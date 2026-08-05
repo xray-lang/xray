@@ -1,0 +1,19 @@
+type Named = { name: string, ... }
+
+fn readDirect(value: Named) -> string {
+    return value.name
+}
+
+fn readDispatch(value: Named) -> string {
+    return value["name"]
+}
+
+fn main() -> string {
+    var a = readDirect({ name: "ada", age: 1 })
+    var b = readDirect({ name: "bob", zzz: 2 })
+    var c = readDispatch({ age: 3, name: "cat" })
+    var d = readDispatch({ id: 4, name: "dot" })
+    return a + b + c + d
+}
+
+print(main())

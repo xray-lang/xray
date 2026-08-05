@@ -171,9 +171,9 @@
     X(DEFER_MARK, xi_emit_defer_mark) \
     X(DEFER_RUN_TO, xi_emit_defer_run_to) \
     X(JSON_NEW, xi_emit_json_new) \
-    X(JSON_INIT_F, xi_emit_json_init_f) \
-    X(JSON_GET_F, xi_emit_json_get_f) \
-    X(JSON_SET_F, xi_emit_json_set_f) \
+    X(OBJECT_INIT_F, xi_emit_object_init_f) \
+    X(OBJECT_GET_F, xi_emit_object_get_f) \
+    X(OBJECT_SET_F, xi_emit_object_set_f) \
     X(JSON_MERGE, xi_emit_json_merge) \
     X(JSON_DECODE, xi_emit_json_decode) \
     X(AGG_NEW, xi_emit_struct_new) \

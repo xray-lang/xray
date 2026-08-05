@@ -64,7 +64,7 @@ static const char *xi_type_name(const struct XrType *type) {
             return "enum";
         case XR_KIND_JSON:
             return "json";
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
             return "record";
         case XR_KIND_UNION:
             return "union";
@@ -179,12 +179,12 @@ static void dump_value(FILE *out, const XiValue *v) {
     } else if (v->op == XI_AGG_NEW && v->aux) {
         XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
         fprintf(out, " [size=%u fields=%u]", sl->total_size, sl->field_count);
-    } else if (v->op == XI_JSON_GET_F || v->op == XI_JSON_SET_F || v->op == XI_JSON_INIT_F) {
+    } else if (v->op == XI_OBJECT_GET_F || v->op == XI_OBJECT_SET_F || v->op == XI_OBJECT_INIT_F) {
         fprintf(out, " [field=%" PRId64 "]", v->aux_int);
-        if (v->xg_json_access_id != 0)
-            fprintf(out, " [json_access=%u]", v->xg_json_access_id);
-        if (v->xg_record_access_id != 0)
-            fprintf(out, " [record_access=%u]", v->xg_record_access_id);
+        if (v->xg_json_dynamic_access_id != 0)
+            fprintf(out, " [json_dynamic_access=%u]", v->xg_json_dynamic_access_id);
+        if (v->xg_object_access_id != 0)
+            fprintf(out, " [object_access=%u]", v->xg_object_access_id);
     } else if (v->op == XI_INDEX_GET || v->op == XI_INDEX_SET) {
         if (v->xg_key_access_id != 0)
             fprintf(out, " [key_access=%u]", v->xg_key_access_id);
@@ -230,8 +230,8 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [unchecked]");
     if (v->xg_json_codec_id != 0 && v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
         fprintf(out, " [json_codec=%u]", v->xg_json_codec_id);
-    if (v->xg_record_merge_id != 0)
-        fprintf(out, " [record_merge=%u]", v->xg_record_merge_id);
+    if (v->xg_object_merge_id != 0)
+        fprintf(out, " [object_merge=%u]", v->xg_object_merge_id);
     if (v->enum_metadata_owner) {
         const XrType *owner = v->enum_metadata_owner;
         const char *owner_name =

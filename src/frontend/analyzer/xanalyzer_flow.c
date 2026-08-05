@@ -711,6 +711,25 @@ XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true) {
     if (!type)
         return type;
 
+    if (type_id == XR_TID_OBJECT) {
+        if (XR_TYPE_IS_UNION(type)) {
+            XrType *members[XR_UNION_MAX_MEMBERS];
+            int count = 0;
+            for (int i = 0; i < xr_type_union_count(type) && count < XR_UNION_MAX_MEMBERS; i++) {
+                XrType *member = xr_type_union_member(type, i);
+                bool is_object = member && (member->kind == XR_KIND_JSON ||
+                                             member->kind == XR_KIND_STRUCT_OBJECT);
+                if (is_object == assume_true)
+                    members[count++] = member;
+            }
+            return count == 0 ? xr_type_new_never(NULL)
+                              : (count == 1 ? members[0]
+                                            : xr_type_new_union(NULL, members, count));
+        }
+        bool is_object = type->kind == XR_KIND_JSON || type->kind == XR_KIND_STRUCT_OBJECT;
+        return is_object == assume_true ? type : xr_type_new_never(NULL);
+    }
+
     int target_kind = -1;
     switch (type_id) {
         case XR_TID_I8:

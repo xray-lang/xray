@@ -27,6 +27,7 @@
 #include "../stdlib/xstdlib_metadata.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 enum {
@@ -78,6 +79,13 @@ typedef struct XgStdlibImportRow {
 typedef struct XgLocalType XgLocalType;
 typedef struct XgLocalName XgLocalName;
 
+typedef struct XgPendingOpenObjectAccess {
+    XgObjectAccessId access_id;
+    XgFuncId owner_func_id;
+    XgObjectShapeId constraint_shape_id;
+    uint16_t param_ordinal;
+} XgPendingOpenObjectAccess;
+
 typedef struct XgProducer {
     XgGlobalEvidence *evidence;
     XgClassNameRow *classes;
@@ -98,12 +106,16 @@ typedef struct XgProducer {
     struct XgPendingBody *bodies;
     uint32_t nbodies;
     uint32_t body_cap;
+    XgPendingOpenObjectAccess *open_object_accesses;
+    uint32_t nopen_object_accesses;
+    uint32_t open_object_access_cap;
     XgFuncId next_func_id;
     XaAnalyzer *analyzer;
 } XgProducer;
 
 typedef struct XgPendingBody {
     XgFuncId func_id;
+    XgFuncId lexical_parent_func_id;
     XgModuleId module_id;
     XgDeclId owner_decl_id;
     XgClassId current_class_id;
@@ -123,16 +135,32 @@ typedef struct XgPendingBody {
     uint32_t captured_name_local_count;
 } XgPendingBody;
 
+static const XgPendingBody *producer_find_child_function_body(const XgProducer *producer,
+                                                               XgFuncId parent_func_id,
+                                                               uint32_t name_id) {
+    const XgPendingBody *match = NULL;
+    if (!producer || parent_func_id == XG_NO_ID || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < producer->nbodies; i++) {
+        const XgPendingBody *pending = &producer->bodies[i];
+        if (pending->lexical_parent_func_id != parent_func_id || pending->name_id != name_id ||
+            pending->kind != XG_BODY_FUNCTION)
+            continue;
+        if (match)
+            return NULL;
+        match = pending;
+    }
+    return match;
+}
+
 struct XgLocalType {
     const char *name;
     const char *nominal_name;
     XgClassId class_id;
     XgInterfaceId interface_id;
     uint32_t type_key;
-    XgJsonShapeId json_shape_id;
-    const ObjectLiteralNode *json_shape_literal;
-    XgRecordShapeId record_shape_id;
-    const ObjectLiteralNode *record_shape_literal;
+    XgObjectShapeId object_shape_id;
+    const ObjectLiteralNode *object_shape_literal;
     XgMapShapeId map_shape_id;
     uint8_t map_container_kind;
     uint32_t map_receiver_type_key;
@@ -148,12 +176,14 @@ struct XgLocalType {
     XgClassId sequence_elem_class_id;
     uint32_t sequence_storage_id;
     bool sequence_elem_managed_ref;
-    XgJsonShapeId sequence_elem_json_shape_id;
-    const ObjectLiteralNode *sequence_elem_json_shape_literal;
+    XgObjectShapeId sequence_elem_object_shape_id;
+    const ObjectLiteralNode *sequence_elem_object_shape_literal;
     uint8_t sequence_elem_map_container_kind;
     uint32_t sequence_elem_map_key_type_key;
     uint32_t sequence_elem_map_value_type_key;
     bool sequence_fresh_empty;
+    uint16_t param_ordinal;
+    uint8_t object_row_mode;
     bool inferred;
 };
 
@@ -1356,6 +1386,35 @@ static bool producer_reserve_bodies(XgProducer *p, uint32_t needed) {
     return true;
 }
 
+static uint64_t stable_tref_key(const XrTypeRef *t) {
+    char canonical[512];
+    int length;
+    if (!t)
+        return 0;
+    length = xr_tref_to_string_buf(t, canonical, (int) sizeof(canonical));
+    if (length <= 0)
+        return 0;
+    uint64_t key = xr_hash_bytes64(canonical, (size_t) length);
+    return key ? key : 1;
+}
+
+static bool producer_reserve_open_object_accesses(XgProducer *p, uint32_t needed) {
+    uint32_t new_cap;
+    XgPendingOpenObjectAccess *rows;
+    if (!p || p->open_object_access_cap >= needed)
+        return p != NULL;
+    new_cap = p->open_object_access_cap < 8 ? 8 : p->open_object_access_cap;
+    while (new_cap < needed)
+        new_cap *= 2;
+    rows = (XgPendingOpenObjectAccess *) xr_realloc(
+        p->open_object_accesses, (size_t) new_cap * sizeof(*rows));
+    if (!rows)
+        return false;
+    p->open_object_accesses = rows;
+    p->open_object_access_cap = new_cap;
+    return true;
+}
+
 static bool producer_enqueue_body(XgProducer *p, XgFuncId func_id, XgModuleId module_id,
                                   XgDeclId owner_decl_id, XgClassId current_class_id,
                                   XgMethodId owner_method_id, uint32_t name_id,
@@ -1398,6 +1457,23 @@ static bool producer_snapshot_body_captures(XgPendingBody *row, const XgBodyColl
         memcpy(row->captured_locals, bc->locals,
                (size_t) bc->nlocals * sizeof(*row->captured_locals));
         row->captured_local_count = bc->nlocals;
+        for (uint32_t i = 0; i < row->captured_local_count; i++) {
+            XgLocalType *captured = &row->captured_locals[i];
+
+            /* A closure boundary is an escape boundary for flow-sensitive Json
+             * refinements.  Preserve the declared Json type, but force the
+             * nested body to use dynamic Json access unless it proves a fresh
+             * shape of its own.  Structural object shapes are type guarantees
+             * and therefore remain valid across the same boundary. */
+            if (captured->type_key == hash_named_type_key32("Json", NULL, 0)) {
+                captured->object_shape_id = XG_NO_ID;
+                captured->object_shape_literal = NULL;
+            }
+            if (captured->sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0)) {
+                captured->sequence_elem_object_shape_id = XG_NO_ID;
+                captured->sequence_elem_object_shape_literal = NULL;
+            }
+        }
     }
     if (bc->nname_locals > 0) {
         row->captured_name_locals = (XgLocalName *) xr_malloc((size_t) bc->nname_locals *
@@ -1423,9 +1499,13 @@ static void producer_free_bodies(XgProducer *p) {
         xr_free(p->bodies[i].captured_name_locals);
     }
     xr_free(p->bodies);
+    xr_free(p->open_object_accesses);
     p->bodies = NULL;
+    p->open_object_accesses = NULL;
     p->nbodies = 0;
     p->body_cap = 0;
+    p->nopen_object_accesses = 0;
+    p->open_object_access_cap = 0;
 }
 
 static bool producer_register_class(XgProducer *p, XgModuleId module_id, const char *name,
@@ -1966,10 +2046,8 @@ static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol
     row->class_id = class_id;
     row->interface_id = interface_id;
     row->type_key = type_key;
-    row->json_shape_id = XG_NO_ID;
-    row->json_shape_literal = NULL;
-    row->record_shape_id = XG_NO_ID;
-    row->record_shape_literal = NULL;
+    row->object_shape_id = XG_NO_ID;
+    row->object_shape_literal = NULL;
     row->map_shape_id = XG_NO_ID;
     row->map_container_kind = 0;
     row->map_receiver_type_key = 0;
@@ -1980,11 +2058,13 @@ static bool body_push_local(XgBodyCollect *bc, const char *name, uint32_t symbol
     row->sequence_elem_interface_id = XG_NO_ID;
     row->sequence_elem_class_id = XG_NO_ID;
     row->sequence_elem_managed_ref = false;
-    row->sequence_elem_json_shape_id = XG_NO_ID;
-    row->sequence_elem_json_shape_literal = NULL;
+    row->sequence_elem_object_shape_id = XG_NO_ID;
+    row->sequence_elem_object_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
     row->sequence_elem_map_key_type_key = 0;
     row->sequence_elem_map_value_type_key = 0;
+    row->param_ordinal = UINT16_MAX;
+    row->object_row_mode = XR_OBJECT_ROW_EXACT;
     row->inferred = inferred;
     return true;
 }
@@ -2115,10 +2195,8 @@ static void body_assign_local(XgBodyCollect *bc, const char *name, uint32_t symb
     row->class_id = class_id;
     row->interface_id = interface_id;
     row->type_key = type_key;
-    row->json_shape_id = XG_NO_ID;
-    row->json_shape_literal = NULL;
-    row->record_shape_id = XG_NO_ID;
-    row->record_shape_literal = NULL;
+    row->object_shape_id = XG_NO_ID;
+    row->object_shape_literal = NULL;
     row->map_shape_id = XG_NO_ID;
     row->map_container_kind = 0;
     row->map_receiver_type_key = 0;
@@ -2126,8 +2204,8 @@ static void body_assign_local(XgBodyCollect *bc, const char *name, uint32_t symb
     row->map_value_type_key = 0;
     row->sequence_elem_interface_id = XG_NO_ID;
     row->sequence_elem_class_id = XG_NO_ID;
-    row->sequence_elem_json_shape_id = XG_NO_ID;
-    row->sequence_elem_json_shape_literal = NULL;
+    row->sequence_elem_object_shape_id = XG_NO_ID;
+    row->sequence_elem_object_shape_literal = NULL;
 }
 
 typedef struct XgCaptureScan {
@@ -3336,7 +3414,10 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             if (callee && callee->type == AST_MEMBER_ACCESS && call->type_arg_count > 0 &&
                 call->type_args && call->type_args[0]) {
                 const MemberAccessNode *member = &callee->as.member_access;
-                if (member->name && strcmp(member->name, "decode") == 0 && member->object &&
+                if (member->name &&
+                    (strcmp(member->name, "decode") == 0 ||
+                     strcmp(member->name, "parse") == 0) &&
+                    member->object &&
                     member->object->type == AST_VARIABLE && member->object->as.variable.name &&
                     strcmp(member->object->as.variable.name, "Json") == 0)
                     return hash_tref32(call->type_args[0]);
@@ -3409,6 +3490,47 @@ static uint64_t body_options_shape_hash(const char *role, const XgCallsiteSummar
     return h ? h : 1;
 }
 
+static uint64_t body_expr_stable_type_key(const XgBodyCollect *bc, const AstNode *expr) {
+    XrType *type;
+    if (!bc || !bc->producer || !bc->producer->analyzer || !expr)
+        return 0;
+    type = xa_analyzer_get_node_type(bc->producer->analyzer, expr);
+    return type ? xr_type_stable_key(type) : 0;
+}
+
+static bool body_finalize_object_shape_identity(XgGlobalEvidence *evidence,
+                                                XgObjectShapeId shape_id);
+
+static bool body_add_options_shape_fields(XgBodyCollect *bc, XgObjectShapeId shape_id,
+                                          const CallExprNode *call, uint16_t field_count,
+                                          bool supplied_only) {
+    if (!bc || !bc->evidence || shape_id == XG_NO_ID)
+        return false;
+    for (uint16_t ordinal = 0; ordinal < field_count; ordinal++) {
+        char name[32];
+        XgObjectFieldSummary field;
+        int written = snprintf(name, sizeof(name), "$arg%u", (unsigned) ordinal);
+        if (written <= 0 || (size_t) written >= sizeof(name))
+            return false;
+        memset(&field, 0, sizeof(field));
+        field.field_id = (XgObjectFieldId) (bc->evidence->nobject_fields + 1);
+        field.shape_id = shape_id;
+        field.field_ordinal = ordinal;
+        field.name_id = hash_name32(name);
+        field.stable_name_key = xg_object_stable_name_key(name);
+        if (call && call->arguments && ordinal < (uint16_t) call->arg_count)
+            field.type_key = body_expr_type_key(bc, call->arguments[ordinal]);
+        if (call && call->arguments && ordinal < (uint16_t) call->arg_count)
+            field.stable_type_key =
+                body_expr_stable_type_key(bc, call->arguments[ordinal]);
+        field.flags = XG_OBJECT_FIELD_STATIC_KEY |
+                      (supplied_only ? XG_OBJECT_FIELD_REQUIRED : XG_OBJECT_FIELD_OPTIONAL);
+        if (!xg_global_evidence_add_object_field(bc->evidence, &field))
+            return false;
+    }
+    return body_finalize_object_shape_identity(bc->evidence, shape_id);
+}
+
 static void body_add_options_bag_callsite(XgBodyCollect *bc, const CallExprNode *call,
                                           const XgCallsiteSummary *callsite) {
     if (!bc || !bc->evidence || !call || !callsite || call->default_arg_param_count <= 0)
@@ -3434,16 +3556,16 @@ static void body_add_options_bag_callsite(XgBodyCollect *bc, const CallExprNode 
     if (param_count == 0 || supplied_count > param_count || default_count > param_count)
         return;
 
-    XgRecordShapeId param_shape_id = (XgRecordShapeId) (bc->evidence->nrecord_shapes + 1);
-    XgRecordShapeId supplied_shape_id = (XgRecordShapeId) (bc->evidence->nrecord_shapes + 2);
+    XgObjectShapeId param_shape_id = (XgObjectShapeId) (bc->evidence->nobject_shapes + 1);
+    XgObjectShapeId supplied_shape_id = (XgObjectShapeId) (bc->evidence->nobject_shapes + 2);
     uint32_t supplied_type_key =
         body_call_arg_type_key_start(bc, call->arguments, (int) supplied_count);
-    XgRecordShapeSummary param_shape;
-    XgRecordShapeSummary supplied_shape;
+    XgObjectShapeSummary param_shape;
+    XgObjectShapeSummary supplied_shape;
     XgOptionsBagSummary options;
 
     memset(&param_shape, 0, sizeof(param_shape));
-    param_shape.record_shape_id = param_shape_id;
+    param_shape.object_shape_id = param_shape_id;
     param_shape.module_id = bc->module_id;
     param_shape.owner_func_id = bc->owner_func_id;
     param_shape.source_span_id = callsite->source_span_id;
@@ -3452,14 +3574,19 @@ static void body_add_options_bag_callsite(XgBodyCollect *bc, const CallExprNode 
     param_shape.field_name_start =
         body_options_count_mask_id(callsite->callsite_id, "options:param-fields", 0, param_count);
     param_shape.field_count = param_count;
-    param_shape.shape_kind = XG_RECORD_SHAPE_OPTIONS;
+    param_shape.shape_kind = XG_OBJECT_SHAPE_OPTIONS;
+    param_shape.domain = XG_OBJECT_DOMAIN_STRUCT;
+    param_shape.provenance = XG_OBJECT_SHAPE_OPTIONS;
+    param_shape.concrete_exact = 1;
     param_shape.flags =
-        XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_HAS_OPTIONS;
+        XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_HAS_OPTIONS;
     param_shape.shape_hash =
         body_options_shape_hash("options:param", callsite, param_shape.type_key, param_count);
+    param_shape.stable_type_key = param_shape.type_key;
+    param_shape.stable_shape_key = param_shape.shape_hash;
 
     memset(&supplied_shape, 0, sizeof(supplied_shape));
-    supplied_shape.record_shape_id = supplied_shape_id;
+    supplied_shape.object_shape_id = supplied_shape_id;
     supplied_shape.module_id = bc->module_id;
     supplied_shape.owner_func_id = bc->owner_func_id;
     supplied_shape.source_span_id = callsite->source_span_id;
@@ -3468,14 +3595,24 @@ static void body_add_options_bag_callsite(XgBodyCollect *bc, const CallExprNode 
     supplied_shape.field_name_start = body_options_count_mask_id(
         callsite->callsite_id, "options:supplied-fields", 0, supplied_count);
     supplied_shape.field_count = supplied_count;
-    supplied_shape.shape_kind = XG_RECORD_SHAPE_LITERAL;
-    supplied_shape.flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS;
+    supplied_shape.shape_kind = XG_OBJECT_SHAPE_LITERAL;
+    supplied_shape.domain = XG_OBJECT_DOMAIN_STRUCT;
+    supplied_shape.provenance = XG_OBJECT_SHAPE_LITERAL;
+    supplied_shape.concrete_exact = 1;
+    supplied_shape.fresh = 1;
+    supplied_shape.flags =
+        XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_HAS_OPTIONS;
     supplied_shape.shape_hash = body_options_shape_hash("options:supplied", callsite,
                                                         supplied_shape.type_key, supplied_count);
+    supplied_shape.stable_type_key = supplied_shape.type_key;
+    supplied_shape.stable_shape_key = supplied_shape.shape_hash;
 
-    if (!xg_global_evidence_add_record_shape(bc->evidence, &param_shape))
+    if (!xg_global_evidence_add_object_shape(bc->evidence, &param_shape))
         return;
-    if (!xg_global_evidence_add_record_shape(bc->evidence, &supplied_shape))
+    if (!xg_global_evidence_add_object_shape(bc->evidence, &supplied_shape))
+        return;
+    if (!body_add_options_shape_fields(bc, param_shape_id, call, param_count, false) ||
+        !body_add_options_shape_fields(bc, supplied_shape_id, call, supplied_count, true))
         return;
 
     memset(&options, 0, sizeof(options));
@@ -3899,7 +4036,7 @@ static uint64_t body_json_shape_hash(const ObjectLiteralNode *obj) {
     for (int i = 0; obj && i < obj->count; i++) {
         const char *key = body_object_literal_static_key(obj, i);
         if (key && ordinal < count) {
-            h = xg_json_shape_hash_add_field(h, XG_JSON_SHAPE_SHAPED, hash_name32(key), 0);
+            h = xg_json_shape_hash_add_field(h, 0, hash_name32(key), 0);
             ordinal++;
         }
     }
@@ -3939,7 +4076,7 @@ static const XrTypeRef *body_type_alias_record_type_ref(const TypeAliasNode *ali
     return alias->resolved_type;
 }
 
-static int body_type_alias_record_field_count(const TypeAliasNode *alias) {
+static int body_type_alias_object_field_count(const TypeAliasNode *alias) {
     const XrTypeRef *record_type;
     if (!alias)
         return 0;
@@ -3951,7 +4088,7 @@ static int body_type_alias_record_field_count(const TypeAliasNode *alias) {
     return (int) record_type->nchildren;
 }
 
-static const char *body_type_alias_record_field_name(const TypeAliasNode *alias, int index) {
+static const char *body_type_alias_object_field_name(const TypeAliasNode *alias, int index) {
     const XrTypeRef *record_type;
     if (!alias || index < 0)
         return NULL;
@@ -3963,7 +4100,7 @@ static const char *body_type_alias_record_field_name(const TypeAliasNode *alias,
     return record_type->field_names[index];
 }
 
-static const XrTypeRef *body_type_alias_record_field_type(const TypeAliasNode *alias, int index) {
+static const XrTypeRef *body_type_alias_object_field_type(const TypeAliasNode *alias, int index) {
     const XrTypeRef *record_type;
     if (!alias || index < 0)
         return NULL;
@@ -3975,28 +4112,28 @@ static const XrTypeRef *body_type_alias_record_field_type(const TypeAliasNode *a
     return record_type->children[index];
 }
 
-static bool body_type_alias_record_field_optional(const TypeAliasNode *alias, int index) {
+static bool body_type_alias_object_field_optional(const TypeAliasNode *alias, int index) {
     return alias && alias->field_optional && index >= 0 && index < alias->field_count &&
            alias->field_optional[index];
 }
 
-static bool body_type_alias_record_field_readonly(const TypeAliasNode *alias, int index) {
+static bool body_type_alias_object_field_readonly(const TypeAliasNode *alias, int index) {
     const XrTypeRef *record_type = body_type_alias_record_type_ref(alias);
     return record_type && record_type->field_readonly && index >= 0 &&
            index < (int) record_type->nchildren && record_type->field_readonly[index];
 }
 
-static uint64_t body_type_alias_record_shape_hash(const TypeAliasNode *alias) {
+static uint64_t body_type_alias_object_shape_hash(const TypeAliasNode *alias) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    int count = body_type_alias_record_field_count(alias);
+    int count = body_type_alias_object_field_count(alias);
     h = fold_u64(h, (uint64_t) count);
     for (int i = 0; i < count; i++) {
-        const char *name = body_type_alias_record_field_name(alias, i);
+        const char *name = body_type_alias_object_field_name(alias, i);
         uint32_t name_id = name ? hash_name32(name) : 0;
-        const XrTypeRef *field_type = body_type_alias_record_field_type(alias, i);
+        const XrTypeRef *field_type = body_type_alias_object_field_type(alias, i);
         uint32_t type_key = field_type ? hash_tref32(field_type) : 0;
-        bool optional = body_type_alias_record_field_optional(alias, i);
-        bool readonly = body_type_alias_record_field_readonly(alias, i);
+        bool optional = body_type_alias_object_field_optional(alias, i);
+        bool readonly = body_type_alias_object_field_readonly(alias, i);
         h = fold_u64(h, name_id);
         h = fold_u64(h, type_key);
         h = fold_u64(h, optional ? 1 : 0);
@@ -4005,23 +4142,8 @@ static uint64_t body_type_alias_record_shape_hash(const TypeAliasNode *alias) {
     return h ? h : 1;
 }
 
-static uint64_t body_type_alias_json_shape_hash(const TypeAliasNode *alias) {
-    int count = body_type_alias_record_field_count(alias);
-    if (count > (int) UINT16_MAX)
-        count = (int) UINT16_MAX;
-    uint64_t h = xg_json_shape_hash_begin((uint32_t) (count > 0 ? count : 0));
-    for (int i = 0; i < count; i++) {
-        const char *name = body_type_alias_record_field_name(alias, i);
-        const XrTypeRef *field_type = body_type_alias_record_field_type(alias, i);
-        h = xg_json_shape_hash_add_field(h, XG_JSON_SHAPE_RECORD_BRIDGE,
-                                         name ? hash_name32(name) : 0,
-                                         field_type ? hash_tref32(field_type) : 0);
-    }
-    return h;
-}
-
 static uint32_t body_type_alias_field_name_start(const TypeAliasNode *alias) {
-    return (uint32_t) (body_type_alias_record_shape_hash(alias) & UINT32_MAX);
+    return (uint32_t) (body_type_alias_object_shape_hash(alias) & UINT32_MAX);
 }
 
 static uint32_t body_type_alias_record_type_key(const TypeAliasNode *alias) {
@@ -4031,24 +4153,12 @@ static uint32_t body_type_alias_record_type_key(const TypeAliasNode *alias) {
     return alias && alias->name ? hash_named_type_key32(alias->name, NULL, 0) : 0;
 }
 
-static const XgJsonShapeSummary *
-body_find_json_shape_for_type_key(XgBodyCollect *bc, uint32_t type_key, uint8_t shape_kind) {
+static const XgObjectShapeSummary *
+body_find_object_shape_for_type_key(XgBodyCollect *bc, uint32_t type_key, uint8_t shape_kind) {
     if (!bc || !bc->evidence || type_key == 0)
         return NULL;
-    for (uint32_t i = 0; i < bc->evidence->njson_shapes; i++) {
-        const XgJsonShapeSummary *shape = &bc->evidence->json_shapes[i];
-        if (shape->type_key == type_key && shape->shape_kind == shape_kind)
-            return shape;
-    }
-    return NULL;
-}
-
-static const XgRecordShapeSummary *
-body_find_record_shape_for_type_key(XgBodyCollect *bc, uint32_t type_key, uint8_t shape_kind) {
-    if (!bc || !bc->evidence || type_key == 0)
-        return NULL;
-    for (uint32_t i = 0; i < bc->evidence->nrecord_shapes; i++) {
-        const XgRecordShapeSummary *shape = &bc->evidence->record_shapes[i];
+    for (uint32_t i = 0; i < bc->evidence->nobject_shapes; i++) {
+        const XgObjectShapeSummary *shape = &bc->evidence->object_shapes[i];
         if (shape->type_key == type_key && shape->shape_kind == shape_kind)
             return shape;
     }
@@ -4057,94 +4167,24 @@ body_find_record_shape_for_type_key(XgBodyCollect *bc, uint32_t type_key, uint8_
 
 static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr);
 static XgLocalType *body_lookup_local_sequence(XgBodyCollect *bc, const AstNode *expr);
+static XgObjectShapeId body_lookup_object_shape(XgBodyCollect *bc, const AstNode *expr,
+                                                const ObjectLiteralNode **out_literal);
+static int body_object_shape_static_field_index(XgBodyCollect *bc, XgObjectShapeId shape_id,
+                                                const ObjectLiteralNode *literal,
+                                                const char *name);
 static const XgClassFieldSummary *
 body_find_class_field_in_hierarchy(XgBodyCollect *bc, XgClassId class_id, uint32_t field_name_id);
 
-static void body_add_json_fields_for_literal(XgBodyCollect *bc, XgJsonShapeId shape_id,
-                                             const ObjectLiteralNode *obj) {
-    uint32_t ordinal = 0;
-    if (!bc || !bc->evidence || shape_id == XG_NO_ID || !obj)
-        return;
-    for (int i = 0; i < obj->count; i++) {
-        const char *key = body_object_literal_static_key(obj, i);
-        XgJsonFieldSummary field;
-        if (!key)
-            continue;
-        if (ordinal >= UINT16_MAX)
-            break;
-        memset(&field, 0, sizeof(field));
-        field.field_id = (XgJsonFieldId) (bc->evidence->njson_fields + 1);
-        field.shape_id = shape_id;
-        field.field_ordinal = (uint16_t) ordinal++;
-        field.name_id = hash_name32(key);
-        field.type_key = obj->values ? body_expr_type_key(bc, obj->values[i]) : 0;
-        field.flags = XG_JSON_FIELD_STATIC_KEY;
-        if (field.type_key != 0)
-            field.flags |= XG_JSON_FIELD_TYPED;
-        (void) xg_global_evidence_add_json_field(bc->evidence, &field);
-    }
-}
+static XgObjectShapeId body_add_object_shape_for_literal_domain(
+    XgBodyCollect *bc, const ObjectLiteralNode *obj, uint32_t source_span_id,
+    uint32_t type_key, uint8_t domain);
 
-static void body_add_json_fields_for_type_alias(XgGlobalEvidence *evidence, XgJsonShapeId shape_id,
-                                                const TypeAliasNode *alias) {
-    int field_count = body_type_alias_record_field_count(alias);
-    if (!evidence || shape_id == XG_NO_ID || !alias)
-        return;
-    if (field_count > (int) UINT16_MAX)
-        field_count = (int) UINT16_MAX;
-    for (int i = 0; i < field_count; i++) {
-        const char *name = body_type_alias_record_field_name(alias, i);
-        const XrTypeRef *field_type = body_type_alias_record_field_type(alias, i);
-        XgJsonFieldSummary field;
-        if (!name)
-            continue;
-        memset(&field, 0, sizeof(field));
-        field.field_id = (XgJsonFieldId) (evidence->njson_fields + 1);
-        field.shape_id = shape_id;
-        field.field_ordinal = (uint16_t) (i < UINT16_MAX ? i : UINT16_MAX);
-        field.name_id = hash_name32(name);
-        field.type_key = field_type ? hash_tref32(field_type) : 0;
-        field.flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_RECORD_BRIDGE;
-        if (field.type_key != 0)
-            field.flags |= XG_JSON_FIELD_TYPED;
-        (void) xg_global_evidence_add_json_field(evidence, &field);
-    }
-}
-
-static XgJsonShapeId body_add_json_shape_for_literal(XgBodyCollect *bc,
-                                                     const ObjectLiteralNode *obj,
-                                                     uint32_t source_span_id, uint32_t type_key) {
-    XgJsonShapeSummary row;
-    bool has_computed = false;
-    if (!bc || !bc->evidence || !obj)
-        return XG_NO_ID;
-    for (int i = 0; i < obj->count; i++) {
-        if (!body_object_literal_static_key(obj, i)) {
-            has_computed = true;
-            break;
-        }
-    }
-    memset(&row, 0, sizeof(row));
-    row.json_shape_id = (XgJsonShapeId) (bc->evidence->njson_shapes + 1);
-    row.module_id = bc->module_id;
-    row.owner_func_id = bc->owner_func_id;
-    row.source_span_id = source_span_id;
-    row.type_key = type_key;
-    row.field_name_start = (uint32_t) (body_json_shape_hash(obj) & UINT32_MAX);
-    uint32_t static_field_count = body_json_static_field_count(obj);
-    row.field_count =
-        (uint16_t) (static_field_count < UINT16_MAX ? static_field_count : UINT16_MAX);
-    row.shape_kind = has_computed ? XG_JSON_SHAPE_OPEN : XG_JSON_SHAPE_SHAPED;
-    row.flags = XG_JSON_SHAPE_MUTABLE;
-    if (!has_computed)
-        row.flags |= XG_JSON_SHAPE_STATIC_KEYS;
-    else
-        row.flags |= XG_JSON_SHAPE_HAS_COMPUTED_KEYS;
-    row.shape_hash = body_json_shape_hash(obj);
-    if (!xg_global_evidence_add_json_shape(bc->evidence, &row))
-        return XG_NO_ID;
-    body_add_json_fields_for_literal(bc, row.json_shape_id, obj);
-    return row.json_shape_id;
+static XgObjectShapeId body_add_json_shape_for_literal(XgBodyCollect *bc,
+                                                       const ObjectLiteralNode *obj,
+                                                       uint32_t source_span_id,
+                                                       uint32_t type_key) {
+    return body_add_object_shape_for_literal_domain(bc, obj, source_span_id, type_key,
+                                                    XG_OBJECT_DOMAIN_JSON);
 }
 
 typedef struct XgReturnObjectLiteralLocal {
@@ -4190,6 +4230,115 @@ static int return_literal_local_index(const XgReturnObjectLiteralScan *scan, con
             return (int) (i - 1);
     }
     return -1;
+}
+
+static bool body_add_object_access_with_case(XgBodyCollect *bc, XgObjectAccessSummary *access,
+                                             const XgObjectShapeSummary *shape) {
+    XgObjectAccessCaseSummary access_case;
+    if (!bc || !bc->evidence || !access || !shape ||
+        access->receiver_shape_id != shape->object_shape_id)
+        return false;
+    access->receiver_param_ordinal = UINT16_MAX;
+    access->constraint_shape_id = shape->object_shape_id;
+    access->receiver_shape_count = 1;
+    access->receiver_shape_set_id = access->object_access_id;
+    access->mutation_epoch = shape->mutation_epoch;
+    if (!xg_global_evidence_add_object_access(bc->evidence, access))
+        return false;
+    memset(&access_case, 0, sizeof(access_case));
+    access_case.case_id =
+        (XgObjectAccessCaseId) (bc->evidence->nobject_access_cases + 1);
+    access_case.object_access_id = access->object_access_id;
+    access_case.receiver_shape_set_id = access->receiver_shape_set_id;
+    access_case.receiver_shape_id = shape->object_shape_id;
+    access_case.stable_shape_key = shape->stable_shape_key;
+    access_case.mutation_epoch = shape->mutation_epoch;
+    access_case.field_ordinal = access->field_ordinal;
+    access_case.domain = shape->domain;
+    if (!xg_global_evidence_add_object_access_case(bc->evidence, &access_case)) {
+        bc->evidence->nobject_accesses--;
+        return false;
+    }
+    return true;
+}
+
+static bool body_add_resolved_object_field_access(XgBodyCollect *bc, const AstNode *node,
+                                                  bool mutating, XgObjectShapeId shape_id,
+                                                  const char *name, uint16_t field_ordinal) {
+    const XgObjectShapeSummary *shape;
+    XgObjectAccessSummary row;
+
+    if (!bc || !bc->evidence || !node || shape_id == XG_NO_ID || !name)
+        return false;
+    shape = xg_global_evidence_find_object_shape(bc->evidence, shape_id);
+    if (!shape)
+        return false;
+    memset(&row, 0, sizeof(row));
+    row.object_access_id = (XgObjectAccessId) (bc->evidence->nobject_accesses + 1);
+    row.module_id = bc->module_id;
+    row.owner_func_id = bc->owner_func_id;
+    row.receiver_shape_id = shape_id;
+    row.source_span_id = (uint32_t) node->line;
+    row.field_name_id = hash_name32(name);
+    row.field_ordinal = field_ordinal;
+    row.access_kind = mutating ? XG_OBJECT_ACCESS_FIELD_SET : XG_OBJECT_ACCESS_FIELD_GET;
+    row.domain = shape->domain;
+    row.syntax = (node->type == AST_INDEX_GET || node->type == AST_INDEX_SET)
+                     ? XG_OBJECT_ACCESS_SYNTAX_STATIC_INDEX
+                     : XG_OBJECT_ACCESS_SYNTAX_DOT;
+    row.flags = XG_OBJECT_ACCESS_STATIC_FIELD | XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN;
+    if (mutating)
+        row.flags |= XG_OBJECT_ACCESS_MUTATING;
+    return body_add_object_access_with_case(bc, &row, shape);
+}
+
+static bool body_add_open_row_object_field_access(XgBodyCollect *bc, const AstNode *node,
+                                                  bool mutating, XgObjectShapeId constraint_shape_id,
+                                                  const char *name, uint16_t constraint_ordinal,
+                                                  uint16_t param_ordinal) {
+    XgObjectAccessSummary row;
+    XgPendingOpenObjectAccess *pending;
+    const XgObjectShapeSummary *constraint;
+
+    if (!bc || !bc->producer || !bc->evidence || !node || !name ||
+        constraint_shape_id == XG_NO_ID || param_ordinal == UINT16_MAX)
+        return false;
+    constraint = xg_global_evidence_find_object_shape(bc->evidence, constraint_shape_id);
+    if (!constraint || (constraint->flags & XG_OBJECT_SHAPE_OPEN_ROW) == 0)
+        return false;
+    memset(&row, 0, sizeof(row));
+    row.object_access_id = (XgObjectAccessId) (bc->evidence->nobject_accesses + 1);
+    row.module_id = bc->module_id;
+    row.owner_func_id = bc->owner_func_id;
+    row.receiver_shape_id = constraint_shape_id;
+    row.constraint_shape_id = constraint_shape_id;
+    row.source_span_id = (uint32_t) node->line;
+    row.field_name_id = hash_name32(name);
+    row.field_ordinal = constraint_ordinal;
+    row.access_kind = mutating ? XG_OBJECT_ACCESS_FIELD_SET : XG_OBJECT_ACCESS_FIELD_GET;
+    row.domain = XG_OBJECT_DOMAIN_STRUCT;
+    row.syntax = (node->type == AST_INDEX_GET || node->type == AST_INDEX_SET)
+                     ? XG_OBJECT_ACCESS_SYNTAX_STATIC_INDEX
+                     : XG_OBJECT_ACCESS_SYNTAX_DOT;
+    row.flags = XG_OBJECT_ACCESS_STATIC_FIELD | XG_OBJECT_ACCESS_OPEN_ROW;
+    row.receiver_param_ordinal = param_ordinal;
+    if (mutating)
+        row.flags |= XG_OBJECT_ACCESS_MUTATING;
+    if (!xg_global_evidence_add_object_access(bc->evidence, &row) ||
+        !producer_reserve_open_object_accesses(
+            bc->producer, bc->producer->nopen_object_accesses + 1)) {
+        if (bc->evidence->nobject_accesses > 0 &&
+            bc->evidence->object_accesses[bc->evidence->nobject_accesses - 1].object_access_id ==
+                row.object_access_id)
+            bc->evidence->nobject_accesses--;
+        return false;
+    }
+    pending = &bc->producer->open_object_accesses[bc->producer->nopen_object_accesses++];
+    pending->access_id = row.object_access_id;
+    pending->owner_func_id = row.owner_func_id;
+    pending->constraint_shape_id = constraint_shape_id;
+    pending->param_ordinal = param_ordinal;
+    return true;
 }
 
 static bool return_literal_push_local(XgReturnObjectLiteralScan *scan, const char *name,
@@ -4736,7 +4885,7 @@ body_unique_pending_json_array_return_literal(const XgPendingBody *body) {
     return seen ? literal : NULL;
 }
 
-static XgJsonShapeId body_lookup_call_json_return_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_call_json_return_shape(XgBodyCollect *bc, const AstNode *expr,
                                                         const ObjectLiteralNode **out_literal) {
     const XgPendingBody *body;
     const ObjectLiteralNode *literal;
@@ -4776,7 +4925,7 @@ static XgJsonShapeId body_lookup_call_json_return_shape(XgBodyCollect *bc, const
     return body_add_json_shape_for_literal(bc, literal, (uint32_t) expr->line, type_key);
 }
 
-static XgJsonShapeId body_lookup_call_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_call_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
                                                           const ObjectLiteralNode **out_literal) {
     const XgPendingBody *body;
     const ObjectLiteralNode *literal;
@@ -4845,7 +4994,7 @@ static const AstNode *body_json_receiver_unwrap(const AstNode *expr) {
     return NULL;
 }
 
-static XgJsonShapeId body_lookup_static_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_static_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
                                                             const ObjectLiteralNode **out_literal) {
     const AstNode *array_expr = body_json_receiver_unwrap(expr);
     const ObjectLiteralNode *literal = body_static_json_array_element_literal(array_expr);
@@ -4859,33 +5008,33 @@ static XgJsonShapeId body_lookup_static_sequence_json_shape(XgBodyCollect *bc, c
                                            hash_named_type_key32("Json", NULL, 0));
 }
 
-static XgJsonShapeId body_lookup_static_json_shape_for_type_key(XgBodyCollect *bc,
+static XgObjectShapeId body_lookup_static_json_shape_for_type_key(XgBodyCollect *bc,
                                                                 uint32_t type_key) {
-    const XgJsonShapeSummary *shape =
-        body_find_json_shape_for_type_key(bc, type_key, XG_JSON_SHAPE_RECORD_BRIDGE);
-    return shape ? shape->json_shape_id : XG_NO_ID;
+    const XgObjectShapeSummary *shape =
+        body_find_object_shape_for_type_key(bc, type_key, XG_OBJECT_SHAPE_STATIC);
+    return shape ? shape->object_shape_id : XG_NO_ID;
 }
 
-static XgJsonShapeId body_lookup_local_json_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_local_json_shape(XgBodyCollect *bc, const AstNode *expr,
                                                   const ObjectLiteralNode **out_literal);
-static bool body_json_shape_id_same_shape(XgBodyCollect *bc, XgJsonShapeId left_id,
-                                          XgJsonShapeId right_id);
+static bool body_object_shape_id_same_shape(XgBodyCollect *bc, XgObjectShapeId left_id,
+                                          XgObjectShapeId right_id);
 
-static XgJsonShapeId
+static XgObjectShapeId
 body_lookup_sequence_json_ternary_arm_shape(XgBodyCollect *bc, const AstNode *expr,
                                             const ObjectLiteralNode **out_literal) {
     XgLocalType *local;
-    XgJsonShapeId shape_id;
+    XgObjectShapeId shape_id;
     if (out_literal)
         *out_literal = NULL;
     if (!bc || !expr)
         return XG_NO_ID;
     local = body_lookup_local_sequence(bc, expr);
     if (local && local->sequence_elem_type_key != 0) {
-        if (local->sequence_elem_json_shape_id != XG_NO_ID) {
+        if (local->sequence_elem_object_shape_id != XG_NO_ID) {
             if (out_literal)
-                *out_literal = local->sequence_elem_json_shape_literal;
-            return local->sequence_elem_json_shape_id;
+                *out_literal = local->sequence_elem_object_shape_literal;
+            return local->sequence_elem_object_shape_id;
         }
         return body_lookup_static_json_shape_for_type_key(bc, local->sequence_elem_type_key);
     }
@@ -4895,14 +5044,14 @@ body_lookup_sequence_json_ternary_arm_shape(XgBodyCollect *bc, const AstNode *ex
     return body_lookup_call_sequence_json_shape(bc, expr, out_literal);
 }
 
-static XgJsonShapeId
+static XgObjectShapeId
 body_lookup_sequence_json_ternary_shape(XgBodyCollect *bc, const AstNode *expr,
                                         const ObjectLiteralNode **out_literal) {
     const AstNode *value = body_json_receiver_unwrap(expr);
     const ObjectLiteralNode *then_literal = NULL;
     const ObjectLiteralNode *else_literal = NULL;
-    XgJsonShapeId then_shape_id;
-    XgJsonShapeId else_shape_id;
+    XgObjectShapeId then_shape_id;
+    XgObjectShapeId else_shape_id;
     if (out_literal)
         *out_literal = NULL;
     if (!bc || !value || value->type != AST_TERNARY)
@@ -4914,14 +5063,14 @@ body_lookup_sequence_json_ternary_shape(XgBodyCollect *bc, const AstNode *expr,
     else_shape_id = body_lookup_sequence_json_ternary_arm_shape(bc, value->as.ternary.false_expr,
                                                                 &else_literal);
     if (else_shape_id == XG_NO_ID ||
-        !body_json_shape_id_same_shape(bc, then_shape_id, else_shape_id))
+        !body_object_shape_id_same_shape(bc, then_shape_id, else_shape_id))
         return XG_NO_ID;
     if (out_literal)
         *out_literal = then_literal ? then_literal : else_literal;
     return then_shape_id;
 }
 
-static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const AstNode *expr,
                                                      const ObjectLiteralNode **out_literal) {
     XgLocalType *local;
     const AstNode *receiver = body_json_receiver_unwrap(expr);
@@ -4933,21 +5082,21 @@ static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const As
         return XG_NO_ID;
     local = body_lookup_local_sequence(bc, array_expr);
     if (local && local->sequence_elem_type_key != 0) {
-        if (local->sequence_elem_json_shape_id != XG_NO_ID) {
+        if (local->sequence_elem_object_shape_id != XG_NO_ID) {
             if (out_literal)
-                *out_literal = local->sequence_elem_json_shape_literal;
-            return local->sequence_elem_json_shape_id;
+                *out_literal = local->sequence_elem_object_shape_literal;
+            return local->sequence_elem_object_shape_id;
         }
         return body_lookup_static_json_shape_for_type_key(bc, local->sequence_elem_type_key);
     }
     {
-        XgJsonShapeId shape_id =
+        XgObjectShapeId shape_id =
             body_lookup_static_sequence_json_shape(bc, array_expr, out_literal);
         if (shape_id != XG_NO_ID)
             return shape_id;
     }
     {
-        XgJsonShapeId shape_id =
+        XgObjectShapeId shape_id =
             body_lookup_sequence_json_ternary_shape(bc, array_expr, out_literal);
         if (shape_id != XG_NO_ID)
             return shape_id;
@@ -4955,7 +5104,7 @@ static XgJsonShapeId body_lookup_sequence_json_shape(XgBodyCollect *bc, const As
     return body_lookup_call_sequence_json_shape(bc, array_expr, out_literal);
 }
 
-static XgJsonShapeId body_lookup_static_json_ternary_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_static_json_ternary_shape(XgBodyCollect *bc, const AstNode *expr,
                                                            const ObjectLiteralNode **out_literal) {
     const AstNode *value = body_json_receiver_unwrap(expr);
     const ObjectLiteralNode *then_literal;
@@ -5366,11 +5515,11 @@ static bool producer_class_field_json_constructor_writes_match_initializer(
     return true;
 }
 
-static XgJsonShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const AstNode *expr) {
+static XgObjectShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const AstNode *expr) {
     const AstNode *receiver = body_json_receiver_unwrap(expr);
     XgClassId receiver_class;
     const XgClassFieldSummary *field;
-    XgJsonShapeId shape_id;
+    XgObjectShapeId shape_id;
     const ObjectLiteralNode *initializer;
     if (!bc || !receiver || receiver->type != AST_MEMBER_ACCESS || !receiver->as.member_access.name)
         return XG_NO_ID;
@@ -5398,34 +5547,7 @@ static XgJsonShapeId body_lookup_class_field_json_shape(XgBodyCollect *bc, const
                                            field->type_key);
 }
 
-static XgJsonShapeId body_add_json_record_bridge_shape_for_type_alias(
-    XgGlobalEvidence *evidence, XgModuleId module_id, const TypeAliasNode *alias,
-    uint32_t source_span_id, XgRecordShapeId record_shape_id) {
-    XgJsonShapeSummary row;
-    uint32_t type_key;
-    int field_count = body_type_alias_record_field_count(alias);
-    if (!evidence || !alias || !alias->name || field_count <= 0)
-        return XG_NO_ID;
-    type_key = body_type_alias_record_type_key(alias);
-    memset(&row, 0, sizeof(row));
-    row.json_shape_id = (XgJsonShapeId) (evidence->njson_shapes + 1);
-    row.record_shape_id = record_shape_id;
-    row.module_id = module_id;
-    row.owner_func_id = XG_NO_ID;
-    row.source_span_id = source_span_id;
-    row.type_key = type_key;
-    row.field_name_start = (uint32_t) (body_type_alias_json_shape_hash(alias) & UINT32_MAX);
-    row.field_count = (uint16_t) (field_count < UINT16_MAX ? field_count : UINT16_MAX);
-    row.shape_kind = XG_JSON_SHAPE_RECORD_BRIDGE;
-    row.flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_RECORD_BRIDGEABLE;
-    row.shape_hash = body_type_alias_json_shape_hash(alias);
-    if (!xg_global_evidence_add_json_shape(evidence, &row))
-        return XG_NO_ID;
-    body_add_json_fields_for_type_alias(evidence, row.json_shape_id, alias);
-    return row.json_shape_id;
-}
-
-static void body_bind_json_shape_local(XgBodyCollect *bc, const char *name, XgJsonShapeId shape_id,
+static void body_bind_json_shape_local(XgBodyCollect *bc, const char *name, XgObjectShapeId shape_id,
                                        const ObjectLiteralNode *literal) {
     XgLocalType *row;
     if (!bc || !name || shape_id == XG_NO_ID)
@@ -5433,8 +5555,8 @@ static void body_bind_json_shape_local(XgBodyCollect *bc, const char *name, XgJs
     row = body_find_local(bc, name);
     if (!row)
         return;
-    row->json_shape_id = shape_id;
-    row->json_shape_literal = literal;
+    row->object_shape_id = shape_id;
+    row->object_shape_literal = literal;
 }
 
 static void body_clear_json_shape_local(XgBodyCollect *bc, const char *name) {
@@ -5444,11 +5566,11 @@ static void body_clear_json_shape_local(XgBodyCollect *bc, const char *name) {
     row = body_find_local(bc, name);
     if (!row)
         return;
-    row->json_shape_id = XG_NO_ID;
-    row->json_shape_literal = NULL;
+    row->object_shape_id = XG_NO_ID;
+    row->object_shape_literal = NULL;
 }
 
-static XgJsonShapeId body_lookup_local_json_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_local_json_shape(XgBodyCollect *bc, const AstNode *expr,
                                                   const ObjectLiteralNode **out_literal) {
     XgLocalType *row;
     if (out_literal)
@@ -5470,16 +5592,16 @@ static XgJsonShapeId body_lookup_local_json_shape(XgBodyCollect *bc, const AstNo
     if (expr->type != AST_VARIABLE || !expr->as.variable.name)
         return XG_NO_ID;
     row = body_find_local(bc, expr->as.variable.name);
-    if (!row || row->json_shape_id == XG_NO_ID)
+    if (!row || row->object_shape_id == XG_NO_ID)
         return XG_NO_ID;
     if (out_literal)
-        *out_literal = row->json_shape_literal;
-    return row->json_shape_id;
+        *out_literal = row->object_shape_literal;
+    return row->object_shape_id;
 }
 
-static XgJsonShapeId body_lookup_json_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_json_shape(XgBodyCollect *bc, const AstNode *expr,
                                             const ObjectLiteralNode **out_literal) {
-    XgJsonShapeId shape_id = body_lookup_local_json_shape(bc, expr, out_literal);
+    XgObjectShapeId shape_id = body_lookup_local_json_shape(bc, expr, out_literal);
     if (shape_id != XG_NO_ID)
         return shape_id;
     shape_id = body_lookup_call_json_return_shape(bc, expr, out_literal);
@@ -5494,7 +5616,7 @@ static XgJsonShapeId body_lookup_json_shape(XgBodyCollect *bc, const AstNode *ex
     return body_lookup_class_field_json_shape(bc, expr);
 }
 
-static int body_json_shape_static_field_index(XgBodyCollect *bc, XgJsonShapeId shape_id,
+static int body_json_shape_static_field_index(XgBodyCollect *bc, XgObjectShapeId shape_id,
                                               const ObjectLiteralNode *literal, const char *name) {
     uint32_t name_id;
     if (!bc || !bc->evidence || shape_id == XG_NO_ID || !name)
@@ -5504,8 +5626,8 @@ static int body_json_shape_static_field_index(XgBodyCollect *bc, XgJsonShapeId s
     name_id = hash_name32(name);
     if (name_id == 0)
         return -1;
-    for (uint32_t i = 0; i < bc->evidence->njson_fields; i++) {
-        const XgJsonFieldSummary *field = &bc->evidence->json_fields[i];
+    for (uint32_t i = 0; i < bc->evidence->nobject_fields; i++) {
+        const XgObjectFieldSummary *field = &bc->evidence->object_fields[i];
         if (field->shape_id == shape_id && field->name_id == name_id)
             return field->field_ordinal;
     }
@@ -5536,7 +5658,7 @@ static bool body_expr_is_json_without_shape(XgBodyCollect *bc, const AstNode *ex
             array_expr = body_json_receiver_unwrap(expr->as.index_get.array);
             row = body_lookup_local_sequence(bc, array_expr);
             if (row)
-                return row->sequence_elem_json_shape_id == XG_NO_ID &&
+                return row->sequence_elem_object_shape_id == XG_NO_ID &&
                        row->sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0);
             return array_expr && array_expr->type == AST_CALL_EXPR &&
                    body_type_ref_is_json_array(
@@ -5548,16 +5670,16 @@ static bool body_expr_is_json_without_shape(XgBodyCollect *bc, const AstNode *ex
     if (expr->type != AST_VARIABLE || !expr->as.variable.name)
         return false;
     row = body_find_local(bc, expr->as.variable.name);
-    return row && row->json_shape_id == XG_NO_ID && body_local_type_is_json(row);
+    return row && row->object_shape_id == XG_NO_ID && body_local_type_is_json(row);
 }
 
 static void body_add_json_member_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
     const ObjectLiteralNode *literal = NULL;
-    XgJsonShapeId shape_id;
+    XgObjectShapeId shape_id;
     const AstNode *receiver;
     const char *name;
     int field_index;
-    XgJsonAccessSummary row;
+    XgJsonDynamicAccessSummary row;
     if (!bc || !node)
         return;
     if (node->type == AST_MEMBER_ACCESS) {
@@ -5579,8 +5701,24 @@ static void body_add_json_member_access(XgBodyCollect *bc, const AstNode *node, 
         return;
     if (shape_id != XG_NO_ID && field_index < 0)
         return;
+    if (shape_id != XG_NO_ID && field_index >= 0) {
+        const XgObjectShapeSummary *shape =
+            xg_global_evidence_find_object_shape(bc->evidence, shape_id);
+        if (shape && (shape->flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) == 0) {
+            const ObjectLiteralNode *object_literal = NULL;
+            XgObjectShapeId object_shape_id =
+                body_lookup_object_shape(bc, receiver, &object_literal);
+            if (object_shape_id != XG_NO_ID &&
+                body_object_shape_static_field_index(bc, object_shape_id, object_literal, name) >=
+                    0)
+                return;
+            (void) body_add_resolved_object_field_access(bc, node, mutating, shape_id, name,
+                                                         (uint16_t) field_index);
+            return;
+        }
+    }
     memset(&row, 0, sizeof(row));
-    row.json_access_id = (XgJsonAccessId) (bc->evidence->njson_accesses + 1);
+    row.json_dynamic_access_id = (XgJsonDynamicAccessId) (bc->evidence->njson_dynamic_accesses + 1);
     row.module_id = bc->module_id;
     row.owner_func_id = bc->owner_func_id;
     row.receiver_shape_id = shape_id;
@@ -5588,13 +5726,13 @@ static void body_add_json_member_access(XgBodyCollect *bc, const AstNode *node, 
     row.key_name_id = hash_name32(name);
     row.result_type_key = 0;
     row.field_ordinal = field_index >= 0 ? (uint16_t) field_index : UINT16_MAX;
-    row.access_kind = mutating ? XG_JSON_ACCESS_FIELD_SET : XG_JSON_ACCESS_FIELD_GET;
-    row.flags = XG_JSON_ACCESS_STATIC_KEY;
+    row.access_kind = mutating ? XG_JSON_DYNAMIC_ACCESS_FIELD_SET : XG_JSON_DYNAMIC_ACCESS_FIELD_GET;
+    row.flags = XG_JSON_DYNAMIC_ACCESS_STATIC_KEY;
     if (shape_id != XG_NO_ID)
-        row.flags |= XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN;
+        row.flags |= XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN;
     if (mutating)
-        row.flags |= XG_JSON_ACCESS_MUTATING;
-    (void) xg_global_evidence_add_json_access(bc->evidence, &row);
+        row.flags |= XG_JSON_DYNAMIC_ACCESS_MUTATING;
+    (void) xg_global_evidence_add_json_dynamic_access(bc->evidence, &row);
 }
 
 static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
@@ -5602,9 +5740,9 @@ static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, b
     const AstNode *receiver;
     const AstNode *key;
     const char *static_key;
-    XgJsonShapeId shape_id;
+    XgObjectShapeId shape_id;
     int field_index = -1;
-    XgJsonAccessSummary row;
+    XgJsonDynamicAccessSummary row;
     if (!bc || !node)
         return;
     if (node->type == AST_INDEX_GET) {
@@ -5622,18 +5760,30 @@ static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, b
         if (!static_key || !body_expr_is_json_without_shape(bc, receiver))
             return;
     } else if (static_key) {
-        const XgJsonShapeSummary *shape =
-            xg_global_evidence_find_json_shape(bc->evidence, shape_id);
+        const XgObjectShapeSummary *shape =
+            xg_global_evidence_find_object_shape(bc->evidence, shape_id);
         if (!shape)
             return;
         field_index = body_json_shape_static_field_index(bc, shape_id, literal, static_key);
         if (field_index < 0)
             return;
+        if ((shape->flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) == 0) {
+            const ObjectLiteralNode *object_literal = NULL;
+            XgObjectShapeId object_shape_id =
+                body_lookup_object_shape(bc, receiver, &object_literal);
+            if (object_shape_id != XG_NO_ID &&
+                body_object_shape_static_field_index(bc, object_shape_id, object_literal,
+                                                     static_key) >= 0)
+                return;
+            (void) body_add_resolved_object_field_access(bc, node, mutating, shape_id, static_key,
+                                                         (uint16_t) field_index);
+            return;
+        }
     }
     if (!static_key && shape_id == XG_NO_ID)
         return;
     memset(&row, 0, sizeof(row));
-    row.json_access_id = (XgJsonAccessId) (bc->evidence->njson_accesses + 1);
+    row.json_dynamic_access_id = (XgJsonDynamicAccessId) (bc->evidence->njson_dynamic_accesses + 1);
     row.module_id = bc->module_id;
     row.owner_func_id = bc->owner_func_id;
     row.receiver_shape_id = shape_id;
@@ -5641,17 +5791,17 @@ static void body_add_json_index_access(XgBodyCollect *bc, const AstNode *node, b
     row.key_name_id = static_key ? hash_name32(static_key) : 0;
     row.result_type_key = 0;
     row.field_ordinal = field_index >= 0 ? (uint16_t) field_index : UINT16_MAX;
-    row.access_kind = mutating ? XG_JSON_ACCESS_INDEX_SET : XG_JSON_ACCESS_INDEX_GET;
+    row.access_kind = mutating ? XG_JSON_DYNAMIC_ACCESS_INDEX_SET : XG_JSON_DYNAMIC_ACCESS_INDEX_GET;
     row.flags = 0;
     if (static_key)
-        row.flags |= XG_JSON_ACCESS_STATIC_KEY;
+        row.flags |= XG_JSON_DYNAMIC_ACCESS_STATIC_KEY;
     else
-        row.flags |= XG_JSON_ACCESS_COMPUTED_KEY;
+        row.flags |= XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY;
     if (shape_id != XG_NO_ID)
-        row.flags |= XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN;
+        row.flags |= XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN;
     if (mutating)
-        row.flags |= XG_JSON_ACCESS_MUTATING;
-    (void) xg_global_evidence_add_json_access(bc->evidence, &row);
+        row.flags |= XG_JSON_DYNAMIC_ACCESS_MUTATING;
+    (void) xg_global_evidence_add_json_dynamic_access(bc->evidence, &row);
 }
 
 static const char *body_json_static_method_name(const AstNode *callee) {
@@ -5680,9 +5830,15 @@ static void body_add_json_codec_shape_test(XgBodyCollect *bc, const AstNode *nod
      * check; every other cast keeps its own lowering and must not claim a codec
      * site. Emitting a row unconditionally also collides on source identity,
      * because nested casts share a start position. */
-    uint32_t target_type_key = hash_tref32(target);
-    const XgJsonShapeSummary *target_shape =
-        body_find_json_shape_for_type_key(bc, target_type_key, XG_JSON_SHAPE_RECORD_BRIDGE);
+    const XrTypeRef *shape_target = target;
+    while (shape_target &&
+           (shape_target->kind == XR_TREF_OPTIONAL || shape_target->kind == XR_TREF_CONST) &&
+           shape_target->nchildren == 1 && shape_target->children) {
+        shape_target = shape_target->children[0];
+    }
+    uint32_t target_type_key = hash_tref32(shape_target);
+    const XgObjectShapeSummary *target_shape =
+        body_find_object_shape_for_type_key(bc, target_type_key, XG_OBJECT_SHAPE_STATIC);
     if (!target_shape)
         return;
 
@@ -5698,12 +5854,9 @@ static void body_add_json_codec_shape_test(XgBodyCollect *bc, const AstNode *nod
     if (operand)
         row.input_type_key = body_expr_type_key(bc, operand);
 
-    row.output_shape_id = target_shape->json_shape_id;
-    row.record_shape_id = target_shape->record_shape_id;
+    row.output_shape_id = target_shape->object_shape_id;
     row.field_count = target_shape->field_count;
     row.flags |= XG_JSON_CODEC_HAS_OUTPUT_SHAPE;
-    if (row.record_shape_id != XG_NO_ID)
-        row.flags |= XG_JSON_CODEC_HAS_RECORD_SHAPE;
 
     (void) xg_global_evidence_add_json_codec(bc->evidence, &row);
 }
@@ -5735,28 +5888,36 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
         row.codec_kind = XG_JSON_CODEC_PARSE;
         if (arg0 && arg0->type == AST_LITERAL_STRING)
             row.flags |= XG_JSON_CODEC_STATIC_TEXT;
+        if (call->type_arg_count == 1 && call->type_args && call->type_args[0]) {
+            row.target_type_key = hash_tref32(call->type_args[0]);
+            row.flags |= XG_JSON_CODEC_HAS_TARGET_TYPE;
+            const XgObjectShapeSummary *target_shape = body_find_object_shape_for_type_key(
+                bc, row.target_type_key, XG_OBJECT_SHAPE_STATIC);
+            if (target_shape) {
+                row.output_shape_id = target_shape->object_shape_id;
+                row.field_count = target_shape->field_count;
+                row.flags |= XG_JSON_CODEC_HAS_OUTPUT_SHAPE;
+            }
+        }
     } else if (strcmp(method, "decode") == 0) {
         row.codec_kind = XG_JSON_CODEC_DECODE;
         if (call->type_arg_count > 0 && call->type_args && call->type_args[0]) {
             row.target_type_key = hash_tref32(call->type_args[0]);
             row.flags |= XG_JSON_CODEC_HAS_TARGET_TYPE;
-            const XgJsonShapeSummary *target_shape = body_find_json_shape_for_type_key(
-                bc, row.target_type_key, XG_JSON_SHAPE_RECORD_BRIDGE);
+            const XgObjectShapeSummary *target_shape = body_find_object_shape_for_type_key(
+                bc, row.target_type_key, XG_OBJECT_SHAPE_STATIC);
             if (target_shape) {
-                row.output_shape_id = target_shape->json_shape_id;
-                row.record_shape_id = target_shape->record_shape_id;
+                row.output_shape_id = target_shape->object_shape_id;
                 row.field_count = target_shape->field_count;
                 row.flags |= XG_JSON_CODEC_HAS_OUTPUT_SHAPE;
-                if (row.record_shape_id != XG_NO_ID)
-                    row.flags |= XG_JSON_CODEC_HAS_RECORD_SHAPE;
             }
         }
         if (arg0) {
             const ObjectLiteralNode *literal = NULL;
             row.input_shape_id = body_lookup_local_json_shape(bc, arg0, &literal);
             if (row.input_shape_id != XG_NO_ID) {
-                const XgJsonShapeSummary *shape =
-                    xg_global_evidence_find_json_shape(bc->evidence, row.input_shape_id);
+                const XgObjectShapeSummary *shape =
+                    xg_global_evidence_find_object_shape(bc->evidence, row.input_shape_id);
                 row.flags |= XG_JSON_CODEC_HAS_INPUT_SHAPE;
                 if (shape && row.field_count == 0)
                     row.field_count = shape->field_count;
@@ -5768,15 +5929,11 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
             const ObjectLiteralNode *literal = NULL;
             row.input_shape_id = body_lookup_local_json_shape(bc, arg0, &literal);
             if (row.input_shape_id != XG_NO_ID) {
-                const XgJsonShapeSummary *shape =
-                    xg_global_evidence_find_json_shape(bc->evidence, row.input_shape_id);
+                const XgObjectShapeSummary *shape =
+                    xg_global_evidence_find_object_shape(bc->evidence, row.input_shape_id);
                 row.flags |= XG_JSON_CODEC_HAS_INPUT_SHAPE;
-                if (shape) {
+                if (shape)
                     row.field_count = shape->field_count;
-                    row.record_shape_id = shape->record_shape_id;
-                    if (row.record_shape_id != XG_NO_ID)
-                        row.flags |= XG_JSON_CODEC_HAS_RECORD_SHAPE;
-                }
             }
         }
         if (body_type_key_has_derive_kind(bc, row.input_type_key, XG_DERIVE_JSON))
@@ -5787,8 +5944,8 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
             const ObjectLiteralNode *literal = NULL;
             row.input_shape_id = body_lookup_local_json_shape(bc, arg0, &literal);
             if (row.input_shape_id != XG_NO_ID) {
-                const XgJsonShapeSummary *shape =
-                    xg_global_evidence_find_json_shape(bc->evidence, row.input_shape_id);
+                const XgObjectShapeSummary *shape =
+                    xg_global_evidence_find_object_shape(bc->evidence, row.input_shape_id);
                 row.flags |= XG_JSON_CODEC_HAS_INPUT_SHAPE;
                 if (shape)
                     row.field_count = shape->field_count;
@@ -5803,7 +5960,7 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
     (void) xg_global_evidence_add_json_codec(bc->evidence, &row);
 }
 
-static uint32_t body_record_type_key(const ObjectLiteralNode *obj) {
+static uint32_t body_struct_object_type_key(const ObjectLiteralNode *obj) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     static const char tag[] = "Record";
     h = fold_bytes(h, tag, sizeof(tag) - 1);
@@ -5811,18 +5968,18 @@ static uint32_t body_record_type_key(const ObjectLiteralNode *obj) {
     return hash_folded32(h);
 }
 
-static XgRecordShapeId body_lookup_local_record_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_local_object_shape(XgBodyCollect *bc, const AstNode *expr,
                                                       const ObjectLiteralNode **out_literal);
-static XgRecordShapeId body_lookup_record_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_object_shape(XgBodyCollect *bc, const AstNode *expr,
                                                 const ObjectLiteralNode **out_literal);
-static XgRecordShapeId body_lookup_or_add_record_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_or_add_object_shape(XgBodyCollect *bc, const AstNode *expr,
                                                        const ObjectLiteralNode **out_literal);
-static XgRecordShapeId body_add_record_shape_for_literal(XgBodyCollect *bc,
+static XgObjectShapeId body_add_object_shape_for_literal(XgBodyCollect *bc,
                                                          const ObjectLiteralNode *obj,
                                                          uint32_t source_span_id,
                                                          uint32_t type_key);
 
-static int record_shape_key_index(const char **keys, uint32_t count, const char *key) {
+static int object_shape_key_index(const char **keys, uint32_t count, const char *key) {
     if (!keys || !key)
         return -1;
     for (uint32_t i = 0; i < count; i++) {
@@ -5832,11 +5989,11 @@ static int record_shape_key_index(const char **keys, uint32_t count, const char 
     return -1;
 }
 
-static bool record_shape_add_key(const char **keys, uint32_t capacity, uint32_t *count,
+static bool object_shape_add_key(const char **keys, uint32_t capacity, uint32_t *count,
                                  const char *key) {
     if (!keys || !count || !key)
         return false;
-    if (record_shape_key_index(keys, *count, key) >= 0)
+    if (object_shape_key_index(keys, *count, key) >= 0)
         return true;
     if (*count >= capacity)
         return false;
@@ -5844,7 +6001,7 @@ static bool record_shape_add_key(const char **keys, uint32_t capacity, uint32_t 
     return true;
 }
 
-static bool record_shape_count_candidate_keys(XgBodyCollect *bc, const ObjectLiteralNode *obj,
+static bool object_shape_count_candidate_keys(XgBodyCollect *bc, const ObjectLiteralNode *obj,
                                               uint32_t *count, uint32_t depth) {
     if (!obj || !count || depth > 16)
         return false;
@@ -5853,11 +6010,11 @@ static bool record_shape_count_candidate_keys(XgBodyCollect *bc, const ObjectLit
             const ObjectLiteralNode *source_literal = NULL;
             AstNode *spread = obj->values[i];
             if (!spread ||
-                body_lookup_or_add_record_shape(bc, spread->as.spread_expr.expr, &source_literal) ==
+                body_lookup_or_add_object_shape(bc, spread->as.spread_expr.expr, &source_literal) ==
                     XG_NO_ID ||
                 !source_literal)
                 return false;
-            if (!record_shape_count_candidate_keys(bc, source_literal, count, depth + 1))
+            if (!object_shape_count_candidate_keys(bc, source_literal, count, depth + 1))
                 return false;
         } else if (!body_object_literal_static_key(obj, i)) {
             return false;
@@ -5868,7 +6025,7 @@ static bool record_shape_count_candidate_keys(XgBodyCollect *bc, const ObjectLit
     return true;
 }
 
-static bool record_shape_collect_keys(XgBodyCollect *bc, const ObjectLiteralNode *obj,
+static bool object_shape_collect_keys(XgBodyCollect *bc, const ObjectLiteralNode *obj,
                                       const char **keys, uint32_t capacity, uint32_t *count,
                                       bool *has_spread, uint32_t depth) {
     if (!obj || (!keys && capacity > 0) || !count || depth > 16)
@@ -5880,49 +6037,75 @@ static bool record_shape_collect_keys(XgBodyCollect *bc, const ObjectLiteralNode
             if (has_spread)
                 *has_spread = true;
             if (!spread ||
-                body_lookup_or_add_record_shape(bc, spread->as.spread_expr.expr, &source_literal) ==
+                body_lookup_or_add_object_shape(bc, spread->as.spread_expr.expr, &source_literal) ==
                     XG_NO_ID ||
                 !source_literal)
                 return false;
-            if (!record_shape_collect_keys(bc, source_literal, keys, capacity, count, has_spread,
+            if (!object_shape_collect_keys(bc, source_literal, keys, capacity, count, has_spread,
                                            depth + 1))
                 return false;
         } else {
             const char *key = body_object_literal_static_key(obj, i);
-            if (!key || !record_shape_add_key(keys, capacity, count, key))
+            if (!key || !object_shape_add_key(keys, capacity, count, key))
                 return false;
         }
     }
     return true;
 }
 
-static bool record_shape_collect_literal_keys(XgBodyCollect *bc, const ObjectLiteralNode *obj,
-                                              const char ***out_keys, uint32_t *out_count,
-                                              bool *out_has_spread, uint64_t *out_hash) {
+static int object_shape_key_compare(const void *left_ptr, const void *right_ptr) {
+    const char *left = *(const char *const *) left_ptr;
+    const char *right = *(const char *const *) right_ptr;
+    uint64_t left_key = xg_object_stable_name_key(left ? left : "");
+    uint64_t right_key = xg_object_stable_name_key(right ? right : "");
+    if (left_key < right_key)
+        return -1;
+    if (left_key > right_key)
+        return 1;
+    uint32_t left_name_id = hash_name32(left ? left : "");
+    uint32_t right_name_id = hash_name32(right ? right : "");
+    return left_name_id < right_name_id ? -1 : left_name_id > right_name_id ? 1 : 0;
+}
+
+static void object_shape_canonicalize_keys(const char **keys, uint32_t count) {
+    if (keys && count > 1)
+        qsort(keys, count, sizeof(*keys), object_shape_key_compare);
+}
+
+static bool object_shape_collect_literal_keys(XgBodyCollect *bc, const ObjectLiteralNode *obj,
+                                              uint8_t domain, const char ***out_keys,
+                                              uint32_t *out_count, bool *out_has_spread,
+                                              uint64_t *out_hash) {
     uint32_t capacity = 0;
     uint32_t count = 0;
     bool has_spread = false;
     const char **keys = NULL;
     uint64_t hash = XR_FNV64_OFFSET_BASIS;
-    static const char tag[] = "RecordShape";
+    static const char struct_tag[] = "StructObjectShape";
+    static const char json_tag[] = "JsonObjectShape";
     if (!out_keys || !out_count || !out_has_spread || !out_hash)
         return false;
     *out_keys = NULL;
     *out_count = 0;
     *out_has_spread = false;
     *out_hash = 0;
-    if (!record_shape_count_candidate_keys(bc, obj, &capacity, 0))
+    if (!object_shape_count_candidate_keys(bc, obj, &capacity, 0))
         return false;
     if (capacity > 0) {
         keys = (const char **) xr_calloc((size_t) capacity, sizeof(*keys));
         if (!keys)
             return false;
     }
-    if (!record_shape_collect_keys(bc, obj, keys, capacity, &count, &has_spread, 0)) {
+    if (!object_shape_collect_keys(bc, obj, keys, capacity, &count, &has_spread, 0)) {
         xr_free(keys);
         return false;
     }
-    hash = fold_bytes(hash, tag, sizeof(tag) - 1);
+    if (domain == XG_OBJECT_DOMAIN_STRUCT)
+        object_shape_canonicalize_keys(keys, count);
+    if (domain == XG_OBJECT_DOMAIN_STRUCT)
+        hash = fold_bytes(hash, struct_tag, sizeof(struct_tag) - 1);
+    else
+        hash = fold_bytes(hash, json_tag, sizeof(json_tag) - 1);
     for (uint32_t i = 0; i < count; i++) {
         const char *key = keys[i] ? keys[i] : "";
         hash = fold_bytes(hash, key, strlen(key));
@@ -5934,13 +6117,13 @@ static bool record_shape_collect_literal_keys(XgBodyCollect *bc, const ObjectLit
     return true;
 }
 
-static bool record_patch_collect_literal_keys(const ObjectLiteralNode *obj, const char ***out_keys,
+static bool object_patch_collect_literal_keys(const ObjectLiteralNode *obj, const char ***out_keys,
                                               uint32_t *out_count, uint64_t *out_hash) {
     uint32_t capacity = 0;
     uint32_t count = 0;
     const char **keys = NULL;
     uint64_t hash = XR_FNV64_OFFSET_BASIS;
-    static const char tag[] = "RecordPatchShape";
+    static const char tag[] = "StructObjectPatchShape";
     if (!out_keys || !out_count || !out_hash)
         return false;
     *out_keys = NULL;
@@ -5965,11 +6148,12 @@ static bool record_patch_collect_literal_keys(const ObjectLiteralNode *obj, cons
         if (body_object_literal_entry_is_spread(obj, i))
             continue;
         key = body_object_literal_static_key(obj, i);
-        if (!key || !record_shape_add_key(keys, capacity, &count, key)) {
+        if (!key || !object_shape_add_key(keys, capacity, &count, key)) {
             xr_free(keys);
             return false;
         }
     }
+    object_shape_canonicalize_keys(keys, count);
     hash = fold_bytes(hash, tag, sizeof(tag) - 1);
     for (uint32_t i = 0; i < count; i++) {
         const char *key = keys[i] ? keys[i] : "";
@@ -5981,7 +6165,7 @@ static bool record_patch_collect_literal_keys(const ObjectLiteralNode *obj, cons
     return true;
 }
 
-static uint16_t record_patch_overwrite_count(const ObjectLiteralNode *source_literal,
+static uint16_t object_patch_overwrite_count(const ObjectLiteralNode *source_literal,
                                              const char **patch_keys, uint32_t patch_key_count) {
     uint32_t count = 0;
     if (!source_literal || !patch_keys)
@@ -5994,125 +6178,226 @@ static uint16_t record_patch_overwrite_count(const ObjectLiteralNode *source_lit
     return (uint16_t) (count < UINT16_MAX ? count : UINT16_MAX);
 }
 
-static void body_add_record_fields_for_keys(XgBodyCollect *bc, XgRecordShapeId shape_id,
+static void body_add_object_fields_for_keys(XgBodyCollect *bc, XgObjectShapeId shape_id,
                                             const char **keys, uint32_t key_count,
-                                            uint32_t base_flags) {
+                                            uint32_t base_flags,
+                                            const ObjectLiteralNode *literal) {
     if (!bc || !bc->evidence || shape_id == XG_NO_ID || (!keys && key_count > 0))
         return;
     for (uint32_t i = 0; i < key_count; i++) {
-        XgRecordFieldSummary field;
+        XgObjectFieldSummary field;
         if (!keys[i])
             continue;
         memset(&field, 0, sizeof(field));
-        field.field_id = (XgRecordFieldId) (bc->evidence->nrecord_fields + 1);
+        field.field_id = (XgObjectFieldId) (bc->evidence->nobject_fields + 1);
         field.shape_id = shape_id;
         field.field_ordinal = (uint16_t) (i < UINT16_MAX ? i : UINT16_MAX);
         field.name_id = hash_name32(keys[i]);
-        field.flags = base_flags | XG_RECORD_FIELD_STATIC_KEY;
-        (void) xg_global_evidence_add_record_field(bc->evidence, &field);
+        if (literal && literal->values) {
+            int literal_index = body_object_literal_static_field_index(literal, keys[i]);
+            if (literal_index >= 0)
+                field.type_key = body_expr_type_key(bc, literal->values[literal_index]);
+            if (literal_index >= 0)
+                field.stable_type_key =
+                    body_expr_stable_type_key(bc, literal->values[literal_index]);
+        }
+        field.flags = base_flags | XG_OBJECT_FIELD_STATIC_KEY;
+        field.stable_name_key = xg_object_stable_name_key(keys[i]);
+        (void) xg_global_evidence_add_object_field(bc->evidence, &field);
     }
 }
 
-static void body_add_record_fields_for_type_alias(XgGlobalEvidence *evidence,
-                                                  XgRecordShapeId shape_id,
+static void body_add_object_fields_for_type_alias(XgProducer *producer,
+                                                  XgGlobalEvidence *evidence,
+                                                  XgObjectShapeId shape_id,
                                                   const TypeAliasNode *alias) {
-    int field_count = body_type_alias_record_field_count(alias);
+    typedef struct ObjectAliasFieldInput {
+        const char *name;
+        const XrTypeRef *type;
+        uint64_t stable_name_key;
+        uint32_t name_id;
+        uint32_t flags;
+    } ObjectAliasFieldInput;
+    int field_count = body_type_alias_object_field_count(alias);
+    ObjectAliasFieldInput *inputs;
+    (void) producer;
     if (!evidence || shape_id == XG_NO_ID || !alias)
         return;
+    inputs = field_count > 0
+                 ? (ObjectAliasFieldInput *) xr_calloc((size_t) field_count, sizeof(*inputs))
+                 : NULL;
+    if (field_count > 0 && !inputs)
+        return;
     for (int i = 0; i < field_count; i++) {
-        const char *name = body_type_alias_record_field_name(alias, i);
-        const XrTypeRef *field_type = body_type_alias_record_field_type(alias, i);
-        XgRecordFieldSummary field;
+        inputs[i].name = body_type_alias_object_field_name(alias, i);
+        inputs[i].type = body_type_alias_object_field_type(alias, i);
+        inputs[i].stable_name_key = xg_object_stable_name_key(inputs[i].name ? inputs[i].name : "");
+        inputs[i].name_id = hash_name32(inputs[i].name ? inputs[i].name : "");
+        inputs[i].flags = XG_OBJECT_FIELD_STATIC_KEY;
+        if (body_type_alias_object_field_optional(alias, i))
+            inputs[i].flags |= XG_OBJECT_FIELD_OPTIONAL;
+        else
+            inputs[i].flags |= XG_OBJECT_FIELD_REQUIRED;
+        if (body_type_alias_object_field_readonly(alias, i))
+            inputs[i].flags |= XG_OBJECT_FIELD_READONLY;
+    }
+    for (int i = 1; i < field_count; i++) {
+        ObjectAliasFieldInput current = inputs[i];
+        int j = i;
+        while (j > 0 &&
+               (inputs[j - 1].stable_name_key > current.stable_name_key ||
+                (inputs[j - 1].stable_name_key == current.stable_name_key &&
+                  inputs[j - 1].name_id > current.name_id))) {
+            inputs[j] = inputs[j - 1];
+            j--;
+        }
+        inputs[j] = current;
+    }
+    for (int i = 0; i < field_count; i++) {
+        const char *name = inputs[i].name;
+        XgObjectFieldSummary field;
         if (!name)
             continue;
         memset(&field, 0, sizeof(field));
-        field.field_id = (XgRecordFieldId) (evidence->nrecord_fields + 1);
+        field.field_id = (XgObjectFieldId) (evidence->nobject_fields + 1);
         field.shape_id = shape_id;
         field.field_ordinal = (uint16_t) (i < UINT16_MAX ? i : UINT16_MAX);
-        field.name_id = hash_name32(name);
-        field.type_key = field_type ? hash_tref32(field_type) : 0;
-        field.flags = XG_RECORD_FIELD_STATIC_KEY;
-        if (body_type_alias_record_field_optional(alias, i))
-            field.flags |= XG_RECORD_FIELD_OPTIONAL;
-        else
-            field.flags |= XG_RECORD_FIELD_REQUIRED;
-        if (body_type_alias_record_field_readonly(alias, i))
-            field.flags |= XG_RECORD_FIELD_READONLY;
-        (void) xg_global_evidence_add_record_field(evidence, &field);
+        field.name_id = inputs[i].name_id;
+        field.type_key = inputs[i].type ? hash_tref32(inputs[i].type) : 0;
+        field.stable_type_key = stable_tref_key(inputs[i].type);
+        field.stable_name_key = inputs[i].stable_name_key;
+        field.flags = inputs[i].flags;
+        (void) xg_global_evidence_add_object_field(evidence, &field);
     }
+    xr_free(inputs);
 }
 
-static XgRecordShapeId body_add_record_patch_shape(XgBodyCollect *bc, uint32_t source_span_id,
+static XgObjectShapeSummary *body_find_mutable_object_shape(XgGlobalEvidence *evidence,
+                                                            XgObjectShapeId shape_id) {
+    if (!evidence || shape_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nobject_shapes; i++) {
+        if (evidence->object_shapes[i].object_shape_id == shape_id)
+            return &evidence->object_shapes[i];
+    }
+    return NULL;
+}
+
+static bool body_finalize_object_shape_identity(XgGlobalEvidence *evidence,
+                                                XgObjectShapeId shape_id) {
+    XgObjectShapeSummary *shape = body_find_mutable_object_shape(evidence, shape_id);
+    XgObjectFieldSummary *fields = NULL;
+    uint64_t stable_shape_key = 0;
+    bool ok = false;
+
+    if (!shape)
+        return false;
+    if (shape->field_count != 0) {
+        fields = (XgObjectFieldSummary *) xr_calloc(shape->field_count, sizeof(*fields));
+        if (!fields)
+            return false;
+        for (uint32_t i = 0; i < evidence->nobject_fields; i++) {
+            const XgObjectFieldSummary *field = &evidence->object_fields[i];
+            if (field->shape_id != shape_id || field->field_ordinal >= shape->field_count)
+                continue;
+            fields[field->field_ordinal] = *field;
+        }
+        for (uint16_t ordinal = 0; ordinal < shape->field_count; ordinal++) {
+            if (fields[ordinal].shape_id != shape_id || fields[ordinal].stable_name_key == 0)
+                goto done;
+        }
+    }
+    if (!xg_object_shape_stable_key(shape->domain, fields, shape->field_count,
+                                    &stable_shape_key))
+        goto done;
+    shape->stable_type_key = shape->type_key ? (uint64_t) shape->type_key : stable_shape_key;
+    shape->stable_shape_key = stable_shape_key;
+    ok = true;
+
+done:
+    xr_free(fields);
+    return ok;
+}
+
+static XgObjectShapeId body_add_object_patch_shape(XgBodyCollect *bc, uint32_t source_span_id,
                                                    const char **patch_keys,
                                                    uint32_t patch_key_count, uint64_t patch_hash) {
-    XgRecordShapeSummary row;
+    XgObjectShapeSummary row;
     if (!bc || !bc->evidence)
         return XG_NO_ID;
     memset(&row, 0, sizeof(row));
-    row.record_shape_id = (XgRecordShapeId) (bc->evidence->nrecord_shapes + 1);
+    row.object_shape_id = (XgObjectShapeId) (bc->evidence->nobject_shapes + 1);
     row.module_id = bc->module_id;
     row.owner_func_id = bc->owner_func_id;
     row.source_span_id = source_span_id;
     row.type_key = hash_folded32(fold_u64(patch_hash, patch_key_count));
     row.field_name_start = (uint32_t) (patch_hash & UINT32_MAX);
     row.field_count = (uint16_t) (patch_key_count < UINT16_MAX ? patch_key_count : UINT16_MAX);
-    row.shape_kind = XG_RECORD_SHAPE_PATCH;
+    row.shape_kind = XG_OBJECT_SHAPE_PATCH;
+    row.domain = XG_OBJECT_DOMAIN_STRUCT;
+    row.provenance = XG_OBJECT_SHAPE_PATCH;
+    row.concrete_exact = 1;
+    row.fresh = 1;
     row.flags =
-        XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE;
+        XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_JSON_BRIDGEABLE;
     row.shape_hash = patch_hash;
-    if (!xg_global_evidence_add_record_shape(bc->evidence, &row))
+    row.stable_type_key = row.type_key;
+    row.stable_shape_key = patch_hash;
+    if (!xg_global_evidence_add_object_shape(bc->evidence, &row))
         return XG_NO_ID;
-    body_add_record_fields_for_keys(bc, row.record_shape_id, patch_keys, patch_key_count, 0);
-    return row.record_shape_id;
+    body_add_object_fields_for_keys(bc, row.object_shape_id, patch_keys, patch_key_count, 0, NULL);
+    if (!body_finalize_object_shape_identity(bc->evidence, row.object_shape_id))
+        return XG_NO_ID;
+    return row.object_shape_id;
 }
 
-static void body_add_record_merge_rows_for_literal(XgBodyCollect *bc, const ObjectLiteralNode *obj,
-                                                   XgRecordShapeId result_shape_id,
+static void body_add_object_merge_rows_for_literal(XgBodyCollect *bc, const ObjectLiteralNode *obj,
+                                                   XgObjectShapeId result_shape_id,
                                                    uint32_t result_field_count,
                                                    uint64_t result_shape_hash,
                                                    uint32_t source_span_id) {
     const char **patch_keys = NULL;
     uint32_t patch_key_count = 0;
     uint64_t patch_hash = 0;
-    XgRecordShapeId patch_shape_id = XG_NO_ID;
-    const XgRecordShapeSummary *patch_shape = NULL;
-    const XgRecordShapeSummary *result_shape = NULL;
+    XgObjectShapeId patch_shape_id = XG_NO_ID;
+    const XgObjectShapeSummary *patch_shape = NULL;
+    const XgObjectShapeSummary *result_shape = NULL;
     if (!bc || !bc->evidence || !obj || result_shape_id == XG_NO_ID)
         return;
-    if (!record_patch_collect_literal_keys(obj, &patch_keys, &patch_key_count, &patch_hash))
+    if (!object_patch_collect_literal_keys(obj, &patch_keys, &patch_key_count, &patch_hash))
         return;
-    result_shape = xg_global_evidence_find_record_shape(bc->evidence, result_shape_id);
+    result_shape = xg_global_evidence_find_object_shape(bc->evidence, result_shape_id);
     if (!result_shape)
         goto done;
     for (int i = 0; i < obj->count; i++) {
         AstNode *spread;
         const ObjectLiteralNode *source_literal = NULL;
-        XgRecordShapeId base_shape_id;
-        const XgRecordShapeSummary *base_shape;
-        XgRecordMergeSummary row;
+        XgObjectShapeId base_shape_id;
+        const XgObjectShapeSummary *base_shape;
+        XgObjectMergeSummary row;
         uint16_t overwrites;
         uint64_t merge_hash;
-        static const char tag[] = "RecordMerge";
+        static const char tag[] = "StructObjectMerge";
         if (!body_object_literal_entry_is_spread(obj, i))
             continue;
         spread = obj->values[i];
         if (!spread)
             continue;
         base_shape_id =
-            body_lookup_or_add_record_shape(bc, spread->as.spread_expr.expr, &source_literal);
+            body_lookup_or_add_object_shape(bc, spread->as.spread_expr.expr, &source_literal);
         if (base_shape_id == XG_NO_ID || !source_literal)
             continue;
         if (patch_shape_id == XG_NO_ID) {
-            patch_shape_id = body_add_record_patch_shape(bc, source_span_id, patch_keys,
+            patch_shape_id = body_add_object_patch_shape(bc, source_span_id, patch_keys,
                                                          patch_key_count, patch_hash);
-            patch_shape = xg_global_evidence_find_record_shape(bc->evidence, patch_shape_id);
+            patch_shape = xg_global_evidence_find_object_shape(bc->evidence, patch_shape_id);
             if (!patch_shape)
                 break;
         }
-        base_shape = xg_global_evidence_find_record_shape(bc->evidence, base_shape_id);
+        base_shape = xg_global_evidence_find_object_shape(bc->evidence, base_shape_id);
         if (!base_shape)
             continue;
-        overwrites = record_patch_overwrite_count(source_literal, patch_keys, patch_key_count);
+        overwrites = object_patch_overwrite_count(source_literal, patch_keys, patch_key_count);
         merge_hash = XR_FNV64_OFFSET_BASIS;
         merge_hash = fold_bytes(merge_hash, tag, sizeof(tag) - 1);
         merge_hash = fold_u64(merge_hash, base_shape->shape_hash);
@@ -6120,7 +6405,7 @@ static void body_add_record_merge_rows_for_literal(XgBodyCollect *bc, const Obje
         merge_hash = fold_u64(merge_hash, result_shape_hash);
         merge_hash = fold_u64(merge_hash, overwrites);
         memset(&row, 0, sizeof(row));
-        row.merge_id = (XgRecordMergeId) (bc->evidence->nrecord_merges + 1);
+        row.merge_id = (XgObjectMergeId) (bc->evidence->nobject_merges + 1);
         row.module_id = bc->module_id;
         row.owner_func_id = bc->owner_func_id;
         row.source_node_id = producer_source_node_id(bc->module_id, spread->as.spread_expr.expr);
@@ -6134,51 +6419,61 @@ static void body_add_record_merge_rows_for_literal(XgBodyCollect *bc, const Obje
             (uint16_t) (result_field_count < UINT16_MAX ? result_field_count : UINT16_MAX);
         row.overwrite_count = overwrites;
         row.copy_table_id = (uint32_t) (merge_hash & UINT32_MAX);
-        row.flags = XG_RECORD_MERGE_BASE_SHAPE_PROVEN | XG_RECORD_MERGE_PATCH_SHAPE_PROVEN |
-                    XG_RECORD_MERGE_RESULT_SHAPE_PROVEN;
+        row.flags = XG_OBJECT_MERGE_BASE_SHAPE_PROVEN | XG_OBJECT_MERGE_PATCH_SHAPE_PROVEN |
+                    XG_OBJECT_MERGE_RESULT_SHAPE_PROVEN;
         if (overwrites != 0)
-            row.flags |= XG_RECORD_MERGE_OVERWRITES;
+            row.flags |= XG_OBJECT_MERGE_OVERWRITES;
         row.merge_hash = merge_hash;
-        (void) xg_global_evidence_add_record_merge(bc->evidence, &row);
+        (void) xg_global_evidence_add_object_merge(bc->evidence, &row);
     }
 
 done:
     xr_free(patch_keys);
 }
 
-static XgRecordShapeId body_add_record_shape_for_literal(XgBodyCollect *bc,
-                                                         const ObjectLiteralNode *obj,
-                                                         uint32_t source_span_id,
-                                                         uint32_t type_key) {
-    XgRecordShapeSummary row;
+static XgObjectShapeId body_add_object_shape_for_literal_domain(
+    XgBodyCollect *bc, const ObjectLiteralNode *obj, uint32_t source_span_id,
+    uint32_t type_key, uint8_t domain) {
+    XgObjectShapeSummary row;
     const char **shape_keys = NULL;
     uint32_t shape_key_count = 0;
     bool has_spread = false;
     uint64_t shape_hash = 0;
     uint32_t resolved_type_key;
     uint8_t shape_kind;
-    if (!bc || !bc->evidence || !obj)
+    if (!bc || !bc->evidence || !obj ||
+        (domain != XG_OBJECT_DOMAIN_STRUCT && domain != XG_OBJECT_DOMAIN_JSON))
         return XG_NO_ID;
-    if (!record_shape_collect_literal_keys(bc, obj, &shape_keys, &shape_key_count, &has_spread,
-                                           &shape_hash))
+    if (domain == XG_OBJECT_DOMAIN_JSON) {
+        for (int i = 0; i < obj->count; i++) {
+            if (!body_object_literal_static_key(obj, i))
+                return XG_NO_ID;
+        }
+    }
+    if (!object_shape_collect_literal_keys(bc, obj, domain, &shape_keys, &shape_key_count,
+                                           &has_spread, &shape_hash))
         return XG_NO_ID;
-    resolved_type_key = type_key ? type_key : body_record_type_key(obj);
-    shape_kind = has_spread ? XG_RECORD_SHAPE_SPREAD : XG_RECORD_SHAPE_LITERAL;
-    for (uint32_t i = 0; i < bc->evidence->nrecord_shapes; i++) {
-        const XgRecordShapeSummary *existing = &bc->evidence->record_shapes[i];
+    resolved_type_key = type_key ? type_key
+                                 : (domain == XG_OBJECT_DOMAIN_JSON
+                                        ? hash_named_type_key32("Json", NULL, 0)
+                                        : body_struct_object_type_key(obj));
+    shape_kind = has_spread ? XG_OBJECT_SHAPE_SPREAD : XG_OBJECT_SHAPE_LITERAL;
+    for (uint32_t i = 0; i < bc->evidence->nobject_shapes; i++) {
+        const XgObjectShapeSummary *existing = &bc->evidence->object_shapes[i];
         if (existing->module_id == bc->module_id && existing->owner_func_id == bc->owner_func_id &&
             existing->source_span_id == source_span_id && existing->type_key == resolved_type_key &&
+            existing->domain == domain &&
             existing->shape_kind == shape_kind &&
             existing->field_count ==
                 (uint16_t) (shape_key_count < UINT16_MAX ? shape_key_count : UINT16_MAX) &&
             existing->shape_hash == shape_hash) {
-            XgRecordShapeId existing_id = existing->record_shape_id;
+            XgObjectShapeId existing_id = existing->object_shape_id;
             xr_free(shape_keys);
             return existing_id;
         }
     }
     memset(&row, 0, sizeof(row));
-    row.record_shape_id = (XgRecordShapeId) (bc->evidence->nrecord_shapes + 1);
+    row.object_shape_id = (XgObjectShapeId) (bc->evidence->nobject_shapes + 1);
     row.module_id = bc->module_id;
     row.owner_func_id = bc->owner_func_id;
     row.source_span_id = source_span_id;
@@ -6186,52 +6481,87 @@ static XgRecordShapeId body_add_record_shape_for_literal(XgBodyCollect *bc,
     row.field_name_start = (uint32_t) (shape_hash & UINT32_MAX);
     row.field_count = (uint16_t) (shape_key_count < UINT16_MAX ? shape_key_count : UINT16_MAX);
     row.shape_kind = shape_kind;
-    row.flags =
-        XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE;
+    row.domain = domain;
+    row.provenance = shape_kind;
+    row.concrete_exact = 1;
+    row.fresh = 1;
+    row.flags = XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS;
+    if (domain == XG_OBJECT_DOMAIN_STRUCT)
+        row.flags |= XG_OBJECT_SHAPE_JSON_BRIDGEABLE;
+    else
+        row.flags |= XG_OBJECT_SHAPE_JSON_DOMAIN | XG_OBJECT_SHAPE_FRESH |
+                     XG_OBJECT_SHAPE_MUTABLE;
     if (has_spread)
-        row.flags |= XG_RECORD_SHAPE_HAS_SPREAD;
+        row.flags |= XG_OBJECT_SHAPE_HAS_SPREAD;
     row.shape_hash = shape_hash;
-    if (!xg_global_evidence_add_record_shape(bc->evidence, &row)) {
+    row.stable_type_key = row.type_key;
+    row.stable_shape_key = shape_hash;
+    if (!xg_global_evidence_add_object_shape(bc->evidence, &row)) {
         xr_free(shape_keys);
         return XG_NO_ID;
     }
     if (has_spread)
-        body_add_record_merge_rows_for_literal(bc, obj, row.record_shape_id, shape_key_count,
+        body_add_object_merge_rows_for_literal(bc, obj, row.object_shape_id, shape_key_count,
                                                shape_hash, source_span_id);
-    body_add_record_fields_for_keys(bc, row.record_shape_id, shape_keys, shape_key_count,
-                                    XG_RECORD_FIELD_REQUIRED);
+    body_add_object_fields_for_keys(bc, row.object_shape_id, shape_keys, shape_key_count,
+                                    XG_OBJECT_FIELD_REQUIRED, obj);
+    if (!body_finalize_object_shape_identity(bc->evidence, row.object_shape_id)) {
+        xr_free(shape_keys);
+        return XG_NO_ID;
+    }
     xr_free(shape_keys);
-    return row.record_shape_id;
+    return row.object_shape_id;
 }
 
-static XgRecordShapeId body_add_record_shape_for_type_alias(XgGlobalEvidence *evidence,
+static XgObjectShapeId body_add_object_shape_for_literal(XgBodyCollect *bc,
+                                                         const ObjectLiteralNode *obj,
+                                                         uint32_t source_span_id,
+                                                         uint32_t type_key) {
+    return body_add_object_shape_for_literal_domain(bc, obj, source_span_id, type_key,
+                                                    XG_OBJECT_DOMAIN_STRUCT);
+}
+
+static XgObjectShapeId body_add_object_shape_for_type_alias(XgProducer *p,
                                                             XgModuleId module_id,
                                                             const TypeAliasNode *alias,
-                                                            uint32_t source_span_id,
-                                                            XgJsonShapeId json_shape_id) {
-    XgRecordShapeSummary row;
+                                                            uint32_t source_span_id) {
+    XgGlobalEvidence *evidence = p ? p->evidence : NULL;
+    XgObjectShapeSummary row;
+    const XrTypeRef *object_type;
     uint32_t type_key;
-    int field_count = body_type_alias_record_field_count(alias);
+    int field_count = body_type_alias_object_field_count(alias);
     if (!evidence || !alias || !alias->name || field_count <= 0)
         return XG_NO_ID;
+    object_type = body_type_alias_record_type_ref(alias);
     type_key = body_type_alias_record_type_key(alias);
     memset(&row, 0, sizeof(row));
-    row.record_shape_id = (XgRecordShapeId) (evidence->nrecord_shapes + 1);
-    row.json_shape_id = json_shape_id;
+    row.object_shape_id = (XgObjectShapeId) (evidence->nobject_shapes + 1);
     row.module_id = module_id;
     row.owner_func_id = XG_NO_ID;
     row.source_span_id = source_span_id;
     row.type_key = type_key;
     row.field_name_start = body_type_alias_field_name_start(alias);
     row.field_count = (uint16_t) (field_count < UINT16_MAX ? field_count : UINT16_MAX);
-    row.shape_kind = XG_RECORD_SHAPE_STATIC;
+    row.shape_kind = XG_OBJECT_SHAPE_STATIC;
+    row.domain = XG_OBJECT_DOMAIN_STRUCT;
+    row.provenance = XG_OBJECT_SHAPE_STATIC;
+    row.concrete_exact =
+        object_type && object_type->object_row_mode == XR_OBJECT_ROW_OPEN ? 0 : 1;
     row.flags =
-        XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE;
-    row.shape_hash = body_type_alias_record_shape_hash(alias);
-    if (!xg_global_evidence_add_record_shape(evidence, &row))
+        XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_JSON_BRIDGEABLE;
+    if (!row.concrete_exact) {
+        row.flags &= ~(uint32_t) XG_OBJECT_SHAPE_SEALED;
+        row.flags |= XG_OBJECT_SHAPE_OPEN_ROW;
+    }
+    row.shape_hash = body_type_alias_object_shape_hash(alias);
+    row.stable_type_key = row.type_key;
+    row.stable_shape_key = row.shape_hash;
+    if (!xg_global_evidence_add_object_shape(evidence, &row))
         return XG_NO_ID;
-    body_add_record_fields_for_type_alias(evidence, row.record_shape_id, alias);
-    return row.record_shape_id;
+    body_add_object_fields_for_type_alias(p, evidence, row.object_shape_id, alias);
+    if (!body_finalize_object_shape_identity(evidence, row.object_shape_id))
+        return XG_NO_ID;
+    return row.object_shape_id;
 }
 
 static const ObjectLiteralNode *
@@ -6245,7 +6575,7 @@ body_unique_pending_record_return_literal(const XgPendingBody *body) {
     return seen ? literal : NULL;
 }
 
-static XgRecordShapeId body_lookup_call_record_return_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_call_record_return_shape(XgBodyCollect *bc, const AstNode *expr,
                                                             const ObjectLiteralNode **out_literal) {
     const XgPendingBody *body;
     const ObjectLiteralNode *literal;
@@ -6285,18 +6615,18 @@ static XgRecordShapeId body_lookup_call_record_return_shape(XgBodyCollect *bc, c
     if (return_type)
         type_key = hash_tref32(return_type);
     if (type_key != 0) {
-        const XgRecordShapeSummary *shape =
-            body_find_record_shape_for_type_key(bc, type_key, XG_RECORD_SHAPE_STATIC);
+        const XgObjectShapeSummary *shape =
+            body_find_object_shape_for_type_key(bc, type_key, XG_OBJECT_SHAPE_STATIC);
         if (shape)
-            return shape->record_shape_id;
+            return shape->object_shape_id;
     }
     if (!literal)
         return XG_NO_ID;
-    return body_add_record_shape_for_literal(bc, literal, (uint32_t) expr->line, type_key);
+    return body_add_object_shape_for_literal(bc, literal, (uint32_t) expr->line, type_key);
 }
 
-static void body_bind_record_shape_local(XgBodyCollect *bc, const char *name,
-                                         XgRecordShapeId shape_id,
+static void body_bind_object_shape_local(XgBodyCollect *bc, const char *name,
+                                         XgObjectShapeId shape_id,
                                          const ObjectLiteralNode *literal) {
     XgLocalType *row;
     if (!bc || !name || shape_id == XG_NO_ID)
@@ -6304,40 +6634,35 @@ static void body_bind_record_shape_local(XgBodyCollect *bc, const char *name,
     row = body_find_local(bc, name);
     if (!row)
         return;
-    row->record_shape_id = shape_id;
-    row->record_shape_literal = literal;
+    row->object_shape_id = shape_id;
+    row->object_shape_literal = literal;
 }
 
-static void body_bind_record_bridge_shapes_for_type_key(XgBodyCollect *bc, const char *name,
-                                                        uint32_t type_key) {
-    const XgJsonShapeSummary *json_shape;
-    const XgRecordShapeSummary *record_shape;
+static void body_bind_static_object_shape_for_type_key(XgBodyCollect *bc, const char *name,
+                                                       uint32_t type_key) {
+    const XgObjectShapeSummary *object_shape;
     if (!bc || !name || type_key == 0)
         return;
-    json_shape = body_find_json_shape_for_type_key(bc, type_key, XG_JSON_SHAPE_RECORD_BRIDGE);
-    if (!json_shape || json_shape->record_shape_id == XG_NO_ID)
+    object_shape =
+        body_find_object_shape_for_type_key(bc, type_key, XG_OBJECT_SHAPE_STATIC);
+    if (!object_shape || object_shape->type_key != type_key ||
+        (object_shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) == 0)
         return;
-    record_shape = xg_global_evidence_find_record_shape(bc->evidence, json_shape->record_shape_id);
-    if (!record_shape || record_shape->json_shape_id != json_shape->json_shape_id ||
-        record_shape->type_key != type_key ||
-        (record_shape->flags & XG_RECORD_SHAPE_JSON_BRIDGEABLE) == 0)
-        return;
-    body_bind_json_shape_local(bc, name, json_shape->json_shape_id, NULL);
-    body_bind_record_shape_local(bc, name, record_shape->record_shape_id, NULL);
+    body_bind_object_shape_local(bc, name, object_shape->object_shape_id, NULL);
 }
 
-static void body_clear_record_shape_local(XgBodyCollect *bc, const char *name) {
+static void body_clear_object_shape_local(XgBodyCollect *bc, const char *name) {
     XgLocalType *row;
     if (!bc || !name)
         return;
     row = body_find_local(bc, name);
     if (!row)
         return;
-    row->record_shape_id = XG_NO_ID;
-    row->record_shape_literal = NULL;
+    row->object_shape_id = XG_NO_ID;
+    row->object_shape_literal = NULL;
 }
 
-static XgRecordShapeId body_lookup_local_record_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_local_object_shape(XgBodyCollect *bc, const AstNode *expr,
                                                       const ObjectLiteralNode **out_literal) {
     XgLocalType *row;
     if (out_literal)
@@ -6346,24 +6671,24 @@ static XgRecordShapeId body_lookup_local_record_shape(XgBodyCollect *bc, const A
         return XG_NO_ID;
     switch (expr->type) {
         case AST_GROUPING:
-            return body_lookup_local_record_shape(bc, expr->as.grouping, out_literal);
+            return body_lookup_local_object_shape(bc, expr->as.grouping, out_literal);
         case AST_MOVE_EXPR:
-            return body_lookup_local_record_shape(bc, expr->as.move_expr.expr, out_literal);
+            return body_lookup_local_object_shape(bc, expr->as.move_expr.expr, out_literal);
         case AST_UNSAFE_EXPR:
-            return body_lookup_local_record_shape(bc, expr->as.unsafe_expr.operand, out_literal);
+            return body_lookup_local_object_shape(bc, expr->as.unsafe_expr.operand, out_literal);
         case AST_FORCE_UNWRAP:
-            return body_lookup_local_record_shape(bc, expr->as.unary.operand, out_literal);
+            return body_lookup_local_object_shape(bc, expr->as.unary.operand, out_literal);
         default:
             break;
     }
     if (expr->type != AST_VARIABLE || !expr->as.variable.name)
         return XG_NO_ID;
     row = body_find_local(bc, expr->as.variable.name);
-    if (!row || row->record_shape_id == XG_NO_ID)
+    if (!row || row->object_shape_id == XG_NO_ID)
         return XG_NO_ID;
     if (out_literal)
-        *out_literal = row->record_shape_literal;
-    return row->record_shape_id;
+        *out_literal = row->object_shape_literal;
+    return row->object_shape_id;
 }
 
 static const AstNode *body_record_receiver_unwrap(const AstNode *expr) {
@@ -6388,14 +6713,14 @@ static const AstNode *body_record_receiver_unwrap(const AstNode *expr) {
     return NULL;
 }
 
-static XgRecordShapeId body_lookup_static_record_shape_for_type_key(XgBodyCollect *bc,
+static XgObjectShapeId body_lookup_static_object_shape_for_type_key(XgBodyCollect *bc,
                                                                     uint32_t type_key) {
-    const XgRecordShapeSummary *shape =
-        body_find_record_shape_for_type_key(bc, type_key, XG_RECORD_SHAPE_STATIC);
-    return shape ? shape->record_shape_id : XG_NO_ID;
+    const XgObjectShapeSummary *shape =
+        body_find_object_shape_for_type_key(bc, type_key, XG_OBJECT_SHAPE_STATIC);
+    return shape ? shape->object_shape_id : XG_NO_ID;
 }
 
-static XgRecordShapeId body_lookup_sequence_record_shape(XgBodyCollect *bc, const AstNode *expr) {
+static XgObjectShapeId body_lookup_sequence_object_shape(XgBodyCollect *bc, const AstNode *expr) {
     XgLocalType *local;
     const AstNode *receiver = body_record_receiver_unwrap(expr);
     if (!bc || !receiver || receiver->type != AST_INDEX_GET)
@@ -6403,10 +6728,10 @@ static XgRecordShapeId body_lookup_sequence_record_shape(XgBodyCollect *bc, cons
     local = body_lookup_local_sequence(bc, receiver->as.index_get.array);
     if (!local || local->sequence_elem_type_key == 0)
         return XG_NO_ID;
-    return body_lookup_static_record_shape_for_type_key(bc, local->sequence_elem_type_key);
+    return body_lookup_static_object_shape_for_type_key(bc, local->sequence_elem_type_key);
 }
 
-static XgRecordShapeId body_lookup_class_field_record_shape(XgBodyCollect *bc,
+static XgObjectShapeId body_lookup_class_field_object_shape(XgBodyCollect *bc,
                                                             const AstNode *expr) {
     const AstNode *receiver = body_record_receiver_unwrap(expr);
     XgClassId receiver_class;
@@ -6418,33 +6743,123 @@ static XgRecordShapeId body_lookup_class_field_record_shape(XgBodyCollect *bc,
                                                hash_name32(receiver->as.member_access.name));
     if (!field || field->type_key == 0)
         return XG_NO_ID;
-    return body_lookup_static_record_shape_for_type_key(bc, field->type_key);
+    return body_lookup_static_object_shape_for_type_key(bc, field->type_key);
 }
 
-static XgRecordShapeId body_lookup_record_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_selected_object_field_shape(XgBodyCollect *bc,
+                                                               const AstNode *expr) {
+    const AstNode *receiver = body_record_receiver_unwrap(expr);
+    const char *field_name = NULL;
+    XgObjectShapeId receiver_shape_id;
+    uint32_t field_name_id;
+    if (!bc || !receiver)
+        return XG_NO_ID;
+    if (receiver->type == AST_MEMBER_ACCESS) {
+        field_name = receiver->as.member_access.name;
+        receiver = receiver->as.member_access.object;
+    } else if (receiver->type == AST_INDEX_GET) {
+        field_name = body_static_string_key(receiver->as.index_get.index);
+        receiver = receiver->as.index_get.array;
+    } else {
+        return XG_NO_ID;
+    }
+    if (!field_name)
+        return XG_NO_ID;
+    receiver_shape_id = body_lookup_object_shape(bc, receiver, NULL);
+    if (receiver_shape_id == XG_NO_ID)
+        return XG_NO_ID;
+    field_name_id = hash_name32(field_name);
+    for (uint32_t i = 0; i < bc->evidence->nobject_fields; i++) {
+        const XgObjectFieldSummary *field = &bc->evidence->object_fields[i];
+        if (field->shape_id == receiver_shape_id && field->name_id == field_name_id)
+            return body_lookup_static_object_shape_for_type_key(bc, field->type_key);
+    }
+    return XG_NO_ID;
+}
+
+static XgObjectShapeId body_lookup_analyzed_object_shape(XgBodyCollect *bc,
+                                                         const AstNode *expr) {
+    XrType *type;
+    if (!bc || !bc->producer || !bc->producer->analyzer || !bc->evidence || !expr)
+        return XG_NO_ID;
+    type = xa_analyzer_get_node_type(bc->producer->analyzer, expr);
+    if (!XR_TYPE_HAS_OBJECT_SHAPE(type) || type->object.field_count <= 0 ||
+        !type->object.field_names || !type->object.field_types)
+        return XG_NO_ID;
+
+    for (uint32_t si = 0; si < bc->evidence->nobject_shapes; si++) {
+        const XgObjectShapeSummary *shape = &bc->evidence->object_shapes[si];
+        bool matches = true;
+        if (shape->shape_kind != XG_OBJECT_SHAPE_STATIC ||
+            shape->domain != XG_OBJECT_DOMAIN_STRUCT ||
+            shape->field_count != (uint16_t) type->object.field_count ||
+            shape->concrete_exact !=
+                (uint8_t) (type->object.row_mode == XR_OBJECT_ROW_EXACT))
+            continue;
+        for (int ti = 0; ti < type->object.field_count && matches; ti++) {
+            uint32_t name_id = hash_name32(type->object.field_names[ti]);
+            uint64_t stable_type_key = xr_type_stable_key(type->object.field_types[ti]);
+            bool found = false;
+            for (uint32_t fi = 0; fi < bc->evidence->nobject_fields; fi++) {
+                const XgObjectFieldSummary *field = &bc->evidence->object_fields[fi];
+                if (field->shape_id != shape->object_shape_id || field->name_id != name_id)
+                    continue;
+                found = field->stable_type_key == stable_type_key;
+                if (type->object.field_readonly) {
+                    bool readonly =
+                        (field->flags & XG_OBJECT_FIELD_READONLY) != 0;
+                    found = found && readonly == type->object.field_readonly[ti];
+                }
+                break;
+            }
+            matches = found;
+        }
+        if (matches)
+            return shape->object_shape_id;
+    }
+    return XG_NO_ID;
+}
+
+static XgObjectShapeId body_lookup_object_shape(XgBodyCollect *bc, const AstNode *expr,
                                                 const ObjectLiteralNode **out_literal) {
-    XgRecordShapeId shape_id = body_lookup_local_record_shape(bc, expr, out_literal);
+    XgObjectShapeId shape_id = body_lookup_local_object_shape(bc, expr, out_literal);
     if (shape_id != XG_NO_ID)
         return shape_id;
     shape_id = body_lookup_call_record_return_shape(bc, expr, out_literal);
     if (shape_id != XG_NO_ID)
         return shape_id;
-    shape_id = body_lookup_sequence_record_shape(bc, expr);
+    shape_id = body_lookup_sequence_object_shape(bc, expr);
     if (shape_id != XG_NO_ID)
         return shape_id;
-    return body_lookup_class_field_record_shape(bc, expr);
+    shape_id = body_lookup_class_field_object_shape(bc, expr);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    shape_id = body_lookup_selected_object_field_shape(bc, expr);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+    shape_id = body_lookup_analyzed_object_shape(bc, expr);
+    if (shape_id != XG_NO_ID)
+        return shape_id;
+
+    /* An analyzed expression of an exact structural type carries a stronger
+     * identity than syntax-local literal/call provenance. This is required
+     * for values constructed by compiler intrinsics such as Json.parse<T>,
+     * and for recursively selected object fields (profile.address.geo): the
+     * target descriptor is already frozen in the type-alias shape table, so
+     * re-derive the shape from the canonical expression type key. */
+    return body_lookup_static_object_shape_for_type_key(bc, body_expr_type_key(bc, expr));
 }
 
-static XgRecordShapeId body_lookup_or_add_record_shape(XgBodyCollect *bc, const AstNode *expr,
+static XgObjectShapeId body_lookup_or_add_object_shape(XgBodyCollect *bc, const AstNode *expr,
                                                        const ObjectLiteralNode **out_literal) {
-    XgRecordShapeId shape_id = body_lookup_record_shape(bc, expr, out_literal);
+    XgObjectShapeId shape_id = body_lookup_object_shape(bc, expr, out_literal);
     if (shape_id != XG_NO_ID)
         return shape_id;
 
     const ObjectLiteralNode *literal = body_static_object_literal(expr);
     if (!literal)
         return XG_NO_ID;
-    shape_id = body_add_record_shape_for_literal(bc, literal,
+    shape_id = body_add_object_shape_for_literal(bc, literal,
                                                  expr && expr->line > 0 ? (uint32_t) expr->line : 0,
                                                  body_expr_type_key(bc, expr));
     if (shape_id != XG_NO_ID && out_literal)
@@ -6452,76 +6867,78 @@ static XgRecordShapeId body_lookup_or_add_record_shape(XgBodyCollect *bc, const 
     return shape_id;
 }
 
-static int body_record_shape_static_field_index(XgBodyCollect *bc, XgRecordShapeId shape_id,
+static int body_object_shape_static_field_index(XgBodyCollect *bc, XgObjectShapeId shape_id,
                                                 const ObjectLiteralNode *literal,
                                                 const char *name) {
     uint32_t name_id;
     if (!bc || !bc->evidence || shape_id == XG_NO_ID || !name)
         return -1;
-    if (literal)
-        return body_object_literal_static_field_index(literal, name);
+    (void) literal;
     name_id = hash_name32(name);
     if (name_id == 0)
         return -1;
-    for (uint32_t i = 0; i < bc->evidence->nrecord_fields; i++) {
-        const XgRecordFieldSummary *field = &bc->evidence->record_fields[i];
+    for (uint32_t i = 0; i < bc->evidence->nobject_fields; i++) {
+        const XgObjectFieldSummary *field = &bc->evidence->object_fields[i];
         if (field->shape_id == shape_id && field->name_id == name_id)
             return field->field_ordinal;
     }
     return -1;
 }
 
-static void body_add_record_field_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
+static void body_add_object_field_access(XgBodyCollect *bc, const AstNode *node, bool mutating) {
     const ObjectLiteralNode *literal = NULL;
-    XgRecordShapeId shape_id;
+    const AstNode *receiver = NULL;
+    XgObjectShapeId shape_id;
     const char *name;
     int field_index;
-    XgRecordAccessSummary row;
     if (!bc || !node)
         return;
     if (node->type == AST_MEMBER_ACCESS) {
         name = node->as.member_access.name;
-        shape_id = body_lookup_record_shape(bc, node->as.member_access.object, &literal);
+        receiver = node->as.member_access.object;
+        shape_id = body_lookup_object_shape(bc, receiver, &literal);
     } else if (node->type == AST_MEMBER_SET) {
         name = node->as.member_set.member;
-        shape_id = body_lookup_record_shape(bc, node->as.member_set.object, &literal);
+        receiver = node->as.member_set.object;
+        shape_id = body_lookup_object_shape(bc, receiver, &literal);
     } else if (node->type == AST_INDEX_GET) {
         name = body_static_string_key(node->as.index_get.index);
-        shape_id = body_lookup_record_shape(bc, node->as.index_get.array, &literal);
+        receiver = node->as.index_get.array;
+        shape_id = body_lookup_object_shape(bc, receiver, &literal);
     } else if (node->type == AST_INDEX_SET) {
         name = body_static_string_key(node->as.index_set.index);
-        shape_id = body_lookup_record_shape(bc, node->as.index_set.array, &literal);
+        receiver = node->as.index_set.array;
+        shape_id = body_lookup_object_shape(bc, receiver, &literal);
     } else {
         return;
     }
     if (shape_id == XG_NO_ID || !name)
         return;
-    field_index = body_record_shape_static_field_index(bc, shape_id, literal, name);
+    field_index = body_object_shape_static_field_index(bc, shape_id, literal, name);
     if (field_index < 0)
         return;
-    memset(&row, 0, sizeof(row));
-    row.record_access_id = (XgRecordAccessId) (bc->evidence->nrecord_accesses + 1);
-    row.module_id = bc->module_id;
-    row.owner_func_id = bc->owner_func_id;
-    row.receiver_shape_id = shape_id;
-    row.source_span_id = (uint32_t) node->line;
-    row.field_name_id = hash_name32(name);
-    row.result_type_key = 0;
-    row.field_ordinal = (uint16_t) field_index;
-    row.access_kind = mutating ? XG_RECORD_ACCESS_FIELD_SET : XG_RECORD_ACCESS_FIELD_GET;
-    row.flags = XG_RECORD_ACCESS_STATIC_FIELD | XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN;
-    if (mutating)
-        row.flags |= XG_RECORD_ACCESS_MUTATING;
-    (void) xg_global_evidence_add_record_access(bc->evidence, &row);
+    receiver = body_record_receiver_unwrap(receiver);
+    if (receiver && receiver->type == AST_VARIABLE && receiver->as.variable.name) {
+        XgLocalType *local = body_find_local(bc, receiver->as.variable.name);
+        if (local && local->param_ordinal != UINT16_MAX &&
+            local->object_row_mode == XR_OBJECT_ROW_OPEN) {
+            (void) body_add_open_row_object_field_access(
+                bc, node, mutating, shape_id, name, (uint16_t) field_index,
+                local->param_ordinal);
+            return;
+        }
+    }
+    (void) body_add_resolved_object_field_access(bc, node, mutating, shape_id, name,
+                                                 (uint16_t) field_index);
 }
 
-static const XgRecordFieldSummary *body_find_record_shape_field(const XgBodyCollect *bc,
-                                                                XgRecordShapeId shape_id,
+static const XgObjectFieldSummary *body_find_object_shape_field(const XgBodyCollect *bc,
+                                                                XgObjectShapeId shape_id,
                                                                 uint16_t field_ordinal) {
     if (!bc || !bc->evidence || shape_id == XG_NO_ID)
         return NULL;
-    for (uint32_t i = 0; i < bc->evidence->nrecord_fields; i++) {
-        const XgRecordFieldSummary *field = &bc->evidence->record_fields[i];
+    for (uint32_t i = 0; i < bc->evidence->nobject_fields; i++) {
+        const XgObjectFieldSummary *field = &bc->evidence->object_fields[i];
         if (field->shape_id == shape_id && field->field_ordinal == field_ordinal)
             return field;
     }
@@ -6560,7 +6977,7 @@ static void body_add_record_destructure_accesses(XgBodyCollect *bc,
                                                  const AstNode *source, uint32_t source_span_id,
                                                  bool declare_locals) {
     const ObjectLiteralNode *literal = NULL;
-    XgRecordShapeId shape_id;
+    XgObjectShapeId shape_id;
     if (!bc || !pattern || !source)
         return;
     if (pattern->type != PATTERN_OBJECT) {
@@ -6569,11 +6986,11 @@ static void body_add_record_destructure_accesses(XgBodyCollect *bc,
         return;
     }
 
-    shape_id = body_lookup_record_shape(bc, source, &literal);
+    shape_id = body_lookup_object_shape(bc, source, &literal);
     if (shape_id == XG_NO_ID) {
         literal = body_static_object_literal(source);
         if (literal)
-            shape_id = body_add_record_shape_for_literal(bc, literal, source_span_id,
+            shape_id = body_add_object_shape_for_literal(bc, literal, source_span_id,
                                                          body_expr_type_key(bc, source));
     }
     if (shape_id == XG_NO_ID) {
@@ -6585,21 +7002,21 @@ static void body_add_record_destructure_accesses(XgBodyCollect *bc,
     for (int i = 0; i < pattern->as.object.field_count; i++) {
         const char *name = pattern->as.object.field_names[i];
         const XrDestructurePattern *binding = pattern->as.object.patterns[i];
-        int field_index = body_record_shape_static_field_index(bc, shape_id, literal, name);
+        int field_index = body_object_shape_static_field_index(bc, shape_id, literal, name);
         uint32_t result_type_key = 0;
         if (!name || field_index < 0 || field_index > UINT16_MAX) {
             if (declare_locals)
                 body_push_destructure_pattern_locals(bc, binding, 0);
             continue;
         }
-        const XgRecordFieldSummary *field =
-            body_find_record_shape_field(bc, shape_id, (uint16_t) field_index);
+        const XgObjectFieldSummary *field =
+            body_find_object_shape_field(bc, shape_id, (uint16_t) field_index);
         if (field)
             result_type_key = field->type_key;
 
-        XgRecordAccessSummary row;
+        XgObjectAccessSummary row;
         memset(&row, 0, sizeof(row));
-        row.record_access_id = (XgRecordAccessId) (bc->evidence->nrecord_accesses + 1);
+        row.object_access_id = (XgObjectAccessId) (bc->evidence->nobject_accesses + 1);
         row.module_id = bc->module_id;
         row.owner_func_id = bc->owner_func_id;
         row.receiver_shape_id = shape_id;
@@ -6607,9 +7024,14 @@ static void body_add_record_destructure_accesses(XgBodyCollect *bc,
         row.field_name_id = hash_name32(name);
         row.result_type_key = result_type_key;
         row.field_ordinal = (uint16_t) field_index;
-        row.access_kind = XG_RECORD_ACCESS_DESTRUCTURE;
-        row.flags = XG_RECORD_ACCESS_STATIC_FIELD | XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN;
-        (void) xg_global_evidence_add_record_access(bc->evidence, &row);
+        row.access_kind = XG_OBJECT_ACCESS_DESTRUCTURE;
+        const XgObjectShapeSummary *receiver_shape =
+            xg_global_evidence_find_object_shape(bc->evidence, shape_id);
+        row.domain = receiver_shape ? receiver_shape->domain : 0;
+        row.syntax = XG_OBJECT_ACCESS_SYNTAX_DESTRUCTURE;
+        row.flags = XG_OBJECT_ACCESS_STATIC_FIELD | XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN;
+        if (receiver_shape)
+            (void) body_add_object_access_with_case(bc, &row, receiver_shape);
 
         if (declare_locals)
             body_push_destructure_pattern_locals(bc, binding, result_type_key);
@@ -7436,8 +7858,8 @@ static void body_bind_sequence_local(XgBodyCollect *bc, const char *name, uint8_
     row->sequence_elem_class_id = producer_lookup_class_from_tref(bc->producer, elem_type_ref);
     row->sequence_storage_id = 0;
     row->sequence_elem_managed_ref = body_type_ref_is_managed_storage_ref(elem_type_ref);
-    row->sequence_elem_json_shape_id = XG_NO_ID;
-    row->sequence_elem_json_shape_literal = NULL;
+    row->sequence_elem_object_shape_id = XG_NO_ID;
+    row->sequence_elem_object_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
     row->sequence_elem_map_key_type_key = 0;
     row->sequence_elem_map_value_type_key = 0;
@@ -7450,7 +7872,7 @@ static void body_bind_sequence_local(XgBodyCollect *bc, const char *name, uint8_
 }
 
 static void body_bind_sequence_json_shape_local(XgBodyCollect *bc, const char *name,
-                                                XgJsonShapeId shape_id,
+                                                XgObjectShapeId shape_id,
                                                 const ObjectLiteralNode *literal) {
     XgLocalType *row;
     if (!bc || !name || shape_id == XG_NO_ID)
@@ -7458,8 +7880,8 @@ static void body_bind_sequence_json_shape_local(XgBodyCollect *bc, const char *n
     row = body_find_local(bc, name);
     if (!row || row->sequence_kind == 0)
         return;
-    row->sequence_elem_json_shape_id = shape_id;
-    row->sequence_elem_json_shape_literal = literal;
+    row->sequence_elem_object_shape_id = shape_id;
+    row->sequence_elem_object_shape_literal = literal;
 }
 
 static void body_bind_sequence_local_from_source(XgBodyCollect *bc, const char *name,
@@ -7476,8 +7898,8 @@ static void body_bind_sequence_local_from_source(XgBodyCollect *bc, const char *
     row->sequence_elem_class_id = source->sequence_elem_class_id;
     row->sequence_storage_id = source->sequence_storage_id;
     row->sequence_elem_managed_ref = source->sequence_elem_managed_ref;
-    row->sequence_elem_json_shape_id = source->sequence_elem_json_shape_id;
-    row->sequence_elem_json_shape_literal = source->sequence_elem_json_shape_literal;
+    row->sequence_elem_object_shape_id = source->sequence_elem_object_shape_id;
+    row->sequence_elem_object_shape_literal = source->sequence_elem_object_shape_literal;
     row->sequence_elem_map_container_kind = source->sequence_elem_map_container_kind;
     row->sequence_elem_map_key_type_key = source->sequence_elem_map_key_type_key;
     row->sequence_elem_map_value_type_key = source->sequence_elem_map_value_type_key;
@@ -7500,8 +7922,8 @@ static void body_inherit_sequence_source_metadata(XgBodyCollect *bc, const char 
         row->sequence_elem_class_id = source->sequence_elem_class_id;
     row->sequence_storage_id = source->sequence_storage_id;
     row->sequence_elem_managed_ref = source->sequence_elem_managed_ref;
-    row->sequence_elem_json_shape_id = source->sequence_elem_json_shape_id;
-    row->sequence_elem_json_shape_literal = source->sequence_elem_json_shape_literal;
+    row->sequence_elem_object_shape_id = source->sequence_elem_object_shape_id;
+    row->sequence_elem_object_shape_literal = source->sequence_elem_object_shape_literal;
     row->sequence_elem_map_container_kind = source->sequence_elem_map_container_kind;
     row->sequence_elem_map_key_type_key = source->sequence_elem_map_key_type_key;
     row->sequence_elem_map_value_type_key = source->sequence_elem_map_value_type_key;
@@ -7511,8 +7933,8 @@ static void body_inherit_sequence_source_metadata(XgBodyCollect *bc, const char 
 static void body_clear_sequence_json_shape(XgLocalType *row) {
     if (!row)
         return;
-    row->sequence_elem_json_shape_id = XG_NO_ID;
-    row->sequence_elem_json_shape_literal = NULL;
+    row->sequence_elem_object_shape_id = XG_NO_ID;
+    row->sequence_elem_object_shape_literal = NULL;
 }
 
 static bool body_sequence_local_elem_is_json(const XgLocalType *row) {
@@ -7520,44 +7942,30 @@ static bool body_sequence_local_elem_is_json(const XgLocalType *row) {
            row->sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0);
 }
 
-static bool body_json_shape_id_same_shape(XgBodyCollect *bc, XgJsonShapeId left_id,
-                                          XgJsonShapeId right_id) {
-    const XgJsonShapeSummary *left;
-    const XgJsonShapeSummary *right;
+static bool body_object_shape_id_same_shape(XgBodyCollect *bc, XgObjectShapeId left_id,
+                                          XgObjectShapeId right_id) {
+    const XgObjectShapeSummary *left;
+    const XgObjectShapeSummary *right;
     if (!bc || left_id == XG_NO_ID || right_id == XG_NO_ID)
         return false;
     if (left_id == right_id)
         return true;
-    left = xg_global_evidence_find_json_shape(bc->evidence, left_id);
-    right = xg_global_evidence_find_json_shape(bc->evidence, right_id);
-    return left && right && left->shape_kind == right->shape_kind &&
-           left->field_count == right->field_count && left->shape_hash == right->shape_hash;
+    left = xg_global_evidence_find_object_shape(bc->evidence, left_id);
+    right = xg_global_evidence_find_object_shape(bc->evidence, right_id);
+    return left && right && left->domain == right->domain &&
+           left->field_count == right->field_count &&
+           left->stable_shape_key == right->stable_shape_key;
 }
 
 static void body_update_sequence_json_shape_from_value(XgBodyCollect *bc, XgLocalType *row,
                                                        const AstNode *value) {
     const ObjectLiteralNode *literal = NULL;
-    const XgJsonShapeSummary *current_shape;
-    XgJsonShapeId shape_id;
+    XgObjectShapeId shape_id;
     if (!bc || !body_sequence_local_elem_is_json(row))
         return;
     shape_id = body_lookup_json_shape(bc, value, &literal);
     if (shape_id == XG_NO_ID)
         literal = body_static_object_literal(value);
-    if (row->sequence_elem_json_shape_id != XG_NO_ID && literal) {
-        uint16_t literal_field_count =
-            (uint16_t) (literal->count < UINT16_MAX ? literal->count : UINT16_MAX);
-        current_shape =
-            xg_global_evidence_find_json_shape(bc->evidence, row->sequence_elem_json_shape_id);
-        if (!current_shape || current_shape->field_count != literal_field_count ||
-            current_shape->shape_hash != body_json_shape_hash(literal)) {
-            body_clear_sequence_json_shape(row);
-            return;
-        }
-        if (!row->sequence_elem_json_shape_literal)
-            row->sequence_elem_json_shape_literal = literal;
-        return;
-    }
     if (shape_id == XG_NO_ID && literal)
         shape_id = body_add_json_shape_for_literal(
             bc, literal, value && value->line > 0 ? (uint32_t) value->line : 0,
@@ -7566,17 +7974,17 @@ static void body_update_sequence_json_shape_from_value(XgBodyCollect *bc, XgLoca
         body_clear_sequence_json_shape(row);
         return;
     }
-    if (row->sequence_elem_json_shape_id != XG_NO_ID) {
-        if (!body_json_shape_id_same_shape(bc, row->sequence_elem_json_shape_id, shape_id)) {
+    if (row->sequence_elem_object_shape_id != XG_NO_ID) {
+        if (!body_object_shape_id_same_shape(bc, row->sequence_elem_object_shape_id, shape_id)) {
             body_clear_sequence_json_shape(row);
             return;
         }
-        if (!row->sequence_elem_json_shape_literal)
-            row->sequence_elem_json_shape_literal = literal;
+        if (!row->sequence_elem_object_shape_literal)
+            row->sequence_elem_object_shape_literal = literal;
         return;
     }
-    row->sequence_elem_json_shape_id = shape_id;
-    row->sequence_elem_json_shape_literal = literal;
+    row->sequence_elem_object_shape_id = shape_id;
+    row->sequence_elem_object_shape_literal = literal;
 }
 
 static void body_clear_sequence_local(XgBodyCollect *bc, const char *name) {
@@ -7592,8 +8000,8 @@ static void body_clear_sequence_local(XgBodyCollect *bc, const char *name) {
     row->sequence_elem_class_id = XG_NO_ID;
     row->sequence_storage_id = 0;
     row->sequence_elem_managed_ref = false;
-    row->sequence_elem_json_shape_id = XG_NO_ID;
-    row->sequence_elem_json_shape_literal = NULL;
+    row->sequence_elem_object_shape_id = XG_NO_ID;
+    row->sequence_elem_object_shape_literal = NULL;
     row->sequence_elem_map_container_kind = 0;
     row->sequence_elem_map_key_type_key = 0;
     row->sequence_elem_map_value_type_key = 0;
@@ -8594,6 +9002,73 @@ static void body_add_generic_inst(XgBodyCollect *bc, uint8_t kind, const char *n
     (void) xg_global_evidence_add_generic_inst(bc->evidence, &inst);
 }
 
+static XgFuncId body_call_object_shape_flow_target(const XgBodyCollect *bc,
+                                                   const XgCallsiteSummary *callsite) {
+    const XgPendingBody *method_body;
+    if (!bc || !bc->producer || !callsite)
+        return XG_NO_ID;
+    if ((callsite->kind == XG_CALL_DIRECT_FUNC || callsite->kind == XG_CALL_CLOSURE) &&
+        callsite->static_target_func_id != XG_NO_ID)
+        return callsite->static_target_func_id;
+    if (callsite->kind != XG_CALL_METHOD || callsite->method_id == XG_NO_ID)
+        return XG_NO_ID;
+    method_body = producer_find_method_body(bc->producer, callsite->method_id);
+    return method_body ? method_body->func_id : XG_NO_ID;
+}
+
+static const XgLocalType *body_forwarded_open_object_param(XgBodyCollect *bc,
+                                                           const AstNode *argument) {
+    while (argument && argument->type == AST_GROUPING)
+        argument = argument->as.grouping;
+    if (!bc || !argument || argument->type != AST_VARIABLE)
+        return NULL;
+    XgLocalType *local = body_find_local(bc, argument->as.variable.name);
+    return local && local->param_ordinal != UINT16_MAX &&
+                   local->object_row_mode == XR_OBJECT_ROW_OPEN
+               ? local
+               : NULL;
+}
+
+static void body_record_call_object_shape_flows(XgBodyCollect *bc, const AstNode *call,
+                                                const XgCallsiteSummary *callsite) {
+    XgFuncId target_func_id = body_call_object_shape_flow_target(bc, callsite);
+    if (!bc || !bc->producer || !bc->evidence || !call || !callsite ||
+        target_func_id == XG_NO_ID)
+        return;
+    for (int i = 0; i < call->as.call_expr.arg_count && i < UINT16_MAX; i++) {
+        const ObjectLiteralNode *literal = NULL;
+        AstNode *argument = call->as.call_expr.arguments ? call->as.call_expr.arguments[i] : NULL;
+        XgObjectShapeId shape_id =
+            body_lookup_or_add_object_shape(bc, argument, &literal);
+        const XgObjectShapeSummary *shape;
+        const XgLocalType *source_param;
+        XgObjectShapeFlowSummary flow;
+        memset(&flow, 0, sizeof(flow));
+        flow.flow_id = (XgObjectShapeFlowId) (bc->evidence->nobject_shape_flows + 1);
+        flow.callsite_id = callsite->callsite_id;
+        flow.source_func_id = bc->owner_func_id;
+        flow.target_func_id = target_func_id;
+        flow.source_param_ordinal = UINT16_MAX;
+        flow.target_param_ordinal = (uint16_t) i;
+        shape = shape_id != XG_NO_ID
+                    ? xg_global_evidence_find_object_shape(bc->evidence, shape_id)
+                    : NULL;
+        if (shape && shape->concrete_exact &&
+            (shape->flags & XG_OBJECT_SHAPE_OPEN_ROW) == 0 &&
+            shape->domain == XG_OBJECT_DOMAIN_STRUCT) {
+            flow.concrete_shape_id = shape_id;
+            flow.flags = XG_OBJECT_SHAPE_FLOW_CONCRETE;
+        } else if ((source_param = body_forwarded_open_object_param(bc, argument)) != NULL) {
+            flow.source_param_ordinal = source_param->param_ordinal;
+            flow.flags = XG_OBJECT_SHAPE_FLOW_FORWARDED;
+        } else {
+            continue;
+        }
+        if (!xg_global_evidence_add_object_shape_flow(bc->evidence, &flow))
+            return;
+    }
+}
+
 static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     XgCallsiteSummary row;
     const AstNode *callee;
@@ -8628,6 +9103,10 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     if (callee && callee->type == AST_VARIABLE) {
         const char *callee_name = callee->as.variable.name;
         XgFuncNameRow *target = producer_lookup_func_row(bc->producer, callee_name);
+        const XgPendingBody *child_target =
+            !target ? producer_find_child_function_body(bc->producer, bc->owner_func_id,
+                                                        hash_name32(callee_name))
+                    : NULL;
         XgClassNameRow *class_row = producer_lookup_class_row(bc->producer, callee_name);
         XgClassSummary *class_summary =
             class_row && class_row->summary_index < bc->evidence->nclasses
@@ -8668,6 +9147,9 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             row.static_target_func_id = target->func_id;
             if ((target->decl_flags & (XG_DECL_EXTERN | XG_DECL_NATIVE)) == 0)
                 generic_origin_func_id = target->func_id;
+        } else if (child_target) {
+            row.kind = XG_CALL_CLOSURE;
+            row.static_target_func_id = child_target->func_id;
         } else if (constructor) {
             row.kind = XG_CALL_METHOD;
             row.receiver_static_class_id = class_row->class_id;
@@ -8765,6 +9247,7 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         bc->callsite_start = row.callsite_id;
     if (xg_global_evidence_add_callsite(bc->evidence, &row)) {
         bc->callsite_count++;
+        body_record_call_object_shape_flows(bc, call, &row);
         body_add_options_bag_callsite(bc, &call->as.call_expr, &row);
         body_add_generic_inst(bc, generic_kind, generic_name, call->as.call_expr.type_args,
                               call->as.call_expr.type_arg_count, row.callsite_id,
@@ -9030,6 +9513,7 @@ static void body_enqueue_child_function_body(XgBodyCollect *bc, const AstNode *n
                                NULL, fn, NULL))
         return;
     pending = &bc->producer->bodies[bc->producer->nbodies - 1];
+    pending->lexical_parent_func_id = bc->owner_func_id;
     if (!producer_snapshot_body_captures(pending, bc)) {
         xr_free(pending->captured_locals);
         xr_free(pending->captured_name_locals);
@@ -9292,11 +9776,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                     : NULL;
             const ObjectLiteralNode *record_literal =
                 !json_literal ? body_static_object_literal(node->as.var_decl.initializer) : NULL;
-            XgJsonShapeId json_shape_id = XG_NO_ID;
-            XgJsonShapeId source_json_shape_id = XG_NO_ID;
+            XgObjectShapeId json_shape_id = XG_NO_ID;
+            XgObjectShapeId source_json_shape_id = XG_NO_ID;
             const ObjectLiteralNode *source_json_literal = NULL;
-            XgRecordShapeId record_shape_id = XG_NO_ID;
-            XgRecordShapeId source_record_shape_id = XG_NO_ID;
+            XgObjectShapeId object_shape_id = XG_NO_ID;
+            XgObjectShapeId source_object_shape_id = XG_NO_ID;
             const ObjectLiteralNode *source_record_literal = NULL;
             XgMapShapeId map_shape_id = XG_NO_ID;
             uint8_t map_container_kind = 0;
@@ -9309,7 +9793,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             uint32_t sequence_elem_type_key = 0;
             const XrTypeRef *sequence_elem_type_ref = NULL;
             const ObjectLiteralNode *sequence_json_literal = NULL;
-            XgJsonShapeId sequence_json_shape_id = XG_NO_ID;
+            XgObjectShapeId sequence_object_shape_id = XG_NO_ID;
             XgLocalType *source_sequence_local = NULL;
             XgLocalType source_sequence_snapshot;
             uint32_t source_sequence_storage_id = 0;
@@ -9344,8 +9828,8 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             walk_body_for_calls(bc, node->as.var_decl.initializer);
             source_json_shape_id =
                 body_lookup_json_shape(bc, node->as.var_decl.initializer, &source_json_literal);
-            source_record_shape_id =
-                body_lookup_record_shape(bc, node->as.var_decl.initializer, &source_record_literal);
+            source_object_shape_id =
+                body_lookup_object_shape(bc, node->as.var_decl.initializer, &source_record_literal);
             source_map_local = body_lookup_local_map_shape(bc, node->as.var_decl.initializer);
             source_sequence_local = body_lookup_local_sequence(bc, node->as.var_decl.initializer);
             /* body_push_local below may grow bc->locals. Preserve any source
@@ -9374,7 +9858,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (json_literal && type_key == 0)
                 type_key = hash_named_type_key32("Json", NULL, 0);
             if (record_literal && type_key == 0)
-                type_key = body_record_type_key(record_literal);
+                type_key = body_struct_object_type_key(record_literal);
             if (class_id == XG_NO_ID && interface_id == XG_NO_ID) {
                 uint32_t expr_type_key;
                 class_id = body_resolve_expr_class(bc, node->as.var_decl.initializer);
@@ -9387,7 +9871,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             if (json_literal && type_key == 0)
                 type_key = hash_named_type_key32("Json", NULL, 0);
             if (record_literal && type_key == 0)
-                type_key = body_record_type_key(record_literal);
+                type_key = body_struct_object_type_key(record_literal);
             const char *nominal_name =
                 node->as.var_decl.type_annotation ? node->as.var_decl.type_annotation->name : NULL;
             if (!nominal_name && node->as.var_decl.initializer &&
@@ -9397,24 +9881,25 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             (void) body_push_local(bc, node->as.var_decl.name, node->as.var_decl.symbol_id,
                                    class_id, interface_id, type_key, nominal_name, inferred);
-            body_bind_record_bridge_shapes_for_type_key(bc, node->as.var_decl.name, type_key);
+            body_bind_static_object_shape_for_type_key(bc, node->as.var_decl.name, type_key);
             if (json_literal) {
-                json_shape_id = body_add_json_shape_for_literal(bc, json_literal,
-                                                                (uint32_t) node->line, type_key);
-                body_bind_json_shape_local(bc, node->as.var_decl.name, json_shape_id, json_literal);
+                json_shape_id = body_add_json_shape_for_literal(
+                    bc, json_literal, (uint32_t) node->line, type_key);
+                body_bind_object_shape_local(bc, node->as.var_decl.name, json_shape_id,
+                                             json_literal);
             } else if (source_json_shape_id != XG_NO_ID &&
                        body_local_type_is_json(body_find_local(bc, node->as.var_decl.name))) {
-                body_bind_json_shape_local(bc, node->as.var_decl.name, source_json_shape_id,
-                                           source_json_literal);
+                body_bind_object_shape_local(bc, node->as.var_decl.name, source_json_shape_id,
+                                             source_json_literal);
             }
             if (record_literal) {
-                record_shape_id = body_add_record_shape_for_literal(
+                object_shape_id = body_add_object_shape_for_literal(
                     bc, record_literal, (uint32_t) node->line, type_key);
-                body_bind_record_shape_local(
-                    bc, node->as.var_decl.name, record_shape_id,
+                body_bind_object_shape_local(
+                    bc, node->as.var_decl.name, object_shape_id,
                     body_record_literal_has_spread(record_literal) ? NULL : record_literal);
-            } else if (source_record_shape_id != XG_NO_ID) {
-                body_bind_record_shape_local(bc, node->as.var_decl.name, source_record_shape_id,
+            } else if (source_object_shape_id != XG_NO_ID) {
+                body_bind_object_shape_local(bc, node->as.var_decl.name, source_object_shape_id,
                                              source_record_literal);
             }
             if (map_shape_id != XG_NO_ID) {
@@ -9457,21 +9942,21 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             }
             if (sequence_kind != 0 && body_type_ref_is_json(sequence_elem_type_ref) &&
                 !sequence_json_literal) {
-                sequence_json_shape_id = body_lookup_sequence_json_ternary_shape(
+                sequence_object_shape_id = body_lookup_sequence_json_ternary_shape(
                     bc, node->as.var_decl.initializer, &sequence_json_literal);
-                if (sequence_json_shape_id == XG_NO_ID)
-                    sequence_json_shape_id = body_lookup_call_sequence_json_shape(
+                if (sequence_object_shape_id == XG_NO_ID)
+                    sequence_object_shape_id = body_lookup_call_sequence_json_shape(
                         bc, node->as.var_decl.initializer, &sequence_json_literal);
             }
-            if (sequence_json_shape_id == XG_NO_ID && sequence_json_literal) {
-                sequence_json_shape_id = body_add_json_shape_for_literal(
+            if (sequence_object_shape_id == XG_NO_ID && sequence_json_literal) {
+                sequence_object_shape_id = body_add_json_shape_for_literal(
                     bc, sequence_json_literal, (uint32_t) node->line,
                     sequence_elem_type_key ? sequence_elem_type_key
                                            : hash_named_type_key32("Json", NULL, 0));
             }
-            if (sequence_json_shape_id != XG_NO_ID) {
+            if (sequence_object_shape_id != XG_NO_ID) {
                 body_bind_sequence_json_shape_local(bc, node->as.var_decl.name,
-                                                    sequence_json_shape_id, sequence_json_literal);
+                                                    sequence_object_shape_id, sequence_json_literal);
             }
             {
                 const XgLocalType *container_local = body_find_local(bc, node->as.var_decl.name);
@@ -9504,11 +9989,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             const ObjectLiteralNode *json_literal =
                 target_is_json ? body_static_object_literal(node->as.assignment.value) : NULL;
             const ObjectLiteralNode *source_json_literal = NULL;
-            XgJsonShapeId source_json_shape_id =
+            XgObjectShapeId source_json_shape_id =
                 body_lookup_json_shape(bc, node->as.assignment.value, &source_json_literal);
             const ObjectLiteralNode *source_record_literal = NULL;
-            XgRecordShapeId source_record_shape_id =
-                body_lookup_record_shape(bc, node->as.assignment.value, &source_record_literal);
+            XgObjectShapeId source_object_shape_id =
+                body_lookup_object_shape(bc, node->as.assignment.value, &source_record_literal);
             XgLocalType *source_map_local =
                 body_lookup_local_map_shape(bc, node->as.assignment.value);
             XgLocalType source_map_snapshot;
@@ -9526,7 +10011,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             uint32_t source_sequence_elem_type_key = 0;
             const XrTypeRef *source_sequence_elem_type_ref = NULL;
             const ObjectLiteralNode *source_sequence_json_literal = NULL;
-            XgJsonShapeId source_sequence_json_shape_id = XG_NO_ID;
+            XgObjectShapeId source_sequence_object_shape_id = XG_NO_ID;
             XgClassId class_id;
             XgInterfaceId interface_id;
             uint32_t type_key;
@@ -9548,10 +10033,10 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 source_sequence_elem_type_ref =
                     body_type_ref_sequence_elem_type_ref(source_sequence_type_ref);
                 if (body_type_ref_is_json(source_sequence_elem_type_ref)) {
-                    source_sequence_json_shape_id = body_lookup_sequence_json_ternary_shape(
+                    source_sequence_object_shape_id = body_lookup_sequence_json_ternary_shape(
                         bc, node->as.assignment.value, &source_sequence_json_literal);
-                    if (source_sequence_json_shape_id == XG_NO_ID)
-                        source_sequence_json_shape_id = body_lookup_call_sequence_json_shape(
+                    if (source_sequence_object_shape_id == XG_NO_ID)
+                        source_sequence_object_shape_id = body_lookup_call_sequence_json_shape(
                             bc, node->as.assignment.value, &source_sequence_json_literal);
                 }
             }
@@ -9560,7 +10045,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             interface_id = body_resolve_expr_interface(bc, node->as.assignment.value);
             type_key = body_expr_type_key(bc, node->as.assignment.value);
             body_clear_json_shape_local(bc, node->as.assignment.name);
-            body_clear_record_shape_local(bc, node->as.assignment.name);
+            body_clear_object_shape_local(bc, node->as.assignment.name);
             body_clear_map_shape_local(bc, node->as.assignment.name);
             body_clear_sequence_local(bc, node->as.assignment.name);
             body_assign_local(bc, node->as.assignment.name, node->as.assignment.symbol_id, class_id,
@@ -9576,22 +10061,22 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                     (uint32_t) node->line, ordinal, target_type_key, XG_INTERFACE_OBJECT_USE_VALUE);
             }
             target_row = body_find_local(bc, node->as.assignment.name);
-            body_bind_record_bridge_shapes_for_type_key(
+            body_bind_static_object_shape_for_type_key(
                 bc, node->as.assignment.name,
                 target_row && target_row->type_key != 0 ? target_row->type_key : type_key);
             if (json_literal) {
-                XgJsonShapeId json_shape_id = body_add_json_shape_for_literal(
+                XgObjectShapeId json_shape_id = body_add_json_shape_for_literal(
                     bc, json_literal, (uint32_t) node->line,
                     type_key ? type_key : hash_named_type_key32("Json", NULL, 0));
-                body_bind_json_shape_local(bc, node->as.assignment.name, json_shape_id,
-                                           json_literal);
+                body_bind_object_shape_local(bc, node->as.assignment.name, json_shape_id,
+                                             json_literal);
             } else if (source_json_shape_id != XG_NO_ID &&
                        body_local_type_is_json(body_find_local(bc, node->as.assignment.name))) {
-                body_bind_json_shape_local(bc, node->as.assignment.name, source_json_shape_id,
-                                           source_json_literal);
+                body_bind_object_shape_local(bc, node->as.assignment.name, source_json_shape_id,
+                                             source_json_literal);
             }
-            if (source_record_shape_id != XG_NO_ID)
-                body_bind_record_shape_local(bc, node->as.assignment.name, source_record_shape_id,
+            if (source_object_shape_id != XG_NO_ID)
+                body_bind_object_shape_local(bc, node->as.assignment.name, source_object_shape_id,
                                              source_record_literal);
             if (source_map_local)
                 body_bind_map_shape_local_from_source(bc, node->as.assignment.name,
@@ -9616,14 +10101,14 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 if (target_row)
                     target_row->sequence_elem_interface_id = target_sequence_elem_interface_id;
             }
-            if (source_sequence_json_shape_id == XG_NO_ID && target_sequence_kind != 0 &&
+            if (source_sequence_object_shape_id == XG_NO_ID && target_sequence_kind != 0 &&
                 target_sequence_elem_type_key == hash_named_type_key32("Json", NULL, 0)) {
-                source_sequence_json_shape_id = body_lookup_sequence_json_ternary_shape(
+                source_sequence_object_shape_id = body_lookup_sequence_json_ternary_shape(
                     bc, node->as.assignment.value, &source_sequence_json_literal);
             }
-            if (source_sequence_json_shape_id != XG_NO_ID)
+            if (source_sequence_object_shape_id != XG_NO_ID)
                 body_bind_sequence_json_shape_local(bc, node->as.assignment.name,
-                                                    source_sequence_json_shape_id,
+                                                    source_sequence_object_shape_id,
                                                     source_sequence_json_literal);
             if (!target_is_scalar_local)
                 bc->effect_bits |= XG_BODY_MAY_MUTATE;
@@ -9641,14 +10126,14 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                                                              node->as.member_access.name);
             }
             body_add_json_member_access(bc, node, false);
-            body_add_record_field_access(bc, node, false);
+            body_add_object_field_access(bc, node, false);
             body_add_enum_metadata_use(bc, node);
             walk_body_for_calls(bc, node->as.member_access.object);
             break;
         }
         case AST_MEMBER_SET:
             body_add_json_member_access(bc, node, true);
-            body_add_record_field_access(bc, node, true);
+            body_add_object_field_access(bc, node, true);
             walk_body_for_calls(bc, node->as.member_set.object);
             walk_body_for_calls(bc, node->as.member_set.value);
             bc->effect_bits |= XG_BODY_MAY_MUTATE;
@@ -9657,7 +10142,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_INDEX_GET:
             bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             body_add_json_index_access(bc, node, false);
-            body_add_record_field_access(bc, node, false);
+            body_add_object_field_access(bc, node, false);
             body_add_map_index_key_access(bc, node, false);
             body_add_sequence_index_access(bc, node, false);
             walk_body_for_calls(bc, node->as.index_get.array);
@@ -9665,7 +10150,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_INDEX_SET:
             body_add_json_index_access(bc, node, true);
-            body_add_record_field_access(bc, node, true);
+            body_add_object_field_access(bc, node, true);
             body_add_map_index_key_access(bc, node, true);
             body_add_sequence_index_access(bc, node, true);
             walk_body_for_calls(bc, node->as.index_set.array);
@@ -10029,7 +10514,21 @@ static void body_add_method_params(XgBodyCollect *bc, const MethodDeclNode *meth
                                                            XG_INTERFACE_OBJECT_USE_PARAM, 0);
         (void) body_push_local(bc, param_name, 0, class_id, interface_id, type_key,
                                param_type ? param_type->name : NULL, false);
-        body_bind_record_bridge_shapes_for_type_key(bc, param_name, type_key);
+        body_bind_static_object_shape_for_type_key(bc, param_name, type_key);
+        {
+            XgLocalType *local = body_find_local(bc, param_name);
+            if (local) {
+                local->param_ordinal = (uint16_t) (i < UINT16_MAX ? i : UINT16_MAX);
+                if (param_type && param_type->kind == XR_TREF_OBJECT)
+                    local->object_row_mode = (uint8_t) param_type->object_row_mode;
+                else if (local->object_shape_id != XG_NO_ID) {
+                    const XgObjectShapeSummary *shape = xg_global_evidence_find_object_shape(
+                        bc->evidence, local->object_shape_id);
+                    if (shape && (shape->flags & XG_OBJECT_SHAPE_OPEN_ROW) != 0)
+                        local->object_row_mode = XR_OBJECT_ROW_OPEN;
+                }
+            }
+        }
         body_bind_map_shape_local_for_type_ref(bc, param_name, param_type, 0);
         if (body_type_ref_sequence_parts(param_type, &sequence_kind, &sequence_elem_type_key))
             body_bind_sequence_local(bc, param_name, sequence_kind, sequence_elem_type_key,
@@ -10061,7 +10560,21 @@ static void body_add_function_params(XgBodyCollect *bc, const FunctionDeclNode *
         (void) body_push_local(bc, param ? param->name : NULL, param ? param->symbol_id : 0,
                                class_id, interface_id, type_key,
                                param && param->type ? param->type->name : NULL, false);
-        body_bind_record_bridge_shapes_for_type_key(bc, param ? param->name : NULL, type_key);
+        body_bind_static_object_shape_for_type_key(bc, param ? param->name : NULL, type_key);
+        {
+            XgLocalType *local = body_find_local(bc, param ? param->name : NULL);
+            if (local) {
+                local->param_ordinal = (uint16_t) (i < UINT16_MAX ? i : UINT16_MAX);
+                if (param && param->type && param->type->kind == XR_TREF_OBJECT)
+                    local->object_row_mode = (uint8_t) param->type->object_row_mode;
+                else if (local->object_shape_id != XG_NO_ID) {
+                    const XgObjectShapeSummary *shape = xg_global_evidence_find_object_shape(
+                        bc->evidence, local->object_shape_id);
+                    if (shape && (shape->flags & XG_OBJECT_SHAPE_OPEN_ROW) != 0)
+                        local->object_row_mode = XR_OBJECT_ROW_OPEN;
+                }
+            }
+        }
         body_bind_map_shape_local_for_type_ref(
             bc, param ? param->name : NULL, param ? param->type : NULL,
             param && param->line > 0 ? (uint32_t) param->line : 0);
@@ -10182,6 +10695,194 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     return xg_global_evidence_add_body(producer->evidence, &row) != NULL;
 }
 
+static XgObjectAccessSummary *producer_find_mutable_object_access(XgGlobalEvidence *evidence,
+                                                                 XgObjectAccessId access_id) {
+    if (!evidence || access_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nobject_accesses; i++) {
+        if (evidence->object_accesses[i].object_access_id == access_id)
+            return &evidence->object_accesses[i];
+    }
+    return NULL;
+}
+
+static const XgObjectFieldSummary *producer_find_object_field_by_name(
+    const XgGlobalEvidence *evidence, XgObjectShapeId shape_id, uint32_t name_id) {
+    if (!evidence || shape_id == XG_NO_ID || name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nobject_fields; i++) {
+        const XgObjectFieldSummary *field = &evidence->object_fields[i];
+        if (field->shape_id == shape_id && field->name_id == name_id)
+            return field;
+    }
+    return NULL;
+}
+
+typedef struct XgObjectFlowVisit {
+    XgFuncId func_id;
+    uint16_t param_ordinal;
+} XgObjectFlowVisit;
+
+static bool producer_collect_object_flow_shapes(const XgGlobalEvidence *evidence,
+                                                XgFuncId target_func_id,
+                                                uint16_t target_param_ordinal,
+                                                XgObjectShapeId *shape_ids,
+                                                uint32_t shape_capacity,
+                                                uint32_t *shape_count,
+                                                XgObjectFlowVisit *visits,
+                                                uint32_t visit_capacity,
+                                                uint32_t *visit_count) {
+    if (!evidence || target_func_id == XG_NO_ID || !shape_count || !visit_count)
+        return false;
+    for (uint32_t i = 0; i < *visit_count; i++) {
+        if (visits[i].func_id == target_func_id &&
+            visits[i].param_ordinal == target_param_ordinal)
+            return true;
+    }
+    if (!visits || *visit_count >= visit_capacity)
+        return false;
+    visits[*visit_count].func_id = target_func_id;
+    visits[*visit_count].param_ordinal = target_param_ordinal;
+    (*visit_count)++;
+    for (uint32_t i = 0; i < evidence->nobject_shape_flows; i++) {
+        const XgObjectShapeFlowSummary *flow = &evidence->object_shape_flows[i];
+        if (flow->target_func_id != target_func_id ||
+            flow->target_param_ordinal != target_param_ordinal)
+            continue;
+        if ((flow->flags & XG_OBJECT_SHAPE_FLOW_CONCRETE) != 0) {
+            bool duplicate = false;
+            if (flow->concrete_shape_id == XG_NO_ID)
+                return false;
+            for (uint32_t j = 0; j < *shape_count; j++)
+                duplicate = duplicate || shape_ids[j] == flow->concrete_shape_id;
+            if (!duplicate) {
+                if (!shape_ids || *shape_count >= shape_capacity)
+                    return false;
+                shape_ids[(*shape_count)++] = flow->concrete_shape_id;
+            }
+        } else if ((flow->flags & XG_OBJECT_SHAPE_FLOW_FORWARDED) != 0) {
+            if (flow->source_func_id == XG_NO_ID || flow->source_param_ordinal == UINT16_MAX ||
+                !producer_collect_object_flow_shapes(
+                    evidence, flow->source_func_id, flow->source_param_ordinal, shape_ids,
+                    shape_capacity, shape_count, visits, visit_capacity, visit_count))
+                return false;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool producer_finalize_open_object_accesses(XgProducer *producer) {
+    XgGlobalEvidence *evidence;
+    if (!producer || !producer->evidence)
+        return false;
+    evidence = producer->evidence;
+    for (uint32_t i = 0; i < producer->nopen_object_accesses; i++) {
+        const XgPendingOpenObjectAccess *pending = &producer->open_object_accesses[i];
+        XgObjectAccessSummary *access =
+            producer_find_mutable_object_access(evidence, pending->access_id);
+        const XgObjectFieldSummary *constraint_field;
+        XgObjectShapeId *shape_ids;
+        XgObjectFlowVisit *visits;
+        uint32_t shape_count = 0;
+        uint32_t visit_count = 0;
+        if (!access || access->owner_func_id != pending->owner_func_id ||
+            access->receiver_param_ordinal != pending->param_ordinal ||
+            access->constraint_shape_id != pending->constraint_shape_id)
+            return false;
+        constraint_field = producer_find_object_field_by_name(
+            evidence, pending->constraint_shape_id, access->field_name_id);
+        if (!constraint_field)
+            return false;
+        shape_ids = evidence->nobject_shape_flows > 0
+                        ? (XgObjectShapeId *) xr_calloc(evidence->nobject_shape_flows,
+                                                       sizeof(*shape_ids))
+                        : NULL;
+        visits = (XgObjectFlowVisit *) xr_calloc(evidence->nobject_shape_flows + 1,
+                                                 sizeof(*visits));
+        if ((evidence->nobject_shape_flows > 0 && !shape_ids) || !visits) {
+            xr_free(shape_ids);
+            return false;
+        }
+        if (!producer_collect_object_flow_shapes(
+                evidence, pending->owner_func_id, pending->param_ordinal, shape_ids,
+                evidence->nobject_shape_flows, &shape_count, visits,
+                evidence->nobject_shape_flows + 1, &visit_count)) {
+            xr_free(visits);
+            xr_free(shape_ids);
+            return false;
+        }
+        xr_free(visits);
+        for (uint32_t j = 0; j < shape_count; j++) {
+            const XgObjectFieldSummary *field;
+            field = producer_find_object_field_by_name(evidence, shape_ids[j],
+                                                       access->field_name_id);
+            if (!field || field->type_key != constraint_field->type_key) {
+                xr_free(shape_ids);
+                return false;
+            }
+        }
+        if (shape_count == 0) {
+            xr_free(shape_ids);
+            return false;
+        }
+        for (uint32_t j = 1; j < shape_count; j++) {
+            XgObjectShapeId current = shape_ids[j];
+            const XgObjectShapeSummary *current_shape =
+                xg_global_evidence_find_object_shape(evidence, current);
+            uint32_t k = j;
+            while (k > 0) {
+                const XgObjectShapeSummary *previous =
+                    xg_global_evidence_find_object_shape(evidence, shape_ids[k - 1]);
+                if (!previous || !current_shape ||
+                    previous->stable_shape_key < current_shape->stable_shape_key ||
+                    (previous->stable_shape_key == current_shape->stable_shape_key &&
+                     previous->object_shape_id <= current_shape->object_shape_id))
+                    break;
+                shape_ids[k] = shape_ids[k - 1];
+                k--;
+            }
+            shape_ids[k] = current;
+        }
+        access->receiver_shape_count = (uint16_t) shape_count;
+        access->receiver_shape_set_id = access->object_access_id;
+        access->receiver_shape_id = shape_ids[0];
+        access->result_type_key = constraint_field->type_key;
+        for (uint32_t j = 0; j < shape_count; j++) {
+            const XgObjectShapeSummary *shape =
+                xg_global_evidence_find_object_shape(evidence, shape_ids[j]);
+            const XgObjectFieldSummary *field = producer_find_object_field_by_name(
+                evidence, shape_ids[j], access->field_name_id);
+            XgObjectAccessCaseSummary access_case;
+            if (!shape || !field) {
+                xr_free(shape_ids);
+                return false;
+            }
+            if (j == 0) {
+                access->field_ordinal = field->field_ordinal;
+                access->mutation_epoch = shape->mutation_epoch;
+            }
+            memset(&access_case, 0, sizeof(access_case));
+            access_case.case_id =
+                (XgObjectAccessCaseId) (evidence->nobject_access_cases + 1);
+            access_case.object_access_id = access->object_access_id;
+            access_case.receiver_shape_set_id = access->receiver_shape_set_id;
+            access_case.receiver_shape_id = shape->object_shape_id;
+            access_case.stable_shape_key = shape->stable_shape_key;
+            access_case.mutation_epoch = shape->mutation_epoch;
+            access_case.field_ordinal = field->field_ordinal;
+            access_case.domain = shape->domain;
+            if (!xg_global_evidence_add_object_access_case(evidence, &access_case)) {
+                xr_free(shape_ids);
+                return false;
+            }
+        }
+        xr_free(shape_ids);
+    }
+    return true;
+}
+
 static bool producer_emit_body_summaries(XgProducer *producer) {
     if (!producer)
         return false;
@@ -10189,7 +10890,7 @@ static bool producer_emit_body_summaries(XgProducer *producer) {
         if (!add_body_summary(producer, &producer->bodies[i]))
             return false;
     }
-    return true;
+    return producer_finalize_open_object_accesses(producer);
 }
 
 static bool add_function_decl(XgProducer *p, XgModuleId module_id, const AstNode *node) {
@@ -10528,23 +11229,18 @@ static bool add_import_link_dependencies(XgProducer *p, XgModuleId module_id, co
     return true;
 }
 
-static bool add_type_alias_record_shape(XgProducer *p, XgModuleId module_id, const AstNode *node) {
+static bool add_type_alias_object_shape(XgProducer *p, XgModuleId module_id, const AstNode *node) {
     const TypeAliasNode *alias;
-    XgRecordShapeId record_shape_id;
-    XgJsonShapeId json_shape_id;
+    XgObjectShapeId object_shape_id;
     if (!p || !p->evidence || !node || node->type != AST_TYPE_ALIAS)
         return true;
     alias = &node->as.type_alias;
     if (!alias->name || alias->type_param_count > 0 ||
-        body_type_alias_record_field_count(alias) <= 0)
+        body_type_alias_object_field_count(alias) <= 0)
         return true;
-    record_shape_id = (XgRecordShapeId) (p->evidence->nrecord_shapes + 1);
-    json_shape_id = (XgJsonShapeId) (p->evidence->njson_shapes + 1);
-    if (body_add_record_shape_for_type_alias(p->evidence, module_id, alias, (uint32_t) node->line,
-                                             json_shape_id) != record_shape_id)
-        return false;
-    if (body_add_json_record_bridge_shape_for_type_alias(
-            p->evidence, module_id, alias, (uint32_t) node->line, record_shape_id) != json_shape_id)
+    object_shape_id = (XgObjectShapeId) (p->evidence->nobject_shapes + 1);
+    if (body_add_object_shape_for_type_alias(p, module_id, alias,
+                                             (uint32_t) node->line) != object_shape_id)
         return false;
     return true;
 }
@@ -10644,7 +11340,7 @@ static bool add_module_decl_stmt(XgProducer *p, XgModuleId module_id, const AstN
         case AST_IMPORT_STMT:
             return add_import_link_dependencies(p, module_id, stmt);
         case AST_TYPE_ALIAS:
-            return add_type_alias_record_shape(p, module_id, stmt);
+            return add_type_alias_object_shape(p, module_id, stmt);
         default:
             if (handled)
                 *handled = false;

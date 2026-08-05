@@ -202,7 +202,7 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
                                                        uint64_t stable_type_key,
                                                        uint8_t shape_flags,
                                                        uint8_t json_value_kind,
-                                                       XrClass *json_record_class,
+                                                       XrClass *json_struct_object_class,
                                                        bool allow_sealed_source) {
     XR_DCHECK(X != NULL, "transition: NULL isolate");
     XR_DCHECK(klass != NULL, "transition: NULL klass");
@@ -228,7 +228,7 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
          t = t->next) {
         if (t->symbol == symbol && t->stable_type_key == stable_type_key &&
             t->shape_flags == shape_flags && t->json_value_kind == json_value_kind &&
-            t->json_record_class == json_record_class)
+            t->json_struct_object_class == json_struct_object_class)
             return t->target;
     }
 
@@ -245,7 +245,7 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
          t = t->next) {
         if (t->symbol == symbol && t->stable_type_key == stable_type_key &&
             t->shape_flags == shape_flags && t->json_value_kind == json_value_kind &&
-            t->json_record_class == json_record_class) {
+            t->json_struct_object_class == json_struct_object_class) {
             if (core)
                 xr_amutex_unlock(&core->metadata_lock);
             return t->target;
@@ -298,7 +298,7 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
     new_fd->offset = parent_fc;
     new_fd->json_value_kind = json_value_kind;
     new_fd->shape_flags = shape_flags;
-    new_fd->json_record_class = json_record_class;
+    new_fd->json_struct_object_class = json_struct_object_class;
 
     child->field_count = child_fc;
     child->own_field_count = klass->own_field_count + 1;
@@ -344,7 +344,7 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
     trans->stable_type_key = stable_type_key;
     trans->json_value_kind = json_value_kind;
     trans->shape_flags = shape_flags;
-    trans->json_record_class = json_record_class;
+    trans->json_struct_object_class = json_struct_object_class;
     trans->target = child;
     trans->next = atomic_load_explicit(&klass->transitions, memory_order_relaxed);
     // Publish with release: any reader that acquire-loads the new head is
@@ -365,7 +365,7 @@ XrClass *xr_class_transition_get_or_create(XrVMRuntime *X, XrClass *klass, int s
 static XrClass *xr_class_build_dynamic_chain(XrVMRuntime *X, XrClass *root,
                                               const char *const *names,
                                               const uint8_t *json_value_kinds,
-                                              XrClass *const *json_record_classes, int count,
+                                              XrClass *const *json_struct_object_classes, int count,
                                               const uint64_t *stable_type_keys,
                                               const uint8_t *shape_field_flags, bool sealed,
                                               const char *label) {
@@ -384,7 +384,7 @@ static XrClass *xr_class_build_dynamic_chain(XrVMRuntime *X, XrClass *root,
                 stable_type_keys ? stable_type_keys[i] : 0,
                 shape_field_flags ? shape_field_flags[i] : 0,
                 json_value_kinds ? json_value_kinds[i] : XR_JSON_VALUE_ANY,
-                json_record_classes ? json_record_classes[i] : NULL, true);
+                json_struct_object_classes ? json_struct_object_classes[i] : NULL, true);
             if (!next)
                 return NULL;
             cur = next;
@@ -407,17 +407,15 @@ XrClass *xr_class_build_json_chain(XrVMRuntime *X, const char *const *names, int
                                         stable_type_keys, shape_field_flags, sealed, "Json");
 }
 
-XrClass *xr_class_build_record_chain(XrVMRuntime *X, const char *const *names,
+XrClass *xr_class_build_struct_object_chain(XrVMRuntime *X, const char *const *names,
                                      const uint8_t *json_value_kinds, int count,
-                                     XrClass *const *json_record_classes,
+                                     XrClass *const *json_struct_object_classes,
                                      const uint64_t *stable_type_keys,
-                                     const uint8_t *shape_field_flags, bool sealed) {
-    XR_DCHECK(X != NULL, "build_record_chain: NULL isolate");
-    XR_DCHECK(X->core != NULL && X->core->recordRootClass != NULL,
-              "build_record_chain: recordRootClass not initialized");
-    XrClass *root = sealed ? X->core->recordSealedRootClass : X->core->recordRootClass;
-    XR_DCHECK(root != NULL, "build_record_chain: selected root not initialized");
-    return xr_class_build_dynamic_chain(X, root, names, json_value_kinds, json_record_classes,
-                                         count, stable_type_keys, shape_field_flags, sealed,
-                                         "Record");
+                                     const uint8_t *shape_field_flags) {
+    XR_DCHECK(X != NULL, "build_struct_object_chain: NULL isolate");
+    XR_DCHECK(X->core != NULL && X->core->structObjectRootClass != NULL,
+              "build_struct_object_chain: root not initialized");
+    return xr_class_build_dynamic_chain(
+        X, X->core->structObjectRootClass, names, json_value_kinds, json_struct_object_classes, count,
+        stable_type_keys, shape_field_flags, true, TYPE_NAME_OBJECT);
 }

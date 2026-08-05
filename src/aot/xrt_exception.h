@@ -250,10 +250,8 @@ static inline const char *xrt_type_name(int64_t tid) {
             return TYPE_NAME_MAP;
         case XR_TID_INSTANCE:
             return TYPE_NAME_INSTANCE;
-        case XR_TID_JSON:
-            return TYPE_NAME_JSON;
-        case XR_TID_RECORD:
-            return TYPE_NAME_RECORD;
+        case XR_TID_OBJECT:
+            return TYPE_NAME_OBJECT;
         case XR_TID_BIGINT:
             return TYPE_NAME_BIGINT;
         case XR_TID_STRINGBUILDER:

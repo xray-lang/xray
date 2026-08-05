@@ -176,7 +176,7 @@ static XaJsonCapabilityResult json_capability_visit(const XrType *type,
                     false, XA_JSON_CAPABILITY_TUPLE_TARGET_NOT_DECODABLE, type);
             }
             break;
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
             if (type->object.row_mode == XR_OBJECT_ROW_OPEN) {
                 return json_capability_result(false, XA_JSON_CAPABILITY_OPEN_ROW_TARGET, type);
             }
@@ -217,7 +217,7 @@ static XaJsonCapabilityResult json_capability_visit(const XrType *type,
                     break;
             }
             break;
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
             for (int i = 0; i < type->object.field_count; i++) {
                 const XrType *field =
                     type->object.field_types ? type->object.field_types[i] : NULL;

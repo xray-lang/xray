@@ -45,7 +45,9 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
     if (type->kind == XR_KIND_SET)
         return XR_TID_SET;
     if (XR_TYPE_IS_JSON(type))
-        return XR_TID_JSON;
+        return XR_TID_OBJECT;
+    if (XR_TYPE_IS_STRUCT_OBJECT(type))
+        return XR_TID_OBJECT;
     /* Every named check below must exclude a user class that reuses the
      * builtin's name. This function is the single gate for builtin identity —
      * it decides the member table (xa_builtin_get_type_info), the native
@@ -85,6 +87,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
 
 // Get built-in type info by XrType (O(1) via enum index)
 const XaBuiltinType *xa_builtin_get_type_info(XrType *type) {
+    if (XR_TYPE_IS_JSON(type))
+        return xa_native_get_compiler_builtin_type("Json");
     if (xr_type_is_builtin_named_class(type, "CoroLocal"))
         return xa_native_get_compiler_builtin_type("CoroLocal");
     XrTypeId id = xr_type_to_builtin_id(type);
@@ -1014,7 +1018,7 @@ XrType *xa_builtin_record_decl_type(XrVMRuntime *X, const XaBuiltinRecord *recor
         names[i] = record->fields[i].name;
         types[i] = xa_builtin_parse_type_string(X, record->fields[i].type_str);
     }
-    XrType *type = xr_type_new_record_with_fields(
+    XrType *type = xr_type_new_struct_object_with_fields(
         X, names, types, count,
         record->is_sealed ? XR_OBJECT_ROW_EXACT : XR_OBJECT_ROW_OPEN);
     xr_free(names);
@@ -1156,6 +1160,8 @@ int xa_builtin_get_members_for_type(XrType *type, const XaBuiltinMember **out_me
 }
 
 const char *xa_builtin_get_type_name(XrType *type) {
+    if (XR_TYPE_IS_JSON(type))
+        return TYPE_NAME_JSON;
     XrTypeId id = xr_type_to_builtin_id(type);
     if (id == XR_TID_NULL)
         return NULL;

@@ -1,10 +1,10 @@
 args=--dump-global-evidence
 contains=xaot-plan v0
 regex=json-shape-plan [0-9]+ id=[0-9]+ .*kind=record_bridge action=record_bridge .*record_shape=[1-9][0-9]*
-regex=record-shape-plan [0-9]+ id=[0-9]+ .*kind=static action=static_record .*json_shape=[1-9][0-9]*
+regex=object-shape-plan [0-9]+ id=[0-9]+ .*kind=static action=static .*json_shape=[1-9][0-9]*
 regex=json-codec [0-9]+ .*kind=encode .*input_shape=[1-9][0-9]* .*fields=2 .*record_shape=[1-9][0-9]*
 regex=json-codec [0-9]+ .*kind=decode .*output_shape=[1-9][0-9]* .*fields=2 .*record_shape=[1-9][0-9]*
 regex=json-codec-plan [0-9]+ .*kind=encode action=encode_field_table .*input_shape=[1-9][0-9]* .*fields=2 .*record_shape=[1-9][0-9]*
 regex=json-codec-plan [0-9]+ .*kind=decode action=decode_validate_copy .*output_shape=[1-9][0-9]* .*fields=2 .*record_shape=[1-9][0-9]*
-c_contains=xrt_json_decode_record
+c_contains=xrt_json_decode_struct_object
 c_contains=(const XrJsonDecodeFieldSpec[]){{"name", 5, NULL, 0}, {"age", 3, NULL, 0}}

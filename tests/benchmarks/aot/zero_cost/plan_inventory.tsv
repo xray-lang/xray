@@ -18,7 +18,7 @@ function_attr_callee_effect|covered|fn-attr .*evidence=0x7|tests/aot/filetests/c
 static_data_materialization|covered|static-data .*action=materialize|tests/aot/filetests/cgen|Static-data plans expose materialization actions.
 metadata_derive_reachability|covered|derive-plan|tests/aot/filetests/cgen|Derive metadata reachability has plan coverage.
 derived_eq_hash|covered|kind=hash|tests/aot/filetests/link|Derived Eq/Hash evidence has global evidence coverage.
-json_shape_direct_index|covered|json-access-plan .*action=direct_index|tests/aot/filetests/cgen|Json static member/key access direct-index path is covered.
+json_shape_direct_index|covered|json-dynamic-access-plan .*action=direct_index|tests/aot/filetests/cgen|Json static member/key access direct-index path is covered.
 json_closure_capture_shape|covered|json_closure_capture_direct_index_plan|tests/aot/filetests/cgen|Json receivers captured by closures keep child-body shape evidence and direct-index generated C helpers.
 json_return_receiver_shape|covered|makeJsonReturnReceiverPlan|tests/aot/filetests/cgen|Json direct function-call return receivers with a unique static literal return keep receiver shape evidence and direct-index generated C helpers.
 json_method_return_receiver_shape|covered|jsonMethodReturnReceiverPlan|tests/aot/filetests/cgen|Json class method-chain return receivers with a unique static literal return keep receiver shape evidence and direct-index generated C helpers.
@@ -59,13 +59,13 @@ json_array_method_return_container_receiver_shape|covered|jsonArrayMethodReturnC
 json_array_method_return_local_container_receiver_shape|covered|jsonArrayMethodReturnLocalContainerPlan|tests/aot/filetests/cgen|Json Array<Json> locals initialized or assigned from class method-chain returns preserve homogeneous element shape evidence and direct-index generated C helpers.
 json_field_receiver_shape|covered|jsonFieldReceiverPlan|tests/aot/filetests/cgen|Json record-bridge class field receivers keep static shape evidence and direct-index generated C helpers.
 json_container_receiver_shape|covered|jsonContainerReceiverPlan|tests/aot/filetests/cgen|Json record-bridge receivers loaded from typed Array<Record> containers keep static shape evidence and direct-index generated C helpers.
-json_dynamic_fallback|covered|json-access-plan .*action=dynamic_lookup|tests/aot/filetests/cgen|Json computed/open/unknown fallback reasons are covered.
+json_dynamic_fallback|covered|json-dynamic-access-plan .*action=dynamic_lookup|tests/aot/filetests/cgen|Json computed/open/unknown fallback reasons are covered.
 json_parse_runtime_direct_plan|covered|action=parse_runtime_direct|tests/unit/analysis|Json.parse uses an explicit verified runtime-direct parse plan instead of the old DOM bridge.
 json_decode_plan|covered|json-codec-plan .*kind=decode action=decode_validate_copy|tests/aot/filetests/cgen|Json.decode<Record> consumes a verified codec plan instead of assembling shape checks ad hoc.
 json_decode_mixed_record_array_plan|covered|jsonDecodeMixedRecordArrayPlan|tests/aot/filetests/cgen|Json.decode<Record> mixed primitive, nested Record, and Array<Json> fields share one verified decode plan and generated field-spec table.
 json_encode_field_table|covered|json-codec-plan .*kind=encode action=encode_field_table|tests/aot/filetests/cgen|Json.encode consumes verified field-table codec evidence.
 record_json_bridge|covered|XG_JSON_SHAPE_RECORD_BRIDGE|tests/unit/analysis|Record type aliases produce Json bridge shape and codec evidence.
-record_access_direct|covered|record-access-plan .*action=direct_field|tests/aot/filetests/cgen|Record field access consumes a verified direct-field plan.
+record_access_direct|covered|object-access-plan .*action=direct_ordinal|tests/aot/filetests/cgen|Record field access consumes a verified direct-field plan.
 record_closure_capture_shape|covered|recordClosureCapturePlan|tests/aot/filetests/cgen|Record receivers captured by closures keep child-body shape evidence and direct-field generated C helpers.
 record_param_receiver_shape|covered|recordParamReceiverPlan|tests/aot/filetests/cgen|Record typed parameter receivers keep static shape evidence and direct-field generated C helpers.
 record_field_receiver_shape|covered|recordFieldReceiverPlan|tests/aot/filetests/cgen|Record typed class field receivers keep static shape evidence and direct-field generated C helpers.
@@ -75,7 +75,7 @@ record_method_return_receiver_shape|covered|recordMethodReturnReceiverPlan|tests
 record_method_return_local_shape|covered|recordMethodReturnLocalPlan|tests/aot/filetests/cgen|Record locals initialized or assigned from class method-chain returns keep direct-field evidence and generated C helpers.
 record_return_local_shape|covered|recordReturnLocalPlan|tests/aot/filetests/cgen|Record locals initialized from static return type shapes keep direct-field evidence and generated C helpers.
 record_indirect_return_receiver_shape|covered|recordIndirectReturnReceiverPlan|tests/aot/filetests/cgen|Record indirect function-call return receivers through static return type shapes keep direct-field evidence and generated C helpers.
-record_spread_merge_plan|covered|record-merge-plan .*action=copy_with_overwrite|tests/aot/filetests|Record spread merge consumes an explicit copy/overwrite merge plan from shape evidence.
+record_spread_merge_plan|covered|object-merge-plan .*action=copy_with_overwrite|tests/aot/filetests|Record spread merge consumes an explicit copy/overwrite merge plan from shape evidence.
 options_default_args_plan|covered|options-plan .*action=default_fill_table|tests/aot/filetests/cgen|Caller-side default argument filling consumes verified options bag plans in direct-call CGen.
 map_set_key_prehash|covered|key-access-plan .*action=prehashed_lookup|tests/aot/filetests/cgen|Map/Set static key access consumes prehashed lookup plans.
 map_set_readonly_static_table|covered|xrt_map_static_storage_init|tests/aot/filetests/cgen|Module-level readonly constant Map/Set literals consume verified static-table storage and producer prehash evidence in generated C.
@@ -111,8 +111,8 @@ interface_fixed_array_object_use_identity|covered|value\\\+array\\\+param|tests/
 interface_implements_no_object_itable|covered|not_contains=interface-abi|tests/aot/filetests/cgen/interface_implements_no_object_itable.expect|Classes that only implement an interface but never form interface objects do not generate interface ABI or itable artifacts.
 itable_emitter|covered|xrt_itable_method|tests/aot/filetests/cgen|Verified itable backend emission is covered by generated C lookup and installed class itables.
 interface_object_use_evidence|covered|interface-object-use|tests/unit/analysis|Interface object value/array/field/return/capture/param uses have schema, dump, hash, and cache payload evidence.
-json_shape_guard|covered|json-access-plan .*action=shape_guard_index|tests/aot/filetests/cgen|Json open-shape static-key access emits shape guard plus fallback helpers.
-json_computed_key_guard|covered|json-access-plan .*action=computed_key_guard|tests/aot/filetests/cgen|Json computed-key access consumes receiver-shape guarded lookup helpers in generated C.
+json_shape_guard|covered|json-dynamic-access-plan .*action=shape_guard_index|tests/aot/filetests/cgen|Json open-shape static-key access emits shape guard plus fallback helpers.
+json_computed_key_guard|covered|json-dynamic-access-plan .*action=computed_key_guard|tests/aot/filetests/cgen|Json computed-key access consumes receiver-shape guarded lookup helpers in generated C.
 map_set_small_lookup|covered|key-access-plan .*action=inline_small_scan|tests/aot/filetests/cgen|Small Map/Set literal lookup consumes inline scan plans in generated C.
 map_set_small_mutation_boundary|covered|smallMutationBoundary|tests/aot/filetests/cgen|Small literal Map/Set mutating key operations deliberately stay on verified prehashed mutation helpers instead of pretending small lookup tables are mutation-specialized.
 map_set_dense_lookup|covered|key-access-plan .*action=direct_dense_index|tests/aot/filetests/cgen|Dense ordinal int and enum Map/Set literal lookup consumes direct dense-index plans in generated C.

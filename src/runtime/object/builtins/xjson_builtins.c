@@ -41,6 +41,64 @@
 
 /* ========== Static Method Implementations ========== */
 
+typedef enum XrJsonRuntimeKind {
+    XR_JSON_RUNTIME_INVALID = -1,
+    XR_JSON_RUNTIME_NULL,
+    XR_JSON_RUNTIME_BOOL,
+    XR_JSON_RUNTIME_INT,
+    XR_JSON_RUNTIME_FLOAT,
+    XR_JSON_RUNTIME_STRING,
+    XR_JSON_RUNTIME_ARRAY,
+    XR_JSON_RUNTIME_OBJECT,
+} XrJsonRuntimeKind;
+
+static XrJsonRuntimeKind xr_json_runtime_kind(XrValue value) {
+    if (XR_IS_NULL(value))
+        return XR_JSON_RUNTIME_NULL;
+    if (XR_IS_BOOL(value))
+        return XR_JSON_RUNTIME_BOOL;
+    if (XR_IS_INT(value))
+        return XR_JSON_RUNTIME_INT;
+    if (XR_IS_FLOAT(value))
+        return XR_JSON_RUNTIME_FLOAT;
+    if (XR_IS_STRING(value))
+        return XR_JSON_RUNTIME_STRING;
+    if (XR_IS_ARRAY(value))
+        return XR_JSON_RUNTIME_ARRAY;
+    if (xr_value_is_json(value))
+        return XR_JSON_RUNTIME_OBJECT;
+    return XR_JSON_RUNTIME_INVALID;
+}
+
+static XrValue xr_json_static_kind_of(XrVMRuntime *X, XrValue self, XrValue *args, int nargs) {
+    (void) self;
+    static const char *const names[] = {"null", "bool", "int", "float",
+                                        "string", "array", "object"};
+    XrJsonRuntimeKind kind = nargs >= 1 ? xr_json_runtime_kind(args[0]) : XR_JSON_RUNTIME_INVALID;
+    XR_DCHECK(kind != XR_JSON_RUNTIME_INVALID, "Json.kindOf: value is outside the Json domain");
+    if (kind == XR_JSON_RUNTIME_INVALID)
+        return xr_null();
+    const char *name = names[kind];
+    return xr_string_value(xr_string_intern(X, name, strlen(name), 0));
+}
+
+#define XR_JSON_KIND_PREDICATE(fn_name, expected_kind)                                      \
+    static XrValue fn_name(XrVMRuntime *X, XrValue self, XrValue *args, int nargs) {        \
+        (void) X;                                                                           \
+        (void) self;                                                                        \
+        return xr_bool(nargs >= 1 && xr_json_runtime_kind(args[0]) == (expected_kind));     \
+    }
+
+XR_JSON_KIND_PREDICATE(xr_json_static_is_null, XR_JSON_RUNTIME_NULL)
+XR_JSON_KIND_PREDICATE(xr_json_static_is_bool, XR_JSON_RUNTIME_BOOL)
+XR_JSON_KIND_PREDICATE(xr_json_static_is_int, XR_JSON_RUNTIME_INT)
+XR_JSON_KIND_PREDICATE(xr_json_static_is_float, XR_JSON_RUNTIME_FLOAT)
+XR_JSON_KIND_PREDICATE(xr_json_static_is_string, XR_JSON_RUNTIME_STRING)
+XR_JSON_KIND_PREDICATE(xr_json_static_is_array, XR_JSON_RUNTIME_ARRAY)
+XR_JSON_KIND_PREDICATE(xr_json_static_is_object, XR_JSON_RUNTIME_OBJECT)
+
+#undef XR_JSON_KIND_PREDICATE
+
 // Json.keys(obj) -> Array<string>
 static XrValue xr_json_static_keys(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
     (void) self;
@@ -213,6 +271,14 @@ static XrClass *create_json_utility_class(XrVMRuntime *X) {
     xr_class_builder_add_static_method(builder, "entries", xr_json_static_entries, 1, 0);
     xr_class_builder_add_static_method(builder, "containsKey", xr_json_static_contains_key, 2, 0);
     xr_class_builder_add_static_method(builder, "get", xr_json_static_get, 2, 0);
+    xr_class_builder_add_static_method(builder, "kindOf", xr_json_static_kind_of, 1, 0);
+    xr_class_builder_add_static_method(builder, "isNull", xr_json_static_is_null, 1, 0);
+    xr_class_builder_add_static_method(builder, "isBool", xr_json_static_is_bool, 1, 0);
+    xr_class_builder_add_static_method(builder, "isInt", xr_json_static_is_int, 1, 0);
+    xr_class_builder_add_static_method(builder, "isFloat", xr_json_static_is_float, 1, 0);
+    xr_class_builder_add_static_method(builder, "isString", xr_json_static_is_string, 1, 0);
+    xr_class_builder_add_static_method(builder, "isArray", xr_json_static_is_array, 1, 0);
+    xr_class_builder_add_static_method(builder, "isObject", xr_json_static_is_object, 1, 0);
 
     // JSON parse/stringify — core engine in xjson_serde.c, throw wrapper above
     xr_class_builder_add_static_method(builder, "parse", xr_json_fn_parse, 1, 0);

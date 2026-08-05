@@ -33,6 +33,15 @@ typedef struct {
     char error_msg[128];  // human-readable description of the offending type
 } XrJsonEncodeResult;
 
+typedef struct XrJsonTypedParseError {
+    char path[160];
+    char expected[48];
+    char actual[48];
+} XrJsonTypedParseError;
+
+struct XrClass;
+struct XrCoroutine;
+
 /* ========== Script-callable Functions ========== */
 
 // parse(str) → XrValue
@@ -59,5 +68,9 @@ XR_FUNC char *xr_json_stringify_to_cstr(XrVMRuntime *X, XrValue val, size_t *out
 
 // Parse JSON C-string to XrValue (returns xr_null() on error)
 XR_FUNC XrValue xr_json_parse_from_cstr(XrVMRuntime *X, const char *json_str, size_t len);
+XR_FUNC bool xr_json_parse_typed_object_from_cstr(XrVMRuntime *X, struct XrCoroutine *coro,
+                                                   const char *json_str, size_t len,
+                                                   struct XrClass *target_class, XrValue *out,
+                                                   XrJsonTypedParseError *error);
 
 #endif  // XJSON_SERDE_H

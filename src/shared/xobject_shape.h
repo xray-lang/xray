@@ -71,12 +71,25 @@ static inline uint64_t xr_object_shape_key_begin(uint8_t domain, int64_t field_c
     return xr_object_shape_key_fold_u64(key, (uint64_t) field_count);
 }
 
-static inline uint64_t xr_object_shape_key_add_field(uint64_t key, const char *name,
-                                                     uint64_t stable_type_key, uint8_t flags) {
+static inline uint64_t xr_object_shape_stable_name_key(const char *name) {
     const char *field_name = name ? name : "?";
-    key = xr_object_shape_key_fold(key, field_name, strlen(field_name));
+    uint64_t key = xr_hash_bytes64(field_name, strlen(field_name));
+    return key ? key : 1;
+}
+
+static inline uint64_t xr_object_shape_key_add_field_key(uint64_t key,
+                                                         uint64_t stable_name_key,
+                                                         uint64_t stable_type_key,
+                                                         uint8_t flags) {
+    key = xr_object_shape_key_fold_u64(key, stable_name_key);
     key = xr_object_shape_key_fold_u64(key, stable_type_key);
     return xr_object_shape_key_fold(key, &flags, sizeof(flags));
+}
+
+static inline uint64_t xr_object_shape_key_add_field(uint64_t key, const char *name,
+                                                     uint64_t stable_type_key, uint8_t flags) {
+    return xr_object_shape_key_add_field_key(key, xr_object_shape_stable_name_key(name),
+                                             stable_type_key, flags);
 }
 
 static inline uint64_t xr_object_shape_stable_key(uint8_t domain,

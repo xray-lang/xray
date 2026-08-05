@@ -634,6 +634,7 @@ typedef struct CgObjectShape {
     const char *const *field_names; /* owned: Xi value/type arena; TU-scoped borrow */
     const XrType *type;             /* owned: type pool; TU-scoped borrow */
     uint8_t object_domain;
+    bool owns_field_names;
     int id;
 } CgObjectShape;
 
@@ -1062,7 +1063,20 @@ static void cg_reset_str_lits(XiCgenCtx *ctx) {
     ctx->nstrlit = 0;
 }
 
-static uint8_t cg_object_shape_field_flags(const XrType *type, int64_t ordinal) {
+static int64_t cg_object_shape_type_ordinal(const XrType *type, const char *name,
+                                            int64_t fallback_ordinal) {
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || !name || !type->object.field_names)
+        return fallback_ordinal;
+    for (int64_t i = 0; i < type->object.field_count; i++) {
+        if (type->object.field_names[i] && strcmp(type->object.field_names[i], name) == 0)
+            return i;
+    }
+    return fallback_ordinal;
+}
+
+static uint8_t cg_object_shape_field_flags(const XrType *type, const char *name,
+                                           int64_t ordinal) {
+    ordinal = cg_object_shape_type_ordinal(type, name, ordinal);
     if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || ordinal < 0 ||
         ordinal >= type->object.field_count)
         return 0;
@@ -1071,7 +1085,9 @@ static uint8_t cg_object_shape_field_flags(const XrType *type, int64_t ordinal) 
                : 0;
 }
 
-static uint64_t cg_object_shape_field_type_key(const XrType *type, int64_t ordinal) {
+static uint64_t cg_object_shape_field_type_key(const XrType *type, const char *name,
+                                               int64_t ordinal) {
+    ordinal = cg_object_shape_type_ordinal(type, name, ordinal);
     if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || !type->object.field_types || ordinal < 0 ||
         ordinal >= type->object.field_count)
         return 0;
@@ -1079,8 +1095,13 @@ static uint64_t cg_object_shape_field_type_key(const XrType *type, int64_t ordin
 }
 
 static void cg_reset_object_shapes(XiCgenCtx *ctx) {
-    if (ctx)
-        ctx->nobject_shapes = 0;
+    if (!ctx)
+        return;
+    for (int i = 0; i < ctx->nobject_shapes; i++) {
+        if (ctx->object_shapes[i].owns_field_names)
+            xr_free((void *) ctx->object_shapes[i].field_names);
+    }
+    ctx->nobject_shapes = 0;
 }
 
 static bool cg_reserve_object_shapes(XiCgenCtx *ctx, int need) {
@@ -1110,10 +1131,10 @@ static bool cg_object_shape_matches(const CgObjectShape *shape, uint64_t stable_
         const char *left = shape->field_names && shape->field_names[i] ? shape->field_names[i] : "?";
         const char *right = field_names && field_names[i] ? field_names[i] : "?";
         if (strcmp(left, right) != 0 ||
-            cg_object_shape_field_type_key(shape->type, i) !=
-                cg_object_shape_field_type_key(type, i) ||
-            cg_object_shape_field_flags(shape->type, i) !=
-                cg_object_shape_field_flags(type, i))
+            cg_object_shape_field_type_key(shape->type, left, i) !=
+                cg_object_shape_field_type_key(type, right, i) ||
+            cg_object_shape_field_flags(shape->type, left, i) !=
+                cg_object_shape_field_flags(type, right, i))
             return false;
     }
     return true;
@@ -1130,8 +1151,8 @@ static int cg_intern_object_shape_parts(XiCgenCtx *ctx, int64_t field_count,
     uint64_t stable_key = xr_object_shape_key_begin(object_domain, field_count);
     for (int64_t i = 0; i < field_count; i++) {
         stable_key = xr_object_shape_key_add_field(
-            stable_key, field_names[i], cg_object_shape_field_type_key(type, i),
-            cg_object_shape_field_flags(type, i));
+            stable_key, field_names[i], cg_object_shape_field_type_key(type, field_names[i], i),
+            cg_object_shape_field_flags(type, field_names[i], i));
     }
     for (int i = 0; i < ctx->nobject_shapes; i++) {
         if (cg_object_shape_matches(&ctx->object_shapes[i], stable_key, field_count, field_names,
@@ -1147,7 +1168,48 @@ static int cg_intern_object_shape_parts(XiCgenCtx *ctx, int64_t field_count,
     shape->field_names = field_names;
     shape->type = type;
     shape->object_domain = object_domain;
+    shape->owns_field_names = false;
     shape->id = id;
+    return id;
+}
+
+static int cg_intern_object_shape_type(XiCgenCtx *ctx, const XrType *type) {
+    if (!ctx || !type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || type->object.field_count <= 0 ||
+        !type->object.field_names)
+        return -1;
+    int field_count = type->object.field_count;
+    const char **names = (const char **) xr_malloc((size_t) field_count * sizeof(const char *));
+    if (!names) {
+        ctx->error = true;
+        return -1;
+    }
+    for (int i = 0; i < field_count; i++)
+        names[i] = type->object.field_names[i] ? type->object.field_names[i] : "?";
+    for (int i = 1; i < field_count; i++) {
+        const char *current = names[i];
+        uint64_t current_key = xg_object_stable_name_key(current);
+        uint32_t current_id = xg_name_id(current);
+        int j = i;
+        while (j > 0) {
+            uint64_t previous_key = xg_object_stable_name_key(names[j - 1]);
+            uint32_t previous_id = xg_name_id(names[j - 1]);
+            if (previous_key < current_key ||
+                (previous_key == current_key && previous_id <= current_id))
+                break;
+            names[j] = names[j - 1];
+            j--;
+        }
+        names[j] = current;
+    }
+    int id = cg_intern_object_shape_parts(ctx, field_count, names, type, XR_OBJECT_DOMAIN_STRUCT);
+    if (id < 0) {
+        xr_free(names);
+        return -1;
+    }
+    if (ctx->object_shapes[id].field_names == names)
+        ctx->object_shapes[id].owns_field_names = true;
+    else
+        xr_free(names);
     return id;
 }
 
@@ -1155,7 +1217,7 @@ static int cg_intern_object_shape(XiCgenCtx *ctx, const XiValue *value) {
     const XrType *type = value ? value->type : NULL;
     return cg_intern_object_shape_parts(
         ctx, xi_json_field_count(value), value ? (const char *const *) value->aux : NULL, type,
-        type && type->kind == XR_KIND_RECORD ? XR_OBJECT_DOMAIN_STRUCT : XR_OBJECT_DOMAIN_JSON);
+        type && type->kind == XR_KIND_STRUCT_OBJECT ? XR_OBJECT_DOMAIN_STRUCT : XR_OBJECT_DOMAIN_JSON);
 }
 
 /* Storage-class prefix for emitted top-level objects: external linkage in
@@ -12435,8 +12497,14 @@ static bool cg_json_codec_site_contract(const XiValue *value, uint8_t *out_kind,
     if (!value || !out_kind || !out_allowed_actions)
         return false;
     if (value->op == XI_JSON_DECODE) {
-        kind = XG_JSON_CODEC_DECODE;
-        actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
+        if ((value->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0) {
+            kind = XG_JSON_CODEC_PARSE;
+            actions =
+                xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT_TYPED);
+        } else {
+            kind = XG_JSON_CODEC_DECODE;
+            actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
+        }
     } else if (value->op == XI_CALL_METHOD && value->nargs >= 1 && value->aux &&
                xicgen_receiver_is_builtin_global(value->args[0], XR_GLOBAL_VAR_JSON)) {
         const char *method = (const char *) value->aux;
@@ -12506,30 +12574,30 @@ static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *fun
         valid = false;
     }
 
-    const bool record_merge_site = value->op == XI_JSON_MERGE && value->nargs >= 2 &&
+    const bool object_merge_site = value->op == XI_JSON_MERGE && value->nargs >= 2 &&
                                    value->args[0] && value->args[0]->type &&
-                                   value->args[0]->type->kind == XR_KIND_RECORD;
-    const uint32_t record_merge_actions =
-        xaot_backend_record_merge_action_bit(XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE) |
-        xaot_backend_record_merge_action_bit(XAOT_RECORD_MERGE_COPY_APPEND);
-    if (record_merge_site) {
-        if (value->xg_record_merge_id == XG_NO_ID) {
+                                   value->args[0]->type->kind == XR_KIND_STRUCT_OBJECT;
+    const uint32_t object_merge_actions =
+        xaot_backend_object_merge_action_bit(XAOT_OBJECT_MERGE_COPY_WITH_OVERWRITE) |
+        xaot_backend_object_merge_action_bit(XAOT_OBJECT_MERGE_COPY_APPEND);
+    if (object_merge_site) {
+        if (value->xg_object_merge_id == XG_NO_ID) {
             issue = XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN;
             cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge", XG_NO_ID,
                                                       issue);
             return false;
         }
-        const XaotRecordMergePlan *plan =
-            xaot_bundle_find_record_merge_plan(bundle, value->xg_record_merge_id);
-        if (!xaot_backend_contract_record_merge_plan_allowed(plan, record_merge_actions, &issue)) {
+        const XaotObjectMergePlan *plan =
+            xaot_bundle_find_object_merge_plan(bundle, value->xg_object_merge_id);
+        if (!xaot_backend_contract_object_merge_plan_allowed(plan, object_merge_actions, &issue)) {
             cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge",
-                                                      value->xg_record_merge_id, issue);
+                                                      value->xg_object_merge_id, issue);
             valid = false;
         }
-    } else if (value->xg_record_merge_id != XG_NO_ID) {
+    } else if (value->xg_object_merge_id != XG_NO_ID) {
         issue = XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH;
         cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge",
-                                                  value->xg_record_merge_id, issue);
+                                                  value->xg_object_merge_id, issue);
         valid = false;
     }
     return valid;

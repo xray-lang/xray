@@ -1,0 +1,15 @@
+// Task 260: Json.parse<T> constructs the exact target directly from tokens.
+type Geo = { lat: float, verified: bool }
+type Address = { city: string, geo: Geo }
+type Profile = { name: string, age: int, address: Address, tags: Array<Json> }
+
+var profile: Profile = Json.parse<Profile>(
+    "{\"ignored\":{\"deep\":[1,2,3]},\"tags\":[\"ops\",3,null],\"address\":{\"geo\":{\"verified\":true,\"lat\":30.25},\"city\":\"Hangzhou\"},\"age\":37,\"name\":\"Ada\"}"
+)
+
+print(profile.name)
+print(profile.age)
+print(profile.address.city)
+print(profile.address.geo.lat)
+print(profile.address.geo.verified)
+print(len(profile.tags))

@@ -475,7 +475,7 @@ static XrType *snapshot_type(XiSemanticSnapshot *snapshot, const XrType *source)
                  (!source->map.value_type || copy->map.value_type);
             break;
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
             ok = snapshot_object_type(snapshot, &copy->object, &source->object);
             break;
         case XR_KIND_CLASS:

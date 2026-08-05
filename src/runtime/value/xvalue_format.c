@@ -330,7 +330,7 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                 break;
             }
             /* Json/Record: recursive key-value format. */
-            if (cls && (cls->builtin_kind == XR_BK_JSON || cls->builtin_kind == XR_BK_RECORD)) {
+            if (cls && (cls->builtin_kind == XR_BK_JSON || cls->builtin_kind == XR_BK_STRUCT_OBJECT)) {
                 format_json(isolate, sb, (XrJson *) gc, depth);
                 break;
             }

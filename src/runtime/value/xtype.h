@@ -82,7 +82,7 @@ typedef enum XrTypeKind {
                           // width integer at the value level, invisible to the GC.
     XR_KIND_RUNE,         // Unicode scalar value. Immediate value (tag XR_TAG_RUNE), not
                           // a uint32; appended last to keep existing kind values stable.
-    XR_KIND_RECORD,       // Sealed/open structural record; shares ObjectShape metadata with Json.
+    XR_KIND_STRUCT_OBJECT,       // Sealed/open structural record; shares ObjectShape metadata with Json.
     XR_KIND_SLICE,        // Borrowed contiguous view; source surface: Slice<T>.
     XR_KIND_COUNT
 } XrTypeKind;
@@ -103,7 +103,7 @@ static inline bool xr_kind_is_builtin_iterable(XrTypeKind k) {
            k == XR_KIND_STRING;
 }
 static inline bool xr_kind_has_object_shape(XrTypeKind k) {
-    return k == XR_KIND_RECORD || k == XR_KIND_JSON;
+    return k == XR_KIND_STRUCT_OBJECT || k == XR_KIND_JSON;
 }
 static inline bool xr_kind_is_object_like(XrTypeKind k) {
     return xr_kind_has_object_shape(k) || k == XR_KIND_INSTANCE || k == XR_KIND_MAP;
@@ -436,7 +436,7 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_IS_INTERFACE(t) ((t)->kind == XR_KIND_INTERFACE)
 #define XR_TYPE_IS_NULLABLE(t) ((t)->is_nullable || ((t)->kind == XR_KIND_NULL))
 #define XR_TYPE_IS_JSON(t) ((t)->kind == XR_KIND_JSON)
-#define XR_TYPE_IS_RECORD(t) ((t)->kind == XR_KIND_RECORD)
+#define XR_TYPE_IS_STRUCT_OBJECT(t) ((t)->kind == XR_KIND_STRUCT_OBJECT)
 #define XR_TYPE_HAS_OBJECT_SHAPE(t) ((t) && xr_kind_has_object_shape((t)->kind))
 #define XR_TYPE_IS_TYPE_PARAM(t) ((t)->kind == XR_KIND_TYPE_PARAM)
 #define XR_TYPE_IS_TUPLE(t) ((t)->kind == XR_KIND_TUPLE)
@@ -526,7 +526,7 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_INTERFACE:
@@ -635,7 +635,7 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
         case XR_KIND_SET:
         case XR_KIND_TUPLE:
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_INTERFACE:
@@ -691,7 +691,7 @@ static inline uint8_t xr_type_to_xr_tag(const XrType *t) {
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
         case XR_KIND_INTERFACE:
@@ -760,7 +760,7 @@ XR_FUNC XrType *xr_type_new_json(XrVMRuntime *X);
 /* Whether every value represented by this static type is already a member of
  * the Json value domain. This is deliberately narrower than encodability. */
 XR_FUNC bool xr_type_is_json_value(const XrType *type);
-XR_FUNC XrType *xr_type_new_record_with_fields(XrVMRuntime *X, const char **names, XrType **types,
+XR_FUNC XrType *xr_type_new_struct_object_with_fields(XrVMRuntime *X, const char **names, XrType **types,
                                                int count, XrObjectRowMode row_mode);
 XR_FUNC XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types,
                                              int count, bool allows_runtime_extension);
@@ -859,19 +859,19 @@ static inline bool xr_type_intrinsically_includes_null(const XrType *t) {
 }
 
 static inline bool xr_type_object_row_is_exact(const XrType *type) {
-    return type && XR_TYPE_IS_RECORD(type) && type->object.row_mode == XR_OBJECT_ROW_EXACT;
+    return type && XR_TYPE_IS_STRUCT_OBJECT(type) && type->object.row_mode == XR_OBJECT_ROW_EXACT;
 }
 
 static inline bool xr_type_object_fields_are_closed(const XrType *type) {
     if (!XR_TYPE_HAS_OBJECT_SHAPE(type))
         return false;
-    return XR_TYPE_IS_RECORD(type) || !type->object.allows_runtime_extension;
+    return XR_TYPE_IS_STRUCT_OBJECT(type) || !type->object.allows_runtime_extension;
 }
 
 static inline bool xr_type_object_accepts_extra_fields(const XrType *type) {
     if (!XR_TYPE_HAS_OBJECT_SHAPE(type))
         return false;
-    if (XR_TYPE_IS_RECORD(type))
+    if (XR_TYPE_IS_STRUCT_OBJECT(type))
         return type->object.row_mode == XR_OBJECT_ROW_OPEN;
     return type->object.allows_runtime_extension;
 }

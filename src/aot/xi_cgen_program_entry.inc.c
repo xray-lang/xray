@@ -602,7 +602,7 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "}\n"
         "static XrValue xrt_runtime_record_new(int64_t field_count, const char *const "
         "*field_names) {\n"
-        "    return xrt_record_new_named(field_count, field_names);\n"
+        "    return xrt_struct_object_new_named(field_count, field_names);\n"
         "}\n"
         "static void xrt_runtime_record_set(XrValue record, int64_t field_index, XrValue value) {\n"
         "    xrt_json_set_field(record, (int)field_index, value);\n"

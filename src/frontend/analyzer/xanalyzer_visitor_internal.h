@@ -133,7 +133,7 @@ static inline bool xa_freestanding_type_requires_tagged_value(const XrType *type
         return false;
     switch (type->kind) {
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_ARRAY:
         case XR_KIND_MAP:
         case XR_KIND_SET:

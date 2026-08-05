@@ -29,6 +29,7 @@
  *   Json:
  *     - OP_NEWJSON
  *     - OP_JSON_GET / SET / GETK / SETK
+ *     - OP_OBJECT_GETK / SETK (verified structural descriptor dispatch)
  *     - OP_JSON_INIT / OP_JSON_INIT_I / OP_JSON_INIT_N
  *
  *   Property R/W:
@@ -376,6 +377,36 @@ vmcase(OP_JSON_SETK) {
     vmbreak;
 }
 
+vmcase(OP_OBJECT_GETK) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrJson *object = xr_value_to_json(R(b));
+    SymbolId symbol = (SymbolId) PROTO_SYMBOL(cl->proto, c);
+    int ordinal = object && object->klass ? xr_class_lookup_field(object->klass, (int) symbol) : -1;
+    if (ordinal < 0) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
+                         "verified object access plan does not cover the runtime shape");
+    }
+    R(a) = xr_instance_get_dynamic_field(object, (uint16_t) ordinal);
+    vmbreak;
+}
+
+vmcase(OP_OBJECT_SETK) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrJson *object = xr_value_to_json(R(a));
+    SymbolId symbol = (SymbolId) PROTO_SYMBOL(cl->proto, b);
+    int ordinal = object && object->klass ? xr_class_lookup_field(object->klass, (int) symbol) : -1;
+    if (ordinal < 0 ||
+        !xr_instance_set_dynamic_field(isolate, object, (uint16_t) ordinal, R(c))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
+                         "verified object access plan does not cover the runtime shape");
+    }
+    vmbreak;
+}
+
 vmcase(OP_JSON_MERGE) {
     // OP_JSON_MERGE: copy every field of R[B]:Json into R[A]:Json (object
     // spread). Source fields are borrowed, so each value is retained as it is
@@ -439,16 +470,20 @@ vmcase(OP_JSON_DECODE) {
     XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
     XR_DCHECK(cls != NULL, "OP_JSON_DECODE: null class");
 
-    /* Accept string (parse first) or Json object (validate directly) */
+    /* Accept string (direct typed parse) or Json object (validate/copy). */
     XrJson *src = NULL;
     if (XR_IS_STRING(data)) {
         XrString *str = XR_TO_STRING(data);
-        XrValue parsed = xr_json_parse_from_cstr(isolate, str->data, str->length);
-        if (XR_IS_NULL(parsed) || !xr_value_is_json(parsed)) {
+        XrValue parsed = xr_null();
+        XrJsonTypedParseError ignored_error;
+        if (!xr_json_parse_typed_object_from_cstr(isolate, VM_CURRENT_CORO, str->data,
+                                                   str->length, cls, &parsed, &ignored_error)) {
             R(a) = xr_null();
             vmbreak;
         }
-        src = xr_value_to_json(parsed);
+        R(a) = parsed;
+        checkGC(base + a + 1);
+        vmbreak;
     } else if (xr_value_has_object_shape(data)) {
         /* Records share Json's dynamic-field representation, so a Record source
          * is validated against the target field set the same way. This is what
@@ -458,7 +493,44 @@ vmcase(OP_JSON_DECODE) {
         R(a) = xr_null();
         vmbreak;
     }
-    R(a) = xr_json_decode_record_with_class(isolate, VM_CURRENT_CORO, src, cls);
+    R(a) = xr_json_decode_struct_object_with_class(isolate, VM_CURRENT_CORO, src, cls);
+    checkGC(base + a + 1);
+    vmbreak;
+}
+
+vmcase(OP_JSON_PARSE_TYPED) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrValue text = R(b);
+    XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(k[c]);
+    XR_DCHECK(cls != NULL, "OP_JSON_PARSE_TYPED: null target class");
+
+    XrJsonTypedParseError error;
+    XrValue parsed = xr_null();
+    bool ok = false;
+    if (XR_IS_STRING(text)) {
+        XrString *str = XR_TO_STRING(text);
+        ok = xr_json_parse_typed_object_from_cstr(isolate, VM_CURRENT_CORO, str->data,
+                                                   str->length, cls, &parsed, &error);
+    } else {
+        memset(&error, 0, sizeof(error));
+        snprintf(error.path, sizeof(error.path), "$");
+        snprintf(error.expected, sizeof(error.expected), "string");
+        snprintf(error.actual, sizeof(error.actual), "non_string");
+    }
+    if (!ok) {
+        savepc();
+        XrValue exc = xr_panic_info_newf(
+            isolate, XR_ERR_JSON_INVALID, "Json.parse<T>: path %s expected %s, got %s",
+            error.path[0] ? error.path : "$", error.expected[0] ? error.expected : "valid JSON",
+            error.actual[0] ? error.actual : "invalid");
+        xr_vm_unwind_with_trace(isolate, exc);
+        if (!xr_vm_is_catch_reachable(isolate))
+            return XR_VM_RUNTIME_ERROR;
+        goto startfunc;
+    }
+    R(a) = parsed;
     checkGC(base + a + 1);
     vmbreak;
 }

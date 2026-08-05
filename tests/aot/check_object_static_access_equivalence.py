@@ -100,7 +100,7 @@ def main(argv: list[str]) -> int:
             )
             return 1
         if (
-            "xrt_record_new_named" in object_body
+            "xrt_struct_object_new_named" in object_body
             or "xrt_json_new_named" in object_body
             or "(const char*[]){" in object_body
             or "(const char *const[]){" in object_body

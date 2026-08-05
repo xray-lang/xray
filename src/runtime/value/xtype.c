@@ -70,8 +70,8 @@ uint8_t xr_type_json_value_kind(const XrType *type) {
         case XR_KIND_JSON:
             kind = XR_JSON_VALUE_JSON;
             break;
-        case XR_KIND_RECORD:
-            kind = XR_JSON_VALUE_RECORD;
+        case XR_KIND_STRUCT_OBJECT:
+            kind = XR_JSON_VALUE_STRUCT_OBJECT;
             break;
         case XR_KIND_ARRAY:
             if (type->container.element_type && XR_TYPE_IS_JSON(type->container.element_type)) {
@@ -89,8 +89,8 @@ static bool xr_type_is_json_decode_field_supported_depth(const XrType *type, int
     if (!type || depth > 16)
         return false;
     uint8_t base = xr_json_value_kind_base(xr_type_json_value_kind(type));
-    if (base == XR_JSON_VALUE_RECORD) {
-        if (!XR_TYPE_IS_RECORD(type) || !xr_type_object_row_is_exact(type) ||
+    if (base == XR_JSON_VALUE_STRUCT_OBJECT) {
+        if (!XR_TYPE_IS_STRUCT_OBJECT(type) || !xr_type_object_row_is_exact(type) ||
             type->object.field_count <= 0 || !type->object.field_names ||
             !type->object.field_types)
             return false;
@@ -410,9 +410,9 @@ static XrType *xr_type_new_object_shape(XrVMRuntime *X, XrTypeKind kind, const c
     return type;
 }
 
-XrType *xr_type_new_record_with_fields(XrVMRuntime *X, const char **names, XrType **types,
+XrType *xr_type_new_struct_object_with_fields(XrVMRuntime *X, const char **names, XrType **types,
                                        int count, XrObjectRowMode row_mode) {
-    return xr_type_new_object_shape(X, XR_KIND_RECORD, names, types, count, row_mode, false);
+    return xr_type_new_object_shape(X, XR_KIND_STRUCT_OBJECT, names, types, count, row_mode, false);
 }
 
 uint64_t xr_type_stable_key(const XrType *type) {
@@ -492,7 +492,7 @@ static bool xr_type_contains_error_impl(const XrType *type, int depth) {
             return xr_type_contains_error_impl(type->map.key_type, depth + 1) ||
                    xr_type_contains_error_impl(type->map.value_type, depth + 1);
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
             for (int i = 0; i < type->object.field_count; i++) {
                 XrType *field_type = type->object.field_types ? type->object.field_types[i] : NULL;
                 if (xr_type_contains_error_impl(field_type, depth + 1))
@@ -1311,7 +1311,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
                     type->function.type_param_constraint_counts, type->function.type_param_count);
             }
             break;
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_JSON:
             if (type->object.field_count < 0)
                 return NULL;
@@ -1698,7 +1698,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             return true;
         if (XR_TYPE_IS_JSON(source) && source->object.field_count == 0)
             return true;
-        if (XR_TYPE_IS_RECORD(target) && target->object.row_mode == XR_OBJECT_ROW_EXACT &&
+        if (XR_TYPE_IS_STRUCT_OBJECT(target) && target->object.row_mode == XR_OBJECT_ROW_EXACT &&
             source->object.row_mode == XR_OBJECT_ROW_OPEN)
             return false;
 

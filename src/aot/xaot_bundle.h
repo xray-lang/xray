@@ -1102,24 +1102,18 @@ typedef struct XaotDerivedClonePlan {
     uint8_t unproven_reason;
 } XaotDerivedClonePlan;
 
-typedef enum XaotJsonShapeAction {
-    XAOT_JSON_SHAPE_OPEN_DYNAMIC = 1,
-    XAOT_JSON_SHAPE_HIDDEN_CLASS,
-    XAOT_JSON_SHAPE_RECORD_BRIDGE,
-    XAOT_JSON_SHAPE_REJECT,
-} XaotJsonShapeAction;
-
-typedef enum XaotJsonAccessAction {
-    XAOT_JSON_ACCESS_DIRECT_INDEX = 1,
-    XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX,
-    XAOT_JSON_ACCESS_COMPUTED_KEY_GUARD,
-    XAOT_JSON_ACCESS_DYNAMIC_LOOKUP,
-    XAOT_JSON_ACCESS_REJECT,
-} XaotJsonAccessAction;
+typedef enum XaotJsonDynamicAccessAction {
+    XAOT_JSON_DYNAMIC_ACCESS_DIRECT_INDEX = 1,
+    XAOT_JSON_DYNAMIC_ACCESS_SHAPE_GUARD_INDEX,
+    XAOT_JSON_DYNAMIC_ACCESS_COMPUTED_KEY_GUARD,
+    XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP,
+    XAOT_JSON_DYNAMIC_ACCESS_REJECT,
+} XaotJsonDynamicAccessAction;
 
 typedef enum XaotJsonCodecAction {
     XAOT_JSON_CODEC_PARSE_DOM_BRIDGE = 1,
     XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT,
+    XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT_TYPED,
     XAOT_JSON_CODEC_DECODE_VALIDATE_COPY,
     XAOT_JSON_CODEC_ENCODE_FIELD_TABLE,
     XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR,
@@ -1132,7 +1126,7 @@ enum {
     XAOT_JSON_EV_STATIC_KEY = 1u << 1,
     XAOT_JSON_EV_RECEIVER_SHAPE = 1u << 2,
     XAOT_JSON_EV_FIELD_INDEX = 1u << 3,
-    XAOT_JSON_EV_RECORD_BRIDGE = 1u << 4,
+    XAOT_JSON_EV_OBJECT_SHAPE = 1u << 4,
     XAOT_JSON_EV_INPUT_SHAPE = 1u << 5,
     XAOT_JSON_EV_OUTPUT_SHAPE = 1u << 6,
     XAOT_JSON_EV_TARGET_TYPE = 1u << 7,
@@ -1150,26 +1144,11 @@ enum {
     XAOT_JSON_UNPROVEN_UNSUPPORTED_CODEC = 7,
 };
 
-typedef struct XaotJsonShapePlan {
-    XgJsonShapeId json_shape_id;
-    XgRecordShapeId record_shape_id;
+typedef struct XaotJsonDynamicAccessPlan {
+    XgJsonDynamicAccessId json_dynamic_access_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
-    uint32_t type_key;
-    uint32_t field_name_start;
-    uint16_t field_count;
-    uint8_t shape_kind;
-    uint8_t action;
-    uint32_t evidence;
-    uint8_t unproven_reason;
-    uint64_t shape_hash;
-} XaotJsonShapePlan;
-
-typedef struct XaotJsonAccessPlan {
-    XgJsonAccessId json_access_id;
-    XgModuleId module_id;
-    XgFuncId owner_func_id;
-    XgJsonShapeId receiver_shape_id;
+    XgObjectShapeId receiver_shape_id;
     uint32_t key_name_id;
     uint32_t result_type_key;
     uint16_t field_ordinal;
@@ -1177,7 +1156,7 @@ typedef struct XaotJsonAccessPlan {
     uint8_t action;
     uint32_t evidence;
     uint8_t unproven_reason;
-} XaotJsonAccessPlan;
+} XaotJsonDynamicAccessPlan;
 
 typedef struct XaotJsonCodecPlan {
     XgJsonCodecId codec_id;
@@ -1189,98 +1168,123 @@ typedef struct XaotJsonCodecPlan {
     uint8_t action;
     uint32_t input_type_key;
     uint32_t target_type_key;
-    XgJsonShapeId input_shape_id;
-    XgJsonShapeId output_shape_id;
-    XgRecordShapeId record_shape_id;
+    XgObjectShapeId input_shape_id;
+    XgObjectShapeId output_shape_id;
     uint16_t field_count;
     uint32_t evidence;
     uint8_t unproven_reason;
 } XaotJsonCodecPlan;
 
-typedef enum XaotRecordShapeAction {
-    XAOT_RECORD_SHAPE_SEALED_RECORD = 1,
-    XAOT_RECORD_SHAPE_OPTIONS_BAG,
-    XAOT_RECORD_SHAPE_SPREAD_RESULT,
-    XAOT_RECORD_SHAPE_STATIC_RECORD,
-    XAOT_RECORD_SHAPE_PATCH_RECORD,
-    XAOT_RECORD_SHAPE_REJECT,
-} XaotRecordShapeAction;
+typedef enum XaotObjectShapeAction {
+    XAOT_OBJECT_SHAPE_EXACT = 1,
+    XAOT_OBJECT_SHAPE_OPTIONS_BAG,
+    XAOT_OBJECT_SHAPE_SPREAD_RESULT,
+    XAOT_OBJECT_SHAPE_STATIC,
+    XAOT_OBJECT_SHAPE_PATCH,
+    XAOT_OBJECT_SHAPE_CONSTRAINT,
+    XAOT_OBJECT_SHAPE_REJECT,
+} XaotObjectShapeAction;
 
-typedef enum XaotRecordAccessAction {
-    XAOT_RECORD_ACCESS_DIRECT_FIELD = 1,
-    XAOT_RECORD_ACCESS_COPY_DESTRUCTURE,
-    XAOT_RECORD_ACCESS_CHECKED_FIELD,
-    XAOT_RECORD_ACCESS_REJECT,
-} XaotRecordAccessAction;
+typedef enum XaotObjectAccessAction {
+    XAOT_OBJECT_ACCESS_DIRECT_ORDINAL = 1,
+    XAOT_OBJECT_ACCESS_SHAPE_GUARD_ORDINAL,
+    XAOT_OBJECT_ACCESS_SHAPE_DISPATCH_ORDINAL,
+    XAOT_OBJECT_ACCESS_DYNAMIC_JSON_LOOKUP,
+    XAOT_OBJECT_ACCESS_REJECT,
+} XaotObjectAccessAction;
 
-typedef enum XaotRecordMergeAction {
-    XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE = 1,
-    XAOT_RECORD_MERGE_COPY_APPEND,
-    XAOT_RECORD_MERGE_JSON_BRIDGE,
-    XAOT_RECORD_MERGE_REJECT,
-} XaotRecordMergeAction;
+typedef enum XaotObjectMergeAction {
+    XAOT_OBJECT_MERGE_COPY_WITH_OVERWRITE = 1,
+    XAOT_OBJECT_MERGE_COPY_APPEND,
+    XAOT_OBJECT_MERGE_JSON_BRIDGE,
+    XAOT_OBJECT_MERGE_REJECT,
+} XaotObjectMergeAction;
 
 enum {
-    XAOT_RECORD_EV_GLOBAL_ROW = 1u << 0,
-    XAOT_RECORD_EV_SEALED = 1u << 1,
-    XAOT_RECORD_EV_STATIC_FIELD = 1u << 2,
-    XAOT_RECORD_EV_RECEIVER_SHAPE = 1u << 3,
-    XAOT_RECORD_EV_FIELD_INDEX = 1u << 4,
-    XAOT_RECORD_EV_JSON_BRIDGE = 1u << 5,
-    XAOT_RECORD_EV_BASE_SHAPE = 1u << 6,
-    XAOT_RECORD_EV_PATCH_SHAPE = 1u << 7,
-    XAOT_RECORD_EV_RESULT_SHAPE = 1u << 8,
-    XAOT_RECORD_EV_COPY_TABLE = 1u << 9,
+    XAOT_OBJECT_EV_GLOBAL_ROW = 1u << 0,
+    XAOT_OBJECT_EV_SEALED = 1u << 1,
+    XAOT_OBJECT_EV_STATIC_FIELD = 1u << 2,
+    XAOT_OBJECT_EV_RECEIVER_SHAPE = 1u << 3,
+    XAOT_OBJECT_EV_FIELD_INDEX = 1u << 4,
+    XAOT_OBJECT_EV_JSON_BRIDGE = 1u << 5,
+    XAOT_OBJECT_EV_BASE_SHAPE = 1u << 6,
+    XAOT_OBJECT_EV_PATCH_SHAPE = 1u << 7,
+    XAOT_OBJECT_EV_RESULT_SHAPE = 1u << 8,
+    XAOT_OBJECT_EV_COPY_TABLE = 1u << 9,
 };
 
 enum {
-    XAOT_RECORD_UNPROVEN_NONE = 0,
-    XAOT_RECORD_UNPROVEN_INVALID_KIND = 1,
-    XAOT_RECORD_UNPROVEN_RECEIVER_SHAPE_UNKNOWN = 2,
-    XAOT_RECORD_UNPROVEN_STALE_SHAPE = 3,
-    XAOT_RECORD_UNPROVEN_DYNAMIC_FIELD = 4,
-    XAOT_RECORD_UNPROVEN_MISSING_MERGE_SHAPE = 5,
-    XAOT_RECORD_UNPROVEN_MERGE_FIELD_MISMATCH = 6,
+    XAOT_OBJECT_UNPROVEN_NONE = 0,
+    XAOT_OBJECT_UNPROVEN_INVALID_KIND = 1,
+    XAOT_OBJECT_UNPROVEN_RECEIVER_SHAPE_UNKNOWN = 2,
+    XAOT_OBJECT_UNPROVEN_STALE_SHAPE = 3,
+    XAOT_OBJECT_UNPROVEN_DYNAMIC_FIELD = 4,
+    XAOT_OBJECT_UNPROVEN_MISSING_MERGE_SHAPE = 5,
+    XAOT_OBJECT_UNPROVEN_MERGE_FIELD_MISMATCH = 6,
 };
 
-typedef struct XaotRecordShapePlan {
-    XgRecordShapeId record_shape_id;
-    XgJsonShapeId json_shape_id;
+typedef struct XaotObjectShapePlan {
+    XgObjectShapeId object_shape_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
     uint32_t type_key;
     uint32_t field_name_start;
     uint16_t field_count;
     uint8_t shape_kind;
+    uint8_t domain;
+    uint8_t provenance;
+    uint8_t concrete_exact;
+    uint8_t fresh;
+    uint8_t escaped;
+    uint32_t mutation_epoch;
     uint8_t action;
     uint32_t evidence;
     uint8_t unproven_reason;
+    uint64_t stable_type_key;
+    uint64_t stable_shape_key;
     uint64_t shape_hash;
-} XaotRecordShapePlan;
+} XaotObjectShapePlan;
 
-typedef struct XaotRecordAccessPlan {
-    XgRecordAccessId record_access_id;
+typedef struct XaotObjectAccessPlan {
+    XgObjectAccessId object_access_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
-    XgRecordShapeId receiver_shape_id;
+    XgObjectShapeId receiver_shape_id;
     uint32_t field_name_id;
     uint32_t result_type_key;
     uint16_t field_ordinal;
     uint8_t access_kind;
+    uint8_t domain;
+    uint8_t syntax;
+    uint16_t receiver_shape_count;
+    uint32_t receiver_shape_set_id;
+    uint32_t dispatch_case_start;
+    uint32_t mutation_epoch;
     uint8_t action;
     uint32_t evidence;
     uint8_t unproven_reason;
-} XaotRecordAccessPlan;
+} XaotObjectAccessPlan;
 
-typedef struct XaotRecordMergePlan {
-    XgRecordMergeId merge_id;
+typedef struct XaotObjectAccessCasePlan {
+    XgObjectAccessCaseId case_id;
+    XgObjectAccessId object_access_id;
+    uint32_t receiver_shape_set_id;
+    XgObjectShapeId receiver_shape_id;
+    uint64_t stable_shape_key;
+    uint32_t mutation_epoch;
+    uint16_t field_ordinal;
+    uint8_t domain;
+} XaotObjectAccessCasePlan;
+
+typedef struct XaotObjectMergePlan {
+    XgObjectMergeId merge_id;
     XgModuleId module_id;
     XgFuncId owner_func_id;
     uint32_t source_node_id;
     uint32_t source_span_id;
-    XgRecordShapeId base_shape_id;
-    XgRecordShapeId patch_shape_id;
-    XgRecordShapeId result_shape_id;
+    XgObjectShapeId base_shape_id;
+    XgObjectShapeId patch_shape_id;
+    XgObjectShapeId result_shape_id;
     uint16_t base_field_count;
     uint16_t patch_field_count;
     uint16_t result_field_count;
@@ -1290,7 +1294,7 @@ typedef struct XaotRecordMergePlan {
     uint32_t evidence;
     uint8_t unproven_reason;
     uint64_t merge_hash;
-} XaotRecordMergePlan;
+} XaotObjectMergePlan;
 
 typedef enum XaotOptionsAction {
     XAOT_OPTIONS_DEFAULT_ELIDED = 1,
@@ -1323,8 +1327,8 @@ typedef struct XaotOptionsPlan {
     XgModuleId module_id;
     XgFuncId owner_func_id;
     XgCallsiteId callsite_id;
-    XgRecordShapeId param_shape_id;
-    XgRecordShapeId supplied_shape_id;
+    XgObjectShapeId param_shape_id;
+    XgObjectShapeId supplied_shape_id;
     uint32_t supplied_field_mask_id;
     uint32_t default_field_mask_id;
     uint32_t required_field_mask_id;
@@ -1852,24 +1856,24 @@ typedef struct XaotBundle {
     XaotDerivedClonePlan *derived_clone_plans;
     uint32_t nderived_clone_plans;
     uint32_t derived_clone_plan_cap;
-    XaotJsonShapePlan *json_shape_plans;
-    uint32_t njson_shape_plans;
-    uint32_t json_shape_plan_cap;
-    XaotJsonAccessPlan *json_access_plans;
-    uint32_t njson_access_plans;
-    uint32_t json_access_plan_cap;
+    XaotJsonDynamicAccessPlan *json_dynamic_access_plans;
+    uint32_t njson_dynamic_access_plans;
+    uint32_t json_dynamic_access_plan_cap;
     XaotJsonCodecPlan *json_codec_plans;
     uint32_t njson_codec_plans;
     uint32_t json_codec_plan_cap;
-    XaotRecordShapePlan *record_shape_plans;
-    uint32_t nrecord_shape_plans;
-    uint32_t record_shape_plan_cap;
-    XaotRecordAccessPlan *record_access_plans;
-    uint32_t nrecord_access_plans;
-    uint32_t record_access_plan_cap;
-    XaotRecordMergePlan *record_merge_plans;
-    uint32_t nrecord_merge_plans;
-    uint32_t record_merge_plan_cap;
+    XaotObjectShapePlan *object_shape_plans;
+    uint32_t nobject_shape_plans;
+    uint32_t object_shape_plan_cap;
+    XaotObjectAccessPlan *object_access_plans;
+    uint32_t nobject_access_plans;
+    uint32_t object_access_plan_cap;
+    XaotObjectAccessCasePlan *object_access_case_plans;
+    uint32_t nobject_access_case_plans;
+    uint32_t object_access_case_plan_cap;
+    XaotObjectMergePlan *object_merge_plans;
+    uint32_t nobject_merge_plans;
+    uint32_t object_merge_plan_cap;
     XaotOptionsPlan *options_plans;
     uint32_t noptions_plans;
     uint32_t options_plan_cap;
@@ -1974,18 +1978,16 @@ XR_FUNC const XaotDerivedEqHashPlan *xaot_bundle_find_derived_eq_hash_plan(const
                                                                            uint32_t type_key);
 XR_FUNC const XaotDerivedClonePlan *xaot_bundle_find_derived_clone_plan(const XaotBundle *bundle,
                                                                         uint32_t type_key);
-XR_FUNC const XaotJsonShapePlan *xaot_bundle_find_json_shape_plan(const XaotBundle *bundle,
-                                                                  XgJsonShapeId json_shape_id);
-XR_FUNC const XaotJsonAccessPlan *xaot_bundle_find_json_access_plan(const XaotBundle *bundle,
-                                                                    XgJsonAccessId json_access_id);
+XR_FUNC const XaotJsonDynamicAccessPlan *xaot_bundle_find_json_dynamic_access_plan(const XaotBundle *bundle,
+                                                                    XgJsonDynamicAccessId json_dynamic_access_id);
 XR_FUNC const XaotJsonCodecPlan *xaot_bundle_find_json_codec_plan(const XaotBundle *bundle,
                                                                   XgJsonCodecId codec_id);
-XR_FUNC const XaotRecordShapePlan *
-xaot_bundle_find_record_shape_plan(const XaotBundle *bundle, XgRecordShapeId record_shape_id);
-XR_FUNC const XaotRecordAccessPlan *
-xaot_bundle_find_record_access_plan(const XaotBundle *bundle, XgRecordAccessId record_access_id);
-XR_FUNC const XaotRecordMergePlan *
-xaot_bundle_find_record_merge_plan(const XaotBundle *bundle, XgRecordMergeId record_merge_id);
+XR_FUNC const XaotObjectShapePlan *
+xaot_bundle_find_object_shape_plan(const XaotBundle *bundle, XgObjectShapeId object_shape_id);
+XR_FUNC const XaotObjectAccessPlan *
+xaot_bundle_find_object_access_plan(const XaotBundle *bundle, XgObjectAccessId object_access_id);
+XR_FUNC const XaotObjectMergePlan *
+xaot_bundle_find_object_merge_plan(const XaotBundle *bundle, XgObjectMergeId object_merge_id);
 XR_FUNC const XaotOptionsPlan *xaot_bundle_find_options_plan(const XaotBundle *bundle,
                                                              XgOptionsId options_id);
 XR_FUNC const XaotMapShapePlan *xaot_bundle_find_map_shape_plan(const XaotBundle *bundle,

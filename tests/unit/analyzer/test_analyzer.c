@@ -317,9 +317,9 @@ TEST(record_nullable_field_accepts_explicit_null) {
         xr_type_make_nullable(g_isolate, xr_type_new_string(g_isolate)),
     };
     XrType *source_fields[] = {xr_type_new_null(g_isolate)};
-    XrType *target = xr_type_new_record_with_fields(g_isolate, names, target_fields, 1,
+    XrType *target = xr_type_new_struct_object_with_fields(g_isolate, names, target_fields, 1,
                                                     XR_OBJECT_ROW_EXACT);
-    XrType *source = xr_type_new_record_with_fields(g_isolate, names, source_fields, 1,
+    XrType *source = xr_type_new_struct_object_with_fields(g_isolate, names, source_fields, 1,
                                                     XR_OBJECT_ROW_EXACT);
 
     ASSERT(xr_type_assignable(target, source));
@@ -1075,11 +1075,11 @@ TEST(object_row_assignment_matrix_and_field_invariance) {
     XrType *a_fields[] = {xr_type_new_string(g_isolate)};
     const char *b_names[] = {"age", "name"};
     XrType *b_fields[] = {xr_type_new_int(g_isolate), xr_type_new_string(g_isolate)};
-    XrType *a = xr_type_new_record_with_fields(g_isolate, a_names, a_fields, 1,
+    XrType *a = xr_type_new_struct_object_with_fields(g_isolate, a_names, a_fields, 1,
                                                XR_OBJECT_ROW_EXACT);
-    XrType *b = xr_type_new_record_with_fields(g_isolate, b_names, b_fields, 2,
+    XrType *b = xr_type_new_struct_object_with_fields(g_isolate, b_names, b_fields, 2,
                                                XR_OBJECT_ROW_EXACT);
-    XrType *open_a = xr_type_new_record_with_fields(g_isolate, a_names, a_fields, 1,
+    XrType *open_a = xr_type_new_struct_object_with_fields(g_isolate, a_names, a_fields, 1,
                                                     XR_OBJECT_ROW_OPEN);
 
     ASSERT(xr_type_assignable(a, a));
@@ -1092,12 +1092,12 @@ TEST(object_row_assignment_matrix_and_field_invariance) {
     XrType *name_union = xr_type_union(g_isolate, xr_type_new_string(g_isolate),
                                        xr_type_new_int(g_isolate));
     XrType *wide_fields[] = {name_union};
-    XrType *wide_name = xr_type_new_record_with_fields(g_isolate, a_names, wide_fields, 1,
+    XrType *wide_name = xr_type_new_struct_object_with_fields(g_isolate, a_names, wide_fields, 1,
                                                        XR_OBJECT_ROW_EXACT);
     ASSERT(!xr_type_assignable(open_a, wide_name));
 
     bool readonly[] = {true};
-    XrType *readonly_a = xr_type_new_record_with_fields(g_isolate, a_names, a_fields, 1,
+    XrType *readonly_a = xr_type_new_struct_object_with_fields(g_isolate, a_names, a_fields, 1,
                                                         XR_OBJECT_ROW_EXACT);
     xr_type_set_object_field_readonly(g_isolate, readonly_a, readonly, 1);
     ASSERT(xr_type_assignable(readonly_a, a));
@@ -1114,9 +1114,9 @@ TEST(json_value_and_codec_capability_matrix) {
 
     const char *names[] = {"value"};
     XrType *fields[] = {xr_type_new_int(g_isolate)};
-    XrType *exact = xr_type_new_record_with_fields(g_isolate, names, fields, 1,
+    XrType *exact = xr_type_new_struct_object_with_fields(g_isolate, names, fields, 1,
                                                    XR_OBJECT_ROW_EXACT);
-    XrType *open = xr_type_new_record_with_fields(g_isolate, names, fields, 1,
+    XrType *open = xr_type_new_struct_object_with_fields(g_isolate, names, fields, 1,
                                                   XR_OBJECT_ROW_OPEN);
     ASSERT(xa_json_encodable(exact).supported);
     ASSERT(xa_json_decodable(exact).supported);
@@ -1130,7 +1130,7 @@ TEST(json_value_and_codec_capability_matrix) {
 
     XrType *fn = xr_type_new_function(g_isolate, NULL, 0, xr_type_new_int(g_isolate), false);
     XrType *fn_fields[] = {fn};
-    XrType *with_function = xr_type_new_record_with_fields(
+    XrType *with_function = xr_type_new_struct_object_with_fields(
         g_isolate, names, fn_fields, 1, XR_OBJECT_ROW_EXACT);
     result = xa_json_encodable(with_function);
     ASSERT(!result.supported);
@@ -1178,7 +1178,7 @@ TEST(json_value_and_codec_capability_matrix) {
     XrType *instantiated = xr_type_substitute(g_isolate, generic_array, params, args, 1);
     ASSERT(xa_json_encodable(instantiated).supported);
 
-    XrType *recursive = xr_type_new_record_with_fields(g_isolate, names, fields, 1,
+    XrType *recursive = xr_type_new_struct_object_with_fields(g_isolate, names, fields, 1,
                                                        XR_OBJECT_ROW_EXACT);
     recursive->object.field_types[0] = recursive;
     result = xa_json_encodable(recursive);
@@ -1254,7 +1254,7 @@ TEST(analyzer_open_row_is_width_only_and_literal_stays_exact) {
     AstNode *decl = program->as.program.statements[1];
     ASSERT(decl != NULL && decl->type == AST_VAR_DECL);
     XrType *literal_type = xa_analyzer_get_node_type(a, decl->as.var_decl.initializer);
-    ASSERT(literal_type != NULL && XR_TYPE_IS_RECORD(literal_type));
+    ASSERT(literal_type != NULL && XR_TYPE_IS_STRUCT_OBJECT(literal_type));
     ASSERT(literal_type->object.row_mode == XR_OBJECT_ROW_EXACT);
     ASSERT(literal_type->object.field_count == 2);
     ASSERT(analyzer_diag_message_count(a, "type 'OpenNamed' has no field 'age'") == 2);

@@ -24,6 +24,7 @@
 #include "../class/xclass_system.h"
 #include "../mem/xobj_header.h"
 #include "../mem/xheap.h"
+#include "../mem/xalloc_unified.h"
 #include "../symbol/xsymbol_table.h"
 #include "../value/xvalue.h"
 #include "../xisolate_api.h"
@@ -100,11 +101,11 @@ static inline bool xr_value_is_json(XrValue v) {
     return inst->klass && inst->klass->builtin_kind == XR_BK_JSON;
 }
 
-static inline bool xr_value_is_record(XrValue v) {
+static inline bool xr_value_is_struct_object(XrValue v) {
     if (!XR_IS_INSTANCE(v))
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass && inst->klass->builtin_kind == XR_BK_RECORD;
+    return inst->klass && inst->klass->builtin_kind == XR_BK_STRUCT_OBJECT;
 }
 
 static inline bool xr_value_has_object_shape(XrValue v) {
@@ -112,7 +113,7 @@ static inline bool xr_value_has_object_shape(XrValue v) {
         return false;
     XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
     return inst->klass &&
-           (inst->klass->builtin_kind == XR_BK_JSON || inst->klass->builtin_kind == XR_BK_RECORD);
+           (inst->klass->builtin_kind == XR_BK_JSON || inst->klass->builtin_kind == XR_BK_STRUCT_OBJECT);
 }
 
 static inline bool xr_json_value_matches_kind(XrValue value, uint8_t encoded_kind) {
@@ -132,7 +133,7 @@ static inline bool xr_json_value_matches_kind(XrValue value, uint8_t encoded_kin
         case XR_JSON_VALUE_JSON:
             return XR_IS_BOOL(value) || XR_IS_INT(value) || XR_IS_FLOAT(value) ||
                    XR_IS_STRING(value) || XR_IS_ARRAY(value) || xr_value_is_json(value);
-        case XR_JSON_VALUE_RECORD:
+        case XR_JSON_VALUE_STRUCT_OBJECT:
             return xr_value_has_object_shape(value);
         case XR_JSON_VALUE_ARRAY:
             return XR_IS_ARRAY(value);
@@ -147,7 +148,12 @@ static inline XrJson *xr_value_to_json(XrValue v) {
     return (XrJson *) XR_TO_PTR(v);
 }
 
-static inline XrValue xr_json_decode_record_with_class(XrVMRuntime *X, struct XrCoroutine *coro,
+static inline void xr_json_decode_release_partial(XrValue *values, uint16_t count) {
+    for (uint16_t i = 0; values && i < count; i++)
+        xr_rc_release_value(xr_current_coro_heap(), values[i]);
+}
+
+static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X, struct XrCoroutine *coro,
                                                        XrJson *src, XrClass *cls) {
     if (!X || !src || !cls || cls->field_count == 0 || !cls->fields)
         return xr_null();
@@ -159,41 +165,56 @@ static inline XrValue xr_json_decode_record_with_class(XrVMRuntime *X, struct Xr
         XrFieldDescriptor *field = &cls->fields[fi];
         const char *fname = field->name;
         if (!fname) {
+            xr_json_decode_release_partial(decoded_values, fi);
             xr_free(decoded_values);
             return xr_null();
         }
         XrValue field_val = xr_json_get_by_key(X, src, fname);
         if (XR_IS_NULL(field_val) && !xr_json_has_field(X, src, field->symbol)) {
+            xr_json_decode_release_partial(decoded_values, fi);
             xr_free(decoded_values);
             return xr_null();
         }
         if (!xr_json_value_matches_kind(field_val, field->json_value_kind)) {
+            xr_json_decode_release_partial(decoded_values, fi);
             xr_free(decoded_values);
             return xr_null();
         }
-        if (xr_json_value_kind_base(field->json_value_kind) == XR_JSON_VALUE_RECORD &&
+        if (xr_json_value_kind_base(field->json_value_kind) == XR_JSON_VALUE_STRUCT_OBJECT &&
             !XR_IS_NULL(field_val)) {
-            if (!field->json_record_class) {
+            if (!field->json_struct_object_class) {
+                xr_json_decode_release_partial(decoded_values, fi);
                 xr_free(decoded_values);
                 return xr_null();
             }
-            field_val = xr_json_decode_record_with_class(X, coro, xr_value_to_json(field_val),
-                                                         field->json_record_class);
+            field_val = xr_json_decode_struct_object_with_class(X, coro, xr_value_to_json(field_val),
+                                                         field->json_struct_object_class);
             if (XR_IS_NULL(field_val)) {
+                xr_json_decode_release_partial(decoded_values, fi);
                 xr_free(decoded_values);
                 return xr_null();
             }
+        } else {
+            xr_rc_retain_value(field_val);
         }
         decoded_values[fi] = field_val;
     }
 
     XrJson *result = xr_json_new_with_class(coro, cls);
     if (!result) {
+        xr_json_decode_release_partial(decoded_values, field_count);
         xr_free(decoded_values);
         return xr_null();
     }
-    for (uint16_t fi = 0; fi < field_count; fi++)
-        xr_instance_set_dynamic_field(X, result, fi, decoded_values[fi]);
+    for (uint16_t fi = 0; fi < field_count; fi++) {
+        if (xr_instance_set_dynamic_field(X, result, fi, decoded_values[fi]))
+            continue;
+        for (uint16_t remaining = fi; remaining < field_count; remaining++)
+            xr_rc_release_value(xr_current_coro_heap(), decoded_values[remaining]);
+        xr_rc_release_value(xr_current_coro_heap(), XR_FROM_PTR(result));
+        xr_free(decoded_values);
+        return xr_null();
+    }
     xr_free(decoded_values);
     return XR_FROM_PTR(result);
 }

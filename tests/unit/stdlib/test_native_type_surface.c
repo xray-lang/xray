@@ -63,7 +63,7 @@ TEST(native_module_record_and_enum_metadata) {
 
     XrType *record_type = xa_builtin_record_decl_type(iso, record);
     ASSERT_NOT_NULL(record_type);
-    ASSERT_EQ_INT(record_type->kind, XR_KIND_RECORD);
+    ASSERT_EQ_INT(record_type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_EQ_INT(record_type->object.row_mode, XR_OBJECT_ROW_EXACT);
     ASSERT_EQ_INT(record_type->object.field_count, 2);
 
@@ -97,7 +97,7 @@ TEST(native_module_record_and_enum_metadata) {
     ASSERT_NOT_NULL(fn);
     ASSERT_EQ_INT(fn->kind, XR_KIND_FUNCTION);
     ASSERT_NOT_NULL(fn->function.return_type);
-    ASSERT_EQ_INT(fn->function.return_type->kind, XR_KIND_RECORD);
+    ASSERT_EQ_INT(fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);
 
     ASSERT_EQ_INT(copy_bidi->effect_contract.kind, XA_EFFECT_CONTRACT_ERRORS);
     ASSERT_EQ_INT(copy_bidi->effect_contract.error_count, 10);
@@ -116,7 +116,7 @@ TEST(native_module_record_and_enum_metadata) {
     ASSERT_EQ_INT(ws_fn->kind, XR_KIND_FUNCTION);
     ASSERT_EQ_INT(ws_fn->function.param_count, 2);
     ASSERT_NOT_NULL(ws_fn->function.params[1].type);
-    ASSERT_EQ_INT(ws_fn->function.params[1].type->kind, XR_KIND_RECORD);
+    ASSERT_EQ_INT(ws_fn->function.params[1].type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_TRUE(ws_fn->function.params[1].type->is_nullable);
 
     const XaBuiltinRecord *cluster_config = xa_builtin_get_record_type("cluster", "ClusterConfig");
@@ -153,10 +153,10 @@ TEST(native_module_record_and_enum_metadata) {
     ASSERT_NOT_NULL(cluster_info_fn);
     ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
     ASSERT_EQ_INT(cluster_start_fn->function.param_count, 1);
-    ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_RECORD);
+    ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_EQ_INT(cluster_start_fn->function.return_type->kind, XR_KIND_BOOL);
     ASSERT_EQ_INT(cluster_info_fn->kind, XR_KIND_FUNCTION);
-    ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_RECORD);
+    ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_TRUE(cluster_info_fn->function.return_type->is_nullable);
 
     xray_vm_delete(iso);

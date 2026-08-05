@@ -445,7 +445,7 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
     bool layout_ok = layout && layout->field_count == 2 &&
                      layout->fields[0].native_type == XR_NATIVE_I64 &&
                      layout->fields[1].native_type == XR_NATIVE_I64;
-    bool record_ok = record_type && XR_TYPE_IS_RECORD(record_type) &&
+    bool record_ok = record_type && XR_TYPE_IS_STRUCT_OBJECT(record_type) &&
                      record_type->object.field_count == 2 && record_type->object.field_names &&
                      record_type->object.field_types && record_type->object.field_types[0] &&
                      record_type->object.field_types[1] &&

@@ -82,7 +82,7 @@ typedef struct XrFieldDescriptor {
     uint8_t shape_flags;
     int16_t static_slot;      // Pre-computed static slot index (-1 if not static)
     uint8_t json_value_kind;  // XrJsonValueKind plus XR_JSON_VALUE_NULLABLE
-    struct XrClass *json_record_class;
+    struct XrClass *json_struct_object_class;
 } XrFieldDescriptor;
 
 // Field flags
@@ -110,7 +110,7 @@ typedef struct XrClassTransition {
     uint64_t stable_type_key;
     uint8_t json_value_kind;  // Typed Record identity; ANY for dynamic Json fields
     uint8_t shape_flags;
-    struct XrClass *json_record_class;
+    struct XrClass *json_struct_object_class;
     struct XrClass *target;          // Resulting child class after adding the field
     struct XrClassTransition *next;  // Next transition in the linked list
 } XrClassTransition;
@@ -123,7 +123,7 @@ typedef struct XrClassTransition {
 typedef enum {
     XR_BK_NONE = 0,
     XR_BK_JSON,
-    XR_BK_RECORD,
+    XR_BK_STRUCT_OBJECT,
     XR_BK_STRINGBUILDER,
     XR_BK_ITERATOR,
     XR_BK_REGEX,

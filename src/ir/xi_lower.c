@@ -1151,8 +1151,7 @@ XR_FUNC void xi_lower_bind_json_codec_id(XiLower *l, XiValue *value, uint32_t so
                                          uint8_t expected_kind) {
     const XgGlobalEvidence *ev;
     const XgJsonCodecSummary *match = NULL;
-    if (!l || !value || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID ||
-        source_node_id == 0)
+    if (!l || !value || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID)
         return;
     switch ((XgJsonCodecKind) expected_kind) {
         case XG_JSON_CODEC_PARSE:
@@ -1167,8 +1166,14 @@ XR_FUNC void xi_lower_bind_json_codec_id(XiLower *l, XiValue *value, uint32_t so
     for (uint32_t i = 0; i < ev->njson_codecs; i++) {
         const XgJsonCodecSummary *row = &ev->json_codecs[i];
         if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id ||
-            row->source_node_id != source_node_id || row->codec_kind != expected_kind)
+            row->codec_kind != expected_kind)
             continue;
+        if (source_node_id != 0) {
+            if (row->source_node_id != source_node_id)
+                continue;
+        } else if (value->line == 0 || row->source_span_id != value->line) {
+            continue;
+        }
         if (match)
             return;
         match = row;
@@ -1177,26 +1182,26 @@ XR_FUNC void xi_lower_bind_json_codec_id(XiLower *l, XiValue *value, uint32_t so
         value->xg_json_codec_id = match->codec_id;
 }
 
-static bool xi_lower_json_access_row_requires_dynamic_lookup(const XgGlobalEvidence *ev,
-                                                             const XgJsonAccessSummary *row);
+static bool xi_lower_json_dynamic_access_row_requires_dynamic_lookup(const XgGlobalEvidence *ev,
+                                                             const XgJsonDynamicAccessSummary *row);
 
-XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const char *field_name,
+XR_FUNC void xi_lower_bind_json_dynamic_access_id(XiLower *l, XiValue *access, const char *field_name,
                                           uint32_t source_span_id, uint16_t field_ordinal,
                                           uint8_t access_kind) {
     const XgGlobalEvidence *ev;
-    const XgJsonAccessSummary *match = NULL;
+    const XgJsonDynamicAccessSummary *match = NULL;
     uint32_t key_name_id;
     if (!l || !access || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID ||
-        (access->op != XI_JSON_GET_F && access->op != XI_JSON_SET_F && access->op != XI_INDEX_GET &&
+        (access->op != XI_OBJECT_GET_F && access->op != XI_OBJECT_SET_F && access->op != XI_INDEX_GET &&
          access->op != XI_INDEX_SET && access->op != XI_LOAD_FIELD && access->op != XI_STORE_FIELD))
         return;
     key_name_id = field_name ? xg_name_id(field_name) : 0;
-    if (key_name_id == 0 && access_kind != XG_JSON_ACCESS_INDEX_GET &&
-        access_kind != XG_JSON_ACCESS_INDEX_SET)
+    if (key_name_id == 0 && access_kind != XG_JSON_DYNAMIC_ACCESS_INDEX_GET &&
+        access_kind != XG_JSON_DYNAMIC_ACCESS_INDEX_SET)
         return;
     ev = l->global_evidence;
-    for (uint32_t i = 0; i < ev->njson_accesses; i++) {
-        const XgJsonAccessSummary *row = &ev->json_accesses[i];
+    for (uint32_t i = 0; i < ev->njson_dynamic_accesses; i++) {
+        const XgJsonDynamicAccessSummary *row = &ev->json_dynamic_accesses[i];
         if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id)
             continue;
         if (!xi_lower_evidence_module_matches(l, row->module_id))
@@ -1205,7 +1210,7 @@ XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const cha
         if (!field_matches && field_ordinal == UINT16_MAX &&
             (access->op == XI_INDEX_GET || access->op == XI_INDEX_SET ||
              access->op == XI_LOAD_FIELD || access->op == XI_STORE_FIELD))
-            field_matches = xi_lower_json_access_row_requires_dynamic_lookup(ev, row);
+            field_matches = xi_lower_json_dynamic_access_row_requires_dynamic_lookup(ev, row);
         if (row->source_span_id != source_span_id || row->key_name_id != key_name_id ||
             !field_matches || row->access_kind != access_kind)
             continue;
@@ -1214,27 +1219,27 @@ XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const cha
         match = row;
     }
     if (match)
-        access->xg_json_access_id = match->json_access_id;
+        access->xg_json_dynamic_access_id = match->json_dynamic_access_id;
 }
 
-static bool xi_lower_json_access_row_requires_dynamic_lookup(const XgGlobalEvidence *ev,
-                                                             const XgJsonAccessSummary *row) {
-    const XgJsonShapeSummary *shape;
+static bool xi_lower_json_dynamic_access_row_requires_dynamic_lookup(const XgGlobalEvidence *ev,
+                                                             const XgJsonDynamicAccessSummary *row) {
+    const XgObjectShapeSummary *shape;
     if (!ev || !row)
         return false;
-    if ((row->flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0 || row->key_name_id == 0 ||
+    if ((row->flags & XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY) != 0 || row->key_name_id == 0 ||
         row->receiver_shape_id == XG_NO_ID)
         return true;
-    shape = xg_global_evidence_find_json_shape(ev, row->receiver_shape_id);
-    return !shape || shape->shape_kind == XG_JSON_SHAPE_OPEN ||
+    shape = xg_global_evidence_find_object_shape(ev, row->receiver_shape_id);
+    return !shape || (shape->flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) != 0 ||
            row->field_ordinal >= shape->field_count;
 }
 
-static bool xi_lower_json_access_row_is_direct_index(const XgGlobalEvidence *ev,
-                                                     const XgJsonAccessSummary *row) {
-    if (!row || (row->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0)
+static bool xi_lower_json_dynamic_access_row_is_direct_index(const XgGlobalEvidence *ev,
+                                                     const XgJsonDynamicAccessSummary *row) {
+    if (!row || (row->flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0)
         return false;
-    return !xi_lower_json_access_row_requires_dynamic_lookup(ev, row);
+    return !xi_lower_json_dynamic_access_row_requires_dynamic_lookup(ev, row);
 }
 
 XR_FUNC bool xi_lower_find_json_direct_field_ordinal(XiLower *l, const char *field_name,
@@ -1262,15 +1267,15 @@ XR_FUNC bool xi_lower_find_json_direct_field_ordinal(XiLower *l, const char *fie
     ev = l->global_evidence;
     if (l->func)
         owner_func_id = (XgFuncId) l->func->xg_body_func_id;
-    for (uint32_t i = 0; i < ev->njson_accesses; i++) {
-        const XgJsonAccessSummary *row = &ev->json_accesses[i];
+    for (uint32_t i = 0; i < ev->njson_dynamic_accesses; i++) {
+        const XgJsonDynamicAccessSummary *row = &ev->json_dynamic_accesses[i];
         bool direct;
         if (!xi_lower_evidence_module_matches(l, row->module_id))
             continue;
         if (row->source_span_id != source_span_id || row->key_name_id != key_name_id ||
             row->access_kind != access_kind)
             continue;
-        direct = xi_lower_json_access_row_is_direct_index(ev, row);
+        direct = xi_lower_json_dynamic_access_row_is_direct_index(ev, row);
         if (owner_func_id != XG_NO_ID && row->owner_func_id == owner_func_id) {
             owner_seen = true;
             if (!direct) {
@@ -1307,7 +1312,7 @@ XR_FUNC bool xi_lower_find_json_direct_field_ordinal(XiLower *l, const char *fie
     return false;
 }
 
-XR_FUNC bool xi_lower_json_access_requires_dynamic_lookup(XiLower *l, const char *field_name,
+XR_FUNC bool xi_lower_json_dynamic_access_requires_dynamic_lookup(XiLower *l, const char *field_name,
                                                           uint32_t source_span_id,
                                                           uint16_t field_ordinal,
                                                           uint8_t access_kind) {
@@ -1321,26 +1326,30 @@ XR_FUNC bool xi_lower_json_access_requires_dynamic_lookup(XiLower *l, const char
     if (!l || !l->global_evidence)
         return false;
     key_name_id = field_name ? xg_name_id(field_name) : 0;
-    if (key_name_id == 0 && access_kind != XG_JSON_ACCESS_INDEX_GET &&
-        access_kind != XG_JSON_ACCESS_INDEX_SET)
+    if (key_name_id == 0 && access_kind != XG_JSON_DYNAMIC_ACCESS_INDEX_GET &&
+        access_kind != XG_JSON_DYNAMIC_ACCESS_INDEX_SET)
         return false;
     ev = l->global_evidence;
     if (l->func)
         owner_func_id = (XgFuncId) l->func->xg_body_func_id;
-    for (uint32_t i = 0; i < ev->njson_accesses; i++) {
-        const XgJsonAccessSummary *row = &ev->json_accesses[i];
+    for (uint32_t i = 0; i < ev->njson_dynamic_accesses; i++) {
+        const XgJsonDynamicAccessSummary *row = &ev->json_dynamic_accesses[i];
+        bool requires_dynamic;
         if (!xi_lower_evidence_module_matches(l, row->module_id))
             continue;
         if (row->source_span_id != source_span_id || row->key_name_id != key_name_id ||
-            row->field_ordinal != field_ordinal || row->access_kind != access_kind)
+            row->access_kind != access_kind)
+            continue;
+        requires_dynamic = xi_lower_json_dynamic_access_row_requires_dynamic_lookup(ev, row);
+        if (row->field_ordinal != field_ordinal && !requires_dynamic)
             continue;
         if (owner_func_id != XG_NO_ID && row->owner_func_id == owner_func_id) {
             has_owner_match = true;
-            if (xi_lower_json_access_row_requires_dynamic_lookup(ev, row))
+            if (requires_dynamic)
                 owner_requires_dynamic = true;
         } else {
             has_fallback_match = true;
-            if (xi_lower_json_access_row_requires_dynamic_lookup(ev, row))
+            if (requires_dynamic)
                 fallback_requires_dynamic = true;
         }
     }
@@ -1349,45 +1358,93 @@ XR_FUNC bool xi_lower_json_access_requires_dynamic_lookup(XiLower *l, const char
     return has_fallback_match && fallback_requires_dynamic;
 }
 
-XR_FUNC void xi_lower_bind_record_access_id(XiLower *l, XiValue *access, const char *field_name,
+XR_FUNC void xi_lower_bind_object_access_id(XiLower *l, XiValue *access, const char *field_name,
                                             uint32_t source_span_id, uint16_t field_ordinal,
                                             uint8_t access_kind) {
     const XgGlobalEvidence *ev;
-    const XgRecordAccessSummary *match = NULL;
+    const XgObjectAccessSummary *match = NULL;
     uint32_t field_name_id;
-    if (!l || !access || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID ||
-        (access->op != XI_JSON_GET_F && access->op != XI_JSON_SET_F))
+    if (!l || !access || !l->func ||
+        (access->op != XI_OBJECT_GET_F && access->op != XI_OBJECT_SET_F))
+        return;
+    const XrType *receiver_type =
+        access->nargs > 0 && access->args[0] ? access->args[0]->type : NULL;
+    if (field_name && receiver_type && XR_TYPE_IS_STRUCT_OBJECT(receiver_type) &&
+        receiver_type->object.row_mode == XR_OBJECT_ROW_OPEN) {
+        access->aux = (void *) arena_strdup(l->func, field_name);
+        if (!access->aux) {
+            l->had_error = true;
+            return;
+        }
+        access->lowering_flags |= XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH;
+    }
+    if (!l->global_evidence || l->func->xg_body_func_id == XG_NO_ID)
         return;
     field_name_id = field_name ? xg_name_id(field_name) : 0;
     if (field_name_id == 0)
         return;
     ev = l->global_evidence;
-    for (uint32_t i = 0; i < ev->nrecord_accesses; i++) {
-        const XgRecordAccessSummary *row = &ev->record_accesses[i];
+    for (uint32_t i = 0; i < ev->nobject_accesses; i++) {
+        const XgObjectAccessSummary *row = &ev->object_accesses[i];
         if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id)
             continue;
         if (!xi_lower_evidence_module_matches(l, row->module_id))
             continue;
         if (row->source_span_id != source_span_id || row->field_name_id != field_name_id ||
-            row->field_ordinal != field_ordinal || row->access_kind != access_kind)
+            row->access_kind != access_kind)
             continue;
         if (match)
             return;
         match = row;
     }
-    if (match)
-        access->xg_record_access_id = match->record_access_id;
+    if (match) {
+        access->xg_object_access_id = match->object_access_id;
+        /* The verified Object shape table owns the physical field order.
+         * Analyzer selection indices are source-type ordinals and can differ
+         * from canonical structural descriptor ordinals. Keep the Xi hot path
+         * as a raw ordinal load/store, but take that ordinal from the evidence
+         * row rather than duplicating layout policy in expression lowering. */
+        access->aux_int = match->field_ordinal;
+        if ((match->flags & XG_OBJECT_ACCESS_OPEN_ROW) != 0) {
+            bool descriptor_dispatch = match->receiver_shape_count <= 1;
+            uint16_t first_ordinal = UINT16_MAX;
+            uint32_t matched_cases = 0;
+            for (uint32_t i = 0; i < ev->nobject_access_cases; i++) {
+                const XgObjectAccessCaseSummary *access_case = &ev->object_access_cases[i];
+                if (access_case->object_access_id != match->object_access_id)
+                    continue;
+                if (first_ordinal == UINT16_MAX)
+                    first_ordinal = access_case->field_ordinal;
+                else if (access_case->field_ordinal != first_ordinal)
+                    descriptor_dispatch = true;
+                matched_cases++;
+            }
+            if (matched_cases != match->receiver_shape_count || first_ordinal == UINT16_MAX)
+                descriptor_dispatch = true;
+            access->lowering_flags &=
+                (uint8_t) ~XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH;
+            access->aux = NULL;
+            if (descriptor_dispatch) {
+                access->aux = (void *) arena_strdup(l->func, field_name);
+                if (!access->aux) {
+                    l->had_error = true;
+                    return;
+                }
+                access->lowering_flags |= XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH;
+            }
+        }
+    }
 }
 
-XR_FUNC void xi_lower_bind_record_merge_id(XiLower *l, XiValue *merge, uint32_t source_node_id) {
+XR_FUNC void xi_lower_bind_object_merge_id(XiLower *l, XiValue *merge, uint32_t source_node_id) {
     const XgGlobalEvidence *ev;
-    const XgRecordMergeSummary *match = NULL;
+    const XgObjectMergeSummary *match = NULL;
     if (!l || !merge || merge->op != XI_JSON_MERGE || !l->global_evidence || !l->func ||
         l->func->xg_body_func_id == XG_NO_ID || source_node_id == 0)
         return;
     ev = l->global_evidence;
-    for (uint32_t i = 0; i < ev->nrecord_merges; i++) {
-        const XgRecordMergeSummary *row = &ev->record_merges[i];
+    for (uint32_t i = 0; i < ev->nobject_merges; i++) {
+        const XgObjectMergeSummary *row = &ev->object_merges[i];
         if (row->owner_func_id != (XgFuncId) l->func->xg_body_func_id ||
             row->source_node_id != source_node_id ||
             !xi_lower_evidence_module_matches(l, row->module_id))
@@ -1397,7 +1454,7 @@ XR_FUNC void xi_lower_bind_record_merge_id(XiLower *l, XiValue *merge, uint32_t 
         match = row;
     }
     if (match)
-        merge->xg_record_merge_id = match->merge_id;
+        merge->xg_object_merge_id = match->merge_id;
 }
 
 XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t source_span_id,

@@ -181,10 +181,10 @@ static uint32_t vn_value_hash(const VnTable *vn, const XiValue *v) {
     h = vn_hash_mix(h, v->xg_callsite_id);
     h = vn_hash_mix(h, v->xg_method_id);
     h = vn_hash_mix(h, v->xg_interface_dispatch_slot);
-    h = vn_hash_mix(h, v->xg_json_access_id);
+    h = vn_hash_mix(h, v->xg_json_dynamic_access_id);
     h = vn_hash_mix(h, v->xg_json_codec_id);
-    h = vn_hash_mix(h, v->xg_record_access_id);
-    h = vn_hash_mix(h, v->xg_record_merge_id);
+    h = vn_hash_mix(h, v->xg_object_access_id);
+    h = vn_hash_mix(h, v->xg_object_merge_id);
     h = vn_hash_mix(h, v->xg_key_access_id);
     h = vn_hash_mix(h, v->xg_map_shape_id);
     h = vn_hash_mix(h, v->xg_class_field_id);
@@ -218,10 +218,10 @@ static bool vn_same_semantic_metadata(const XiValue *a, const XiValue *b) {
            a->xa_intrinsic_id == b->xa_intrinsic_id && a->xg_callsite_id == b->xg_callsite_id &&
            a->xg_method_id == b->xg_method_id &&
            a->xg_interface_dispatch_slot == b->xg_interface_dispatch_slot &&
-           a->xg_json_access_id == b->xg_json_access_id &&
+           a->xg_json_dynamic_access_id == b->xg_json_dynamic_access_id &&
            a->xg_json_codec_id == b->xg_json_codec_id &&
-           a->xg_record_access_id == b->xg_record_access_id &&
-           a->xg_record_merge_id == b->xg_record_merge_id &&
+           a->xg_object_access_id == b->xg_object_access_id &&
+           a->xg_object_merge_id == b->xg_object_merge_id &&
            a->xg_key_access_id == b->xg_key_access_id && a->xg_map_shape_id == b->xg_map_shape_id &&
            a->xg_class_field_id == b->xg_class_field_id &&
            a->xg_sequence_access_id == b->xg_sequence_access_id &&

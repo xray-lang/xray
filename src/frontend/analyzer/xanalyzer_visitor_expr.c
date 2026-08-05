@@ -46,7 +46,7 @@ static void xa_report_deprecated_use(XaInferContext *ctx, AstNode *node, XaSymbo
 }
 
 /* Record a selection fact for a member/index access node. */
-static void record_selection(XaInferContext *ctx, AstNode *node, XaSelectionKind kind,
+static void note_selection(XaInferContext *ctx, AstNode *node, XaSelectionKind kind,
                              XrType *receiver, XaSymbol *target, int32_t field_idx, XrType *result,
                              bool is_optional) {
     if (target) {
@@ -341,7 +341,7 @@ static XrType *xa_try_expected_enum_member_access(XaInferContext *ctx, AstNode *
                                              ? enum_type->enum_type.layout->layout_id
                                              : ctx->expected_type->enum_type.layout_id;
     }
-    record_selection(ctx, node, XA_SEL_ENUM_MEMBER, enum_type ? enum_type : ctx->expected_type,
+    note_selection(ctx, node, XA_SEL_ENUM_MEMBER, enum_type ? enum_type : ctx->expected_type,
                      enum_sym, member_index, enum_type ? enum_type : ctx->expected_type, false);
     return enum_type ? enum_type : ctx->expected_type;
 }
@@ -1838,7 +1838,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
                     XrType *member_type = member_links ? member_links->type : NULL;
                     if (member_type) {
-                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, member_sym, -1,
+                        note_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, member_sym, -1,
                                          member_type, false);
                         return member_type;
                     }
@@ -1848,7 +1848,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                             xr_type_new_class(ctx->analyzer->isolate, member_sym->name);
                         if (class_type)
                             class_type->instance.class_ref = member_links->class_info;
-                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, member_sym, -1,
+                        note_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, member_sym, -1,
                                          class_type, false);
                         return class_type ? class_type : xr_type_new_unknown(NULL);
                     }
@@ -1880,7 +1880,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         mod_result = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
                     }
                     if (mod_result) {
-                        record_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
+                        note_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
                                          mod_result, false);
                     }
                     return mod_result;
@@ -1959,7 +1959,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         enum_type->enum_type.layout_id = enum_info->layout->layout_id;
                         XrType *view_type = xr_type_new_enum_metadata(
                             ctx->analyzer->isolate, XR_ENUM_VARIANTS_TYPE_NAME, enum_type);
-                        record_selection(ctx, node, XA_SEL_ENUM_VARIANTS, obj_type, enum_sym,
+                        note_selection(ctx, node, XA_SEL_ENUM_VARIANTS, obj_type, enum_sym,
                                          XA_ENUM_META_VARIANTS, view_type, false);
                         return view_type;
                     }
@@ -1988,7 +1988,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                             enum_type->enum_type.layout = enum_info->layout;
                             enum_type->enum_type.layout_id =
                                 enum_info->layout ? enum_info->layout->layout_id : 0;
-                            record_selection(ctx, node, XA_SEL_ENUM_MEMBER, obj_type, enum_sym, i,
+                            note_selection(ctx, node, XA_SEL_ENUM_MEMBER, obj_type, enum_sym, i,
                                              enum_type, false);
                             return enum_type;
                         }
@@ -1999,7 +1999,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         if (member && member->kind == XA_SYM_METHOD && member->is_static) {
                             XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
                             if (ml && ml->type) {
-                                record_selection(ctx, node, XA_SEL_STATIC_MEMBER, obj_type, member,
+                                note_selection(ctx, node, XA_SEL_STATIC_MEMBER, obj_type, member,
                                                  -1, ml->type, false);
                                 return ml->type;
                             }
@@ -2019,7 +2019,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     if (member && member->kind == XA_SYM_METHOD && !member->is_static) {
                         XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
                         if (ml && ml->type) {
-                            record_selection(ctx, node, XA_SEL_METHOD, obj_type, member, -1,
+                            note_selection(ctx, node, XA_SEL_METHOD, obj_type, member, -1,
                                              ml->type, false);
                             return ml->type;
                         }
@@ -2123,7 +2123,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             }
         }
         if (result) {
-            record_selection(ctx, node, XA_SEL_ENUM_META, obj_type, enum_sym, field, result, false);
+            note_selection(ctx, node, XA_SEL_ENUM_META, obj_type, enum_sym, field, result, false);
             return result;
         }
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -2158,7 +2158,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             if (member) {
                 XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
                 if (ml && ml->type) {
-                    record_selection(ctx, node, XA_SEL_STATIC_MEMBER, obj_type, member, -1,
+                    note_selection(ctx, node, XA_SEL_STATIC_MEMBER, obj_type, member, -1,
                                      ml->type, false);
                     return ml->type;
                 }
@@ -2280,7 +2280,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         (member->kind == XA_SYM_METHOD) ? XA_SEL_METHOD : XA_SEL_FIELD;
                     if (sk == XA_SEL_FIELD)
                         member_type = xa_const_projection_type(ctx, obj_type, member_type);
-                    record_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
+                    note_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
                     return member_type;
                 }
             }
@@ -2428,7 +2428,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                                             : NULL;
                     if (!prop_type)
                         prop_type = xr_type_new_unknown(NULL);
-                    record_selection(ctx, node, XA_SEL_PROPERTY, obj_type, getter, -1, prop_type,
+                    note_selection(ctx, node, XA_SEL_PROPERTY, obj_type, getter, -1, prop_type,
                                      false);
                     return prop_type;
                 }
@@ -2470,7 +2470,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 }
                 if (sk == XA_SEL_FIELD)
                     member_type = xa_const_projection_type(ctx, obj_type, member_type);
-                record_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
+                note_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
                 return member_type;
             }
         }
@@ -2635,7 +2635,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                     }
                     if (sk == XA_SEL_FIELD)
                         member_type = xa_const_projection_type(ctx, obj_type, member_type);
-                    record_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
+                    note_selection(ctx, node, sk, obj_type, member, -1, member_type, false);
                     return member_type;
                 }
             }
@@ -2696,7 +2696,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             XrType *result_ft =
                 XR_TYPE_IS_JSON(obj_type) ? xr_type_make_nullable(ctx->analyzer->isolate, ft) : ft;
             result_ft = xa_const_projection_type(ctx, obj_type, result_ft);
-            record_selection(ctx, node, XA_SEL_FIELD, obj_type, NULL, field_idx, result_ft, false);
+            note_selection(ctx, node, XA_SEL_FIELD, obj_type, NULL, field_idx, result_ft, false);
             return result_ft;
         }
         if (xr_type_object_fields_are_closed(obj_type)) {
@@ -2848,7 +2848,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                     if (ft) {
                         XrType *result = xr_type_make_nullable(ctx->analyzer->isolate, ft);
                         result = xa_const_projection_type(ctx, container, result);
-                        record_selection(ctx, node, XA_SEL_FIELD, container, NULL, i, result,
+                        note_selection(ctx, node, XA_SEL_FIELD, container, NULL, i, result,
                                          false);
                         return result;
                     }
@@ -2870,7 +2870,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     }
 
     // Record subscript is only a fixed-field shorthand with string literal keys.
-    if (XR_TYPE_IS_RECORD(container)) {
+    if (XR_TYPE_IS_STRUCT_OBJECT(container)) {
         if (ig->index && ig->index->type == AST_LITERAL_STRING && container->object.field_names &&
             container->object.field_types) {
             const char *key = ig->index->as.literal.raw_value.string_val;
@@ -2880,7 +2880,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
                                      ? container->object.field_types[field_idx]
                                      : xr_type_new_unknown(NULL);
                 result = xa_const_projection_type(ctx, container, result);
-                record_selection(ctx, node, XA_SEL_FIELD, container, NULL, field_idx, result,
+                note_selection(ctx, node, XA_SEL_FIELD, container, NULL, field_idx, result,
                                  false);
                 return result;
             }
@@ -2945,7 +2945,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
             XrType *result = member_type->function.return_type
                                  ? member_type->function.return_type
                                  : xr_type_new_unknown(ctx->analyzer->isolate);
-            record_selection(ctx, node, XA_SEL_INDEX, container, member, -1, result, false);
+            note_selection(ctx, node, XA_SEL_INDEX, container, member, -1, result, false);
             return result;
         }
     }
@@ -3531,7 +3531,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
     ObjectLiteralNode *obj = &node->as.object_literal;
     XrType *expected = ctx->expected_type;
     bool json_context = expected && XR_TYPE_IS_JSON(expected);
-    bool record_context = expected && XR_TYPE_IS_RECORD(expected);
+    bool record_context = expected && XR_TYPE_IS_STRUCT_OBJECT(expected);
     bool result_is_json = json_context;
 
     if (obj->count == 0) {
@@ -3562,7 +3562,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
             xa_check_span_value_escape(ctx, val, src,
                                        "spread Slice view fields into object literal");
             bool src_ok =
-                result_is_json ? (src && XR_TYPE_IS_JSON(src)) : (src && XR_TYPE_IS_RECORD(src));
+                result_is_json ? (src && XR_TYPE_IS_JSON(src)) : (src && XR_TYPE_IS_STRUCT_OBJECT(src));
             if (src_ok) {
                 cap += src->object.field_count;
             } else if (src && !XR_TYPE_IS_UNKNOWN(src)) {
@@ -3648,7 +3648,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
         if (val && val->type == AST_SPREAD_EXPR) {
             XrType *src = entry_types[i];
             bool src_ok =
-                result_is_json ? (src && XR_TYPE_IS_JSON(src)) : (src && XR_TYPE_IS_RECORD(src));
+                result_is_json ? (src && XR_TYPE_IS_JSON(src)) : (src && XR_TYPE_IS_STRUCT_OBJECT(src));
             if (src_ok && src->object.field_count > 0 && src->object.field_names) {
                 for (int j = 0; j < src->object.field_count; j++) {
                     const char *fname = src->object.field_names[j];
@@ -3726,7 +3726,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
         type = xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, n,
                                             true);
     else
-        type = xr_type_new_record_with_fields(ctx->analyzer->isolate, field_names, field_types, n,
+        type = xr_type_new_struct_object_with_fields(ctx->analyzer->isolate, field_names, field_types, n,
                                               XR_OBJECT_ROW_EXACT);
     if (type && n > 0)
         xr_type_set_object_field_readonly(ctx->analyzer->isolate, type, field_readonly, n);
@@ -5303,7 +5303,7 @@ bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
         case XR_KIND_SET:
         case XR_KIND_FIXED_ARRAY:
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
             return true;
         case XR_KIND_INSTANCE:
             return xr_type_is_builtin_named_class(type, "StringBuilder");

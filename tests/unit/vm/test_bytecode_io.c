@@ -442,19 +442,19 @@ TEST(bytecode_roundtrips_typed_record_decode_shape) {
     const uint8_t nested_kinds[] = {XR_JSON_VALUE_STRING, XR_JSON_VALUE_INT};
     const uint64_t nested_type_keys[] = {UINT64_C(0x3101), UINT64_C(0x3102)};
     const uint8_t nested_flags[] = {0, XR_OBJECT_SHAPE_FIELD_READONLY};
-    XrClass *nested_shape = xr_class_build_record_chain(
-        writer, nested_names, nested_kinds, 2, NULL, nested_type_keys, nested_flags, true);
+    XrClass *nested_shape = xr_class_build_struct_object_chain(
+        writer, nested_names, nested_kinds, 2, NULL, nested_type_keys, nested_flags);
     ASSERT_NOT_NULL(nested_shape);
 
     const char *names[] = {"name", "address", "items"};
-    const uint8_t kinds[] = {XR_JSON_VALUE_STRING, XR_JSON_VALUE_RECORD, XR_JSON_VALUE_ARRAY};
+    const uint8_t kinds[] = {XR_JSON_VALUE_STRING, XR_JSON_VALUE_STRUCT_OBJECT, XR_JSON_VALUE_ARRAY};
     XrClass *nested_shapes[] = {NULL, nested_shape, NULL};
     const uint64_t stable_type_keys[] = {UINT64_C(0x4101), UINT64_C(0x4102),
                                          UINT64_C(0x4103)};
     const uint8_t shape_flags[] = {XR_OBJECT_SHAPE_FIELD_READONLY, 0,
                                    XR_OBJECT_SHAPE_FIELD_OPTIONAL};
-    XrClass *shape = xr_class_build_record_chain(writer, names, kinds, 3, nested_shapes,
-                                                 stable_type_keys, shape_flags, true);
+    XrClass *shape = xr_class_build_struct_object_chain(writer, names, kinds, 3, nested_shapes,
+                                                 stable_type_keys, shape_flags);
     ASSERT_NOT_NULL(shape);
     const XrtObjectShapeField manifest[] = {
         {"name", stable_type_keys[0], 0, 0, shape_flags[0], 0},
@@ -482,7 +482,7 @@ TEST(bytecode_roundtrips_typed_record_decode_shape) {
     ASSERT_EQ_INT(error, XR_BC_OK);
     XrClass *roundtrip_shape = (XrClass *) (intptr_t) XR_TO_INT(PROTO_CONSTANT(roundtrip, 0));
     ASSERT_NOT_NULL(roundtrip_shape);
-    ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_RECORD);
+    ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_STRUCT_OBJECT);
     ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_DYNAMIC_SEALED) != 0);
     ASSERT_EQ_UINT(roundtrip_shape->field_count, 3);
     ASSERT_EQ_UINT(xr_class_object_domain(roundtrip_shape), XR_OBJECT_DOMAIN_STRUCT);
@@ -491,10 +491,10 @@ TEST(bytecode_roundtrips_typed_record_decode_shape) {
     ASSERT_EQ_UINT(roundtrip_shape->fields[2].stable_type_key, stable_type_keys[2]);
     ASSERT_EQ_UINT(roundtrip_shape->fields[2].shape_flags, shape_flags[2]);
     ASSERT_EQ_UINT(roundtrip_shape->fields[0].json_value_kind, XR_JSON_VALUE_STRING);
-    ASSERT_EQ_UINT(roundtrip_shape->fields[1].json_value_kind, XR_JSON_VALUE_RECORD);
-    XrClass *roundtrip_nested = roundtrip_shape->fields[1].json_record_class;
+    ASSERT_EQ_UINT(roundtrip_shape->fields[1].json_value_kind, XR_JSON_VALUE_STRUCT_OBJECT);
+    XrClass *roundtrip_nested = roundtrip_shape->fields[1].json_struct_object_class;
     ASSERT_NOT_NULL(roundtrip_nested);
-    ASSERT_EQ_UINT(roundtrip_nested->builtin_kind, XR_BK_RECORD);
+    ASSERT_EQ_UINT(roundtrip_nested->builtin_kind, XR_BK_STRUCT_OBJECT);
     ASSERT_EQ_UINT(roundtrip_nested->field_count, 2);
     ASSERT_STR_EQ(roundtrip_nested->fields[0].name, "city");
     ASSERT_EQ_UINT(roundtrip_nested->fields[0].json_value_kind, XR_JSON_VALUE_STRING);

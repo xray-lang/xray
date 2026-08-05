@@ -239,9 +239,9 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_PTR_STORE     —                    XrFFIType width of pointee | unaligned flag;
  *                                         args[2] carries Endian
  *  XI_JSON_NEW      char** field_names   field count
- *  XI_JSON_INIT_F   —                    field index
- *  XI_JSON_GET_F    —                    field index
- *  XI_JSON_SET_F    —                    field index
+ *  XI_OBJECT_INIT_F   —                    field index
+ *  XI_OBJECT_GET_F    —                    field index
+ *  XI_OBJECT_SET_F    —                    field index
  *  XI_JSON_DECODE   char** field_names   field count
  *  XI_CALL          —                    bits[0:7]=flags, bits[8:15]=nresults
  *  XI_CALL_METHOD   method name (debug)  (global_symbol_id << 1) | is_super
@@ -427,9 +427,9 @@ typedef enum {
 
     /* Json / Allocation */
     XI_JSON_NEW,     /* Create Json object: aux=field_count, aux_ptr=field_names[] */
-    XI_JSON_INIT_F,  /* Init field by index: args[0]=json, args[1]=val, aux_int=field_idx */
-    XI_JSON_GET_F,   /* Read field by index: args[0]=json, aux_int=field_idx */
-    XI_JSON_SET_F,   /* Write field by index: args[0]=json, args[1]=val, aux_int=field_idx */
+    XI_OBJECT_INIT_F,  /* Init field by index: args[0]=json, args[1]=val, aux_int=field_idx */
+    XI_OBJECT_GET_F,   /* Read field by index: args[0]=json, aux_int=field_idx */
+    XI_OBJECT_SET_F,   /* Write field by index: args[0]=json, args[1]=val, aux_int=field_idx */
     XI_JSON_MERGE,   /* Merge all fields of src into dst: args[0]=dst, args[1]=src
                       * (object spread `{...base}`; later fields override earlier) */
     XI_JSON_DECODE,  /* Typed decode: args[0]=string, aux=field_names[], aux_int=field_count
@@ -855,6 +855,15 @@ typedef enum {
  * `super(...)` call lowers to the same XI_CALL_METHOD with aux "constructor"
  * but returns the receiver at +0, and it is deliberately NOT marked. */
 #define XI_LOWERING_FLAG_CONSTRUCTOR_CALL (1u << 5)
+/* A fixed structural field access whose closed receiver-shape set does not
+ * share one raw ordinal. The VM consumes the verified field symbol through
+ * the runtime class descriptor's O(1) symbol-to-ordinal table; AOT consumes
+ * the full XaotObjectAccessPlan and emits its guarded shape dispatch. */
+#define XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH (1u << 6)
+/* XI_JSON_DECODE consumes UTF-8 text directly into its exact target shape.
+ * The flag changes the codec evidence kind and selects the VM/AOT typed parser;
+ * an unflagged op validates and copies an already materialized Json value. */
+#define XI_LOWERING_FLAG_JSON_TYPED_PARSE (1u << 7)
 /* Weak field ownership is represented by XI_WEAK_LOAD_FIELD and
  * XI_WEAK_STORE_FIELD. No lowering flag or ARC-side exception is permitted. */
 
@@ -1030,11 +1039,11 @@ typedef struct XiValue {
     uint32_t xa_intrinsic_id; /* stable XaIntrinsicId for canonical semantic operations */
     uint32_t xg_method_id;    /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
-    uint32_t xg_json_access_id; /* stable XgJsonAccessId for evidence-backed Json slot access */
+    uint32_t xg_json_dynamic_access_id; /* stable XgJsonDynamicAccessId for evidence-backed Json slot access */
     uint32_t xg_json_codec_id;  /* stable XgJsonCodecId for evidence-backed Json codec calls */
     uint32_t
-        xg_record_access_id; /* stable XgRecordAccessId for evidence-backed Record slot access */
-    uint32_t xg_record_merge_id; /* stable XgRecordMergeId for evidence-backed Record spread */
+        xg_object_access_id; /* stable XgObjectAccessId for evidence-backed Record slot access */
+    uint32_t xg_object_merge_id; /* stable XgObjectMergeId for evidence-backed Record spread */
     uint32_t xg_key_access_id;   /* stable XgKeyAccessId for evidence-backed Map/Set key access */
     uint32_t xg_map_shape_id;    /* stable XgMapShapeId for evidence-backed Map/Set construction */
     uint32_t xg_class_field_id;  /* stable XgFieldId for evidence-backed class field access */
@@ -1133,10 +1142,10 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->move_source_domain = src->move_source_domain;
     dst->move_target_domain = src->move_target_domain;
     dst->xg_interface_dispatch_slot = src->xg_interface_dispatch_slot;
-    dst->xg_json_access_id = src->xg_json_access_id;
+    dst->xg_json_dynamic_access_id = src->xg_json_dynamic_access_id;
     dst->xg_json_codec_id = src->xg_json_codec_id;
-    dst->xg_record_access_id = src->xg_record_access_id;
-    dst->xg_record_merge_id = src->xg_record_merge_id;
+    dst->xg_object_access_id = src->xg_object_access_id;
+    dst->xg_object_merge_id = src->xg_object_merge_id;
     dst->xg_key_access_id = src->xg_key_access_id;
     dst->xg_map_shape_id = src->xg_map_shape_id;
     dst->xg_class_field_id = src->xg_class_field_id;

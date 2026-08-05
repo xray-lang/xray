@@ -360,7 +360,7 @@ XR_FUNC bool xa_task_result_requires_consuming_await(const XrType *result) {
     if (XR_TYPE_IS_TUPLE(result))
         return true;
     if (xr_type_is_const((XrType *) result) || result->is_value_type ||
-        result->kind == XR_KIND_RECORD || xa_type_has_fixed_layout_data_object(result) ||
+        result->kind == XR_KIND_STRUCT_OBJECT || xa_type_has_fixed_layout_data_object(result) ||
         xr_type_is_runtime_managed(result) || xa_type_is_concurrency_handle(result))
         return false;
     return true;
@@ -379,7 +379,7 @@ XR_FUNC bool xa_task_result_requires_shared_copy_publication(const XrType *resul
     if (xr_type_base_rep(result) != XR_REP_PTR || xr_type_is_const((XrType *) result) ||
         xr_type_is_runtime_managed(result) || xa_type_is_concurrency_handle(result))
         return false;
-    return result->is_value_type || result->kind == XR_KIND_RECORD ||
+    return result->is_value_type || result->kind == XR_KIND_STRUCT_OBJECT ||
            xa_type_has_fixed_layout_data_object(result);
 }
 
@@ -6745,7 +6745,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
-            } else if (array_type && XR_TYPE_IS_RECORD(array_type)) {
+            } else if (array_type && XR_TYPE_IS_STRUCT_OBJECT(array_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,

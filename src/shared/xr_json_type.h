@@ -22,7 +22,7 @@ typedef enum XrJsonValueKind {
     XR_JSON_VALUE_FLOAT = 4,
     XR_JSON_VALUE_STRING = 5,
     XR_JSON_VALUE_JSON = 6,
-    XR_JSON_VALUE_RECORD = 7,
+    XR_JSON_VALUE_STRUCT_OBJECT = 7,
     XR_JSON_VALUE_ARRAY = 8,
 } XrJsonValueKind;
 
@@ -44,6 +44,7 @@ typedef struct XrJsonDecodeFieldSpec {
     uint8_t value_kind;
     const struct XrJsonDecodeFieldSpec *nested_fields;
     uint16_t nested_field_count;
+    const void *target_shape;
 } XrJsonDecodeFieldSpec;
 
 #endif

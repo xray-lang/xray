@@ -220,7 +220,7 @@ const char *xr_type_to_string(XrType *type) {
                     printed++;
                 }
                 if ((has_computed ||
-                     (XR_TYPE_IS_RECORD(type) &&
+                     (XR_TYPE_IS_STRUCT_OBJECT(type) &&
                       type->object.row_mode == XR_OBJECT_ROW_OPEN)) &&
                     remaining > 5) {
                     n = snprintf(ptr, remaining, ",...");
@@ -231,7 +231,7 @@ const char *xr_type_to_string(XrType *type) {
                 return xr_pool_strdup(pool, buf);
             }
         }
-        return XR_TYPE_IS_JSON(type) ? TYPE_NAME_JSON : TYPE_NAME_RECORD;
+        return XR_TYPE_IS_JSON(type) ? TYPE_NAME_JSON : "{}";
     }
 
     if (type->kind == XR_KIND_TYPE_PARAM) {
@@ -538,7 +538,7 @@ bool xr_type_is_default_initializable(const XrType *type) {
         case XR_KIND_FUNCTION:
         case XR_KIND_INTERFACE:
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_ENUM:
         case XR_KIND_TUPLE:
         case XR_KIND_UNION:

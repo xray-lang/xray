@@ -2677,7 +2677,7 @@ static XrType *xa_infer_return_record_type(XrVMRuntime *X, FunctionDeclNode *fn)
         }
         idx++;
     }
-    return xr_type_new_record_with_fields(X, names, types, fc, XR_OBJECT_ROW_EXACT);
+    return xr_type_new_struct_object_with_fields(X, names, types, fc, XR_OBJECT_ROW_EXACT);
 }
 
 // Phase 2: Collect function body (parameters and body declarations).

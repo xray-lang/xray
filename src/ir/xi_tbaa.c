@@ -102,8 +102,8 @@ static XiMemGroup generated_group_to_mem_group(uint8_t group) {
             return XI_MEM_UPVAL;
         case XI_GEN_TBAA_TLS:
             return XI_MEM_TLS;
-        case XI_GEN_TBAA_JSON:
-            return XI_MEM_JSON;
+        case XI_GEN_TBAA_OBJECT:
+            return XI_MEM_OBJECT;
         case XI_GEN_TBAA_TUPLE:
             return XI_MEM_TUPLE;
         case XI_GEN_TBAA_CHAN:

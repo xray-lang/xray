@@ -86,7 +86,7 @@ typedef enum {
     XI_MEM_GLOBAL,   /* global variable dict (REPL name-keyed) */
     XI_MEM_UPVAL,    /* closure upvalue slot */
     XI_MEM_TLS,      /* thread-local / per-isolate state */
-    XI_MEM_JSON,     /* JSON object field access */
+    XI_MEM_OBJECT,   /* fixed and dynamic object field storage */
     XI_MEM_TUPLE,    /* tuple element access */
     XI_MEM_CHAN,     /* channel send/recv buffer */
     XI_MEM_FRESH,    /* storage allocated by this op; aliases nothing */

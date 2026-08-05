@@ -1204,11 +1204,11 @@ TEST(class_field_default_initializer_store_lowers_with_global_evidence_id) {
 #undef REQUIRE_CLASS_FIELD_INIT_EVIDENCE
 }
 
-TEST(json_access_lowers_with_global_evidence_id) {
+TEST(json_dynamic_access_lowers_with_global_evidence_id) {
 #define REQUIRE_JSON_EVIDENCE(cond, msg)                                                           \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
-            fprintf(stderr, "json_access_lowers_with_global_evidence_id: %s\n", msg);              \
+            fprintf(stderr, "json_dynamic_access_lowers_with_global_evidence_id: %s\n", msg);              \
             abort();                                                                               \
         }                                                                                          \
     } while (0)
@@ -1224,7 +1224,8 @@ TEST(json_access_lowers_with_global_evidence_id) {
                                           "print(updateAge())\n",
                                           &ev);
     REQUIRE_JSON_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_EVIDENCE(ev.njson_accesses == 2, "producer should record Json get and set");
+    REQUIRE_JSON_EVIDENCE(ev.nobject_accesses == 2,
+                          "producer should record static Object get and set");
     XiFunc *update = func_tree_find_func_name(main_func, "updateAge");
     REQUIRE_JSON_EVIDENCE(update != NULL, "target function should be present");
 
@@ -1238,14 +1239,14 @@ TEST(json_access_lowers_with_global_evidence_id) {
             XiValue *v = blk->values[i];
             if (!v)
                 continue;
-            if (v->op == XI_JSON_GET_F) {
-                REQUIRE_JSON_EVIDENCE(v->xg_json_access_id != 0,
-                                      "Json field get should bind global access evidence");
-                get_id = v->xg_json_access_id;
-            } else if (v->op == XI_JSON_SET_F) {
-                REQUIRE_JSON_EVIDENCE(v->xg_json_access_id != 0,
-                                      "Json field set should bind global access evidence");
-                set_id = v->xg_json_access_id;
+            if (v->op == XI_OBJECT_GET_F) {
+                REQUIRE_JSON_EVIDENCE(v->xg_object_access_id != 0,
+                                      "Json field get should bind Object access evidence");
+                get_id = v->xg_object_access_id;
+            } else if (v->op == XI_OBJECT_SET_F) {
+                REQUIRE_JSON_EVIDENCE(v->xg_object_access_id != 0,
+                                      "Json field set should bind Object access evidence");
+                set_id = v->xg_object_access_id;
             }
         }
     }
@@ -1255,17 +1256,17 @@ TEST(json_access_lowers_with_global_evidence_id) {
 
     int matched_get = 0;
     int matched_set = 0;
-    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
-        const XgJsonAccessSummary *row = &ev.json_accesses[i];
-        if (row->json_access_id == get_id) {
-            REQUIRE_JSON_EVIDENCE(row->access_kind == XG_JSON_ACCESS_FIELD_GET,
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *row = &ev.object_accesses[i];
+        if (row->object_access_id == get_id) {
+            REQUIRE_JSON_EVIDENCE(row->access_kind == XG_OBJECT_ACCESS_FIELD_GET,
                                   "bound get id should point at field_get row");
             REQUIRE_JSON_EVIDENCE(row->field_ordinal == 1,
                                   "bound get id should preserve field ordinal");
             matched_get = 1;
         }
-        if (row->json_access_id == set_id) {
-            REQUIRE_JSON_EVIDENCE(row->access_kind == XG_JSON_ACCESS_FIELD_SET,
+        if (row->object_access_id == set_id) {
+            REQUIRE_JSON_EVIDENCE(row->access_kind == XG_OBJECT_ACCESS_FIELD_SET,
                                   "bound set id should point at field_set row");
             REQUIRE_JSON_EVIDENCE(row->field_ordinal == 1,
                                   "bound set id should preserve field ordinal");
@@ -1300,8 +1301,8 @@ TEST(json_alias_shape_access_lowers_with_global_evidence_id) {
                                           "print(readAlias())\n",
                                           &ev);
     REQUIRE_JSON_ALIAS_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_ALIAS_EVIDENCE(ev.njson_accesses == 1,
-                                "producer should record one Json alias field get");
+    REQUIRE_JSON_ALIAS_EVIDENCE(ev.nobject_accesses == 1,
+                                "producer should record one Object alias field get");
     XiFunc *read_alias = func_tree_find_func_name(main_func, "readAlias");
     REQUIRE_JSON_ALIAS_EVIDENCE(read_alias != NULL, "target function should be present");
 
@@ -1313,21 +1314,21 @@ TEST(json_alias_shape_access_lowers_with_global_evidence_id) {
             continue;
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (!v || v->op != XI_JSON_GET_F)
+            if (!v || v->op != XI_OBJECT_GET_F)
                 continue;
             direct_count++;
             REQUIRE_JSON_ALIAS_EVIDENCE(v->aux_int == 1,
                                         "alias Json direct get should use propagated ordinal");
-            REQUIRE_JSON_ALIAS_EVIDENCE(v->xg_json_access_id != 0,
-                                        "alias Json direct get should bind global access evidence");
-            access_id = v->xg_json_access_id;
+            REQUIRE_JSON_ALIAS_EVIDENCE(v->xg_object_access_id != 0,
+                                        "alias Json direct get should bind Object evidence");
+            access_id = v->xg_object_access_id;
         }
     }
     REQUIRE_JSON_ALIAS_EVIDENCE(direct_count == 1,
                                 "alias Json field get should lower to one direct indexed get");
-    REQUIRE_JSON_ALIAS_EVIDENCE(access_id == ev.json_accesses[0].json_access_id,
+    REQUIRE_JSON_ALIAS_EVIDENCE(access_id == ev.object_accesses[0].object_access_id,
                                 "bound id should point at propagated alias access row");
-    REQUIRE_JSON_ALIAS_EVIDENCE(ev.json_accesses[0].field_ordinal == 1,
+    REQUIRE_JSON_ALIAS_EVIDENCE(ev.object_accesses[0].field_ordinal == 1,
                                 "propagated alias access should keep field ordinal");
 
     xi_func_free(main_func);
@@ -1355,7 +1356,7 @@ TEST(json_computed_key_access_lowers_with_global_evidence_id) {
                                           "print(readKey(\"name\"))\n",
                                           &ev);
     REQUIRE_JSON_INDEX_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_INDEX_EVIDENCE(ev.njson_accesses == 1,
+    REQUIRE_JSON_INDEX_EVIDENCE(ev.njson_dynamic_accesses == 1,
                                 "producer should record computed Json index get");
     XiFunc *read_key = func_tree_find_func_name(main_func, "readKey");
     REQUIRE_JSON_INDEX_EVIDENCE(read_key != NULL, "target function should be present");
@@ -1369,16 +1370,16 @@ TEST(json_computed_key_access_lowers_with_global_evidence_id) {
             XiValue *v = blk->values[i];
             if (!v || v->op != XI_INDEX_GET)
                 continue;
-            REQUIRE_JSON_INDEX_EVIDENCE(v->xg_json_access_id != 0,
+            REQUIRE_JSON_INDEX_EVIDENCE(v->xg_json_dynamic_access_id != 0,
                                         "Json computed index should bind global access evidence");
-            access_id = v->xg_json_access_id;
+            access_id = v->xg_json_dynamic_access_id;
         }
     }
-    REQUIRE_JSON_INDEX_EVIDENCE(access_id == ev.json_accesses[0].json_access_id,
+    REQUIRE_JSON_INDEX_EVIDENCE(access_id == ev.json_dynamic_accesses[0].json_dynamic_access_id,
                                 "bound id should point at computed-key access row");
-    REQUIRE_JSON_INDEX_EVIDENCE(ev.json_accesses[0].access_kind == XG_JSON_ACCESS_INDEX_GET,
+    REQUIRE_JSON_INDEX_EVIDENCE(ev.json_dynamic_accesses[0].access_kind == XG_JSON_DYNAMIC_ACCESS_INDEX_GET,
                                 "row should describe index_get");
-    REQUIRE_JSON_INDEX_EVIDENCE((ev.json_accesses[0].flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0,
+    REQUIRE_JSON_INDEX_EVIDENCE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY) != 0,
                                 "row should keep computed-key evidence");
 
     xi_func_free(main_func);
@@ -1409,8 +1410,8 @@ TEST(json_static_key_index_lowers_to_direct_field_with_global_evidence_id) {
                                           "print(updateKey())\n",
                                           &ev);
     REQUIRE_JSON_STATIC_INDEX_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_STATIC_INDEX_EVIDENCE(ev.njson_accesses == 2,
-                                       "producer should record static-key get and set");
+    REQUIRE_JSON_STATIC_INDEX_EVIDENCE(ev.nobject_accesses == 2,
+                                       "producer should record static-key Object get and set");
     XiFunc *update_key = func_tree_find_func_name(main_func, "updateKey");
     REQUIRE_JSON_STATIC_INDEX_EVIDENCE(update_key != NULL, "target function should be present");
 
@@ -1427,19 +1428,19 @@ TEST(json_static_key_index_lowers_to_direct_field_with_global_evidence_id) {
                 continue;
             if (v->op == XI_INDEX_GET || v->op == XI_INDEX_SET)
                 generic_index_count++;
-            if (v->op == XI_JSON_GET_F) {
+            if (v->op == XI_OBJECT_GET_F) {
                 REQUIRE_JSON_STATIC_INDEX_EVIDENCE(v->aux_int == 1,
                                                    "static-key get should use field ordinal");
-                REQUIRE_JSON_STATIC_INDEX_EVIDENCE(v->xg_json_access_id != 0,
-                                                   "static-key get should bind evidence");
-                get_id = v->xg_json_access_id;
+                REQUIRE_JSON_STATIC_INDEX_EVIDENCE(v->xg_object_access_id != 0,
+                                                   "static-key get should bind Object evidence");
+                get_id = v->xg_object_access_id;
             }
-            if (v->op == XI_JSON_SET_F) {
+            if (v->op == XI_OBJECT_SET_F) {
                 REQUIRE_JSON_STATIC_INDEX_EVIDENCE(v->aux_int == 1,
                                                    "static-key set should use field ordinal");
-                REQUIRE_JSON_STATIC_INDEX_EVIDENCE(v->xg_json_access_id != 0,
-                                                   "static-key set should bind evidence");
-                set_id = v->xg_json_access_id;
+                REQUIRE_JSON_STATIC_INDEX_EVIDENCE(v->xg_object_access_id != 0,
+                                                   "static-key set should bind Object evidence");
+                set_id = v->xg_object_access_id;
             }
         }
     }
@@ -1452,16 +1453,22 @@ TEST(json_static_key_index_lowers_to_direct_field_with_global_evidence_id) {
 
     bool matched_get = false;
     bool matched_set = false;
-    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
-        const XgJsonAccessSummary *row = &ev.json_accesses[i];
-        if (row->json_access_id == get_id) {
-            REQUIRE_JSON_STATIC_INDEX_EVIDENCE(row->access_kind == XG_JSON_ACCESS_INDEX_GET,
-                                               "bound get id should point at index_get row");
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *row = &ev.object_accesses[i];
+        if (row->object_access_id == get_id) {
+            REQUIRE_JSON_STATIC_INDEX_EVIDENCE(row->access_kind == XG_OBJECT_ACCESS_FIELD_GET,
+                                               "bound get id should point at field_get row");
+            REQUIRE_JSON_STATIC_INDEX_EVIDENCE(
+                row->syntax == XG_OBJECT_ACCESS_SYNTAX_STATIC_INDEX,
+                "bound get row should preserve bracket syntax");
             matched_get = true;
         }
-        if (row->json_access_id == set_id) {
-            REQUIRE_JSON_STATIC_INDEX_EVIDENCE(row->access_kind == XG_JSON_ACCESS_INDEX_SET,
-                                               "bound set id should point at index_set row");
+        if (row->object_access_id == set_id) {
+            REQUIRE_JSON_STATIC_INDEX_EVIDENCE(row->access_kind == XG_OBJECT_ACCESS_FIELD_SET,
+                                               "bound set id should point at field_set row");
+            REQUIRE_JSON_STATIC_INDEX_EVIDENCE(
+                row->syntax == XG_OBJECT_ACCESS_SYNTAX_STATIC_INDEX,
+                "bound set row should preserve bracket syntax");
             matched_set = true;
         }
     }
@@ -1493,10 +1500,11 @@ TEST(json_open_shape_member_access_lowers_to_dynamic_lookup) {
                                           "print(readName(\"age\"))\n",
                                           &ev);
     REQUIRE_JSON_OPEN_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_OPEN_EVIDENCE(ev.njson_shapes == 1, "producer should record one Json shape");
-    REQUIRE_JSON_OPEN_EVIDENCE(ev.njson_accesses == 1, "producer should record Json field get");
-    REQUIRE_JSON_OPEN_EVIDENCE(ev.json_shapes[0].shape_kind == XG_JSON_SHAPE_OPEN,
-                               "shape should be open");
+    REQUIRE_JSON_OPEN_EVIDENCE(ev.nobject_shapes == 0,
+                               "computed-key Json literal should not claim an exact shape");
+    REQUIRE_JSON_OPEN_EVIDENCE(ev.njson_dynamic_accesses == 1, "producer should record Json field get");
+    REQUIRE_JSON_OPEN_EVIDENCE(ev.json_dynamic_accesses[0].receiver_shape_id == XG_NO_ID,
+                               "computed-key receiver should remain dynamically shaped");
 
     XiFunc *read_name = func_tree_find_func_name(main_func, "readName");
     REQUIRE_JSON_OPEN_EVIDENCE(read_name != NULL, "target function should be present");
@@ -1511,7 +1519,7 @@ TEST(json_open_shape_member_access_lowers_to_dynamic_lookup) {
             XiValue *v = blk->values[i];
             if (!v)
                 continue;
-            if (v->op == XI_JSON_GET_F)
+            if (v->op == XI_OBJECT_GET_F)
                 direct_count++;
             if (v->op == XI_LOAD_FIELD && v->aux && strcmp((const char *) v->aux, "name") == 0)
                 dynamic_count++;
@@ -1548,12 +1556,13 @@ TEST(json_open_shape_static_key_index_lowers_to_dynamic_lookup) {
                                           "print(readName(\"age\"))\n",
                                           &ev);
     REQUIRE_JSON_OPEN_INDEX_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.njson_shapes == 1, "producer should record one Json shape");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.njson_accesses == 1,
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.nobject_shapes == 0,
+                                     "computed-key Json literal should not claim an exact shape");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.njson_dynamic_accesses == 1,
                                      "producer should record Json static-key index get");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_shapes[0].shape_kind == XG_JSON_SHAPE_OPEN,
-                                     "shape should be open");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_accesses[0].access_kind == XG_JSON_ACCESS_INDEX_GET,
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_dynamic_accesses[0].receiver_shape_id == XG_NO_ID,
+                                     "computed-key receiver should remain dynamically shaped");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_dynamic_accesses[0].access_kind == XG_JSON_DYNAMIC_ACCESS_INDEX_GET,
                                      "access should be an index_get row");
 
     XiFunc *read_name = func_tree_find_func_name(main_func, "readName");
@@ -1570,11 +1579,11 @@ TEST(json_open_shape_static_key_index_lowers_to_dynamic_lookup) {
             XiValue *v = blk->values[i];
             if (!v)
                 continue;
-            if (v->op == XI_JSON_GET_F)
+            if (v->op == XI_OBJECT_GET_F)
                 direct_count++;
-            if (v->op == XI_INDEX_GET && v->xg_json_access_id != 0) {
+            if (v->op == XI_INDEX_GET && v->xg_json_dynamic_access_id != 0) {
                 dynamic_count++;
-                access_id = v->xg_json_access_id;
+                access_id = v->xg_json_dynamic_access_id;
             }
         }
     }
@@ -1582,7 +1591,7 @@ TEST(json_open_shape_static_key_index_lowers_to_dynamic_lookup) {
                                      "open Json shape must not lower to direct indexed get");
     REQUIRE_JSON_OPEN_INDEX_EVIDENCE(dynamic_count == 1,
                                      "open Json shape should keep dynamic index lookup");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(access_id == ev.json_accesses[0].json_access_id,
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(access_id == ev.json_dynamic_accesses[0].json_dynamic_access_id,
                                      "dynamic index lookup should retain Json evidence id");
 
     xi_func_free(main_func);
@@ -1591,11 +1600,11 @@ TEST(json_open_shape_static_key_index_lowers_to_dynamic_lookup) {
 #undef REQUIRE_JSON_OPEN_INDEX_EVIDENCE
 }
 
-TEST(record_access_lowers_with_global_evidence_id) {
+TEST(object_access_lowers_with_global_evidence_id) {
 #define REQUIRE_RECORD_EVIDENCE(cond, msg)                                                         \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
-            fprintf(stderr, "record_access_lowers_with_global_evidence_id: %s\n", msg);            \
+            fprintf(stderr, "object_access_lowers_with_global_evidence_id: %s\n", msg);            \
             abort();                                                                               \
         }                                                                                          \
     } while (0)
@@ -1610,9 +1619,9 @@ TEST(record_access_lowers_with_global_evidence_id) {
                                           "print(readAge())\n",
                                           &ev);
     REQUIRE_RECORD_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_RECORD_EVIDENCE(ev.njson_accesses == 0,
+    REQUIRE_RECORD_EVIDENCE(ev.njson_dynamic_accesses == 0,
                             "bare object literal should not produce Json access evidence");
-    REQUIRE_RECORD_EVIDENCE(ev.nrecord_accesses == 1, "producer should record Record field get");
+    REQUIRE_RECORD_EVIDENCE(ev.nobject_accesses == 1, "producer should record Record field get");
     XiFunc *read = func_tree_find_func_name(main_func, "readAge");
     REQUIRE_RECORD_EVIDENCE(read != NULL, "target function should be present");
 
@@ -1624,21 +1633,21 @@ TEST(record_access_lowers_with_global_evidence_id) {
             continue;
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (!v || v->op != XI_JSON_GET_F)
+            if (!v || v->op != XI_OBJECT_GET_F)
                 continue;
-            if (v->xg_json_access_id != 0)
+            if (v->xg_json_dynamic_access_id != 0)
                 json_bound_count++;
-            if (v->xg_record_access_id != 0)
-                get_id = v->xg_record_access_id;
+            if (v->xg_object_access_id != 0)
+                get_id = v->xg_object_access_id;
         }
     }
     REQUIRE_RECORD_EVIDENCE(json_bound_count == 0, "Record access should not bind Json id");
     REQUIRE_RECORD_EVIDENCE(get_id != 0, "Record field get should bind global access evidence");
-    REQUIRE_RECORD_EVIDENCE(ev.record_accesses[0].record_access_id == get_id,
+    REQUIRE_RECORD_EVIDENCE(ev.object_accesses[0].object_access_id == get_id,
                             "bound id should point at Record access row");
-    REQUIRE_RECORD_EVIDENCE(ev.record_accesses[0].access_kind == XG_RECORD_ACCESS_FIELD_GET,
+    REQUIRE_RECORD_EVIDENCE(ev.object_accesses[0].access_kind == XG_OBJECT_ACCESS_FIELD_GET,
                             "bound id should point at field_get row");
-    REQUIRE_RECORD_EVIDENCE(ev.record_accesses[0].field_ordinal == 1,
+    REQUIRE_RECORD_EVIDENCE(ev.object_accesses[0].field_ordinal == 1,
                             "bound id should preserve field ordinal");
 
     xi_func_free(main_func);
@@ -1673,7 +1682,7 @@ TEST(structural_object_dot_and_static_index_share_fixed_field_lowering) {
         "}\n",
         &ev);
     REQUIRE_OBJECT_FIELD_EQUIVALENCE(root != NULL, "source should lower");
-    REQUIRE_OBJECT_FIELD_EQUIVALENCE(ev.nrecord_accesses == 4,
+    REQUIRE_OBJECT_FIELD_EQUIVALENCE(ev.nobject_accesses == 4,
                                      "producer should record both get/set syntax pairs");
 
     XiFunc *dot = func_tree_find_func_name(root, "dotAccess");
@@ -1701,14 +1710,14 @@ TEST(structural_object_dot_and_static_index_share_fixed_field_lowering) {
                     generic_counts[f]++;
                 if (value->op == XI_CONST && value->type && XR_TYPE_IS_STRING(value->type))
                     string_constant_counts[f]++;
-                if (value->op != XI_JSON_GET_F && value->op != XI_JSON_SET_F)
+                if (value->op != XI_OBJECT_GET_F && value->op != XI_OBJECT_SET_F)
                     continue;
                 REQUIRE_OBJECT_FIELD_EQUIVALENCE(field_counts[f] < 2,
                                                  "fixture should contain one get and one set");
                 field_ops[f][field_counts[f]] = value->op;
                 field_ordinals[f][field_counts[f]] = value->aux_int;
                 field_counts[f]++;
-                if (value->xg_record_access_id != 0)
+                if (value->xg_object_access_id != 0)
                     bound_record_counts[f]++;
             }
         }
@@ -1734,6 +1743,79 @@ TEST(structural_object_dot_and_static_index_share_fixed_field_lowering) {
     xg_global_evidence_free(&ev);
 
 #undef REQUIRE_OBJECT_FIELD_EQUIVALENCE
+}
+
+TEST(open_row_object_access_selects_vm_descriptor_dispatch_only_when_required) {
+#define REQUIRE_OPEN_ROW_DISPATCH(cond, msg)                                                       \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr,                                                                        \
+                    "open_row_object_access_selects_vm_descriptor_dispatch_only_when_required: " \
+                    "%s\n",                                                                      \
+                    msg);                                                                          \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+    XgGlobalEvidence ev;
+    memset(&ev, 0, sizeof(ev));
+    XiFunc *root = lower_source_with_global_evidence(
+        "type Named = { name: string, ... }\n"
+        "fn readDirect(value: Named) -> string { return value.name }\n"
+        "fn readGuard(value: Named) -> string { return value.name }\n"
+        "fn readDispatch(value: Named) -> string { return value[\"name\"] }\n"
+        "fn forwardDirect(value: Named) -> string { return readDirect(value) }\n"
+        "fn exercise() -> string {\n"
+        "    var a = forwardDirect({ name: \"ada\", age: 1 })\n"
+        "    var b = forwardDirect({ name: \"bob\", zzz: 2 })\n"
+        "    var c = readGuard({ name: \"cat\", tag: 3 })\n"
+        "    var d = readDispatch({ age: 4, name: \"dot\" })\n"
+        "    var e = readDispatch({ id: 5, name: \"eve\" })\n"
+        "    return a + b + c + d + e\n"
+        "}\n",
+        &ev);
+    REQUIRE_OPEN_ROW_DISPATCH(root != NULL, "source should lower");
+
+    const char *func_names[] = {"readDirect", "readGuard", "readDispatch"};
+    const bool expect_descriptor_dispatch[] = {false, true, true};
+    for (uint32_t f = 0; f < 3; f++) {
+        XiFunc *func = func_tree_find_func_name(root, func_names[f]);
+        REQUIRE_OPEN_ROW_DISPATCH(func != NULL, "target function should be present");
+        XiValue *field_get = NULL;
+        for (uint32_t b = 0; b < func->nblocks; b++) {
+            XiBlock *block = func->blocks[b];
+            if (!block)
+                continue;
+            for (uint32_t i = 0; i < block->nvalues; i++) {
+                XiValue *value = block->values[i];
+                if (!value || value->op != XI_OBJECT_GET_F)
+                    continue;
+                REQUIRE_OPEN_ROW_DISPATCH(field_get == NULL,
+                                          "fixture should emit one fixed-field get per reader");
+                field_get = value;
+            }
+        }
+        REQUIRE_OPEN_ROW_DISPATCH(field_get != NULL, "reader should emit a fixed-field get");
+        REQUIRE_OPEN_ROW_DISPATCH(field_get->xg_object_access_id != 0,
+                                  "open-row get should bind structural access evidence");
+        bool has_descriptor_dispatch =
+            (field_get->lowering_flags & XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH) != 0;
+        REQUIRE_OPEN_ROW_DISPATCH(has_descriptor_dispatch == expect_descriptor_dispatch[f],
+                                  "VM dispatch selection should match closed-world shape evidence");
+        if (has_descriptor_dispatch) {
+            REQUIRE_OPEN_ROW_DISPATCH(field_get->aux != NULL &&
+                                          strcmp((const char *) field_get->aux, "name") == 0,
+                                      "descriptor dispatch should retain the verified field symbol");
+        } else {
+            REQUIRE_OPEN_ROW_DISPATCH(field_get->aux == NULL,
+                                      "raw-ordinal access should not carry a field-name fallback");
+        }
+    }
+
+    xi_func_free(root);
+    xg_global_evidence_free(&ev);
+
+#undef REQUIRE_OPEN_ROW_DISPATCH
 }
 
 static const char *json_codec_same_line_source(void) {
@@ -3200,13 +3282,14 @@ int main(void) {
     run_object_literal();
     run_class_field_access_lowers_with_global_evidence_id();
     run_class_field_default_initializer_store_lowers_with_global_evidence_id();
-    run_json_access_lowers_with_global_evidence_id();
+    run_json_dynamic_access_lowers_with_global_evidence_id();
     run_json_alias_shape_access_lowers_with_global_evidence_id();
     run_json_computed_key_access_lowers_with_global_evidence_id();
     run_json_static_key_index_lowers_to_direct_field_with_global_evidence_id();
     run_json_open_shape_member_access_lowers_to_dynamic_lookup();
     run_json_open_shape_static_key_index_lowers_to_dynamic_lookup();
-    run_record_access_lowers_with_global_evidence_id();
+    run_object_access_lowers_with_global_evidence_id();
+    run_open_row_object_access_selects_vm_descriptor_dispatch_only_when_required();
     run_structural_object_dot_and_static_index_share_fixed_field_lowering();
     run_json_codec_calls_bind_exact_source_node_evidence_ids();
     run_json_codec_binding_does_not_fallback_to_source_span();

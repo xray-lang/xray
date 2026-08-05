@@ -30,6 +30,98 @@ static XrVMRuntime *g_iso = NULL;
 static XrCompilerSession *g_session = NULL;
 static XrType stub_int_type = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 
+static void finalize_object_shape_fixture(XgObjectShapeSummary *shape) {
+    if (!shape)
+        return;
+    shape->domain = XG_OBJECT_DOMAIN_STRUCT;
+    shape->provenance = shape->shape_kind;
+    shape->concrete_exact = 1;
+    shape->stable_type_key = shape->type_key ? shape->type_key : 1;
+    shape->stable_shape_key = shape->shape_hash ? shape->shape_hash : 1;
+    shape->shape_hash = shape->stable_shape_key;
+}
+
+static void finalize_object_shape_fields_fixture(XgObjectShapeSummary *shape,
+                                                 XgObjectFieldSummary *fields,
+                                                 uint16_t field_count) {
+    if (!shape || shape->field_count != field_count)
+        abort();
+    finalize_object_shape_fixture(shape);
+    for (uint16_t i = 0; i < field_count; i++) {
+        if (fields[i].stable_name_key == 0)
+            abort();
+    }
+    if (!xg_object_shape_stable_key(shape->domain, fields, field_count,
+                                    &shape->stable_shape_key))
+        abort();
+    shape->shape_hash = shape->stable_shape_key;
+}
+
+static void finalize_object_access_fixture(XgObjectAccessSummary *access) {
+    if (!access)
+        return;
+    access->domain = XG_OBJECT_DOMAIN_STRUCT;
+    access->syntax = XG_OBJECT_ACCESS_SYNTAX_DOT;
+    access->receiver_shape_count = access->receiver_shape_id != XG_NO_ID ? 1 : 0;
+    access->receiver_shape_set_id = access->receiver_shape_id;
+    access->constraint_shape_id = access->receiver_shape_id;
+    access->receiver_param_ordinal = UINT16_MAX;
+}
+
+static const XgObjectShapeSummary *evidence_object_shape_by_domain(
+    const XgGlobalEvidence *ev, uint8_t domain, uint32_t ordinal) {
+    if (!ev)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nobject_shapes; i++) {
+        if (ev->object_shapes[i].domain != domain)
+            continue;
+        if (ordinal-- == 0)
+            return &ev->object_shapes[i];
+    }
+    return NULL;
+}
+
+static uint32_t evidence_object_shape_count_by_domain(const XgGlobalEvidence *ev,
+                                                      uint8_t domain) {
+    uint32_t count = 0;
+    if (!ev)
+        return 0;
+    for (uint32_t i = 0; i < ev->nobject_shapes; i++) {
+        if (ev->object_shapes[i].domain == domain)
+            count++;
+    }
+    return count;
+}
+
+static const XgObjectFieldSummary *evidence_object_field_by_domain(
+    const XgGlobalEvidence *ev, uint8_t domain, uint32_t ordinal) {
+    if (!ev)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nobject_fields; i++) {
+        const XgObjectShapeSummary *shape =
+            xg_global_evidence_find_object_shape(ev, ev->object_fields[i].shape_id);
+        if (!shape || shape->domain != domain)
+            continue;
+        if (ordinal-- == 0)
+            return &ev->object_fields[i];
+    }
+    return NULL;
+}
+
+static uint32_t evidence_object_field_count_by_domain(const XgGlobalEvidence *ev,
+                                                      uint8_t domain) {
+    uint32_t count = 0;
+    if (!ev)
+        return 0;
+    for (uint32_t i = 0; i < ev->nobject_fields; i++) {
+        const XgObjectShapeSummary *shape =
+            xg_global_evidence_find_object_shape(ev, ev->object_fields[i].shape_id);
+        if (shape && shape->domain == domain)
+            count++;
+    }
+    return count;
+}
+
 static void setup_parser_session(void) {
     if (g_iso)
         return;
@@ -807,7 +899,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=35 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=40 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1181,15 +1273,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=35 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=35 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=35 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=35 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=40 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=40 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=40 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=40 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=35 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=35 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=35 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=35 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=40 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=40 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=40 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=40 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -5233,7 +5325,8 @@ TEST(global_evidence_verifier_rejects_stale_callsite_identity_rows) {
     closure_stale_body.callsite_start = 1;
     closure_stale_body.callsite_count = 1;
     closure_stale_call.kind = XG_CALL_CLOSURE;
-    closure_stale_call.static_target_func_id = 123;
+    closure_stale_call.static_target_func_id = XG_NO_ID;
+    closure_stale_call.method_id = 123;
     xg_global_evidence_init(&closure_stale_ev, closure_stale_key);
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&closure_stale_ev, &decl));
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&closure_stale_ev, &closure_stale_body));
@@ -10126,952 +10219,7 @@ TEST(global_evidence_rejects_eq_only_as_hashable_plan) {
     xg_global_evidence_free(&ev);
 }
 
-TEST(global_evidence_records_json_shape_and_access_plans) {
-    XgBuildKey key = {.source_hash = 11,
-                      .compiler_semver_hash = 22,
-                      .profile_hash = 33,
-                      .imported_summary_hash = 44,
-                      .module_id = 1,
-                      .profile = XG_BUILD_NATIVE_RELEASE};
-    XgGlobalEvidence ev;
-    xg_global_evidence_init(&ev, key);
-
-    XgJsonShapeSummary shape = {.json_shape_id = 1,
-                                .module_id = 1,
-                                .owner_func_id = 7,
-                                .source_span_id = 100,
-                                .type_key = 200,
-                                .field_name_start = 300,
-                                .field_count = 2,
-                                .shape_kind = XG_JSON_SHAPE_SHAPED,
-                                .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_MUTABLE,
-                                .shape_hash = 0};
-    XgJsonFieldSummary id_field = {.field_id = 1,
-                                   .shape_id = 1,
-                                   .field_ordinal = 0,
-                                   .name_id = 0,
-                                   .type_key = 200,
-                                   .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
-    XgJsonFieldSummary name_field = {.field_id = 2,
-                                     .shape_id = 1,
-                                     .field_ordinal = 1,
-                                     .name_id = 0,
-                                     .type_key = 201,
-                                     .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
-    XgJsonAccessSummary direct = {.json_access_id = 1,
-                                  .module_id = 1,
-                                  .owner_func_id = 7,
-                                  .receiver_shape_id = 1,
-                                  .source_span_id = 101,
-                                  .key_name_id = xg_name_id("name"),
-                                  .result_type_key = 201,
-                                  .field_ordinal = 1,
-                                  .access_kind = XG_JSON_ACCESS_FIELD_GET,
-                                  .flags = XG_JSON_ACCESS_STATIC_KEY |
-                                           XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN};
-    XgJsonAccessSummary dynamic = {.json_access_id = 2,
-                                   .module_id = 1,
-                                   .owner_func_id = 7,
-                                   .receiver_shape_id = XG_NO_ID,
-                                   .source_span_id = 102,
-                                   .key_name_id = 0,
-                                   .result_type_key = 202,
-                                   .field_ordinal = UINT16_MAX,
-                                   .access_kind = XG_JSON_ACCESS_INDEX_GET,
-                                   .flags = XG_JSON_ACCESS_COMPUTED_KEY};
-    id_field.name_id = xg_name_id("id");
-    name_field.name_id = xg_name_id("name");
-    shape.shape_hash = xg_json_shape_hash_begin(shape.field_count);
-    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
-                                                    id_field.name_id, id_field.type_key);
-    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
-                                                    name_field.name_id, name_field.type_key);
-    shape.field_name_start = (uint32_t) shape.shape_hash;
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(&ev, &shape));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&ev, &id_field));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&ev, &name_field));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_access(&ev, &direct));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_access(&ev, &dynamic));
-
-    char *dump = xg_global_evidence_dump(&ev);
-    ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "json-shape 0 id=1 module=1 func=7 type=200 kind=shaped"));
-    ASSERT_NOT_NULL(strstr(dump, "json-access 0 id=1 module=1 func=7 shape=1 kind=field_get"));
-    ASSERT_NOT_NULL(strstr(dump, "json-access 1 id=2 module=1 func=7 shape=0 kind=index_get"));
-    xr_free(dump);
-
-    XaotBundle bundle;
-    memset(&bundle, 0, sizeof(bundle));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_shape_plans, 1);
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 2);
-    const XaotJsonShapePlan *shape_plan = xaot_bundle_find_json_shape_plan(&bundle, 1);
-    const XaotJsonAccessPlan *direct_plan = xaot_bundle_find_json_access_plan(&bundle, 1);
-    const XaotJsonAccessPlan *dynamic_plan = xaot_bundle_find_json_access_plan(&bundle, 2);
-    ASSERT_NOT_NULL(shape_plan);
-    ASSERT_NOT_NULL(direct_plan);
-    ASSERT_NOT_NULL(dynamic_plan);
-    ASSERT_EQ_UINT(shape_plan->action, XAOT_JSON_SHAPE_HIDDEN_CLASS);
-    ASSERT_EQ_UINT(direct_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(direct_plan->evidence, XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_STATIC_KEY |
-                                              XAOT_JSON_EV_RECEIVER_SHAPE |
-                                              XAOT_JSON_EV_FIELD_INDEX);
-    ASSERT_EQ_UINT(dynamic_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
-    ASSERT_EQ_UINT(dynamic_plan->unproven_reason, XAOT_JSON_UNPROVEN_COMPUTED_KEY);
-
-    char *plan_dump = xaot_bundle_dump_plan(&bundle);
-    ASSERT_NOT_NULL(plan_dump);
-    ASSERT_NOT_NULL(strstr(plan_dump, "json-shape-plan 0 id=1"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "kind=shaped action=hidden_class"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "json-access-plan 0 id=1"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=direct_index"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "json-access-plan 1 id=2"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=dynamic_lookup"));
-    xr_free(plan_dump);
-
-    XiFunc init_func;
-    XiModule module;
-    XiModule *modules[1];
-    memset(&init_func, 0, sizeof(init_func));
-    init_func.name = "init";
-    memset(&module, 0, sizeof(module));
-    module.path = "test.xr";
-    module.name = "test";
-    module.init = &init_func;
-    modules[0] = &module;
-    bundle.modules = modules;
-    bundle.nmodules = 1;
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
-    char err[256];
-    memset(err, 0, sizeof(err));
-    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
-    bundle.json_access_plans[0].action = XAOT_JSON_ACCESS_DYNAMIC_LOOKUP;
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Json access plan action does not re-derive"));
-
-    xaot_bundle_free(&bundle);
-    xg_global_evidence_free(&ev);
-}
-
-TEST(global_evidence_records_json_codec_plans) {
-    XgBuildKey key = {.source_hash = 12,
-                      .compiler_semver_hash = 23,
-                      .profile_hash = 34,
-                      .imported_summary_hash = 45,
-                      .module_id = 1,
-                      .profile = XG_BUILD_NATIVE_RELEASE};
-    XgGlobalEvidence ev;
-    xg_global_evidence_init(&ev, key);
-
-    XgJsonShapeSummary shape = {.json_shape_id = 1,
-                                .record_shape_id = 1,
-                                .module_id = 1,
-                                .owner_func_id = 7,
-                                .source_span_id = 100,
-                                .type_key = 30,
-                                .field_name_start = 300,
-                                .field_count = 2,
-                                .shape_kind = XG_JSON_SHAPE_RECORD_BRIDGE,
-                                .flags =
-                                    XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_RECORD_BRIDGEABLE,
-                                .shape_hash = 0};
-    XgJsonFieldSummary name_field = {.field_id = 1,
-                                     .shape_id = 1,
-                                     .field_ordinal = 0,
-                                     .name_id = 0,
-                                     .type_key = 201,
-                                     .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED |
-                                              XG_JSON_FIELD_RECORD_BRIDGE};
-    XgJsonFieldSummary age_field = {.field_id = 2,
-                                    .shape_id = 1,
-                                    .field_ordinal = 1,
-                                    .name_id = 0,
-                                    .type_key = 202,
-                                    .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED |
-                                             XG_JSON_FIELD_RECORD_BRIDGE};
-    XgRecordShapeSummary record_shape = {.record_shape_id = 1,
-                                         .json_shape_id = 1,
-                                         .module_id = 1,
-                                         .owner_func_id = 7,
-                                         .source_span_id = 100,
-                                         .type_key = 30,
-                                         .field_count = 2,
-                                         .shape_kind = XG_RECORD_SHAPE_STATIC,
-                                         .flags = XG_RECORD_SHAPE_SEALED |
-                                                  XG_RECORD_SHAPE_STATIC_KEYS |
-                                                  XG_RECORD_SHAPE_JSON_BRIDGEABLE};
-    XgRecordFieldSummary record_name_field = {.field_id = 1,
-                                              .shape_id = 1,
-                                              .field_ordinal = 0,
-                                              .name_id = 0,
-                                              .type_key = 201,
-                                              .flags = XG_RECORD_FIELD_REQUIRED |
-                                                       XG_RECORD_FIELD_STATIC_KEY};
-    XgRecordFieldSummary record_age_field = {.field_id = 2,
-                                             .shape_id = 1,
-                                             .field_ordinal = 1,
-                                             .name_id = 0,
-                                             .type_key = 202,
-                                             .flags = XG_RECORD_FIELD_REQUIRED |
-                                                      XG_RECORD_FIELD_STATIC_KEY};
-    XgJsonCodecSummary parse = {.codec_id = 1,
-                                .module_id = 1,
-                                .owner_func_id = 7,
-                                .source_node_id = 1001,
-                                .source_span_id = 101,
-                                .codec_kind = XG_JSON_CODEC_PARSE,
-                                .input_type_key = 10,
-                                .field_count = 0};
-    XgJsonCodecSummary decode = {
-        .codec_id = 2,
-        .module_id = 1,
-        .owner_func_id = 7,
-        .source_node_id = 1002,
-        .source_span_id = 102,
-        .codec_kind = XG_JSON_CODEC_DECODE,
-        .input_type_key = 20,
-        .target_type_key = 30,
-        .input_shape_id = 1,
-        .output_shape_id = 1,
-        .record_shape_id = 1,
-        .field_count = 2,
-        .flags = XG_JSON_CODEC_HAS_INPUT_SHAPE | XG_JSON_CODEC_HAS_OUTPUT_SHAPE |
-                 XG_JSON_CODEC_HAS_TARGET_TYPE | XG_JSON_CODEC_HAS_RECORD_SHAPE};
-    XgJsonCodecSummary encode = {.codec_id = 3,
-                                 .module_id = 1,
-                                 .owner_func_id = 7,
-                                 .source_node_id = 1003,
-                                 .source_span_id = 103,
-                                 .codec_kind = XG_JSON_CODEC_ENCODE,
-                                 .input_type_key = 30,
-                                 .input_shape_id = 1,
-                                 .record_shape_id = 1,
-                                 .field_count = 2,
-                                 .flags = XG_JSON_CODEC_HAS_INPUT_SHAPE |
-                                          XG_JSON_CODEC_USES_DERIVE |
-                                          XG_JSON_CODEC_HAS_RECORD_SHAPE};
-    XgJsonCodecSummary stringify = {.codec_id = 4,
-                                    .module_id = 1,
-                                    .owner_func_id = 7,
-                                    .source_node_id = 1004,
-                                    .source_span_id = 104,
-                                    .codec_kind = XG_JSON_CODEC_STRINGIFY,
-                                    .input_type_key = 30,
-                                    .input_shape_id = 1,
-                                    .field_count = 2,
-                                    .flags = XG_JSON_CODEC_HAS_INPUT_SHAPE};
-    name_field.name_id = xg_name_id("name");
-    age_field.name_id = xg_name_id("age");
-    record_name_field.name_id = name_field.name_id;
-    record_age_field.name_id = age_field.name_id;
-    shape.shape_hash = xg_json_shape_hash_begin(shape.field_count);
-    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
-                                                    name_field.name_id, name_field.type_key);
-    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
-                                                    age_field.name_id, age_field.type_key);
-    shape.field_name_start = (uint32_t) shape.shape_hash;
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(&ev, &shape));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&ev, &name_field));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&ev, &age_field));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &record_shape));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_field(&ev, &record_name_field));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_field(&ev, &record_age_field));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &parse));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &decode));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &encode));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &stringify));
-
-    char *dump = xg_global_evidence_dump(&ev);
-    ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "json_codecs=4"));
-    ASSERT_NOT_NULL(strstr(dump, "json-codec 0 id=1 module=1 func=7 node=1001 kind=parse"));
-    ASSERT_NOT_NULL(strstr(dump, "json-codec 1 id=2 module=1 func=7 node=1002 kind=decode"));
-    ASSERT_NOT_NULL(strstr(dump, "json-codec 2 id=3 module=1 func=7 node=1003 kind=encode"));
-    ASSERT_NOT_NULL(strstr(dump, "json-codec 3 id=4 module=1 func=7 node=1004 kind=stringify"));
-    xr_free(dump);
-
-    uint64_t evidence_hash = xg_global_evidence_hash(&ev);
-    XgEvidenceCacheKey cache_key =
-        xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
-    ev.json_codecs[0].source_node_id++;
-    ASSERT_NE(xg_global_evidence_hash(&ev), evidence_hash);
-    ASSERT_NE(xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE).content_hash,
-              cache_key.content_hash);
-    ev.json_codecs[0].source_node_id--;
-
-    char *payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
-    XgGlobalEvidence materialized = {0};
-    ASSERT_NOT_NULL(payload);
-    ASSERT_NOT_NULL(strstr(payload, "json-codec id=1 module=1 func=7 node=1001"));
-    ASSERT_TRUE(xg_evidence_cache_payload_materialize(payload, &materialized));
-    ASSERT_EQ_UINT(materialized.njson_codecs, 4);
-    ASSERT_EQ_UINT(materialized.json_codecs[0].source_node_id, 1001);
-    ASSERT_EQ_UINT(materialized.json_codecs[1].source_node_id, 1002);
-    ASSERT_EQ_UINT(materialized.json_shapes[0].record_shape_id, 1);
-    ASSERT_EQ_UINT(materialized.record_shapes[0].json_shape_id, 1);
-    ASSERT_EQ_UINT(materialized.json_codecs[1].record_shape_id, 1);
-    ASSERT_EQ_UINT(materialized.json_codecs[2].record_shape_id, 1);
-    xg_global_evidence_free(&materialized);
-    xr_free(payload);
-
-    XaotBundle bundle;
-    memset(&bundle, 0, sizeof(bundle));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_codec_plans, 4);
-    const XaotJsonCodecPlan *parse_plan = xaot_bundle_find_json_codec_plan(&bundle, 1);
-    const XaotJsonCodecPlan *decode_plan = xaot_bundle_find_json_codec_plan(&bundle, 2);
-    const XaotJsonCodecPlan *encode_plan = xaot_bundle_find_json_codec_plan(&bundle, 3);
-    const XaotJsonCodecPlan *stringify_plan = xaot_bundle_find_json_codec_plan(&bundle, 4);
-    ASSERT_NOT_NULL(parse_plan);
-    ASSERT_NOT_NULL(decode_plan);
-    ASSERT_NOT_NULL(encode_plan);
-    ASSERT_NOT_NULL(stringify_plan);
-    ASSERT_EQ_UINT(parse_plan->source_node_id, 1001);
-    ASSERT_EQ_UINT(decode_plan->source_node_id, 1002);
-    ASSERT_EQ_UINT(parse_plan->action, XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT);
-    ASSERT_EQ_UINT(decode_plan->action, XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
-    ASSERT_EQ_UINT(encode_plan->action, XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR);
-    ASSERT_EQ_UINT(stringify_plan->action, XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
-    ASSERT_EQ_UINT(decode_plan->evidence, XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_INPUT_SHAPE |
-                                              XAOT_JSON_EV_OUTPUT_SHAPE | XAOT_JSON_EV_TARGET_TYPE |
-                                              XAOT_JSON_EV_RECORD_BRIDGE);
-    ASSERT_EQ_UINT(encode_plan->evidence, XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_INPUT_SHAPE |
-                                              XAOT_JSON_EV_DERIVE | XAOT_JSON_EV_RECORD_BRIDGE);
-
-    char *plan_dump = xaot_bundle_dump_plan(&bundle);
-    ASSERT_NOT_NULL(plan_dump);
-    ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 0 id=1"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=parse_runtime_direct"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 1 id=2"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=decode_validate_copy"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 2 id=3"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=encode_derive_sidecar"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "json-codec-plan 3 id=4"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=stringify_dynamic_walk"));
-    xr_free(plan_dump);
-
-    XiFunc init_func;
-    XiModule module;
-    XiModule *modules[1];
-    memset(&init_func, 0, sizeof(init_func));
-    init_func.name = "init";
-    memset(&module, 0, sizeof(module));
-    module.path = "test.xr";
-    module.name = "test";
-    module.init = &init_func;
-    modules[0] = &module;
-    bundle.modules = modules;
-    bundle.nmodules = 1;
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
-    char err[256];
-    memset(err, 0, sizeof(err));
-    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
-    bundle.json_codec_plans[1].source_node_id++;
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Json codec plan identity does not re-derive"));
-    bundle.json_codec_plans[1].source_node_id--;
-    bundle.json_codec_plans[1].action = XAOT_JSON_CODEC_PARSE_DOM_BRIDGE;
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Json codec plan action does not re-derive"));
-
-    xaot_bundle_free(&bundle);
-    xg_global_evidence_free(&ev);
-}
-
-TEST(global_evidence_records_record_shape_and_access_plans) {
-    XgBuildKey key = {.source_hash = 31,
-                      .compiler_semver_hash = 32,
-                      .profile_hash = 33,
-                      .imported_summary_hash = 34,
-                      .module_id = 1,
-                      .profile = XG_BUILD_NATIVE_RELEASE};
-    XgGlobalEvidence ev;
-    xg_global_evidence_init(&ev, key);
-
-    XgRecordShapeSummary shape = {.record_shape_id = 1,
-                                  .module_id = 1,
-                                  .owner_func_id = 7,
-                                  .source_span_id = 100,
-                                  .type_key = 200,
-                                  .field_name_start = 300,
-                                  .field_count = 2,
-                                  .shape_kind = XG_RECORD_SHAPE_LITERAL,
-                                  .flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS |
-                                           XG_RECORD_SHAPE_JSON_BRIDGEABLE,
-                                  .shape_hash = UINT64_C(0x2345)};
-    XgRecordAccessSummary access = {.record_access_id = 1,
-                                    .module_id = 1,
-                                    .owner_func_id = 7,
-                                    .receiver_shape_id = 1,
-                                    .source_span_id = 101,
-                                    .field_name_id = xg_name_id("x"),
-                                    .result_type_key = 201,
-                                    .field_ordinal = 0,
-                                    .access_kind = XG_RECORD_ACCESS_FIELD_GET,
-                                    .flags = XG_RECORD_ACCESS_STATIC_FIELD |
-                                             XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN};
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &shape));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_access(&ev, &access));
-
-    char *dump = xg_global_evidence_dump(&ev);
-    ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "record-shape 0 id=1 module=1 func=7 type=200 kind=literal"));
-    ASSERT_NOT_NULL(strstr(dump, "record-access 0 id=1 module=1 func=7 shape=1 kind=field_get"));
-    xr_free(dump);
-
-    XaotBundle bundle;
-    memset(&bundle, 0, sizeof(bundle));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.nrecord_shape_plans, 1);
-    ASSERT_EQ_UINT(bundle.nrecord_access_plans, 1);
-    const XaotRecordShapePlan *shape_plan = xaot_bundle_find_record_shape_plan(&bundle, 1);
-    const XaotRecordAccessPlan *access_plan = xaot_bundle_find_record_access_plan(&bundle, 1);
-    ASSERT_NOT_NULL(shape_plan);
-    ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(shape_plan->action, XAOT_RECORD_SHAPE_SEALED_RECORD);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
-    ASSERT_EQ_UINT(access_plan->evidence, XAOT_RECORD_EV_GLOBAL_ROW | XAOT_RECORD_EV_STATIC_FIELD |
-                                              XAOT_RECORD_EV_RECEIVER_SHAPE |
-                                              XAOT_RECORD_EV_FIELD_INDEX);
-
-    char *plan_dump = xaot_bundle_dump_plan(&bundle);
-    ASSERT_NOT_NULL(plan_dump);
-    ASSERT_NOT_NULL(strstr(plan_dump, "record-shape-plan 0 id=1"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=sealed_record"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "record-access-plan 0 id=1"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=direct_field"));
-    xr_free(plan_dump);
-
-    XiFunc init_func;
-    XiModule module;
-    XiModule *modules[1];
-    memset(&init_func, 0, sizeof(init_func));
-    init_func.name = "init";
-    memset(&module, 0, sizeof(module));
-    module.path = "test.xr";
-    module.name = "test";
-    module.init = &init_func;
-    modules[0] = &module;
-    bundle.modules = modules;
-    bundle.nmodules = 1;
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
-    char err[256];
-    memset(err, 0, sizeof(err));
-    ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
-    bundle.record_access_plans[0].action = XAOT_RECORD_ACCESS_CHECKED_FIELD;
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Record access plan action does not re-derive"));
-
-    xaot_bundle_free(&bundle);
-    xg_global_evidence_free(&ev);
-}
-
-TEST(global_evidence_verifier_rejects_stale_json_record_field_rows) {
-    XgBuildKey key = {.source_hash = 35,
-                      .compiler_semver_hash = 36,
-                      .profile_hash = 37,
-                      .imported_summary_hash = 38,
-                      .module_id = 1,
-                      .profile = XG_BUILD_NATIVE_RELEASE};
-    XgGlobalEvidence json_ev;
-    xg_global_evidence_init(&json_ev, key);
-    XgJsonShapeSummary json_shape = {.json_shape_id = 1,
-                                     .module_id = 1,
-                                     .owner_func_id = 7,
-                                     .source_span_id = 100,
-                                     .type_key = 200,
-                                     .field_count = 1,
-                                     .shape_kind = XG_JSON_SHAPE_SHAPED,
-                                     .flags = XG_JSON_SHAPE_STATIC_KEYS,
-                                     .shape_hash = UINT64_C(0x2346)};
-    XgJsonFieldSummary json_field = {.field_id = 1,
-                                     .shape_id = 1,
-                                     .field_ordinal = 1,
-                                     .name_id = xg_name_id("stale"),
-                                     .type_key = 201,
-                                     .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(&json_ev, &json_shape));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&json_ev, &json_field));
-
-    XiFunc init_func;
-    XiModule module;
-    XiModule *modules[1];
-    memset(&init_func, 0, sizeof(init_func));
-    init_func.name = "init";
-    memset(&module, 0, sizeof(module));
-    module.path = "test.xr";
-    module.name = "test";
-    module.init = &init_func;
-    modules[0] = &module;
-
-    XaotBundle json_bundle;
-    memset(&json_bundle, 0, sizeof(json_bundle));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&json_bundle, &json_ev, XG_BUILD_NATIVE_RELEASE));
-    json_bundle.modules = modules;
-    json_bundle.nmodules = 1;
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&json_bundle, &init_func, 0, 0));
-    char err[256];
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&json_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Json field ordinal is stale"));
-    xaot_bundle_free(&json_bundle);
-    xg_global_evidence_free(&json_ev);
-
-    XgGlobalEvidence record_ev;
-    xg_global_evidence_init(&record_ev, key);
-    XgRecordShapeSummary record_shape = {.record_shape_id = 1,
-                                         .module_id = 1,
-                                         .owner_func_id = 7,
-                                         .source_span_id = 100,
-                                         .type_key = 200,
-                                         .field_count = 1,
-                                         .shape_kind = XG_RECORD_SHAPE_LITERAL,
-                                         .flags =
-                                             XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS,
-                                         .shape_hash = UINT64_C(0x2347)};
-    XgRecordFieldSummary record_field = {.field_id = 1,
-                                         .shape_id = 1,
-                                         .field_ordinal = 1,
-                                         .name_id = xg_name_id("stale"),
-                                         .type_key = 201,
-                                         .flags =
-                                             XG_RECORD_FIELD_STATIC_KEY | XG_RECORD_FIELD_REQUIRED};
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&record_ev, &record_shape));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_field(&record_ev, &record_field));
-
-    XaotBundle record_bundle;
-    memset(&record_bundle, 0, sizeof(record_bundle));
-    ASSERT_TRUE(
-        xaot_bundle_set_global_evidence(&record_bundle, &record_ev, XG_BUILD_NATIVE_RELEASE));
-    record_bundle.modules = modules;
-    record_bundle.nmodules = 1;
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&record_bundle, &init_func, 0, 0));
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&record_bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Record field ordinal is stale"));
-    xaot_bundle_free(&record_bundle);
-    xg_global_evidence_free(&record_ev);
-}
-
-static void init_json_shape_integrity_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
-    XgJsonShapeSummary shape = {.json_shape_id = 1,
-                                .module_id = 1,
-                                .owner_func_id = 7,
-                                .source_span_id = 100,
-                                .type_key = 200,
-                                .field_count = 2,
-                                .shape_kind = XG_JSON_SHAPE_SHAPED,
-                                .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_MUTABLE};
-    XgJsonFieldSummary first = {.field_id = 1,
-                                .shape_id = 1,
-                                .field_ordinal = 0,
-                                .name_id = xg_name_id("name"),
-                                .type_key = 201,
-                                .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
-    XgJsonFieldSummary second = {.field_id = 2,
-                                 .shape_id = 1,
-                                 .field_ordinal = 1,
-                                 .name_id = xg_name_id("age"),
-                                 .type_key = 202,
-                                 .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED};
-    xg_global_evidence_init(ev, key);
-    shape.shape_hash = xg_json_shape_hash_begin(shape.field_count);
-    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
-                                                    first.name_id, first.type_key);
-    shape.shape_hash = xg_json_shape_hash_add_field(shape.shape_hash, shape.shape_kind,
-                                                    second.name_id, second.type_key);
-    shape.field_name_start = (uint32_t) shape.shape_hash;
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(ev, &shape));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(ev, &first));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(ev, &second));
-}
-
-static void assert_json_evidence_rejected(XgGlobalEvidence *ev, const char *expected_error) {
-    XiFunc init_func;
-    XiModule module;
-    XiModule *modules[1];
-    XaotBundle bundle;
-    char err[256];
-    memset(&init_func, 0, sizeof(init_func));
-    init_func.name = "init";
-    memset(&module, 0, sizeof(module));
-    module.path = "test.xr";
-    module.name = "test";
-    module.init = &init_func;
-    modules[0] = &module;
-    memset(&bundle, 0, sizeof(bundle));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, ev, XG_BUILD_NATIVE_RELEASE));
-    bundle.modules = modules;
-    bundle.nmodules = 1;
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, expected_error));
-    xaot_bundle_free(&bundle);
-}
-
-TEST(global_evidence_verifier_rederives_json_shape_fields) {
-    XgBuildKey key = {.source_hash = 351,
-                      .compiler_semver_hash = 361,
-                      .profile_hash = 371,
-                      .imported_summary_hash = 381,
-                      .module_id = 1,
-                      .profile = XG_BUILD_NATIVE_RELEASE};
-    XgGlobalEvidence ev;
-
-    init_json_shape_integrity_fixture(&ev, key);
-    ev.njson_fields--;
-    assert_json_evidence_rejected(&ev, "AOT Json shape field count does not re-derive");
-    xg_global_evidence_free(&ev);
-
-    init_json_shape_integrity_fixture(&ev, key);
-    ev.json_fields[0].field_ordinal = 1;
-    assert_json_evidence_rejected(&ev, "AOT Json shape field ordinals are not contiguous");
-    xg_global_evidence_free(&ev);
-
-    init_json_shape_integrity_fixture(&ev, key);
-    ev.json_fields[1].name_id = ev.json_fields[0].name_id;
-    assert_json_evidence_rejected(&ev, "AOT Json shape field name is duplicated");
-    xg_global_evidence_free(&ev);
-
-    init_json_shape_integrity_fixture(&ev, key);
-    ev.json_shapes[0].shape_hash ^= UINT64_C(0x100);
-    assert_json_evidence_rejected(&ev, "AOT Json shape hash does not re-derive from fields");
-    xg_global_evidence_free(&ev);
-}
-
-static void init_json_codec_integrity_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
-    XgJsonShapeSummary json_shape = {.json_shape_id = 1,
-                                     .record_shape_id = 1,
-                                     .module_id = 1,
-                                     .owner_func_id = XG_NO_ID,
-                                     .source_span_id = 100,
-                                     .type_key = 200,
-                                     .field_count = 2,
-                                     .shape_kind = XG_JSON_SHAPE_RECORD_BRIDGE,
-                                     .flags = XG_JSON_SHAPE_STATIC_KEYS |
-                                              XG_JSON_SHAPE_RECORD_BRIDGEABLE};
-    XgJsonFieldSummary json_name = {.field_id = 1,
-                                    .shape_id = 1,
-                                    .field_ordinal = 0,
-                                    .name_id = xg_name_id("name"),
-                                    .type_key = 201,
-                                    .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED |
-                                             XG_JSON_FIELD_RECORD_BRIDGE};
-    XgJsonFieldSummary json_age = {.field_id = 2,
-                                   .shape_id = 1,
-                                   .field_ordinal = 1,
-                                   .name_id = xg_name_id("age"),
-                                   .type_key = 202,
-                                   .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED |
-                                            XG_JSON_FIELD_RECORD_BRIDGE};
-    XgRecordShapeSummary record_shape = {.record_shape_id = 1,
-                                         .json_shape_id = 1,
-                                         .module_id = 1,
-                                         .owner_func_id = XG_NO_ID,
-                                         .source_span_id = 100,
-                                         .type_key = 200,
-                                         .field_count = 2,
-                                         .shape_kind = XG_RECORD_SHAPE_STATIC,
-                                         .flags = XG_RECORD_SHAPE_SEALED |
-                                                  XG_RECORD_SHAPE_STATIC_KEYS |
-                                                  XG_RECORD_SHAPE_JSON_BRIDGEABLE};
-    XgRecordFieldSummary record_name = {.field_id = 1,
-                                        .shape_id = 1,
-                                        .field_ordinal = 0,
-                                        .name_id = xg_name_id("name"),
-                                        .type_key = 201,
-                                        .flags =
-                                            XG_RECORD_FIELD_REQUIRED | XG_RECORD_FIELD_STATIC_KEY};
-    XgRecordFieldSummary record_age = {.field_id = 2,
-                                       .shape_id = 1,
-                                       .field_ordinal = 1,
-                                       .name_id = xg_name_id("age"),
-                                       .type_key = 202,
-                                       .flags =
-                                           XG_RECORD_FIELD_REQUIRED | XG_RECORD_FIELD_STATIC_KEY};
-    XgJsonCodecSummary decode = {.codec_id = 1,
-                                 .module_id = 1,
-                                 .owner_func_id = 7,
-                                 .source_node_id = 1001,
-                                 .source_span_id = 101,
-                                 .codec_kind = XG_JSON_CODEC_DECODE,
-                                 .input_type_key = 10,
-                                 .target_type_key = 200,
-                                 .output_shape_id = 1,
-                                 .record_shape_id = 1,
-                                 .field_count = 2,
-                                 .flags = XG_JSON_CODEC_HAS_OUTPUT_SHAPE |
-                                          XG_JSON_CODEC_HAS_TARGET_TYPE |
-                                          XG_JSON_CODEC_HAS_RECORD_SHAPE};
-    xg_global_evidence_init(ev, key);
-    json_shape.shape_hash = xg_json_shape_hash_begin(json_shape.field_count);
-    json_shape.shape_hash = xg_json_shape_hash_add_field(
-        json_shape.shape_hash, json_shape.shape_kind, json_name.name_id, json_name.type_key);
-    json_shape.shape_hash = xg_json_shape_hash_add_field(
-        json_shape.shape_hash, json_shape.shape_kind, json_age.name_id, json_age.type_key);
-    json_shape.field_name_start = (uint32_t) json_shape.shape_hash;
-    record_shape.field_name_start = json_shape.field_name_start;
-    record_shape.shape_hash = json_shape.shape_hash;
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(ev, &json_shape));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(ev, &json_name));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_field(ev, &json_age));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(ev, &record_shape));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_field(ev, &record_name));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_field(ev, &record_age));
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(ev, &decode));
-}
-
-TEST(global_evidence_verifier_rederives_json_codec_record_shape) {
-    XgBuildKey key = {.source_hash = 352,
-                      .compiler_semver_hash = 362,
-                      .profile_hash = 372,
-                      .imported_summary_hash = 382,
-                      .module_id = 1,
-                      .profile = XG_BUILD_NATIVE_RELEASE};
-    XgGlobalEvidence ev;
-
-    init_json_codec_integrity_fixture(&ev, key);
-    ev.json_codecs[0].target_type_key++;
-    assert_json_evidence_rejected(&ev, "AOT Json decode target type does not match output shape");
-    xg_global_evidence_free(&ev);
-
-    init_json_codec_integrity_fixture(&ev, key);
-    ev.json_shapes[0].type_key++;
-    assert_json_evidence_rejected(&ev, "AOT Json/Record bridge shape identity is stale");
-    xg_global_evidence_free(&ev);
-
-    init_json_codec_integrity_fixture(&ev, key);
-    ev.json_codecs[0].field_count--;
-    assert_json_evidence_rejected(&ev, "AOT Json decode output shape field count is stale");
-    xg_global_evidence_free(&ev);
-
-    init_json_codec_integrity_fixture(&ev, key);
-    ev.record_fields[1].type_key++;
-    assert_json_evidence_rejected(&ev, "AOT Json/Record bridge field identity is stale");
-    xg_global_evidence_free(&ev);
-
-    init_json_codec_integrity_fixture(&ev, key);
-    ev.nrecord_fields--;
-    assert_json_evidence_rejected(&ev, "AOT Json/Record bridge field row is missing");
-    xg_global_evidence_free(&ev);
-
-    init_json_codec_integrity_fixture(&ev, key);
-    ev.json_codecs[0].flags &= ~XG_JSON_CODEC_HAS_OUTPUT_SHAPE;
-    assert_json_evidence_rejected(&ev, "AOT Json codec output shape flag does not re-derive");
-    xg_global_evidence_free(&ev);
-}
-
-TEST(global_evidence_verifier_rejects_json_codec_source_identity) {
-    XgBuildKey key = {.source_hash = 353,
-                      .compiler_semver_hash = 363,
-                      .profile_hash = 373,
-                      .imported_summary_hash = 383,
-                      .module_id = 1,
-                      .profile = XG_BUILD_NATIVE_RELEASE};
-    XgGlobalEvidence ev;
-
-    init_json_codec_integrity_fixture(&ev, key);
-    ev.json_codecs[0].source_node_id = 0;
-    assert_json_evidence_rejected(&ev, "AOT Json codec source identity is missing");
-    xg_global_evidence_free(&ev);
-
-    init_json_codec_integrity_fixture(&ev, key);
-    ev.json_codecs[0].owner_func_id = XG_NO_ID;
-    assert_json_evidence_rejected(&ev, "AOT Json codec source identity is missing");
-    xg_global_evidence_free(&ev);
-
-    init_json_codec_integrity_fixture(&ev, key);
-    XgJsonCodecSummary duplicate = ev.json_codecs[0];
-    duplicate.codec_id++;
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &duplicate));
-    assert_json_evidence_rejected(&ev, "AOT Json codec source identity is duplicated");
-    xg_global_evidence_free(&ev);
-}
-
-TEST(global_evidence_verifier_cross_checks_json_record_bridge_ids) {
-    XgBuildKey key = {.source_hash = 0x1811,
-                      .compiler_semver_hash = 0x1812,
-                      .profile_hash = 0x1813,
-                      .imported_summary_hash = 0x1814,
-                      .module_id = 1,
-                      .profile = XG_BUILD_NATIVE_RELEASE};
-    XgGlobalEvidence ev;
-    xg_global_evidence_init(&ev, key);
-
-    XgJsonShapeSummary json_shapes[2] = {
-        {.json_shape_id = 1,
-         .record_shape_id = 1,
-         .module_id = 1,
-         .owner_func_id = XG_NO_ID,
-         .source_span_id = 10,
-         .type_key = 100,
-         .field_name_start = 50,
-         .field_count = 1,
-         .shape_kind = XG_JSON_SHAPE_RECORD_BRIDGE,
-         .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_RECORD_BRIDGEABLE,
-         .shape_hash = UINT64_C(0x18101)},
-        {.json_shape_id = 2,
-         .record_shape_id = 2,
-         .module_id = 1,
-         .owner_func_id = XG_NO_ID,
-         .source_span_id = 20,
-         .type_key = 101,
-         .field_name_start = 51,
-         .field_count = 1,
-         .shape_kind = XG_JSON_SHAPE_RECORD_BRIDGE,
-         .flags = XG_JSON_SHAPE_STATIC_KEYS | XG_JSON_SHAPE_RECORD_BRIDGEABLE,
-         .shape_hash = UINT64_C(0x18102)}};
-    XgRecordShapeSummary record_shapes[2] = {
-        {.record_shape_id = 1,
-         .json_shape_id = 1,
-         .module_id = 1,
-         .owner_func_id = XG_NO_ID,
-         .source_span_id = 10,
-         .type_key = 100,
-         .field_name_start = 50,
-         .field_count = 1,
-         .shape_kind = XG_RECORD_SHAPE_STATIC,
-         .flags =
-             XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE,
-         .shape_hash = UINT64_C(0x18101)},
-        {.record_shape_id = 2,
-         .json_shape_id = 2,
-         .module_id = 1,
-         .owner_func_id = XG_NO_ID,
-         .source_span_id = 20,
-         .type_key = 101,
-         .field_name_start = 51,
-         .field_count = 1,
-         .shape_kind = XG_RECORD_SHAPE_STATIC,
-         .flags =
-             XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_JSON_BRIDGEABLE,
-         .shape_hash = UINT64_C(0x18102)}};
-    XgJsonFieldSummary json_fields[2] = {
-        {.field_id = 1,
-         .shape_id = 1,
-         .field_ordinal = 0,
-         .name_id = 1000,
-         .type_key = 200,
-         .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED | XG_JSON_FIELD_RECORD_BRIDGE},
-        {.field_id = 2,
-         .shape_id = 2,
-         .field_ordinal = 0,
-         .name_id = 1001,
-         .type_key = 201,
-         .flags = XG_JSON_FIELD_STATIC_KEY | XG_JSON_FIELD_TYPED | XG_JSON_FIELD_RECORD_BRIDGE}};
-    XgRecordFieldSummary record_fields[2] = {
-        {.field_id = 1,
-         .shape_id = 1,
-         .field_ordinal = 0,
-         .name_id = 1000,
-         .type_key = 200,
-         .flags = XG_RECORD_FIELD_REQUIRED | XG_RECORD_FIELD_STATIC_KEY},
-        {.field_id = 2,
-         .shape_id = 2,
-         .field_ordinal = 0,
-         .name_id = 1001,
-         .type_key = 201,
-         .flags = XG_RECORD_FIELD_REQUIRED | XG_RECORD_FIELD_STATIC_KEY}};
-    XgJsonCodecSummary codec = {.codec_id = 1,
-                                .module_id = 1,
-                                .owner_func_id = 7,
-                                .source_node_id = 3001,
-                                .source_span_id = 30,
-                                .codec_kind = XG_JSON_CODEC_DECODE,
-                                .input_type_key = 20,
-                                .target_type_key = 100,
-                                .output_shape_id = 1,
-                                .record_shape_id = 1,
-                                .field_count = 1,
-                                .flags = XG_JSON_CODEC_HAS_OUTPUT_SHAPE |
-                                         XG_JSON_CODEC_HAS_TARGET_TYPE |
-                                         XG_JSON_CODEC_HAS_RECORD_SHAPE};
-    for (uint32_t i = 0; i < 2; i++) {
-        json_shapes[i].shape_hash = xg_json_shape_hash_begin(json_shapes[i].field_count);
-        json_shapes[i].shape_hash =
-            xg_json_shape_hash_add_field(json_shapes[i].shape_hash, json_shapes[i].shape_kind,
-                                         json_fields[i].name_id, json_fields[i].type_key);
-        record_shapes[i].shape_hash = json_shapes[i].shape_hash;
-        ASSERT_NOT_NULL(xg_global_evidence_add_json_shape(&ev, &json_shapes[i]));
-        ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &record_shapes[i]));
-        ASSERT_NOT_NULL(xg_global_evidence_add_json_field(&ev, &json_fields[i]));
-        ASSERT_NOT_NULL(xg_global_evidence_add_record_field(&ev, &record_fields[i]));
-    }
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_codec(&ev, &codec));
-
-    XiFunc init_func;
-    XiModule module;
-    XiModule *modules[1];
-    memset(&init_func, 0, sizeof(init_func));
-    init_func.name = "init";
-    memset(&module, 0, sizeof(module));
-    module.path = "bridge.xr";
-    module.name = "bridge";
-    module.init = &init_func;
-    modules[0] = &module;
-    char err[256];
-
-    XaotBundle valid;
-    memset(&valid, 0, sizeof(valid));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&valid, &ev, XG_BUILD_NATIVE_RELEASE));
-    valid.modules = modules;
-    valid.nmodules = 1;
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&valid, &init_func, 0, 0));
-    memset(err, 0, sizeof(err));
-    ASSERT_MSG(xaot_verify_bundle(&valid, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
-    valid.json_shape_plans[0].record_shape_id = 2;
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&valid, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Json shape plan identity does not re-derive"));
-    xaot_bundle_free(&valid);
-
-    ev.json_shapes[0].record_shape_id = 2;
-    XaotBundle crossed;
-    memset(&crossed, 0, sizeof(crossed));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&crossed, &ev, XG_BUILD_NATIVE_RELEASE));
-    crossed.modules = modules;
-    crossed.nmodules = 1;
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&crossed, &init_func, 0, 0));
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&crossed, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Json/Record bridge ids are not reciprocal"));
-    xaot_bundle_free(&crossed);
-
-    ev.json_shapes[0].record_shape_id = 1;
-    ev.record_fields[0].type_key = 999;
-    XaotBundle stale_field;
-    memset(&stale_field, 0, sizeof(stale_field));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_field, &ev, XG_BUILD_NATIVE_RELEASE));
-    stale_field.modules = modules;
-    stale_field.nmodules = 1;
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_field, &init_func, 0, 0));
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&stale_field, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Json/Record bridge field identity is stale"));
-    xaot_bundle_free(&stale_field);
-
-    ev.record_fields[0].type_key = 200;
-    ev.json_codecs[0].record_shape_id = 2;
-    XaotBundle stale_codec;
-    memset(&stale_codec, 0, sizeof(stale_codec));
-    ASSERT_TRUE(xaot_bundle_set_global_evidence(&stale_codec, &ev, XG_BUILD_NATIVE_RELEASE));
-    stale_codec.modules = modules;
-    stale_codec.nmodules = 1;
-    ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&stale_codec, &init_func, 0, 0));
-    memset(err, 0, sizeof(err));
-    ASSERT_TRUE(!xaot_verify_bundle(&stale_codec, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Json codec Record bridge shape id is stale"));
-    xaot_bundle_free(&stale_codec);
-
-    xg_global_evidence_free(&ev);
-}
-
-TEST(global_evidence_records_record_merge_plans) {
+TEST(global_evidence_records_object_merge_plans) {
     XgBuildKey key = {.source_hash = 36,
                       .compiler_semver_hash = 37,
                       .profile_hash = 38,
@@ -11081,38 +10229,51 @@ TEST(global_evidence_records_record_merge_plans) {
     XgGlobalEvidence ev;
     xg_global_evidence_init(&ev, key);
 
-    XgRecordShapeSummary base = {.record_shape_id = 1,
+    XgObjectShapeSummary base = {.object_shape_id = 1,
                                  .module_id = 1,
                                  .owner_func_id = 7,
                                  .source_span_id = 100,
                                  .type_key = 200,
                                  .field_name_start = 300,
                                  .field_count = 2,
-                                 .shape_kind = XG_RECORD_SHAPE_LITERAL,
-                                 .flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS,
+                                 .shape_kind = XG_OBJECT_SHAPE_LITERAL,
+                                 .flags = XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS,
                                  .shape_hash = UINT64_C(0x1001)};
-    XgRecordShapeSummary patch = {.record_shape_id = 2,
+    XgObjectShapeSummary patch = {.object_shape_id = 2,
                                   .module_id = 1,
                                   .owner_func_id = 7,
                                   .source_span_id = 101,
                                   .type_key = 201,
                                   .field_name_start = 301,
                                   .field_count = 1,
-                                  .shape_kind = XG_RECORD_SHAPE_PATCH,
-                                  .flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS,
+                                  .shape_kind = XG_OBJECT_SHAPE_PATCH,
+                                  .flags = XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS,
                                   .shape_hash = UINT64_C(0x1002)};
-    XgRecordShapeSummary result = {.record_shape_id = 3,
+    XgObjectShapeSummary result = {.object_shape_id = 3,
                                    .module_id = 1,
                                    .owner_func_id = 7,
                                    .source_span_id = 102,
                                    .type_key = 202,
                                    .field_name_start = 302,
                                    .field_count = 2,
-                                   .shape_kind = XG_RECORD_SHAPE_SPREAD,
-                                   .flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS |
-                                            XG_RECORD_SHAPE_HAS_SPREAD,
+                                   .shape_kind = XG_OBJECT_SHAPE_SPREAD,
+                                   .flags = XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS |
+                                            XG_OBJECT_SHAPE_HAS_SPREAD,
                                    .shape_hash = UINT64_C(0x1003)};
-    XgRecordMergeSummary merge = {
+    XgObjectFieldSummary base_fields[2] = {
+        {.field_id = 1, .shape_id = 1, .field_ordinal = 0, .name_id = 11, .type_key = 21,
+         .flags = XG_OBJECT_FIELD_REQUIRED | XG_OBJECT_FIELD_STATIC_KEY},
+        {.field_id = 2, .shape_id = 1, .field_ordinal = 1, .name_id = 12, .type_key = 22,
+         .flags = XG_OBJECT_FIELD_REQUIRED | XG_OBJECT_FIELD_STATIC_KEY}};
+    XgObjectFieldSummary patch_fields[1] = {
+        {.field_id = 3, .shape_id = 2, .field_ordinal = 0, .name_id = 12, .type_key = 22,
+         .flags = XG_OBJECT_FIELD_REQUIRED | XG_OBJECT_FIELD_STATIC_KEY}};
+    XgObjectFieldSummary result_fields[2] = {
+        {.field_id = 4, .shape_id = 3, .field_ordinal = 0, .name_id = 11, .type_key = 21,
+         .flags = XG_OBJECT_FIELD_REQUIRED | XG_OBJECT_FIELD_STATIC_KEY},
+        {.field_id = 5, .shape_id = 3, .field_ordinal = 1, .name_id = 12, .type_key = 22,
+         .flags = XG_OBJECT_FIELD_REQUIRED | XG_OBJECT_FIELD_STATIC_KEY}};
+    XgObjectMergeSummary merge = {
         .merge_id = 1,
         .module_id = 1,
         .owner_func_id = 7,
@@ -11126,43 +10287,57 @@ TEST(global_evidence_records_record_merge_plans) {
         .result_field_count = 2,
         .overwrite_count = 1,
         .copy_table_id = 77,
-        .flags = XG_RECORD_MERGE_BASE_SHAPE_PROVEN | XG_RECORD_MERGE_PATCH_SHAPE_PROVEN |
-                 XG_RECORD_MERGE_RESULT_SHAPE_PROVEN | XG_RECORD_MERGE_OVERWRITES,
+        .flags = XG_OBJECT_MERGE_BASE_SHAPE_PROVEN | XG_OBJECT_MERGE_PATCH_SHAPE_PROVEN |
+                 XG_OBJECT_MERGE_RESULT_SHAPE_PROVEN | XG_OBJECT_MERGE_OVERWRITES,
         .merge_hash = UINT64_C(0x2001)};
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &base));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &patch));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &result));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_merge(&ev, &merge));
+    base_fields[0].stable_name_key = xg_object_stable_name_key("a");
+    base_fields[1].stable_name_key = xg_object_stable_name_key("b");
+    patch_fields[0].stable_name_key = xg_object_stable_name_key("b");
+    result_fields[0].stable_name_key = xg_object_stable_name_key("a");
+    result_fields[1].stable_name_key = xg_object_stable_name_key("b");
+    finalize_object_shape_fields_fixture(&base, base_fields, 2);
+    finalize_object_shape_fields_fixture(&patch, patch_fields, 1);
+    finalize_object_shape_fields_fixture(&result, result_fields, 2);
+    ASSERT_NOT_NULL(xg_global_evidence_add_object_shape(&ev, &base));
+    ASSERT_NOT_NULL(xg_global_evidence_add_object_shape(&ev, &patch));
+    ASSERT_NOT_NULL(xg_global_evidence_add_object_shape(&ev, &result));
+    for (uint32_t i = 0; i < 2; i++)
+        ASSERT_NOT_NULL(xg_global_evidence_add_object_field(&ev, &base_fields[i]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_object_field(&ev, &patch_fields[0]));
+    for (uint32_t i = 0; i < 2; i++)
+        ASSERT_NOT_NULL(xg_global_evidence_add_object_field(&ev, &result_fields[i]));
+    ASSERT_NOT_NULL(xg_global_evidence_add_object_merge(&ev, &merge));
 
     char *dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "record-shape 1 id=2 module=1 func=7 type=201 kind=patch"));
-    ASSERT_NOT_NULL(strstr(dump, "record-merge 0 id=1 module=1 func=7"));
+    ASSERT_NOT_NULL(strstr(dump, "object-shape 1 id=2 module=1 func=7 type=201"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=patch domain=1"));
+    ASSERT_NOT_NULL(strstr(dump, "object-merge 0 id=1 module=1 func=7"));
     ASSERT_NOT_NULL(strstr(dump, "overwrites=1"));
     xr_free(dump);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.nrecord_shape_plans, 3);
-    ASSERT_EQ_UINT(bundle.nrecord_merge_plans, 1);
-    const XaotRecordShapePlan *patch_plan = xaot_bundle_find_record_shape_plan(&bundle, 2);
-    const XaotRecordMergePlan *merge_plan = xaot_bundle_find_record_merge_plan(&bundle, 1);
+    ASSERT_EQ_UINT(bundle.nobject_shape_plans, 3);
+    ASSERT_EQ_UINT(bundle.nobject_merge_plans, 1);
+    const XaotObjectShapePlan *patch_plan = xaot_bundle_find_object_shape_plan(&bundle, 2);
+    const XaotObjectMergePlan *merge_plan = xaot_bundle_find_object_merge_plan(&bundle, 1);
     ASSERT_NOT_NULL(patch_plan);
     ASSERT_NOT_NULL(merge_plan);
-    ASSERT_EQ_UINT(patch_plan->action, XAOT_RECORD_SHAPE_PATCH_RECORD);
-    ASSERT_EQ_UINT(merge_plan->action, XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE);
+    ASSERT_EQ_UINT(patch_plan->action, XAOT_OBJECT_SHAPE_PATCH);
+    ASSERT_EQ_UINT(merge_plan->action, XAOT_OBJECT_MERGE_COPY_WITH_OVERWRITE);
     ASSERT_EQ_UINT(merge_plan->source_node_id, 104);
-    ASSERT_EQ_UINT(merge_plan->evidence, XAOT_RECORD_EV_GLOBAL_ROW | XAOT_RECORD_EV_BASE_SHAPE |
-                                             XAOT_RECORD_EV_PATCH_SHAPE |
-                                             XAOT_RECORD_EV_RESULT_SHAPE |
-                                             XAOT_RECORD_EV_COPY_TABLE);
+    ASSERT_EQ_UINT(merge_plan->evidence, XAOT_OBJECT_EV_GLOBAL_ROW | XAOT_OBJECT_EV_BASE_SHAPE |
+                                             XAOT_OBJECT_EV_PATCH_SHAPE |
+                                             XAOT_OBJECT_EV_RESULT_SHAPE |
+                                             XAOT_OBJECT_EV_COPY_TABLE);
 
     char *plan_dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(plan_dump);
-    ASSERT_NOT_NULL(strstr(plan_dump, "record-shape-plan 1 id=2"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=patch_record"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "record-merge-plan 0 id=1"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "object-shape-plan 1 id=2"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=patch"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "object-merge-plan 0 id=1"));
     ASSERT_NOT_NULL(strstr(plan_dump, "action=copy_with_overwrite"));
     xr_free(plan_dump);
 
@@ -11182,7 +10357,7 @@ TEST(global_evidence_records_record_merge_plans) {
     char err[256];
     memset(err, 0, sizeof(err));
     ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)), err);
-    bundle.record_merge_plans[0].action = XAOT_RECORD_MERGE_COPY_APPEND;
+    bundle.object_merge_plans[0].action = XAOT_OBJECT_MERGE_COPY_APPEND;
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
     ASSERT_NOT_NULL(strstr(err, "AOT Record merge plan action does not re-derive"));
@@ -11208,28 +10383,37 @@ TEST(global_evidence_records_options_bag_plans) {
                           .name_id = xg_name_id("caller"),
                           .signature_key = 701,
                           .source_span_id = 109};
-    XgRecordShapeSummary param_shape = {
-        .record_shape_id = 1,
+    XgObjectShapeSummary param_shape = {
+        .object_shape_id = 1,
         .module_id = 1,
         .owner_func_id = 7,
         .source_span_id = 110,
         .type_key = 210,
         .field_name_start = 310,
         .field_count = 3,
-        .shape_kind = XG_RECORD_SHAPE_OPTIONS,
-        .flags = XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS | XG_RECORD_SHAPE_HAS_OPTIONS,
+        .shape_kind = XG_OBJECT_SHAPE_OPTIONS,
+        .flags = XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_HAS_OPTIONS,
         .shape_hash = UINT64_C(0x3456)};
-    XgRecordShapeSummary supplied_shape = {.record_shape_id = 2,
+    XgObjectShapeSummary supplied_shape = {.object_shape_id = 2,
                                            .module_id = 1,
                                            .owner_func_id = 7,
                                            .source_span_id = 111,
                                            .type_key = 211,
                                            .field_name_start = 320,
                                            .field_count = 3,
-                                           .shape_kind = XG_RECORD_SHAPE_LITERAL,
-                                           .flags =
-                                               XG_RECORD_SHAPE_SEALED | XG_RECORD_SHAPE_STATIC_KEYS,
+                                           .shape_kind = XG_OBJECT_SHAPE_LITERAL,
+                                            .flags = XG_OBJECT_SHAPE_SEALED |
+                                                     XG_OBJECT_SHAPE_STATIC_KEYS |
+                                                     XG_OBJECT_SHAPE_HAS_OPTIONS,
                                            .shape_hash = UINT64_C(0x4567)};
+    XgObjectFieldSummary param_fields[3] = {
+        {.field_id = 1, .shape_id = 1, .field_ordinal = 0, .name_id = 11, .type_key = 21},
+        {.field_id = 2, .shape_id = 1, .field_ordinal = 1, .name_id = 12, .type_key = 22},
+        {.field_id = 3, .shape_id = 1, .field_ordinal = 2, .name_id = 13, .type_key = 23}};
+    XgObjectFieldSummary supplied_fields[3] = {
+        {.field_id = 4, .shape_id = 2, .field_ordinal = 0, .name_id = 11, .type_key = 21},
+        {.field_id = 5, .shape_id = 2, .field_ordinal = 1, .name_id = 12, .type_key = 22},
+        {.field_id = 6, .shape_id = 2, .field_ordinal = 2, .name_id = 13, .type_key = 23}};
     XgCallsiteSummary call = {.callsite_id = 12,
                               .owner_func_id = 7,
                               .source_node_id = 2112,
@@ -11285,8 +10469,21 @@ TEST(global_evidence_records_options_bag_plans) {
                                                    XG_OPTIONS_CALLSITE_PROVEN};
 
     ASSERT_NOT_NULL(xg_global_evidence_add_decl(&ev, &decl));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &param_shape));
-    ASSERT_NOT_NULL(xg_global_evidence_add_record_shape(&ev, &supplied_shape));
+    for (uint32_t i = 0; i < 3; i++) {
+        static const char *names[3] = {"a", "b", "c"};
+        param_fields[i].flags = XG_OBJECT_FIELD_STATIC_KEY;
+        supplied_fields[i].flags = XG_OBJECT_FIELD_STATIC_KEY;
+        param_fields[i].stable_name_key = xg_object_stable_name_key(names[i]);
+        supplied_fields[i].stable_name_key = param_fields[i].stable_name_key;
+    }
+    finalize_object_shape_fields_fixture(&param_shape, param_fields, 3);
+    finalize_object_shape_fields_fixture(&supplied_shape, supplied_fields, 3);
+    ASSERT_NOT_NULL(xg_global_evidence_add_object_shape(&ev, &param_shape));
+    ASSERT_NOT_NULL(xg_global_evidence_add_object_shape(&ev, &supplied_shape));
+    for (uint32_t i = 0; i < 3; i++) {
+        ASSERT_NOT_NULL(xg_global_evidence_add_object_field(&ev, &param_fields[i]));
+        ASSERT_NOT_NULL(xg_global_evidence_add_object_field(&ev, &supplied_fields[i]));
+    }
     ASSERT_NOT_NULL(xg_global_evidence_add_body(&ev, &body));
     ASSERT_NOT_NULL(xg_global_evidence_add_callsite(&ev, &call));
     ASSERT_NOT_NULL(xg_global_evidence_add_options_bag(&ev, &all_supplied));
@@ -12172,34 +11369,46 @@ TEST(global_evidence_producer_records_explicit_json_shape_access) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_fields, 2);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_shapes[0].shape_kind, XG_JSON_SHAPE_SHAPED);
-    ASSERT_EQ_UINT(ev.json_shapes[0].field_count, 2);
-    ASSERT_TRUE((ev.json_shapes[0].flags & XG_JSON_SHAPE_STATIC_KEYS) != 0);
-    ASSERT_EQ_UINT(ev.json_fields[0].shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_fields[0].field_ordinal, 0);
-    ASSERT_EQ_UINT(ev.json_fields[0].name_id, xg_name_id("name"));
-    ASSERT_TRUE((ev.json_fields[0].flags & XG_JSON_FIELD_STATIC_KEY) != 0);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 0);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(evidence_object_field_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 2);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_shapes, 1);
+    ASSERT_EQ_UINT(ev.nobject_fields, 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT((*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).shape_kind,
+                   XG_OBJECT_SHAPE_LITERAL);
+    ASSERT_EQ_UINT((*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).field_count, 2);
+    ASSERT_TRUE(((*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).flags &
+                 XG_OBJECT_SHAPE_STATIC_KEYS) != 0);
+    ASSERT_EQ_UINT((*evidence_object_field_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).shape_id,
+                   (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0))
+                       .object_shape_id);
+    ASSERT_EQ_UINT((*evidence_object_field_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).field_ordinal, 0);
+    ASSERT_EQ_UINT((*evidence_object_field_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).name_id, xg_name_id("name"));
+    ASSERT_TRUE(((*evidence_object_field_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).flags &
+                 XG_OBJECT_FIELD_STATIC_KEY) != 0);
+    ASSERT_EQ_UINT(ev.object_shapes[0].domain, XG_OBJECT_DOMAIN_JSON);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id,
+                   ev.object_shapes[0].object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 0);
+    ASSERT_EQ_UINT(ev.object_accesses[0].syntax, XG_OBJECT_ACCESS_SYNTAX_DOT);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan = xaot_bundle_find_object_access_plan(
+        &bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
 
     char *dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "json-shape 0 id=1"));
-    ASSERT_NOT_NULL(strstr(dump, "json-field 0 id=1 shape=1 ord=0"));
-    ASSERT_NOT_NULL(strstr(dump, "json-access 0 id=1"));
+    ASSERT_NOT_NULL(strstr(dump, "object-shape 0 id="));
+    ASSERT_NOT_NULL(strstr(dump, "domain=0"));
+    ASSERT_NOT_NULL(strstr(dump, "object-field 0 id="));
+    ASSERT_NOT_NULL(strstr(dump, " ord=0"));
+    ASSERT_NOT_NULL(strstr(dump, "object-access 0 id="));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -12235,27 +11444,25 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
-    ASSERT_EQ_UINT(ev.record_shapes[0].shape_kind, XG_RECORD_SHAPE_STATIC);
-    ASSERT_TRUE((ev.record_shapes[0].flags & XG_RECORD_SHAPE_JSON_BRIDGEABLE) != 0);
-    ASSERT_EQ_UINT(ev.nrecord_fields, 2);
-    ASSERT_EQ_UINT(ev.njson_shapes, 2);
-    const XgJsonShapeSummary *bridge_shape = NULL;
-    for (uint32_t i = 0; i < ev.njson_shapes; i++) {
-        if (ev.json_shapes[i].shape_kind == XG_JSON_SHAPE_RECORD_BRIDGE)
-            bridge_shape = &ev.json_shapes[i];
+    ASSERT_EQ_UINT(ev.nobject_shapes, 2);
+    const XgObjectShapeSummary *struct_shape = NULL;
+    const XgObjectShapeSummary *json_object_shape = NULL;
+    for (uint32_t i = 0; i < ev.nobject_shapes; i++) {
+        if (ev.object_shapes[i].domain == XG_OBJECT_DOMAIN_STRUCT)
+            struct_shape = &ev.object_shapes[i];
+        if (ev.object_shapes[i].domain == XG_OBJECT_DOMAIN_JSON)
+            json_object_shape = &ev.object_shapes[i];
     }
-    ASSERT_NOT_NULL(bridge_shape);
-    ASSERT_EQ_UINT(bridge_shape->record_shape_id, ev.record_shapes[0].record_shape_id);
-    ASSERT_EQ_UINT(ev.record_shapes[0].json_shape_id, bridge_shape->json_shape_id);
-    ASSERT_EQ_UINT(bridge_shape->type_key, ev.record_shapes[0].type_key);
-    ASSERT_EQ_UINT(bridge_shape->field_count, ev.record_shapes[0].field_count);
-    ASSERT_NE(bridge_shape->shape_hash, 0);
-    ASSERT_NE(ev.record_shapes[0].shape_hash, 0);
-    ASSERT_EQ_UINT(ev.json_fields[0].name_id, ev.record_fields[0].name_id);
-    ASSERT_EQ_UINT(ev.json_fields[0].type_key, ev.record_fields[0].type_key);
-    ASSERT_EQ_UINT(ev.json_fields[1].name_id, ev.record_fields[1].name_id);
-    ASSERT_EQ_UINT(ev.json_fields[1].type_key, ev.record_fields[1].type_key);
+    ASSERT_NOT_NULL(struct_shape);
+    ASSERT_NOT_NULL(json_object_shape);
+    ASSERT_EQ_UINT(struct_shape->shape_kind, XG_OBJECT_SHAPE_STATIC);
+    ASSERT_TRUE((struct_shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) != 0);
+    ASSERT_EQ_UINT(ev.nobject_fields, 4);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(struct_shape->field_count, 2);
+    ASSERT_EQ_UINT(json_object_shape->field_count, 2);
+    ASSERT_NE(struct_shape->stable_shape_key, 0);
+    ASSERT_NE(json_object_shape->stable_shape_key, 0);
     ASSERT_EQ_UINT(ev.njson_codecs, 4);
     for (uint32_t i = 0; i < ev.njson_codecs; i++) {
         ASSERT_NE(ev.json_codecs[i].source_node_id, 0);
@@ -12270,16 +11477,12 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     ASSERT_TRUE((ev.json_codecs[1].flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0);
     ASSERT_TRUE((ev.json_codecs[1].flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0);
     ASSERT_NE(ev.json_codecs[1].target_type_key, 0);
-    ASSERT_EQ_UINT(ev.json_codecs[1].output_shape_id, bridge_shape->json_shape_id);
-    ASSERT_EQ_UINT(ev.json_codecs[1].record_shape_id, ev.record_shapes[0].record_shape_id);
-    ASSERT_TRUE((ev.json_codecs[1].flags & XG_JSON_CODEC_HAS_RECORD_SHAPE) != 0);
+    ASSERT_EQ_UINT(ev.json_codecs[1].output_shape_id, struct_shape->object_shape_id);
     ASSERT_EQ_UINT(ev.json_codecs[1].field_count, 2);
     ASSERT_EQ_UINT(ev.json_codecs[2].codec_kind, XG_JSON_CODEC_ENCODE);
     ASSERT_NE(ev.json_codecs[2].input_type_key, 0);
     ASSERT_TRUE((ev.json_codecs[2].flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0);
-    ASSERT_EQ_UINT(ev.json_codecs[2].input_shape_id, bridge_shape->json_shape_id);
-    ASSERT_EQ_UINT(ev.json_codecs[2].record_shape_id, ev.record_shapes[0].record_shape_id);
-    ASSERT_TRUE((ev.json_codecs[2].flags & XG_JSON_CODEC_HAS_RECORD_SHAPE) != 0);
+    ASSERT_EQ_UINT(ev.json_codecs[2].input_shape_id, struct_shape->object_shape_id);
     ASSERT_EQ_UINT(ev.json_codecs[2].field_count, 2);
     ASSERT_EQ_UINT(ev.json_codecs[3].codec_kind, XG_JSON_CODEC_STRINGIFY);
     ASSERT_TRUE((ev.json_codecs[3].flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0);
@@ -12301,16 +11504,14 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     ASSERT_EQ_UINT(bundle.json_codec_plans[1].action, XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
     ASSERT_EQ_UINT(bundle.json_codec_plans[2].action, XAOT_JSON_CODEC_ENCODE_FIELD_TABLE);
     ASSERT_EQ_UINT(bundle.json_codec_plans[3].action, XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
-    const XaotJsonShapePlan *bridge_plan =
-        xaot_bundle_find_json_shape_plan(&bundle, bridge_shape->json_shape_id);
-    const XaotRecordShapePlan *record_plan =
-        xaot_bundle_find_record_shape_plan(&bundle, ev.record_shapes[0].record_shape_id);
-    ASSERT_NOT_NULL(bridge_plan);
-    ASSERT_NOT_NULL(record_plan);
-    ASSERT_EQ_UINT(bridge_plan->record_shape_id, ev.record_shapes[0].record_shape_id);
-    ASSERT_EQ_UINT(record_plan->json_shape_id, bridge_shape->json_shape_id);
-    ASSERT_EQ_UINT(bundle.json_codec_plans[1].record_shape_id, ev.record_shapes[0].record_shape_id);
-    ASSERT_EQ_UINT(bundle.json_codec_plans[2].record_shape_id, ev.record_shapes[0].record_shape_id);
+    const XaotObjectShapePlan *object_plan =
+        xaot_bundle_find_object_shape_plan(&bundle, struct_shape->object_shape_id);
+    ASSERT_NOT_NULL(object_plan);
+    ASSERT_EQ_UINT(bundle.json_codec_plans[1].output_shape_id,
+                   struct_shape->object_shape_id);
+    ASSERT_EQ_UINT(bundle.json_codec_plans[2].input_shape_id,
+                   struct_shape->object_shape_id);
+    ASSERT_TRUE((bundle.json_codec_plans[1].evidence & XAOT_JSON_EV_OBJECT_SHAPE) != 0);
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -12341,21 +11542,21 @@ TEST(global_evidence_producer_records_json_computed_key_access) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_INDEX_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_COMPUTED_KEY) != 0);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).object_shape_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_INDEX_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY) != 0);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_COMPUTED_KEY_GUARD);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_COMPUTED_KEY_GUARD);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_NONE);
     ASSERT_EQ_UINT(access_plan->evidence, XAOT_JSON_EV_GLOBAL_ROW | XAOT_JSON_EV_RECEIVER_SHAPE);
 
@@ -12394,29 +11595,30 @@ TEST(global_evidence_producer_records_json_static_key_index_access) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 2);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 2);
 
     bool saw_get = false;
     bool saw_set = false;
-    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
-        const XgJsonAccessSummary *row = &ev.json_accesses[i];
-        ASSERT_EQ_UINT(row->receiver_shape_id, ev.json_shapes[0].json_shape_id);
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *row = &ev.object_accesses[i];
+        ASSERT_EQ_UINT(row->receiver_shape_id, ev.object_shapes[0].object_shape_id);
         ASSERT_EQ_UINT(row->field_ordinal, 1);
-        ASSERT_TRUE((row->flags & XG_JSON_ACCESS_STATIC_KEY) != 0);
-        ASSERT_TRUE((row->flags & XG_JSON_ACCESS_COMPUTED_KEY) == 0);
-        ASSERT_TRUE((row->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
-        if (row->access_kind == XG_JSON_ACCESS_INDEX_GET)
+        ASSERT_EQ_UINT(row->domain, XG_OBJECT_DOMAIN_JSON);
+        ASSERT_EQ_UINT(row->syntax, XG_OBJECT_ACCESS_SYNTAX_STATIC_INDEX);
+        ASSERT_TRUE((row->flags & XG_OBJECT_ACCESS_STATIC_FIELD) != 0);
+        if (row->access_kind == XG_OBJECT_ACCESS_FIELD_GET)
             saw_get = true;
-        if (row->access_kind == XG_JSON_ACCESS_INDEX_SET)
+        if (row->access_kind == XG_OBJECT_ACCESS_FIELD_SET)
             saw_set = true;
         XaotBundle bundle;
         memset(&bundle, 0, sizeof(bundle));
         ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-        const XaotJsonAccessPlan *access_plan =
-            xaot_bundle_find_json_access_plan(&bundle, row->json_access_id);
+        const XaotObjectAccessPlan *access_plan =
+            xaot_bundle_find_object_access_plan(&bundle, row->object_access_id);
         ASSERT_NOT_NULL(access_plan);
-        ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+        ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
         ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
         xaot_bundle_free(&bundle);
     }
@@ -12450,32 +11652,26 @@ TEST(global_evidence_producer_records_json_open_shape_access) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_shapes[0].shape_kind, XG_JSON_SHAPE_OPEN);
-    ASSERT_TRUE((ev.json_shapes[0].flags & XG_JSON_SHAPE_HAS_COMPUTED_KEYS) != 0);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_STATIC_KEY) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_STATIC_KEY) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonShapePlan *shape_plan =
-        xaot_bundle_find_json_shape_plan(&bundle, ev.json_shapes[0].json_shape_id);
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
-    ASSERT_NOT_NULL(shape_plan);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(shape_plan->action, XAOT_JSON_SHAPE_OPEN_DYNAMIC);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX);
-    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_NONE);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->unproven_reason,
+                   XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
 
     char *dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "kind=open action=open_dynamic"));
-    ASSERT_NOT_NULL(strstr(dump, "kind=field_get action=shape_guard_index"));
-    ASSERT_NOT_NULL(strstr(dump, "reason=none"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=field_get action=dynamic_lookup"));
+    ASSERT_NOT_NULL(strstr(dump, "reason=receiver_shape_unknown"));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -12506,27 +11702,27 @@ TEST(global_evidence_producer_records_json_open_shape_static_key_index_access) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_shapes[0].shape_kind, XG_JSON_SHAPE_OPEN);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_INDEX_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 0);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_STATIC_KEY) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_INDEX_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_STATIC_KEY) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX);
-    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_NONE);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->unproven_reason,
+                   XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
 
     char *dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "kind=index_get action=shape_guard_index"));
-    ASSERT_NOT_NULL(strstr(dump, "reason=none"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=index_get action=dynamic_lookup"));
+    ASSERT_NOT_NULL(strstr(dump, "reason=receiver_shape_unknown"));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -12556,21 +11752,21 @@ TEST(global_evidence_producer_records_json_unknown_shape_access) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.njson_shapes, 0);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_STATIC_KEY) != 0);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_STATIC_KEY) != 0);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
 
     char *dump = xaot_bundle_dump_plan(&bundle);
@@ -12608,20 +11804,21 @@ TEST(global_evidence_producer_propagates_json_shape_through_local_alias) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id,
+                   ev.object_shapes[0].object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan = xaot_bundle_find_object_access_plan(
+        &bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
 
     xaot_bundle_free(&bundle);
@@ -12657,21 +11854,21 @@ TEST(global_evidence_producer_propagates_json_shape_through_direct_return_receiv
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturned");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 0);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id, (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 0);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 0);
     xaot_bundle_free(&bundle);
 
@@ -12708,21 +11905,21 @@ TEST(global_evidence_producer_propagates_json_shape_through_indirect_return_rece
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedIndirect");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 2);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[1].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id, (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 1)).object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -12763,20 +11960,20 @@ TEST(global_evidence_producer_does_not_propagate_json_shape_after_indirect_retur
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedEscaped");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -12816,21 +12013,23 @@ TEST(global_evidence_producer_propagates_json_shape_through_branch_return_receiv
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedBranch");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id,
+                   (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0))
+                       .object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind,
+                   XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan = xaot_bundle_find_object_access_plan(
+        &bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -12872,21 +12071,21 @@ TEST(global_evidence_producer_propagates_json_shape_through_branch_local_return_
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedBranchLocal");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 3);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[2].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 3);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id, (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 2)).object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -12926,20 +12125,20 @@ TEST(global_evidence_producer_does_not_propagate_json_shape_through_mismatched_b
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedBranchUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -12978,20 +12177,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_fallthrough_return_r
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedFallthrough");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13030,20 +12229,20 @@ TEST(global_evidence_producer_does_not_propagate_json_shape_through_mismatched_f
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedFallthroughUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -13084,20 +12283,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_else_if_fallthrough_
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedElseIfFallthrough");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13141,20 +12340,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readReturnedElseIfFallthroughUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -13194,20 +12393,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_match_return_receive
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedMatch");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13247,20 +12446,20 @@ TEST(global_evidence_producer_does_not_propagate_json_shape_through_mismatched_m
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedMatchUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -13302,20 +12501,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_match_assignment_ret
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedMatchAssigned");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13359,20 +12558,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readReturnedMatchAssignedUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -13413,20 +12612,20 @@ TEST(global_evidence_producer_ignores_unreachable_json_return_after_closed_branc
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedClosedBranch");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13469,20 +12668,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readReturnedClosedBranchUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -13519,21 +12718,23 @@ TEST(global_evidence_producer_propagates_json_shape_through_return_initialized_l
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedLocal");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id,
+                   (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0))
+                       .object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13574,21 +12775,23 @@ TEST(global_evidence_producer_propagates_json_shape_through_branch_return_initia
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedBranchLocal");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id,
+                   (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0))
+                       .object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13633,20 +12836,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_branch_assignment_re
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedBranchAssigned");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13690,20 +12893,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readReturnedBranchAssignedUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -13745,20 +12948,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readReturnedConditionalAssigned");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13800,20 +13003,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readReturnedConditionalAssignedUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -13849,20 +13052,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_ternary_return_recei
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedTernary");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13900,20 +13103,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_ternary_local_return
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedTernaryLocal");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -13950,20 +13153,20 @@ TEST(global_evidence_producer_does_not_propagate_json_shape_through_mismatched_t
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedTernaryUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -14003,20 +13206,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readReturnedTernaryInitializedLocal");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -14054,20 +13257,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_ternary_assignment_r
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedTernaryAssigned");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -14108,20 +13311,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readReturnedTernaryAssignedUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -14156,20 +13359,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_ternary_initialized_
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readTernaryInitializedLocal");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -14206,20 +13409,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readTernaryInitializedLocalUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -14254,20 +13457,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_ternary_assigned_loc
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readTernaryAssignedLocal");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -14305,20 +13508,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readTernaryAssignedLocalUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -14356,20 +13559,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readTernaryLocalArmInitializedLocal");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -14408,20 +13611,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readTernaryLocalArmAssignedLocal");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -14459,20 +13662,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readTernaryLocalArmLocalUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -14506,20 +13709,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_ternary_expression_r
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readTernaryExpressionReceiver");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -14555,12 +13758,12 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readTernaryExpressionReceiverUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 0);
+    ASSERT_EQ_UINT(bundle.njson_dynamic_access_plans, 0);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -14595,20 +13798,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_ternary_local_expres
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readTernaryLocalExpressionReceiver");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -14645,12 +13848,12 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readTernaryLocalExpressionReceiverUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 0);
+    ASSERT_EQ_UINT(bundle.njson_dynamic_access_plans, 0);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -14689,22 +13892,23 @@ TEST(global_evidence_producer_propagates_json_shape_through_closure_capture) {
     ASSERT_NOT_NULL(outer);
     ASSERT_NOT_NULL(closure);
     ASSERT_TRUE(outer->func_id != closure->func_id);
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, closure->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 0);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 0);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, closure->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(access_plan->field_ordinal, 0);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->field_ordinal, UINT16_MAX);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -14744,20 +13948,21 @@ TEST(global_evidence_producer_propagates_json_shape_through_array_closure_contai
     ASSERT_NOT_NULL(outer);
     ASSERT_NOT_NULL(closure);
     ASSERT_TRUE(outer->func_id != closure->func_id);
-    ASSERT_TRUE(ev.njson_shapes >= 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, closure->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_TRUE(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON) >= 1);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 0);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, closure->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.njson_dynamic_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.json_dynamic_access_plans[0].action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(bundle.json_dynamic_access_plans[0].field_ordinal, UINT16_MAX);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -14792,21 +13997,21 @@ TEST(global_evidence_producer_propagates_json_shape_through_field_initializer) {
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readPayloadAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_fields, 2);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(evidence_object_field_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id, (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -14847,21 +14052,21 @@ TEST(global_evidence_producer_keeps_json_field_initializer_shape_through_constru
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readPayloadAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_fields, 2);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(evidence_object_field_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id, (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -14903,12 +14108,12 @@ TEST(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readPayloadAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 0);
+    ASSERT_EQ_UINT(bundle.njson_dynamic_access_plans, 0);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -14949,12 +14154,12 @@ TEST(global_evidence_producer_clears_json_field_shape_after_constructor_unknown_
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readPayloadAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 0);
+    ASSERT_EQ_UINT(bundle.njson_dynamic_access_plans, 0);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -14992,21 +14197,21 @@ TEST(global_evidence_producer_propagates_json_shape_through_constructor_field_as
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readPayloadAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_fields, 2);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(evidence_object_field_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id, (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15049,19 +14254,19 @@ TEST(global_evidence_producer_propagates_json_shape_through_constructor_branch_f
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readPayloadAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15100,19 +14305,19 @@ TEST(global_evidence_producer_propagates_json_shape_through_constructor_ternary_
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readPayloadAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15156,12 +14361,12 @@ TEST(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readPayloadAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 0);
+    ASSERT_EQ_UINT(bundle.njson_dynamic_access_plans, 0);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15201,12 +14406,12 @@ TEST(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readPayloadAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 0);
+    ASSERT_EQ_UINT(bundle.njson_dynamic_access_plans, 0);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15240,21 +14445,21 @@ TEST(global_evidence_producer_propagates_json_shape_through_array_literal_contai
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readArrayLiteralAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_fields, 2);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, ev.json_shapes[0].json_shape_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
+    ASSERT_EQ_UINT(evidence_object_field_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id, (*evidence_object_shape_by_domain(&ev, XG_OBJECT_DOMAIN_JSON, 0)).object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15289,20 +14494,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_array_push_container
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readArrayPushAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_TRUE(ev.njson_shapes >= 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_TRUE(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON) >= 1);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15339,20 +14544,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_array_alias_containe
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readArrayAliasAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_TRUE(ev.njson_shapes >= 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_TRUE(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON) >= 1);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15406,8 +14611,8 @@ TEST(global_evidence_producer_propagates_json_shape_through_array_ternary_contai
     ASSERT_NOT_NULL(expr_reader);
     ASSERT_NOT_NULL(init_reader);
     ASSERT_NOT_NULL(assign_reader);
-    ASSERT_TRUE(ev.njson_shapes >= 3);
-    ASSERT_EQ_UINT(ev.njson_accesses, 3);
+    ASSERT_TRUE(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON) >= 3);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 3);
 
     bool saw_expr = false;
     bool saw_init = false;
@@ -15415,19 +14620,19 @@ TEST(global_evidence_producer_propagates_json_shape_through_array_ternary_contai
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
-        const XgJsonAccessSummary *row = &ev.json_accesses[i];
-        const XaotJsonAccessPlan *access_plan =
-            xaot_bundle_find_json_access_plan(&bundle, row->json_access_id);
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *row = &ev.object_accesses[i];
+        const XaotObjectAccessPlan *access_plan =
+            xaot_bundle_find_object_access_plan(&bundle, row->object_access_id);
         ASSERT_TRUE(row->owner_func_id == expr_reader->func_id ||
                     row->owner_func_id == init_reader->func_id ||
                     row->owner_func_id == assign_reader->func_id);
         ASSERT_TRUE(row->receiver_shape_id != XG_NO_ID);
-        ASSERT_EQ_UINT(row->access_kind, XG_JSON_ACCESS_FIELD_GET);
+        ASSERT_EQ_UINT(row->access_kind, XG_OBJECT_ACCESS_FIELD_GET);
         ASSERT_EQ_UINT(row->field_ordinal, 1);
-        ASSERT_TRUE((row->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        ASSERT_TRUE((row->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
         ASSERT_NOT_NULL(access_plan);
-        ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+        ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
         ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
         if (row->owner_func_id == expr_reader->func_id)
             saw_expr = true;
@@ -15475,20 +14680,20 @@ TEST(
     const XgBodySummary *reader =
         evidence_find_body_by_name(&ev, "readArrayTernaryContainerUnknown");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotJsonAccessPlan *access_plan =
-        xaot_bundle_find_json_access_plan(&bundle, ev.json_accesses[0].json_access_id);
+    const XaotJsonDynamicAccessPlan *access_plan =
+        xaot_bundle_find_json_dynamic_access_plan(&bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
     xaot_bundle_free(&bundle);
 
@@ -15524,20 +14729,20 @@ TEST(global_evidence_producer_propagates_json_shape_through_array_return_contain
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readReturnedArrayAge");
     ASSERT_NOT_NULL(reader);
-    ASSERT_TRUE(ev.njson_shapes >= 1);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_TRUE(ev.json_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_TRUE(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON) >= 1);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_TRUE(ev.object_accesses[0].receiver_shape_id != XG_NO_ID);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+    ASSERT_EQ_UINT(bundle.object_access_plans[0].field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15594,40 +14799,36 @@ TEST(global_evidence_producer_propagates_shapes_through_method_return_receivers)
     ASSERT_NOT_NULL(json_reader);
     ASSERT_NOT_NULL(array_reader);
     ASSERT_NOT_NULL(record_reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 2);
-    ASSERT_EQ_UINT(ev.nrecord_accesses, 1);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 3);
     bool saw_json = false;
     bool saw_array = false;
-    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
-        const XgJsonAccessSummary *access = &ev.json_accesses[i];
+    bool saw_record = false;
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *access = &ev.object_accesses[i];
         ASSERT_TRUE(access->receiver_shape_id != XG_NO_ID);
-        ASSERT_EQ_UINT(access->access_kind, XG_JSON_ACCESS_FIELD_GET);
+        ASSERT_EQ_UINT(access->access_kind, XG_OBJECT_ACCESS_FIELD_GET);
         ASSERT_EQ_UINT(access->field_ordinal, 1);
-        ASSERT_TRUE((access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        ASSERT_TRUE((access->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
         if (access->owner_func_id == json_reader->func_id)
             saw_json = true;
         if (access->owner_func_id == array_reader->func_id)
             saw_array = true;
+        if (access->owner_func_id == record_reader->func_id)
+            saw_record = true;
     }
     ASSERT_TRUE(saw_json);
     ASSERT_TRUE(saw_array);
-    ASSERT_EQ_UINT(ev.record_accesses[0].owner_func_id, record_reader->func_id);
-    ASSERT_TRUE(ev.record_accesses[0].receiver_shape_id != XG_NO_ID);
-    ASSERT_EQ_UINT(ev.record_accesses[0].access_kind, XG_RECORD_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.record_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.record_accesses[0].flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_TRUE(saw_record);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 2);
-    for (uint32_t i = 0; i < bundle.njson_access_plans; i++) {
-        ASSERT_EQ_UINT(bundle.json_access_plans[i].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-        ASSERT_EQ_UINT(bundle.json_access_plans[i].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 3);
+    for (uint32_t i = 0; i < bundle.nobject_access_plans; i++) {
+        ASSERT_EQ_UINT(bundle.object_access_plans[i].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+        ASSERT_EQ_UINT(bundle.object_access_plans[i].field_ordinal, 1);
     }
-    ASSERT_EQ_UINT(bundle.nrecord_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.record_access_plans[0].action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
-    ASSERT_EQ_UINT(bundle.record_access_plans[0].field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15676,15 +14877,15 @@ TEST(global_evidence_producer_propagates_json_array_method_return_shape_through_
         evidence_find_body_by_name(&ev, "readAssignedArrayMethodLocalAge");
     ASSERT_NOT_NULL(inferred_reader);
     ASSERT_NOT_NULL(assigned_reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 2);
     bool saw_inferred = false;
     bool saw_assigned = false;
-    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
-        const XgJsonAccessSummary *access = &ev.json_accesses[i];
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *access = &ev.object_accesses[i];
         ASSERT_TRUE(access->receiver_shape_id != XG_NO_ID);
-        ASSERT_EQ_UINT(access->access_kind, XG_JSON_ACCESS_FIELD_GET);
+        ASSERT_EQ_UINT(access->access_kind, XG_OBJECT_ACCESS_FIELD_GET);
         ASSERT_EQ_UINT(access->field_ordinal, 1);
-        ASSERT_TRUE((access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        ASSERT_TRUE((access->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
         if (access->owner_func_id == inferred_reader->func_id)
             saw_inferred = true;
         if (access->owner_func_id == assigned_reader->func_id)
@@ -15696,10 +14897,10 @@ TEST(global_evidence_producer_propagates_json_array_method_return_shape_through_
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 2);
-    for (uint32_t i = 0; i < bundle.njson_access_plans; i++) {
-        ASSERT_EQ_UINT(bundle.json_access_plans[i].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-        ASSERT_EQ_UINT(bundle.json_access_plans[i].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 2);
+    for (uint32_t i = 0; i < bundle.nobject_access_plans; i++) {
+        ASSERT_EQ_UINT(bundle.object_access_plans[i].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+        ASSERT_EQ_UINT(bundle.object_access_plans[i].field_ordinal, 1);
     }
     xaot_bundle_free(&bundle);
 
@@ -15788,24 +14989,16 @@ TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals)
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
 
-    uint32_t matched_json_accesses = 0;
-    bool saw_json_age = false;
-    bool saw_json_name = false;
+    uint32_t matched_array_object_accesses = 0;
     bool saw_array_age = false;
     bool saw_array_name = false;
-    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
-        const XgJsonAccessSummary *access = &ev.json_accesses[i];
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *access = &ev.object_accesses[i];
         uint16_t expected_field = UINT16_MAX;
         ASSERT_TRUE(access->receiver_shape_id != XG_NO_ID);
-        ASSERT_EQ_UINT(access->access_kind, XG_JSON_ACCESS_FIELD_GET);
-        ASSERT_TRUE((access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
-        if (access->owner_func_id == json_age->func_id) {
-            expected_field = 1;
-            saw_json_age = true;
-        } else if (access->owner_func_id == json_name->func_id) {
-            expected_field = 0;
-            saw_json_name = true;
-        } else if (access->owner_func_id == array_age->func_id) {
+        ASSERT_EQ_UINT(access->access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+        ASSERT_TRUE((access->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        if (access->owner_func_id == array_age->func_id) {
             expected_field = 1;
             saw_array_age = true;
         } else if (access->owner_func_id == array_name->func_id) {
@@ -15814,28 +15007,34 @@ TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals)
         } else {
             continue;
         }
-        matched_json_accesses++;
+        matched_array_object_accesses++;
         ASSERT_EQ_UINT(access->field_ordinal, expected_field);
-        const XaotJsonAccessPlan *plan =
-            xaot_bundle_find_json_access_plan(&bundle, access->json_access_id);
+        const XaotObjectAccessPlan *plan =
+            xaot_bundle_find_object_access_plan(&bundle, access->object_access_id);
         ASSERT_NOT_NULL(plan);
-        ASSERT_EQ_UINT(plan->action, XAOT_JSON_ACCESS_DIRECT_INDEX);
+        ASSERT_EQ_UINT(plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     }
-    ASSERT_EQ_UINT(matched_json_accesses, 4);
-    ASSERT_TRUE(saw_json_age);
-    ASSERT_TRUE(saw_json_name);
+    ASSERT_EQ_UINT(matched_array_object_accesses, 2);
     ASSERT_TRUE(saw_array_age);
     ASSERT_TRUE(saw_array_name);
-    uint32_t matched_record_accesses = 0;
+    uint32_t matched_object_accesses = 0;
+    bool saw_json_age = false;
+    bool saw_json_name = false;
     bool saw_record_age = false;
     bool saw_record_name = false;
-    for (uint32_t i = 0; i < ev.nrecord_accesses; i++) {
-        const XgRecordAccessSummary *access = &ev.record_accesses[i];
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *access = &ev.object_accesses[i];
         uint16_t expected_field = UINT16_MAX;
         ASSERT_TRUE(access->receiver_shape_id != XG_NO_ID);
-        ASSERT_EQ_UINT(access->access_kind, XG_RECORD_ACCESS_FIELD_GET);
-        ASSERT_TRUE((access->flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
-        if (access->owner_func_id == record_age->func_id) {
+        ASSERT_EQ_UINT(access->access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+        ASSERT_TRUE((access->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        if (access->owner_func_id == json_age->func_id) {
+            expected_field = 1;
+            saw_json_age = true;
+        } else if (access->owner_func_id == json_name->func_id) {
+            expected_field = 0;
+            saw_json_name = true;
+        } else if (access->owner_func_id == record_age->func_id) {
             expected_field = 1;
             saw_record_age = true;
         } else if (access->owner_func_id == record_name->func_id) {
@@ -15844,14 +15043,16 @@ TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals)
         } else {
             continue;
         }
-        matched_record_accesses++;
+        matched_object_accesses++;
         ASSERT_EQ_UINT(access->field_ordinal, expected_field);
-        const XaotRecordAccessPlan *plan =
-            xaot_bundle_find_record_access_plan(&bundle, access->record_access_id);
+        const XaotObjectAccessPlan *plan =
+            xaot_bundle_find_object_access_plan(&bundle, access->object_access_id);
         ASSERT_NOT_NULL(plan);
-        ASSERT_EQ_UINT(plan->action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
+        ASSERT_EQ_UINT(plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     }
-    ASSERT_EQ_UINT(matched_record_accesses, 2);
+    ASSERT_EQ_UINT(matched_object_accesses, 4);
+    ASSERT_TRUE(saw_json_age);
+    ASSERT_TRUE(saw_json_name);
     ASSERT_TRUE(saw_record_age);
     ASSERT_TRUE(saw_record_name);
     xaot_bundle_free(&bundle);
@@ -15887,20 +15088,19 @@ TEST(global_evidence_producer_clears_json_container_shape_after_mismatched_eleme
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readAfterMismatchedSet");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.njson_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.json_accesses[0].receiver_shape_id, XG_NO_ID);
-    ASSERT_EQ_UINT(ev.json_accesses[0].access_kind, XG_JSON_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.json_accesses[0].field_ordinal, UINT16_MAX);
-    ASSERT_TRUE((ev.json_accesses[0].flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) == 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 1);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].action, XAOT_JSON_ACCESS_DYNAMIC_LOOKUP);
-    ASSERT_EQ_UINT(bundle.json_access_plans[0].unproven_reason,
-                   XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
+    ASSERT_EQ_UINT(bundle.njson_dynamic_access_plans, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 0);
+    ASSERT_EQ_UINT(bundle.json_dynamic_access_plans[0].action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15944,17 +15144,19 @@ TEST(global_evidence_producer_propagates_json_bridge_shape_through_field_and_con
     const XgBodySummary *container_reader = evidence_find_body_by_name(&ev, "readContainerJson");
     ASSERT_NOT_NULL(field_reader);
     ASSERT_NOT_NULL(container_reader);
-    ASSERT_EQ_UINT(ev.njson_shapes, 1);
-    ASSERT_EQ_UINT(ev.njson_fields, 2);
-    ASSERT_EQ_UINT(ev.njson_accesses, 2);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_STRUCT), 1);
+    ASSERT_EQ_UINT(evidence_object_field_count_by_domain(&ev, XG_OBJECT_DOMAIN_STRUCT), 2);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 2);
     bool saw_field = false;
     bool saw_container = false;
-    for (uint32_t i = 0; i < ev.njson_accesses; i++) {
-        const XgJsonAccessSummary *access = &ev.json_accesses[i];
-        ASSERT_EQ_UINT(access->receiver_shape_id, ev.json_shapes[0].json_shape_id);
-        ASSERT_EQ_UINT(access->access_kind, XG_JSON_ACCESS_FIELD_GET);
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *access = &ev.object_accesses[i];
+        ASSERT_EQ_UINT(access->receiver_shape_id, ev.object_shapes[0].object_shape_id);
+        ASSERT_EQ_UINT(access->access_kind, XG_OBJECT_ACCESS_FIELD_GET);
         ASSERT_EQ_UINT(access->field_ordinal, 1);
-        ASSERT_TRUE((access->flags & XG_JSON_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        ASSERT_TRUE((access->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
         if (access->owner_func_id == field_reader->func_id)
             saw_field = true;
         if (access->owner_func_id == container_reader->func_id)
@@ -15966,10 +15168,10 @@ TEST(global_evidence_producer_propagates_json_bridge_shape_through_field_and_con
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_access_plans, 2);
-    for (uint32_t i = 0; i < bundle.njson_access_plans; i++) {
-        ASSERT_EQ_UINT(bundle.json_access_plans[i].action, XAOT_JSON_ACCESS_DIRECT_INDEX);
-        ASSERT_EQ_UINT(bundle.json_access_plans[i].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 2);
+    for (uint32_t i = 0; i < bundle.nobject_access_plans; i++) {
+        ASSERT_EQ_UINT(bundle.object_access_plans[i].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+        ASSERT_EQ_UINT(bundle.object_access_plans[i].field_ordinal, 1);
     }
     xaot_bundle_free(&bundle);
 
@@ -15977,7 +15179,7 @@ TEST(global_evidence_producer_propagates_json_bridge_shape_through_field_and_con
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_propagates_record_shape_through_closure_capture) {
+TEST(global_evidence_producer_propagates_object_shape_through_closure_capture) {
     setup_parser_session();
     const char *source = "fn readCapturedRecord() -> int {\n"
                          "    var user = { name: \"ada\", age: 7 }\n"
@@ -16009,22 +15211,22 @@ TEST(global_evidence_producer_propagates_record_shape_through_closure_capture) {
     ASSERT_NOT_NULL(outer);
     ASSERT_NOT_NULL(closure);
     ASSERT_TRUE(outer->func_id != closure->func_id);
-    ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
-    ASSERT_EQ_UINT(ev.nrecord_fields, 2);
-    ASSERT_EQ_UINT(ev.nrecord_accesses, 1);
-    ASSERT_EQ_UINT(ev.record_accesses[0].owner_func_id, closure->func_id);
-    ASSERT_EQ_UINT(ev.record_accesses[0].receiver_shape_id, ev.record_shapes[0].record_shape_id);
-    ASSERT_EQ_UINT(ev.record_accesses[0].access_kind, XG_RECORD_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.record_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.record_accesses[0].flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_shapes, 1);
+    ASSERT_EQ_UINT(ev.nobject_fields, 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, closure->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id, ev.object_shapes[0].object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotRecordAccessPlan *access_plan =
-        xaot_bundle_find_record_access_plan(&bundle, ev.record_accesses[0].record_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -16032,7 +15234,7 @@ TEST(global_evidence_producer_propagates_record_shape_through_closure_capture) {
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_propagates_record_shape_through_return_receivers) {
+TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) {
     setup_parser_session();
     const char *source = "type User = { name: string, age: int }\n"
                          "fn makeUser() -> User {\n"
@@ -16076,18 +15278,18 @@ TEST(global_evidence_producer_propagates_record_shape_through_return_receivers) 
     ASSERT_NOT_NULL(direct);
     ASSERT_NOT_NULL(local);
     ASSERT_NOT_NULL(indirect);
-    ASSERT_EQ_UINT(ev.nrecord_shapes, 2);
-    ASSERT_EQ_UINT(ev.nrecord_fields, 4);
-    ASSERT_EQ_UINT(ev.nrecord_accesses, 3);
+    ASSERT_EQ_UINT(ev.nobject_shapes, 2);
+    ASSERT_EQ_UINT(ev.nobject_fields, 4);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 3);
     bool saw_direct = false;
     bool saw_local = false;
     bool saw_indirect = false;
-    for (uint32_t i = 0; i < ev.nrecord_accesses; i++) {
-        const XgRecordAccessSummary *access = &ev.record_accesses[i];
-        ASSERT_EQ_UINT(access->receiver_shape_id, ev.record_shapes[0].record_shape_id);
-        ASSERT_EQ_UINT(access->access_kind, XG_RECORD_ACCESS_FIELD_GET);
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *access = &ev.object_accesses[i];
+        ASSERT_EQ_UINT(access->receiver_shape_id, ev.object_shapes[0].object_shape_id);
+        ASSERT_EQ_UINT(access->access_kind, XG_OBJECT_ACCESS_FIELD_GET);
         ASSERT_EQ_UINT(access->field_ordinal, 1);
-        ASSERT_TRUE((access->flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        ASSERT_TRUE((access->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
         if (access->owner_func_id == direct->func_id)
             saw_direct = true;
         if (access->owner_func_id == local->func_id)
@@ -16102,10 +15304,10 @@ TEST(global_evidence_producer_propagates_record_shape_through_return_receivers) 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.nrecord_access_plans, 3);
-    for (uint32_t i = 0; i < bundle.nrecord_access_plans; i++) {
-        ASSERT_EQ_UINT(bundle.record_access_plans[i].action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
-        ASSERT_EQ_UINT(bundle.record_access_plans[i].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 3);
+    for (uint32_t i = 0; i < bundle.nobject_access_plans; i++) {
+        ASSERT_EQ_UINT(bundle.object_access_plans[i].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+        ASSERT_EQ_UINT(bundle.object_access_plans[i].field_ordinal, 1);
     }
     xaot_bundle_free(&bundle);
 
@@ -16113,7 +15315,7 @@ TEST(global_evidence_producer_propagates_record_shape_through_return_receivers) 
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_propagates_record_shape_through_typed_param) {
+TEST(global_evidence_producer_propagates_object_shape_through_typed_param) {
     setup_parser_session();
     const char *source = "type User = { name: string, age: int }\n"
                          "fn readParamRecord(user: User) -> int {\n"
@@ -16139,22 +15341,22 @@ TEST(global_evidence_producer_propagates_record_shape_through_typed_param) {
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readParamRecord");
     ASSERT_NOT_NULL(reader);
-    ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
-    ASSERT_EQ_UINT(ev.nrecord_fields, 2);
-    ASSERT_EQ_UINT(ev.nrecord_accesses, 1);
-    ASSERT_EQ_UINT(ev.record_accesses[0].owner_func_id, reader->func_id);
-    ASSERT_EQ_UINT(ev.record_accesses[0].receiver_shape_id, ev.record_shapes[0].record_shape_id);
-    ASSERT_EQ_UINT(ev.record_accesses[0].access_kind, XG_RECORD_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.record_accesses[0].field_ordinal, 1);
-    ASSERT_TRUE((ev.record_accesses[0].flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(ev.nobject_shapes, 1);
+    ASSERT_EQ_UINT(ev.nobject_fields, 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_accesses[0].owner_func_id, reader->func_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id, ev.object_shapes[0].object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotRecordAccessPlan *access_plan =
-        xaot_bundle_find_record_access_plan(&bundle, ev.record_accesses[0].record_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
     ASSERT_EQ_UINT(access_plan->field_ordinal, 1);
     xaot_bundle_free(&bundle);
 
@@ -16162,7 +15364,222 @@ TEST(global_evidence_producer_propagates_record_shape_through_typed_param) {
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_propagates_record_shape_through_field_and_container_receivers) {
+TEST(global_evidence_producer_closes_open_row_receiver_shape_sets) {
+    setup_parser_session();
+    const char *source = "type Named = { name: string, ... }\n"
+                         "fn readSame(value: Named) -> string {\n"
+                         "    return value.name\n"
+                         "}\n"
+                          "fn readDifferent(value: Named) -> string {\n"
+                          "    return value[\"name\"]\n"
+                          "}\n"
+                          "fn readGuard(value: Named) -> string {\n"
+                          "    return value.name\n"
+                          "}\n"
+                          "fn forwardSame(value: Named) -> string {\n"
+                          "    return readSame(value)\n"
+                          "}\n"
+                          "fn useRows() -> string {\n"
+                          "    fn readNested(value: Named) -> string {\n"
+                          "        return value.name\n"
+                          "    }\n"
+                          "    var a = forwardSame({ name: \"ada\", age: 1 })\n"
+                          "    var b = forwardSame({ name: \"bob\", zzz: 2 })\n"
+                          "    var c = readDifferent({ age: 3, name: \"cat\" })\n"
+                          "    var d = readGuard({ name: \"eve\", tag: 5 })\n"
+                          "    var e = readNested({ name: \"nested\", extra: 6 })\n"
+                          "    return a + b + c + d + e + readDifferent({ id: 4, name: \"dot\" })\n"
+                         "}\n";
+    AstNode *ast = xr_parse(g_session, source);
+    ASSERT_NOT_NULL(ast);
+    XrModuleSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.source_path = "test.xr";
+    spec.ast = ast;
+    int topo_order[1] = {0};
+    XrModuleGraph graph;
+    memset(&graph, 0, sizeof(graph));
+    graph.specs = &spec;
+    graph.spec_count = 1;
+    graph.topo_order = topo_order;
+    graph.topo_count = 1;
+    graph.entry_index = 0;
+
+    XgGlobalEvidence ev;
+    ASSERT_TRUE(
+        xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
+    const XgBodySummary *same = evidence_find_body_by_name(&ev, "readSame");
+    const XgBodySummary *different = evidence_find_body_by_name(&ev, "readDifferent");
+    const XgBodySummary *guard = evidence_find_body_by_name(&ev, "readGuard");
+    const XgBodySummary *nested = evidence_find_body_by_name(&ev, "readNested");
+    const XgBodySummary *use_rows = evidence_find_body_by_name(&ev, "useRows");
+    ASSERT_NOT_NULL(same);
+    ASSERT_NOT_NULL(different);
+    ASSERT_NOT_NULL(guard);
+    ASSERT_NOT_NULL(nested);
+    ASSERT_NOT_NULL(use_rows);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 4);
+    ASSERT_EQ_UINT(ev.nobject_access_cases, 6);
+    ASSERT_EQ_UINT(ev.nobject_shape_flows, 7);
+    {
+        bool saw_forwarded = false;
+        bool saw_closure_flow = false;
+        for (uint32_t i = 0; i < ev.nobject_shape_flows; i++) {
+            if ((ev.object_shape_flows[i].flags & XG_OBJECT_SHAPE_FLOW_FORWARDED) != 0)
+                saw_forwarded = true;
+            if (ev.object_shape_flows[i].target_func_id == nested->func_id &&
+                (ev.object_shape_flows[i].flags & XG_OBJECT_SHAPE_FLOW_CONCRETE) != 0)
+                saw_closure_flow = true;
+        }
+        ASSERT_TRUE(saw_forwarded);
+        ASSERT_TRUE(saw_closure_flow);
+        bool saw_static_closure_call = false;
+        for (uint32_t i = 0; i < ev.ncallsites; i++) {
+            if (ev.callsites[i].owner_func_id == use_rows->func_id &&
+                ev.callsites[i].kind == XG_CALL_CLOSURE &&
+                ev.callsites[i].static_target_func_id == nested->func_id)
+                saw_static_closure_call = true;
+        }
+        ASSERT_TRUE(saw_static_closure_call);
+    }
+    {
+        uint64_t name_age_shape_key = 0;
+        uint32_t name_age_shape_count = 0;
+        uint16_t canonical_name_ordinal = UINT16_MAX;
+        uint16_t canonical_age_ordinal = UINT16_MAX;
+        for (uint32_t i = 0; i < ev.nobject_shapes; i++) {
+            const XgObjectShapeSummary *shape = &ev.object_shapes[i];
+            bool has_name = false;
+            bool has_age = false;
+            uint16_t name_ordinal = UINT16_MAX;
+            uint16_t age_ordinal = UINT16_MAX;
+            if (shape->domain != XG_OBJECT_DOMAIN_STRUCT || !shape->concrete_exact ||
+                shape->field_count != 2)
+                continue;
+            for (uint32_t j = 0; j < ev.nobject_fields; j++) {
+                const XgObjectFieldSummary *field = &ev.object_fields[j];
+                if (field->shape_id != shape->object_shape_id)
+                    continue;
+                if (field->name_id == xg_name_id("name")) {
+                    has_name = true;
+                    name_ordinal = field->field_ordinal;
+                }
+                if (field->name_id == xg_name_id("age")) {
+                    has_age = true;
+                    age_ordinal = field->field_ordinal;
+                }
+            }
+            if (has_name && has_age) {
+                if (name_age_shape_count == 0) {
+                    name_age_shape_key = shape->stable_shape_key;
+                    canonical_name_ordinal = name_ordinal;
+                    canonical_age_ordinal = age_ordinal;
+                } else {
+                    ASSERT_EQ_UINT(shape->stable_shape_key, name_age_shape_key);
+                    ASSERT_EQ_UINT(name_ordinal, canonical_name_ordinal);
+                    ASSERT_EQ_UINT(age_ordinal, canonical_age_ordinal);
+                }
+                name_age_shape_count++;
+            }
+        }
+        ASSERT_EQ_UINT(name_age_shape_count, 2);
+        ASSERT_TRUE(canonical_name_ordinal != canonical_age_ordinal);
+    }
+
+    XaotBundle bundle;
+    memset(&bundle, 0, sizeof(bundle));
+    ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
+    bool saw_direct = false;
+    bool saw_dispatch = false;
+    bool saw_guard = false;
+    uint32_t dispatch_access_index = UINT32_MAX;
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *access = &ev.object_accesses[i];
+        const XaotObjectAccessPlan *plan =
+            xaot_bundle_find_object_access_plan(&bundle, access->object_access_id);
+        ASSERT_NOT_NULL(plan);
+        ASSERT_TRUE((access->flags & XG_OBJECT_ACCESS_OPEN_ROW) != 0);
+        if (access->owner_func_id == same->func_id) {
+            ASSERT_EQ_UINT(access->receiver_shape_count, 2);
+            ASSERT_EQ_UINT(access->syntax, XG_OBJECT_ACCESS_SYNTAX_DOT);
+            ASSERT_EQ_UINT(plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+            saw_direct = true;
+        } else if (access->owner_func_id == different->func_id) {
+            ASSERT_EQ_UINT(access->receiver_shape_count, 2);
+            ASSERT_EQ_UINT(access->syntax, XG_OBJECT_ACCESS_SYNTAX_STATIC_INDEX);
+            ASSERT_EQ_UINT(plan->action, XAOT_OBJECT_ACCESS_SHAPE_DISPATCH_ORDINAL);
+            dispatch_access_index = i;
+            saw_dispatch = true;
+        } else if (access->owner_func_id == guard->func_id) {
+            ASSERT_EQ_UINT(access->receiver_shape_count, 1);
+            ASSERT_EQ_UINT(plan->action, XAOT_OBJECT_ACCESS_SHAPE_GUARD_ORDINAL);
+            saw_guard = true;
+        } else if (access->owner_func_id == nested->func_id) {
+            ASSERT_EQ_UINT(access->receiver_shape_count, 1);
+            ASSERT_EQ_UINT(plan->action, XAOT_OBJECT_ACCESS_SHAPE_GUARD_ORDINAL);
+        }
+    }
+    ASSERT_TRUE(saw_direct);
+    ASSERT_TRUE(saw_dispatch);
+    ASSERT_TRUE(saw_guard);
+    ASSERT_TRUE(dispatch_access_index != UINT32_MAX);
+    {
+        char err[256] = {0};
+        XiFunc init_func;
+        XiModule module;
+        XiModule *modules[1];
+        memset(&init_func, 0, sizeof(init_func));
+        init_func.name = "init";
+        init_func.xg_body_func_id = use_rows->func_id;
+        memset(&module, 0, sizeof(module));
+        module.path = "test.xr";
+        module.name = "test";
+        module.init = &init_func;
+        modules[0] = &module;
+        bundle.modules = modules;
+        bundle.nmodules = 1;
+        ASSERT_NOT_NULL(xaot_bundle_add_func_plan(&bundle, &init_func, 0, 0));
+        ASSERT_MSG(xaot_verify_bundle(&bundle, XAOT_VERIFY_REP_READY, err, sizeof(err)), err);
+        memset(err, 0, sizeof(err));
+        ev.object_accesses[dispatch_access_index].receiver_shape_count++;
+        bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+        ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_REP_READY, err, sizeof(err)));
+        ASSERT_MSG(strstr(err, "receiver shape set is incomplete") != NULL, err);
+        ev.object_accesses[dispatch_access_index].receiver_shape_count--;
+        bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+        {
+            XgObjectShapeFlowSummary *first = NULL;
+            XgObjectShapeFlowSummary *second = NULL;
+            for (uint32_t i = 0; i < ev.nobject_shape_flows; i++) {
+                XgObjectShapeFlowSummary *flow = &ev.object_shape_flows[i];
+                if (flow->target_func_id != different->func_id ||
+                    flow->target_param_ordinal != 0 ||
+                    (flow->flags & XG_OBJECT_SHAPE_FLOW_CONCRETE) == 0)
+                    continue;
+                if (!first)
+                    first = flow;
+                else
+                    second = flow;
+            }
+            ASSERT_NOT_NULL(first);
+            ASSERT_NOT_NULL(second);
+            XgObjectShapeId saved_shape_id = second->concrete_shape_id;
+            second->concrete_shape_id = first->concrete_shape_id;
+            bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+            memset(err, 0, sizeof(err));
+            ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_REP_READY, err, sizeof(err)));
+            ASSERT_MSG(strstr(err, "receiver shape set is incomplete") != NULL, err);
+            second->concrete_shape_id = saved_shape_id;
+            bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&ev);
+        }
+    }
+    xaot_bundle_free(&bundle);
+
+    xg_global_evidence_free(&ev);
+    teardown_parser_session();
+}
+
+TEST(global_evidence_producer_propagates_object_shape_through_field_and_container_receivers) {
     setup_parser_session();
     const char *source = "type User = { name: string, age: int }\n"
                          "class Holder {\n"
@@ -16199,17 +15616,17 @@ TEST(global_evidence_producer_propagates_record_shape_through_field_and_containe
     const XgBodySummary *container_reader = evidence_find_body_by_name(&ev, "readContainer");
     ASSERT_NOT_NULL(field_reader);
     ASSERT_NOT_NULL(container_reader);
-    ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
-    ASSERT_EQ_UINT(ev.nrecord_fields, 2);
-    ASSERT_EQ_UINT(ev.nrecord_accesses, 2);
+    ASSERT_EQ_UINT(ev.nobject_shapes, 1);
+    ASSERT_EQ_UINT(ev.nobject_fields, 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 2);
     bool saw_field = false;
     bool saw_container = false;
-    for (uint32_t i = 0; i < ev.nrecord_accesses; i++) {
-        const XgRecordAccessSummary *access = &ev.record_accesses[i];
-        ASSERT_EQ_UINT(access->receiver_shape_id, ev.record_shapes[0].record_shape_id);
-        ASSERT_EQ_UINT(access->access_kind, XG_RECORD_ACCESS_FIELD_GET);
+    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
+        const XgObjectAccessSummary *access = &ev.object_accesses[i];
+        ASSERT_EQ_UINT(access->receiver_shape_id, ev.object_shapes[0].object_shape_id);
+        ASSERT_EQ_UINT(access->access_kind, XG_OBJECT_ACCESS_FIELD_GET);
         ASSERT_EQ_UINT(access->field_ordinal, 1);
-        ASSERT_TRUE((access->flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+        ASSERT_TRUE((access->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
         if (access->owner_func_id == field_reader->func_id)
             saw_field = true;
         if (access->owner_func_id == container_reader->func_id)
@@ -16221,10 +15638,10 @@ TEST(global_evidence_producer_propagates_record_shape_through_field_and_containe
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.nrecord_access_plans, 2);
-    for (uint32_t i = 0; i < bundle.nrecord_access_plans; i++) {
-        ASSERT_EQ_UINT(bundle.record_access_plans[i].action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
-        ASSERT_EQ_UINT(bundle.record_access_plans[i].field_ordinal, 1);
+    ASSERT_EQ_UINT(bundle.nobject_access_plans, 2);
+    for (uint32_t i = 0; i < bundle.nobject_access_plans; i++) {
+        ASSERT_EQ_UINT(bundle.object_access_plans[i].action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
+        ASSERT_EQ_UINT(bundle.object_access_plans[i].field_ordinal, 1);
     }
     xaot_bundle_free(&bundle);
 
@@ -16232,7 +15649,7 @@ TEST(global_evidence_producer_propagates_record_shape_through_field_and_containe
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_records_record_shape_access) {
+TEST(global_evidence_producer_records_object_shape_access) {
     setup_parser_session();
     const char *source = "fn readX() -> int {\n"
                          "    var p = { x: 1, y: 2 }\n"
@@ -16256,37 +15673,38 @@ TEST(global_evidence_producer_records_record_shape_access) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(ev.njson_shapes, 0);
-    ASSERT_EQ_UINT(ev.njson_accesses, 0);
-    ASSERT_EQ_UINT(ev.nrecord_shapes, 1);
-    ASSERT_EQ_UINT(ev.nrecord_fields, 2);
-    ASSERT_EQ_UINT(ev.nrecord_accesses, 1);
-    ASSERT_EQ_UINT(ev.record_shapes[0].shape_kind, XG_RECORD_SHAPE_LITERAL);
-    ASSERT_EQ_UINT(ev.record_shapes[0].field_count, 2);
-    ASSERT_TRUE((ev.record_shapes[0].flags & XG_RECORD_SHAPE_SEALED) != 0);
-    ASSERT_TRUE((ev.record_shapes[0].flags & XG_RECORD_SHAPE_STATIC_KEYS) != 0);
-    ASSERT_EQ_UINT(ev.record_fields[0].shape_id, ev.record_shapes[0].record_shape_id);
-    ASSERT_EQ_UINT(ev.record_fields[0].field_ordinal, 0);
-    ASSERT_EQ_UINT(ev.record_fields[0].name_id, xg_name_id("x"));
-    ASSERT_TRUE((ev.record_fields[0].flags & XG_RECORD_FIELD_REQUIRED) != 0);
-    ASSERT_EQ_UINT(ev.record_accesses[0].receiver_shape_id, ev.record_shapes[0].record_shape_id);
-    ASSERT_EQ_UINT(ev.record_accesses[0].access_kind, XG_RECORD_ACCESS_FIELD_GET);
-    ASSERT_EQ_UINT(ev.record_accesses[0].field_ordinal, 0);
-    ASSERT_TRUE((ev.record_accesses[0].flags & XG_RECORD_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 0);
+    ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
+    ASSERT_EQ_UINT(ev.nobject_shapes, 1);
+    ASSERT_EQ_UINT(ev.nobject_fields, 2);
+    ASSERT_EQ_UINT(ev.nobject_accesses, 1);
+    ASSERT_EQ_UINT(ev.object_shapes[0].shape_kind, XG_OBJECT_SHAPE_LITERAL);
+    ASSERT_EQ_UINT(ev.object_shapes[0].field_count, 2);
+    ASSERT_TRUE((ev.object_shapes[0].flags & XG_OBJECT_SHAPE_SEALED) != 0);
+    ASSERT_TRUE((ev.object_shapes[0].flags & XG_OBJECT_SHAPE_STATIC_KEYS) != 0);
+    ASSERT_EQ_UINT(ev.object_fields[0].shape_id, ev.object_shapes[0].object_shape_id);
+    ASSERT_EQ_UINT(ev.object_fields[0].field_ordinal, 0);
+    ASSERT_EQ_UINT(ev.object_fields[0].name_id, xg_name_id("y"));
+    ASSERT_EQ_UINT(ev.object_fields[1].name_id, xg_name_id("x"));
+    ASSERT_TRUE((ev.object_fields[0].flags & XG_OBJECT_FIELD_REQUIRED) != 0);
+    ASSERT_EQ_UINT(ev.object_accesses[0].receiver_shape_id, ev.object_shapes[0].object_shape_id);
+    ASSERT_EQ_UINT(ev.object_accesses[0].access_kind, XG_OBJECT_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.object_accesses[0].field_ordinal, 1);
+    ASSERT_TRUE((ev.object_accesses[0].flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    const XaotRecordAccessPlan *access_plan =
-        xaot_bundle_find_record_access_plan(&bundle, ev.record_accesses[0].record_access_id);
+    const XaotObjectAccessPlan *access_plan =
+        xaot_bundle_find_object_access_plan(&bundle, ev.object_accesses[0].object_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_RECORD_ACCESS_DIRECT_FIELD);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_OBJECT_ACCESS_DIRECT_ORDINAL);
 
     char *dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "record-shape 0 id=1"));
-    ASSERT_NOT_NULL(strstr(dump, "record-field 0 id=1 shape=1 ord=0"));
-    ASSERT_NOT_NULL(strstr(dump, "record-access 0 id=1"));
+    ASSERT_NOT_NULL(strstr(dump, "object-shape 0 id=1"));
+    ASSERT_NOT_NULL(strstr(dump, "object-field 0 id=1 shape=1 ord=0"));
+    ASSERT_NOT_NULL(strstr(dump, "object-access 0 id=1"));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -18417,15 +17835,7 @@ RUN_TEST(global_evidence_rejects_unhashable_derived_eq_hash_field);
 RUN_TEST(global_evidence_producer_records_derived_clone_plan);
 RUN_TEST(global_evidence_producer_classifies_derived_clone_fields);
 RUN_TEST(global_evidence_rejects_eq_only_as_hashable_plan);
-RUN_TEST(global_evidence_records_json_shape_and_access_plans);
-RUN_TEST(global_evidence_records_json_codec_plans);
-RUN_TEST(global_evidence_records_record_shape_and_access_plans);
-RUN_TEST(global_evidence_verifier_rejects_stale_json_record_field_rows);
-RUN_TEST(global_evidence_verifier_rederives_json_shape_fields);
-RUN_TEST(global_evidence_verifier_rederives_json_codec_record_shape);
-RUN_TEST(global_evidence_verifier_rejects_json_codec_source_identity);
-RUN_TEST(global_evidence_verifier_cross_checks_json_record_bridge_ids);
-RUN_TEST(global_evidence_records_record_merge_plans);
+RUN_TEST(global_evidence_records_object_merge_plans);
 RUN_TEST(global_evidence_records_options_bag_plans);
 RUN_TEST(global_evidence_records_map_set_key_plans);
 RUN_TEST(global_evidence_producer_records_user_hashable_direct_call_plan);
@@ -18528,11 +17938,12 @@ RUN_TEST(global_evidence_producer_propagates_call_return_shapes_through_more_loc
 RUN_TEST(global_evidence_producer_clears_json_container_shape_after_mismatched_element_set);
 RUN_TEST(
     global_evidence_producer_propagates_json_bridge_shape_through_field_and_container_receivers);
-RUN_TEST(global_evidence_producer_propagates_record_shape_through_closure_capture);
-RUN_TEST(global_evidence_producer_propagates_record_shape_through_return_receivers);
-RUN_TEST(global_evidence_producer_propagates_record_shape_through_typed_param);
-RUN_TEST(global_evidence_producer_propagates_record_shape_through_field_and_container_receivers);
-RUN_TEST(global_evidence_producer_records_record_shape_access);
+RUN_TEST(global_evidence_producer_propagates_object_shape_through_closure_capture);
+RUN_TEST(global_evidence_producer_propagates_object_shape_through_return_receivers);
+RUN_TEST(global_evidence_producer_propagates_object_shape_through_typed_param);
+RUN_TEST(global_evidence_producer_closes_open_row_receiver_shape_sets);
+RUN_TEST(global_evidence_producer_propagates_object_shape_through_field_and_container_receivers);
+RUN_TEST(global_evidence_producer_records_object_shape_access);
 RUN_TEST(global_evidence_producer_records_map_literal_and_key_access);
 RUN_TEST(global_evidence_producer_records_verified_readonly_static_map_set_tables);
 RUN_TEST(global_evidence_producer_records_non_string_readonly_static_map_set_tables);

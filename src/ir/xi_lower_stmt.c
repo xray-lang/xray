@@ -1167,7 +1167,7 @@ static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *
     if (fidx >= 0) {
         struct XrType *ft =
             subject->type->object.field_types ? subject->type->object.field_types[fidx] : NULL;
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F, ft ? ft : l->type_any, 1);
+        XiValue *v = xi_value_new(l->func, l->cur_block, XI_OBJECT_GET_F, ft ? ft : l->type_any, 1);
         if (v) {
             v->args[0] = subject;
             v->aux_int = fidx;
@@ -1395,7 +1395,7 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
              * present) is captured in lower_pattern_bindings once the
              * test succeeds. */
             PatternTypeNode *tp = &pattern->as.pattern_type;
-            return xi_lower_is_test(l, subject, tp->type, pattern->line);
+            return xi_lower_is_test(l, subject, tp->type, pattern->line, 0);
         }
 
         default:
@@ -2650,7 +2650,7 @@ static void lower_error_catch_clauses(XiLower *l, XrCatchClause **errc, int errn
         XiBlock *next_blk = NULL;
 
         if (has_type) {
-            XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line);
+            XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line, 0);
             XiBlock *type_blk = xi_block_new(l->func);
             next_blk = xi_block_new(l->func);
             xi_block_set_if(l->cur_block, is_val, type_blk, next_blk);
@@ -2948,15 +2948,15 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                 if (fidx >= 0) {
                     struct XrType *field_type =
                         src->type->object.field_types ? src->type->object.field_types[fidx] : NULL;
-                    val = xi_value_new(l->func, l->cur_block, XI_JSON_GET_F,
+                    val = xi_value_new(l->func, l->cur_block, XI_OBJECT_GET_F,
                                        field_type ? field_type : l->type_any, 1);
                     if (val) {
                         val->args[0] = src;
                         val->aux_int = fidx;
                         val->line = source_span_id;
-                        xi_lower_bind_record_access_id(l, val, fname, source_span_id,
+                        xi_lower_bind_object_access_id(l, val, fname, source_span_id,
                                                        (uint16_t) fidx,
-                                                       XG_RECORD_ACCESS_DESTRUCTURE);
+                                                       XG_OBJECT_ACCESS_DESTRUCTURE);
                     }
                 } else {
                     XiValue *key = xi_const_str(l->func, l->cur_block, fname, l->type_string);

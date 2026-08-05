@@ -1,0 +1,28 @@
+type Named = { name: string, ... }
+
+fn readDirect(value: Named) -> string {
+    return value.name
+}
+
+fn readGuard(value: Named) -> string {
+    return value.name
+}
+
+fn readDispatch(value: Named) -> string {
+    return value["name"]
+}
+
+fn forwardDirect(value: Named) -> string {
+    return readDirect(value)
+}
+
+fn exercise() -> string {
+    var a = forwardDirect({ name: "ada", age: 1 })
+    var b = forwardDirect({ name: "bob", zzz: 2 })
+    var c = readGuard({ name: "cat", tag: 3 })
+    var d = readDispatch({ age: 4, name: "dot" })
+    var e = readDispatch({ id: 5, name: "eve" })
+    return a + b + c + d + e
+}
+
+print(exercise())

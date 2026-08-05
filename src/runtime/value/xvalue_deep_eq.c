@@ -119,7 +119,7 @@ deep_compare: {
         XrInstance *ia = (XrInstance *) gc_a;
         XrInstance *ib = (XrInstance *) gc_b;
         if (ia->klass &&
-            (ia->klass->builtin_kind == XR_BK_JSON || ia->klass->builtin_kind == XR_BK_RECORD))
+            (ia->klass->builtin_kind == XR_BK_JSON || ia->klass->builtin_kind == XR_BK_STRUCT_OBJECT))
             result = xr_json_equals_deep(ctx, a, b);
         else if (ia->klass && ia->klass == ib->klass &&
                  (ia->klass->flags & XR_CLASS_DERIVE_EQ) != 0) {

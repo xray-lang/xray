@@ -54,13 +54,13 @@ RULES = (
     ),
     Rule(
         "INTERNAL_RECORD_IDENTITY",
-        re.compile(r"\bXR_KIND_RECORD\b|\bXR_BK_RECORD\b|\bXRT_OBJECT_RECORD\b"),
+        re.compile(r"\bXR_KIND_STRUCT_OBJECT\b|\bXR_BK_STRUCT_OBJECT\b|\bXRT_OBJECT_STRUCT\b"),
         ("src", "stdlib", "tests", "xisa"),
     ),
     Rule(
         "LEGACY_RECORD_TYPE_API",
         re.compile(
-            r"\bXR_TYPE_IS_RECORD\b|\bxr_type_new_record(?:_with_fields)?\b|"
+            r"\bXR_TYPE_IS_STRUCT_OBJECT\b|\bxr_type_new_struct_object(?:_with_fields)?\b|"
             r"\bXR_TID_RECORD\b|\bTYPE_NAME_RECORD\b"
         ),
         ("src", "stdlib", "tests", "xisa"),

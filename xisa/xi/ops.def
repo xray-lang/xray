@@ -1208,12 +1208,12 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.json.init.f
+(define-xi-op xi.object.init.f
   :class memory-write
   :arity 2
   :result-kind void
   :result-ownership none
-  :tbaa-group json
+  :tbaa-group object
   :escape-use heap
   :own-use stored-value
   :effects (side-effect memory-write)
@@ -1221,24 +1221,24 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.json.get.f
+(define-xi-op xi.object.get.f
   :class memory-read
   :arity 1
   :result-ownership borrowed
   :own-use borrow
   :vn-kind memory-read
-  :tbaa-group json
+  :tbaa-group object
   :effects (memory-read)
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.json.set.f
+(define-xi-op xi.object.set.f
   :class memory-write
   :arity 2
   :result-kind void
   :result-ownership none
-  :tbaa-group json
+  :tbaa-group object
   :escape-use heap
   :own-use stored-value
   :effects (side-effect memory-write)
@@ -1254,7 +1254,7 @@
   :arity 2
   :result-kind void
   :result-ownership none
-  :tbaa-group json
+  :tbaa-group object
   :escape-use heap
   :own-use borrow
   :effects (side-effect memory-read memory-write)

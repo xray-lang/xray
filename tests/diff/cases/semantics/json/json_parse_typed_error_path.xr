@@ -1,0 +1,19 @@
+// Task 260: typed parse reports the same stable path/kind errors in VM and AOT.
+type Geo = { lat: float, verified: bool }
+type Address = { city: string, geo: Geo }
+type Profile = { name: string, age: int, address: Address }
+
+fn parseCase(label: string, text: string) {
+    try {
+        var value = Json.parse<Profile>(text)
+        print(label + ":unexpected:" + value.name)
+    } catch panic (p) {
+        print(label + ":" + p.message)
+        print(p.code)
+    }
+}
+
+parseCase("kind", "{\"name\":\"Ada\",\"age\":37,\"address\":{\"city\":\"Hangzhou\",\"geo\":{\"lat\":true,\"verified\":true}}}")
+parseCase("missing", "{\"name\":\"Ada\",\"age\":37,\"address\":{\"city\":\"Hangzhou\",\"geo\":{\"lat\":30.25}}}")
+parseCase("duplicate", "{\"name\":\"Ada\",\"age\":37,\"age\":38,\"address\":{\"city\":\"Hangzhou\",\"geo\":{\"lat\":30.25,\"verified\":true}}}")
+parseCase("malformed", "{\"name\":\"Ada\",\"age\":37,\"address\":")
