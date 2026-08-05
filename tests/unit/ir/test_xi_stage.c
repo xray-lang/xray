@@ -807,6 +807,14 @@ static void test_close_materializes_first_class_capture_cells(void) {
     assert(xi_verify_stage(middle, XI_STAGE_CLOSED, error, sizeof(error)));
     assert(xi_verify_stage(leaf, XI_STAGE_CLOSED, error, sizeof(error)));
 
+    /* One closure captures this cell, so it is the sole consumer and takes the
+     * +1 that CELL_NEW produced -- no retain, and no release by the frame that
+     * gave it away. RC contract C1 makes every closure capture of a cell "an
+     * ordinary consume/retain path" and forbids a cell-specific release
+     * exception; demanding a retain from a sole consume would be exactly that
+     * exception. The multi-consumer half of C1, where each consumer past the
+     * first must retain, is covered end-to-end by
+     * tests/diff/cases/semantics/closure/shared_mutable_capture_cell.xr. */
     xi_arc_insert(root);
     unsigned cell_retains = 0;
     unsigned cell_releases = 0;
@@ -817,8 +825,105 @@ static void test_close_materializes_first_class_capture_cells(void) {
             cell_releases += value->op == XI_RELEASE;
         }
     }
-    assert(cell_retains == 1);
-    assert(cell_releases == 1);
+    assert(cell_retains == 0);
+    assert(cell_releases == 0);
+
+    xi_func_free(xi_closed_program_release(closed));
+    printf("  PASS\n");
+}
+
+static void attach_two_children(XiFunc *parent, XiFunc *a, XiFunc *b) {
+    parent->children = (XiFunc **) xr_calloc(2, sizeof(XiFunc *));
+    assert(parent->children != NULL);
+    parent->children[0] = a;
+    parent->children[1] = b;
+    parent->nchildren = 2;
+    parent->children_cap = 2;
+    a->parent_func = parent;
+    b->parent_func = parent;
+}
+
+/* Two captures of one variable, both asking for a cell, must land on ONE cell
+ * rather than one per closure. This covers the close pass only: the captures
+ * here are hand-marked needs_cell, so the lowering decision that produces that
+ * mark is not exercised -- that half lives in
+ * tests/diff/cases/semantics/closure/shared_mutable_capture_cell.xr, whose
+ * .xr.expected oracle is what catches it, since the two-cell bug printed the
+ * same wrong number on both backends and the differential net stayed quiet. */
+static void test_close_shares_one_cell_across_closures(void) {
+    printf("--- test_close_shares_one_cell_across_closures ---\n");
+
+    XiFunc *root = xi_func_new("shared_root", &stub_function);
+    XiFunc *writer = xi_func_new("shared_writer", &stub_int);
+    XiFunc *reader = xi_func_new("shared_reader", &stub_int);
+    assert(root && writer && reader);
+    attach_two_children(root, writer, reader);
+
+    XiBlock *root_entry = xi_block_new(root);
+    XiValue *initial = xi_const_int(root, root_entry, 0, &stub_int);
+    initial->var_id = 0;
+
+    const XiCapture shared = {
+        .source = XI_CAPTURE_SRC_REG,
+        .needs_cell = true,
+        .is_mutable = true,
+        .type = &stub_int,
+        .value = initial,
+        .name = "shared",
+    };
+    writer->captures[0] = shared;
+    writer->ncaptures = 1;
+    reader->captures[0] = shared;
+    reader->ncaptures = 1;
+
+    XiValue *writer_closure = xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 1);
+    writer_closure->aux = writer;
+    writer_closure->args[0] = initial;
+    XiValue *reader_closure = xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 1);
+    reader_closure->aux = reader;
+    reader_closure->args[0] = initial;
+    xi_block_set_return(root_entry, writer_closure);
+
+    XiBlock *writer_entry = xi_block_new(writer);
+    XiValue *writer_replacement = xi_const_int(writer, writer_entry, 1, &stub_int);
+    XiValue *writer_store = xi_value_new(writer, writer_entry, XI_STORE_UPVAL, &stub_void, 1);
+    writer_store->aux_int = 0;
+    writer_store->args[0] = writer_replacement;
+    xi_block_set_return(writer_entry, writer_replacement);
+
+    XiBlock *reader_entry = xi_block_new(reader);
+    XiValue *reader_load = xi_value_new(reader, reader_entry, XI_LOAD_UPVAL, &stub_int, 0);
+    reader_load->aux_int = 0;
+    xi_block_set_return(reader_entry, reader_load);
+
+    char error[512] = {0};
+    XiRawProgram *raw = xi_stage_adopt_raw(root, error, sizeof(error));
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+    assert(canonical != NULL);
+    xi_pass_close(root);
+    XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
+    if (!closed)
+        fprintf(stderr, "shared cell close failed: %s\n", error);
+    assert(closed != NULL);
+
+    XiValue *cell = writer_closure->args[0];
+    assert(cell && cell->op == XI_CELL_NEW);
+    assert(reader_closure->args[0] == cell);
+    assert(writer->captures[0].value == cell);
+    assert(reader->captures[0].value == cell);
+
+    /* Exactly one cell, not one per capturing closure. */
+    unsigned cell_news = 0;
+    for (uint32_t i = 0; i < root_entry->nvalues; i++)
+        cell_news += root_entry->values[i]->op == XI_CELL_NEW;
+    assert(cell_news == 1);
+
+    assert(writer_store->op == XI_CELL_SET);
+    assert(reader_load->op == XI_CELL_GET);
+    assert(xi_verify_stage(root, XI_STAGE_CLOSED, error, sizeof(error)));
+    assert(xi_verify_stage(writer, XI_STAGE_CLOSED, error, sizeof(error)));
+    assert(xi_verify_stage(reader, XI_STAGE_CLOSED, error, sizeof(error)));
 
     xi_func_free(xi_closed_program_release(closed));
     printf("  PASS\n");
@@ -848,6 +953,7 @@ int main(void) {
     test_pass_order_and_invariants();
     test_optimizer_invariant_failure_is_data();
     test_close_materializes_first_class_capture_cells();
+    test_close_shares_one_cell_across_closures();
 
     printf("\n=== All stage contract tests passed ===\n");
     return 0;
