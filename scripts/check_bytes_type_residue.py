@@ -20,10 +20,17 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 REMOVED_TYPES = ("Bytes", "ByteSpan", "ByteView")
-REMOVED_TYPE_RE = re.compile(r"\b(?:Bytes|ByteSpan|ByteView)\b")
+# "Bytes" is also an ordinary English word, and doc comments start sentences
+# with it ("Bytes allocated into the MODULE_STATIC arena", "Bytes fed to both
+# backends' stdin"). A bare word match reported those as surviving references
+# to the removed type. A type or namespace reference is never followed by a
+# space and a lowercase word -- it is followed by punctuation, a line end, or a
+# capitalised identifier -- so that is the one shape excluded here.
+_PROSE = r"(?!\s+[a-z])"
+REMOVED_TYPE_RE = re.compile(r"\b(?:Bytes|ByteSpan|ByteView)\b" + _PROSE)
 SIGNATURE_RE = re.compile(
-    r"(?::|->|<|\||\()\s*(?:Bytes|ByteSpan|ByteView)\b|"
-    r",\s*(?:Bytes|ByteSpan|ByteView)\b(?!\s*:)"
+    r"(?::|->|<|\||\()\s*(?:Bytes|ByteSpan|ByteView)\b" + _PROSE + r"|"
+    r",\s*(?:Bytes|ByteSpan|ByteView)\b" + _PROSE + r"(?!\s*:)"
 )
 DIAGNOSTIC_RE = re.compile(
     r"(undefined type|member|diagnostic|error|warning).*\b(?:Bytes|ByteSpan|ByteView)\b",
