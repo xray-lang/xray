@@ -2252,7 +2252,7 @@ static bool emit_struct_aggregate_box_c_expr(XiCgenCtx *ctx, FILE *out, const Xi
 static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix);
 static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                          const XiValue *v, const char *prefix, bool in_coro);
+                                         const XiValue *v, const char *prefix, bool in_coro);
 static XrRep cg_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 static void emit_value_generated_line_reset(XiCgenCtx *ctx, FILE *out, const XiValue *v);
@@ -7493,8 +7493,7 @@ static bool cg_vec_shuffle_use_tree_is_fused(XiCgenCtx *ctx, const XiFunc *f, co
 
 static bool cg_vec_shuffle_only_feeds_fused_widen_mul(XiCgenCtx *ctx, const XiFunc *f,
                                                       const XiValue *v) {
-    if (!ctx || !f || !v || v->op != XI_VEC_SHUFFLE ||
-        cg_debug_value_has_source_storage(ctx, f, v))
+    if (!ctx || !f || !v || v->op != XI_VEC_SHUFFLE || cg_debug_value_has_source_storage(ctx, f, v))
         return false;
     bool saw_fused = false;
     return cg_vec_shuffle_use_tree_is_fused(ctx, f, v, 0, &saw_fused) && saw_fused;
@@ -10363,8 +10362,7 @@ static bool cg_hosted_vm_is_object_type(const XrType *type) {
  * the class, not from the wrapper module. This matters for signatures such as
  * io.open(path.Path): the hosted entry belongs to io while the argument's
  * nominal owner remains path. */
-static bool cg_hosted_vm_module_logical_name(const XiModule *module, char *out,
-                                              size_t out_cap) {
+static bool cg_hosted_vm_module_logical_name(const XiModule *module, char *out, size_t out_cap) {
     if (!module || !out || out_cap == 0)
         return false;
     const char *path = module->path;
@@ -10374,14 +10372,14 @@ static bool cg_hosted_vm_module_logical_name(const XiModule *module, char *out,
         const char *component = path;
         while (*path && *path != '/' && *path != '\\')
             path++;
-        size_t component_len = (size_t)(path - component);
+        size_t component_len = (size_t) (path - component);
         if (component_len == strlen("stdlib") && strncmp(component, "stdlib", component_len) == 0) {
             while (*path == '/' || *path == '\\')
                 path++;
             const char *owner = path;
             while (*path && *path != '/' && *path != '\\')
                 path++;
-            size_t owner_len = (size_t)(path - owner);
+            size_t owner_len = (size_t) (path - owner);
             if (owner_len == 0 || owner_len >= out_cap)
                 return false;
             memcpy(out, owner, owner_len);
@@ -10428,19 +10426,32 @@ static const char *cg_hosted_vm_array_elem_constant(const XrType *type) {
     if (!type || type->kind != XR_KIND_ARRAY || !type->container.element_type)
         return NULL;
     switch (xr_native_type_to_elem_type(type->container.element_type->scalar_rep)) {
-        case XR_ELEM_I8: return "XR_ELEM_I8";
-        case XR_ELEM_U8: return "XR_ELEM_U8";
-        case XR_ELEM_I16: return "XR_ELEM_I16";
-        case XR_ELEM_U16: return "XR_ELEM_U16";
-        case XR_ELEM_I32: return "XR_ELEM_I32";
-        case XR_ELEM_U32: return "XR_ELEM_U32";
-        case XR_ELEM_I64: return "XR_ELEM_I64";
-        case XR_ELEM_U64: return "XR_ELEM_U64";
-        case XR_ELEM_F32: return "XR_ELEM_F32";
-        case XR_ELEM_F64: return "XR_ELEM_F64";
-        case XR_ELEM_BOOL: return "XR_ELEM_BOOL";
-        case XR_ELEM_RUNE: return "XR_ELEM_RUNE";
-        default: return NULL;
+        case XR_ELEM_I8:
+            return "XR_ELEM_I8";
+        case XR_ELEM_U8:
+            return "XR_ELEM_U8";
+        case XR_ELEM_I16:
+            return "XR_ELEM_I16";
+        case XR_ELEM_U16:
+            return "XR_ELEM_U16";
+        case XR_ELEM_I32:
+            return "XR_ELEM_I32";
+        case XR_ELEM_U32:
+            return "XR_ELEM_U32";
+        case XR_ELEM_I64:
+            return "XR_ELEM_I64";
+        case XR_ELEM_U64:
+            return "XR_ELEM_U64";
+        case XR_ELEM_F32:
+            return "XR_ELEM_F32";
+        case XR_ELEM_F64:
+            return "XR_ELEM_F64";
+        case XR_ELEM_BOOL:
+            return "XR_ELEM_BOOL";
+        case XR_ELEM_RUNE:
+            return "XR_ELEM_RUNE";
+        default:
+            return NULL;
     }
 }
 
@@ -10569,8 +10580,7 @@ static bool cg_func_can_have_c_export_stub(XiCgenCtx *ctx, const XiFunc *f) {
         return false;
     if (cg_c_export_is_hosted_vm(f))
         return cg_hosted_vm_signature_supported(f);
-    return !cg_func_needs_aot_coro_ctx(ctx, f) &&
-           cg_c_export_xray_func_signature_supported(ctx, f);
+    return !cg_func_needs_aot_coro_ctx(ctx, f) && cg_c_export_xray_func_signature_supported(ctx, f);
 }
 
 static bool cg_func_can_have_entry_stub(XiCgenCtx *ctx, const XiFunc *f) {
@@ -10696,8 +10706,7 @@ static void emit_c_export_header_func(XiCgenCtx *ctx, FILE *out, const XiFunc *f
             return;
         }
         if (cg_c_export_is_hosted_vm(f))
-            fprintf(out, "#define XR_HOSTED_FRAGMENT_SUSPENDABLE_%s %u\n",
-                    f->export_plan->symbol,
+            fprintf(out, "#define XR_HOSTED_FRAGMENT_SUSPENDABLE_%s %u\n", f->export_plan->symbol,
                     cg_func_needs_aot_coro_ctx(ctx, f) ? 1u : 0u);
         emit_c_export_stub_signature(ctx, out, f, cg_c_export_func_prefix(ctx, f), false);
         fprintf(out, ";\n");
@@ -10856,29 +10865,27 @@ static void emit_hosted_vm_target_call_expr(XiCgenCtx *ctx, FILE *out, const XiF
 }
 
 static void emit_hosted_vm_runtime_scope_enter(FILE *out) {
-    fprintf(out,
-            "    if (!context->runtime_ops)\n"
-            "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-            "    XrAotContext _hosted_runtime_context = {0};\n"
-            "    _hosted_runtime_context.coro = (struct XrCoroutine *)context->coroutine;\n"
-            "    _hosted_runtime_context.vm_host_ops = "
-            "(const XrAotVmHostOps *)context->runtime_ops;\n"
-            "    _hosted_runtime_context.vm_host = context->host;\n"
-            "    const XrAotContext *_hosted_previous_runtime_context = "
-            "xrt_hosted_aot_context;\n"
-            "    xrt_hosted_aot_context = &_hosted_runtime_context;\n");
+    fprintf(out, "    if (!context->runtime_ops)\n"
+                 "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                 "    XrAotContext _hosted_runtime_context = {0};\n"
+                 "    _hosted_runtime_context.coro = (struct XrCoroutine *)context->coroutine;\n"
+                 "    _hosted_runtime_context.vm_host_ops = "
+                 "(const XrAotVmHostOps *)context->runtime_ops;\n"
+                 "    _hosted_runtime_context.vm_host = context->host;\n"
+                 "    const XrAotContext *_hosted_previous_runtime_context = "
+                 "xrt_hosted_aot_context;\n"
+                 "    xrt_hosted_aot_context = &_hosted_runtime_context;\n");
 }
 
 static void emit_hosted_vm_runtime_scope_leave(FILE *out) {
-    fprintf(out,
-            "    xrt_hosted_aot_context = _hosted_previous_runtime_context;\n");
+    fprintf(out, "    xrt_hosted_aot_context = _hosted_previous_runtime_context;\n");
 }
 
 static uint32_t cg_hosted_vm_runtime_context_capability_mask(void) {
-    return XG_CAP_COROUTINE | XG_CAP_CHANNEL | XG_CAP_DEEP_COPY | XG_CAP_SYS_THREAD |
-           XG_CAP_SCOPE | XG_CAP_TIMER | XG_CAP_TASK | XG_CAP_ATOMIC |
-           XG_CAP_WORK_QUEUE | XG_CAP_RESULT_GROUP | XG_CAP_COUNTDOWN_LATCH |
-           XG_CAP_SEMAPHORE | XG_CAP_EVENT_COUNT | XG_CAP_GENERATOR | XG_CAP_PARALLEL;
+    return XG_CAP_COROUTINE | XG_CAP_CHANNEL | XG_CAP_DEEP_COPY | XG_CAP_SYS_THREAD | XG_CAP_SCOPE |
+           XG_CAP_TIMER | XG_CAP_TASK | XG_CAP_ATOMIC | XG_CAP_WORK_QUEUE | XG_CAP_RESULT_GROUP |
+           XG_CAP_COUNTDOWN_LATCH | XG_CAP_SEMAPHORE | XG_CAP_EVENT_COUNT | XG_CAP_GENERATOR |
+           XG_CAP_PARALLEL;
 }
 
 static bool cg_hosted_vm_find_body_index(const XgGlobalEvidence *evidence, XgFuncId func_id,
@@ -10902,8 +10909,7 @@ static bool cg_hosted_vm_find_body_index(const XgGlobalEvidence *evidence, XgFun
  * a runtime helper with no context. */
 static bool cg_hosted_vm_export_needs_runtime_context(XiCgenCtx *ctx, const XiFunc *f) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    const XgGlobalEvidence *evidence =
-        bundle ? bundle->global_evidence_plan.evidence : NULL;
+    const XgGlobalEvidence *evidence = bundle ? bundle->global_evidence_plan.evidence : NULL;
     uint8_t *reachable = NULL;
     uint32_t required = 0;
     bool changed = true;
@@ -10913,14 +10919,13 @@ static bool cg_hosted_vm_export_needs_runtime_context(XiCgenCtx *ctx, const XiFu
             ctx->error = true;
         return true;
     }
-    reachable = (uint8_t *) xr_calloc(evidence->nbodies ? evidence->nbodies : 1,
-                                      sizeof(uint8_t));
+    reachable = (uint8_t *) xr_calloc(evidence->nbodies ? evidence->nbodies : 1, sizeof(uint8_t));
     if (!reachable) {
         ctx->error = true;
         return true;
     }
-    if (!xg_body_reachability_mark_closed_world_calls(
-            evidence, f->xg_body_func_id, reachable, evidence->nbodies)) {
+    if (!xg_body_reachability_mark_closed_world_calls(evidence, f->xg_body_func_id, reachable,
+                                                      evidence->nbodies)) {
         ctx->error = true;
         xr_free(reachable);
         return true;
@@ -10943,9 +10948,8 @@ static bool cg_hosted_vm_export_needs_runtime_context(XiCgenCtx *ctx, const XiFu
             for (uint16_t ti = 0; ti < plan->target_count; ti++) {
                 const XaotCallableTargetCase *target =
                     xaot_bundle_callable_target_case(bundle, plan, ti);
-                XgFuncId target_id = target && target->target_func
-                                         ? target->target_func->xg_body_func_id
-                                         : XG_NO_ID;
+                XgFuncId target_id =
+                    target && target->target_func ? target->target_func->xg_body_func_id : XG_NO_ID;
                 uint32_t target_index = 0;
                 if (target_id == XG_NO_ID ||
                     !cg_hosted_vm_find_body_index(evidence, target_id, &target_index)) {
@@ -10955,8 +10959,8 @@ static bool cg_hosted_vm_export_needs_runtime_context(XiCgenCtx *ctx, const XiFu
                 }
                 if (reachable[target_index])
                     continue;
-                if (!xg_body_reachability_mark_closed_world_calls(
-                        evidence, target_id, reachable, evidence->nbodies)) {
+                if (!xg_body_reachability_mark_closed_world_calls(evidence, target_id, reachable,
+                                                                  evidence->nbodies)) {
                     ctx->error = true;
                     xr_free(reachable);
                     return true;
@@ -10980,15 +10984,36 @@ static bool cg_hosted_vm_export_needs_runtime_context(XiCgenCtx *ctx, const XiFu
     return (required & cg_hosted_vm_runtime_context_capability_mask()) != 0;
 }
 
-static void emit_hosted_vm_argument_cleanup(FILE *out, const XiFunc *f,
-                                            bool materialized_strings) {
+/* Whether the exported function only borrows parameter `index`, per the ARC
+ * borrow signature its own body was compiled against. OWNED parameters are
+ * released by the callee on every return path, BORROWED ones stay with the
+ * caller. A missing or invalid signature reads as OWNED — the analysis
+ * default — which fails closed for the adapter: skipping a release can at
+ * worst leak, while releasing a consumed argument frees live memory. */
+static bool hosted_vm_param_is_borrowed(const XiFunc *f, uint16_t index) {
+    return f && f->arc_borrow_sig && f->arc_borrow_sig->valid &&
+           index < f->arc_borrow_sig->nparams &&
+           f->arc_borrow_sig->param_own[index] == XI_OWN_BORROWED;
+}
+
+/* Release the adapter-materialized argument values after the call.
+ *
+ * `owned_args_consumed_by_call` distinguishes the two call shapes. The plain
+ * export calls the target directly with no extra retain, so the call itself
+ * consumes every OWNED argument and only BORROWED ones still belong to the
+ * adapter. The coroutine export retains each ref argument before frame_new,
+ * so the adapter keeps an owning reference of its own to drop regardless of
+ * the parameter's ownership. */
+static void emit_hosted_vm_argument_cleanup(FILE *out, const XiFunc *f, bool materialized_strings,
+                                            bool owned_args_consumed_by_call) {
     for (uint16_t i = 0; f && i < f->nparams; i++) {
         const XrType *type = f->params && f->params[i] ? f->params[i]->type : NULL;
-        if (type && ((materialized_strings && type->kind == XR_KIND_STRING) ||
-                     type->kind == XR_KIND_ENUM ||
-                     cg_hosted_vm_array_has_string_elements(type)))
-            fprintf(out, "    if (!XR_IS_NULL(_hosted_arg_%u)) xrt_release(_hosted_arg_%u);\n",
-                    i, i);
+        if (!type || !((materialized_strings && type->kind == XR_KIND_STRING) ||
+                       type->kind == XR_KIND_ENUM || cg_hosted_vm_array_has_string_elements(type)))
+            continue;
+        if (owned_args_consumed_by_call && !hosted_vm_param_is_borrowed(f, i))
+            continue;
+        fprintf(out, "    if (!XR_IS_NULL(_hosted_arg_%u)) xrt_release(_hosted_arg_%u);\n", i, i);
     }
 }
 
@@ -11086,56 +11111,69 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
     bool coroutine_export = cg_func_needs_aot_coro_ctx(ctx, f);
     bool may_error = !f->error_effect_nothrow || coroutine_export;
     bool needs_runtime_context = cg_hosted_vm_export_needs_runtime_context(ctx, f);
-    bool needs_host_ops = may_error ||
-                          (f->return_type && (f->return_type->kind == XR_KIND_STRING ||
-                                              f->return_type->kind == XR_KIND_ENUM ||
-                                              cg_hosted_vm_is_object_type(f->return_type) ||
-                                              cg_hosted_vm_array_has_string_elements(
-                                                  f->return_type)));
+    bool needs_host_ops =
+        may_error || (f->return_type && (f->return_type->kind == XR_KIND_STRING ||
+                                         f->return_type->kind == XR_KIND_ENUM ||
+                                         cg_hosted_vm_is_object_type(f->return_type) ||
+                                         cg_hosted_vm_array_has_string_elements(f->return_type)));
     for (uint16_t i = 0; i < f->nparams; i++) {
         const XrType *type = f->params && f->params[i] ? f->params[i]->type : NULL;
-        if (type && (type->kind == XR_KIND_STRING || type->kind == XR_KIND_ENUM ||
-                     cg_hosted_vm_is_object_type(type) ||
-                     cg_hosted_vm_array_has_string_elements(type)))
+        if (type &&
+            (type->kind == XR_KIND_STRING || type->kind == XR_KIND_ENUM ||
+             cg_hosted_vm_is_object_type(type) || cg_hosted_vm_array_has_string_elements(type)))
             needs_host_ops = true;
     }
 
     emit_c_export_stub_signature(ctx, out, f, prefix, true);
     fprintf(out, " {\n");
-    fprintf(out,
-            "    if (!context || !context->signal)\n"
-            "        return xr_hosted_fragment_invalid_call(context, 0u);\n");
+    fprintf(out, "    if (!context || !context->signal)\n"
+                 "        return xr_hosted_fragment_invalid_call(context, 0u);\n");
     if (needs_host_ops) {
-        fprintf(out,
-                "    if (!context->ops || "
-                "context->ops->abi_version != XR_HOSTED_FRAGMENT_ABI_VERSION || "
-                "context->ops->struct_size < sizeof(XrHostedFragmentHostOps))\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n");
+        fprintf(out, "    if (!context->ops || "
+                     "context->ops->abi_version != XR_HOSTED_FRAGMENT_ABI_VERSION || "
+                     "context->ops->struct_size < sizeof(XrHostedFragmentHostOps))\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n");
     }
     if (may_error) {
-        fprintf(out,
-                "    if (!context->ops->error_new_utf8 || xrt_has_pending_error())\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n");
+        fprintf(out, "    if (!context->ops->error_new_utf8 || xrt_has_pending_error())\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n");
     }
     if (coroutine_export) {
-        fprintf(out,
-                "    void *_hosted_continuation = context->continuation;\n"
-                "    if (_hosted_continuation) {\n"
-                "        if (arguments || argument_count != 0u)\n"
-                "            return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "        goto _hosted_resume;\n"
-                "    }\n");
+        fprintf(out, "    void *_hosted_continuation = context->continuation;\n"
+                     "    if (_hosted_continuation) {\n"
+                     "        if (arguments || argument_count != 0u)\n"
+                     "            return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "        goto _hosted_resume;\n"
+                     "    }\n");
     }
     fprintf(out,
             "    if (argument_count != %uu || (argument_count != 0u && !arguments))\n"
             "        return xr_hosted_fragment_invalid_call(context, 0u);\n",
             (unsigned) f->nparams);
 
+    /* A string argument is normally borrowed: the view points straight at the
+     * VM string's bytes through a stack-local xrt_str_t header, which costs no
+     * copy and stays valid for exactly the duration of the call.
+     *
+     * That is wrong as soon as the callee can keep the string past the call.
+     * An export returning a class instance is the case that bit: `path.from`
+     * stores its argument into Path.raw, the instance is handed to the VM via
+     * object_new and outlives this stub, and the field is left pointing at a
+     * dead stack frame -- `path.from(s).toString()` read freed memory and
+     * `path.basename(path.from(s))` segfaulted, while the AOT backend (which
+     * never builds a borrowed header) was correct.
+     *
+     * Copying is always sound, so widen the owned-copy path rather than trying
+     * to prove non-escape here. Coroutine exports already needed it for the
+     * same reason: their frame outlives the call. */
+    bool string_arg_may_outlive_call =
+        coroutine_export || cg_hosted_vm_is_object_type(f->return_type);
+
     for (uint16_t i = 0; i < f->nparams; i++) {
         const XrType *type = f->params && f->params[i] ? f->params[i]->type : NULL;
         if (type && type->kind == XR_KIND_STRING) {
             if (type->is_nullable) {
-                if (coroutine_export) {
+                if (string_arg_may_outlive_call) {
                     fprintf(out,
                             "    XrHostedFragmentStringView _hosted_string_%u = {0};\n"
                             "    XrValue _hosted_arg_%u = XR_NULL_VAL;\n"
@@ -11149,8 +11187,7 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
                             "        if (XR_IS_NULL(_hosted_arg_%u))\n"
                             "            return xr_hosted_fragment_invalid_call(context, %uu);\n"
                             "    }\n",
-                            i, i, i, i, i, (unsigned) i + 1u, i, i, i, i,
-                            (unsigned) i + 1u);
+                            i, i, i, i, i, (unsigned) i + 1u, i, i, i, i, (unsigned) i + 1u);
                 } else {
                     fprintf(out,
                             "    XrHostedFragmentStringView _hosted_string_%u = {0};\n"
@@ -11170,7 +11207,7 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
                             i, i, i, i, i, i, (unsigned) i + 1u, i, i, i, i, i, i, i);
                 }
             } else {
-                if (coroutine_export) {
+                if (string_arg_may_outlive_call) {
                     fprintf(out,
                             "    XrHostedFragmentStringView _hosted_string_%u;\n"
                             "    if (!context->ops->string_view || "
@@ -11181,8 +11218,7 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
                             "_hosted_string_%u.data, _hosted_string_%u.byte_length);\n"
                             "    if (XR_IS_NULL(_hosted_arg_%u))\n"
                             "        return xr_hosted_fragment_invalid_call(context, %uu);\n",
-                            i, i, i, (unsigned) i + 1u, i, i, i, i,
-                            (unsigned) i + 1u);
+                            i, i, i, (unsigned) i + 1u, i, i, i, i, (unsigned) i + 1u);
                 } else {
                     fprintf(out,
                             "    XrHostedFragmentStringView _hosted_string_%u;\n"
@@ -11200,10 +11236,10 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
             }
         } else if (type && type->kind == XR_KIND_ENUM) {
             const char *enum_name = type->enum_type.enum_name ? type->enum_type.enum_name : "";
-            const char *nominal_owner = type->enum_type.layout &&
-                                                type->enum_type.layout->nominal_owner
-                                            ? type->enum_type.layout->nominal_owner
-                                            : "";
+            const char *nominal_owner =
+                type->enum_type.layout && type->enum_type.layout->nominal_owner
+                    ? type->enum_type.layout->nominal_owner
+                    : "";
             fprintf(out,
                     "    XrValue _hosted_arg_%u = XR_NULL_VAL;\n"
                     "    XrHostedFragmentEnumView _hosted_enum_%u = {0};\n"
@@ -11255,8 +11291,8 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
                     "            _hosted_enum_%u.payload_count, "
                     "_hosted_enum_payload_values_%u);\n"
                     "    }\n",
-                    i, (unsigned) type->enum_type.layout_id, i, (unsigned) i + 1u, i, i, i, i, i,
-                    i, i, (unsigned) i + 1u, i, i, i, i, i, i, i);
+                    i, (unsigned) type->enum_type.layout_id, i, (unsigned) i + 1u, i, i, i, i, i, i,
+                    i, (unsigned) i + 1u, i, i, i, i, i, i, i);
             if (!type->is_nullable)
                 fprintf(out,
                         "    if (XR_IS_NULL(_hosted_arg_%u)) "
@@ -11291,12 +11327,12 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
                     "            return xr_hosted_fragment_invalid_call(context, %uu);\n"
                     "        _hosted_arg_%u = _hosted_object_%u.native_value;\n"
                     "    }\n",
-                    i, (unsigned)i + 1u, i, i);
+                    i, (unsigned) i + 1u, i, i);
             if (!type->is_nullable)
                 fprintf(out,
                         "    if (XR_IS_NULL(_hosted_arg_%u)) "
                         "return xr_hosted_fragment_invalid_call(context, %uu);\n",
-                        i, (unsigned)i + 1u);
+                        i, (unsigned) i + 1u);
         } else if (cg_hosted_vm_array_has_string_elements(type)) {
             fprintf(out,
                     "    XrValue _hosted_arg_%u = XR_NULL_VAL;\n"
@@ -11334,13 +11370,12 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
                     "\"\", _hosted_element_view.byte_length));\n"
                     "        }\n"
                     "    }\n",
-                    i, i, i, i, i, i, i, (unsigned)i + 1u, i, i,
-                    (unsigned)i + 1u, i, i, i, i, i);
+                    i, i, i, i, i, i, i, (unsigned) i + 1u, i, i, (unsigned) i + 1u, i, i, i, i, i);
             if (!type->is_nullable)
                 fprintf(out,
                         "    if (XR_IS_NULL(_hosted_arg_%u)) "
                         "return xr_hosted_fragment_invalid_call(context, %uu);\n",
-                        i, (unsigned)i + 1u);
+                        i, (unsigned) i + 1u);
         } else if (type && type->kind == XR_KIND_SLICE && xr_type_is_u8_slice(type)) {
             emit_hosted_vm_type_guard(out, type, i);
             fprintf(out,
@@ -11381,43 +11416,39 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
         fprintf(out, ";\n");
         fprintf(out, "    if (!_hosted_continuation) {\n");
         emit_hosted_vm_coroutine_param_ref_ops(out, f, "xrt_release");
-        emit_hosted_vm_argument_cleanup(out, f, true);
-        fprintf(out,
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "    }\n");
-        emit_hosted_vm_argument_cleanup(out, f, true);
+        emit_hosted_vm_argument_cleanup(out, f, true, false);
+        fprintf(out, "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "    }\n");
+        emit_hosted_vm_argument_cleanup(out, f, true, false);
         fprintf(out, "_hosted_resume:;\n");
         emit_hosted_vm_runtime_scope_enter(out);
         fprintf(out, "    XrAotResult _hosted_run = ");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
         fprintf(out, "(_hosted_continuation, &_hosted_runtime_context);\n");
         emit_hosted_vm_runtime_scope_leave(out);
-        fprintf(out,
-                "    if (_hosted_run.kind == XR_AOT_RUN_BLOCKED ||\n"
-                "        _hosted_run.kind == XR_AOT_RUN_YIELD) {\n"
-                "        context->signal->status = XR_HOSTED_FRAGMENT_SUSPEND;\n"
-                "        context->signal->suspend_kind =\n"
-                "            _hosted_run.kind == XR_AOT_RUN_BLOCKED\n"
-                "                ? XR_HOSTED_FRAGMENT_SUSPEND_BLOCKED\n"
-                "                : XR_HOSTED_FRAGMENT_SUSPEND_YIELD;\n"
-                "        context->signal->continuation = _hosted_continuation;\n"
-                "        return (XrValue){0};\n"
-                "    }\n"
-                "    if (_hosted_run.kind != XR_AOT_RUN_DONE) {\n"
-                "        XrValue _hosted_run_error = _hosted_run.error;\n");
+        fprintf(out, "    if (_hosted_run.kind == XR_AOT_RUN_BLOCKED ||\n"
+                     "        _hosted_run.kind == XR_AOT_RUN_YIELD) {\n"
+                     "        context->signal->status = XR_HOSTED_FRAGMENT_SUSPEND;\n"
+                     "        context->signal->suspend_kind =\n"
+                     "            _hosted_run.kind == XR_AOT_RUN_BLOCKED\n"
+                     "                ? XR_HOSTED_FRAGMENT_SUSPEND_BLOCKED\n"
+                     "                : XR_HOSTED_FRAGMENT_SUSPEND_YIELD;\n"
+                     "        context->signal->continuation = _hosted_continuation;\n"
+                     "        return (XrValue){0};\n"
+                     "    }\n"
+                     "    if (_hosted_run.kind != XR_AOT_RUN_DONE) {\n"
+                     "        XrValue _hosted_run_error = _hosted_run.error;\n");
         fprintf(out, "        ");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
         fprintf(out, "(_hosted_continuation, NULL);\n");
-        fprintf(out,
-                "        if (!XR_IS_NULL(_hosted_run_error))\n"
-                "            xrt_pending_error = _hosted_run_error;\n"
-                "    }\n");
+        fprintf(out, "        if (!XR_IS_NULL(_hosted_run_error))\n"
+                     "            xrt_pending_error = _hosted_run_error;\n"
+                     "    }\n");
         emit_hosted_vm_pending_error_bridge(out);
-        fprintf(out,
-                "    if (_hosted_run.kind != XR_AOT_RUN_DONE)\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "    XrValue _hosted_result = _hosted_run.value;\n"
-                "    ");
+        fprintf(out, "    if (_hosted_run.kind != XR_AOT_RUN_DONE)\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "    XrValue _hosted_result = _hosted_run.value;\n"
+                     "    ");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
         fprintf(out, "(_hosted_continuation, NULL);\n");
         if (!ret_type || ret_type->kind == XR_KIND_UNIT) {
@@ -11433,7 +11464,7 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
         fprintf(out, ";\n");
         if (needs_runtime_context)
             emit_hosted_vm_runtime_scope_leave(out);
-        emit_hosted_vm_argument_cleanup(out, f, false);
+        emit_hosted_vm_argument_cleanup(out, f, false, true);
         if (may_error)
             emit_hosted_vm_pending_error_bridge(out);
         fprintf(out, "    return (XrValue){0};\n}\n\n");
@@ -11452,7 +11483,7 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
         fprintf(out, ";\n");
         if (needs_runtime_context)
             emit_hosted_vm_runtime_scope_leave(out);
-        emit_hosted_vm_argument_cleanup(out, f, false);
+        emit_hosted_vm_argument_cleanup(out, f, false, true);
         if (may_error)
             emit_hosted_vm_pending_error_bridge(out);
     }
@@ -11460,109 +11491,106 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
     if (ret_type->kind == XR_KIND_STRING) {
         if (ret_type->is_nullable)
             fprintf(out, "    if (XR_IS_NULL(_hosted_result)) return XR_NULL_VAL;\n");
-        fprintf(out,
-                "    if (!XR_IS_STR(_hosted_result) || !context->ops->string_new_utf8)\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "    XrValue _hosted_value = context->ops->string_new_utf8(\n"
-                "        context->host, xr_str_data(_hosted_result), "
-                "(size_t)xr_str_len(_hosted_result),\n"
-                "        (size_t)xr_str_rune_len(_hosted_result), "
-                "xrt_str_hash(_hosted_result));\n"
-                "    xrt_release(_hosted_result);\n"
-                "    return _hosted_value;\n");
+        fprintf(out, "    if (!XR_IS_STR(_hosted_result) || !context->ops->string_new_utf8)\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "    XrValue _hosted_value = context->ops->string_new_utf8(\n"
+                     "        context->host, xr_str_data(_hosted_result), "
+                     "(size_t)xr_str_len(_hosted_result),\n"
+                     "        (size_t)xr_str_rune_len(_hosted_result), "
+                     "xrt_str_hash(_hosted_result));\n"
+                     "    xrt_release(_hosted_result);\n"
+                     "    return _hosted_value;\n");
     } else if (cg_hosted_vm_array_has_string_elements(ret_type)) {
         if (ret_type->is_nullable)
             fprintf(out, "    if (XR_IS_NULL(_hosted_result)) return XR_NULL_VAL;\n");
-        fprintf(out,
-                "    if (!XR_IS_ARRAY(_hosted_result) || !_hosted_result.ptr ||\n"
-                "        !context->ops->array_new || !context->ops->array_set ||\n"
-                "        !context->ops->string_new_utf8 || !context->ops->release)\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "    xrt_array_t *_hosted_result_array = "
-                "(xrt_array_t *)_hosted_result.ptr;\n"
-                "    if (_hosted_result_array->elem_type != XR_ELEM_ANY || "
-                "_hosted_result_array->length < 0) {\n"
-                "        xrt_release(_hosted_result);\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "    }\n"
-                "    for (int64_t _hosted_i = 0; "
-                "_hosted_i < _hosted_result_array->length; _hosted_i++) {\n"
-                "        XrValue _hosted_element = xr_typed_get(\n"
-                "            _hosted_result_array->data, (int32_t)_hosted_i, XR_ELEM_ANY);\n"
-                "        if (!XR_IS_STR(_hosted_element)) {\n"
-                "            xrt_release(_hosted_result);\n"
-                "            return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "        }\n"
-                "    }\n"
-                "    XrValue _hosted_value = context->ops->array_new(\n"
-                "        context->host, (uint64_t)_hosted_result_array->length, "
-                "XR_ELEM_ANY);\n"
-                "    if (XR_IS_NULL(_hosted_value)) {\n"
-                "        xrt_release(_hosted_result);\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "    }\n"
-                "    for (int64_t _hosted_i = 0; "
-                "_hosted_i < _hosted_result_array->length; _hosted_i++) {\n"
-                "        XrValue _hosted_element = xr_typed_get(\n"
-                "            _hosted_result_array->data, (int32_t)_hosted_i, XR_ELEM_ANY);\n"
-                "        XrValue _hosted_vm_element = context->ops->string_new_utf8(\n"
-                "            context->host, xr_str_data(_hosted_element),\n"
-                "            (size_t)xr_str_len(_hosted_element),\n"
-                "            (size_t)xr_str_rune_len(_hosted_element), "
-                "xrt_str_hash(_hosted_element));\n"
-                "        if (XR_IS_NULL(_hosted_vm_element) ||\n"
-                "            !context->ops->array_set(context->host, _hosted_value,\n"
-                "                                     (uint64_t)_hosted_i, "
-                "_hosted_vm_element)) {\n"
-                "            if (!XR_IS_NULL(_hosted_vm_element))\n"
-                "                context->ops->release(context->host, "
-                "_hosted_vm_element);\n"
-                "            context->ops->release(context->host, _hosted_value);\n"
-                "            xrt_release(_hosted_result);\n"
-                "            return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "        }\n"
-                "    }\n"
-                "    xrt_release(_hosted_result);\n"
-                "    return _hosted_value;\n");
+        fprintf(out, "    if (!XR_IS_ARRAY(_hosted_result) || !_hosted_result.ptr ||\n"
+                     "        !context->ops->array_new || !context->ops->array_set ||\n"
+                     "        !context->ops->string_new_utf8 || !context->ops->release)\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "    xrt_array_t *_hosted_result_array = "
+                     "(xrt_array_t *)_hosted_result.ptr;\n"
+                     "    if (_hosted_result_array->elem_type != XR_ELEM_ANY || "
+                     "_hosted_result_array->length < 0) {\n"
+                     "        xrt_release(_hosted_result);\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "    }\n"
+                     "    for (int64_t _hosted_i = 0; "
+                     "_hosted_i < _hosted_result_array->length; _hosted_i++) {\n"
+                     "        XrValue _hosted_element = xr_typed_get(\n"
+                     "            _hosted_result_array->data, (int32_t)_hosted_i, XR_ELEM_ANY);\n"
+                     "        if (!XR_IS_STR(_hosted_element)) {\n"
+                     "            xrt_release(_hosted_result);\n"
+                     "            return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "        }\n"
+                     "    }\n"
+                     "    XrValue _hosted_value = context->ops->array_new(\n"
+                     "        context->host, (uint64_t)_hosted_result_array->length, "
+                     "XR_ELEM_ANY);\n"
+                     "    if (XR_IS_NULL(_hosted_value)) {\n"
+                     "        xrt_release(_hosted_result);\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "    }\n"
+                     "    for (int64_t _hosted_i = 0; "
+                     "_hosted_i < _hosted_result_array->length; _hosted_i++) {\n"
+                     "        XrValue _hosted_element = xr_typed_get(\n"
+                     "            _hosted_result_array->data, (int32_t)_hosted_i, XR_ELEM_ANY);\n"
+                     "        XrValue _hosted_vm_element = context->ops->string_new_utf8(\n"
+                     "            context->host, xr_str_data(_hosted_element),\n"
+                     "            (size_t)xr_str_len(_hosted_element),\n"
+                     "            (size_t)xr_str_rune_len(_hosted_element), "
+                     "xrt_str_hash(_hosted_element));\n"
+                     "        if (XR_IS_NULL(_hosted_vm_element) ||\n"
+                     "            !context->ops->array_set(context->host, _hosted_value,\n"
+                     "                                     (uint64_t)_hosted_i, "
+                     "_hosted_vm_element)) {\n"
+                     "            if (!XR_IS_NULL(_hosted_vm_element))\n"
+                     "                context->ops->release(context->host, "
+                     "_hosted_vm_element);\n"
+                     "            context->ops->release(context->host, _hosted_value);\n"
+                     "            xrt_release(_hosted_result);\n"
+                     "            return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "        }\n"
+                     "    }\n"
+                     "    xrt_release(_hosted_result);\n"
+                     "    return _hosted_value;\n");
     } else if (ret_type->kind == XR_KIND_ENUM) {
         if (ret_type->is_nullable)
             fprintf(out, "    if (XR_IS_NULL(_hosted_result)) return XR_NULL_VAL;\n");
-        fprintf(out,
-                "    if (_hosted_result.tag != XR_TAG_ENUM || !_hosted_result.ptr || "
-                "!context->ops->enum_new || !context->module_name)\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "    XrAotEnumAggregate _hosted_enum_result = "
-                "xrt_enum_aggregate_from_boxed(_hosted_result);\n"
-                "    XrHostedFragmentValueView _hosted_result_payloads["
-                "XR_AOT_ENUM_AGG_PAYLOAD_CAP] = {0};\n"
-                "    bool _hosted_result_supported = "
-                "_hosted_enum_result.payload_count <= XR_AOT_ENUM_AGG_PAYLOAD_CAP;\n"
-                "    for (uint32_t _hosted_i = 0; _hosted_result_supported && "
-                "_hosted_i < _hosted_enum_result.payload_count; _hosted_i++) {\n"
-                "        XrValue _hosted_payload = _hosted_enum_result.payloads[_hosted_i];\n"
-                "        if (XR_IS_NULL(_hosted_payload) || XR_IS_BOOL(_hosted_payload) || "
-                "XR_IS_INT(_hosted_payload) || XR_IS_FLOAT(_hosted_payload)) {\n"
-                "            _hosted_result_payloads[_hosted_i].kind = "
-                "XR_HOSTED_FRAGMENT_VALUE_IMMEDIATE;\n"
-                "            _hosted_result_payloads[_hosted_i].immediate = _hosted_payload;\n"
-                "        } else if (XR_IS_STR(_hosted_payload)) {\n"
-                "            _hosted_result_payloads[_hosted_i].kind = "
-                "XR_HOSTED_FRAGMENT_VALUE_STRING_UTF8;\n"
-                "            _hosted_result_payloads[_hosted_i].data = "
-                "xr_str_data(_hosted_payload);\n"
-                "            _hosted_result_payloads[_hosted_i].byte_length = "
-                "(size_t)xr_str_len(_hosted_payload);\n"
-                "        } else { _hosted_result_supported = false; }\n"
-                "    }\n"
-                "    XrValue _hosted_value = _hosted_result_supported ? "
-                "context->ops->enum_new(\n"
-                "        context->host, context->module_name, _hosted_enum_result.enum_name,\n"
-                "        _hosted_enum_result.member_name, _hosted_result_payloads,\n"
-                "        _hosted_enum_result.payload_count) : XR_NULL_VAL;\n"
-                "    xrt_release(_hosted_result);\n"
-                "    if (XR_IS_NULL(_hosted_value))\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "    return _hosted_value;\n");
+        fprintf(out, "    if (_hosted_result.tag != XR_TAG_ENUM || !_hosted_result.ptr || "
+                     "!context->ops->enum_new || !context->module_name)\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "    XrAotEnumAggregate _hosted_enum_result = "
+                     "xrt_enum_aggregate_from_boxed(_hosted_result);\n"
+                     "    XrHostedFragmentValueView _hosted_result_payloads["
+                     "XR_AOT_ENUM_AGG_PAYLOAD_CAP] = {0};\n"
+                     "    bool _hosted_result_supported = "
+                     "_hosted_enum_result.payload_count <= XR_AOT_ENUM_AGG_PAYLOAD_CAP;\n"
+                     "    for (uint32_t _hosted_i = 0; _hosted_result_supported && "
+                     "_hosted_i < _hosted_enum_result.payload_count; _hosted_i++) {\n"
+                     "        XrValue _hosted_payload = _hosted_enum_result.payloads[_hosted_i];\n"
+                     "        if (XR_IS_NULL(_hosted_payload) || XR_IS_BOOL(_hosted_payload) || "
+                     "XR_IS_INT(_hosted_payload) || XR_IS_FLOAT(_hosted_payload)) {\n"
+                     "            _hosted_result_payloads[_hosted_i].kind = "
+                     "XR_HOSTED_FRAGMENT_VALUE_IMMEDIATE;\n"
+                     "            _hosted_result_payloads[_hosted_i].immediate = _hosted_payload;\n"
+                     "        } else if (XR_IS_STR(_hosted_payload)) {\n"
+                     "            _hosted_result_payloads[_hosted_i].kind = "
+                     "XR_HOSTED_FRAGMENT_VALUE_STRING_UTF8;\n"
+                     "            _hosted_result_payloads[_hosted_i].data = "
+                     "xr_str_data(_hosted_payload);\n"
+                     "            _hosted_result_payloads[_hosted_i].byte_length = "
+                     "(size_t)xr_str_len(_hosted_payload);\n"
+                     "        } else { _hosted_result_supported = false; }\n"
+                     "    }\n"
+                     "    XrValue _hosted_value = _hosted_result_supported ? "
+                     "context->ops->enum_new(\n"
+                     "        context->host, context->module_name, _hosted_enum_result.enum_name,\n"
+                     "        _hosted_enum_result.member_name, _hosted_result_payloads,\n"
+                     "        _hosted_enum_result.payload_count) : XR_NULL_VAL;\n"
+                     "    xrt_release(_hosted_result);\n"
+                     "    if (XR_IS_NULL(_hosted_value))\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "    return _hosted_value;\n");
     } else if (cg_hosted_vm_is_object_type(ret_type)) {
         char owner[128];
         if (!cg_hosted_vm_object_owner(ctx, ret_type, owner, sizeof(owner))) {
@@ -11573,21 +11601,19 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
         }
         if (ret_type->is_nullable)
             fprintf(out, "    if (XR_IS_NULL(_hosted_result)) return XR_NULL_VAL;\n");
-        fprintf(out,
-                "    if (XR_IS_NULL(_hosted_result) || !context->ops->object_new)\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "    XrValue _hosted_value = context->ops->object_new(\n"
-                "        context->host, ");
+        fprintf(out, "    if (XR_IS_NULL(_hosted_result) || !context->ops->object_new)\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "    XrValue _hosted_value = context->ops->object_new(\n"
+                     "        context->host, ");
         emit_c_string_literal(out, owner);
         fprintf(out, ", ");
         emit_c_string_literal(out, ret_type->instance.class_name);
-        fprintf(out,
-                ", _hosted_result);\n"
-                "    if (XR_IS_NULL(_hosted_value)) {\n"
-                "        xrt_release(_hosted_result);\n"
-                "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
-                "    }\n"
-                "    return _hosted_value;\n");
+        fprintf(out, ", _hosted_result);\n"
+                     "    if (XR_IS_NULL(_hosted_value)) {\n"
+                     "        xrt_release(_hosted_result);\n"
+                     "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
+                     "    }\n"
+                     "    return _hosted_value;\n");
     } else {
         fprintf(out, "    return _hosted_result;\n");
     }
@@ -11937,8 +11963,8 @@ static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
      * when a reachable import/shared-slot read consumes it. Hosted shared
      * libraries remain open-world; freestanding shared images expose only
      * manifest-owned C/link/entry symbols and therefore remain closed-world. */
-    return ctx->artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY &&
-           !ctx->freestanding_profile && cg_func_is_module_export(ctx, f);
+    return ctx->artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY && !ctx->freestanding_profile &&
+           cg_func_is_module_export(ctx, f);
 }
 
 static void cg_func_reach_collect_tree(XiCgenCtx *ctx, const XiFunc *f) {

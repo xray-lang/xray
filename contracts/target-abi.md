@@ -40,6 +40,13 @@ Task 253 adds per-function return-ownership metadata to analysis and Xi. The
 metadata controls caller ARC placement only; it does not change the public
 value representation, calling convention, parameter list, or native return
 ABI.
+Resolved import references additionally carry the callee function and owning
+module they bind to, so ARC can read a cross-module callee's borrow signature
+and keep caller-side ownership of an argument the callee only borrows. Like the
+return-ownership metadata above, this controls caller ARC placement only: the
+public value representation, calling convention, parameter list, and native
+return ABI are unchanged, and an unresolved reference keeps the conservative
+moved-argument convention.
 Task 254 makes mutable capture cells explicit in Xi and changes the internal VM
 cell opcode operand shape. Closure upvalues remain tagged `XrValue` slots and
 the public target ABI, calling convention, and closure layout are unchanged.
@@ -226,12 +233,12 @@ anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c ca46c452959bee987bc8d4
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 457a155d62ceaabe4faa817bb1fdba75443c8479d4eb92c0c343bc0a9da8687c
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 85251d30879b7e96f36336c1772d7decfe1dc638d6d5626ccfc34a0f282e1bb1
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
-anchor-sha256: src/aot/xi_cgen.c 32e3d1b768ed46f1744b8137cff983950955baaa591df4b2bab15b27a71e33b5
+anchor-sha256: src/aot/xi_cgen.c 45e2695e1fe0e08ffcd02bfd9fd8cf89d33067a89790956121953dd2c144d914
 anchor-sha256: src/aot/xrt_coll.h 4e1bd816748739629c7b5271cd6fe58c7da3090562cd062042241c7ed208c7b6
 anchor-sha256: src/aot/xrt_core_freestanding.h 13af59f530ac1a77bb9f050bb391a65cbaebe941d77efd4f65043c4d811c7e00
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c 5176cb4b44a22335b74882f74be75ab08b05a18e04872e89acfadffe2fd8e61b
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 78ecab6e52428fcc05c9fae5bba166581feeca0cc676468133120321fbcc6ffd
-anchor-sha256: src/ir/xi.h 286b998d786bed1678de12e25b19e08e03a95299f82499bebe483dc465cfff2d
+anchor-sha256: src/ir/xi.h 2252d5c7437fcaa0f5ad4a3c875b47c0e5629a07f66bb49c9664e7989e1d2e6a
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24
