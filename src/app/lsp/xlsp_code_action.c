@@ -196,11 +196,20 @@ static void push_defer_clear_action(XrJsonValue *actions, const char *uri, const
     const char *tail = hint ? strstr(hint, " = null") : NULL;
     if (!hint || !tail)
         return;
-    size_t expr_len = (size_t) (tail - (hint + 6));
+    /* The diagnostic spells the idiom as `defer { b.onClick = null }`, so the
+     * brace and its padding sit between "defer " and the target expression.
+     * Taking them as part of the expression is what produced the doubled brace
+     * `defer { { b.onClick = null }` -- an edit that does not compile. */
+    const char *head = hint + 6;
+    while (head < tail && (*head == '{' || *head == ' ' || *head == '\t'))
+        head++;
+    while (tail > head && (tail[-1] == ' ' || tail[-1] == '\t'))
+        tail--;
+    size_t expr_len = (size_t) (tail - head);
     if (expr_len == 0 || expr_len >= 128)
         return;
     char expr[128];
-    memcpy(expr, hint + 6, expr_len);
+    memcpy(expr, head, expr_len);
     expr[expr_len] = '\0';
 
     XrJsonValue *diag_range = xjson_get_object(diag, "range");
@@ -229,7 +238,8 @@ static void push_defer_clear_action(XrJsonValue *actions, const char *uri, const
     snprintf(new_text, sizeof(new_text), "%sdefer { %s = null }\n", indent, expr);
 
     char title[192];
-    snprintf(title, sizeof(title), "Clear the field when the scope ends: defer { %s = null }", expr);
+    snprintf(title, sizeof(title), "Clear the field when the scope ends: defer { %s = null }",
+             expr);
 
     XrJsonValue *action = xjson_new_object();
     xjson_object_set(action, "title", xjson_new_string(title));
