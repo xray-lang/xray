@@ -1345,10 +1345,24 @@ static bool emit_aot_frame_transfer_cl_arg(XiCgenCtx *ctx, FILE *out, const XiFu
             return true;
         }
     }
+    /* The transfer allocates into the thread root arena, not the spawning
+     * coroutine's. Everything built here belongs to the CHILD execution: the
+     * child frame takes the closure and its release drops the last reference.
+     * Allocating it in the parent's execution-local arena made it outlive that
+     * arena, and arena disposal frees every node it owns unconditionally --
+     * the XR_OBJ_AOT_SWEEP guard that makes a concurrent release a no-op lives
+     * in the node it just freed. The child's later release then read freed
+     * memory and handed a dangling pointer to free(). An object that crosses
+     * an execution boundary is by definition not execution-local, so it goes
+     * to the next wider domain and ordinary RC reclaims it.
+     *
+     * _src is read before the switch: it is a plain pointer load out of the
+     * parent's own value, and only the copies below may allocate. */
     fprintf(out, "({ xrt_closure_t *_src = ");
     emit_aot_frame_raw_cl_arg(out, current, callee, target);
     fprintf(out,
-            "; xrt_closure_t *_dst = NULL; if (_src) { XrValue _dstv = "
+            "; void *_xa_prev = xrt_execution_arena_enter(xrt_execution_root()); "
+            "xrt_closure_t *_dst = NULL; if (_src) { XrValue _dstv = "
             "xrt_closure_new(_src->callable, %u); _dst = (xrt_closure_t *)_dstv.ptr; ",
             (unsigned) target->ncaptures);
     for (uint16_t ci = 0; ci < target->ncaptures; ci++) {
@@ -1361,7 +1375,7 @@ static bool emit_aot_frame_transfer_cl_arg(XiCgenCtx *ctx, FILE *out, const XiFu
                     (unsigned) ci);
         }
     }
-    fprintf(out, "} _dst; })");
+    fprintf(out, "} xrt_execution_arena_restore(_xa_prev); _dst; })");
     return true;
 }
 
