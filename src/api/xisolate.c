@@ -37,6 +37,7 @@
 #include "../coro/xcoroutine.h"
 #include "../coro/xtask.h"
 #include "../runtime/mem/xcoro_heap.h"
+#include "../runtime/mem/xsystem_heap.h"
 #include "../runtime/xisolate_api.h"
 #include "../vm/xvm_profiler.h"
 #include "../vm/xvm_internal.h"

@@ -326,6 +326,39 @@ int xr_runtime_main_thread_run(XrRuntime *runtime, XrCoroutine *main_coro) {
         }
     }
 
+    /* Reap executor shells parked for deferred recycle. A completing worker
+     * eagerly reclaims a DONE executor by pushing it onto its own
+     * pending_recycle_coro list, which is drained only on the next shell
+     * allocation in xr_coro_pool_get. A program whose final coroutines
+     * complete right before the main coroutine never allocates again, so
+     * those shells would survive into runtime teardown with their backend
+     * frames intact. By the time xr_coro_pool_destroy frees them, the
+     * spawning coroutine's execution storage — which owns closure and
+     * capture-cell allocations the frames still reference — is already
+     * gone, and the frame release would free through dangling headers
+     * (double free). Every worker thread has been joined above, so this
+     * thread is the sole accessor of all worker lists and timer wheels:
+     * detach any embedded timer node, release the shell's resources while
+     * all execution storage is still alive, and return it to the pool. */
+    {
+        XrCoroStructPool *pool = xr_runtime_get_coro_pool(runtime);
+        for (int i = 0; i < runtime->worker_count; i++) {
+            XrCoroutine *pending = runtime->workers[i].p.pending_recycle_coro;
+            runtime->workers[i].p.pending_recycle_coro = NULL;
+            while (pending) {
+                XrCoroutine *next = pending->next;
+                pending->next = NULL;
+                xr_coro_detach_timer_quiescent(runtime, pending);
+                xr_coro_free(pending);
+                if (pool && pool->initialized)
+                    xr_coro_struct_pool_free(pool, pending);
+                else if (!(pending->gc_flags & XR_CORO_GC_FROM_POOL))
+                    xr_free(pending);
+                pending = next;
+            }
+        }
+    }
+
     // Cleanup TLS
     tls_current_worker = NULL;
     tls_current_machine = NULL;
