@@ -1551,8 +1551,19 @@ static bool xa_type_name_matches(XrType *type, const char *name) {
     return false;
 }
 
+/* Error is what an untyped `catch (e)` binds, so `throw e` -- rethrowing what
+ * was caught -- has to be accepted alongside a concrete enum. The interface is
+ * satisfied by enums and by nothing else, so admitting it here does not widen
+ * what can be thrown; it only lets the value travel back out under the name it
+ * was caught with. */
+static bool xa_is_error_interface_type(XrType *type) {
+    return type && XR_TYPE_IS_INTERFACE(type) && type->instance.class_name &&
+           strcmp(type->instance.class_name, "Error") == 0;
+}
+
 static bool xa_is_enum_error_type(XrType *type) {
-    return type && !XR_TYPE_IS_UNKNOWN(type) && XR_TYPE_IS_ENUM(type);
+    return type && !XR_TYPE_IS_UNKNOWN(type) &&
+           (XR_TYPE_IS_ENUM(type) || xa_is_error_interface_type(type));
 }
 
 static bool xa_enum_error_type_has_payload(XaAnalyzer *analyzer, XrType *type) {
@@ -1630,8 +1641,23 @@ static XrType *xa_resolve_catch_binding_type(XaInferContext *ctx, XrCatchClause 
         return xr_type_new_named_instance(ctx->analyzer->isolate, "PanicInfo");
     }
 
-    if (!cc->type)
+    if (!cc->type) {
+        /* An untyped catch-all binds the raised error value, and that is what
+         * Error names. It used to bind `unknown`, which admitted every
+         * assignment: `catch (e) { var v: int = e }` type-checked and then held
+         * an enum at runtime. Matching still narrows to concrete variants, and
+         * string(e) still works, because every enum satisfies Error. */
+        XrType *error_type =
+            ctx->analyzer
+                ? (XrType *) xa_scope_resolve_type_alias(ctx->analyzer->global_scope, "Error")
+                : NULL;
+        if (error_type)
+            return error_type;
+        /* Unreachable in a well-formed analyzer -- the alias is registered
+         * before any source is visited -- but this function must not hand back
+         * NULL, so fall back to the same recovery type used above. */
         return xr_type_new_unknown(ctx->analyzer ? ctx->analyzer->isolate : NULL);
+    }
 
     XrType *type = xr_tref_resolve_in_analyzer(ctx->analyzer, cc->type);
     if (report_diagnostics)
@@ -3337,10 +3363,10 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
 
                 // Store enum member names and payload metadata for exhaustiveness checking.
                 if (edecl->member_count > 0) {
-                    char *nominal_owner = xa_analyzer_nominal_owner_for_file(
-                        ctx->analyzer, ctx->file_path);
-                    XaEnumInfo *enum_meta = xa_enum_info_new(
-                        nominal_owner, edecl->name, (uint32_t) edecl->member_count);
+                    char *nominal_owner =
+                        xa_analyzer_nominal_owner_for_file(ctx->analyzer, ctx->file_path);
+                    XaEnumInfo *enum_meta = xa_enum_info_new(nominal_owner, edecl->name,
+                                                             (uint32_t) edecl->member_count);
                     xr_free(nominal_owner);
                     uint32_t enum_index = 0;
                     for (int m = 0; m < edecl->member_count; m++) {
@@ -3403,8 +3429,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                         }
                         enum_index++;
                     }
-                    bool enum_layout_ready = enum_meta &&
-                                             enum_index == enum_meta->variant_count &&
+                    bool enum_layout_ready = enum_meta && enum_index == enum_meta->variant_count &&
                                              xa_enum_info_finalize_layout(enum_meta);
                     if (enum_layout_ready) {
                         links->enum_info = enum_meta;
@@ -6764,9 +6789,9 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                "defer uses hosted cleanup/runtime state");
             if (node->as.defer_stmt.expr) {
                 xa_visit_infer_expr(ctx, node->as.defer_stmt.expr);
-                bool is_snapshot =
-                    ctx->current_block_node && ctx->current_block_node->type == AST_BLOCK &&
-                    ctx->current_block_node->as.block.is_synthetic_defer_capture;
+                bool is_snapshot = ctx->current_block_node &&
+                                   ctx->current_block_node->type == AST_BLOCK &&
+                                   ctx->current_block_node->as.block.is_synthetic_defer_capture;
                 xa_register_pending_defer_loans(ctx, node, is_snapshot);
             }
             break;
