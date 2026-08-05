@@ -214,7 +214,7 @@ static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *
 
     // Runtime field additions must reject sealed classes before consulting the
     // transition cache. Compile-time class-chain construction intentionally
-    // bypasses this so wider sealed Record shapes can reuse sealed prefixes.
+    // bypasses this so wider exact object shapes can reuse exact prefixes.
     if (!allow_sealed_source && (klass->flags & XR_CLASS_DYNAMIC_SEALED)) {
         return NULL;
     }

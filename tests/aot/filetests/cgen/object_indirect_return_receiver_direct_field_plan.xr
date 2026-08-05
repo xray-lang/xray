@@ -1,0 +1,12 @@
+type User = { name: string, age: int }
+
+fn makeObjectIndirectReturnPlan() -> User {
+    var user: User = { name: "ada", age: 7 }
+    return user
+}
+
+fn objectIndirectReturnReceiverPlan() -> int {
+    return makeObjectIndirectReturnPlan().age
+}
+
+print(objectIndirectReturnReceiverPlan())

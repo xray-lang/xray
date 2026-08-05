@@ -6097,7 +6097,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
-                    "Json.decode<T>() requires T to be a sealed Record type alias with fields",
+                    "Json.decode<T>() requires T to be an exact object type alias with fields",
                     &loc);
                 return xr_type_new_error(ctx->analyzer->isolate);
             }
@@ -6112,7 +6112,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 char msg[256];
                 snprintf(msg, sizeof(msg),
                          "Json.decode<T>() field '%s' has unsupported type '%s'; supported field "
-                         "types are null, bool, int, float, string, Json, nested Record, "
+                         "types are null, bool, int, float, string, Json, nested object, "
                          "Array<Json>, and "
                          "nullable variants",
                          field_name ? field_name : "?",
@@ -7003,7 +7003,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         param_type->enum_type.enum_name ? param_type->enum_type.enum_name : "Enum");
                 } else {
                     char reason[192];
-                    if (xr_type_record_mismatch_reason(param_type, arg_type, reason,
+                    if (xr_type_object_mismatch_reason(param_type, arg_type, reason,
                                                        sizeof(reason))) {
                         snprintf(
                             msg, sizeof(msg),

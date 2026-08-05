@@ -921,7 +921,7 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    /* Build sealed Record class chain for typed Json.decode<T>. */
+    /* Build sealed structural object class chain for typed Json.decode<T>. */
     XrClass *cls = xi_json_struct_object_class_from_type_depth(
         ctx, v->type, 0, (const char *const *) v->aux, (int) v->aux_int);
     if (!cls) {

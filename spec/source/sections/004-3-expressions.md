@@ -374,7 +374,7 @@ for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 - **函数调用展开**：`f(...args)`，展开源必须是静态 arity 已知的 tuple。
 - **tuple 字面量展开**：`(head, ...tail)`，展开源必须是静态 arity 已知的 tuple。
 - **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
-- **对象/record 字面量展开**：`{...base, x: 1}`，展开源必须是对象；字段合并成新对象，同名字段后者覆盖前者，结果字段集为各展开源字段与字面量字段的并集。
+- **对象字面量展开**：`{...base, x: 1}`，展开源必须是对象；字段合并成新对象，同名字段后者覆盖前者，结果字段集为各展开源字段与字面量字段的并集。
 
 ```xray @id=expr-spread-collections
 var a = [1, 2]
@@ -441,9 +441,9 @@ var users = "Bob"
 var obj = { users }              // shorthand
 ```
 
-- 默认推断为 sealed structural `Record`（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
+- 默认推断为 exact 对象形状（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
 - 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
-- 用 `type` 别名命名 Record：`var u: User = {...}`（编译期检查字段集，密封）。
+- 用 `type` 别名命名 structural object：`var u: User = {...}`（编译期检查字段集，密封）。
 
 #### Array<byte> `Array<byte>(...)`
 
@@ -1051,7 +1051,7 @@ Allowed in the following positions only:
 - **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
 - **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
 - **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
-- **Object/record literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
+- **Object-literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
 
 ```xray @id=expr-spread-collections
 var a = [1, 2]
@@ -1118,9 +1118,9 @@ var users = "Bob"
 var obj = { users }              // shorthand
 ```
 
-- Defaults to sealed structural `Record` (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
+- Defaults to an exact object shape (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
 - It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
-- Name the Record with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
+- Name the structural object with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
 #### Array<byte> `Array<byte>(...)`
 

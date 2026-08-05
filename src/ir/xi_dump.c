@@ -65,7 +65,7 @@ static const char *xi_type_name(const struct XrType *type) {
         case XR_KIND_JSON:
             return "json";
         case XR_KIND_STRUCT_OBJECT:
-            return "record";
+            return "object";
         case XR_KIND_UNION:
             return "union";
         case XR_KIND_TUPLE:

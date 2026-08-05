@@ -311,7 +311,7 @@ TEST(type_assignable) {
     ASSERT(!xr_type_assignable(mutable_array, const_array));
 }
 
-TEST(record_nullable_field_accepts_explicit_null) {
+TEST(object_nullable_field_accepts_explicit_null) {
     const char *names[] = {"secret"};
     XrType *target_fields[] = {
         xr_type_make_nullable(g_isolate, xr_type_new_string(g_isolate)),
@@ -1184,6 +1184,30 @@ TEST(json_value_and_codec_capability_matrix) {
     result = xa_json_encodable(recursive);
     ASSERT(!result.supported);
     ASSERT(result.reason == XA_JSON_CAPABILITY_UNSUPPORTED_RECURSIVE_ALIAS);
+}
+
+TEST(analyzer_typed_json_calls_complete_all_analysis_passes) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source =
+        "type User = { name: string, age: int }\n"
+        "fn main() {\n"
+        "    var data = Json.parse(\"{\\\"name\\\":\\\"Ada\\\",\\\"age\\\":37}\")\n"
+        "    var decoded = Json.decode<User>(data)\n"
+        "    var parsed = Json.parse<User>(\"{\\\"name\\\":\\\"Grace\\\",\\\"age\\\":38}\")\n"
+        "    print(decoded == null, parsed.name)\n"
+        "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "typed_json_all_passes.xr", program);
+
+    int diagnostic_count = 0;
+    xa_analyzer_get_diagnostics(a, &diagnostic_count);
+    ASSERT(diagnostic_count == 0);
+
+    xr_program_destroy(program);
+    xa_analyzer_free(a);
+    setup_pool();
 }
 
 static int analyzer_diag_message_count(XaAnalyzer *analyzer, const char *message) {
@@ -6747,9 +6771,10 @@ int main(void) {
     RUN_TEST(type_union);
     RUN_TEST(type_error_recovery);
     RUN_TEST(type_assignable);
-    RUN_TEST(record_nullable_field_accepts_explicit_null);
+    RUN_TEST(object_nullable_field_accepts_explicit_null);
     RUN_TEST(object_row_assignment_matrix_and_field_invariance);
     RUN_TEST(json_value_and_codec_capability_matrix);
+    RUN_TEST(analyzer_typed_json_calls_complete_all_analysis_passes);
     RUN_TEST(typecheck_assignable_rejects_unknown_source);
     RUN_TEST(typecheck_assignable_rejects_unknown_container_member);
     RUN_TEST(analyzer_check_assignment_rejects_unknown_source);

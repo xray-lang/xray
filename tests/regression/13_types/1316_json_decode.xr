@@ -75,7 +75,7 @@ type Address = { city: string, zip: int }
 type Profile = { name: string, address: Address }
 
 @test
-fn test_decode_nested_record_field() {
+fn test_decode_nested_object_field() {
     var json = Json.parse("{\"name\": \"Dana\", \"address\": {\"city\": \"Hangzhou\", \"zip\": 310000}}")
     var profile = Json.decode<Profile>(json)
     assert(profile != null)
@@ -85,14 +85,14 @@ fn test_decode_nested_record_field() {
 }
 
 @test
-fn test_decode_nested_record_wrong_type() {
+fn test_decode_nested_object_wrong_type() {
     var wrong = Json.parse("{\"name\": \"Dana\", \"address\": {\"city\": \"Hangzhou\", \"zip\": \"bad\"}}")
     var profile = Json.decode<Profile>(wrong)
     assert_eq(profile, null)
 }
 
 @test
-fn test_decode_nested_record_wrong_kind() {
+fn test_decode_nested_object_wrong_kind() {
     var wrong = Json.parse("{\"name\": \"Dana\", \"address\": \"Hangzhou\"}")
     var profile = Json.decode<Profile>(wrong)
     assert_eq(profile, null)
@@ -118,7 +118,7 @@ fn test_decode_array_json_field_rejects_non_array() {
 type MixedProfile = { name: string, tags: Array<Json>, address: Address, active: bool }
 
 @test
-fn test_decode_mixed_nested_record_and_array_json_fields() {
+fn test_decode_mixed_nested_object_and_array_json_fields() {
     var json = Json.parse("{\"name\": \"Dana\", \"tags\": [\"ops\", 3, null], \"address\": {\"city\": \"Hangzhou\", \"zip\": 310000}, \"active\": true}")
     var profile = Json.decode<MixedProfile>(json)
     assert(profile != null)
@@ -130,7 +130,7 @@ fn test_decode_mixed_nested_record_and_array_json_fields() {
 }
 
 @test
-fn test_decode_mixed_rejects_nested_record_wrong_field() {
+fn test_decode_mixed_rejects_nested_object_wrong_field() {
     var json = Json.parse("{\"name\": \"Dana\", \"tags\": [\"ops\"], \"address\": {\"city\": \"Hangzhou\", \"zip\": \"bad\"}, \"active\": true}")
     var profile = Json.decode<MixedProfile>(json)
     assert_eq(profile, null)

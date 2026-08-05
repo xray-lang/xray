@@ -365,7 +365,7 @@ static XrAstNode *parse_escape(XrParser *p) {
             }
             advance(p);  // skip '{'
 
-            // Record property name start position
+            // object property name start position
             const char *name_start = p->p;
             int name_len = 0;
 

@@ -285,7 +285,7 @@ static void test_object_merge_plan_contracts(void) {
 
     plan.action = XAOT_OBJECT_MERGE_JSON_BRIDGE;
     ASSERT_TRUE(!xaot_backend_contract_object_merge_plan_allowed(&plan, copy_actions, &issue));
-    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_RECORD_MERGE_ACTION_REJECTED);
+    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_OBJECT_MERGE_ACTION_REJECTED);
 
     passed++;
 }

@@ -650,7 +650,7 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
                                   result_type->object.field_count > 0 &&
                                   result_type->object.field_names;
 
-    /* A contextual Record must retain its declared shape even when optional
+    /* A contextual structural object must retain its declared shape even when optional
      * fields are omitted. Otherwise a later supplied field is compacted into
      * an earlier optional slot and direct field reads observe the wrong value. */
     int static_count = 0;

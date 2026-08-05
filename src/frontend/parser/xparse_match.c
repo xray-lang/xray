@@ -79,7 +79,7 @@ static char *pattern_copy_token(Parser *parser, const Token *tok) {
     return buf;
 }
 
-/* Parse an object/record match pattern: `{ x, y }` or `{ x: sub }`.
+/* Parse an object match pattern: `{ x, y }` or `{ x: sub }`.
  * Shorthand `{ x }` binds field `x` to a local `x`; `{ x: sub }` matches the
  * field value against the sub-pattern (rename, literal, nested destructure). */
 static AstNode *parse_object_pattern(Parser *parser) {

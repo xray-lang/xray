@@ -1844,20 +1844,20 @@ static XrCFuncResult net_bidi_wait_continue(XrVMRuntime *X, int status, XrValue 
     return net_bidi_wait_step(X, state, result);
 }
 
-static XrValue net_bidi_result_record(XrVMRuntime *X, NetBidiWaitState *state) {
-    XrClass *cls = xr_stdlib_record_class_get(X, "net", "__CopyBidirectionalResult");
+static XrValue net_bidi_result_object(XrVMRuntime *X, NetBidiWaitState *state) {
+    XrClass *cls = xr_stdlib_object_shape_class_get(X, "net", "__CopyBidirectionalResult");
     if (!cls)
         return XR_NULL_VAL;
-    XrJson *record = xr_json_new_with_class(xr_current_coro(X), cls);
-    if (!record)
+    XrJson *object = xr_json_new_with_class(xr_current_coro(X), cls);
+    if (!object)
         return XR_NULL_VAL;
     xr_instance_set_dynamic_field(
-        X, record, 0,
+        X, object, 0,
         xr_int((xr_Integer) atomic_load_explicit(&state->shared->ab, memory_order_acquire)));
     xr_instance_set_dynamic_field(
-        X, record, 1,
+        X, object, 1,
         xr_int((xr_Integer) atomic_load_explicit(&state->shared->ba, memory_order_acquire)));
-    return xr_json_value(record);
+    return xr_json_value(object);
 }
 
 static XrCFuncResult net_bidi_wait_step(XrVMRuntime *X, NetBidiWaitState *state, XrValue *result) {
@@ -1867,7 +1867,7 @@ static XrCFuncResult net_bidi_wait_step(XrVMRuntime *X, NetBidiWaitState *state,
             net_set_pending_error(X, error == XR_NETERR_NONE ? XR_NETERR_IO : error);
             *result = XR_NULL_VAL;
         } else {
-            *result = net_bidi_result_record(X, state);
+            *result = net_bidi_result_object(X, state);
             if (XR_IS_NULL(*result))
                 net_set_pending_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
         }

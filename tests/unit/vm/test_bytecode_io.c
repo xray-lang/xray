@@ -430,7 +430,7 @@ TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
     xray_vm_delete(writer);
 }
 
-TEST(bytecode_roundtrips_typed_record_decode_shape) {
+TEST(bytecode_roundtrips_typed_object_decode_shape) {
     XrVMRuntime *writer = new_test_isolate();
     ASSERT_NOT_NULL(writer);
     XrVMRuntime *reader = new_test_isolate();
@@ -1217,7 +1217,7 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_reader_assigns_unique_proto_ids);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);
-    RUN_TEST(bytecode_roundtrips_typed_record_decode_shape);
+    RUN_TEST(bytecode_roundtrips_typed_object_decode_shape);
     RUN_TEST(bytecode_roundtrips_class_descriptor_constants);
     RUN_TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically);
     RUN_TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corruption);

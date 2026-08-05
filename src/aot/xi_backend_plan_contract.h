@@ -42,7 +42,7 @@ typedef enum XaotBackendContractIssue {
     XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH,
     XAOT_BACKEND_CONTRACT_JSON_CODEC_KIND_MISMATCH,
     XAOT_BACKEND_CONTRACT_JSON_CODEC_ACTION_REJECTED,
-    XAOT_BACKEND_CONTRACT_RECORD_MERGE_ACTION_REJECTED,
+    XAOT_BACKEND_CONTRACT_OBJECT_MERGE_ACTION_REJECTED,
 } XaotBackendContractIssue;
 
 static inline const char *xaot_backend_contract_issue_name(XaotBackendContractIssue issue) {
@@ -79,7 +79,7 @@ static inline const char *xaot_backend_contract_issue_name(XaotBackendContractIs
             return "json_codec_kind_mismatch";
         case XAOT_BACKEND_CONTRACT_JSON_CODEC_ACTION_REJECTED:
             return "json_codec_action_rejected";
-        case XAOT_BACKEND_CONTRACT_RECORD_MERGE_ACTION_REJECTED:
+        case XAOT_BACKEND_CONTRACT_OBJECT_MERGE_ACTION_REJECTED:
             return "object_merge_action_rejected";
     }
     return "unknown";
@@ -378,7 +378,7 @@ xaot_backend_contract_object_merge_plan_allowed(const XaotObjectMergePlan *plan,
     if ((allowed_actions & xaot_backend_object_merge_action_bit(plan->action)) == 0 ||
         plan->unproven_reason != XAOT_OBJECT_UNPROVEN_NONE) {
         xaot_backend_contract_set_issue(out_issue,
-                                        XAOT_BACKEND_CONTRACT_RECORD_MERGE_ACTION_REJECTED);
+                                        XAOT_BACKEND_CONTRACT_OBJECT_MERGE_ACTION_REJECTED);
         return false;
     }
     xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);

@@ -97,18 +97,18 @@ static void register_builtin_module_types_in_prelude(XaAnalyzer *analyzer,
     if (!analyzer || !module)
         return;
 
-    for (int i = 0; i < module->record_count; i++) {
-        const XaBuiltinRecord *record = &module->records[i];
-        if (!record->name || xa_scope_lookup_local(analyzer->global_scope, record->name))
+    for (int i = 0; i < module->object_shape_count; i++) {
+        const XaBuiltinObjectShape *object_shape = &module->object_shapes[i];
+        if (!object_shape->name || xa_scope_lookup_local(analyzer->global_scope, object_shape->name))
             continue;
-        XaSymbol *sym = xa_symbol_new(record->name, XA_SYM_TYPE_ALIAS);
+        XaSymbol *sym = xa_symbol_new(object_shape->name, XA_SYM_TYPE_ALIAS);
         if (!sym)
             continue;
         sym->location.line = 0;
         sym->is_builtin = true;
         sym->is_const = true;
         sym->is_exported = true;
-        sym->alias_type = xa_builtin_record_decl_type(analyzer->isolate, record);
+        sym->alias_type = xa_builtin_object_shape_decl_type(analyzer->isolate, object_shape);
         xa_scope_add_symbol(analyzer->global_scope, sym);
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (links) {
@@ -116,7 +116,7 @@ static void register_builtin_module_types_in_prelude(XaAnalyzer *analyzer,
             links->declared_type = links->type;
             links->is_definitely_assigned = true;
             links->module_name = module_name;
-            links->import_member_name = record->name;
+            links->import_member_name = object_shape->name;
         }
     }
 
@@ -1640,18 +1640,18 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
                                             !xa_stdlib_native_type_is_internal(handle->name));
     }
 
-    for (int i = 0; i < module->record_count; i++) {
-        const XaBuiltinRecord *record = &module->records[i];
-        if (!record->name || xa_scope_lookup_local(scope, record->name))
+    for (int i = 0; i < module->object_shape_count; i++) {
+        const XaBuiltinObjectShape *object_shape = &module->object_shapes[i];
+        if (!object_shape->name || xa_scope_lookup_local(scope, object_shape->name))
             continue;
-        XaSymbol *sym = xa_symbol_new(record->name, XA_SYM_TYPE_ALIAS);
+        XaSymbol *sym = xa_symbol_new(object_shape->name, XA_SYM_TYPE_ALIAS);
         if (!sym)
             continue;
         sym->location.line = 0;
         sym->is_builtin = true;
         sym->is_const = true;
-        sym->is_exported = !xa_stdlib_native_type_is_internal(record->name);
-        sym->alias_type = xa_builtin_record_decl_type(analyzer->isolate, record);
+        sym->is_exported = !xa_stdlib_native_type_is_internal(object_shape->name);
+        sym->alias_type = xa_builtin_object_shape_decl_type(analyzer->isolate, object_shape);
         xa_scope_add_symbol(scope, sym);
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
         if (links) {
@@ -1663,7 +1663,7 @@ static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const c
              * and readers such as sync_runtime_import_class_name compare it
              * long after the stack slot is gone (R-OWN-1). */
             links->module_name = module->name;
-            links->import_member_name = record->name;
+            links->import_member_name = object_shape->name;
         }
     }
 

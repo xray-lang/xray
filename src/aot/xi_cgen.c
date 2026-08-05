@@ -12583,20 +12583,20 @@ static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *fun
     if (object_merge_site) {
         if (value->xg_object_merge_id == XG_NO_ID) {
             issue = XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN;
-            cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge", XG_NO_ID,
+            cg_report_mandatory_plan_contract_failure(ctx, func, value, "object-merge", XG_NO_ID,
                                                       issue);
             return false;
         }
         const XaotObjectMergePlan *plan =
             xaot_bundle_find_object_merge_plan(bundle, value->xg_object_merge_id);
         if (!xaot_backend_contract_object_merge_plan_allowed(plan, object_merge_actions, &issue)) {
-            cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge",
+            cg_report_mandatory_plan_contract_failure(ctx, func, value, "object-merge",
                                                       value->xg_object_merge_id, issue);
             valid = false;
         }
     } else if (value->xg_object_merge_id != XG_NO_ID) {
         issue = XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH;
-        cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge",
+        cg_report_mandatory_plan_contract_failure(ctx, func, value, "object-merge",
                                                   value->xg_object_merge_id, issue);
         valid = false;
     }

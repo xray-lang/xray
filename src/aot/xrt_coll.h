@@ -5441,7 +5441,7 @@ static inline XrValue xrt_getprop_key(XrValue obj, XrValue key) {
 }
 
 /* Name-keyed property store. Handles the two shapes that actually carry named
- * properties at run time: a Map, and a JSON/record object.
+ * properties at run time: a Map, and a JSON/structural object.
  *
  * Fails closed on anything else. A store that cannot be performed has no
  * defensible "skip it" reading — the value the program assigned simply would
@@ -5549,11 +5549,11 @@ static inline void xrt_json_merge(XrValue dst_val, XrValue src_val) {
     }
 }
 
-/* Sealed Record spread: only overwrite fields that already exist in the target
- * Record shape. Unknown source fields are intentionally ignored here; a Record
+/* Sealed structural object spread: only overwrite fields that already exist in the target
+ * structural object shape. Unknown source fields are intentionally ignored here; a structural object
  * merge that needs a dynamic source must be lowered through the explicit Json
  * bridge path instead of turning the result into an open Json object. */
-static inline void xrt_record_merge(XrValue dst_val, XrValue src_val) {
+static inline void xrt_object_merge(XrValue dst_val, XrValue src_val) {
     if (dst_val.tag != XR_TAG_PTR || !dst_val.ptr)
         return;
     if (src_val.tag != XR_TAG_PTR || !src_val.ptr)
@@ -5570,7 +5570,7 @@ static inline void xrt_record_merge(XrValue dst_val, XrValue src_val) {
     }
 }
 
-static inline void xrt_record_merge_copy_table(XrValue dst_val, XrValue src_val,
+static inline void xrt_object_merge_copy_table(XrValue dst_val, XrValue src_val,
                                                int64_t copy_pair_count,
                                                const uint16_t *dst_src_ordinals) {
     if (copy_pair_count <= 0 || !dst_src_ordinals)

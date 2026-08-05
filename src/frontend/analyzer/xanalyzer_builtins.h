@@ -97,19 +97,19 @@ typedef struct XaBuiltinHandle {
     int method_count;
 } XaBuiltinHandle;
 
-// Named sealed record declared by a native stdlib module.
-typedef struct XaBuiltinRecordField {
+// Named exact object shape declared by a native stdlib module.
+typedef struct XaBuiltinObjectField {
     const char *name;
     const char *type_str;
-} XaBuiltinRecordField;
+} XaBuiltinObjectField;
 
-typedef struct XaBuiltinRecord {
+typedef struct XaBuiltinObjectShape {
     const char *name;
     const char *doc;
-    const XaBuiltinRecordField *fields;
+    const XaBuiltinObjectField *fields;
     int field_count;
-    bool is_sealed;
-} XaBuiltinRecord;
+    bool is_exact;
+} XaBuiltinObjectShape;
 
 // Module-scoped enum declared by a native stdlib module.
 typedef struct XaBuiltinEnumVariant {
@@ -133,8 +133,8 @@ typedef struct XaBuiltinModule {
     int function_count;
     const XaBuiltinHandle *handles;
     int handle_count;
-    const XaBuiltinRecord *records;
-    int record_count;
+    const XaBuiltinObjectShape *object_shapes;
+    int object_shape_count;
     const XaBuiltinEnum *enums;
     int enum_count;
 } XaBuiltinModule;
@@ -247,16 +247,17 @@ XR_FUNC bool xa_builtin_module_func_is_yieldable(const char *module_name, const 
 XR_FUNC const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name,
                                                           const char *handle_name);
 
-// Get native module named record/enum declarations.
-XR_FUNC const XaBuiltinRecord *xa_builtin_get_record_type(const char *module_name,
-                                                          const char *record_name);
-XR_FUNC const XaBuiltinRecord *xa_builtin_find_record_by_name(const char *record_name);
+// Get native module named object-shape/enum declarations.
+XR_FUNC const XaBuiltinObjectShape *xa_builtin_get_object_shape(const char *module_name,
+                                                          const char *object_shape_name);
+XR_FUNC const XaBuiltinObjectShape *xa_builtin_find_object_shape_by_name(const char *object_shape_name);
 XR_FUNC const XaBuiltinEnum *xa_builtin_get_enum_type(const char *module_name,
                                                       const char *enum_name);
 XR_FUNC const XaBuiltinEnum *xa_builtin_find_enum_by_name(const char *enum_name);
 
 // Materialize analyzer types and enum metadata from native declarations.
-XR_FUNC XrType *xa_builtin_record_decl_type(XrVMRuntime *X, const XaBuiltinRecord *record);
+XR_FUNC XrType *xa_builtin_object_shape_decl_type(XrVMRuntime *X,
+                                                  const XaBuiltinObjectShape *object_shape);
 XR_FUNC XrType *xa_builtin_enum_decl_type(XrVMRuntime *X, const XaBuiltinEnum *enum_decl,
                                           XaEnumInfo **out_info);
 

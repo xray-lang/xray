@@ -713,7 +713,7 @@ static inline int64_t xrt_net_min_active_deadline(int64_t current, int64_t candi
 
 /* Hosted AOT data plane for net.copyBidirectional. The helper returns a
  * native pair plus an enum ordinal; codegen materializes the declared sealed
- * Record and publishes the generated stable NetError value when needed. */
+ * structural object and publishes the generated stable NetError value when needed. */
 static inline XrtI64PairResult xrt_net_copy_bidirectional(XrValue a_value, XrValue b_value) {
     xrt_net_conn_object_t *a = xrt_net_conn_ptr(a_value);
     xrt_net_conn_object_t *b = xrt_net_conn_ptr(b_value);

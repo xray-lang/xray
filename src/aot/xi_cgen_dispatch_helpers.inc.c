@@ -4082,10 +4082,10 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         } else if (xicgen_import_ref_is_core_math_member(ref)) {
             fprintf(out, "XR_NULL_VAL /* builtin math.%s */", ref->member_name);
         } else if (ref && ref->module_path && ref->member_name &&
-                   xa_builtin_get_record_type(ref->module_path, ref->member_name)) {
-            /* Native Record declarations are type-only imports. They have no
+                   xa_builtin_get_object_shape(ref->module_path, ref->member_name)) {
+            /* Native structural object declarations are type-only imports. They have no
              * runtime namespace value to resolve after type erasure. */
-            fprintf(out, "XR_NULL_VAL /* builtin record type: %s.%s */", ref->module_path,
+            fprintf(out, "XR_NULL_VAL /* builtin object type: %s.%s */", ref->module_path,
                     ref->member_name);
         } else if (ref && ref->module_path && ref->member_name &&
                    xa_builtin_get_enum_type(ref->module_path, ref->member_name)) {
@@ -11383,22 +11383,22 @@ static void xicgen_json_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 }
 
 static bool xicgen_emit_json_decode_field_specs(XiCgenCtx *ctx, FILE *out,
-                                                const XrType *record_type,
+                                                const XrType *object_type,
                                                 const char *const *field_names,
                                                 int64_t field_count, int depth) {
-    if (!ctx || !out || !record_type || !XR_TYPE_IS_STRUCT_OBJECT(record_type) || !field_names ||
-        !record_type->object.field_names || !record_type->object.field_types ||
-        record_type->object.field_count != field_count || depth > 16)
+    if (!ctx || !out || !object_type || !XR_TYPE_IS_STRUCT_OBJECT(object_type) || !field_names ||
+        !object_type->object.field_names || !object_type->object.field_types ||
+        object_type->object.field_count != field_count || depth > 16)
         return false;
     fprintf(out, "(const XrJsonDecodeFieldSpec[]){");
     for (int64_t i = 0; i < field_count; i++) {
         if (i > 0)
             fprintf(out, ", ");
         const char *field_name = field_names[i] ? field_names[i] : "?";
-        int64_t type_ordinal = cg_object_shape_type_ordinal(record_type, field_name, i);
-        if (type_ordinal < 0 || type_ordinal >= record_type->object.field_count)
+        int64_t type_ordinal = cg_object_shape_type_ordinal(object_type, field_name, i);
+        if (type_ordinal < 0 || type_ordinal >= object_type->object.field_count)
             return false;
-        const XrType *field_type = record_type->object.field_types[type_ordinal];
+        const XrType *field_type = object_type->object.field_types[type_ordinal];
         uint8_t value_kind = xr_type_json_value_kind(field_type);
         fprintf(out, "{");
         xicgen_emit_c_string_literal(out, field_name);
@@ -11429,11 +11429,11 @@ static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     (void) f;
     (void) prefix;
     int64_t field_count = v ? v->aux_int : 0;
-    const XrType *record_type = v ? v->type : NULL;
+    const XrType *object_type = v ? v->type : NULL;
     const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_TAGGED,
                                                      v ? cg_rep(v) : XR_REP_TAGGED);
-    if (!v || v->nargs < 1 || field_count <= 0 || !record_type || !XR_TYPE_IS_STRUCT_OBJECT(record_type) ||
-        !record_type->object.field_types || record_type->object.field_count != field_count ||
+    if (!v || v->nargs < 1 || field_count <= 0 || !object_type || !XR_TYPE_IS_STRUCT_OBJECT(object_type) ||
+        !object_type->object.field_types || object_type->object.field_count != field_count ||
         !v->aux) {
         fprintf(out, "XR_NULL_VAL");
         emit_conversion_suffix(out, conv_suffix);
@@ -11452,7 +11452,7 @@ static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", &_xobj_shape_%d, %" PRId64 ", ", shape_id, field_count);
     if (!xicgen_emit_json_decode_field_specs(
-            ctx, out, record_type, (const char *const *) v->aux, field_count, 0)) {
+            ctx, out, object_type, (const char *const *) v->aux, field_count, 0)) {
         fprintf(out, "NULL");
     }
     fprintf(out, ")");
@@ -13172,7 +13172,7 @@ static bool xicgen_emit_object_merge_copy_table(XiCgenCtx *ctx, FILE *out, const
     if (!ev || !v || !plan || plan->base_field_count == 0 || plan->result_field_count == 0) {
         if (ctx)
             ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: Record merge plan has no field evidence table\n");
+        fprintf(stderr, "[xi_cgen] ERROR: structural object merge plan has no field evidence table\n");
         emit_codegen_abort_expr(out);
         return true;
     }
@@ -13187,7 +13187,7 @@ static bool xicgen_emit_object_merge_copy_table(XiCgenCtx *ctx, FILE *out, const
             if (ctx)
                 ctx->error = true;
             fprintf(stderr,
-                    "[xi_cgen] ERROR: Record merge plan %u cannot rederive copy table "
+                    "[xi_cgen] ERROR: structural object merge plan %u cannot rederive copy table "
                     "(src_ord=%u)\n",
                     plan->merge_id, (unsigned) src_ord);
             emit_codegen_abort_expr(out);
@@ -13214,7 +13214,7 @@ static bool xicgen_emit_object_merge_copy_table(XiCgenCtx *ctx, FILE *out, const
     return true;
 }
 
-/* Object spread merge: verified Records use a direct ordinal copy table; Json stays dynamic. */
+/* Object spread merge: verified structural objects use a direct ordinal copy table; Json stays dynamic. */
 static void xicgen_json_merge(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) f;
@@ -16388,7 +16388,7 @@ static const char *xicgen_type_label_noalloc(const XrType *type) {
         case XR_KIND_RUNE:
             return "rune";
         case XR_KIND_STRUCT_OBJECT:
-            return "record";
+            return "object";
         case XR_KIND_COUNT:
             return "type";
     }

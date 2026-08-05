@@ -370,7 +370,7 @@ XR_FUNC AstNode *xr_ast_pattern_tuple(XrCompilerSession *session, AstNode **patt
 XR_FUNC AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant,
                                     AstNode **patterns, int count, int line);
 
-// Create object/record match pattern node: { x, y } / { x: sub }
+// Create object match pattern node: { x, y } / { x: sub }
 XR_FUNC AstNode *xr_ast_pattern_object(XrCompilerSession *session, char **field_names,
                                        AstNode **patterns, int count, int line);
 

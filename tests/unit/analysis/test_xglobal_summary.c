@@ -7021,7 +7021,7 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     const XaotGenericInstantiationPlan *plan =
         xaot_bundle_find_generic_instantiation_plan(&bundle, inst->generic_inst_id);
     ASSERT_NOT_NULL(plan);
-    ASSERT_EQ_UINT(plan->action, XAOT_GENERIC_INSTANTIATION_RECORD_ROOT);
+    ASSERT_EQ_UINT(plan->action, XAOT_GENERIC_INSTANTIATION_STRUCT_OBJECT_ROOT);
     ASSERT_EQ_UINT(plan->unproven_reason, XAOT_GENERIC_INST_UNPROVEN_NO_SPECIALIZED_BODY);
     ASSERT_TRUE((plan->evidence & XAOT_GENERIC_INST_EV_GLOBAL_ROW) != 0);
     ASSERT_TRUE((plan->evidence & XAOT_GENERIC_INST_EV_CONCRETE_TYPES) != 0);
@@ -7030,7 +7030,7 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     char *plan_dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(plan_dump);
     ASSERT_NOT_NULL(strstr(plan_dump, "generic-instantiation 0 id=1 module=1 kind=function"));
-    ASSERT_NOT_NULL(strstr(plan_dump, "action=record_root"));
+    ASSERT_NOT_NULL(strstr(plan_dump, "action=struct_object_root"));
     ASSERT_NOT_NULL(strstr(plan_dump, "evidence=row+types+origin+root"));
     ASSERT_NOT_NULL(strstr(plan_dump, "reason=no_specialized_body"));
     xr_free(plan_dump);
@@ -10360,7 +10360,7 @@ TEST(global_evidence_records_object_merge_plans) {
     bundle.object_merge_plans[0].action = XAOT_OBJECT_MERGE_COPY_APPEND;
     memset(err, 0, sizeof(err));
     ASSERT_TRUE(!xaot_verify_bundle(&bundle, XAOT_VERIFY_AOT_READY, err, sizeof(err)));
-    ASSERT_NOT_NULL(strstr(err, "AOT Record merge plan action does not re-derive"));
+    ASSERT_NOT_NULL(strstr(err, "AOT structural object merge plan action does not re-derive"));
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -14759,7 +14759,7 @@ TEST(global_evidence_producer_propagates_shapes_through_method_return_receivers)
                          "    makeJsonArray() -> Array<Json> {\n"
                          "        return [{ name: \"ada\", age: 7 }, { name: \"bob\", age: 8 }]\n"
                          "    }\n"
-                         "    makeRecord() -> User {\n"
+                         "    makeObject() -> User {\n"
                          "        return { name: \"ada\", age: 7 }\n"
                          "    }\n"
                          "}\n"
@@ -14771,9 +14771,9 @@ TEST(global_evidence_producer_propagates_shapes_through_method_return_receivers)
                          "    var f = ShapeFactory()\n"
                          "    return f.makeJsonArray()[0].age\n"
                          "}\n"
-                         "fn readRecordMethodAge() -> int {\n"
+                         "fn readObjectMethodAge() -> int {\n"
                          "    var f = ShapeFactory()\n"
-                         "    return f.makeRecord().age\n"
+                         "    return f.makeObject().age\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -14795,15 +14795,15 @@ TEST(global_evidence_producer_propagates_shapes_through_method_return_receivers)
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *json_reader = evidence_find_body_by_name(&ev, "readJsonMethodAge");
     const XgBodySummary *array_reader = evidence_find_body_by_name(&ev, "readJsonArrayMethodAge");
-    const XgBodySummary *record_reader = evidence_find_body_by_name(&ev, "readRecordMethodAge");
+    const XgBodySummary *object_reader = evidence_find_body_by_name(&ev, "readObjectMethodAge");
     ASSERT_NOT_NULL(json_reader);
     ASSERT_NOT_NULL(array_reader);
-    ASSERT_NOT_NULL(record_reader);
+    ASSERT_NOT_NULL(object_reader);
     ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 0);
     ASSERT_EQ_UINT(ev.nobject_accesses, 3);
     bool saw_json = false;
     bool saw_array = false;
-    bool saw_record = false;
+    bool saw_object = false;
     for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
         const XgObjectAccessSummary *access = &ev.object_accesses[i];
         ASSERT_TRUE(access->receiver_shape_id != XG_NO_ID);
@@ -14814,12 +14814,12 @@ TEST(global_evidence_producer_propagates_shapes_through_method_return_receivers)
             saw_json = true;
         if (access->owner_func_id == array_reader->func_id)
             saw_array = true;
-        if (access->owner_func_id == record_reader->func_id)
-            saw_record = true;
+        if (access->owner_func_id == object_reader->func_id)
+            saw_object = true;
     }
     ASSERT_TRUE(saw_json);
     ASSERT_TRUE(saw_array);
-    ASSERT_TRUE(saw_record);
+    ASSERT_TRUE(saw_object);
 
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
@@ -14918,7 +14918,7 @@ TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals)
                          "    makeJson() -> Json {\n"
                          "        return { name: \"ada\", age: 7 }\n"
                          "    }\n"
-                         "    makeRecord() -> User {\n"
+                         "    makeObject() -> User {\n"
                          "        return { name: \"ada\", age: 7 }\n"
                          "    }\n"
                          "}\n"
@@ -14933,15 +14933,15 @@ TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals)
                          "    j = f.makeJson()\n"
                          "    return j.name\n"
                          "}\n"
-                         "fn readRecordMethodLocalAge() -> int {\n"
+                         "fn readObjectMethodLocalAge() -> int {\n"
                          "    var f = LocalReturnFactory()\n"
-                         "    var user = f.makeRecord()\n"
+                         "    var user = f.makeObject()\n"
                          "    return user.age\n"
                          "}\n"
-                         "fn readRecordMethodAssignedName() -> string {\n"
+                         "fn readObjectMethodAssignedName() -> string {\n"
                          "    var f = LocalReturnFactory()\n"
                          "    var user: User = { name: \"zero\", age: 0 }\n"
-                         "    user = f.makeRecord()\n"
+                         "    user = f.makeObject()\n"
                          "    return user.name\n"
                          "}\n"
                          "fn readArrayReturnLocalAge() -> int {\n"
@@ -14973,16 +14973,16 @@ TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals)
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     const XgBodySummary *json_age = evidence_find_body_by_name(&ev, "readJsonMethodLocalAge");
     const XgBodySummary *json_name = evidence_find_body_by_name(&ev, "readJsonMethodAssignedName");
-    const XgBodySummary *record_age = evidence_find_body_by_name(&ev, "readRecordMethodLocalAge");
-    const XgBodySummary *record_name =
-        evidence_find_body_by_name(&ev, "readRecordMethodAssignedName");
+    const XgBodySummary *object_age = evidence_find_body_by_name(&ev, "readObjectMethodLocalAge");
+    const XgBodySummary *object_name =
+        evidence_find_body_by_name(&ev, "readObjectMethodAssignedName");
     const XgBodySummary *array_age = evidence_find_body_by_name(&ev, "readArrayReturnLocalAge");
     const XgBodySummary *array_name =
         evidence_find_body_by_name(&ev, "readArrayReturnAssignedName");
     ASSERT_NOT_NULL(json_age);
     ASSERT_NOT_NULL(json_name);
-    ASSERT_NOT_NULL(record_age);
-    ASSERT_NOT_NULL(record_name);
+    ASSERT_NOT_NULL(object_age);
+    ASSERT_NOT_NULL(object_name);
     ASSERT_NOT_NULL(array_age);
     ASSERT_NOT_NULL(array_name);
     XaotBundle bundle;
@@ -15020,8 +15020,8 @@ TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals)
     uint32_t matched_object_accesses = 0;
     bool saw_json_age = false;
     bool saw_json_name = false;
-    bool saw_record_age = false;
-    bool saw_record_name = false;
+    bool saw_object_age = false;
+    bool saw_object_name = false;
     for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
         const XgObjectAccessSummary *access = &ev.object_accesses[i];
         uint16_t expected_field = UINT16_MAX;
@@ -15034,12 +15034,12 @@ TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals)
         } else if (access->owner_func_id == json_name->func_id) {
             expected_field = 0;
             saw_json_name = true;
-        } else if (access->owner_func_id == record_age->func_id) {
+        } else if (access->owner_func_id == object_age->func_id) {
             expected_field = 1;
-            saw_record_age = true;
-        } else if (access->owner_func_id == record_name->func_id) {
+            saw_object_age = true;
+        } else if (access->owner_func_id == object_name->func_id) {
             expected_field = 0;
-            saw_record_name = true;
+            saw_object_name = true;
         } else {
             continue;
         }
@@ -15053,8 +15053,8 @@ TEST(global_evidence_producer_propagates_call_return_shapes_through_more_locals)
     ASSERT_EQ_UINT(matched_object_accesses, 4);
     ASSERT_TRUE(saw_json_age);
     ASSERT_TRUE(saw_json_name);
-    ASSERT_TRUE(saw_record_age);
-    ASSERT_TRUE(saw_record_name);
+    ASSERT_TRUE(saw_object_age);
+    ASSERT_TRUE(saw_object_name);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -15181,7 +15181,7 @@ TEST(global_evidence_producer_propagates_json_bridge_shape_through_field_and_con
 
 TEST(global_evidence_producer_propagates_object_shape_through_closure_capture) {
     setup_parser_session();
-    const char *source = "fn readCapturedRecord() -> int {\n"
+    const char *source = "fn readCapturedObject() -> int {\n"
                          "    var user = { name: \"ada\", age: 7 }\n"
                          "    const read = fn() -> int {\n"
                          "        return user.age\n"
@@ -15206,7 +15206,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_closure_capture) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    const XgBodySummary *outer = evidence_find_body_by_name(&ev, "readCapturedRecord");
+    const XgBodySummary *outer = evidence_find_body_by_name(&ev, "readCapturedObject");
     const XgBodySummary *closure = evidence_find_body_by_name(&ev, "<anonymous>");
     ASSERT_NOT_NULL(outer);
     ASSERT_NOT_NULL(closure);
@@ -15240,10 +15240,10 @@ TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) 
                          "fn makeUser() -> User {\n"
                          "    return { name: \"ada\", age: 7 }\n"
                          "}\n"
-                         "fn readReturnedRecord() -> int {\n"
+                         "fn readReturnedObject() -> int {\n"
                          "    return makeUser().age\n"
                          "}\n"
-                         "fn readReturnedRecordLocal() -> int {\n"
+                         "fn readReturnedObjectLocal() -> int {\n"
                          "    var user = makeUser()\n"
                          "    return user.age\n"
                          "}\n"
@@ -15251,7 +15251,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) 
                          "    var user: User = { name: \"ada\", age: 7 }\n"
                          "    return user\n"
                          "}\n"
-                         "fn readReturnedRecordIndirect() -> int {\n"
+                         "fn readReturnedObjectIndirect() -> int {\n"
                          "    return makeUserIndirect().age\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -15272,9 +15272,9 @@ TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) 
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    const XgBodySummary *direct = evidence_find_body_by_name(&ev, "readReturnedRecord");
-    const XgBodySummary *local = evidence_find_body_by_name(&ev, "readReturnedRecordLocal");
-    const XgBodySummary *indirect = evidence_find_body_by_name(&ev, "readReturnedRecordIndirect");
+    const XgBodySummary *direct = evidence_find_body_by_name(&ev, "readReturnedObject");
+    const XgBodySummary *local = evidence_find_body_by_name(&ev, "readReturnedObjectLocal");
+    const XgBodySummary *indirect = evidence_find_body_by_name(&ev, "readReturnedObjectIndirect");
     ASSERT_NOT_NULL(direct);
     ASSERT_NOT_NULL(local);
     ASSERT_NOT_NULL(indirect);
@@ -15318,7 +15318,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) 
 TEST(global_evidence_producer_propagates_object_shape_through_typed_param) {
     setup_parser_session();
     const char *source = "type User = { name: string, age: int }\n"
-                         "fn readParamRecord(user: User) -> int {\n"
+                         "fn readParamObject(user: User) -> int {\n"
                          "    return user.age\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -15339,7 +15339,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_typed_param) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readParamRecord");
+    const XgBodySummary *reader = evidence_find_body_by_name(&ev, "readParamObject");
     ASSERT_NOT_NULL(reader);
     ASSERT_EQ_UINT(ev.nobject_shapes, 1);
     ASSERT_EQ_UINT(ev.nobject_fields, 2);

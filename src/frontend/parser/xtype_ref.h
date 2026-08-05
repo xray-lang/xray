@@ -190,7 +190,7 @@ XR_FUNC const char *xr_tref_to_string(struct XrCompilerSession *session, const X
  * Returns number of characters written (excluding NUL). */
 XR_FUNC int xr_tref_to_string_buf(const XrTypeRef *t, char *buf, int cap);
 
-/* Like xr_tref_to_string_buf, but expands a named record type into its field
+/* Like xr_tref_to_string_buf, but expands a named structural-object type into its field
  * structure instead of printing its name. Only the outermost ref is expanded.
  * For the right-hand side of `type Name = { ... }`, where printing the name
  * would emit the self-referential `type Name = Name`. */

@@ -6520,7 +6520,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         /* Json.decode<T>(data) → XI_JSON_DECODE with compile-time field info.
-         * The analyzer already validated T is a sealed Record type with fields
+         * The analyzer already validated T is a sealed structural object type with fields
          * and stored the result type as T? in the node table. */
         if (ma->name && strcmp(ma->name, "parse") == 0 && ma->object &&
             ma->object->type == AST_VARIABLE &&
@@ -9292,19 +9292,19 @@ static XiValue *lower_typed_enum_metadata_is_test(XiLower *l, XiValue *value, Xr
  * Used both by `expr is T` and by `is T` patterns in match arms. */
 static XiValue *lower_null_guard_or_throw(XiLower *l, XiValue *val, struct XrType *result_type,
                                           const char *message, int line);
-static XiValue *lower_object_shape_narrow(XiLower *l, XiValue *val, struct XrType *record_type,
+static XiValue *lower_object_shape_narrow(XiLower *l, XiValue *val, struct XrType *object_type,
                                           int line, uint32_t source_node_id);
-static bool xi_type_is_checkable_record(struct XrType *type);
+static bool xi_type_is_checkable_object(struct XrType *type);
 static bool xi_type_may_carry_object_shape(struct XrType *type);
 
-/* A Record test compares field sets, not a type id: every object-shaped value
+/* A structural object test compares field sets, not a type id: every object-shaped value
  * carries the same runtime type id, so the shared structural check is the only
  * thing that can answer it. Reuse the validated narrowing the cast path uses
- * and keep just its success bit. Returns NULL when the target is not a Record
+ * and keep just its success bit. Returns NULL when the target is not a structural object
  * whose field set is known, leaving the type-id path to handle it. */
 static XiValue *lower_object_shape_is_test(XiLower *l, XiValue *val, struct XrType *target_type,
                                            int line, uint32_t source_node_id) {
-    if (!val || !xi_type_is_checkable_record(target_type) ||
+    if (!val || !xi_type_is_checkable_object(target_type) ||
         !xi_type_may_carry_object_shape(val->type))
         return NULL;
     XiValue *narrowed =
@@ -9619,13 +9619,13 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
         l->had_error = true;
         return NULL;
     }
-    /* Structural narrowing to a sealed Record is a checked conversion. A bare
+    /* Structural narrowing to a sealed structural object is a checked conversion. A bare
      * XI_AS only compares the runtime type id, which every object-shaped value
      * shares, so the result would keep a foreign field layout while the static
      * type promises the target's — later field reads would address unverified
      * slots. Route both `as T` and `as T?` through the validated decode and
      * differ only in how a rejected value is reported. */
-    if (cast_type && xi_type_is_checkable_record(cast_type) &&
+    if (cast_type && xi_type_is_checkable_object(cast_type) &&
         xi_type_may_carry_object_shape(source_type)) {
         XiValue *narrowed = lower_object_shape_narrow(
             l, val, cast_type, node->line, xi_lower_source_node_id(l, node));
@@ -10043,30 +10043,30 @@ static XiValue *lower_force_unwrap(XiLower *l, AstNode *node) {
                                      node->line);
 }
 
-/* A sealed Record has a closed field set, so narrowing an object-shaped value
+/* A sealed structural object has a closed field set, so narrowing an object-shaped value
  * to one is a validated conversion, not a reinterpretation: field reads on the
  * result address slots by ordinal, and an unchecked source with a different
  * layout would hand back a value of the wrong type from a slot that was never
  * verified. The typed-decode path already confirms every declared field is
  * present and of the declared kind (recursively) and yields null otherwise, so
  * `is` and `as` both route through it and share one definition of the rule. */
-static XiValue *lower_object_shape_narrow(XiLower *l, XiValue *val, struct XrType *record_type,
+static XiValue *lower_object_shape_narrow(XiLower *l, XiValue *val, struct XrType *object_type,
                                           int line, uint32_t source_node_id) {
-    XR_DCHECK(l != NULL, "record narrow: NULL lowering context");
-    if (!val || !record_type)
+    XR_DCHECK(l != NULL, "object narrow: NULL lowering context");
+    if (!val || !object_type)
         return NULL;
-    int fc = record_type->object.field_count;
-    if (fc <= 0 || !record_type->object.field_names)
+    int fc = object_type->object.field_count;
+    if (fc <= 0 || !object_type->object.field_names)
         return NULL;
 
     const char **names =
         (const char **) xi_func_arena_alloc(l->func, (uint32_t) (fc * (int) sizeof(const char *)));
     if (!names)
         return NULL;
-    if (!xi_lower_fill_canonical_object_field_names(l, record_type, names, fc, (uint32_t) line))
+    if (!xi_lower_fill_canonical_object_field_names(l, object_type, names, fc, (uint32_t) line))
         return NULL;
 
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_DECODE, record_type, 1);
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_JSON_DECODE, object_type, 1);
     if (!v)
         return NULL;
     v->args[0] = val;
@@ -10078,16 +10078,16 @@ static XiValue *lower_object_shape_narrow(XiLower *l, XiValue *val, struct XrTyp
     return v;
 }
 
-/* True when `type` is a Record whose full field set is known at compile time,
+/* True when `type` is a structural object whose full field set is known at compile time,
  * i.e. the only form a runtime shape check can be built from. */
-static bool xi_type_is_checkable_record(struct XrType *type) {
+static bool xi_type_is_checkable_object(struct XrType *type) {
     return xr_type_object_row_is_exact(type) &&
            type->object.field_count > 0 && type->object.field_names != NULL;
 }
 
-/* Any source may be compared against a Record layout: the check answers false
+/* Any source may be compared against a structural object layout: the check answers false
  * for a value that carries no matching field set, which is exactly what a test
- * against an int or a class instance should report. A union of Records reaches
+ * against an int or a class instance should report. A union of object shapes reaches
  * the check this way too. `string` is the one exclusion — the shared decode
  * path parses a string as JSON text, and a cast is not a parse request. */
 static bool xi_type_may_carry_object_shape(struct XrType *type) {

@@ -1406,14 +1406,14 @@ static bool xaot_bundle_add_generic_specialization_plans(XaotBundle *bundle,
 
 static uint8_t generic_instantiation_action_for(const XgGenericInstSummary *inst) {
     if (!inst)
-        return XAOT_GENERIC_INSTANTIATION_RECORD_ROOT;
+        return XAOT_GENERIC_INSTANTIATION_STRUCT_OBJECT_ROOT;
     if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0)
         return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_BODY;
     if ((inst->flags & XG_GENERIC_INST_CONCRETE_STORAGE) != 0)
         return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_STORAGE;
     if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0)
         return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_ABI;
-    return XAOT_GENERIC_INSTANTIATION_RECORD_ROOT;
+    return XAOT_GENERIC_INSTANTIATION_STRUCT_OBJECT_ROOT;
 }
 
 static uint8_t generic_instantiation_reason_for(const XgGenericInstSummary *inst) {
@@ -4158,15 +4158,15 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         return false;
     }
     if (!xaot_bundle_add_object_shape_plans(bundle, evidence)) {
-        bundle->error_msg = "failed to allocate AOT Record shape plan";
+        bundle->error_msg = "failed to allocate AOT structural object shape plan";
         return false;
     }
     if (!xaot_bundle_add_object_access_plans(bundle, evidence)) {
-        bundle->error_msg = "failed to allocate AOT Record access plan";
+        bundle->error_msg = "failed to allocate AOT structural object access plan";
         return false;
     }
     if (!xaot_bundle_add_object_merge_plans(bundle, evidence)) {
-        bundle->error_msg = "failed to allocate AOT Record merge plan";
+        bundle->error_msg = "failed to allocate AOT structural object merge plan";
         return false;
     }
     if (!xaot_bundle_add_options_plans(bundle, evidence)) {
@@ -6606,7 +6606,7 @@ static const char *object_merge_action_name(uint8_t action) {
     }
 }
 
-static const char *record_unproven_reason_name(uint8_t reason) {
+static const char *object_unproven_reason_name(uint8_t reason) {
     switch (reason) {
         case XAOT_OBJECT_UNPROVEN_NONE:
             return "none";
@@ -7249,8 +7249,8 @@ static void print_specialization_evidence_bits(FILE *out, uint32_t bits) {
 
 static const char *generic_instantiation_action_name(uint8_t action) {
     switch ((XaotGenericInstantiationAction) action) {
-        case XAOT_GENERIC_INSTANTIATION_RECORD_ROOT:
-            return "record_root";
+        case XAOT_GENERIC_INSTANTIATION_STRUCT_OBJECT_ROOT:
+            return "struct_object_root";
         case XAOT_GENERIC_INSTANTIATION_SPECIALIZED_BODY:
             return "specialized_body";
         case XAOT_GENERIC_INSTANTIATION_SPECIALIZED_ABI:
@@ -8086,7 +8086,7 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 rp->stable_type_key, xg_object_shape_kind_name(rp->shape_kind),
                 (unsigned) rp->domain, object_shape_action_name(rp->action), rp->field_name_start,
                 (unsigned) rp->field_count, rp->stable_shape_key, rp->evidence,
-                record_unproven_reason_name(rp->unproven_reason));
+                object_unproven_reason_name(rp->unproven_reason));
     }
 
     for (uint32_t ri = 0; ri < bundle->nobject_access_plans; ri++) {
@@ -8101,7 +8101,7 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 (unsigned) rp->receiver_shape_count, rp->receiver_shape_set_id,
                 rp->mutation_epoch, rp->field_name_id, rp->result_type_key,
                 (unsigned) rp->field_ordinal, rp->evidence,
-                record_unproven_reason_name(rp->unproven_reason));
+                object_unproven_reason_name(rp->unproven_reason));
     }
 
     for (uint32_t ri = 0; ri < bundle->nobject_merge_plans; ri++) {
@@ -8116,7 +8116,7 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 rp->patch_shape_id, rp->result_shape_id, (unsigned) rp->base_field_count,
                 (unsigned) rp->patch_field_count, (unsigned) rp->result_field_count,
                 (unsigned) rp->overwrite_count, rp->copy_table_id, rp->merge_hash, rp->evidence,
-                record_unproven_reason_name(rp->unproven_reason));
+                object_unproven_reason_name(rp->unproven_reason));
     }
 
     for (uint32_t oi = 0; oi < bundle->noptions_plans; oi++) {

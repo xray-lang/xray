@@ -1402,7 +1402,7 @@ AstNode *xr_ast_pattern_adt(XrCompilerSession *session, AstNode *variant, AstNod
     return node;
 }
 
-// Create object/record match pattern node: { x, y } / { x: sub }
+// Create object match pattern node: { x, y } / { x: sub }
 AstNode *xr_ast_pattern_object(XrCompilerSession *session, char **field_names, AstNode **patterns,
                                int count, int line) {
     AstNode *node = alloc_node(session, AST_PATTERN_OBJECT, line);

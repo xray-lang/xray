@@ -18,12 +18,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     {
         .name = "CoroDeadlock.members",
         .signature = "const Array<CoroInfo>",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroDeadlock.reason",
         .signature = "const string",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroGroupKey",
@@ -48,27 +48,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     {
         .name = "CoroInfo.id",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroInfo.name",
         .signature = "const string?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroInfo.reductions",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroInfo.source",
         .signature = "const string?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroInfo.state",
         .signature = "const CoroState",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroMetric",
@@ -123,27 +123,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     {
         .name = "CoroStats.active",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroStats.blocked",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroStats.created",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroStats.ready",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "CoroStats.total",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "Local",
@@ -307,22 +307,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "ClusterConfig.name",
         .signature = "const string",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterConfig.port",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterConfig.secret",
         .signature = "const string?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterConfig.tls",
         .signature = "const ClusterTlsOptions?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo",
@@ -332,57 +332,57 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "ClusterInfo.channels",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.deadNodes",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.heartbeatIntervalMs",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.heartbeatTimeoutMs",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.maxMissedHeartbeats",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.nodes",
         .signature = "const Array<ClusterNodeInfo>",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.port",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.running",
         .signature = "const bool",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.self",
         .signature = "const string",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.tls",
         .signature = "const ClusterTlsStatus",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.topicSubscriptions",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo",
@@ -392,82 +392,82 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "ClusterNodeInfo.bytesReceived",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.bytesSent",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.framesReceived",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.framesSent",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.host",
         .signature = "const string",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.missedHeartbeats",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.name",
         .signature = "const string",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.outQueueBytes",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.outQueueFrames",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.phi",
         .signature = "const float",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.port",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.rttMs",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.sendErrors",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.slow",
         .signature = "const bool",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.slowConsumerEvents",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.state",
         .signature = "const ClusterNodeState",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterNodeState",
@@ -507,27 +507,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "ClusterTlsOptions.caFile",
         .signature = "const string?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsOptions.certFile",
         .signature = "const string?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsOptions.enabled",
         .signature = "const bool",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsOptions.insecure",
         .signature = "const bool",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsOptions.keyFile",
         .signature = "const string?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsStatus",
@@ -537,17 +537,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "ClusterTlsStatus.clientReady",
         .signature = "const bool",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsStatus.enabled",
         .signature = "const bool",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsStatus.serverReady",
         .signature = "const bool",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "HANDSHAKE_VERSION",
@@ -2390,6 +2390,41 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
         .summary = "",
     },
     {
+        .name = "Json.isArray",
+        .signature = "(value: Json): bool",
+        .summary = "",
+    },
+    {
+        .name = "Json.isBool",
+        .signature = "(value: Json): bool",
+        .summary = "",
+    },
+    {
+        .name = "Json.isFloat",
+        .signature = "(value: Json): bool",
+        .summary = "",
+    },
+    {
+        .name = "Json.isInt",
+        .signature = "(value: Json): bool",
+        .summary = "",
+    },
+    {
+        .name = "Json.isNull",
+        .signature = "(value: Json): bool",
+        .summary = "",
+    },
+    {
+        .name = "Json.isObject",
+        .signature = "(value: Json): bool",
+        .summary = "",
+    },
+    {
+        .name = "Json.isString",
+        .signature = "(value: Json): bool",
+        .summary = "",
+    },
+    {
         .name = "Json.isValid",
         .signature = "(text: string, strict?: bool): bool",
         .summary = "",
@@ -2407,6 +2442,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     {
         .name = "Json.keys",
         .signature = "(obj: Json): Array<string>",
+        .summary = "",
+    },
+    {
+        .name = "Json.kindOf",
+        .signature = "(value: Json): string",
         .summary = "",
     },
     {
@@ -3809,37 +3849,37 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     {
         .name = "RuntimeInfo.blocks",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.finalizerCount",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.freeBlocks",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.fullBlocks",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.liveBytes",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.liveKB",
         .signature = "const float",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.liveObjects",
         .signature = "const int",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "info",
@@ -5741,22 +5781,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "WsConnectOptions.maxMessageSize",
         .signature = "const int?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "WsConnectOptions.pingInterval",
         .signature = "const int?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "WsConnectOptions.pongTimeout",
         .signature = "const int?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "WsConnectOptions.timeout",
         .signature = "const int?",
-        .summary = "Record field",
+        .summary = "Object field",
     },
     {
         .name = "WsMessage",
@@ -6642,14 +6682,16 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var view: Slice<int> = arr[1:4]\n"
             "```\n"
             "\n"
-            "### Record / Json object\n"
+            "### Structural object / Json object\n"
             "```xray\n"
-            "// Record/Json object literal: identifier or string key + colon ':'\n"
+            "// Object-shape/Json object literal: identifier or string key + colon ':'\n"
             "var data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
-            "var user = { name: \"Bob\", age: 25 }       // default type is sealed Record\n"
-            "typeName(user)                            // \"Record\"\n"
+            "var user = { name: \"Bob\", age: 25 }       // default type is an exact object shape\n"
+            "typeName(user)                            // \"object\"\n"
             "data.name              // type: Json (field access returns Json)\n"
             "data[\"name\"]           // equivalent\n"
+            "user.name              // type: string; direct ordinal\n"
+            "user[\"name\"]           // exactly equivalent to user.name; same direct ordinal\n"
             "\n"
             "// Field shorthand: when a field name matches a variable name\n"
             "var name = \"Alice\"\n"
@@ -8022,17 +8064,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Coro.CoroDeadlock` | `{ members: Array<CoroInfo>, reason: string }` | Typed description of a detected coroutine wait cycle |\n"
-            "| `Coro.CoroDeadlock.members` | `const Array<CoroInfo>` | Record field |\n"
-            "| `Coro.CoroDeadlock.reason` | `const string` | Record field |\n"
+            "| `Coro.CoroDeadlock.members` | `const Array<CoroInfo>` | Object field |\n"
+            "| `Coro.CoroDeadlock.reason` | `const string` | Object field |\n"
             "| `Coro.CoroGroupKey` | `enum CoroGroupKey` | Stable key used to group coroutine diagnostic snapshots |\n"
             "| `Coro.CoroGroupKey.Name` | `CoroGroupKey.Name` | Enum variant |\n"
             "| `Coro.CoroGroupKey.State` | `CoroGroupKey.State` | Enum variant |\n"
             "| `Coro.CoroInfo` | `{ id: int, name: string?, state: CoroState, reductions: int, source: string? }` | Typed diagnostic snapshot for one coroutine |\n"
-            "| `Coro.CoroInfo.id` | `const int` | Record field |\n"
-            "| `Coro.CoroInfo.name` | `const string?` | Record field |\n"
-            "| `Coro.CoroInfo.reductions` | `const int` | Record field |\n"
-            "| `Coro.CoroInfo.source` | `const string?` | Record field |\n"
-            "| `Coro.CoroInfo.state` | `const CoroState` | Record field |\n"
+            "| `Coro.CoroInfo.id` | `const int` | Object field |\n"
+            "| `Coro.CoroInfo.name` | `const string?` | Object field |\n"
+            "| `Coro.CoroInfo.reductions` | `const int` | Object field |\n"
+            "| `Coro.CoroInfo.source` | `const string?` | Object field |\n"
+            "| `Coro.CoroInfo.state` | `const CoroState` | Object field |\n"
             "| `Coro.CoroMetric` | `enum CoroMetric` | Metric used to rank coroutine diagnostic snapshots |\n"
             "| `Coro.CoroMetric.Id` | `CoroMetric.Id` | Enum variant |\n"
             "| `Coro.CoroMetric.Reductions` | `CoroMetric.Reductions` | Enum variant |\n"
@@ -8043,11 +8085,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Coro.CoroState.Running` | `CoroState.Running` | Enum variant |\n"
             "| `Coro.CoroState.Unknown` | `CoroState.Unknown` | Enum variant |\n"
             "| `Coro.CoroStats` | `{ active: int, blocked: int, ready: int, total: int, created: int }` | Typed aggregate counters for the coroutine scheduler |\n"
-            "| `Coro.CoroStats.active` | `const int` | Record field |\n"
-            "| `Coro.CoroStats.blocked` | `const int` | Record field |\n"
-            "| `Coro.CoroStats.created` | `const int` | Record field |\n"
-            "| `Coro.CoroStats.ready` | `const int` | Record field |\n"
-            "| `Coro.CoroStats.total` | `const int` | Record field |\n"
+            "| `Coro.CoroStats.active` | `const int` | Object field |\n"
+            "| `Coro.CoroStats.blocked` | `const int` | Object field |\n"
+            "| `Coro.CoroStats.created` | `const int` | Object field |\n"
+            "| `Coro.CoroStats.ready` | `const int` | Object field |\n"
+            "| `Coro.CoroStats.total` | `const int` | Object field |\n"
             "| `Coro.Local` | `<T>(): CoroLocal<T>` | Create a typed coroutine-local slot |\n"
             "| `Coro.deadlocks` | `(): Array<CoroDeadlock>` | Detect deadlocked coroutines |\n"
             "| `Coro.demonitor` | `(ch: Channel<string>): ()` | Cancel coroutine monitor |\n"
@@ -8132,39 +8174,39 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `cluster.CHANNEL_NAME_MAX` | `: int` |  |\n"
             "| `cluster.ClusterConfig` | `{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }` | Typed cluster node startup configuration |\n"
-            "| `cluster.ClusterConfig.name` | `const string` | Record field |\n"
-            "| `cluster.ClusterConfig.port` | `const int` | Record field |\n"
-            "| `cluster.ClusterConfig.secret` | `const string?` | Record field |\n"
-            "| `cluster.ClusterConfig.tls` | `const ClusterTlsOptions?` | Record field |\n"
+            "| `cluster.ClusterConfig.name` | `const string` | Object field |\n"
+            "| `cluster.ClusterConfig.port` | `const int` | Object field |\n"
+            "| `cluster.ClusterConfig.secret` | `const string?` | Object field |\n"
+            "| `cluster.ClusterConfig.tls` | `const ClusterTlsOptions?` | Object field |\n"
             "| `cluster.ClusterInfo` | `{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }` | Typed diagnostic snapshot for the local cluster runtime |\n"
-            "| `cluster.ClusterInfo.channels` | `const int` | Record field |\n"
-            "| `cluster.ClusterInfo.deadNodes` | `const int` | Record field |\n"
-            "| `cluster.ClusterInfo.heartbeatIntervalMs` | `const int` | Record field |\n"
-            "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `const int` | Record field |\n"
-            "| `cluster.ClusterInfo.maxMissedHeartbeats` | `const int` | Record field |\n"
-            "| `cluster.ClusterInfo.nodes` | `const Array<ClusterNodeInfo>` | Record field |\n"
-            "| `cluster.ClusterInfo.port` | `const int` | Record field |\n"
-            "| `cluster.ClusterInfo.running` | `const bool` | Record field |\n"
-            "| `cluster.ClusterInfo.self` | `const string` | Record field |\n"
-            "| `cluster.ClusterInfo.tls` | `const ClusterTlsStatus` | Record field |\n"
-            "| `cluster.ClusterInfo.topicSubscriptions` | `const int` | Record field |\n"
+            "| `cluster.ClusterInfo.channels` | `const int` | Object field |\n"
+            "| `cluster.ClusterInfo.deadNodes` | `const int` | Object field |\n"
+            "| `cluster.ClusterInfo.heartbeatIntervalMs` | `const int` | Object field |\n"
+            "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `const int` | Object field |\n"
+            "| `cluster.ClusterInfo.maxMissedHeartbeats` | `const int` | Object field |\n"
+            "| `cluster.ClusterInfo.nodes` | `const Array<ClusterNodeInfo>` | Object field |\n"
+            "| `cluster.ClusterInfo.port` | `const int` | Object field |\n"
+            "| `cluster.ClusterInfo.running` | `const bool` | Object field |\n"
+            "| `cluster.ClusterInfo.self` | `const string` | Object field |\n"
+            "| `cluster.ClusterInfo.tls` | `const ClusterTlsStatus` | Object field |\n"
+            "| `cluster.ClusterInfo.topicSubscriptions` | `const int` | Object field |\n"
             "| `cluster.ClusterNodeInfo` | `{ name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }` | Typed diagnostic snapshot for one remote cluster node |\n"
-            "| `cluster.ClusterNodeInfo.bytesReceived` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.bytesSent` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.framesReceived` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.framesSent` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.host` | `const string` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.missedHeartbeats` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.name` | `const string` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.outQueueBytes` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.outQueueFrames` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.phi` | `const float` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.port` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.rttMs` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.sendErrors` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.slow` | `const bool` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.slowConsumerEvents` | `const int` | Record field |\n"
-            "| `cluster.ClusterNodeInfo.state` | `const ClusterNodeState` | Record field |\n"
+            "| `cluster.ClusterNodeInfo.bytesReceived` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.bytesSent` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.framesReceived` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.framesSent` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.host` | `const string` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.missedHeartbeats` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.name` | `const string` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.outQueueBytes` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.outQueueFrames` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.phi` | `const float` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.port` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.rttMs` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.sendErrors` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.slow` | `const bool` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.slowConsumerEvents` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.state` | `const ClusterNodeState` | Object field |\n"
             "| `cluster.ClusterNodeState` | `enum ClusterNodeState` | Lifecycle state of a remote cluster node |\n"
             "| `cluster.ClusterNodeState.Closing` | `ClusterNodeState.Closing` | Enum variant |\n"
             "| `cluster.ClusterNodeState.Connected` | `ClusterNodeState.Connected` | Enum variant |\n"
@@ -8172,15 +8214,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.ClusterNodeState.Handshaking` | `ClusterNodeState.Handshaking` | Enum variant |\n"
             "| `cluster.ClusterNodeState.Idle` | `ClusterNodeState.Idle` | Enum variant |\n"
             "| `cluster.ClusterTlsOptions` | `{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }` | Typed TLS configuration for a cluster node |\n"
-            "| `cluster.ClusterTlsOptions.caFile` | `const string?` | Record field |\n"
-            "| `cluster.ClusterTlsOptions.certFile` | `const string?` | Record field |\n"
-            "| `cluster.ClusterTlsOptions.enabled` | `const bool` | Record field |\n"
-            "| `cluster.ClusterTlsOptions.insecure` | `const bool` | Record field |\n"
-            "| `cluster.ClusterTlsOptions.keyFile` | `const string?` | Record field |\n"
+            "| `cluster.ClusterTlsOptions.caFile` | `const string?` | Object field |\n"
+            "| `cluster.ClusterTlsOptions.certFile` | `const string?` | Object field |\n"
+            "| `cluster.ClusterTlsOptions.enabled` | `const bool` | Object field |\n"
+            "| `cluster.ClusterTlsOptions.insecure` | `const bool` | Object field |\n"
+            "| `cluster.ClusterTlsOptions.keyFile` | `const string?` | Object field |\n"
             "| `cluster.ClusterTlsStatus` | `{ enabled: bool, clientReady: bool, serverReady: bool }` | Effective TLS posture of a running cluster node |\n"
-            "| `cluster.ClusterTlsStatus.clientReady` | `const bool` | Record field |\n"
-            "| `cluster.ClusterTlsStatus.enabled` | `const bool` | Record field |\n"
-            "| `cluster.ClusterTlsStatus.serverReady` | `const bool` | Record field |\n"
+            "| `cluster.ClusterTlsStatus.clientReady` | `const bool` | Object field |\n"
+            "| `cluster.ClusterTlsStatus.enabled` | `const bool` | Object field |\n"
+            "| `cluster.ClusterTlsStatus.serverReady` | `const bool` | Object field |\n"
             "| `cluster.HANDSHAKE_VERSION` | `: int` |  |\n"
             "| `cluster.NODE_NAME_MAX` | `: int` |  |\n"
             "| `NodeAddress` | `NodeAddress` |  |\n"
@@ -8737,10 +8779,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Json.entries` | `(obj: Json): Array<(string, Json)>` |  |\n"
             "| `Json.entriesIterator` | `(): Iterator<(string, Json)>` |  |\n"
             "| `Json.get` | `(obj: Json, key: string, default?: T): Json` |  |\n"
+            "| `Json.isArray` | `(value: Json): bool` |  |\n"
+            "| `Json.isBool` | `(value: Json): bool` |  |\n"
+            "| `Json.isFloat` | `(value: Json): bool` |  |\n"
+            "| `Json.isInt` | `(value: Json): bool` |  |\n"
+            "| `Json.isNull` | `(value: Json): bool` |  |\n"
+            "| `Json.isObject` | `(value: Json): bool` |  |\n"
+            "| `Json.isString` | `(value: Json): bool` |  |\n"
             "| `Json.isValid` | `(text: string, strict?: bool): bool` |  |\n"
             "| `Json.iterator` | `(): Iterator<string>` |  |\n"
             "| `Json.keys` | `(): Array<string>` |  |\n"
             "| `Json.keys` | `(obj: Json): Array<string>` |  |\n"
+            "| `Json.kindOf` | `(value: Json): string` |  |\n"
             "| `Json.parse` | `(text: string): Json` |  |\n"
             "| `Json.stringify` | `(value: T, indent?: int): string` |  |\n"
             "| `Json.toString` | `(): string` |  |\n"
@@ -9232,13 +9282,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `runtime.RuntimeInfo` | `{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }` | Typed snapshot of the current execution-local reclamation domain |\n"
-            "| `runtime.RuntimeInfo.blocks` | `const int` | Record field |\n"
-            "| `runtime.RuntimeInfo.finalizerCount` | `const int` | Record field |\n"
-            "| `runtime.RuntimeInfo.freeBlocks` | `const int` | Record field |\n"
-            "| `runtime.RuntimeInfo.fullBlocks` | `const int` | Record field |\n"
-            "| `runtime.RuntimeInfo.liveBytes` | `const int` | Record field |\n"
-            "| `runtime.RuntimeInfo.liveKB` | `const float` | Record field |\n"
-            "| `runtime.RuntimeInfo.liveObjects` | `const int` | Record field |\n"
+            "| `runtime.RuntimeInfo.blocks` | `const int` | Object field |\n"
+            "| `runtime.RuntimeInfo.finalizerCount` | `const int` | Object field |\n"
+            "| `runtime.RuntimeInfo.freeBlocks` | `const int` | Object field |\n"
+            "| `runtime.RuntimeInfo.fullBlocks` | `const int` | Object field |\n"
+            "| `runtime.RuntimeInfo.liveBytes` | `const int` | Object field |\n"
+            "| `runtime.RuntimeInfo.liveKB` | `const float` | Object field |\n"
+            "| `runtime.RuntimeInfo.liveObjects` | `const int` | Object field |\n"
             "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current execution-local reclamation domain |\n"
             "| `runtime.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
             "| `runtime.liveObjects` | `(): int` | Get live object count |\n"
@@ -9818,10 +9868,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.WsConn.url` | `string` | Handle field |\n"
             "| `ws.WsConn.wsid` | `const int` | Handle field |\n"
             "| `ws.WsConnectOptions` | `{ timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }` | Typed WebSocket client connection options |\n"
-            "| `ws.WsConnectOptions.maxMessageSize` | `const int?` | Record field |\n"
-            "| `ws.WsConnectOptions.pingInterval` | `const int?` | Record field |\n"
-            "| `ws.WsConnectOptions.pongTimeout` | `const int?` | Record field |\n"
-            "| `ws.WsConnectOptions.timeout` | `const int?` | Record field |\n"
+            "| `ws.WsConnectOptions.maxMessageSize` | `const int?` | Object field |\n"
+            "| `ws.WsConnectOptions.pingInterval` | `const int?` | Object field |\n"
+            "| `ws.WsConnectOptions.pongTimeout` | `const int?` | Object field |\n"
+            "| `ws.WsConnectOptions.timeout` | `const int?` | Object field |\n"
             "| `ws.WsMessage` | `WsMessage` | Native handle type |\n"
             "| `ws.WsMessage.binary` | `const bool` | Handle field |\n"
             "| `ws.WsMessage.data` | `const string \\| Array<byte> \\| null` | Handle field |\n"
@@ -10200,12 +10250,14 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var s: Set<int> = #[1, 2, 3]\n"
     "```\n"
     "```xray\n"
-    "// Record/Json object literal: identifier or string key + colon ':'\n"
+    "// Object-shape/Json object literal: identifier or string key + colon ':'\n"
     "var data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
-    "var user = { name: \"Bob\", age: 25 }       // default type is sealed Record\n"
-    "typeName(user)                            // \"Record\"\n"
+    "var user = { name: \"Bob\", age: 25 }       // default type is an exact object shape\n"
+    "typeName(user)                            // \"object\"\n"
     "data.name              // type: Json (field access returns Json)\n"
     "data[\"name\"]           // equivalent\n"
+    "user.name              // type: string; direct ordinal\n"
+    "user[\"name\"]           // exactly equivalent to user.name; same direct ordinal\n"
     "\n"
     "// Field shorthand: when a field name matches a variable name\n"
     "var name = \"Alice\"\n"

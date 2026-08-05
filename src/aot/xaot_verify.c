@@ -2273,18 +2273,18 @@ static bool verify_object_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
         const XgObjectFieldSummary *field = &ev->object_fields[i];
         const XgObjectShapeSummary *shape;
         if (field->field_id == XG_NO_ID)
-            return set_error(errbuf, errbuf_len, "AOT Record field evidence has no id");
+            return set_error(errbuf, errbuf_len, "AOT structural object field evidence has no id");
         for (uint32_t j = i + 1; j < ev->nobject_fields; j++) {
             if (ev->object_fields[j].field_id == field->field_id)
-                return set_error(errbuf, errbuf_len, "AOT Record field evidence id is duplicated");
+                return set_error(errbuf, errbuf_len, "AOT structural object field evidence id is duplicated");
         }
         shape = xg_global_evidence_find_object_shape(ev, field->shape_id);
         if (!shape)
-            return set_error(errbuf, errbuf_len, "AOT Record field references missing shape");
+            return set_error(errbuf, errbuf_len, "AOT structural object field references missing shape");
         if (field->field_ordinal >= shape->field_count)
-            return set_error(errbuf, errbuf_len, "AOT Record field ordinal is stale");
+            return set_error(errbuf, errbuf_len, "AOT structural object field ordinal is stale");
         if (field->name_id == 0)
-            return set_error(errbuf, errbuf_len, "AOT Record field has no static key");
+            return set_error(errbuf, errbuf_len, "AOT structural object field has no static key");
         for (uint32_t j = i + 1; j < ev->nobject_fields; j++) {
             const XgObjectFieldSummary *other = &ev->object_fields[j];
             if (other->shape_id != field->shape_id)
@@ -2301,12 +2301,12 @@ static bool verify_object_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
         uint32_t access_case_count = 0;
         bool found_representative = false;
         if (access->object_access_id == XG_NO_ID)
-            return set_error(errbuf, errbuf_len, "AOT Record access evidence has no id");
+            return set_error(errbuf, errbuf_len, "AOT structural object access evidence has no id");
         if (!verify_object_access_kind_valid(access->access_kind))
-            return set_error(errbuf, errbuf_len, "AOT Record access evidence has invalid kind");
+            return set_error(errbuf, errbuf_len, "AOT structural object access evidence has invalid kind");
         for (uint32_t j = i + 1; j < ev->nobject_accesses; j++) {
             if (ev->object_accesses[j].object_access_id == access->object_access_id)
-                return set_error(errbuf, errbuf_len, "AOT Record access evidence id is duplicated");
+                return set_error(errbuf, errbuf_len, "AOT structural object access evidence id is duplicated");
         }
         if (access->receiver_shape_count == 0 || access->receiver_shape_set_id == 0)
             return set_error(errbuf, errbuf_len,
@@ -2374,12 +2374,12 @@ static bool verify_object_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
                              "AOT Object access representative shape is missing");
         shape = xg_global_evidence_find_object_shape(ev, access->receiver_shape_id);
         if (!shape)
-            return set_error(errbuf, errbuf_len, "AOT Record access references missing shape");
+            return set_error(errbuf, errbuf_len, "AOT structural object access references missing shape");
         if (access->domain != shape->domain || access->mutation_epoch != shape->mutation_epoch)
             return set_error(errbuf, errbuf_len, "AOT Object access domain or epoch is stale");
         if ((access->flags & XG_OBJECT_ACCESS_STATIC_FIELD) != 0 && access->field_name_id != 0 &&
             access->field_ordinal >= shape->field_count)
-            return set_error(errbuf, errbuf_len, "AOT Record access field ordinal is stale");
+            return set_error(errbuf, errbuf_len, "AOT structural object access field ordinal is stale");
     }
     for (uint32_t i = 0; i < ev->nobject_merges; i++) {
         const XgObjectMergeSummary *merge = &ev->object_merges[i];
@@ -2387,30 +2387,30 @@ static bool verify_object_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
         const XgObjectShapeSummary *patch;
         const XgObjectShapeSummary *result;
         if (merge->merge_id == XG_NO_ID)
-            return set_error(errbuf, errbuf_len, "AOT Record merge evidence has no id");
+            return set_error(errbuf, errbuf_len, "AOT structural object merge evidence has no id");
         if (merge->owner_func_id == XG_NO_ID || merge->source_node_id == 0)
             return set_error(errbuf, errbuf_len,
-                             "AOT Record merge evidence has no stable source identity");
+                             "AOT structural object merge evidence has no stable source identity");
         for (uint32_t j = i + 1; j < ev->nobject_merges; j++) {
             if (ev->object_merges[j].merge_id == merge->merge_id)
-                return set_error(errbuf, errbuf_len, "AOT Record merge evidence id is duplicated");
+                return set_error(errbuf, errbuf_len, "AOT structural object merge evidence id is duplicated");
             if (ev->object_merges[j].module_id == merge->module_id &&
                 ev->object_merges[j].owner_func_id == merge->owner_func_id &&
                 ev->object_merges[j].source_node_id == merge->source_node_id)
                 return set_error(errbuf, errbuf_len,
-                                 "AOT Record merge stable source identity is duplicated");
+                                 "AOT structural object merge stable source identity is duplicated");
         }
         base = xg_global_evidence_find_object_shape(ev, merge->base_shape_id);
         patch = xg_global_evidence_find_object_shape(ev, merge->patch_shape_id);
         result = xg_global_evidence_find_object_shape(ev, merge->result_shape_id);
         if (!base || !patch || !result)
-            return set_error(errbuf, errbuf_len, "AOT Record merge references missing shape");
+            return set_error(errbuf, errbuf_len, "AOT structural object merge references missing shape");
         if (base->field_count != merge->base_field_count ||
             patch->field_count != merge->patch_field_count ||
             result->field_count != merge->result_field_count)
-            return set_error(errbuf, errbuf_len, "AOT Record merge field count is stale");
+            return set_error(errbuf, errbuf_len, "AOT structural object merge field count is stale");
         if (merge->overwrite_count > merge->patch_field_count)
-            return set_error(errbuf, errbuf_len, "AOT Record merge overwrite count is stale");
+            return set_error(errbuf, errbuf_len, "AOT structural object merge overwrite count is stale");
     }
     return true;
 }
@@ -4213,14 +4213,14 @@ static bool verify_generic_specialization_plan_rederives(const XgGlobalEvidence 
 
 static uint8_t verify_generic_instantiation_action_for(const XgGenericInstSummary *inst) {
     if (!inst)
-        return XAOT_GENERIC_INSTANTIATION_RECORD_ROOT;
+        return XAOT_GENERIC_INSTANTIATION_STRUCT_OBJECT_ROOT;
     if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_BODY) != 0)
         return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_BODY;
     if ((inst->flags & XG_GENERIC_INST_CONCRETE_STORAGE) != 0)
         return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_STORAGE;
     if ((inst->flags & XG_GENERIC_INST_SPECIALIZED_ABI) != 0)
         return XAOT_GENERIC_INSTANTIATION_SPECIALIZED_ABI;
-    return XAOT_GENERIC_INSTANTIATION_RECORD_ROOT;
+    return XAOT_GENERIC_INSTANTIATION_STRUCT_OBJECT_ROOT;
 }
 
 static uint8_t verify_generic_instantiation_reason_for(const XgGenericInstSummary *inst) {
@@ -5191,7 +5191,7 @@ static bool verify_object_shape_plan_rederives(const XaotObjectShapePlan *plan,
                                                const XgObjectShapeSummary *shape, char *errbuf,
                                                size_t errbuf_len) {
     if (!plan || !shape)
-        return set_error(errbuf, errbuf_len, "AOT Record shape verifier has incomplete input");
+        return set_error(errbuf, errbuf_len, "AOT structural object shape verifier has incomplete input");
     if (plan->object_shape_id != shape->object_shape_id || plan->module_id != shape->module_id ||
         plan->owner_func_id != shape->owner_func_id || plan->type_key != shape->type_key ||
         plan->field_name_start != shape->field_name_start ||
@@ -5202,12 +5202,12 @@ static bool verify_object_shape_plan_rederives(const XaotObjectShapePlan *plan,
         plan->stable_type_key != shape->stable_type_key ||
         plan->stable_shape_key != shape->stable_shape_key ||
         plan->shape_hash != shape->shape_hash)
-        return set_error(errbuf, errbuf_len, "AOT Record shape plan identity does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT structural object shape plan identity does not re-derive");
     if (plan->action != verify_object_shape_action_for(shape) ||
         plan->unproven_reason != verify_object_shape_reason_for(shape))
-        return set_error(errbuf, errbuf_len, "AOT Record shape plan action does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT structural object shape plan action does not re-derive");
     if (plan->evidence != verify_object_shape_evidence_for(shape))
-        return set_error(errbuf, errbuf_len, "AOT Record shape plan evidence does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT structural object shape plan evidence does not re-derive");
     return true;
 }
 
@@ -5322,7 +5322,7 @@ static bool verify_object_access_plan_rederives(const XgGlobalEvidence *ev,
                                                 const XgObjectAccessSummary *access, char *errbuf,
                                                 size_t errbuf_len) {
     if (!ev || !bundle || !plan || !access)
-        return set_error(errbuf, errbuf_len, "AOT Record access verifier has incomplete input");
+        return set_error(errbuf, errbuf_len, "AOT structural object access verifier has incomplete input");
     if (plan->object_access_id != access->object_access_id ||
         plan->module_id != access->module_id || plan->owner_func_id != access->owner_func_id ||
         plan->receiver_shape_id != access->receiver_shape_id ||
@@ -5333,7 +5333,7 @@ static bool verify_object_access_plan_rederives(const XgGlobalEvidence *ev,
         plan->receiver_shape_count != access->receiver_shape_count ||
         plan->receiver_shape_set_id != access->receiver_shape_set_id ||
         plan->mutation_epoch != access->mutation_epoch)
-        return set_error(errbuf, errbuf_len, "AOT Record access plan identity does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT structural object access plan identity does not re-derive");
     if (plan->dispatch_case_start > bundle->nobject_access_case_plans ||
         access->receiver_shape_count >
             bundle->nobject_access_case_plans - plan->dispatch_case_start)
@@ -5365,9 +5365,9 @@ static bool verify_object_access_plan_rederives(const XgGlobalEvidence *ev,
                          "AOT Object access dispatch case set is incomplete");
     if (plan->action != verify_object_access_action_for(ev, access) ||
         plan->unproven_reason != verify_object_access_reason_for(ev, access))
-        return set_error(errbuf, errbuf_len, "AOT Record access plan action does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT structural object access plan action does not re-derive");
     if (plan->evidence != verify_object_access_evidence_for(ev, access))
-        return set_error(errbuf, errbuf_len, "AOT Record access plan evidence does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT structural object access plan evidence does not re-derive");
     return true;
 }
 
@@ -5423,7 +5423,7 @@ static bool verify_object_merge_plan_rederives(const XgGlobalEvidence *ev,
                                                const XgObjectMergeSummary *merge, char *errbuf,
                                                size_t errbuf_len) {
     if (!ev || !plan || !merge)
-        return set_error(errbuf, errbuf_len, "AOT Record merge verifier has incomplete input");
+        return set_error(errbuf, errbuf_len, "AOT structural object merge verifier has incomplete input");
     if (plan->merge_id != merge->merge_id || plan->module_id != merge->module_id ||
         plan->owner_func_id != merge->owner_func_id ||
         plan->source_node_id != merge->source_node_id ||
@@ -5436,12 +5436,12 @@ static bool verify_object_merge_plan_rederives(const XgGlobalEvidence *ev,
         plan->result_field_count != merge->result_field_count ||
         plan->overwrite_count != merge->overwrite_count ||
         plan->copy_table_id != merge->copy_table_id || plan->merge_hash != merge->merge_hash)
-        return set_error(errbuf, errbuf_len, "AOT Record merge plan identity does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT structural object merge plan identity does not re-derive");
     if (plan->action != verify_object_merge_action_for(ev, merge) ||
         plan->unproven_reason != verify_object_merge_reason_for(ev, merge))
-        return set_error(errbuf, errbuf_len, "AOT Record merge plan action does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT structural object merge plan action does not re-derive");
     if (plan->evidence != verify_object_merge_evidence_for(ev, merge))
-        return set_error(errbuf, errbuf_len, "AOT Record merge plan evidence does not re-derive");
+        return set_error(errbuf, errbuf_len, "AOT structural object merge plan evidence does not re-derive");
     return true;
 }
 
@@ -7051,12 +7051,12 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         expected_object_shape_plans++;
         plan = xaot_bundle_find_object_shape_plan(bundle, shape->object_shape_id);
         if (!plan)
-            return set_error(errbuf, errbuf_len, "AOT Record shape evidence has no shape plan");
+            return set_error(errbuf, errbuf_len, "AOT structural object shape evidence has no shape plan");
         if (!verify_object_shape_plan_rederives(plan, shape, errbuf, errbuf_len))
             return false;
     }
     if (bundle->nobject_shape_plans != expected_object_shape_plans)
-        return set_error(errbuf, errbuf_len, "AOT Record shape plan count mismatches evidence");
+        return set_error(errbuf, errbuf_len, "AOT structural object shape plan count mismatches evidence");
 
     for (uint32_t i = 0; i < ev->nobject_accesses; i++) {
         const XgObjectAccessSummary *access = &ev->object_accesses[i];
@@ -7064,12 +7064,12 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         expected_object_access_plans++;
         plan = xaot_bundle_find_object_access_plan(bundle, access->object_access_id);
         if (!plan)
-            return set_error(errbuf, errbuf_len, "AOT Record access evidence has no access plan");
+            return set_error(errbuf, errbuf_len, "AOT structural object access evidence has no access plan");
         if (!verify_object_access_plan_rederives(ev, bundle, plan, access, errbuf, errbuf_len))
             return false;
     }
     if (bundle->nobject_access_plans != expected_object_access_plans)
-        return set_error(errbuf, errbuf_len, "AOT Record access plan count mismatches evidence");
+        return set_error(errbuf, errbuf_len, "AOT structural object access plan count mismatches evidence");
     if (bundle->nobject_access_case_plans != ev->nobject_access_cases)
         return set_error(errbuf, errbuf_len,
                          "AOT Object access dispatch case count mismatches evidence");
@@ -7080,12 +7080,12 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         expected_object_merge_plans++;
         plan = xaot_bundle_find_object_merge_plan(bundle, merge->merge_id);
         if (!plan)
-            return set_error(errbuf, errbuf_len, "AOT Record merge evidence has no merge plan");
+            return set_error(errbuf, errbuf_len, "AOT structural object merge evidence has no merge plan");
         if (!verify_object_merge_plan_rederives(ev, plan, merge, errbuf, errbuf_len))
             return false;
     }
     if (bundle->nobject_merge_plans != expected_object_merge_plans)
-        return set_error(errbuf, errbuf_len, "AOT Record merge plan count mismatches evidence");
+        return set_error(errbuf, errbuf_len, "AOT structural object merge plan count mismatches evidence");
 
     for (uint32_t i = 0; i < ev->noptions_bags; i++) {
         const XgOptionsBagSummary *options = &ev->options_bags[i];

@@ -108,7 +108,7 @@ typedef struct XrFieldDescriptor {
 typedef struct XrClassTransition {
     int symbol;               // Field symbol that triggers this transition
     uint64_t stable_type_key;
-    uint8_t json_value_kind;  // Typed Record identity; ANY for dynamic Json fields
+    uint8_t json_value_kind;  // Typed object-field contract; ANY for dynamic Json fields
     uint8_t shape_flags;
     struct XrClass *json_struct_object_class;
     struct XrClass *target;          // Resulting child class after adding the field

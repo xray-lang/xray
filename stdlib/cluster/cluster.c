@@ -809,7 +809,7 @@ void cluster_subscriber_remove_all_for_node(XrCluster *c, XrClusterNode *node) {
 
 // cluster.start(config: ClusterConfig) -> bool
 //
-// The optional typed `tls` Record maps 1:1 onto XrClusterTlsOptions:
+// The optional typed `tls` object maps 1:1 onto XrClusterTlsOptions:
 //     tls: {
 //         enabled: true,
 //         caFile:   "/etc/xray/ca.pem",
@@ -818,7 +818,7 @@ void cluster_subscriber_remove_all_for_node(XrCluster *c, XrClusterNode *node) {
 //         insecure: false
 //     }
 // Nullable string fields map to the struct's zero-initialised defaults. The
-// strings stay borrowed from the Record for the duration of this
+// strings stay borrowed from the object for the duration of this
 // call — cluster_start_ex copies them into OpenSSL contexts before it
 // returns, so no lifetime surprise.
 static XrValue cluster_start(XrVMRuntime *X, XrValue *args, int argc) {
@@ -1249,8 +1249,8 @@ static XrValue cluster_subscribe_fn(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Cluster Info API ========== */
 
-static XrJson *cluster_record_new(XrVMRuntime *X, const char *name) {
-    XrClass *cls = xr_stdlib_record_class_get(X, "cluster", name);
+static XrJson *cluster_object_new(XrVMRuntime *X, const char *name) {
+    XrClass *cls = xr_stdlib_object_shape_class_get(X, "cluster", name);
     return cls ? xr_json_new_with_class(NULL, cls) : NULL;
 }
 
@@ -1269,7 +1269,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     if (!c)
         return xr_null();
 
-    XrJson *info = cluster_record_new(X, "ClusterInfo");
+    XrJson *info = cluster_object_new(X, "ClusterInfo");
     if (!info)
         return xr_null();
 
@@ -1285,7 +1285,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
         xr_amutex_lock(&c->nodes_lock);
         XrClusterNode *node = c->nodes;
         while (node) {
-            XrJson *nj = cluster_record_new(X, "ClusterNodeInfo");
+            XrJson *nj = cluster_object_new(X, "ClusterNodeInfo");
             if (nj) {
                 XrString *nname = xr_string_intern(X, node->name, (uint32_t) strlen(node->name), 0);
                 xr_json_set_by_key(X, nj, "name", xr_string_value(nname));
@@ -1388,11 +1388,11 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     xr_json_set_by_key(X, info, "maxMissedHeartbeats", xr_int(c->max_missed_heartbeats));
 
     /*
-     * TLS posture is a typed nested Record. A mis-configured cluster
+     * TLS posture is a typed nested object. A mis-configured cluster
      * (enabled with neither context ready) remains directly visible to
      * operators without exposing a bitmap convention in the public API.
      */
-    XrJson *tls = cluster_record_new(X, "ClusterTlsStatus");
+    XrJson *tls = cluster_object_new(X, "ClusterTlsStatus");
     if (!tls)
         return xr_null();
     xr_json_set_by_key(X, tls, "enabled", xr_bool(c->tls_enabled));

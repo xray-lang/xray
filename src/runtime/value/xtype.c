@@ -1446,7 +1446,7 @@ XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type) {
     }
 
     /* Qualifiers are values, not mutations of declaration identity.  Named
-     * enum/class/record types are shared through analyzer symbol links even
+     * enum/class/structural-object types are shared through analyzer symbol links even
      * before they are frozen; mutating one while resolving `T?` would silently
      * make the exported declaration itself nullable.  Mirror
      * xr_type_make_const(): every non-singleton qualifier gets its own copy. */
@@ -1689,7 +1689,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         }
     }
 
-    // Structural object subtyping. Record and Json object shapes are distinct
+    // Structural object subtyping. structural object and Json object shapes are distinct
     // semantic domains, so this branch never bridges between them.
     bool target_is_struct = XR_TYPE_HAS_OBJECT_SHAPE(target);
     bool source_is_struct = XR_TYPE_HAS_OBJECT_SHAPE(source);
@@ -2024,7 +2024,7 @@ static int object_shape_field_index_by_name(XrType *shape, const char *name) {
     return -1;
 }
 
-bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, size_t n) {
+bool xr_type_object_mismatch_reason(XrType *target, XrType *source, char *buf, size_t n) {
     if (!target || !source || !buf || n == 0)
         return false;
 
@@ -2034,7 +2034,7 @@ bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, s
     if ((XR_TYPE_IS_ARRAY(target) && XR_TYPE_IS_ARRAY(source)) ||
         (XR_TYPE_IS_SLICE(target) && XR_TYPE_IS_SLICE(source))) {
         char sub[192];
-        if (xr_type_record_mismatch_reason(target->container.element_type,
+        if (xr_type_object_mismatch_reason(target->container.element_type,
                                            source->container.element_type, sub, sizeof(sub))) {
             snprintf(buf, n, "element: %s", sub);
             return true;
@@ -2043,7 +2043,7 @@ bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, s
     }
     if (XR_TYPE_IS_MAP(target) && XR_TYPE_IS_MAP(source)) {
         char sub[192];
-        if (xr_type_record_mismatch_reason(target->map.value_type, source->map.value_type, sub,
+        if (xr_type_object_mismatch_reason(target->map.value_type, source->map.value_type, sub,
                                            sizeof(sub))) {
             snprintf(buf, n, "value: %s", sub);
             return true;
@@ -2051,7 +2051,7 @@ bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, s
         return false;
     }
 
-    /* Only object shapes of the same kind carry a field-set reason; Record and
+    /* Only object shapes of the same kind carry a field-set reason; structural object and
      * Json are distinct domains and never bridge (mirrors xr_type_assignable). */
     if (!XR_TYPE_HAS_OBJECT_SHAPE(target) || !XR_TYPE_HAS_OBJECT_SHAPE(source) ||
         target->kind != source->kind)
@@ -2097,7 +2097,7 @@ bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, s
             XrType *sft = source->object.field_types[j];
             if (tft && sft && !xr_type_assignable(tft, sft)) {
                 char sub[192];
-                if (xr_type_record_mismatch_reason(tft, sft, sub, sizeof(sub)))
+                if (xr_type_object_mismatch_reason(tft, sft, sub, sizeof(sub)))
                     snprintf(buf, n, "field '%s': %s", tf, sub);
                 else
                     snprintf(buf, n, "field '%s' has type '%s', expected '%s'", tf,

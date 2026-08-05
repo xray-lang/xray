@@ -1042,8 +1042,8 @@ typedef struct XiValue {
     uint32_t xg_json_dynamic_access_id; /* stable XgJsonDynamicAccessId for evidence-backed Json slot access */
     uint32_t xg_json_codec_id;  /* stable XgJsonCodecId for evidence-backed Json codec calls */
     uint32_t
-        xg_object_access_id; /* stable XgObjectAccessId for evidence-backed Record slot access */
-    uint32_t xg_object_merge_id; /* stable XgObjectMergeId for evidence-backed Record spread */
+        xg_object_access_id; /* stable XgObjectAccessId for evidence-backed structural object slot access */
+    uint32_t xg_object_merge_id; /* stable XgObjectMergeId for evidence-backed structural object spread */
     uint32_t xg_key_access_id;   /* stable XgKeyAccessId for evidence-backed Map/Set key access */
     uint32_t xg_map_shape_id;    /* stable XgMapShapeId for evidence-backed Map/Set construction */
     uint32_t xg_class_field_id;  /* stable XgFieldId for evidence-backed class field access */

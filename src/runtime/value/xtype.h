@@ -82,7 +82,7 @@ typedef enum XrTypeKind {
                           // width integer at the value level, invisible to the GC.
     XR_KIND_RUNE,         // Unicode scalar value. Immediate value (tag XR_TAG_RUNE), not
                           // a uint32; appended last to keep existing kind values stable.
-    XR_KIND_STRUCT_OBJECT,       // Sealed/open structural record; shares ObjectShape metadata with Json.
+    XR_KIND_STRUCT_OBJECT,       // Exact/open structural object; shares ObjectShape metadata with Json.
     XR_KIND_SLICE,        // Borrowed contiguous view; source surface: Slice<T>.
     XR_KIND_COUNT
 } XrTypeKind;
@@ -920,7 +920,7 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
 }
 
 // Check if a type is valid as an already-typed Json literal field value.
-// External Record/Array/Map/Set/class values must cross through Json.encode.
+// External structural object/Array/Map/Set/class values must cross through Json.encode.
 static inline bool xr_type_is_json_field_compatible(XrType *type) {
     if (!type)
         return true;
@@ -953,12 +953,12 @@ XR_FUNC XrType *xr_type_copy(XrVMRuntime *X, XrType *type);
 XR_FUNC bool xr_type_assignable(XrType *target, XrType *source);
 XR_FUNC bool xr_type_equals(XrType *a, XrType *b);
 /* Explain why `source` is not assignable to `target` when the root cause is a
- * Record/object-shape field-set difference, possibly nested inside an invariant
+ * structural object/object-shape field-set difference, possibly nested inside an invariant
  * container. Writes a reason such as "extra field 'z'", "missing field 'y'", or
  * "element: extra field 'z'" into `buf` and returns true. Returns false for
  * scalar or otherwise unstructured mismatches, so callers keep their plain
  * "not assignable" message. Only call after xr_type_assignable() has failed. */
-XR_FUNC bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, size_t n);
+XR_FUNC bool xr_type_object_mismatch_reason(XrType *target, XrType *source, char *buf, size_t n);
 // Classify a conversion between concrete numeric types.  This does not grant
 // contextual-literal or dynamic-cast semantics; the analyzer upgrades those
 // cases using the same XrConversionKind domain.
@@ -1130,7 +1130,7 @@ XR_FUNC bool xr_type_is_iterable(XrType *type, XrType **out_element_type);
 
 /* Json.decode first-stage field contract. ANY means the type is unsupported,
  * not that validation may be skipped. Supported structural leaves include nested
- * Record descriptors and Array<Json> containers. */
+ * object descriptors and Array<Json> containers. */
 XR_FUNC uint8_t xr_type_json_value_kind(const XrType *type);
 XR_FUNC uint64_t xr_type_stable_key(const XrType *type);
 XR_FUNC bool xr_type_is_json_decode_field_supported(const XrType *type);

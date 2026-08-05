@@ -1,7 +1,7 @@
 // anchor: json-decode-type-matrix
 // 177: pin the Json.decode<T> typed-field validation matrix across VM/AOT.
 // Covers per-field kind mismatch, missing required fields, extra-field tolerance,
-// null vs non-nullable, nested Record validation, Array<Json> shape, and the
+// null vs non-nullable, nested object validation, Array<Json> shape, and the
 // permissive Json field. Any backend whose decode validation drifts (accepts a
 // wrong kind, over-rejects, or diverges VM vs AOT) fails here.
 
@@ -37,7 +37,7 @@ print(Json.decode<Scalars>(p("{\"i\":true,\"f\":2.5,\"s\":\"hi\",\"b\":true}")) 
 print(Json.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":\"hi\"}")) == null)               // true
 print(Json.decode<Scalars>(p("{\"i\":null,\"f\":2.5,\"s\":\"hi\",\"b\":true}")) == null) // true
 
-// Nested Record validated recursively.
+// Nested object validated recursively.
 var nok = Json.decode<Nested>(p("{\"id\":7,\"inner\":{\"i\":1,\"f\":2.5,\"s\":\"hi\",\"b\":true}}"))
 print(nok == null)   // false
 print(nok!.inner.i)  // 1

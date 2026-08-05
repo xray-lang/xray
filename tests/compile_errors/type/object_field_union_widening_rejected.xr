@@ -1,0 +1,10 @@
+// The same rule with a union rather than inheritance: a wider field type must
+// not accept a Object whose field is narrower.
+type WideField = { v: int | string }
+type NarrowField = { v: int }
+
+var n: NarrowField = { v: 1 }
+var w: WideField = n
+w.v = "boom"
+var x: int = n.v
+print(x + 1)

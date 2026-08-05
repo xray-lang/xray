@@ -1601,7 +1601,7 @@ TEST(json_open_shape_static_key_index_lowers_to_dynamic_lookup) {
 }
 
 TEST(object_access_lowers_with_global_evidence_id) {
-#define REQUIRE_RECORD_EVIDENCE(cond, msg)                                                         \
+#define REQUIRE_OBJECT_EVIDENCE(cond, msg)                                                         \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
             fprintf(stderr, "object_access_lowers_with_global_evidence_id: %s\n", msg);            \
@@ -1618,12 +1618,13 @@ TEST(object_access_lowers_with_global_evidence_id) {
                                           "}\n"
                                           "print(readAge())\n",
                                           &ev);
-    REQUIRE_RECORD_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_RECORD_EVIDENCE(ev.njson_dynamic_accesses == 0,
+    REQUIRE_OBJECT_EVIDENCE(main_func != NULL, "source should lower");
+    REQUIRE_OBJECT_EVIDENCE(ev.njson_dynamic_accesses == 0,
                             "bare object literal should not produce Json access evidence");
-    REQUIRE_RECORD_EVIDENCE(ev.nobject_accesses == 1, "producer should record Record field get");
+    REQUIRE_OBJECT_EVIDENCE(ev.nobject_accesses == 1,
+                            "producer should record structural object field get");
     XiFunc *read = func_tree_find_func_name(main_func, "readAge");
-    REQUIRE_RECORD_EVIDENCE(read != NULL, "target function should be present");
+    REQUIRE_OBJECT_EVIDENCE(read != NULL, "target function should be present");
 
     uint32_t get_id = 0;
     uint32_t json_bound_count = 0;
@@ -1641,19 +1642,21 @@ TEST(object_access_lowers_with_global_evidence_id) {
                 get_id = v->xg_object_access_id;
         }
     }
-    REQUIRE_RECORD_EVIDENCE(json_bound_count == 0, "Record access should not bind Json id");
-    REQUIRE_RECORD_EVIDENCE(get_id != 0, "Record field get should bind global access evidence");
-    REQUIRE_RECORD_EVIDENCE(ev.object_accesses[0].object_access_id == get_id,
-                            "bound id should point at Record access row");
-    REQUIRE_RECORD_EVIDENCE(ev.object_accesses[0].access_kind == XG_OBJECT_ACCESS_FIELD_GET,
+    REQUIRE_OBJECT_EVIDENCE(json_bound_count == 0,
+                            "structural object access should not bind Json id");
+    REQUIRE_OBJECT_EVIDENCE(get_id != 0,
+                            "structural object field get should bind global access evidence");
+    REQUIRE_OBJECT_EVIDENCE(ev.object_accesses[0].object_access_id == get_id,
+                            "bound id should point at structural object access row");
+    REQUIRE_OBJECT_EVIDENCE(ev.object_accesses[0].access_kind == XG_OBJECT_ACCESS_FIELD_GET,
                             "bound id should point at field_get row");
-    REQUIRE_RECORD_EVIDENCE(ev.object_accesses[0].field_ordinal == 1,
+    REQUIRE_OBJECT_EVIDENCE(ev.object_accesses[0].field_ordinal == 1,
                             "bound id should preserve field ordinal");
 
     xi_func_free(main_func);
     xg_global_evidence_free(&ev);
 
-#undef REQUIRE_RECORD_EVIDENCE
+#undef REQUIRE_OBJECT_EVIDENCE
 }
 
 TEST(structural_object_dot_and_static_index_share_fixed_field_lowering) {
@@ -2476,20 +2479,20 @@ TEST(copy_struct_task_result_plans_shared_publication) {
            "Copy result Task remains multi-observer");
     xi_func_free(f);
 
-    XiFunc *record_f = lower_source("type PairRecord = { a: int, b: int }\n"
-                                    "fn recordPair() -> PairRecord { return {a: 10, b: 20} }\n"
-                                    "var recordTask = go recordPair()\n"
-                                    "var recordResult = await recordTask\n"
-                                    "print(recordResult.a + recordResult.b)\n");
-    assert(record_f != NULL);
-    XiValue *record_go = func_tree_find_op(record_f, XI_GO);
-    XiValue *record_await = func_tree_find_op(record_f, XI_AWAIT);
-    assert(record_go != NULL && record_await != NULL);
-    assert((record_go->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) != 0 &&
-           "pointer-backed record result must carry a compiler publication plan");
-    assert((record_await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0 &&
-           "record result Task remains multi-observer");
-    xi_func_free(record_f);
+    XiFunc *object_f = lower_source("type PairObject = { a: int, b: int }\n"
+                                    "fn objectPair() -> PairObject { return {a: 10, b: 20} }\n"
+                                    "var objectTask = go objectPair()\n"
+                                    "var objectResult = await objectTask\n"
+                                    "print(objectResult.a + objectResult.b)\n");
+    assert(object_f != NULL);
+    XiValue *object_go = func_tree_find_op(object_f, XI_GO);
+    XiValue *object_await = func_tree_find_op(object_f, XI_AWAIT);
+    assert(object_go != NULL && object_await != NULL);
+    assert((object_go->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) != 0 &&
+           "pointer-backed object result must carry a compiler publication plan");
+    assert((object_await->aux_int & XI_AWAIT_AUX_CONSUME_TASK) == 0 &&
+           "object result Task remains multi-observer");
+    xi_func_free(object_f);
 }
 
 TEST(go_arg_transfer_modes) {

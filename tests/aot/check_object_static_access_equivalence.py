@@ -68,7 +68,7 @@ def main(argv: list[str]) -> int:
 
     for name, text in generated.items():
         object_body = re.sub(
-            r"static XrValue xrt_runtime_record_new\([^}]+\}\n", "", text, flags=re.S
+            r"static XrValue xrt_runtime_object_new\([^}]+\}\n", "", text, flags=re.S
         )
         if "xrt_index_get" in text or "xrt_index_set" in text:
             print(

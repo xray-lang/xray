@@ -1,0 +1,2 @@
+Json.decode<T>() requires T to be an exact object type alias with fields
+

@@ -54,13 +54,13 @@ RULES = (
     ),
     Rule(
         "INTERNAL_RECORD_IDENTITY",
-        re.compile(r"\bXR_KIND_STRUCT_OBJECT\b|\bXR_BK_STRUCT_OBJECT\b|\bXRT_OBJECT_STRUCT\b"),
+        re.compile(r"\bXR_KIND_RECORD\b|\bXR_BK_RECORD\b|\bXRT_OBJECT_RECORD\b"),
         ("src", "stdlib", "tests", "xisa"),
     ),
     Rule(
         "LEGACY_RECORD_TYPE_API",
         re.compile(
-            r"\bXR_TYPE_IS_STRUCT_OBJECT\b|\bxr_type_new_struct_object(?:_with_fields)?\b|"
+            r"\bXR_TYPE_IS_RECORD\b|\bxr_type_new_record(?:_with_fields)?\b|"
             r"\bXR_TID_RECORD\b|\bTYPE_NAME_RECORD\b"
         ),
         ("src", "stdlib", "tests", "xisa"),
@@ -104,6 +104,13 @@ def collect(root: Path) -> dict[str, list[dict[str, object]]]:
             if not under_any_root(rel, rule.roots):
                 continue
             for line_number, line in enumerate(lines, 1):
+                stripped = line.lstrip()
+                if (
+                    rule.name == "PUBLIC_RECORD_SURFACE"
+                    and path.suffix.lower() in {".c", ".h", ".inc", ".py", ".sh"}
+                    and stripped.startswith(("//", "/*", "*", "#"))
+                ):
+                    continue
                 if rule.pattern.search(line):
                     hits[rule.name].append(
                         {"path": rel.as_posix(), "line": line_number, "text": line.strip()}

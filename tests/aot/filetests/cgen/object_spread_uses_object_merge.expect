@@ -1,0 +1,7 @@
+contains=xaot-plan v0
+regex=object-shape-plan [0-9]+ .*kind=spread action=spread_result
+regex=object-shape-plan [0-9]+ .*kind=patch action=patch
+regex=object-merge-plan [0-9]+ .*source=[1-9][0-9]* .*action=copy_with_overwrite .*overwrites=1
+c_regex=xrt_object_merge_copy_table\(v[0-9]+, v[0-9]+, 2, \(const uint16_t\[\]\)\{0, 0, 1, 1\}\)
+c_not_regex=xrt_object_merge\(v[0-9]+, v[0-9]+\)
+c_not_regex=xrt_json_merge\(v[0-9]+, v[0-9]+\)

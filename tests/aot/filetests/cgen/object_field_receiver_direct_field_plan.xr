@@ -1,0 +1,20 @@
+type User = { name: string, age: int }
+
+class Holder {
+    user: User
+
+    constructor(user: User) {
+        this.user = user
+    }
+
+    objectFieldReceiverPlan() -> int {
+        return this.user.age
+    }
+}
+
+fn mainValue() -> int {
+    var user: User = { name: "ada", age: 7 }
+    return Holder(user).objectFieldReceiverPlan()
+}
+
+print(mainValue())

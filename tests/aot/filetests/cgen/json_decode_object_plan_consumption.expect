@@ -1,0 +1,13 @@
+args=--dump-global-evidence
+regex=json-shape [0-9]+ id=[1-9][0-9]* .*kind=object_bridge .*object_shape=[1-9][0-9]*
+regex=object-shape [0-9]+ id=[1-9][0-9]* .*kind=static .*json_shape=[1-9][0-9]*
+regex=json-codec [0-9]+ .*kind=decode .*object_shape=[1-9][0-9]*
+regex=json-codec [0-9]+ .*kind=encode .*object_shape=[1-9][0-9]*
+contains=xaot-plan v0
+regex=json-shape-plan [0-9]+ .*kind=object_bridge .*reason=none object_shape=[1-9][0-9]*
+regex=object-shape-plan [0-9]+ .*kind=static .*reason=none json_shape=[1-9][0-9]*
+regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=decode action=decode_validate_copy input_type=[1-9][0-9]* target_type=[1-9][0-9]* input_shape=[1-9][0-9]* output_shape=[1-9][0-9]* fields=2 evidence=0xf1 reason=none object_shape=[1-9][0-9]*
+regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=encode action=encode_field_table input_type=[1-9][0-9]* target_type=0 input_shape=[1-9][0-9]* output_shape=0 fields=2 evidence=0x31 reason=none object_shape=[1-9][0-9]*
+c_contains=xrt_json_decode_struct_object
+c_contains=xrt_json_encode
+c_contains=(const XrJsonDecodeFieldSpec[]){{"name", 5, NULL, 0}, {"age", 3, NULL, 0}}

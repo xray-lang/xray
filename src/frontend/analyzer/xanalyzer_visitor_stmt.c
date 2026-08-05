@@ -5611,7 +5611,7 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
     char reason[192];
     const char *tail = "";
     char tail_buf[200];
-    if (xr_type_record_mismatch_reason(target_type, value_type, reason, sizeof(reason))) {
+    if (xr_type_object_mismatch_reason(target_type, value_type, reason, sizeof(reason))) {
         snprintf(tail_buf, sizeof(tail_buf), "; %s", reason);
         tail = tail_buf;
     }
@@ -8702,7 +8702,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                     !xr_is_json_coercion(links->declared_type, init_type)) {
                     char msg[256];
                     char reason[192];
-                    if (xr_type_record_mismatch_reason(links->declared_type, init_type, reason,
+                    if (xr_type_object_mismatch_reason(links->declared_type, init_type, reason,
                                                        sizeof(reason))) {
                         snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'; %s",
                                  xr_type_to_string(init_type),
@@ -8852,7 +8852,6 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         }
         s = s->parent;
     }
-
     // Store the inferred type in the analyzer side table for codegen.
     xa_analyzer_set_node_type(ctx->analyzer, node, var_type);
 
@@ -9374,7 +9373,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];
                 char reason[192];
-                if (xr_type_record_mismatch_reason(ctx->expected_return_type, return_type, reason,
+                if (xr_type_object_mismatch_reason(ctx->expected_return_type, return_type, reason,
                                                    sizeof(reason))) {
                     snprintf(msg, sizeof(msg), "Return type mismatch: expected '%s', got '%s'; %s",
                              xr_type_to_string(ctx->expected_return_type),

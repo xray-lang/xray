@@ -140,7 +140,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `forEach(fn)` | 遍历 |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
-**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 Record/Json 对象字面量。
+**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 structural object/Json 对象字面量。
 
 `m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
 
@@ -183,13 +183,15 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `Json.containsKey(obj, key)` | 字段存在性 |
 | `Json.get(obj, key, default?)` | 字段读取，不存在返回 default 或 null |
 | `len(obj)` | Object / Array / String variant 的元素数量；scalar 抛 TypeError |
-| `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON 解析与校验 |
+| `Json.parse(s)` / `Json.parse<T>(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON 解析与校验；typed parse 直接按 schema 构造 `T` |
 | `Json.encode(value)` | 显式 typed value → Json 边界转换 |
 | `Json.stringify(value, indent?)` | 序列化 |
+| `Json.kindOf(value)` | 返回 `null/bool/int/float/string/array/object` |
+| `Json.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | Json 类别谓词 |
 
 `keys()` / `values()` / `entries()` / `toString()` 也有实例形态。Json 的字段只能承载数据、永远不能承载函数，所以 `j.keys` 恒为字段读取、`j.keys()` 恒为内置成员调用，两者始终可判定。但当数据里可能存在与内置成员同名的字段时，**优先使用静态形态**，让读者不必依赖调用括号来区分意图。
 
-**字面量**：`{ name: "alice", age: 30 }` 默认是 sealed `Record`。显式写 `var j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。字面量取得 `Json` 域的位置受 §2.4.6 的可见性规则约束。
+**字面量**：`{ name: "alice", age: 30 }` 默认是 exact 对象形状。显式写 `var j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。`Json.parse<T>` 的 `T` 必须满足 `JsonDecodable`，open row 不是合法构造目标；解析器直接消费 token stream，不先物化中间 Json DOM。
 
 **格式化前应先提交类型**：`Json` 内在含 `null`，缺失字段读出来是 `null`，直接插值会格式化成 `"null"`——一个拼错的字段名因此看起来像一个合理结果。把 `Json` 值直接放进模板字符串会产生警告；写 `${j.field as string}` 提交类型，或写 `${j.field ?? "-"}` 给默认值。这与语言对 `T?` 的解包纪律一致。
 
@@ -422,7 +424,7 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 | `forEach(fn)` | traversal |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
-**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from Record/Json object literals by the `#` prefix.
+**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from structural object/Json object literals by the `#` prefix.
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
@@ -467,11 +469,13 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `Json.containsKey(obj, key)` | field existence |
 | `Json.get(obj, key, default?)` | field read; returns `default` or `null` if absent |
 | `len(obj)` | element count for Object / Array / String variants; scalar values throw TypeError |
-| `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON parsing and validation |
+| `Json.parse(s)` / `Json.parse<T>(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON parsing and validation; typed parse constructs `T` directly from its schema |
 | `Json.encode(value)` | explicit typed value → Json boundary conversion |
 | `Json.stringify(value, indent?)` | serialization |
+| `Json.kindOf(value)` | returns `null/bool/int/float/string/array/object` |
+| `Json.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | Json category predicates |
 
-**Literal**: `{ name: "alice", age: 30 }` defaults to sealed `Record`. It becomes a dynamic Json object only with an explicit `Json` annotation such as `var j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary.
+**Literal**: `{ name: "alice", age: 30 }` defaults to an exact object shape. It becomes a dynamic Json object only with an explicit `Json` annotation such as `var j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary. `T` in `Json.parse<T>` must satisfy `JsonDecodable`; an open row is not a construction target. The parser consumes the token stream directly without first materializing an intermediate Json DOM.
 
 ### 14.12 `Range`
 

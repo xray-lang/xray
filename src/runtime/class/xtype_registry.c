@@ -461,7 +461,7 @@ const char *xr_xr_type_kind_name(struct XrType *xa_type) {
         case XR_KIND_MAP:
             return "Map";
         case XR_KIND_STRUCT_OBJECT:
-            return "Record";
+            return "object";
         case XR_KIND_CLASS:
             return "class";
         case XR_KIND_INSTANCE:

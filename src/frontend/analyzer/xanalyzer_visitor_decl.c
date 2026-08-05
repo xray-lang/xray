@@ -2579,8 +2579,8 @@ static void xa_collect_returns(AstNode *node, AstNode **out, int *count, int cap
     }
 }
 
-// Infer Record return type for a function whose returns are all same-shape object literals.
-static XrType *xa_infer_return_record_type(XrVMRuntime *X, FunctionDeclNode *fn) {
+// Infer the structural-object return type when all returns are same-shape object literals.
+static XrType *xa_infer_return_object_type(XrVMRuntime *X, FunctionDeclNode *fn) {
     if (!fn->body || fn->return_type)
         return NULL;
 
@@ -2736,7 +2736,7 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
     // This updates the function's return type so that call-site type propagation
     // can see a concrete Json type instead of unknown.
     if (links && !fn->return_type) {
-        XrType *inferred_ret = xa_infer_return_record_type(ctx->analyzer->isolate, fn);
+        XrType *inferred_ret = xa_infer_return_object_type(ctx->analyzer->isolate, fn);
         if (inferred_ret) {
             links->return_type = inferred_ret;
             links->return_type_inferred = true;

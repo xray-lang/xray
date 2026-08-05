@@ -71,8 +71,8 @@ static const XaBuiltinMember g_gen_osrwlock_members[] = {
 
 // ======== C Module Declarations ========
 
-// Coro.CoroStats record fields
-static const XaBuiltinRecordField g_gen_Coro_corostats_record_fields[] = {
+// Coro.CoroStats object fields
+static const XaBuiltinObjectField g_gen_Coro_corostats_object_fields[] = {
     {"active", "int"},
     {"blocked", "int"},
     {"ready", "int"},
@@ -80,8 +80,8 @@ static const XaBuiltinRecordField g_gen_Coro_corostats_record_fields[] = {
     {"created", "int"},
 };
 
-// Coro.CoroInfo record fields
-static const XaBuiltinRecordField g_gen_Coro_coroinfo_record_fields[] = {
+// Coro.CoroInfo object fields
+static const XaBuiltinObjectField g_gen_Coro_coroinfo_object_fields[] = {
     {"id", "int"},
     {"name", "string?"},
     {"state", "CoroState"},
@@ -89,18 +89,18 @@ static const XaBuiltinRecordField g_gen_Coro_coroinfo_record_fields[] = {
     {"source", "string?"},
 };
 
-// Coro.CoroDeadlock record fields
-static const XaBuiltinRecordField g_gen_Coro_corodeadlock_record_fields[] = {
+// Coro.CoroDeadlock object fields
+static const XaBuiltinObjectField g_gen_Coro_corodeadlock_object_fields[] = {
     {"members", "Array<CoroInfo>"},
     {"reason", "string"},
 };
 
-static const XaBuiltinRecord g_gen_Coro_records[] = {
-    {"CoroStats", "Typed aggregate counters for the coroutine scheduler", g_gen_Coro_corostats_record_fields, 5, true},
-    {"CoroInfo", "Typed diagnostic snapshot for one coroutine", g_gen_Coro_coroinfo_record_fields, 5, true},
-    {"CoroDeadlock", "Typed description of a detected coroutine wait cycle", g_gen_Coro_corodeadlock_record_fields, 2, true},
+static const XaBuiltinObjectShape g_gen_Coro_object_shapes[] = {
+    {"CoroStats", "Typed aggregate counters for the coroutine scheduler", g_gen_Coro_corostats_object_fields, 5, true},
+    {"CoroInfo", "Typed diagnostic snapshot for one coroutine", g_gen_Coro_coroinfo_object_fields, 5, true},
+    {"CoroDeadlock", "Typed description of a detected coroutine wait cycle", g_gen_Coro_corodeadlock_object_fields, 2, true},
 };
-#define GEN_CORO_RECORD_COUNT 3
+#define GEN_CORO_OBJECT_SHAPE_COUNT 3
 
 static const XaBuiltinEnumVariant g_gen_Coro_corostate_variants[] = {
     {"Unknown", NULL, 0},
@@ -127,8 +127,8 @@ static const XaBuiltinEnum g_gen_Coro_enums[] = {
 };
 #define GEN_CORO_ENUM_COUNT 3
 
-// cluster.ClusterTlsOptions record fields
-static const XaBuiltinRecordField g_gen_cluster_clustertlsoptions_record_fields[] = {
+// cluster.ClusterTlsOptions object fields
+static const XaBuiltinObjectField g_gen_cluster_clustertlsoptions_object_fields[] = {
     {"enabled", "bool"},
     {"caFile", "string?"},
     {"certFile", "string?"},
@@ -136,23 +136,23 @@ static const XaBuiltinRecordField g_gen_cluster_clustertlsoptions_record_fields[
     {"insecure", "bool"},
 };
 
-// cluster.ClusterConfig record fields
-static const XaBuiltinRecordField g_gen_cluster_clusterconfig_record_fields[] = {
+// cluster.ClusterConfig object fields
+static const XaBuiltinObjectField g_gen_cluster_clusterconfig_object_fields[] = {
     {"name", "string"},
     {"port", "int"},
     {"secret", "string?"},
     {"tls", "ClusterTlsOptions?"},
 };
 
-// cluster.ClusterTlsStatus record fields
-static const XaBuiltinRecordField g_gen_cluster_clustertlsstatus_record_fields[] = {
+// cluster.ClusterTlsStatus object fields
+static const XaBuiltinObjectField g_gen_cluster_clustertlsstatus_object_fields[] = {
     {"enabled", "bool"},
     {"clientReady", "bool"},
     {"serverReady", "bool"},
 };
 
-// cluster.ClusterNodeInfo record fields
-static const XaBuiltinRecordField g_gen_cluster_clusternodeinfo_record_fields[] = {
+// cluster.ClusterNodeInfo object fields
+static const XaBuiltinObjectField g_gen_cluster_clusternodeinfo_object_fields[] = {
     {"name", "string"},
     {"host", "string"},
     {"port", "int"},
@@ -171,8 +171,8 @@ static const XaBuiltinRecordField g_gen_cluster_clusternodeinfo_record_fields[] 
     {"missedHeartbeats", "int"},
 };
 
-// cluster.ClusterInfo record fields
-static const XaBuiltinRecordField g_gen_cluster_clusterinfo_record_fields[] = {
+// cluster.ClusterInfo object fields
+static const XaBuiltinObjectField g_gen_cluster_clusterinfo_object_fields[] = {
     {"self", "string"},
     {"port", "int"},
     {"running", "bool"},
@@ -186,14 +186,14 @@ static const XaBuiltinRecordField g_gen_cluster_clusterinfo_record_fields[] = {
     {"tls", "ClusterTlsStatus"},
 };
 
-static const XaBuiltinRecord g_gen_cluster_records[] = {
-    {"ClusterTlsOptions", "Typed TLS configuration for a cluster node", g_gen_cluster_clustertlsoptions_record_fields, 5, true},
-    {"ClusterConfig", "Typed cluster node startup configuration", g_gen_cluster_clusterconfig_record_fields, 4, true},
-    {"ClusterTlsStatus", "Effective TLS posture of a running cluster node", g_gen_cluster_clustertlsstatus_record_fields, 3, true},
-    {"ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", g_gen_cluster_clusternodeinfo_record_fields, 16, true},
-    {"ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", g_gen_cluster_clusterinfo_record_fields, 11, true},
+static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
+    {"ClusterTlsOptions", "Typed TLS configuration for a cluster node", g_gen_cluster_clustertlsoptions_object_fields, 5, true},
+    {"ClusterConfig", "Typed cluster node startup configuration", g_gen_cluster_clusterconfig_object_fields, 4, true},
+    {"ClusterTlsStatus", "Effective TLS posture of a running cluster node", g_gen_cluster_clustertlsstatus_object_fields, 3, true},
+    {"ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", g_gen_cluster_clusternodeinfo_object_fields, 16, true},
+    {"ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", g_gen_cluster_clusterinfo_object_fields, 11, true},
 };
-#define GEN_CLUSTER_RECORD_COUNT 5
+#define GEN_CLUSTER_OBJECT_SHAPE_COUNT 5
 
 static const XaBuiltinEnumVariant g_gen_cluster_clusternodestate_variants[] = {
     {"Idle", NULL, 0},
@@ -449,16 +449,16 @@ static const XaBuiltinHandle g_gen_net_handles[] = {
 };
 #define GEN_NET_HANDLE_COUNT 1
 
-// net.__CopyBidirectionalResult record fields
-static const XaBuiltinRecordField g_gen_net___copybidirectionalresult_record_fields[] = {
+// net.__CopyBidirectionalResult object fields
+static const XaBuiltinObjectField g_gen_net___copybidirectionalresult_object_fields[] = {
     {"aToB", "int"},
     {"bToA", "int"},
 };
 
-static const XaBuiltinRecord g_gen_net_records[] = {
-    {"__CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", g_gen_net___copybidirectionalresult_record_fields, 2, true},
+static const XaBuiltinObjectShape g_gen_net_object_shapes[] = {
+    {"__CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", g_gen_net___copybidirectionalresult_object_fields, 2, true},
 };
-#define GEN_NET_RECORD_COUNT 1
+#define GEN_NET_OBJECT_SHAPE_COUNT 1
 
 static const XaBuiltinEnumVariant g_gen_net_neterror_variants[] = {
     {"Timeout", NULL, 0},
@@ -587,8 +587,8 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
 };
 #define GEN_REGEX_FUNCTION_COUNT 13
 
-// runtime.RuntimeInfo record fields
-static const XaBuiltinRecordField g_gen_runtime_runtimeinfo_record_fields[] = {
+// runtime.RuntimeInfo object fields
+static const XaBuiltinObjectField g_gen_runtime_runtimeinfo_object_fields[] = {
     {"liveBytes", "int"},
     {"liveKB", "float"},
     {"liveObjects", "int"},
@@ -598,10 +598,10 @@ static const XaBuiltinRecordField g_gen_runtime_runtimeinfo_record_fields[] = {
     {"fullBlocks", "int"},
 };
 
-static const XaBuiltinRecord g_gen_runtime_records[] = {
-    {"RuntimeInfo", "Typed snapshot of the current execution-local reclamation domain", g_gen_runtime_runtimeinfo_record_fields, 7, true},
+static const XaBuiltinObjectShape g_gen_runtime_object_shapes[] = {
+    {"RuntimeInfo", "Typed snapshot of the current execution-local reclamation domain", g_gen_runtime_runtimeinfo_object_fields, 7, true},
 };
-#define GEN_RUNTIME_RECORD_COUNT 1
+#define GEN_RUNTIME_OBJECT_SHAPE_COUNT 1
 
 // runtime module functions
 static const XaBuiltinMember g_gen_runtime_functions[] = {
@@ -676,18 +676,18 @@ static const XaBuiltinHandle g_gen_ws_handles[] = {
 };
 #define GEN_WS_HANDLE_COUNT 2
 
-// ws.WsConnectOptions record fields
-static const XaBuiltinRecordField g_gen_ws_wsconnectoptions_record_fields[] = {
+// ws.WsConnectOptions object fields
+static const XaBuiltinObjectField g_gen_ws_wsconnectoptions_object_fields[] = {
     {"timeout", "int?"},
     {"pingInterval", "int?"},
     {"pongTimeout", "int?"},
     {"maxMessageSize", "int?"},
 };
 
-static const XaBuiltinRecord g_gen_ws_records[] = {
-    {"WsConnectOptions", "Typed WebSocket client connection options", g_gen_ws_wsconnectoptions_record_fields, 4, true},
+static const XaBuiltinObjectShape g_gen_ws_object_shapes[] = {
+    {"WsConnectOptions", "Typed WebSocket client connection options", g_gen_ws_wsconnectoptions_object_fields, 4, true},
 };
-#define GEN_WS_RECORD_COUNT 1
+#define GEN_WS_OBJECT_SHAPE_COUNT 1
 
 // ws module functions
 static const XaBuiltinMember g_gen_ws_functions[] = {
@@ -703,21 +703,21 @@ static const XaBuiltinMember g_gen_ws_functions[] = {
 
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
-    {"Coro", NULL, 0, NULL, 0, g_gen_Coro_records, GEN_CORO_RECORD_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT},
-    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_records, GEN_CLUSTER_RECORD_COUNT, g_gen_cluster_enums, GEN_CLUSTER_ENUM_COUNT},
+    {"Coro", NULL, 0, NULL, 0, g_gen_Coro_object_shapes, GEN_CORO_OBJECT_SHAPE_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT},
+    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0, g_gen_cluster_object_shapes, GEN_CLUSTER_OBJECT_SHAPE_COUNT, g_gen_cluster_enums, GEN_CLUSTER_ENUM_COUNT},
     {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"http2", g_gen_http2_functions, GEN_HTTP2_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0},
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT, g_gen_net_records, GEN_NET_RECORD_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT},
+    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT, g_gen_net_object_shapes, GEN_NET_OBJECT_SHAPE_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, g_gen_runtime_records, GEN_RUNTIME_RECORD_COUNT, NULL, 0},
+    {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, g_gen_runtime_object_shapes, GEN_RUNTIME_OBJECT_SHAPE_COUNT, NULL, 0},
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT, g_gen_ws_records, GEN_WS_RECORD_COUNT, NULL, 0},
+    {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT, g_gen_ws_object_shapes, GEN_WS_OBJECT_SHAPE_COUNT, NULL, 0},
 };
 #define GEN_BUILTIN_MODULE_COUNT 15
 
