@@ -9410,8 +9410,8 @@ TEST(cgen_hosted_string_array_boundary_uses_deep_value_bridge) {
                  "AOT result materializes a VM-owned array");
     TEST_REQUIRE(contains(code, "context->ops->array_set"),
                  "AOT string results populate through host ownership operations");
-    TEST_REQUIRE(contains(code, "xrt_release(_hosted_arg_0)"),
-                 "temporary AOT argument graph is released after the call");
+    TEST_REQUIRE(!contains(code, "xrt_release(_hosted_arg_0)"),
+                 "owned AOT argument graph is consumed exactly once by the call");
     const char *hosted_entry = strstr(code, "xr_hosted_string_array_bridge(");
     const char *hosted_initializer = strstr(code, "bool xr_hosted_fragment_initialize(");
     const char *runtime_scope =
