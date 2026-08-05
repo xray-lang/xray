@@ -10101,8 +10101,8 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
     }
 
     static const struct {
-        const char *method;
-        const char *kind;
+        char method[9];
+        char kind[32];
     } json_kind_predicates[] = {
         {"isNull", "XRT_JSON_RUNTIME_NULL"},       {"isBool", "XRT_JSON_RUNTIME_BOOL"},
         {"isInt", "XRT_JSON_RUNTIME_INT"},         {"isFloat", "XRT_JSON_RUNTIME_FLOAT"},
@@ -11382,6 +11382,15 @@ static void xicgen_json_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     xicgen_emit_json_new_expr(ctx, out, v);
 }
 
+static bool xicgen_emit_json_decode_value_spec(XiCgenCtx *ctx, FILE *out,
+                                               const XrType *type, int depth);
+
+static uint8_t xicgen_json_decode_storage_type(const XrType *type) {
+    if (!type || type->is_nullable)
+        return XR_ELEM_ANY;
+    return (uint8_t) xr_tid_to_elem_type(xr_type_to_tid((XrType *) type));
+}
+
 static bool xicgen_emit_json_decode_field_specs(XiCgenCtx *ctx, FILE *out,
                                                 const XrType *object_type,
                                                 const char *const *field_names,
@@ -11399,29 +11408,55 @@ static bool xicgen_emit_json_decode_field_specs(XiCgenCtx *ctx, FILE *out,
         if (type_ordinal < 0 || type_ordinal >= object_type->object.field_count)
             return false;
         const XrType *field_type = object_type->object.field_types[type_ordinal];
-        uint8_t value_kind = xr_type_json_value_kind(field_type);
         fprintf(out, "{");
         xicgen_emit_c_string_literal(out, field_name);
-        fprintf(out, ", %u, ", (unsigned) value_kind);
-        if (xr_json_value_kind_base(value_kind) == XR_JSON_VALUE_STRUCT_OBJECT && field_type &&
-            XR_TYPE_IS_STRUCT_OBJECT(field_type) && field_type->object.field_count > 0) {
-            int nested_shape_id = cg_intern_object_shape_type(ctx, field_type);
-            if (nested_shape_id < 0)
-                return false;
-            const CgObjectShape *nested_shape = &ctx->object_shapes[nested_shape_id];
-            if (!xicgen_emit_json_decode_field_specs(
-                    ctx, out, field_type, nested_shape->field_names,
-                    field_type->object.field_count, depth + 1))
-                return false;
-            fprintf(out, ", %u, &_xobj_shape_%d", (unsigned) field_type->object.field_count,
-                    nested_shape_id);
-        } else {
-            fprintf(out, "NULL, 0, NULL");
-        }
+        fprintf(out, ", ");
+        if (!xicgen_emit_json_decode_value_spec(ctx, out, field_type, depth))
+            return false;
         fprintf(out, "}");
     }
     fprintf(out, "}");
     return true;
+}
+
+static bool xicgen_emit_json_decode_value_spec(XiCgenCtx *ctx, FILE *out,
+                                               const XrType *type, int depth) {
+    if (!ctx || !out || !type || depth > 16)
+        return false;
+    uint8_t value_kind = xr_type_json_value_kind(type);
+    fprintf(out, "%u, ", (unsigned) value_kind);
+    switch ((XrJsonValueKind) xr_json_value_kind_base(value_kind)) {
+        case XR_JSON_VALUE_STRUCT_OBJECT: {
+            if (!XR_TYPE_IS_STRUCT_OBJECT(type) || type->object.field_count <= 0)
+                return false;
+            int nested_shape_id = cg_intern_object_shape_type(ctx, type);
+            if (nested_shape_id < 0)
+                return false;
+            const CgObjectShape *nested_shape = &ctx->object_shapes[nested_shape_id];
+            if (!xicgen_emit_json_decode_field_specs(ctx, out, type, nested_shape->field_names,
+                                                      type->object.field_count, depth + 1))
+                return false;
+            fprintf(out, ", %u, &_xobj_shape_%d", (unsigned) type->object.field_count,
+                    nested_shape_id);
+            return true;
+        }
+        case XR_JSON_VALUE_ARRAY:
+        case XR_JSON_VALUE_MAP: {
+            const XrType *child = XR_TYPE_IS_ARRAY(type) ? type->container.element_type
+                                                         : type->map.value_type;
+            if (!child)
+                return false;
+            fprintf(out, "(const XrJsonDecodeFieldSpec[]){{NULL, ");
+            if (!xicgen_emit_json_decode_value_spec(ctx, out, child, depth + 1))
+                return false;
+            fprintf(out, "}}, 1, (const void *)(uintptr_t)%u",
+                    (unsigned) xicgen_json_decode_storage_type(child));
+            return true;
+        }
+        default:
+            fprintf(out, "NULL, 0, NULL");
+            return xr_json_value_kind_base(value_kind) != XR_JSON_VALUE_ANY;
+    }
 }
 
 static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -11432,9 +11467,28 @@ static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     const XrType *object_type = v ? v->type : NULL;
     const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_TAGGED,
                                                      v ? cg_rep(v) : XR_REP_TAGGED);
-    if (!v || v->nargs < 1 || field_count <= 0 || !object_type || !XR_TYPE_IS_STRUCT_OBJECT(object_type) ||
-        !object_type->object.field_types || object_type->object.field_count != field_count ||
-        !v->aux) {
+    if (!v || v->nargs < 1 || !object_type ||
+        !xr_type_is_json_decode_field_supported(object_type)) {
+        fprintf(out, "XR_NULL_VAL");
+        emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
+    bool typed_parse = (v->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0;
+    if (!XR_TYPE_IS_STRUCT_OBJECT(object_type)) {
+        fprintf(out, typed_parse ? "xrt_json_parse_typed_value_or_throw("
+                                 : "xrt_json_decode_typed_value(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", &(const XrJsonDecodeFieldSpec){NULL, ");
+        if (!xicgen_emit_json_decode_value_spec(ctx, out, object_type, 0)) {
+            ctx->error = true;
+            fprintf(out, "0, NULL, 0, NULL");
+        }
+        fprintf(out, "})");
+        emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
+    if (field_count <= 0 || !object_type->object.field_types ||
+        object_type->object.field_count != field_count || !v->aux) {
         fprintf(out, "XR_NULL_VAL");
         emit_conversion_suffix(out, conv_suffix);
         return;
@@ -11446,7 +11500,6 @@ static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
-    bool typed_parse = (v->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0;
     fprintf(out, typed_parse ? "xrt_json_parse_typed_object_or_throw("
                              : "xrt_json_decode_struct_object(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);

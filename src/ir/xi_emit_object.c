@@ -26,6 +26,7 @@
 #include "../module/xmodule.h"
 #include "../base/xfileio.h"
 #include "../base/xmalloc.h"
+#include "../shared/xr_elem_type.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/analyzer/xa_selection.h"
@@ -651,42 +652,66 @@ static XrClass *xi_json_struct_object_class_from_type_depth(EmitCtx *ctx, const 
                                                      const char *const *canonical_names,
                                                      int canonical_name_count);
 
-static bool xi_json_struct_object_nested_classes(EmitCtx *ctx, const XrType *type,
-                                          const char *const *field_names, int field_count,
-                                          int depth, XrClass ***out_nested_classes) {
-    *out_nested_classes = NULL;
-    bool has_nested = false;
-    for (int i = 0; i < field_count; i++) {
-        int type_ordinal =
-            xi_object_shape_type_ordinal(type, field_names ? field_names[i] : NULL, i);
-        uint8_t kind = xr_type_json_value_kind(type->object.field_types[type_ordinal]);
-        if (xr_json_value_kind_base(kind) == XR_JSON_VALUE_STRUCT_OBJECT) {
-            has_nested = true;
-            break;
-        }
-    }
-    if (!has_nested)
-        return true;
+static uint8_t xi_json_decode_storage_type(const XrType *type) {
+    if (!type || type->is_nullable)
+        return XR_ELEM_ANY;
+    if (XR_TYPE_IS_RUNE(type))
+        return XR_ELEM_RUNE;
+    int native = xr_type_kind_to_native(type->kind, type->scalar_rep);
+    return native >= 0 ? (uint8_t) xr_native_type_to_elem_type((uint8_t) native) : XR_ELEM_ANY;
+}
 
-    XrClass **nested_classes = (XrClass **) xr_calloc((size_t) field_count, sizeof(XrClass *));
-    if (!nested_classes)
-        return false;
-    for (int i = 0; i < field_count; i++) {
-        int type_ordinal =
-            xi_object_shape_type_ordinal(type, field_names ? field_names[i] : NULL, i);
-        uint8_t kind = xr_type_json_value_kind(type->object.field_types[type_ordinal]);
-        if (xr_json_value_kind_base(kind) != XR_JSON_VALUE_STRUCT_OBJECT)
-            continue;
-        nested_classes[i] =
-            xi_json_struct_object_class_from_type_depth(ctx, type->object.field_types[type_ordinal],
-                                                 depth + 1, NULL, 0);
-        if (!nested_classes[i]) {
-            xr_free(nested_classes);
-            return false;
-        }
+static void xi_json_decode_schema_dispose(XrJsonDecodeSchema *schema) {
+    if (!schema)
+        return;
+    if (schema->child) {
+        XrJsonDecodeSchema *child = (XrJsonDecodeSchema *) schema->child;
+        xi_json_decode_schema_dispose(child);
+        xr_free(child);
     }
-    *out_nested_classes = nested_classes;
-    return true;
+    memset(schema, 0, sizeof(*schema));
+}
+
+static bool xi_json_decode_schema_from_type(EmitCtx *ctx, const XrType *type, int depth,
+                                            XrJsonDecodeSchema *out) {
+    if (!ctx || !type || !out || depth > 16)
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->value_kind = xr_type_json_value_kind(type);
+    switch ((XrJsonValueKind) xr_json_value_kind_base(out->value_kind)) {
+        case XR_JSON_VALUE_STRUCT_OBJECT:
+            out->target_descriptor =
+                xi_json_struct_object_class_from_type_depth(ctx, type, depth + 1, NULL, 0);
+            return out->target_descriptor != NULL;
+        case XR_JSON_VALUE_ARRAY:
+        case XR_JSON_VALUE_MAP: {
+            const XrType *child_type = XR_TYPE_IS_ARRAY(type) ? type->container.element_type
+                                                              : type->map.value_type;
+            if (!child_type)
+                return false;
+            out->storage_type = xi_json_decode_storage_type(child_type);
+            XrJsonDecodeSchema *child = (XrJsonDecodeSchema *) xr_calloc(1, sizeof(*child));
+            if (!child)
+                return false;
+            if (!xi_json_decode_schema_from_type(ctx, child_type, depth + 1, child)) {
+                xi_json_decode_schema_dispose(child);
+                xr_free(child);
+                return false;
+            }
+            out->child = child;
+            return true;
+        }
+        case XR_JSON_VALUE_NULL:
+        case XR_JSON_VALUE_BOOL:
+        case XR_JSON_VALUE_INT:
+        case XR_JSON_VALUE_FLOAT:
+        case XR_JSON_VALUE_STRING:
+        case XR_JSON_VALUE_JSON:
+            return true;
+        case XR_JSON_VALUE_ANY:
+        default:
+            return false;
+    }
 }
 
 static XrClass *xi_json_struct_object_class_from_type_depth(EmitCtx *ctx, const XrType *type, int depth,
@@ -729,12 +754,31 @@ static XrClass *xi_json_struct_object_class_from_type_depth(EmitCtx *ctx, const 
         xr_free(field_names);
         return NULL;
     }
-    XrClass **nested_classes = NULL;
-    if (!xi_json_struct_object_nested_classes(ctx, type, field_names, field_count, depth,
-                                       &nested_classes)) {
+    XrClass **nested_classes = (XrClass **) xr_calloc((size_t) field_count, sizeof(XrClass *));
+    XrJsonDecodeSchema *schemas =
+        (XrJsonDecodeSchema *) xr_calloc((size_t) field_count, sizeof(XrJsonDecodeSchema));
+    if (!nested_classes || !schemas) {
         xr_free(field_names);
         xr_free(value_kinds);
+        xr_free(nested_classes);
+        xr_free(schemas);
         return NULL;
+    }
+    for (int i = 0; i < field_count; i++) {
+        int type_ordinal =
+            xi_object_shape_type_ordinal(type, field_names ? field_names[i] : NULL, i);
+        if (!xi_json_decode_schema_from_type(ctx, type->object.field_types[type_ordinal], depth,
+                                             &schemas[i])) {
+            for (int j = 0; j <= i; j++)
+                xi_json_decode_schema_dispose(&schemas[j]);
+            xr_free(field_names);
+            xr_free(value_kinds);
+            xr_free(nested_classes);
+            xr_free(schemas);
+            return NULL;
+        }
+        if (xr_json_value_kind_base(schemas[i].value_kind) == XR_JSON_VALUE_STRUCT_OBJECT)
+            nested_classes[i] = (XrClass *) schemas[i].target_descriptor;
     }
     uint64_t *stable_type_keys =
         xi_object_shape_stable_type_keys(type, field_names, field_count);
@@ -745,17 +789,47 @@ static XrClass *xi_json_struct_object_class_from_type_depth(EmitCtx *ctx, const 
         xr_free(shape_field_flags);
         xr_free(stable_type_keys);
         xr_free(nested_classes);
+        for (int i = 0; i < field_count; i++)
+            xi_json_decode_schema_dispose(&schemas[i]);
+        xr_free(schemas);
         xr_free(value_kinds);
         return NULL;
     }
     XrClass *cls = xr_class_build_struct_object_chain(
         ctx->isolate, field_names, value_kinds, field_count, nested_classes,
-        stable_type_keys, shape_field_flags);
+        schemas, stable_type_keys, shape_field_flags);
     xr_free(field_names);
     xr_free(shape_field_flags);
     xr_free(stable_type_keys);
     xr_free(nested_classes);
+    for (int i = 0; i < field_count; i++)
+        xi_json_decode_schema_dispose(&schemas[i]);
+    xr_free(schemas);
     xr_free(value_kinds);
+    return cls;
+}
+
+static XrClass *xi_json_decode_root_class_from_type(EmitCtx *ctx, const XrType *type) {
+    if (!ctx || !ctx->isolate || !type || XR_TYPE_IS_STRUCT_OBJECT(type))
+        return NULL;
+    XrJsonDecodeSchema schema = {0};
+    if (!xi_json_decode_schema_from_type(ctx, type, 0, &schema))
+        return NULL;
+    static const char root_name[] = "\x1fjson_decode_root";
+    const char *names[] = {root_name};
+    uint8_t kinds[] = {schema.value_kind};
+    XrClass *nested[] = {
+        xr_json_value_kind_base(schema.value_kind) == XR_JSON_VALUE_STRUCT_OBJECT
+            ? (XrClass *) schema.target_descriptor
+            : NULL,
+    };
+    uint64_t stable_type_keys[] = {xr_type_stable_key(type)};
+    const uint8_t shape_flags[] = {0};
+    XrClass *cls = xr_class_build_struct_object_chain(
+        ctx->isolate, names, kinds, 1, nested, &schema, stable_type_keys, shape_flags);
+    xi_json_decode_schema_dispose(&schema);
+    if (cls)
+        cls->flags |= XR_CLASS_JSON_DECODE_ROOT;
     return cls;
 }
 
@@ -783,7 +857,7 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     uint8_t *shape_field_flags = xi_object_shape_field_flags(v->type, field_names, n);
     XrClass *cls = is_struct_object
                        ? xr_class_build_struct_object_chain(ctx->isolate, field_names, NULL, n, NULL,
-                                                     stable_type_keys, shape_field_flags)
+                                                     NULL, stable_type_keys, shape_field_flags)
                        : xr_class_build_json_chain(ctx->isolate, field_names, n, stable_type_keys,
                                                    shape_field_flags, false);
     xr_free(shape_field_flags);
@@ -911,7 +985,9 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     int n = (int) v->aux_int;
     const char **field_names = (const char **) v->aux;
-    XR_DCHECK(n > 0 && field_names != NULL, "json_decode: no field info");
+    bool object_target = v->type && XR_TYPE_IS_STRUCT_OBJECT(v->type);
+    XR_DCHECK(!object_target || (n > 0 && field_names != NULL),
+              "json_decode: object target has no field info");
     if (n < 0 || n > UINT16_MAX) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -921,9 +997,14 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    /* Build sealed structural object class chain for typed Json.decode<T>. */
-    XrClass *cls = xi_json_struct_object_class_from_type_depth(
-        ctx, v->type, 0, (const char *const *) v->aux, (int) v->aux_int);
+    /* Object targets use their exact class directly. Other decodable targets
+     * use an internal one-field class solely as a bytecode-serializable root
+     * schema carrier; it is never allocated as a language value. */
+    XrClass *cls = object_target
+                       ? xi_json_struct_object_class_from_type_depth(
+                             ctx, v->type, 0, (const char *const *) v->aux,
+                             (int) v->aux_int)
+                       : xi_json_decode_root_class_from_type(ctx, v->type);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;

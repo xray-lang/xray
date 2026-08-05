@@ -689,6 +689,8 @@ static const char *direct_expected_kind(uint8_t encoded_kind) {
             return "object";
         case XR_JSON_VALUE_ARRAY:
             return "array";
+        case XR_JSON_VALUE_MAP:
+            return "object";
         case XR_JSON_VALUE_ANY:
         default:
             return "supported Json value";
@@ -699,16 +701,165 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
                                       const char *path, XrValue *out,
                                       XrJsonTypedParseError *error);
 
-static bool direct_parse_typed_field(JsonDirectParser *p, XrCoroutine *coro,
-                                     const XrFieldDescriptor *field, const char *path, XrValue *out,
-                                     XrJsonTypedParseError *error) {
+static bool direct_parse_typed_schema(JsonDirectParser *p, XrCoroutine *coro,
+                                      const XrJsonDecodeSchema *schema, const char *path,
+                                      XrValue *out, XrJsonTypedParseError *error);
+
+static uint8_t direct_json_schema_tid(const XrJsonDecodeSchema *schema) {
+    if (!schema)
+        return 0;
+    switch ((XrJsonValueKind) xr_json_value_kind_base(schema->value_kind)) {
+        case XR_JSON_VALUE_BOOL:
+            return XR_TID_BOOL;
+        case XR_JSON_VALUE_INT:
+            return XR_TID_INT;
+        case XR_JSON_VALUE_FLOAT:
+            return XR_TID_FLOAT;
+        case XR_JSON_VALUE_STRING:
+            return XR_TID_STRING;
+        case XR_JSON_VALUE_JSON:
+            return 0;
+        case XR_JSON_VALUE_ARRAY:
+            return XR_TID_ARRAY;
+        case XR_JSON_VALUE_MAP:
+            return XR_TID_MAP;
+        default:
+            return 0;
+    }
+}
+
+static bool direct_parse_typed_array(JsonDirectParser *p, XrCoroutine *coro,
+                                     const XrJsonDecodeSchema *schema, const char *path,
+                                     XrValue *out, XrJsonTypedParseError *error) {
+    if (!p || !schema || !schema->child || p->pos >= p->end || *p->pos != '[')
+        return false;
+    p->pos++;
+    p->depth++;
+    XrArray *array = xr_array_with_capacity_typed(
+        coro, 0, schema->storage_type < XR_ELEM_COUNT ? (XrArrayElemType) schema->storage_type
+                                                       : XR_ELEM_ANY);
+    if (!array) {
+        p->depth--;
+        return false;
+    }
+    bool ok = true;
+    size_t index = 0;
     direct_skip_whitespace(p);
-    if (xr_json_value_kind_is_nullable(field->json_value_kind) && p->pos + 4 <= p->end &&
+    if (p->pos < p->end && *p->pos == ']') {
+        p->pos++;
+    } else {
+        while (ok) {
+            XrValue value = xr_null();
+            char item_path[160];
+            snprintf(item_path, sizeof(item_path), "%s[%zu]", path, index);
+            ok = direct_parse_typed_schema(p, coro, schema->child, item_path, &value, error);
+            if (!ok)
+                break;
+            xr_array_push(array, value);
+            index++;
+            direct_skip_whitespace(p);
+            if (p->pos < p->end && *p->pos == ']') {
+                p->pos++;
+                break;
+            }
+            if (p->pos >= p->end || *p->pos != ',') {
+                direct_typed_error(p, error, path, "',' or ']'", NULL);
+                ok = false;
+                break;
+            }
+            p->pos++;
+            direct_skip_whitespace(p);
+        }
+    }
+    p->depth--;
+    if (!ok) {
+        direct_release_owned_value(XR_FROM_PTR(array));
+        return false;
+    }
+    *out = XR_FROM_PTR(array);
+    return true;
+}
+
+static bool direct_parse_typed_map(JsonDirectParser *p, XrCoroutine *coro,
+                                   const XrJsonDecodeSchema *schema, const char *path,
+                                   XrValue *out, XrJsonTypedParseError *error) {
+    if (!p || !schema || !schema->child || p->pos >= p->end || *p->pos != '{')
+        return false;
+    p->pos++;
+    p->depth++;
+    XrMap *map = xr_map_new(coro);
+    if (!map) {
+        p->depth--;
+        return false;
+    }
+    map->key_tid = XR_TID_STRING;
+    map->value_tid = direct_json_schema_tid(schema->child);
+    bool ok = true;
+    direct_skip_whitespace(p);
+    if (p->pos < p->end && *p->pos == '}') {
+        p->pos++;
+    } else {
+        while (ok) {
+            XrValue key = xr_null();
+            XrValue value = xr_null();
+            if (!direct_parse_string(p, &key)) {
+                direct_typed_error(p, error, path, "object field name", NULL);
+                ok = false;
+                break;
+            }
+            direct_skip_whitespace(p);
+            if (p->pos >= p->end || *p->pos != ':') {
+                direct_release_owned_value(key);
+                direct_typed_error(p, error, path, "':'", NULL);
+                ok = false;
+                break;
+            }
+            p->pos++;
+            direct_skip_whitespace(p);
+            char value_path[160];
+            snprintf(value_path, sizeof(value_path), "%s[%s]", path,
+                     XR_TO_STRING(key)->data);
+            ok = direct_parse_typed_schema(p, coro, schema->child, value_path, &value, error);
+            if (!ok) {
+                direct_release_owned_value(key);
+                break;
+            }
+            xr_map_set(map, key, value);
+            direct_skip_whitespace(p);
+            if (p->pos < p->end && *p->pos == '}') {
+                p->pos++;
+                break;
+            }
+            if (p->pos >= p->end || *p->pos != ',') {
+                direct_typed_error(p, error, path, "',' or '}'", NULL);
+                ok = false;
+                break;
+            }
+            p->pos++;
+            direct_skip_whitespace(p);
+        }
+    }
+    p->depth--;
+    if (!ok) {
+        direct_release_owned_value(XR_FROM_PTR(map));
+        return false;
+    }
+    *out = XR_FROM_PTR(map);
+    return true;
+}
+
+static bool direct_parse_typed_schema(JsonDirectParser *p, XrCoroutine *coro,
+                                      const XrJsonDecodeSchema *schema, const char *path,
+                                      XrValue *out, XrJsonTypedParseError *error) {
+    if (!schema)
+        return false;
+    direct_skip_whitespace(p);
+    if (xr_json_value_kind_is_nullable(schema->value_kind) && p->pos + 4 <= p->end &&
         strncmp(p->pos, "null", 4) == 0)
         return direct_parse_null(p, out);
 
     bool ok = false;
-    switch ((XrJsonValueKind) xr_json_value_kind_base(field->json_value_kind)) {
+    switch ((XrJsonValueKind) xr_json_value_kind_base(schema->value_kind)) {
         case XR_JSON_VALUE_NULL:
             ok = direct_parse_null(p, out);
             break;
@@ -728,21 +879,30 @@ static bool direct_parse_typed_field(JsonDirectParser *p, XrCoroutine *coro,
             ok = direct_parse_value(p, out);
             break;
         case XR_JSON_VALUE_STRUCT_OBJECT:
-            ok = field->json_struct_object_class && direct_parse_typed_object(
-                                                   p, coro, field->json_struct_object_class, path, out,
-                                                   error);
+            ok = schema->target_descriptor &&
+                 direct_parse_typed_object(p, coro, (XrClass *) schema->target_descriptor, path,
+                                           out, error);
             break;
         case XR_JSON_VALUE_ARRAY:
-            ok = direct_parse_array(p, out);
+            ok = direct_parse_typed_array(p, coro, schema, path, out, error);
+            break;
+        case XR_JSON_VALUE_MAP:
+            ok = direct_parse_typed_map(p, coro, schema, path, out, error);
             break;
         case XR_JSON_VALUE_ANY:
         default:
-            ok = false;
             break;
     }
     if (!ok)
-        direct_typed_error(p, error, path, direct_expected_kind(field->json_value_kind), NULL);
+        direct_typed_error(p, error, path, direct_expected_kind(schema->value_kind), NULL);
     return ok;
+}
+
+static bool direct_parse_typed_field(JsonDirectParser *p, XrCoroutine *coro,
+                                     const XrFieldDescriptor *field, const char *path, XrValue *out,
+                                     XrJsonTypedParseError *error) {
+    return field && direct_parse_typed_schema(p, coro, &field->json_decode_schema, path, out,
+                                              error);
 }
 
 static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, XrClass *target,
@@ -908,6 +1068,42 @@ bool xr_json_parse_typed_object_from_cstr(XrVMRuntime *X, XrCoroutine *coro,
     };
     XrValue result = xr_null();
     if (!direct_parse_typed_object(&parser, coro, target_class, "$", &result, error))
+        return false;
+    direct_skip_whitespace(&parser);
+    if (parser.pos != parser.end) {
+        direct_release_owned_value(result);
+        direct_typed_error(&parser, error, "$", "end_of_input", NULL);
+        return false;
+    }
+    *out = result;
+    return true;
+}
+
+bool xr_json_parse_typed_value_from_cstr(XrVMRuntime *X, XrCoroutine *coro,
+                                         const char *json_str, size_t len,
+                                         const XrJsonDecodeSchema *schema, XrValue *out,
+                                         XrJsonTypedParseError *error) {
+    if (out)
+        *out = xr_null();
+    if (error)
+        memset(error, 0, sizeof(*error));
+    if (!X || !json_str || len == 0 || !schema || !out) {
+        if (error) {
+            snprintf(error->path, sizeof(error->path), "$");
+            snprintf(error->expected, sizeof(error->expected), "typed Json input");
+            snprintf(error->actual, sizeof(error->actual), "invalid_argument");
+        }
+        return false;
+    }
+    JsonDirectParser parser = {
+        .X = X,
+        .src = json_str,
+        .end = json_str + len,
+        .pos = json_str,
+        .depth = 0,
+    };
+    XrValue result = xr_null();
+    if (!direct_parse_typed_schema(&parser, coro, schema, "$", &result, error))
         return false;
     direct_skip_whitespace(&parser);
     if (parser.pos != parser.end) {

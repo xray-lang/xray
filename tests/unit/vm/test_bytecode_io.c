@@ -443,18 +443,29 @@ TEST(bytecode_roundtrips_typed_object_decode_shape) {
     const uint64_t nested_type_keys[] = {UINT64_C(0x3101), UINT64_C(0x3102)};
     const uint8_t nested_flags[] = {0, XR_OBJECT_SHAPE_FIELD_READONLY};
     XrClass *nested_shape = xr_class_build_struct_object_chain(
-        writer, nested_names, nested_kinds, 2, NULL, nested_type_keys, nested_flags);
+        writer, nested_names, nested_kinds, 2, NULL, NULL, nested_type_keys, nested_flags);
     ASSERT_NOT_NULL(nested_shape);
 
     const char *names[] = {"name", "address", "items"};
     const uint8_t kinds[] = {XR_JSON_VALUE_STRING, XR_JSON_VALUE_STRUCT_OBJECT, XR_JSON_VALUE_ARRAY};
     XrClass *nested_shapes[] = {NULL, nested_shape, NULL};
+    const XrJsonDecodeSchema array_item_schema = {
+        .value_kind = XR_JSON_VALUE_JSON,
+        .storage_type = XR_ELEM_ANY,
+    };
+    const XrJsonDecodeSchema schemas[] = {
+        {.value_kind = XR_JSON_VALUE_STRING},
+        {.value_kind = XR_JSON_VALUE_STRUCT_OBJECT, .target_descriptor = nested_shape},
+        {.value_kind = XR_JSON_VALUE_ARRAY,
+         .storage_type = XR_ELEM_ANY,
+         .child = &array_item_schema},
+    };
     const uint64_t stable_type_keys[] = {UINT64_C(0x4101), UINT64_C(0x4102),
                                          UINT64_C(0x4103)};
     const uint8_t shape_flags[] = {XR_OBJECT_SHAPE_FIELD_READONLY, 0,
                                    XR_OBJECT_SHAPE_FIELD_OPTIONAL};
     XrClass *shape = xr_class_build_struct_object_chain(writer, names, kinds, 3, nested_shapes,
-                                                 stable_type_keys, shape_flags);
+                                                 schemas, stable_type_keys, shape_flags);
     ASSERT_NOT_NULL(shape);
     const XrtObjectShapeField manifest[] = {
         {"name", stable_type_keys[0], 0, 0, shape_flags[0], 0},
@@ -492,6 +503,11 @@ TEST(bytecode_roundtrips_typed_object_decode_shape) {
     ASSERT_EQ_UINT(roundtrip_shape->fields[2].shape_flags, shape_flags[2]);
     ASSERT_EQ_UINT(roundtrip_shape->fields[0].json_value_kind, XR_JSON_VALUE_STRING);
     ASSERT_EQ_UINT(roundtrip_shape->fields[1].json_value_kind, XR_JSON_VALUE_STRUCT_OBJECT);
+    ASSERT_EQ_UINT(roundtrip_shape->fields[2].json_decode_schema.value_kind,
+                   XR_JSON_VALUE_ARRAY);
+    ASSERT_NOT_NULL(roundtrip_shape->fields[2].json_decode_schema.child);
+    ASSERT_EQ_UINT(roundtrip_shape->fields[2].json_decode_schema.child->value_kind,
+                   XR_JSON_VALUE_JSON);
     XrClass *roundtrip_nested = roundtrip_shape->fields[1].json_struct_object_class;
     ASSERT_NOT_NULL(roundtrip_nested);
     ASSERT_EQ_UINT(roundtrip_nested->builtin_kind, XR_BK_STRUCT_OBJECT);
@@ -501,6 +517,74 @@ TEST(bytecode_roundtrips_typed_object_decode_shape) {
     ASSERT_STR_EQ(roundtrip_nested->fields[1].name, "zip");
     ASSERT_EQ_UINT(roundtrip_nested->fields[1].json_value_kind, XR_JSON_VALUE_INT);
     ASSERT_EQ_UINT(roundtrip_shape->fields[2].json_value_kind, XR_JSON_VALUE_ARRAY);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_vm_delete(reader);
+    xray_vm_delete(writer);
+}
+
+TEST(bytecode_roundtrips_typed_json_root_schema) {
+    XrVMRuntime *writer = new_test_isolate();
+    ASSERT_NOT_NULL(writer);
+    XrVMRuntime *reader = new_test_isolate();
+    ASSERT_NOT_NULL(reader);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    const XrJsonDecodeSchema int_schema = {
+        .value_kind = XR_JSON_VALUE_INT,
+        .storage_type = XR_ELEM_I64,
+    };
+    const XrJsonDecodeSchema array_schema = {
+        .value_kind = XR_JSON_VALUE_ARRAY,
+        .storage_type = XR_ELEM_I64,
+        .child = &int_schema,
+    };
+    const XrJsonDecodeSchema map_schema = {
+        .value_kind = XR_JSON_VALUE_MAP,
+        .storage_type = XR_ELEM_ANY,
+        .child = &array_schema,
+    };
+    const char *names[] = {"\x1fjson_decode_root"};
+    const uint8_t kinds[] = {XR_JSON_VALUE_MAP};
+    const uint64_t stable_type_keys[] = {UINT64_C(0x5201)};
+    const uint8_t shape_flags[] = {0};
+    XrClass *shape = xr_class_build_struct_object_chain(
+        writer, names, kinds, 1, NULL, &map_schema, stable_type_keys, shape_flags);
+    ASSERT_NOT_NULL(shape);
+    shape->flags |= XR_CLASS_JSON_DECODE_ROOT;
+
+    int kidx = xr_valuearray_add(&proto->constants, xr_int((int64_t) (intptr_t) shape));
+    ASSERT_EQ_INT(kidx, 0);
+    proto->code.count = 0;
+    proto->lineinfo.count = 0;
+    proto->maxstacksize = 2;
+    xr_vm_proto_write(proto, CREATE_ABC(OP_JSON_DECODE, 0, 1, kidx), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(reader, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    XrClass *roundtrip_shape =
+        (XrClass *) (intptr_t) XR_TO_INT(PROTO_CONSTANT(roundtrip, 0));
+    ASSERT_NOT_NULL(roundtrip_shape);
+    ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_JSON_DECODE_ROOT) != 0);
+    ASSERT_EQ_UINT(roundtrip_shape->field_count, 1);
+    const XrJsonDecodeSchema *roundtrip_schema =
+        &roundtrip_shape->fields[0].json_decode_schema;
+    ASSERT_EQ_UINT(roundtrip_schema->value_kind, XR_JSON_VALUE_MAP);
+    ASSERT_NOT_NULL(roundtrip_schema->child);
+    ASSERT_EQ_UINT(roundtrip_schema->child->value_kind, XR_JSON_VALUE_ARRAY);
+    ASSERT_EQ_UINT(roundtrip_schema->child->storage_type, XR_ELEM_I64);
+    ASSERT_NOT_NULL(roundtrip_schema->child->child);
+    ASSERT_EQ_UINT(roundtrip_schema->child->child->value_kind, XR_JSON_VALUE_INT);
 
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);
@@ -1218,6 +1302,7 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);
     RUN_TEST(bytecode_roundtrips_typed_object_decode_shape);
+    RUN_TEST(bytecode_roundtrips_typed_json_root_schema);
     RUN_TEST(bytecode_roundtrips_class_descriptor_constants);
     RUN_TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically);
     RUN_TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corruption);

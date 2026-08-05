@@ -2364,8 +2364,10 @@ static uint8_t json_codec_action_for(const XgJsonCodecSummary *codec) {
         case XG_JSON_CODEC_PARSE:
             if ((codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) == 0)
                 return XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT;
-            return codec->target_type_key != 0 && codec->output_shape_id != XG_NO_ID &&
-                           (codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0
+            return codec->target_type_key != 0 &&
+                           (((codec->flags & XG_JSON_CODEC_TARGET_OBJECT_SHAPE) == 0) ||
+                            (codec->output_shape_id != XG_NO_ID &&
+                             (codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0))
                        ? XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT_TYPED
                        : XAOT_JSON_CODEC_REJECT;
         case XG_JSON_CODEC_DECODE:
@@ -2394,6 +2396,7 @@ static uint8_t json_codec_reason_for(const XgJsonCodecSummary *codec) {
         return XAOT_JSON_UNPROVEN_MISSING_TARGET_TYPE;
     if (codec->codec_kind == XG_JSON_CODEC_PARSE &&
         (codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0 &&
+        (codec->flags & XG_JSON_CODEC_TARGET_OBJECT_SHAPE) != 0 &&
         (codec->output_shape_id == XG_NO_ID ||
          (codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) == 0))
         return XAOT_JSON_UNPROVEN_OPEN_SHAPE;

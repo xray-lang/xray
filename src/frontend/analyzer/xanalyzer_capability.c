@@ -149,7 +149,9 @@ static XaJsonCapabilityResult json_capability_visit(const XrType *type,
 
     switch (type->kind) {
         case XR_KIND_RUNE:
-            return json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL);
+            return mode == XA_JSON_CAPABILITY_ENCODE
+                       ? json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL)
+                       : json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
         case XR_KIND_FUNCTION:
             return json_capability_result(false, XA_JSON_CAPABILITY_FUNCTION_FIELD, type);
         case XR_KIND_TYPE_PARAM:

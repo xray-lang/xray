@@ -163,6 +163,7 @@ XR_FUNC struct XrClass *xr_class_build_json_chain(struct XrVMRuntime *X, const c
 XR_FUNC struct XrClass *xr_class_build_struct_object_chain(struct XrVMRuntime *X, const char *const *names,
                                                     const uint8_t *json_value_kinds, int count,
                                                     struct XrClass *const *json_struct_object_classes,
+                                                    const XrJsonDecodeSchema *json_decode_schemas,
                                                     const uint64_t *stable_type_keys,
                                                     const uint8_t *shape_field_flags);
 

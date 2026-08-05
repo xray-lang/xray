@@ -469,6 +469,11 @@ vmcase(OP_JSON_DECODE) {
     XrValue cls_val = k[c];
     XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
     XR_DCHECK(cls != NULL, "OP_JSON_DECODE: null class");
+    bool root_schema = (cls->flags & XR_CLASS_JSON_DECODE_ROOT) != 0;
+    const XrJsonDecodeSchema *schema =
+        root_schema && cls->field_count == 1 && cls->fields
+            ? &cls->fields[0].json_decode_schema
+            : NULL;
 
     /* Accept string (direct typed parse) or Json object (validate/copy). */
     XrJson *src = NULL;
@@ -476,19 +481,34 @@ vmcase(OP_JSON_DECODE) {
         XrString *str = XR_TO_STRING(data);
         XrValue parsed = xr_null();
         XrJsonTypedParseError ignored_error;
-        if (!xr_json_parse_typed_object_from_cstr(isolate, VM_CURRENT_CORO, str->data,
-                                                   str->length, cls, &parsed, &ignored_error)) {
+        bool ok = root_schema
+                      ? schema && xr_json_parse_typed_value_from_cstr(
+                                      isolate, VM_CURRENT_CORO, str->data, str->length, schema,
+                                      &parsed, &ignored_error)
+                      : xr_json_parse_typed_object_from_cstr(
+                            isolate, VM_CURRENT_CORO, str->data, str->length, cls, &parsed,
+                            &ignored_error);
+        if (!ok) {
             R(a) = xr_null();
             vmbreak;
         }
         R(a) = parsed;
         checkGC(base + a + 1);
         vmbreak;
-    } else if (xr_value_has_object_shape(data)) {
+    } else if (!root_schema && xr_value_has_object_shape(data)) {
         /* Structural objects share Json's field storage representation, so an object
          * source is validated against the target field set the same way. This lets
          * `object is T` and `object as T` reach the check at all. */
         src = xr_value_to_json(data);
+    } else if (root_schema && schema) {
+        XrValue decoded = xr_null();
+        if (!xr_json_decode_value_with_schema(isolate, VM_CURRENT_CORO, data, schema, &decoded)) {
+            R(a) = xr_null();
+            vmbreak;
+        }
+        R(a) = decoded;
+        checkGC(base + a + 1);
+        vmbreak;
     } else {
         R(a) = xr_null();
         vmbreak;
@@ -505,14 +525,23 @@ vmcase(OP_JSON_PARSE_TYPED) {
     XrValue text = R(b);
     XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(k[c]);
     XR_DCHECK(cls != NULL, "OP_JSON_PARSE_TYPED: null target class");
+    bool root_schema = (cls->flags & XR_CLASS_JSON_DECODE_ROOT) != 0;
+    const XrJsonDecodeSchema *schema =
+        root_schema && cls->field_count == 1 && cls->fields
+            ? &cls->fields[0].json_decode_schema
+            : NULL;
 
     XrJsonTypedParseError error;
     XrValue parsed = xr_null();
     bool ok = false;
     if (XR_IS_STRING(text)) {
         XrString *str = XR_TO_STRING(text);
-        ok = xr_json_parse_typed_object_from_cstr(isolate, VM_CURRENT_CORO, str->data,
-                                                   str->length, cls, &parsed, &error);
+        ok = root_schema
+                 ? schema && xr_json_parse_typed_value_from_cstr(
+                                 isolate, VM_CURRENT_CORO, str->data, str->length, schema, &parsed,
+                                 &error)
+                 : xr_json_parse_typed_object_from_cstr(
+                       isolate, VM_CURRENT_CORO, str->data, str->length, cls, &parsed, &error);
     } else {
         memset(&error, 0, sizeof(error));
         snprintf(error.path, sizeof(error.path), "$");

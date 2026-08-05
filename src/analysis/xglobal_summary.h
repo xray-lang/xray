@@ -527,6 +527,7 @@ enum {
     XG_JSON_CODEC_HAS_TARGET_TYPE = 1u << 2,
     XG_JSON_CODEC_USES_DERIVE = 1u << 3,
     XG_JSON_CODEC_STATIC_TEXT = 1u << 4,
+    XG_JSON_CODEC_TARGET_OBJECT_SHAPE = 1u << 5,
 };
 
 enum {

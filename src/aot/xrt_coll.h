@@ -3970,6 +3970,8 @@ static inline int xrt_json_value_matches_kind(XrValue value, uint8_t encoded_kin
             return value.tag == XR_TAG_PTR && value.ptr && value.heap_type == 0;
         case XR_JSON_VALUE_ARRAY:
             return XR_IS_ARRAY(value);
+        case XR_JSON_VALUE_MAP:
+            return value.tag == XR_TAG_PTR && value.ptr && value.heap_type == 0;
         case XR_JSON_VALUE_NULL:
         case XR_JSON_VALUE_ANY:
         default:
@@ -3980,6 +3982,109 @@ static inline int xrt_json_value_matches_kind(XrValue value, uint8_t encoded_kin
 static inline void xrt_json_decode_release_partial(XrValue *values, int64_t count) {
     for (int64_t i = 0; values && i < count; i++)
         xrt_release(values[i]);
+}
+
+static inline XrValue xrt_json_decode_struct_object(XrValue data,
+                                                     const XrtObjectShape *target_shape,
+                                                     int64_t field_count,
+                                                     const XrJsonDecodeFieldSpec *fields);
+
+static inline int xrt_json_decode_value(XrValue source, const XrJsonDecodeFieldSpec *spec,
+                                        XrValue *out) {
+    if (!spec || !out)
+        return 0;
+    if (XR_IS_NULL(source)) {
+        if (xr_json_value_kind_base(spec->value_kind) != XR_JSON_VALUE_NULL &&
+            xr_json_value_kind_base(spec->value_kind) != XR_JSON_VALUE_JSON &&
+            !xr_json_value_kind_is_nullable(spec->value_kind))
+            return 0;
+        *out = XR_NULL_VAL;
+        return 1;
+    }
+    switch ((XrJsonValueKind) xr_json_value_kind_base(spec->value_kind)) {
+        case XR_JSON_VALUE_STRUCT_OBJECT: {
+            if (!spec->target_shape || !spec->nested_fields || spec->nested_field_count == 0)
+                return 0;
+            XrValue decoded = xrt_json_decode_struct_object(
+                source, (const XrtObjectShape *) spec->target_shape, spec->nested_field_count,
+                spec->nested_fields);
+            if (XR_IS_NULL(decoded))
+                return 0;
+            *out = decoded;
+            return 1;
+        }
+        case XR_JSON_VALUE_ARRAY: {
+            if (!XR_IS_ARRAY(source) || !spec->nested_fields || spec->nested_field_count != 1)
+                return 0;
+            xrt_array_t *src = (xrt_array_t *) source.ptr;
+            uint8_t storage = (uint8_t) (uintptr_t) spec->target_shape;
+            if (storage >= XR_ELEM_COUNT)
+                return 0;
+            XrValue dst = xrt_array_new_typed_uninit(src->length, storage);
+            for (int64_t i = 0; i < src->length; i++) {
+                XrValue item = XR_NULL_VAL;
+                XrValue borrowed = xr_typed_get(src->data, (int32_t) i, src->elem_type);
+                if (!xrt_json_decode_value(borrowed, &spec->nested_fields[0], &item)) {
+                    xrt_release(dst);
+                    return 0;
+                }
+                xrt_array_push(dst, item);
+            }
+            *out = dst;
+            return 1;
+        }
+        case XR_JSON_VALUE_MAP: {
+            if (source.tag != XR_TAG_PTR || !source.ptr || source.heap_type != 0 ||
+                !spec->nested_fields || spec->nested_field_count != 1)
+                return 0;
+            xrt_json_t *src = (xrt_json_t *) source.ptr;
+            uint8_t storage = (uint8_t) (uintptr_t) spec->target_shape;
+            if (storage >= XR_ELEM_COUNT)
+                return 0;
+            int64_t count = xrt_object_field_count(src) +
+                            (src->dynamic_fields ? xrt_map_len(src->dynamic_fields) : 0);
+            XrValue dst = xrt_map_new_declared(count, XR_ELEM_ANY, storage);
+            xrt_map_t *map = (xrt_map_t *) dst.ptr;
+            for (int64_t i = 0; i < xrt_object_field_count(src); i++) {
+                const char *name = xrt_object_field_name(src, i);
+                XrValue value = XR_NULL_VAL;
+                if (!name || !xrt_json_decode_value(src->fields[i], &spec->nested_fields[0],
+                                                    &value)) {
+                    xrt_release(dst);
+                    return 0;
+                }
+                xrt_map_set(map, xr_box_str(name), value);
+            }
+            if (src->dynamic_fields) {
+                xrt_map_t *dynamic = src->dynamic_fields;
+                for (uint32_t i = 0; i < dynamic->nentries; i++) {
+                    XrMapEntry *entry = &dynamic->entries[i];
+                    if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                        continue;
+                    XrValue value = XR_NULL_VAL;
+                    if (!XR_IS_STR(entry->key) ||
+                        !xrt_json_decode_value(entry->value, &spec->nested_fields[0], &value)) {
+                        xrt_release(dst);
+                        return 0;
+                    }
+                    xrt_map_set(map, xrt_value_to_owned(entry->key), value);
+                }
+            }
+            *out = dst;
+            return 1;
+        }
+        default:
+            if (!xrt_json_value_matches_kind(source, spec->value_kind))
+                return 0;
+            *out = xrt_value_to_owned(source);
+            return 1;
+    }
+}
+
+static inline XrValue xrt_json_decode_typed_value(XrValue source,
+                                                   const XrJsonDecodeFieldSpec *spec) {
+    XrValue out = XR_NULL_VAL;
+    return xrt_json_decode_value(source, spec, &out) ? out : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_json_decode_struct_object(XrValue data,
@@ -4010,32 +4115,13 @@ static inline XrValue xrt_json_decode_struct_object(XrValue data,
             return XR_NULL_VAL;
         }
         XrValue field_value = xrt_json_get_name(data, name);
-        if (!xrt_json_value_matches_kind(field_value, field->value_kind)) {
+        XrValue decoded = XR_NULL_VAL;
+        if (!xrt_json_decode_value(field_value, field, &decoded)) {
             xrt_json_decode_release_partial(decoded_values, i);
             XRT_FREE(decoded_values);
             return XR_NULL_VAL;
         }
-        if (xr_json_value_kind_base(field->value_kind) == XR_JSON_VALUE_STRUCT_OBJECT &&
-            !XR_IS_NULL(field_value)) {
-            if (!field->nested_fields || field->nested_field_count == 0 ||
-                !field->target_shape) {
-                xrt_json_decode_release_partial(decoded_values, i);
-                XRT_FREE(decoded_values);
-                return XR_NULL_VAL;
-            }
-            XrValue nested = xrt_json_decode_struct_object(
-                field_value, (const XrtObjectShape *) field->target_shape,
-                field->nested_field_count, field->nested_fields);
-            if (XR_IS_NULL(nested)) {
-                xrt_json_decode_release_partial(decoded_values, i);
-                XRT_FREE(decoded_values);
-                return XR_NULL_VAL;
-            }
-            field_value = nested;
-        } else {
-            field_value = xrt_value_to_owned(field_value);
-        }
-        decoded_values[i] = field_value;
+        decoded_values[i] = decoded;
     }
     XrValue dstv = xrt_object_new_shape(target_shape);
     if (XR_IS_NULL(dstv)) {
@@ -4704,6 +4790,8 @@ static inline const char *xrt_json_expected_kind(uint8_t encoded_kind) {
             return "object";
         case XR_JSON_VALUE_ARRAY:
             return "array";
+        case XR_JSON_VALUE_MAP:
+            return "object";
         case XR_JSON_VALUE_ANY:
         default:
             return "supported Json value";
@@ -4716,6 +4804,130 @@ static int xrt_json_parse_typed_object_value(xrt_json_parser_t *p,
                                              const XrJsonDecodeFieldSpec *fields,
                                              const char *path, XrValue *out,
                                              XrtJsonTypedParseError *error);
+
+static int xrt_json_parse_typed_field(xrt_json_parser_t *p,
+                                      const XrJsonDecodeFieldSpec *field, const char *path,
+                                      XrValue *out, XrtJsonTypedParseError *error);
+
+static int xrt_json_parse_typed_array_value(xrt_json_parser_t *p,
+                                            const XrJsonDecodeFieldSpec *field,
+                                            const char *path, XrValue *out,
+                                            XrtJsonTypedParseError *error) {
+    if (!p || !field || !field->nested_fields || field->nested_field_count != 1 ||
+        p->pos >= p->end || *p->pos != '[' || p->depth >= XRT_JSON_PARSE_MAX_DEPTH)
+        return 0;
+    uint8_t storage = (uint8_t) (uintptr_t) field->target_shape;
+    if (storage >= XR_ELEM_COUNT)
+        return 0;
+    p->pos++;
+    p->depth++;
+    XrValue array = xrt_array_new_typed_uninit(4, storage);
+    int ok = !XR_IS_NULL(array);
+    int64_t index = 0;
+    xrt_json_parse_skip_ws(p);
+    if (ok && p->pos < p->end && *p->pos == ']') {
+        p->pos++;
+    } else {
+        while (ok) {
+            XrValue item = XR_NULL_VAL;
+            char item_path[160];
+            snprintf(item_path, sizeof(item_path), "%s[%lld]", path, (long long) index);
+            ok = xrt_json_parse_typed_field(p, &field->nested_fields[0], item_path, &item,
+                                            error);
+            if (!ok)
+                break;
+            xrt_array_push(array, item);
+            index++;
+            xrt_json_parse_skip_ws(p);
+            if (p->pos < p->end && *p->pos == ']') {
+                p->pos++;
+                break;
+            }
+            if (p->pos >= p->end || *p->pos != ',') {
+                xrt_json_typed_error(p, error, path, "',' or ']'", NULL);
+                ok = 0;
+                break;
+            }
+            p->pos++;
+            xrt_json_parse_skip_ws(p);
+        }
+    }
+    p->depth--;
+    if (!ok) {
+        xrt_release(array);
+        return 0;
+    }
+    *out = array;
+    return 1;
+}
+
+static int xrt_json_parse_typed_map_value(xrt_json_parser_t *p,
+                                          const XrJsonDecodeFieldSpec *field,
+                                          const char *path, XrValue *out,
+                                          XrtJsonTypedParseError *error) {
+    if (!p || !field || !field->nested_fields || field->nested_field_count != 1 ||
+        p->pos >= p->end || *p->pos != '{' || p->depth >= XRT_JSON_PARSE_MAX_DEPTH)
+        return 0;
+    uint8_t storage = (uint8_t) (uintptr_t) field->target_shape;
+    if (storage >= XR_ELEM_COUNT)
+        return 0;
+    p->pos++;
+    p->depth++;
+    XrValue map_value = xrt_map_new_declared(4, XR_ELEM_ANY, storage);
+    xrt_map_t *map = (xrt_map_t *) map_value.ptr;
+    int ok = map != NULL;
+    xrt_json_parse_skip_ws(p);
+    if (ok && p->pos < p->end && *p->pos == '}') {
+        p->pos++;
+    } else {
+        while (ok) {
+            XrValue key = XR_NULL_VAL;
+            XrValue value = XR_NULL_VAL;
+            if (!xrt_json_parse_string_value(p, &key)) {
+                xrt_json_typed_error(p, error, path, "object field name", NULL);
+                ok = 0;
+                break;
+            }
+            xrt_json_parse_skip_ws(p);
+            if (p->pos >= p->end || *p->pos != ':') {
+                xrt_release(key);
+                xrt_json_typed_error(p, error, path, "':'", NULL);
+                ok = 0;
+                break;
+            }
+            p->pos++;
+            xrt_json_parse_skip_ws(p);
+            char value_path[160];
+            snprintf(value_path, sizeof(value_path), "%s[%s]", path, xr_str_data(key));
+            ok = xrt_json_parse_typed_field(p, &field->nested_fields[0], value_path, &value,
+                                            error);
+            if (!ok) {
+                xrt_release(key);
+                break;
+            }
+            xrt_map_set(map, key, value);
+            xrt_json_parse_skip_ws(p);
+            if (p->pos < p->end && *p->pos == '}') {
+                p->pos++;
+                break;
+            }
+            if (p->pos >= p->end || *p->pos != ',') {
+                xrt_json_typed_error(p, error, path, "',' or '}'", NULL);
+                ok = 0;
+                break;
+            }
+            p->pos++;
+            xrt_json_parse_skip_ws(p);
+        }
+    }
+    p->depth--;
+    if (!ok) {
+        xrt_release(map_value);
+        return 0;
+    }
+    *out = map_value;
+    return 1;
+}
 
 static int xrt_json_parse_typed_field(xrt_json_parser_t *p,
                                       const XrJsonDecodeFieldSpec *field, const char *path,
@@ -4752,7 +4964,10 @@ static int xrt_json_parse_typed_field(xrt_json_parser_t *p,
                      field->nested_fields, path, out, error);
             break;
         case XR_JSON_VALUE_ARRAY:
-            ok = xrt_json_parse_array(p, out);
+            ok = xrt_json_parse_typed_array_value(p, field, path, out, error);
+            break;
+        case XR_JSON_VALUE_MAP:
+            ok = xrt_json_parse_typed_map_value(p, field, path, out, error);
             break;
         case XR_JSON_VALUE_ANY:
         default:
@@ -4915,6 +5130,43 @@ static inline XrValue xrt_json_parse_typed_object_or_throw(
     XrValue out = XR_NULL_VAL;
     int ok = data && len > 0 && xrt_json_parse_typed_object_value(
                                    &parser, target_shape, field_count, fields, "$", &out, &error);
+    if (ok) {
+        xrt_json_parse_skip_ws(&parser);
+        if (parser.pos != parser.end) {
+            xrt_release(out);
+            out = XR_NULL_VAL;
+            xrt_json_typed_error(&parser, &error, "$", "end_of_input", NULL);
+            ok = 0;
+        }
+    }
+    if (!ok) {
+        char message[320];
+        snprintf(message, sizeof(message), "Json.parse<T>: path %s expected %s, got %s",
+                 error.path[0] ? error.path : "$",
+                 error.expected[0] ? error.expected : "valid JSON",
+                 error.actual[0] ? error.actual : "invalid");
+        xrt_throw_error(XR_ERR_JSON_INVALID, message);
+    }
+    return out;
+}
+
+static inline XrValue xrt_json_parse_typed_value_or_throw(
+    XrValue text, const XrJsonDecodeFieldSpec *spec) {
+    if (!XR_IS_STR(text))
+        xrt_throw_error(XR_ERR_JSON_INVALID,
+                        "Json.parse<T>: path $ expected string, got non_string");
+    const char *data = xr_str_data(text);
+    int64_t len = xr_str_len(text);
+    xrt_json_parser_t parser = {
+        .src = data,
+        .end = data ? data + len : data,
+        .pos = data,
+        .depth = 0,
+    };
+    XrtJsonTypedParseError error = {{0}, {0}, {0}};
+    XrValue out = XR_NULL_VAL;
+    int ok = data && len > 0 && spec &&
+             xrt_json_parse_typed_field(&parser, spec, "$", &out, &error);
     if (ok) {
         xrt_json_parse_skip_ws(&parser);
         if (parser.pos != parser.end) {

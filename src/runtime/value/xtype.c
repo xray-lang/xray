@@ -74,8 +74,15 @@ uint8_t xr_type_json_value_kind(const XrType *type) {
             kind = XR_JSON_VALUE_STRUCT_OBJECT;
             break;
         case XR_KIND_ARRAY:
-            if (type->container.element_type && XR_TYPE_IS_JSON(type->container.element_type)) {
+            if (type->container.element_type) {
                 kind = XR_JSON_VALUE_ARRAY;
+                break;
+            }
+            return XR_JSON_VALUE_ANY;
+        case XR_KIND_MAP:
+            if (type->map.key_type && XR_TYPE_IS_STRING(type->map.key_type) &&
+                !type->map.key_type->is_nullable && type->map.value_type) {
+                kind = XR_JSON_VALUE_MAP;
                 break;
             }
             return XR_JSON_VALUE_ANY;
@@ -100,6 +107,16 @@ static bool xr_type_is_json_decode_field_supported_depth(const XrType *type, int
                 return false;
         }
         return true;
+    }
+    if (base == XR_JSON_VALUE_ARRAY) {
+        return XR_TYPE_IS_ARRAY(type) && type->container.element_type &&
+               xr_type_is_json_decode_field_supported_depth(type->container.element_type,
+                                                             depth + 1);
+    }
+    if (base == XR_JSON_VALUE_MAP) {
+        return XR_TYPE_IS_MAP(type) && type->map.key_type && XR_TYPE_IS_STRING(type->map.key_type) &&
+               !type->map.key_type->is_nullable && type->map.value_type &&
+               xr_type_is_json_decode_field_supported_depth(type->map.value_type, depth + 1);
     }
     return base != XR_JSON_VALUE_ANY;
 }

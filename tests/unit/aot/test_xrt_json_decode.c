@@ -382,8 +382,12 @@ static void test_decode_deep_nested_object_field(void) {
 
 static void test_decode_validates_array_json_field(void) {
     static const char *names[] = {"items"};
+    static const XrJsonDecodeFieldSpec item_schema[] = {
+        {NULL, XR_JSON_VALUE_JSON, NULL, 0, NULL},
+    };
     static const XrJsonDecodeFieldSpec fields[] = {
-        {"items", XR_JSON_VALUE_ARRAY, NULL, 0, NULL},
+        {"items", XR_JSON_VALUE_ARRAY, item_schema, 1,
+         (const XrtObjectShape *) (uintptr_t) XR_ELEM_ANY},
     };
     XrValue source = xrt_json_new_named(1, names);
     XrValue items = xrt_array_with_capacity(2);
@@ -410,9 +414,13 @@ static void test_decode_mixed_nested_object_and_array_json_fields(void) {
         {"city", XR_JSON_VALUE_STRING, NULL, 0, NULL},
         {"zip", XR_JSON_VALUE_INT, NULL, 0, NULL},
     };
+    const XrJsonDecodeFieldSpec tag_item_schema[] = {
+        {NULL, XR_JSON_VALUE_JSON, NULL, 0, NULL},
+    };
     const XrJsonDecodeFieldSpec fields[] = {
         {"name", XR_JSON_VALUE_STRING, NULL, 0, NULL},
-        {"tags", XR_JSON_VALUE_ARRAY, NULL, 0, NULL},
+        {"tags", XR_JSON_VALUE_ARRAY, tag_item_schema, 1,
+         (const XrtObjectShape *) (uintptr_t) XR_ELEM_ANY},
         {"address", XR_JSON_VALUE_STRUCT_OBJECT, nested_fields, 2,
          test_static_shape(2, nested_names)},
         {"active", XR_JSON_VALUE_BOOL, NULL, 0, NULL},

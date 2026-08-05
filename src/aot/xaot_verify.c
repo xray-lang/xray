@@ -1818,6 +1818,8 @@ static bool verify_json_codec_shape_contract(const XgGlobalEvidence *ev,
                          "AOT Json codec shape verifier has incomplete input");
     has_input_shape = (codec->flags & XG_JSON_CODEC_HAS_INPUT_SHAPE) != 0;
     has_output_shape = (codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0;
+    bool target_object_shape =
+        (codec->flags & XG_JSON_CODEC_TARGET_OBJECT_SHAPE) != 0;
     if (has_input_shape != (codec->input_shape_id != XG_NO_ID))
         return set_error(errbuf, errbuf_len,
                          "AOT Json codec input shape flag does not re-derive");
@@ -1839,10 +1841,12 @@ static bool verify_json_codec_shape_contract(const XgGlobalEvidence *ev,
     switch ((XgJsonCodecKind) codec->codec_kind) {
         case XG_JSON_CODEC_PARSE:
             if ((codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0) {
-                if (codec->target_type_key == 0 || !output_shape ||
-                    output_shape->domain != XG_OBJECT_DOMAIN_STRUCT ||
-                    output_shape->type_key != codec->target_type_key ||
-                    (output_shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) == 0)
+                if (codec->target_type_key == 0 ||
+                    (target_object_shape &&
+                     (!output_shape || output_shape->domain != XG_OBJECT_DOMAIN_STRUCT ||
+                      output_shape->type_key != codec->target_type_key ||
+                      (output_shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) == 0)) ||
+                    (!target_object_shape && output_shape))
                     return set_error(errbuf, errbuf_len,
                                      "AOT typed Json parse output Object shape is stale");
             } else if (output_shape && output_shape->domain != XG_OBJECT_DOMAIN_JSON) {
@@ -1855,9 +1859,11 @@ static bool verify_json_codec_shape_contract(const XgGlobalEvidence *ev,
                 codec->target_type_key == 0)
                 return set_error(errbuf, errbuf_len,
                                  "AOT Json decode target type evidence is missing");
-            if (!output_shape || output_shape->domain != XG_OBJECT_DOMAIN_STRUCT ||
-                output_shape->type_key != codec->target_type_key ||
-                (output_shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) == 0)
+            if ((target_object_shape &&
+                 (!output_shape || output_shape->domain != XG_OBJECT_DOMAIN_STRUCT ||
+                  output_shape->type_key != codec->target_type_key ||
+                  (output_shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) == 0)) ||
+                (!target_object_shape && output_shape))
                 return set_error(errbuf, errbuf_len,
                                  "AOT Json decode output Object shape is stale");
             break;
@@ -5070,8 +5076,10 @@ static uint8_t verify_json_codec_action_for(const XgJsonCodecSummary *codec) {
         case XG_JSON_CODEC_PARSE:
             if ((codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) == 0)
                 return XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT;
-            return codec->target_type_key != 0 && codec->output_shape_id != XG_NO_ID &&
-                           (codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0
+            return codec->target_type_key != 0 &&
+                           (((codec->flags & XG_JSON_CODEC_TARGET_OBJECT_SHAPE) == 0) ||
+                            (codec->output_shape_id != XG_NO_ID &&
+                             (codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) != 0))
                        ? XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT_TYPED
                        : XAOT_JSON_CODEC_REJECT;
         case XG_JSON_CODEC_DECODE:
@@ -5100,6 +5108,7 @@ static uint8_t verify_json_codec_reason_for(const XgJsonCodecSummary *codec) {
         return XAOT_JSON_UNPROVEN_MISSING_TARGET_TYPE;
     if (codec->codec_kind == XG_JSON_CODEC_PARSE &&
         (codec->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0 &&
+        (codec->flags & XG_JSON_CODEC_TARGET_OBJECT_SHAPE) != 0 &&
         (codec->output_shape_id == XG_NO_ID ||
          (codec->flags & XG_JSON_CODEC_HAS_OUTPUT_SHAPE) == 0))
         return XAOT_JSON_UNPROVEN_OPEN_SHAPE;

@@ -5932,21 +5932,23 @@ static XiValue *lower_json_object_codec(XiLower *l, AstNode *node, const CallExp
     if (!l || !node || !call || call->arg_count != 1)
         return NULL;
     XrType *result_type = xi_lower_node_type(l, node);
-    if (!result_type || !xr_type_object_row_is_exact(result_type) ||
-        result_type->object.field_count <= 0 || !result_type->object.field_names ||
-        !result_type->object.field_types)
+    if (!result_type || !xr_type_is_json_decode_field_supported(result_type))
         return NULL;
 
-    int field_count = result_type->object.field_count;
+    bool object_target = XR_TYPE_IS_STRUCT_OBJECT(result_type);
+    int field_count = object_target ? result_type->object.field_count : 0;
     XiValue *input = xi_lower_expr(l, call->arguments[0]);
     if (!input)
         return NULL;
-    const char **names = (const char **) xi_func_arena_alloc(
-        l->func, (uint32_t) ((size_t) field_count * sizeof(const char *)));
-    if (!names || !xi_lower_fill_canonical_object_field_names(
-                      l, result_type, names, field_count, (uint32_t) node->line)) {
-        l->had_error = true;
-        return NULL;
+    const char **names = NULL;
+    if (object_target) {
+        names = (const char **) xi_func_arena_alloc(
+            l->func, (uint32_t) ((size_t) field_count * sizeof(const char *)));
+        if (!names || !xi_lower_fill_canonical_object_field_names(
+                          l, result_type, names, field_count, (uint32_t) node->line)) {
+            l->had_error = true;
+            return NULL;
+        }
     }
 
     XiValue *value = xi_value_new(l->func, l->cur_block, XI_JSON_DECODE, result_type, 1);

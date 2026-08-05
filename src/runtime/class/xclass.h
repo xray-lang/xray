@@ -33,6 +33,17 @@
 #include "xmethod.h"
 
 typedef struct XrClass XrClass;
+
+/* Recursive construction contract for compiler-lowered typed Json decoding.
+ * Object nodes point at their exact target class; Array/Map nodes point at one
+ * child schema and carry the packed element layout selected by both backends. */
+typedef struct XrJsonDecodeSchema {
+    uint8_t value_kind;   /* XrJsonValueKind plus XR_JSON_VALUE_NULLABLE */
+    uint8_t storage_type; /* XrArrayElemType; Map uses the value lane */
+    uint16_t reserved;
+    const void *target_descriptor;
+    const struct XrJsonDecodeSchema *child;
+} XrJsonDecodeSchema;
 typedef struct XrInstance XrInstance;
 typedef struct XrArena XrArena;
 typedef struct XrCoroHeap XrCoroHeap;
@@ -83,6 +94,7 @@ typedef struct XrFieldDescriptor {
     int16_t static_slot;      // Pre-computed static slot index (-1 if not static)
     uint8_t json_value_kind;  // XrJsonValueKind plus XR_JSON_VALUE_NULLABLE
     struct XrClass *json_struct_object_class;
+    XrJsonDecodeSchema json_decode_schema;
 } XrFieldDescriptor;
 
 // Field flags
@@ -111,6 +123,7 @@ typedef struct XrClassTransition {
     uint8_t json_value_kind;  // Typed object-field contract; ANY for dynamic Json fields
     uint8_t shape_flags;
     struct XrClass *json_struct_object_class;
+    XrJsonDecodeSchema json_decode_schema;
     struct XrClass *target;          // Resulting child class after adding the field
     struct XrClassTransition *next;  // Next transition in the linked list
 } XrClassTransition;
@@ -283,6 +296,7 @@ struct XrClass {
  * SETPROP so a class without weak fields — every class today — keeps its
  * inline-cache fast paths untouched. */
 #define XR_CLASS_HAS_WEAK_FIELDS (1 << 18)
+#define XR_CLASS_JSON_DECODE_ROOT (1 << 19)  // Internal wrapper carrying a non-object root schema.
 
 static inline uint64_t xr_class_stable_shape_key(const XrClass *cls) {
     return cls && (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) ? cls->stable_shape_key : 0;

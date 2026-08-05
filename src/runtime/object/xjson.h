@@ -27,6 +27,10 @@
 #include "../mem/xalloc_unified.h"
 #include "../symbol/xsymbol_table.h"
 #include "../value/xvalue.h"
+#include "../value/xtype_names.h"
+#include "xarray.h"
+#include "xmap.h"
+#include "xstring.h"
 #include "../xisolate_api.h"
 #include "../../base/xmalloc.h"
 #include <stdint.h>
@@ -137,6 +141,8 @@ static inline bool xr_json_value_matches_kind(XrValue value, uint8_t encoded_kin
             return xr_value_has_object_shape(value);
         case XR_JSON_VALUE_ARRAY:
             return XR_IS_ARRAY(value);
+        case XR_JSON_VALUE_MAP:
+            return xr_value_has_object_shape(value);
         case XR_JSON_VALUE_NULL:
         case XR_JSON_VALUE_ANY:
         default:
@@ -151,6 +157,118 @@ static inline XrJson *xr_value_to_json(XrValue v) {
 static inline void xr_json_decode_release_partial(XrValue *values, uint16_t count) {
     for (uint16_t i = 0; values && i < count; i++)
         xr_rc_release_value(xr_current_coro_heap(), values[i]);
+}
+
+static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X,
+                                                               struct XrCoroutine *coro,
+                                                               XrJson *src, XrClass *cls);
+
+static inline uint8_t xr_json_decode_schema_tid(const XrJsonDecodeSchema *schema) {
+    if (!schema)
+        return 0;
+    switch ((XrJsonValueKind) xr_json_value_kind_base(schema->value_kind)) {
+        case XR_JSON_VALUE_BOOL:
+            return XR_TID_BOOL;
+        case XR_JSON_VALUE_INT:
+            return XR_TID_INT;
+        case XR_JSON_VALUE_FLOAT:
+            return XR_TID_FLOAT;
+        case XR_JSON_VALUE_STRING:
+            return XR_TID_STRING;
+        case XR_JSON_VALUE_JSON:
+            return 0;
+        case XR_JSON_VALUE_ARRAY:
+            return XR_TID_ARRAY;
+        case XR_JSON_VALUE_MAP:
+            return XR_TID_MAP;
+        default:
+            return 0;
+    }
+}
+
+/* Decode one borrowed Json-DOM value into an owned value matching schema. */
+static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCoroutine *coro,
+                                                    XrValue source,
+                                                    const XrJsonDecodeSchema *schema,
+                                                    XrValue *out) {
+    if (!X || !schema || !out)
+        return false;
+    if (XR_IS_NULL(source)) {
+        if (xr_json_value_kind_base(schema->value_kind) != XR_JSON_VALUE_NULL &&
+            xr_json_value_kind_base(schema->value_kind) != XR_JSON_VALUE_JSON &&
+            !xr_json_value_kind_is_nullable(schema->value_kind))
+            return false;
+        *out = xr_null();
+        return true;
+    }
+
+    switch ((XrJsonValueKind) xr_json_value_kind_base(schema->value_kind)) {
+        case XR_JSON_VALUE_STRUCT_OBJECT: {
+            if (!xr_value_has_object_shape(source) || !schema->target_descriptor)
+                return false;
+            XrValue decoded = xr_json_decode_struct_object_with_class(
+                X, coro, xr_value_to_json(source), (XrClass *) schema->target_descriptor);
+            if (XR_IS_NULL(decoded))
+                return false;
+            *out = decoded;
+            return true;
+        }
+        case XR_JSON_VALUE_ARRAY: {
+            if (!XR_IS_ARRAY(source) || !schema->child)
+                return false;
+            XrArray *src = XR_TO_ARRAY(source);
+            XrArrayElemType storage = schema->storage_type < XR_ELEM_COUNT
+                                          ? (XrArrayElemType) schema->storage_type
+                                          : XR_ELEM_ANY;
+            XrArray *dst = xr_array_with_capacity_typed(coro, src->length, storage);
+            if (!dst)
+                return false;
+            for (int32_t i = 0; i < src->length; i++) {
+                XrValue item = xr_null();
+                if (!xr_json_decode_value_with_schema(X, coro, xr_array_get(src, i), schema->child,
+                                                      &item)) {
+                    xr_rc_release_value(xr_current_coro_heap(), XR_FROM_PTR(dst));
+                    return false;
+                }
+                xr_array_push(dst, item);
+            }
+            *out = XR_FROM_PTR(dst);
+            return true;
+        }
+        case XR_JSON_VALUE_MAP: {
+            if (!xr_value_has_object_shape(source) || !schema->child)
+                return false;
+            XrJson *src = xr_value_to_json(source);
+            uint16_t count = src->klass ? src->klass->field_count : 0;
+            XrMap *dst = xr_map_with_capacity(coro, count);
+            if (!dst)
+                return false;
+            dst->key_tid = XR_TID_STRING;
+            dst->value_tid = xr_json_decode_schema_tid(schema->child);
+            for (uint16_t i = 0; i < count; i++) {
+                const char *name = src->klass->fields[i].name;
+                XrString *key = name ? xr_string_new(X, name, strlen(name)) : NULL;
+                XrValue value = xr_null();
+                if (!key || !xr_json_decode_value_with_schema(
+                                X, coro, xr_instance_get_dynamic_field(src, i), schema->child,
+                                &value)) {
+                    if (key)
+                        xr_rc_release_value(xr_current_coro_heap(), XR_FROM_PTR(key));
+                    xr_rc_release_value(xr_current_coro_heap(), XR_FROM_PTR(dst));
+                    return false;
+                }
+                xr_map_set(dst, XR_FROM_PTR(key), value);
+            }
+            *out = XR_FROM_PTR(dst);
+            return true;
+        }
+        default:
+            if (!xr_json_value_matches_kind(source, schema->value_kind))
+                return false;
+            xr_rc_retain_value(source);
+            *out = source;
+            return true;
+    }
 }
 
 static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X, struct XrCoroutine *coro,
@@ -175,29 +293,14 @@ static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X, st
             xr_free(decoded_values);
             return xr_null();
         }
-        if (!xr_json_value_matches_kind(field_val, field->json_value_kind)) {
+        XrValue decoded = xr_null();
+        if (!xr_json_decode_value_with_schema(X, coro, field_val, &field->json_decode_schema,
+                                              &decoded)) {
             xr_json_decode_release_partial(decoded_values, fi);
             xr_free(decoded_values);
             return xr_null();
         }
-        if (xr_json_value_kind_base(field->json_value_kind) == XR_JSON_VALUE_STRUCT_OBJECT &&
-            !XR_IS_NULL(field_val)) {
-            if (!field->json_struct_object_class) {
-                xr_json_decode_release_partial(decoded_values, fi);
-                xr_free(decoded_values);
-                return xr_null();
-            }
-            field_val = xr_json_decode_struct_object_with_class(X, coro, xr_value_to_json(field_val),
-                                                         field->json_struct_object_class);
-            if (XR_IS_NULL(field_val)) {
-                xr_json_decode_release_partial(decoded_values, fi);
-                xr_free(decoded_values);
-                return xr_null();
-            }
-        } else {
-            xr_rc_retain_value(field_val);
-        }
-        decoded_values[fi] = field_val;
+        decoded_values[fi] = decoded;
     }
 
     XrJson *result = xr_json_new_with_class(coro, cls);

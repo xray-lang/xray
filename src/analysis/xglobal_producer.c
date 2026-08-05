@@ -5896,7 +5896,8 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
             if (target_shape) {
                 row.output_shape_id = target_shape->object_shape_id;
                 row.field_count = target_shape->field_count;
-                row.flags |= XG_JSON_CODEC_HAS_OUTPUT_SHAPE;
+                row.flags |= XG_JSON_CODEC_HAS_OUTPUT_SHAPE |
+                             XG_JSON_CODEC_TARGET_OBJECT_SHAPE;
             }
         }
     } else if (strcmp(method, "decode") == 0) {
@@ -5909,7 +5910,8 @@ static void body_add_json_codec_call(XgBodyCollect *bc, const AstNode *node) {
             if (target_shape) {
                 row.output_shape_id = target_shape->object_shape_id;
                 row.field_count = target_shape->field_count;
-                row.flags |= XG_JSON_CODEC_HAS_OUTPUT_SHAPE;
+                row.flags |= XG_JSON_CODEC_HAS_OUTPUT_SHAPE |
+                             XG_JSON_CODEC_TARGET_OBJECT_SHAPE;
             }
         }
         if (arg0) {

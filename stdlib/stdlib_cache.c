@@ -55,7 +55,7 @@ static XrClass *stdlib_object_shape_class_build(XrVMRuntime *isolate,
     for (uint32_t i = 0; i < count; i++)
         names[i] = decl->fields[i].name;
     XrClass *cls = xr_class_build_struct_object_chain(isolate, names, NULL, (int) count, NULL,
-                                                       NULL, NULL);
+                                                       NULL, NULL, NULL);
     xr_free(names);
     return cls;
 }

@@ -19,6 +19,8 @@
 
 #include "../value/xvalue.h"
 
+typedef struct XrJsonDecodeSchema XrJsonDecodeSchema;
+
 /* ========== Stringify Result (error-returning, no VM dependency) ========== */
 
 typedef struct {
@@ -72,5 +74,9 @@ XR_FUNC bool xr_json_parse_typed_object_from_cstr(XrVMRuntime *X, struct XrCorou
                                                    const char *json_str, size_t len,
                                                    struct XrClass *target_class, XrValue *out,
                                                    XrJsonTypedParseError *error);
+XR_FUNC bool xr_json_parse_typed_value_from_cstr(XrVMRuntime *X, struct XrCoroutine *coro,
+                                                  const char *json_str, size_t len,
+                                                  const XrJsonDecodeSchema *schema, XrValue *out,
+                                                  XrJsonTypedParseError *error);
 
 #endif  // XJSON_SERDE_H
