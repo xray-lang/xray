@@ -16,7 +16,6 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Tuple
 
 
 def _bootstrap() -> None:
@@ -35,13 +34,13 @@ class Case:
     should_verify: bool
     # Wording that must appear. Split by stream because which stream carries a
     # verdict is itself part of the contract CLI's surface.
-    stdout_contains: Tuple[str, ...] = ()
-    stderr_contains: Tuple[str, ...] = ()
+    stdout_contains: tuple[str, ...] = ()
+    stderr_contains: tuple[str, ...] = ()
     # Printed when a contract that must fail instead passed.
     unexpected_pass: str = ""
 
 
-CASES: Tuple[Case, ...] = (
+CASES: tuple[Case, ...] = (
     Case("positive.toml", True, stdout_contains=("verified symbol-id=",)),
     Case("negative-effect.toml", False,
          stderr_contains=("contract 'allocates' failed", "effect summary"),
@@ -115,7 +114,7 @@ def check(result, case: Case) -> bool:
 
 
 def run_weak_edit_case(xray: Path, fixture: Path, work: Path,
-                       timeout: "float | None") -> bool:
+                       timeout: float | None) -> bool:
     """Apply the code action's own edit and require the contract to become provable.
 
     Two hand-written classes would only prove that `weak` works somewhere. This
@@ -130,8 +129,8 @@ def run_weak_edit_case(xray: Path, fixture: Path, work: Path,
         sys.stderr.write(f"fixture no longer has the field the edit targets: "
                          f"{WEAK_EDIT_FROM!r}\n")
         return False
-    platform.write_text_lf(main, text.replace(WEAK_EDIT_FROM + "\n",
-                                              WEAK_EDIT_TO + "\n"))
+    main.write_text(text.replace(WEAK_EDIT_FROM + "\n",
+                                              WEAK_EDIT_TO + "\n"), encoding="utf-8", newline="\n")
 
     result = proc.run([xray, "verify", "--contract", "cycles-negative.toml"],
                       cwd=copy, timeout=timeout)
@@ -145,7 +144,7 @@ def run_weak_edit_case(xray: Path, fixture: Path, work: Path,
     return True
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     if len(argv) < 3:
         sys.stderr.write("usage: run_verify_contract_tests.py <xray> <fixture-dir>\n")
         return 1

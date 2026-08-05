@@ -21,7 +21,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -47,7 +46,7 @@ MEM_TESTS = (
 FAIL_LOG = PROJECT_ROOT / "tests" / "tmp" / "mem_stress_failures.log"
 
 
-def find_xray() -> "Path | None":
+def find_xray() -> Path | None:
     override = os.environ.get("XRAY_BIN")
     if override:
         return Path(override)
@@ -58,7 +57,7 @@ def find_xray() -> "Path | None":
     return None
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     raw = argv[1] if len(argv) > 1 else os.environ.get("MEM_STRESS_ROUNDS",
                                                        str(DEFAULT_ROUNDS))
     if not raw.isdigit():

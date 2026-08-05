@@ -10,8 +10,9 @@ A runner locates the package with `bootstrap()` and imports submodules:
     bootstrap()
     from xraytest import proc, workspace, cache, ratchet, scheduler, report
 
-No install step: bootstrap() puts tests/lib on sys.path. Python 3.9 is the floor
-across the whole package.
+No install step: bootstrap() puts tests/lib on sys.path. The Python floor is
+XRAY_PYTHON_MIN_VERSION in CMakeLists.txt, which CI pins by reading it from
+there; nothing in this package may need a newer interpreter than that.
 """
 
 from __future__ import annotations

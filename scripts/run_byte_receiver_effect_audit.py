@@ -21,7 +21,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 
 def _bootstrap() -> None:
@@ -36,7 +35,7 @@ from xraytest import diagnostics, platform, proc  # noqa: E402
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LABEL = "[byte-receiver-effect]"
 
-POSITIVE_TESTS: Tuple[str, ...] = (
+POSITIVE_TESTS: tuple[str, ...] = (
     "tests/regression/14_typed_array/1416_byte_receiver_effect_matrix.xr",
     "tests/regression/14_typed_array/1410_shared_provenance_rebind_reset.xr",
     "tests/regression/14_typed_array/1411_shared_provenance_readonly_param.xr",
@@ -47,7 +46,7 @@ POSITIVE_TESTS: Tuple[str, ...] = (
     "tests/regression/09_advanced/0916_owned_binding.xr",
 )
 
-NEGATIVE_TESTS: Tuple[str, ...] = (
+NEGATIVE_TESTS: tuple[str, ...] = (
     "tests/compile_errors/type/byte_array_append_from_rejects_in.xr",
     "tests/compile_errors/type/byte_slice_repeat_from_rejects_in.xr",
     "tests/compile_errors/type/byte_method_union_matrix.xr",
@@ -78,13 +77,13 @@ def typepath_for(case: Path) -> str:
     return f"{case.parent}{os.pathsep}{inherited}" if inherited else str(case.parent)
 
 
-def run_positive(xray: Path, rel: str, timeout: "float | None") -> bool:
+def run_positive(xray: Path, rel: str, timeout: float | None) -> bool:
     print(f"{LABEL} positive {rel}")
     return proc.run_passthrough([xray, "test", PROJECT_ROOT / rel],
                                 timeout=timeout) == 0
 
 
-def run_negative(xray: Path, rel: str, timeout: "float | None") -> bool:
+def run_negative(xray: Path, rel: str, timeout: float | None) -> bool:
     print(f"{LABEL} negative {rel}")
     case = PROJECT_ROOT / rel
     expected_file = Path(str(case) + ".expected")
@@ -114,7 +113,7 @@ def run_negative(xray: Path, rel: str, timeout: "float | None") -> bool:
     return True
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = os.environ.get("XRAY_BIN")
     if not xray:
         sys.stderr.write("XRAY_BIN must point to the xray executable\n")

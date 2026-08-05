@@ -26,7 +26,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Sequence
 
 
 def _bootstrap() -> None:
@@ -67,7 +67,7 @@ class Config:
     xray: Path
     opt_level: str
     cache_target: str
-    timeout: "float | None"
+    timeout: float | None
 
 
 def build(config: Config, cache: Path, entry: Path, out: Path,
@@ -436,7 +436,7 @@ def run_lto_cache(rec: Recorder, config: Config, ws: workspace.Workspace) -> Non
     expect_output(rec, config, d / "lapp2", "70\n10", "lto-warm")
 
 
-SCENARIOS: Dict[str, Callable] = {
+SCENARIOS: dict[str, Callable] = {
     "basic": run_basic_modules,
     "evidence": run_evidence_manifest_cache,
     "class": run_class_symbols,
@@ -444,7 +444,7 @@ SCENARIOS: Dict[str, Callable] = {
 }
 
 
-def resolve_cache_target(config_xray: Path, timeout: "float | None") -> Optional[str]:
+def resolve_cache_target(config_xray: Path, timeout: float | None) -> str | None:
     """The normalized native target that names the on-disk cache directory."""
     result = proc.run([config_xray, "toolchain", "list", "--target", "native", "--json"],
                       timeout=timeout)
@@ -455,7 +455,7 @@ def resolve_cache_target(config_xray: Path, timeout: "float | None") -> Optional
     return match.group(1) if match else None
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Incremental AOT cache suite")
     ap.add_argument("--xray", default=None)
     ap.add_argument("xray_positional", nargs="?", default=None)

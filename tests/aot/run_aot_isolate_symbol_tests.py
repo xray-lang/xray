@@ -24,7 +24,6 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -67,12 +66,12 @@ class Case:
     name: str
     source: str                       # repo-relative
     want_output: str = ""
-    max_bytes: Optional[int] = None
+    max_bytes: int | None = None
     # Runtime cases may additionally forbid eagerly-initialized script builtins.
     no_eager_script_builtins: bool = False
 
 
-CASES: Tuple[Case, ...] = (
+CASES: tuple[Case, ...] = (
     Case("core_math_single_symbol", "core-math-single-symbol",
          "tests/aot/filetests/link/core_math_single_symbol.xr",
          want_output="9.0", max_bytes=PURE_TINY_AOT_MAX_BYTES),
@@ -96,7 +95,7 @@ class Config:
     xray: Path
     jobs: int
     build_cache: Path
-    case_timeout: "float | None"
+    case_timeout: float | None
 
 
 @dataclass
@@ -115,7 +114,7 @@ def configure_jobs(requested: str) -> int:
     return int(requested) if requested.isdigit() and int(requested) > 0 else 1
 
 
-def build_native(config: Config, source: Path, out_bin: Path) -> Tuple[bool, str]:
+def build_native(config: Config, source: Path, out_bin: Path) -> tuple[bool, str]:
     """Build with --dump-link-command so the link line can be asserted on."""
     last = ""
     for _ in range(BUILD_ATTEMPTS):
@@ -136,7 +135,7 @@ def build_native(config: Config, source: Path, out_bin: Path) -> Tuple[bool, str
     return False, last
 
 
-def dump_symbols(binary: Path) -> Tuple[bool, str]:
+def dump_symbols(binary: Path) -> tuple[bool, str]:
     """Symbol table via nm. -U (defined only) where supported, else plain nm."""
     result = proc.run(["nm", "-U", binary], timeout=120)
     if result.ok:
@@ -147,8 +146,8 @@ def dump_symbols(binary: Path) -> Tuple[bool, str]:
     return False, result.combined_text()
 
 
-def run_case(config: Config, case: Case, ws: workspace.Workspace) -> List[Check]:
-    checks: List[Check] = []
+def run_case(config: Config, case: Case, ws: workspace.Workspace) -> list[Check]:
+    checks: list[Check] = []
     source = PROJECT_DIR / case.source
     binary = ws.path(case.slug)
 
@@ -198,7 +197,7 @@ def run_case(config: Config, case: Case, ws: workspace.Workspace) -> List[Check]
     return checks
 
 
-def check_runtime_archive(config: Config) -> List[Check]:
+def check_runtime_archive(config: Config) -> list[Check]:
     """The coroutine runtime archive itself must be free of compiler/VM symbols.
 
     This checks the shipped static library rather than any one case's binary: if
@@ -217,7 +216,7 @@ def check_runtime_archive(config: Config) -> List[Check]:
                   "|".join(hits[:5]) if hits else "")]
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="AOT isolate/symbol gate")
     ap.add_argument("--xray", default=None)
     ap.add_argument("xray_positional", nargs="?", default=None)
@@ -247,7 +246,7 @@ def main(argv: List[str]) -> int:
         print("=== Results: 0 passed, 0 failed ===")
         return 0
 
-    results: List[Tuple[str, List[Check]]] = []
+    results: list[tuple[str, list[Check]]] = []
     with workspace.Workspace("xray_aot_isolate") as ws:
         reporter = progress.ProgressReporter(len(CASES))
         if config.jobs <= 1:

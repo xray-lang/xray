@@ -17,7 +17,7 @@ from __future__ import annotations
 import concurrent.futures
 import threading
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterable, List, Optional
+from typing import Callable, Iterable
 
 from . import platform
 
@@ -29,7 +29,7 @@ RUN = "run"        # executing built binaries: ports/temp files, modest width
 IO = "io"          # disk-heavy setup/copy: throttle
 
 
-def default_limits(cores: "Optional[int]" = None) -> "Dict[str, int]":
+def default_limits(cores: "int | None" = None) -> "dict[str, int]":
     """Per-tag concurrency for a machine with `cores` logical CPUs."""
     n = cores if isinstance(cores, int) and cores >= 1 else platform.cpu_count()
     return {
@@ -57,7 +57,7 @@ class Scheduler:
     though CPU tasks are allowed to fill every core.
     """
 
-    def __init__(self, limits: "Optional[Dict[str, int]]" = None) -> None:
+    def __init__(self, limits: "Optional[dict[str, int]]" = None) -> None:
         self._limits = limits or default_limits()
         self._sems = {tag: threading.Semaphore(n) for tag, n in self._limits.items()}
         self._max_workers = max(self._limits.values()) if self._limits else 1
@@ -76,8 +76,8 @@ class Scheduler:
     def run(
         self,
         tasks: "Iterable[Task]",
-        on_done: "Optional[Callable]" = None,
-    ) -> "Dict[str, object]":
+        on_done: "Callable | None" = None,
+    ) -> "dict[str, object]":
         """Run all tasks, returning {key: result}. Order-independent.
 
         A task that raises stores the exception as its result rather than
@@ -90,7 +90,7 @@ class Scheduler:
         task_list = list(tasks)
         if not task_list:
             return {}
-        results: "Dict[str, object]" = {}
+        results: "dict[str, object]" = {}
         workers = min(self._max_workers, len(task_list))
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
             future_to_key = {
@@ -109,10 +109,10 @@ class Scheduler:
 
 def run_serial(
     tasks: "Iterable[Task]",
-    on_done: "Optional[Callable]" = None,
-) -> "Dict[str, object]":
+    on_done: "Callable | None" = None,
+) -> "dict[str, object]":
     """Run tasks one at a time. For --jobs 1 and for deterministic debugging."""
-    results: "Dict[str, object]" = {}
+    results: "dict[str, object]" = {}
     for task in tasks:
         try:
             results[task.key] = task.fn()

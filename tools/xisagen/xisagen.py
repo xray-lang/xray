@@ -24,7 +24,6 @@ import sys
 import re
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 # ============================================================
 # Common utilities
@@ -113,10 +112,10 @@ class SList(SExpr):
     col: int = 0
 
     @property
-    def head(self) -> Optional[SExpr]:
+    def head(self) -> SExpr | None:
         return self.children[0] if self.children else None
 
-    def get_kw(self, keyword: str) -> Optional[SExpr]:
+    def get_kw(self, keyword: str) -> SExpr | None:
         """Find value after :keyword in this list."""
         for i, child in enumerate(self.children):
             if isinstance(child, SAtom) and child.value == keyword:
@@ -136,7 +135,7 @@ class SList(SExpr):
             return v.str_value
         return default
 
-    def get_kw_list(self, keyword: str) -> Optional['SList']:
+    def get_kw_list(self, keyword: str) -> 'SList' | None:
         v = self.get_kw(keyword)
         if isinstance(v, SList):
             return v
@@ -229,7 +228,7 @@ def parse_sexpr(tokens: list, path: str = '<input>') -> list[SExpr]:
     """Parse token list into S-expression tree. Returns list of top-level forms."""
     pos = [0]  # mutable index
 
-    def parse_one() -> Optional[SExpr]:
+    def parse_one() -> SExpr | None:
         if pos[0] >= len(tokens):
             return None
         tok, line, col = tokens[pos[0]]
@@ -449,12 +448,12 @@ class XiOpDef:
     tbaa_group: str
     sync_order: str
     backend_rewrite: str
-    backend_rewrite_name: Optional[str]
+    backend_rewrite_name: str | None
     escape_use: str
     escape_alloc: str
     own_use: str
     ic_site: str
-    negated_op: Optional[str]
+    negated_op: str | None
 
 
 def _xi_c_ident(token: str) -> str:
@@ -477,7 +476,7 @@ def _sexpr_atom_value(expr: SExpr, context: str) -> str:
     return expr.str_value
 
 
-def _xi_get_kw(form: SList, keyword: str) -> Optional[SExpr]:
+def _xi_get_kw(form: SList, keyword: str) -> SExpr | None:
     found = []
     for i, child in enumerate(form.children):
         if isinstance(child, SAtom) and child.value == keyword:
@@ -496,7 +495,7 @@ def _xi_get_kw_str(form: SList, keyword: str, default: str = '') -> str:
     return _sexpr_atom_value(value, keyword)
 
 
-def _xi_get_kw_list(form: SList, keyword: str) -> Optional[SList]:
+def _xi_get_kw_list(form: SList, keyword: str) -> SList | None:
     value = _xi_get_kw(form, keyword)
     if value is None:
         return None
@@ -505,7 +504,7 @@ def _xi_get_kw_list(form: SList, keyword: str) -> Optional[SList]:
     return value
 
 
-def _xi_parse_atom_list(expr: Optional[SList], context: str) -> list:
+def _xi_parse_atom_list(expr: SList | None, context: str) -> list:
     if expr is None:
         return []
     values = []
@@ -514,7 +513,7 @@ def _xi_parse_atom_list(expr: Optional[SList], context: str) -> list:
     return values
 
 
-def _xi_parse_arity(expr: Optional[SExpr], default: int, context: str) -> int:
+def _xi_parse_arity(expr: SExpr | None, default: int, context: str) -> int:
     if expr is None:
         return default
     value = _sexpr_atom_value(expr, context)
@@ -528,7 +527,7 @@ def _xi_parse_arity(expr: Optional[SExpr], default: int, context: str) -> int:
     return arity
 
 
-def _xi_parse_value_defs(expr: Optional[SList], context: str, result: bool) -> list:
+def _xi_parse_value_defs(expr: SList | None, context: str, result: bool) -> list:
     if expr is None:
         return []
     values = []
@@ -558,8 +557,8 @@ def _xi_parse_value_defs(expr: Optional[SList], context: str, result: bool) -> l
     return values
 
 
-def _xi_parse_backend_rewrite(expr: Optional[SList],
-                              context: str) -> tuple[str, Optional[str]]:
+def _xi_parse_backend_rewrite(expr: SList | None,
+                              context: str) -> tuple[str, str | None]:
     if expr is None:
         return 'none', None
     if len(expr.children) != 2:
@@ -1440,7 +1439,7 @@ class XiLoweringDef:
     target_drivers: dict
     target_rejects: dict
     target_attrs: dict
-    match: Optional[SList] = None
+    match: SList | None = None
     template: str = 'custom'
 
 
@@ -1454,7 +1453,7 @@ def _xi_lowering_parse_bool_attr(value: SExpr, context: str) -> bool:
 
 
 def _xi_lowering_target_entry(form: SList, target: str,
-                              op_name: str) -> tuple[Optional[str], bool, dict]:
+                              op_name: str) -> tuple[str | None, bool, dict]:
     value = _xi_get_kw(form, ':' + target)
     if value is None:
         return None, False, {}
@@ -1499,7 +1498,7 @@ def _xi_lowering_target_entries(form: SList, op_name: str) -> tuple[dict, dict, 
     return drivers, rejects, attrs
 
 
-def _xi_lowering_template_from_match(match: Optional[SList], op_name: str) -> str:
+def _xi_lowering_template_from_match(match: SList | None, op_name: str) -> str:
     if match is None or not match.children:
         return 'custom'
     template = _sexpr_atom_value(match.children[0], f"{op_name}:match")

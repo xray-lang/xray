@@ -20,7 +20,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import List
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 
@@ -30,7 +29,7 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 KNOWN_AOT_BOUNDARY_RE = r"^(aot_link_command_manifest)$"
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Local 0.9 consolidation gate.",
         epilog=f"The gate excludes only:\n  {KNOWN_AOT_BOUNDARY_RE}\n\n"
@@ -57,7 +56,7 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
     return parser.parse_args(argv[1:])
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     args = parse_args(argv)
 
     if not str(args.jobs).isdigit():

@@ -16,7 +16,7 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Sequence
 
 from . import proc
 
@@ -28,7 +28,7 @@ def strip_underscore(symbol: str) -> str:
     return _LEADING_UNDERSCORE.sub("", symbol)
 
 
-def _first_tool(names: Sequence, env_override: "Optional[str]" = None) -> "Optional[str]":
+def _first_tool(names: Sequence, env_override: "str | None" = None) -> "str | None":
     import os
 
     if env_override:
@@ -42,11 +42,11 @@ def _first_tool(names: Sequence, env_override: "Optional[str]" = None) -> "Optio
     return None
 
 
-def find_nm() -> "Optional[str]":
+def find_nm() -> "str | None":
     return _first_tool(("llvm-nm", "nm"), "LLVM_NM")
 
 
-def find_disassembler() -> "Optional[tuple]":
+def find_disassembler() -> "tuple | None":
     """(path, argv_template_kind) for the best available disassembler."""
     llvm = shutil.which("llvm-objdump")
     if llvm:
@@ -62,7 +62,7 @@ def find_disassembler() -> "Optional[tuple]":
 
 def symbols(binary: Path, *, undefined_only: bool = False,
             global_only: bool = False,
-            timeout: "float | None" = 120) -> "Optional[List[str]]":
+            timeout: float | None = 120) -> "Optional[list[str]]":
     """Symbol lines from nm, or None when nm is unavailable or fails.
 
     `undefined_only` asks for the undefined set (-u), which is what the ABI
@@ -91,8 +91,8 @@ def symbols(binary: Path, *, undefined_only: bool = False,
     return result.stdout.decode("utf-8", "replace").splitlines()
 
 
-def undefined_symbol_names(binary: Path, timeout: "float | None" = 120
-                           ) -> "Optional[List[str]]":
+def undefined_symbol_names(binary: Path, timeout: float | None = 120
+                           ) -> "Optional[list[str]]":
     """Sorted, de-duplicated undefined symbol names with any '_' prefix removed."""
     lines = symbols(binary, undefined_only=True, timeout=timeout)
     if lines is None:
@@ -105,7 +105,7 @@ def undefined_symbol_names(binary: Path, timeout: "float | None" = 120
     return sorted(names)
 
 
-def disassemble(binary: Path, timeout: "float | None" = 300) -> "Optional[str]":
+def disassemble(binary: Path, timeout: float | None = 300) -> "str | None":
     """Disassembly text, or None when no disassembler is installed."""
     found = find_disassembler()
     if not found:
@@ -131,7 +131,7 @@ _LABEL_RE = re.compile(r"<[A-Za-z_.$][A-Za-z0-9_.$]*>:|^_?[A-Za-z_.$][A-Za-z0-9_
 def extract_symbol_body(disassembly: str, symbol: str) -> str:
     """The disassembled body of one symbol, tolerating the '_' prefix."""
     start = re.compile(r"<_?" + re.escape(symbol) + r">:|^_?" + re.escape(symbol) + r":")
-    out: List[str] = []
+    out: list[str] = []
     active = False
     for line in disassembly.splitlines():
         if not active:

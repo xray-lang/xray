@@ -17,14 +17,14 @@ from __future__ import annotations
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Sequence
 
 from . import platform, proc
 
-_probe_cache: "Dict[str, Optional[str]]" = {}
+_probe_cache: "dict[str, str | None]" = {}
 
 
-def find_python() -> "Optional[str]":
+def find_python() -> "str | None":
     """A Python 3 that actually runs, not merely one that is on PATH.
 
     Executes a candidate before trusting it, defeating the App Execution Alias
@@ -40,11 +40,11 @@ def find_python() -> "Optional[str]":
     # image behind a different Python than the one under test.
     override = os.environ.get("XRAY_TEST_PYTHON")
     if override:
-        candidates: "List[str]" = [override]
+        candidates: "list[str]" = [override]
     else:
         candidates = ["python3", "python", "py"]
 
-    chosen: "Optional[str]" = None
+    chosen: "str | None" = None
     for name in candidates:
         if not name:
             continue
@@ -71,7 +71,7 @@ class CCompiler:
     path: str
     is_zig: bool
 
-    def syntax_check_argv(self, source: Path, include_dirs: Sequence, out_obj: Path) -> "List[str]":
+    def syntax_check_argv(self, source: Path, include_dirs: Sequence, out_obj: Path) -> "list[str]":
         argv = [self.path]
         if self.is_zig:
             argv = [self.path, "cc", "-c", "-o", str(out_obj)]
@@ -83,7 +83,7 @@ class CCompiler:
         return argv
 
 
-def find_c_compiler() -> "Optional[CCompiler]":
+def find_c_compiler() -> "CCompiler | None":
     """The C compiler to use for syntax gates, verified by a trivial compile.
 
     Honors CC, then falls back to cc/clang/gcc. Verification matters: a broken
@@ -95,7 +95,7 @@ def find_c_compiler() -> "Optional[CCompiler]":
         return _CC_OBJS.get(cached) if cached else None
     import os
 
-    candidates: "List[str]" = []
+    candidates: "list[str]" = []
     if os.environ.get("CC"):
         candidates.append(os.environ["CC"])
     candidates.extend(["cc", "clang", "gcc"])
@@ -115,7 +115,7 @@ def find_c_compiler() -> "Optional[CCompiler]":
     return None
 
 
-_CC_OBJS: "Dict[str, CCompiler]" = {}
+_CC_OBJS: "dict[str, CCompiler]" = {}
 
 
 def reset_probe_cache() -> None:

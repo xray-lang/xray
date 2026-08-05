@@ -11,7 +11,6 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
 
 
 SIZES = (1024, 64 * 1024, 1024 * 1024)
@@ -23,7 +22,7 @@ def child_peak_rss_kib() -> int:
 
 
 def run_timed(
-    command: list[str], cwd: Path, timeout: Optional[float] = None
+    command: list[str], cwd: Path, timeout: float | None = None
 ) -> tuple[subprocess.CompletedProcess[str], float, int]:
     started = time.perf_counter()
     try:

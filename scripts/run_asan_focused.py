@@ -39,7 +39,6 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -72,7 +71,7 @@ UBSAN_OPTIONS = "print_stacktrace=1:halt_on_error=1"
 
 
 def compile_workload(log, xray: Path, main: Path, label: str,
-                     timeout: "float | None", required: bool) -> bool:
+                     timeout: float | None, required: bool) -> bool:
     """AOT-compile a real workload to C only. Exercises the whole front end and
     code generator on code far larger than any unit test."""
     if not main.is_file():
@@ -100,7 +99,7 @@ def compile_workload(log, xray: Path, main: Path, label: str,
         out.unlink(missing_ok=True)
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     log = sanitizer.LaneLog(LANE)
     jobs = sanitizer.default_jobs("XR_ASAN_JOBS")
     build_dir = PROJECT_DIR / os.environ.get("XR_ASAN_BUILD_DIR", "build-asan")

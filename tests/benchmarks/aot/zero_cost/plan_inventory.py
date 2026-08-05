@@ -18,7 +18,6 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parents[3]
@@ -61,7 +60,7 @@ def _file_matches(path: Path, regex) -> bool:
     return bool(regex.search(text))
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     inventory = Path(argv[1]) if len(argv) > 1 else DEFAULT_INVENTORY
     if not inventory.is_file():
         sys.stderr.write(f"FAIL: inventory not found: {inventory}\n")

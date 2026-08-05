@@ -28,7 +28,6 @@ import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -123,8 +122,8 @@ class Scenario:
     # identity hash (foo_<16 hex>_fn_<n>), so this is a pattern, not a literal:
     # a fixed string went stale the moment hashing was introduced.
     symbol_re: str
-    locals_expected: Tuple[str, ...]
-    frame_vars: Tuple[str, ...]
+    locals_expected: tuple[str, ...]
+    frame_vars: tuple[str, ...]
 
 
 SCENARIOS = (
@@ -174,14 +173,14 @@ class Recorder:
             print(f"    {line}")
 
 
-def find_debugserver() -> Optional[str]:
+def find_debugserver() -> str | None:
     for candidate in DEBUGSERVER_CANDIDATES:
         if os.access(candidate, os.X_OK):
             return candidate
     return shutil.which("debugserver")
 
 
-def find_dwarfdump() -> Optional[str]:
+def find_dwarfdump() -> str | None:
     override = os.environ.get("LLVM_DWARFDUMP")
     if override and os.access(override, os.X_OK):
         return override
@@ -204,7 +203,7 @@ def marker_line(source: str) -> int:
 
 def run_scenario(rec: Recorder, scenario: Scenario, xray: Path, ws: workspace.Workspace,
                  dwarfdump: str, lldb: str, debugserver: str,
-                 timeout: "float | None") -> None:
+                 timeout: float | None) -> None:
     label = scenario.name
     source_path = ws.write(scenario.filename, scenario.source)
     binary = ws.path(f"{scenario.name}_bin")
@@ -290,7 +289,7 @@ def run_scenario(rec: Recorder, scenario: Scenario, xray: Path, ws: workspace.Wo
             rec.bad(f"{label} lldb exposes source local {expected}", text)
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Native AOT debug smoke")
     ap.add_argument("xray", nargs="?", default=None)
     ns = ap.parse_args(argv[1:])

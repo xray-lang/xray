@@ -14,6 +14,7 @@ import importlib.util
 import json
 import re
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -74,21 +75,9 @@ def harness_type(module: str, kind: str) -> str:
 
 
 def load_manifest_toml(root: Path, path: Path) -> dict[str, Any]:
-    """Parse a repository TOML manifest through the shared governance loader.
-
-    Python 3.9 build hosts ship no tomllib, so scripts/stdlib_manifest.py owns
-    the single dependency-free parser for the manifest subset. Routing every
-    manifest read through it keeps one parser behind the boundary manifest
-    instead of letting a generator diverge from the governance gates.
-    """
-    loader_path = root / "scripts" / "stdlib_manifest.py"
-    spec = importlib.util.spec_from_file_location("xray_stdlib_manifest", loader_path)
-    if not spec or not spec.loader:
-        fail(f"cannot load manifest parser from {loader_path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module.load_toml(path)
+    """Parse a repository TOML manifest."""
+    with path.open("rb") as handle:
+        return tomllib.load(handle)
 
 
 def load_source_inventory(root: Path) -> list[dict[str, Any]]:

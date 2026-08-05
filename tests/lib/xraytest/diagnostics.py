@@ -11,10 +11,10 @@ src/frontend/xdiag_fmt.h), and a runner always captures through a pipe.
 """
 
 from pathlib import Path
-from typing import List, Sequence
+from typing import Sequence
 
 
-def expected_lines(path: Path) -> List[str]:
+def expected_lines(path: Path) -> list[str]:
     """Non-empty lines of an expected-diagnostics file, in order.
 
     A missing file yields no requirements, matching the shell runners: the
@@ -25,6 +25,6 @@ def expected_lines(path: Path) -> List[str]:
     return [line for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
-def missing_lines(output: str, expected: Sequence[str]) -> List[str]:
+def missing_lines(output: str, expected: Sequence[str]) -> list[str]:
     """Expected lines absent from output, in the order they were declared."""
     return [line for line in expected if line not in output]

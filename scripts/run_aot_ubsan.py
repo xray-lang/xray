@@ -32,7 +32,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 
 def _bootstrap() -> None:
@@ -89,7 +88,7 @@ ld_flags = ["-fsanitize=undefined"]
 UBSAN_HANDLER_RE = re.compile(r"ubsan_handle")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(os.environ.get("XRAY_BIN", str(PROJECT_DIR / "build" / "xray")))
     toolchain_name = os.environ.get("XR_AOT_UBSAN_TOOLCHAIN", "clang")
     timeout = platform.env_timeout("XR_AOT_UBSAN_TIMEOUT", 600)

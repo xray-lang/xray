@@ -39,7 +39,6 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -77,7 +76,7 @@ class Result:
     report: str
 
 
-def expected_for(case: Path) -> Tuple[Path, str]:
+def expected_for(case: Path) -> tuple[Path, str]:
     """The sibling that governs this case, and whether it is a coverage gap."""
     runtime_sibling = Path(str(case) + ".expected-runtime")
     if runtime_sibling.is_file():
@@ -85,7 +84,7 @@ def expected_for(case: Path) -> Tuple[Path, str]:
     return Path(str(case) + ".expected"), "compile"
 
 
-def run_one_case(xray: Path, case: Path, timeout: "float | None") -> Result:
+def run_one_case(xray: Path, case: Path, timeout: float | None) -> Result:
     expected_file, kind = expected_for(case)
 
     env = dict(os.environ)
@@ -124,15 +123,15 @@ def run_one_case(xray: Path, case: Path, timeout: "float | None") -> Result:
     return Result(case.parent.name, name, verdict, report)
 
 
-def collect_cases() -> List[Path]:
+def collect_cases() -> list[Path]:
     """One directory level of categories, `*.xr` directly inside each."""
-    cases: List[Path] = []
+    cases: list[Path] = []
     for directory in sorted(p for p in SCRIPT_DIR.iterdir() if p.is_dir()):
         cases.extend(sorted(directory.glob("*.xr")))
     return cases
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(os.environ.get("XRAY")
                 or os.environ.get("XRAY_BIN")
                 or str(PROJECT_DIR / "build" / platform.exe_name("xray")))
@@ -159,8 +158,8 @@ def main(argv: List[str]) -> int:
     results.sort(key=lambda r: (r.category, r.filename))
 
     passed = failed = runtime_only = 0
-    runtime_list: List[str] = []
-    previous_category: Optional[str] = None
+    runtime_list: list[str] = []
+    previous_category: str | None = None
 
     for item in results:
         if item.category != previous_category:

@@ -23,7 +23,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Sequence
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = Path("src")
@@ -35,7 +35,7 @@ H_CAP = 800
 # Files already over the cap when it was introduced. The value is that file's
 # own ceiling, so it can shrink but never grow. Remove an entry once its file
 # is back under C_CAP.
-OVERSIZE_CAPS: Dict[str, int] = {
+OVERSIZE_CAPS: dict[str, int] = {
     "src/frontend/analyzer/xanalyzer_errorset.c": 4327,
     "src/frontend/analyzer/xanalyzer_visitor_stmt.c": 9210,
     "src/frontend/analyzer/xanalyzer_visitor.c": 7636,
@@ -54,7 +54,7 @@ class IncludeRule:
     success: str        # message when clean
 
 
-INCLUDE_RULES: Tuple[IncludeRule, ...] = (
+INCLUDE_RULES: tuple[IncludeRule, ...] = (
     IncludeRule("R1: lexer/ -> runtime/", "frontend/lexer", r".*runtime/",
                 "lexer/ includes runtime/:", "lexer/ does not include runtime/"),
     IncludeRule("R2: parser/ -> analyzer/", "frontend/parser", r".*analyzer/",
@@ -103,7 +103,7 @@ class Lint:
             print(f"      {line}")
 
 
-def sources(root: Path, suffixes: Sequence[str]) -> List[Path]:
+def sources(root: Path, suffixes: Sequence[str]) -> list[Path]:
     if not root.is_dir():
         return []
     return sorted(p for p in root.rglob("*")
@@ -113,7 +113,7 @@ def sources(root: Path, suffixes: Sequence[str]) -> List[Path]:
 def check_include_rule(lint: Lint, rule: IncludeRule) -> None:
     print(f"--- {rule.label} ---")
     pattern = re.compile(r'#include\s+["<]' + rule.forbidden)
-    hits: List[str] = []
+    hits: list[str] = []
     for path in sources(REPO_ROOT / SRC_DIR / rule.directory, (".c", ".h")):
         relative = path.relative_to(REPO_ROOT)
         for number, line in enumerate(
@@ -135,7 +135,7 @@ def check_ast_fields(lint: Lint) -> None:
     # `... compile_type;` or `... *compile_type;`, and the anchor keeps
     # `// ... compile_type ...` comments from tripping it.
     header = REPO_ROOT / SRC_DIR / "frontend" / "parser" / "xast_nodes.h"
-    hits: List[str] = []
+    hits: list[str] = []
     if header.is_file():
         for number, line in enumerate(
                 header.read_text(encoding="utf-8").splitlines(),
@@ -152,8 +152,8 @@ def check_ast_fields(lint: Lint) -> None:
 
 def check_size_caps(lint: Lint) -> None:
     print(f"--- R9: frontend .c file size cap (≤ {C_CAP} lines) ---")
-    allowed: List[str] = []
-    oversize: List[str] = []
+    allowed: list[str] = []
+    oversize: list[str] = []
     for path in sources(REPO_ROOT / FRONTEND, (".c",)):
         relative = str(path.relative_to(REPO_ROOT))
         count = len(path.read_text(encoding="utf-8").splitlines())
@@ -188,7 +188,7 @@ def check_size_caps(lint: Lint) -> None:
     print("")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     os.chdir(REPO_ROOT)
     lint = Lint()
 

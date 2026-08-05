@@ -24,7 +24,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Sequence
 
 
 def _bootstrap() -> None:
@@ -70,7 +70,7 @@ class Recorder:
 
 def check_run(rec: Recorder, xray: Path, label: str, args: Sequence,
               want_rc: int, want_out: str, want_err: str,
-              forbid_err: Optional[str], timeout: "float | None") -> None:
+              forbid_err: str | None, timeout: float | None) -> None:
     """Run piped (never a TTY) and assert on exit code, stdout and stderr."""
     result = proc.run([xray] + list(args), timeout=timeout)
     raw_err = result.stderr.decode("utf-8", "replace")
@@ -97,7 +97,7 @@ def check_run(rec: Recorder, xray: Path, label: str, args: Sequence,
 
 
 def check_backtrace(rec: Recorder, xray: Path, div: Path,
-                    timeout: "float | None") -> None:
+                    timeout: float | None) -> None:
     env = dict(os.environ)
     env["XRAY_BACKTRACE"] = "1"
     result = proc.run([xray, "run", div], env=env, timeout=timeout)
@@ -109,7 +109,7 @@ def check_backtrace(rec: Recorder, xray: Path, div: Path,
 
 
 def check_aot(rec: Recorder, xray: Path, div: Path, work: Path,
-              timeout: "float | None") -> None:
+              timeout: float | None) -> None:
     """AOT parity, skipped when no native toolchain provider is READY."""
     native = work / platform.exe_name("div_native")
     build = proc.run([xray, "build", "--native", div, "-o", native],
@@ -129,7 +129,7 @@ def check_aot(rec: Recorder, xray: Path, div: Path, work: Path,
                 f"err='{err}'")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY_BIN", str(PROJECT_DIR / "build" / "xray")))
     if not (xray.is_file() and os.access(xray, os.X_OK)):

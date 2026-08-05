@@ -16,7 +16,6 @@ import re
 import sys
 import argparse
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 
 # Project root (script is in scripts/)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -42,7 +41,7 @@ class CheckResult:
     priority: str  # P0, P1, P2
     passed: bool
     message: str
-    details: List[str] = field(default_factory=list)
+    details: list[str] = field(default_factory=list)
 
 
 class StaticChecker:
@@ -50,7 +49,7 @@ class StaticChecker:
 
     def __init__(self, verbose=False):
         self.verbose = verbose
-        self.results: List[CheckResult] = []
+        self.results: list[CheckResult] = []
         self._file_cache = {}
 
     def read_file(self, path: str) -> str:
@@ -63,7 +62,7 @@ class StaticChecker:
                 self._warn(f"File not found: {path}")
         return self._file_cache[path]
 
-    def read_lines(self, path: str) -> List[str]:
+    def read_lines(self, path: str) -> list[str]:
         return self.read_file(path).splitlines()
 
     def _warn(self, msg: str):

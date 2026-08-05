@@ -69,10 +69,10 @@ def _terminate_tree(proc: "subprocess.Popen") -> None:
 def run(
     argv: Sequence,
     *,
-    cwd: "Path | None" = None,
-    env: "Mapping | None" = None,
-    stdin: "bytes | None" = None,
-    timeout: "float | None" = None,
+    cwd: Path | None = None,
+    env: Mapping | None = None,
+    stdin: bytes | None = None,
+    timeout: float | None = None,
     check: bool = False,
 ) -> ProcResult:
     """Run one command to completion and capture its byte streams.
@@ -139,9 +139,9 @@ def run(
 def run_passthrough(
     argv: Sequence,
     *,
-    cwd: "Path | None" = None,
-    env: "Mapping | None" = None,
-    timeout: "float | None" = None,
+    cwd: Path | None = None,
+    env: Mapping | None = None,
+    timeout: float | None = None,
 ) -> int:
     """Run one command with the parent's own stdout/stderr, returning its exit code.
 

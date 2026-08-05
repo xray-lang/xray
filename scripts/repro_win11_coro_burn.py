@@ -20,7 +20,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -46,7 +45,7 @@ OUT_DIR = PROJECT_ROOT / "tests" / "tmp" / "win11_coro"
 FAIL_LOG = OUT_DIR / "failures.log"
 
 
-def find_xray() -> "Path | None":
+def find_xray() -> Path | None:
     """Ninja is the project's one generator and is single-config, so a build
     tree has exactly one binary location -- no per-configuration subdirectory."""
     override = os.environ.get("XRAY_BIN")
@@ -60,7 +59,7 @@ def find_xray() -> "Path | None":
     return None
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     raw = argv[1] if len(argv) > 1 else str(DEFAULT_ROUNDS)
     if not raw.isdigit():
         sys.stderr.write(f"FAIL: N must be integer, got: {raw}\n")

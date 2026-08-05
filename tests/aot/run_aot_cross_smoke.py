@@ -22,7 +22,6 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
 
 
 def _bootstrap() -> None:
@@ -85,7 +84,7 @@ def target_suffix(target: str) -> str:
     return ".exe" if "windows" in target else ""
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="AOT cross-target smoke")
     ap.add_argument("xray", nargs="?", default=None)
     ns = ap.parse_args(argv[1:])

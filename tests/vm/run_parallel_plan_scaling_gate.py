@@ -24,7 +24,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -62,7 +61,7 @@ class Recorder:
 
 def expect_output_workers(rec: Recorder, xray: Path, name: str, source: Path,
                           expected: str, workers: int,
-                          timeout: "float | None") -> None:
+                          timeout: float | None) -> None:
     result = proc.run([xray, "run", "--workers", str(workers), source], timeout=timeout)
     stdout = result.stdout.decode("utf-8", "replace").replace("\r", "")
     stderr = result.stderr.decode("utf-8", "replace")
@@ -75,7 +74,7 @@ def expect_output_workers(rec: Recorder, xray: Path, name: str, source: Path,
         rec.bad(f"{name} output", stdout, stderr)
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY_BIN", str(PROJECT_DIR / "build" / "xray")))
     timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 300)

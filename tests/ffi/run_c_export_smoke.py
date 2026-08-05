@@ -23,7 +23,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Sequence
+from typing import Sequence
 
 
 def _bootstrap() -> None:
@@ -67,7 +67,7 @@ class Recorder:
             self.bad(name, text or "")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY_BIN",
                                     str(PROJECT_DIR / "build" / "xray"))).resolve()
@@ -109,7 +109,7 @@ def main(argv: List[str]) -> int:
             [cc, gen_o, caller_o, "-pthread", "-lm", "-o", caller_bin],
             [caller_bin],
         )
-        logs: List[str] = []
+        logs: list[str] = []
         linked = True
         for step in steps:
             result = proc.run(step, timeout=timeout)

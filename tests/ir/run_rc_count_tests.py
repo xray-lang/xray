@@ -23,7 +23,6 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -57,10 +56,10 @@ class Case:
     expect_stdout: str
     stdout_label: str
     rc_count: bool
-    bounds: Tuple[Bound, ...] = ()
+    bounds: tuple[Bound, ...] = ()
 
 
-CASES: Tuple[Case, ...] = (
+CASES: tuple[Case, ...] = (
     Case("scalar_no_rc.xr", "2", "scalar: program output", False,
          (Bound("absent", 0, "scalar: disabled by default"),)),
     Case("scalar_no_rc.xr", "2", "scalar: enabled program output", True,
@@ -100,7 +99,7 @@ class Recorder:
                 print(f"      {line}")
 
 
-def first_total(stderr: str) -> Optional[int]:
+def first_total(stderr: str) -> int | None:
     match = COUNT_LINE.search(stderr)
     return int(match.group(1)) if match else None
 
@@ -129,7 +128,7 @@ def check_bound(rec: Recorder, bound: Bound, stderr: str) -> None:
             rec.bad(f"{bound.label}: total={total} < {bound.value}", stderr)
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY_BIN", str(PROJECT_DIR / "build" / "xray")))
 

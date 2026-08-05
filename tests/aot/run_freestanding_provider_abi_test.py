@@ -15,7 +15,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -69,7 +68,7 @@ PROVIDER_DEFINES = (
 )
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Freestanding provider ABI gate")
     ap.add_argument("xray", nargs="?", default=None)
     ns = ap.parse_args(argv[1:])

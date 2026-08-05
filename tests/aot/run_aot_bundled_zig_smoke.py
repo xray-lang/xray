@@ -22,7 +22,6 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 
 def _bootstrap() -> None:
@@ -44,7 +43,7 @@ CROSS_TARGET = "x86_64-linux-musl"
 PROBE_SOURCE = "fn answer() -> int {\n    return 42\n}\n\nanswer()\n"
 
 
-def find_zig() -> "Optional[Path]":
+def find_zig() -> "Path | None":
     """Zig for staging: XRAY_ZIG wins, else PATH. Resolved through symlinks so
     the bundled root points at the real toolchain directory."""
     override = os.environ.get("XRAY_ZIG")
@@ -58,7 +57,7 @@ def find_zig() -> "Optional[Path]":
     return Path(found).resolve() if found else None
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Bundled Zig discovery smoke")
     ap.add_argument("xray", nargs="?", default=None)
     ns = ap.parse_args(argv[1:])

@@ -18,7 +18,7 @@ from __future__ import annotations
 import filecmp
 import sys
 from pathlib import Path
-from typing import List, Sequence
+from typing import Sequence
 
 
 def _bootstrap() -> None:
@@ -119,7 +119,7 @@ def compare(gate: Gate, group: str, scratch: Path,
         gate.green(f"OK: generated {group} artifacts match xisa sources.")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     gate = Gate()
     with workspace.Workspace("xray_xi_aot_sync") as ws:
         scratch = ws.root

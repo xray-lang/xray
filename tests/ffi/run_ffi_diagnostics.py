@@ -19,7 +19,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -147,7 +146,7 @@ class Recorder:
             self.ok(name)
 
 
-def run_vm_case(xray: Path, source: Path, timeout: "float | None") -> str:
+def run_vm_case(xray: Path, source: Path, timeout: float | None) -> str:
     """stderr then stdout, as the shell concatenated them, ANSI stripped."""
     result = proc.run([xray, "run", source], timeout=timeout)
     combined = (result.stderr.decode("utf-8", "replace")
@@ -155,7 +154,7 @@ def run_vm_case(xray: Path, source: Path, timeout: "float | None") -> str:
     return strip_ansi(combined)
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY_BIN",
                                     str(PROJECT_DIR / "build" / "xray")))
@@ -175,13 +174,13 @@ def main(argv: List[str]) -> int:
 
         lib_dir = ws.subdir("missing_lib")
         lib_src = lib_dir / "main.xr"
-        platform.write_text_lf(lib_src, MISSING_LIB_SOURCE)
-        platform.write_text_lf(lib_dir / "xray.toml", MISSING_LIB_MANIFEST)
+        lib_src.write_text(MISSING_LIB_SOURCE, encoding="utf-8", newline="\n")
+        (lib_dir / "xray.toml").write_text(MISSING_LIB_MANIFEST, encoding="utf-8", newline="\n")
 
         sym_dir = ws.subdir("missing_symbol")
         sym_src = sym_dir / "main.xr"
-        platform.write_text_lf(sym_src, MISSING_SYMBOL_SOURCE)
-        platform.write_text_lf(sym_dir / "xray.toml", MISSING_SYMBOL_MANIFEST)
+        sym_src.write_text(MISSING_SYMBOL_SOURCE, encoding="utf-8", newline="\n")
+        (sym_dir / "xray.toml").write_text(MISSING_SYMBOL_MANIFEST, encoding="utf-8", newline="\n")
 
         vm_lib_text = run_vm_case(xray, lib_src, timeout)
         if NO_LIBFFI in vm_lib_text:

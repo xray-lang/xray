@@ -21,7 +21,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Sequence
+from typing import Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -77,8 +77,8 @@ def contains(paths: Sequence[Path], needle: str) -> bool:
     return False
 
 
-def files_under(dirs: Sequence[Path]) -> List[Path]:
-    found: List[Path] = []
+def files_under(dirs: Sequence[Path]) -> list[Path]:
+    found: list[Path] = []
     for directory in dirs:
         if directory.is_dir():
             found.extend(p for p in directory.rglob("*") if p.is_file())
@@ -97,7 +97,7 @@ def file_prefix(rule: str) -> str:
         return f"n{major}"
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     os.chdir(PROJECT_ROOT)
     report = Report()
 

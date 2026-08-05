@@ -4,17 +4,13 @@
 from __future__ import annotations
 
 import importlib.util
-import ast
 import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.9 build hosts
-    tomllib = None  # type: ignore[assignment]
+import tomllib
 
 
 MANIFEST_PATH = Path("stdlib/stdlib_boundary.toml")
@@ -50,91 +46,12 @@ class BoundaryManifest:
         )
 
 
-def _strip_toml_comment(line: str) -> str:
-    in_string = False
-    escaped = False
-    out: list[str] = []
-    for char in line:
-        if escaped:
-            out.append(char)
-            escaped = False
-            continue
-        if char == "\\" and in_string:
-            out.append(char)
-            escaped = True
-            continue
-        if char == '"':
-            in_string = not in_string
-            out.append(char)
-            continue
-        if char == "#" and not in_string:
-            break
-        out.append(char)
-    return "".join(out).strip()
-
-
-def _parse_toml_value(raw: str, path: Path, line: int) -> Any:
-    translated = re.sub(r"\btrue\b", "True", raw)
-    translated = re.sub(r"\bfalse\b", "False", translated)
-    try:
-        return ast.literal_eval(translated)
-    except (SyntaxError, ValueError) as exc:
-        raise RuntimeError(f"{path}:{line}: unsupported manifest TOML value: {raw}") from exc
-
-
-def _load_toml_subset(path: Path) -> dict[str, Any]:
-    """Parse the dependency-free TOML subset used by stdlib_boundary.toml.
-
-    Python 3.9 is still a supported build host, so the governance gate cannot
-    require tomllib. The accepted subset is deliberately narrow: scalar
-    key/value pairs, string/bool/list values, tables, and array-of-table blocks.
-    """
-
-    raw: dict[str, Any] = {}
-    current: dict[str, Any] = raw
-    lines = path.read_text(encoding="utf-8").splitlines()
-    index = 0
-    while index < len(lines):
-        line_no = index + 1
-        line = _strip_toml_comment(lines[index])
-        index += 1
-        if not line:
-            continue
-        array_table = re.fullmatch(r"\[\[([A-Za-z_][A-Za-z0-9_]*)\]\]", line)
-        if array_table:
-            name = array_table.group(1)
-            entry: dict[str, Any] = {}
-            raw.setdefault(name, []).append(entry)
-            current = entry
-            continue
-        table = re.fullmatch(r"\[([A-Za-z_][A-Za-z0-9_]*)\]", line)
-        if table:
-            name = table.group(1)
-            value = raw.setdefault(name, {})
-            if not isinstance(value, dict):
-                raise RuntimeError(f"{path}:{line_no}: table {name!r} conflicts with another value")
-            current = value
-            continue
-        assignment = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)", line)
-        if not assignment:
-            raise RuntimeError(f"{path}:{line_no}: unsupported manifest TOML syntax: {line}")
-        key, value_text = assignment.groups()
-        start_line = line_no
-        while value_text.count("[") > value_text.count("]") and index < len(lines):
-            continuation = _strip_toml_comment(lines[index])
-            index += 1
-            if continuation:
-                value_text += " " + continuation
-        if key in current:
-            raise RuntimeError(f"{path}:{start_line}: duplicate key {key!r}")
-        current[key] = _parse_toml_value(value_text, path, start_line)
-    return raw
-
-
 def load_toml(path: Path) -> dict[str, Any]:
-    """Load a repository TOML manifest on both Python 3.9 and 3.11+."""
-    if tomllib is None:
-        return _load_toml_subset(path)
+    """Load a repository TOML manifest.
+
+    Binary mode is what tomllib requires: it decodes UTF-8 itself and rejects
+    anything else, which is the behaviour a manifest parser should have.
+    """
     with path.open("rb") as handle:
         return tomllib.load(handle)
 

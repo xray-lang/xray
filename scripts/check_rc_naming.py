@@ -19,11 +19,10 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-TOKENS: Tuple[str, ...] = (
+TOKENS: tuple[str, ...] = (
     "XrGCHeader", "XrCoroGC", "XrGC", "xr_gc_", "xr_coro_gc_",
     "g_type_ops", "XR_GC_", "XGC_", "GC_BARRIER",
 )
@@ -46,9 +45,9 @@ CYAN = "\033[0;36m" if USE_COLOR else ""
 RESET = "\033[0m" if USE_COLOR else ""
 
 
-def scan() -> List[str]:
+def scan() -> list[str]:
     """grep -RInE equivalent: `path:line:text` for every matching line."""
-    hits: List[str] = []
+    hits: list[str] = []
     for directory in SCAN_DIRS:
         root = PROJECT_ROOT / directory
         if not root.is_dir():
@@ -67,7 +66,7 @@ def scan() -> List[str]:
     return hits
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Scan active sources for legacy GC names.")
     parser.add_argument("--allow-current", action="store_true",

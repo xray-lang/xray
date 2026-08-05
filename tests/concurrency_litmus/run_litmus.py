@@ -25,7 +25,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -49,7 +48,7 @@ def combined(result) -> str:
 
 
 def run_vm(xray: Path, case: Path, work: Path, opt: str,
-           timeout: "float | None") -> Tuple[bool, str]:
+           timeout: float | None) -> tuple[bool, str]:
     result = proc.run([xray, "run", case], timeout=timeout)
     if not result.ok:
         why = "timed out" if result.timed_out else "run failed"
@@ -58,7 +57,7 @@ def run_vm(xray: Path, case: Path, work: Path, opt: str,
 
 
 def run_aot(xray: Path, case: Path, work: Path, opt: str,
-            timeout: "float | None") -> Tuple[bool, str]:
+            timeout: float | None) -> tuple[bool, str]:
     binary = work / (case.stem + ".aot")
     build = proc.run([xray, "build", "--native", "-O", opt, case, "-o", binary],
                      timeout=timeout)
@@ -75,7 +74,7 @@ def run_aot(xray: Path, case: Path, work: Path, opt: str,
 BACKENDS = {"vm": run_vm, "aot": run_aot}
 
 
-def verdict(output: str) -> Optional[str]:
+def verdict(output: str) -> str | None:
     """None when the case is clean, else the reason it is not."""
     lines = output.splitlines()
     summary = lines[-1] if lines else ""
@@ -87,7 +86,7 @@ def verdict(output: str) -> Optional[str]:
     return None
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY_BIN", str(REPO_ROOT / "build" / "xray")))
     enabled = [b for b in os.environ.get("XRAY_LITMUS_BACKENDS", "vm,aot").split(",")

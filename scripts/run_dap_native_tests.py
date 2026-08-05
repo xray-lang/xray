@@ -23,7 +23,6 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -44,7 +43,7 @@ MARKER = "// BREAKPOINT"
 
 # Probed in the same order as the native bridge, so the test and the product
 # agree on which adapter is in use.
-LLDB_DAP_CANDIDATES: Tuple[str, ...] = (
+LLDB_DAP_CANDIDATES: tuple[str, ...] = (
     "/opt/homebrew/opt/llvm/bin/lldb-dap",
     "/usr/local/opt/llvm/bin/lldb-dap",
     "/usr/bin/lldb-dap",
@@ -52,7 +51,7 @@ LLDB_DAP_CANDIDATES: Tuple[str, ...] = (
     "/Library/Developer/CommandLineTools/usr/bin/lldb-dap",
 )
 
-CASES: Tuple[str, ...] = ("native_bp.xr",)
+CASES: tuple[str, ...] = ("native_bp.xr",)
 
 
 def skip(reason: str) -> int:
@@ -70,7 +69,7 @@ def find_build_dir() -> Path:
     return PROJECT_DIR / "build"
 
 
-def find_lldb_dap() -> Optional[str]:
+def find_lldb_dap() -> str | None:
     override = os.environ.get("XRAY_LLDB_DAP")
     if override and os.access(override, os.X_OK):
         return override
@@ -89,7 +88,7 @@ def has_debugserver() -> bool:
     return proc.run(["xcrun", "-f", "debugserver"], timeout=60).ok
 
 
-def breakpoint_line(fixture: Path) -> Optional[int]:
+def breakpoint_line(fixture: Path) -> int | None:
     for number, text in enumerate(
             fixture.read_text(encoding="utf-8").splitlines(), start=1):
         if MARKER in text:
@@ -97,7 +96,7 @@ def breakpoint_line(fixture: Path) -> Optional[int]:
     return None
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     print("======================================")
     print("DAP Native Backend Tests")
     print("======================================")

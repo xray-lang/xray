@@ -23,7 +23,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 
 def _bootstrap() -> None:
@@ -145,13 +144,13 @@ class Recorder:
 
 
 def build_native(xray: Path, source: Path, out: Path,
-                 timeout: "float | None") -> Optional[Path]:
+                 timeout: float | None) -> Path | None:
     result = proc.run([xray, "build", "--native", source, "-o", out],
                       timeout=timeout)
     return out if result.ok and os.access(out, os.X_OK) else None
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY_BIN",
                                     str(PROJECT_DIR / "build" / "xray")))

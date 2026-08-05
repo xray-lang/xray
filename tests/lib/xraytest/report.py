@@ -11,7 +11,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, TextIO
+from typing import TextIO
 
 
 class Status(Enum):
@@ -41,7 +41,7 @@ class Report:
     """Accumulated case verdicts and the suite-level summary they imply."""
 
     suite: str
-    cases: "List[CaseResult]" = field(default_factory=list)
+    cases: "list[CaseResult]" = field(default_factory=list)
 
     def add(self, result: CaseResult) -> None:
         self.cases.append(result)
@@ -50,26 +50,26 @@ class Report:
         self.add(CaseResult(name=name, status=status, detail=detail, excerpt=excerpt))
 
     @property
-    def passed(self) -> "List[CaseResult]":
+    def passed(self) -> "list[CaseResult]":
         return [c for c in self.cases if c.status is Status.PASS]
 
     @property
-    def failed(self) -> "List[CaseResult]":
+    def failed(self) -> "list[CaseResult]":
         return [c for c in self.cases if c.status is Status.FAIL]
 
     @property
-    def skipped(self) -> "List[CaseResult]":
+    def skipped(self) -> "list[CaseResult]":
         return [c for c in self.cases if c.status is Status.SKIP]
 
     @property
-    def failed_names(self) -> "List[str]":
+    def failed_names(self) -> "list[str]":
         return [c.name for c in self.failed]
 
     @property
-    def skipped_names(self) -> "List[str]":
+    def skipped_names(self) -> "list[str]":
         return [c.name for c in self.skipped]
 
-    def write(self, stream: "Optional[TextIO]" = None, *, verbose: bool = False) -> None:
+    def write(self, stream: "TextIO | None" = None, *, verbose: bool = False) -> None:
         """Print per-case lines and a one-line summary.
 
         Failures always show their detail; verbose adds the captured excerpt so

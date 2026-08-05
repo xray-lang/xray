@@ -38,7 +38,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Sequence
 
 
 def _bootstrap() -> None:
@@ -82,28 +82,28 @@ class Target:
     build_target: str
     qemu_binary: str
     qemu_env_var: str
-    machine_args: Tuple[str, ...]
+    machine_args: tuple[str, ...]
     # Extra compiler flags beyond COMMON_CFLAGS (e.g. -mcpu for Cortex-M).
-    extra_cflags: Tuple[str, ...] = ()
+    extra_cflags: tuple[str, ...] = ()
     # Defines applied only to the generated C (not the boot/hook translation unit).
-    generated_defines: Tuple[str, ...] = ()
+    generated_defines: tuple[str, ...] = ()
     # Fixture file names. These match what xray.toml references by name, so they
     # are the manifest's names, not generic ones: the manifest pins `main` and
     # (for RISC-V) the assembly unit's `sources`, and a rename breaks the build.
     main_source: str = ""
-    boot_source: Optional[str] = None
+    boot_source: str | None = None
     linker_script: str = ""
     # readelf -h / -S / -s / -A substrings that must all be present.
-    elf_header_contains: Tuple[str, ...] = ()
-    elf_sections_contains: Tuple[str, ...] = ()
-    elf_symbols_contains: Tuple[str, ...] = ()
-    elf_attributes_contains: Tuple[str, ...] = ()
+    elf_header_contains: tuple[str, ...] = ()
+    elf_sections_contains: tuple[str, ...] = ()
+    elf_symbols_contains: tuple[str, ...] = ()
+    elf_attributes_contains: tuple[str, ...] = ()
     # Substrings that must NOT appear in the header (e.g. a zero entry point).
-    elf_header_absent: Tuple[str, ...] = ()
+    elf_header_absent: tuple[str, ...] = ()
     # Reject any undefined symbol in the final ELF (llvm-nm -u must be empty).
     require_no_undefined: bool = False
     # xray.toml carries the boot source's SHA-256 under this placeholder.
-    hash_placeholder: Optional[str] = None
+    hash_placeholder: str | None = None
     verify: str = "serial"          # "serial" | "qmp_vga"
     serial_marker: bytes = b""
     vga_expect: bytes = b""
@@ -231,7 +231,7 @@ def resolve_tool(env_var: str, binary: str) -> str:
     return found
 
 
-def run_step(argv: Sequence, log: List[bytes], what: str, cwd: "Optional[Path]" = None) -> None:
+def run_step(argv: Sequence, log: list[bytes], what: str, cwd: "Path | None" = None) -> None:
     """Run a build step, accumulating output and failing with context."""
     result = proc.run(argv, cwd=cwd, timeout=platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 300))
     log.append(result.stdout + result.stderr)
@@ -390,7 +390,7 @@ def run_target(target: Target, xray: Path, ws: workspace.Workspace) -> None:
         # edited start.S fails the build instead of booting something else.
         digest = hashlib.sha256(boot_src.read_bytes()).hexdigest()
         manifest_text = manifest_text.replace(target.hash_placeholder, digest)
-    platform.write_text_lf(project / "xray.toml", manifest_text)
+    (project / "xray.toml").write_text(manifest_text, encoding="utf-8", newline="\n")
 
     # 1. Xray -> C. --target is not decoration: it is the target the generated
     # C is compiled for two steps down, and passing it keeps Xray's own target
@@ -398,7 +398,7 @@ def run_target(target: Target, xray: Path, ws: workspace.Workspace) -> None:
     # host triple, which on a 64-bit machine contradicts the 32-bit image the
     # x86 lane produces.
     gen_c = ws.path("generated.c")
-    log: List[bytes] = []
+    log: list[bytes] = []
     run_step([xray, "build", "--native", "--profile", "freestanding",
               "--target", target.build_target, "--toolchain", "zig", "--zig", zig,
               "--rebuild", "-c", "-o", gen_c, target.main_source],
@@ -509,7 +509,7 @@ def run_target(target: Target, xray: Path, ws: workspace.Workspace) -> None:
             qemu_proc.wait()
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Freestanding QEMU boot smoke")
     ap.add_argument("--target", required=True, choices=sorted(TARGETS))
     ap.add_argument("--xray", default=None)

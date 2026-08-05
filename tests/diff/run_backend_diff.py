@@ -27,7 +27,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 
 def _bootstrap() -> None:
@@ -63,7 +63,7 @@ def env_int(name: str, default: int) -> int:
     return int(raw) if is_uint(raw) and int(raw) > 0 else default
 
 
-def configure_jobs(requested: str) -> Tuple[int, bool]:
+def configure_jobs(requested: str) -> tuple[int, bool]:
     """Worker count and whether it was auto-derived (auto is capped, hot-shrunk)."""
     if requested in ("", "auto"):
         jobs = min(cache_cpu_count(), env_int("XRAY_DIFF_MAX_AUTO_JOBS", 16))
@@ -114,7 +114,7 @@ def read_first_directive(path: Path, prefix: str, max_lines: int) -> str:
     return ""
 
 
-def read_args(path: Path) -> List[str]:
+def read_args(path: Path) -> list[str]:
     argfile = path.with_suffix(".args")
     if not argfile.is_file():
         return []
@@ -137,7 +137,7 @@ def read_stdin(path: Path) -> bytes:
         return b""
 
 
-def read_expected_stdout(path: Path) -> Optional[bytes]:
+def read_expected_stdout(path: Path) -> bytes | None:
     """Optional exact stdout oracle stored as <case>.xr.expected."""
     sidecar = Path(str(path) + ".expected")
     if not sidecar.is_file():
@@ -174,7 +174,7 @@ class CaseResult:
 @dataclass
 class RunnerConfig:
     xray: Path
-    backends: List[str]
+    backends: list[str]
     jobs: int
     aot_opt: str
     aot_cache: Path
@@ -185,12 +185,12 @@ class RunnerConfig:
     # A generous default turns that into a single red case; the whole child
     # tree is killed on expiry (proc.run uses killpg on POSIX). Tunable via
     # XRAY_TEST_CASE_TIMEOUT; 0 disables (the historical behavior).
-    case_timeout: Optional[float]
+    case_timeout: float | None
 
 
 def build_aot_binary(
     config: RunnerConfig, case: Path, rel: str, case_key: str
-) -> Tuple[Optional[Path], bytes]:
+) -> tuple[Path | None, bytes]:
     """Build (or reuse) the native binary for one case, under a directory lock.
 
     The lock is the shared DirLock: exactly one racer builds while the rest wait,
@@ -244,7 +244,7 @@ def build_aot_binary(
 
 
 def run_backend(
-    config: RunnerConfig, kind: str, case: Path, args: List[str], stdin_bytes: bytes
+    config: RunnerConfig, kind: str, case: Path, args: list[str], stdin_bytes: bytes
 ) -> BackendResult:
     if kind == "vm":
         cmd = [config.xray, "run", case]
@@ -275,8 +275,8 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
     case_backends_raw = read_first_directive(case, "// diff-backends: ", 5)
     case_backends = [b.strip() for b in case_backends_raw.split(",") if b.strip()]
 
-    enabled: List[str] = []
-    excluded: List[str] = []
+    enabled: list[str] = []
+    excluded: list[str] = []
     for backend in ("vm", "aot"):
         if backend not in config.backends:
             continue
@@ -295,7 +295,7 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
 
     args = read_args(case)
     stdin_bytes = read_stdin(case)
-    results: Dict[str, BackendResult] = {}
+    results: dict[str, BackendResult] = {}
     for backend in enabled:
         results[backend] = run_backend(config, backend, case, args, stdin_bytes)
 
@@ -353,7 +353,7 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
 # --- case collection --------------------------------------------------------
 
 
-def append_case_manifest(manifest: str) -> Optional[List[Path]]:
+def append_case_manifest(manifest: str) -> Optional[list[Path]]:
     if not manifest:
         return []
     manifest_path = Path(manifest)
@@ -361,7 +361,7 @@ def append_case_manifest(manifest: str) -> Optional[List[Path]]:
         manifest_path = PROJECT_DIR / manifest
     if not manifest_path.is_file():
         return None
-    cases: List[Path] = []
+    cases: list[Path] = []
     for raw in manifest_path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -373,7 +373,7 @@ def append_case_manifest(manifest: str) -> Optional[List[Path]]:
     return cases
 
 
-def collect_cases(base_cases_file: str, extra_cases_file: str) -> List[Path]:
+def collect_cases(base_cases_file: str, extra_cases_file: str) -> list[Path]:
     if base_cases_file:
         base = append_case_manifest(base_cases_file)
         if base is None:
@@ -394,7 +394,7 @@ def collect_cases(base_cases_file: str, extra_cases_file: str) -> List[Path]:
     return cases
 
 
-def aot_binary_cache_hot(config: RunnerConfig, selected: List[Tuple[int, Path]]) -> bool:
+def aot_binary_cache_hot(config: RunnerConfig, selected: list[tuple[int, Path]]) -> bool:
     if "aot" not in config.backends:
         return True
     for _order, case in selected:
@@ -410,7 +410,7 @@ def aot_binary_cache_hot(config: RunnerConfig, selected: List[Tuple[int, Path]])
     return True
 
 
-def validate_shard(total: str, index: str) -> Tuple[int, int]:
+def validate_shard(total: str, index: str) -> tuple[int, int]:
     if not is_uint(total) or not is_uint(index):
         raise ValueError(f"shard config must be numeric: total={total} index={index}")
     total_i, index_i = int(total), int(index)
@@ -430,7 +430,7 @@ def diff_stable_cache_dir(suite: str, xray: Path) -> Path:
     return cache.stable_cache_dir(PROJECT_DIR, suite, xray)
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray_raw = argv[1] if len(argv) > 1 else os.environ.get("XRAY_BIN", "")
     if not xray_raw:
         build_dir = os.environ.get("XRAY_BUILD_DIR")
@@ -501,7 +501,7 @@ def main(argv: List[str]) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    selected: List[Tuple[int, Path]] = []
+    selected: list[tuple[int, Path]] = []
     case_index = 0
     for case in all_cases:
         if not case.is_file() or case.name.startswith("_"):
@@ -534,7 +534,7 @@ def main(argv: List[str]) -> int:
     # Case-level parallelism. Each case mixes an AOT build and both backends'
     # runs, so it is one CPU-tagged unit; the scheduler caps concurrency at the
     # configured job count.
-    results: List[CaseResult] = []
+    results: list[CaseResult] = []
     reporter = progress.ProgressReporter(len(selected))
     if jobs <= 1:
         for order, case in selected:

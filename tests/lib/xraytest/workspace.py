@@ -33,10 +33,10 @@ class Workspace:
     a developer can inspect the failing artifacts.
     """
 
-    def __init__(self, label: str = "xraytest", *, keep: "bool | None" = None) -> None:
+    def __init__(self, label: str = "xraytest", *, keep: bool | None = None) -> None:
         self._label = label
         self._keep = platform.env_flag("XRAY_TEST_KEEP_TMP") if keep is None else keep
-        self._root: "Path | None" = None
+        self._root: Path | None = None
 
     def __enter__(self) -> "Workspace":
         base = tempfile.mkdtemp(prefix=f"{self._label}.")
@@ -76,11 +76,11 @@ class Workspace:
         target.parent.mkdir(parents=True, exist_ok=True)
         return target
 
-    def write(self, name: str, content: "bytes | str") -> Path:
+    def write(self, name: str, content: bytes | str) -> Path:
         """Materialize a file in the workspace and return its path."""
         target = self.path(name)
         if isinstance(content, str):
-            platform.write_text_lf(target, content)
+            target.write_text(content, encoding="utf-8", newline="\n")
         else:
             target.write_bytes(content)
         return target

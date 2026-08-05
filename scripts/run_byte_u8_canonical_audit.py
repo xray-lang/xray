@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List, Sequence
+from typing import Sequence
 
 
 def _bootstrap() -> None:
@@ -38,7 +38,7 @@ REGRESSION_CASE = (PROJECT_ROOT / "tests" / "regression" / "14_typed_array"
                    / "1409_byte_u8_canonical_identity.xr")
 
 
-def require_env(name: str) -> "str | None":
+def require_env(name: str) -> str | None:
     value = os.environ.get(name)
     if not value:
         sys.stderr.write(f"{name} must point to the executable\n")
@@ -46,12 +46,12 @@ def require_env(name: str) -> "str | None":
     return value
 
 
-def run_step(label: str, argv: Sequence, timeout: "float | None") -> bool:
+def run_step(label: str, argv: Sequence, timeout: float | None) -> bool:
     print(f"{LABEL} {label}")
     return proc.run_passthrough(argv, timeout=timeout) == 0
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = require_env("XRAY_BIN")
     lsp_document = require_env("XRAY_TEST_LSP_DOCUMENT")
     xglobal_summary = require_env("XRAY_TEST_XGLOBAL_SUMMARY")

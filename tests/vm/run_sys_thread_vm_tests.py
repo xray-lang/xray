@@ -24,7 +24,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Sequence, Tuple
+from typing import List, Sequence
 
 
 def _bootstrap() -> None:
@@ -56,12 +56,12 @@ class Case:
     expected: str
     # Only the yieldable case pins a worker count: it must make progress with a
     # single worker, which is where a missing yield would deadlock.
-    workers: "int | None" = None
+    workers: int | None = None
     # Non-empty for WARNING_CASES: every one must appear in stderr.
-    needles: Tuple[str, ...] = ()
+    needles: tuple[str, ...] = ()
 
 
-OUTPUT_CASES: Tuple[Case, ...] = (
+OUTPUT_CASES: tuple[Case, ...] = (
     Case("spawn_join", "sys_thread_spawn_join", "42"),
     Case("join_array", "sys_thread_join_array", "42"),
     Case("spawn_options", "sys_thread_spawn_options", "42"),
@@ -137,7 +137,7 @@ OUTPUT_CASES: Tuple[Case, ...] = (
          "sys_thread_lifecycle_for_in_const_range_join", "42"),
 )
 
-WARNING_CASES: Tuple[Case, ...] = (
+WARNING_CASES: tuple[Case, ...] = (
     Case("orphan", "sys_thread_orphan_warning", "orphan", needles=(EXPLICIT,)),
     Case("unused_local", "sys_thread_unused_local_warning", "unused-local",
          needles=(NEVER_USED.format("t"), "call join() or detach() explicitly")),
@@ -228,7 +228,7 @@ class Recorder:
             print(f"      stderr: {line}")
 
 
-def run_case(xray: Path, case: Case, timeout: "float | None"):
+def run_case(xray: Path, case: Case, timeout: float | None):
     argv: List = [xray, "run"]
     if case.workers is not None:
         argv += ["--workers", str(case.workers)]
@@ -237,7 +237,7 @@ def run_case(xray: Path, case: Case, timeout: "float | None"):
 
 
 def check_output(rec: Recorder, xray: Path, case: Case, label: str,
-                 timeout: "float | None") -> None:
+                 timeout: float | None) -> None:
     result = run_case(xray, case, timeout)
     stdout = result.stdout.decode("utf-8", "replace")
     stderr = result.stderr.decode("utf-8", "replace")
@@ -248,7 +248,7 @@ def check_output(rec: Recorder, xray: Path, case: Case, label: str,
 
 
 def check_warning(rec: Recorder, xray: Path, case: Case,
-                  timeout: "float | None") -> None:
+                  timeout: float | None) -> None:
     result = run_case(xray, case, timeout)
     stdout = result.stdout.decode("utf-8", "replace")
     stderr = result.stderr.decode("utf-8", "replace")
@@ -259,7 +259,7 @@ def check_warning(rec: Recorder, xray: Path, case: Case,
         rec.bad(f"{case.name} warning", stdout, stderr, stderr_lines=80)
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY_BIN", str(PROJECT_DIR / "build" / "xray")))
 

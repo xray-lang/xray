@@ -18,7 +18,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -63,7 +62,7 @@ class Recorder:
 
 
 def check_no_symbols(rec: Recorder, path: Path, label: str,
-                     timeout: "float | None") -> None:
+                     timeout: float | None) -> None:
     lines = binary.symbols(path, global_only=True, timeout=timeout)
     offenders = [line for line in (lines or []) if TOOLCHAIN_SYMBOL.search(line)]
     if offenders:
@@ -73,7 +72,7 @@ def check_no_symbols(rec: Recorder, path: Path, label: str,
         rec.ok(f"{label} has no compiler/toolchain symbols")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     if len(argv) < 5 or not all(argv[1:5]):
         sys.stderr.write(USAGE)
         return 2

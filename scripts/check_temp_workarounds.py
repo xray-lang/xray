@@ -29,7 +29,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Sequence, Set, Tuple
+from typing import Sequence
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TABLE_FILE = Path("tests/known_temp_workarounds.md")
@@ -70,9 +70,9 @@ def section(title: str) -> None:
     print(f"=== {title} ===")
 
 
-def table_rows(text: str) -> List[List[str]]:
+def table_rows(text: str) -> list[list[str]]:
     """Data rows of the markdown table, cells trimmed, header/alignment gone."""
-    rows: List[List[str]] = []
+    rows: list[list[str]] = []
     for line in text.splitlines():
         if not line.startswith("|"):
             continue
@@ -86,7 +86,7 @@ def table_rows(text: str) -> List[List[str]]:
     return rows
 
 
-def source_files() -> List[Path]:
+def source_files() -> list[Path]:
     root = REPO_ROOT / SCAN_DIR
     if not root.is_dir():
         return []
@@ -94,7 +94,7 @@ def source_files() -> List[Path]:
                   if p.is_file() and p.suffix in SOURCE_SUFFIXES)
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     os.chdir(REPO_ROOT)
     failed = False
 
@@ -126,7 +126,7 @@ def main(argv: List[str]) -> int:
         green("OK: every row has all eight cells filled.")
 
     files = source_files()
-    tag_refs: Set[str] = set()
+    tag_refs: set[str] = set()
     for path in files:
         tag_refs.update(TRACKING_REF.findall(
             path.read_text(encoding="utf-8")))
@@ -136,7 +136,7 @@ def main(argv: List[str]) -> int:
         yellow(f"Note: no DEFENSIVE-TEMP tracking refs found under {SCAN_DIR}.")
 
     section("tag block shape")
-    malformed: List[str] = []
+    malformed: list[str] = []
     for path in files:
         lines = path.read_text(encoding="utf-8").splitlines()
         for index, line in enumerate(lines):

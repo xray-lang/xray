@@ -21,7 +21,6 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -56,7 +55,7 @@ Status = report.Status
 class Config:
     xray: Path
     mode: str
-    selected_modes: List[str]
+    selected_modes: list[str]
     verbose: bool
     keep_tmp: bool
     jobs: int
@@ -67,7 +66,7 @@ class Config:
     # Per-subprocess wall-clock ceiling. A dump/verify/compile that deadlocks
     # becomes one red case, not a hung lane; the child tree is killed on expiry.
     # XRAY_TEST_CASE_TIMEOUT tunes it, 0 disables.
-    case_timeout: "float | None"
+    case_timeout: float | None
 
 
 # --- helpers ----------------------------------------------------------------
@@ -101,7 +100,7 @@ def configure_jobs(requested: str) -> int:
 # --- commands ---------------------------------------------------------------
 
 
-def probe_dump_support(config: Config, ws: workspace.Workspace) -> Tuple[bool, str]:
+def probe_dump_support(config: Config, ws: workspace.Workspace) -> tuple[bool, str]:
     """Does this xray support --dump-xaot-plan? A trivial build decides; failure
     skips the whole suite rather than reporting every case as a failure."""
     src = ws.write("probe.xr", "fn answer() -> int {\n    return 42\n}\nprint(answer())\n")
@@ -114,7 +113,7 @@ def probe_dump_support(config: Config, ws: workspace.Workspace) -> Tuple[bool, s
     return result.ok, result.combined_text()
 
 
-def run_dump(config: Config, out_c: Path, xr_file: Path, extra_args: List[str]) -> proc.ProcResult:
+def run_dump(config: Config, out_c: Path, xr_file: Path, extra_args: list[str]) -> proc.ProcResult:
     argv = [config.xray, "build", "--native", "--dump-xaot-plan", "--dump-link-manifest"]
     argv.extend(extra_args)
     argv.extend(["-c", "-o", out_c, xr_file])
@@ -130,7 +129,7 @@ def run_verify(config: Config, project: Path, contract: Path) -> proc.ProcResult
 
 
 def compile_c_syntax(
-    config: Config, c_out: Path, extra_args: List[str], ws: workspace.Workspace, tag: str
+    config: Config, c_out: Path, extra_args: list[str], ws: workspace.Workspace, tag: str
 ) -> expectlib.CheckOutcome:
     """Check the generated C compiles. Cross-target C needs a toolchain shipping
     that target's headers (zig); host C uses -fsyntax-only."""
@@ -176,7 +175,7 @@ def skip_for_sanitizer(config: Config, exp: expectlib.Expect) -> bool:
     return False
 
 
-def assemble_project(mode: str, xr_file: Path, manifest: Path, contract: Optional[Path],
+def assemble_project(mode: str, xr_file: Path, manifest: Path, contract: Path | None,
                      ws: workspace.Workspace) -> Path:
     """A .toml case builds as a project: copy the directory's .xr and .S assets,
     the manifest as xray.toml, and any contract, then build from there."""
@@ -202,8 +201,8 @@ class CaseVerdict:
     excerpt: str = ""
 
 
-def _dump_and_c_paths(config: Config, mode: str, xr_file: Path, extra_args: List[str],
-                      ws: workspace.Workspace) -> Tuple[bytes, bytes, Optional[str]]:
+def _dump_and_c_paths(config: Config, mode: str, xr_file: Path, extra_args: list[str],
+                      ws: workspace.Workspace) -> tuple[bytes, bytes, str | None]:
     """Return (dump_bytes, c_bytes, error). Uses the persistent dump/C cache
     unless disabled. error is a failure detail when the dump command itself
     failed on a status=pass case."""
@@ -372,8 +371,8 @@ def _verdict_from_outcome(name: str, mode: str, outcome: expectlib.CheckOutcome,
 # --- collection & driver ----------------------------------------------------
 
 
-def collect(selected_modes: List[str]) -> List[Tuple[str, Path]]:
-    out: List[Tuple[str, Path]] = []
+def collect(selected_modes: list[str]) -> list[tuple[str, Path]]:
+    out: list[tuple[str, Path]] = []
     for mode in selected_modes:
         directory = FILETEST_DIR / mode
         if not directory.is_dir():
@@ -393,7 +392,7 @@ def format_line(v: CaseVerdict) -> str:
     return prefix + f"FAIL ({v.detail})"
 
 
-def parse_args(argv: List[str]) -> Config:
+def parse_args(argv: list[str]) -> Config:
     ap = argparse.ArgumentParser(description="AOT filetest runner")
     ap.add_argument("--mode", default="all")
     ap.add_argument("--xray", default=None)
@@ -441,7 +440,7 @@ def parse_args(argv: List[str]) -> Config:
     )
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     config = parse_args(argv)
     cases = collect(config.selected_modes)
 
@@ -477,7 +476,7 @@ def main(argv: List[str]) -> int:
     return _report_and_ratchet(config, verdicts)
 
 
-def _run_cases(config: Config, cases: List[Tuple[str, Path]], ws: workspace.Workspace) -> List[CaseVerdict]:
+def _run_cases(config: Config, cases: list[tuple[str, Path]], ws: workspace.Workspace) -> list[CaseVerdict]:
     reporter = progress.ProgressReporter(len(cases))
     if config.jobs <= 1:
         results = []
@@ -508,7 +507,7 @@ def _run_cases(config: Config, cases: List[Tuple[str, Path]], ws: workspace.Work
     return results
 
 
-def _report_and_ratchet(config: Config, verdicts: List[CaseVerdict]) -> int:
+def _report_and_ratchet(config: Config, verdicts: list[CaseVerdict]) -> int:
     passed = failed = skipped = 0
     for v in verdicts:
         print(format_line(v))

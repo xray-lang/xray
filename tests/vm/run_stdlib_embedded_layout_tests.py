@@ -16,7 +16,6 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -44,7 +43,7 @@ class Case:
     mode: str
 
 
-CASES: Tuple[Case, ...] = (
+CASES: tuple[Case, ...] = (
     Case("vm_path_empty_stdlib", "demo.xr",
          'import path; print(path.basename(path.from("/tmp/demo.xr")))', "arg"),
     Case("vm_http_empty_stdlib", "<fn>",
@@ -52,7 +51,7 @@ CASES: Tuple[Case, ...] = (
     Case("vm_cluster_empty_stdlib", "true", CLUSTER_CODE, "run"),
 )
 
-DIFF_CASES: Tuple[str, ...] = (
+DIFF_CASES: tuple[str, ...] = (
     "tests/diff/cases/semantics/stdlib/probe_module_shapes.xr",
     "tests/diff/cases/semantics/stdlib/http_pure_helpers_direct.xr",
     "tests/diff/cases/semantics/stdlib/cluster_protocol_pure_direct.xr",
@@ -69,7 +68,7 @@ def normalize(data: bytes) -> str:
 
 
 def run_case(xray: Path, case: Case, env: dict,
-             timeout: "float | None") -> Optional[str]:
+             timeout: float | None) -> str | None:
     """None on success, else a failure description."""
     if case.mode == "arg":
         result = proc.run([xray, "-e", case.code], env=env, cwd=ROOT, timeout=timeout)
@@ -85,7 +84,7 @@ def run_case(xray: Path, case: Case, env: dict,
     return None
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY", str(ROOT / "build" / "xray")))
     python = argv[2] if len(argv) > 2 else os.environ.get("PYTHON", sys.executable)

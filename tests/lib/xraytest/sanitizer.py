@@ -24,7 +24,7 @@ import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Sequence
 
 from . import platform, proc
 
@@ -38,13 +38,13 @@ class BuildSpec:
 
     build_dir: Path
     # CMake cache variables that turn the sanitizer on, e.g. ENABLE_ASAN=ON.
-    sanitizer_flags: Tuple[str, ...]
+    sanitizer_flags: tuple[str, ...]
     build_type: str = "Debug"
     c_compiler: str = "clang"
     cxx_compiler: str = "clang++"
     # Extra cache variables beyond the sanitizer flags.
-    extra_cache: Tuple[str, ...] = ()
-    targets: Tuple[str, ...] = ()          # empty = build everything
+    extra_cache: tuple[str, ...] = ()
+    targets: tuple[str, ...] = ()          # empty = build everything
     # What proves this tree really is instrumented. Normally the sanitizer
     # flags themselves, but a lane that instruments through raw CMAKE_C_FLAGS
     # rather than an ENABLE_* option has no BOOL to check, so it names the
@@ -52,9 +52,9 @@ class BuildSpec:
     # because "how to configure" and "how to verify" are not the same question:
     # conflating them either skips the check or invents an option that changes
     # what the build does.
-    verify_cache_contains: Tuple[str, ...] = ()
+    verify_cache_contains: tuple[str, ...] = ()
 
-    def verification_targets(self) -> "Tuple[str, ...]":
+    def verification_targets(self) -> "tuple[str, ...]":
         return self.verify_cache_contains or self.sanitizer_flags
 
 
@@ -62,7 +62,7 @@ def cache_file(build_dir: Path) -> Path:
     return build_dir / "CMakeCache.txt"
 
 
-def configured_generator(build_dir: Path) -> Optional[str]:
+def configured_generator(build_dir: Path) -> str | None:
     cache = cache_file(build_dir)
     if not cache.is_file():
         return None
@@ -72,7 +72,7 @@ def configured_generator(build_dir: Path) -> Optional[str]:
     return None
 
 
-def verify_configured(build_dir: Path, required_flag: str) -> Optional[str]:
+def verify_configured(build_dir: Path, required_flag: str) -> str | None:
     """None when the tree really has the sanitizer on, else an error message.
 
     Checked even when the build is skipped: a caller may point the lane at a
@@ -98,7 +98,7 @@ def verify_configured(build_dir: Path, required_flag: str) -> Optional[str]:
     return None
 
 
-def stale_source(binary: Path, project_dir: Path) -> Optional[Path]:
+def stale_source(binary: Path, project_dir: Path) -> Path | None:
     """A source file newer than `binary`, or None when the binary is current."""
     if not binary.is_file():
         return None
@@ -121,7 +121,7 @@ def stale_source(binary: Path, project_dir: Path) -> Optional[Path]:
 
 
 def configure(spec: BuildSpec, project_dir: Path, jobs: int,
-              timeout: "float | None", log) -> bool:
+              timeout: float | None, log) -> bool:
     """Configure the tree, reusing an existing one unless its generator differs.
 
     Ninja is the project's one generator. A Makefiles tree costs the ASan lane
@@ -178,7 +178,7 @@ def configure(spec: BuildSpec, project_dir: Path, jobs: int,
     return True
 
 
-def build(spec: BuildSpec, jobs: int, timeout: "float | None", log) -> bool:
+def build(spec: BuildSpec, jobs: int, timeout: float | None, log) -> bool:
     argv = ["cmake", "--build", spec.build_dir, "-j", str(jobs)]
     if spec.targets:
         argv.append("--target")
@@ -192,7 +192,7 @@ def build(spec: BuildSpec, jobs: int, timeout: "float | None", log) -> bool:
 
 
 def ctest(build_dir: Path, *, include: str = "", exclude: str = "", jobs: int = 1,
-          timeout_each: int = 300, timeout: "float | None" = None) -> proc.ProcResult:
+          timeout_each: int = 300, timeout: float | None = None) -> proc.ProcResult:
     argv = ["ctest", "--test-dir", str(build_dir), "--output-on-failure",
             "-j", str(jobs), "--timeout", str(timeout_each)]
     if include:
@@ -203,7 +203,7 @@ def ctest(build_dir: Path, *, include: str = "", exclude: str = "", jobs: int = 
 
 
 def ctest_has_match(build_dir: Path, pattern: str,
-                    timeout: "float | None" = 120) -> bool:
+                    timeout: float | None = 120) -> bool:
     """Whether any registered test matches, so a lane can skip an empty subset
     instead of failing on ctest's 'no tests were found' exit."""
     result = proc.run(["ctest", "--test-dir", str(build_dir), "-N", "-R", pattern],

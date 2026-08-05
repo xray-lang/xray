@@ -31,7 +31,6 @@ import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
-from typing import List
 
 DEFAULT_VERSION = "0.16.0"
 
@@ -71,7 +70,7 @@ def download(url: str, target: Path) -> None:
     partial.replace(target)
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     version = os.environ.get("ZIG_VERSION", DEFAULT_VERSION)
     prefix = Path(os.environ.get("XRAY_ZIG_PREFIX", str(home() / ".local/opt/zig")))
     bin_dir = Path(os.environ.get("XRAY_ZIG_BIN_DIR", str(home() / ".local/bin")))

@@ -36,7 +36,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -116,8 +115,8 @@ def run_one(xray: Path, case: Path, timeout: float) -> CaseResult:
     return CaseResult(case.name, FAIL, count, output)
 
 
-def collect_cases() -> List[Path]:
-    cases: List[Path] = []
+def collect_cases() -> list[Path]:
+    cases: list[Path] = []
     for path in TEST_DIR.rglob("*.xr"):
         if not path.is_file() or path.name.startswith("_"):
             continue
@@ -127,7 +126,7 @@ def collect_cases() -> List[Path]:
     return sorted(cases)
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Run the regression corpus.")
     parser.add_argument("--json", type=Path, default=None,
                         help="also write the result as structured JSON")
@@ -174,8 +173,8 @@ def main(argv: List[str]) -> int:
     results.sort(key=lambda r: r.name)
 
     passed = failed = skipped = executed = 0
-    failed_list: List[str] = []
-    outputs: Dict[str, bytes] = {}
+    failed_list: list[str] = []
+    outputs: dict[str, bytes] = {}
     for item in results:
         executed += item.executed
         if item.verdict == PASS:
@@ -218,7 +217,7 @@ def main(argv: List[str]) -> int:
     print("")
 
     if args.json:
-        platform.write_text_lf(args.json, json.dumps({
+        args.json.write_text(json.dumps({
             "total_files": len(cases),
             "executed": executed,
             "passed": passed,
@@ -226,7 +225,7 @@ def main(argv: List[str]) -> int:
             "failed": failed,
             "elapsed_seconds": elapsed,
             "failed_tests": failed_list,
-        }, indent=2, ensure_ascii=False) + "\n")
+        }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
     if not failed:
         print(f"{GREEN}所有测试通过！{NC}")

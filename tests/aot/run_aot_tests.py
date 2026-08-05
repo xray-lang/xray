@@ -25,7 +25,7 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Sequence
 
 
 def _bootstrap() -> None:
@@ -76,7 +76,7 @@ class Config:
     disable_run_cache: bool
     shard_total: int
     shard_index: int
-    case_timeout: "float | None"
+    case_timeout: float | None
 
 
 @dataclass
@@ -99,7 +99,7 @@ def safe_case_name(rel: str) -> str:
     return "".join(ch if ch.isalnum() or ch in "_.-" else "_" for ch in stem)
 
 
-def case_args(xr_file: Path) -> Tuple[str, ...]:
+def case_args(xr_file: Path) -> tuple[str, ...]:
     stem = xr_file.stem
     for prefix, args in CASE_ARGS.items():
         if stem.startswith(prefix):
@@ -115,7 +115,7 @@ def configure_jobs(requested: str) -> int:
 
 
 def build_native(config: Config, xr_file: Path, bin_out: Path, ws: workspace.Workspace
-                 ) -> Tuple[bool, str]:
+                 ) -> tuple[bool, str]:
     """Build a case to a native binary, cached and lock-protected.
 
     Returns (ok, detail). The binary is content-addressed, so a warm cache skips
@@ -211,8 +211,8 @@ def run_positive(config: Config, xr_file: Path, ws: workspace.Workspace) -> Case
                     run_dir.mkdir(parents=True, exist_ok=True)
                     (run_dir / "vm.out").write_bytes(vm.stdout)
                     (run_dir / "aot.out").write_bytes(aot.stdout)
-                    platform.write_text_lf(run_dir / "vm.rc", f"{vm.returncode}\n")
-                    platform.write_text_lf(run_dir / "aot.rc", f"{aot.returncode}\n")
+                    (run_dir / "vm.rc").write_text(f"{vm.returncode}\n", encoding="utf-8", newline="\n")
+                    (run_dir / "aot.rc").write_text(f"{aot.returncode}\n", encoding="utf-8", newline="\n")
                     (run_dir / "pass").touch()
             finally:
                 lock.release()
@@ -278,8 +278,8 @@ def read_tombstones(path: Path) -> "set[str]":
     return names
 
 
-def tombstone_gate(tomb_file: Path, verdicts: List[CaseVerdict],
-                   max_allowed: "Optional[int]") -> int:
+def tombstone_gate(tomb_file: Path, verdicts: list[CaseVerdict],
+                   max_allowed: "int | None") -> int:
     """Fail-closed gate: exactly the tombstoned cases may fail.
 
     Any other failure fails the gate; a tombstoned case that now passes is
@@ -317,14 +317,14 @@ def tombstone_gate(tomb_file: Path, verdicts: List[CaseVerdict],
     return 0
 
 
-def collect(section: str) -> List[Path]:
+def collect(section: str) -> list[Path]:
     directory = SCRIPT_DIR / section
     if not directory.is_dir():
         return []
     return sorted(p for p in directory.glob("*.xr") if not p.name.startswith("_"))
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="AOT VM/native equivalence suite")
     ap.add_argument("--xray", default=None)
     ap.add_argument("-v", "--verbose", action="store_true")
@@ -379,7 +379,7 @@ def main(argv: List[str]) -> int:
         everything = [item for i, item in enumerate(everything)
                       if i % shard_total == shard_index]
 
-    verdicts: List[CaseVerdict] = []
+    verdicts: list[CaseVerdict] = []
     with workspace.Workspace("xray_aot_tests") as ws:
         reporter = progress.ProgressReporter(len(everything))
 

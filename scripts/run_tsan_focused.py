@@ -28,7 +28,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List, Tuple
 
 
 def _bootstrap() -> None:
@@ -45,7 +44,7 @@ LANE = "tsan_focused"
 
 # (mode, case). Channel / work-stealing / scope shapes from the canonical suite,
 # plus the progress shapes the liveness lane pinned.
-CASES: Tuple[Tuple[str, str], ...] = (
+CASES: tuple[tuple[str, str], ...] = (
     ("test", "tests/regression/11_coroutine/1101_channel_basic.xr"),
     ("test", "tests/regression/11_coroutine/1102_go_await.xr"),
     ("test", "tests/regression/11_coroutine/1104_coroutine_combined.xr"),
@@ -65,7 +64,7 @@ CASE_TIMEOUT = 60
 TSAN_WARNING = "WARNING: ThreadSanitizer"
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     log = sanitizer.LaneLog(LANE)
     jobs = sanitizer.default_jobs("XR_TSAN_JOBS")
     build_dir = PROJECT_DIR / os.environ.get("XR_TSAN_BUILD_DIR", "build-tsan")

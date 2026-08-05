@@ -17,7 +17,6 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -45,7 +44,7 @@ import re  # noqa: E402
 RUNTIME_HELPER_RE = re.compile(r"xr_array_core|xrt_(ptr|endian_arg|has_pending_error)")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Raw scalar assembly shape gate")
     ap.add_argument("xray", nargs="?", default=None)
     ns = ap.parse_args(argv[1:])

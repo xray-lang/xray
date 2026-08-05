@@ -20,7 +20,6 @@ import re
 import shutil
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -40,7 +39,7 @@ CASE = SCRIPT_DIR / "provider" / "freestanding_numeric_core.c"
 SKIP_EXIT = 77
 
 # (target triple, optional -mcpu)
-TARGETS: Tuple[Tuple[str, Optional[str]], ...] = (
+TARGETS: tuple[tuple[str, str | None], ...] = (
     ("riscv32-freestanding-none", None),
     ("riscv64-freestanding-none", None),
     ("thumb-freestanding-eabi", "cortex_m4"),
@@ -55,7 +54,7 @@ CFLAGS = (
 )
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Freestanding numeric core compile gate")
     ap.add_argument("xray", nargs="?", default=None)
     ns = ap.parse_args(argv[1:])

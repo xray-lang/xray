@@ -37,7 +37,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Optional, Sequence
 
 # grep's [[:space:]] is line-wise, so \s is the exact Python equivalent here.
 SP = r"\s"
@@ -45,7 +45,7 @@ SP = r"\s"
 # name -> pattern, shared by every scope that has the metric. One table rather
 # than three: the shell repeated all of these once per scope, which is how a
 # pattern fix could land in one scope and not the others.
-SHARED_PATTERNS: Dict[str, str] = {
+SHARED_PATTERNS: dict[str, str] = {
     "xrvalue_count": r"\bXrValue\b",
     "xrvalue_local_count": r"(^|[({;=,\s])XrValue\s+[*]?[A-Za-z_][A-Za-z0-9_]*",
     "box_count": r"XR_FROM_[A-Z0-9_]*\s*\(|xr_box_[A-Za-z0-9_]*\s*\(|XI_BOX",
@@ -71,14 +71,14 @@ SHARED_PATTERNS: Dict[str, str] = {
 }
 
 # Only meaningful for the whole translation unit.
-BASE_ONLY_PATTERNS: Dict[str, str] = {
+BASE_ONLY_PATTERNS: dict[str, str] = {
     "dtor_emitted": r"^static\s+void\s+[A-Za-z0-9_]+_dtor\s*\(void\s+\*obj\)",
     "release_runs_dtor": r"xrt_type_register\s*\([^;]*_dtor",
     "vm_jit_include_count": r'^#include\s+["<].*(src/)?(vm|jit|xvm|xm_)',
 }
 
 # Loop shape, only asked of the hot functions.
-HOT_ONLY_PATTERNS: Dict[str, str] = {
+HOT_ONLY_PATTERNS: dict[str, str] = {
     "int64_phi_count": r"^\s*int64_t\s+phi[0-9]+\s*=",
     "if_count": r"^\s*if\s*\(",
     "while_count": r"^\s*while\s*\(",
@@ -89,7 +89,7 @@ FUNCTION_OPEN = re.compile(r"^static\s.*\)\s*\{")
 # Printed in exactly this order. restrict_local_count and its hot twin are
 # computed and checkable but deliberately absent: they describe an
 # implementation detail of the array fast path, not a plan metric.
-OUTPUT_ORDER: Tuple[str, ...] = (
+OUTPUT_ORDER: tuple[str, ...] = (
     "xrvalue_count", "xrvalue_local_count", "box_count", "unbox_count",
     "runtime_arith_calls", "runtime_int_checked_arith_calls",
     "typed_array_runtime_calls", "typed_array_bounds_check_count",
@@ -127,13 +127,13 @@ OUTPUT_ORDER: Tuple[str, ...] = (
 )
 
 # The one named region shape the scanner knows how to bracket.
-NAMED_REGIONS: Dict[str, Tuple[str, str]] = {
+NAMED_REGIONS: dict[str, tuple[str, str]] = {
     "typed_array_raw_access": (r"XR_AOT_HOT_REGION_BEGIN\s+typed_array_raw_access",
                                r"XR_AOT_HOT_REGION_END\s+typed_array_raw_access"),
 }
 
 
-def manifest_value(expect_file: Optional[Path], key: str) -> str:
+def manifest_value(expect_file: Path | None, key: str) -> str:
     """`key = value` from the expectation file, comments stripped."""
     if expect_file is None or not expect_file.is_file():
         return ""
@@ -162,14 +162,14 @@ def function_name(line: str) -> str:
     return re.sub(r".*[\s*]", "", name)
 
 
-def extract_hot_functions(pattern: str, lines: Sequence[str]) -> Optional[List[str]]:
+def extract_hot_functions(pattern: str, lines: Sequence[str]) -> Optional[list[str]]:
     """Whole bodies of the functions whose name matches, or None if none did.
 
     Brace depth rather than a closing-brace regex: a nested block or a struct
     literal in the body would end the capture early otherwise.
     """
     compiled = re.compile(pattern)
-    captured: List[str] = []
+    captured: list[str] = []
     matched = 0
     depth = 0
     inside = False
@@ -191,10 +191,10 @@ def extract_hot_functions(pattern: str, lines: Sequence[str]) -> Optional[List[s
 
 
 def extract_hot_regions(start: str, end: str,
-                        lines: Sequence[str]) -> Tuple[Optional[List[str]], bool]:
+                        lines: Sequence[str]) -> tuple[Optional[list[str]], bool]:
     """(captured lines or None, unterminated) for the marked region."""
     start_re, end_re = re.compile(start), re.compile(end)
-    captured: List[str] = []
+    captured: list[str] = []
     matched = 0
     inside = False
     for line in lines:
@@ -214,7 +214,7 @@ def extract_hot_regions(start: str, end: str,
     return (captured if matched else None), False
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         description="Scan generated C for AOT code-shape invariants.",
         add_help=True)
@@ -250,7 +250,7 @@ def main(argv: List[str]) -> int:
             region_start = region_start or known[0]
             region_end = region_end or known[1]
 
-    hot_blocks: List[List[str]] = []
+    hot_blocks: list[list[str]] = []
     if hot_function:
         for block in sources:
             found = extract_hot_functions(hot_function, block)
@@ -258,7 +258,7 @@ def main(argv: List[str]) -> int:
                 hot_blocks.append(found)
     hot_function_missing = bool(hot_function) and not hot_blocks
 
-    region_blocks: List[List[str]] = []
+    region_blocks: list[list[str]] = []
     region_missing = False
     if region_start or region_end:
         if not (region_start and region_end):
@@ -276,7 +276,7 @@ def main(argv: List[str]) -> int:
                         region_incomplete = True
             region_missing = not region_blocks
 
-    metrics: Dict[str, int] = {}
+    metrics: dict[str, int] = {}
     for name, pattern in SHARED_PATTERNS.items():
         metrics[name] = count_lines(pattern, sources)
         metrics[f"hot_{name}"] = count_lines(pattern, hot_blocks)

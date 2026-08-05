@@ -20,7 +20,6 @@ from __future__ import annotations
 import shutil
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -36,7 +35,7 @@ from xraytest import platform, proc, workspace  # noqa: E402
 LAYOUT_LIB_NAME = "_extern_layout_bytecode_lib.xr"
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     if len(argv) != 4:
         sys.stderr.write(f"usage: {argv[0]} <xray> <entry.xr> <layout-lib.xr>\n")
         return 2

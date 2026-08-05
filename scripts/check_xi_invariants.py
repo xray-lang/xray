@@ -20,7 +20,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Set, Tuple
+from typing import Iterable, Sequence
 
 
 def _bootstrap() -> None:
@@ -43,7 +43,7 @@ COMBINED_MIN_REFS = 3
 # Pre-existing long functions grandfathered before strict enforcement. New code
 # must not exceed the limit. Each entry MUST be removed when its function is
 # refactored.
-INV13_ALLOWLIST: Tuple[Tuple[str, str], ...] = (
+INV13_ALLOWLIST: tuple[tuple[str, str], ...] = (
     ("xi_emit.c", "xi_emit"),
     ("xi_emit_cf.c", "emit_block"),
     ("xi_emit_object.c", "emit_class_create_impl"),
@@ -106,7 +106,7 @@ class Report:
             print("    ... (--verbose for the rest)")
 
 
-def sources(root: Path, suffixes: Sequence[str] = (".c", ".h")) -> List[Path]:
+def sources(root: Path, suffixes: Sequence[str] = (".c", ".h")) -> list[Path]:
     if not root.is_dir():
         return []
     return sorted(p for p in root.rglob("*") if p.is_file() and p.suffix in suffixes)
@@ -118,9 +118,9 @@ def read(path: Path) -> str:
 
 def grep(roots: Sequence[Path], pattern: re.Pattern,
          skip_comments: bool = False,
-         exclude_substrings: Sequence[str] = ()) -> List[str]:
+         exclude_substrings: Sequence[str] = ()) -> list[str]:
     """`path:line:text` for each matching line, in path then line order."""
-    hits: List[str] = []
+    hits: list[str] = []
     for root in roots:
         for path in sources(root):
             relative = path.relative_to(REPO_ROOT)
@@ -176,7 +176,7 @@ def check_no_mode_flags(report: Report) -> None:
 
 def check_no_silent_defaults(report: Report) -> None:
     print("--- INV-X: No silent default branches in src/ir/ ---")
-    hits: List[str] = []
+    hits: list[str] = []
     for path in sources(IR_DIR):
         lines = read(path).splitlines()
         relative = path.relative_to(REPO_ROOT)
@@ -201,7 +201,7 @@ def check_op_name_sync(report: Report) -> None:
         report.warn("xi.h or xi_ops_gen.h not found, skipping")
         return
 
-    ops: Set[str] = set()
+    ops: set[str] = set()
     inside = False
     for line in read(xi_h).splitlines():
         if "XI_CONST = 0" in line:
@@ -285,9 +285,9 @@ def check_function_length(report: Report) -> None:
         report.ok(f"No new functions exceed {MAX_FUNCTION_LINES} lines in src/ir/")
 
 
-def pass_table_names(text: str) -> List[str]:
+def pass_table_names(text: str) -> list[str]:
     """Pass names in declaration order, read from the single pass table."""
-    names: List[str] = []
+    names: list[str] = []
     inside = False
     for line in text.splitlines():
         if "static const XiPassDesc xi_pass_table[]" in line:
@@ -326,7 +326,7 @@ def check_pass_registration(report: Report) -> None:
         report.warn("xi_opt.c not found, skipping")
         return
 
-    functions: Set[str] = set()
+    functions: set[str] = set()
     for path in sources(IR_DIR, (".c",)):
         for line in read(path).splitlines():
             match = PASS_FUNC_DEF.match(line)
@@ -371,8 +371,8 @@ def check_test_coverage(report: Report) -> None:
     combined_text = read(combined) if combined.is_file() else ""
     test_dir = REPO_ROOT / "tests" / "unit" / "ir"
 
-    missing_dedicated: List[str] = []
-    no_coverage: List[str] = []
+    missing_dedicated: list[str] = []
+    no_coverage: list[str] = []
     for path in sorted(IR_DIR.glob("xi_opt_*.c")):
         base = path.stem
         short = base[len("xi_opt_"):]
@@ -400,7 +400,7 @@ def check_test_coverage(report: Report) -> None:
         report.ok("Every xi_opt_*.c has a dedicated test file")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     report = Report(verbose="--verbose" in argv[1:])
 
     print("=== Xi IR Reverse Invariants ===")

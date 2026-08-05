@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -33,7 +32,7 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 SYMBOL = "xr_cycle_detector"
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     import os
 
     target = Path(argv[1]) if len(argv) > 1 else PROJECT_DIR / "build" / "xray"

@@ -26,7 +26,6 @@ import platform as host_platform
 import shutil
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 
 def _bootstrap() -> None:
@@ -99,7 +98,7 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Manifest-first AOT link smoke")
     ap.add_argument("xray", nargs="?", default=None)
     ns = ap.parse_args(argv[1:])

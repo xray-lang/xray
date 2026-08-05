@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -100,15 +101,8 @@ LINK_EXPECTS: dict[str, tuple[str, ...]] = {
 
 
 def load_toml(root: Path, path: Path) -> dict[str, Any]:
-    sys.path.insert(0, str(root / "scripts"))
-    try:
-        import stdlib_manifest  # type: ignore[import-not-found]
-    finally:
-        try:
-            sys.path.remove(str(root / "scripts"))
-        except ValueError:
-            pass
-    return stdlib_manifest.load_toml(path)
+    with path.open("rb") as handle:
+        return tomllib.load(handle)
 
 
 def check_text_file(root: Path, category: str, path_text: str, anchors: tuple[str, ...]) -> CheckResult:

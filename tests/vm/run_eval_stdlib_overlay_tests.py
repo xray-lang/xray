@@ -19,7 +19,6 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -53,7 +52,7 @@ class Case:
     empty_stdlib: bool = False
 
 
-CASES: Tuple[Case, ...] = (
+CASES: tuple[Case, ...] = (
     Case("eval_http_whole", "<fn>", HTTP_WHOLE, "arg"),
     Case("eval_http_selective", "<fn>", HTTP_SELECTIVE, "arg"),
     Case("eval_cluster_whole", "true", CLUSTER_CODE, "eval"),
@@ -74,7 +73,7 @@ def normalize(data: bytes) -> str:
 
 
 def run_case(xray: Path, case: Case, empty_stdlib: Path,
-             timeout: "float | None") -> Optional[str]:
+             timeout: float | None) -> str | None:
     """None on success, else a failure description."""
     env = dict(os.environ)
     if case.empty_stdlib:
@@ -96,7 +95,7 @@ def run_case(xray: Path, case: Case, empty_stdlib: Path,
     return None
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY", str(PROJECT_DIR / "build" / "xray")))
     timeout = platform.env_timeout("XRAY_TEST_CASE_TIMEOUT", 300)

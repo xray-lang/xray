@@ -3,8 +3,6 @@
 One place answers "what is different about this OS", so no suite grows its own
 `uname -s` / `.exe` / CRLF branch. The shell tree had 53 such branches across
 29 files; the point of the package is that this file is the only one.
-
-Python 3.9 is the floor. Nothing here uses 3.10+ syntax or APIs.
 """
 
 from __future__ import annotations
@@ -20,10 +18,6 @@ IS_WINDOWS = os.name == "nt"
 EXE_SUFFIX = ".exe" if IS_WINDOWS else ""
 STATIC_LIB_PREFIX = "" if IS_WINDOWS else "lib"
 STATIC_LIB_SUFFIX = ".lib" if IS_WINDOWS else ".a"
-
-# Generated sources must keep LF endings on every host, so writers open in
-# binary or pass newline="\n" explicitly rather than trusting the OS default.
-TEXT_NEWLINE = "\n"
 
 
 def exe_name(stem: str) -> str:
@@ -47,16 +41,6 @@ def cpu_count() -> int:
     return count if isinstance(count, int) and count >= 1 else 1
 
 
-def write_text_lf(path: Path, content: str) -> None:
-    """Write text with LF endings regardless of host.
-
-    Path.write_text gained a newline parameter only in 3.10; open() has always
-    taken one, so this stays correct on the 3.9 floor.
-    """
-    with path.open("w", encoding="utf-8", newline=TEXT_NEWLINE) as handle:
-        handle.write(content)
-
-
 def env_int(name: str, default: int) -> int:
     """Read a positive integer environment override, falling back on garbage.
 
@@ -72,7 +56,7 @@ def env_int(name: str, default: int) -> int:
     return default
 
 
-def env_timeout(name: str, default: int) -> "float | None":
+def env_timeout(name: str, default: int) -> float | None:
     """Read a per-case timeout override with an explicit disable.
 
     Unset keeps `default`; "0" disables the timeout (returns None) so a lane can

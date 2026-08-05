@@ -73,7 +73,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Set, Tuple
+from typing import Dict, List, Sequence, Tuple
 
 
 def _bootstrap() -> None:
@@ -235,7 +235,7 @@ def build_selected(build_dir: Path, selected: Sequence[str], jobs: int) -> bool:
 
     log = build_dir / ".t-build.log"
     result = proc.run(argv)
-    platform.write_text_lf(log, result.combined_text())
+    log.write_text(result.combined_text(), encoding="utf-8", newline="\n")
     if result.ok:
         return True
     print(f"{RED}BUILD FAILED{NC}")

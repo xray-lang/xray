@@ -30,7 +30,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Sequence
 
 
 def _bootstrap() -> None:
@@ -90,7 +90,7 @@ def as_number(text: str) -> "float | int | None":
     return int(value) if value.is_integer() and "." not in str(text) else value
 
 
-def measure_ms(out_file: Path, argv: Sequence) -> Optional[float]:
+def measure_ms(out_file: Path, argv: Sequence) -> float | None:
     """Wall time of one run in ms, or None when it exited non-zero.
 
     perf_counter_ns around a plain subprocess: the point is to compare two
@@ -150,7 +150,7 @@ def cc_cpu_arg(cpu: str) -> str:
     return f"{prefix}{cpu}"
 
 
-def parse_args(argv: List[str]) -> argparse.Namespace:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run Xray AOT benchmarks against C references.")
     parser.add_argument("--xray-bin", type=Path,
@@ -187,7 +187,7 @@ def matches_filter(spec: str, relative: str, base: str) -> bool:
 
 
 def run_one(args: argparse.Namespace, xr_file: Path, work: Path,
-            results: List[Result]) -> str:
+            results: list[Result]) -> str:
     """Run one benchmark. Returns "pass", "report_only_fail", or "fail"."""
     relative = xr_file.relative_to(BENCH_ROOT)
     rel_no_ext = str(relative.with_suffix(""))
@@ -236,7 +236,7 @@ def run_one(args: argparse.Namespace, xr_file: Path, work: Path,
             print(f"  {line}")
         return "fail"
 
-    rust_bin: Optional[Path] = None
+    rust_bin: Path | None = None
     if args.rust and rs_file.is_file():
         rust_bin = bench_work / platform.exe_name(f"{base}.rust")
         rust_build = proc.run([args.rustc, "-C", f"opt-level={args.opt}",
@@ -261,9 +261,9 @@ def run_one(args: argparse.Namespace, xr_file: Path, work: Path,
                 print(f"  {line}")
         return "fail"
 
-    c_times: List[float] = []
-    aot_times: List[float] = []
-    rust_times: List[float] = []
+    c_times: list[float] = []
+    aot_times: list[float] = []
+    rust_times: list[float] = []
     c_out_ref = bench_work / "c.ref.out"
 
     for i in range(1, args.samples + 1):
@@ -386,10 +386,10 @@ def write_json(path: Path, args: argparse.Namespace,
         }
         for r in results
     ]
-    platform.write_text_lf(path, json.dumps(payload, indent=2) + "\n")
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     args = parse_args(argv)
 
     if not BENCH_ROOT.is_dir():
@@ -421,7 +421,7 @@ def main(argv: List[str]) -> int:
         return 2
 
     passed = failed = report_only = 0
-    results: List[Result] = []
+    results: list[Result] = []
     with workspace.Workspace("xray_aot_c90", keep=args.keep) as ws:
         if args.keep:
             print(f"Work dir: {ws.root}")

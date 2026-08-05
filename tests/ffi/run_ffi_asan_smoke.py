@@ -19,7 +19,6 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -50,7 +49,7 @@ class Case:
     expected: str
 
 
-CASES: Tuple[Case, ...] = (
+CASES: tuple[Case, ...] = (
     Case("ffi_ptr_memory", "tests/diff/cases/semantics/ffi/ptr_memory.xr",
          "10\n20\n30\n40\n30\nfalse\nfalse"),
     Case("ffi_cfn_bsearch", "tests/diff/cases/semantics/ffi/cfn_bsearch.xr",
@@ -107,7 +106,7 @@ def asan_env() -> dict:
     return env
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY_BIN",
                                     str(PROJECT_DIR / "build-sanitizers" / "xray")))

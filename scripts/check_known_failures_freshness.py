@@ -25,7 +25,6 @@ import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
-from typing import List
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FILE = Path("tests/known_failures.txt")
@@ -47,7 +46,7 @@ def green(message: str) -> None:
     print(f"{GREEN}{message}{NC}")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     os.chdir(REPO_ROOT)
     if not FILE.is_file():
         red(f"ERR: {FILE} missing.")

@@ -14,7 +14,6 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import List
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_REGISTRY = SCRIPT_DIR / "contracts.tsv"
@@ -28,7 +27,7 @@ VALID_STATUS = ("baseline-gap", "partial", "verified")
 ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     registry = Path(argv[1]) if len(argv) > 1 else DEFAULT_REGISTRY
     if not registry.is_file():
         sys.stderr.write(f"zero-cost contracts: missing registry: {registry}\n")

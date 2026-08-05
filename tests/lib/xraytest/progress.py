@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import sys
 import threading
-from typing import Optional, TextIO
+from typing import TextIO
 
 from . import platform
 
@@ -23,8 +23,8 @@ class ProgressReporter:
         self,
         total: int,
         *,
-        stream: "Optional[TextIO]" = None,
-        enabled: "Optional[bool]" = None,
+        stream: "TextIO | None" = None,
+        enabled: "bool | None" = None,
     ) -> None:
         self._total = max(0, total)
         self._done = 0

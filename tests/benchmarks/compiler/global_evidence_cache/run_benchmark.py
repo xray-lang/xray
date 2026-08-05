@@ -37,7 +37,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Sequence
 
 
 def _bootstrap() -> None:
@@ -207,7 +207,7 @@ print(value())
 
 # (template, base body expression). Non-base variants always route the body
 # through tag(), which is what makes a body edit observable to the cache.
-TEMPLATES: Dict[str, tuple] = {
+TEMPLATES: dict[str, tuple] = {
     "class": (CLASS_TEMPLATE, None),
     "generic": (GENERIC_TEMPLATE, "0"),
     "closure": (CLOSURE_TEMPLATE, None),
@@ -261,7 +261,7 @@ class Bench:
 
     def run_phase(self, case: str, phase: str, source: Path, out: Path,
                   cache: Path, expected: str, extra_args: Sequence = (),
-                  env: "dict | None" = None) -> str:
+                  env: dict | None = None) -> str:
         """Compile one phase, record the row, and check the cache summary."""
         start = time.time()
         result = proc.run([self.xray, "build", "--native", "--verbose",
@@ -269,7 +269,7 @@ class Bench:
                           env=env)
         ms = int((time.time() - start) * 1000)
         log_text = result.combined_text()
-        platform.write_text_lf(Path(str(out) + ".log"), log_text)
+        Path(str(out) + ".log").write_text(log_text, encoding="utf-8", newline="\n")
 
         matches = SUMMARY_RE.findall(log_text)
         summary = matches[-1] if matches else "missing"
@@ -290,7 +290,7 @@ def write_case(case: str, path: Path, variant: str, extra: str) -> None:
     body = "tag()" if variant != "base" else (base_body
                                               if base_body is not None else extra)
     decl = DECL_EXTRA if variant == "decl" else ""
-    platform.write_text_lf(path, template.format(extra=extra, body=body, decl=decl))
+    path.write_text(template.format(extra=extra, body=body, decl=decl), encoding="utf-8", newline="\n")
 
 
 def prepare_package_payload(bench: Bench, directory: Path, cache: Path) -> bool:
@@ -310,7 +310,7 @@ def prepare_package_payload(bench: Bench, directory: Path, cache: Path) -> bool:
     pkg_dir = home / ".xray" / "packages" / "codex" / "pkg" / "1.0.0" / "src"
     pkg_dir.mkdir(parents=True, exist_ok=True)
     pkg_src = pkg_dir / "main.xr"
-    platform.write_text_lf(pkg_src, PACKAGE_SOURCE)
+    pkg_src.write_text(PACKAGE_SOURCE, encoding="utf-8", newline="\n")
 
     # AOT cache namespaces use the normalized target ABI, including for a
     # native build. Ask the compiler under test rather than assuming a name.
@@ -428,7 +428,7 @@ def run_one_case(bench: Bench, case: str, work: Path, iteration: int) -> None:
                     "hits=0 misses=4 rebuild", ["--rebuild"])
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     xray = Path(argv[1] if len(argv) > 1
                 else os.environ.get("XRAY_BIN", str(PROJECT_DIR / "build" / "xray")))
     fixture = Path(os.environ.get(
@@ -457,7 +457,7 @@ def main(argv: List[str]) -> int:
         results = ws.path("results.tsv")
         header = "case\tphase\telapsed_ms\tevidence_cache\tstatus"
         print(header, flush=True)
-        platform.write_text_lf(results, header + "\n")
+        results.write_text(header + "\n", encoding="utf-8", newline="\n")
 
         bench = Bench(xray, fixture, results)
         for iteration in range(1, repeat + 1):

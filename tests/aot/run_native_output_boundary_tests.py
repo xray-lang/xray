@@ -18,7 +18,6 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -49,7 +48,7 @@ def fail(message: str, log: str = "") -> int:
     return 1
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Native output boundary tests")
     ap.add_argument("xray", nargs="?", default=None)
     ap.add_argument("fixture", nargs="?", default=None)

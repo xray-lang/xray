@@ -155,7 +155,7 @@ def files_key(paths: Sequence) -> str:
     return mix(f"{p} {file_digest(Path(p))}" for p in paths)
 
 
-def dir_key(directory: Path, globs: "Sequence | None" = None) -> str:
+def dir_key(directory: Path, globs: Sequence | None = None) -> str:
     """Key over the files a directory holds, by name and content.
 
     Case-directory identity for suites whose fixtures live beside the case:

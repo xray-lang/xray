@@ -27,7 +27,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 # Directives that are inputs to the runner, not assertions checked here.
 _RUNNER_KEYS = {"args", "status", "c_syntax"}
@@ -39,7 +38,7 @@ _RUNNER_KEYS = {"args", "status", "c_syntax"}
 _REGEX_FLAGS = re.MULTILINE
 
 
-def _search(pattern: str, text: str) -> "re.Match | None":
+def _search(pattern: str, text: str) -> re.Match | None:
     return re.search(pattern, text, _REGEX_FLAGS)
 
 # Assertion directives and whether each targets the dump or the generated C.
@@ -57,10 +56,10 @@ class Directive:
 @dataclass
 class Expect:
     path: Path
-    directives: List[Directive] = field(default_factory=list)
+    directives: list[Directive] = field(default_factory=list)
     status: str = "pass"
     args: str = ""
-    parse_error: Optional[str] = None
+    parse_error: str | None = None
 
     @property
     def wants_c_syntax(self) -> bool:
@@ -97,7 +96,7 @@ def parse(path: Path) -> Expect:
 # `skip` flag distinguishes a requested skip from a failure.
 @dataclass
 class CheckOutcome:
-    reason: Optional[str] = None
+    reason: str | None = None
     skip: bool = False
 
     @property

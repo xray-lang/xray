@@ -18,7 +18,6 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Optional, Tuple
 
 
 def _bootstrap() -> None:
@@ -62,14 +61,14 @@ FREESTANDING_MARKERS = (
 )
 
 
-def parse_allowlist(path: Path) -> Tuple[List[Tuple[str, str]], List[str]]:
+def parse_allowlist(path: Path) -> tuple[list[tuple[str, str]], list[str]]:
     """(module, probe_path) pairs, plus malformed lines.
 
     Task 257 owns runner text normalization: strip the Windows record
     terminator before tokenizing a governed text file.
     """
-    entries: List[Tuple[str, str]] = []
-    bad: List[str] = []
+    entries: list[tuple[str, str]] = []
+    bad: list[str] = []
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.rstrip("\r").split("#", 1)[0]
         fields = line.split()
@@ -82,7 +81,7 @@ def parse_allowlist(path: Path) -> Tuple[List[Tuple[str, str]], List[str]]:
     return entries, bad
 
 
-def analyzer_allowed_modules() -> List[str]:
+def analyzer_allowed_modules() -> list[str]:
     text = ANALYZER_SOURCE.read_text(encoding="utf-8")
     match = _ANALYZER_FUNC_RE.search(text)
     if not match:
@@ -90,7 +89,7 @@ def analyzer_allowed_modules() -> List[str]:
     return sorted(set(_STRCMP_RE.findall(match.group(0))))
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Freestanding allowlist gate")
     ap.add_argument("xray", nargs="?", default=None)
     ns = ap.parse_args(argv[1:])

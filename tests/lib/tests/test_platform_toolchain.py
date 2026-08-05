@@ -24,20 +24,6 @@ class PlatformTest(unittest.TestCase):
     def test_cpu_count_at_least_one(self):
         self.assertGreaterEqual(platform.cpu_count(), 1)
 
-    def test_write_text_lf_uses_lf_on_every_host(self):
-        import tempfile
-
-        tmp = tempfile.mkdtemp(prefix="xt_plat.")
-        try:
-            p = Path(tmp) / "f.txt"
-            platform.write_text_lf(p, "a\nb\n")
-            # Read as bytes: no CRLF translation regardless of OS.
-            self.assertEqual(p.read_bytes(), b"a\nb\n")
-        finally:
-            import shutil
-
-            shutil.rmtree(tmp, ignore_errors=True)
-
     def test_env_flag_accepts_shell_truthy_values(self):
         for val in ("1", "true", "YES", "on"):
             os.environ["XT_PROBE_FLAG"] = val

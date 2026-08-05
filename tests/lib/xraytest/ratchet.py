@@ -61,7 +61,7 @@ def evaluate(
     *,
     failed: Iterable,
     baseline: Iterable,
-    skipped: "Iterable | None" = None,
+    skipped: Iterable | None = None,
 ) -> RatchetResult:
     """Apply the only-shrink policy to one run's verdicts.
 
@@ -87,7 +87,7 @@ def evaluate(
     )
 
 
-def format_report(result: RatchetResult, *, baseline_path: "str | None" = None) -> str:
+def format_report(result: RatchetResult, *, baseline_path: str | None = None) -> str:
     """Human-facing summary mirroring the shell runners' wording."""
     where = f" ({baseline_path})" if baseline_path else ""
     lines: "list[str]" = []

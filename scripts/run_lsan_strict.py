@@ -22,7 +22,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -38,7 +37,7 @@ PROJECT_DIR = Path(__file__).resolve().parent.parent
 LANE = "lsan_strict"
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     log = sanitizer.LaneLog(LANE)
 
     if sys.platform != "linux":

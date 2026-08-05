@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import List
 
 
 def _bootstrap() -> None:
@@ -31,7 +30,7 @@ VM_CASE = SCRIPT_DIR / "http_static_route_full_parse.xr"
 AOT_ENTRY = SCRIPT_DIR / "http_static_route_full_parse_main.xr"
 
 
-def main(argv: List[str]) -> int:
+def main(argv: list[str]) -> int:
     if len(argv) < 2:
         sys.stderr.write(f"usage: {argv[0]} /path/to/xray\n")
         return 2
