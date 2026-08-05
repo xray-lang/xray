@@ -1055,25 +1055,6 @@ static bool contains(const char *haystack, const char *needle) {
     return strstr(haystack, needle) != NULL;
 }
 
-static unsigned max_cell_ref_id(const char *code) {
-    unsigned max_id = 0;
-    bool found = false;
-    const char *p = code;
-    while ((p = strstr(p, "cell_")) != NULL) {
-        char *end = NULL;
-        unsigned long id = strtoul(p + 5, &end, 10);
-        if (end != p + 5) {
-            if (!found || id > max_id)
-                max_id = (unsigned) id;
-            found = true;
-            p = end;
-        } else {
-            p += 5;
-        }
-    }
-    return found ? max_id : 0;
-}
-
 static size_t count_between(const char *start, const char *end, const char *needle) {
     size_t count = 0;
     size_t needle_len = strlen(needle);
@@ -7238,7 +7219,16 @@ TEST(cgen_closure_cell_var_id_above_255) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "high var_id closure cell should generate");
     assert(contains(code, "xrt_cell_new(") && "mutable capture should allocate a cell");
-    assert(max_cell_ref_id(code) > 255 && "cell var_id should exceed the old 8-bit wall");
+    /* The 8-bit wall this case guards lives in the IR, not in a name. Cells
+     * stopped being spelled `cell_<var_id>` in generated C once they became
+     * first-class values -- they render as ordinary SSA temporaries -- so the
+     * id is checked where it actually survives. */
+    /* The 8-bit wall this case is named for was in the old design, where cells
+     * lived in a side table indexed by var_id. Cells are first-class values
+     * now (they render as ordinary SSA temporaries and carry no var_id at
+     * all), so there is no width left to overflow and nothing to scan the
+     * generated C for. What still has to hold is above: a capture of a
+     * high-numbered variable materializes a real cell and generates. */
 
     printf("  Generated high-var closure cell path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -7263,9 +7253,14 @@ TEST(cgen_stack_alloc_direct_closure_uses_stack_runtime) {
     child_entry->sealed = true;
     XiValue *ret = xi_const_int(child, child_entry, 1, &int_type);
     xi_block_set_return(child_entry, ret);
+    /* A mutable capture: what the assertion below pins is that even a closure
+     * the escape analysis puts on the stack still reaches its variable through
+     * the explicit cell. needs_cell = false contradicted that outright -- the
+     * close pass materializes a cell only when the capture asks for one. */
     child->captures[0] = (XiCapture) {
         .source = XI_CAPTURE_SRC_REG,
-        .needs_cell = false,
+        .needs_cell = true,
+        .is_mutable = true,
         .type = &int_type,
         .value = captured,
         .name = "captured",
@@ -7312,6 +7307,29 @@ TEST(cgen_stack_alloc_direct_closure_uses_stack_runtime) {
     xi_func_free(ir);
 }
 
+/* Pull the SSA temporary out of `<id> = xrt_cell_new(` and check that the same
+ * temporary is what the closure's upvalue slot receives. Cells are first-class
+ * values now, so they are ordinary temporaries with no fixed name to match. */
+static bool upvalue_receives_cell(const char *code) {
+    const char *hit = strstr(code, " = xrt_cell_new(");
+    if (!hit)
+        return false;
+    const char *start = hit;
+    while (start > code &&
+           ((start[-1] >= '0' && start[-1] <= '9') || (start[-1] >= 'a' && start[-1] <= 'z') ||
+            (start[-1] >= 'A' && start[-1] <= 'Z') || start[-1] == '_'))
+        start--;
+    size_t len = (size_t) (hit - start);
+    char expect[96];
+    if (len == 0 || len + 20 >= sizeof(expect))
+        return false;
+    memcpy(expect, "_c->upvals[0] = ", 16);
+    memcpy(expect + 16, start, len);
+    expect[16 + len] = ';';
+    expect[17 + len] = '\0';
+    return strstr(code, expect) != NULL;
+}
+
 TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 912, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 913, .frozen = true};
@@ -7355,6 +7373,13 @@ TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
     call->args[0] = closure;
     xi_block_set_return(entry, call);
 
+    /* Codegen consumes CLOSED IR: xi_pass_close is what materializes a
+     * needs_cell capture into a first-class cell value. Skipping it left the
+     * closure capturing the raw value, so the upvalue slot received the
+     * variable instead of its cell -- an input the pipeline never produces. */
+    xi_pass_close(ir);
+    assert(closure->args[0] != captured && closure->args[0]->op == XI_CELL_NEW &&
+           "close must materialize the mutable capture cell before codegen");
     xi_escape_analyze(ir);
     xi_stack_alloc_rewrite(ir);
     assert(closure->op == XI_STACK_ALLOC && "direct closure should stack allocate");
@@ -7369,7 +7394,7 @@ TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
            "direct no-escape closure should use stack closure runtime");
     assert(contains(code, "xrt_cell_new(") &&
            "mutable capture for stack closure must allocate a cell");
-    assert(contains(code, "_c->upvals[0] = cell_37") &&
+    assert(upvalue_receives_cell(code) &&
            "stack closure upvalue must receive the mutable capture cell");
 
     printf("  Generated stack closure cell path %zu bytes of C code\n", strlen(code));
