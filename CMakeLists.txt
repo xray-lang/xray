@@ -2577,8 +2577,16 @@ if(BUILD_TESTS)
                 --max-category STDLIB_DYNAMIC_UNKNOWN_API=0
                 # Native enum namespace constants use one internal tagged
                 # metaobject carrier; this is not a source-level unknown API.
-                --max-category TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK=326
-                --max-category AOT_UNKNOWN_ERASURE_CONSUMER=77
+                #
+                # These three count what is left after XR_ELEM_ANY stopped being
+                # read as erasure -- see the comment on ERASURE_FALLBACK_RE. The
+                # ceilings are the measured truth, which is far tighter than what
+                # they replaced: the AOT one goes from 77 to 4, so a single new
+                # erasure consumer there now trips the gate instead of being lost
+                # among seventy-odd container-representation lines.
+                --max-category TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK=114
+                --max-category IR_UNKNOWN_ERASURE_CONSUMER=128
+                --max-category AOT_UNKNOWN_ERASURE_CONSUMER=4
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(source_unknown_task_erased_result_readiness PROPERTIES

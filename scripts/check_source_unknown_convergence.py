@@ -76,12 +76,23 @@ ASSIGNABILITY_GENERIC_RE = re.compile(
     r"\b(?:XR_TYPE_IS_UNKNOWN|unknown fallback|unknown element|unknown \|)\b",
     re.IGNORECASE,
 )
-ERASURE_FALLBACK_RE = re.compile(r"\b(?:type_any|XR_SLOT_ANY|XR_ELEM_ANY)\b")
+# XR_ELEM_ANY is deliberately absent from all three.
+#
+# It is the tagged element representation a container gets whenever its element
+# is not one of the scalars xaot_container.c specializes -- a string, an object,
+# a Json, an enum. That is a representation decision, and it would read exactly
+# the same if the `unknown` source type had never existed. Counting it here made
+# this inventory grow whenever heterogeneous-container support grew, which is
+# not what it is measuring, and it drowned the signal: of the 82 AOT hits it
+# used to report, 78 were XR_ELEM_ANY. What remains is the erasure this gate is
+# named for -- type_any, which IS xr_type_new_unknown(), and the slot fallback
+# it feeds. Container representation growth belongs to the ABI and layout gates.
+ERASURE_FALLBACK_RE = re.compile(r"\b(?:type_any|XR_SLOT_ANY)\b")
 AOT_UNKNOWN_RE = re.compile(
-    r"\b(?:XR_KIND_UNKNOWN|TYPE_NAME_UNKNOWN|type_any|XR_ELEM_ANY|"
+    r"\b(?:XR_KIND_UNKNOWN|TYPE_NAME_UNKNOWN|type_any|"
     r"unknown\.toString|unknown boundary|unknown direct callee)\b"
 )
-IR_UNKNOWN_RE = re.compile(r"\b(?:XR_KIND_UNKNOWN|type_any|XR_ELEM_ANY)\b")
+IR_UNKNOWN_RE = re.compile(r"\b(?:XR_KIND_UNKNOWN|type_any)\b")
 FORMATTER_LSP_RE = re.compile(
     r"\b(?:TYPE_NAME_UNKNOWN|XLSP_TYPE_UNKNOWN|unknown\?)\b|<unknown>|"
     r"xfmt_write_str\([^,\n]*,\s*\"unknown\""
@@ -232,7 +243,7 @@ def classify_line(rel_path: str, line: str) -> list[str]:
 
     has_unknown = "unknown" in line or "UNKNOWN" in line
     has_error = "error" in line or "ERROR" in line
-    has_erasure_slot = "type_any" in line or "XR_SLOT_ANY" in line or "XR_ELEM_ANY" in line
+    has_erasure_slot = "type_any" in line or "XR_SLOT_ANY" in line
     has_task_result = "Task" in line or "Failed(unknown)" in line
     has_stdlib_unknown_api = (
         "unknown APIs" in line

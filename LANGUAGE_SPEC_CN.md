@@ -691,6 +691,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `Closeable` |
 | `Comparable` |
 | `Equatable` |
+| `Error` |
 | `Hashable` |
 | `Indexable<K, V>` |
 | `Iterable<T>` |

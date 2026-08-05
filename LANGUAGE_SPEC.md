@@ -690,6 +690,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `Closeable` |
 | `Comparable` |
 | `Equatable` |
+| `Error` |
 | `Hashable` |
 | `Indexable<K, V>` |
 | `Iterable<T>` |
