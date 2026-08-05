@@ -2326,6 +2326,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME object_json_domain_inventory
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_object_json_domain.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --json
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(object_json_domain_inventory PROPERTIES
+        LABELS "frontend;syntax;metadata;task-260"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME string_surface_residue
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_string_surface_residue.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}

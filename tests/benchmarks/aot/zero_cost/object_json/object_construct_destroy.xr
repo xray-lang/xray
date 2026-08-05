@@ -1,0 +1,12 @@
+fn run(n: int) -> int {
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        var point = { x: i, y: i + 1 }
+        sum = sum + point.y - point.x
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(200000))

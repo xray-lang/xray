@@ -14,6 +14,9 @@ json_direct_index|json_shape/direct_index_loop.xr|1
 json_dynamic_lookup|json_shape/dynamic_lookup_loop.xr|1
 json_computed_key_guard|json_shape/computed_key_guard_loop.xr|1
 json_open_shape_guard|json_shape/open_shape_guard_loop.xr|1
+object_exact_dot|object_json/exact_dot_loop.xr|6000000
+object_exact_static_index|object_json/exact_static_index_loop.xr|6000000
+object_construct_destroy|object_json/object_construct_destroy.xr|200000
 map_static_key|map_set/static_key_prehash_loop.xr|20000
 map_dynamic_key|map_set/dynamic_key_lookup_loop.xr|20000
 map_dense_int|map_set/dense_int_lookup_loop.xr|520000
