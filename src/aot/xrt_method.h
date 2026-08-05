@@ -144,10 +144,11 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
     if (val.tag == XR_TAG_RUNE) {
         return xrt_rune_to_string(XR_TO_RUNE(val));
     }
-    if (val.tag == XR_TAG_ENUM) {
-        char tmp[256];
-        return xrt_str_from_cstr(xr_to_cstr(val, tmp, sizeof(tmp)));
-    }
+    /* Enum values render through the shared formatter: a payload variant's
+     * "(p1, ...)" text is unbounded (payloads may nest strings or further
+     * enums), so a fixed-size buffer cannot reproduce the VM output. */
+    if (val.tag == XR_TAG_ENUM)
+        return xrt_value_to_string(val);
     /* Aggregates render through the shared formatter, which reproduces the VM's
      * xr_value_to_string output. Restricted to the shapes xrt_format_value
      * renders structurally; every other heap tag would fall through to its

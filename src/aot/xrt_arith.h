@@ -475,6 +475,173 @@ static inline XrValue xrt_value_to_string(XrValue v) {
     return xrt_strbuf_finish(sbv);
 }
 
+/* =========================================================================
+ * String concatenation parts
+ *
+ * One stack-local part per operand of a lowered concatenation; the common
+ * shapes (strings, scalars, zero-payload enum names) borrow existing memory
+ * or format into the inline scratch, so the whole concat performs a single
+ * allocation. Payload-bearing enum parts are the exception: their text runs
+ * through the shared value formatter and is owned by the part until
+ * xrt_str_concat_parts copies it out.
+ * ========================================================================= */
+
+typedef struct {
+    const char *a;
+    const char *b;
+    size_t alen;
+    size_t blen;
+    /* Owned rendered text for XRT_STRPART_OWNED_STR parts (payload-bearing
+     * enums). Written only when kind says so; xrt_str_concat_parts releases
+     * it after copying, so parts must always reach that call. */
+    XrValue owned;
+    char scratch[64];
+    uint8_t kind;
+} xrt_strpart_t;
+
+#define XRT_STRPART_SINGLE 0u
+#define XRT_STRPART_ENUM 1u
+#define XRT_STRPART_OWNED_STR 2u
+
+static inline size_t xrt_format_uint64(char *buf, size_t cap, uint64_t value) {
+    int n = snprintf(buf, cap, "%llu", (unsigned long long) value);
+    if (n < 0)
+        return 0;
+    if ((size_t) n >= cap)
+        return cap ? cap - 1u : 0u;
+    return (size_t) n;
+}
+
+static inline XrValue xrt_uint64_to_string(uint64_t value) {
+    char scratch[32];
+    size_t len = xrt_format_uint64(scratch, sizeof(scratch), value);
+    XrValue out = xrt_str_alloc(len);
+    memcpy(xr_str_buf(out), scratch, len);
+    return out;
+}
+
+static inline void xrt_strpart_init_u64(xrt_strpart_t *part, uint64_t value) {
+    part->a = "";
+    part->b = NULL;
+    part->alen = 0;
+    part->blen = 0;
+    part->kind = XRT_STRPART_SINGLE;
+    part->alen = xrt_format_uint64(part->scratch, sizeof(part->scratch), value);
+    part->a = part->scratch;
+}
+
+static inline void xrt_strpart_init(xrt_strpart_t *part, XrValue val) {
+    part->a = "";
+    part->b = NULL;
+    part->alen = 0;
+    part->blen = 0;
+    part->kind = XRT_STRPART_SINGLE;
+
+    if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC) {
+        part->a = xr_str_data(val);
+        part->alen = (size_t) xr_str_len(val);
+    } else if (val.tag == XR_TAG_I64) {
+        int n = snprintf(part->scratch, sizeof(part->scratch), "%lld", (long long) val.i);
+        part->a = part->scratch;
+        part->alen = (size_t) (n < 0 ? 0 : n);
+    } else if (val.tag == XR_TAG_F64) {
+        int n = xr_format_float(part->scratch, sizeof(part->scratch), val.f);
+        part->a = part->scratch;
+        part->alen = (size_t) (n < 0 ? 0 : n);
+    } else if (val.tag == XR_TAG_BOOL) {
+        part->a = val.i ? "true" : "false";
+        part->alen = val.i ? 4u : 5u;
+    } else if (val.tag == XR_TAG_RUNE) {
+        uint32_t cp = XR_TO_RUNE(val);
+        int n = 0;
+        if (cp <= 0x7Fu) {
+            part->scratch[n++] = (char) cp;
+        } else if (cp <= 0x7FFu) {
+            part->scratch[n++] = (char) (0xC0u | (cp >> 6));
+            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
+        } else if (cp <= 0xFFFFu && !(cp >= 0xD800u && cp <= 0xDFFFu)) {
+            part->scratch[n++] = (char) (0xE0u | (cp >> 12));
+            part->scratch[n++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
+        } else if (cp <= 0x10FFFFu) {
+            part->scratch[n++] = (char) (0xF0u | (cp >> 18));
+            part->scratch[n++] = (char) (0x80u | ((cp >> 12) & 0x3Fu));
+            part->scratch[n++] = (char) (0x80u | ((cp >> 6) & 0x3Fu));
+            part->scratch[n++] = (char) (0x80u | (cp & 0x3Fu));
+        }
+        part->a = part->scratch;
+        part->alen = (size_t) n;
+    } else if (val.tag == XR_TAG_NULL) {
+        part->a = "null";
+        part->alen = 4u;
+    } else if (val.tag == XR_TAG_ENUM) {
+        const XrAotEnumBox *box = xrt_enum_box_view(val);
+        const char *enum_name = NULL;
+        const char *member_name = NULL;
+        if (box && box->payload_count > 0) {
+            /* Payload variants render "Enum.Member(p1, ...)" through the
+             * shared formatter so concatenation matches print and the VM.
+             * Payloads may nest strings or further enums, so this text has
+             * no scratch-size bound and must be heap-rendered. */
+            part->owned = xrt_value_to_string(val);
+            part->a = xr_str_data(part->owned);
+            part->alen = (size_t) xr_str_len(part->owned);
+            part->kind = XRT_STRPART_OWNED_STR;
+        } else if (xrt_enum_key_parts(val, &enum_name, &member_name, NULL, NULL) && enum_name &&
+                   member_name) {
+            part->a = enum_name;
+            part->b = member_name;
+            part->alen = strlen(enum_name);
+            part->blen = strlen(member_name);
+            part->kind = XRT_STRPART_ENUM;
+        } else {
+            int n = snprintf(part->scratch, sizeof(part->scratch), "<enum@%p>", val.ptr);
+            part->a = part->scratch;
+            part->alen = (size_t) (n < 0 ? 0 : n);
+        }
+    } else {
+        const char *s = xr_to_cstr(val, part->scratch, sizeof(part->scratch));
+        part->a = s;
+        part->alen = strlen(s);
+    }
+}
+
+static inline size_t xrt_strpart_len(const xrt_strpart_t *part) {
+    return part->kind == XRT_STRPART_ENUM ? part->alen + 1u + part->blen : part->alen;
+}
+
+static inline char *xrt_strpart_copy(char *dst, const xrt_strpart_t *part) {
+    memcpy(dst, part->a, part->alen);
+    dst += part->alen;
+    if (part->kind == XRT_STRPART_ENUM) {
+        *dst++ = '.';
+        memcpy(dst, part->b, part->blen);
+        dst += part->blen;
+    }
+    return dst;
+}
+
+static inline XrValue xrt_str_concat_parts(size_t count, xrt_strpart_t *parts) {
+    size_t total = 0;
+    for (size_t i = 0; i < count; i++) {
+        size_t len = xrt_strpart_len(&parts[i]);
+        if (XR_UNLIKELY(len > SIZE_MAX - total)) {
+            fprintf(stderr, "xrt_str_concat_parts: string length overflow\n");
+            abort();
+        }
+        total += len;
+    }
+    XrValue out = xrt_str_alloc(total);
+    char *dst = xr_str_buf(out);
+    for (size_t i = 0; i < count; i++) {
+        dst = xrt_strpart_copy(dst, &parts[i]);
+        if (parts[i].kind == XRT_STRPART_OWNED_STR)
+            xrt_release(parts[i].owned);
+    }
+    *dst = 0;
+    return out;
+}
+
 static inline void xrt_print(XrValue v) {
     xrt_print_value(v, 0);
 }
