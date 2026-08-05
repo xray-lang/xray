@@ -9546,6 +9546,25 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
                                          node->line);
     }
 
+    /* A cast to the type the value already has is an identity and must forward
+     * the value itself. The dynamic XI_AS below produces a fresh `any`-typed
+     * result, and that loses the move and alias provenance of what it wraps:
+     *
+     *     var joined = passThread(move t) as Thread<int>
+     *     print(joined.join())        // 0, plus "handle dropped without join"
+     *
+     * while the same line without the cast joined correctly. Only the checked
+     * form is an identity -- `as?` yields T?, a different type, so it keeps
+     * going.
+     *
+     * The comparison is against the LOWERED value's type, not the analyzer's
+     * type for the expression. Narrowing makes those differ: inside
+     * `if (value is ScalarColor)` the static type of a `ScalarColor | int`
+     * parameter is already ScalarColor, while the value in hand still carries
+     * the union representation that the cast exists to unpack. */
+    if (!as->is_safe && cast_type && val->type && xr_type_equals(val->type, cast_type))
+        return val;
+
     int tid;
     const char *tname;
     lower_dynamic_as_target(tref, &tid, &tname);
