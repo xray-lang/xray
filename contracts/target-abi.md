@@ -239,6 +239,6 @@ anchor-sha256: src/aot/xrt_core_freestanding.h 13af59f530ac1a77bb9f050bb391a65cb
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c 5176cb4b44a22335b74882f74be75ab08b05a18e04872e89acfadffe2fd8e61b
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
-anchor-sha256: src/app/toolchain/xtc_probe.c 78ecab6e52428fcc05c9fae5bba166581feeca0cc676468133120321fbcc6ffd
+anchor-sha256: src/app/toolchain/xtc_probe.c bd7b792733cd28cca9e9b01a1718229f0580859e8a35ec9529845229136138ac
 anchor-sha256: src/ir/xi.h 54e3d1e1fc1331504e00fff388dc8cbd04d7b1b5610a0add79449824d5f6cc91
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24
