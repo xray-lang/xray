@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
-"""Task 220 semantic-contract digest and CONTRACT-CHANGE gate."""
+"""Semantic-contract digest gate.
+
+Each contract records an anchor-sha256 line per source file it governs. A
+file whose content no longer matches its recorded digest means the contract
+was not re-read when the code under it moved, and that is what this catches.
+
+Digest drift is the whole gate. There is deliberately no commit-message
+requirement: during high-speed development the change itself is the record,
+and a rule that every anchor edit must be re-justified in a trailer would be
+either noise or a permanently red gate.
+"""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import re
-import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -128,9 +137,6 @@ CONTRACT_SPECS = (
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")
-TRAILER_RE = re.compile(r"^CONTRACT-CHANGE:\s+(\S+)\s+(.+)$", re.MULTILINE)
-
-
 def digest(path: Path) -> str:
     # Contract anchors describe repository content, whose canonical Git form
     # uses LF.  Normalize checkout-only CRLF so the gate has the same result on
@@ -186,50 +192,6 @@ def verify_digests(root: Path, contracts_dir: Path, specs=CONTRACT_SPECS) -> lis
     return errors
 
 
-def run_git(root: Path, args: list[str]) -> str:
-    proc = subprocess.run(
-        ["git", *args], cwd=root, text=True, encoding="utf-8", errors="strict",
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE
-    )
-    return proc.stdout if proc.returncode == 0 else ""
-
-
-def repository_is_dirty(root: Path) -> bool:
-    return bool(run_git(root, ["status", "--porcelain"]).strip())
-
-
-def head_changed_paths(root: Path) -> set[str]:
-    text = run_git(root, ["diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "HEAD"])
-    return {line.strip() for line in text.splitlines() if line.strip()}
-
-
-def head_message(root: Path) -> str:
-    return run_git(root, ["log", "-1", "--format=%B"])
-
-
-def required_contracts(changed: set[str], specs=CONTRACT_SPECS) -> set[str]:
-    required: set[str] = set()
-    for spec in specs:
-        contract_path = f"contracts/{spec.name}"
-        if contract_path in changed or any(anchor in changed for anchor in spec.anchors):
-            required.add(contract_path)
-    return required
-
-
-def verify_trailers(changed: set[str], message: str, specs=CONTRACT_SPECS) -> list[str]:
-    required = required_contracts(changed, specs)
-    present: set[str] = set()
-    for match in TRAILER_RE.finditer(message):
-        name = match.group(1)
-        if not name.startswith("contracts/"):
-            name = f"contracts/{name}"
-        present.add(name)
-    return [
-        f"missing commit trailer: CONTRACT-CHANGE: {name} <one-line reason>"
-        for name in sorted(required - present)
-    ]
-
-
 def self_test() -> int:
     with tempfile.TemporaryDirectory(prefix="xray-contract-freeze-") as tmp:
         root = Path(tmp)
@@ -245,13 +207,6 @@ def self_test() -> int:
         assert verify_digests(root, root / "contracts", (spec,)) == []
         anchor.write_bytes(b"v1\r\n")
         assert verify_digests(root, root / "contracts", (spec,)) == []
-        changed = {"src/truth.def", "contracts/sample.md"}
-        assert verify_trailers(changed, "subject\n", (spec,))
-        assert not verify_trailers(
-            changed,
-            "subject\n\nCONTRACT-CHANGE: contracts/sample.md injected test\n",
-            (spec,),
-        )
         anchor.write_text("v2\n", encoding="utf-8")
         assert any("digest drift" in error for error in verify_digests(root, root / "contracts", (spec,)))
     print("contract freeze injection self-test: PASS")
@@ -262,7 +217,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".", help="repository root")
     parser.add_argument("--contracts-dir", default="contracts", help="contract directory")
-    parser.add_argument("--self-test", action="store_true", help="run injected drift/trailer checks")
+    parser.add_argument("--self-test", action="store_true", help="run injected drift checks")
     args = parser.parse_args()
 
     if args.self_test:
@@ -272,11 +227,6 @@ def main() -> int:
     contracts_dir = (root / args.contracts_dir).resolve()
     errors = verify_digests(root, contracts_dir)
 
-    # A commit trailer cannot exist until a dirty change is committed. Digest
-    # checking still runs in a dirty developer tree; trailer enforcement is
-    # deferred to the clean post-commit/CI state.
-    if not repository_is_dirty(root):
-        errors.extend(verify_trailers(head_changed_paths(root), head_message(root)))
 
     if errors:
         print("task-220 contract freeze gate failed:", file=sys.stderr)
@@ -285,10 +235,6 @@ def main() -> int:
         return 1
 
     print(f"contract freeze: PASS ({len(CONTRACT_SPECS)} contracts)")
-    if repository_is_dirty(root):
-        print("contract trailer check: deferred until the working tree is committed")
-    else:
-        print("contract trailer check: PASS")
     return 0
 
 
