@@ -1,0 +1,1 @@
+interface 'Stringable' redeclares the builtin 'Stringable'

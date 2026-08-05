@@ -1,0 +1,7 @@
+// A prelude enum the runtime constructs values of. Shadowing it made `await`
+// unusable: awaitResult() still returned the builtin TaskResult, but the name
+// resolved to this declaration, so matching Success reported that the enum has
+// no such member.
+enum TaskResult { Foo, Bar }
+
+print(1)

@@ -1,0 +1,10 @@
+// A native handle carries a layout the AOT backend lowers through the
+// handle path; a class of the same name would be read against a class-instance
+// layout. Reported separately from the plain reserved-name case because the
+// consequence is a crash, not a name clash.
+class WsConn {
+    label: string
+    constructor(label: string) { this.label = label }
+}
+
+print(1)

@@ -2857,6 +2857,8 @@ static void xa_visit_predeclare_enum_decl(XaInferContext *ctx, AstNode *node) {
     EnumDeclNode *edecl = &node->as.enum_decl;
     if (!edecl->name || edecl->symbol_id != 0)
         return;
+    if (xa_reject_builtin_name_redeclaration(ctx, node, "enum", edecl->name))
+        return;
 
     XaSymbol *sym = xa_symbol_new(edecl->name, XA_SYM_ENUM);
     sym->location.line = node->line;

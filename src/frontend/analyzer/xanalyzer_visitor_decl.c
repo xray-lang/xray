@@ -1133,8 +1133,7 @@ static void xa_summary_mark_unknown_function_value_args(XaParamEscapeSummary *su
         xa_summary_view_return_contract(summary, call->callee, NULL, &return_source, &return_param);
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *arg = call->arguments ? call->arguments[i] : NULL;
-        XrCallArgAccess access =
-            call->arg_accesses ? call->arg_accesses[i] : XR_CALL_ARG_PLAIN;
+        XrCallArgAccess access = call->arg_accesses ? call->arg_accesses[i] : XR_CALL_ARG_PLAIN;
         if (access == XR_CALL_ARG_REF) {
             /* The callable type authorizes a write, but a dynamic value has no
              * body summary. Record the possible mutation and keep the effect
@@ -1694,12 +1693,10 @@ bool xa_function_expr_param_mutates(XaInferContext *ctx, XrType *function_type,
 
     const char *stack_names[16];
     XrType *stack_types[16];
-    const char **names = param_count <= 16
-                             ? stack_names
-                             : xr_malloc(sizeof(const char *) * (size_t) param_count);
-    XrType **types = param_count <= 16
-                         ? stack_types
-                         : xr_malloc(sizeof(XrType *) * (size_t) param_count);
+    const char **names =
+        param_count <= 16 ? stack_names : xr_malloc(sizeof(const char *) * (size_t) param_count);
+    XrType **types =
+        param_count <= 16 ? stack_types : xr_malloc(sizeof(XrType *) * (size_t) param_count);
     if (!names || !types) {
         if (names && names != stack_names)
             xr_free((void *) names);
@@ -3069,6 +3066,8 @@ void xa_visit_collect_interface(XaInferContext *ctx, AstNode *node) {
         return;
 
     InterfaceDeclNode *iface = &node->as.interface_decl;
+    if (xa_reject_builtin_name_redeclaration(ctx, node, "interface", iface->name))
+        return;
 
     XaSymbol *sym = xa_symbol_new(iface->name, XA_SYM_CLASS);
     sym->location.line = node->line;
@@ -3504,6 +3503,47 @@ void xa_validate_interface_throw_effects(XaInferContext *ctx, AstNode *node) {
     xa_validate_class_interface_throw_effects(ctx, node);
 }
 
+/* A declaration may not take a name the language provides without an import.
+ *
+ * Shadowing was the old rule and it was never coherent. The user's declaration
+ * won for constructors and instance methods but lost everywhere else: a user
+ * class declaring `static withCapacity` still ran Array's, `Json.parse` on a
+ * user Json compiled and then panicked at run time, and annotating a variable
+ * produced "Type 'Array<int>' is not assignable to type 'Array<int>'" because
+ * the two distinct types print the same. A native handle collision was worse
+ * still and already rejected here -- that check is what this generalizes.
+ *
+ * Returns true when it reported, so the caller stops rather than registering a
+ * symbol that would fight the builtin for the rest of the compilation. */
+bool xa_reject_builtin_name_redeclaration(XaInferContext *ctx, AstNode *node,
+                                          const char *decl_label, const char *name) {
+    if (!ctx || !ctx->analyzer || !node || !name)
+        return false;
+    const char *handle_module = xa_builtin_find_handle_module(name);
+    /* The stdlib is where builtins are defined, so a reserved name there is the
+     * declaration the name refers to. A handle collision is still rejected
+     * everywhere: that one is a layout mismatch, not a naming question. */
+    if (!handle_module &&
+        (!xa_builtin_name_is_reserved(name) || xa_analyzer_path_is_stdlib(ctx->file_path)))
+        return false;
+
+    char msg[256];
+    if (handle_module) {
+        snprintf(msg, sizeof(msg),
+                 "%s '%s' conflicts with the builtin native handle type '%s.%s' — "
+                 "choose a different name",
+                 decl_label, name, handle_module, name);
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "%s '%s' redeclares the builtin '%s' — builtin names are reserved, "
+                 "choose a different name",
+                 decl_label, name, name);
+    }
+    XrLocation loc = {.file = ctx->file_path, .line = node->line};
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
+    return true;
+}
+
 void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
     if (!node)
         return;
@@ -3517,25 +3557,8 @@ void xa_visit_collect_class(XaInferContext *ctx, AstNode *node) {
                          : is_struct_decl               ? &node->as.struct_decl
                                                         : &node->as.union_decl;
 
-    // A user class/struct whose name matches a builtin native handle type
-    // (core.def `handle`, e.g. path.PathInfo) would silently shadow it: type
-    // references resolve to the handle, and AOT lowers field access through
-    // the handle/Json path against a class-instance layout — a guaranteed
-    // crash (known_bugs 2026-07-02 gap C'). Reject the collision outright;
-    // the long-term fix is module-scoped handle names (148 §1.1 T3.3).
-    if (cls->name) {
-        const char *handle_module = xa_builtin_find_handle_module(cls->name);
-        if (handle_module) {
-            char msg[256];
-            snprintf(msg, sizeof(msg),
-                     "%s '%s' conflicts with the builtin native handle type '%s.%s' — "
-                     "choose a different name",
-                     decl_label, cls->name, handle_module, cls->name);
-            XrLocation loc = {.file = ctx->file_path, .line = node->line};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
-            return;
-        }
-    }
+    if (xa_reject_builtin_name_redeclaration(ctx, node, decl_label, cls->name))
+        return;
 
     XaSymbol *sym =
         cls->symbol_id ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, cls->symbol_id) : NULL;
@@ -4434,9 +4457,8 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
     AstNode *init = var->initializer;
     if (init && init->type == AST_GO_EXPR) {
         AstNode *go_call = init->as.go_expr.expr;
-        AstNode *go_fn = go_call && go_call->type == AST_CALL_EXPR
-                             ? go_call->as.call_expr.callee
-                             : NULL;
+        AstNode *go_fn =
+            go_call && go_call->type == AST_CALL_EXPR ? go_call->as.call_expr.callee : NULL;
         if (go_fn && go_fn->type == AST_FUNCTION_EXPR) {
             FunctionDeclNode *fn = &go_fn->as.function_expr;
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_FUNCTION, go_fn);

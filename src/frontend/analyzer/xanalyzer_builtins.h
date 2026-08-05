@@ -50,8 +50,7 @@ typedef enum XaBuiltinReturnOwnership {
     XA_BUILTIN_RETURN_BORROWED_PARAM_15,
 } XaBuiltinReturnOwnership;
 
-static inline int
-xa_builtin_return_ownership_param_index(XaBuiltinReturnOwnership ownership) {
+static inline int xa_builtin_return_ownership_param_index(XaBuiltinReturnOwnership ownership) {
     if (ownership < XA_BUILTIN_RETURN_BORROWED_PARAM_0 ||
         ownership > XA_BUILTIN_RETURN_BORROWED_PARAM_15)
         return -1;
@@ -271,6 +270,11 @@ xa_builtin_get_handle_method_allocation_contract(const char *handle_name, const 
 
 // Owning builtin module name for a handle type, or NULL if no builtin module
 // declares one with this name (used for user-class name-collision diagnostics)
+/* True when `name` is provided by the language without an import, and so may
+ * not be redeclared. See g_reserved_builtin_names for why shadowing is not a
+ * coherent alternative. */
+XR_FUNC bool xa_builtin_name_is_reserved(const char *name);
+
 XR_FUNC const char *xa_builtin_find_handle_module(const char *handle_name);
 
 // Set script directory for .xrd file search

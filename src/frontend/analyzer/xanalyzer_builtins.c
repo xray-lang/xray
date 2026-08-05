@@ -910,8 +910,8 @@ const XaEffectContract *xa_builtin_get_module_func_effect_contract(const char *m
     return member ? &member->effect_contract : NULL;
 }
 
-const XaEffectContract *
-xa_builtin_get_module_func_abi_effect_contract(const char *module_name, const char *func_name) {
+const XaEffectContract *xa_builtin_get_module_func_abi_effect_contract(const char *module_name,
+                                                                       const char *func_name) {
     const XaBuiltinMember *member = xa_builtin_find_module_function(module_name, func_name, false);
     return member ? &member->effect_contract : NULL;
 }
@@ -1125,6 +1125,34 @@ XaAllocationContractKind xa_builtin_get_handle_method_allocation_contract(const 
             return method->allocation_contract;
     }
     return XA_ALLOCATION_CONTRACT_MISSING;
+}
+
+/* Every name the language provides without an import. A user declaration may
+ * not take one of these: the name would resolve to the user's type in some
+ * positions and to the builtin in others, which is not a shadowing rule anyone
+ * can reason about. Statics were the clearest case -- a user class declaring
+ * `static withCapacity` still ran Array's, and `Json.parse` on a user Json
+ * reached the runtime before failing -- but the type-annotation path was no
+ * better, rendering both types as `Array<int>` in a "not assignable to itself"
+ * diagnostic. The list is the same registry the resolver and the LSP read, so
+ * it cannot drift from what the language actually provides. */
+static const char *const g_reserved_builtin_names[] = {
+#define XR_BUILTIN_PRELUDE_TYPE(name, arity, native_type, prelude_kind) name,
+#define XR_BUILTIN_TYPE(name, arity) name,
+#define XR_BUILTIN_ENUM(name, arity, vm_slot, variants) name,
+#define XR_BUILTIN_IFACE(name, arity) name,
+#include "../../../stdlib/prelude/builtin_symbols.def"
+};
+
+bool xa_builtin_name_is_reserved(const char *name) {
+    if (!name)
+        return false;
+    for (size_t i = 0; i < sizeof(g_reserved_builtin_names) / sizeof(g_reserved_builtin_names[0]);
+         i++) {
+        if (strcmp(g_reserved_builtin_names[i], name) == 0)
+            return true;
+    }
+    return false;
 }
 
 const char *xa_builtin_find_handle_module(const char *handle_name) {

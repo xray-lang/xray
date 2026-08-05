@@ -243,7 +243,8 @@ XR_FUNC bool xa_freestanding_stdlib_module_allowed(const char *module_name);
  * inference pass; imported declarations may be revisited while another
  * module is current. */
 /* Returns an owned canonical owner string; caller frees with xr_free(). */
-XR_FUNC char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file);
+XR_FUNC XR_FUNC bool xa_analyzer_path_is_stdlib(const char *file);
+char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file);
 XR_FUNC bool xa_freestanding_stdlib_member_allowed(const char *module_name,
                                                    const char *member_name);
 XR_FUNC const char *xa_freestanding_stdlib_member_reject_suggestion(const char *module_name);

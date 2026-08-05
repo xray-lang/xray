@@ -1,0 +1,5 @@
+interface Stringable {
+    toString() -> string
+}
+
+print(1)

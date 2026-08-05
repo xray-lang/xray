@@ -1,0 +1,1 @@
+enum 'TaskResult' redeclares the builtin 'TaskResult'

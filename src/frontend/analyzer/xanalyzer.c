@@ -1492,6 +1492,13 @@ static const char *xa_path_find_stdlib_marker(const char *file) {
     return disk ? disk + strlen("stdlib\\") : NULL;
 }
 
+/* True for a source that lives in the standard library, on disk or embedded.
+ * A builtin's own declaration lives there -- stdlib/path/path.xr declares
+ * `class Path` -- so that is a definition, not a redeclaration. */
+bool xa_analyzer_path_is_stdlib(const char *file) {
+    return xa_path_find_stdlib_marker(file) != NULL;
+}
+
 static const char *xa_path_next_sep(const char *p) {
     if (!p)
         return NULL;

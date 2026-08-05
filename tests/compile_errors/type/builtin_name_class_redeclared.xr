@@ -1,0 +1,11 @@
+// Builtin names are reserved. Shadowing them was never coherent: the user
+// declaration won for constructors and instance methods but lost for statics
+// and type annotations, so `Array.withCapacity` ran the builtin even when the
+// user declared one, and an annotation reported "Array<int> is not assignable
+// to Array<int>".
+class Array {
+    tag: string
+    constructor(tag: string) { this.tag = tag }
+}
+
+print(Array("mine").tag)
