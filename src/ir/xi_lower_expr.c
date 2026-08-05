@@ -2574,6 +2574,17 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
         v->op = XI_WEAK_STORE_FIELD;
         v->flags = xi_op_default_effects(v->op);
     }
+    /* A value allocated for this store leaves the execution-local domain the
+     * moment the field takes it: the owning object outlives the statement and
+     * its destructor runs where this execution's heap is already gone, so the
+     * child can never be released. Declaration lowering marks a `var` for the
+     * same reason, which is why `var tmp = Node(); h.n = tmp` was balanced
+     * while `h.n = Node()` leaked one object per store -- the second had no
+     * declaration to carry the mark. The helper only marks fresh allocations,
+     * so a borrowed value or a plain register read is left alone, and a weak
+     * store never reaches here because it has changed op above. */
+    if (v->op == XI_STORE_FIELD)
+        (void) xi_lower_mark_storage_allocation(val, XR_OBJ_STORAGE_TRANSFER);
     xi_lower_bind_class_field_id(l, v, obj->type, ms->member);
     if (obj->type && XR_TYPE_IS_JSON(obj->type))
         xi_lower_bind_json_access_id(l, v, ms->member, (uint32_t) node->line, UINT16_MAX,

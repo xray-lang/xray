@@ -1,7 +1,8 @@
-#!/usr/bin/env python3
-"""Check task-202 AOT baseline fixtures for typed-erasure convergence.
+#!/ usr / bin / env python3
+""
+    "Check task-202 AOT baseline fixtures for typed-erasure convergence.
 
-This is a P0 coverage gate. It does not claim the four surfaces are fixed; it
+    This is a P0 coverage gate.It does not claim the four surfaces are fixed; it
 only makes sure their current AOT shape/gap evidence stays executable and
 reviewable while later 202 phases replace erased boundaries with final typed
 contracts.
@@ -73,7 +74,11 @@ BASELINES = (
         category="HTTP_HANDLER_AOT_BASELINE",
         xr_path="tests/aot/filetests/cgen/http_route_handler_boundary.xr",
         expect_path="tests/aot/filetests/cgen/http_route_handler_boundary.expect",
-        source_contains=("http.routeHandler", "handle(req: HttpRequest) -> HttpResponse"),
+#routeHandler is a method on http.Server, so a call site can only ever
+#spell it through an instance-- "http.routeHandler" cannot appear in
+#source and the anchor never matched.The metadata name is still the
+#qualified one and is checked on the expect side below.
+        source_contains=(".routeHandler(", "handle(req: HttpRequest) -> HttpResponse"),
         expect_contains=(
             "name=http.routeHandler",
             "c_not_contains=xrt_typename(",
