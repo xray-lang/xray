@@ -1,1 +1,1 @@
-type '{aToB,bToA}' has no field 'ok'
+type 'CopyBidirectionalResult' has no member 'ok'

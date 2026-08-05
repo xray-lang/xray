@@ -1894,7 +1894,14 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                 return xr_type_new_error(ctx->analyzer->isolate);
             }
 
-            /* User module namespaces are resolved above from graph exports. */
+            /* User module namespaces are resolved above from graph exports, and
+             * that table is authoritative: a name absent from it does not exist.
+             * Falling through left the expression untyped, so `http.get(...)`
+             * compiled clean and only failed at run time as an uncaught panic. */
+            if (exports) {
+                xa_report_unknown_stdlib_member(ctx, node, mod_name, ma->name);
+                return xr_type_new_error(ctx->analyzer->isolate);
+            }
         }
     }
 
@@ -5210,8 +5217,7 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
                      "ref parameter '%s' is never mutated; use a read parameter unless an "
                      "expected callable contract requires ref",
                      param->name ? param->name : "?");
-            XrLocation loc = {
-                .file = ctx->file_path, .line = param->line, .column = param->column};
+            XrLocation loc = {.file = ctx->file_path, .line = param->line, .column = param->column};
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_HINT, 0, message, &loc);
         }
     }

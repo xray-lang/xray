@@ -486,8 +486,14 @@ XR_FUNC void xa_report_unknown_stdlib_member(XaInferContext *ctx, AstNode *node,
             snprintf(msg, sizeof(msg), "invalid XRD descriptor for module '%s': %s", module_name,
                      xrd_error);
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE, msg, &loc);
+            return;
         }
-        return;
+        /* No builtin C module table under this name means an .xr stdlib module
+         * such as http. Its export list is still authoritative and every caller
+         * reaches here only after failing to find the member in it, so the
+         * absence is the same hard error. Returning silently let
+         * `http.get(...)` and `import { get } from http` compile clean and fail
+         * at run time as an uncaught panic instead. */
     }
 
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};

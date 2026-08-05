@@ -1,1 +1,1 @@
-Type 'Array<YamlValue?>' is not assignable to type 'Array<Json>'
+Type 'Array<YamlValue>' is not assignable to type 'Array<Json>'

@@ -1,1 +1,1 @@
-parameter type 'LogLevel'
+stdlib module 'log' has no member 'DEBUG'
