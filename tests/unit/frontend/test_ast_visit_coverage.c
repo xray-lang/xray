@@ -780,10 +780,13 @@ TEST(throw_stmt) {
 }
 
 TEST(channel_and_go) {
+    /* `go` takes a call, so the inline body is spelled `go fn() { ... }()`.
+     * The bare-lambda form this used to carry has not parsed since the rule
+     * landed, which cost the whole case rather than the go node alone. */
     return assert_all_typed("const ch = Channel(1)\n"
                             "go fn() {\n"
                             "    ch.send(42)\n"
-                            "}\n"
+                            "}()\n"
                             "var v = ch.recv()\n"
                             "print(v)\n",
                             "channel_and_go");
