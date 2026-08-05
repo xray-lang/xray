@@ -41,16 +41,69 @@ def windows_peak_rss(proc: subprocess.Popen[bytes]) -> int:
     return int(counters.PeakWorkingSetSize) if ok else 0
 
 
-def unix_rss(pid: int) -> int:
+def linux_rss(pid: int) -> int:
     status = Path(f"/proc/{pid}/status")
-    if status.is_file():
-        try:
-            for line in status.read_text(encoding="ascii").splitlines():
-                if line.startswith(("VmHWM:", "VmRSS:")):
-                    return int(line.split()[1]) * 1024
-        except (OSError, ValueError, IndexError):
-            return 0
+    if not status.is_file():
+        return 0
+    try:
+        for line in status.read_text(encoding="ascii").splitlines():
+            if line.startswith(("VmHWM:", "VmRSS:")):
+                return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        return 0
     return 0
+
+
+class _ProcTaskInfo(ctypes.Structure):
+    """Prefix of struct proc_taskinfo; only the first two fields are read."""
+
+    _fields_ = [
+        ("pti_virtual_size", ctypes.c_uint64),
+        ("pti_resident_size", ctypes.c_uint64),
+        ("pti_total_user", ctypes.c_uint64),
+        ("pti_total_system", ctypes.c_uint64),
+        ("pti_threads_user", ctypes.c_uint64),
+        ("pti_threads_system", ctypes.c_uint64),
+        ("pti_policy", ctypes.c_int32),
+        ("pti_faults", ctypes.c_int32),
+        ("pti_pageins", ctypes.c_int32),
+        ("pti_cow_faults", ctypes.c_int32),
+        ("pti_messages_sent", ctypes.c_int32),
+        ("pti_messages_received", ctypes.c_int32),
+        ("pti_syscalls_mach", ctypes.c_int32),
+        ("pti_syscalls_unix", ctypes.c_int32),
+        ("pti_csw", ctypes.c_int32),
+        ("pti_threadnum", ctypes.c_int32),
+        ("pti_numrunning", ctypes.c_int32),
+        ("pti_priority", ctypes.c_int32),
+    ]
+
+
+PROC_PIDTASKINFO = 4
+
+
+def macos_rss(pid: int) -> int:
+    """Current resident size via libproc.
+
+    There is no /proc on macOS, so the Linux reader returned 0 for every
+    sample and the caller could only conclude that memory was unmeasurable.
+    libproc reports the CURRENT resident size rather than a high-water mark,
+    which is why the caller samples in a loop and keeps the maximum.
+    """
+    libc = ctypes.CDLL("libc.dylib", use_errno=True)
+    info = _ProcTaskInfo()
+    written = libc.proc_pidinfo(
+        ctypes.c_int(pid),
+        ctypes.c_int(PROC_PIDTASKINFO),
+        ctypes.c_uint64(0),
+        ctypes.byref(info),
+        ctypes.c_int(ctypes.sizeof(info)),
+    )
+    return int(info.pti_resident_size) if written == ctypes.sizeof(info) else 0
+
+
+def unix_rss(pid: int) -> int:
+    return macos_rss(pid) if sys.platform == "darwin" else linux_rss(pid)
 
 
 def measured(command: list[str], cwd: Path) -> tuple[bytes, int]:

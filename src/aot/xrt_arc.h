@@ -132,8 +132,7 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_AOT_CLASS_TYPE_ID_MASK 0x0000FFFFu
 
 static inline uint16_t xrt_aot_class_type_id(const XrObjHeader *hdr) {
-    if (!hdr || hdr->type != XR_TINSTANCE ||
-        (hdr->extra & XR_OBJ_AOT_NATIVE) == 0 ||
+    if (!hdr || hdr->type != XR_TINSTANCE || (hdr->extra & XR_OBJ_AOT_NATIVE) == 0 ||
         (hdr->_rsv & XRT_AOT_CLASS_TYPE_TAG_MASK) != XRT_AOT_CLASS_TYPE_TAG)
         return 0;
     return (uint16_t) (hdr->_rsv & XRT_AOT_CLASS_TYPE_ID_MASK);
@@ -352,8 +351,8 @@ static inline void *xrt_execution_alloc(size_t object_bytes, XrtExecutionFinaliz
         fprintf(stderr, "xrt_execution_alloc: allocation during arena teardown\n");
         abort();
     }
-    XrtExecutionAllocation *node = (XrtExecutionAllocation *) XRT_CALLOC(
-        1, sizeof(XrtExecutionAllocation) + object_bytes);
+    XrtExecutionAllocation *node =
+        (XrtExecutionAllocation *) XRT_CALLOC(1, sizeof(XrtExecutionAllocation) + object_bytes);
     if (XR_UNLIKELY(!node)) {
         fprintf(stderr, "xrt_execution_alloc: out of memory\n");
         abort();
@@ -375,7 +374,7 @@ static inline void *xrt_execution_alloc(size_t object_bytes, XrtExecutionFinaliz
 }
 
 static inline void *xrt_execution_alloc_embedded(size_t object_bytes,
-                                                  XrtExecutionFinalizer finalizer) {
+                                                 XrtExecutionFinalizer finalizer) {
     XrObjHeader *hdr = (XrObjHeader *) xrt_execution_alloc(object_bytes, finalizer);
     hdr->extra |= XR_OBJ_AOT_NATIVE;
     return hdr;
@@ -541,8 +540,7 @@ static inline void xrt_retain(XrValue v) {
     if (v.tag == XR_TAG_STR)
         return;
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
-        (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
-         (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0)) {
+        (v.tag == XR_TAG_PTR && v.heap_type == 0 && (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0)) {
         xrt_coll_retain(v);
         return;
     }
@@ -562,9 +560,16 @@ static inline void xrt_retain(XrValue v) {
     atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_relaxed);
 }
 
+/* Stack storage is deliberately NOT a reason to refuse the claim. A stack
+ * object's memory must not be freed, but it still owns whatever its payload
+ * points at -- a stack closure holds its upvalues, a capture cell above all --
+ * and those references have to be dropped at its death point. xrt_finalize_one
+ * already draws that line: it always finalizes the payload and calls
+ * xrt_execution_free_allocation only for non-stack storage. Refusing here meant
+ * the destructor never ran at all, so every capture cell reached by a stack
+ * closure was stranded and RSS grew linearly with the loop count. */
 static inline int xrt_rc_claim_release_last(XrObjHeader *hdr) {
-    if (!hdr ||
-        (hdr->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP)))
+    if (!hdr || (hdr->extra & (XR_OBJ_IMMORTAL | XR_OBJ_AOT_SWEEP)))
         return 0;
     if (XR_OBJ_IS_SHARED(hdr)) {
         int32_t old = atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_acq_rel);
@@ -604,8 +609,8 @@ static inline void xrt_array_ref_release_owned(XrValue v);
  * destructor releases child references, which may recurse back into
  * xrt_release. */
 static inline void xrt_finalize_payload(XrObjHeader *hdr) {
-    void *obj = (hdr->extra & XR_OBJ_AOT_NATIVE) ? (void *) hdr
-                                                 : (char *) hdr + sizeof(XrObjHeader);
+    void *obj =
+        (hdr->extra & XR_OBJ_AOT_NATIVE) ? (void *) hdr : (char *) hdr + sizeof(XrObjHeader);
     if (hdr->extra & XR_OBJ_HAS_DTOR) {
         uint16_t class_type_id = xrt_aot_class_type_id(hdr);
         if (class_type_id != 0)
@@ -731,8 +736,7 @@ static inline void xrt_release(XrValue v) {
     if (v.tag == XR_TAG_STR)
         return;
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
-        (v.tag == XR_TAG_PTR && v.heap_type == 0 &&
-         (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0)) {
+        (v.tag == XR_TAG_PTR && v.heap_type == 0 && (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0)) {
         xrt_coll_release(v);
         return;
     }

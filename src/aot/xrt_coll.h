@@ -5078,6 +5078,11 @@ static inline XrValue xrt_closure_call0(XrValue callback) {
         _hdr->extra = XR_OBJ_STORAGE_STACK;                                                        \
         xrt_closure_t *_c = (xrt_closure_t *) ((char *) _hdr + sizeof(XrObjHeader));               \
         xrt_closure_init(_c, (callable_expr), _nupvals);                                           \
+        /* Same builtin kind the heap path marks. Without it _rsv stays        */                  \
+        /* XRT_ARC_KIND_NONE, the closure destructor never runs, and every     */                  \
+        /* upvalue -- a capture cell above all -- is stranded. The storage bit  */                 \
+        /* keeps the frame memory out of free(); only the payload is finalized. */                 \
+        xrt_arc_mark_builtin(_c, XRT_ARC_KIND_CLOSURE);                                            \
         xr_mkptr(_c, XR_TAG_CLOSURE);                                                              \
     })
 #endif
