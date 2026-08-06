@@ -275,12 +275,9 @@ XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t por
 void cluster_node_retain(XrClusterNode *node);
 void cluster_node_shutdown(XrClusterNode *node);
 void cluster_node_release(XrClusterNode *node);
-int cluster_node_connect(struct XrCluster *cluster, XrClusterNode *node);
 int cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len);
 int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
                             uint32_t payload_len);
-int cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uint8_t *buf,
-                            uint32_t buf_size, uint32_t *payload_len_out);
 int cluster_conn_read_try(XrIOConn *conn, uint8_t *data, size_t len, int *wait_events);
 int cluster_conn_write_try(XrIOConn *conn, const uint8_t *data, size_t len, int *wait_events);
 void cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out);
@@ -359,22 +356,8 @@ typedef struct XrCluster {
     _Atomic(bool) running;
 
     /*
-     * Stop-signalling pipe for coroutine-friendly interruptible sleep.
-     *
-     * Every long-lived cluster coroutine uses
-     * cluster_sleep_interruptible(c, ms) which reads from
-     * stop_pipe[0] with a read deadline. cluster_runtime_stop closes
-     * stop_pipe[1] early, turning every outstanding read into an
-     * immediate EOF. Both ends non-blocking.
-     *
-     * Created in start_ex — pipe() failure is fatal.
-     */
-    int stop_pipe[2];
-
-    /*
-     * Heartbeat coroutine — spawned in cluster_runtime_start, yields via
-     * cluster_sleep_interruptible between ticks, observes running
-     * (+ EOF on stop_pipe) to exit.
+     * Heartbeat coroutine — spawned in cluster_runtime_start, yields on the
+     * shared timer wheel between ticks, and observes running to exit.
      *
      * heartbeat_running is flipped to false by the coroutine on exit so
      * cluster_runtime_stop can wait briefly before freeing the cluster
@@ -411,7 +394,7 @@ typedef struct XrCluster {
      *
      *   tls_enabled     — flip to turn on TLS for every inbound and
      *                     outbound cluster connection.
-     *   tls_client_ctx  — used by cluster_node_connect when TLS is on.
+     *   tls_client_ctx  — used by the outgoing join state machine when TLS is on.
      *                     Built at start_ex time with caller-supplied CA
      *                     bundle, optional client cert/key (for mTLS), and
      *                     optional verify_peer toggle.
@@ -477,40 +460,14 @@ int cluster_runtime_start(struct XrVMRuntime *X, const char *name, uint16_t port
 void cluster_runtime_retain(XrCluster *c);
 void cluster_runtime_release(XrCluster *c);
 
-// Connect to a remote node (host:port)
-int cluster_runtime_join(XrCluster *c, const char *host, uint16_t port);
+// Start a netpoll-driven outgoing join without blocking the caller's worker.
+bool cluster_runtime_join_spawn(XrCluster *c, const char *host, uint16_t port);
 
 // Stop the cluster and close all connections
 void cluster_runtime_stop(XrCluster *c);
 
 // Check if cluster is running
 bool cluster_runtime_is_running(XrCluster *c);
-
-/*
- * Coroutine-friendly interruptible sleep.
- *
- * Sleeps for up to `ms` milliseconds or until cluster_runtime_stop signals
- * shutdown. Intended for use inside cluster-owned native coroutines
- * (heartbeat, accept retry, discovery tick) that
- * need periodic wake-up without blocking the worker thread with
- * nanosleep/usleep.
- *
- * Mechanism: reads from the cluster's stop_pipe[0] with a read
- * deadline set via xr_socket_set_read_timeout. cluster_runtime_stop closes
- * stop_pipe[1] early so every outstanding read returns EOF
- * immediately. Each worker's netpoll integration unblocks the
- * coroutine on deadline even if no data arrives.
- *
- * Returns:
- *   true  — the full `ms` elapsed normally (continue looping)
- *   false — the cluster was stopped or stop_pipe is unavailable
- *           (caller should exit its loop)
- *
- * Falls back to a plain nanosleep if stop_pipe was never set up
- * (pipe() failed at start_ex); the cluster is still functional in
- * that case, just not interruptible on the sleep boundary.
- */
-bool cluster_sleep_interruptible(XrCluster *c, int ms);
 
 // Get self node name
 const char *cluster_runtime_self_name(XrCluster *c);

@@ -35,7 +35,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"start", XLSP_SYM_FUNCTION, "fn(config: ClusterConfig): bool", "Start cluster node", NULL, 0},
-    {"join", XLSP_SYM_FUNCTION, "fn(addr: string): bool", "Join cluster by address", NULL, 0},
+    {"join", XLSP_SYM_FUNCTION, "fn(addr: string): bool", "Join cluster by address without blocking the scheduler worker", NULL, 0},
     {"self", XLSP_SYM_FUNCTION, "fn(): string", "Get own node name", NULL, 0},
     {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>", "List cluster node names", NULL, 0},
     {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", NULL, 0},

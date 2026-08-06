@@ -374,7 +374,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"http2", "supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", "h2_supported", "normal", "", "xrt_http_h2_supported", "", "value", "", "", "", "runtime", "method", 0, true},
     {"http2", "request", "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?", "Execute one typed HTTP/2 request", "h2_request_typed", "normal", "", "xrt_http_h2_request_unavailable", "vvvvvv", "value", "", "", "", "runtime", "method", 6, true},
     {"cluster", "start", "(config: ClusterConfig): bool", "Start cluster node", "cluster_start", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
-    {"cluster", "join", "(addr: string): bool", "Join cluster by address", "cluster_join", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
+    {"cluster", "join", "(addr: string): bool", "Join cluster by address without blocking the scheduler worker", "cluster_join", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 1, false},
     {"cluster", "self", "(): string", "Get own node name", "cluster_self", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "nodes", "(): Array<string>", "List cluster node names", "cluster_nodes", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},

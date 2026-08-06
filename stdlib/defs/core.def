@@ -3816,8 +3816,9 @@ module cluster {
 
   fn join {
     signature: "(addr: string): bool"
-    doc: "Join cluster by address"
+    doc: "Join cluster by address without blocking the scheduler worker"
     vm: "cluster_join"
+    vm_binding: "yieldable"
     argc: 1
     arg_spec: ""
     aot_direct: false

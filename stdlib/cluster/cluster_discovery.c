@@ -10,8 +10,8 @@
  * KEY CONCEPT:
  *   A native coroutine sends periodic announce datagrams to a multicast
  *   group and listens for announces from other nodes. On receiving a
- *   new node announce, it triggers cluster_runtime_join() to establish the
- *   TCP connection with full challenge-response authentication.
+ *   new node announce, it spawns the netpoll-driven outgoing join state
+ *   machine with full challenge-response authentication.
  *
  * WIRE FORMAT (announce datagram):
  *   [magic 4B BE] [version 1B] [name_len 1B] [name ...] [port 2B BE]
@@ -273,7 +273,7 @@ static void discovery_drain(XrClusterDiscovery *disc) {
 
         char host[INET_ADDRSTRLEN];
         if (inet_ntop(AF_INET, &sender.sin_addr, host, sizeof(host)))
-            (void) cluster_runtime_join(c, host, peer_port);
+            (void) cluster_runtime_join_spawn(c, host, peer_port);
     }
 }
 
@@ -355,7 +355,7 @@ int cluster_discovery_start(XrCluster *c) {
     /*
      * Spawn discovery as a native coroutine on the worker pool rather
      * than a dedicated pthread: no private scheduling, no thread-block
-     * on poll(), one isolate stop_pipe to wake every background task.
+     * on poll(); cancellation and fd readiness stay in the shared runtime.
      */
     cluster_runtime_retain(c);
     XrCoroutine *coro = xr_coro_create_native_yieldable(
