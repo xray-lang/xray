@@ -85,6 +85,7 @@ XR_FUNC void xr_module_graph_free(XrModuleGraph *g) {
     xr_hashmap_free(g->id_index);
     xr_free(g->topo_order);
     xr_free(g->cycle_desc);
+    xr_free(g->unresolved_error);
     xr_free(g);
 }
 
@@ -175,6 +176,14 @@ XR_FUNC int xr_module_graph_find(const XrModuleGraph *g, const char *canonical) 
 
 /* ========== BFS Build ========== */
 
+static char *make_unresolved_message(const char *specifier) {
+    size_t n = strlen(specifier) + 40;
+    char *msg = (char *) xr_malloc(n);
+    if (msg)
+        snprintf(msg, n, "module '%s' not found", specifier);
+    return msg;
+}
+
 static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char *specifier) {
     if (!g || spec_idx < 0 || spec_idx >= g->spec_count || !specifier)
         return;
@@ -184,8 +193,12 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     char *err = NULL;
     int rc = xr_module_resolver_resolve(g->resolver, specifier, from_spec->source_path, &mid, &err);
     if (rc != 0) {
-        /* Resolution failed — skip (stdlib native modules won't have source). */
-        xr_free(err);
+        /* A registered native module resolves with a NULL source_path rather
+         * than failing, so reaching here means the specifier names nothing. */
+        if (!g->unresolved_error)
+            g->unresolved_error = err ? err : make_unresolved_message(specifier);
+        else
+            xr_free(err);
         return;
     }
     xr_free(err);
@@ -322,6 +335,13 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
 
         /* Resolve imports and discover new modules */
         collect_and_resolve_imports(g, qi, ast);
+        if (g->unresolved_error) {
+            if (out_err) {
+                *out_err = g->unresolved_error;
+                g->unresolved_error = NULL;
+            }
+            return -1;
+        }
     }
 
     return 0;

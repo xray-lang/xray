@@ -88,6 +88,14 @@ typedef struct XrModuleGraph {
     bool has_cycle;
     char *cycle_desc; /* Human-readable cycle description (owned, or NULL) */
 
+    /* First import that did not resolve, if any (owned, or NULL). The walk
+     * cannot report from where it happens -- it is void and several frames
+     * below the caller holding out_err -- so it records the first failure and
+     * the build entry point turns it into the build's error. Dropping it was
+     * how `import "./typo"` and a package missing from xray.toml compiled
+     * clean and only surfaced, if at all, at run time. */
+    char *unresolved_error;
+
     /* The resolver used during build */
     XrModuleResolver *resolver;
 
