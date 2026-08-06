@@ -29,7 +29,11 @@ from typing import Sequence
 from . import platform, proc
 
 # Trees whose contents decide whether a reused binary is stale.
-SOURCE_ROOTS = ("src", "include", "stdlib", "CMakeLists.txt")
+# What a sanitizer binary is built from. `tests` belongs here: the lanes run
+# ctest over the unit tests in that tree, so a binary built before a test source
+# changed is exactly as stale as one built before a compiler source changed --
+# and staleness there is invisible without it.
+SOURCE_ROOTS = ("src", "include", "stdlib", "tests", "CMakeLists.txt")
 
 
 @dataclass
@@ -117,6 +121,32 @@ def stale_source(binary: Path, project_dir: Path) -> Path | None:
                     return path
             except OSError:
                 continue
+    return None
+
+
+def rebuild_reason(binary: Path, project_dir: Path) -> str | None:
+    """Why this lane must build, or None when the existing tree is current.
+
+    The lanes ask this instead of taking a skip-build flag. A flag puts the
+    answer in the hands of whoever remembers to set it, and gets it wrong in
+    both directions: unset on an unchanged tree it rebuilds a whole sanitized
+    compiler for nothing, and set on a changed one the lane used to fail rather
+    than build what it needed. The tree already knows which case it is in.
+
+    Deciding by mtime is deliberately eager -- a checkout that only restores a
+    file's timestamp triggers a rebuild that ccache then serves from cache.
+    Erring the other way would report a clean sanitizer result the current tree
+    never earned, which is the one outcome a gate may not produce.
+    """
+    if not binary.is_file():
+        return "no existing binary"
+    stale = stale_source(binary, project_dir)
+    if stale is not None:
+        try:
+            stale = stale.relative_to(project_dir)
+        except ValueError:
+            pass
+        return f"{stale} is newer than the binary"
     return None
 
 

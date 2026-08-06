@@ -27,7 +27,7 @@ def generate_c(xray: Path, source: Path, output: Path) -> str:
         stderr=subprocess.STDOUT,
         text=True,
         encoding="utf-8",
-        errors="replace",
+        errors="strict",
         check=False,
     )
     if proc.returncode != 0 or not output.is_file():

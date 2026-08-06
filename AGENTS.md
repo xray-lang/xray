@@ -41,6 +41,15 @@ matching its measured wall time so a cold run (no `CTestCostData.txt`) schedules
 it first instead of stranding it at the tail. Keep `PROCESSORS` honest about the
 cores a lane actually consumes.
 
+**The sanitizer lanes are most of a full run.** `tsan_focused` and
+`asan_focused` are `RUN_SERIAL` and each builds its own instrumented tree, so
+together they are roughly two thirds of the wall time of `ctest -j4`; the other
+~344 tests total a few minutes. `ctest -LE sanitizer` is the iteration loop.
+Both lanes decide for themselves whether to build, by comparing the binary
+against `src`, `include`, `stdlib`, `tests`, and `CMakeLists.txt`, so an
+unchanged tree reuses the build and a changed one rebuilds without being asked.
+Neither lane is optional before handing off work in the directories above.
+
 Changes under `src/ir/`, `src/aot/`, or `src/analysis/` must preserve the Task 218 compiler-memory-safety defenses:
 
 - Run `ctest --test-dir build -R meta_ownership_inventory` after compiler metadata changes.

@@ -30,7 +30,6 @@ Environment overrides:
     XR_ASAN_DIFF_REGEX    backend-diff subset regex
     XR_ASAN_XXHASH_MAIN   path to the xxhash port entry
     XR_ASAN_BILI_MAIN     path to the committed bili fixture
-    XR_ASAN_SKIP_BUILD    1 to reuse an existing (and verified current) build
 """
 
 from __future__ import annotations
@@ -103,7 +102,6 @@ def main(argv: list[str]) -> int:
     log = sanitizer.LaneLog(LANE)
     jobs = sanitizer.default_jobs("XR_ASAN_JOBS")
     build_dir = PROJECT_DIR / os.environ.get("XR_ASAN_BUILD_DIR", "build-asan")
-    skip_build = platform.env_flag("XR_ASAN_SKIP_BUILD")
     timeout = platform.env_timeout("XR_ASAN_TIMEOUT", 3600)
 
     ctest_regex = os.environ.get("XR_ASAN_CTEST_REGEX", "^test_")
@@ -135,32 +133,20 @@ def main(argv: list[str]) -> int:
         sanitizer_flags=("ENABLE_ASAN=ON", "ENABLE_UBSAN=ON"),
     )
 
-    if not skip_build:
+    xray = build_dir / platform.exe_name("xray")
+    reason = sanitizer.rebuild_reason(xray, PROJECT_DIR)
+    if reason:
+        log(f"building compiler + tests (ASan/UBSan): {reason}")
         if not sanitizer.configure(spec, PROJECT_DIR, jobs, timeout, log):
             return 1
-        log("building compiler + tests (ASan/UBSan)")
         if not sanitizer.build(spec, jobs, timeout, log):
             return 1
+    else:
+        log("reusing the up-to-date ASan build")
 
-    xray = build_dir / platform.exe_name("xray")
     if not (xray.is_file() and os.access(xray, os.X_OK)):
         log(f"ASan xray binary not found at {xray}", error=True)
-        if skip_build:
-            log("XR_ASAN_SKIP_BUILD=1 was set but no binary exists -- build it first:",
-                error=True)
-            log(f"  cmake --build {build_dir} -j{jobs}", error=True)
         return 1
-
-    # A stale binary is worse than no binary: the lane would report a clean ASan
-    # result the current tree never earned.
-    if skip_build:
-        stale = sanitizer.stale_source(xray, PROJECT_DIR)
-        if stale is not None:
-            log(f"the ASan binary is stale: {stale} is newer than {xray}", error=True)
-            log(f"rebuild it (cmake --build {build_dir} -j{jobs}) or unset "
-                "XR_ASAN_SKIP_BUILD", error=True)
-            return 1
-        log("XR_ASAN_SKIP_BUILD=1: reusing up-to-date ASan binary")
 
     problem = sanitizer.verify_configured(build_dir, "ENABLE_ASAN=ON")
     if problem:

@@ -20,7 +20,6 @@ not hide the rest; the lane fails when any warning appeared.
 Environment overrides:
     XR_TSAN_JOBS        parallel build jobs (default: all cores)
     XR_TSAN_BUILD_DIR   TSan build directory (default: build-tsan)
-    XR_TSAN_SKIP_BUILD  1 = reuse the existing TSan build as-is
 """
 
 from __future__ import annotations
@@ -68,7 +67,6 @@ def main(argv: list[str]) -> int:
     log = sanitizer.LaneLog(LANE)
     jobs = sanitizer.default_jobs("XR_TSAN_JOBS")
     build_dir = PROJECT_DIR / os.environ.get("XR_TSAN_BUILD_DIR", "build-tsan")
-    skip_build = platform.env_flag("XR_TSAN_SKIP_BUILD")
     timeout = platform.env_timeout("XR_TSAN_TIMEOUT", 3600)
 
     # Instrument through raw compiler flags, NOT -DENABLE_TSAN=ON. The option
@@ -89,14 +87,17 @@ def main(argv: list[str]) -> int:
         verify_cache_contains=("-fsanitize=thread",),
     )
 
-    if not skip_build:
+    xray = build_dir / platform.exe_name("xray")
+    reason = sanitizer.rebuild_reason(xray, PROJECT_DIR)
+    if reason:
+        log(f"building xray (TSan, jobs={jobs}): {reason}")
         if not sanitizer.configure(spec, PROJECT_DIR, jobs, timeout, log):
             return 1
-        log(f"building xray (TSan, jobs={jobs})")
         if not sanitizer.build(spec, jobs, timeout, log):
             return 1
+    else:
+        log("reusing the up-to-date TSan build")
 
-    xray = build_dir / platform.exe_name("xray")
     if not (xray.is_file() and os.access(xray, os.X_OK)):
         log(f"TSan xray binary not found at {xray}", error=True)
         return 1
