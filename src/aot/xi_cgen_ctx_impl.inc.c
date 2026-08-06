@@ -74,6 +74,7 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     xr_free(ctx->shared_enum);
     xr_free(ctx->shared_native_instances);
     xr_free(ctx->shared_native_exports);
+    xr_free(ctx->cfn_stub_targets);
     xr_free(ctx->methods);
     cg_clear_imports(ctx);
     xr_free(ctx->imports);

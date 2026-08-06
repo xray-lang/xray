@@ -675,8 +675,8 @@ static void emit_enum_scalar_sidecar_defs(XiCgenCtx *ctx, FILE *out) {
          * its nominal name table is part of the boundary representation even
          * when the local descriptor-use bitmap did not request `.name`.
          * Enums that remain fully typed still emit no sidecar or name table. */
-        fprintf(out, "static const char *const _xenum_scalar_names_%s_%u[%u] = {",
-                module_prefix, (unsigned) index, (unsigned) plan->member_count);
+        fprintf(out, "static const char *const _xenum_scalar_names_%s_%u[%u] = {", module_prefix,
+                (unsigned) index, (unsigned) plan->member_count);
         for (uint32_t i = 0; i < plan->member_count; i++) {
             if (i > 0)
                 fprintf(out, ",");
@@ -1006,8 +1006,7 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
             xaot_value_storage_rep(target_rep) == XR_REP_TAGGED &&
             cg_value_rep_is_adt_aggregate(call_plan->rep)) {
             if (cg_value_rep_is_typed_adt_aggregate(call_plan->rep)) {
-                fprintf(out, "%s_from_base(xrt_value_to_enum_aggregate(",
-                        call_plan->rep.c_type);
+                fprintf(out, "%s_from_base(xrt_value_to_enum_aggregate(", call_plan->rep.c_type);
                 return "))";
             }
             fprintf(out, "xrt_value_to_enum_aggregate(");
@@ -1269,6 +1268,82 @@ static bool cg_func_can_have_cfn_stub(XiCgenCtx *ctx, const XiFunc *f) {
         cg_func_needs_aot_coro_ctx(ctx, f))
         return false;
     return cg_cfn_xray_func_signature_supported(f);
+}
+
+static void cg_cfn_stub_targets_add(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return;
+    for (int i = 0; i < ctx->ncfn_stub_targets; i++) {
+        if (ctx->cfn_stub_targets[i] == f)
+            return;
+    }
+    if (ctx->ncfn_stub_targets == ctx->cfn_stub_targets_cap) {
+        int cap = ctx->cfn_stub_targets_cap ? ctx->cfn_stub_targets_cap * 2 : 8;
+        const XiFunc **grown =
+            (const XiFunc **) xr_realloc(ctx->cfn_stub_targets, (size_t) cap * sizeof(*grown));
+        if (!grown)
+            return; /* out of memory: the stub is simply not elided */
+        ctx->cfn_stub_targets = grown;
+        ctx->cfn_stub_targets_cap = cap;
+    }
+    ctx->cfn_stub_targets[ctx->ncfn_stub_targets++] = f;
+}
+
+/* Record every function handed to an FFI call as an argument. A function value
+ * can only cross the C boundary as a callback, so the argument position alone
+ * identifies the reference without consulting the extern declaration -- which
+ * matters because the declaration lookup marks the decl used. */
+static void cg_cfn_stub_targets_scan_func(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f)
+        return;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *v = blk->values[i];
+            if (!v || v->op != XI_CALL || v->nargs < 1)
+                continue;
+            CgStaticFunctionCall target = cg_resolve_static_function_call(ctx, f, v->args[0]);
+            if (!target.func || !target.func->is_extern)
+                continue;
+            for (uint16_t a = 1; a < v->nargs; a++) {
+                CgStaticFunctionCall cb = cg_resolve_static_function_call(ctx, f, v->args[a]);
+                if (cb.func && !cb.func->is_extern)
+                    cg_cfn_stub_targets_add(ctx, cb.func);
+            }
+        }
+    }
+    for (uint16_t c = 0; c < f->nchildren; c++)
+        cg_cfn_stub_targets_scan_func(ctx, f->children[c]);
+}
+
+/* Is this function's C-ABI `_cfn` stub actually referenced?
+ *
+ * cg_func_can_have_cfn_stub answers whether a stub is POSSIBLE; emitting one
+ * for every top-level noncapturing function makes a static wrapper nobody
+ * calls, which is a -Wunused-function error under the freestanding profile.
+ * The stub exists for exactly one consumer -- emit_cfn_callback_arg -- so the
+ * question is whether any FFI call passes this function as an argument. */
+static bool cg_func_needs_cfn_stub(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !cg_func_can_have_cfn_stub(ctx, f))
+        return false;
+    if (!ctx->cfn_stub_targets_built) {
+        ctx->cfn_stub_targets_built = true;
+        if (ctx->all_modules) {
+            for (int m = 0; m < ctx->all_nmodules; m++) {
+                if (ctx->all_modules[m])
+                    cg_cfn_stub_targets_scan_func(ctx, ctx->all_modules[m]->init);
+            }
+        } else if (ctx->module) {
+            cg_cfn_stub_targets_scan_func(ctx, ctx->module->init);
+        }
+    }
+    for (int i = 0; i < ctx->ncfn_stub_targets; i++) {
+        if (ctx->cfn_stub_targets[i] == f)
+            return true;
+    }
+    return false;
 }
 
 static bool emit_cfn_callback_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *current,

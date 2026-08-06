@@ -717,6 +717,12 @@ struct XiCgenCtx {
     int nimports;
     XiModule **all_modules; /* full modules array for resolved-index lookups */
     int all_nmodules;
+    /* Functions reached as a C-callback argument of an FFI call, so exactly the
+     * ones whose `_cfn` C-ABI stub is referenced. Built once on first query. */
+    const XiFunc **cfn_stub_targets;
+    int ncfn_stub_targets;
+    int cfn_stub_targets_cap;
+    bool cfn_stub_targets_built;
     XaotArtifactKind artifact_kind;
     bool freestanding_profile;
     XiCgenCDialect c_dialect;
@@ -10208,7 +10214,7 @@ static void emit_cfn_stub_definition(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     XrRep ret_rep;
     XrRep c_ret_rep;
 
-    if (!cg_func_can_have_cfn_stub(ctx, f))
+    if (!cg_func_needs_cfn_stub(ctx, f))
         return;
 
     emit_cfn_stub_signature(ctx, out, f, prefix, false);
@@ -12858,7 +12864,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, ");\n");
     }
 
-    if (cg_func_can_have_cfn_stub(ctx, f)) {
+    if (cg_func_needs_cfn_stub(ctx, f)) {
         emit_cfn_stub_signature(ctx, out, f, prefix, cross_module);
         fprintf(out, ";\n");
     }
