@@ -5661,7 +5661,6 @@ import "bob/http_client" as httpClient
 // 3. 文件路径或目录路径：字符串字面量，可显式 alias，也可从路径尾段推导（不含 .xr 扩展名）
 import "./modules/mod_a" as a
 import "../utils/string_utils" as utils
-import "models/user" as user
 
 // 4. 命名 import：成员可重命名；`from` 后可接字符串路径或裸模块名
 import { readFile, writeFile as write } from io
@@ -5672,11 +5671,13 @@ import { publicFn } from "./modules/mod_a"
 - JavaScript 默认导入 `import name from "module"`。使用 `import "module" as name`、`import module` 或 `import { name } from module`。
 - 动态导入 `import("module")`。所有导入必须是静态声明。
 
-**解析算法**（按优先级）：
-1. **stdlib 命名解析**：裸标识符 `import time` → 内置 stdlib 模块表。
-2. **相对路径**：`"./xxx"` 与 `"../xxx"` 相对当前文件解析（自动补 `.xr` 扩展名或 `index.xr` 目录入口）。
-3. **项目根目录路径**：不以 `./` 或 `../` 开头的 quoted path 作为项目目录 import。
-4. **第三方包**：`"owner/name"` 由 `xray.toml` 的 `[dependencies]` 解析。
+**解析算法**：由 specifier 的**形状**决定，三种形状互不重叠，与是否带引号无关。
+1. **具名模块**：不含分隔符的名字 `import time` → 内置 stdlib 模块表与 `.xrd` 声明的原生模块共用这一命名空间。
+2. **路径**：`"./xxx"` 与 `"../xxx"` 相对当前文件解析（自动补 `.xr` 扩展名或 `index.xr` 目录入口）。
+3. **第三方包**：`"owner/name"` 由 `xray.toml` 的 `[dependencies]` 解析。
+
+引号只是书写非标识符文本的手段，本身不表示任何含义——路径和包需要它，模块名不需要。
+解析不到的 import 是编译错误。
 
 **Specifier 校验**（编译错误）：
 - 禁止包含 `.xr` 扩展名：`import "./a.xr"` → 错误

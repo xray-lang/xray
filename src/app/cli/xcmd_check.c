@@ -265,8 +265,16 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
                 total_errors +=
                     check_directory(X, analyzer, path, verbose, &total_files, &passed_files);
             } else if (st.kind == XR_FS_FILE) {
-                /* Single .xr file: use graph to discover + check all deps */
-                int errs = check_with_graph(X, analyzer, path, verbose);
+                /* Single .xr file: use graph to discover + check all deps.
+                 *
+                 * --syntax-only stops at the file itself. Building the graph
+                 * resolves every import, which is not a syntax question and
+                 * cannot succeed for a snippet read out of its project --
+                 * documentation fences import `"alice/utils"` and `"./user"`
+                 * to show the forms, and asking whether those exist is exactly
+                 * what this flag opts out of. */
+                int errs = syntax_only ? check_file(X, NULL, path, verbose)
+                                       : check_with_graph(X, analyzer, path, verbose);
                 total_files++;
                 if (errs == 0)
                     passed_files++;

@@ -5674,10 +5674,9 @@ import http as httpClient
 import "alice/utils"
 import "bob/http_client" as httpClient
 
-// 3. file-path or directory-path: string literal, optional explicit alias, otherwise inferred from the trailing path segment (no .xr extension)
+// 3. path: string literal, optional explicit alias, otherwise inferred from the trailing path segment (no .xr extension)
 import "./modules/mod_a" as a
 import "../utils/string_utils" as utils
-import "models/user" as user
 
 // 4. named imports: members may be renamed; the `from` operand may be a quoted path or a bare module name
 import { readFile, writeFile as write } from io
@@ -5688,11 +5687,12 @@ import { publicFn } from "./modules/mod_a"
 - JavaScript-style default import (`import name from "module"`). Use `import "module" as name`, `import module`, or `import { name } from module`.
 - Dynamic import (`import("module")`). All imports must be static declarations.
 
-**Resolution algorithm** (in priority order):
-1. **stdlib name resolution**: a bare identifier `import time` → the built-in stdlib module table.
-2. **Relative path**: `"./xxx"` and `"../xxx"` are resolved relative to the current file (auto-appends `.xr` extension or `index.xr` directory entry).
-3. **Project-root path**: a quoted path that does not start with `./` or `../` is resolved as a project-relative directory import.
-4. **Third-party packages**: `"owner/name"` is resolved through the `[dependencies]` section in `xray.toml`.
+**Resolution algorithm**: the specifier's **shape** decides, and the three shapes do not overlap. Quoting plays no part in it.
+1. **Named module**: a name with no separator, `import time` → the built-in stdlib module table; `.xrd`-declared native modules share this namespace.
+2. **Path**: `"./xxx"` and `"../xxx"` are resolved relative to the current file (auto-appends `.xr` extension or `index.xr` directory entry).
+3. **Third-party package**: `"owner/name"` is resolved through the `[dependencies]` section in `xray.toml`.
+
+Quoting is only how text that is not an identifier gets written, which is why a path and a package need it and a module name does not. An import that resolves to nothing is a compile error.
 
 **Specifier validation** (compile errors):
 - Including `.xr` extension: `import "./a.xr"` → error
