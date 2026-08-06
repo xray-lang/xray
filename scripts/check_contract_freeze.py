@@ -159,6 +159,25 @@ CONTRACT_SPECS = (
             "src/aot/xaot_verify.c",
         ),
     ),
+    ContractSpec(
+        "sort-semantics.md",
+        (
+            "src/shared/xr_sort_core.h",
+            "src/runtime/object/xarray_vm.c",
+            "src/aot/xrt_sort.inc.c",
+            "tests/diff/cases/semantics/collections/array_sort_shared_core.xr",
+            "tests/unit/stdlib/test_array_core.c",
+        ),
+    ),
+    ContractSpec(
+        "semantic-ownership.md",
+        (
+            "contracts/semantic-owners.toml",
+            "contracts/hof-shape-matrix.toml",
+            "contracts/shared-core-inventory.json",
+            "scripts/check_semantic_owners.py",
+        ),
+    ),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")

@@ -719,6 +719,14 @@ TEST(array_core_sort_typed_buffers_in_place) {
     ASSERT_EQ_INT(bools[2], 1);
     ASSERT_EQ_INT(bools[3], 1);
 
+    double floats[] = {2.0, NAN, -0.0, -3.0, 0.0};
+    ASSERT_TRUE(xr_sort_core_typed(floats, 5, XR_ELEM_F64));
+    ASSERT_EQ_INT(xr_sort_core_compare_f64(floats[0], -3.0), 0);
+    ASSERT_EQ_INT(xr_sort_core_compare_f64(floats[1], 0.0), 0);
+    ASSERT_EQ_INT(xr_sort_core_compare_f64(floats[2], 0.0), 0);
+    ASSERT_EQ_INT(xr_sort_core_compare_f64(floats[3], 2.0), 0);
+    ASSERT_TRUE(isnan(floats[4]));
+
     ASSERT_FALSE(xr_sort_core_typed(ints, 5, XR_ELEM_ANY));
 }
 
@@ -737,6 +745,10 @@ TEST(array_core_sort_default_compare_numbers_and_string_slices) {
               0);
     ASSERT_LT(xr_sort_core_compare_default(XR_NULL_VAL, XR_NULL_VAL, "aa", 2, "b", 1), 0);
     ASSERT_GT(xr_sort_core_compare_default(XR_NULL_VAL, XR_NULL_VAL, "abc", 3, "ab", 2), 0);
+    ASSERT_LT(xr_sort_core_compare_f64(-INFINITY, 0.0), 0);
+    ASSERT_EQ_INT(xr_sort_core_compare_f64(-0.0, 0.0), 0);
+    ASSERT_GT(xr_sort_core_compare_f64(NAN, INFINITY), 0);
+    ASSERT_EQ_INT(xr_sort_core_compare_f64(NAN, NAN), 0);
 }
 
 TEST_MAIN_BEGIN()

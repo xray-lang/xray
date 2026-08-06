@@ -35,3 +35,5 @@ Initial frozen contracts:
 - `differential-protocol.md`
 - `target-abi.md`
 - `object-json-domain.md`
+- `sort-semantics.md`
+- `semantic-ownership.md`

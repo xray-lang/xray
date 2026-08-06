@@ -3638,6 +3638,30 @@ if(BUILD_TESTS)
         PROCESSORS 1
         TIMEOUT 30
     )
+
+    add_test(
+        NAME semantic_owner_inventory
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_owners.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(semantic_owner_inventory PROPERTIES
+        LABELS "meta;semantic-owner;shared-core"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME semantic_owner_inventory_self_test
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_owners.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(semantic_owner_inventory_self_test PROPERTIES
+        LABELS "meta;semantic-owner;shared-core"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
 endif()
 
 # Fuzzing tests (optional, requires Clang with libFuzzer)

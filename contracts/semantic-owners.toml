@@ -1,0 +1,235 @@
+schema = 1
+
+[policy]
+observable_owner_count = 1
+unknown_plan = "fail_closed"
+native_kernel_forbids_tagged_value = true
+tagged_and_descriptor_kernels_are_explicit = true
+
+[[core]]
+id = "arithmetic"
+header = "src/shared/xr_arith_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "array"
+header = "src/shared/xr_array_core.h"
+representation = "tagged"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "bits"
+header = "src/shared/xr_bits_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "compression"
+header = "src/shared/xr_compress_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "crypto"
+header = "src/shared/xr_crypto_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "c-string"
+header = "src/shared/xr_cstr_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "error"
+header = "src/shared/xr_error_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "hash"
+header = "src/shared/xr_hash_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "io"
+header = "src/shared/xr_io_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "math"
+header = "src/shared/xr_math_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "native-type"
+header = "src/shared/xr_native_type_core.h"
+representation = "descriptor"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "numeric-conversion"
+header = "src/shared/xr_numeric_conversion_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "numeric"
+header = "src/shared/xr_numeric_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "os"
+header = "src/shared/xr_os_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "range"
+header = "src/shared/xr_range_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "raw-scalar"
+header = "src/shared/xr_raw_scalar_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "regex"
+header = "src/shared/xr_regex_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "array-sort"
+header = "src/shared/xr_sort_core.h"
+representation = "native-and-tagged"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "string-buffer"
+header = "src/shared/xr_strbuf_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "string"
+header = "src/shared/xr_string_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "synchronization"
+header = "src/shared/xr_sync_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "truthiness"
+header = "src/shared/xr_truthy_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[core]]
+id = "type-names"
+header = "src/shared/xr_type_names_core.h"
+representation = "descriptor"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "utf8"
+header = "src/shared/xr_utf8_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "value-format"
+header = "src/shared/xr_value_format_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted"]
+
+[[operation]]
+id = "Array.sort"
+observable_contract = "contracts/sort-semantics.md"
+semantic_kernel = "src/shared/xr_sort_core.h"
+vm_adapter = "src/runtime/object/xarray_vm.c"
+aot_adapter = "src/aot/xrt_sort.inc.c"
+typed_plan = "array-element-representation"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_array_core.c",
+  "tests/diff/cases/semantics/collections/array_sort_shared_core.xr",
+]
+
+[[operation_family]]
+id = "arithmetic-conversion"
+canonical_cores = ["arithmetic", "bits", "numeric-conversion", "numeric", "raw-scalar"]
+duplicate_sources = []
+disposition = "single-owner"
+
+[[operation_family]]
+id = "string-bytes"
+canonical_cores = ["c-string", "string-buffer", "string", "utf8"]
+duplicate_sources = []
+disposition = "single-owner"
+
+[[operation_family]]
+id = "hash-equality"
+canonical_cores = ["hash"]
+duplicate_sources = []
+disposition = "single-owner"
+
+[[operation_family]]
+id = "container-primitives"
+canonical_cores = ["array", "array-sort", "range"]
+duplicate_sources = [
+  "src/runtime/object/xarray_vm.c:retired-private-sort",
+  "src/aot/xrt_sort.inc.c:retired-private-sort",
+]
+disposition = "migrated"
+
+[[operation_family]]
+id = "enum-aggregate"
+canonical_cores = ["native-type", "type-names", "truthiness"]
+duplicate_sources = []
+disposition = "single-owner"
+
+[[operation_family]]
+id = "encoding-formatting"
+canonical_cores = ["compression", "crypto", "regex", "value-format"]
+duplicate_sources = []
+disposition = "single-owner"
+

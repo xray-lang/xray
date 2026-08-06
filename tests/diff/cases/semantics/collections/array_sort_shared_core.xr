@@ -1,3 +1,5 @@
+import math
+
 fn hugeAscending(a: int, b: int) -> int {
     if (a < b) {
         return -4294967296
@@ -30,4 +32,17 @@ var flags: Array<bool> = [true, false, true, false]
 flags.sort()
 for (flag in flags) {
     print(flag)
+}
+
+var floats: Array<float> = [2.0, math.NAN, -0.0, -3.0, 0.0]
+floats.sort()
+print(floats[0] == -3.0)
+print(floats[1] == 0.0 && floats[2] == 0.0)
+print(floats[3] == 2.0)
+print(floats[4].isNaN())
+
+var unicode: Array<string> = ["é", "z", "中", "a"]
+unicode.sort()
+for (value in unicode) {
+    print(value)
 }
