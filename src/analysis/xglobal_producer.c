@@ -24,6 +24,7 @@
 #include "../module/xstdlib_embedded.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
+#include "../shared/xobject_shape.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -6086,15 +6087,7 @@ static bool object_shape_collect_keys(XgBodyCollect *bc, const ObjectLiteralNode
 static int object_shape_key_compare(const void *left_ptr, const void *right_ptr) {
     const char *left = *(const char *const *) left_ptr;
     const char *right = *(const char *const *) right_ptr;
-    uint64_t left_key = xg_object_stable_name_key(left ? left : "");
-    uint64_t right_key = xg_object_stable_name_key(right ? right : "");
-    if (left_key < right_key)
-        return -1;
-    if (left_key > right_key)
-        return 1;
-    uint32_t left_name_id = hash_name32(left ? left : "");
-    uint32_t right_name_id = hash_name32(right ? right : "");
-    return left_name_id < right_name_id ? -1 : left_name_id > right_name_id ? 1 : 0;
+    return xr_object_shape_name_compare(left, right);
 }
 
 static void object_shape_canonicalize_keys(const char **keys, uint32_t count) {

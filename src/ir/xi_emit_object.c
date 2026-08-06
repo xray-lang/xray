@@ -28,6 +28,7 @@
 #include "../module/xmodule.h"
 #include "../base/xfileio.h"
 #include "../base/xmalloc.h"
+#include "../shared/xobject_shape.h"
 #include "../shared/xr_elem_type.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
@@ -768,22 +769,7 @@ static XrClass *xi_json_struct_object_class_from_type_depth(EmitCtx *ctx, const 
     } else {
         for (int i = 0; i < field_count; i++)
             field_names[i] = type->object.field_names[i];
-        for (int i = 1; i < field_count; i++) {
-            const char *current = field_names[i];
-            uint64_t current_stable = xg_object_stable_name_key(current);
-            uint32_t current_id = xg_name_id(current);
-            int j = i;
-            while (j > 0) {
-                uint64_t previous_stable = xg_object_stable_name_key(field_names[j - 1]);
-                uint32_t previous_id = xg_name_id(field_names[j - 1]);
-                if (previous_stable < current_stable ||
-                    (previous_stable == current_stable && previous_id <= current_id))
-                    break;
-                field_names[j] = field_names[j - 1];
-                j--;
-            }
-            field_names[j] = current;
-        }
+        xr_object_shape_sort_names(field_names, field_count);
     }
     uint8_t *value_kinds = xi_json_struct_object_value_kinds(type, field_names, field_count);
     if (!value_kinds) {

@@ -22,6 +22,7 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 #include "../shared/xr_scalar_type.h"
+#include "../shared/xobject_shape.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -1438,19 +1439,8 @@ static int object_field_runtime_ordinal(struct XrType *type, const char *name) {
     int source_ordinal = json_field_index(type, name);
     if (source_ordinal < 0 || !type || type->kind != XR_KIND_STRUCT_OBJECT)
         return source_ordinal;
-
-    uint64_t stable_name_key = xg_object_stable_name_key(name);
-    uint32_t name_id = xg_name_id(name);
-    int canonical_ordinal = 0;
-    for (int i = 0; i < type->object.field_count; i++) {
-        const char *candidate = type->object.field_names[i];
-        uint64_t candidate_stable_key = xg_object_stable_name_key(candidate);
-        uint32_t candidate_id = xg_name_id(candidate);
-        if (candidate_stable_key < stable_name_key ||
-            (candidate_stable_key == stable_name_key && candidate_id < name_id))
-            canonical_ordinal++;
-    }
-    return canonical_ordinal;
+    return (int) xr_object_shape_canonical_ordinal((const char *const *) type->object.field_names,
+                                                   type->object.field_count, name);
 }
 
 static const char *lower_static_string_key(AstNode *node) {

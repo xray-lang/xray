@@ -1192,22 +1192,7 @@ static int cg_intern_object_shape_type_domain(XiCgenCtx *ctx, const XrType *type
     }
     for (int i = 0; i < field_count; i++)
         names[i] = type->object.field_names[i] ? type->object.field_names[i] : "?";
-    for (int i = 1; i < field_count; i++) {
-        const char *current = names[i];
-        uint64_t current_key = xg_object_stable_name_key(current);
-        uint32_t current_id = xg_name_id(current);
-        int j = i;
-        while (j > 0) {
-            uint64_t previous_key = xg_object_stable_name_key(names[j - 1]);
-            uint32_t previous_id = xg_name_id(names[j - 1]);
-            if (previous_key < current_key ||
-                (previous_key == current_key && previous_id <= current_id))
-                break;
-            names[j] = names[j - 1];
-            j--;
-        }
-        names[j] = current;
-    }
+    xr_object_shape_sort_names(names, field_count);
     int id = cg_intern_object_shape_parts(ctx, field_count, names, type, object_domain);
     if (id < 0) {
         xr_free(names);

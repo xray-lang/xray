@@ -11,7 +11,6 @@
  *   - Buffered and unbuffered modes
  *   - Wait queues inside channel (atomic operations)
  *   - Timer channel support for select timeout
- *   - Distributed channel hooks for cluster Named Channel
  *
  * CHANNEL INVARIANTS:
  *
@@ -45,10 +44,6 @@
  *   lock). XrAdaptiveMutex is an adaptive 3-state lock (active spin -> yield
  *   -> futex sleep) and degrades to a single CAS under no contention.
  *
- *   INVARIANT 6 (Distributed hooks): When dist != NULL, all send/
- *   recv/close operations are routed through xr_channel_dist_hooks.
- *   The hook layer is responsible for network serialization and
- *   remote delivery. Local buffer and wait queues are not used.
  */
 
 #ifndef XCHANNEL_H
@@ -109,32 +104,6 @@ struct XrChannel;
 XR_FUNC bool xr_channel_remove_waiter(struct XrChannel *ch, XrCoroutine *coro);
 XR_FUNC void xr_channel_lock_observed(struct XrChannel *ch);
 
-/* ========== Distributed Channel Hooks ========== */
-
-// Forward declare for hook signatures
-struct XrChannel;
-enum XrChanResult;
-
-/*
- * Hook table for distributed (Named) channel operations.
- * When a channel has dist != NULL, send/recv/close are
- * routed through these hooks to the cluster layer.
- * Local channels (dist == NULL) are not affected.
- */
-typedef struct XrChannelDistHooks {
-    int (*send)(struct XrChannel *ch, XrValue value, struct XrCoroutine *coro);
-    int (*recv)(struct XrChannel *ch, XrValue *out, struct XrCoroutine *coro);
-    bool (*try_send)(struct XrChannel *ch, XrValue value);
-    XrValue (*try_recv)(struct XrChannel *ch, bool *ok);
-    void (*close)(struct XrChannel *ch);
-    void (*destroy)(struct XrChannel *ch);
-    void (*on_select_enter)(struct XrChannel *ch);
-    void (*on_select_exit)(struct XrChannel *ch);
-} XrChannelDistHooks;
-
-// Hooks live on XrVMRuntime (see XrVMRuntime::channel_dist_hooks in
-// xisolate_internal.h). Install/uninstall via cluster_channel_install_hooks.
-
 /* ========== Channel Structure ========== */
 
 typedef enum {
@@ -181,10 +150,6 @@ typedef struct XrChannel {
     struct XrTWheelTimer tw_timer;  // Embedded timer wheel node (avoids polling).
     uint8_t elem_tid;               // XrTypeId: element type for reified generics (0=any)
 
-    /* === Distributed Channel (cluster) === */
-    void *dist;        // Opaque pointer to cluster dist context (NULL = local)
-    const char *name;  // Named Channel identifier (NULL = anonymous)
-
     /* === Waiter Worker Masks (ownership-safe wake routing) ===
      * Bit i in waiter_worker_mask is set when worker i has at least one
      * coroutine blocked on this channel.  Directional masks are hints used to
@@ -208,7 +173,7 @@ typedef struct XrChannel {
     struct XrRuntimeCore *core;
     struct XrRuntime *scheduler;
 
-    /* Optional VM host binding for VM-only distributed-channel hooks. */
+    /* Optional VM host binding for cross-backend channel operations. */
     struct XrVMRuntime *vm_host_isolate;
 } XrChannel;
 

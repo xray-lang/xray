@@ -377,13 +377,12 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "join", "(addr: string): bool", "Join cluster by address", "cluster_join", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
     {"cluster", "self", "(): string", "Get own node name", "cluster_self", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "nodes", "(): Array<string>", "List cluster node names", "cluster_nodes", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
-    {"cluster", "channel", "(name: string, size?: int): Channel", "Create or get named distributed channel", "cluster_channel_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
-    {"cluster", "publish", "(topic: string, value: Json): bool", "Publish to topic", "cluster_publish_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
-    {"cluster", "subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", "cluster_subscribe_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
+    {"cluster", "send", "(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", "cluster_send_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
+    {"cluster", "listen", "(pattern: string): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", "cluster_listen_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
     {"ws", "connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"ws", "send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 3, false},
     {"ws", "recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", "ws_recv_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
@@ -501,8 +500,7 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_Cluster
     {"cluster", "ClusterInfo", "port", "int", true},
     {"cluster", "ClusterInfo", "running", "bool", true},
     {"cluster", "ClusterInfo", "nodes", "Array<ClusterNodeInfo>", true},
-    {"cluster", "ClusterInfo", "channels", "int", true},
-    {"cluster", "ClusterInfo", "topicSubscriptions", "int", true},
+    {"cluster", "ClusterInfo", "listeners", "int", true},
     {"cluster", "ClusterInfo", "deadNodes", "int", true},
     {"cluster", "ClusterInfo", "heartbeatIntervalMs", "int", true},
     {"cluster", "ClusterInfo", "heartbeatTimeoutMs", "int", true},
@@ -527,7 +525,7 @@ static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = 
     {"cluster", "ClusterConfig", "Typed cluster node startup configuration", xr_stdlib_object_fields_cluster_ClusterConfig, 4, true},
     {"cluster", "ClusterTlsStatus", "Effective TLS posture of a running cluster node", xr_stdlib_object_fields_cluster_ClusterTlsStatus, 3, true},
     {"cluster", "ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", xr_stdlib_object_fields_cluster_ClusterNodeInfo, 16, true},
-    {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_object_fields_cluster_ClusterInfo, 11, true},
+    {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_object_fields_cluster_ClusterInfo, 10, true},
     {"ws", "WsConnectOptions", "Typed WebSocket client connection options", xr_stdlib_object_fields_ws_WsConnectOptions, 4, true},
 };
 #define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_object_shape_def_entries) / sizeof(xr_stdlib_object_shape_def_entries[0])))
@@ -563,6 +561,15 @@ static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_net_NetError_variants[] 
     {"OutOfMemory", NULL, 0},
 };
 
+static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_cluster_ClusterDelivery_variants[] = {
+    {"Accepted", NULL, 0},
+    {"InvalidTopic", NULL, 0},
+    {"InvalidEnvelope", NULL, 0},
+    {"Unavailable", NULL, 0},
+    {"Overloaded", NULL, 0},
+    {"Disconnected", NULL, 0},
+};
+
 static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_cluster_ClusterNodeState_variants[] = {
     {"Idle", NULL, 0},
     {"Connecting", NULL, 0},
@@ -576,6 +583,7 @@ static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {
     {"Coro", "CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroGroupKey_variants, 2, UINT32_C(2434143071)},
     {"Coro", "CoroMetric", "Metric used to rank coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroMetric_variants, 2, UINT32_C(4039818693)},
     {"net", "NetError", "Typed failure from native network operations", xr_stdlib_enum_net_NetError_variants, 10, UINT32_C(2184710811)},
+    {"cluster", "ClusterDelivery", "Outcome of handing one opaque service envelope to the cluster transport", xr_stdlib_enum_cluster_ClusterDelivery_variants, 6, UINT32_C(4282747530)},
     {"cluster", "ClusterNodeState", "Lifecycle state of a remote cluster node", xr_stdlib_enum_cluster_ClusterNodeState_variants, 5, UINT32_C(2784952505)},
 };
 #define XR_STDLIB_ENUM_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_enum_def_entries) / sizeof(xr_stdlib_enum_def_entries[0])))

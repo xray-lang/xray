@@ -114,6 +114,10 @@ XR_FUNC XrTlsError xr_tls_conn_handshake_server(struct XrVMRuntime *X, XrTlsConn
 // Returns: 0=done, 1=WANT_READ, 2=WANT_WRITE, -1=error
 XR_FUNC int xr_tls_conn_handshake_try(XrTlsConn *conn);
 
+// Non-blocking server handshake try (single SSL_accept attempt).
+// Returns: 0=done, 1=WANT_READ, 2=WANT_WRITE, -1=error.
+XR_FUNC int xr_tls_conn_handshake_server_try(XrTlsConn *conn);
+
 // Read data (yields on SSL_ERROR_WANT_READ/WRITE via X).
 XR_FUNC int xr_tls_conn_read(struct XrVMRuntime *X, XrTlsConn *conn, void *buf, size_t len);
 

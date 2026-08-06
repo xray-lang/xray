@@ -21,6 +21,7 @@
 #include "../src/runtime/class/xinstance.h"
 #include "../src/runtime/class/xenum.h"
 #include "../src/runtime/xisolate_internal.h"
+#include "../src/shared/xobject_shape.h"
 #include "../src/stdlib/xstdlib_defs_generated.h"
 
 typedef struct XrStdlibNativeEnumCacheEntry {
@@ -55,6 +56,7 @@ static XrClass *stdlib_object_shape_class_build(XrVMRuntime *isolate,
         return NULL;
     for (uint32_t i = 0; i < count; i++)
         names[i] = decl->fields[i].name;
+    xr_object_shape_sort_names(names, (int64_t) count);
     XrClass *cls = xr_class_build_struct_object_chain(isolate, names, NULL, (int) count, NULL, NULL,
                                                       NULL, NULL);
     xr_free(names);

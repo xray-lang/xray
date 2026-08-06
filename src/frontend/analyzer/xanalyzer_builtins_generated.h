@@ -177,8 +177,7 @@ static const XaBuiltinObjectField g_gen_cluster_clusterinfo_object_fields[] = {
     {"port", "int"},
     {"running", "bool"},
     {"nodes", "Array<ClusterNodeInfo>"},
-    {"channels", "int"},
-    {"topicSubscriptions", "int"},
+    {"listeners", "int"},
     {"deadNodes", "int"},
     {"heartbeatIntervalMs", "int"},
     {"heartbeatTimeoutMs", "int"},
@@ -191,9 +190,18 @@ static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
     {"ClusterConfig", "Typed cluster node startup configuration", g_gen_cluster_clusterconfig_object_fields, 4, true},
     {"ClusterTlsStatus", "Effective TLS posture of a running cluster node", g_gen_cluster_clustertlsstatus_object_fields, 3, true},
     {"ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", g_gen_cluster_clusternodeinfo_object_fields, 16, true},
-    {"ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", g_gen_cluster_clusterinfo_object_fields, 11, true},
+    {"ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", g_gen_cluster_clusterinfo_object_fields, 10, true},
 };
 #define GEN_CLUSTER_OBJECT_SHAPE_COUNT 5
+
+static const XaBuiltinEnumVariant g_gen_cluster_clusterdelivery_variants[] = {
+    {"Accepted", NULL, 0},
+    {"InvalidTopic", NULL, 0},
+    {"InvalidEnvelope", NULL, 0},
+    {"Unavailable", NULL, 0},
+    {"Overloaded", NULL, 0},
+    {"Disconnected", NULL, 0},
+};
 
 static const XaBuiltinEnumVariant g_gen_cluster_clusternodestate_variants[] = {
     {"Idle", NULL, 0},
@@ -204,9 +212,10 @@ static const XaBuiltinEnumVariant g_gen_cluster_clusternodestate_variants[] = {
 };
 
 static const XaBuiltinEnum g_gen_cluster_enums[] = {
+    {"ClusterDelivery", "Outcome of handing one opaque service envelope to the cluster transport", g_gen_cluster_clusterdelivery_variants, 6, UINT32_C(4282747530)},
     {"ClusterNodeState", "Lifecycle state of a remote cluster node", g_gen_cluster_clusternodestate_variants, 5, UINT32_C(2784952505)},
 };
-#define GEN_CLUSTER_ENUM_COUNT 1
+#define GEN_CLUSTER_ENUM_COUNT 2
 
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
@@ -214,15 +223,14 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"join", "(addr: string): bool", "Join cluster by address", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"self", "(): string", "Get own node name", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"nodes", "(): Array<string>", "List cluster node names", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"channel", "(name: string, size?: int): Channel", "Create or get named distributed channel", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"discover", "(): ()", "Start LAN auto-discovery", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"stop", "(): ()", "Stop cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"info", "(): ClusterInfo?", "Get cluster status info", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"publish", "(topic: string, value: Json): bool", "Publish to topic", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"send", "(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"listen", "(pattern: string): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_CLUSTER_FUNCTION_COUNT 11
+#define GEN_CLUSTER_FUNCTION_COUNT 10
 
 static const char *g_gen_compress_gunzip_3_errors[] = {
     "CompressionError.InvalidData",

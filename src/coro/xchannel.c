@@ -62,11 +62,6 @@ static XrRuntimeCore *channel_core(XrChannel *ch) {
     return ch ? ch->core : NULL;
 }
 
-static XrChannelDistHooks *channel_dist_hooks(XrChannel *ch) {
-    XrVMRuntime *host = ch ? ch->vm_host_isolate : NULL;
-    return host ? (XrChannelDistHooks *) host->channel_dist_hooks : NULL;
-}
-
 static XrRuntime *channel_stats_runtime(XrChannel *ch) {
     XrRuntime *runtime = channel_runtime(ch);
     return runtime && XR_UNLIKELY(runtime->sched_stats_enabled) ? runtime : NULL;
@@ -745,7 +740,7 @@ XrChannel *xr_channel_new(XrRuntimeCore *core, XrRuntime *scheduler, uint32_t bu
     // All fields default to 0/NULL/false which is correct for:
     //   buffer(NULL), buf_size(0), buf_count(0), send_idx(0), recv_idx(0),
     //   sendq(NULL,NULL), recvq(NULL,NULL), closed(0), lock(UNLOCKED=0),
-    //   is_timer(0), timer_*(0), elem_tid(0), dist(NULL), name(NULL).
+    //   is_timer(0), timer_*(0), elem_tid(0).
     // Only set non-zero fields.
     if (buffer_size > 0) {
         ch->buffer = (XrValue *) (ch + 1);
@@ -889,8 +884,6 @@ XrChannel *xr_channel_new_timer(XrRuntimeCore *core, XrRuntime *scheduler, int64
     atomic_init(&ch->tw_timer.state, XR_TIMER_STATE_ACTIVE);
 
     ch->elem_tid = 0;
-    ch->dist = NULL;
-    ch->name = NULL;
     ch->core = core;
     ch->scheduler = scheduler;
 
@@ -1005,13 +998,6 @@ bool xr_channel_timer_ready(XrChannel *ch) {
 void xr_channel_destroy(XrChannel *ch) {
     if (ch == NULL)
         return;
-
-    // Notify cluster layer before destroying
-    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
-    if (ch->dist && hooks && hooks->destroy) {
-        hooks->destroy(ch);
-        ch->dist = NULL;
-    }
 
     // Only free buffer if separately allocated (not inline)
     if (ch->buffer != NULL && !channel_buffer_is_inline(ch)) {
@@ -1228,12 +1214,6 @@ bool xr_channel_notify_send(XrChannel *ch, XrValue value) {
 bool xr_channel_try_send(XrChannel *ch, XrValue value) {
     XR_DCHECK(ch != NULL, "channel is NULL");
 
-    // Distributed channel: delegate to cluster hooks
-    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
-    if (ch->dist && hooks && hooks->try_send) {
-        return hooks->try_send(ch, value);
-    }
-
     xr_channel_lock_observed(ch);
 
     // Check if closed
@@ -1265,12 +1245,6 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
 XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
     XR_DCHECK(ch != NULL, "channel is NULL");
     XR_DCHECK(ok != NULL, "ok pointer is NULL");
-
-    // Distributed channel: delegate to cluster hooks
-    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
-    if (ch->dist && hooks && hooks->try_recv) {
-        return hooks->try_recv(ch, ok);
-    }
 
     xr_channel_lock_observed(ch);
 
@@ -1480,12 +1454,6 @@ static bool channel_close_defer_to_owner_bucket(XrCoroutine *coro, XrWorker *cur
 void xr_channel_close(XrChannel *ch) {
     XR_DCHECK(ch != NULL, "channel is NULL");
 
-    // Distributed channel: notify cluster before local close
-    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
-    if (ch->dist && hooks && hooks->close) {
-        hooks->close(ch);
-    }
-
     xr_channel_lock_observed(ch);
 
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
@@ -1580,12 +1548,6 @@ bool xr_channel_is_closed(XrChannel *ch) {
 // Key: sender completes value transfer, receiver wakes with value ready
 XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro, int64_t timeout_ms) {
     XR_DCHECK(ch != NULL, "channel is NULL");
-
-    // Distributed channel: delegate to cluster hooks
-    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
-    if (ch->dist && hooks && hooks->send) {
-        return (XrChanResult) hooks->send(ch, value, coro);
-    }
 
     // Fast path: lock-free check closed (relaxed OK, rechecked under lock)
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
@@ -1688,12 +1650,6 @@ XrChanResult xr_channel_recv_slot(XrChannel *ch, XrValue *out, XrCoroutine *coro
     XR_DCHECK(ch != NULL, "channel is NULL");
     XR_DCHECK(out != NULL, "out pointer is NULL");
     XR_DCHECK(!deliver || timeout_ms < 0, "recv_slot: delivered resume cannot carry a timeout");
-
-    // Distributed channel: delegate to cluster hooks
-    XrChannelDistHooks *hooks = channel_dist_hooks(ch);
-    if (ch->dist && hooks && hooks->recv) {
-        return (XrChanResult) hooks->recv(ch, out, coro);
-    }
 
     // Trylock fast path: for buffered channels with data and no waiting senders.
     // Avoids spin contention under high concurrency.

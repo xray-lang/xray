@@ -547,6 +547,25 @@ int xr_tls_conn_handshake_try(XrTlsConn *conn) {
     }
 }
 
+int xr_tls_conn_handshake_server_try(XrTlsConn *conn) {
+    if (!conn || !conn->ssl)
+        return -1;
+
+    int ret = SSL_accept(conn->ssl);
+    if (ret == 1)
+        return 0;
+
+    int err = SSL_get_error(conn->ssl, ret);
+    switch (err) {
+        case SSL_ERROR_WANT_READ:
+            return 1;
+        case SSL_ERROR_WANT_WRITE:
+            return 2;
+        default:
+            return -1;
+    }
+}
+
 int xr_tls_conn_read_try(XrTlsConn *conn, void *buf, size_t len) {
     if (!conn || !conn->ssl)
         return -3;
@@ -770,6 +789,10 @@ XrTlsError xr_tls_conn_handshake_server(struct XrVMRuntime *X, XrTlsConn *conn) 
     return XR_TLS_ERR_INIT;
 }
 int xr_tls_conn_handshake_try(XrTlsConn *conn) {
+    (void) conn;
+    return -1;
+}
+int xr_tls_conn_handshake_server_try(XrTlsConn *conn) {
     (void) conn;
     return -1;
 }

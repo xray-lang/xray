@@ -353,7 +353,6 @@
     _(CORO_CTRL, FMT_ABC, KOP_SPECIAL, "coro monitoring, C=sub_op")                                \
     _(CHAN_NEW, FMT_ABx, KOP_ABx_LIT, "R[A] = Channel(Bx) — buffer size")                          \
     _(CHAN_NEW_CAP, FMT_AB, KOP_AB_UNARY, "R[A] = Channel(R[B]) — dynamic buffer size")            \
-    _(CHAN_NEW_NAMED, FMT_ABC, KOP_ABC_BIN, "R[A] = Channel(R[B], R[C]) - named")                  \
     _(CHAN_SEND, FMT_ABC, KOP_SPECIAL, "R[B].send(R[C])")                                          \
     _(CHAN_RECV, FMT_AB, KOP_AB_RECV, "R[A] = R[B].recv()")                                        \
     _(CHAN_TRY_SEND, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].trySend(R[C])")                            \

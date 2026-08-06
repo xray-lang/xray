@@ -3763,6 +3763,11 @@ module http2 {
 }
 
 module cluster {
+  enum ClusterDelivery {
+    variants: "Accepted, InvalidTopic, InvalidEnvelope, Unavailable, Overloaded, Disconnected"
+    doc: "Outcome of handing one opaque service envelope to the cluster transport"
+  }
+
   enum ClusterNodeState {
     variants: "Idle, Connecting, Handshaking, Connected, Closing"
     doc: "Lifecycle state of a remote cluster node"
@@ -3793,7 +3798,7 @@ module cluster {
   }
 
   object ClusterInfo {
-    fields: "const self: string, const port: int, const running: bool, const nodes: Array<ClusterNodeInfo>, const channels: int, const topicSubscriptions: int, const deadNodes: int, const heartbeatIntervalMs: int, const heartbeatTimeoutMs: int, const maxMissedHeartbeats: int, const tls: ClusterTlsStatus"
+    fields: "const self: string, const port: int, const running: bool, const nodes: Array<ClusterNodeInfo>, const listeners: int, const deadNodes: int, const heartbeatIntervalMs: int, const heartbeatTimeoutMs: int, const maxMissedHeartbeats: int, const tls: ClusterTlsStatus"
     exact: true
     doc: "Typed diagnostic snapshot for the local cluster runtime"
   }
@@ -3844,18 +3849,6 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn channel {
-    signature: "(name: string, size?: int): Channel"
-    doc: "Create or get named distributed channel"
-    vm: "cluster_channel_fn"
-    argc: 2
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
-    layer: "runtime"
-    return_ownership: "unknown"
-  }
-
   fn monitor {
     signature: "(name: string, coro_name?: string): Channel"
     doc: "Monitor node or remote coroutine"
@@ -3902,21 +3895,22 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn publish {
-    signature: "(topic: string, value: Json): bool"
-    doc: "Publish to topic"
-    vm: "cluster_publish_fn"
+  fn send {
+    signature: "(topic: string, envelope: move Buffer): ClusterDelivery"
+    doc: "Hand one canonical opaque service envelope to local and connected transports"
+    vm: "cluster_send_fn"
     argc: 2
     arg_spec: ""
     aot_direct: false
     link_object: false
     layer: "runtime"
+    return_ownership: "fresh"
   }
 
-  fn subscribe {
-    signature: "(pattern: string): Channel"
-    doc: "Subscribe to topic pattern"
-    vm: "cluster_subscribe_fn"
+  fn listen {
+    signature: "(pattern: string): Channel<Buffer>?"
+    doc: "Create a bounded receiver for opaque canonical service envelopes"
+    vm: "cluster_listen_fn"
     argc: 1
     arg_spec: ""
     aot_direct: false

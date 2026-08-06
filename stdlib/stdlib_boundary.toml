@@ -93,14 +93,6 @@ owner = "stdlib/http"
 review_task = "task-221"
 
 [[dynamic_allowlist]]
-symbol = "cluster.publish"
-direction = "input"
-domain = "json_wire_payload"
-reason = "Cluster publication intentionally serializes arbitrary Json values onto the wire"
-owner = "stdlib/cluster"
-review_task = "task-256"
-
-[[dynamic_allowlist]]
 symbol = "log.child"
 direction = "input"
 domain = "explicit_bridge"
@@ -506,7 +498,7 @@ layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/cluster/cluster.xr"
 loader = "stdlib/cluster/cluster.c"
-public_native = ["ClusterConfig", "ClusterInfo", "ClusterNodeInfo", "ClusterNodeState", "ClusterTlsOptions", "ClusterTlsStatus", "channel", "discover", "info", "join", "monitor", "nodes", "publish", "self", "start", "stop", "subscribe"]
+public_native = ["ClusterConfig", "ClusterDelivery", "ClusterInfo", "ClusterNodeInfo", "ClusterNodeState", "ClusterTlsOptions", "ClusterTlsStatus", "discover", "info", "join", "listen", "monitor", "nodes", "self", "send", "start", "stop"]
 private_native_sources = ["stdlib/cluster/*.c"]
 private_native_reason = "Distributed transport, discovery, channel and node lifecycle data plane consumed by cluster.xr"
 perf_suite = "stdlib/cluster"

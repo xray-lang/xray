@@ -18,6 +18,7 @@
 #include "../analysis/xglobal_summary.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../shared/xobject_shape.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xvalue.h"
 #include "../frontend/parser/xast_nodes.h"
@@ -486,22 +487,7 @@ XR_FUNC bool xi_lower_fill_canonical_object_field_names(XiLower *l, const XrType
         if (!names[i])
             return false;
     }
-    for (int i = 1; i < count; i++) {
-        const char *current = names[i];
-        uint64_t current_stable = xg_object_stable_name_key(current);
-        uint32_t current_id = xg_name_id(current);
-        int j = i;
-        while (j > 0) {
-            uint64_t previous_stable = xg_object_stable_name_key(names[j - 1]);
-            uint32_t previous_id = xg_name_id(names[j - 1]);
-            if (previous_stable < current_stable ||
-                (previous_stable == current_stable && previous_id <= current_id))
-                break;
-            names[j] = names[j - 1];
-            j--;
-        }
-        names[j] = current;
-    }
+    xr_object_shape_sort_names(names, count);
     return true;
 }
 

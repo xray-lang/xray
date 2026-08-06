@@ -37,7 +37,9 @@
  */
 
 #include "cluster_internal.h"
+#include "../mem/mem.h"
 #include "../../src/coro/xchannel.h"
+#include "../../src/coro/xchannel_ops.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/base/xhash.h"
 #include "../../src/base/xmalloc.h"
@@ -342,11 +344,46 @@ void cluster_topics_destroy(XrCluster *c) {
     }
 }
 
-/* ========== Subscribe ========== */
+/* ========== Listen ========== */
 
-struct XrChannel *cluster_topic_subscribe(XrVMRuntime *X, const char *pattern) {
+static bool transport_valid_name(const char *text, bool pattern) {
+    if (!text)
+        return false;
+    size_t length = strlen(text);
+    if (length == 0 || length > XR_TOPIC_PATTERN_MAX || text[0] == '.' || text[length - 1] == '.')
+        return false;
+    const char *segment = text;
+    for (const char *p = text;; p++) {
+        unsigned char c = (unsigned char) *p;
+        if (c != '\0' && (c < 0x21 || c > 0x7e))
+            return false;
+        if (c == '.' || c == '\0') {
+            size_t segment_length = (size_t) (p - segment);
+            if (segment_length == 0)
+                return false;
+            if (!pattern &&
+                (memchr(segment, '*', segment_length) || memchr(segment, '>', segment_length)))
+                return false;
+            if (pattern) {
+                bool star = segment_length == 1 && segment[0] == '*';
+                bool tail = segment_length == 1 && segment[0] == '>';
+                if (!star && !tail &&
+                    (memchr(segment, '*', segment_length) || memchr(segment, '>', segment_length)))
+                    return false;
+                if (tail && c != '\0')
+                    return false;
+            }
+            if (c == '\0')
+                break;
+            segment = p + 1;
+        }
+    }
+    return true;
+}
+
+struct XrChannel *cluster_transport_listen(XrVMRuntime *X, const char *pattern) {
     XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || !pattern || !c->topic_root)
+    if (!c || !c->topic_root || !transport_valid_name(pattern, true))
         return NULL;
 
     XrTopicSubscription *sub = (XrTopicSubscription *) xr_calloc(1, sizeof(XrTopicSubscription));
@@ -382,18 +419,19 @@ struct XrChannel *cluster_topic_subscribe(XrVMRuntime *X, const char *pattern) {
     return ch;
 }
 
-/* ========== Deliver & Publish ========== */
+/* ========== Deliver & Send ========== */
 
-void cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value) {
-    if (!c || !topic || !c->topic_root)
-        return;
+XrClusterDelivery cluster_transport_deliver_local(XrCluster *c, const char *topic,
+                                                  const uint8_t *envelope, uint32_t envelope_len) {
+    if (!c || !topic || !envelope || !c->topic_root)
+        return XR_CLUSTER_DELIVERY_UNAVAILABLE;
 
     /*
      * Walk the trie under c->topics_lock to collect matching notify_ch
      * pointers into a stack-first / heap-fallback buffer. We release
      * the lock before the actual xr_channel_try_send calls — the send
-     * path can wake select() waiters and re-enter cluster.publish /
-     * cluster.subscribe, which would recursively acquire topics_lock
+     * path can wake select() waiters and re-enter cluster.send /
+     * cluster.listen, which would recursively acquire topics_lock
      * and deadlock.
      *
      * Budget: 256 matches per publish is plenty for typical topologies;
@@ -418,87 +456,91 @@ void cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value)
     trie_match(c->topic_root, topic, &e);
     xr_amutex_unlock(&c->topics_lock);
 
+    int delivered = 0;
+    int rejected = 0;
     for (int i = 0; i < e.count; i++) {
-        // Channel may have been closed by another thread between
-        // collection and delivery; try_send handles closed channels
-        // gracefully.
-        xr_channel_try_send(e.targets[i], value);
+        XrValue buffer = xr_mem_buffer_copy_from_bytes(c->isolate, envelope, envelope_len);
+        if (XR_IS_NULL(buffer)) {
+            rejected++;
+            continue;
+        }
+        if (xr_chan_try_send_transfer(c->isolate, e.targets[i], buffer, XR_TRANSFER_MOVE))
+            delivered++;
+        else
+            rejected++;
     }
 
     if (e.grown_alloc)
         xr_free(e.targets);
+
+    if (delivered > 0)
+        return XR_CLUSTER_DELIVERY_ACCEPTED;
+    if (rejected > 0)
+        return XR_CLUSTER_DELIVERY_OVERLOADED;
+    return XR_CLUSTER_DELIVERY_DISCONNECTED;
 }
 
 /*
- * Build the wire-format payload shared by both the local publish
- * path (cluster_topic_publish) and the forwarding path
- * (cluster_topic_handle_publish). Layout:
+ * Build the transport payload shared by local send and forwarding. Layout:
  *
- *   [hop_limit 1B] [topic_len 1B] [topic ...] [value_data ...]
+ *   [hop_limit 1B] [topic_len 1B] [topic ...] [opaque envelope ...]
  *
  * Returns 0 on success, -1 on alloc failure. On success the caller
  * owns fb and must free with cluster_frame_buf_free.
  */
-static int topic_build_publish_frame(XrVMRuntime *X, const char *topic, const XrValue *value,
-                                     uint8_t hop_limit, XrFrameBuf *fb_out) {
-    if (!topic || !value || !fb_out)
+static int transport_build_frame(const char *topic, const uint8_t *envelope, uint32_t envelope_len,
+                                 uint8_t hop_limit, XrFrameBuf *fb_out) {
+    if (!topic || !envelope || !fb_out)
         return -1;
-
-    XrSerialBuf sbuf;
-    cluster_serial_buf_init(&sbuf);
-    if (cluster_encode(X, *value, &sbuf) != 0) {
-        cluster_serial_buf_free(&sbuf);
-        return -1;
-    }
 
     uint8_t topic_len = (uint8_t) strlen(topic);
-    uint32_t payload_len = 2 + topic_len + (uint32_t) sbuf.len;
+    uint32_t payload_len = 2 + topic_len + envelope_len;
     cluster_frame_buf_init(fb_out, payload_len);
-    if (!fb_out->data) {
-        cluster_serial_buf_free(&sbuf);
+    if (!fb_out->data)
         return -1;
-    }
     fb_out->data[0] = hop_limit;
     fb_out->data[1] = topic_len;
     memcpy(fb_out->data + 2, topic, topic_len);
-    memcpy(fb_out->data + 2 + topic_len, sbuf.data, sbuf.len);
-    cluster_serial_buf_free(&sbuf);
+    memcpy(fb_out->data + 2 + topic_len, envelope, envelope_len);
 
     return (int) payload_len;
 }
 
 /*
- * Send the already-built TOPIC_PUBLISH frame to every connected peer
+ * Send the already-built opaque envelope frame to every connected peer
  * except `exclude` (used for split-horizon forwarding). Caller owns
  * the XrFrameBuf and is responsible for freeing it.
  */
-static void topic_broadcast_frame(XrCluster *c, XrClusterNode *exclude, const uint8_t *payload,
-                                  uint32_t payload_len) {
+static XrClusterDelivery transport_broadcast_frame(XrCluster *c, XrClusterNode *exclude,
+                                                   const uint8_t *payload, uint32_t payload_len) {
+    int connected = 0;
+    int accepted = 0;
     xr_amutex_lock(&c->nodes_lock);
     XrClusterNode *node = c->nodes;
     while (node) {
         if (node != exclude && node->state == XR_NODE_CONNECTED) {
-            cluster_node_send_frame(node, XR_FRAME_TOPIC_PUBLISH, payload, payload_len);
+            connected++;
+            if (cluster_node_send_frame(node, XR_FRAME_TRANSPORT_ENVELOPE, payload, payload_len) ==
+                0)
+                accepted++;
         }
         node = node->next;
     }
     xr_amutex_unlock(&c->nodes_lock);
+    if (accepted > 0)
+        return XR_CLUSTER_DELIVERY_ACCEPTED;
+    if (connected > 0)
+        return XR_CLUSTER_DELIVERY_OVERLOADED;
+    return XR_CLUSTER_DELIVERY_DISCONNECTED;
 }
 
-void cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const char *topic,
-                                  const uint8_t *value_data, uint32_t value_len,
-                                  uint8_t hop_limit) {
-    if (!c || !topic)
+void cluster_transport_handle_frame(XrCluster *c, XrClusterNode *from, const char *topic,
+                                    const uint8_t *envelope, uint32_t envelope_len,
+                                    uint8_t hop_limit) {
+    if (!c || !topic || !envelope || envelope_len < XR_CLUSTER_ENVELOPE_HEADER_SIZE)
         return;
 
-    // Decode the value
-    XrValue value;
-    if (cluster_decode_value(c->isolate, value_data, value_len, &value) != 0)
-        return;
-
-    // Deliver to every matching local subscription — this happens
-    // regardless of hop_limit because we are the intended recipient.
-    cluster_topic_deliver_local(c, topic, value);
+    (void) cluster_transport_deliver_local(c, topic, envelope, envelope_len);
 
     /*
      * Controlled flooding. If hop_limit == 0 the originator (or a
@@ -525,24 +567,28 @@ void cluster_topic_handle_publish(XrCluster *c, XrClusterNode *from, const char 
 
     uint8_t next_hop = (uint8_t) (hop_limit - 1);
 
-    // Re-serialize with the decremented hop byte. Rebuilding is cheap
-    // compared to the encode that would otherwise be required.
     XrFrameBuf fb;
-    int payload_len = topic_build_publish_frame(c->isolate, topic, &value, next_hop, &fb);
+    int payload_len = transport_build_frame(topic, envelope, envelope_len, next_hop, &fb);
     if (payload_len < 0)
         return;
 
-    topic_broadcast_frame(c, from, fb.data, (uint32_t) payload_len);
+    (void) transport_broadcast_frame(c, from, fb.data, (uint32_t) payload_len);
     cluster_frame_buf_free(&fb);
 }
 
-int cluster_topic_publish(XrVMRuntime *X, const char *topic, XrValue value) {
+XrClusterDelivery cluster_transport_send(XrVMRuntime *X, const char *topic, const uint8_t *envelope,
+                                         uint32_t envelope_len) {
     XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || !topic)
-        return -1;
+    if (!c || !atomic_load(&c->running))
+        return XR_CLUSTER_DELIVERY_UNAVAILABLE;
+    if (!transport_valid_name(topic, false))
+        return XR_CLUSTER_DELIVERY_INVALID_TOPIC;
+    size_t topic_len = strlen(topic);
+    if (!envelope || envelope_len < XR_CLUSTER_ENVELOPE_HEADER_SIZE ||
+        envelope_len > XR_FRAME_MAX_PAYLOAD - 2 - topic_len)
+        return XR_CLUSTER_DELIVERY_INVALID_ENVELOPE;
 
-    // Deliver to local subscribers first
-    cluster_topic_deliver_local(c, topic, value);
+    XrClusterDelivery local = cluster_transport_deliver_local(c, topic, envelope, envelope_len);
 
     /*
      * Build wire frame with the cluster-wide default hop limit. Each
@@ -551,13 +597,18 @@ int cluster_topic_publish(XrVMRuntime *X, const char *topic, XrValue value) {
      * cluster_internal.h for the depth-vs-damage trade-off.
      */
     XrFrameBuf fb;
-    int payload_len = topic_build_publish_frame(X, topic, &value, XR_TOPIC_DEFAULT_HOP_LIMIT, &fb);
+    int payload_len =
+        transport_build_frame(topic, envelope, envelope_len, XR_TOPIC_DEFAULT_HOP_LIMIT, &fb);
     if (payload_len < 0)
-        return -1;
+        return XR_CLUSTER_DELIVERY_OVERLOADED;
 
     // Forward to all connected nodes (no split-horizon — we are the
     // origin, so every peer is a valid destination).
-    topic_broadcast_frame(c, NULL, fb.data, (uint32_t) payload_len);
+    XrClusterDelivery remote = transport_broadcast_frame(c, NULL, fb.data, (uint32_t) payload_len);
     cluster_frame_buf_free(&fb);
-    return 0;
+    if (local == XR_CLUSTER_DELIVERY_ACCEPTED || remote == XR_CLUSTER_DELIVERY_ACCEPTED)
+        return XR_CLUSTER_DELIVERY_ACCEPTED;
+    if (local == XR_CLUSTER_DELIVERY_OVERLOADED || remote == XR_CLUSTER_DELIVERY_OVERLOADED)
+        return XR_CLUSTER_DELIVERY_OVERLOADED;
+    return XR_CLUSTER_DELIVERY_DISCONNECTED;
 }

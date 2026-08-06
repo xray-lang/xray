@@ -295,11 +295,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
-        .name = "CHANNEL_NAME_MAX",
-        .signature = ": int",
-        .summary = "",
-    },
-    {
         .name = "ClusterConfig",
         .signature = "{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }",
         .summary = "Typed cluster node startup configuration",
@@ -325,14 +320,44 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "Object field",
     },
     {
-        .name = "ClusterInfo",
-        .signature = "{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }",
-        .summary = "Typed diagnostic snapshot for the local cluster runtime",
+        .name = "ClusterDelivery",
+        .signature = "enum ClusterDelivery",
+        .summary = "Outcome of handing one opaque service envelope to the cluster transport",
     },
     {
-        .name = "ClusterInfo.channels",
-        .signature = "const int",
-        .summary = "Object field",
+        .name = "ClusterDelivery.Accepted",
+        .signature = "ClusterDelivery.Accepted",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterDelivery.Disconnected",
+        .signature = "ClusterDelivery.Disconnected",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterDelivery.InvalidEnvelope",
+        .signature = "ClusterDelivery.InvalidEnvelope",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterDelivery.InvalidTopic",
+        .signature = "ClusterDelivery.InvalidTopic",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterDelivery.Overloaded",
+        .signature = "ClusterDelivery.Overloaded",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterDelivery.Unavailable",
+        .signature = "ClusterDelivery.Unavailable",
+        .summary = "Enum variant",
+    },
+    {
+        .name = "ClusterInfo",
+        .signature = "{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, listeners: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }",
+        .summary = "Typed diagnostic snapshot for the local cluster runtime",
     },
     {
         .name = "ClusterInfo.deadNodes",
@@ -346,6 +371,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterInfo.heartbeatTimeoutMs",
+        .signature = "const int",
+        .summary = "Object field",
+    },
+    {
+        .name = "ClusterInfo.listeners",
         .signature = "const int",
         .summary = "Object field",
     },
@@ -377,11 +407,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "ClusterInfo.tls",
         .signature = "const ClusterTlsStatus",
-        .summary = "Object field",
-    },
-    {
-        .name = "ClusterInfo.topicSubscriptions",
-        .signature = "const int",
         .summary = "Object field",
     },
     {
@@ -590,11 +615,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
-        .name = "channel",
-        .signature = "(name: string, size?: int): Channel",
-        .summary = "Create or get named distributed channel",
-    },
-    {
         .name = "discover",
         .signature = "(): ()",
         .summary = "Start LAN auto-discovery",
@@ -608,6 +628,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .name = "join",
         .signature = "(addr: string): bool",
         .summary = "Join cluster by address",
+    },
+    {
+        .name = "listen",
+        .signature = "(pattern: string): Channel<Buffer>?",
+        .summary = "Create a bounded receiver for opaque canonical service envelopes",
     },
     {
         .name = "monitor",
@@ -625,14 +650,14 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
-        .name = "publish",
-        .signature = "(topic: string, value: Json): bool",
-        .summary = "Publish to topic",
-    },
-    {
         .name = "self",
         .signature = "(): string",
         .summary = "Get own node name",
+    },
+    {
+        .name = "send",
+        .signature = "(topic: string, envelope: move Buffer): ClusterDelivery",
+        .summary = "Hand one canonical opaque service envelope to local and connected transports",
     },
     {
         .name = "start",
@@ -645,18 +670,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "Stop cluster node",
     },
     {
-        .name = "subscribe",
-        .signature = "(pattern: string): Channel",
-        .summary = "Subscribe to topic pattern",
-    },
-    {
         .name = "topicMatches",
         .signature = "(pattern: string, topic: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "validChannelName",
-        .signature = "(name: string): bool",
         .summary = "",
     },
     {
@@ -8176,24 +8191,29 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `cluster.CHANNEL_NAME_MAX` | `: int` |  |\n"
             "| `cluster.ClusterConfig` | `{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }` | Typed cluster node startup configuration |\n"
             "| `cluster.ClusterConfig.name` | `const string` | Object field |\n"
             "| `cluster.ClusterConfig.port` | `const int` | Object field |\n"
             "| `cluster.ClusterConfig.secret` | `const string?` | Object field |\n"
             "| `cluster.ClusterConfig.tls` | `const ClusterTlsOptions?` | Object field |\n"
-            "| `cluster.ClusterInfo` | `{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }` | Typed diagnostic snapshot for the local cluster runtime |\n"
-            "| `cluster.ClusterInfo.channels` | `const int` | Object field |\n"
+            "| `cluster.ClusterDelivery` | `enum ClusterDelivery` | Outcome of handing one opaque service envelope to the cluster transport |\n"
+            "| `cluster.ClusterDelivery.Accepted` | `ClusterDelivery.Accepted` | Enum variant |\n"
+            "| `cluster.ClusterDelivery.Disconnected` | `ClusterDelivery.Disconnected` | Enum variant |\n"
+            "| `cluster.ClusterDelivery.InvalidEnvelope` | `ClusterDelivery.InvalidEnvelope` | Enum variant |\n"
+            "| `cluster.ClusterDelivery.InvalidTopic` | `ClusterDelivery.InvalidTopic` | Enum variant |\n"
+            "| `cluster.ClusterDelivery.Overloaded` | `ClusterDelivery.Overloaded` | Enum variant |\n"
+            "| `cluster.ClusterDelivery.Unavailable` | `ClusterDelivery.Unavailable` | Enum variant |\n"
+            "| `cluster.ClusterInfo` | `{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, listeners: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }` | Typed diagnostic snapshot for the local cluster runtime |\n"
             "| `cluster.ClusterInfo.deadNodes` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.heartbeatIntervalMs` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `const int` | Object field |\n"
+            "| `cluster.ClusterInfo.listeners` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.maxMissedHeartbeats` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.nodes` | `const Array<ClusterNodeInfo>` | Object field |\n"
             "| `cluster.ClusterInfo.port` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.running` | `const bool` | Object field |\n"
             "| `cluster.ClusterInfo.self` | `const string` | Object field |\n"
             "| `cluster.ClusterInfo.tls` | `const ClusterTlsStatus` | Object field |\n"
-            "| `cluster.ClusterInfo.topicSubscriptions` | `const int` | Object field |\n"
             "| `cluster.ClusterNodeInfo` | `{ name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }` | Typed diagnostic snapshot for one remote cluster node |\n"
             "| `cluster.ClusterNodeInfo.bytesReceived` | `const int` | Object field |\n"
             "| `cluster.ClusterNodeInfo.bytesSent` | `const int` | Object field |\n"
@@ -8235,20 +8255,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `NodeAddress.port` | `: int` |  |\n"
             "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: int` |  |\n"
             "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
-            "| `cluster.channel` | `(name: string, size?: int): Channel` | Create or get named distributed channel |\n"
             "| `cluster.discover` | `(): ()` | Start LAN auto-discovery |\n"
             "| `cluster.info` | `(): ClusterInfo?` | Get cluster status info |\n"
             "| `cluster.join` | `(addr: string): bool` | Join cluster by address |\n"
+            "| `cluster.listen` | `(pattern: string): Channel<Buffer>?` | Create a bounded receiver for opaque canonical service envelopes |\n"
             "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
             "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
-            "| `cluster.publish` | `(topic: string, value: Json): bool` | Publish to topic |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
+            "| `cluster.send` | `(topic: string, envelope: move Buffer): ClusterDelivery` | Hand one canonical opaque service envelope to local and connected transports |\n"
             "| `cluster.start` | `(config: ClusterConfig): bool` | Start cluster node |\n"
             "| `cluster.stop` | `(): ()` | Stop cluster node |\n"
-            "| `cluster.subscribe` | `(pattern: string): Channel` | Subscribe to topic pattern |\n"
             "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"
-            "| `cluster.validChannelName` | `(name: string): bool` |  |\n"
             "| `cluster.validNodeName` | `(name: string): bool` |  |\n"
             "| `cluster.validTopicName` | `(topic: string): bool` |  |\n"
             "| `cluster.validTopicPattern` | `(pattern: string): bool` |  |\n"

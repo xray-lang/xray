@@ -70,6 +70,35 @@ static void native_increment(void *arg) {
         (*value)++;
 }
 
+typedef struct NativeYieldableFixture {
+    int entries;
+    int destroys;
+} NativeYieldableFixture;
+
+static XrCFuncResult native_yieldable_done(XrVMRuntime *isolate, void *context, XrValue *result) {
+    (void) isolate;
+    NativeYieldableFixture *fixture = (NativeYieldableFixture *) context;
+    fixture->entries++;
+    *result = xr_int(42);
+    return XR_CFUNC_DONE;
+}
+
+static XrCFuncResult native_yieldable_test_continuation(XrVMRuntime *isolate, int status,
+                                                        XrValue resume_value, void *context,
+                                                        XrValue *result) {
+    (void) isolate;
+    (void) status;
+    (void) resume_value;
+    (void) context;
+    *result = xr_null();
+    return XR_CFUNC_DONE;
+}
+
+static void native_yieldable_fixture_destroy(void *context) {
+    NativeYieldableFixture *fixture = (NativeYieldableFixture *) context;
+    fixture->destroys++;
+}
+
 static _Atomic int64_t aot_par_for_sum;
 
 static _Atomic int64_t aot_par_for_bad_worker_id;
@@ -454,6 +483,32 @@ TEST(native_coroutine_uses_native_backend_without_vm_state) {
     ASSERT_FALSE(xr_coro_backend_is_vm(coro));
 
     xr_coro_destroy(coro);
+}
+
+TEST(native_yieldable_coroutine_uses_backend_neutral_continuation_contract) {
+    XrVMRuntime isolate;
+    memset(&isolate, 0, sizeof(isolate));
+    NativeYieldableFixture fixture = {0};
+
+    XrCoroutine *coro =
+        xr_coro_create_native_yieldable(&isolate, native_yieldable_done, &fixture,
+                                        native_yieldable_fixture_destroy, "native_yieldable");
+    ASSERT_NOT_NULL(coro);
+    ASSERT_EQ_INT(coro->backend->kind, XR_CORO_BACKEND_NATIVE);
+    ASSERT_NOT_NULL(coro->backend->setup_yield_continuation);
+    ASSERT_TRUE(coro->backend->setup_yield_continuation(
+        &isolate, coro, (void *) native_yieldable_test_continuation, &fixture));
+    ASSERT_TRUE(xr_coro_has_continuation(coro));
+
+    XrCoroEvent event = {.kind = XR_CORO_EVENT_START};
+    XrCoroRunContext run_context = {0};
+    XrCoroRunResult run_result = coro->backend->resume(coro, &event, &run_context);
+    ASSERT_EQ_INT(run_result.kind, XR_CORO_RUN_DONE);
+    ASSERT_EQ_INT(XR_TO_INT(run_result.value), 42);
+    ASSERT_EQ_INT(fixture.entries, 1);
+
+    xr_coro_destroy(coro);
+    ASSERT_EQ_INT(fixture.destroys, 1);
 }
 
 TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done) {
@@ -1330,7 +1385,9 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_FALSE(xr_coro_backend_prepare_recycle(native, NULL));
     ASSERT_FALSE(xr_coro_backend_reset_reusable(native));
     ASSERT_FALSE(xr_coro_has_continuation(native));
-    ASSERT_NULL(native->backend->setup_yield_continuation);
+    ASSERT_NOT_NULL(native->backend->setup_yield_continuation);
+    ASSERT_FALSE(native->backend->setup_yield_continuation(
+        &isolate, native, (void *) native_yieldable_test_continuation, &counter));
     ASSERT_NULL(native->backend->call_closure);
     ASSERT_NULL(native->backend->prepare_execution_state);
     ASSERT_NULL(native->backend->bind_closure_entry);
@@ -1758,6 +1815,7 @@ TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Native Coroutine Backend");
 RUN_TEST(native_coroutine_uses_native_backend_without_vm_state);
+RUN_TEST(native_yieldable_coroutine_uses_backend_neutral_continuation_contract);
 RUN_TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done);
 RUN_TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results);
 RUN_TEST(aot_coroutine_create_failure_releases_frame);

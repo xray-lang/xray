@@ -14,7 +14,9 @@
 #include "xray_vm.h"
 #include "../../../src/frontend/analyzer/xanalyzer_builtins.h"
 #include "../../../src/frontend/analyzer/xanalyzer_native_types.h"
+#include "../../../src/runtime/class/xclass.h"
 #include "../../../src/runtime/class/xenum.h"
+#include "../../../src/shared/xobject_shape.h"
 #include "../../../stdlib/stdlib_cache.h"
 
 static XrVMRuntime *make_full_isolate(void) {
@@ -139,14 +141,25 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_TRUE(cluster_config->is_exact);
     ASSERT_TRUE(cluster_info->is_exact);
     ASSERT_EQ_INT(cluster_config->field_count, 4);
-    ASSERT_EQ_INT(cluster_info->field_count, 11);
+    ASSERT_EQ_INT(cluster_info->field_count, 10);
     ASSERT_TRUE(strcmp(cluster_config->fields[3].name, "tls") == 0);
-    ASSERT_TRUE(strcmp(cluster_info->fields[6].name, "deadNodes") == 0);
+    ASSERT_TRUE(strcmp(cluster_info->fields[4].name, "listeners") == 0);
+    ASSERT_TRUE(strcmp(cluster_info->fields[5].name, "deadNodes") == 0);
 
     XrClass *cluster_info_class = xr_stdlib_object_shape_class_get(iso, "cluster", "ClusterInfo");
     ASSERT_NOT_NULL(cluster_info_class);
     ASSERT_TRUE(cluster_info_class ==
                 xr_stdlib_object_shape_class_get(iso, "cluster", "ClusterInfo"));
+    const char *cluster_info_names[10];
+    for (int i = 0; i < cluster_info->field_count; i++)
+        cluster_info_names[i] = cluster_info->fields[i].name;
+    for (int i = 0; i < cluster_info->field_count; i++) {
+        int expected = (int) xr_object_shape_canonical_ordinal(
+            cluster_info_names, cluster_info->field_count, cluster_info->fields[i].name);
+        ASSERT_EQ_INT(
+            xr_class_lookup_field_by_name(iso, cluster_info_class, cluster_info->fields[i].name),
+            expected);
+    }
 
     const XaBuiltinEnum *cluster_state = xa_builtin_get_enum_type("cluster", "ClusterNodeState");
     ASSERT_NOT_NULL(cluster_state);

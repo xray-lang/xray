@@ -288,6 +288,16 @@ static void xr_vm_entry_plan_scan_proto(const XrProto *proto, bool is_root, XrEn
                 if (strcmp(module, "runtime") == 0) {
                     plan->required_capability_bits |= XR_CAP_COROUTINE;
                     plan->reachable_effect_bits |= XR_EFFECT_OBSERVES_TASK_ID;
+                } else if (strcmp(module, "cluster") == 0) {
+                    /* cluster.start owns accept, heartbeat, reader, and writer
+                     * executors that must make progress independently of the
+                     * caller. The bytecode import has no member-level native
+                     * effect metadata, so importing cluster conservatively
+                     * selects the multi-worker scheduler. */
+                    plan->required_capability_bits |=
+                        XR_CAP_COROUTINE | XR_CAP_CHANNEL | XR_CAP_SYS_THREAD;
+                    plan->reachable_effect_bits |=
+                        XR_EFFECT_MAY_SPAWN | XR_EFFECT_MAY_SUSPEND | XR_EFFECT_MAY_ALLOC;
                 } else if (strcmp(module, "test_yield") == 0) {
                     /* The internal module contains yieldable native calls.  Its
                      * bytecode import has no per-member effect metadata, so
@@ -321,7 +331,6 @@ static void xr_vm_entry_plan_scan_proto(const XrProto *proto, bool is_root, XrEn
                 break;
             case OP_CHAN_NEW:
             case OP_CHAN_NEW_CAP:
-            case OP_CHAN_NEW_NAMED:
                 plan->required_capability_bits |= XR_CAP_COROUTINE | XR_CAP_CHANNEL;
                 plan->reachable_effect_bits |= XR_EFFECT_MAY_ALLOC;
                 if (is_root && plan->root_representation < XR_ROOT_DESCRIPTOR)

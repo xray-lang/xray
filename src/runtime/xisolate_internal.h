@@ -167,18 +167,6 @@ struct XrVMRuntime {
     /* ========== Cluster (optional, enabled with XR_HAS_CLUSTER) ========== */
     void *cluster;  // XrCluster* (stdlib/cluster), NULL if not started
 
-    /*
-     * Distributed channel hook vtable. Populated by
-     * cluster_channel_install_hooks when the cluster module starts;
-     * reset to NULL by cluster_channel_uninstall_hooks. Kept as
-     * `void *` so that the core header avoids a dependency on the
-     * coroutine-subsystem struct XrChannelDistHooks — callers cast via
-     * the cluster/coro accessor sites that already pull in
-     * xchannel.h. NULL means "no cluster attached, route through
-     * in-process channels only".
-     */
-    void *channel_dist_hooks;  // XrChannelDistHooks*
-
     /* ========== stdlib per-isolate cache ========== */
     // Opaque pointer owned by stdlib/stdlib_cache.h. Holds memoised
     // values that reference per-isolate symbol IDs (e.g. the dynamic-

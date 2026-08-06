@@ -38,15 +38,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"join", XLSP_SYM_FUNCTION, "fn(addr: string): bool", "Join cluster by address", NULL, 0},
     {"self", XLSP_SYM_FUNCTION, "fn(): string", "Get own node name", NULL, 0},
     {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>", "List cluster node names", NULL, 0},
-    {"channel", XLSP_SYM_FUNCTION, "fn(name: string, size?: int): Channel", "Create or get named distributed channel", NULL, 0},
     {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", NULL, 0},
     {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "Start LAN auto-discovery", NULL, 0},
     {"stop", XLSP_SYM_FUNCTION, "fn(): ()", "Stop cluster node", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): ClusterInfo?", "Get cluster status info", NULL, 0},
-    {"publish", XLSP_SYM_FUNCTION, "fn(topic: string, value: Json): bool", "Publish to topic", NULL, 0},
-    {"subscribe", XLSP_SYM_FUNCTION, "fn(pattern: string): Channel", "Subscribe to topic pattern", NULL, 0},
+    {"send", XLSP_SYM_FUNCTION, "fn(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", NULL, 0},
+    {"listen", XLSP_SYM_FUNCTION, "fn(pattern: string): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
-    {"validChannelName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): NodeAddress", "", NULL, 0},
     {"validTopicName", XLSP_SYM_FUNCTION, "fn(topic: string): bool", "", NULL, 0},
     {"validTopicPattern", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
@@ -54,7 +52,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"HANDSHAKE_VERSION", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"TOPIC_DEFAULT_HOP_LIMIT", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"NODE_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
-    {"CHANNEL_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"TOPIC_PATTERN_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
     {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
@@ -62,10 +59,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"ClusterConfig", XLSP_SYM_CLASS, "type ClusterConfig = { name: string, port: int, secret: string?, tls: ClusterTlsOptions? }", "Typed cluster node startup configuration", NULL, 0},
     {"ClusterTlsStatus", XLSP_SYM_CLASS, "type ClusterTlsStatus = { enabled: bool, clientReady: bool, serverReady: bool }", "Effective TLS posture of a running cluster node", NULL, 0},
     {"ClusterNodeInfo", XLSP_SYM_CLASS, "type ClusterNodeInfo = { name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }", "Typed diagnostic snapshot for one remote cluster node", NULL, 0},
-    {"ClusterInfo", XLSP_SYM_CLASS, "type ClusterInfo = { self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }", "Typed diagnostic snapshot for the local cluster runtime", NULL, 0},
+    {"ClusterInfo", XLSP_SYM_CLASS, "type ClusterInfo = { self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, listeners: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }", "Typed diagnostic snapshot for the local cluster runtime", NULL, 0},
+    {"ClusterDelivery", XLSP_SYM_CLASS, "enum ClusterDelivery", "Outcome of handing one opaque service envelope to the cluster transport", NULL, 0},
     {"ClusterNodeState", XLSP_SYM_CLASS, "enum ClusterNodeState", "Lifecycle state of a remote cluster node", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 30
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 28
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {
