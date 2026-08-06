@@ -9785,6 +9785,14 @@ TEST(cgen_coro_native_class_await_uses_tagged_boundary_slot) {
            "native-class await result must retain its typed pointer local");
     assert(contains_between(await_call, trace, bridge) &&
            "native-class await result should bridge from the boundary temporary exactly once");
+    char physical_clear[64];
+    char tagged_clear[64];
+    snprintf(physical_clear, sizeof(physical_clear), "v%u = 0;", slot_id);
+    snprintf(tagged_clear, sizeof(tagged_clear), "v%u = XR_NULL_VAL;", slot_id);
+    assert(contains_between(await_call, trace, physical_clear) &&
+           "native-class coroutine frame slot must clear through its physical pointer rep");
+    assert(!contains_between(await_call, trace, tagged_clear) &&
+           "native-class coroutine frame slot must never receive a tagged null");
     char transfer_promotion[96];
     snprintf(transfer_promotion, sizeof(transfer_promotion),
              "xrt_value_set_storage(xrt_box_obj(_inst), %u)", (unsigned) XR_OBJ_STORAGE_TRANSFER);

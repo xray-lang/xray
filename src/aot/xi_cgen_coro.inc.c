@@ -4944,7 +4944,12 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ";\n");
         fprintf(out, "    ");
         emit_vref(out, v->args[0]);
-        fprintf(out, " = %s;\n", cg_rep(v->args[0]) == XR_REP_PTR ? "NULL" : "XR_NULL_VAL");
+        /* Clear through the physical frame-slot representation selected by the
+         * AOT plan. A native class keeps pointer storage even when its Xi value
+         * is logically tagged; consulting cg_rep here emitted XR_NULL_VAL into
+         * a void* field after the last use. */
+        fprintf(out, " = %s;\n",
+                cg_coro_decl_rep(ctx, f, v->args[0]) == XR_REP_TAGGED ? "XR_NULL_VAL" : "0");
         return;
     }
 
