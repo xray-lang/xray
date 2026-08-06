@@ -70,7 +70,7 @@ Status: frozen after object-surface convergence and typed nominal Json construct
 ## Digest anchors
 
 anchor-sha256: src/shared/xobject_row.h 5057c952ae0f809e3aaec6e4c48f64ece296af550a7cd2f23ac36185b2c0f170
-anchor-sha256: src/shared/xobject_shape.h 2f0746ea7c755edda74e5b64a661363a543eb8c96e6e13dfc5e3d339d32e4878
+anchor-sha256: src/shared/xobject_shape.h 21eae050b1e0f3f7dfc00d5d7bee4e79f943d51bdc4b89096c0e328174a65d98
 anchor-sha256: src/runtime/value/xtype.h 3fc485e57ddc2bd95778f995f5df0e6f334b0f86197b40dfe468564e1b0b6426
 anchor-sha256: src/runtime/value/xtype.c 84761e16d37abaeffb9b5969812f1e1c34f7172874a28d52face5529ee149026
 anchor-sha256: src/frontend/parser/xtype_ref.h 4c3823b5f8ca3dc0164605a6824070710f6efb7e0209dc431726ae389ea9dd24
@@ -81,8 +81,8 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_expr.c 83ce300e65c2bd225e
 anchor-sha256: src/analysis/xglobal_summary.h 76668edea6dd3924bfff9b06dc0df7758d06419de65fa87b1b576e3c71c43cc9
 anchor-sha256: src/ir/xi.h 298de848b014831ded0c48e0f95ec176d45d356d2c0da85fb680fecf2372cea8
 anchor-sha256: xisa/xi/ops.def 9091256d150269d3b16cd9b7f60371292a5d8d357d48f513e0608cb32d663ce5
-anchor-sha256: src/aot/xrt_coll.h dee3abad0aaa99b66c0a23e3ff28bbb33e8cfdc70e0d108b93a52a362da975c0
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 02a4d35561f2cb234a6cc481700d9354d9e8517e24c9207f8b8f5a5fce68193f
+anchor-sha256: src/aot/xrt_coll.h b74b9f2b7eee1666774d5ea2e0a946048fd373f77da42e40adb812339842351f
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b4f50ee6ffa9500c9848daa3f61475e708ccd35addf4728c18e362dde0eb4718
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 0bba73642490bb76d403a29495323b04852027bfabb83ecead32a833d23caa36
 anchor-sha256: src/runtime/class/xclass.h 5d92a59177ecf5550463fb81740f68f344a1f6abe669a5220151f681b0ffdf75
 anchor-sha256: src/runtime/class/xinstance.c 6d0b1501e7d8790aa9f6476d96f45162199026d5fc7913071d8cc742c6feddea

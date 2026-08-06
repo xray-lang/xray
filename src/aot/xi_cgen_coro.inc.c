@@ -3857,7 +3857,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ", &_wq_try_pop_val_%u);\n", v->id);
         fprintf(
             out,
-            "    XrValue _wq_try_pop_%u = xrt_tuple_make(2, (XrValue[]){"
+            "    XrValue _wq_try_pop_%u = xrt_tuple_make_consuming(2, (XrValue[]){"
             "xr_aot_bridge_value_to_xrt(_wq_try_pop_val_%u), XR_FROM_BOOL(_wq_try_pop_ok_%u)});\n",
             v->id, v->id, v->id);
         if (cg_coro_value_has_storage(f, v)) {
@@ -4011,7 +4011,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_vref(out, v->args[0]);
         fprintf(out, ", &_rg_try_recv_val_%u);\n", v->id);
         fprintf(out,
-                "    XrValue _rg_try_recv_%u = xrt_tuple_make(2, (XrValue[]){_rg_try_recv_val_%u, "
+                "    XrValue _rg_try_recv_%u = xrt_tuple_make_consuming(2, "
+                "(XrValue[]){_rg_try_recv_val_%u, "
                 "XR_FROM_BOOL(_rg_try_recv_ok_%u)});\n",
                 v->id, v->id, v->id);
         if (cg_coro_value_has_storage(f, v)) {

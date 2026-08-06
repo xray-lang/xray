@@ -102,7 +102,7 @@ anchor-sha256: src/ir/xi_tbaa.h 3f361c253c2a6073043d9a8c77f100cf3b51bc16077fbff3
 anchor-sha256: src/ir/xi_opt_licm.c 89d57c968d90e08f7fed4df46308630d00c92df47ab1c5a059f9e4a7bc750ee0
 anchor-sha256: src/ir/xi_opt_gvn_pre.c 34355ff283cf1c52954ee1f7513ebad9d7feaf80cba63ea234b8756e9a7f2195
 anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a5b384a2b2174598be7
-anchor-sha256: src/coro/xchannel.c a29dda3df9fd51b80fc383758f5a45d379a27246e97e3a4029b7a57367e81d97
+anchor-sha256: src/coro/xchannel.c 4ac92d6b0cc987bc5c2809812b6728843231f0c6887f0dde2595f532e474a943
 anchor-sha256: src/coro/xtask.c 0557f8dbbfa4e8fdd1cecbd4724107aa83db4e629d53bb7ff3d0a67497ec1e20
 anchor-sha256: src/coro/xtask_await.c 1d6026df35f12ff155091a2ee0e54ed46f094e34ee6af89df011382028bd9708
 anchor-sha256: src/frontend/canonical/xcanon.c 6511de9fd3a2a07df02441ceae660a0e47d1cb784fe0a8c6a0cea674f9785ff3

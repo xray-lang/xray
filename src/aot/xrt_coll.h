@@ -133,13 +133,33 @@ static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_siz
 static inline void xrt_coll_set_storage_header(XrObjHeader *h, uint8_t storage_mode) {
     if (!h)
         return;
+    uint8_t previous_mode = XR_OBJ_GET_STORAGE(h);
+    int32_t previous_rc = atomic_load_explicit(&h->refcount, memory_order_relaxed);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         xrt_execution_unbind(h);
     XR_OBJ_SET_STORAGE(h, storage_mode);
-    if (storage_mode == XR_OBJ_STORAGE_SHARED)
-        atomic_store_explicit(&h->refcount, -1, memory_order_relaxed);
-    else if (!(h->extra & XR_OBJ_IMMORTAL))
+    if (h->extra & XR_OBJ_IMMORTAL)
+        return;
+
+    /* Storage publication changes the synchronization domain, not the number
+     * of live owners.  A child can be temporarily owned by both its source
+     * aggregate and the newly constructed published aggregate until the
+     * source is released.  Resetting RC here discarded those compiler-tracked
+     * owners and let the source release reclaim a child still reachable from
+     * the published graph. */
+    if (storage_mode == XR_OBJ_STORAGE_SHARED && previous_mode != XR_OBJ_STORAGE_SHARED) {
+        if (XR_UNLIKELY(previous_rc < 0)) {
+            fprintf(stderr, "xrt: storage publication has an invalid local reference count\n");
+            abort();
+        }
+        atomic_store_explicit(&h->refcount, -(previous_rc + 1), memory_order_relaxed);
+    } else if (storage_mode != XR_OBJ_STORAGE_SHARED && previous_mode == XR_OBJ_STORAGE_SHARED) {
+        if (XR_UNLIKELY(previous_rc != -1)) {
+            fprintf(stderr, "xrt: shared graph must be uniquely owned before storage transfer\n");
+            abort();
+        }
         atomic_store_explicit(&h->refcount, 0, memory_order_relaxed);
+    }
 }
 
 static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t etype,
@@ -1032,12 +1052,32 @@ static inline XrValue xrt_tuple_new(int64_t len) {
     return xr_mkptr(t, XR_TAG_TUPLE);
 }
 
-static inline XrValue xrt_tuple_make(int64_t len, const XrValue *items) {
+/* Construct a tuple by consuming one owner from every lane. */
+static inline XrValue xrt_tuple_make_consuming(int64_t len, const XrValue *items) {
+    XrValue tuple = xrt_tuple_new(len);
+    xrt_tuple_t *t = (xrt_tuple_t *) tuple.ptr;
+    for (int64_t i = 0; i < t->len; i++)
+        t->items[i] = items ? items[i] : XR_NULL_VAL;
+    return tuple;
+}
+
+/* Construct a tuple from borrowed lanes by acquiring an owner for each one. */
+static inline XrValue xrt_tuple_make_from_borrowed(int64_t len, const XrValue *items) {
     XrValue tuple = xrt_tuple_new(len);
     xrt_tuple_t *t = (xrt_tuple_t *) tuple.ptr;
     for (int64_t i = 0; i < t->len; i++)
         t->items[i] = items ? xrt_value_to_owned(items[i]) : XR_NULL_VAL;
     return tuple;
+}
+
+/* XI_TUPLE_NEW consumes every item.  Build the complete tuple first, then
+ * publish the root and all reference lanes into the compiler-planned storage
+ * domain.  This matches the VM NEWTUPLE contract and keeps nested values out
+ * of the producer execution arena without a copy. */
+static inline XrValue xrt_tuple_make_storage(int64_t len, const XrValue *items,
+                                             uint8_t storage_mode) {
+    XrValue tuple = xrt_tuple_make_consuming(len, items);
+    return xrt_value_set_storage_graph(tuple, storage_mode);
 }
 
 XR_FUNC bool xr_aot_atomic_compare_exchange_i64(XrValue atomic_value, int64_t expected,
@@ -1055,7 +1095,7 @@ static inline XrValue xrt_atomic_compare_exchange_i64_tuple(XrValue atomic_value
     bool ok =
         xr_aot_atomic_compare_exchange_i64(atomic_value, expected, desired, ordering, &previous);
     XrValue items[2] = {XR_FROM_INT(previous), XR_FROM_BOOL(ok)};
-    return xrt_tuple_make(2, items);
+    return xrt_tuple_make_consuming(2, items);
 }
 
 static inline XrValue xrt_atomic_compare_exchange_f64_tuple(XrValue atomic_value, double expected,
@@ -1064,7 +1104,7 @@ static inline XrValue xrt_atomic_compare_exchange_f64_tuple(XrValue atomic_value
     bool ok =
         xr_aot_atomic_compare_exchange_f64(atomic_value, expected, desired, ordering, &previous);
     XrValue items[2] = {XR_FROM_FLOAT(previous), XR_FROM_BOOL(ok)};
-    return xrt_tuple_make(2, items);
+    return xrt_tuple_make_consuming(2, items);
 }
 
 static inline XrValue xrt_atomic_compare_exchange_bool_tuple(XrValue atomic_value, bool expected,
@@ -1073,7 +1113,7 @@ static inline XrValue xrt_atomic_compare_exchange_bool_tuple(XrValue atomic_valu
     bool ok =
         xr_aot_atomic_compare_exchange_bool(atomic_value, expected, desired, ordering, &previous);
     XrValue items[2] = {XR_FROM_BOOL(previous), XR_FROM_BOOL(ok)};
-    return xrt_tuple_make(2, items);
+    return xrt_tuple_make_consuming(2, items);
 }
 
 static inline XrValue xrt_tuple_get(XrValue tuple, int64_t index) {
@@ -3511,7 +3551,7 @@ static inline XrValue xrt_json_iterator_next(xrt_iterator_t *it) {
         XrValue value = j->fields[idx];
         if (it->kind == XRT_ITER_PAIRS) {
             XrValue kv[2] = {key, value};
-            return xrt_tuple_make(2, kv);
+            return xrt_tuple_make_from_borrowed(2, kv);
         }
         if (it->kind == XRT_ITER_VALUES)
             return value;
@@ -3528,7 +3568,7 @@ static inline XrValue xrt_json_iterator_next(xrt_iterator_t *it) {
     XrValue value = xrt_map_slot_value(j->dynamic_fields, slot);
     if (it->kind == XRT_ITER_PAIRS) {
         XrValue kv[2] = {key, value};
-        return xrt_tuple_make(2, kv);
+        return xrt_tuple_make_from_borrowed(2, kv);
     }
     if (it->kind == XRT_ITER_VALUES)
         return value;
@@ -3622,7 +3662,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
             if (it->kind == XRT_ITER_PAIRS) {
                 XrValue kv[2] = {xrt_boolmap_iter_key(b, cursor),
                                  xrt_boolmap_iter_value(b, cursor)};
-                return xrt_tuple_make(2, kv);
+                return xrt_tuple_make_from_borrowed(2, kv);
             }
             if (it->kind == XRT_ITER_VALUES)
                 return xrt_boolmap_iter_value(b, cursor);
@@ -3631,7 +3671,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
         int64_t slot = xrt_map_is_typed(m) ? m->order[it->cursor++] : it->cursor++;
         if (it->kind == XRT_ITER_PAIRS) {
             XrValue kv[2] = {xrt_map_slot_key(m, slot), xrt_map_slot_value(m, slot)};
-            return xrt_tuple_make(2, kv);
+            return xrt_tuple_make_from_borrowed(2, kv);
         }
         if (it->kind == XRT_ITER_VALUES)
             return xrt_map_slot_value(m, slot);
@@ -3652,7 +3692,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
             return XR_FROM_INT(idx);
         if (it->kind == XRT_ITER_PAIRS) {
             XrValue kv[2] = {XR_FROM_INT(idx), elem};
-            return xrt_tuple_make(2, kv);
+            return xrt_tuple_make_from_borrowed(2, kv);
         }
         return elem;
     }
@@ -3666,7 +3706,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
             return XR_FROM_INT(char_index);
         if (it->kind == XRT_ITER_PAIRS) {
             XrValue kv[2] = {XR_FROM_INT(char_index), ch};
-            return xrt_tuple_make(2, kv);
+            return xrt_tuple_make_from_borrowed(2, kv);
         }
         return ch;
     }

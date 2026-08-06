@@ -33,6 +33,7 @@ static void arena_test_free(void *ptr) {
 #define XRT_FREE(p) arena_test_free(p)
 #define XRT_IMPL
 #include "../../../src/aot/xrt_coll.h"
+#include "../../../src/aot/xrt_mem.h"
 
 XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     (void) exc;
@@ -42,7 +43,7 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
 #define CHECK(cond, message)                                                                       \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
-            fprintf(stderr, "FAIL: %s\n", message);                                               \
+            fprintf(stderr, "FAIL: %s\n", message);                                                \
             return 1;                                                                              \
         }                                                                                          \
     } while (0)
@@ -84,7 +85,7 @@ int main(void) {
     xrt_release(json);
 
     XrValue tuple_child = xrt_str_from_cstr("tuple-owned");
-    XrValue tuple = xrt_tuple_make(1, &tuple_child);
+    XrValue tuple = xrt_tuple_make_from_borrowed(1, &tuple_child);
     xrt_release(tuple_child);
     CHECK(xrt_execution_arena_live_objects(arena) == 2,
           "tuple takes an owning reference to each reference-valued lane");
@@ -130,7 +131,7 @@ int main(void) {
     CHECK(arena != NULL, "native-class publication arena is created");
     previous = xrt_execution_arena_enter(arena);
     uint16_t box_type = xrt_type_register_hot(0, NULL, 0, arena_test_box_destroy,
-                                               arena_test_box_promote, sizeof(ArenaTestBox));
+                                              arena_test_box_promote, sizeof(ArenaTestBox));
     ArenaTestBox *box = (ArenaTestBox *) xrt_obj_alloc(box_type, sizeof(*box));
     box->child = xrt_str_from_cstr("native-field");
     XrValue published_box = xrt_box_obj(box);
@@ -150,6 +151,25 @@ int main(void) {
     CHECK(((ArenaTestBox *) published_box.ptr)->child.ptr != NULL,
           "published native-class field survives producer teardown");
     xrt_release(published_box);
+
+    arena = xrt_execution_arena_new();
+    CHECK(arena != NULL, "transfer-tuple publication arena is created");
+    previous = xrt_execution_arena_enter(arena);
+    XrValue buffer = xrt_buffer_new(64, 1, 0);
+    xrt_retain(buffer);
+    XrValue transfer_tuple = xrt_tuple_make_storage(1, &buffer, XR_OBJ_STORAGE_TRANSFER);
+    CHECK(xrt_execution_arena_live_objects(arena) == 0,
+          "transfer tuple publication detaches its nested Buffer");
+    CHECK(atomic_load_explicit(&xrt_arc_value_header(buffer)->refcount, memory_order_relaxed) == 1,
+          "storage publication preserves both live Buffer owners");
+    xrt_release(buffer);
+    CHECK(atomic_load_explicit(&xrt_arc_value_header(buffer)->refcount, memory_order_relaxed) == 0,
+          "releasing the source owner leaves the tuple owner live");
+    xrt_execution_arena_restore(previous);
+    xrt_execution_arena_destroy(arena);
+    CHECK(xrt_buffer_length(((xrt_tuple_t *) transfer_tuple.ptr)->items[0]) == 64,
+          "nested Buffer survives producer execution teardown");
+    xrt_release(transfer_tuple);
 
     xrt_arc_shutdown();
     printf("execution arena tests passed (%d allocations, %d frees)\n", g_allocations, g_frees);

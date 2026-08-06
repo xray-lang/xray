@@ -1,0 +1,31 @@
+import mem
+
+fn publish(
+    output: Channel<(int, Buffer?)>,
+    sequence: int,
+    size: int
+) -> int {
+    var buffer = mem.allocZeroed(size)
+    var payload: Buffer? = buffer
+    var frame = (sequence, payload)
+    output.send(move frame)
+    return sequence
+}
+
+const output = Channel<(int, Buffer?)>(1)
+var checksum = 0
+for (var sequence = 0; sequence < 256; sequence++) {
+    var size = sequence % 3 == 0 ? 32 : sequence % 3 == 1 ? 256 : 4096
+    var task = go publish(output, sequence, size)
+    match (output.recv()) {
+        Recv.Value((received, payload)) -> {
+            if (received == sequence && payload != null) {
+                checksum = checksum + len(payload!.asBytes())
+            }
+        }
+        _ -> {}
+    }
+    checksum = checksum + await task
+}
+output.close()
+print(checksum)
