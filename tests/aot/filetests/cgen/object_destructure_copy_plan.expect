@@ -1,5 +1,5 @@
 contains=xaot-plan v0
-regex=object-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=destructure action=direct_ordinal field_name=[0-9]+ result_type=[1-9][0-9]* field=0 evidence=0x1d reason=none
-regex=object-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=destructure action=direct_ordinal field_name=[0-9]+ result_type=[1-9][0-9]* field=1 evidence=0x1d reason=none
+regex=object-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=destructure domain=1 syntax=3 action=direct_ordinal shape_count=1 shape_set=1 epoch=0 field_name=[0-9]+ result_type=2033624235 field=0 evidence=0x1d reason=none
+regex=object-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=destructure domain=1 syntax=3 action=direct_ordinal shape_count=1 shape_set=2 epoch=0 field_name=[0-9]+ result_type=443843934 field=1 evidence=0x1d reason=none
 c_regex=XrValue v[0-9]+ = xrt_json_get_field\(v[0-9]+, 0\);
 c_regex=XrValue v[0-9]+ = xrt_json_get_field\(v[0-9]+, 1\);
