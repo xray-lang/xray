@@ -75,7 +75,7 @@ def main() -> int:
                 "runtime_samples_ns": runtime_ns,
                 "runtime_median_ns": int(statistics.median(runtime_ns)),
                 "runtime_p99_ns": max(runtime_ns),
-                "canonical_sort_kernel_mentions": generated_text.count("xr_sort_core_"),
+                "sort_dispatch_mentions": generated_text.count("xrt_method_discard_0"),
                 "retired_private_sort_mentions": sum(
                     generated_text.count(symbol)
                     for symbol in ("xrt_introsort_", "xrt_vintrosort", "TYPED_SORT")
@@ -96,6 +96,10 @@ def main() -> int:
         "xray": json.loads(version),
         "cc": cc_version,
         "samples": args.samples,
+        "canonical_consumer_mentions": sum(
+            (ROOT / path).read_text(encoding="utf-8").count("xr_sort_core_")
+            for path in ("src/runtime/object/xarray_vm.c", "src/aot/xrt_sort.inc.c")
+        ),
         "profiles": rows,
     }
     args.output.resolve().write_text(

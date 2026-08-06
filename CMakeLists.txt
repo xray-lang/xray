@@ -3662,6 +3662,18 @@ if(BUILD_TESTS)
         PROCESSORS 1
         TIMEOUT 30
     )
+
+    add_test(
+        NAME semantic_performance_evidence
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_performance_evidence.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(semantic_performance_evidence PROPERTIES
+        LABELS "meta;semantic-owner;performance;task-262"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
 endif()
 
 # Fuzzing tests (optional, requires Clang with libFuzzer)

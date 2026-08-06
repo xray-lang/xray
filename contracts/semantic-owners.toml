@@ -193,6 +193,9 @@ fixtures = [
   "tests/unit/stdlib/test_array_core.c",
   "tests/diff/cases/semantics/collections/array_sort_shared_core.xr",
 ]
+performance_evidence = "contracts/semantic-performance-baseline.json"
+runtime_benchmark = "contracts/semantic-runtime-benchmark.json"
+performance_budget = "contracts/semantic-performance-budget.toml"
 
 [[operation_family]]
 id = "arithmetic-conversion"
@@ -232,4 +235,3 @@ id = "encoding-formatting"
 canonical_cores = ["compression", "crypto", "regex", "value-format"]
 duplicate_sources = []
 disposition = "single-owner"
-

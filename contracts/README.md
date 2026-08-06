@@ -37,3 +37,6 @@ Initial frozen contracts:
 - `object-json-domain.md`
 - `sort-semantics.md`
 - `semantic-ownership.md`
+- `semantic-performance-budget.toml`
+- `semantic-performance-baseline.json`
+- `semantic-runtime-benchmark.json`

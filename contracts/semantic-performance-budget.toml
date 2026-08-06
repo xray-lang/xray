@@ -1,0 +1,27 @@
+schema = 1
+task = 262
+host_class = "macos-arm64"
+workload = "tests/benchmarks/aot_c90/runtime/sort_i64_random.xr"
+policy = "absolute first-baseline ceilings; changes require reviewed evidence, never silent rebaselining"
+
+[o0]
+max_generated_c_bytes = 12000
+max_object_bytes = 180000
+max_binary_bytes = 190000
+max_codegen_ns = 50000000
+max_object_compile_ns = 500000000
+max_native_build_ns = 2000000000
+max_runtime_p99_ns = 1000000000
+
+[o2]
+max_generated_c_bytes = 12000
+max_object_bytes = 70000
+max_binary_bytes = 100000
+max_codegen_ns = 50000000
+max_object_compile_ns = 750000000
+max_native_build_ns = 1500000000
+max_runtime_p99_ns = 1000000000
+
+[runtime]
+min_c_ratio = 0.50
+samples = 7

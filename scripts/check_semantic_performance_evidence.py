@@ -26,6 +26,8 @@ def main() -> int:
     if evidence.get("schema") != 1 or evidence.get("task") != 262:
         errors.append("semantic performance evidence schema/task mismatch")
     profiles = {row.get("opt"): row for row in evidence.get("profiles", [])}
+    if evidence.get("canonical_consumer_mentions", 0) <= 0:
+        errors.append("VM/AOT source adapters lost the canonical sort kernel")
     for opt in (0, 2):
         row = profiles.get(opt)
         limits = budget.get(f"o{opt}", {})
@@ -42,8 +44,8 @@ def main() -> int:
                 errors.append(f"O{opt} {metric} is not positive integer evidence")
             elif not isinstance(limit, int) or value > limit:
                 errors.append(f"O{opt} {metric}={value} exceeds budget {limit}")
-        if row.get("canonical_sort_kernel_mentions", 0) <= 0:
-            errors.append(f"O{opt} generated C lost the canonical sort kernel")
+        if row.get("sort_dispatch_mentions", 0) <= 0:
+            errors.append(f"O{opt} generated C lost the Array.sort dispatch")
         if row.get("retired_private_sort_mentions") != 0:
             errors.append(f"O{opt} generated C revived a private sort kernel")
     benches = runtime.get("benchmarks", [])
