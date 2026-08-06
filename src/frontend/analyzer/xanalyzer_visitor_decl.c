@@ -2744,6 +2744,13 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
         }
     }
 
+    /* Publish return ownership before leaving the function scope. The scan
+     * resolves returned names through the visible scope, so it has to run here
+     * rather than on demand from a phase that no longer has this scope. The
+     * return type must already be settled, hence after the inference above. */
+    if (links)
+        xa_ensure_function_return_ownership_prepass(ctx, links);
+
     xa_analyzer_exit_scope(ctx->analyzer);
 }
 
@@ -4349,6 +4356,22 @@ skip_layout:
             xa_symbol_links_set_param_escape_summary(ctx, mlinks, mlinks->param_types,
                                                      mlinks->param_names, mlinks->param_count,
                                                      mlinks->return_type, md->body, info);
+        }
+
+        /* Publish return ownership here, while the method's own scope is still
+         * current -- the scan resolves returned names through the visible
+         * scope, so computing it on demand from a later phase would resolve
+         * them somewhere else or not at all. The member symbol is the one the
+         * evidence producer reads, which is not always the symbol `mlinks`
+         * came from. */
+        {
+            XaSymbol *member_sym = xa_class_info_lookup_member(info, md->name);
+            XaSymbolLinks *member_links =
+                member_sym ? xa_analyzer_get_links(ctx->analyzer, member_sym) : NULL;
+            if (member_links)
+                xa_ensure_function_return_ownership_prepass(ctx, member_links);
+            if (mlinks && mlinks != member_links)
+                xa_ensure_function_return_ownership_prepass(ctx, mlinks);
         }
 
         xa_analyzer_exit_scope(ctx->analyzer);

@@ -61,9 +61,35 @@ enum {
     XG_NO_ID = 0,
     /* 33: combines the sequence/native-class evidence carried by schema 32
      * with enum static-domain and descriptor metadata evidence from task 210.
-     * Use a fresh version so caches from either parent lineage are invalidated. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 35,
+     * Use a fresh version so caches from either parent lineage are invalidated.
+     * 36: bodies and methods publish return ownership. */
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 36,
 };
+
+/* Return ownership as published to the whole-program evidence.
+ *
+ * The analyzer computes this per declaration and stores it on XaSymbolLinks,
+ * which only answers for a declaration it can already name. An interface
+ * method has no body there, so the question "what does a call through this
+ * interface return" cannot be answered locally at all. Publishing it here puts
+ * it beside the other semantic facts -- effects, escape, capabilities, param
+ * storage -- so a consumer with whole-program reach can meet the ownership of
+ * every implementor instead of failing closed for lack of a body.
+ *
+ * The kind values mirror XaReturnOwnershipKind by value; xg_return_ownership_*
+ * in the producer is the only place that converts between the two. */
+typedef enum XgReturnOwnershipKind {
+    XG_RETURN_OWNERSHIP_UNKNOWN = 0,
+    XG_RETURN_OWNERSHIP_OWNED,
+    XG_RETURN_OWNERSHIP_BORROWED_PARAM,
+    XG_RETURN_OWNERSHIP_BORROWED_STATIC,
+} XgReturnOwnershipKind;
+
+typedef struct XgReturnOwnership {
+    uint8_t kind;        /* XgReturnOwnershipKind */
+    int16_t param_index; /* BORROWED_PARAM only; -1 otherwise */
+    uint8_t complete;    /* 0 unless the kind is proven */
+} XgReturnOwnership;
 
 typedef enum XgBuildProfile {
     XG_BUILD_CHECK = 0,
@@ -762,6 +788,7 @@ typedef struct XgMethodSummary {
     uint32_t override_depth;
     uint32_t default_arg_contract_id;
     uint32_t flags;
+    XgReturnOwnership return_ownership;
 } XgMethodSummary;
 
 typedef struct XgInterfaceImplSummary {
@@ -830,6 +857,7 @@ typedef struct XgBodySummary {
     uint32_t callsite_count;
     uint32_t metadata_use_bits;
     uint32_t static_data_use_bits;
+    XgReturnOwnership return_ownership;
 } XgBodySummary;
 
 typedef struct XgParamStorageSummary {
@@ -1520,6 +1548,19 @@ XR_FUNC bool xg_global_evidence_interface_dispatch_slot(const XgGlobalEvidence *
                                                         XgInterfaceId receiver_interface_id,
                                                         XgInterfaceMethodId interface_method_id,
                                                         uint32_t *out_slot);
+/* Return ownership of a call made through an interface.
+ *
+ * This is a meet over implementors, not devirtualization: the caller does not
+ * need to know WHICH implementation runs, only that they all agree. So a
+ * two-implementor interface whose method borrows parameter 0 in both answers
+ * BORROWED_PARAM(0), where a single-implementor requirement would give up.
+ *
+ * Fail-closed on every form of doubt -- an implementor whose target method is
+ * not found, one whose own ownership is unproven, any disagreement between
+ * implementors, and an empty implementor set all yield UNKNOWN. */
+XR_FUNC XgReturnOwnership xg_global_evidence_interface_method_return_ownership(
+    const XgGlobalEvidence *evidence, XgInterfaceId receiver_interface_id, uint32_t name_id,
+    uint32_t signature_key);
 XR_FUNC const XgGenericInstSummary *
 xg_global_evidence_find_generic_inst(const XgGlobalEvidence *evidence,
                                      XgGenericInstId generic_inst_id);

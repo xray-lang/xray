@@ -989,6 +989,42 @@ XR_FUNC uint32_t xi_lower_next_key_access_ordinal(XiLower *l, uint32_t source_sp
     return UINT32_MAX;
 }
 
+/* An interface call has no single declaration to read ownership from, so the
+ * analyzer publishes UNKNOWN for it: the selection resolves to the body-less
+ * interface method. The whole-program evidence can still answer, by meeting the
+ * ownership of every implementor -- agreement is enough, the caller never needs
+ * to know which one runs.
+ *
+ * Only fills a gap. A conclusion the analyzer already proved locally stands. */
+static void xi_lower_bind_interface_return_ownership(const XgGlobalEvidence *ev, XiValue *call,
+                                                     const XgCallsiteSummary *match) {
+    XgReturnOwnership own;
+    if (!ev || !call || !match || call->call_return_ownership.complete)
+        return;
+    own = xg_global_evidence_interface_method_return_ownership(
+        ev, match->receiver_static_interface_id, match->method_name_id,
+        match->method_signature_key);
+    if (!own.complete)
+        return;
+    switch ((XgReturnOwnershipKind) own.kind) {
+        case XG_RETURN_OWNERSHIP_OWNED:
+            call->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+            break;
+        case XG_RETURN_OWNERSHIP_BORROWED_PARAM:
+            call->call_return_ownership.kind = XI_RETURN_OWNERSHIP_BORROWED_PARAM;
+            break;
+        case XG_RETURN_OWNERSHIP_BORROWED_STATIC:
+            call->call_return_ownership.kind = XI_RETURN_OWNERSHIP_BORROWED_STATIC;
+            break;
+        /* No default: a new evidence kind must fail the -Wswitch build rather
+         * than reach ARC as a silently dropped fact. */
+        case XG_RETURN_OWNERSHIP_UNKNOWN:
+            return;
+    }
+    call->call_return_ownership.param_index = own.param_index;
+    call->call_return_ownership.complete = true;
+}
+
 XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t source_node_id) {
     const XgGlobalEvidence *ev;
     const XgCallsiteSummary *match = NULL;
@@ -1025,6 +1061,7 @@ XR_FUNC void xi_lower_bind_callsite_id(XiLower *l, XiValue *call, uint32_t sourc
             if (xg_global_evidence_interface_dispatch_slot(ev, match->receiver_static_interface_id,
                                                            match->method_id, &dispatch_slot))
                 call->xg_interface_dispatch_slot = dispatch_slot;
+            xi_lower_bind_interface_return_ownership(ev, call, match);
         }
     }
 }

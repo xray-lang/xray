@@ -365,6 +365,36 @@ static uint32_t producer_unique_body_source_node_id(const XgProducer *p, XgModul
     return candidate;
 }
 
+/* Republish the analyzer's return-ownership conclusion into the evidence.
+ *
+ * Only a `complete` conclusion crosses: an incomplete one carries no fact, and
+ * publishing it as anything but UNKNOWN would let a consumer read a guess as a
+ * proof. NULL_JOIN is analyzer-internal -- it means every return was a null
+ * literal -- and never reaches a caller as an ownership answer. */
+static XgReturnOwnership producer_return_ownership(const XaSymbolLinks *links) {
+    XgReturnOwnership out = {XG_RETURN_OWNERSHIP_UNKNOWN, -1, 0};
+    if (!links || !links->return_ownership.complete)
+        return out;
+    switch ((XaReturnOwnershipKind) links->return_ownership.kind) {
+        case XA_RETURN_OWNERSHIP_OWNED:
+            out.kind = XG_RETURN_OWNERSHIP_OWNED;
+            break;
+        case XA_RETURN_OWNERSHIP_BORROWED_PARAM:
+            out.kind = XG_RETURN_OWNERSHIP_BORROWED_PARAM;
+            break;
+        case XA_RETURN_OWNERSHIP_BORROWED_STATIC:
+            out.kind = XG_RETURN_OWNERSHIP_BORROWED_STATIC;
+            break;
+        /* No default: a new analyzer kind must fail the -Wswitch build here
+         * rather than be silently republished as UNKNOWN. */
+        case XA_RETURN_OWNERSHIP_UNKNOWN:
+            return out;
+    }
+    out.param_index = links->return_ownership.param_index;
+    out.complete = 1;
+    return out;
+}
+
 static XaSymbolLinks *producer_function_links(const XgProducer *p, const FunctionDeclNode *fn) {
     XaSymbol *sym = NULL;
     if (!p || !p->analyzer || !fn)
@@ -10169,6 +10199,7 @@ static bool add_body_summary(XgProducer *producer, const XgPendingBody *pending)
     row.callsite_count = bc.callsite_count;
     row.metadata_use_bits = bc.metadata_use_bits;
     row.static_data_use_bits = bc.static_data_use_bits;
+    row.return_ownership = producer_return_ownership(pending->links);
     xr_free(bc.locals);
     xr_free(bc.name_locals);
     return xg_global_evidence_add_body(producer->evidence, &row) != NULL;
@@ -10312,6 +10343,8 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
             method.flags |= XG_METHOD_NATIVE;
         if (!cls->is_monomorphized && (cls->type_param_count > 0 || cls->is_generic_skeleton))
             method.flags |= XG_METHOD_GENERIC_TEMPLATE;
+        method.return_ownership =
+            producer_return_ownership(producer_method_links(p, class_info, m));
         if (!xg_global_evidence_add_method(p->evidence, &method))
             return false;
         method_count++;

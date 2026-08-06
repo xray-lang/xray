@@ -730,11 +730,7 @@ static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
         return true;
     if (v && v->call_return_ownership.complete)
         return v->call_return_ownership.kind == XI_RETURN_OWNERSHIP_OWNED;
-    if (!f || !v || v->op != XI_CALL || v->nargs < 1)
-        return false;
-    XiFunc *callee = arc_resolve_callee(f, v->args[0]);
-    return callee && callee->arc_return_ownership.complete &&
-           callee->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_OWNED;
+    return false;
 }
 
 /* Is this value a candidate for dup/drop? RC type, not a stack/region
@@ -918,18 +914,7 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
                 return arc_return_unknown();
             return arc_return_value_ownership(f, value->args[actual], (uint8_t) (depth + 1));
         }
-        if (value->op != XI_CALL || value->nargs < 1)
-            return arc_return_unknown();
-        XiFunc *callee = arc_resolve_callee(f, value->args[0]);
-        if (!callee || !callee->arc_return_ownership.complete)
-            return arc_return_unknown();
-        XiReturnOwnership summary = callee->arc_return_ownership;
-        if (summary.kind != XI_RETURN_OWNERSHIP_BORROWED_PARAM)
-            return summary;
-        uint16_t actual = (uint16_t) (summary.param_index + 1);
-        if (summary.param_index < 0 || actual >= value->nargs)
-            return arc_return_unknown();
-        return arc_return_value_ownership(f, value->args[actual], (uint8_t) (depth + 1));
+        return arc_return_unknown();
     }
 
     if (op_produces_borrow(value->op))

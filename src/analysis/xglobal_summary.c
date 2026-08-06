@@ -2607,6 +2607,71 @@ XR_FUNC bool xg_global_evidence_interface_dispatch_slot(const XgGlobalEvidence *
     return false;
 }
 
+/* Find a class's method by name and signature, walking up the parent chain so
+ * an inherited implementation answers for the subclass that did not override
+ * it. Returns NULL when no class in the chain declares it. */
+static const XgMethodSummary *
+xg_global_evidence_find_method_in_hierarchy(const XgGlobalEvidence *evidence, XgClassId class_id,
+                                            uint32_t name_id, uint32_t signature_key) {
+    uint32_t guard = 0;
+    while (class_id != XG_NO_ID && guard++ < 64) {
+        const XgClassSummary *cls = xg_global_evidence_find_class(evidence, class_id);
+        if (!cls)
+            return NULL;
+        for (uint32_t i = 0; i < cls->method_count; i++) {
+            uint32_t idx = cls->method_start + i;
+            const XgMethodSummary *m = idx < evidence->nmethods ? &evidence->methods[idx] : NULL;
+            if (m && m->name_id == name_id && m->signature_key == signature_key)
+                return m;
+        }
+        class_id = cls->parent_class_id;
+    }
+    return NULL;
+}
+
+XR_FUNC XgReturnOwnership xg_global_evidence_interface_method_return_ownership(
+    const XgGlobalEvidence *evidence, XgInterfaceId receiver_interface_id, uint32_t name_id,
+    uint32_t signature_key) {
+    XgReturnOwnership merged = {XG_RETURN_OWNERSHIP_UNKNOWN, -1, 0};
+    bool seen = false;
+    if (!evidence || receiver_interface_id == XG_NO_ID)
+        return merged;
+
+    for (uint32_t i = 0; i < evidence->ninterface_impls; i++) {
+        const XgInterfaceImplSummary *impl = &evidence->interface_impls[i];
+        const XgMethodSummary *target;
+        if (!xg_global_evidence_interface_impl_matches(evidence, impl->interface_id,
+                                                       receiver_interface_id))
+            continue;
+        if (xg_global_evidence_effective_interface_implementor_seen(evidence, receiver_interface_id,
+                                                                    impl->implementor_class_id, i))
+            continue; /* already met through an earlier row for the same class */
+
+        target = xg_global_evidence_find_method_in_hierarchy(evidence, impl->implementor_class_id,
+                                                             name_id, signature_key);
+        /* An implementor whose target cannot be found, or whose own ownership
+         * is unproven, makes the meet unprovable for every caller. */
+        if (!target || !target->return_ownership.complete)
+            return (XgReturnOwnership) {XG_RETURN_OWNERSHIP_UNKNOWN, -1, 0};
+
+        if (!seen) {
+            merged = target->return_ownership;
+            seen = true;
+            continue;
+        }
+        if (merged.kind != target->return_ownership.kind ||
+            merged.param_index != target->return_ownership.param_index)
+            return (XgReturnOwnership) {XG_RETURN_OWNERSHIP_UNKNOWN, -1, 0};
+    }
+
+    /* No implementor at all proves nothing: an interface with an empty
+     * implementor set cannot be called, but reporting a borrow here would hand
+     * a caller a fact derived from an absence. */
+    if (!seen)
+        return (XgReturnOwnership) {XG_RETURN_OWNERSHIP_UNKNOWN, -1, 0};
+    return merged;
+}
+
 static bool xg_method_callsite_is_direct_dispatch(const XgGlobalEvidence *evidence,
                                                   const XgCallsiteSummary *call) {
     const XgClassSummary *receiver_class;

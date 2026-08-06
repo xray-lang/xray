@@ -1,0 +1,28 @@
+interface EchoLike {
+    idText(text: string) -> string
+}
+
+class EchoBorrow implements EchoLike {
+    constructor() {
+    }
+
+    idText(text: string) -> string {
+        return text
+    }
+}
+
+class EchoFresh implements EchoLike {
+    constructor() {
+    }
+
+    idText(text: string) -> string {
+        return text + "!"
+    }
+}
+
+fn wrap(e: EchoLike, text: string) -> string {
+    return e.idText(text)
+}
+
+print(wrap(EchoBorrow(), "a"))
+print(wrap(EchoFresh(), "b"))

@@ -1,0 +1,10 @@
+# Interface return ownership is a MEET over implementors, not devirtualization.
+# Two implementors, so dispatch cannot resolve to a single target -- yet both
+# return their parameter, so every possible callee returns a borrow of param 0.
+# wrap forwards that borrow and needs no retain, which is what earns it a
+# fn-attr plan. A single-implementor requirement would give up here.
+contains=xaot-plan v0
+regex=interface-abi [0-9]+ interface=[1-9][0-9]* callsites=1 implementors=2 .*
+regex=generic-specialization [0-9]+ .*implementors=2 single=0 targets=2 .*
+regex=fn-attr [0-9]+ func=wrap body=[0-9]+ attr=pure effect=0x60 escape=0x1 evidence=0x7
+c_not_contains=xrt_retain

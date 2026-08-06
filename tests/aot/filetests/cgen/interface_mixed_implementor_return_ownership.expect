@@ -1,0 +1,12 @@
+# The mirror of interface_multi_implementor_return_ownership: the implementors
+# DISAGREE. EchoBorrow returns its parameter (a borrow), EchoFresh returns a
+# fresh concatenation (owned). No single answer holds for every callee, so the
+# meet must fail closed to UNKNOWN and wrap keeps its conservative retain --
+# which in turn disqualifies it from a fn-attr plan.
+#
+# This is the case that must never be "optimized": answering from either
+# implementor alone would either leak a count or free a borrowed string.
+contains=xaot-plan v0
+regex=interface-abi [0-9]+ interface=[1-9][0-9]* callsites=1 implementors=2 .*
+c_not_regex=XRT_FN_PURE [A-Za-z_0-9 ]*\*? ?interface_mixed_implementor_return_ownership_[0-9a-f]+_wrap_
+c_contains=xrt_retain

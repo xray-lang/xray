@@ -102,12 +102,27 @@ complete effect product.
 14. Return ownership is a typed-program sidecar fact, not an allocation-effect
     heuristic. Reference-capable source functions publish `OWNED`,
     `BORROWED_PARAM(n)`, `BORROWED_STATIC`, or fail-closed `UNKNOWN`; recursive
-    call graphs are solved to a fixed point. Cross-analyzer symbol copies
+    call graphs are solved to a fixed point. Reference capability, not movable
+    roots, decides which functions publish: a returned `string` has no movable
+    root yet is refcounted, so its ownership at the return boundary is exactly
+    the fact a caller needs. Publication is unconditional and happens while the
+    declaration's own scope is current, because the scan resolves returned
+    names through that scope; a summary computed on demand from a later phase
+    resolves them elsewhere or not at all. Cross-analyzer symbol copies
     preserve the semantic kind and parameter identity rather than a database
     address. Native reference returns must declare the same metadata in the
     standard-library definition, including explicit `UNKNOWN` when no stronger
     fact is valid. Xi consumes the published summary at each statically known
     call and does not re-infer it from a callee name or allocation effects.
+    A call through an interface has no single declaration to read, so the
+    whole-program evidence answers it by meeting the published ownership of
+    every implementor. This is agreement, not devirtualization: the caller
+    never needs to know which implementation runs, so a multi-implementor
+    interface still yields a fact when the implementors agree. The meet is
+    fail-closed on an unresolvable target, an implementor whose own ownership
+    is unproven, any disagreement, and an empty implementor set. Making the
+    meet require a single implementor, or letting it answer from a subset of
+    implementors, is a contract change.
 15. Parameter mutation is one canonical effect fact for scalar parameters,
     aggregate/view roots, and transitive calls. Direct assignment, compound
     assignment, increment/decrement, member/index writes, and a known mutating
@@ -132,11 +147,11 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b71501e112a6aee3caa413c
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 19585145d88b00d1c1e4fad9fe23ac841e75c941eeaf7c18be3779befc872367
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c dc666a71819aa81f3573754e55626d8bec56766e16eed6191cbcfa293914b723
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 92075df22936a8d9f5ef9db0f97a4b2d88baeb17245f415be853c90170671d23
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c f5d60671012c3a069211b066359344c3a54875d36ef57ffaed5f292654407d2b
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c a856acb9d3aff065be7a4b1204fba08abaa748d92582a525402e4159ecc03931
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c bf0c7c6c391889e57394bdb405a857c46e284311a5f684c307273d6155e5dbf4
 anchor-sha256: src/runtime/value/xtype.h 551ab2030ad8b73b8fa0ce5d372d7e32074b3b225229b3957b578b35fd43ba05
 anchor-sha256: src/ir/xi.h ba556dbbb3dd0d1c40ef0a1bed988cc7f729272bad2ee363ba678f2cd4cdfe15
-anchor-sha256: src/ir/xi_lower.c 3630a8fbf25c43cdb0d2819adf389bdcf29ea93d2406d8826ab5d190c1429419
+anchor-sha256: src/ir/xi_lower.c 62b11fba428482ba471756d7c0c8b46a9290b9c487df3feb254c02e2891d5d1a
 anchor-sha256: src/app/cli/xcmd_verify.c 621d117db22a9c3c101d183f3c5554616bdba614d6ebbaf942d50d6b3ccf6f29
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
 anchor-sha256: tests/unit/analyzer/test_analyzer.c 245c2f5be1293dbdb021db204fe29803a2d2b276332f4c897146d9e32855a23d
