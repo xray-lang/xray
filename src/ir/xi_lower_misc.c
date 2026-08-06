@@ -585,6 +585,7 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
             set->args[1] = v;
             set->aux_int = field_idx;
             set->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+            set->lowering_flags |= XI_LOWERING_FLAG_OBJECT_LITERAL_INIT;
             set->line = (uint32_t) node->line;
         } else {
             XiValue *key = is_computed ? xi_lower_expr(l, obj->keys[i])

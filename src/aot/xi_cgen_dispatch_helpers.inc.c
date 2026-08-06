@@ -6120,6 +6120,15 @@ static const XaotObjectAccessPlan *xicgen_require_object_field_access(XiCgenCtx 
         return NULL;
     bundle = cg_ctx_aot_bundle(ctx);
     if (v->xg_object_access_id == 0) {
+        /* Initializing a literal's own field proves nothing about a receiver's
+         * shape, because the shape is the literal. object-shape-plan already
+         * authorizes it and no producer emits an access row for it, so demand
+         * one here and a plain `{ ...base, y: 9 }` cannot be compiled at all. */
+        if ((v->lowering_flags & XI_LOWERING_FLAG_OBJECT_LITERAL_INIT) != 0) {
+            if (out_unverified)
+                *out_unverified = true;
+            return NULL;
+        }
         if (!bundle || !bundle->global_evidence_plan.evidence) {
             if (out_unverified)
                 *out_unverified = true;

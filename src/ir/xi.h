@@ -873,6 +873,17 @@ typedef enum {
  * The flag changes the codec evidence kind and selects the VM/AOT typed parser;
  * an unflagged op validates and copies an already materialized Json value. */
 #define XI_LOWERING_FLAG_JSON_TYPED_PARSE (1u << 7)
+/* This XI_OBJECT_SET_F initializes a field of the object literal being
+ * constructed, rather than writing into an object that already exists.
+ *
+ * An access plan exists to prove that some receiver really has the shape a
+ * fixed ordinal assumes. A literal's own initialization has nothing to prove:
+ * the shape IS the literal, and object-shape-plan already authorizes it. There
+ * is no receiver whose shape could disagree, so requiring an access plan here
+ * would demand evidence for a question nobody asked -- and no producer emits
+ * an access row for it. Set only by object-literal lowering; every other
+ * OBJECT_SET_F still fails closed without a verified plan. */
+#define XI_LOWERING_FLAG_OBJECT_LITERAL_INIT (1u << 8)
 /* Weak field ownership is represented by XI_WEAK_LOAD_FIELD and
  * XI_WEAK_STORE_FIELD. No lowering flag or ARC-side exception is permitted. */
 
@@ -1027,7 +1038,7 @@ typedef struct XiValue {
                                      * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
     uint8_t mem_group;              /* XiMemGroup (TBAA): memory group for alias analysis
                                      * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
-    uint8_t lowering_flags;         /* XI_LOWERING_FLAG_* */
+    uint16_t lowering_flags;        /* XI_LOWERING_FLAG_* (bits 0-7 were full) */
     uint8_t param_mode;             /* XrParamMode for XI_PARAM values (the single param
                                      * contract source; default XR_PARAM_READ). Occupies
                                      * struct padding, so it costs no extra memory. */

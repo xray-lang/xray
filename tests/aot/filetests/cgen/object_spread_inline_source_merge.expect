@@ -1,6 +1,6 @@
 contains=xaot-plan v0
-regex=object-shape-plan [0-9]+ .*kind=literal action=exact
-regex=object-shape-plan [0-9]+ .*kind=spread action=spread_result
+regex=object-shape-plan [0-9]+ .*kind=literal .*action=exact
+regex=object-shape-plan [0-9]+ .*kind=spread .*action=spread_result
 regex=object-merge-plan [0-9]+ .*action=copy_append .*base_fields=2 .*patch_fields=0 .*result_fields=3 .*overwrites=0
 c_regex=xrt_object_merge_copy_table\(v[0-9]+, v[0-9]+, 2, \(const uint16_t\[\]\)\{0, 0, 1, 1\}\)
 c_regex=xrt_object_merge_copy_table\(v[0-9]+, v[0-9]+, 2, \(const uint16_t\[\]\)\{1, 0, 2, 1\}\)

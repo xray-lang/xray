@@ -1,6 +1,6 @@
 contains=xaot-plan v0
-regex=object-shape-plan [0-9]+ .*kind=spread action=spread_result
-regex=object-shape-plan [0-9]+ .*kind=patch action=patch
+regex=object-shape-plan [0-9]+ .*kind=spread .*action=spread_result
+regex=object-shape-plan [0-9]+ .*kind=patch .*action=patch
 regex=object-merge-plan 0 .*action=copy_with_overwrite .*overwrites=1 .*copy_table=[1-9][0-9]* .*reason=none
 regex=object-merge-plan 1 .*action=copy_with_overwrite .*overwrites=1 .*copy_table=[1-9][0-9]* .*reason=none
 regex=object-access-plan [0-9]+ .*kind=field_get action=direct_ordinal .*field=0 .*reason=none
