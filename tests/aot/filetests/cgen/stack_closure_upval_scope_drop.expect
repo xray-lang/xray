@@ -1,0 +1,13 @@
+# A stack closure's block lives in the frame, so refcounting does not govern
+# it: xrt_retain and xrt_rc_claim_release_last both no-op on
+# XR_OBJ_STORAGE_STACK, so xrt_release returns before reaching the destructor
+# that would have released the upvals. Emitting xrt_release here leaked the
+# captured cell once per call -- 156 MiB over the 2M-iteration probe.
+#
+# The captured cell must be released at scope end without freeing the frame
+# block, which is what xrt_closure_stack_drop does. Pinning both halves: the
+# drop is emitted, and the no-op release is not.
+contains=xaot-plan v0
+c_contains=xrt_closure_stack_new
+c_count=1:xrt_closure_stack_drop(
+c_not_regex=xrt_release\(v[0-9]+\); *\n? *return v[0-9]+;

@@ -6539,6 +6539,35 @@ static inline XrValue xrt_closure_call0(XrValue callback) {
     })
 #endif
 
+/* Release what a stack closure captured, at the end of its scope.
+ *
+ * A stack closure's block lives in the frame, so refcounting does not govern
+ * it: xrt_retain and xrt_rc_claim_release_last both no-op on
+ * XR_OBJ_STORAGE_STACK, and xrt_release therefore returns before reaching
+ * xrt_finalize_one. Nothing then released the upvals, so every captured cell
+ * leaked once per call (2M iterations => 156 MiB of residue).
+ *
+ * The upvals still need releasing even though the block does not need freeing,
+ * so codegen emits this where it would emit xrt_release for a heap closure --
+ * it knows which allocation it produced. Idempotent by clearing as it goes: a
+ * value that ARC released on two paths, or a frame reached twice, must not
+ * release a captured reference twice. */
+static inline void xrt_closure_stack_drop(XrValue v) {
+    if (v.tag != XR_TAG_CLOSURE || !v.ptr)
+        return;
+    xrt_closure_t *c = (xrt_closure_t *) v.ptr;
+    XrObjHeader *hdr = (XrObjHeader *) ((char *) c - sizeof(XrObjHeader));
+    if (!(hdr->extra & XR_OBJ_STORAGE_STACK))
+        return; /* heap closure: its own refcount owns the upvals */
+    int n = c->nupvals;
+    c->nupvals = 0;
+    for (int i = 0; i < n; i++) {
+        XrValue up = c->upvals[i];
+        c->upvals[i] = XR_NULL_VAL;
+        xrt_release(up);
+    }
+}
+
 /* Post-header field set shared with the VM's XrCell (src/shared/xr_cell_abi.h)
  * so the AOT and VM cell layouts stay in lockstep. */
 typedef struct xrt_cell {

@@ -1,0 +1,10 @@
+fn mutate_through_capture(i: int) -> int {
+    var value = i
+    fn read() -> int {
+        return value
+    }
+    value = i + 1
+    return read()
+}
+
+print(mutate_through_capture(41))
