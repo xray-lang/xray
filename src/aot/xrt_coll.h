@@ -3749,13 +3749,10 @@ static inline XrtObjectShape *xrt_object_shape_clone_owned(const XrtObjectShape 
     return shape;
 }
 
-static inline XrValue xrt_object_new_shape(const XrtObjectShape *shape) {
-    if (!shape || shape->field_count < 0 || shape->field_count > UINT16_MAX) {
-        fprintf(stderr, "xrt_object_new_shape: invalid shape descriptor\n");
-        abort();
-    }
+static inline XrValue xrt_object_new_shape_slots(const XrtObjectShape *shape,
+                                                 int64_t field_count) {
     size_t object_bytes =
-        sizeof(xrt_json_t) + (size_t) shape->field_count * sizeof(XrValue);
+        sizeof(xrt_json_t) + (size_t) field_count * sizeof(XrValue);
     xrt_json_t *j =
         (xrt_json_t *) xrt_execution_alloc_embedded(object_bytes, xrt_execution_finalize_json);
     if (XR_UNLIKELY(!j)) {
@@ -3767,11 +3764,27 @@ static inline XrValue xrt_object_new_shape(const XrtObjectShape *shape) {
     j->hdr._rsv = XRT_ARC_KIND_JSON;
     j->shape = shape;
     j->dynamic_fields = NULL;
-    for (int64_t i = 0; i < shape->field_count; i++)
+    for (int64_t i = 0; i < field_count; i++)
         j->fields[i] = XR_NULL_VAL;
     XrValue value = xr_mkptr(j, XR_TAG_PTR);
     value.flags |= XR_VALUE_FLAG_HEADER_AT_PTR;
     return value;
+}
+
+static inline XrValue xrt_object_new_shape(const XrtObjectShape *shape) {
+    if (!shape || shape->field_count < 0 || shape->field_count > UINT16_MAX) {
+        fprintf(stderr, "xrt_object_new_shape: invalid shape descriptor\n");
+        abort();
+    }
+    return xrt_object_new_shape_slots(shape, shape->field_count);
+}
+
+/* Generated file-static descriptors have already passed the CGen shape
+ * verifier. Keeping the slot count as an immediate preserves native constant
+ * propagation and loop unrolling without copying or revalidating metadata. */
+static inline XrValue xrt_object_new_static_shape(const XrtObjectShape *shape,
+                                                  int64_t field_count) {
+    return xrt_object_new_shape_slots(shape, field_count);
 }
 
 static inline XrValue xrt_object_new_like(const xrt_json_t *source, uint8_t object_domain) {
@@ -4010,10 +4023,12 @@ static inline int xrt_json_decode_enum_value(XrValue source,
         if (!candidate || (int64_t) strlen(candidate) != name_length ||
             memcmp(candidate, name, (size_t) name_length) != 0)
             continue;
-        /* AOT payload-free enums use their ordinal scalar representation. The
-         * static schema still validates nominal member names; boxing here would
-         * make a native enum field observe a pointer payload through XR_TO_INT. */
-        *out = XR_FROM_INT((int64_t) i);
+        const XrAotEnumScalarLayout *layout =
+            (const XrAotEnumScalarLayout *) spec->tagged_layout;
+        /* The sidecar carries nominal identity and names without allocating.
+         * Native class/struct storage extracts the compact ordinal below. */
+        *out = layout ? xrt_enum_scalar_box(layout, (int64_t) i)
+                      : XR_FROM_INT((int64_t) i);
         return 1;
     }
     return 0;
@@ -4182,6 +4197,13 @@ static inline int xrt_json_class_store_field(void *object,
     if (!object || !field)
         return 0;
     uint8_t *dst = (uint8_t *) object + field->offset;
+    if (xr_json_value_kind_base(field->value.value_kind) == XR_JSON_VALUE_ENUM &&
+        !XR_IS_NULL(value)) {
+        XrValue ordinal = xrt_enum_box_ordinal(value);
+        if (!XR_IS_INT(ordinal))
+            return 0;
+        value = ordinal;
+    }
 #define XRT_JSON_STORE_NATIVE(type_, expression_)                                                \
     do {                                                                                         \
         type_ native_value = (expression_);                                                      \
@@ -5683,6 +5705,26 @@ static inline XrValue xrt_json_encode_object_value(xrt_json_t *src, int depth) {
                                     xrt_json_encode_value(entry->value, depth + 1));
         }
     }
+    return dstv;
+}
+
+/* A sealed structural object has a compiler-known field order. Json.encode
+ * still returns an independently mutable Json value, but the corresponding
+ * Json-domain shape can be emitted once as immutable generated data instead
+ * of being rebuilt for every encoded value. */
+static inline XrValue xrt_json_encode_static_object(XrValue value,
+                                                    const XrtObjectShape *json_shape,
+                                                    int64_t field_count) {
+    if (value.tag != XR_TAG_PTR || value.heap_type != 0 || !value.ptr || !json_shape ||
+        json_shape->object_domain != XRT_OBJECT_JSON || json_shape->field_count != field_count)
+        xrt_json_encode_abort("static object metadata is invalid", value);
+    xrt_json_t *src = (xrt_json_t *) value.ptr;
+    if (xrt_object_field_count(src) != field_count)
+        xrt_json_encode_abort("static object shape does not match value", value);
+    XrValue dstv = xrt_object_new_static_shape(json_shape, field_count);
+    xrt_json_t *dst = (xrt_json_t *) dstv.ptr;
+    for (int64_t i = 0; i < field_count; i++)
+        dst->fields[i] = xrt_json_encode_value(src->fields[i], 1);
     return dstv;
 }
 

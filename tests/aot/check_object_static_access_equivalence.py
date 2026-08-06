@@ -16,6 +16,7 @@ CASES = {
     "bracket": ROOT
     / "tests/benchmarks/aot/zero_cost/object_json/exact_static_index_loop.xr",
 }
+CODEC_CASE = ROOT / "tests/benchmarks/aot/zero_cost/object_json/json_encode_stringify.xr"
 
 
 def generate_c(xray: Path, source: Path, output: Path) -> str:
@@ -62,24 +63,35 @@ def main(argv: list[str]) -> int:
                 name: generate_c(xray, source, tmp / f"{name}.c")
                 for name, source in CASES.items()
             }
+            codec = generate_c(xray, CODEC_CASE, tmp / "codec.c")
     except (OSError, RuntimeError) as exc:
         print(f"object static access equivalence: FAIL\n{exc}", file=sys.stderr)
         return 1
 
     for name, text in generated.items():
-        object_body = re.sub(
-            r"static XrValue xrt_runtime_object_new\([^}]+\}\n", "", text, flags=re.S
+        run_match = re.search(
+            r"static (?:XR_AINLINE )?int64_t [^(]+_run_1\([^)]*\) \{.*?^\}",
+            text,
+            flags=re.S | re.M,
         )
-        if "xrt_index_get" in text or "xrt_index_set" in text:
+        if not run_match:
+            print(
+                f"object static access equivalence: FAIL\n{name} has no generated run body",
+                file=sys.stderr,
+            )
+            return 1
+        object_body = run_match.group(0)
+        if "xrt_index_get" in object_body or "xrt_index_set" in object_body:
             print(
                 f"object static access equivalence: FAIL\n{name} emitted generic index access",
                 file=sys.stderr,
             )
             return 1
-        if text.count("xrt_json_get_field") != 2:
+        if object_body.count("xrt_json_get_field") != 4:
             print(
                 f"object static access equivalence: FAIL\n"
-                f"{name} expected two fixed-field reads, got {text.count('xrt_json_get_field')}",
+                f"{name} expected four fixed-field reads, got "
+                f"{object_body.count('xrt_json_get_field')}",
                 file=sys.stderr,
             )
             return 1
@@ -92,10 +104,17 @@ def main(argv: list[str]) -> int:
                 file=sys.stderr,
             )
             return 1
-        if text.count("xrt_object_new_shape(&_xobj_shape_") != 1:
+        if object_body.count("xrt_object_new_static_shape(&_xobj_shape_") != 1:
             print(
                 f"object static access equivalence: FAIL\n"
                 f"{name} did not construct the exact object from its static descriptor",
+                file=sys.stderr,
+            )
+            return 1
+        if not object_body.startswith("static XR_AINLINE int64_t "):
+            print(
+                f"object static access equivalence: FAIL\n"
+                f"{name} lost the small exact-object loop native-inline contract",
                 file=sys.stderr,
             )
             return 1
@@ -118,6 +137,33 @@ def main(argv: list[str]) -> int:
         print(
             "object static access equivalence: FAIL\n"
             "normalized dot and static-bracket generated C differ",
+            file=sys.stderr,
+        )
+        return 1
+
+    if codec.count("static const XrtObjectShape _xobj_shape_") != 2:
+        print(
+            "object static access equivalence: FAIL\n"
+            "static object encoding did not emit structural and Json-domain descriptors",
+            file=sys.stderr,
+        )
+        return 1
+    if "xrt_json_encode_static_object(" not in codec:
+        print(
+            "object static access equivalence: FAIL\n"
+            "static object encoding rebuilt its Json-domain shape at run time",
+            file=sys.stderr,
+        )
+        return 1
+    codec_run = re.search(
+        r"static (?:XR_AINLINE )?int64_t [^(]+_run_1\([^)]*\) \{.*?^\}",
+        codec,
+        flags=re.S | re.M,
+    )
+    if not codec_run or codec_run.group(0).startswith("static XR_AINLINE int64_t "):
+        print(
+            "object static access equivalence: FAIL\n"
+            "Json codec loop crossed the narrow static-field force-inline boundary",
             file=sys.stderr,
         )
         return 1

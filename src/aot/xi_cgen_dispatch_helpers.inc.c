@@ -6464,7 +6464,8 @@ static void xicgen_emit_json_new_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
         emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "xrt_object_new_shape(&_xobj_shape_%d)", shape_id);
+    fprintf(out, "xrt_object_new_static_shape(&_xobj_shape_%d, %" PRId64 ")", shape_id,
+            field_count);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, ", %u)", (unsigned) storage_mode);
 }
@@ -10084,7 +10085,23 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
         bool derived_value_struct = input_class && input_class->struct_layout &&
                                     !input_class->instance_layout &&
                                     (input_class->derive_flags & XR_DERIVE_JSON) != 0;
-        if (derived_value_struct) {
+        bool static_struct_object = input && xr_type_object_row_is_exact(input->type) &&
+                                    input->type->object.field_count > 0 &&
+                                    input->type->object.field_names;
+        if (static_struct_object) {
+            int shape_id = cg_intern_object_shape_type_domain(ctx, input->type,
+                                                              XR_OBJECT_DOMAIN_JSON);
+            if (shape_id < 0) {
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+                emit_conversion_suffix(out, conv_suffix);
+                return true;
+            }
+            fprintf(out, "xrt_json_encode_static_object(");
+            emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+            fprintf(out, ", &_xobj_shape_%d, %u)", shape_id,
+                    (unsigned) input->type->object.field_count);
+        } else if (derived_value_struct) {
             fprintf(out, "xrt_json_encode_native_struct(");
             if (cg_value_plan_is_struct_aggregate(ctx, input)) {
                 fprintf(out, "&");
@@ -11610,8 +11627,17 @@ static bool xicgen_emit_json_decode_value_spec(XiCgenCtx *ctx, FILE *out,
                 !layout->variants || layout->variant_count == 0 ||
                 layout->variant_count > UINT16_MAX)
                 return false;
-            fprintf(out, "NULL, 0, &(const XrJsonEnumDecodeSpec){%uu, ",
-                    (unsigned) layout->layout_id);
+            const XaotEnumPlan *plan = cg_unit_enum_scalar_plan(ctx, type);
+            uint32_t plan_index = 0;
+            if (!plan || !cg_mark_enum_scalar_sidecar(ctx, plan, &plan_index))
+                return false;
+            const char *module_prefix =
+                ctx->module && ctx->module->name && ctx->module->name[0]
+                    ? ctx->module->name
+                    : "mod";
+            fprintf(out,
+                    "NULL, 0, &(const XrJsonEnumDecodeSpec){%uu, %uu, 0, ",
+                    (unsigned) layout->layout_id, (unsigned) layout->variant_count);
             xicgen_emit_c_string_literal(out, layout->name);
             fprintf(out, ", (const char *const[]){");
             for (uint32_t i = 0; i < layout->variant_count; i++) {
@@ -11622,7 +11648,8 @@ static bool xicgen_emit_json_decode_value_spec(XiCgenCtx *ctx, FILE *out,
                                                  ? layout->variants[i].name
                                                  : "");
             }
-            fprintf(out, "}, %uu, 0}", (unsigned) layout->variant_count);
+            fprintf(out, "}, &_xenum_scalar_layout_%s_%u}", module_prefix,
+                    (unsigned) plan_index);
             return true;
         }
         case XR_JSON_VALUE_CLASS_INSTANCE:

@@ -1173,7 +1173,8 @@ static int cg_intern_object_shape_parts(XiCgenCtx *ctx, int64_t field_count,
     return id;
 }
 
-static int cg_intern_object_shape_type(XiCgenCtx *ctx, const XrType *type) {
+static int cg_intern_object_shape_type_domain(XiCgenCtx *ctx, const XrType *type,
+                                              uint8_t object_domain) {
     if (!ctx || !type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || type->object.field_count <= 0 ||
         !type->object.field_names)
         return -1;
@@ -1201,7 +1202,7 @@ static int cg_intern_object_shape_type(XiCgenCtx *ctx, const XrType *type) {
         }
         names[j] = current;
     }
-    int id = cg_intern_object_shape_parts(ctx, field_count, names, type, XR_OBJECT_DOMAIN_STRUCT);
+    int id = cg_intern_object_shape_parts(ctx, field_count, names, type, object_domain);
     if (id < 0) {
         xr_free(names);
         return -1;
@@ -1211,6 +1212,10 @@ static int cg_intern_object_shape_type(XiCgenCtx *ctx, const XrType *type) {
     else
         xr_free(names);
     return id;
+}
+
+static int cg_intern_object_shape_type(XiCgenCtx *ctx, const XrType *type) {
+    return cg_intern_object_shape_type_domain(ctx, type, XR_OBJECT_DOMAIN_STRUCT);
 }
 
 static int cg_intern_object_shape(XiCgenCtx *ctx, const XiValue *value) {
@@ -1236,6 +1241,7 @@ static bool cg_func_contains_stack_array(const XiFunc *f);
 static bool cg_func_stack_arrays_force_inline_safe(const XiFunc *f);
 static bool cg_func_should_noinline(const XiFunc *f);
 static bool cg_func_should_force_inline(XiCgenCtx *ctx, const XiFunc *f);
+static bool cg_func_small_static_object_loop_force_inline(const XiFunc *f);
 static bool cg_func_has_native_vector_width(const XiCgenCtx *ctx, const XiFunc *f, uint8_t width);
 static bool cg_func_requires_x86_vector_target(const XiCgenCtx *ctx, const XiFunc *f,
                                                uint8_t width);
@@ -1296,11 +1302,16 @@ static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *
             return "static XR_AINLINE ";
         if (cg_func_contains_stack_array(f) && !cg_func_stack_arrays_force_inline_safe(f))
             return "static XR_NOINLINE ";
-        return cg_func_should_force_inline(ctx, f) ? "static XR_AINLINE " : "static ";
+        return cg_func_should_force_inline(ctx, f) ||
+                       cg_func_small_static_object_loop_force_inline(f)
+                   ? "static XR_AINLINE "
+                   : "static ";
     }
     if (cg_func_should_noinline(f))
         return "static XR_NOINLINE ";
     if (f && f->inline_policy == XI_INLINE_PREFER)
+        return "static XR_AINLINE ";
+    if (cg_func_small_static_object_loop_force_inline(f))
         return "static XR_AINLINE ";
     return cg_linkage(ctx);
 }
@@ -8568,6 +8579,39 @@ static bool cg_func_has_branching_call_fanout(XiCgenCtx *ctx, const XiFunc *f) {
 
 static bool cg_func_should_noinline(const XiFunc *f) {
     return f && f->inline_policy == XI_INLINE_PRESERVE_CALL;
+}
+
+/* A small leaf loop that constructs one verified exact structural object can
+ * otherwise cross MSVC's heuristic inlining threshold when the static shape
+ * descriptor replaces the old per-instance name table. Inlining this narrow
+ * form exposes the same scalar replacement and loop folding as W0. Calls,
+ * dynamic Json objects, large bodies, and source-declared noinline boundaries
+ * remain untouched. */
+static bool cg_func_small_static_object_loop_force_inline(const XiFunc *f) {
+    enum {
+        CG_STATIC_OBJECT_LOOP_INLINE_VALUE_LIMIT = 48
+    };
+    if (!f || cg_func_should_noinline(f) || !cg_func_has_backedge(f) ||
+        cg_func_value_count(f) > CG_STATIC_OBJECT_LOOP_INLINE_VALUE_LIMIT)
+        return false;
+    bool found = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value)
+                continue;
+            if (value->op == XI_CALL || value->op == XI_TAIL_CALL ||
+                value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT)
+                return false;
+            if (value->op == XI_JSON_NEW && XR_TYPE_IS_STRUCT_OBJECT(value->type) &&
+                value->aux_int > 0)
+                found = true;
+        }
+    }
+    return found;
 }
 
 static bool cg_func_should_force_inline(XiCgenCtx *ctx, const XiFunc *f) {

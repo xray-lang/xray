@@ -65,10 +65,14 @@ typedef struct XrJsonDecodeFieldSpec {
  * process lifetime; VM bytecode rebuilds the equivalent immutable enum type. */
 typedef struct XrJsonEnumDecodeSpec {
     uint32_t layout_id;
-    const char *enum_name;
-    const char *const *member_names;
     uint16_t member_count;
     uint16_t reserved;
+    const char *enum_name;
+    const char *const *member_names;
+    /* Backend-owned immutable descriptor used when a decoded ordinal crosses
+     * a tagged boundary. AOT points at XrAotEnumScalarLayout; the VM rebuilds
+     * the equivalent nominal enum identity from bytecode metadata. */
+    const void *tagged_layout;
 } XrJsonEnumDecodeSpec;
 
 typedef enum XrJsonNominalDecodeTargetKind {

@@ -30,10 +30,16 @@ print(Json.decode<Array<int>>(Json.parse("[1,true]")) == null)
 print(Json.decode<Map<string, int>>(Json.parse("{\"a\":false}")) == null)
 
 var parsedKind: WireKind = Json.parse<WireKind>("\"Binary\"")
-var decodedKind = Json.decode<WireKind>(Json.parse("\"Text\""))
+var decodedKind = Json.decode<WireKind>(Json.parse("\"Binary\""))
+var parsedKinds = Json.parse<Array<WireKind>>("[\"Text\",\"Binary\"]")
+var decodedKinds = Json.decode<Map<string, WireKind>>(
+    Json.parse("{\"primary\":\"Binary\"}"))
 print(parsedKind == WireKind.Binary)
 print(decodedKind == null)
-print(decodedKind! == WireKind.Text)
+print(decodedKind! == WireKind.Binary)
+print(decodedKinds == null)
+print(decodedKinds!["primary"] == WireKind.Binary)
+print(Json.stringify(parsedKinds))
 print(Json.decode<WireKind>(Json.parse("\"Missing\"")) == null)
 
 try {

@@ -1,17 +1,17 @@
+type Profile = { id: int, active: bool }
+
 fn run(n: int) -> int {
-    var point = { x: 1, y: 2 }
     var i = 0
     var sum = 0
     while (i < n) {
-        sum = sum + point.x + point.y
-        point.x = point.x + 1
-        point.y = point.y - 1
+        var profile: Profile = Json.parse<Profile>("{\"id\":7,\"active\":true}")
+        sum = sum + profile.id
         i = i + 1
     }
     return sum
 }
 
-var iterations = 2000000
+var iterations = 20000
 if (len(process.args) > 0) {
     iterations = int(process.args[0]) ?? iterations
 }

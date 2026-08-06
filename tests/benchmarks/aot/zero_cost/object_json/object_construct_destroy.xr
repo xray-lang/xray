@@ -9,4 +9,8 @@ fn run(n: int) -> int {
     return sum
 }
 
-print(run(200000))
+var iterations = 200000
+if (len(process.args) > 0) {
+    iterations = int(process.args[0]) ?? iterations
+}
+print(run(iterations))
