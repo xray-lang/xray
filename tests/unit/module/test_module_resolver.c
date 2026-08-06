@@ -91,7 +91,7 @@ TEST(resolve_bare_stdlib_known) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "time", true, NULL, &mid, &err);
+    int rc = xr_module_resolver_resolve(r, "time", NULL, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_STDLIB);
@@ -99,7 +99,7 @@ TEST(resolve_bare_stdlib_known) {
     ASSERT_NULL(mid.source_path);
     xr_module_id_cleanup(&mid);
 
-    rc = xr_module_resolver_resolve(r, "math", true, NULL, &mid, &err);
+    rc = xr_module_resolver_resolve(r, "math", NULL, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(mid.kind, XR_MOD_STDLIB);
     ASSERT_STR_EQ(mid.canonical, "math");
@@ -118,7 +118,7 @@ TEST(resolve_bare_stdlib_unknown) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "nosuchmodule", true, NULL, &mid, &err);
+    int rc = xr_module_resolver_resolve(r, "nosuchmodule", NULL, &mid, &err);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_NOT_NULL(err);
     xr_free(err);
@@ -142,7 +142,7 @@ TEST(resolve_relative_file) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "./utils", false, importer, &mid, &err);
+    int rc = xr_module_resolver_resolve(r, "./utils", importer, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
@@ -168,7 +168,7 @@ TEST(resolve_relative_dir_index) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "./models", false, importer, &mid, &err);
+    int rc = xr_module_resolver_resolve(r, "./models", importer, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
@@ -192,7 +192,7 @@ TEST(resolve_relative_not_found) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "./nonexist", false, importer, &mid, &err);
+    int rc = xr_module_resolver_resolve(r, "./nonexist", importer, &mid, &err);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_NOT_NULL(err);
     xr_free(err);
@@ -214,7 +214,7 @@ TEST(resolve_parent_relative) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "../../lib/helper", false, importer, &mid, &err);
+    int rc = xr_module_resolver_resolve(r, "../../lib/helper", importer, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
@@ -240,10 +240,10 @@ TEST(resolve_caches_results) {
 
     XrModuleId mid1, mid2;
     char *err = NULL;
-    int rc1 = xr_module_resolver_resolve(r, "./utils", false, importer, &mid1, &err);
+    int rc1 = xr_module_resolver_resolve(r, "./utils", importer, &mid1, &err);
     ASSERT_EQ_INT(rc1, 0);
 
-    int rc2 = xr_module_resolver_resolve(r, "./utils", false, importer, &mid2, &err);
+    int rc2 = xr_module_resolver_resolve(r, "./utils", importer, &mid2, &err);
     ASSERT_EQ_INT(rc2, 0);
 
     /* Both should resolve to the same canonical path */
@@ -266,9 +266,14 @@ TEST(module_id_cleanup_null_safe) {
     xr_module_id_cleanup(NULL);
 }
 
-/* ========== Quoted Non-Relative (Project-Relative) Tests ========== */
+/* ========== Single-Segment Name Tests ========== */
 
-TEST(resolve_quoted_single_segment) {
+/* A single-segment name with no path prefix is a named module, never a file
+ * beside the importer. Project-relative resolution is gone: a sibling file is
+ * reached with an explicit `./`, which is what makes a bare name unambiguously
+ * a stdlib/named-module lookup. `src/config.xr` existing next to the importer
+ * must not make `config` resolve. */
+TEST(resolve_single_segment_is_not_project_relative) {
     setup_tmpdir();
     create_file("src/main.xr", "// entry");
     create_file("src/config.xr", "// config");
@@ -281,7 +286,13 @@ TEST(resolve_quoted_single_segment) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "config", false, importer, &mid, &err);
+    int rc = xr_module_resolver_resolve(r, "config", importer, &mid, &err);
+    ASSERT_EQ_INT(rc, -1);
+    xr_free(err);
+    err = NULL;
+
+    /* The same file IS reachable through the explicit relative form. */
+    rc = xr_module_resolver_resolve(r, "./config", importer, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
@@ -315,7 +326,7 @@ RUN_TEST(resolve_caches_results);
 RUN_TEST_SUITE("Module ID");
 RUN_TEST(module_id_cleanup_null_safe);
 
-RUN_TEST_SUITE("Project-Relative Resolution");
-RUN_TEST(resolve_quoted_single_segment);
+RUN_TEST_SUITE("Single-Segment Names");
+RUN_TEST(resolve_single_segment_is_not_project_relative);
 
 TEST_MAIN_END()

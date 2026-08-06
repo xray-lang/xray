@@ -1028,8 +1028,8 @@ TEST(compile_type_ref_function_modes) {
 /* ========== L0 cycle-candidate marking ========== */
 
 /* is_cycle_candidate is the ONLY truth about L0 marking. Runtime residue is a
- * downstream proxy that stops working once removal of the trial-deletion collector removes the cycle
- * collector, so these assert the flag directly. */
+ * downstream proxy that stops working once removal of the trial-deletion collector removes the
+ * cycle collector, so these assert the flag directly. */
 static bool analyzer_class_is_cycle_candidate(XaAnalyzer *analyzer, const char *class_name) {
     XaSymbol *sym = xa_analyzer_lookup(analyzer, class_name);
     if (!sym)
@@ -2933,19 +2933,19 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     XrModuleId star_id;
     XrModuleId callback_id;
     char *resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_export_module", false, entry_path,
-                                      &lib_id, &resolve_err) == 0);
-    xr_free(resolve_err);
-    resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_reexport_module", false, entry_path,
-                                      &reexport_id, &resolve_err) == 0);
-    xr_free(resolve_err);
-    resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", false, entry_path, &star_id,
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_export_module", entry_path, &lib_id,
                                       &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", false, entry_path,
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_reexport_module", entry_path,
+                                      &reexport_id, &resolve_err) == 0);
+    xr_free(resolve_err);
+    resolve_err = NULL;
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", entry_path, &star_id,
+                                      &resolve_err) == 0);
+    xr_free(resolve_err);
+    resolve_err = NULL;
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", entry_path,
                                       &callback_id, &resolve_err) == 0);
     xr_free(resolve_err);
     char *entry_canonical = xr_test_realpath_alloc(entry_path);
@@ -3250,7 +3250,7 @@ TEST(analyzer_xrd_signatures_fail_closed_without_typed_contracts) {
     const char *source = "enum NativeErr { Boom, Other }\n"
                          "import native_effects\n"
                          "import { failNative, noThrowNative, missingNative } from "
-                         "\"native_effects\"\n"
+                         "native_effects\n"
                          "fn viaNamespace() { native_effects.failNative() }\n"
                          "fn viaSelective() { failNative() }\n"
                          "fn viaNoThrow() { noThrowNative() }\n"
@@ -3335,7 +3335,7 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     XaAnalyzer *ok = xa_analyzer_new(g_session);
     ASSERT(ok != NULL);
     const char *ok_source = "enum NativeByteErr { BadInput }\n"
-                            "import { decode } from \"native_byte_effects\"\n"
+                            "import { decode } from native_byte_effects\n"
                             "fn viaNative(input: Slice<byte>) { decode(input) }\n";
     AstNode *ok_program = xr_parse(g_session, ok_source);
     ASSERT(ok_program != NULL);
@@ -3351,7 +3351,7 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     ASSERT(legacy != NULL);
     const char *legacy_source = "enum NativeByteErr { BadInput }\n"
                                 "import { decodeOld, viewOld } from "
-                                "\"native_legacy_byte_effects\"\n"
+                                "native_legacy_byte_effects\n"
                                 "fn viaOld(input: ByteSlice) { decodeOld(input) }\n"
                                 "fn viaView(input: ByteView) { viewOld(input) }\n";
     AstNode *legacy_program = xr_parse(g_session, legacy_source);
@@ -3365,7 +3365,7 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
 
     XaAnalyzer *span_only = xa_analyzer_new(g_session);
     ASSERT(span_only != NULL);
-    const char *span_only_source = "import { spanOnly } from \"native_legacy_bytespan_only\"\n"
+    const char *span_only_source = "import { spanOnly } from native_legacy_bytespan_only\n"
                                    "fn viaSlice(input: Slice<byte>) { spanOnly(input) }\n";
     AstNode *span_only_program = xr_parse(g_session, span_only_source);
     ASSERT(span_only_program != NULL);
@@ -3376,7 +3376,7 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
 
     XaAnalyzer *view_only = xa_analyzer_new(g_session);
     ASSERT(view_only != NULL);
-    const char *view_only_source = "import { viewOnly } from \"native_legacy_byteview_only\"\n"
+    const char *view_only_source = "import { viewOnly } from native_legacy_byteview_only\n"
                                    "fn viaViewOnly(input: Slice<byte>) { viewOnly(input) }\n";
     AstNode *view_only_program = xr_parse(g_session, view_only_source);
     ASSERT(view_only_program != NULL);
@@ -3417,7 +3417,7 @@ TEST(analyzer_xrd_handle_fields_reject_legacy_byte_aliases) {
 
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "import { makeBox } from \"native_handle_bytes\"\n"
+    const char *source = "import { makeBox } from native_handle_bytes\n"
                          "fn payload() { makeBox().payload }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -5815,20 +5815,19 @@ TEST(analyzer_ref_arrow_hint_is_advisory_and_fail_closed) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *source =
-        "fn mutate(value: ref int) { value *= 2 }\n"
-        "var readOnly = (x: ref int) -> x * 2\n"
-        "var direct = (x: ref int) -> { x = x * 2 }\n"
-        "var compound = (x: ref int) -> { x *= 2 }\n"
-        "var increment = (x: ref int) -> { x++ }\n"
-        "var delegated = (x: ref int) -> { mutate(ref x) }\n"
-        "var indexed = (xs: ref Array<int>) -> { xs[0] = 1 }\n"
-        "var receiver = (xs: ref Array<int>) -> { xs.push(1) }\n"
-        "var required: (ref int) -> int = (x: ref int) -> x * 2\n"
-        "var inferred: (ref int) -> int = x -> x * 2\n"
-        "var uncertain = (x: ref int, callback: (ref int) -> ()) -> {\n"
-        "    callback(ref x)\n"
-        "}\n";
+    const char *source = "fn mutate(value: ref int) { value *= 2 }\n"
+                         "var readOnly = (x: ref int) -> x * 2\n"
+                         "var direct = (x: ref int) -> { x = x * 2 }\n"
+                         "var compound = (x: ref int) -> { x *= 2 }\n"
+                         "var increment = (x: ref int) -> { x++ }\n"
+                         "var delegated = (x: ref int) -> { mutate(ref x) }\n"
+                         "var indexed = (xs: ref Array<int>) -> { xs[0] = 1 }\n"
+                         "var receiver = (xs: ref Array<int>) -> { xs.push(1) }\n"
+                         "var required: (ref int) -> int = (x: ref int) -> x * 2\n"
+                         "var inferred: (ref int) -> int = x -> x * 2\n"
+                         "var uncertain = (x: ref int, callback: (ref int) -> ()) -> {\n"
+                         "    callback(ref x)\n"
+                         "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "lambda_ref_hint.xr", program);

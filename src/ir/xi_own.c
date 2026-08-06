@@ -52,22 +52,7 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
     /* CFn<...> is a bare C function pointer (no closure header), not RC-managed. */
     if (XR_TYPE_IS_C_FUNCTION(type))
         return false;
-    switch (type->kind) {
-        case XR_KIND_INT:
-        case XR_KIND_FLOAT:
-        case XR_KIND_BOOL:
-        case XR_KIND_RUNE:
-        case XR_KIND_NULL:
-        case XR_KIND_UNIT:
-        case XR_KIND_NEVER:
-        case XR_KIND_POINTER:
-        case XR_KIND_TYPE_PARAM: /* erased; concrete rep decided after mono */
-            return false;
-        default:
-            /* string, array, map, set, json, instance, channel, function,
-             * enum, tuple, union, class, interface → heap / RC-managed */
-            return true;
-    }
+    return xr_kind_is_reference_counted(type->kind);
 }
 
 XR_FUNC XrTransferAction xi_capture_cross_execution_action(const XiCapture *capture) {

@@ -6867,6 +6867,18 @@ XR_FUNC XaSymbol *xa_whole_binding_symbol(XaInferContext *ctx, AstNode *value) {
                : NULL;
 }
 
+/* Does a value of this type carry a reference count at runtime? Mirrors
+ * xi_own_type_is_rc over the same kind predicate, so the ownership facts the
+ * analyzer publishes and the ones ARC consumes classify identically. */
+bool xa_type_is_reference_capable(XrType *type) {
+    if (!type)
+        return false;
+    if (XR_TYPE_IS_UNKNOWN_OR_ERROR(type) || xr_type_is_runtime_managed(type) ||
+        XR_TYPE_IS_C_FUNCTION(type))
+        return false;
+    return xr_kind_is_reference_counted(type->kind);
+}
+
 bool xa_type_has_movable_root(XrType *type) {
     if (type && XR_TYPE_IS_TUPLE(type))
         return true;
@@ -7667,7 +7679,14 @@ void xa_ensure_function_return_ownership_prepass(XaInferContext *ctx, XaSymbolLi
         return;
     links->return_ownership.param_index = -1;
     XrType *return_type = xa_links_function_return_type(links);
-    if (!xa_type_has_movable_root(return_type)) {
+    /* Gate on reference-capability, not on movable roots. A returned `string`
+     * has no movable root -- it is a source-level value type -- but it is a
+     * refcounted heap object, so its ownership at the return boundary is
+     * exactly the fact Xi needs. Gating on movability published UNKNOWN for
+     * every string-returning function, which cost the caller a retain nobody
+     * released: `fn w(t: string) -> string { return f(t) }` forwards a borrow,
+     * yet ARC saw no proof of that and dupped at the return. */
+    if (!xa_type_is_reference_capable(return_type)) {
         links->return_ownership_scanned = true;
         return;
     }

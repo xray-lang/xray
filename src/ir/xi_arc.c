@@ -1693,7 +1693,27 @@ static bool arc_value_is_coro_frame_pinned(const XiFunc *f, const XiLiveness *co
     return coro_live && xi_coro_value_is_logical_member(f, target, coro_live, NULL);
 }
 
+/* A return terminator in a function whose own return ownership is a PROVEN
+ * borrow forwards that borrow; it does not transfer a reference. Retaining
+ * there raises the count by one that nobody releases: the callee's published
+ * signature tells every caller the result is +0, so no caller drops it.
+ *
+ * `fn w(t: string) -> string { return f(t) }` where `f` is BORROWED_PARAM(0)
+ * is the minimal shape — w is BORROWED_PARAM(0) too, yet the result of `f(t)`
+ * is OWN_CALL_RESULT (not OWNED, so not statically fresh) and every consume of
+ * an OWN_CALL_RESULT/OWN_BORROWED value dups. The dup landed on the return.
+ *
+ * Only a `complete` borrow signature relaxes this. UNKNOWN keeps the retain,
+ * whose failure direction is a leaked count rather than a use-after-free. */
+static bool arc_return_forwards_borrow(const XiFunc *f) {
+    return f && f->arc_return_ownership.complete &&
+           (f->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_BORROWED_PARAM ||
+            f->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_BORROWED_STATIC);
+}
+
 static void insert_dup_at_consume_site(XiFunc *f, XiValue *target, const ConsumeSite *site) {
+    if (!site->user && arc_return_forwards_borrow(f))
+        return;
     if (!site->user || site->user->op == XI_PHI) {
         XiValue *last = phi_dup_anchor(site->blk);
         insert_dup_after(f, site->blk, last, target);

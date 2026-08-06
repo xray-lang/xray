@@ -3,5 +3,9 @@ regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ co
 regex=key-access-plan [0-9]+ id=[0-9]+ func=[0-9]+ span=[0-9]+ ordinal=[0-9]+ container=map op=index_get shape=[0-9]+ action=inline_small_scan receiver_type=[0-9]+ key_type=[0-9]+ value_type=[0-9]+ key_const=[0-9]+ prehash=[0-9a-f]+ evidence=0x5d reason=none
 c_regex=xrt_map_set_prehashed\(\(\(xrt_map_t\*\)\(v[0-9]+\)\.ptr\), xr_str_lit\(&_xstr_(m[0-9]+_)?[0-9]+\), v[0-9]+, UINT32_C\(0x[0-9a-f]+\)\)
 c_regex=XrValue v[0-9]+ = xrt_map_index_get_small_owned\(\(\(xrt_map_t\*\)\(v[0-9]+\)\.ptr\), xr_str_lit\(&_xstr_(m[0-9]+_)?[0-9]+\)\);
-c_not_regex=xrt_index_set\(v[0-9]+, xr_str_lit\(&_xstr_(m[0-9]+_)?[0-9]+\), v[0-9]+\)
+# A map literal fills its initial entries through the generic setter right
+# after xrt_map_stack_new; that is construction, not a key access, and the
+# key-access plan does not cover it. What must not appear is a THIRD such
+# call -- the planned store falling back to the generic path.
+c_count=2:xrt_index_set(
 c_not_contains=xrt_index_get(

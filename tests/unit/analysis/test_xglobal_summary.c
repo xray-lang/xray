@@ -17553,7 +17553,7 @@ TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
 TEST(global_evidence_producer_marks_stdlib_link_dependencies) {
     setup_parser_session();
     const char *source = "import path\n"
-                         "import { sep as directSep, join } from \"path\"\n"
+                         "import { sep as directSep, join } from path\n"
                          "import os\n"
                          "print(path.join(\"a\", \"b\"))\n"
                          "print(os.sep)\n"

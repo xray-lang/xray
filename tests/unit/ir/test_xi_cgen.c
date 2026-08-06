@@ -10266,7 +10266,7 @@ TEST(cgen_coro_sleep_publishes_state_before_block) {
 
 TEST(cgen_test_yield_calls_publish_resume_states) {
     const char *src = "import test_yield\n"
-                      "import { add } from \"test_yield\"\n"
+                      "import { add } from test_yield\n"
                       "Coro.yield()\n"
                       "print(test_yield.simple())\n"
                       "print(add(19, 23))\n";

@@ -101,6 +101,35 @@ static inline bool xr_kind_is_builtin_iterable(XrTypeKind k) {
     return k == XR_KIND_ARRAY || k == XR_KIND_SLICE || k == XR_KIND_MAP || k == XR_KIND_SET ||
            k == XR_KIND_STRING;
 }
+/* Does a value of this kind carry a reference count at runtime?
+ *
+ * This is the "reference-capable" question, and it is NOT the same as move
+ * semantics: `string` is a source-level value type with no movable root, yet
+ * every string is a heap object the compiler must retain and release. Anything
+ * deciding ownership -- return-ownership publication, ARC insertion -- asks
+ * this one; only move/storage analysis asks about movable roots.
+ *
+ * Kind alone is not the whole answer for a concrete XrType: runtime-managed
+ * objects and bare C function pointers are excluded by xi_own_type_is_rc,
+ * which layers those checks on top of this. Keep the two in agreement. */
+static inline bool xr_kind_is_reference_counted(XrTypeKind k) {
+    switch (k) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+        case XR_KIND_NULL:
+        case XR_KIND_UNIT:
+        case XR_KIND_NEVER:
+        case XR_KIND_POINTER:
+        case XR_KIND_TYPE_PARAM: /* erased; concrete rep decided after mono */
+            return false;
+        default:
+            /* string, array, map, set, json, instance, channel, function,
+             * enum, tuple, union, class, interface -> heap / RC-managed */
+            return true;
+    }
+}
 static inline bool xr_kind_has_object_shape(XrTypeKind k) {
     return k == XR_KIND_RECORD || k == XR_KIND_JSON;
 }

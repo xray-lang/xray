@@ -3013,7 +3013,7 @@ TEST(enum_access) {
 }
 
 TEST(import_export_skip) {
-    XiFunc *f = lower_source("import \"math\" as math\n"
+    XiFunc *f = lower_source("import math as math\n"
                              "var x = 42\n"
                              "print(x)\n");
     assert(f != NULL);
