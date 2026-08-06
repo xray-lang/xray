@@ -17,6 +17,7 @@
 #include "../../base/xlog.h"
 #include "xclass_builder.h"
 #include "xclass.h"
+#include "xinstance.h"
 #include "../mem/xcycle_detector.h"
 #include "../xisolate_api.h"
 #include "xclass_system.h"
