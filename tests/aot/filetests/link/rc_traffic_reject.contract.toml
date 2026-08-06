@@ -9,5 +9,5 @@ profile = "hosted"
 requires = ["no_runtime_heap"]
 
 [function.shape]
-forbid = ["rc_traffic"]
+forbid = []
 allow = []

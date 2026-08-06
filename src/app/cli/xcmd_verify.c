@@ -536,8 +536,14 @@ static bool verify_backend_contract(const VerifyAnalysis *state, XrTomlValue *it
     for (int i = 0; requires && i < xtoml_array_len(requires); i++) {
         XrTomlValue *value = xtoml_array_get(requires, i);
         if (value && value->type == XR_TOML_STRING &&
-            strcmp(value->as.string, "no_runtime_heap") == 0)
+            strcmp(value->as.string, "no_runtime_heap") == 0) {
+            /* A heap-free export cannot hide ownership traffic behind ARC.
+             * Both facts come from the live backend residue row, not from a
+             * generated-C token scan: R2 is allocation and R7 is retain /
+             * release traffic after all plan-driven lowering has finished. */
             forbid |= 1u << XI_RESIDUE_R2_HEAP_ALLOC;
+            forbid |= 1u << XI_RESIDUE_R7_RC_TRAFFIC;
+        }
     }
     for (int i = 0; i < XI_RESIDUE_CATEGORY_COUNT; i++) {
         if ((forbid & (1u << i)) == 0 || counts[i] == 0)
