@@ -1,5 +1,5 @@
 import parallel
-import { sleep } from "time"
+import { sleep } from time
 
 parallel.forEach(0..4, (i) -> {
     sleep(0)

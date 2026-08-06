@@ -733,8 +733,7 @@ static bool xa_export_map_try_set_symbol(XaAnalyzer *analyzer, XrHashMap **expor
 }
 
 static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNode *ast,
-                                                   const char *from_path, bool from_is_quoted,
-                                                   bool *out_invalid) {
+                                                   const char *from_path, bool *out_invalid) {
     if (out_invalid)
         *out_invalid = false;
     XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
@@ -746,8 +745,7 @@ static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNo
         owner && owner->source_path ? owner->source_path : analyzer->current_file;
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(graph->resolver, from_path, !from_is_quoted, importer, &mid,
-                                        &err);
+    int rc = xr_module_resolver_resolve(graph->resolver, from_path, importer, &mid, &err);
     xr_free(err);
     if (rc != 0)
         return NULL;
@@ -842,8 +840,8 @@ bool xa_analyzer_collect_export_symbols_checked(XaAnalyzer *analyzer, XrAstNode 
         /* Re-exports remain statements because they do not declare a local name. */
         if (exp->from_path) {
             bool source_invalid = false;
-            XrHashMap *source_exports = xa_graph_reexport_source_exports(
-                analyzer, ast, exp->from_path, exp->from_is_quoted, &source_invalid);
+            XrHashMap *source_exports =
+                xa_graph_reexport_source_exports(analyzer, ast, exp->from_path, &source_invalid);
             if (!source_exports) {
                 if (source_invalid) {
                     xa_report_poisoned_export_metadata(analyzer, stmt, exp->from_path);

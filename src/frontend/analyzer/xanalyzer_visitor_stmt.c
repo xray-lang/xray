@@ -6826,14 +6826,12 @@ static bool xa_call_is_compiler_fresh_factory(XaInferContext *ctx, AstNode *call
     if (callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &callee->as.member_access;
         AstNode *object = xa_whole_binding_value(member->object);
-        if (member->name && object && object->type == AST_VARIABLE &&
-            object->as.variable.name) {
+        if (member->name && object && object->type == AST_VARIABLE && object->as.variable.name) {
             XaSymbol *module =
                 xa_scope_lookup(ctx->analyzer->current_scope, object->as.variable.name);
-            XaSymbolLinks *module_links =
-                module && module->kind == XA_SYM_MODULE
-                    ? xa_analyzer_get_links(ctx->analyzer, module)
-                    : NULL;
+            XaSymbolLinks *module_links = module && module->kind == XA_SYM_MODULE
+                                              ? xa_analyzer_get_links(ctx->analyzer, module)
+                                              : NULL;
             const char *module_name =
                 module_links && module_links->module_name ? module_links->module_name : NULL;
             if (module_name && module_name[0] != '.' && module_name[0] != '/' &&
@@ -7166,8 +7164,7 @@ static XaSymbol *xa_function_value_source_symbol(XaInferContext *ctx, AstNode *s
     XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
     const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
                                                                  : ma->object->as.variable.name;
-    bool is_quoted = mod_name && (mod_name[0] == '.' || mod_name[0] == '/');
-    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
     XaSymbol *member_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, ma->name) : NULL;
     return member_sym && member_sym->kind == XA_SYM_FUNCTION ? member_sym : NULL;
 }
@@ -7376,15 +7373,13 @@ static XaReturnOwnershipSummary xa_return_ownership_null_join(void) {
     return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_NULL_JOIN, -1, true);
 }
 
-static bool xa_return_ownership_equal(XaReturnOwnershipSummary a,
-                                      XaReturnOwnershipSummary b) {
+static bool xa_return_ownership_equal(XaReturnOwnershipSummary a, XaReturnOwnershipSummary b) {
     return a.complete == b.complete && a.kind == b.kind && a.param_index == b.param_index;
 }
 
 static int16_t xa_return_ownership_param_index(const XaSymbolLinks *function_links,
                                                const XaSymbol *parameter) {
-    if (!function_links || !parameter || parameter->kind != XA_SYM_PARAMETER ||
-        !parameter->name)
+    if (!function_links || !parameter || parameter->kind != XA_SYM_PARAMETER || !parameter->name)
         return -1;
     for (int i = 0; i < function_links->param_count; i++) {
         if (function_links->param_names && function_links->param_names[i] &&
@@ -7403,19 +7398,20 @@ static XaSymbol *xa_return_ownership_expr_symbol(XaInferContext *ctx, AstNode *e
     return expr->as.variable.name ? xa_lookup_visible_symbol(ctx, expr->as.variable.name) : NULL;
 }
 
-static XaReturnOwnershipSummary
-xa_return_ownership_expr_summary(XaInferContext *ctx, XaSymbolLinks *function_links,
-                                 AstNode *expr, uint8_t depth);
+static XaReturnOwnershipSummary xa_return_ownership_expr_summary(XaInferContext *ctx,
+                                                                 XaSymbolLinks *function_links,
+                                                                 AstNode *expr, uint8_t depth);
 
-static XaReturnOwnershipSummary
-xa_return_ownership_merge_exprs(XaInferContext *ctx, XaSymbolLinks *function_links,
-                                AstNode *const *exprs, int count, uint8_t depth) {
+static XaReturnOwnershipSummary xa_return_ownership_merge_exprs(XaInferContext *ctx,
+                                                                XaSymbolLinks *function_links,
+                                                                AstNode *const *exprs, int count,
+                                                                uint8_t depth) {
     XaReturnOwnershipSummary merged = xa_return_ownership_unknown();
     if (!exprs || count <= 0)
         return merged;
     for (int i = 0; i < count; i++) {
-        XaReturnOwnershipSummary arm = xa_return_ownership_expr_summary(
-            ctx, function_links, exprs[i], (uint8_t) (depth + 1));
+        XaReturnOwnershipSummary arm =
+            xa_return_ownership_expr_summary(ctx, function_links, exprs[i], (uint8_t) (depth + 1));
         if (!arm.complete)
             return xa_return_ownership_unknown();
         if (arm.kind == XA_RETURN_OWNERSHIP_NULL_JOIN)
@@ -7428,9 +7424,9 @@ xa_return_ownership_merge_exprs(XaInferContext *ctx, XaSymbolLinks *function_lin
     return merged.complete ? merged : xa_return_ownership_null_join();
 }
 
-static XaReturnOwnershipSummary
-xa_return_ownership_call_summary(XaInferContext *ctx, XaSymbolLinks *function_links,
-                                 AstNode *expr, uint8_t depth) {
+static XaReturnOwnershipSummary xa_return_ownership_call_summary(XaInferContext *ctx,
+                                                                 XaSymbolLinks *function_links,
+                                                                 AstNode *expr, uint8_t depth) {
     if (!ctx || !expr || expr->type != AST_CALL_EXPR || depth > 32)
         return xa_return_ownership_unknown();
     CallExprNode *call = &expr->as.call_expr;
@@ -7450,13 +7446,11 @@ xa_return_ownership_call_summary(XaInferContext *ctx, XaSymbolLinks *function_li
             if (native == XA_BUILTIN_RETURN_FRESH)
                 return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
             if (native == XA_BUILTIN_RETURN_BORROWED_STATIC)
-                return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_STATIC, -1,
-                                                   true);
+                return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
             int param_index = xa_builtin_return_ownership_param_index(native);
             if (param_index >= 0 && param_index < call->arg_count && call->arguments)
                 return xa_return_ownership_expr_summary(
-                    ctx, function_links, call->arguments[param_index],
-                    (uint8_t) (depth + 1));
+                    ctx, function_links, call->arguments[param_index], (uint8_t) (depth + 1));
             /* A stdlib native reference return with an explicit UNKNOWN
              * contract must not be reclassified from its allocation effect.
              * UNKNOWN is the sealed fail-closed answer for mixed provenance. */
@@ -7472,8 +7466,7 @@ xa_return_ownership_call_summary(XaInferContext *ctx, XaSymbolLinks *function_li
         callee_symbol ? xa_analyzer_get_links(ctx->analyzer, callee_symbol) : NULL;
     if (!callee_links)
         return xa_return_ownership_unknown();
-    if (!callee_links->return_ownership_scanned &&
-        !callee_links->return_ownership_scan_in_progress)
+    if (!callee_links->return_ownership_scanned && !callee_links->return_ownership_scan_in_progress)
         xa_ensure_function_return_ownership_prepass(ctx, callee_links);
     XaReturnOwnershipSummary summary = callee_links->return_ownership;
     if (!summary.complete)
@@ -7482,14 +7475,13 @@ xa_return_ownership_call_summary(XaInferContext *ctx, XaSymbolLinks *function_li
         return summary;
     if (summary.param_index < 0 || summary.param_index >= call->arg_count || !call->arguments)
         return xa_return_ownership_unknown();
-    return xa_return_ownership_expr_summary(ctx, function_links,
-                                            call->arguments[summary.param_index],
-                                            (uint8_t) (depth + 1));
+    return xa_return_ownership_expr_summary(
+        ctx, function_links, call->arguments[summary.param_index], (uint8_t) (depth + 1));
 }
 
-static XaReturnOwnershipSummary
-xa_return_ownership_expr_summary(XaInferContext *ctx, XaSymbolLinks *function_links,
-                                 AstNode *expr, uint8_t depth) {
+static XaReturnOwnershipSummary xa_return_ownership_expr_summary(XaInferContext *ctx,
+                                                                 XaSymbolLinks *function_links,
+                                                                 AstNode *expr, uint8_t depth) {
     if (!ctx || !function_links || !expr || depth > 32)
         return xa_return_ownership_unknown();
     AstNode *block_value = NULL;
@@ -7516,18 +7508,16 @@ xa_return_ownership_expr_summary(XaInferContext *ctx, XaSymbolLinks *function_li
             if (symbol->passing_mode == XR_PARAM_MOVE)
                 return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
             int16_t index = xa_return_ownership_param_index(function_links, symbol);
-            return index >= 0
-                       ? xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_PARAM, index,
-                                                     true)
-                       : xa_return_ownership_unknown();
+            return index >= 0 ? xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_PARAM,
+                                                            index, true)
+                              : xa_return_ownership_unknown();
         }
         if (symbol->borrowed_root_symbol_id != 0) {
-            XaSymbol *root = xa_scope_lookup_by_id(ctx->analyzer->global_scope,
-                                                  symbol->borrowed_root_symbol_id);
+            XaSymbol *root =
+                xa_scope_lookup_by_id(ctx->analyzer->global_scope, symbol->borrowed_root_symbol_id);
             int16_t index = xa_return_ownership_param_index(function_links, root);
             if (index >= 0)
-                return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_PARAM, index,
-                                                   true);
+                return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_PARAM, index, true);
         }
         XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, symbol);
         if (links && (links->storage_domain == XR_STORAGE_CONST_SHARED ||
@@ -7541,26 +7531,22 @@ xa_return_ownership_expr_summary(XaInferContext *ctx, XaSymbolLinks *function_li
     if (xa_expr_creates_fresh_root(ctx, direct))
         return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
     if (direct->type == AST_CALL_EXPR)
-        return xa_return_ownership_call_summary(ctx, function_links, direct,
-                                                (uint8_t) (depth + 1));
+        return xa_return_ownership_call_summary(ctx, function_links, direct, (uint8_t) (depth + 1));
     if (direct->type == AST_TERNARY) {
         AstNode *arms[] = {direct->as.ternary.true_expr, direct->as.ternary.false_expr};
-        return xa_return_ownership_merge_exprs(ctx, function_links, arms, 2,
-                                               (uint8_t) (depth + 1));
+        return xa_return_ownership_merge_exprs(ctx, function_links, arms, 2, (uint8_t) (depth + 1));
     }
     if (direct->type == AST_NULLISH_COALESCE) {
         AstNode *arms[] = {direct->as.binary.left, direct->as.binary.right};
-        return xa_return_ownership_merge_exprs(ctx, function_links, arms, 2,
-                                               (uint8_t) (depth + 1));
+        return xa_return_ownership_merge_exprs(ctx, function_links, arms, 2, (uint8_t) (depth + 1));
     }
     if (direct->type == AST_MATCH_EXPR) {
         MatchExprNode *match = &direct->as.match_expr;
         XaReturnOwnershipSummary merged = xa_return_ownership_unknown();
         for (int i = 0; i < match->arm_count; i++) {
             AstNode *arm_node = match->arms[i];
-            AstNode *arm_expr = arm_node && arm_node->type == AST_MATCH_ARM
-                                    ? arm_node->as.match_arm.body
-                                    : NULL;
+            AstNode *arm_expr =
+                arm_node && arm_node->type == AST_MATCH_ARM ? arm_node->as.match_arm.body : NULL;
             if (arm_expr && (arm_expr->type == AST_BLOCK || arm_expr->type == AST_PROGRAM))
                 arm_expr = xa_lifecycle_lint_single_expr_block_value(arm_expr);
             XaReturnOwnershipSummary arm_ownership = xa_return_ownership_expr_summary(
@@ -7697,15 +7683,14 @@ void xa_ensure_function_return_ownership_prepass(XaInferContext *ctx, XaSymbolLi
     }
 
     links->return_ownership_scan_in_progress = true;
-    XaReturnOwnershipPrepass scan = {.ctx = ctx,
-                                     .links = links,
-                                     .result = xa_return_ownership_unknown()};
+    XaReturnOwnershipPrepass scan = {
+        .ctx = ctx, .links = links, .result = xa_return_ownership_unknown()};
     xa_return_ownership_scan_block(&scan, body);
     links->return_ownership =
         scan.seen && !scan.failed ? scan.result : xa_return_ownership_unknown();
     if (links->return_ownership.kind == XA_RETURN_OWNERSHIP_NULL_JOIN)
-        links->return_ownership = xa_return_ownership_summary(
-            XA_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
+        links->return_ownership =
+            xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
     links->return_ownership_scanned = true;
     links->return_ownership_scan_in_progress = false;
 }

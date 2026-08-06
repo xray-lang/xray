@@ -18,8 +18,21 @@
 #include "../lexer/xquoted_literal.h"
 
 /*
- * Validate an import specifier and report errors for disallowed patterns.
- * Returns true if valid, false if an error was reported.
+ * Validate a QUOTED import specifier and report errors for disallowed
+ * patterns. Returns true if valid, false if an error was reported.
+ *
+ * What a specifier means is decided by its shape, not by whether it is quoted:
+ *
+ *     import math                 named module -- stdlib or .xrd native
+ *     import "./util"             path, relative to the importing file
+ *     import "owner/name"         package, resolved through xray.toml
+ *
+ * Quoting is only how text that is not an identifier gets written, which is
+ * why a path or a package needs it and a module name does not. Treating the
+ * quote itself as the signal never worked: the analyzer re-derived it from the
+ * first character of the specifier, so `"math"` read as bare and resolved to
+ * the standard library anyway -- twenty imports in this tree were written that
+ * way and every one of them silently worked.
  */
 static bool validate_import_specifier(Parser *parser, const char *path) {
     size_t len = strlen(path);
@@ -45,6 +58,18 @@ static bool validate_import_specifier(Parser *parser, const char *path) {
     /* Reject absolute paths */
     if (path[0] == '/' || (len >= 2 && path[1] == ':') || (len >= 3 && path[2] == ':')) {
         xr_parser_error(parser, "absolute paths are not supported in imports");
+        return false;
+    }
+
+    /* A quoted specifier must have the shape of a path or of a package. One
+     * segment with no separator is a module name, and those are written bare. */
+    if (strchr(path, '/') == NULL) {
+        char msg[192];
+        snprintf(msg, sizeof(msg),
+                 "quoted import must be a path ('./%s') or a package "
+                 "('owner/%s'); write a module name without quotes: import %s",
+                 path, path, path);
+        xr_parser_error(parser, msg);
         return false;
     }
 

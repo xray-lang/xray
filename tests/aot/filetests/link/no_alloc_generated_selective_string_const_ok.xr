@@ -1,4 +1,4 @@
-import { arch as directArch } from "os"
+import { arch as directArch } from os
 
 fn xray_no_alloc_os_arch_selective_const_ok() -> string {
     return directArch

@@ -175,16 +175,14 @@ XR_FUNC int xr_module_graph_find(const XrModuleGraph *g, const char *canonical) 
 
 /* ========== BFS Build ========== */
 
-static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char *specifier,
-                                      bool is_bare) {
+static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char *specifier) {
     if (!g || spec_idx < 0 || spec_idx >= g->spec_count || !specifier)
         return;
 
     XrModuleSpec *from_spec = &g->specs[spec_idx];
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(g->resolver, specifier, is_bare, from_spec->source_path,
-                                        &mid, &err);
+    int rc = xr_module_resolver_resolve(g->resolver, specifier, from_spec->source_path, &mid, &err);
     if (rc != 0) {
         /* Resolution failed — skip (stdlib native modules won't have source). */
         xr_free(err);
@@ -194,8 +192,7 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
 
     /* Statically linked core/official modules can carry an embedded script
      * layer even when no development source tree is present. */
-    if (!mid.source_path &&
-        (mid.kind == XR_MOD_STDLIB || mid.kind == XR_MOD_PACKAGE)) {
+    if (!mid.source_path && (mid.kind == XR_MOD_STDLIB || mid.kind == XR_MOD_PACKAGE)) {
         char embedded_path[XR_PATH_MAX];
         if (graph_stdlib_embedded_path(mid.canonical, embedded_path, sizeof(embedded_path))) {
             mid.source_path = xr_strdup(embedded_path);
@@ -240,13 +237,11 @@ static void collect_and_resolve_imports(XrModuleGraph *g, int spec_idx, struct A
             continue;
 
         if (stmt->type == AST_IMPORT_STMT) {
-            graph_resolve_and_add_dep(g, spec_idx, stmt->as.import_stmt.module_name,
-                                      !stmt->as.import_stmt.is_quoted);
+            graph_resolve_and_add_dep(g, spec_idx, stmt->as.import_stmt.module_name);
             continue;
         }
         if (stmt->type == AST_EXPORT_STMT && stmt->as.export_stmt.from_path) {
-            graph_resolve_and_add_dep(g, spec_idx, stmt->as.export_stmt.from_path,
-                                      !stmt->as.export_stmt.from_is_quoted);
+            graph_resolve_and_add_dep(g, spec_idx, stmt->as.export_stmt.from_path);
             continue;
         }
     }

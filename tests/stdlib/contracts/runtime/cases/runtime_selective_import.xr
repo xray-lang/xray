@@ -2,7 +2,7 @@ import {
     info,
     liveBytes,
     liveObjects,
-} from "runtime"
+} from runtime
 
 print(liveBytes() >= 0)
 print(liveObjects() >= 0)

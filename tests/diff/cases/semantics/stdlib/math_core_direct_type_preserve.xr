@@ -2,7 +2,7 @@
 // shape for integer-preserving helpers. These used to lower to double-only C
 // expressions, producing 42.0/3.0/7.0 and "float" where the VM produced ints.
 import math
-import { min as mmin, max as mmax, clamp as cclamp } from "math"
+import { min as mmin, max as mmax, clamp as cclamp } from math
 
 var a = math.abs(-42)
 print(typeName(a))

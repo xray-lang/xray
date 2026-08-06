@@ -219,8 +219,7 @@ XR_FUNC XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC bool xa_boundary_transfer_type_needs_explicit(const XrType *type);
 XR_FUNC bool xa_expr_creates_fresh_root(XaInferContext *ctx, AstNode *value);
-XR_FUNC void xa_ensure_function_return_ownership_prepass(XaInferContext *ctx,
-                                                         XaSymbolLinks *links);
+XR_FUNC void xa_ensure_function_return_ownership_prepass(XaInferContext *ctx, XaSymbolLinks *links);
 XR_FUNC bool xa_boundary_arg_is_explicit_copy(AstNode *arg_node);
 XR_FUNC bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node);
 XR_FUNC XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node);
@@ -281,8 +280,7 @@ XR_FUNC void xa_register_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym
 XR_FUNC void xa_record_pending_capture(XaInferContext *ctx, XaSymbol *captured);
 XR_FUNC void xa_register_pending_capture_loans(XaInferContext *ctx, XaSymbol *borrower_sym,
                                                AstNode *site);
-XR_FUNC void xa_register_pending_defer_loans(XaInferContext *ctx, AstNode *site,
-                                             bool is_snapshot);
+XR_FUNC void xa_register_pending_defer_loans(XaInferContext *ctx, AstNode *site, bool is_snapshot);
 XR_FUNC void xa_register_defer_snapshot_expr_loans(XaInferContext *ctx, AstNode *expr,
                                                    AstNode *site);
 XR_FUNC void xa_discard_pending_captures(XaInferContext *ctx);
@@ -353,9 +351,13 @@ XR_FUNC void xa_check_constructor_visibility(XaInferContext *ctx, AstNode *node,
                                              struct XrClassInfo *owner);
 
 // Module graph export-symbol lookup (defined in xanalyzer_visitor.c).
-// Resolves an import specifier to the target module's semantic export-symbol hashmap.
+// Resolves an import specifier to the target module's semantic export-symbol
+// hashmap. The specifier's shape says what it is, so there is no quotedness to
+// pass alongside it.
+XR_FUNC bool xa_specifier_is_named_module(const char *spec);
+
 struct XrHashMap;
 XR_FUNC struct XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer,
-                                                       const char *module_name, bool is_quoted);
+                                                       const char *module_name);
 
 #endif  // XANALYZER_VISITOR_INTERNAL_H

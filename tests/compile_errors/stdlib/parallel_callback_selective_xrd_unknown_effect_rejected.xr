@@ -1,5 +1,5 @@
 import parallel
-import { nativeOp } from "parallel_unknown_effect_native"
+import { nativeOp } from parallel_unknown_effect_native
 
 parallel.forEach(0..4, (i) -> {
     var value = nativeOp(i)

@@ -1,6 +1,6 @@
 import strconv
 
-import "text" as textutil
+import text as textutil
 
 // yaml - typed pure-Xray YAML parser and writer.
 //

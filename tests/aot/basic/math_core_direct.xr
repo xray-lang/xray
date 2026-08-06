@@ -1,5 +1,5 @@
 import math
-import { sqrt, pow } from "math"
+import { sqrt, pow } from math
 
 print(int(math.sqrt(81)))
 print(int(math.pow(2, 10)))

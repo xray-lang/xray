@@ -328,48 +328,9 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
 
 /* ========== Resolution: project-relative path ========== */
 
-/*
- * Non-relative quoted paths that are not packages (no slash or only one
- * segment) are resolved relative to the project root or cwd.
- */
-static int resolve_project_relative(XrModuleResolver *r, const char *specifier,
-                                    const char *importer_path, XrModuleId *out_id, char **err_buf) {
-    (void) r;
-
-    /* Use importer's directory as fallback project root */
-    char *base_dir = NULL;
-    if (importer_path) {
-        base_dir = xr_path_dirname(importer_path);
-    } else {
-        char cwd[XR_PATH_MAX];
-        if (getcwd(cwd, sizeof(cwd)))
-            base_dir = xr_strdup(cwd);
-    }
-
-    if (!base_dir) {
-        if (err_buf)
-            *err_buf = make_error("cannot determine base directory for import '%s'", specifier);
-        return -1;
-    }
-
-    char *resolved = probe_file_import(base_dir, specifier);
-    xr_free(base_dir);
-
-    if (resolved) {
-        out_id->kind = XR_MOD_FILE;
-        out_id->canonical = resolved;
-        out_id->source_path = xr_strdup(resolved);
-        return 0;
-    }
-
-    if (err_buf)
-        *err_buf = make_error("module '%s' not found", specifier);
-    return -1;
-}
-
 /* ========== Main Resolution Entry ========== */
 
-int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier, bool is_bare_name,
+int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
                                const char *importer_path, XrModuleId *out_id, char **err_buf) {
     XR_DCHECK(r != NULL, "xr_module_resolver_resolve: NULL resolver");
     XR_DCHECK(specifier != NULL, "xr_module_resolver_resolve: NULL specifier");
@@ -392,20 +353,24 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier, bool 
 
     int rc;
 
-    if (is_bare_name) {
-        /* Bare identifier: stdlib only */
-        rc = resolve_stdlib(r, specifier, out_id, err_buf);
-    } else if (is_relative_specifier(specifier)) {
-        /* "./" or "../" prefix: file/directory import */
+    /* The specifier's shape decides what it is, and the three shapes do not
+     * overlap. `is_bare_name` used to carry that decision from the caller and
+     * disagreed with the text often enough to matter -- `"math"` arrived as
+     * bare and resolved to the standard library.
+     *
+     * The project-root form is gone with it. It shared its shape with a package
+     * exactly, and the two were told apart by which resolver happened to
+     * succeed first, so adding a directory to a project could take over a
+     * package import and adding a dependency could take over a directory one.
+     * Nothing in the tree used it. */
+    if (is_relative_specifier(specifier)) {
         rc = resolve_relative(r, specifier, importer_path, out_id, err_buf);
     } else if (strchr(specifier, '/') != NULL) {
-        /* Contains slash but not relative: try package first, then project-relative */
-        rc = resolve_package(r, specifier, out_id, NULL);
-        if (rc != 0)
-            rc = resolve_project_relative(r, specifier, importer_path, out_id, err_buf);
+        rc = resolve_package(r, specifier, out_id, err_buf);
     } else {
-        /* Single segment, quoted: try as project-relative path */
-        rc = resolve_project_relative(r, specifier, importer_path, out_id, err_buf);
+        /* A named module: the standard library and .xrd-declared native
+         * modules share this one namespace. */
+        rc = resolve_stdlib(r, specifier, out_id, err_buf);
     }
 
     /* Cache on success. The cache is an optimization: on OOM just skip

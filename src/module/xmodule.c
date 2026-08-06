@@ -676,7 +676,7 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(resolver, module_name, is_bare, importer, &mid, &err);
+    int rc = xr_module_resolver_resolve(resolver, module_name, importer, &mid, &err);
     if (err)
         xr_free(err);
 

@@ -1,5 +1,5 @@
 import math
-import { random } from "math"
+import { random } from math
 
 fn xray_math_call_reject(x: float) -> float {
     return math.sqrt(x) + random()

@@ -1,4 +1,4 @@
-import { free } from "mem"
+import { free } from mem
 
 fn xray_bad_mem_free_selective(p: MutPtr<byte>) -> int {
     free(p)

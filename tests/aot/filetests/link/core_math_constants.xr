@@ -4,7 +4,7 @@ import {
     MIN_INT as directMin,
     INF as directInf,
     NAN as directNan
-} from "math"
+} from math
 
 print(math.PI > 3.0)
 print(directPI > 3.0)

@@ -142,8 +142,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
 
         XrModuleId mid;
         char *err = NULL;
-        int rc = xr_module_resolver_resolve(ctx->resolver, module_name, is_bare, importer_buf, &mid,
-                                            &err);
+        int rc = xr_module_resolver_resolve(ctx->resolver, module_name, importer_buf, &mid, &err);
         if (rc != 0) {
             if (err) {
                 xr_log_warning("bundle", "%s", err);

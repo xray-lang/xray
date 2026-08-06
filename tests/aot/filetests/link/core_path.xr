@@ -1,5 +1,5 @@
 import path
-import { sep as directSep, delimiter as directDelimiter } from "path"
+import { sep as directSep, delimiter as directDelimiter } from path
 
 print(path.sep == "/")
 print(len(path.delimiter) == 1)

@@ -19,7 +19,7 @@ import http2
 import io
 import net
 import { NetError } from net
-import "path" as pathutil
+import path as pathutil
 import time
 
 const COOKIE_MAX_INPUT_LEN = 8192

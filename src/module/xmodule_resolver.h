@@ -101,7 +101,6 @@ XR_FUNC void xr_module_resolver_free(XrModuleResolver *r);
  *
  * @param r             Resolver instance
  * @param specifier     The import path string (without quotes)
- * @param is_bare_name  true if the specifier was an unquoted identifier
  * @param importer_path Absolute path of the importing file, or NULL for
  *                      entry scripts (uses cwd as base)
  * @param out_id        On success, filled with the resolved module info.
@@ -112,7 +111,7 @@ XR_FUNC void xr_module_resolver_free(XrModuleResolver *r);
  * @return              0 on success, -1 on failure
  */
 XR_FUNC int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
-                                       bool is_bare_name, const char *importer_path,
-                                       XrModuleId *out_id, char **err_buf);
+                                       const char *importer_path, XrModuleId *out_id,
+                                       char **err_buf);
 
 #endif  // XMODULE_RESOLVER_H

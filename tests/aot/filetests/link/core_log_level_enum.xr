@@ -1,5 +1,5 @@
 import log
-import { LogLevel } from "log"
+import { LogLevel } from log
 
 log.setLevel(LogLevel.Debug)
 print(log.isEnabled(LogLevel.Debug))

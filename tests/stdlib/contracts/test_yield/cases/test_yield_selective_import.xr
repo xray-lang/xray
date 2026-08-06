@@ -1,4 +1,4 @@
-import { add, counter_get, counter_inc, counter_reset, simple, sync } from "test_yield"
+import { add, counter_get, counter_inc, counter_reset, simple, sync } from test_yield
 
 print(sync())
 print(simple())

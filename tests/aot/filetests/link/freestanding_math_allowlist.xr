@@ -1,5 +1,5 @@
 import math
-import { min, max, clamp } from "math"
+import { min, max, clamp } from math
 
 fn xray_math_allowlist_constants(x: float) -> float {
     return math.PI + math.E + math.TAU + math.SQRT2 + x

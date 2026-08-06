@@ -35,7 +35,7 @@ import {
     tan,
     tanh,
     trunc
-} from "math"
+} from math
 
 print(math.sqrt(81))
 print(sqrt(64))

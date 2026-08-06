@@ -1123,8 +1123,7 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
         (!links->type || XR_TYPE_IS_UNKNOWN(links->type))) {
         const char *module_name = links->module_name;
         const char *member_name = links->import_member_name;
-        bool is_quoted = module_name[0] == '.' || module_name[0] == '/';
-        XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name, is_quoted);
+        XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name);
         XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
         if (export_sym) {
             xa_symbol_links_copy_export_metadata(ctx->analyzer, links, &export_sym->links);
@@ -1830,8 +1829,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             XaSymbolLinks *sym_links = xa_analyzer_get_links(ctx->analyzer, sym);
             const char *mod_name =
                 (sym_links && sym_links->module_name) ? sym_links->module_name : var_name;
-            bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
-            XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+            XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
             if (exports) {
                 XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
                 if (member_sym) {

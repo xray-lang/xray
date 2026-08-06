@@ -75,10 +75,9 @@ static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, X
 
     const char *module_name = links->module_name;
     const char *member_name = links->import_member_name;
-    bool is_quoted = module_name[0] == '.' || module_name[0] == '/';
-    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name, is_quoted);
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name);
     XaSymbol *export_sym = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
-    if (!export_sym && !is_quoted) {
+    if (!export_sym && xa_specifier_is_named_module(module_name)) {
         char key[192];
         int key_len = snprintf(key, sizeof(key), "%s.%s", module_name, member_name);
         const XaIntrinsicDesc *desc =
@@ -1363,9 +1362,7 @@ static XaSymbol *xa_thread_spawn_import_target_symbol(XaInferContext *ctx, XaSym
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     if (!links || !links->module_name)
         return sym;
-
-    bool is_quoted = links->module_name[0] == '.' || links->module_name[0] == '/';
-    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, links->module_name, is_quoted);
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, links->module_name);
     if (!exports)
         return sym;
     const char *member_name = links->import_member_name ? links->import_member_name : sym->name;
@@ -1388,8 +1385,7 @@ static XaSymbol *xa_thread_spawn_module_member_symbol(XaInferContext *ctx, AstNo
     XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
     const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
                                                                  : ma->object->as.variable.name;
-    bool is_quoted = mod_name[0] == '.' || mod_name[0] == '/';
-    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
     if (!exports)
         return NULL;
 
@@ -4517,13 +4513,12 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExp
     XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
     const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
                                                                  : ma->object->as.variable.name;
-    bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
     char semantic_key[192];
     int semantic_key_len =
         snprintf(semantic_key, sizeof(semantic_key), "%s.%s", mod_name, ma->name);
     XaSemanticTypeId semantic_type_id = (XaSemanticTypeId) call->semantic_type_id;
-    if (semantic_type_id == XA_SEMANTIC_TYPE_NONE && !is_quoted && semantic_key_len > 0 &&
-        (size_t) semantic_key_len < sizeof(semantic_key)) {
+    if (semantic_type_id == XA_SEMANTIC_TYPE_NONE && xa_specifier_is_named_module(mod_name) &&
+        semantic_key_len > 0 && (size_t) semantic_key_len < sizeof(semantic_key)) {
         semantic_type_id = xa_semantic_type_by_key(semantic_key);
         if (semantic_type_id != XA_SEMANTIC_TYPE_NONE) {
             /* Preserve canonical ownership across generic specialization. The
@@ -4539,7 +4534,7 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExp
     int semantic_tref_count =
         call->semantic_type_id != 0 ? call->semantic_type_arg_count : call->type_arg_count;
     const char *semantic_source_name = xa_semantic_type_source_name(semantic_type_id);
-    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
     if (!exports) {
         if (semantic_type_id == XA_SEMANTIC_TYPE_NONE)
             return NULL;
@@ -4580,7 +4575,7 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExp
          * exported class symbol before constructing the instance.  This is
          * needed for embedded stdlib graphs, whose class locations are not
          * filesystem paths, and deliberately does not trust source spelling. */
-        if (!is_quoted) {
+        if (xa_specifier_is_named_module(mod_name)) {
             member_links->module_name = mod_name;
             member_links->class_info->capability_flags |=
                 xa_stdlib_type_capability_flags(mod_name, ma->name);
@@ -4603,7 +4598,7 @@ static XrType *xa_module_member_class_instance_type(XaInferContext *ctx, CallExp
         }
         return instance;
     }
-    if (!is_quoted && strcmp(mod_name, "sync") == 0)
+    if (xa_specifier_is_named_module(mod_name) && strcmp(mod_name, "sync") == 0)
         return xa_sync_runtime_construct_type(ctx, ma->name, call);
     return NULL;
 }
@@ -4625,8 +4620,7 @@ static XaSymbolLinks *xa_module_member_fn_links(XaInferContext *ctx, AstNode *ca
     XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
     const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
                                                                  : ma->object->as.variable.name;
-    bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
-    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
     if (!exports)
         return NULL;
     XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
@@ -4648,8 +4642,7 @@ static XaSymbol *xa_module_member_class_symbol(XaInferContext *ctx, AstNode *nod
     XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
     const char *mod_name = (mod_links && mod_links->module_name) ? mod_links->module_name
                                                                  : ma->object->as.variable.name;
-    bool is_quoted = (mod_name[0] == '.' || mod_name[0] == '/');
-    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
     if (!exports)
         return NULL;
     XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
@@ -4773,9 +4766,7 @@ static XrHashMap *xa_default_arg_decl_exports(XaInferContext *ctx, XaSymbolLinks
         return NULL;
 
     if (links->module_name) {
-        bool is_quoted = links->module_name[0] == '.' || links->module_name[0] == '/';
-        XrHashMap *exports =
-            resolve_graph_export_symbols(ctx->analyzer, links->module_name, is_quoted);
+        XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, links->module_name);
         if (exports)
             return exports;
     }
@@ -4797,7 +4788,7 @@ static XrHashMap *xa_default_arg_decl_exports(XaInferContext *ctx, XaSymbolLinks
     char module_name[64];
     if (xa_default_arg_stdlib_module_from_path(links->file_path, module_name,
                                                sizeof(module_name))) {
-        return resolve_graph_export_symbols(ctx->analyzer, module_name, false);
+        return resolve_graph_export_symbols(ctx->analyzer, module_name);
     }
     return NULL;
 }

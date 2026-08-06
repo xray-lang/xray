@@ -1377,9 +1377,7 @@ static XaSymbol *resolve_type_symbol(XaAnalyzer *analyzer, const char *name) {
         if (sync_runtime_import_class_name(links))
             return sym;
         if (links && links->module_name && links->import_member_name) {
-            bool is_quoted = links->module_name[0] == '.' || links->module_name[0] == '/';
-            XrHashMap *exports =
-                resolve_graph_export_symbols(analyzer, links->module_name, is_quoted);
+            XrHashMap *exports = resolve_graph_export_symbols(analyzer, links->module_name);
             XaSymbol *export_sym =
                 exports ? (XaSymbol *) xr_hashmap_get(exports, links->import_member_name) : NULL;
             if (export_sym) {

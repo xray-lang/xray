@@ -606,9 +606,7 @@ static XaSymbol *xa_parallel_import_target_symbol(XaInferContext *ctx, XaSymbol 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     if (!links || !links->module_name)
         return sym;
-
-    bool is_quoted = links->module_name[0] == '.' || links->module_name[0] == '/';
-    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, links->module_name, is_quoted);
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, links->module_name);
     if (!exports)
         return sym;
     const char *member_name = links->import_member_name ? links->import_member_name : sym->name;
@@ -631,8 +629,7 @@ static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *
     XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
     const char *mod_name =
         mod_links && mod_links->module_name ? mod_links->module_name : ma->object->as.variable.name;
-    bool is_quoted = mod_name[0] == '.' || mod_name[0] == '/';
-    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name, is_quoted);
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, mod_name);
     if (!exports)
         return NULL;
     XaSymbol *member = (XaSymbol *) xr_hashmap_get(exports, ma->name);
@@ -2993,8 +2990,14 @@ void xa_visit_collect_statements_with_hoisting(XaInferContext *ctx, AstNode **st
 
 /* Try to resolve an import target's exported semantic symbols from the module graph.
  * Returns the target module's export-symbol hashmap, or NULL if unavailable. */
-XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char *module_name,
-                                                bool is_quoted) {
+/* A specifier that names a module rather than locating one. The standard
+ * library and .xrd-declared natives share that namespace; a path or a package
+ * always carries a separator, a module name never does. */
+bool xa_specifier_is_named_module(const char *spec) {
+    return spec && spec[0] && strchr(spec, '/') == NULL && strchr(spec, '\\') == NULL;
+}
+
+XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char *module_name) {
     XrModuleGraph *graph = (XrModuleGraph *) analyzer->graph;
     if (!graph)
         return NULL;
@@ -3002,8 +3005,8 @@ XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char
     /* Resolve the import specifier to a canonical ID */
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(graph->resolver, module_name, !is_quoted,
-                                        analyzer->current_file, &mid, &err);
+    int rc = xr_module_resolver_resolve(graph->resolver, module_name, analyzer->current_file, &mid,
+                                        &err);
     xr_free(err);
     if (rc != 0)
         return NULL;
@@ -3057,8 +3060,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
         }
     } else {
         // For selective import: import { a, b } from "module"
-        XrHashMap *graph_exports =
-            resolve_graph_export_symbols(ctx->analyzer, import->module_name, import->is_quoted);
+        XrHashMap *graph_exports = resolve_graph_export_symbols(ctx->analyzer, import->module_name);
 
         for (int i = 0; i < import->member_count; i++) {
             ImportMember *member = &import->members[i];
