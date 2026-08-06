@@ -1142,10 +1142,20 @@ TEST(json_value_and_codec_capability_matrix) {
     ASSERT(!result.supported);
     ASSERT(result.reason == XA_JSON_CAPABILITY_NON_STRING_MAP_KEY);
 
-    XrType *enum_type = xr_type_new_enum(g_isolate, "WireKind");
+    const char *enum_members[] = {"Text", "Binary"};
+    XrEnumLayout *enum_layout =
+        xr_enum_layout_new("test.capability", "WireKind", enum_members, 2);
+    ASSERT(enum_layout != NULL);
+    XrType *enum_type =
+        xr_type_new_generic_enum(g_isolate, "WireKind", enum_layout, NULL, 0);
     XrType *good_map = xr_type_new_map(g_isolate, xr_type_new_string(g_isolate), enum_type);
     ASSERT(xa_json_encodable(good_map).supported);
     ASSERT(xa_json_decodable(good_map).supported);
+
+    XrType *layoutless_enum = xr_type_new_enum(g_isolate, "Layoutless");
+    result = xa_json_decodable(layoutless_enum);
+    ASSERT(!result.supported);
+    ASSERT(result.reason == XA_JSON_CAPABILITY_UNSUPPORTED_TYPE);
 
     XrType *tuple_fields[] = {xr_type_new_string(g_isolate), xr_type_new_int(g_isolate)};
     XrType *tuple = xr_type_new_tuple(g_isolate, tuple_fields, 2);
@@ -1184,6 +1194,8 @@ TEST(json_value_and_codec_capability_matrix) {
     result = xa_json_encodable(recursive);
     ASSERT(!result.supported);
     ASSERT(result.reason == XA_JSON_CAPABILITY_UNSUPPORTED_RECURSIVE_ALIAS);
+
+    xr_enum_layout_free(enum_layout);
 }
 
 TEST(analyzer_typed_json_calls_complete_all_analysis_passes) {

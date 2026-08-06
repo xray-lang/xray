@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include "xmethod.h"
 #include "../value/xvalue.h"
+#include "../../shared/xr_json_type.h"
 
 /* ========== Field Descriptor Entry ========== */
 
@@ -32,6 +33,7 @@ typedef struct XrFieldDescriptorEntry {
     const char *type_name;
     XrValue default_value;
     uint16_t flags;
+    XrJsonDecodeSchema json_decode_schema;
 } XrFieldDescriptorEntry;
 
 /* ========== Method Descriptor Entry ========== */

@@ -6,6 +6,7 @@
 #include "xanalyzer_capability.h"
 
 #include "xanalyzer_builtins.h"
+#include "xanalyzer_symbol.h"
 #include "../../runtime/class/xclass_info.h"
 #include "../../shared/xr_derive_flags.h"
 
@@ -158,7 +159,11 @@ static XaJsonCapabilityResult json_capability_visit(const XrType *type,
             return json_capability_result(false,
                                           XA_JSON_CAPABILITY_UNINSTANTIATED_TYPE_PARAMETER, type);
         case XR_KIND_ENUM:
-            return json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL);
+            if (mode == XA_JSON_CAPABILITY_ENCODE ||
+                (type->enum_type.layout && type->enum_type.layout->is_zero_payload &&
+                 type->enum_type.layout->variant_count > 0))
+                return json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL);
+            return json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
         case XR_KIND_INSTANCE:
             if (!type->instance.class_ref) {
                 return json_capability_result(
@@ -171,7 +176,7 @@ static XaJsonCapabilityResult json_capability_visit(const XrType *type,
                 return json_capability_result(false,
                                               XA_JSON_CAPABILITY_MISSING_DERIVE_SIDECAR, type);
             }
-            return json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL);
+            break;
         case XR_KIND_TUPLE:
             if (mode == XA_JSON_CAPABILITY_DECODE) {
                 return json_capability_result(
@@ -224,6 +229,20 @@ static XaJsonCapabilityResult json_capability_visit(const XrType *type,
                 const XrType *field =
                     type->object.field_types ? type->object.field_types[i] : NULL;
                 result = json_capability_visit(field, mode, walk);
+                if (!result.supported)
+                    break;
+            }
+            break;
+        case XR_KIND_INSTANCE:
+            for (const XrClassInfo *info = type->instance.class_ref; info; info = info->base) {
+                for (int i = 0; i < info->field_count; i++) {
+                    const XaSymbol *field = info->fields ? info->fields[i] : NULL;
+                    if (!field || field->is_static)
+                        continue;
+                    result = json_capability_visit(field->links.type, mode, walk);
+                    if (!result.supported)
+                        break;
+                }
                 if (!result.supported)
                     break;
             }

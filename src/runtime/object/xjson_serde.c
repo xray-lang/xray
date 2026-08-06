@@ -691,6 +691,10 @@ static const char *direct_expected_kind(uint8_t encoded_kind) {
             return "array";
         case XR_JSON_VALUE_MAP:
             return "object";
+        case XR_JSON_VALUE_ENUM:
+            return "enum member string";
+        case XR_JSON_VALUE_CLASS_INSTANCE:
+            return "object";
         case XR_JSON_VALUE_ANY:
         default:
             return "supported Json value";
@@ -704,6 +708,32 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
 static bool direct_parse_typed_schema(JsonDirectParser *p, XrCoroutine *coro,
                                       const XrJsonDecodeSchema *schema, const char *path,
                                       XrValue *out, XrJsonTypedParseError *error);
+
+static bool direct_parse_typed_enum(JsonDirectParser *p, const XrJsonDecodeSchema *schema,
+                                    XrValue *out) {
+    XrEnumType *target = schema ? (XrEnumType *) schema->target_descriptor : NULL;
+    if (!p || !target || xr_enum_type_has_payloads(target) || !out)
+        return false;
+    XrValue parsed_name = xr_null();
+    if (!direct_parse_string(p, &parsed_name))
+        return false;
+    XrString *name = XR_TO_STRING(parsed_name);
+    bool ok = false;
+    for (uint32_t i = 0; i < target->member_count; i++) {
+        const char *candidate = xr_enum_type_member_name(target, i);
+        if (!candidate || strlen(candidate) != name->length ||
+            memcmp(candidate, name->data, name->length) != 0)
+            continue;
+        XrEnumAggregateValue *value = xr_enum_zero_payload_value(p->X, target, i);
+        if (value) {
+            *out = XR_FROM_PTR(value);
+            ok = true;
+        }
+        break;
+    }
+    direct_release_owned_value(parsed_name);
+    return ok;
+}
 
 static uint8_t direct_json_schema_tid(const XrJsonDecodeSchema *schema) {
     if (!schema)
@@ -889,6 +919,16 @@ static bool direct_parse_typed_schema(JsonDirectParser *p, XrCoroutine *coro,
         case XR_JSON_VALUE_MAP:
             ok = direct_parse_typed_map(p, coro, schema, path, out, error);
             break;
+        case XR_JSON_VALUE_ENUM:
+            ok = direct_parse_typed_enum(p, schema, out);
+            break;
+        case XR_JSON_VALUE_CLASS_INSTANCE: {
+            XrString *class_name = (XrString *) schema->target_descriptor;
+            XrClass *target = class_name ? xr_class_lookup_by_name(p->X, class_name->data) : NULL;
+            ok = target && (target->flags & XR_CLASS_DERIVE_JSON) != 0 &&
+                 direct_parse_typed_object(p, coro, target, path, out, error);
+            break;
+        }
         case XR_JSON_VALUE_ANY:
         default:
             break;
@@ -908,7 +948,8 @@ static bool direct_parse_typed_field(JsonDirectParser *p, XrCoroutine *coro,
 static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, XrClass *target,
                                       const char *path, XrValue *out,
                                       XrJsonTypedParseError *error) {
-    if (!p || !target || !out || target->field_count == 0 || !target->fields ||
+    int instance_fields = target ? xr_class_instance_field_count(target) : 0;
+    if (!p || !target || !out || instance_fields <= 0 || !target->fields ||
         p->depth >= JSON_MAX_DEPTH) {
         direct_typed_error(p, error, path, "object", NULL);
         return false;
@@ -921,7 +962,7 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
     p->pos++;
     p->depth++;
 
-    uint16_t field_count = target->field_count;
+    uint16_t field_count = (uint16_t) instance_fields;
     XrValue *values = (XrValue *) xr_malloc((size_t) field_count * sizeof(XrValue));
     uint8_t *seen = (uint8_t *) xr_calloc(field_count, sizeof(uint8_t));
     if (!values || !seen) {
@@ -959,6 +1000,8 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
             direct_skip_whitespace(p);
 
             int field_index = xr_class_lookup_field_by_name(p->X, target, key);
+            if (field_index >= field_count)
+                field_index = -1;
             if (field_index < 0) {
                 ok = direct_skip_value(p);
                 if (!ok)
@@ -1009,14 +1052,20 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
 
     XrValue result = xr_null();
     if (ok) {
-        XrJson *object = xr_json_new_with_class(coro, target);
+        XrInstance *object = (target->flags & XR_CLASS_DYNAMIC_LAYOUT)
+                                 ? (XrInstance *) xr_json_new_with_class(coro, target)
+                                 : xr_instance_new(p->X, target);
         if (!object) {
             direct_typed_error(p, error, path, "available memory", "out_of_memory");
             ok = false;
         } else {
             result = XR_FROM_PTR(object);
             for (uint16_t i = 0; i < field_count; i++) {
-                if (!xr_instance_set_dynamic_field_direct(object, i, values[i])) {
+                bool stored = (target->flags & XR_CLASS_DYNAMIC_LAYOUT)
+                                  ? xr_instance_set_dynamic_field_direct((XrJson *) object, i,
+                                                                         values[i])
+                                  : xr_instance_set_decoded_field(object, i, values[i]);
+                if (!stored) {
                     for (uint16_t j = i; j < field_count; j++)
                         direct_release_owned_value(values[j]);
                     memset(seen, 0, field_count);

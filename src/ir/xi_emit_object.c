@@ -17,8 +17,10 @@
 #include "../runtime/object/xstring.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/class/xclass.h"
+#include "../runtime/class/xclass_info.h"
 #include "../runtime/class/xinstance.h"
 #include "../runtime/class/xmethod.h"
+#include "../runtime/class/xenum.h"
 #include "../runtime/closure/xclosure.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
@@ -30,6 +32,9 @@
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/analyzer/xa_selection.h"
+#include "../frontend/analyzer/xanalyzer_symbol.h"
+
+#include <limits.h>
 
 /* Recursively propagate shared_offset to a proto and all its descendants.
  * When a parent closure emits a child via xi_emit(), the child's sub-protos
@@ -672,11 +677,41 @@ static void xi_json_decode_schema_dispose(XrJsonDecodeSchema *schema) {
     memset(schema, 0, sizeof(*schema));
 }
 
+static XrEnumType *xi_json_decode_enum_type_from_type(EmitCtx *ctx, const XrType *type) {
+    const XrEnumLayout *layout = type && XR_TYPE_IS_ENUM(type) ? type->enum_type.layout : NULL;
+    if (!ctx || !ctx->isolate || !layout || !layout->is_zero_payload ||
+        !layout->nominal_owner || !layout->nominal_owner[0] || !layout->name ||
+        layout->variant_count == 0 || layout->variant_count > INT_MAX || !layout->variants)
+        return NULL;
+    char **member_names =
+        (char **) xr_malloc((size_t) layout->variant_count * sizeof(char *));
+    if (!member_names)
+        return NULL;
+    for (uint32_t i = 0; i < layout->variant_count; i++)
+        member_names[i] = (char *) layout->variants[i].name;
+    XrEnumType *result = xr_enum_type_new(ctx->isolate, layout->nominal_owner, layout->name,
+                                          member_names, (int) layout->variant_count);
+    xr_free(member_names);
+    return result;
+}
+
 static bool xi_json_decode_schema_from_type(EmitCtx *ctx, const XrType *type, int depth,
                                             XrJsonDecodeSchema *out) {
     if (!ctx || !type || !out || depth > 16)
         return false;
     memset(out, 0, sizeof(*out));
+    if (XR_TYPE_IS_INSTANCE(type) && type->instance.class_ref &&
+        (type->instance.class_ref->derive_flags & XR_DERIVE_JSON) != 0 &&
+        type->instance.class_name) {
+        XrString *class_name = xr_string_intern_permanent(
+            ctx->isolate, type->instance.class_name, strlen(type->instance.class_name));
+        if (!class_name)
+            return false;
+        out->value_kind = XR_JSON_VALUE_CLASS_INSTANCE |
+                          (type->is_nullable ? XR_JSON_VALUE_NULLABLE : 0u);
+        out->target_descriptor = class_name;
+        return true;
+    }
     out->value_kind = xr_type_json_value_kind(type);
     switch ((XrJsonValueKind) xr_json_value_kind_base(out->value_kind)) {
         case XR_JSON_VALUE_STRUCT_OBJECT:
@@ -701,6 +736,9 @@ static bool xi_json_decode_schema_from_type(EmitCtx *ctx, const XrType *type, in
             out->child = child;
             return true;
         }
+        case XR_JSON_VALUE_ENUM:
+            out->target_descriptor = xi_json_decode_enum_type_from_type(ctx, type);
+            return out->target_descriptor != NULL;
         case XR_JSON_VALUE_NULL:
         case XR_JSON_VALUE_BOOL:
         case XR_JSON_VALUE_INT:
@@ -1423,7 +1461,8 @@ static XrValue ast_field_default_to_value(EmitCtx *ctx, AstNode *init) {
 
 /* Populate instance and static fields on the descriptor from AST. */
 static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd,
-                                           XrClassDescriptor *desc) {
+                                            XrClassInfo *class_info,
+                                            XrClassDescriptor *desc) {
     /* Instance fields */
     uint32_t fc = 0;
     for (int i = 0; i < cd->field_count; i++)
@@ -1448,6 +1487,22 @@ static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd,
                               : NULL;
             desc->instance_fields[idx].default_value =
                 ast_field_default_to_value(ctx, f->initializer);
+            if ((desc->flags & XR_CLASS_DERIVE_JSON) != 0) {
+                XaSymbol *field_symbol =
+                    class_info ? xa_class_info_lookup_instance_member(class_info, f->name) : NULL;
+                XrType *field_type = field_symbol && (field_symbol->links.type ||
+                                                       field_symbol->links.declared_type)
+                                         ? (field_symbol->links.type
+                                                ? field_symbol->links.type
+                                                : field_symbol->links.declared_type)
+                                         : (f->field_type
+                                                ? xr_tref_resolve(ctx->isolate, f->field_type)
+                                                : NULL);
+                if (!field_type || !xi_json_decode_schema_from_type(
+                                       ctx, field_type, 0,
+                                       &desc->instance_fields[idx].json_decode_schema))
+                    return false;
+            }
             if (f->is_private)
                 desc->instance_fields[idx].flags |= XR_FIELD_PRIVATE;
             if (f->is_final)
@@ -1579,7 +1634,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
     if (cdata->is_cycle_candidate)
         desc->flags |= XR_CLASS_CYCLE_CANDIDATE;
 
-    if (!emit_class_collect_fields_impl(ctx, cd, desc)) {
+    if (!emit_class_collect_fields_impl(ctx, cd, cdata->class_info, desc)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }

@@ -128,7 +128,7 @@ static XrType *xa_visit_json_typed_parse(XaInferContext *ctx, AstNode *node,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
         return xr_type_new_error(ctx->analyzer->isolate);
     }
-    if (!xr_type_is_json_decode_field_supported(target)) {
+    if (!xr_type_is_json_decode_field_supported(target) && !XR_TYPE_IS_INSTANCE(target)) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
             "Json.parse<T>() target is not decodable: UNSUPPORTED_TYPE", &loc);
@@ -6079,7 +6079,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
             XaJsonCapabilityResult target_capability = xa_json_decodable(target_type);
             bool structural_target = XR_TYPE_IS_STRUCT_OBJECT(target_type);
-            if ((!structural_target &&
+            bool class_target = XR_TYPE_IS_INSTANCE(target_type);
+            if ((class_target && !target_capability.supported) ||
+                (!structural_target && !class_target &&
                  (!target_capability.supported ||
                   !xr_type_is_json_decode_field_supported(target_type))) ||
                 (structural_target &&

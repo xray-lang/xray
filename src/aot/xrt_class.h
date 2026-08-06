@@ -80,6 +80,9 @@ typedef struct {
     const char *name;
     uint16_t offset;
     uint8_t native_type;
+    uint8_t json_value_kind;
+    uint16_t json_enum_member_count;
+    const char *const *json_enum_member_names;
 } XrtInspectField;
 
 typedef struct {

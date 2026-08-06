@@ -234,6 +234,21 @@ static XrJsonDecodeSchema xr_json_decode_schema_clone(XrSystemHeap *heap,
     return copy;
 }
 
+bool xr_json_decode_schema_clone_for_class(XrVMRuntime *X,
+                                           const XrJsonDecodeSchema *source,
+                                           XrJsonDecodeSchema *out) {
+    if (!X || !source || !out)
+        return false;
+    XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
+    if (!heap)
+        return false;
+    bool ok = true;
+    *out = xr_json_decode_schema_clone(heap, source, &ok, 0);
+    if (!ok)
+        memset(out, 0, sizeof(*out));
+    return ok;
+}
+
 static XrClass *xr_class_transition_get_or_create_impl(XrVMRuntime *X, XrClass *klass, int symbol,
                                                        const char *field_name,
                                                        uint64_t stable_type_key,

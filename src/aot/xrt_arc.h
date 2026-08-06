@@ -123,17 +123,17 @@ static inline void xrt_coll_release(XrValue v);
 
 /* `_rsv` is an ABI-stable auxiliary word whose meaning is selected by the
  * object's storage/runtime domain. Generic prefix allocations use the small
- * XRT_ARC_KIND_* values for builtin destructor routing. Embedded AOT-native
- * class instances use a disjoint tagged encoding for the compilation-local
- * class table id. Keeping that id out of XrObjHeader.type is what makes the
- * object header's type field canonical across VM and AOT. */
+ * XRT_ARC_KIND_* values for builtin destructor routing. AOT-native class
+ * instances and registered value-struct boxes use a disjoint tagged encoding
+ * for the compilation-local type table id. Keeping that id out of
+ * XrObjHeader.type is what makes the object header's type field canonical
+ * across VM and AOT. */
 #define XRT_AOT_CLASS_TYPE_TAG 0x80000000u
 #define XRT_AOT_CLASS_TYPE_TAG_MASK 0xFFFF0000u
 #define XRT_AOT_CLASS_TYPE_ID_MASK 0x0000FFFFu
 
 static inline uint16_t xrt_aot_class_type_id(const XrObjHeader *hdr) {
     if (!hdr || hdr->type != XR_TINSTANCE ||
-        (hdr->extra & XR_OBJ_AOT_NATIVE) == 0 ||
         (hdr->_rsv & XRT_AOT_CLASS_TYPE_TAG_MASK) != XRT_AOT_CLASS_TYPE_TAG)
         return 0;
     return (uint16_t) (hdr->_rsv & XRT_AOT_CLASS_TYPE_ID_MASK);

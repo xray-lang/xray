@@ -5932,7 +5932,11 @@ static XiValue *lower_json_object_codec(XiLower *l, AstNode *node, const CallExp
     if (!l || !node || !call || call->arg_count != 1)
         return NULL;
     XrType *result_type = xi_lower_node_type(l, node);
-    if (!result_type || !xr_type_is_json_decode_field_supported(result_type))
+    bool derived_class = result_type && XR_TYPE_IS_INSTANCE(result_type) &&
+                         result_type->instance.class_ref &&
+                         (result_type->instance.class_ref->derive_flags & XR_DERIVE_JSON) != 0;
+    if (!result_type ||
+        (!xr_type_is_json_decode_field_supported(result_type) && !derived_class))
         return NULL;
 
     bool object_target = XR_TYPE_IS_STRUCT_OBJECT(result_type);

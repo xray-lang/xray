@@ -692,11 +692,12 @@ static bool bc_write_dynamic_shape(BcWriter *w, XrValue val);
 static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
                            bool as_class_descriptor);
 static XrValue bc_read_value(BcReader *r);
+static bool bc_read_json_decode_schema(BcReader *r, XrJsonDecodeSchema *out, int depth);
 
 static bool bc_write_json_decode_schema(BcWriter *w, const XrJsonDecodeSchema *schema,
                                         int depth) {
     if (!w || !schema || depth > 32 ||
-        xr_json_value_kind_base(schema->value_kind) > XR_JSON_VALUE_MAP)
+        xr_json_value_kind_base(schema->value_kind) > XR_JSON_VALUE_CLASS_INSTANCE)
         return false;
     if (!bc_put_u8(w, schema->value_kind) || !bc_put_u8(w, schema->storage_type))
         return false;
@@ -708,6 +709,12 @@ static bool bc_write_json_decode_schema(BcWriter *w, const XrJsonDecodeSchema *s
         case XR_JSON_VALUE_ARRAY:
         case XR_JSON_VALUE_MAP:
             return schema->child && bc_write_json_decode_schema(w, schema->child, depth + 1);
+        case XR_JSON_VALUE_ENUM:
+            return schema->target_descriptor &&
+                   bc_write_value(w, XR_FROM_PTR(schema->target_descriptor), false, false);
+        case XR_JSON_VALUE_CLASS_INSTANCE:
+            return schema->target_descriptor &&
+                   bc_write_value(w, XR_FROM_PTR(schema->target_descriptor), false, false);
         default:
             return schema->child == NULL;
     }
@@ -776,7 +783,8 @@ static bool bc_write_field_descriptor(BcWriter *w, const XrFieldDescriptorEntry 
         return false;
     if (!bc_write_value(w, field->default_value, false, false))
         return false;
-    return bc_put_u16(w, field->flags);
+    return bc_put_u16(w, field->flags) &&
+           bc_write_json_decode_schema(w, &field->json_decode_schema, 0);
 }
 
 static bool bc_write_method_descriptor(BcWriter *w, const XrMethodDescriptorEntry *method) {
@@ -996,7 +1004,8 @@ static bool bc_read_field_descriptor(BcReader *r, XrFieldDescriptorEntry *field)
     field->type_name = bc_read_optional_string(r);
     field->default_value = bc_read_value(r);
     field->flags = bc_get_u16(r);
-    return r->error == XR_BC_OK;
+    return r->error == XR_BC_OK &&
+           bc_read_json_decode_schema(r, &field->json_decode_schema, 0);
 }
 
 static bool bc_read_method_descriptor(BcReader *r, XrMethodDescriptorEntry *method) {
@@ -1302,7 +1311,7 @@ static bool bc_read_json_decode_schema(BcReader *r, XrJsonDecodeSchema *out, int
     out->value_kind = bc_get_u8(r);
     out->storage_type = bc_get_u8(r);
     uint8_t base = xr_json_value_kind_base(out->value_kind);
-    if (r->error != XR_BC_OK || base > XR_JSON_VALUE_MAP ||
+    if (r->error != XR_BC_OK || base > XR_JSON_VALUE_CLASS_INSTANCE ||
         out->storage_type >= XR_ELEM_COUNT) {
         if (r->error == XR_BC_OK)
             r->error = XR_BC_ERR_CORRUPT;
@@ -1316,6 +1325,22 @@ static bool bc_read_json_decode_schema(BcReader *r, XrJsonDecodeSchema *out, int
             return false;
         }
         out->target_descriptor = (const void *) (intptr_t) XR_TO_INT(nested);
+    } else if (base == XR_JSON_VALUE_ENUM) {
+        XrValue enum_type = bc_read_value(r);
+        if (r->error != XR_BC_OK || !XR_IS_ENUM_TYPE(enum_type)) {
+            if (r->error == XR_BC_OK)
+                r->error = XR_BC_ERR_CORRUPT;
+            return false;
+        }
+        out->target_descriptor = XR_TO_PTR(enum_type);
+    } else if (base == XR_JSON_VALUE_CLASS_INSTANCE) {
+        XrValue class_name = bc_read_value(r);
+        if (r->error != XR_BC_OK || !XR_IS_STRING(class_name)) {
+            if (r->error == XR_BC_OK)
+                r->error = XR_BC_ERR_CORRUPT;
+            return false;
+        }
+        out->target_descriptor = XR_TO_PTR(class_name);
     } else if (base == XR_JSON_VALUE_ARRAY || base == XR_JSON_VALUE_MAP) {
         XrJsonDecodeSchema *child = (XrJsonDecodeSchema *) xr_calloc(1, sizeof(*child));
         if (!child) {

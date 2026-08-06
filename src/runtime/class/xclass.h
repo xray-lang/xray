@@ -34,16 +34,6 @@
 
 typedef struct XrClass XrClass;
 
-/* Recursive construction contract for compiler-lowered typed Json decoding.
- * Object nodes point at their exact target class; Array/Map nodes point at one
- * child schema and carry the packed element layout selected by both backends. */
-typedef struct XrJsonDecodeSchema {
-    uint8_t value_kind;   /* XrJsonValueKind plus XR_JSON_VALUE_NULLABLE */
-    uint8_t storage_type; /* XrArrayElemType; Map uses the value lane */
-    uint16_t reserved;
-    const void *target_descriptor;
-    const struct XrJsonDecodeSchema *child;
-} XrJsonDecodeSchema;
 typedef struct XrInstance XrInstance;
 typedef struct XrArena XrArena;
 typedef struct XrCoroHeap XrCoroHeap;

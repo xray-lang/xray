@@ -78,6 +78,10 @@ XR_FUNC void xr_instance_set_field(XrVMRuntime *X, XrInstance *inst, const char 
 // Fast path by index
 XR_FUNC XrValue xr_instance_get_field_by_index(XrInstance *inst, int index);
 XR_FUNC void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value);
+/* Store one already type-checked Json-decoded value. Ordinary classes use the
+ * tagged field slot; value structs additionally materialize their native body
+ * while the tagged slot remains the ownership anchor for referenced values. */
+XR_FUNC bool xr_instance_set_decoded_field(XrInstance *inst, int index, XrValue value);
 
 XR_FUNC XrValue xr_instance_call_method(XrVMRuntime *X, XrInstance *inst, const char *name,
                                         XrValue *args, int argc);
@@ -166,5 +170,8 @@ XR_FUNC struct XrClass *xr_class_build_struct_object_chain(struct XrVMRuntime *X
                                                     const XrJsonDecodeSchema *json_decode_schemas,
                                                     const uint64_t *stable_type_keys,
                                                     const uint8_t *shape_field_flags);
+XR_FUNC bool xr_json_decode_schema_clone_for_class(struct XrVMRuntime *X,
+                                                    const XrJsonDecodeSchema *source,
+                                                    XrJsonDecodeSchema *out);
 
 #endif  // XINSTANCE_H

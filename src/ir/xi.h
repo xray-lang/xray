@@ -788,6 +788,7 @@ typedef struct XiClassData {
     const char *display_name; /* User-visible name (e.g. "Box"), NULL = same as class_name */
     const char *source_file;  /* arena copy of declaration source path (NULL if unavailable) */
     const char **instance_field_names;        /* declared non-static field names, arena-owned */
+    struct XrType **instance_field_types;     /* resolved types parallel to instance_field_names */
     uint32_t *instance_field_source_node_ids; /* evidence-stable IDs parallel to field names */
     XiFieldDefault *instance_field_defaults;  /* declaration defaults parallel to field names */
     uint16_t instance_field_count;

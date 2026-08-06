@@ -2330,6 +2330,7 @@ if(BUILD_TESTS)
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_object_json_domain.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
                 --json
+                --fail-on-legacy
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(object_json_domain_inventory PROPERTIES

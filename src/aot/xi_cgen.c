@@ -7839,6 +7839,12 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (cg_fixed_array_value_clone_place_store(f, v))
         return;
 
+    if (xicgen_emit_json_native_struct_decode_stmt(ctx, out, f, v, prefix)) {
+        emit_value_generated_line_reset(ctx, out, v);
+        emit_debug_source_var_sync(ctx, out, f, v);
+        return;
+    }
+
     const XiValue *wide_mul_partner = NULL;
     bool wide_mul_is_first = false;
     if (cg_u64_mul_wide_pair(ctx, f, v, &wide_mul_partner, &wide_mul_is_first)) {

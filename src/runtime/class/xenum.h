@@ -104,6 +104,17 @@ XR_FUNC int xr_enum_type_payload_count(const XrEnumType *enum_type, uint32_t mem
 XR_FUNC uint16_t xr_enum_type_max_payload(const XrEnumType *enum_type);
 XR_FUNC const char *xr_enum_type_member_name(const XrEnumType *enum_type, uint32_t member_index);
 
+/* Runtime enum metadata may be reconstructed from bytecode-owned decode
+ * schemas. Nominal identity is the stable declaration layout id, not the
+ * address of one isolate-local metadata object. */
+static inline bool xr_enum_type_same_nominal(const XrEnumType *a, const XrEnumType *b) {
+    if (a == b)
+        return true;
+    if (!a || !b || !a->layout || !b->layout)
+        return false;
+    return a->layout->layout_id != 0 && a->layout->layout_id == b->layout->layout_id;
+}
+
 /* ========== Access ========== */
 
 XR_FUNC XrEnumCtor *xr_enum_get_member_by_symbol(XrEnumType *enum_type, int symbol);

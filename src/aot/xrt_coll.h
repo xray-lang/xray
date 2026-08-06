@@ -3972,6 +3972,11 @@ static inline int xrt_json_value_matches_kind(XrValue value, uint8_t encoded_kin
             return XR_IS_ARRAY(value);
         case XR_JSON_VALUE_MAP:
             return value.tag == XR_TAG_PTR && value.ptr && value.heap_type == 0;
+        case XR_JSON_VALUE_ENUM:
+            return XR_IS_INT(value) || (value.tag == XR_TAG_ENUM && value.ptr);
+        case XR_JSON_VALUE_CLASS_INSTANCE:
+            return (value.tag == XR_TAG_PTR && value.ptr && value.heap_type == XR_TINSTANCE) ||
+                   (value.tag == XR_TAG_AGG_REF && !XR_IS_ARRAY_REF(value) && value.ptr);
         case XR_JSON_VALUE_NULL:
         case XR_JSON_VALUE_ANY:
         default:
@@ -3988,6 +3993,31 @@ static inline XrValue xrt_json_decode_struct_object(XrValue data,
                                                      const XrtObjectShape *target_shape,
                                                      int64_t field_count,
                                                      const XrJsonDecodeFieldSpec *fields);
+
+static inline XrValue xrt_json_decode_class_instance(
+    XrValue data, const XrJsonClassDecodeSpec *spec);
+
+static inline int xrt_json_decode_enum_value(XrValue source,
+                                             const XrJsonEnumDecodeSpec *spec,
+                                             XrValue *out) {
+    if (!XR_IS_STR(source) || !spec || !spec->enum_name || !spec->member_names ||
+        spec->member_count == 0 || !out)
+        return 0;
+    const char *name = xr_str_data(source);
+    int64_t name_length = xr_str_len(source);
+    for (uint16_t i = 0; i < spec->member_count; i++) {
+        const char *candidate = spec->member_names[i];
+        if (!candidate || (int64_t) strlen(candidate) != name_length ||
+            memcmp(candidate, name, (size_t) name_length) != 0)
+            continue;
+        /* AOT payload-free enums use their ordinal scalar representation. The
+         * static schema still validates nominal member names; boxing here would
+         * make a native enum field observe a pointer payload through XR_TO_INT. */
+        *out = XR_FROM_INT((int64_t) i);
+        return 1;
+    }
+    return 0;
+}
 
 static inline int xrt_json_decode_value(XrValue source, const XrJsonDecodeFieldSpec *spec,
                                         XrValue *out) {
@@ -4073,6 +4103,17 @@ static inline int xrt_json_decode_value(XrValue source, const XrJsonDecodeFieldS
             *out = dst;
             return 1;
         }
+        case XR_JSON_VALUE_ENUM:
+            return xrt_json_decode_enum_value(
+                source, (const XrJsonEnumDecodeSpec *) spec->target_shape, out);
+        case XR_JSON_VALUE_CLASS_INSTANCE: {
+            XrValue decoded = xrt_json_decode_class_instance(
+                source, (const XrJsonClassDecodeSpec *) spec->target_shape);
+            if (XR_IS_NULL(decoded))
+                return 0;
+            *out = decoded;
+            return 1;
+        }
         default:
             if (!xrt_json_value_matches_kind(source, spec->value_kind))
                 return 0;
@@ -4133,6 +4174,155 @@ static inline XrValue xrt_json_decode_struct_object(XrValue data,
         xrt_json_set_field(dstv, (int) i, decoded_values[i]);
     XRT_FREE(decoded_values);
     return dstv;
+}
+
+static inline int xrt_json_class_store_field(void *object,
+                                             const XrJsonClassDecodeFieldSpec *field,
+                                             XrValue value) {
+    if (!object || !field)
+        return 0;
+    uint8_t *dst = (uint8_t *) object + field->offset;
+#define XRT_JSON_STORE_NATIVE(type_, expression_)                                                \
+    do {                                                                                         \
+        type_ native_value = (expression_);                                                      \
+        memcpy(dst, &native_value, sizeof(native_value));                                        \
+        return 1;                                                                                \
+    } while (0)
+    switch (field->native_type) {
+        case XR_NATIVE_I64:
+            XRT_JSON_STORE_NATIVE(int64_t, XR_TO_INT(value));
+        case XR_NATIVE_U64:
+            XRT_JSON_STORE_NATIVE(uint64_t, (uint64_t) XR_TO_INT(value));
+        case XR_NATIVE_ISIZE:
+            XRT_JSON_STORE_NATIVE(ptrdiff_t, (ptrdiff_t) XR_TO_INT(value));
+        case XR_NATIVE_USIZE:
+            XRT_JSON_STORE_NATIVE(size_t, (size_t) XR_TO_INT(value));
+        case XR_NATIVE_I32:
+            XRT_JSON_STORE_NATIVE(int32_t, (int32_t) XR_TO_INT(value));
+        case XR_NATIVE_U32:
+            XRT_JSON_STORE_NATIVE(uint32_t, (uint32_t) XR_TO_INT(value));
+        case XR_NATIVE_I16:
+            XRT_JSON_STORE_NATIVE(int16_t, (int16_t) XR_TO_INT(value));
+        case XR_NATIVE_U16:
+            XRT_JSON_STORE_NATIVE(uint16_t, (uint16_t) XR_TO_INT(value));
+        case XR_NATIVE_I8:
+            XRT_JSON_STORE_NATIVE(int8_t, (int8_t) XR_TO_INT(value));
+        case XR_NATIVE_U8:
+            XRT_JSON_STORE_NATIVE(uint8_t, (uint8_t) XR_TO_INT(value));
+        case XR_NATIVE_F64:
+            XRT_JSON_STORE_NATIVE(double, XR_TO_FLOAT(value));
+        case XR_NATIVE_F32:
+            XRT_JSON_STORE_NATIVE(float, (float) XR_TO_FLOAT(value));
+        case XR_NATIVE_BOOL:
+            XRT_JSON_STORE_NATIVE(uint8_t, XR_TO_BOOL(value) ? 1u : 0u);
+        case XR_NATIVE_STRING:
+        case XR_NATIVE_VALUE:
+            memcpy(dst, &value, sizeof(value));
+            return 1;
+        case XR_NATIVE_ARRAY_REF:
+            if (!XR_IS_ARRAY(value))
+                return 0;
+            XRT_JSON_STORE_NATIVE(void *, value.ptr);
+        case XR_NATIVE_MAP_REF:
+            if (!XR_IS_MAP(value))
+                return 0;
+            XRT_JSON_STORE_NATIVE(void *, value.ptr);
+        case XR_NATIVE_SET_REF:
+            if (!XR_IS_SET(value))
+                return 0;
+            XRT_JSON_STORE_NATIVE(void *, value.ptr);
+        case XR_NATIVE_NESTED_AGGREGATE: {
+            const XrJsonClassDecodeSpec *nested =
+                xr_json_value_kind_base(field->value.value_kind) ==
+                        XR_JSON_VALUE_CLASS_INSTANCE
+                    ? (const XrJsonClassDecodeSpec *) field->value.target_shape
+                    : NULL;
+            if (!nested || nested->target_kind != XR_JSON_NOMINAL_TARGET_VALUE_STRUCT ||
+                nested->instance_size == 0 || value.tag != XR_TAG_AGG_REF ||
+                XR_IS_ARRAY_REF(value) ||
+                !value.ptr)
+                return 0;
+            memcpy(dst, value.ptr, nested->instance_size);
+            memset(value.ptr, 0, nested->instance_size);
+            xrt_release(value);
+            return 1;
+        }
+        default:
+            return 0;
+    }
+#undef XRT_JSON_STORE_NATIVE
+}
+
+static inline XrValue xrt_json_value_struct_alloc(const XrJsonClassDecodeSpec *spec) {
+    if (!spec || spec->target_kind != XR_JSON_NOMINAL_TARGET_VALUE_STRUCT ||
+        spec->type_id == 0 || spec->instance_size == 0 || spec->instance_size > UINT16_MAX)
+        return XR_NULL_VAL;
+    void *object = xrt_arc_alloc(spec->instance_size);
+    XrObjHeader *header = XRT_ARC_HDR(object);
+    xrt_heap_header_init(header, XR_TINSTANCE);
+    xrt_aot_class_type_set(header, spec->type_id);
+    header->extra |= XR_OBJ_HAS_DTOR;
+    return xr_aggregate_ref(object, (uint16_t) spec->instance_size);
+}
+
+static inline XrValue xrt_json_class_from_values(const XrJsonClassDecodeSpec *spec,
+                                                 XrValue *values) {
+    if (!spec || !values || spec->type_id == 0 || spec->field_count == 0 || !spec->fields)
+        return XR_NULL_VAL;
+    const XrtTypeDeriveInfo *derive = xrt_type_derive_info(spec->type_id);
+    if (!derive || (derive->derive_flags & XR_DERIVE_JSON) == 0)
+        return XR_NULL_VAL;
+    XrValue result = XR_NULL_VAL;
+    void *object = NULL;
+    if (spec->target_kind == XR_JSON_NOMINAL_TARGET_CLASS &&
+        spec->instance_size >= sizeof(XrObjHeader)) {
+        object = xrt_obj_alloc(spec->type_id, spec->instance_size);
+        result = xrt_box_obj(object);
+    } else if (spec->target_kind == XR_JSON_NOMINAL_TARGET_VALUE_STRUCT) {
+        result = xrt_json_value_struct_alloc(spec);
+        object = result.ptr;
+    }
+    if (!object)
+        return XR_NULL_VAL;
+    for (uint16_t i = 0; i < spec->field_count; i++) {
+        if (xrt_json_class_store_field(object, &spec->fields[i], values[i])) {
+            values[i] = XR_NULL_VAL;
+            continue;
+        }
+        xrt_release(result);
+        return XR_NULL_VAL;
+    }
+    return result;
+}
+
+static inline XrValue xrt_json_decode_class_instance(
+    XrValue data, const XrJsonClassDecodeSpec *spec) {
+    if (!spec || spec->field_count == 0 || !spec->fields || data.tag != XR_TAG_PTR ||
+        !data.ptr || data.heap_type != 0)
+        return XR_NULL_VAL;
+    xrt_json_t *source = (xrt_json_t *) data.ptr;
+    if (xrt_object_domain(source) != XRT_OBJECT_JSON &&
+        xrt_object_domain(source) != XRT_OBJECT_STRUCT)
+        return XR_NULL_VAL;
+    XrValue *values =
+        (XrValue *) XRT_CALLOC((size_t) spec->field_count, sizeof(XrValue));
+    if (!values)
+        return XR_NULL_VAL;
+    for (uint16_t i = 0; i < spec->field_count; i++) {
+        const XrJsonClassDecodeFieldSpec *field = &spec->fields[i];
+        if (!field->name || !xrt_json_has_name(data, field->name) ||
+            !xrt_json_decode_value(xrt_json_get_name(data, field->name), &field->value,
+                                   &values[i])) {
+            xrt_json_decode_release_partial(values, i);
+            XRT_FREE(values);
+            return XR_NULL_VAL;
+        }
+    }
+    XrValue result = xrt_json_class_from_values(spec, values);
+    if (XR_IS_NULL(result))
+        xrt_json_decode_release_partial(values, spec->field_count);
+    XRT_FREE(values);
+    return result;
 }
 
 static inline int64_t xrt_json_static_has(XrValue obj, XrValue key) {
@@ -4792,6 +4982,10 @@ static inline const char *xrt_json_expected_kind(uint8_t encoded_kind) {
             return "array";
         case XR_JSON_VALUE_MAP:
             return "object";
+        case XR_JSON_VALUE_ENUM:
+            return "enum member string";
+        case XR_JSON_VALUE_CLASS_INSTANCE:
+            return "object";
         case XR_JSON_VALUE_ANY:
         default:
             return "supported Json value";
@@ -4800,10 +4994,12 @@ static inline const char *xrt_json_expected_kind(uint8_t encoded_kind) {
 
 static int xrt_json_parse_typed_object_value(xrt_json_parser_t *p,
                                              const XrtObjectShape *target_shape,
+                                             const XrJsonClassDecodeSpec *class_spec,
                                              int64_t field_count,
                                              const XrJsonDecodeFieldSpec *fields,
                                              const char *path, XrValue *out,
-                                             XrtJsonTypedParseError *error);
+                                             XrtJsonTypedParseError *error,
+                                             void *native_target);
 
 static int xrt_json_parse_typed_field(xrt_json_parser_t *p,
                                       const XrJsonDecodeFieldSpec *field, const char *path,
@@ -4960,8 +5156,8 @@ static int xrt_json_parse_typed_field(xrt_json_parser_t *p,
         case XR_JSON_VALUE_STRUCT_OBJECT:
             ok = field->target_shape && field->nested_fields && field->nested_field_count > 0 &&
                  xrt_json_parse_typed_object_value(
-                     p, (const XrtObjectShape *) field->target_shape, field->nested_field_count,
-                     field->nested_fields, path, out, error);
+                     p, (const XrtObjectShape *) field->target_shape, NULL,
+                     field->nested_field_count, field->nested_fields, path, out, error, NULL);
             break;
         case XR_JSON_VALUE_ARRAY:
             ok = xrt_json_parse_typed_array_value(p, field, path, out, error);
@@ -4969,6 +5165,23 @@ static int xrt_json_parse_typed_field(xrt_json_parser_t *p,
         case XR_JSON_VALUE_MAP:
             ok = xrt_json_parse_typed_map_value(p, field, path, out, error);
             break;
+        case XR_JSON_VALUE_ENUM: {
+            XrValue parsed = XR_NULL_VAL;
+            ok = xrt_json_parse_string_value(p, &parsed) &&
+                 xrt_json_decode_enum_value(
+                     parsed, (const XrJsonEnumDecodeSpec *) field->target_shape, out);
+            xrt_release(parsed);
+            break;
+        }
+        case XR_JSON_VALUE_CLASS_INSTANCE: {
+            const XrJsonClassDecodeSpec *class_spec =
+                (const XrJsonClassDecodeSpec *) field->target_shape;
+            ok = class_spec && class_spec->field_count > 0 && class_spec->fields &&
+                 xrt_json_parse_typed_object_value(p, NULL, class_spec,
+                                                   class_spec->field_count, NULL, path, out,
+                                                   error, NULL);
+            break;
+        }
         case XR_JSON_VALUE_ANY:
         default:
             ok = 0;
@@ -4981,13 +5194,17 @@ static int xrt_json_parse_typed_field(xrt_json_parser_t *p,
 
 static int xrt_json_parse_typed_object_value(xrt_json_parser_t *p,
                                              const XrtObjectShape *target_shape,
+                                             const XrJsonClassDecodeSpec *class_spec,
                                              int64_t field_count,
                                              const XrJsonDecodeFieldSpec *fields,
                                              const char *path, XrValue *out,
-                                             XrtJsonTypedParseError *error) {
-    if (!p || !target_shape || !fields || !out || field_count <= 0 ||
-        target_shape->field_count != field_count ||
-        target_shape->object_domain != XRT_OBJECT_STRUCT ||
+                                             XrtJsonTypedParseError *error,
+                                             void *native_target) {
+    int struct_target = target_shape && fields && target_shape->field_count == field_count &&
+                        target_shape->object_domain == XRT_OBJECT_STRUCT;
+    int class_target = class_spec && class_spec->fields &&
+                       class_spec->field_count == field_count;
+    if (!p || !out || field_count <= 0 || (!struct_target && !class_target) ||
         p->depth >= XRT_JSON_PARSE_MAX_DEPTH) {
         xrt_json_typed_error(p, error, path, "object", NULL);
         return 0;
@@ -5037,7 +5254,8 @@ static int xrt_json_parse_typed_object_value(xrt_json_parser_t *p,
 
             int64_t field_index = -1;
             for (int64_t i = 0; i < field_count; i++) {
-                if (fields[i].name && strcmp(fields[i].name, key_name) == 0) {
+                const char *candidate = class_target ? class_spec->fields[i].name : fields[i].name;
+                if (candidate && strcmp(candidate, key_name) == 0) {
                     field_index = i;
                     break;
                 }
@@ -5054,8 +5272,31 @@ static int xrt_json_parse_typed_object_value(xrt_json_parser_t *p,
             } else {
                 char field_path[160];
                 snprintf(field_path, sizeof(field_path), "%s.%s", path, key_name);
-                ok = xrt_json_parse_typed_field(p, &fields[field_index], field_path,
-                                                &values[field_index], error);
+                const XrJsonDecodeFieldSpec *value_spec =
+                    class_target ? &class_spec->fields[field_index].value
+                                 : &fields[field_index];
+                const XrJsonClassDecodeFieldSpec *native_field =
+                    class_target && native_target ? &class_spec->fields[field_index] : NULL;
+                const XrJsonClassDecodeSpec *nested_native =
+                    value_spec &&
+                            xr_json_value_kind_base(value_spec->value_kind) ==
+                                XR_JSON_VALUE_CLASS_INSTANCE
+                        ? (const XrJsonClassDecodeSpec *) value_spec->target_shape
+                        : NULL;
+                if (native_field && native_field->native_type == XR_NATIVE_NESTED_AGGREGATE &&
+                    nested_native &&
+                    nested_native->target_kind == XR_JSON_NOMINAL_TARGET_VALUE_STRUCT &&
+                    nested_native->instance_size > 0) {
+                    void *nested_target =
+                        (uint8_t *) native_target + native_field->offset;
+                    memset(nested_target, 0, nested_native->instance_size);
+                    ok = xrt_json_parse_typed_object_value(
+                        p, NULL, nested_native, nested_native->field_count, NULL, field_path,
+                        &values[field_index], error, nested_target);
+                } else {
+                    ok = xrt_json_parse_typed_field(p, value_spec, field_path,
+                                                    &values[field_index], error);
+                }
                 if (ok)
                     seen[field_index] = 1;
             }
@@ -5082,8 +5323,10 @@ static int xrt_json_parse_typed_object_value(xrt_json_parser_t *p,
             if (seen[i])
                 continue;
             char missing_path[160];
+            const char *missing_name =
+                class_target ? class_spec->fields[i].name : fields[i].name;
             snprintf(missing_path, sizeof(missing_path), "%s.%s", path,
-                     fields[i].name ? fields[i].name : "?");
+                     missing_name ? missing_name : "?");
             xrt_json_typed_error(p, error, missing_path, "present field", "missing");
             ok = 0;
             break;
@@ -5092,11 +5335,34 @@ static int xrt_json_parse_typed_object_value(xrt_json_parser_t *p,
 
     XrValue result = XR_NULL_VAL;
     if (ok) {
-        result = xrt_object_new_shape(target_shape);
-        if (XR_IS_NULL(result)) {
+        if (class_target && native_target) {
+            for (int64_t i = 0; i < field_count; i++) {
+                const XrJsonClassDecodeFieldSpec *native_field = &class_spec->fields[i];
+                const XrJsonClassDecodeSpec *nested_native =
+                    xr_json_value_kind_base(native_field->value.value_kind) ==
+                            XR_JSON_VALUE_CLASS_INSTANCE
+                        ? (const XrJsonClassDecodeSpec *) native_field->value.target_shape
+                        : NULL;
+                if (native_field->native_type == XR_NATIVE_NESTED_AGGREGATE &&
+                    nested_native &&
+                    nested_native->target_kind == XR_JSON_NOMINAL_TARGET_VALUE_STRUCT)
+                    continue;
+                if (!xrt_json_class_store_field(native_target, native_field, values[i])) {
+                    xrt_json_typed_error(p, error, path, "valid native field layout",
+                                         "invalid_target");
+                    ok = 0;
+                    break;
+                }
+                values[i] = XR_NULL_VAL;
+            }
+        } else {
+            result = class_target ? xrt_json_class_from_values(class_spec, values)
+                                  : xrt_object_new_shape(target_shape);
+        }
+        if (ok && !native_target && XR_IS_NULL(result)) {
             xrt_json_typed_error(p, error, path, "available memory", "out_of_memory");
             ok = 0;
-        } else {
+        } else if (ok && struct_target) {
             for (int64_t i = 0; i < field_count; i++)
                 xrt_json_set_field(result, (int) i, values[i]);
         }
@@ -5110,6 +5376,101 @@ static int xrt_json_parse_typed_object_value(xrt_json_parser_t *p,
         return 0;
     *out = result;
     return 1;
+}
+
+static void xrt_json_native_struct_release(const XrJsonClassDecodeSpec *spec, void *target) {
+    if (!spec || !target || spec->target_kind != XR_JSON_NOMINAL_TARGET_VALUE_STRUCT ||
+        spec->field_count == 0 || !spec->fields)
+        return;
+    for (uint16_t i = 0; i < spec->field_count; i++) {
+        const XrJsonClassDecodeFieldSpec *field = &spec->fields[i];
+        uint8_t *slot = (uint8_t *) target + field->offset;
+        switch (field->native_type) {
+            case XR_NATIVE_STRING:
+            case XR_NATIVE_VALUE: {
+                XrValue value = XR_NULL_VAL;
+                memcpy(&value, slot, sizeof(value));
+                xrt_release(value);
+                break;
+            }
+            case XR_NATIVE_ARRAY_REF: {
+                void *ptr = NULL;
+                memcpy(&ptr, slot, sizeof(ptr));
+                if (ptr)
+                    xrt_release(xr_mkptr(ptr, XR_TAG_ARRAY));
+                break;
+            }
+            case XR_NATIVE_MAP_REF: {
+                void *ptr = NULL;
+                memcpy(&ptr, slot, sizeof(ptr));
+                if (ptr)
+                    xrt_release(xr_mkptr(ptr, XR_TAG_MAP));
+                break;
+            }
+            case XR_NATIVE_SET_REF: {
+                void *ptr = NULL;
+                memcpy(&ptr, slot, sizeof(ptr));
+                if (ptr)
+                    xrt_release(xr_mkptr(ptr, XR_TAG_SET));
+                break;
+            }
+            case XR_NATIVE_NESTED_AGGREGATE: {
+                const XrJsonClassDecodeSpec *nested =
+                    xr_json_value_kind_base(field->value.value_kind) ==
+                            XR_JSON_VALUE_CLASS_INSTANCE
+                        ? (const XrJsonClassDecodeSpec *) field->value.target_shape
+                        : NULL;
+                if (nested &&
+                    nested->target_kind == XR_JSON_NOMINAL_TARGET_VALUE_STRUCT)
+                    xrt_json_native_struct_release(nested, slot);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    memset(target, 0, spec->instance_size);
+}
+
+static inline void xrt_json_parse_typed_native_or_throw(
+    XrValue text, const XrJsonClassDecodeSpec *spec, void *target) {
+    if (!spec || !target || spec->target_kind != XR_JSON_NOMINAL_TARGET_VALUE_STRUCT ||
+        spec->instance_size == 0 || spec->field_count == 0 || !spec->fields)
+        xrt_throw_error(XR_ERR_JSON_INVALID,
+                        "Json.parse<T>: path $ expected valid native target, got invalid_target");
+    memset(target, 0, spec->instance_size);
+    if (!XR_IS_STR(text))
+        xrt_throw_error(XR_ERR_JSON_INVALID,
+                        "Json.parse<T>: path $ expected string, got non_string");
+    const char *data = xr_str_data(text);
+    int64_t len = xr_str_len(text);
+    xrt_json_parser_t parser = {
+        .src = data,
+        .end = data ? data + len : data,
+        .pos = data,
+        .depth = 0,
+    };
+    XrtJsonTypedParseError error = {{0}, {0}, {0}};
+    XrValue ignored = XR_NULL_VAL;
+    int ok = data && len > 0 && xrt_json_parse_typed_object_value(
+                                   &parser, NULL, spec, spec->field_count, NULL, "$", &ignored,
+                                   &error, target);
+    if (ok) {
+        xrt_json_parse_skip_ws(&parser);
+        if (parser.pos != parser.end) {
+            xrt_json_typed_error(&parser, &error, "$", "end_of_input", NULL);
+            ok = 0;
+        }
+    }
+    if (!ok) {
+        char message[320];
+        xrt_json_native_struct_release(spec, target);
+        snprintf(message, sizeof(message), "Json.parse<T>: path %s expected %s, got %s",
+                 error.path[0] ? error.path : "$",
+                 error.expected[0] ? error.expected : "valid JSON",
+                 error.actual[0] ? error.actual : "invalid");
+        xrt_throw_error(XR_ERR_JSON_INVALID, message);
+    }
 }
 
 static inline XrValue xrt_json_parse_typed_object_or_throw(
@@ -5129,7 +5490,8 @@ static inline XrValue xrt_json_parse_typed_object_or_throw(
     XrtJsonTypedParseError error = {{0}, {0}, {0}};
     XrValue out = XR_NULL_VAL;
     int ok = data && len > 0 && xrt_json_parse_typed_object_value(
-                                   &parser, target_shape, field_count, fields, "$", &out, &error);
+                                   &parser, target_shape, NULL, field_count, fields, "$", &out,
+                                   &error, NULL);
     if (ok) {
         xrt_json_parse_skip_ws(&parser);
         if (parser.pos != parser.end) {
@@ -5371,12 +5733,93 @@ static inline XrValue xrt_json_encode_set_value(xrt_set_t *src, int depth) {
     return dst;
 }
 
+static inline XrValue xrt_json_encode_native_struct_field(
+    const void *object, const XrJsonClassDecodeFieldSpec *field, int depth) {
+    if (!object || !field)
+        return XR_NULL_VAL;
+    if (depth > XRT_JSON_ENCODE_MAX_DEPTH)
+        xrt_json_encode_abort("value is too deeply nested", XR_NULL_VAL);
+    const XrJsonClassDecodeSpec *nested =
+        xr_json_value_kind_base(field->value.value_kind) == XR_JSON_VALUE_CLASS_INSTANCE
+            ? (const XrJsonClassDecodeSpec *) field->value.target_shape
+            : NULL;
+    if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+        if (!nested || nested->target_kind != XR_JSON_NOMINAL_TARGET_VALUE_STRUCT)
+            xrt_json_encode_abort("nested value-struct metadata is missing", XR_NULL_VAL);
+        const uint8_t *slot = (const uint8_t *) object + field->offset;
+        XrValue dst = xrt_json_new(0);
+        for (uint16_t i = 0; i < nested->field_count; i++) {
+            const XrJsonClassDecodeFieldSpec *child = &nested->fields[i];
+            XrValue key = xr_box_str(child->name ? child->name : "");
+            XrValue item = xrt_json_encode_native_struct_field(slot, child, depth + 1);
+            xrt_json_put_string_key(dst, key, item);
+        }
+        return dst;
+    }
+
+    XrtInspectField inspect = {
+        field->name, (uint16_t) field->offset, field->native_type, 0, 0, NULL,
+    };
+    XrValue item = xrt_inspect_field_value(object, &inspect);
+    if (xr_json_value_kind_base(field->value.value_kind) == XR_JSON_VALUE_ENUM) {
+        if (XR_IS_NULL(item) && xr_json_value_kind_is_nullable(field->value.value_kind))
+            return item;
+        const XrJsonEnumDecodeSpec *enum_spec =
+            (const XrJsonEnumDecodeSpec *) field->value.target_shape;
+        int64_t ordinal = XR_IS_INT(item) ? XR_TO_INT(item) : -1;
+        if (!enum_spec || !enum_spec->member_names || ordinal < 0 ||
+            (uint64_t) ordinal >= enum_spec->member_count ||
+            !enum_spec->member_names[ordinal])
+            xrt_json_encode_abort("enum field has invalid ordinal", item);
+        return xr_box_str(enum_spec->member_names[ordinal]);
+    }
+    return xrt_json_encode_value(item, depth + 1);
+}
+
+static inline XrValue xrt_json_encode_native_struct(
+    const void *object, const XrJsonClassDecodeSpec *spec) {
+    if (!object || !spec || spec->target_kind != XR_JSON_NOMINAL_TARGET_VALUE_STRUCT ||
+        spec->field_count == 0 || !spec->fields)
+        xrt_json_encode_abort("value-struct metadata is missing", XR_NULL_VAL);
+    XrValue dst = xrt_json_new(0);
+    for (uint16_t i = 0; i < spec->field_count; i++) {
+        const XrJsonClassDecodeFieldSpec *field = &spec->fields[i];
+        XrValue key = xr_box_str(field->name ? field->name : "");
+        XrValue item = xrt_json_encode_native_struct_field(object, field, 0);
+        xrt_json_put_string_key(dst, key, item);
+    }
+    return dst;
+}
+
 static inline const XrtTypeDeriveInfo *xrt_json_instance_derive_info(XrValue val) {
     if (val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr)
         return NULL;
     XrObjHeader *hdr = (XrObjHeader *) val.ptr;
     const XrtTypeInfo *ti = xrt_type_info(xrt_aot_class_type_id(hdr));
     return ti ? xrt_type_derive_info(ti->type_id) : NULL;
+}
+
+static inline XrValue xrt_json_encode_inspect_field_value(XrValue owner,
+                                                          const XrtInspectField *field) {
+    XrValue item = xrt_inspect_field_value(owner.ptr, field);
+    if (!field || !field->json_enum_member_names || field->json_enum_member_count == 0)
+        return item;
+    if (XR_IS_NULL(item) && xr_json_value_kind_is_nullable(field->json_value_kind))
+        return item;
+    int64_t ordinal = -1;
+    if (XR_IS_INT(item)) {
+        ordinal = XR_TO_INT(item);
+    } else if (item.tag == XR_TAG_ENUM) {
+        uint32_t member_index = 0;
+        if (xrt_enum_key_parts(item, NULL, NULL, &member_index, NULL))
+            ordinal = (int64_t) member_index;
+    }
+    if (ordinal < 0 || (uint64_t) ordinal >= field->json_enum_member_count)
+        xrt_json_encode_abort("enum field has invalid ordinal", owner);
+    const char *member_name = field->json_enum_member_names[ordinal];
+    if (!member_name)
+        xrt_json_encode_abort("enum field metadata is missing", owner);
+    return xr_box_str(member_name);
 }
 
 static inline XrValue xrt_json_encode_instance_value(XrValue val, int depth) {
@@ -5392,7 +5835,7 @@ static inline XrValue xrt_json_encode_instance_value(XrValue val, int depth) {
     for (uint16_t i = 0; i < di->inspect_field_count; i++) {
         const XrtInspectField *field = &di->inspect_fields[i];
         XrValue key = xr_box_str(field->name ? field->name : "");
-        XrValue item = xrt_inspect_field_value(val.ptr, field);
+        XrValue item = xrt_json_encode_inspect_field_value(val, field);
         xrt_json_put_string_key(dst, key, xrt_json_encode_value(item, depth + 1));
     }
     return dst;
@@ -5517,6 +5960,96 @@ static void xrt_json_stringify_string(xrt_strbuf_t *sb, const char *s, size_t le
         i++;
     }
     xrt_json_sb_char(sb, '"');
+}
+
+static void xrt_json_stringify_native_struct_fields(
+    xrt_strbuf_t *sb, const void *object, const XrJsonClassDecodeSpec *spec, int depth) {
+    if (!object || !spec || spec->target_kind != XR_JSON_NOMINAL_TARGET_VALUE_STRUCT ||
+        spec->field_count == 0 || !spec->fields)
+        xrt_json_stringify_abort("value-struct metadata is missing", XR_NULL_VAL);
+    if (depth > XRT_JSON_STRINGIFY_MAX_DEPTH)
+        xrt_json_stringify_abort("value is too deeply nested", XR_NULL_VAL);
+
+    xrt_json_sb_char(sb, '{');
+    for (uint16_t i = 0; i < spec->field_count; i++) {
+        const XrJsonClassDecodeFieldSpec *field = &spec->fields[i];
+        if (i > 0)
+            xrt_json_sb_char(sb, ',');
+        xrt_json_stringify_string(sb, field->name ? field->name : "",
+                                  strlen(field->name ? field->name : ""));
+        xrt_json_sb_char(sb, ':');
+
+        const XrJsonClassDecodeSpec *nested =
+            xr_json_value_kind_base(field->value.value_kind) == XR_JSON_VALUE_CLASS_INSTANCE
+                ? (const XrJsonClassDecodeSpec *) field->value.target_shape
+                : NULL;
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+            if (!nested || nested->target_kind != XR_JSON_NOMINAL_TARGET_VALUE_STRUCT)
+                xrt_json_stringify_abort("nested value-struct metadata is missing", XR_NULL_VAL);
+            xrt_json_stringify_native_struct_fields(
+                sb, (const uint8_t *) object + field->offset, nested, depth + 1);
+            continue;
+        }
+
+        XrtInspectField inspect = {
+            field->name, (uint16_t) field->offset, field->native_type, 0, 0, NULL,
+        };
+        XrValue item = xrt_inspect_field_value(object, &inspect);
+        if (xr_json_value_kind_base(field->value.value_kind) == XR_JSON_VALUE_ENUM) {
+            if (XR_IS_NULL(item) && xr_json_value_kind_is_nullable(field->value.value_kind)) {
+                xrt_json_sb_cstr(sb, "null");
+                continue;
+            }
+            const XrJsonEnumDecodeSpec *enum_spec =
+                (const XrJsonEnumDecodeSpec *) field->value.target_shape;
+            int64_t ordinal = XR_IS_INT(item) ? XR_TO_INT(item) : -1;
+            if (!enum_spec || !enum_spec->member_names || ordinal < 0 ||
+                (uint64_t) ordinal >= enum_spec->member_count ||
+                !enum_spec->member_names[ordinal])
+                xrt_json_stringify_abort("enum field has invalid ordinal", item);
+            xrt_json_stringify_string(sb, enum_spec->member_names[ordinal],
+                                      strlen(enum_spec->member_names[ordinal]));
+            continue;
+        }
+        xrt_json_stringify_value(sb, item, depth + 1);
+    }
+    xrt_json_sb_char(sb, '}');
+}
+
+static void xrt_json_stringify_instance_fields(xrt_strbuf_t *sb, XrValue owner,
+                                                const XrtTypeDeriveInfo *di, int depth) {
+    if (!di || (di->derive_flags & XR_DERIVE_JSON) == 0 ||
+        (di->inspect_field_count > 0 && !di->inspect_fields))
+        xrt_json_stringify_abort("derive Json metadata is missing", owner);
+    if (depth > XRT_JSON_STRINGIFY_MAX_DEPTH)
+        xrt_json_stringify_abort("value is too deeply nested", owner);
+
+    xrt_json_sb_char(sb, '{');
+    for (uint16_t i = 0; i < di->inspect_field_count; i++) {
+        const XrtInspectField *field = &di->inspect_fields[i];
+        if (i > 0)
+            xrt_json_sb_char(sb, ',');
+        xrt_json_stringify_string(sb, field->name ? field->name : "",
+                                  strlen(field->name ? field->name : ""));
+        xrt_json_sb_char(sb, ':');
+
+        XrValue item = xrt_inspect_field_value(owner.ptr, field);
+        if (field->json_enum_member_names && field->json_enum_member_count > 0) {
+            if (XR_IS_NULL(item) && xr_json_value_kind_is_nullable(field->json_value_kind)) {
+                xrt_json_sb_cstr(sb, "null");
+                continue;
+            }
+            int64_t ordinal = XR_IS_INT(item) ? XR_TO_INT(item) : -1;
+            if (ordinal < 0 || (uint64_t) ordinal >= field->json_enum_member_count ||
+                !field->json_enum_member_names[ordinal])
+                xrt_json_stringify_abort("enum field has invalid ordinal", owner);
+            xrt_json_stringify_string(sb, field->json_enum_member_names[ordinal],
+                                      strlen(field->json_enum_member_names[ordinal]));
+            continue;
+        }
+        xrt_json_stringify_value(sb, item, depth + 1);
+    }
+    xrt_json_sb_char(sb, '}');
 }
 
 static void xrt_json_stringify_array(xrt_strbuf_t *sb, xrt_array_t *arr, int depth) {
@@ -5657,8 +6190,7 @@ static void xrt_json_stringify_value(xrt_strbuf_t *sb, XrValue val, int depth) {
             if (val.ptr && val.heap_type == XR_TINSTANCE) {
                 const XrtTypeDeriveInfo *di = xrt_json_instance_derive_info(val);
                 if (di && (di->derive_flags & XR_DERIVE_JSON) != 0) {
-                    xrt_json_stringify_value(sb, xrt_json_encode_instance_value(val, depth + 1),
-                                             depth + 1);
+                    xrt_json_stringify_instance_fields(sb, val, di, depth);
                     return;
                 }
             }
@@ -5672,6 +6204,13 @@ static void xrt_json_stringify_value(xrt_strbuf_t *sb, XrValue val, int depth) {
 static inline XrValue xrt_json_stringify(XrValue val) {
     XrValue sbv = xrt_strbuf_new();
     xrt_json_stringify_value((xrt_strbuf_t *) sbv.ptr, val, 0);
+    return xrt_strbuf_finish(sbv);
+}
+
+static inline XrValue xrt_json_stringify_native_struct(
+    const void *object, const XrJsonClassDecodeSpec *spec) {
+    XrValue sbv = xrt_strbuf_new();
+    xrt_json_stringify_native_struct_fields((xrt_strbuf_t *) sbv.ptr, object, spec, 0);
     return xrt_strbuf_finish(sbv);
 }
 
@@ -6209,6 +6748,16 @@ static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage
             if (value.heap_type == XR_TINSTANCE && class_type_id != 0 &&
                 class_type_id < xrt_type_count) {
                 XrtStoragePromoter promote = xrt_type_table[class_type_id].promote_storage;
+                if (promote)
+                    promote(value.ptr, storage_mode);
+            }
+            break;
+        }
+        case XR_TAG_AGG_REF: {
+            uint16_t struct_type_id = xrt_aot_class_type_id(hdr);
+            if (!XR_IS_ARRAY_REF(value) && struct_type_id != 0 &&
+                struct_type_id < xrt_type_count) {
+                XrtStoragePromoter promote = xrt_type_table[struct_type_id].promote_storage;
                 if (promote)
                     promote(value.ptr, storage_mode);
             }

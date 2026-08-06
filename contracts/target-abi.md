@@ -59,6 +59,11 @@ generates the first scalar stdlib fragment from authoritative Xray source. The
 fragment borrows the embedding runtime and exports only manifest-declared C ABI
 entries; it cannot synthesize a program main, runtime implementation, or
 constructor lifecycle.
+Task 260 carries recursive typed-Json schemas across VM bytecode and generated
+C. Decoding a derived value struct writes its existing native aggregate layout;
+heap materialization uses the registered type destructor and storage promoter.
+This adds no public field, tag, calling-convention change, or per-instance
+metadata to the target ABI.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -226,19 +231,19 @@ the compiler core does not download a provider.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c 77db5eea55ef7ed4a31553ac05bf7efa88490b9e5b428c6d8c296744c05b797f
-anchor-sha256: src/aot/xaot_prepare.c fbf0bf75c63b4836a25290a932179b01589fb4e20b7a2796f0dc707782626741
-anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
+anchor-sha256: src/aot/xaot_prepare.c aafc236f21231b6509fca91e544d948f7ea2d06b059fd0c8101f0286f4a66bbd
+anchor-sha256: src/aot/xaot_verify.c ce65476db888067cafed913b3ea516c1ca889de0f2502075ed348f4c7b682532
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c da806cef9862a0ae4213f36ff4748a6f4f0f528e032604c0ed3fbcaf68d1e1dd
-anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c ca46c452959bee987bc8d4c00f2401ff38e030407d9662c10cbb565e26c3e7c2
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b4c8682ecf94f568e54e516fceccb0abb320ff890ab453a03a4e1242e8d62586
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c a23326e9a8c759476907862b6440733115a7fc935fbd232ff7a990cd6a11aea6
-anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c dc2ff44cd2ee1b61989cec03a28a51ddc9cb848507a42d8f111634eca38422a3
-anchor-sha256: src/aot/xi_cgen.c 91aefe1029ce45a55df61dd88c1712b15acd4ab906fcb366a8ce9231c2d89e7f
-anchor-sha256: src/aot/xrt_coll.h 13d8943ca683301a931fcabe9e82a1a84b3e46f915378fb80ac14d81e0a9696d
+anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c bc154e47dcfbf7afc6a7354bc6d26609a5b7d304d52713c80c201c009e01c9e3
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 034bcd6d11e206bb190e88e6e2cfe716b597b9ab7ce6962f46f154f3d555dedf
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c d4ddd1ecd7b7edfc296137267dd5472acc38ea65c9a4e403873eae24e41d8460
+anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 2488d1bd71f79d90c8b211c42056428c8491ac9c868cc122b69b894cfc197d49
+anchor-sha256: src/aot/xi_cgen.c 12ef5b0afd63b1cf101ebe245b31eb0a2801b5b2dbd797122eb9acfd2086f6b0
+anchor-sha256: src/aot/xrt_coll.h 1f37bb9c1a4f8641c6206d525d37e9731c913efa5df62e30558e1e833f3aa598
 anchor-sha256: src/aot/xrt_core_freestanding.h 13af59f530ac1a77bb9f050bb391a65cbaebe941d77efd4f65043c4d811c7e00
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c 5176cb4b44a22335b74882f74be75ab08b05a18e04872e89acfadffe2fd8e61b
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c bd7b792733cd28cca9e9b01a1718229f0580859e8a35ec9529845229136138ac
-anchor-sha256: src/ir/xi.h 54e3d1e1fc1331504e00fff388dc8cbd04d7b1b5610a0add79449824d5f6cc91
+anchor-sha256: src/ir/xi.h 7155a9e179743a61aa942fe98a5f9d3eb13e8a42b1517eb713fd104de736c959
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24

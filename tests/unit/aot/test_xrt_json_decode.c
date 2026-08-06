@@ -477,7 +477,7 @@ static int parse_typed_for_test(const char *text, const XrtObjectShape *shape,
     memset(error, 0, sizeof(*error));
     *out = XR_NULL_VAL;
     int ok = text && xrt_json_parse_typed_object_value(
-                         &parser, shape, field_count, fields, "$", out, error);
+                         &parser, shape, NULL, field_count, fields, "$", out, error, NULL);
     if (ok) {
         xrt_json_parse_skip_ws(&parser);
         if (parser.pos != parser.end) {
@@ -568,6 +568,115 @@ static void test_parse_typed_direct_reports_stable_errors_and_unwinds(void) {
                 "missing-field errors should identify the target path");
 }
 
+typedef struct TestDerivedPoint {
+    int64_t x;
+    int64_t y;
+} TestDerivedPoint;
+
+typedef struct TestDerivedBox {
+    TestDerivedPoint point;
+    XrValue label;
+} TestDerivedBox;
+
+static int g_test_derived_box_dtor_calls;
+
+static void test_derived_box_dtor(void *object) {
+    TestDerivedBox *box = (TestDerivedBox *) object;
+    if (!box)
+        return;
+    g_test_derived_box_dtor_calls++;
+    xrt_release(box->label);
+    box->label = XR_NULL_VAL;
+}
+
+static int parse_nominal_for_test(const char *text, const XrJsonClassDecodeSpec *spec,
+                                  XrValue *out, XrtJsonTypedParseError *error) {
+    xrt_json_parser_t parser = {
+        .src = text,
+        .end = text ? text + strlen(text) : text,
+        .pos = text,
+        .depth = 0,
+    };
+    memset(error, 0, sizeof(*error));
+    *out = XR_NULL_VAL;
+    int ok = text && spec && xrt_json_parse_typed_object_value(
+                                      &parser, NULL, spec, spec->field_count, NULL, "$", out,
+                                      error, NULL);
+    if (ok) {
+        xrt_json_parse_skip_ws(&parser);
+        if (parser.pos != parser.end) {
+            xrt_release(*out);
+            *out = XR_NULL_VAL;
+            xrt_json_typed_error(&parser, error, "$", "end_of_input", NULL);
+            ok = 0;
+        }
+    }
+    return ok;
+}
+
+static void test_derived_value_struct_parse_and_decode_own_references(void) {
+    uint16_t point_type = xrt_type_register_hot(0, NULL, 0, NULL, NULL,
+                                                 (uint32_t) sizeof(TestDerivedPoint));
+    uint16_t box_type = xrt_type_register_hot(0, NULL, 0, test_derived_box_dtor, NULL,
+                                               (uint32_t) sizeof(TestDerivedBox));
+    xrt_type_set_derive(point_type, XR_DERIVE_JSON, NULL, 0);
+    xrt_type_set_derive(box_type, XR_DERIVE_JSON, NULL, 0);
+
+    const XrJsonClassDecodeFieldSpec point_fields[] = {
+        {"x", (uint32_t) offsetof(TestDerivedPoint, x), XR_NATIVE_I64, {0, 0, 0},
+         {NULL, XR_JSON_VALUE_INT, NULL, 0, NULL}},
+        {"y", (uint32_t) offsetof(TestDerivedPoint, y), XR_NATIVE_I64, {0, 0, 0},
+         {NULL, XR_JSON_VALUE_INT, NULL, 0, NULL}},
+    };
+    const XrJsonClassDecodeSpec point_spec = {
+        point_type, 2, (uint32_t) sizeof(TestDerivedPoint),
+        XR_JSON_NOMINAL_TARGET_VALUE_STRUCT, {0, 0, 0}, point_fields,
+    };
+    const XrJsonClassDecodeFieldSpec box_fields[] = {
+        {"point", (uint32_t) offsetof(TestDerivedBox, point), XR_NATIVE_NESTED_AGGREGATE,
+         {0, 0, 0}, {NULL, XR_JSON_VALUE_CLASS_INSTANCE, NULL, 0, &point_spec}},
+        {"label", (uint32_t) offsetof(TestDerivedBox, label), XR_NATIVE_STRING, {0, 0, 0},
+         {NULL, XR_JSON_VALUE_STRING, NULL, 0, NULL}},
+    };
+    const XrJsonClassDecodeSpec box_spec = {
+        box_type, 2, (uint32_t) sizeof(TestDerivedBox),
+        XR_JSON_NOMINAL_TARGET_VALUE_STRUCT, {0, 0, 0}, box_fields,
+    };
+
+    size_t allocations_before = g_allocations;
+    size_t frees_before = g_frees;
+    XrValue parsed = XR_NULL_VAL;
+    XrtJsonTypedParseError error;
+    ASSERT_TRUE(parse_nominal_for_test(
+                    "{\"point\":{\"x\":8,\"y\":9},\"label\":\"owned\"}",
+                    &box_spec, &parsed, &error),
+                "typed parse should construct a boxed derived value struct");
+    ASSERT_TRUE(parsed.tag == XR_TAG_AGG_REF && parsed.ptr,
+                "derived value struct should preserve aggregate runtime identity");
+    TestDerivedBox *box = (TestDerivedBox *) parsed.ptr;
+    ASSERT_TRUE(box->point.x == 8 && box->point.y == 9,
+                "nested value-struct fields should decode directly into native layout");
+    ASSERT_TRUE(XR_IS_STR(box->label) && strcmp(xr_str_data(box->label), "owned") == 0,
+                "reference fields should be transferred into the boxed value struct");
+    int dtor_before = g_test_derived_box_dtor_calls;
+    xrt_release(parsed);
+    ASSERT_TRUE(g_test_derived_box_dtor_calls == dtor_before + 1,
+                "boxed derived value struct should run its registered destructor");
+    ASSERT_TRUE(g_allocations - allocations_before == g_frees - frees_before,
+                "derived value-struct parse should release target, scratch, and nested boxes");
+
+    allocations_before = g_allocations;
+    frees_before = g_frees;
+    ASSERT_TRUE(!parse_nominal_for_test(
+                    "{\"label\":\"partial\",\"point\":{\"x\":1}}", &box_spec,
+                    &parsed, &error),
+                "malformed nested value struct should fail closed");
+    ASSERT_TRUE(strcmp(error.path, "$.point.y") == 0,
+                "derived value-struct failure should preserve the nested path");
+    ASSERT_TRUE(g_allocations - allocations_before == g_frees - frees_before,
+                "derived value-struct failure should unwind every partial owner");
+}
+
 int main(void) {
     test_static_shape_is_zero_copy_and_header_shrinks();
     test_clone_and_storage_keep_static_shape();
@@ -581,6 +690,7 @@ int main(void) {
     test_decode_mixed_nested_object_and_array_json_fields();
     test_parse_typed_direct_has_no_intermediate_dom();
     test_parse_typed_direct_reports_stable_errors_and_unwinds();
+    test_derived_value_struct_parse_and_decode_own_references();
     destroy_test_static_shapes();
     printf("test_xrt_json_decode: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

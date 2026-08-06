@@ -1,6 +1,6 @@
 # Object and Json domain contract
 
-Status: frozen before the object-surface convergence.
+Status: frozen after object-surface convergence and typed nominal Json construction.
 
 1. Structural objects and Json values are distinct semantic domains. A
    structural object is not implicitly converted to Json, and an encodable
@@ -59,26 +59,33 @@ Status: frozen before the object-surface convergence.
     ordinal manifest as AOT descriptors. Bytecode persists stable field-type
     keys and shape flags, and rejects incompatible serialized manifests rather
     than reconstructing a weaker identity.
+16. A payload-free enum and a class or value struct explicitly deriving Json
+    may participate in `JsonDecodable`, but do not thereby become Json values.
+    Their recursive field schema survives bytecode and generated-C boundaries.
+    Decoding constructs the declared nominal target without invoking its
+    constructor; native value structs decode into their established aggregate
+    layout, and stringify streams that layout without first materializing a
+    Json object.
 
 ## Digest anchors
 
 anchor-sha256: src/shared/xobject_row.h 5057c952ae0f809e3aaec6e4c48f64ece296af550a7cd2f23ac36185b2c0f170
-anchor-sha256: src/shared/xobject_shape.h cee1f96041d0a55ac88170ed9ef882dc1bda3d507617a136439ea8dd399fa31a
-anchor-sha256: src/runtime/value/xtype.h 063aa4c9c311373e573d53c08e2669ef76ad1c1fdae002254dae8337785559f9
-anchor-sha256: src/runtime/value/xtype.c 49ca1d35ed5297108b35dac396d8900cda732e24bbe046c6961945fa75c97529
-anchor-sha256: src/frontend/parser/xtype_ref.h 13f55898123e2f92fc61233dbfa4f844981307a86df90a4495cd7796e72370ca
-anchor-sha256: src/frontend/parser/xtype_ref.c 2c4531e3451f4c277077de6d778897e33fb5bbb3cee7e531efc94b60af68aa03
+anchor-sha256: src/shared/xobject_shape.h d7f814c82990bc4eb1c8e9b31f15cda4582a1a582f9016ac2a890b342b82be72
+anchor-sha256: src/runtime/value/xtype.h 684f0351f5de9e545591c1feb00cbd6c7f16c63adf3a8d8afa78737a62d80ea6
+anchor-sha256: src/runtime/value/xtype.c efe8411062422bcdbb32f6aad21309151213323608a570cb010cc53d8223bd87
+anchor-sha256: src/frontend/parser/xtype_ref.h 4c3823b5f8ca3dc0164605a6824070710f6efb7e0209dc431726ae389ea9dd24
+anchor-sha256: src/frontend/parser/xtype_ref.c 3a2b839172e60f9801d5b54e4be986186884c3fabe5fcaacd1d006907a2678a3
 anchor-sha256: src/frontend/analyzer/xanalyzer_capability.h 94c7b2c2f02b92c6bd324e7719dba1afadb52faf0b0f03bf6dd4ac4164d96123
-anchor-sha256: src/frontend/analyzer/xanalyzer_capability.c 8ed8173e90f05be19b9d103b346639e592dc2e356cf607800a5f34338ab43c35
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_expr.c d5c3bfd1956f53272f3fcd4ab3adb8dae4b9883e3bfd8a2a689c23471edbe329
-anchor-sha256: src/analysis/xglobal_summary.h 2230be70b30a147c5b885e2e5ab8a1db80354b8cc0f0cf7d78f97d0a61a67d3d
-anchor-sha256: src/ir/xi.h 54e3d1e1fc1331504e00fff388dc8cbd04d7b1b5610a0add79449824d5f6cc91
-anchor-sha256: xisa/xi/ops.def edac98373bbcbca5c894aabf853c96b12abc977c5ef12d172c853f389d06c132
-anchor-sha256: src/aot/xrt_coll.h 13d8943ca683301a931fcabe9e82a1a84b3e46f915378fb80ac14d81e0a9696d
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c b4c8682ecf94f568e54e516fceccb0abb320ff890ab453a03a4e1242e8d62586
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c a23326e9a8c759476907862b6440733115a7fc935fbd232ff7a990cd6a11aea6
-anchor-sha256: src/runtime/class/xclass.h 458b8a6fb6f1f60acf9950928982583cdbe3c1b8ffcef8ad6236636ad59820c0
-anchor-sha256: src/runtime/class/xinstance.c b89f2b55cb36ae88ac0bb4bbd41767e4018c702a1b09e737f7ead4ba338d116c
-anchor-sha256: src/module/xbytecode_io.h aaf737dd61bf98314b22ae1752db737e2b6490a3c8400ff0f5dc73db390beb25
-anchor-sha256: src/module/xbytecode_io.c c293a5eaa34662a4428c2e377d5b25fd93ac5a92ab1cbf98afc9727d1e9032a5
-anchor-sha256: src/aot/xaot_verify.c 394cc8c6c53c982413af6d8524e49cdf573da31b0d75fd23c4b13dbdadc2a423
+anchor-sha256: src/frontend/analyzer/xanalyzer_capability.c db1d019c684b320cd2340ce071f84ac0b0efcb60c54c65f5240e3ff84c724106
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_expr.c 1bc97ec734b0aa3e41dc376793ee90260838cfd814c32b3c29dd039e4d461f40
+anchor-sha256: src/analysis/xglobal_summary.h d65498c445e52292e38fbe6cdd6b5e49bc941347ee31968e95653dcd355c04a3
+anchor-sha256: src/ir/xi.h 7155a9e179743a61aa942fe98a5f9d3eb13e8a42b1517eb713fd104de736c959
+anchor-sha256: xisa/xi/ops.def 9091256d150269d3b16cd9b7f60371292a5d8d357d48f513e0608cb32d663ce5
+anchor-sha256: src/aot/xrt_coll.h 1f37bb9c1a4f8641c6206d525d37e9731c913efa5df62e30558e1e833f3aa598
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 034bcd6d11e206bb190e88e6e2cfe716b597b9ab7ce6962f46f154f3d555dedf
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c d4ddd1ecd7b7edfc296137267dd5472acc38ea65c9a4e403873eae24e41d8460
+anchor-sha256: src/runtime/class/xclass.h 1623dd05f8e6fdf462407206090a1c98fd822c51010375272a21a1cd26959183
+anchor-sha256: src/runtime/class/xinstance.c 70442d0f568f1e5e119ba084df12d6e8d5ce151a4b1e61c8544f4ff3347bac0d
+anchor-sha256: src/module/xbytecode_io.h be21ee7702928d3f28804e3543b18b1c80a1db07c2b95d887e5073e0cf709b36
+anchor-sha256: src/module/xbytecode_io.c bacfe362ee607b2918615e3df7f2056b363fc1ad033f8502bddb31ec3660b307
+anchor-sha256: src/aot/xaot_verify.c ce65476db888067cafed913b3ea516c1ca889de0f2502075ed348f4c7b682532

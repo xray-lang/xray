@@ -20,8 +20,10 @@
 #define XJSON_H
 
 #include "../class/xclass.h"
+#include "../class/xclass_lookup.h"
 #include "../class/xinstance.h"
 #include "../class/xclass_system.h"
+#include "../class/xenum.h"
 #include "../mem/xobj_header.h"
 #include "../mem/xheap.h"
 #include "../mem/xalloc_unified.h"
@@ -143,6 +145,10 @@ static inline bool xr_json_value_matches_kind(XrValue value, uint8_t encoded_kin
             return XR_IS_ARRAY(value);
         case XR_JSON_VALUE_MAP:
             return xr_value_has_object_shape(value);
+        case XR_JSON_VALUE_ENUM:
+            return xr_value_is_enum_aggregate(value);
+        case XR_JSON_VALUE_CLASS_INSTANCE:
+            return XR_IS_INSTANCE(value) && !xr_value_has_object_shape(value);
         case XR_JSON_VALUE_NULL:
         case XR_JSON_VALUE_ANY:
         default:
@@ -213,6 +219,19 @@ static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCor
             *out = decoded;
             return true;
         }
+        case XR_JSON_VALUE_CLASS_INSTANCE: {
+            XrString *class_name = (XrString *) schema->target_descriptor;
+            XrClass *target = class_name ? xr_class_lookup_by_name(X, class_name->data) : NULL;
+            if (!target || (target->flags & XR_CLASS_DERIVE_JSON) == 0 ||
+                !xr_value_has_object_shape(source))
+                return false;
+            XrValue decoded = xr_json_decode_struct_object_with_class(
+                X, coro, xr_value_to_json(source), target);
+            if (XR_IS_NULL(decoded))
+                return false;
+            *out = decoded;
+            return true;
+        }
         case XR_JSON_VALUE_ARRAY: {
             if (!XR_IS_ARRAY(source) || !schema->child)
                 return false;
@@ -262,6 +281,24 @@ static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCor
             *out = XR_FROM_PTR(dst);
             return true;
         }
+        case XR_JSON_VALUE_ENUM: {
+            XrEnumType *target = (XrEnumType *) schema->target_descriptor;
+            if (!XR_IS_STRING(source) || !target || xr_enum_type_has_payloads(target))
+                return false;
+            XrString *name = XR_TO_STRING(source);
+            for (uint32_t i = 0; i < target->member_count; i++) {
+                const char *candidate = xr_enum_type_member_name(target, i);
+                if (!candidate || strlen(candidate) != name->length ||
+                    memcmp(candidate, name->data, name->length) != 0)
+                    continue;
+                XrEnumAggregateValue *value = xr_enum_zero_payload_value(X, target, i);
+                if (!value)
+                    return false;
+                *out = XR_FROM_PTR(value);
+                return true;
+            }
+            return false;
+        }
         default:
             if (!xr_json_value_matches_kind(source, schema->value_kind))
                 return false;
@@ -273,9 +310,10 @@ static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCor
 
 static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X, struct XrCoroutine *coro,
                                                        XrJson *src, XrClass *cls) {
-    if (!X || !src || !cls || cls->field_count == 0 || !cls->fields)
+    int instance_fields = cls ? xr_class_instance_field_count(cls) : 0;
+    if (!X || !src || !cls || instance_fields <= 0 || !cls->fields)
         return xr_null();
-    uint16_t field_count = cls->field_count;
+    uint16_t field_count = (uint16_t) instance_fields;
     XrValue *decoded_values = (XrValue *) xr_malloc(sizeof(XrValue) * field_count);
     if (!decoded_values)
         return xr_null();
@@ -303,14 +341,20 @@ static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X, st
         decoded_values[fi] = decoded;
     }
 
-    XrJson *result = xr_json_new_with_class(coro, cls);
+    XrInstance *result = (cls->flags & XR_CLASS_DYNAMIC_LAYOUT)
+                             ? (XrInstance *) xr_json_new_with_class(coro, cls)
+                             : xr_instance_new(X, cls);
     if (!result) {
         xr_json_decode_release_partial(decoded_values, field_count);
         xr_free(decoded_values);
         return xr_null();
     }
     for (uint16_t fi = 0; fi < field_count; fi++) {
-        if (xr_instance_set_dynamic_field(X, result, fi, decoded_values[fi]))
+        bool stored = (cls->flags & XR_CLASS_DYNAMIC_LAYOUT)
+                          ? xr_instance_set_dynamic_field(X, (XrJson *) result, fi,
+                                                          decoded_values[fi])
+                          : xr_instance_set_decoded_field(result, fi, decoded_values[fi]);
+        if (stored)
             continue;
         for (uint16_t remaining = fi; remaining < field_count; remaining++)
             xr_rc_release_value(xr_current_coro_heap(), decoded_values[remaining]);

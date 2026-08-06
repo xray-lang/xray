@@ -14,6 +14,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../base/xhash.h"
+#include "../../shared/xr_derive_flags.h"
 #include "../../os/os_thread.h"
 #include "xtype_names.h"
 #include <stdint.h>
@@ -86,6 +87,20 @@ uint8_t xr_type_json_value_kind(const XrType *type) {
                 break;
             }
             return XR_JSON_VALUE_ANY;
+        case XR_KIND_ENUM:
+            if (type->enum_type.layout && type->enum_type.layout->is_zero_payload &&
+                type->enum_type.layout->variant_count > 0) {
+                kind = XR_JSON_VALUE_ENUM;
+                break;
+            }
+            return XR_JSON_VALUE_ANY;
+        case XR_KIND_INSTANCE:
+            if (type->instance.class_ref && type->instance.class_name &&
+                (type->instance.class_ref->derive_flags & XR_DERIVE_JSON) != 0) {
+                kind = XR_JSON_VALUE_CLASS_INSTANCE;
+                break;
+            }
+            return XR_JSON_VALUE_ANY;
         default:
             return XR_JSON_VALUE_ANY;
     }
@@ -95,6 +110,10 @@ uint8_t xr_type_json_value_kind(const XrType *type) {
 static bool xr_type_is_json_decode_field_supported_depth(const XrType *type, int depth) {
     if (!type || depth > 16)
         return false;
+    /* Derive authorization is analyzer-owned; the value layer only records
+     * that a declared class has enough identity for a compiler sidecar. */
+    if (XR_TYPE_IS_INSTANCE(type))
+        return type->instance.class_ref != NULL && type->instance.class_name != NULL;
     uint8_t base = xr_json_value_kind_base(xr_type_json_value_kind(type));
     if (base == XR_JSON_VALUE_STRUCT_OBJECT) {
         if (!XR_TYPE_IS_STRUCT_OBJECT(type) || !xr_type_object_row_is_exact(type) ||
@@ -117,6 +136,11 @@ static bool xr_type_is_json_decode_field_supported_depth(const XrType *type, int
         return XR_TYPE_IS_MAP(type) && type->map.key_type && XR_TYPE_IS_STRING(type->map.key_type) &&
                !type->map.key_type->is_nullable && type->map.value_type &&
                xr_type_is_json_decode_field_supported_depth(type->map.value_type, depth + 1);
+    }
+    if (base == XR_JSON_VALUE_ENUM) {
+        return XR_TYPE_IS_ENUM(type) && type->enum_type.layout &&
+               type->enum_type.layout->is_zero_payload &&
+               type->enum_type.layout->variant_count > 0;
     }
     return base != XR_JSON_VALUE_ANY;
 }

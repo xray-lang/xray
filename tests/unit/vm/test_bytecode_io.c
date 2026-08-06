@@ -533,14 +533,19 @@ TEST(bytecode_roundtrips_typed_json_root_schema) {
 
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-    const XrJsonDecodeSchema int_schema = {
-        .value_kind = XR_JSON_VALUE_INT,
-        .storage_type = XR_ELEM_I64,
+    char *enum_names[] = {"Text", "Binary"};
+    XrEnumType *enum_type =
+        xr_enum_type_new(writer, "test.bytecode", "WireKind", enum_names, 2);
+    ASSERT_NOT_NULL(enum_type);
+    const XrJsonDecodeSchema enum_schema = {
+        .value_kind = XR_JSON_VALUE_ENUM,
+        .storage_type = XR_ELEM_ANY,
+        .target_descriptor = enum_type,
     };
     const XrJsonDecodeSchema array_schema = {
         .value_kind = XR_JSON_VALUE_ARRAY,
-        .storage_type = XR_ELEM_I64,
-        .child = &int_schema,
+        .storage_type = XR_ELEM_ANY,
+        .child = &enum_schema,
     };
     const XrJsonDecodeSchema map_schema = {
         .value_kind = XR_JSON_VALUE_MAP,
@@ -582,9 +587,17 @@ TEST(bytecode_roundtrips_typed_json_root_schema) {
     ASSERT_EQ_UINT(roundtrip_schema->value_kind, XR_JSON_VALUE_MAP);
     ASSERT_NOT_NULL(roundtrip_schema->child);
     ASSERT_EQ_UINT(roundtrip_schema->child->value_kind, XR_JSON_VALUE_ARRAY);
-    ASSERT_EQ_UINT(roundtrip_schema->child->storage_type, XR_ELEM_I64);
+    ASSERT_EQ_UINT(roundtrip_schema->child->storage_type, XR_ELEM_ANY);
     ASSERT_NOT_NULL(roundtrip_schema->child->child);
-    ASSERT_EQ_UINT(roundtrip_schema->child->child->value_kind, XR_JSON_VALUE_INT);
+    ASSERT_EQ_UINT(roundtrip_schema->child->child->value_kind, XR_JSON_VALUE_ENUM);
+    XrEnumType *roundtrip_enum =
+        (XrEnumType *) roundtrip_schema->child->child->target_descriptor;
+    ASSERT_NOT_NULL(roundtrip_enum);
+    ASSERT_STR_EQ(roundtrip_enum->name, "WireKind");
+    ASSERT_EQ_UINT(roundtrip_enum->member_count, 2);
+    ASSERT_STR_EQ(xr_enum_type_member_name(roundtrip_enum, 0), "Text");
+    ASSERT_STR_EQ(xr_enum_type_member_name(roundtrip_enum, 1), "Binary");
+    ASSERT_TRUE(xr_enum_type_same_nominal(enum_type, roundtrip_enum));
 
     xr_vm_proto_free(roundtrip);
     xr_free(bytes);

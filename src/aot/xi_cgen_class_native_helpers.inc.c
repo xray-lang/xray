@@ -447,6 +447,7 @@ static const char *cg_class_native_ref_field_tag_name(uint8_t native_type) {
 
 static bool cg_class_native_field_is_ref(const XrAggregateFieldLayout *field) {
     return field && (field->native_type == XR_NATIVE_STRING ||
+                     field->native_type == XR_NATIVE_VALUE ||
                      cg_class_native_ref_field_tag_name(field->native_type) != NULL);
 }
 
@@ -645,7 +646,7 @@ static void emit_class_native_ref_field_value(XiCgenCtx *ctx, FILE *out, const X
         fprintf(out, "XR_NULL_VAL");
         return;
     }
-    if (field->native_type == XR_NATIVE_STRING) {
+    if (field->native_type == XR_NATIVE_STRING || field->native_type == XR_NATIVE_VALUE) {
         emit_class_native_field_ref(ctx, out, cd, object_expr, idx);
         return;
     }
@@ -668,7 +669,7 @@ static void emit_class_native_receiver_ref_field_value(XiCgenCtx *ctx, FILE *out
         fprintf(out, "XR_NULL_VAL");
         return;
     }
-    if (field->native_type == XR_NATIVE_STRING) {
+    if (field->native_type == XR_NATIVE_STRING || field->native_type == XR_NATIVE_VALUE) {
         emit_class_native_receiver_field_ref(ctx, out, f, cd, recv, idx);
         return;
     }
@@ -930,16 +931,24 @@ static bool emit_class_native_receiver_ref_field_store_expr(XiCgenCtx *ctx, FILE
     return true;
 }
 
-static bool cg_class_native_type_registers_native_layout(const XiCgenCtx *ctx,
-                                                         const XiClassData *cd) {
-    return ctx && ctx->module && cd && cd->instance_layout &&
-           cg_class_native_slot_in_module(ctx->module, cd) >= 0;
+static const XrAggregateLayout *cg_class_native_registered_layout(const XiCgenCtx *ctx,
+                                                                  const XiClassData *cd) {
+    if (!ctx || !ctx->module || !cd || cg_class_native_slot_in_module(ctx->module, cd) < 0)
+        return NULL;
+    if (cd->instance_layout)
+        return cd->instance_layout;
+    if (cd->struct_layout && (cd->derive_flags & XR_DERIVE_JSON) != 0)
+        return cd->struct_layout;
+    return NULL;
 }
 
 static void emit_class_native_type_register_expr(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
                                                   const char *prefix) {
     const char *name = cd && cd->class_name ? cd->class_name : "?";
-    bool native_layout = cg_class_native_type_registers_native_layout(ctx, cd);
+    const XrAggregateLayout *registered_layout = cg_class_native_registered_layout(ctx, cd);
+    bool native_layout = registered_layout != NULL;
+    bool value_struct_layout = native_layout && !cd->instance_layout && cd->struct_layout;
+    bool has_arc_refs = cg_struct_layout_has_arc_refs(registered_layout);
     const XgGlobalEvidence *ev = cg_class_native_global_evidence(ctx);
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     const XgClassSummary *summary =
@@ -963,21 +972,33 @@ static void emit_class_native_type_register_expr(XiCgenCtx *ctx, FILE *out, cons
         fprintf(out, "0");
     }
     fprintf(out, ", NULL, 0, ");
-    if (native_layout && cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
-        emit_class_native_dtor_name(out, prefix, cd);
+    if (native_layout && has_arc_refs) {
+        if (value_struct_layout)
+            emit_struct_lifecycle_helper_name(out, registered_layout, "dtor");
+        else
+            emit_class_native_dtor_name(out, prefix, cd);
     } else {
         fprintf(out, "NULL");
     }
     fprintf(out, ", ");
-    if (native_layout && cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
-        emit_class_native_storage_promoter_name(out, prefix, cd);
+    if (native_layout && has_arc_refs) {
+        if (value_struct_layout)
+            emit_struct_lifecycle_helper_name(out, registered_layout, "promote_storage");
+        else
+            emit_class_native_storage_promoter_name(out, prefix, cd);
     } else {
         fprintf(out, "NULL");
     }
     fprintf(out, ", ");
     if (native_layout) {
         fprintf(out, "(uint32_t)sizeof(");
-        emit_class_native_type_name(out, prefix, cd->class_name);
+        if (value_struct_layout) {
+            char struct_type[128];
+            cg_struct_heap_type_name(struct_type, sizeof(struct_type), prefix, registered_layout);
+            fprintf(out, "%s", struct_type);
+        } else {
+            emit_class_native_type_name(out, prefix, cd->class_name);
+        }
         fprintf(out, ")");
     } else {
         fprintf(out, "0");
@@ -993,6 +1014,54 @@ static void emit_class_native_type_register_helper_name(FILE *out, const char *p
     fprintf(out, "xrt_register_%s_%s", prefix ? prefix : "mod", class_name);
 }
 
+static bool emit_class_native_ensure_type_id_expr_depth(XiCgenCtx *ctx, FILE *out,
+                                                        const XiClassData *cd, int depth) {
+    const XiModule *module = cg_class_native_module_for_data(ctx, cd);
+    if (!ctx || !out || !cd || !module || depth > 32)
+        return false;
+    int slot = cg_class_native_slot_in_module(module, cd);
+    if (slot < 0)
+        return false;
+
+    const XiClassData *parent =
+        cd->super_name ? cg_class_native_data_by_name(ctx, cd->super_name) : NULL;
+    const char *prefix = cg_class_native_prefix_for_data(ctx, cd, NULL);
+
+    fprintf(out, "(");
+    if (parent) {
+        fprintf(out, "(void)(");
+        if (!emit_class_native_ensure_type_id_expr_depth(ctx, out, parent, depth + 1))
+            return false;
+        fprintf(out, "), ");
+    }
+    fprintf(out, "(");
+    if (!emit_class_native_type_id_expr(ctx, out, cd))
+        return false;
+    fprintf(out, " ? (uint16_t)(");
+    if (!emit_class_native_type_id_expr(ctx, out, cd))
+        return false;
+    fprintf(out, ") : (uint16_t)(");
+    if (module == ctx->module) {
+        fprintf(out, "%s[%d]", ctx->shared_name ? ctx->shared_name : "xrt_shared", slot);
+    } else {
+        fprintf(out, "xrt_shared_%s[%d]", module->name ? module->name : "mod", slot);
+    }
+    fprintf(out, " = ");
+    emit_class_native_type_register_helper_name(out, prefix, cd);
+    fprintf(out, "()).i))");
+    return true;
+}
+
+/* Json.parse<T>/Json.decode<T> can be the only reference that keeps a class
+ * alive in generated C.  In that case the ordinary class-declaration init op
+ * is absent, so materializing the decode schema must also initialize the
+ * shared type-id slot.  The conditional preserves the one-registration
+ * invariant and the parent-first sequence keeps inheritance metadata valid. */
+static bool emit_class_native_ensure_type_id_expr(XiCgenCtx *ctx, FILE *out,
+                                                  const XiClassData *cd) {
+    return emit_class_native_ensure_type_id_expr_depth(ctx, out, cd, 0);
+}
+
 static bool cg_class_native_has_inspect_sidecar(const XiClassData *cd) {
     return cd && cd->instance_layout &&
            (cd->derive_flags & (XR_DERIVE_INSPECT | XR_DERIVE_JSON)) != 0;
@@ -1002,6 +1071,28 @@ static void emit_class_native_inspect_fields_name(FILE *out, const char *prefix,
                                                   const XiClassData *cd) {
     emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
     fprintf(out, "_inspect_fields");
+}
+
+static const XrType *cg_class_native_field_type_by_name(XiCgenCtx *ctx,
+                                                        const XiClassData *cd,
+                                                        const char *field_name) {
+    for (const XiClassData *current = cd; current;
+         current = cg_class_native_data_by_name(ctx, current->super_name)) {
+        for (uint16_t i = 0; i < current->instance_field_count; i++) {
+            const char *candidate =
+                current->instance_field_names ? current->instance_field_names[i] : NULL;
+            if (candidate && field_name && strcmp(candidate, field_name) == 0)
+                return current->instance_field_types ? current->instance_field_types[i] : NULL;
+        }
+    }
+    return NULL;
+}
+
+static void emit_class_native_inspect_enum_names_name(FILE *out, const char *prefix,
+                                                       const XiClassData *cd,
+                                                       uint16_t field_index) {
+    emit_class_native_inspect_fields_name(out, prefix, cd);
+    fprintf(out, "_enum_%u", (unsigned) field_index);
 }
 
 static bool cg_class_native_has_derived_eq_hash(const XiClassData *cd) {
@@ -6201,6 +6292,28 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
         fprintf(out, " *src);\n");
     }
     if (cg_class_native_has_inspect_sidecar(cd)) {
+        for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++) {
+            const char *field_name =
+                cd->instance_layout->field_names ? cd->instance_layout->field_names[fi] : NULL;
+            const XrType *field_type =
+                cg_class_native_field_type_by_name(ctx, cd, field_name);
+            const XrEnumLayout *enum_layout =
+                field_type && XR_TYPE_IS_ENUM(field_type) ? field_type->enum_type.layout : NULL;
+            if (!enum_layout || !enum_layout->is_zero_payload || !enum_layout->variants ||
+                enum_layout->variant_count == 0 || enum_layout->variant_count > UINT16_MAX)
+                continue;
+            fprintf(out, "static const char *const ");
+            emit_class_native_inspect_enum_names_name(out, prefix, cd, fi);
+            fprintf(out, "[%u] = {", (unsigned) enum_layout->variant_count);
+            for (uint32_t vi = 0; vi < enum_layout->variant_count; vi++) {
+                if (vi > 0)
+                    fprintf(out, ", ");
+                emit_c_string_literal(out, enum_layout->variants[vi].name
+                                               ? enum_layout->variants[vi].name
+                                               : "");
+            }
+            fprintf(out, "};\n");
+        }
         fprintf(out, "static const XrtInspectField ");
         emit_class_native_inspect_fields_name(out, prefix, cd);
         fprintf(out, "[] = {");
@@ -6208,14 +6321,28 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
             const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, fi);
             const char *field_name =
                 cd->instance_layout->field_names ? cd->instance_layout->field_names[fi] : NULL;
+            const XrType *field_type =
+                cg_class_native_field_type_by_name(ctx, cd, field_name);
+            const XrEnumLayout *enum_layout =
+                field_type && XR_TYPE_IS_ENUM(field_type) ? field_type->enum_type.layout : NULL;
+            bool json_enum = enum_layout && enum_layout->is_zero_payload && enum_layout->variants &&
+                             enum_layout->variant_count > 0 &&
+                             enum_layout->variant_count <= UINT16_MAX;
             fprintf(out, "%s{", fi > 0 ? ", " : "");
             emit_c_string_literal(out, field_name ? field_name : "?");
             fprintf(out, ", (uint32_t)offsetof(");
             emit_class_native_type_name(out, prefix, cd->class_name);
             fprintf(out, ", ");
             emit_class_native_field_path(ctx, out, cd, fi);
-            fprintf(out, "), %u}",
-                    field ? (unsigned) field->native_type : (unsigned) XR_NATIVE_VALUE);
+            fprintf(out, "), %u, %u, %u, ",
+                    field ? (unsigned) field->native_type : (unsigned) XR_NATIVE_VALUE,
+                    field_type ? (unsigned) xr_type_json_value_kind(field_type) : 0u,
+                    json_enum ? (unsigned) enum_layout->variant_count : 0u);
+            if (json_enum)
+                emit_class_native_inspect_enum_names_name(out, prefix, cd, fi);
+            else
+                fprintf(out, "NULL");
+            fprintf(out, "}");
         }
         fprintf(out, "};\n");
     }

@@ -475,27 +475,11 @@ vmcase(OP_JSON_DECODE) {
             ? &cls->fields[0].json_decode_schema
             : NULL;
 
-    /* Accept string (direct typed parse) or Json object (validate/copy). */
+    /* Json.decode consumes an already parsed Json value. In particular, a
+     * Json string is data, not a second JSON source text. Json.parse<T> owns
+     * the direct token-stream path in OP_JSON_PARSE_TYPED. */
     XrJson *src = NULL;
-    if (XR_IS_STRING(data)) {
-        XrString *str = XR_TO_STRING(data);
-        XrValue parsed = xr_null();
-        XrJsonTypedParseError ignored_error;
-        bool ok = root_schema
-                      ? schema && xr_json_parse_typed_value_from_cstr(
-                                      isolate, VM_CURRENT_CORO, str->data, str->length, schema,
-                                      &parsed, &ignored_error)
-                      : xr_json_parse_typed_object_from_cstr(
-                            isolate, VM_CURRENT_CORO, str->data, str->length, cls, &parsed,
-                            &ignored_error);
-        if (!ok) {
-            R(a) = xr_null();
-            vmbreak;
-        }
-        R(a) = parsed;
-        checkGC(base + a + 1);
-        vmbreak;
-    } else if (!root_schema && xr_value_has_object_shape(data)) {
+    if (!root_schema && xr_value_has_object_shape(data)) {
         /* Structural objects share Json's field storage representation, so an object
          * source is validated against the target field set the same way. This lets
          * `object is T` and `object as T` reach the check at all. */

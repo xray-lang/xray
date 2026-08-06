@@ -13,8 +13,10 @@
 #include "../core/xr_runtime_core.h"
 #include "../mem/xalloc_unified.h"
 #include "../mem/xheap.h"
+#include "../object/xarray.h"
 #include "../xisolate_api.h"
 #include "../xisolate_internal.h"
+#include "../value/xstruct_layout.h"
 #include "../../base/xchecks.h"
 #include "../../base/xlog.h"
 
@@ -95,6 +97,124 @@ void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value) 
     XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
     xr_rc_release_value(xr_current_coro_heap(), inst->fields[index]);
     inst->fields[index] = value;
+}
+
+static bool xr_instance_write_decoded_native_field(uint8_t *dst,
+                                                   const XrAggregateFieldLayout *field,
+                                                   XrValue value);
+
+static bool xr_instance_write_decoded_array(uint8_t *dst,
+                                            const XrAggregateFieldLayout *field,
+                                            XrValue value) {
+    if (!dst || !field || field->elem_count == 0)
+        return false;
+    if (XR_IS_ARRAY_REF(value)) {
+        memcpy(dst, value.ptr, field->size);
+        return true;
+    }
+    if (!XR_IS_ARRAY(value))
+        return false;
+    uint8_t elem_size =
+        xr_native_type_size(xr_target_data_layout_host(), field->elem_native_type);
+    if (elem_size == 0)
+        return false;
+    XrArray *array = XR_TO_ARRAY(value);
+    int count = array->length < field->elem_count ? array->length : field->elem_count;
+    XrAggregateFieldLayout elem = {.native_type = field->elem_native_type};
+    for (int i = 0; i < count; i++) {
+        if (!xr_instance_write_decoded_native_field(dst + (size_t) i * elem_size, &elem,
+                                                    xr_array_get(array, i)))
+            return false;
+    }
+    if (count < field->elem_count)
+        memset(dst + (size_t) count * elem_size, 0,
+               (size_t) (field->elem_count - count) * elem_size);
+    return true;
+}
+
+static bool xr_instance_write_decoded_native_field(uint8_t *dst,
+                                                   const XrAggregateFieldLayout *field,
+                                                   XrValue value) {
+    if (!dst || !field || field->is_flexible)
+        return false;
+#define XR_STORE_NATIVE(type_, expression_)                                                     \
+    do {                                                                                         \
+        type_ native_value = (expression_);                                                      \
+        memcpy(dst, &native_value, sizeof(native_value));                                        \
+        return true;                                                                             \
+    } while (0)
+    switch (field->native_type) {
+        case XR_NATIVE_I64:
+            XR_STORE_NATIVE(int64_t, XR_TO_INT(value));
+        case XR_NATIVE_U64:
+            XR_STORE_NATIVE(uint64_t, (uint64_t) XR_TO_INT(value));
+        case XR_NATIVE_ISIZE:
+            XR_STORE_NATIVE(ptrdiff_t, (ptrdiff_t) XR_TO_INT(value));
+        case XR_NATIVE_USIZE:
+            XR_STORE_NATIVE(size_t, (size_t) XR_TO_INT(value));
+        case XR_NATIVE_I32:
+            XR_STORE_NATIVE(int32_t, (int32_t) XR_TO_INT(value));
+        case XR_NATIVE_U32:
+            XR_STORE_NATIVE(uint32_t, (uint32_t) XR_TO_INT(value));
+        case XR_NATIVE_I16:
+            XR_STORE_NATIVE(int16_t, (int16_t) XR_TO_INT(value));
+        case XR_NATIVE_U16:
+            XR_STORE_NATIVE(uint16_t, (uint16_t) XR_TO_INT(value));
+        case XR_NATIVE_I8:
+            XR_STORE_NATIVE(int8_t, (int8_t) XR_TO_INT(value));
+        case XR_NATIVE_U8:
+            XR_STORE_NATIVE(uint8_t, (uint8_t) XR_TO_INT(value));
+        case XR_NATIVE_F64:
+            XR_STORE_NATIVE(double, XR_TO_FLOAT(value));
+        case XR_NATIVE_F32:
+            XR_STORE_NATIVE(float, (float) XR_TO_FLOAT(value));
+        case XR_NATIVE_BOOL:
+            XR_STORE_NATIVE(uint8_t, XR_TO_BOOL(value) ? 1u : 0u);
+        case XR_NATIVE_STRING:
+            XR_STORE_NATIVE(XrString *, XR_IS_NULL(value) ? NULL : XR_TO_STRING(value));
+        case XR_NATIVE_ARRAY_REF:
+        case XR_NATIVE_MAP_REF:
+        case XR_NATIVE_SET_REF:
+        case XR_NATIVE_VALUE:
+            memcpy(dst, &value, sizeof(value));
+            return true;
+        case XR_NATIVE_NESTED_AGGREGATE: {
+            if (!XR_IS_INSTANCE(value))
+                return false;
+            XrInstance *nested = XR_TO_INSTANCE(value);
+            void *body = nested && nested->klass ? xr_instance_native_body(nested) : NULL;
+            if (!body || !nested->klass->struct_layout ||
+                nested->klass->struct_layout->total_size != field->size)
+                return false;
+            memcpy(dst, body, field->size);
+            return true;
+        }
+        case XR_NATIVE_ARRAY:
+            return xr_instance_write_decoded_array(dst, field, value);
+        default:
+            return false;
+    }
+#undef XR_STORE_NATIVE
+}
+
+bool xr_instance_set_decoded_field(XrInstance *inst, int index, XrValue value) {
+    if (!inst || !inst->klass || index < 0 ||
+        index >= xr_class_instance_field_count(inst->klass))
+        return false;
+    XrAggregateLayout *layout = inst->klass->struct_layout;
+    if (!layout) {
+        xr_instance_set_field_by_index(inst, index, value);
+        return true;
+    }
+    if (index >= layout->field_count)
+        return false;
+    uint8_t *body = (uint8_t *) xr_instance_native_body(inst);
+    XrAggregateFieldLayout *field = &layout->fields[index];
+    if (!body || !xr_instance_write_decoded_native_field(body + field->offset, field, value))
+        return false;
+    xr_rc_release_value(xr_current_coro_heap(), inst->fields[index]);
+    inst->fields[index] = value;
+    return true;
 }
 
 size_t xr_instance_size(XrClass *cls) {

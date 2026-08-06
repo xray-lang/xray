@@ -10044,6 +10044,9 @@ static bool xicgen_receiver_is_builtin_global(const XiValue *receiver, int globa
     return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == global_index;
 }
 
+static bool xicgen_emit_json_decode_class_target_spec(XiCgenCtx *ctx, FILE *out,
+                                                      const XrType *type, int depth);
+
 /* PanicInfo(message="", cause=null) constructs the lightweight exception value
  * shared with the runtime helpers (a json-named object with message/stack/cause/
  * code/data). The match-non-exhaustive and force-unwrap lowerings emit this. */
@@ -10075,9 +10078,33 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
 
     if (strcmp(method, "encode") == 0 && nargs == 1 && v->nargs >= 2) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_json_encode(");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ")");
+        const XiValue *input = v->args[1];
+        const XiClassData *input_class =
+            input ? cg_class_native_data_for_type(ctx, input->type) : NULL;
+        bool derived_value_struct = input_class && input_class->struct_layout &&
+                                    !input_class->instance_layout &&
+                                    (input_class->derive_flags & XR_DERIVE_JSON) != 0;
+        if (derived_value_struct) {
+            fprintf(out, "xrt_json_encode_native_struct(");
+            if (cg_value_plan_is_struct_aggregate(ctx, input)) {
+                fprintf(out, "&");
+                emit_vref(out, input);
+            } else {
+                fprintf(out, "(");
+                emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+                fprintf(out, ").ptr");
+            }
+            fprintf(out, ", ");
+            if (!xicgen_emit_json_decode_class_target_spec(ctx, out, input->type, 0)) {
+                ctx->error = true;
+                fprintf(out, "NULL");
+            }
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "xrt_json_encode(");
+            emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+            fprintf(out, ")");
+        }
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
@@ -10149,9 +10176,33 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
 
     if (strcmp(method, "stringify") == 0 && nargs == 1 && v->nargs >= 2) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_json_stringify(");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ")");
+        const XiValue *input = v->args[1];
+        const XiClassData *input_class =
+            input ? cg_class_native_data_for_type(ctx, input->type) : NULL;
+        bool derived_value_struct = input_class && input_class->struct_layout &&
+                                    !input_class->instance_layout &&
+                                    (input_class->derive_flags & XR_DERIVE_JSON) != 0;
+        if (derived_value_struct) {
+            fprintf(out, "xrt_json_stringify_native_struct(");
+            if (cg_value_plan_is_struct_aggregate(ctx, input)) {
+                fprintf(out, "&");
+                emit_vref(out, input);
+            } else {
+                fprintf(out, "(");
+                emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+                fprintf(out, ").ptr");
+            }
+            fprintf(out, ", ");
+            if (!xicgen_emit_json_decode_class_target_spec(ctx, out, input->type, 0)) {
+                ctx->error = true;
+                fprintf(out, "NULL");
+            }
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "xrt_json_stringify(");
+            emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+            fprintf(out, ")");
+        }
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
@@ -11419,6 +11470,106 @@ static bool xicgen_emit_json_decode_field_specs(XiCgenCtx *ctx, FILE *out,
     return true;
 }
 
+static const XrType *xicgen_json_class_field_type(XiCgenCtx *ctx,
+                                                  const XiClassData *class_data,
+                                                  const char *field_name) {
+    for (const XiClassData *current = class_data; current;
+         current = cg_class_native_data_by_name(ctx, current->super_name)) {
+        for (uint16_t i = 0; i < current->instance_field_count; i++) {
+            const char *candidate =
+                current->instance_field_names ? current->instance_field_names[i] : NULL;
+            if (candidate && field_name && strcmp(candidate, field_name) == 0)
+                return current->instance_field_types ? current->instance_field_types[i] : NULL;
+        }
+    }
+    return NULL;
+}
+
+static bool xicgen_emit_json_decode_class_target_spec(XiCgenCtx *ctx, FILE *out,
+                                                      const XrType *type, int depth) {
+    const XiClassData *class_data = cg_class_native_data_for_type(ctx, type);
+    const XrAggregateLayout *layout =
+        class_data ? (class_data->instance_layout ? class_data->instance_layout
+                                                  : class_data->struct_layout)
+                   : NULL;
+    const bool value_struct = class_data && !class_data->instance_layout &&
+                              class_data->struct_layout;
+    if (!ctx || !out || !class_data || !layout || !layout->field_names ||
+        layout->field_count == 0 || depth > 16 ||
+        (class_data->derive_flags & XR_DERIVE_JSON) == 0) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: Json class schema unavailable for '%s' "
+                "(kind=%d, class=%s, layout=%s, fields=%u, depth=%d, derive=%u)\n",
+                type ? xr_type_to_string((XrType *) type) : "?", type ? (int) type->kind : -1,
+                class_data && class_data->class_name ? class_data->class_name : "?",
+                layout ? "yes" : "no", layout ? (unsigned) layout->field_count : 0u, depth,
+                class_data ? (unsigned) class_data->derive_flags : 0u);
+        return false;
+    }
+    const char *prefix = cg_class_native_prefix_for_data(ctx, class_data, NULL);
+    char value_struct_type_name[128];
+    if (value_struct)
+        cg_struct_heap_type_name(value_struct_type_name, sizeof(value_struct_type_name), prefix,
+                                 layout);
+    fprintf(out, "&(const XrJsonClassDecodeSpec){(uint16_t)(");
+    if (!emit_class_native_ensure_type_id_expr(ctx, out, class_data)) {
+        return false;
+    }
+    fprintf(out, "), %uu, (uint32_t)sizeof(", (unsigned) layout->field_count);
+    if (value_struct)
+        fprintf(out, "%s", value_struct_type_name);
+    else
+        emit_class_native_type_name(out, prefix, class_data->class_name);
+    fprintf(out, "), %s, {0, 0, 0}, (const XrJsonClassDecodeFieldSpec[]){",
+            value_struct ? "XR_JSON_NOMINAL_TARGET_VALUE_STRUCT"
+                         : "XR_JSON_NOMINAL_TARGET_CLASS");
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const char *field_name = layout->field_names[i];
+        const XrAggregateFieldLayout *field_layout = cg_struct_field(layout, i);
+        const XrType *field_type =
+            xicgen_json_class_field_type(ctx, class_data, field_name);
+        if (!field_name || !field_layout || !field_type) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: Json class field schema unavailable for '%s.%s' "
+                    "(layout=%s, type=%s)\n",
+                    class_data->class_name ? class_data->class_name : "?",
+                    field_name ? field_name : "?", field_layout ? "yes" : "no",
+                    field_type ? xr_type_to_string((XrType *) field_type) : "?");
+            return false;
+        }
+        if (i > 0)
+            fprintf(out, ", ");
+        fprintf(out, "{");
+        xicgen_emit_c_string_literal(out, field_name);
+        fprintf(out, ", (uint32_t)offsetof(");
+        if (value_struct)
+            fprintf(out, "%s", value_struct_type_name);
+        else
+            emit_class_native_type_name(out, prefix, class_data->class_name);
+        fprintf(out, ", ");
+        if (value_struct) {
+            char field_c_name[128];
+            cg_struct_field_c_name(layout, i, field_c_name, sizeof(field_c_name));
+            fprintf(out, "%s", field_c_name);
+        } else {
+            emit_class_native_field_path(ctx, out, class_data, i);
+        }
+        fprintf(out, "), %uu, {0, 0, 0}, {NULL, ",
+                (unsigned) field_layout->native_type);
+        if (!xicgen_emit_json_decode_value_spec(ctx, out, field_type, depth + 1))
+            return false;
+        fprintf(out, "}}");
+    }
+    fprintf(out, "}}");
+    return true;
+}
+
+static bool xicgen_emit_json_decode_class_spec(XiCgenCtx *ctx, FILE *out,
+                                               const XrType *type, int depth) {
+    fprintf(out, "NULL, 0, ");
+    return xicgen_emit_json_decode_class_target_spec(ctx, out, type, depth);
+}
+
 static bool xicgen_emit_json_decode_value_spec(XiCgenCtx *ctx, FILE *out,
                                                const XrType *type, int depth) {
     if (!ctx || !out || !type || depth > 16)
@@ -11453,6 +11604,29 @@ static bool xicgen_emit_json_decode_value_spec(XiCgenCtx *ctx, FILE *out,
                     (unsigned) xicgen_json_decode_storage_type(child));
             return true;
         }
+        case XR_JSON_VALUE_ENUM: {
+            const XrEnumLayout *layout = XR_TYPE_IS_ENUM(type) ? type->enum_type.layout : NULL;
+            if (!layout || !layout->is_zero_payload || !layout->name ||
+                !layout->variants || layout->variant_count == 0 ||
+                layout->variant_count > UINT16_MAX)
+                return false;
+            fprintf(out, "NULL, 0, &(const XrJsonEnumDecodeSpec){%uu, ",
+                    (unsigned) layout->layout_id);
+            xicgen_emit_c_string_literal(out, layout->name);
+            fprintf(out, ", (const char *const[]){");
+            for (uint32_t i = 0; i < layout->variant_count; i++) {
+                if (i > 0)
+                    fprintf(out, ", ");
+                xicgen_emit_c_string_literal(out,
+                                             layout->variants[i].name
+                                                 ? layout->variants[i].name
+                                                 : "");
+            }
+            fprintf(out, "}, %uu, 0}", (unsigned) layout->variant_count);
+            return true;
+        }
+        case XR_JSON_VALUE_CLASS_INSTANCE:
+            return xicgen_emit_json_decode_class_spec(ctx, out, type, depth + 1);
         default:
             fprintf(out, "NULL, 0, NULL");
             return xr_json_value_kind_base(value_kind) != XR_JSON_VALUE_ANY;
@@ -11465,8 +11639,7 @@ static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     (void) prefix;
     int64_t field_count = v ? v->aux_int : 0;
     const XrType *object_type = v ? v->type : NULL;
-    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_TAGGED,
-                                                     v ? cg_rep(v) : XR_REP_TAGGED);
+    const char *conv_suffix = v ? emit_tagged_to_value_storage_prefix(ctx, out, v) : NULL;
     if (!v || v->nargs < 1 || !object_type ||
         !xr_type_is_json_decode_field_supported(object_type)) {
         fprintf(out, "XR_NULL_VAL");
@@ -11510,6 +11683,44 @@ static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     }
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
+}
+
+static bool xicgen_emit_json_native_struct_decode_stmt(XiCgenCtx *ctx, FILE *out,
+                                                       const XiFunc *f, const XiValue *v,
+                                                       const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (!ctx || !out || !v || v->op != XI_JSON_DECODE || v->nargs < 1 ||
+        (v->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) == 0 ||
+        !cg_value_plan_is_struct_aggregate(ctx, v))
+        return false;
+    const XiClassData *class_data = cg_class_native_data_for_type(ctx, v->type);
+    if (!class_data || !class_data->struct_layout || class_data->instance_layout ||
+        (class_data->derive_flags & XR_DERIVE_JSON) == 0)
+        return false;
+
+    if (ctx->pre_decl_all) {
+        fprintf(out, "    memset(&");
+        emit_vref(out, v);
+        fprintf(out, ", 0, sizeof(");
+        emit_vref(out, v);
+        fprintf(out, "));\n");
+    } else {
+        fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+        emit_vref(out, v);
+        fprintf(out, " = {0};\n");
+    }
+    fprintf(out, "    xrt_json_parse_typed_native_or_throw(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    if (!xicgen_emit_json_decode_class_target_spec(ctx, out, v->type, 0)) {
+        ctx->error = true;
+        return true;
+    }
+    fprintf(out, ", &");
+    emit_vref(out, v);
+    fprintf(out, ");\n");
+    return true;
 }
 
 static void xicgen_struct_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

@@ -2,6 +2,8 @@
 // Task 260: JsonDecodable(T) applies to root scalars and containers, not only
 // fields nested inside an exact structural object.
 
+enum WireKind { Text, Binary }
+
 var parsedInt: int = Json.parse<int>("7")
 var parsedBool: bool = Json.parse<bool>("true")
 var parsedString: string = Json.parse<string>("\"ok\"")
@@ -26,6 +28,13 @@ print(decodedMap == null)
 print(len(decodedMap!))
 print(Json.decode<Array<int>>(Json.parse("[1,true]")) == null)
 print(Json.decode<Map<string, int>>(Json.parse("{\"a\":false}")) == null)
+
+var parsedKind: WireKind = Json.parse<WireKind>("\"Binary\"")
+var decodedKind = Json.decode<WireKind>(Json.parse("\"Text\""))
+print(parsedKind == WireKind.Binary)
+print(decodedKind == null)
+print(decodedKind! == WireKind.Text)
+print(Json.decode<WireKind>(Json.parse("\"Missing\"")) == null)
 
 try {
     var bad = Json.parse<Array<int>>("[1,false]")
