@@ -60,12 +60,12 @@ BASELINES = (
     ),
     Baseline(
         category="JSON_ENCODE_AOT_BASELINE",
-        xr_path="tests/aot/filetests/cgen/json_decode_record_plan_consumption.xr",
-        expect_path="tests/aot/filetests/cgen/json_decode_record_plan_consumption.expect",
+        xr_path="tests/aot/filetests/cgen/json_decode_object_plan_consumption.xr",
+        expect_path="tests/aot/filetests/cgen/json_decode_object_plan_consumption.expect",
         source_contains=("Json.decode<User>", "Json.encode(user!)"),
         expect_contains=(
             "kind=encode action=encode_field_table",
-            "xrt_json_decode_record",
+            "xrt_json_decode_struct_object",
             "xrt_json_encode",
         ),
     ),

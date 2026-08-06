@@ -72,7 +72,6 @@
 #define TYPE_NAME_ITERATOR "iterator"
 #define TYPE_NAME_STRUCT "struct"
 #define TYPE_NAME_JSON "Json"
-#define TYPE_NAME_RECORD "Record"
 #define TYPE_NAME_STRINGBUILDER "StringBuilder"
 #define TYPE_NAME_BUFFER "Buffer"
 #define TYPE_NAME_UNKNOWN "unknown"
@@ -150,7 +149,7 @@ typedef enum {
     XR_TID_SET,             // 15
     XR_TID_MAP,             // 16
     XR_TID_INSTANCE,        // 17
-    XR_TID_JSON,            // 18
+    XR_TID_OBJECT,          // 18 (Json object and structural object values)
     XR_TID_BIGINT,          // 19
     XR_TID_STRINGBUILDER,   // 20
     XR_TID_CHANNEL,         // 21
@@ -175,11 +174,8 @@ typedef enum {
     XR_TID_EVENTCOUNT,      // 40
     XR_TID_THREAD,          // 41
     XR_TID_BUFFER,          // 42
-    // Analyzer-only type IDs (not returned by typeof at runtime)
-    // char and Record are runtime-visible scalar/struct names outside the
-    // concurrency block.
+    // Analyzer-only type ID (not returned by typeof at runtime).
     XR_TID_RUNE,
-    XR_TID_RECORD,
     XR_TID_COUNT
 } XrTypeId;
 

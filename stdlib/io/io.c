@@ -211,13 +211,12 @@ static XrValue io_readStdinBytes(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 static intptr_t XR_IO_CORE_ACQUIRE_HANDLE("xray_file_stream")
-io_file_open_handle(const char *path) {
+    io_file_open_handle(const char *path) {
     FILE *file = path && path[0] != '\0' ? fopen(path, "rb") : NULL;
     return file ? (intptr_t) file : -1;
 }
 
-static bool io_file_close_handle(
-    intptr_t handle XR_IO_CORE_RELEASE_HANDLE("xray_file_stream")) {
+static bool io_file_close_handle(intptr_t handle XR_IO_CORE_RELEASE_HANDLE("xray_file_stream")) {
     return handle >= 0 && fclose((FILE *) handle) == 0;
 }
 
@@ -953,7 +952,7 @@ static XrClass *io_get_stat_class(XrVMRuntime *X) {
         return cache->io_stat_class;
 
     XrClass *cls = xr_class_build_json_chain(X, XR_IO_CORE_STAT_FIELD_NAMES,
-                                             XR_IO_CORE_STAT_FIELD_COUNT, false);
+                                             XR_IO_CORE_STAT_FIELD_COUNT, NULL, NULL, false);
     if (!cls)
         return NULL;
     cache->io_stat_class = cls;

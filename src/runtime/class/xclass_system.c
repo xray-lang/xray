@@ -97,8 +97,8 @@ void xr_core_init(XrVMRuntime *X) {
     // start at this class and transition as fields are added.
     X->core->jsonRootClass = xr_class_new_dynamic_root(X, "Json", 8, false, XR_BK_JSON);
     X->core->jsonRootClass->super = X->core->jsonInstanceMethodClass;
-    X->core->recordRootClass = xr_class_new_dynamic_root(X, "Record", 8, false, XR_BK_RECORD);
-    X->core->recordSealedRootClass = xr_class_new_dynamic_root(X, "Record", 8, false, XR_BK_RECORD);
+    X->core->structObjectRootClass =
+        xr_class_new_dynamic_root(X, TYPE_NAME_OBJECT, 8, false, XR_BK_STRUCT_OBJECT);
 
     xr_int_register_native_type(X);
     X->core->intClass = xr_isolate_get_native_type_class(X, XR_TINT);

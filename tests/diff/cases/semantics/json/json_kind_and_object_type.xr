@@ -1,0 +1,38 @@
+var structural = { name: "Ada", age: 37 }
+var dynamicObject: Json = { name: "Ada", age: 37 }
+
+print(typeName(structural))
+print(typeName(dynamicObject))
+print(typeName<Json>())
+print(typeOf(structural) == Type.object)
+print(typeOf(dynamicObject) == Type.object)
+
+var jnull: Json = null
+var jbool: Json = true
+var jint: Json = 7
+var jfloat: Json = 1.5
+var jstring: Json = "x"
+var jarray: Json = [1, true, null]
+
+print(Json.kindOf(jnull))
+print(Json.kindOf(jbool))
+print(Json.kindOf(jint))
+print(Json.kindOf(jfloat))
+print(Json.kindOf(jstring))
+print(Json.kindOf(jarray))
+print(Json.kindOf(dynamicObject))
+
+var pnull: bool = Json.isNull(jnull)
+var pbool: bool = Json.isBool(jbool)
+var pint: bool = Json.isInt(jint)
+var pfloat: bool = Json.isFloat(jfloat)
+var pstring: bool = Json.isString(jstring)
+var parray: bool = Json.isArray(jarray)
+var pobject: bool = Json.isObject(dynamicObject)
+print(pnull)
+print(pbool)
+print(pint)
+print(pfloat)
+print(pstring)
+print(parray)
+print(pobject)

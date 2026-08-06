@@ -687,7 +687,7 @@ static bool compile_repeat(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
         if (!has_prev) {
             prev = copy;
             has_prev = true;
-            first_start = copy.start;  // Record first entry
+            first_start = copy.start;  // object first entry
         } else {
             frag_patch_to(&prev, c, copy.start);
             frag_free(&prev);

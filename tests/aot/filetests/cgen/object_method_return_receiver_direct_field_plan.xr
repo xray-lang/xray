@@ -1,0 +1,14 @@
+type User = { name: string, age: int }
+
+class ObjectMethodReturnFactory {
+    makeUser() -> User {
+        return { name: "ada", age: 7 }
+    }
+}
+
+fn objectMethodReturnReceiverPlan() -> int {
+    var f = ObjectMethodReturnFactory()
+    return f.makeUser().age
+}
+
+print(objectMethodReturnReceiverPlan())

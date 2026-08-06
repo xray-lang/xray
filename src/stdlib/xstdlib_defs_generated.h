@@ -66,14 +66,14 @@ typedef struct XrStdlibHandleDefEntry {
     uint16_t field_count;
 } XrStdlibHandleDefEntry;
 
-typedef struct XrStdlibRecordDefEntry {
+typedef struct XrStdlibObjectShapeDefEntry {
     const char *module;
     const char *name;
     const char *doc;
     const XrStdlibHandleFieldDefEntry *fields;
     uint16_t field_count;
-    bool sealed;
-} XrStdlibRecordDefEntry;
+    bool exact;
+} XrStdlibObjectShapeDefEntry;
 
 typedef struct XrStdlibEnumVariantDefEntry {
     const char *name;
@@ -420,7 +420,7 @@ static const XrStdlibConstDefEntry xr_stdlib_const_def_entries[] = {
 };
 #define XR_STDLIB_CONST_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_const_def_entries) / sizeof(xr_stdlib_const_def_entries[0])))
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_runtime_RuntimeInfo[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_runtime_RuntimeInfo[] = {
     {"runtime", "RuntimeInfo", "liveBytes", "int", true},
     {"runtime", "RuntimeInfo", "liveKB", "float", true},
     {"runtime", "RuntimeInfo", "liveObjects", "int", true},
@@ -430,7 +430,7 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_runtime_Runtime
     {"runtime", "RuntimeInfo", "fullBlocks", "int", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_Coro_CoroStats[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroStats[] = {
     {"Coro", "CoroStats", "active", "int", true},
     {"Coro", "CoroStats", "blocked", "int", true},
     {"Coro", "CoroStats", "ready", "int", true},
@@ -438,7 +438,7 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_Coro_CoroStats[
     {"Coro", "CoroStats", "created", "int", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_Coro_CoroInfo[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroInfo[] = {
     {"Coro", "CoroInfo", "id", "int", true},
     {"Coro", "CoroInfo", "name", "string?", true},
     {"Coro", "CoroInfo", "state", "CoroState", true},
@@ -446,17 +446,17 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_Coro_CoroInfo[]
     {"Coro", "CoroInfo", "source", "string?", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_Coro_CoroDeadlock[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_Coro_CoroDeadlock[] = {
     {"Coro", "CoroDeadlock", "members", "Array<CoroInfo>", true},
     {"Coro", "CoroDeadlock", "reason", "string", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_net___CopyBidirectionalResult[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_net___CopyBidirectionalResult[] = {
     {"net", "__CopyBidirectionalResult", "aToB", "int", true},
     {"net", "__CopyBidirectionalResult", "bToA", "int", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_ClusterTlsOptions[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterTlsOptions[] = {
     {"cluster", "ClusterTlsOptions", "enabled", "bool", true},
     {"cluster", "ClusterTlsOptions", "caFile", "string?", true},
     {"cluster", "ClusterTlsOptions", "certFile", "string?", true},
@@ -464,20 +464,20 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_Cluster
     {"cluster", "ClusterTlsOptions", "insecure", "bool", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_ClusterConfig[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterConfig[] = {
     {"cluster", "ClusterConfig", "name", "string", true},
     {"cluster", "ClusterConfig", "port", "int", true},
     {"cluster", "ClusterConfig", "secret", "string?", true},
     {"cluster", "ClusterConfig", "tls", "ClusterTlsOptions?", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_ClusterTlsStatus[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterTlsStatus[] = {
     {"cluster", "ClusterTlsStatus", "enabled", "bool", true},
     {"cluster", "ClusterTlsStatus", "clientReady", "bool", true},
     {"cluster", "ClusterTlsStatus", "serverReady", "bool", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_ClusterNodeInfo[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterNodeInfo[] = {
     {"cluster", "ClusterNodeInfo", "name", "string", true},
     {"cluster", "ClusterNodeInfo", "host", "string", true},
     {"cluster", "ClusterNodeInfo", "port", "int", true},
@@ -496,7 +496,7 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_Cluster
     {"cluster", "ClusterNodeInfo", "missedHeartbeats", "int", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_ClusterInfo[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterInfo[] = {
     {"cluster", "ClusterInfo", "self", "string", true},
     {"cluster", "ClusterInfo", "port", "int", true},
     {"cluster", "ClusterInfo", "running", "bool", true},
@@ -510,27 +510,27 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_cluster_Cluster
     {"cluster", "ClusterInfo", "tls", "ClusterTlsStatus", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_record_fields_ws_WsConnectOptions[] = {
+static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_ws_WsConnectOptions[] = {
     {"ws", "WsConnectOptions", "timeout", "int?", true},
     {"ws", "WsConnectOptions", "pingInterval", "int?", true},
     {"ws", "WsConnectOptions", "pongTimeout", "int?", true},
     {"ws", "WsConnectOptions", "maxMessageSize", "int?", true},
 };
 
-static const XrStdlibRecordDefEntry xr_stdlib_record_def_entries[] = {
-    {"runtime", "RuntimeInfo", "Typed snapshot of the current execution-local reclamation domain", xr_stdlib_record_fields_runtime_RuntimeInfo, 7, true},
-    {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_record_fields_Coro_CoroStats, 5, true},
-    {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_record_fields_Coro_CoroInfo, 5, true},
-    {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_record_fields_Coro_CoroDeadlock, 2, true},
-    {"net", "__CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", xr_stdlib_record_fields_net___CopyBidirectionalResult, 2, true},
-    {"cluster", "ClusterTlsOptions", "Typed TLS configuration for a cluster node", xr_stdlib_record_fields_cluster_ClusterTlsOptions, 5, true},
-    {"cluster", "ClusterConfig", "Typed cluster node startup configuration", xr_stdlib_record_fields_cluster_ClusterConfig, 4, true},
-    {"cluster", "ClusterTlsStatus", "Effective TLS posture of a running cluster node", xr_stdlib_record_fields_cluster_ClusterTlsStatus, 3, true},
-    {"cluster", "ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", xr_stdlib_record_fields_cluster_ClusterNodeInfo, 16, true},
-    {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_record_fields_cluster_ClusterInfo, 11, true},
-    {"ws", "WsConnectOptions", "Typed WebSocket client connection options", xr_stdlib_record_fields_ws_WsConnectOptions, 4, true},
+static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
+    {"runtime", "RuntimeInfo", "Typed snapshot of the current execution-local reclamation domain", xr_stdlib_object_fields_runtime_RuntimeInfo, 7, true},
+    {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
+    {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
+    {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},
+    {"net", "__CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", xr_stdlib_object_fields_net___CopyBidirectionalResult, 2, true},
+    {"cluster", "ClusterTlsOptions", "Typed TLS configuration for a cluster node", xr_stdlib_object_fields_cluster_ClusterTlsOptions, 5, true},
+    {"cluster", "ClusterConfig", "Typed cluster node startup configuration", xr_stdlib_object_fields_cluster_ClusterConfig, 4, true},
+    {"cluster", "ClusterTlsStatus", "Effective TLS posture of a running cluster node", xr_stdlib_object_fields_cluster_ClusterTlsStatus, 3, true},
+    {"cluster", "ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", xr_stdlib_object_fields_cluster_ClusterNodeInfo, 16, true},
+    {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_object_fields_cluster_ClusterInfo, 11, true},
+    {"ws", "WsConnectOptions", "Typed WebSocket client connection options", xr_stdlib_object_fields_ws_WsConnectOptions, 4, true},
 };
-#define XR_STDLIB_RECORD_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_record_def_entries) / sizeof(xr_stdlib_record_def_entries[0])))
+#define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_object_shape_def_entries) / sizeof(xr_stdlib_object_shape_def_entries[0])))
 
 static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_Coro_CoroState_variants[] = {
     {"Unknown", NULL, 0},

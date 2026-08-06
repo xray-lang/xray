@@ -179,8 +179,7 @@ static XrAggregateLayout *snapshot_aggregate_layout(XiSemanticSnapshot *snapshot
         return NULL;
     }
 
-    XrAggregateLayout *copy =
-        (XrAggregateLayout *) snapshot_alloc(snapshot, sizeof(*copy));
+    XrAggregateLayout *copy = (XrAggregateLayout *) snapshot_alloc(snapshot, sizeof(*copy));
     if (!copy || !snapshot_map_put(&snapshot->aggregate_layouts, source, copy)) {
         snapshot->failed = true;
         return NULL;
@@ -249,8 +248,7 @@ static XrEnumLayout *snapshot_enum_layout(XiSemanticSnapshot *snapshot,
         dst_variant->payload_names = (const char **) snapshot_alloc(
             snapshot, (size_t) src_variant->payload_count * sizeof(*dst_variant->payload_names));
         dst_variant->payload_type_ids = (uint8_t *) snapshot_alloc(
-            snapshot,
-            (size_t) src_variant->payload_count * sizeof(*dst_variant->payload_type_ids));
+            snapshot, (size_t) src_variant->payload_count * sizeof(*dst_variant->payload_type_ids));
         if (!dst_variant->payload_names || !dst_variant->payload_type_ids)
             return NULL;
         for (uint16_t p = 0; p < src_variant->payload_count; p++) {
@@ -266,8 +264,7 @@ static XrEnumLayout *snapshot_enum_layout(XiSemanticSnapshot *snapshot,
     return copy;
 }
 
-static XrClassInfo *snapshot_class_info(XiSemanticSnapshot *snapshot,
-                                        const XrClassInfo *source) {
+static XrClassInfo *snapshot_class_info(XiSemanticSnapshot *snapshot, const XrClassInfo *source) {
     if (!source)
         return NULL;
     XrClassInfo *known = (XrClassInfo *) snapshot_map_get(&snapshot->class_infos, source);
@@ -321,8 +318,7 @@ static bool snapshot_type_vector(XiSemanticSnapshot *snapshot, XrType ***target,
         return count == 0;
     if (!source)
         return false;
-    XrType **items =
-        (XrType **) snapshot_alloc(snapshot, (size_t) count * sizeof(*items));
+    XrType **items = (XrType **) snapshot_alloc(snapshot, (size_t) count * sizeof(*items));
     if (!items)
         return false;
     *target = items;
@@ -405,10 +401,10 @@ static bool snapshot_function_type(XiSemanticSnapshot *snapshot, XrType *copy,
     size_t count = (size_t) type_param_count;
     copy->function.type_param_names =
         (const char **) snapshot_alloc(snapshot, count * sizeof(*copy->function.type_param_names));
-    copy->function.type_param_constraints =
-        (XrType ***) snapshot_alloc(snapshot, count * sizeof(*copy->function.type_param_constraints));
-    copy->function.type_param_constraint_counts =
-        (int *) snapshot_alloc(snapshot, count * sizeof(*copy->function.type_param_constraint_counts));
+    copy->function.type_param_constraints = (XrType ***) snapshot_alloc(
+        snapshot, count * sizeof(*copy->function.type_param_constraints));
+    copy->function.type_param_constraint_counts = (int *) snapshot_alloc(
+        snapshot, count * sizeof(*copy->function.type_param_constraint_counts));
     if (!copy->function.type_param_names || !copy->function.type_param_constraints ||
         !copy->function.type_param_constraint_counts)
         return false;
@@ -420,10 +416,9 @@ static bool snapshot_function_type(XiSemanticSnapshot *snapshot, XrType *copy,
         if ((source->function.type_param_names[i] && !copy->function.type_param_names[i]) ||
             constraint_count < 0)
             return false;
-        XrType *const *constraints =
-            source->function.type_param_constraints
-                ? source->function.type_param_constraints[i]
-                : NULL;
+        XrType *const *constraints = source->function.type_param_constraints
+                                         ? source->function.type_param_constraints[i]
+                                         : NULL;
         if (!snapshot_type_vector(snapshot, &copy->function.type_param_constraints[i], constraints,
                                   constraint_count))
             return false;
@@ -475,7 +470,7 @@ static XrType *snapshot_type(XiSemanticSnapshot *snapshot, const XrType *source)
                  (!source->map.value_type || copy->map.value_type);
             break;
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
             ok = snapshot_object_type(snapshot, &copy->object, &source->object);
             break;
         case XR_KIND_CLASS:
@@ -488,8 +483,7 @@ static XrType *snapshot_type(XiSemanticSnapshot *snapshot, const XrType *source)
                  (!source->instance.class_ref || copy->instance.class_ref) &&
                  (!source->instance.superclass || copy->instance.superclass) &&
                  snapshot_type_vector(snapshot, &copy->instance.type_args,
-                                      source->instance.type_args,
-                                      source->instance.type_arg_count);
+                                      source->instance.type_args, source->instance.type_arg_count);
             break;
         case XR_KIND_FUNCTION:
             ok = snapshot_function_type(snapshot, copy, source);
@@ -507,11 +501,11 @@ static XrType *snapshot_type(XiSemanticSnapshot *snapshot, const XrType *source)
         case XR_KIND_ENUM:
             copy->enum_type.enum_name = snapshot_strdup(snapshot, source->enum_type.enum_name);
             copy->enum_type.layout = snapshot_enum_layout(snapshot, source->enum_type.layout);
-            ok = (!source->enum_type.enum_name || copy->enum_type.enum_name) &&
-                 (!source->enum_type.layout || copy->enum_type.layout) &&
-                 snapshot_type_vector(snapshot, &copy->enum_type.type_args,
-                                      source->enum_type.type_args,
-                                      source->enum_type.type_arg_count);
+            ok =
+                (!source->enum_type.enum_name || copy->enum_type.enum_name) &&
+                (!source->enum_type.layout || copy->enum_type.layout) &&
+                snapshot_type_vector(snapshot, &copy->enum_type.type_args,
+                                     source->enum_type.type_args, source->enum_type.type_arg_count);
             break;
         case XR_KIND_UNION: {
             XrType **members = NULL;
@@ -560,8 +554,7 @@ static bool snapshot_enum_data(XiSemanticSnapshot *snapshot, XiEnumData *data) {
         return false;
     for (uint32_t i = 0; i < data->member_count; i++) {
         XiEnumMemberData *member = &data->members[i];
-        if (member->payload_count < 0 ||
-            (member->payload_count > 0 && !member->payload_types))
+        if (member->payload_count < 0 || (member->payload_count > 0 && !member->payload_types))
             return false;
         for (int p = 0; p < member->payload_count; p++) {
             XrType *source = member->payload_types[p];
@@ -599,12 +592,11 @@ static bool snapshot_value(XiSemanticSnapshot *snapshot, XiValue *value) {
 
     if (value->op == XI_IS && value->aux) {
         value->aux = snapshot_type(snapshot, (const XrType *) value->aux);
-    } else if ((value->op == XI_AGG_NEW || value->op == XI_AGG_GET ||
-                value->op == XI_AGG_SET || value->op == XI_SLICE_FROM_PTR ||
-                value->op == XI_SLICE_REINTERPRET || value->op == XI_BUFFER_MATERIALIZE) &&
+    } else if ((value->op == XI_AGG_NEW || value->op == XI_AGG_GET || value->op == XI_AGG_SET ||
+                value->op == XI_SLICE_FROM_PTR || value->op == XI_SLICE_REINTERPRET ||
+                value->op == XI_BUFFER_MATERIALIZE) &&
                value->aux) {
-        value->aux = snapshot_aggregate_layout(snapshot,
-                                               (const XrAggregateLayout *) value->aux);
+        value->aux = snapshot_aggregate_layout(snapshot, (const XrAggregateLayout *) value->aux);
     } else if (value->op == XI_CLASS_CREATE) {
         if (!snapshot_class_data(snapshot, (XiClassData *) value->aux))
             return false;
@@ -640,8 +632,7 @@ static bool snapshot_module(XiSemanticSnapshot *snapshot, XiModule *module) {
             return false;
     }
     for (uint16_t i = 0; i < module->nslots; i++) {
-        if (module->slot_classes &&
-            !snapshot_class_data(snapshot, module->slot_classes[i]))
+        if (module->slot_classes && !snapshot_class_data(snapshot, module->slot_classes[i]))
             return false;
         if (module->slot_enums && !snapshot_enum_data(snapshot, module->slot_enums[i]))
             return false;
@@ -691,11 +682,10 @@ static bool snapshot_func(XiSemanticSnapshot *snapshot, XiFunc *func) {
     if (!snapshot_literal_types(snapshot, func->shared_const_literals,
                                 func->shared_const_literal_count) ||
         !snapshot_literal_types(snapshot, func->shared_init_literals,
-                                func->shared_init_literal_count))
-        {
-            snapshot_note_failure(snapshot, "function shared literal type");
-            return false;
-        }
+                                func->shared_init_literal_count)) {
+        snapshot_note_failure(snapshot, "function shared literal type");
+        return false;
+    }
 
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
         XiBlock *block = func->blocks ? func->blocks[bi] : NULL;

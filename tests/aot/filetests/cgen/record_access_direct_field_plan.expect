@@ -1,3 +1,0 @@
-contains=xaot-plan v0
-regex=record-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=field_get action=direct_field field_name=[0-9]+ result_type=[0-9]+ field=1 evidence=0x1d reason=none
-c_regex=XrValue v[0-9]+ = xrt_json_get_field\(v[0-9]+, 1\);

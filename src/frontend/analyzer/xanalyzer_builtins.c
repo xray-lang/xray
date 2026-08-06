@@ -45,7 +45,9 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
     if (type->kind == XR_KIND_SET)
         return XR_TID_SET;
     if (XR_TYPE_IS_JSON(type))
-        return XR_TID_JSON;
+        return XR_TID_OBJECT;
+    if (XR_TYPE_IS_STRUCT_OBJECT(type))
+        return XR_TID_OBJECT;
     /* Every named check below must exclude a user class that reuses the
      * builtin's name. This function is the single gate for builtin identity —
      * it decides the member table (xa_builtin_get_type_info), the native
@@ -85,6 +87,10 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
 
 // Get built-in type info by XrType (O(1) via enum index)
 const XaBuiltinType *xa_builtin_get_type_info(XrType *type) {
+    if (!type)
+        return NULL;
+    if (XR_TYPE_IS_JSON(type))
+        return xa_native_get_compiler_builtin_type("Json");
     if (xr_type_is_builtin_named_class(type, "CoroLocal"))
         return xa_native_get_compiler_builtin_type("CoroLocal");
     XrTypeId id = xr_type_to_builtin_id(type);
@@ -814,8 +820,8 @@ static const XaBuiltinMember g_rt_coropool_functions[] = {
     ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))
 
 static const XaBuiltinModule g_rt_builtin_modules[] = {
-    {"Coro", g_rt_coro_functions, RT_CORO_FUNCTION_COUNT, NULL, 0, g_gen_Coro_records,
-     GEN_CORO_RECORD_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT},
+    {"Coro", g_rt_coro_functions, RT_CORO_FUNCTION_COUNT, NULL, 0, g_gen_Coro_object_shapes,
+     GEN_CORO_OBJECT_SHAPE_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT},
     {"CoroPool", g_rt_coropool_functions, RT_COROPOOL_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
 };
 #define RT_BUILTIN_MODULE_COUNT 2
@@ -946,28 +952,30 @@ const XaBuiltinHandle *xa_builtin_get_handle_type(const char *module_name,
     return NULL;
 }
 
-const XaBuiltinRecord *xa_builtin_get_record_type(const char *module_name,
-                                                  const char *record_name) {
+const XaBuiltinObjectShape *xa_builtin_get_object_shape(const char *module_name,
+                                                        const char *object_shape_name) {
     const XaBuiltinModule *mod = xa_builtin_get_module_info(module_name);
-    if (!mod || !record_name)
+    if (!mod || !object_shape_name)
         return NULL;
-    for (int i = 0; i < mod->record_count; i++) {
-        if (mod->records[i].name && strcmp(mod->records[i].name, record_name) == 0)
-            return &mod->records[i];
+    for (int i = 0; i < mod->object_shape_count; i++) {
+        if (mod->object_shapes[i].name &&
+            strcmp(mod->object_shapes[i].name, object_shape_name) == 0)
+            return &mod->object_shapes[i];
     }
     return NULL;
 }
 
-const XaBuiltinRecord *xa_builtin_find_record_by_name(const char *record_name) {
-    if (!record_name)
+const XaBuiltinObjectShape *xa_builtin_find_object_shape_by_name(const char *object_shape_name) {
+    if (!object_shape_name)
         return NULL;
     for (int i = 0; i < xa_builtin_get_module_count(); i++) {
         const XaBuiltinModule *mod = xa_builtin_get_module_at(i);
         if (!mod)
             continue;
-        for (int j = 0; j < mod->record_count; j++) {
-            if (mod->records[j].name && strcmp(mod->records[j].name, record_name) == 0)
-                return &mod->records[j];
+        for (int j = 0; j < mod->object_shape_count; j++) {
+            if (mod->object_shapes[j].name &&
+                strcmp(mod->object_shapes[j].name, object_shape_name) == 0)
+                return &mod->object_shapes[j];
         }
     }
     return NULL;
@@ -999,10 +1007,12 @@ const XaBuiltinEnum *xa_builtin_find_enum_by_name(const char *enum_name) {
     return NULL;
 }
 
-XrType *xa_builtin_record_decl_type(XrVMRuntime *X, const XaBuiltinRecord *record) {
-    if (!record || record->field_count < 0 || (record->field_count > 0 && !record->fields))
+XrType *xa_builtin_object_shape_decl_type(XrVMRuntime *X,
+                                          const XaBuiltinObjectShape *object_shape) {
+    if (!object_shape || object_shape->field_count < 0 ||
+        (object_shape->field_count > 0 && !object_shape->fields))
         return xr_type_new_error(X);
-    int count = record->field_count;
+    int count = object_shape->field_count;
     const char **names = count > 0 ? xr_malloc(sizeof(*names) * (size_t) count) : NULL;
     XrType **types = count > 0 ? xr_malloc(sizeof(*types) * (size_t) count) : NULL;
     if (count > 0 && (!names || !types)) {
@@ -1011,10 +1021,11 @@ XrType *xa_builtin_record_decl_type(XrVMRuntime *X, const XaBuiltinRecord *recor
         return xr_type_new_error(X);
     }
     for (int i = 0; i < count; i++) {
-        names[i] = record->fields[i].name;
-        types[i] = xa_builtin_parse_type_string(X, record->fields[i].type_str);
+        names[i] = object_shape->fields[i].name;
+        types[i] = xa_builtin_parse_type_string(X, object_shape->fields[i].type_str);
     }
-    XrType *type = xr_type_new_record_with_fields(X, names, types, count, record->is_sealed);
+    XrType *type = xr_type_new_struct_object_with_fields(
+        X, names, types, count, object_shape->is_exact ? XR_OBJECT_ROW_EXACT : XR_OBJECT_ROW_OPEN);
     xr_free(names);
     xr_free(types);
     return type ? type : xr_type_new_error(X);
@@ -1182,6 +1193,8 @@ int xa_builtin_get_members_for_type(XrType *type, const XaBuiltinMember **out_me
 }
 
 const char *xa_builtin_get_type_name(XrType *type) {
+    if (XR_TYPE_IS_JSON(type))
+        return TYPE_NAME_JSON;
     XrTypeId id = xr_type_to_builtin_id(type);
     if (id == XR_TID_NULL)
         return NULL;
@@ -1607,9 +1620,10 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
                     type->instance.class_name = handle->name;
             }
             if (!type) {
-                const XaBuiltinRecord *record = xa_builtin_find_record_by_name(name_buf);
-                if (record)
-                    type = xa_builtin_record_decl_type(X, record);
+                const XaBuiltinObjectShape *object_shape =
+                    xa_builtin_find_object_shape_by_name(name_buf);
+                if (object_shape)
+                    type = xa_builtin_object_shape_decl_type(X, object_shape);
             }
             if (!type) {
                 const XaBuiltinEnum *enum_decl = xa_builtin_find_enum_by_name(name_buf);

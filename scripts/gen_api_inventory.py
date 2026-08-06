@@ -592,7 +592,7 @@ def build_def_location_index(root: Path) -> dict[tuple[str, str, str], tuple[str
         ("fn", re.compile(r"fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
         ("const", re.compile(r"const\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
         ("handle", re.compile(r"handle\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
-        ("record", re.compile(r"record\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
+        ("object", re.compile(r"object\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
         ("enum", re.compile(r"enum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{")),
     )
     for path in sorted(defs_dir.glob("*.def")):
@@ -631,7 +631,7 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
         entries,
         constants,
         handles,
-        records,
+        object_shapes,
         enums,
         _type_methods,
         _native_classes,
@@ -719,36 +719,36 @@ def collect_def_stdlib(root: Path) -> list[dict[str, Any]]:
                     doc_module=doc_module,
                 )
             )
-    for record in records:
-        if getattr(record, "is_internal", False):
+    for object_shape in object_shapes:
+        if getattr(object_shape, "is_internal", False):
             continue
-        source, line = source_for("record", record.module, record.name)
-        category, surface, doc_module = module_inventory_surface(record.module)
+        source, line = source_for("object", object_shape.module, object_shape.name)
+        category, surface, doc_module = module_inventory_surface(object_shape.module)
         out.append(
             item(
                 category=category,
-                namespace=record.module,
-                name=record.name,
+                namespace=object_shape.module,
+                name=object_shape.name,
                 kind="type",
                 signature="{ "
-                + ", ".join(f"{field.name}: {field.type}" for field in record.fields)
+                + ", ".join(f"{field.name}: {field.type}" for field in object_shape.fields)
                 + " }",
-                summary=record.doc,
+                summary=object_shape.doc,
                 source=source,
                 line=line,
                 doc_surface=surface,
                 doc_module=doc_module,
             )
         )
-        for field in record.fields:
+        for field in object_shape.fields:
             out.append(
                 item(
                     category=category,
-                    namespace=record.module,
-                    name=f"{record.name}.{field.name}",
+                    namespace=object_shape.module,
+                    name=f"{object_shape.name}.{field.name}",
                     kind="field",
                     signature=f"{'const ' if field.is_const else ''}{field.type}",
-                    summary="Record field",
+                    summary="Object field",
                     source=source,
                     line=line,
                     doc_surface=surface,

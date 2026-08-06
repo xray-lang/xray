@@ -618,12 +618,12 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "static void xrt_runtime_array_push(XrValue array, XrValue value) {\n"
         "    if (XR_IS_ARRAY(array) && array.ptr) xrt_runtime_array_append(array, value);\n"
         "}\n"
-        "static XrValue xrt_runtime_record_new(int64_t field_count, const char *const "
+        "static XrValue xrt_runtime_object_new(int64_t field_count, const char *const "
         "*field_names) {\n"
-        "    return xrt_record_new_named(field_count, field_names);\n"
+        "    return xrt_struct_object_new_named(field_count, field_names);\n"
         "}\n"
-        "static void xrt_runtime_record_set(XrValue record, int64_t field_index, XrValue value) {\n"
-        "    xrt_json_set_field(record, (int)field_index, value);\n"
+        "static void xrt_runtime_object_set(XrValue object, int64_t field_index, XrValue value) {\n"
+        "    xrt_json_set_field(object, (int)field_index, value);\n"
         "}\n"
         "static XrValue xrt_runtime_enum_new(const char *enum_name, const char *member_name, "
         "int64_t member_index) {\n"
@@ -651,8 +651,8 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "    .map_delete = xrt_runtime_map_delete,\n"
         "    .array_new = xrt_runtime_array_new,\n"
         "    .array_push = xrt_runtime_array_push,\n"
-        "    .record_new = xrt_runtime_record_new,\n"
-        "    .record_set = xrt_runtime_record_set,\n"
+        "    .object_new = xrt_runtime_object_new,\n"
+        "    .object_set = xrt_runtime_object_set,\n"
         "    .enum_new = xrt_runtime_enum_new,\n"
         "    .enum_ordinal = xrt_runtime_enum_ordinal,\n"
         "    .retain = xrt_runtime_value_retain,\n"
@@ -929,6 +929,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         return;
     cg_reset_enum_scalar_sidecars(ctx);
     cg_reset_prelude_enum_scalar_sidecars(ctx);
+    cg_reset_object_shapes(ctx);
 
     /* Build every section off-output.  The final unit is assembled in fixed
      * phase order and copied to the caller only after every buffer closes and
@@ -1054,6 +1055,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     cg_mark_extern_adapter_enum_scalar_sidecars(ctx);
     emit_enum_scalar_sidecar_defs(ctx, statics);
     emit_prelude_enum_scalar_sidecar_defs(ctx, statics);
+    cg_emit_object_shape_defs(ctx, statics);
 
     bool close_failed = xr_close_memstream(types, &typebuf, &typesz) != 0;
     close_failed = (xr_close_memstream(forwards, &forwardbuf, &forwardsz) != 0) || close_failed;
@@ -1195,6 +1197,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     }
     cg_reset_enum_scalar_sidecars(ctx);
     cg_reset_prelude_enum_scalar_sidecars(ctx);
+    cg_reset_object_shapes(ctx);
 
     char *staticbuf = NULL;
     size_t staticsz = 0;
@@ -1244,6 +1247,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     cg_mark_extern_adapter_enum_scalar_sidecars(ctx);
     emit_enum_scalar_sidecar_defs(ctx, statics);
     emit_prelude_enum_scalar_sidecar_defs(ctx, statics);
+    cg_emit_object_shape_defs(ctx, statics);
 
     bool close_failed = xr_close_memstream(statics, &staticbuf, &staticsz) != 0;
     close_failed = (xr_close_memstream(body, &bodybuf, &bodysz) != 0) || close_failed;

@@ -1,10 +1,20 @@
 // Built-in Json type — implementation in src/runtime/object/xjson_methods.c
 class Json {
     static parse(text: string) -> Json
+    // @lowered
+    static decode<T>(value: Json) -> T?
     static stringify<T>(value: T, indent?: int) -> string
     static encode<T>(value: T) -> Json
     static isValid(text: string, strict?: bool) -> bool
     static tryParse(text: string) -> Json
+    static kindOf(value: Json) -> string
+    static isNull(value: Json) -> bool
+    static isBool(value: Json) -> bool
+    static isInt(value: Json) -> bool
+    static isFloat(value: Json) -> bool
+    static isString(value: Json) -> bool
+    static isArray(value: Json) -> bool
+    static isObject(value: Json) -> bool
     static keys(obj: Json) -> Array<string>
     static values(obj: Json) -> Array<Json>
     static entries(obj: Json) -> Array<(string, Json)>

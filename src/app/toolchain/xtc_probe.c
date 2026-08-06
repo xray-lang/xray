@@ -47,7 +47,8 @@ static const char xtc_probe_sdk_c[] =
     "}\n"
     "int xray_cgen_dialect_probe(void) {\n"
     "  XtcDialectPair pair = xtc_pair(0);\n"
-    "  int expression_value = ({ int local = pair.second; local; });\n"
+    "  int local = pair.second;\n"
+    "  int expression_value = local;\n"
     "  goto done;\n"
     "done:\n"
     "  return pair.first + expression_value - 1;\n"
@@ -62,7 +63,8 @@ static const char xtc_probe_freestanding_sdk_c[] =
     "}\n"
     "int xray_cgen_dialect_probe(void) {\n"
     "  XtcDialectPair pair = xtc_pair(0);\n"
-    "  int expression_value = ({ int local = pair.second; local; });\n"
+    "  int local = pair.second;\n"
+    "  int expression_value = local;\n"
     "  goto done;\n"
     "done:\n"
     "  return pair.first + expression_value - 1;\n"
@@ -358,9 +360,8 @@ static bool xtc_probe_run_process(XrProcessSpec *spec, XrProcessResult *process,
         return false;
     }
     if (process->exit_code != 0) {
-        const XrProcessByteBuffer *output = process->stderr_bytes.length > 0
-                                                ? &process->stderr_bytes
-                                                : &process->stdout_bytes;
+        const XrProcessByteBuffer *output =
+            process->stderr_bytes.length > 0 ? &process->stderr_bytes : &process->stdout_bytes;
         const uint8_t *diagnostic = NULL;
         size_t len = 0;
         xtc_probe_select_diagnostic_line(output, &diagnostic, &len);

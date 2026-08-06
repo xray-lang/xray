@@ -1233,9 +1233,9 @@ TEST(cmp_while_multi_cond) {
 /* --- Map Literal --- */
 
 /* A Map literal needs the '#' prefix (LANGUAGE_SPEC.md §2.4.7); a bare
- * '{...}' is a sealed Record, which does not support ['key'] indexing and
+ * '{...}' is an exact object shape, which supports only static-key indexing and
  * panics with E0402 at runtime.  This snippet used the bare form and so
- * tested a Record, not a Map -- invisible for as long as the execution
+ * tested an object shape, not a Map -- invisible for as long as the execution
  * comparison never ran. */
 TEST(cmp_map_literal) {
     run_compare((CompareSpec) {
@@ -1796,9 +1796,9 @@ TEST(cmp_class_method) {
 
 /* --- Struct literal --- */
 
-/* A bare object literal is a sealed Record, whose fields are reached with
+/* A bare object literal is an exact object shape, whose fields are reached with
  * '.' -- ['name'] indexing panics with E0402 (LANGUAGE_SPEC.md §2.4.7).
- * Keep this case on the Record path and use field access; the Json path,
+ * Keep this case on the structural-object path and use field access; the Json path,
  * where ['name'] is the equivalent spelling, is covered by
  * cmp_object_literal below. */
 TEST(cmp_struct_literal) {
@@ -2011,7 +2011,7 @@ TEST(cmp_set_literal) {
 
 /* Bracket access is the Json spelling of field access (LANGUAGE_SPEC.md
  * §2.4.7: `data["name"]` is equivalent to `data.name` for Json).  The
- * annotation is what opts this literal out of the sealed Record default;
+ * annotation is what opts this literal out of the exact object-shape default;
  * without it the bracket form panics with E0402, which the never-executed
  * comparison could not catch. */
 TEST(cmp_object_literal) {

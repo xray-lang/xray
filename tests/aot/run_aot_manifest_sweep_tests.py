@@ -62,7 +62,7 @@ ALLOWED_RUNTIME_CASES = {
     # the fixture's orchestration intentionally requires coro/task support.
     "tests/diff/cases/semantics/stdlib/net_byte_io_direct.xr",
     # Typed Coro diagnostics lower directly to XI_CORO_OP and therefore need
-    # the coroutine runtime that produces their record and enum values.
+    # the coroutine runtime that produces their object and enum values.
     "tests/diff/cases/semantics/stdlib/coro_typed_diagnostics_direct.xr",
     # Typed coroutine-local slots and CoroPool.submit are explicit wrappers
     # around coroutine runtime storage and task scheduling.

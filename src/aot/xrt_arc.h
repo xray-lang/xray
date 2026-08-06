@@ -123,16 +123,17 @@ static inline void xrt_coll_release(XrValue v);
 
 /* `_rsv` is an ABI-stable auxiliary word whose meaning is selected by the
  * object's storage/runtime domain. Generic prefix allocations use the small
- * XRT_ARC_KIND_* values for builtin destructor routing. Embedded AOT-native
- * class instances use a disjoint tagged encoding for the compilation-local
- * class table id. Keeping that id out of XrObjHeader.type is what makes the
- * object header's type field canonical across VM and AOT. */
+ * XRT_ARC_KIND_* values for builtin destructor routing. AOT-native class
+ * instances and registered value-struct boxes use a disjoint tagged encoding
+ * for the compilation-local type table id. Keeping that id out of
+ * XrObjHeader.type is what makes the object header's type field canonical
+ * across VM and AOT. */
 #define XRT_AOT_CLASS_TYPE_TAG 0x80000000u
 #define XRT_AOT_CLASS_TYPE_TAG_MASK 0xFFFF0000u
 #define XRT_AOT_CLASS_TYPE_ID_MASK 0x0000FFFFu
 
 static inline uint16_t xrt_aot_class_type_id(const XrObjHeader *hdr) {
-    if (!hdr || hdr->type != XR_TINSTANCE || (hdr->extra & XR_OBJ_AOT_NATIVE) == 0 ||
+    if (!hdr || hdr->type != XR_TINSTANCE ||
         (hdr->_rsv & XRT_AOT_CLASS_TYPE_TAG_MASK) != XRT_AOT_CLASS_TYPE_TAG)
         return 0;
     return (uint16_t) (hdr->_rsv & XRT_AOT_CLASS_TYPE_ID_MASK);
@@ -560,16 +561,8 @@ static inline void xrt_retain(XrValue v) {
     atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_relaxed);
 }
 
-/* Stack storage is deliberately NOT a reason to refuse the claim. A stack
- * object's memory must not be freed, but it still owns whatever its payload
- * points at -- a stack closure holds its upvalues, a capture cell above all --
- * and those references have to be dropped at its death point. xrt_finalize_one
- * already draws that line: it always finalizes the payload and calls
- * xrt_execution_free_allocation only for non-stack storage. Refusing here meant
- * the destructor never ran at all, so every capture cell reached by a stack
- * closure was stranded and RSS grew linearly with the loop count. */
 static inline int xrt_rc_claim_release_last(XrObjHeader *hdr) {
-    if (!hdr || (hdr->extra & (XR_OBJ_IMMORTAL | XR_OBJ_AOT_SWEEP)))
+    if (!hdr || (hdr->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP)))
         return 0;
     if (XR_OBJ_IS_SHARED(hdr)) {
         int32_t old = atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_acq_rel);

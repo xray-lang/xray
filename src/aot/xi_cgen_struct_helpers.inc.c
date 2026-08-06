@@ -203,6 +203,129 @@ static void emit_struct_field_decl(FILE *out, const XrAggregateLayout *sl, int64
 
 static void emit_aggregate_layout_c_attributes(FILE *out, const XrAggregateLayout *sl);
 
+static bool cg_struct_native_type_is_arc_ref(uint8_t native_type) {
+    return native_type == XR_NATIVE_STRING || native_type == XR_NATIVE_VALUE ||
+           native_type == XR_NATIVE_ARRAY_REF || native_type == XR_NATIVE_MAP_REF ||
+           native_type == XR_NATIVE_SET_REF;
+}
+
+static bool cg_struct_layout_has_arc_refs_depth(const XrAggregateLayout *sl, int depth) {
+    if (!sl || depth > 16)
+        return false;
+    for (uint16_t i = 0; i < sl->field_count; i++) {
+        const XrAggregateFieldLayout *field = &sl->fields[i];
+        if (cg_struct_native_type_is_arc_ref(field->native_type))
+            return true;
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE &&
+            cg_struct_layout_has_arc_refs_depth(field->sub_layout, depth + 1))
+            return true;
+        if (field->native_type == XR_NATIVE_ARRAY &&
+            cg_struct_native_type_is_arc_ref(field->elem_native_type))
+            return true;
+    }
+    return false;
+}
+
+static bool cg_struct_layout_has_arc_refs(const XrAggregateLayout *sl) {
+    return cg_struct_layout_has_arc_refs_depth(sl, 0);
+}
+
+static void emit_struct_lifecycle_helper_name(FILE *out, const XrAggregateLayout *sl,
+                                              const char *suffix) {
+    fprintf(out, "xrt_struct_abi_%016" PRIx64 "_%s", cg_struct_layout_hash(sl), suffix);
+}
+
+static void emit_struct_arc_value_expr(FILE *out, uint8_t native_type, const char *expr) {
+    switch ((XrNativeType) native_type) {
+        case XR_NATIVE_STRING:
+        case XR_NATIVE_VALUE:
+            fprintf(out, "%s", expr);
+            return;
+        case XR_NATIVE_ARRAY_REF:
+            fprintf(out, "xr_mkptr(%s, XR_TAG_ARRAY)", expr);
+            return;
+        case XR_NATIVE_MAP_REF:
+            fprintf(out, "xr_mkptr(%s, XR_TAG_MAP)", expr);
+            return;
+        case XR_NATIVE_SET_REF:
+            fprintf(out, "xr_mkptr(%s, XR_TAG_SET)", expr);
+            return;
+        default:
+            fprintf(out, "XR_NULL_VAL");
+            return;
+    }
+}
+
+static void emit_struct_native_lifecycle_helpers(FILE *out, const XrAggregateLayout *sl) {
+    if (!cg_struct_layout_has_arc_refs(sl))
+        return;
+    char tname[128];
+    cg_struct_heap_type_name(tname, sizeof(tname), NULL, sl);
+
+    fprintf(out, "static void ");
+    emit_struct_lifecycle_helper_name(out, sl, "promote_storage");
+    fprintf(out,
+            "(void *obj, uint8_t storage_mode) {\n    %s *self = (%s*)obj;\n"
+            "    if (!self) return;\n",
+            tname, tname);
+    for (uint16_t i = 0; i < sl->field_count; i++) {
+        const XrAggregateFieldLayout *field = &sl->fields[i];
+        char field_name[128];
+        char expr[300];
+        cg_struct_field_c_name(sl, i, field_name, sizeof(field_name));
+        snprintf(expr, sizeof(expr), "self->%s", field_name);
+        if (cg_struct_native_type_is_arc_ref(field->native_type)) {
+            fprintf(out, "    (void)xrt_value_set_storage(");
+            emit_struct_arc_value_expr(out, field->native_type, expr);
+            fprintf(out, ", storage_mode);\n");
+        } else if (field->native_type == XR_NATIVE_NESTED_AGGREGATE &&
+                   cg_struct_layout_has_arc_refs(field->sub_layout)) {
+            fprintf(out, "    ");
+            emit_struct_lifecycle_helper_name(out, field->sub_layout, "promote_storage");
+            fprintf(out, "(&%s, storage_mode);\n", expr);
+        } else if (field->native_type == XR_NATIVE_ARRAY && field->elem_count > 0 &&
+                   cg_struct_native_type_is_arc_ref(field->elem_native_type)) {
+            fprintf(out, "    for (uint32_t i = 0; i < %uu; i++) (void)xrt_value_set_storage(",
+                    (unsigned) field->elem_count);
+            char item_expr[340];
+            snprintf(item_expr, sizeof(item_expr), "%s[i]", expr);
+            emit_struct_arc_value_expr(out, field->elem_native_type, item_expr);
+            fprintf(out, ", storage_mode);\n");
+        }
+    }
+    fprintf(out, "}\n");
+
+    fprintf(out, "static void ");
+    emit_struct_lifecycle_helper_name(out, sl, "dtor");
+    fprintf(out, "(void *obj) {\n    %s *self = (%s*)obj;\n    if (!self) return;\n", tname, tname);
+    for (uint16_t i = 0; i < sl->field_count; i++) {
+        const XrAggregateFieldLayout *field = &sl->fields[i];
+        char field_name[128];
+        char expr[300];
+        cg_struct_field_c_name(sl, i, field_name, sizeof(field_name));
+        snprintf(expr, sizeof(expr), "self->%s", field_name);
+        if (cg_struct_native_type_is_arc_ref(field->native_type)) {
+            fprintf(out, "    xrt_release(");
+            emit_struct_arc_value_expr(out, field->native_type, expr);
+            fprintf(out, ");\n");
+        } else if (field->native_type == XR_NATIVE_NESTED_AGGREGATE &&
+                   cg_struct_layout_has_arc_refs(field->sub_layout)) {
+            fprintf(out, "    ");
+            emit_struct_lifecycle_helper_name(out, field->sub_layout, "dtor");
+            fprintf(out, "(&%s);\n", expr);
+        } else if (field->native_type == XR_NATIVE_ARRAY && field->elem_count > 0 &&
+                   cg_struct_native_type_is_arc_ref(field->elem_native_type)) {
+            fprintf(out, "    for (uint32_t i = 0; i < %uu; i++) xrt_release(",
+                    (unsigned) field->elem_count);
+            char item_expr[340];
+            snprintf(item_expr, sizeof(item_expr), "%s[i]", expr);
+            emit_struct_arc_value_expr(out, field->elem_native_type, item_expr);
+            fprintf(out, ");\n");
+        }
+    }
+    fprintf(out, "}\n");
+}
+
 static void emit_struct_native_typedef(FILE *out, const XrAggregateLayout *sl, const char *prefix) {
     char tname[128];
     cg_struct_heap_type_name(tname, sizeof(tname), prefix, sl);
@@ -219,7 +342,9 @@ static void emit_struct_native_typedef(FILE *out, const XrAggregateLayout *sl, c
         emit_struct_field_decl(out, sl, i, fname, prefix);
         fprintf(out, "; ");
     }
-    fprintf(out, "} %s;\n#endif\n", tname);
+    fprintf(out, "} %s;\n", tname);
+    emit_struct_native_lifecycle_helpers(out, sl);
+    fprintf(out, "#endif\n");
 }
 
 static void emit_aggregate_layout_c_attributes(FILE *out, const XrAggregateLayout *sl) {

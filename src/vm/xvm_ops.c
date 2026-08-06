@@ -433,12 +433,11 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
     if (xr_value_is_instance(a) && xr_value_is_instance(b)) {
         XrInstance *ia = xr_value_to_instance(a);
         XrInstance *ib = xr_value_to_instance(b);
-        if (ia->klass != ib->klass)
-            return false;
-        if (ia->klass && ia->klass->builtin_kind == XR_BK_ADT_ENUM) {
+        if (ia->klass && ib->klass && ia->klass->builtin_kind == XR_BK_ADT_ENUM &&
+            ib->klass->builtin_kind == XR_BK_ADT_ENUM) {
             XrEnumAggregateValue *ea = xr_value_to_enum_aggregate(a);
             XrEnumAggregateValue *eb = xr_value_to_enum_aggregate(b);
-            if (!ea || !eb || ea->enum_type != eb->enum_type ||
+            if (!ea || !eb || !xr_enum_type_same_nominal(ea->enum_type, eb->enum_type) ||
                 ea->member_index != eb->member_index || ea->payload_count != eb->payload_count)
                 return false;
             for (uint32_t i = 0; i < ea->payload_count; i++) {
@@ -447,6 +446,8 @@ static bool deep_compare(CompareContext *ctx, XrValue a, XrValue b) {
             }
             return true;
         }
+        if (ia->klass != ib->klass)
+            return false;
         if (ia->klass && ia->klass->struct_layout) {
             XrAggregateLayout *layout = ia->klass->struct_layout;
             for (uint16_t i = 0; i < layout->field_count; i++) {
@@ -580,8 +581,8 @@ bool vm_values_equal(XrValue a, XrValue b) {
     XrEnumAggregateValue *ea = xr_value_to_enum_aggregate(a);
     XrEnumAggregateValue *eb = xr_value_to_enum_aggregate(b);
     if (ea || eb) {
-        if (!ea || !eb || ea->enum_type != eb->enum_type || ea->member_index != eb->member_index ||
-            ea->payload_count != eb->payload_count)
+        if (!ea || !eb || !xr_enum_type_same_nominal(ea->enum_type, eb->enum_type) ||
+            ea->member_index != eb->member_index || ea->payload_count != eb->payload_count)
             return false;
         for (uint32_t i = 0; i < ea->payload_count; i++) {
             if (!vm_values_equal(ea->payloads[i], eb->payloads[i]))

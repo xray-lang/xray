@@ -19,7 +19,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 条件 | truthy / falsy | 条件必须是 `bool`，或使用 nullable `T?` 的存在性；int/string 不做 truthy 转换 |
 | 相等比较 | `===` 强、`==` 弱（string↔number 自动转） | 仅 `==`/`!=`；值相等只做数值 int↔float 提升，不提供 `===`/`!==` |
 | 闭包捕获 | 引用 | 引用（默认）；`go` 闭包严格受限 |
-| 对象 | 动态字段 | `{...}` 默认形成 sealed Record；动态对象需显式 `Json` 边界 |
+| 对象 | 动态字段 | `{...}` 默认形成 sealed structural object；动态对象需显式 `Json` 边界 |
 | import | ES Module | 自有 import 语法（含 stdlib 无引号形式） |
 | 并发 | 异步/Promise | 协程 + Channel |
 
@@ -87,7 +87,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Conditions | truthy / falsy | conditions must be `bool`, or nullable `T?` presence; int/string have no truthy conversion |
 | Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric int↔float, and `===`/`!==` are not operators |
 | Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
-| Objects | dynamic fields | `{...}` creates a sealed Record by default; dynamic objects require an explicit `Json` boundary |
+| Objects | dynamic fields | `{...}` creates a sealed structural object by default; dynamic objects require an explicit `Json` boundary |
 | import | ES Modules | xray-specific syntax (stdlib uses unquoted form) |
 | Concurrency | async / Promise | coroutines + channels |
 

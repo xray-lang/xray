@@ -2326,6 +2326,20 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME object_json_domain_inventory
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_object_json_domain.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --json
+                --fail-on-legacy
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(object_json_domain_inventory PROPERTIES
+        LABELS "frontend;syntax;metadata;task-260"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME string_surface_residue
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_string_surface_residue.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2834,6 +2848,18 @@ if(BUILD_TESTS)
     set_tests_properties(zero_cost_contract_inventory PROPERTIES
         LABELS "aot;benchmark;plan;evidence"
         TIMEOUT 20
+    )
+
+    add_test(
+        NAME object_static_access_equivalence
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/check_object_static_access_equivalence.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(object_static_access_equivalence PROPERTIES
+        LABELS "aot;cgen;object;zero-cost"
+        TIMEOUT 60
     )
 
     # This runner builds ELF/Mach-O fixture libraries and asserts GNU/Apple

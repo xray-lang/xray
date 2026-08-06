@@ -136,7 +136,7 @@ typedef enum {
     XR_TID_SET,            /* 15 */
     XR_TID_MAP,            /* 16 */
     XR_TID_INSTANCE,       /* 17 */
-    XR_TID_JSON,           /* 18 */
+    XR_TID_OBJECT,         /* 18 (Json object and structural object values) */
     XR_TID_BIGINT,         /* 19 */
     XR_TID_STRINGBUILDER,  /* 20 */
     XR_TID_CHANNEL,        /* 21 */
@@ -232,8 +232,8 @@ static inline const char *xr_type_name_from_tid(XrTypeId tid) {
             return TYPE_NAME_MAP;
         case XR_TID_INSTANCE:
             return TYPE_NAME_INSTANCE;
-        case XR_TID_JSON:
-            return TYPE_NAME_JSON;
+        case XR_TID_OBJECT:
+            return TYPE_NAME_OBJECT;
         case XR_TID_BIGINT:
             return TYPE_NAME_BIGINT;
         case XR_TID_STRINGBUILDER:

@@ -19,8 +19,9 @@
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
 
-// LSP uses unified XrTypeId directly
-typedef XrTypeId XlspBuiltinType;
+// Runtime categories use XrTypeId directly. Json is a compiler-only semantic
+// surface, so LSP gives it a private slot outside the public TypeId range.
+typedef int XlspBuiltinType;
 
 #define XLSP_TYPE_UNRESOLVED XR_TID_NULL
 #define XLSP_TYPE_INT XR_TID_INT
@@ -30,7 +31,7 @@ typedef XrTypeId XlspBuiltinType;
 #define XLSP_TYPE_ARRAY XR_TID_ARRAY
 #define XLSP_TYPE_MAP XR_TID_MAP
 #define XLSP_TYPE_SET XR_TID_SET
-#define XLSP_TYPE_JSON XR_TID_JSON
+#define XLSP_TYPE_JSON ((XlspBuiltinType) XR_TID_COUNT)
 #define XLSP_TYPE_CHANNEL XR_TID_CHANNEL
 #define XLSP_TYPE_REGEX XR_TID_REGEX
 #define XLSP_TYPE_BIGINT XR_TID_BIGINT

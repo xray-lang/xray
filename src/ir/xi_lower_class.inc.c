@@ -302,6 +302,8 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
     if (out_inherited)
         *out_inherited = inherited;
     const bool polymorphic = class_info_is_polymorphic(class_info);
+    const bool json_derived =
+        (class_decl_derive_flags(cd->attributes, cd->attr_count) & XR_DERIVE_JSON) != 0;
 
     int instance_fields = 0;
     for (int i = 0; i < cd->field_count; i++) {
@@ -345,11 +347,17 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
             continue;
         if (!f->name || !f->field_type)
             return NULL;
-        XrType *type = xr_tref_resolve(l->isolate, f->field_type);
+        XaSymbol *field_symbol =
+            class_info ? xa_class_info_lookup_instance_member(class_info, f->name) : NULL;
+        XaSymbolLinks *field_links =
+            field_symbol && l->analyzer ? xa_analyzer_get_links(l->analyzer, field_symbol) : NULL;
+        XrType *type = field_links && (field_links->type || field_links->declared_type)
+                           ? (field_links->type ? field_links->type : field_links->declared_type)
+                           : xr_tref_resolve(l->isolate, f->field_type);
         type = xi_lower_type_or_any(l, type, "class field type", 0);
         if (!type || type->kind == XR_KIND_UNKNOWN)
             return NULL;
-        int native = xr_type_kind_to_native(type->kind, type->scalar_rep);
+        int native = type->is_nullable ? -1 : xr_type_kind_to_native(type->kind, type->scalar_rep);
         if (native < 0 && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_SLICE ||
                            type->kind == XR_KIND_SLICE))
             native = XR_NATIVE_ARRAY_REF;
@@ -357,12 +365,13 @@ static XrAggregateLayout *class_make_native_instance_layout(XiLower *l, ClassDec
             native = XR_NATIVE_MAP_REF;
         if (native < 0 && type->kind == XR_KIND_SET)
             native = XR_NATIVE_SET_REF;
+        /* The verified AOT class-field plan represents nominal, enum,
+         * structural and nullable values as an owned tagged XrValue.  A
+         * Json-derived class must use that same physical lane so recursive
+         * schemas do not force the entire class back to the boxed map path. */
+        if (native < 0 && json_derived && xr_type_is_json_decode_field_supported(type))
+            native = XR_NATIVE_VALUE;
         if (native < 0)
-            return NULL;
-        /* Nullable/optional fields are laid out as generic tagged XrValue by the
-         * AOT class-field plan; keep such classes boxed to avoid a native_type
-         * mismatch at the class-field-plan boundary. */
-        if (type->is_nullable)
             return NULL;
         /* Task 215: all classes use the native layout; string/tagged fields are
          * XrValue members with converged tagged field-access rep (see cgen). */
@@ -889,16 +898,19 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         size_t names_size = (size_t) declared_instance_fields * sizeof(*data->instance_field_names);
         size_t ids_size =
             (size_t) declared_instance_fields * sizeof(*data->instance_field_source_node_ids);
+        size_t types_size = (size_t) declared_instance_fields * sizeof(*data->instance_field_types);
         size_t defaults_size =
             (size_t) declared_instance_fields * sizeof(*data->instance_field_defaults);
         data->instance_field_names =
             (const char **) xi_func_arena_alloc(l->func, (uint32_t) names_size);
+        data->instance_field_types =
+            (XrType **) xi_func_arena_alloc(l->func, (uint32_t) types_size);
         data->instance_field_source_node_ids =
             (uint32_t *) xi_func_arena_alloc(l->func, (uint32_t) ids_size);
         data->instance_field_defaults =
             (XiFieldDefault *) xi_func_arena_alloc(l->func, (uint32_t) defaults_size);
-        if (!data->instance_field_names || !data->instance_field_source_node_ids ||
-            !data->instance_field_defaults) {
+        if (!data->instance_field_names || !data->instance_field_types ||
+            !data->instance_field_source_node_ids || !data->instance_field_defaults) {
             l->had_error = true;
             return;
         }
@@ -910,6 +922,10 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                 continue;
             data->instance_field_names[field_index] =
                 arena_strdup(l->func, field_node->as.field_decl.name);
+            data->instance_field_types[field_index] =
+                field_node->as.field_decl.field_type
+                    ? xr_tref_resolve(l->isolate, field_node->as.field_decl.field_type)
+                    : NULL;
             data->instance_field_source_node_ids[field_index] =
                 xi_lower_source_node_id(l, field_node);
             class_field_default_from_ast(l, field_node->as.field_decl.initializer,
@@ -934,6 +950,26 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
             XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, cls_sym);
             XrClassInfo *class_info = links ? links->class_info : NULL;
             data->class_info = class_info;
+            /* The AST type reference preserves the spelling but can still be
+             * an unresolved nominal instance (class_ref == NULL).  Json AOT
+             * schemas need the analyzer-owned field identity so nested
+             * @derive(Json) classes resolve to their XiClassData. */
+            if (class_info && data->instance_field_types) {
+                for (uint16_t field_index = 0; field_index < data->instance_field_count;
+                     field_index++) {
+                    const char *field_name = data->instance_field_names[field_index];
+                    XaSymbol *field_symbol =
+                        xa_class_info_lookup_instance_member(class_info, field_name);
+                    XaSymbolLinks *field_links =
+                        field_symbol ? xa_analyzer_get_links(l->analyzer, field_symbol) : NULL;
+                    XrType *field_type =
+                        field_links && (field_links->type || field_links->declared_type)
+                            ? (field_links->type ? field_links->type : field_links->declared_type)
+                            : NULL;
+                    if (field_type)
+                        data->instance_field_types[field_index] = field_type;
+                }
+            }
             if (class_info)
                 data->source_file = arena_strdup(l->func, class_info->location.file);
             if (class_info && class_info->struct_layout) {

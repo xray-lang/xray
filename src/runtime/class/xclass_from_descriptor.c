@@ -17,6 +17,7 @@
 #include "../../base/xlog.h"
 #include "xclass_builder.h"
 #include "xclass.h"
+#include "xinstance.h"
 #include "../mem/xcycle_detector.h"
 #include "../xisolate_api.h"
 #include "xclass_system.h"
@@ -228,9 +229,21 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
 
     // Backfill field type_name from descriptor entries (for type metadata)
     if (cls->fields) {
-        for (uint32_t i = 0; i < desc->instance_field_count && (int) i < cls->own_field_count;
-             i++) {
-            cls->fields[i].type_name = desc->instance_fields[i].type_name;
+        for (uint32_t i = 0; i < desc->instance_field_count; i++) {
+            int field_index =
+                xr_class_lookup_field_by_name(isolate, cls, desc->instance_fields[i].name);
+            if (field_index < 0 || field_index >= xr_class_instance_field_count(cls))
+                continue;
+            XrFieldDescriptor *field = &cls->fields[field_index];
+            field->type_name = desc->instance_fields[i].type_name;
+            if (!xr_json_decode_schema_clone_for_class(isolate,
+                                                       &desc->instance_fields[i].json_decode_schema,
+                                                       &field->json_decode_schema))
+                memset(&field->json_decode_schema, 0, sizeof(field->json_decode_schema));
+            field->json_value_kind = field->json_decode_schema.value_kind;
+            if (xr_json_value_kind_base(field->json_value_kind) == XR_JSON_VALUE_STRUCT_OBJECT)
+                field->json_struct_object_class =
+                    (XrClass *) field->json_decode_schema.target_descriptor;
         }
         int sf_base = cls->own_field_count - cls->static_field_count;
         if (sf_base < 0)

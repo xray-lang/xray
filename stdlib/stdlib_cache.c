@@ -28,24 +28,25 @@ typedef struct XrStdlibNativeEnumCacheEntry {
     XrEnumType *type;
 } XrStdlibNativeEnumCacheEntry;
 
-typedef struct XrStdlibNativeRecordCacheEntry {
-    const XrStdlibRecordDefEntry *decl;
+typedef struct XrStdlibNativeObjectShapeCacheEntry {
+    const XrStdlibObjectShapeDefEntry *decl;
     XrClass *cls;
-} XrStdlibNativeRecordCacheEntry;
+} XrStdlibNativeObjectShapeCacheEntry;
 
-static const XrStdlibRecordDefEntry *stdlib_record_decl_find(const char *module, const char *name) {
+static const XrStdlibObjectShapeDefEntry *stdlib_object_shape_decl_find(const char *module,
+                                                                        const char *name) {
     if (!module || !name)
         return NULL;
-    for (uint32_t i = 0; i < XR_STDLIB_RECORD_DEF_ENTRY_COUNT; i++) {
-        const XrStdlibRecordDefEntry *decl = &xr_stdlib_record_def_entries[i];
+    for (uint32_t i = 0; i < XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibObjectShapeDefEntry *decl = &xr_stdlib_object_shape_def_entries[i];
         if (strcmp(decl->module, module) == 0 && strcmp(decl->name, name) == 0)
             return decl;
     }
     return NULL;
 }
 
-static XrClass *stdlib_record_class_build(XrVMRuntime *isolate,
-                                          const XrStdlibRecordDefEntry *decl) {
+static XrClass *stdlib_object_shape_class_build(XrVMRuntime *isolate,
+                                                const XrStdlibObjectShapeDefEntry *decl) {
     uint32_t count = decl ? decl->field_count : 0;
     if (!isolate || !decl || count == 0 || !decl->fields)
         return NULL;
@@ -54,8 +55,8 @@ static XrClass *stdlib_record_class_build(XrVMRuntime *isolate,
         return NULL;
     for (uint32_t i = 0; i < count; i++)
         names[i] = decl->fields[i].name;
-    XrClass *cls =
-        xr_class_build_record_chain(isolate, names, NULL, (int) count, NULL, decl->sealed);
+    XrClass *cls = xr_class_build_struct_object_chain(isolate, names, NULL, (int) count, NULL, NULL,
+                                                      NULL, NULL);
     xr_free(names);
     return cls;
 }
@@ -164,35 +165,36 @@ XR_FUNC const char *xr_stdlib_enum_type_module(XrVMRuntime *isolate, const XrEnu
     return NULL;
 }
 
-XR_FUNC XrClass *xr_stdlib_record_class_get(XrVMRuntime *isolate, const char *module,
-                                            const char *name) {
-    const XrStdlibRecordDefEntry *decl = stdlib_record_decl_find(module, name);
+XR_FUNC XrClass *xr_stdlib_object_shape_class_get(XrVMRuntime *isolate, const char *module,
+                                                  const char *name) {
+    const XrStdlibObjectShapeDefEntry *decl = stdlib_object_shape_decl_find(module, name);
     XrStdlibCache *cache = isolate ? xr_stdlib_cache_get(isolate) : NULL;
     if (!decl || !cache)
         return NULL;
-    XrStdlibNativeRecordCacheEntry *entries =
-        (XrStdlibNativeRecordCacheEntry *) cache->native_record_cache;
-    for (size_t i = 0; i < cache->native_record_count; i++) {
+    XrStdlibNativeObjectShapeCacheEntry *entries =
+        (XrStdlibNativeObjectShapeCacheEntry *) cache->native_object_shape_cache;
+    for (size_t i = 0; i < cache->native_object_shape_count; i++) {
         if (entries[i].decl == decl)
             return entries[i].cls;
     }
 
-    XrClass *cls = stdlib_record_class_build(isolate, decl);
+    XrClass *cls = stdlib_object_shape_class_build(isolate, decl);
     if (!cls)
         return NULL;
-    if (cache->native_record_count == cache->native_record_capacity) {
+    if (cache->native_object_shape_count == cache->native_object_shape_capacity) {
         size_t next_capacity =
-            cache->native_record_capacity ? cache->native_record_capacity * 2 : 4;
-        XrStdlibNativeRecordCacheEntry *next =
-            (XrStdlibNativeRecordCacheEntry *) xr_realloc(entries, next_capacity * sizeof(*next));
+            cache->native_object_shape_capacity ? cache->native_object_shape_capacity * 2 : 4;
+        XrStdlibNativeObjectShapeCacheEntry *next =
+            (XrStdlibNativeObjectShapeCacheEntry *) xr_realloc(entries,
+                                                               next_capacity * sizeof(*next));
         if (!next)
             return NULL;
         entries = next;
-        cache->native_record_cache = entries;
-        cache->native_record_capacity = next_capacity;
+        cache->native_object_shape_cache = entries;
+        cache->native_object_shape_capacity = next_capacity;
     }
-    entries[cache->native_record_count++] =
-        (XrStdlibNativeRecordCacheEntry) {.decl = decl, .cls = cls};
+    entries[cache->native_object_shape_count++] =
+        (XrStdlibNativeObjectShapeCacheEntry) {.decl = decl, .cls = cls};
     return cls;
 }
 
@@ -206,7 +208,7 @@ XR_FUNC void xr_stdlib_cache_free(XrVMRuntime *isolate) {
         c->log_state_cleanup(c->log_state);
     }
 
-    xr_free(c->native_record_cache);
+    xr_free(c->native_object_shape_cache);
     xr_free(c->native_enum_cache);
 
     /* Shapes and interned strings are GC-managed; freeing the

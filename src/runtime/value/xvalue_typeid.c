@@ -69,9 +69,8 @@ XrTypeId xr_value_typeid(XrValue v) {
                 if (inst->klass) {
                     switch (inst->klass->builtin_kind) {
                         case XR_BK_JSON:
-                            return XR_TID_JSON;
-                        case XR_BK_RECORD:
-                            return XR_TID_RECORD;
+                        case XR_BK_STRUCT_OBJECT:
+                            return XR_TID_OBJECT;
                         case XR_BK_STRINGBUILDER:
                             return XR_TID_STRINGBUILDER;
                         case XR_BK_ADT_ENUM:
@@ -128,13 +127,12 @@ XR_DATADEF const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_FLOAT] = TYPE_NAME_FLOAT,
     [XR_TID_STRING] = TYPE_NAME_STRING,
     [XR_TID_RUNE] = TYPE_NAME_RUNE,
-    [XR_TID_RECORD] = TYPE_NAME_RECORD,
     [XR_TID_FUNCTION] = TYPE_NAME_FUNCTION,
     [XR_TID_ARRAY] = TYPE_NAME_ARRAY,
     [XR_TID_SET] = TYPE_NAME_SET,
     [XR_TID_MAP] = TYPE_NAME_MAP,
     [XR_TID_INSTANCE] = TYPE_NAME_INSTANCE,
-    [XR_TID_JSON] = TYPE_NAME_JSON,
+    [XR_TID_OBJECT] = TYPE_NAME_OBJECT,
     [XR_TID_BIGINT] = TYPE_NAME_BIGINT,
     [XR_TID_STRINGBUILDER] = TYPE_NAME_STRINGBUILDER,
     [XR_TID_CHANNEL] = TYPE_NAME_CHANNEL,
@@ -219,9 +217,8 @@ uint8_t xr_type_to_tid(const XrType *type) {
         case XR_KIND_CHANNEL:
             return XR_TID_CHANNEL;
         case XR_KIND_JSON:
-            return XR_TID_JSON;
-        case XR_KIND_RECORD:
-            return XR_TID_RECORD;
+        case XR_KIND_STRUCT_OBJECT:
+            return XR_TID_OBJECT;
         case XR_KIND_INSTANCE:
             return XR_TID_INSTANCE;
         case XR_KIND_FUNCTION:

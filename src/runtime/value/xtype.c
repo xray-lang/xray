@@ -13,6 +13,8 @@
 #include "xtype_pool.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../base/xhash.h"
+#include "../../shared/xr_derive_flags.h"
 #include "../../os/os_thread.h"
 #include "xtype_names.h"
 #include <stdint.h>
@@ -21,6 +23,30 @@
 #include <stdio.h>
 
 #include "xtype_internal.h"
+
+bool xr_type_is_json_value(const XrType *type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_NULL:
+        case XR_KIND_BOOL:
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_STRING:
+        case XR_KIND_JSON:
+            return true;
+        case XR_KIND_UNION:
+            if (type->union_type.member_count <= 0 || !type->union_type.members)
+                return false;
+            for (int i = 0; i < type->union_type.member_count; i++) {
+                if (!xr_type_is_json_value(type->union_type.members[i]))
+                    return false;
+            }
+            return true;
+        default:
+            return false;
+    }
+}
 
 uint8_t xr_type_json_value_kind(const XrType *type) {
     uint8_t kind;
@@ -45,12 +71,33 @@ uint8_t xr_type_json_value_kind(const XrType *type) {
         case XR_KIND_JSON:
             kind = XR_JSON_VALUE_JSON;
             break;
-        case XR_KIND_RECORD:
-            kind = XR_JSON_VALUE_RECORD;
+        case XR_KIND_STRUCT_OBJECT:
+            kind = XR_JSON_VALUE_STRUCT_OBJECT;
             break;
         case XR_KIND_ARRAY:
-            if (type->container.element_type && XR_TYPE_IS_JSON(type->container.element_type)) {
+            if (type->container.element_type) {
                 kind = XR_JSON_VALUE_ARRAY;
+                break;
+            }
+            return XR_JSON_VALUE_ANY;
+        case XR_KIND_MAP:
+            if (type->map.key_type && XR_TYPE_IS_STRING(type->map.key_type) &&
+                !type->map.key_type->is_nullable && type->map.value_type) {
+                kind = XR_JSON_VALUE_MAP;
+                break;
+            }
+            return XR_JSON_VALUE_ANY;
+        case XR_KIND_ENUM:
+            if (type->enum_type.layout && type->enum_type.layout->is_zero_payload &&
+                type->enum_type.layout->variant_count > 0) {
+                kind = XR_JSON_VALUE_ENUM;
+                break;
+            }
+            return XR_JSON_VALUE_ANY;
+        case XR_KIND_INSTANCE:
+            if (type->instance.class_ref && type->instance.class_name &&
+                (type->instance.class_ref->derive_flags & XR_DERIVE_JSON) != 0) {
+                kind = XR_JSON_VALUE_CLASS_INSTANCE;
                 break;
             }
             return XR_JSON_VALUE_ANY;
@@ -63,10 +110,14 @@ uint8_t xr_type_json_value_kind(const XrType *type) {
 static bool xr_type_is_json_decode_field_supported_depth(const XrType *type, int depth) {
     if (!type || depth > 16)
         return false;
+    /* Derive authorization is analyzer-owned; the value layer only records
+     * that a declared class has enough identity for a compiler sidecar. */
+    if (XR_TYPE_IS_INSTANCE(type))
+        return type->instance.class_ref != NULL && type->instance.class_name != NULL;
     uint8_t base = xr_json_value_kind_base(xr_type_json_value_kind(type));
-    if (base == XR_JSON_VALUE_RECORD) {
-        if (!XR_TYPE_IS_RECORD(type) || !type->object.is_sealed || type->object.field_count <= 0 ||
-            !type->object.field_names || !type->object.field_types)
+    if (base == XR_JSON_VALUE_STRUCT_OBJECT) {
+        if (!XR_TYPE_IS_STRUCT_OBJECT(type) || !xr_type_object_row_is_exact(type) ||
+            type->object.field_count <= 0 || !type->object.field_names || !type->object.field_types)
             return false;
         for (int i = 0; i < type->object.field_count; i++) {
             if (!xr_type_is_json_decode_field_supported_depth(type->object.field_types[i],
@@ -74,6 +125,21 @@ static bool xr_type_is_json_decode_field_supported_depth(const XrType *type, int
                 return false;
         }
         return true;
+    }
+    if (base == XR_JSON_VALUE_ARRAY) {
+        return XR_TYPE_IS_ARRAY(type) && type->container.element_type &&
+               xr_type_is_json_decode_field_supported_depth(type->container.element_type,
+                                                            depth + 1);
+    }
+    if (base == XR_JSON_VALUE_MAP) {
+        return XR_TYPE_IS_MAP(type) && type->map.key_type &&
+               XR_TYPE_IS_STRING(type->map.key_type) && !type->map.key_type->is_nullable &&
+               type->map.value_type &&
+               xr_type_is_json_decode_field_supported_depth(type->map.value_type, depth + 1);
+    }
+    if (base == XR_JSON_VALUE_ENUM) {
+        return XR_TYPE_IS_ENUM(type) && type->enum_type.layout &&
+               type->enum_type.layout->is_zero_payload && type->enum_type.layout->variant_count > 0;
     }
     return base != XR_JSON_VALUE_ANY;
 }
@@ -134,6 +200,7 @@ static void xr_type_global_init_once(void) {
     // returning nothing and as the unique value of the empty tuple literal.
     init_singleton(&g_type_unit, XR_KIND_UNIT, id++, false, XR_SCALAR_REP_NONE);
     init_singleton(&g_type_json, XR_KIND_JSON, id++, false, XR_SCALAR_REP_NONE);
+    g_type_json.object.allows_runtime_extension = true;
 
     init_singleton(&g_type_int_nullable, XR_KIND_INT, id++, true, XR_NATIVE_I64);
     init_singleton(&g_type_float_nullable, XR_KIND_FLOAT, id++, true, XR_NATIVE_F64);
@@ -351,7 +418,8 @@ XrType *xr_type_new_json(XrVMRuntime *X) {
 }
 
 static XrType *xr_type_new_object_shape(XrVMRuntime *X, XrTypeKind kind, const char **names,
-                                        XrType **types, int count, bool is_sealed) {
+                                        XrType **types, int count, XrObjectRowMode row_mode,
+                                        bool allows_runtime_extension) {
     if (count < 0)
         return NULL;
     if (count > 0 && (!names || !types))
@@ -377,18 +445,29 @@ static XrType *xr_type_new_object_shape(XrVMRuntime *X, XrTypeKind kind, const c
             type->object.field_types[i] = types[i];
         }
     }
-    type->object.is_sealed = is_sealed;
+    type->object.row_mode = row_mode;
+    type->object.allows_runtime_extension = allows_runtime_extension;
     return type;
 }
 
-XrType *xr_type_new_record_with_fields(XrVMRuntime *X, const char **names, XrType **types,
-                                       int count, bool is_sealed) {
-    return xr_type_new_object_shape(X, XR_KIND_RECORD, names, types, count, is_sealed);
+XrType *xr_type_new_struct_object_with_fields(XrVMRuntime *X, const char **names, XrType **types,
+                                              int count, XrObjectRowMode row_mode) {
+    return xr_type_new_object_shape(X, XR_KIND_STRUCT_OBJECT, names, types, count, row_mode, false);
+}
+
+uint64_t xr_type_stable_key(const XrType *type) {
+    if (!type)
+        return 0;
+    const char *canonical = xr_type_to_string((XrType *) type);
+    uint64_t key = xr_hash_bytes64(canonical ? canonical : "<error>",
+                                   canonical ? strlen(canonical) : sizeof("<error>") - 1);
+    return key ? key : 1;
 }
 
 XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types, int count,
-                                     bool is_sealed) {
-    return xr_type_new_object_shape(X, XR_KIND_JSON, names, types, count, is_sealed);
+                                     bool allows_runtime_extension) {
+    return xr_type_new_object_shape(X, XR_KIND_JSON, names, types, count, XR_OBJECT_ROW_EXACT,
+                                    allows_runtime_extension);
 }
 
 XR_FUNC void xr_type_set_object_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
@@ -453,7 +532,7 @@ static bool xr_type_contains_error_impl(const XrType *type, int depth) {
             return xr_type_contains_error_impl(type->map.key_type, depth + 1) ||
                    xr_type_contains_error_impl(type->map.value_type, depth + 1);
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
             for (int i = 0; i < type->object.field_count; i++) {
                 XrType *field_type = type->object.field_types ? type->object.field_types[i] : NULL;
                 if (xr_type_contains_error_impl(field_type, depth + 1))
@@ -1272,7 +1351,7 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
                     type->function.type_param_constraint_counts, type->function.type_param_count);
             }
             break;
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_JSON:
             if (type->object.field_count < 0)
                 return NULL;
@@ -1311,7 +1390,8 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
                            field_readonly_size);
                 }
             }
-            copy->object.is_sealed = type->object.is_sealed;
+            copy->object.row_mode = type->object.row_mode;
+            copy->object.allows_runtime_extension = type->object.allows_runtime_extension;
             break;
         case XR_KIND_TYPE_PARAM:
             copy->type_param.name =
@@ -1406,7 +1486,7 @@ XrType *xr_type_make_nullable(XrVMRuntime *X, XrType *type) {
     }
 
     /* Qualifiers are values, not mutations of declaration identity.  Named
-     * enum/class/record types are shared through analyzer symbol links even
+     * enum/class/structural-object types are shared through analyzer symbol links even
      * before they are frozen; mutating one while resolving `T?` would silently
      * make the exported declaration itself nullable.  Mirror
      * xr_type_make_const(): every non-singleton qualifier gets its own copy. */
@@ -1635,7 +1715,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
 
     // Json value-domain compatibility. External heap/container values do not
     // implicitly cross into Json; literal contexts must type them as Json.
-    if (XR_TYPE_IS_JSON(target) && !target->object.is_sealed) {
+    if (XR_TYPE_IS_JSON(target) && target->object.allows_runtime_extension) {
         switch (source->kind) {
             case XR_KIND_JSON:
             case XR_KIND_NULL:
@@ -1649,7 +1729,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         }
     }
 
-    // Structural object subtyping. Record and Json object shapes are distinct
+    // Structural object subtyping. structural object and Json object shapes are distinct
     // semantic domains, so this branch never bridges between them.
     bool target_is_struct = XR_TYPE_HAS_OBJECT_SHAPE(target);
     bool source_is_struct = XR_TYPE_HAS_OBJECT_SHAPE(source);
@@ -1658,6 +1738,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             return true;
         if (XR_TYPE_IS_JSON(source) && source->object.field_count == 0)
             return true;
+        if (XR_TYPE_IS_STRUCT_OBJECT(target) && target->object.row_mode == XR_OBJECT_ROW_EXACT &&
+            source->object.row_mode == XR_OBJECT_ROW_OPEN)
+            return false;
 
         // Check structural compatibility (source has all target fields)
         for (int i = 0; i < target->object.field_count; i++) {
@@ -1673,43 +1756,44 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                     strcmp(target->object.field_names[i], source->object.field_names[j]) == 0) {
                     if (target_field_type && source->object.field_types) {
                         XrType *source_field_type = source->object.field_types[j];
-                        /* A nullable Record field is optional when absent, but an
-                         * explicitly present `null` value must also be checked
-                         * against the nullable target itself. Stripping `?` here
-                         * made a contextually typed literal reject its own shape. */
+                        /* A nullable object field is optional when absent, but an
+                         * explicitly present null value must still be checked
+                         * against the nullable target itself. */
                         if (!xr_type_assignable(target_field_type, source_field_type)) {
                             return false;
                         }
-                        /* Object shapes are reference values with mutable
-                         * fields, so a field accepted only in the widening
-                         * direction is unsound: the wider view can store a
-                         * value the narrower view still promises to hold at its
-                         * own type.  Fields are therefore invariant, matching
-                         * Array, Map, Slice and fixed-length arrays.  A literal
-                         * `null` stays acceptable for a nullable field because
-                         * it denotes the absent value rather than a narrower
-                         * field type that could later be read back.
-                         *
-                         * A nullable target field is optional, not a variance
-                         * position: writing `int` into `int?` is how every
-                         * options record is spelled (`{url, timeoutMs}` against
-                         * `{url, method: string?, timeoutMs: int?}`), so the
-                         * reverse direction is not required there. */
+                        /* Object fields are invariant because an open-row view
+                         * may write a declared field through an alias. A literal
+                         * null is the sole value-level exception: it initializes
+                         * an absent nullable slot and does not create a narrower
+                         * mutable field contract. Contextual object literals use
+                         * the declared field type for every other initialized
+                         * slot. */
                         if (!XR_TYPE_IS_NULL(source_field_type) &&
-                            !target_field_type->is_nullable &&
                             !xr_type_assignable(source_field_type, target_field_type)) {
                             return false;
                         }
+                        bool target_readonly = target->object.field_readonly
+                                                   ? target->object.field_readonly[i]
+                                                   : false;
+                        bool source_readonly = source->object.field_readonly
+                                                   ? source->object.field_readonly[j]
+                                                   : false;
+                        /* A mutable object may be viewed through a readonly
+                         * field capability, but a readonly source must never be
+                         * widened to a mutable target. */
+                        if (!target_readonly && source_readonly)
+                            return false;
                     }
                     found = true;
                     break;
                 }
             }
-            if (!found && !is_optional && target->object.is_sealed) {
+            if (!found && !is_optional) {
                 return false;
             }
         }
-        if (target->object.is_sealed) {
+        if (!xr_type_object_accepts_extra_fields(target)) {
             for (int j = 0; j < source->object.field_count; j++) {
                 if (!source->object.field_names || !source->object.field_names[j])
                     continue;
@@ -1980,7 +2064,7 @@ static int object_shape_field_index_by_name(XrType *shape, const char *name) {
     return -1;
 }
 
-bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, size_t n) {
+bool xr_type_object_mismatch_reason(XrType *target, XrType *source, char *buf, size_t n) {
     if (!target || !source || !buf || n == 0)
         return false;
 
@@ -1990,7 +2074,7 @@ bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, s
     if ((XR_TYPE_IS_ARRAY(target) && XR_TYPE_IS_ARRAY(source)) ||
         (XR_TYPE_IS_SLICE(target) && XR_TYPE_IS_SLICE(source))) {
         char sub[192];
-        if (xr_type_record_mismatch_reason(target->container.element_type,
+        if (xr_type_object_mismatch_reason(target->container.element_type,
                                            source->container.element_type, sub, sizeof(sub))) {
             snprintf(buf, n, "element: %s", sub);
             return true;
@@ -1999,7 +2083,7 @@ bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, s
     }
     if (XR_TYPE_IS_MAP(target) && XR_TYPE_IS_MAP(source)) {
         char sub[192];
-        if (xr_type_record_mismatch_reason(target->map.value_type, source->map.value_type, sub,
+        if (xr_type_object_mismatch_reason(target->map.value_type, source->map.value_type, sub,
                                            sizeof(sub))) {
             snprintf(buf, n, "value: %s", sub);
             return true;
@@ -2007,14 +2091,14 @@ bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, s
         return false;
     }
 
-    /* Only object shapes of the same kind carry a field-set reason; Record and
+    /* Only object shapes of the same kind carry a field-set reason; structural object and
      * Json are distinct domains and never bridge (mirrors xr_type_assignable). */
     if (!XR_TYPE_HAS_OBJECT_SHAPE(target) || !XR_TYPE_HAS_OBJECT_SHAPE(source) ||
         target->kind != source->kind)
         return false;
 
-    /* 1. Extra field the sealed target does not declare. */
-    if (target->object.is_sealed && source->object.field_names) {
+    /* 1. Extra field an exact target does not declare. */
+    if (!xr_type_object_accepts_extra_fields(target) && source->object.field_names) {
         for (int j = 0; j < source->object.field_count; j++) {
             const char *sf = source->object.field_names[j];
             if (sf && object_shape_field_index_by_name(target, sf) < 0) {
@@ -2053,7 +2137,7 @@ bool xr_type_record_mismatch_reason(XrType *target, XrType *source, char *buf, s
             XrType *sft = source->object.field_types[j];
             if (tft && sft && !xr_type_assignable(tft, sft)) {
                 char sub[192];
-                if (xr_type_record_mismatch_reason(tft, sft, sub, sizeof(sub)))
+                if (xr_type_object_mismatch_reason(tft, sft, sub, sizeof(sub)))
                     snprintf(buf, n, "field '%s': %s", tf, sub);
                 else
                     snprintf(buf, n, "field '%s' has type '%s', expected '%s'", tf,
@@ -2230,7 +2314,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
     if (XR_TYPE_HAS_OBJECT_SHAPE(a)) {
         if (a->object.field_count != b->object.field_count)
             return false;
-        if (a->object.is_sealed != b->object.is_sealed)
+        if (a->object.row_mode != b->object.row_mode ||
+            a->object.allows_runtime_extension != b->object.allows_runtime_extension)
             return false;
         for (int i = 0; i < a->object.field_count; i++) {
             if (!a->object.field_names || !b->object.field_names)

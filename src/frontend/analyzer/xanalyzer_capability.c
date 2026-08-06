@@ -6,7 +6,9 @@
 #include "xanalyzer_capability.h"
 
 #include "xanalyzer_builtins.h"
+#include "xanalyzer_symbol.h"
 #include "../../runtime/class/xclass_info.h"
+#include "../../shared/xr_derive_flags.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -106,4 +108,181 @@ uint32_t xa_type_capability_flags(const XrType *type) {
 
 bool xa_type_has_capabilities(const XrType *type, uint32_t required) {
     return (xa_type_capability_flags(type) & required) == required;
+}
+
+typedef enum XaJsonCapabilityMode {
+    XA_JSON_CAPABILITY_ENCODE,
+    XA_JSON_CAPABILITY_DECODE,
+} XaJsonCapabilityMode;
+
+typedef struct XaJsonCapabilityWalk {
+    const XrType *stack[64];
+    int depth;
+} XaJsonCapabilityWalk;
+
+static XaJsonCapabilityResult json_capability_result(bool supported, XaJsonCapabilityReason reason,
+                                                     const XrType *blocking_type) {
+    XaJsonCapabilityResult result = {
+        .supported = supported,
+        .reason = reason,
+        .blocking_type = blocking_type,
+    };
+    return result;
+}
+
+static bool json_capability_stack_contains(const XaJsonCapabilityWalk *walk, const XrType *type) {
+    for (int i = 0; walk && i < walk->depth; i++) {
+        if (walk->stack[i] == type)
+            return true;
+    }
+    return false;
+}
+
+static XaJsonCapabilityResult json_capability_visit(const XrType *type, XaJsonCapabilityMode mode,
+                                                    XaJsonCapabilityWalk *walk) {
+    if (!type)
+        return json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
+    if (xr_type_is_json_value(type))
+        return json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL);
+
+    switch (type->kind) {
+        case XR_KIND_RUNE:
+            return mode == XA_JSON_CAPABILITY_ENCODE
+                       ? json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL)
+                       : json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
+        case XR_KIND_FUNCTION:
+            return json_capability_result(false, XA_JSON_CAPABILITY_FUNCTION_FIELD, type);
+        case XR_KIND_TYPE_PARAM:
+            return json_capability_result(false, XA_JSON_CAPABILITY_UNINSTANTIATED_TYPE_PARAMETER,
+                                          type);
+        case XR_KIND_ENUM:
+            if (mode == XA_JSON_CAPABILITY_ENCODE ||
+                (type->enum_type.layout && type->enum_type.layout->is_zero_payload &&
+                 type->enum_type.layout->variant_count > 0))
+                return json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL);
+            return json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
+        case XR_KIND_INSTANCE:
+            if (!type->instance.class_ref) {
+                return json_capability_result(false,
+                                              mode == XA_JSON_CAPABILITY_ENCODE
+                                                  ? XA_JSON_CAPABILITY_NON_ENCODABLE_NATIVE_HANDLE
+                                                  : XA_JSON_CAPABILITY_NON_DECODABLE_NATIVE_HANDLE,
+                                              type);
+            }
+            if ((type->instance.class_ref->derive_flags & XR_DERIVE_JSON) == 0) {
+                return json_capability_result(false, XA_JSON_CAPABILITY_MISSING_DERIVE_SIDECAR,
+                                              type);
+            }
+            break;
+        case XR_KIND_TUPLE:
+            if (mode == XA_JSON_CAPABILITY_DECODE) {
+                return json_capability_result(false, XA_JSON_CAPABILITY_TUPLE_TARGET_NOT_DECODABLE,
+                                              type);
+            }
+            break;
+        case XR_KIND_STRUCT_OBJECT:
+            if (type->object.row_mode == XR_OBJECT_ROW_OPEN) {
+                return json_capability_result(false, XA_JSON_CAPABILITY_OPEN_ROW_TARGET, type);
+            }
+            break;
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+            break;
+        default:
+            return json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
+    }
+
+    if (json_capability_stack_contains(walk, type) || walk->depth >= 64) {
+        return json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_RECURSIVE_ALIAS, type);
+    }
+    walk->stack[walk->depth++] = type;
+
+    XaJsonCapabilityResult result = json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL);
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+            result = json_capability_visit(type->container.element_type, mode, walk);
+            break;
+        case XR_KIND_MAP:
+            if (!type->map.key_type || !XR_TYPE_IS_STRING(type->map.key_type) ||
+                type->map.key_type->is_nullable) {
+                result = json_capability_result(false, XA_JSON_CAPABILITY_NON_STRING_MAP_KEY, type);
+            } else {
+                result = json_capability_visit(type->map.value_type, mode, walk);
+            }
+            break;
+        case XR_KIND_TUPLE:
+            for (int i = 0; i < type->tuple.element_count; i++) {
+                const XrType *element =
+                    type->tuple.element_types ? type->tuple.element_types[i] : NULL;
+                result = json_capability_visit(element, mode, walk);
+                if (!result.supported)
+                    break;
+            }
+            break;
+        case XR_KIND_STRUCT_OBJECT:
+            for (int i = 0; i < type->object.field_count; i++) {
+                const XrType *field = type->object.field_types ? type->object.field_types[i] : NULL;
+                result = json_capability_visit(field, mode, walk);
+                if (!result.supported)
+                    break;
+            }
+            break;
+        case XR_KIND_INSTANCE:
+            for (const XrClassInfo *info = type->instance.class_ref; info; info = info->base) {
+                for (int i = 0; i < info->field_count; i++) {
+                    const XaSymbol *field = info->fields ? info->fields[i] : NULL;
+                    if (!field || field->is_static)
+                        continue;
+                    result = json_capability_visit(field->links.type, mode, walk);
+                    if (!result.supported)
+                        break;
+                }
+                if (!result.supported)
+                    break;
+            }
+            break;
+        default:
+            result = json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
+            break;
+    }
+    walk->depth--;
+    return result;
+}
+
+XaJsonCapabilityResult xa_json_encodable(const XrType *type) {
+    XaJsonCapabilityWalk walk = {0};
+    return json_capability_visit(type, XA_JSON_CAPABILITY_ENCODE, &walk);
+}
+
+XaJsonCapabilityResult xa_json_decodable(const XrType *type) {
+    XaJsonCapabilityWalk walk = {0};
+    return json_capability_visit(type, XA_JSON_CAPABILITY_DECODE, &walk);
+}
+
+const char *xa_json_capability_reason_name(XaJsonCapabilityReason reason) {
+    switch (reason) {
+        case XA_JSON_CAPABILITY_OK:
+            return "OK";
+        case XA_JSON_CAPABILITY_FUNCTION_FIELD:
+            return "FUNCTION_FIELD";
+        case XA_JSON_CAPABILITY_NON_STRING_MAP_KEY:
+            return "NON_STRING_MAP_KEY";
+        case XA_JSON_CAPABILITY_OPEN_ROW_TARGET:
+            return "OPEN_ROW_TARGET";
+        case XA_JSON_CAPABILITY_UNSUPPORTED_RECURSIVE_ALIAS:
+            return "UNSUPPORTED_RECURSIVE_ALIAS";
+        case XA_JSON_CAPABILITY_MISSING_DERIVE_SIDECAR:
+            return "MISSING_DERIVE_SIDECAR";
+        case XA_JSON_CAPABILITY_NON_ENCODABLE_NATIVE_HANDLE:
+            return "NON_ENCODABLE_NATIVE_HANDLE";
+        case XA_JSON_CAPABILITY_NON_DECODABLE_NATIVE_HANDLE:
+            return "NON_DECODABLE_NATIVE_HANDLE";
+        case XA_JSON_CAPABILITY_UNINSTANTIATED_TYPE_PARAMETER:
+            return "UNINSTANTIATED_TYPE_PARAMETER";
+        case XA_JSON_CAPABILITY_TUPLE_TARGET_NOT_DECODABLE:
+            return "TUPLE_TARGET_NOT_DECODABLE";
+        case XA_JSON_CAPABILITY_UNSUPPORTED_TYPE:
+        default:
+            return "UNSUPPORTED_TYPE";
+    }
 }

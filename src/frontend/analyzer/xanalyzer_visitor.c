@@ -360,7 +360,7 @@ XR_FUNC bool xa_task_result_requires_consuming_await(const XrType *result) {
     if (XR_TYPE_IS_TUPLE(result))
         return true;
     if (xr_type_is_const((XrType *) result) || result->is_value_type ||
-        result->kind == XR_KIND_RECORD || xa_type_has_fixed_layout_data_object(result) ||
+        result->kind == XR_KIND_STRUCT_OBJECT || xa_type_has_fixed_layout_data_object(result) ||
         xr_type_is_runtime_managed(result) || xa_type_is_concurrency_handle(result))
         return false;
     return true;
@@ -379,7 +379,7 @@ XR_FUNC bool xa_task_result_requires_shared_copy_publication(const XrType *resul
     if (xr_type_base_rep(result) != XR_REP_PTR || xr_type_is_const((XrType *) result) ||
         xr_type_is_runtime_managed(result) || xa_type_is_concurrency_handle(result))
         return false;
-    return result->is_value_type || result->kind == XR_KIND_RECORD ||
+    return result->is_value_type || result->kind == XR_KIND_STRUCT_OBJECT ||
            xa_type_has_fixed_layout_data_object(result);
 }
 
@@ -2104,6 +2104,25 @@ static void xa_record_property_write(XaInferContext *ctx, AstNode *node, XrType 
     xa_selection_table_set(st, node, &sel);
 }
 
+static void xa_record_object_field_write(XaInferContext *ctx, AstNode *node, XrType *receiver,
+                                         int32_t field_index, XrType *value_type) {
+    if (!ctx || !ctx->analyzer || !node || field_index < 0)
+        return;
+    XaSelectionTable *st = (XaSelectionTable *) ctx->analyzer->selection_table;
+    if (!st)
+        return;
+    XaSelection sel = {
+        .kind = XA_SEL_FIELD,
+        .receiver_type = receiver,
+        .target_symbol = NULL,
+        .field_index = field_index,
+        .result_type = value_type,
+        .is_indirect = false,
+        .is_optional = false,
+    };
+    xa_selection_table_set(st, node, &sel);
+}
+
 static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
                                           XaSymbolLinks **out_links) {
     if (out_links)
@@ -3077,16 +3096,16 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
             const char *local_name = member->alias ? member->alias : member->name;
             XaSymbol *export_sym =
                 graph_exports ? (XaSymbol *) xr_hashmap_get(graph_exports, member->name) : NULL;
-            const XaBuiltinRecord *builtin_record =
-                export_sym ? NULL : xa_builtin_get_record_type(import->module_name, member->name);
+            const XaBuiltinObjectShape *builtin_object_shape =
+                export_sym ? NULL : xa_builtin_get_object_shape(import->module_name, member->name);
             const XaBuiltinEnum *builtin_enum =
                 export_sym ? NULL : xa_builtin_get_enum_type(import->module_name, member->name);
 
             // Register each imported member as its exported semantic kind.
-            XaSymbolKind imported_kind = export_sym       ? export_sym->kind
-                                         : builtin_record ? XA_SYM_TYPE_ALIAS
-                                         : builtin_enum   ? XA_SYM_ENUM
-                                                          : XA_SYM_IMPORT;
+            XaSymbolKind imported_kind = export_sym             ? export_sym->kind
+                                         : builtin_object_shape ? XA_SYM_TYPE_ALIAS
+                                         : builtin_enum         ? XA_SYM_ENUM
+                                                                : XA_SYM_IMPORT;
             XaSymbol *sym = xa_symbol_new(local_name, imported_kind);
             if (sym) {
                 sym->is_imported = true;
@@ -3135,9 +3154,9 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                         }
                     }
 
-                    if (!member_type && builtin_record) {
-                        member_type =
-                            xa_builtin_record_decl_type(ctx->analyzer->isolate, builtin_record);
+                    if (!member_type && builtin_object_shape) {
+                        member_type = xa_builtin_object_shape_decl_type(ctx->analyzer->isolate,
+                                                                        builtin_object_shape);
                         sym->alias_type = member_type;
                     }
                     if (!member_type && builtin_enum) {
@@ -3145,7 +3164,7 @@ static void xa_visit_collect_import(XaInferContext *ctx, AstNode *node) {
                                                                 builtin_enum, &links->enum_info);
                     }
 
-                    if (!export_sym && !builtin_sig && !builtin_record && !builtin_enum)
+                    if (!export_sym && !builtin_sig && !builtin_object_shape && !builtin_enum)
                         xa_report_unknown_stdlib_member(ctx, node, import->module_name,
                                                         member->name);
 
@@ -5701,7 +5720,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
-                } else if (obj_type->object.is_sealed) {
+                } else if (xr_type_object_fields_are_closed(obj_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "type '%s' does not allow adding field '%s'",
                              object_shape_type_label_local(obj_type), ms->member);
@@ -6584,6 +6603,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_add_index_type_error(ctx, node, index_type, key_expected);
             }
             XrType *value_expected = NULL;
+            int object_field_index = -1;
+            const char *object_field_name = NULL;
             if (array_type) {
                 if ((XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SLICE(array_type) ||
                      XR_TYPE_IS_SLICE(array_type)) &&
@@ -6599,8 +6620,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         is->index->type == AST_LITERAL_STRING) {
                         const char *key = is->index->as.literal.raw_value.string_val;
                         int field_idx = object_shape_field_index_local(array_type, key);
-                        if (field_idx >= 0 && array_type->object.field_types)
+                        if (field_idx >= 0 && array_type->object.field_types) {
+                            object_field_index = field_idx;
+                            object_field_name = key;
                             value_expected = array_type->object.field_types[field_idx];
+                        }
                     }
                     if (!value_expected && XR_TYPE_IS_JSON(array_type))
                         value_expected = xr_type_new_json(ctx->analyzer->isolate);
@@ -6622,6 +6646,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     ctx->expected_type = value_expected;
                 value_type = xa_visit_infer_expr(ctx, is->value);
                 ctx->expected_type = saved_expected;
+            }
+            if (object_field_index >= 0) {
+                xa_analyzer_set_node_type(ctx->analyzer, node,
+                                          value_expected ? value_expected : value_type);
+                xa_record_object_field_write(ctx, node, array_type, object_field_index,
+                                             value_expected ? value_expected : value_type);
+                xa_assign_check_type(ctx, node, value_expected, value_type, object_field_name,
+                                     "member");
             }
             xa_check_span_value_escape(ctx, node, value_type,
                                        "store Slice view into an index target");
@@ -6741,21 +6773,20 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
-                } else if (array_type->object.is_sealed) {
+                } else if (xr_type_object_fields_are_closed(array_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "type '%s' does not allow adding field '%s'",
                              object_shape_type_label_local(array_type), key);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
-            } else if (array_type && XR_TYPE_IS_RECORD(array_type) &&
-                       array_type->object.is_sealed) {
+            } else if (array_type && XR_TYPE_IS_STRUCT_OBJECT(array_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                           "sealed Record index assignment requires a string "
-                                           "literal key",
+                                           "structural object index requires a string literal "
+                                           "field name",
                                            &loc);
             } else if (array_type &&
                        (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_SLICE(array_type) ||

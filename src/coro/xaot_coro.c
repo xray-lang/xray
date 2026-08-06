@@ -1513,26 +1513,26 @@ static XrValue aot_coro_new_array(XrAotVmHost vm_host, XrCoroutine *coro) {
 
 static XrValue aot_coro_name_value(XrAotVmHost vm_host, const XrCoroutine *coro);
 
-static XrValue aot_coro_new_record(XrAotVmHost vm_host, XrCoroutine *coro, const char *name,
+static XrValue aot_coro_new_object(XrAotVmHost vm_host, XrCoroutine *coro, const char *name,
                                    const char *const *field_names, int64_t field_count) {
     if (!coro)
         coro = aot_context_coro(NULL, vm_host, NULL);
-    if (aot_vm_host_available(vm_host) && vm_host.ops->new_record)
-        return vm_host.ops->new_record(vm_host.host, "Coro", name, coro);
-    return vm_host.value_ops && vm_host.value_ops->record_new
-               ? vm_host.value_ops->record_new(field_count, field_names)
+    if (aot_vm_host_available(vm_host) && vm_host.ops->new_object)
+        return vm_host.ops->new_object(vm_host.host, "Coro", name, coro);
+    return vm_host.value_ops && vm_host.value_ops->object_new
+               ? vm_host.value_ops->object_new(field_count, field_names)
                : XR_NULL_VAL;
 }
 
-static void aot_value_record_set(XrAotVmHost vm_host, XrValue record, int64_t field_index,
+static void aot_value_object_set(XrAotVmHost vm_host, XrValue object, int64_t field_index,
                                  XrValue value) {
     if (aot_vm_host_available(vm_host)) {
-        if (vm_host.ops->record_set)
-            vm_host.ops->record_set(vm_host.host, record, field_index, value);
+        if (vm_host.ops->object_set)
+            vm_host.ops->object_set(vm_host.host, object, field_index, value);
         return;
     }
-    if (vm_host.value_ops && vm_host.value_ops->record_set)
-        vm_host.value_ops->record_set(record, field_index, value);
+    if (vm_host.value_ops && vm_host.value_ops->object_set)
+        vm_host.value_ops->object_set(object, field_index, value);
 }
 
 static int64_t aot_coro_enum_ordinal(XrAotVmHost vm_host, XrValue value, int64_t fallback) {
@@ -1577,13 +1577,13 @@ static const char *const aot_coro_info_fields[] = {"id", "name", "state", "reduc
 
 static XrValue aot_coro_info_record(XrAotVmHost vm_host, XrCoroutine *owner,
                                     const XrCoroutine *coro, const char *state) {
-    XrValue info = aot_coro_new_record(vm_host, owner, "CoroInfo", aot_coro_info_fields, 5);
+    XrValue info = aot_coro_new_object(vm_host, owner, "CoroInfo", aot_coro_info_fields, 5);
     if (XR_IS_NULL(info))
         return XR_NULL_VAL;
-    aot_value_record_set(vm_host, info, 0, xr_int(coro->id));
-    aot_value_record_set(vm_host, info, 1, aot_coro_name_value(vm_host, coro));
-    aot_value_record_set(vm_host, info, 2, aot_coro_state_value(vm_host, state));
-    aot_value_record_set(vm_host, info, 3, xr_int(xr_coro_reds(coro)));
+    aot_value_object_set(vm_host, info, 0, xr_int(coro->id));
+    aot_value_object_set(vm_host, info, 1, aot_coro_name_value(vm_host, coro));
+    aot_value_object_set(vm_host, info, 2, aot_coro_state_value(vm_host, state));
+    aot_value_object_set(vm_host, info, 3, xr_int(xr_coro_reds(coro)));
 
     XrValue source = XR_NULL_VAL;
     const char *source_file = xr_coro_source_file(coro);
@@ -1592,7 +1592,7 @@ static XrValue aot_coro_info_record(XrAotVmHost vm_host, XrCoroutine *owner,
         snprintf(source_buf, sizeof(source_buf), "%s:%d", source_file, xr_coro_source_line(coro));
         source = aot_vm_host_string_value(vm_host, source_buf, strlen(source_buf));
     }
-    aot_value_record_set(vm_host, info, 4, source);
+    aot_value_object_set(vm_host, info, 4, source);
     return info;
 }
 
@@ -1793,15 +1793,15 @@ static XrValue aot_coro_stats(XrAotVmHost vm_host, XrCoroutine *owner) {
         xr_free(entries);
     }
 
-    XrValue result = aot_coro_new_record(vm_host, owner, "CoroStats", aot_coro_stats_fields, 5);
+    XrValue result = aot_coro_new_object(vm_host, owner, "CoroStats", aot_coro_stats_fields, 5);
     if (XR_IS_NULL(result))
         return XR_NULL_VAL;
     int total_alive = ready_count + blocked_count + active_count;
-    aot_value_record_set(vm_host, result, 0, xr_int(active_count));
-    aot_value_record_set(vm_host, result, 1, xr_int(blocked_count));
-    aot_value_record_set(vm_host, result, 2, xr_int(ready_count));
-    aot_value_record_set(vm_host, result, 3, xr_int(total_alive));
-    aot_value_record_set(vm_host, result, 4, xr_int((int) total_created));
+    aot_value_object_set(vm_host, result, 0, xr_int(active_count));
+    aot_value_object_set(vm_host, result, 1, xr_int(blocked_count));
+    aot_value_object_set(vm_host, result, 2, xr_int(ready_count));
+    aot_value_object_set(vm_host, result, 3, xr_int(total_alive));
+    aot_value_object_set(vm_host, result, 4, xr_int((int) total_created));
     return result;
 }
 

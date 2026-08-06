@@ -162,7 +162,9 @@ vmcase(OP_TYPENAME) {
     if (type_name == NULL && xr_value_is_instance(val)) {
         XrInstance *inst = xr_value_to_instance(val);
         XrClass *cls = xr_instance_get_class(inst);
-        if (cls && cls->name)
+        if (cls && (cls->builtin_kind == XR_BK_JSON || cls->builtin_kind == XR_BK_STRUCT_OBJECT))
+            type_name = TYPE_NAME_OBJECT;
+        else if (cls && cls->name)
             type_name = cls->name;
     }
     // For struct refs, extract class pointer from struct area header
@@ -234,8 +236,8 @@ vmcase(OP_TOINT) {
         } else {
             if (!XR_IS_INT(val))
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "numeric conversion requires integer");
-            R(a) = xr_int(xr_numeric_int_convert_i64(XR_TO_INT(val), source_rep, target_rep,
-                                                     pointer_bits));
+            R(a) = xr_int(
+                xr_numeric_int_convert_i64(XR_TO_INT(val), source_rep, target_rep, pointer_bits));
         }
         vmbreak;
     }

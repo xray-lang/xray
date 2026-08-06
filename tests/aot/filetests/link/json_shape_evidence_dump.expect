@@ -3,10 +3,10 @@ contains=xglobal-evidence v1 profile=native_release
 contains=json-shape
 contains=kind=shaped
 contains=json-field
-contains=json-access
+contains=json-dynamic-access
 contains=kind=field_get
 contains=json-shape-plan
 contains=action=hidden_class
-contains=json-access-plan
+contains=json-dynamic-access-plan
 contains=action=direct_index
-not_contains=record-access
+not_contains=object-access

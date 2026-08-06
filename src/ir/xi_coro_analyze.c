@@ -29,8 +29,8 @@ static XrRep xi_coro_rep(const XiValue *v) {
  * "conservative" for this analysis means assuming a suspension may exist
  * (the caller compiles a resumable frame it may not need), never assuming
  * its absence (a suspendable function emitted with a plain sync ABI is a
- * miscompile). The depth bound therefore treats unknown callees as suspendable; the old text claimed
- * non-suspendable was the conservative answer, which is fail-open. */
+ * miscompile). The depth bound therefore treats unknown callees as suspendable; the old text
+ * claimed non-suspendable was the conservative answer, which is fail-open. */
 #define XI_CORO_RESOLVE_DEPTH_MAX 8
 
 /* ========== Op classifier ========== */
@@ -768,7 +768,7 @@ XR_FUNC bool xi_coro_type_needs_boundary_clone(const XrType *type) {
         case XR_KIND_SET:
         case XR_KIND_FIXED_ARRAY:
         case XR_KIND_JSON:
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_STRING:
             return true;
         case XR_KIND_INSTANCE:

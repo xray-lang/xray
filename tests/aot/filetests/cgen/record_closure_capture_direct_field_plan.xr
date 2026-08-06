@@ -1,9 +1,0 @@
-fn recordClosureCapturePlan() -> int {
-    var user = { name: "ada", age: 7 }
-    const read = fn() -> int {
-        return user.age
-    }
-    return read()
-}
-
-print(recordClosureCapturePlan())

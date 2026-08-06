@@ -1,1 +1,1 @@
-object spread '...' source must be a Record object
+object spread '...' source must be a structural object

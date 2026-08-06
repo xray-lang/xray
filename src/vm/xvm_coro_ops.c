@@ -93,14 +93,14 @@ static XrValue vm_coro_state_value(XrVMRuntime *isolate, const char *state) {
     return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
 }
 
-static XrJson *vm_coro_record_new(XrVMRuntime *isolate, XrCoroutine *owner, const char *name) {
-    XrClass *cls = xr_stdlib_record_class_get(isolate, "Coro", name);
+static XrJson *vm_coro_object_new(XrVMRuntime *isolate, XrCoroutine *owner, const char *name) {
+    XrClass *cls = xr_stdlib_object_shape_class_get(isolate, "Coro", name);
     return cls ? xr_json_new_with_class(owner, cls) : NULL;
 }
 
-static XrValue vm_coro_info_record(XrVMRuntime *isolate, XrCoroutine *owner,
+static XrValue vm_coro_info_object(XrVMRuntime *isolate, XrCoroutine *owner,
                                    const XrCoroutine *coro, const char *state) {
-    XrJson *info = vm_coro_record_new(isolate, owner, "CoroInfo");
+    XrJson *info = vm_coro_object_new(isolate, owner, "CoroInfo");
     if (!info)
         return XR_NULL_VAL;
     xr_json_set_by_key(isolate, info, "id", xr_int(coro->id));
@@ -176,7 +176,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
             }
 
             int total_alive = ready_count + blocked_count + active_count;
-            XrJson *result = vm_coro_record_new(isolate, vm_get_coro(vm_ctx), "CoroStats");
+            XrJson *result = vm_coro_object_new(isolate, vm_get_coro(vm_ctx), "CoroStats");
             if (!result) {
                 base[a] = XR_NULL_VAL;
                 return XR_DISP_NEXT;
@@ -219,7 +219,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                 if (state_filter >= 0 && state_filter != vm_coro_state_ordinal(st))
                     continue;
 
-                XrValue info = vm_coro_info_record(isolate, vm_get_coro(vm_ctx), coro, st);
+                XrValue info = vm_coro_info_object(isolate, vm_get_coro(vm_ctx), coro, st);
                 if (XR_IS_NULL(info))
                     continue;
                 xr_array_push(result, info);
@@ -387,7 +387,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
             for (int j = 0; j < result_count; j++) {
                 XrCoroutine *coro = entries[j].coro;
                 XrValue info =
-                    vm_coro_info_record(isolate, vm_get_coro(vm_ctx), coro, entries[j].state);
+                    vm_coro_info_object(isolate, vm_get_coro(vm_ctx), coro, entries[j].state);
                 if (!XR_IS_NULL(info))
                     xr_array_push(result, info);
             }

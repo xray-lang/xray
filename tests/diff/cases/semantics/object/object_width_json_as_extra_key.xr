@@ -1,0 +1,13 @@
+// anchor: object-width-json-bridge
+// `json as T` is the explicit open-domain bridge: extra JSON keys are ignored
+// on narrowing, unlike the sealed Object assignment path.
+type Point = { x: int, y: int }
+
+fn main() {
+    var j: Json = Json.parse("{\"x\":1,\"y\":2,\"z\":3}")
+    var p = j as Point
+    print(p.x)
+    print(p.y)
+}
+
+main()

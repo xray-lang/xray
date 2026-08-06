@@ -1,0 +1,8 @@
+// Object width rule at an argument position: extra field is rejected.
+type Point = { x: int, y: int }
+
+fn describe(p: Point) { print(p.x) }
+
+fn main() { describe({ x: 1, y: 2, z: 3 }) }
+
+main()

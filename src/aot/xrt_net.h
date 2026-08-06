@@ -713,7 +713,7 @@ static inline int64_t xrt_net_min_active_deadline(int64_t current, int64_t candi
 
 /* Hosted AOT data plane for net.copyBidirectional. The helper returns a
  * native pair plus an enum ordinal; codegen materializes the declared sealed
- * Record and publishes the generated stable NetError value when needed. */
+ * structural object and publishes the generated stable NetError value when needed. */
 static inline XrtI64PairResult xrt_net_copy_bidirectional(XrValue a_value, XrValue b_value) {
     xrt_net_conn_object_t *a = xrt_net_conn_ptr(a_value);
     xrt_net_conn_object_t *b = xrt_net_conn_ptr(b_value);
@@ -937,10 +937,9 @@ static inline XrValue xrt_net_last_error(XrValue handle_value) {
     const char *name = xrt_net_error_variant_name(kind);
     if (!name)
         return XR_NULL_VAL;
-    static const char *const member_names[] = {"Timeout",   "Closed",    "Reset",
-                                               "Refused",   "Dns",       "Tls",
-                                               "Io",        "Invalid",   "Cancelled",
-                                               "OutOfMemory"};
+    static const char *const member_names[] = {"Timeout",   "Closed",     "Reset", "Refused",
+                                               "Dns",       "Tls",        "Io",    "Invalid",
+                                               "Cancelled", "OutOfMemory"};
     static const XrAotEnumScalarLayout layout = {
         {XR_TENUM_SCALAR_LAYOUT, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0, 0},
         "NetError",

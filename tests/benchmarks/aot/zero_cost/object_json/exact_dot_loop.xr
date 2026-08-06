@@ -1,0 +1,18 @@
+fn run(n: int) -> int {
+    var point = { x: 1, y: 2 }
+    var i = 0
+    var sum = 0
+    while (i < n) {
+        sum = sum + point.x + point.y
+        point.x = point.x + 1
+        point.y = point.y - 1
+        i = i + 1
+    }
+    return sum
+}
+
+var iterations = 2000000
+if (len(process.args) > 0) {
+    iterations = int(process.args[0]) ?? iterations
+}
+print(run(iterations))

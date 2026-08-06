@@ -871,7 +871,7 @@ TEST(alias_upval_vs_array) {
     ASSERT(check_hoist(XI_MEM_UPVAL, XI_MEM_ARRAY));
 }
 TEST(alias_json_vs_array) {
-    ASSERT(check_hoist(XI_MEM_JSON, XI_MEM_ARRAY));
+    ASSERT(check_hoist(XI_MEM_OBJECT, XI_MEM_ARRAY));
 }
 TEST(alias_tuple_vs_field) {
     ASSERT(check_hoist(XI_MEM_TUPLE, XI_MEM_FIELD));
@@ -880,7 +880,7 @@ TEST(alias_chan_vs_struct) {
     ASSERT(check_hoist(XI_MEM_CHAN, XI_MEM_STRUCT));
 }
 TEST(alias_shared_vs_json) {
-    ASSERT(check_hoist(XI_MEM_SHARED, XI_MEM_JSON));
+    ASSERT(check_hoist(XI_MEM_SHARED, XI_MEM_OBJECT));
 }
 TEST(alias_global_vs_array) {
     ASSERT(check_hoist(XI_MEM_GLOBAL, XI_MEM_ARRAY));
@@ -900,7 +900,7 @@ TEST(alias_struct_vs_struct) {
     ASSERT(!check_hoist(XI_MEM_STRUCT, XI_MEM_STRUCT));
 }
 TEST(alias_json_vs_json) {
-    ASSERT(!check_hoist(XI_MEM_JSON, XI_MEM_JSON));
+    ASSERT(!check_hoist(XI_MEM_OBJECT, XI_MEM_OBJECT));
 }
 TEST(alias_upval_vs_upval) {
     ASSERT(!check_hoist(XI_MEM_UPVAL, XI_MEM_UPVAL));

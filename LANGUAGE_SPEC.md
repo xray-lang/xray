@@ -603,7 +603,7 @@ Xray is statically typed; every expression has a determined type at compile time
 2. **Nullable separation**: `T` is never `null`; `T?` is sugar for `T | null`.
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
-5. **Three disconnected compatibility domains**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `Record` is **structural with an exact field set** (sealed, no width subtyping); `Json` is an **open, run-time** data-exchange value domain. There is no implicit conversion between domains — only the two explicit bridges `Json.encode(value)` and `json as T`.
+5. **Three disconnected compatibility domains**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `structural object` is **structural with an exact field set** (sealed, no width subtyping); `Json` is an **open, run-time** data-exchange value domain. There is no implicit conversion between domains — only the two explicit bridges `Json.encode(value)` and `json as T`.
 6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
@@ -961,7 +961,7 @@ Let view `v` borrow owner `o`. While `v` is **live**:
 1. **Element writes are allowed**: `o[i] = x` is legal. An element write does not move the owner's storage, so the view stays valid.
 2. **Invalidating operations are rejected** (`E0382`): any operation that may relocate, shorten, or otherwise invalidate `o`'s element storage. The criterion is not a method-name allowlist but the callee's memory effect: address stability (`ADDRESS_STABLE` / `MAY_RELOCATE`), shortening (`NEVER_SHORTENS` / `MAY_SHORTEN`), and view invalidation (`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`). `o.push(x)`, reassigning `o`, `move o`, `freeze o`, and `return o` all fall in this class.
 3. **Liveness ends at the last use** (non-lexical lifetimes): the borrow ends at `v`'s last use, not at the end of the enclosing block, so an owner mutation placed after that point is legal.
-4. **No escape** (`E0383`): a view must not outlive the owner's scope. All of the following are rejected — function return values (unless the return contract below is satisfied), class / struct / Record fields, Array / Map / Set / tuple / Json / enum-payload elements, closure captures, generator `yield`, module-level bindings, type arguments of a generic class or struct, crossing an execution boundary via `go` or a channel, and erasing the type with `as`.
+4. **No escape** (`E0383`): a view must not outlive the owner's scope. All of the following are rejected — function return values (unless the return contract below is satisfied), class / struct / structural object fields, Array / Map / Set / tuple / Json / enum-payload elements, closure captures, generator `yield`, module-level bindings, type arguments of a generic class or struct, crossing an execution boundary via `go` or a channel, and erasing the type with `as`.
 
 ```xray
 fn ok() {
@@ -1035,7 +1035,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 
 | Literal form | Type | Purpose |
 |---|---|---|
-| `{ key: value }` (no prefix) | sealed `Record` (`Json` when the expected type is `Json`) | see §2.4.7 |
+| `{ key: value }` (no prefix) | sealed `structural object` (`Json` when the expected type is `Json`) | see §2.4.7 |
 | `#{ "k": v }` (`#` prefix + `:`) | `Map<K, V>` (hash table) | this section |
 | `#{}` | `Map<K, V>` (empty) | explicit empty Map |
 | `[]` | `Array<T>` | array |
@@ -1068,19 +1068,21 @@ var buf = Array<byte>(1024)
 var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.7 `Record` / `Json` and Object Literals
+#### 2.4.7 Object Shapes / `Json` and Object Literals
 
-Bare object literals default to sealed structural `Record`, for ordinary business objects, options, and multi-field returns. `Json` is an explicit opt-in JSON value-domain type: it is used at external data-exchange boundaries, can hold any JSON-equivalent structure, and intrinsically includes `null`.
+Bare object literals default to exact object shapes, for ordinary business objects, options, and multi-field returns. `Json` is an explicit opt-in JSON value-domain type: it is used at external data-exchange boundaries, can hold any JSON-equivalent structure, and intrinsically includes `null`.
 
 The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
 
 ```xray
-// Record/Json object literal: identifier or string key + colon ':'
+// Object-shape/Json object literal: identifier or string key + colon ':'
 var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-var user = { name: "Bob", age: 25 }       // default type is sealed Record
-typeName(user)                            // "Record"
+var user = { name: "Bob", age: 25 }       // default type is an exact object shape
+typeName(user)                            // "object"
 data.name              // type: Json (field access returns Json)
 data["name"]           // equivalent
+user.name              // type: string; direct ordinal
+user["name"]           // exactly equivalent to user.name; same direct ordinal
 
 // Field shorthand: when a field name matches a variable name
 var name = "Alice"
@@ -1095,13 +1097,13 @@ var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 
 | Form | Type | Notes |
 |---|---|---|
-| `{ name: "x", age: 1 }` | sealed anonymous `Record` | identifier or string key followed by `:` |
+| `{ name: "x", age: 1 }` | exact anonymous object shape | identifier or string key followed by `:` |
 | `var j: Json = { name: "x" }` | `Json` object | interpreted as dynamic Json only with an explicit `Json` expected type |
-| `{ x: y }` (`x` is field name, `y` is variable) | sealed anonymous `Record` | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
+| `{ x: y }` (`x` is field name, `y` is variable) | exact anonymous object shape | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
 | `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
 | `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
 
-**Record types**: bare object literals and `type T = {...}` are Records. Records are sealed by default — accessing or assigning an undeclared field is a compile error. Use an explicit `Json` annotation or `Json.encode(value)` at JSON boundaries.
+**Object-shape types**: bare object literals and `type T = {...}` are exact object shapes, so accessing or assigning an undeclared field is a compile error. `type T = { known: U, ... }` is an open-row constraint: it accepts a wider concrete exact shape but does not grant access to, mutation of, or enumeration of hidden fields. Use an explicit `Json` annotation or `Json.encode(value)` at JSON boundaries.
 
 ```xray
 type User = { name: string, age: int }
@@ -1110,8 +1112,16 @@ var u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
 // u.extra = "x"      // compile error: sealed type User has no field 'extra'
 
-var u2 = { name: "Alice", age: 30 }      // sealed Record
+var u2 = { name: "Alice", age: 30 }      // exact object shape
 // u2.extra = "x"     // compile error
+
+type Named = { name: string, ... }
+fn showName(value: Named) {
+    print(value.name)                     // the open row exposes declared fields only
+    print(value["name"])                  // identical to .name
+    // print(value.age)                    // compile error: hidden field
+}
+showName(u)                               // OK: u has a wider concrete exact shape
 
 var j: Json = { name: "Alice", age: 30 } // dynamic Json object
 j.extra = "x"        // OK (Json is dynamic)
@@ -1121,12 +1131,12 @@ j.extra = "x"        // OK (Json is dynamic)
 
 | | Identity | Field set | User-defined methods | Use for |
 |---|---|---|---|---|
-| `Record` | structural | declared, exact at compile time | **no** | options, multi-field returns, ordinary business data |
+| object shape | structural | exact, or an explicit open-row constraint | **no** | options, multi-field returns, ordinary business data |
 | `Json` | value domain (no identity) | arbitrary, resolved at run time | **no** | external data-exchange boundaries |
 | `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
 | `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
 
-**Normative commitment**: `Record` and `Json` are pure data shapes. Their fields **carry data only and can never hold a function**, and users cannot declare methods on them. Consequently `j.name` is always a field read, while a built-in member can only appear in call form `j.name()` — the two forms stay syntactically decidable, so a field name never contends with a built-in member name for the same expression. Use `struct` or `class` when behavior is required. `Json` also exposes its generic queries and conversions as static functions (`Json.keys(obj)`, see §14.11); prefer the static form whenever a field name may collide with a built-in member name.
+**Normative commitment**: object shapes and `Json` are pure data shapes. Their fields **carry data only and can never hold a function**, and users cannot declare methods on them. Consequently `j.name` is always a field read, while a built-in member can only appear in call form `j.name()` — the two forms stay syntactically decidable, so a field name never contends with a built-in member name for the same expression. Use `struct` or `class` when behavior is required. `Json` also exposes its generic queries and conversions as static functions (`Json.keys(obj)`, see §14.11); prefer the static form whenever a field name may collide with a built-in member name.
 
 #### 2.4.8 `BigInt`
 
@@ -1168,7 +1178,7 @@ var y: int? = 42        // OK
 var z: int = null       // compile error: null is not int
 ```
 
-`Json` intrinsically includes `null`, so `Json?` and `Json | null` are redundant and rejected during parsing. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a Record with an explicit status field. Do not introduce a global `Result<T,E>`.
+`Json` intrinsically includes `null`, so `Json?` and `Json | null` are redundant and rejected during parsing. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a structural object with an explicit status field. Do not introduce a global `Result<T,E>`.
 
 **Nullable primitives are first-class**: `int?` / `float?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
 
@@ -1343,21 +1353,25 @@ var f = (x: int) -> x   // f: (int) -> int — explicit parameter, inferred retu
 | Any other type | `Json` | ❌ `Json.encode(value)` required |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype (class) | ✅ |
-| Record with a different field set | Record | ❌ a sealed Record requires an exact field set |
+| exact object shape with a different field set | exact object shape | ❌ an exact target requires an exact field set |
+| wider exact object shape | explicit open row `{ a: A, ... }` | ✅ contains every declared field with invariant field types |
 
-> **Width rule for sealed Records**: Record assignment requires an **exact field set** — the source field names must match the target's. Fields whose declared type admits null may be omitted; every other field can be neither missing nor extra. Xray has no width subtyping; both `superset → subset` and `subset → superset` are rejected.
+> **Exact/open row rule**: an exact target requires an **exact field set** — source field names must match the target; nullable target fields may be omitted. Only an explicit `{ a: A, ... }` open-row target accepts extra fields, with invariant types for fields present on both sides. An open row is a static view, not a dynamic dictionary: hidden fields cannot be read, written, or enumerated, and an open row cannot be a `Json.parse<T>` construction target.
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
 > // var u: User = full            // compile error E0352: extra field 'age'
+> type Named = { name: string, ... }
+> var named: Named = full          // OK: explicit open row
+> // print(named.age)              // compile error: hidden field
 >
 > type Opt = { name: string, age: int? }
 > var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
 > ```
 
-> **Record and Json are two disconnected semantic domains**: `Record` is a closed field set checked at compile time; `Json` is an open data-exchange value domain resolved at run time. There is no implicit conversion between them, only two explicit bridges:
+> **Object shapes and Json are two disconnected semantic domains**: an object shape is checked by the compiler; `Json` is an open data-exchange value domain resolved at run time. There is no implicit conversion between them, only two explicit bridges:
 > - `Json.encode(value)`: typed value → `Json`
-> - `json as T` / `json as T?`: `Json` → a Record or other typed value (structural narrowing)
+> - `json as T` / `json as T?`: `Json` → a structural object or other typed value (structural narrowing)
 
 #### 2.10.2 Explicit `as`
 
@@ -1538,7 +1552,7 @@ Xray has no lifetime syntax and no borrow-checker annotations. Ownership is none
 
 #### 2.14.1 Ownership roots
 
-An **ownership root** is the entry point of a heap object graph that can be reclaimed on its own. `Array`, `Map`, `Set`, `Json`, `Record`, class instances, and a unique-result `Task<T>` each have their own root. Scalars, `string`, `Slice<T>`, raw pointers, value structs, and fixed arrays have **no** root: they are copied by value or they are borrowed views.
+An **ownership root** is the entry point of a heap object graph that can be reclaimed on its own. `Array`, `Map`, `Set`, `Json`, `structural object`, class instances, and a unique-result `Task<T>` each have their own root. Scalars, `string`, `Slice<T>`, raw pointers, value structs, and fixed arrays have **no** root: they are copied by value or they are borrowed views.
 
 Only a binding that owns a root can transfer ownership. Writing `move` on a rootless value is a compile error (`E0391`: `move is not meaningful for value type`).
 
@@ -2079,7 +2093,7 @@ Allowed in the following positions only:
 - **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
 - **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
 - **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
-- **Object/record literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
+- **Object-literal spread**: `{...base, x: 1}`; the spread source must be an object. Fields are merged into a new object; on a name clash the later field wins, and the result field set is the union of every source's fields and the literal fields.
 
 ```xray
 var a = [1, 2]
@@ -2146,9 +2160,9 @@ var users = "Bob"
 var obj = { users }              // shorthand
 ```
 
-- Defaults to sealed structural `Record` (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
+- Defaults to an exact object shape (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
 - It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
-- Name the Record with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
+- Name the structural object with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
 #### Array<byte> `Array<byte>(...)`
 
@@ -6138,7 +6152,7 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 | `forEach(fn)` | traversal |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
-**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from Record/Json object literals by the `#` prefix.
+**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from structural object/Json object literals by the `#` prefix.
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
@@ -6183,11 +6197,13 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `Json.containsKey(obj, key)` | field existence |
 | `Json.get(obj, key, default?)` | field read; returns `default` or `null` if absent |
 | `len(obj)` | element count for Object / Array / String variants; scalar values throw TypeError |
-| `Json.parse(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON parsing and validation |
+| `Json.parse(s)` / `Json.parse<T>(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON parsing and validation; typed parse constructs `T` directly from its schema |
 | `Json.encode(value)` | explicit typed value → Json boundary conversion |
 | `Json.stringify(value, indent?)` | serialization |
+| `Json.kindOf(value)` | returns `null/bool/int/float/string/array/object` |
+| `Json.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | Json category predicates |
 
-**Literal**: `{ name: "alice", age: 30 }` defaults to sealed `Record`. It becomes a dynamic Json object only with an explicit `Json` annotation such as `var j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary.
+**Literal**: `{ name: "alice", age: 30 }` defaults to an exact object shape. It becomes a dynamic Json object only with an explicit `Json` annotation such as `var j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary. `T` in `Json.parse<T>` must satisfy `JsonDecodable`; an open row is not a construction target. The parser consumes the token stream directly without first materializing an intermediate Json DOM.
 
 ### 14.12 `Range`
 
@@ -7398,7 +7414,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Conditions | truthy / falsy | conditions must be `bool`, or nullable `T?` presence; int/string have no truthy conversion |
 | Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric int↔float, and `===`/`!==` are not operators |
 | Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
-| Objects | dynamic fields | `{...}` creates a sealed Record by default; dynamic objects require an explicit `Json` boundary |
+| Objects | dynamic fields | `{...}` creates a sealed structural object by default; dynamic objects require an explicit `Json` boundary |
 | import | ES Modules | xray-specific syntax (stdlib uses unquoted form) |
 | Concurrency | async / Promise | coroutines + channels |
 

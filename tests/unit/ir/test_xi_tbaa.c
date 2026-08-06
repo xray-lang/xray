@@ -51,7 +51,7 @@ TEST(is_memory_load) {
     assert(xi_is_memory_load(XI_LOAD_FIELD));
     assert(xi_is_memory_load(XI_INDEX_GET));
     assert(xi_is_memory_load(XI_AGG_GET));
-    assert(xi_is_memory_load(XI_JSON_GET_F));
+    assert(xi_is_memory_load(XI_OBJECT_GET_F));
     assert(xi_is_memory_load(XI_TUPLE_GET));
     assert(xi_is_memory_load(XI_LOAD_UPVAL));
     assert(xi_is_memory_load(XI_GET_SHARED));
@@ -73,8 +73,8 @@ TEST(is_memory_store) {
     assert(xi_is_memory_store(XI_STORE_FIELD));
     assert(xi_is_memory_store(XI_INDEX_SET));
     assert(xi_is_memory_store(XI_AGG_SET));
-    assert(xi_is_memory_store(XI_JSON_SET_F));
-    assert(xi_is_memory_store(XI_JSON_INIT_F));
+    assert(xi_is_memory_store(XI_OBJECT_SET_F));
+    assert(xi_is_memory_store(XI_OBJECT_INIT_F));
     assert(xi_is_memory_store(XI_STORE_UPVAL));
     assert(xi_is_memory_store(XI_SET_SHARED));
     assert(xi_is_memory_store(XI_SET_GLOBAL));
@@ -607,7 +607,7 @@ static XiValue *make_mem_op(XiFunc *f, XiBlock *blk, uint16_t op, XiValue *obj, 
             case XI_AGG_SET:
                 nargs = 2;
                 break;
-            case XI_JSON_SET_F:
+            case XI_OBJECT_SET_F:
                 nargs = 2;
                 break;
             case XI_STORE_UPVAL:
@@ -637,7 +637,7 @@ static XiValue *make_mem_op(XiFunc *f, XiBlock *blk, uint16_t op, XiValue *obj, 
             case XI_AGG_GET:
                 nargs = 1;
                 break;
-            case XI_JSON_GET_F:
+            case XI_OBJECT_GET_F:
                 nargs = 1;
                 break;
             case XI_TUPLE_GET:
@@ -681,8 +681,8 @@ static uint16_t load_op_for_group(XiMemGroup g) {
             return XI_INDEX_GET;
         case XI_MEM_STRUCT:
             return XI_AGG_GET;
-        case XI_MEM_JSON:
-            return XI_JSON_GET_F;
+        case XI_MEM_OBJECT:
+            return XI_OBJECT_GET_F;
         case XI_MEM_TUPLE:
             return XI_TUPLE_GET;
         case XI_MEM_UPVAL:
@@ -714,18 +714,18 @@ static uint16_t load_op_for_group(XiMemGroup g) {
     }
 
 PAIRWISE_TEST(pw_field_vs_struct, XI_MEM_FIELD, XI_MEM_STRUCT)
-PAIRWISE_TEST(pw_field_vs_json, XI_MEM_FIELD, XI_MEM_JSON)
+PAIRWISE_TEST(pw_field_vs_object, XI_MEM_FIELD, XI_MEM_OBJECT)
 PAIRWISE_TEST(pw_field_vs_tuple, XI_MEM_FIELD, XI_MEM_TUPLE)
 PAIRWISE_TEST(pw_field_vs_chan, XI_MEM_FIELD, XI_MEM_CHAN)
 PAIRWISE_TEST(pw_array_vs_struct, XI_MEM_ARRAY, XI_MEM_STRUCT)
-PAIRWISE_TEST(pw_array_vs_json, XI_MEM_ARRAY, XI_MEM_JSON)
+PAIRWISE_TEST(pw_array_vs_object, XI_MEM_ARRAY, XI_MEM_OBJECT)
 PAIRWISE_TEST(pw_array_vs_tuple, XI_MEM_ARRAY, XI_MEM_TUPLE)
 PAIRWISE_TEST(pw_array_vs_chan, XI_MEM_ARRAY, XI_MEM_CHAN)
-PAIRWISE_TEST(pw_struct_vs_json, XI_MEM_STRUCT, XI_MEM_JSON)
+PAIRWISE_TEST(pw_struct_vs_object, XI_MEM_STRUCT, XI_MEM_OBJECT)
 PAIRWISE_TEST(pw_struct_vs_tuple, XI_MEM_STRUCT, XI_MEM_TUPLE)
 PAIRWISE_TEST(pw_struct_vs_chan, XI_MEM_STRUCT, XI_MEM_CHAN)
-PAIRWISE_TEST(pw_json_vs_tuple, XI_MEM_JSON, XI_MEM_TUPLE)
-PAIRWISE_TEST(pw_json_vs_chan, XI_MEM_JSON, XI_MEM_CHAN)
+PAIRWISE_TEST(pw_object_vs_tuple, XI_MEM_OBJECT, XI_MEM_TUPLE)
+PAIRWISE_TEST(pw_object_vs_chan, XI_MEM_OBJECT, XI_MEM_CHAN)
 PAIRWISE_TEST(pw_tuple_vs_chan, XI_MEM_TUPLE, XI_MEM_CHAN)
 PAIRWISE_TEST(pw_shared_vs_global, XI_MEM_SHARED, XI_MEM_GLOBAL)
 PAIRWISE_TEST(pw_shared_vs_chan, XI_MEM_SHARED, XI_MEM_CHAN)
@@ -869,12 +869,12 @@ TEST(const_vs_json_no_alias) {
     XiValue *obj = xi_param(f, blk, 0, &stub_any);
     XiValue *val = xi_const_int(f, blk, 1, &stub_int);
 
-    XiValue *store = xi_value_new(f, blk, XI_JSON_SET_F, &stub_int, 2);
+    XiValue *store = xi_value_new(f, blk, XI_OBJECT_SET_F, &stub_int, 2);
     store->args[0] = obj;
     store->args[1] = val;
     store->aux_int = 0;
 
-    XiValue *cload = xi_value_new(f, blk, XI_JSON_GET_F, &stub_int, 1);
+    XiValue *cload = xi_value_new(f, blk, XI_OBJECT_GET_F, &stub_int, 1);
     cload->args[0] = obj;
     cload->aux_int = 1;
     xi_block_set_return(blk, cload);
@@ -1007,8 +1007,8 @@ TEST(struct_set_is_store) {
 }
 
 TEST(json_get_is_load) {
-    assert(xi_is_memory_load(XI_JSON_GET_F));
-    assert(!xi_is_memory_store(XI_JSON_GET_F));
+    assert(xi_is_memory_load(XI_OBJECT_GET_F));
+    assert(!xi_is_memory_store(XI_OBJECT_GET_F));
 }
 
 TEST(tuple_get_is_load) {
@@ -1118,14 +1118,14 @@ TEST(annotate_json_get_sets_json) {
     XiBlock *blk = f->entry;
     XiValue *obj = xi_param(f, blk, 0, &stub_any);
 
-    XiValue *load = xi_value_new(f, blk, XI_JSON_GET_F, &stub_int, 1);
+    XiValue *load = xi_value_new(f, blk, XI_OBJECT_GET_F, &stub_int, 1);
     load->args[0] = obj;
     load->aux_int = 0;
 
     xi_block_set_return(blk, load);
     xi_tbaa_annotate(f);
 
-    assert(load->mem_group == XI_MEM_JSON);
+    assert(load->mem_group == XI_MEM_OBJECT);
     xi_func_free(f);
 }
 
@@ -1878,8 +1878,8 @@ TEST(fresh_group_aliases_nothing) {
     XiValue *b = xi_const_int(f, blk, 2, &stub_int);
 
     a->mem_group = XI_MEM_FRESH;
-    const uint8_t others[] = {XI_MEM_TOP,    XI_MEM_FIELD, XI_MEM_ARRAY, XI_MEM_STRUCT,
-                              XI_MEM_SHARED, XI_MEM_JSON,  XI_MEM_CHAN,  XI_MEM_FRESH};
+    const uint8_t others[] = {XI_MEM_TOP,    XI_MEM_FIELD,  XI_MEM_ARRAY, XI_MEM_STRUCT,
+                              XI_MEM_SHARED, XI_MEM_OBJECT, XI_MEM_CHAN,  XI_MEM_FRESH};
     for (size_t i = 0; i < sizeof(others) / sizeof(others[0]); i++) {
         b->mem_group = others[i];
         assert(!xi_tbaa_may_alias(a, b));
@@ -1976,18 +1976,18 @@ int main(void) {
 
     /* Pairwise alias matrix (25) */
     run_pw_field_vs_struct();
-    run_pw_field_vs_json();
+    run_pw_field_vs_object();
     run_pw_field_vs_tuple();
     run_pw_field_vs_chan();
     run_pw_array_vs_struct();
-    run_pw_array_vs_json();
+    run_pw_array_vs_object();
     run_pw_array_vs_tuple();
     run_pw_array_vs_chan();
-    run_pw_struct_vs_json();
+    run_pw_struct_vs_object();
     run_pw_struct_vs_tuple();
     run_pw_struct_vs_chan();
-    run_pw_json_vs_tuple();
-    run_pw_json_vs_chan();
+    run_pw_object_vs_tuple();
+    run_pw_object_vs_chan();
     run_pw_tuple_vs_chan();
     run_pw_shared_vs_global();
     run_pw_shared_vs_tls();

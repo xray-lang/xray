@@ -246,8 +246,8 @@ static const char *find_module_prefix(XrLspDocument *doc, XrLspPosition pos, cha
 }
 
 // Convert XrType to XrTypeId (delegates to unified analyzer function)
-static XrTypeId xr_type_to_builtin(XrType *type) {
-    return xr_type_to_builtin_id(type);
+static XlspBuiltinType xr_type_to_builtin(XrType *type) {
+    return XR_TYPE_IS_JSON(type) ? XLSP_TYPE_JSON : (XlspBuiltinType) xr_type_to_builtin_id(type);
 }
 
 // Fallback: infer type by scanning source text (used when analyzer unavailable)

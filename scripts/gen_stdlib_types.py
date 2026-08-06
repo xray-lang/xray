@@ -377,7 +377,7 @@ def merge_pure_xray_modules(module_results, pure_modules):
     for mod_name, pure_data in sorted(pure_modules.items()):
         mod_data = module_results.setdefault(mod_name, {
             'handles': [],
-            'records': [],
+            'object_shapes': [],
             'enums': [],
             'methods': [],
             'handle_methods': {},
@@ -579,11 +579,11 @@ def load_def_module_handles():
     return modules
 
 
-def load_def_module_records():
-    """Load named native record declarations from stdlib/defs/*.def."""
+def load_def_module_object_shapes():
+    """Load named native object-shape declarations from stdlib/defs/*.def."""
     sys.path.insert(0, str(STDLIBGEN_TOOL_DIR))
     try:
-        from stdlibgen import parse_records
+        from stdlibgen import parse_object_shapes
     except Exception as e:
         raise SystemExit(f"Error: cannot import stdlibgen parser: {e}") from e
     finally:
@@ -593,11 +593,11 @@ def load_def_module_records():
             pass
 
     modules = {}
-    for entry in parse_records(PROJECT_ROOT):
+    for entry in parse_object_shapes(PROJECT_ROOT):
         modules.setdefault(entry.module, []).append({
             'name': entry.name,
             'doc': entry.doc,
-            'sealed': entry.sealed,
+            'exact': entry.exact,
             'fields': [
                 {
                     'name': field.name,
@@ -667,7 +667,7 @@ def merge_def_module_methods(module_results, def_methods):
     for mod_name, methods in sorted(def_methods.items()):
         mod_data = module_results.setdefault(mod_name, {
             'handles': [],
-            'records': [],
+            'object_shapes': [],
             'enums': [],
             'methods': [],
             'handle_methods': {},
@@ -695,7 +695,7 @@ def merge_def_module_constants(module_results, def_constants):
     for mod_name, constants in sorted(def_constants.items()):
         mod_data = module_results.setdefault(mod_name, {
             'handles': [],
-            'records': [],
+            'object_shapes': [],
             'enums': [],
             'methods': [],
             'handle_methods': {},
@@ -723,7 +723,7 @@ def merge_def_module_handles(module_results, def_handles):
     for mod_name, handles in sorted(def_handles.items()):
         mod_data = module_results.setdefault(mod_name, {
             'handles': [],
-            'records': [],
+            'object_shapes': [],
             'enums': [],
             'methods': [],
             'handle_methods': {},
@@ -744,24 +744,24 @@ def merge_def_module_handles(module_results, def_handles):
     return replaced, added
 
 
-def merge_def_module_records(module_results, def_records):
-    """Overlay .def record declarations onto module metadata."""
+def merge_def_module_object_shapes(module_results, def_object_shapes):
+    """Overlay .def object-shape declarations onto module metadata."""
     added = 0
-    for mod_name, records in sorted(def_records.items()):
+    for mod_name, object_shapes in sorted(def_object_shapes.items()):
         mod_data = module_results.setdefault(mod_name, {
             'handles': [],
-            'records': [],
+            'object_shapes': [],
             'enums': [],
             'methods': [],
             'handle_methods': {},
             'constants': [],
         })
-        existing = {record['name'] for record in mod_data.get('records', [])}
-        for record in records:
-            if record['name'] in existing:
-                raise SystemExit(f"duplicate native record declaration: {mod_name}.{record['name']}")
-            mod_data.setdefault('records', []).append(record)
-            existing.add(record['name'])
+        existing = {object_shape['name'] for object_shape in mod_data.get('object_shapes', [])}
+        for object_shape in object_shapes:
+            if object_shape['name'] in existing:
+                raise SystemExit(f"duplicate native object-shape declaration: {mod_name}.{object_shape['name']}")
+            mod_data.setdefault('object_shapes', []).append(object_shape)
+            existing.add(object_shape['name'])
             added += 1
     return added
 
@@ -772,7 +772,7 @@ def merge_def_module_enums(module_results, def_enums):
     for mod_name, enums in sorted(def_enums.items()):
         mod_data = module_results.setdefault(mod_name, {
             'handles': [],
-            'records': [],
+            'object_shapes': [],
             'enums': [],
             'methods': [],
             'handle_methods': {},
@@ -1030,28 +1030,28 @@ def generate_header(type_results, module_results):
                 lines.append(f"#define GEN_{mod_macro}_HANDLE_COUNT {len(mod_data['handles'])}")
                 lines.append("")
 
-            # Named sealed records returned by native module functions.
-            for record in mod_data.get('records', []):
-                field_var = f"g_gen_{mod_ident}_{record['name'].lower()}_record_fields"
-                lines.append(f"// {mod_name}.{record['name']} record fields")
-                lines.append(f"static const XaBuiltinRecordField {field_var}[] = {{")
-                for field in record['fields']:
+            # Named exact object shapes returned by native module functions.
+            for object_shape in mod_data.get('object_shapes', []):
+                field_var = f"g_gen_{mod_ident}_{object_shape['name'].lower()}_object_fields"
+                lines.append(f"// {mod_name}.{object_shape['name']} object fields")
+                lines.append(f"static const XaBuiltinObjectField {field_var}[] = {{")
+                for field in object_shape['fields']:
                     lines.append(
                         f'    {{"{c_string(field["name"])}", "{c_string(field["type"])}"}},'
                     )
                 lines.append("};")
                 lines.append("")
-            if mod_data.get('records'):
-                lines.append(f"static const XaBuiltinRecord g_gen_{mod_ident}_records[] = {{")
-                for record in mod_data['records']:
-                    field_var = f"g_gen_{mod_ident}_{record['name'].lower()}_record_fields"
+            if mod_data.get('object_shapes'):
+                lines.append(f"static const XaBuiltinObjectShape g_gen_{mod_ident}_object_shapes[] = {{")
+                for object_shape in mod_data['object_shapes']:
+                    field_var = f"g_gen_{mod_ident}_{object_shape['name'].lower()}_object_fields"
                     lines.append(
-                        f'    {{"{c_string(record["name"])}", "{c_string(record["doc"])}", '
-                        f'{field_var}, {len(record["fields"])}, '
-                        f'{"true" if record.get("sealed", True) else "false"}}},'
+                        f'    {{"{c_string(object_shape["name"])}", "{c_string(object_shape["doc"])}", '
+                        f'{field_var}, {len(object_shape["fields"])}, '
+                        f'{"true" if object_shape.get("exact", True) else "false"}}},'
                     )
                 lines.append("};")
-                lines.append(f"#define GEN_{mod_macro}_RECORD_COUNT {len(mod_data['records'])}")
+                lines.append(f"#define GEN_{mod_macro}_OBJECT_SHAPE_COUNT {len(mod_data['object_shapes'])}")
                 lines.append("")
 
             # Module-scoped enum declarations. Payload types are kept as
@@ -1160,13 +1160,13 @@ def generate_header(type_results, module_results):
             func_count = f"GEN_{mod_macro}_FUNCTION_COUNT" if has_function_slot else "0"
             handle_ref = f"g_gen_{mod_ident}_handles" if mod_data.get('handles') else "NULL"
             handle_count = f"GEN_{mod_macro}_HANDLE_COUNT" if mod_data.get('handles') else "0"
-            record_ref = f"g_gen_{mod_ident}_records" if mod_data.get('records') else "NULL"
-            record_count = f"GEN_{mod_macro}_RECORD_COUNT" if mod_data.get('records') else "0"
+            object_shape_ref = f"g_gen_{mod_ident}_object_shapes" if mod_data.get('object_shapes') else "NULL"
+            object_shape_count = f"GEN_{mod_macro}_OBJECT_SHAPE_COUNT" if mod_data.get('object_shapes') else "0"
             enum_ref = f"g_gen_{mod_ident}_enums" if mod_data.get('enums') else "NULL"
             enum_count = f"GEN_{mod_macro}_ENUM_COUNT" if mod_data.get('enums') else "0"
             lines.append(
                 f'    {{"{c_string(mod_name)}", {func_ref}, {func_count}, '
-                f'{handle_ref}, {handle_count}, {record_ref}, {record_count}, '
+                f'{handle_ref}, {handle_count}, {object_shape_ref}, {object_shape_count}, '
                 f'{enum_ref}, {enum_count}}},')
         lines.append("};")
         lines.append(f"#define GEN_BUILTIN_MODULE_COUNT {len(module_results)}")
@@ -1215,14 +1215,14 @@ def generate_lsp_include(module_results):
                 'doc': handle.get('doc') or "Native handle type",
                 'lsp_kind': "XLSP_SYM_CLASS",
             })
-        for record in mod_data.get('records', []):
+        for object_shape in mod_data.get('object_shapes', []):
             fields = ", ".join(
-                f"{field['name']}: {field['type']}" for field in record.get('fields', [])
+                f"{field['name']}: {field['type']}" for field in object_shape.get('fields', [])
             )
             symbols.append({
-                'name': record['name'],
-                'signature': f"type {record['name']} = {{ {fields} }}",
-                'doc': record.get('doc') or "Native sealed record type",
+                'name': object_shape['name'],
+                'signature': f"type {object_shape['name']} = {{ {fields} }}",
+                'doc': object_shape.get('doc') or "Native exact object shape",
                 'lsp_kind': "XLSP_SYM_CLASS",
             })
         for enum in mod_data.get('enums', []):
@@ -1382,7 +1382,7 @@ def main():
     const_replaced, const_added = merge_def_module_constants(module_results, def_constants)
     def_handles = load_def_module_handles()
     handle_replaced, handle_added = merge_def_module_handles(module_results, def_handles)
-    record_added = merge_def_module_records(module_results, load_def_module_records())
+    object_shape_added = merge_def_module_object_shapes(module_results, load_def_module_object_shapes())
     enum_added = merge_def_module_enums(module_results, load_def_module_enums())
     def_type_methods = load_def_type_methods()
     type_method_replaced, type_method_added = merge_def_type_methods(
@@ -1408,7 +1408,7 @@ def main():
           f"({const_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def handles: {handle_added} handles loaded "
           f"({handle_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)
-    print(f"Def records: {record_added} records loaded from stdlib/defs/*.def", file=sys.stderr)
+    print(f"Def object shapes: {object_shape_added} object shapes loaded from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def enums: {enum_added} enums loaded from stdlib/defs/*.def", file=sys.stderr)
     print(f"Def type methods: {type_method_added} methods loaded "
           f"({type_method_replaced} replaced) from stdlib/defs/*.def", file=sys.stderr)

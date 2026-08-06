@@ -13,4 +13,8 @@ fn run(n: int) -> Json {
     return v
 }
 
-print(run(20000))
+var iterations = 20000
+if (len(process.args) > 0) {
+    iterations = int(process.args[0]) ?? iterations
+}
+print(run(iterations))

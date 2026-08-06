@@ -1,2 +1,2 @@
-empty object literal '{}' requires an explicit Record or Json context
+empty object literal '{}' requires an explicit object-shape or Json context
 

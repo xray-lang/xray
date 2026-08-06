@@ -88,9 +88,8 @@ typedef struct XrEnumType {
 
 XR_FUNC XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *nominal_owner, const char *name,
                                      char **member_names, int count);
-XR_FUNC XrEnumType *xr_enum_type_new_core(struct XrRuntimeCore *core,
-                                          const char *nominal_owner, const char *name,
-                                          char **member_names, int count);
+XR_FUNC XrEnumType *xr_enum_type_new_core(struct XrRuntimeCore *core, const char *nominal_owner,
+                                          const char *name, char **member_names, int count);
 
 XR_FUNC XrEnumCtor *xr_enum_ctor_new(XrVMRuntime *X, const char *enum_name, const char *member_name,
                                      uint32_t index);
@@ -103,6 +102,17 @@ XR_FUNC bool xr_enum_type_has_payloads(const XrEnumType *enum_type);
 XR_FUNC int xr_enum_type_payload_count(const XrEnumType *enum_type, uint32_t member_index);
 XR_FUNC uint16_t xr_enum_type_max_payload(const XrEnumType *enum_type);
 XR_FUNC const char *xr_enum_type_member_name(const XrEnumType *enum_type, uint32_t member_index);
+
+/* Runtime enum metadata may be reconstructed from bytecode-owned decode
+ * schemas. Nominal identity is the stable declaration layout id, not the
+ * address of one isolate-local metadata object. */
+static inline bool xr_enum_type_same_nominal(const XrEnumType *a, const XrEnumType *b) {
+    if (a == b)
+        return true;
+    if (!a || !b || !a->layout || !b->layout)
+        return false;
+    return a->layout->layout_id != 0 && a->layout->layout_id == b->layout->layout_id;
+}
 
 /* ========== Access ========== */
 

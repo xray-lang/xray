@@ -45,6 +45,12 @@
 #include <string.h>
 #if defined(_WIN32)
 #include <io.h> /* _isatty/_fileno for the panic report's TTY colour gate */
+#if defined(__MINGW32__)
+/* The generated-C include path also contains the language's net/io.h.  Some
+ * MinGW drivers resolve that project header before the CRT's <io.h>, so keep
+ * the one CRT declaration used here explicit and provider-independent. */
+int __cdecl _isatty(int fd);
+#endif
 #else
 #include <unistd.h> /* isatty for the panic report's TTY colour gate */
 #endif
@@ -250,10 +256,8 @@ static inline const char *xrt_type_name(int64_t tid) {
             return TYPE_NAME_MAP;
         case XR_TID_INSTANCE:
             return TYPE_NAME_INSTANCE;
-        case XR_TID_JSON:
-            return TYPE_NAME_JSON;
-        case XR_TID_RECORD:
-            return TYPE_NAME_RECORD;
+        case XR_TID_OBJECT:
+            return TYPE_NAME_OBJECT;
         case XR_TID_BIGINT:
             return TYPE_NAME_BIGINT;
         case XR_TID_STRINGBUILDER:

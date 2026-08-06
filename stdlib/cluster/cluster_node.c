@@ -604,7 +604,7 @@ void cluster_node_start_writer(XrClusterNode *node, XrVMRuntime *X) {
     if (atomic_load(&node->writer_running))
         return;  // already started
 
-    // Record the isolate so the writer loop can drive xr_socket_read
+    // object the isolate so the writer loop can drive xr_socket_read
     // on notify_pipe[0] (coroutine-aware suspend instead of thread block).
     node->isolate = X;
     atomic_store(&node->writer_running, true);

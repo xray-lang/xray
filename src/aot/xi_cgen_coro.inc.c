@@ -90,7 +90,7 @@ static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
 
 /* Await always receives a tagged cross-coroutine value from XrSlotRef.  Most
  * tagged await results can use their final local directly, and scalar results
- * reuse a typed UNBOX consumer.  A native class/record result is different:
+ * reuse a typed UNBOX consumer.  A native class/structural-object result is different:
  * its final AOT storage is a pointer even though the boundary value is tagged.
  * Give that boundary its own XrValue temporary, then bridge and convert it once
  * the await completes.  This keeps the runtime slot ABI and the typed local ABI

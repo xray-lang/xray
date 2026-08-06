@@ -172,20 +172,21 @@ XR_FUNC void xi_lower_bind_class_field_id(XiLower *l, XiValue *access,
                                           const char *field_name);
 XR_FUNC void xi_lower_bind_json_codec_id(XiLower *l, XiValue *value, uint32_t source_node_id,
                                          uint8_t expected_kind);
-XR_FUNC void xi_lower_bind_json_access_id(XiLower *l, XiValue *access, const char *field_name,
-                                          uint32_t source_span_id, uint16_t field_ordinal,
-                                          uint8_t access_kind);
-XR_FUNC bool xi_lower_json_access_requires_dynamic_lookup(XiLower *l, const char *field_name,
-                                                          uint32_t source_span_id,
-                                                          uint16_t field_ordinal,
-                                                          uint8_t access_kind);
+XR_FUNC void xi_lower_bind_json_dynamic_access_id(XiLower *l, XiValue *access,
+                                                  const char *field_name, uint32_t source_span_id,
+                                                  uint16_t field_ordinal, uint8_t access_kind);
+XR_FUNC bool xi_lower_json_dynamic_access_requires_dynamic_lookup(XiLower *l,
+                                                                  const char *field_name,
+                                                                  uint32_t source_span_id,
+                                                                  uint16_t field_ordinal,
+                                                                  uint8_t access_kind);
 XR_FUNC bool xi_lower_find_json_direct_field_ordinal(XiLower *l, const char *field_name,
                                                      uint32_t source_span_id, uint8_t access_kind,
                                                      uint16_t *out_ordinal);
-XR_FUNC void xi_lower_bind_record_access_id(XiLower *l, XiValue *access, const char *field_name,
+XR_FUNC void xi_lower_bind_object_access_id(XiLower *l, XiValue *access, const char *field_name,
                                             uint32_t source_span_id, uint16_t field_ordinal,
                                             uint8_t access_kind);
-XR_FUNC void xi_lower_bind_record_merge_id(XiLower *l, XiValue *merge, uint32_t source_node_id);
+XR_FUNC void xi_lower_bind_object_merge_id(XiLower *l, XiValue *merge, uint32_t source_node_id);
 XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t source_span_id,
                                          uint32_t body_ordinal, uint8_t access_op);
 XR_FUNC void xi_lower_bind_map_shape_id(XiLower *l, XiValue *literal, uint32_t source_span_id,
@@ -241,8 +242,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
                                         struct XrType *receiver_type, uint32_t source_span_id);
 XR_FUNC const char *xi_lower_enum_method_hidden_name(XiFunc *arena, const char *enum_name,
                                                      const char *method_name, bool is_static);
-XR_FUNC XiValue *xi_lower_apply_numeric_conversion_witness(XiLower *l,
-                                                           struct AstNode *source_node,
+XR_FUNC XiValue *xi_lower_apply_numeric_conversion_witness(XiLower *l, struct AstNode *source_node,
                                                            XiValue *value,
                                                            struct XrType *target_type);
 
@@ -271,7 +271,8 @@ XR_FUNC bool xi_lower_defer_register_closure(XiLower *l, XiValue *callee, int li
 
 /* Emit XI_IS test against the given XrTypeRef on a pre-lowered value. */
 struct XrTypeRef;
-XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, struct XrTypeRef *tref, int line);
+XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, struct XrTypeRef *tref, int line,
+                                  uint32_t source_node_id);
 XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, struct AstNode *node, XiValue *val,
                                              struct XrType *target_type);
 
@@ -296,5 +297,8 @@ XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_cancelled_expr(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, struct AstNode *node);
+XR_FUNC bool xi_lower_fill_canonical_object_field_names(XiLower *l, const struct XrType *type,
+                                                        const char **names, int count,
+                                                        uint32_t source_span_id);
 
 #endif  // XI_LOWER_INTERNAL_H

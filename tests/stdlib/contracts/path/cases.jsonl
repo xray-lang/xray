@@ -1,3 +1,3 @@
 {"case":"path-module-contract","probe":"tests/diff/cases/semantics/stdlib/path_module.xr","equivalence":["value","error"],"oracle":"platform normalization and root properties"}
 {"case":"path-string-operations","probe":"tests/diff/cases/semantics/stdlib/path_string_ops.xr","equivalence":["value","complexity"],"oracle":"join-normalize-relative algebraic properties"}
-{"case":"typed-path-info","probe":"tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr","equivalence":["value","effect"],"oracle":"PathInfo sealed record contract"}
+{"case":"typed-path-info","probe":"tests/diff/cases/semantics/stdlib/path_parse_schema_shared_core.xr","equivalence":["value","effect"],"oracle":"PathInfo exact object contract"}

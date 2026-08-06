@@ -1,0 +1,9 @@
+type Inner = { count: int, ok: bool }
+type Payload = { name: string, inner: Inner, values: Array<Json> }
+
+var payload = Json.parse<Payload>(
+    "{\"ignored\":{\"deep\":[1,2,3]},\"values\":[1,true,null],\"inner\":{\"ok\":true,\"count\":7},\"name\":\"Ada\"}"
+)
+print(payload.name)
+print(payload.inner.count)
+print(len(payload.values))

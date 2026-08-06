@@ -1,0 +1,112 @@
+// Task 260: @derive(Json) nominal targets are constructed from verified schemas.
+// Class constructors are deliberately bypassed by both decode and direct typed parse.
+
+@derive(Json)
+class User {
+    name: string
+    age: int
+
+    constructor(name: string, age: int) {
+        print("constructor-ran")
+        this.name = name
+        this.age = age
+    }
+}
+
+@derive(Json)
+class Envelope {
+    user: User
+    tags: Array<string>
+    scores: Map<string, int>
+
+    constructor(user: User, tags: Array<string>, scores: Map<string, int>) {
+        print("envelope-constructor-ran")
+        this.user = user
+        this.tags = tags
+        this.scores = scores
+    }
+}
+
+@derive(Json)
+struct Point {
+    x: int
+    y: int
+}
+
+@derive(Json)
+struct Box {
+    point: Point
+    label: string
+}
+
+enum WireState {
+    Ready,
+    Done
+}
+
+@derive(Json)
+class Packet {
+    state: WireState
+    note: string?
+
+    constructor(state: WireState, note: string?) {
+        print("packet-constructor-ran")
+        this.state = state
+        this.note = note
+    }
+}
+
+var parsed: User = Json.parse<User>("{\"name\":\"Ada\",\"age\":37}")
+var parsedJson = Json.encode(parsed)
+print(parsedJson.name)
+print(parsedJson.age)
+
+var decoded = Json.decode<User>(Json.parse("{\"name\":\"Grace\",\"age\":42}"))
+print(decoded == null)
+var decodedJson = Json.encode(decoded!)
+print(decodedJson.name)
+print(decodedJson.age)
+
+var nested: Envelope = Json.parse<Envelope>(
+    "{\"user\":{\"name\":\"Lin\",\"age\":29},\"tags\":[\"compiler\",\"vm\"],\"scores\":{\"a\":9}}"
+)
+var nestedJson = Json.encode(nested)
+print(nestedJson.user.name)
+print(nestedJson.tags[1])
+print(nestedJson.scores["a"])
+
+print(Json.decode<User>(Json.parse("{\"name\":\"bad\",\"age\":true}")) == null)
+
+fn exerciseDerivedStructs() {
+    var point: Point = Json.parse<Point>("{\"x\":3,\"y\":4}")
+    print(point.x)
+    print(point.y)
+
+    var box: Box = Json.parse<Box>("{\"point\":{\"x\":8,\"y\":9},\"label\":\"nested\"}")
+    print(box.point.x)
+    print(box.label)
+    var boxJson = Json.encode(box)
+    print(boxJson.point.x)
+    print(boxJson.label)
+    print(Json.stringify(box))
+
+    var decodedBox = Json.decode<Box>(
+        Json.parse("{\"point\":{\"x\":11,\"y\":12},\"label\":\"decoded\"}")
+    )
+    print(decodedBox == null)
+    var presentBox = decodedBox!
+    print(presentBox.point.y)
+    print(presentBox.label)
+    print(Json.decode<Box>(Json.parse("{\"point\":{\"x\":1},\"label\":\"bad\"}")) == null)
+
+    var packet: Packet = Json.parse<Packet>(
+        "{\"state\":\"Ready\",\"note\":null}"
+    )
+    print(packet.state.toString())
+    print(packet.note == null)
+    var packetJson = Json.encode(packet)
+    print(packetJson.state)
+    print(Json.stringify(packet))
+}
+
+exerciseDerivedStructs()

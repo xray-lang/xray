@@ -81,8 +81,8 @@
   :scalar-rep no
   :typed-boundary yes)
 
-(define-aot-abi record
-  :type-kind XR_KIND_RECORD
+(define-aot-abi struct_object
+  :type-kind XR_KIND_STRUCT_OBJECT
   :nullable yes
   :abi-class tagged
   :default-rep tagged

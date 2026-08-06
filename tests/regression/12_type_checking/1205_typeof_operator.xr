@@ -199,7 +199,7 @@ fn test_typeof_regex() {
 @test
 fn test_typeof_json_object() {
     var obj = { name: "Alice", age: 30 }
-    assert_eq(typeName(obj), "Record")
+    assert_eq(typeName(obj), "object")
 }
 
 @test
@@ -210,7 +210,7 @@ fn test_typeof_nested_json() {
             scores: [90, 85, 95]
         }
     }
-    assert_eq(typeName(obj), "Record")
+    assert_eq(typeName(obj), "object")
     assert_eq(typeName(obj.user.scores), "Array")
 }
 

@@ -368,8 +368,8 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
                 int64_t emitted = 0;
                 int64_t total = 0;
                 xrt_fmt_char(sb, '{');
-                for (int64_t i = 0; i < j->field_count; i++) {
-                    const char *name = j->field_names ? j->field_names[i] : NULL;
+                for (int64_t i = 0; i < xrt_object_field_count(j); i++) {
+                    const char *name = xrt_object_field_name(j, i);
                     if (!name)
                         continue;
                     total++;
@@ -658,42 +658,40 @@ static inline void xrt_println(XrValue v) {
 static inline int64_t xrt_typeof_id(XrValue v) {
     switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
-            return 8; /* XR_TID_INT */
+            return XR_TID_INT;
         case XR_TAG_F64:
-            return 11; /* XR_TID_FLOAT */
+            return XR_TID_FLOAT;
         case XR_TAG_BOOL:
-            return 1; /* XR_TID_BOOL */
+            return XR_TID_BOOL;
         case XR_TAG_RUNE:
-            return 45; /* XR_TID_RUNE */
+            return XR_TID_RUNE;
         case XR_TAG_NULL:
-            return 0; /* XR_TID_NULL */
+            return XR_TID_NULL;
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
-            return 12; /* XR_TID_STRING */
+            return XR_TID_STRING;
         case XR_TAG_ARRAY:
-            return 14; /* XR_TID_ARRAY */
+            return XR_TID_ARRAY;
         case XR_TAG_SET:
-            return 15; /* XR_TID_SET */
+            return XR_TID_SET;
         case XR_TAG_MAP:
-            return 16; /* XR_TID_MAP */
+            return XR_TID_MAP;
         case XR_TAG_PTR:
-            if (v.ptr && v.heap_type == 0) {
-                const xrt_json_t *obj = (const xrt_json_t *) v.ptr;
-                return obj->object_kind == XRT_OBJECT_RECORD ? 41 : 18;
-            }
-            return 17; /* XR_TID_INSTANCE */
+            if (v.ptr && v.heap_type == 0)
+                return XR_TID_OBJECT;
+            return XR_TID_INSTANCE;
         case XR_TAG_CLOSURE:
-            return 13; /* XR_TID_FUNCTION */
+            return XR_TID_FUNCTION;
         case XR_TAG_STRBUF:
-            return 20; /* XR_TID_STRINGBUILDER */
+            return XR_TID_STRINGBUILDER;
         case XR_TAG_RANGE:
-            return 31; /* XR_TID_RANGE */
+            return XR_TID_RANGE;
         case XR_TAG_ENUM:
-            return 25; /* XR_TID_ENUM_VALUE */
+            return XR_TID_ENUM_VALUE;
         case XR_TAG_BIGINT:
-            return 19; /* XR_TID_BIGINT */
+            return XR_TID_BIGINT;
         default:
-            return 17; /* XR_TID_INSTANCE */
+            return XR_TID_INSTANCE;
     }
 }
 
@@ -727,8 +725,6 @@ static inline XrValue xrt_typename(XrValue v) {
     XRT_STR_LIT_DEF(xs_strbuf, "StringBuilder");
     XRT_STR_LIT_DEF(xs_tuple, "tuple");
     XRT_STR_LIT_DEF(xs_range, "Range");
-    XRT_STR_LIT_DEF(xs_json, "Json");
-    XRT_STR_LIT_DEF(xs_record, "Record");
     XRT_STR_LIT_DEF(xs_bigint, "BigInt");
     XRT_STR_LIT_DEF(xs_net_conn, "NetConn");
     XRT_STR_LIT_DEF(xs_net_listener, "NetListener");
@@ -779,9 +775,7 @@ static inline XrValue xrt_typename(XrValue v) {
             return xr_str_lit(&xs_net_listener);
         case XR_TAG_PTR:
             if (v.ptr && v.heap_type == 0) {
-                const xrt_json_t *obj = (const xrt_json_t *) v.ptr;
-                return obj->object_kind == XRT_OBJECT_RECORD ? xr_str_lit(&xs_record)
-                                                             : xr_str_lit(&xs_json);
+                return xr_str_lit(&xs_object);
             }
             if (v.ptr && v.heap_type == XR_TINSTANCE) {
                 XrObjHeader *hdr = (XrObjHeader *) v.ptr;

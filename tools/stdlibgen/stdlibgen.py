@@ -155,12 +155,12 @@ class StdlibHandleEntry:
 
 
 @dataclasses.dataclass(frozen=True)
-class StdlibRecordEntry:
+class StdlibObjectShapeEntry:
     module: str
     name: str
     doc: str
     fields: tuple[StdlibHandleFieldEntry, ...]
-    sealed: bool
+    exact: bool
 
     @property
     def symbol(self) -> str:
@@ -447,7 +447,7 @@ def parse_def_metadata(
     list[StdlibEntry],
     list[StdlibConstEntry],
     list[StdlibHandleEntry],
-    list[StdlibRecordEntry],
+    list[StdlibObjectShapeEntry],
     list[StdlibEnumEntry],
     list[StdlibTypeMethodEntry],
     list[StdlibNativeClassEntry],
@@ -459,7 +459,7 @@ def parse_def_metadata(
     entries: list[StdlibEntry] = []
     constants: list[StdlibConstEntry] = []
     handles: list[StdlibHandleEntry] = []
-    records: list[StdlibRecordEntry] = []
+    object_shapes: list[StdlibObjectShapeEntry] = []
     enums: list[StdlibEnumEntry] = []
     type_methods: list[StdlibTypeMethodEntry] = []
     native_classes: list[StdlibNativeClassEntry] = []
@@ -649,7 +649,7 @@ def parse_def_metadata(
                     fields=fields,
                 )
             )
-        elif current_kind == "record":
+        elif current_kind == "object":
             missing = [k for k in ("fields",) if k not in props]
             if missing:
                 names = ", ".join(missing)
@@ -657,18 +657,18 @@ def parse_def_metadata(
             fields = parse_handle_fields(
                 str(props["fields"]), f"{path}:{line_no}: {current_module}.{current_name}"
             )
-            sealed = props.get("sealed", True)
-            if not isinstance(sealed, bool):
+            exact = props.get("exact", True)
+            if not isinstance(exact, bool):
                 raise SystemExit(
-                    f"{path}:{line_no}: {current_module}.{current_name} sealed must be boolean"
+                    f"{path}:{line_no}: {current_module}.{current_name} exact must be boolean"
                 )
-            records.append(
-                StdlibRecordEntry(
+            object_shapes.append(
+                StdlibObjectShapeEntry(
                     module=current_module,
                     name=current_name,
-                    doc=str(props.get("doc", "Native sealed record type")),
+                    doc=str(props.get("doc", "Native exact object shape")),
                     fields=fields,
-                    sealed=sealed,
+                    exact=exact,
                 )
             )
         elif current_kind == "enum":
@@ -818,11 +818,11 @@ def parse_def_metadata(
                 current_name = m.group(1)
                 props = {}
                 continue
-            m = re.fullmatch(r"record\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
+            m = re.fullmatch(r"object\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{", line)
             if m:
                 if current_module is None or current_kind is not None:
-                    raise SystemExit(f"{path}:{line_no}: record outside module or nested record")
-                current_kind = "record"
+                    raise SystemExit(f"{path}:{line_no}: object declaration outside module or nested object declaration")
+                current_kind = "object"
                 current_name = m.group(1)
                 props = {}
                 continue
@@ -912,7 +912,7 @@ def parse_def_metadata(
         entries,
         constants,
         handles,
-        records,
+        object_shapes,
         enums,
         type_methods,
         native_classes,
@@ -937,9 +937,9 @@ def parse_handles(root: Path) -> list[StdlibHandleEntry]:
     return handles
 
 
-def parse_records(root: Path) -> list[StdlibRecordEntry]:
-    _, _, _, records, _, _, _, _, _, _ = parse_def_metadata(root)
-    return records
+def parse_object_shapes(root: Path) -> list[StdlibObjectShapeEntry]:
+    _, _, _, object_shapes, _, _, _, _, _, _ = parse_def_metadata(root)
+    return object_shapes
 
 
 def parse_enums(root: Path) -> list[StdlibEnumEntry]:
@@ -1534,7 +1534,7 @@ def emit_defs_header(
     entries: list[StdlibEntry],
     constants: list[StdlibConstEntry],
     handles: list[StdlibHandleEntry],
-    records: list[StdlibRecordEntry],
+    object_shapes: list[StdlibObjectShapeEntry],
     enums: list[StdlibEnumEntry],
     type_methods: list[StdlibTypeMethodEntry],
     native_classes: list[StdlibNativeClassEntry],
@@ -1604,14 +1604,14 @@ def emit_defs_header(
             "    uint16_t field_count;",
             "} XrStdlibHandleDefEntry;",
             "",
-            "typedef struct XrStdlibRecordDefEntry {",
+            "typedef struct XrStdlibObjectShapeDefEntry {",
             "    const char *module;",
             "    const char *name;",
             "    const char *doc;",
             "    const XrStdlibHandleFieldDefEntry *fields;",
             "    uint16_t field_count;",
-            "    bool sealed;",
-            "} XrStdlibRecordDefEntry;",
+            "    bool exact;",
+            "} XrStdlibObjectShapeDefEntry;",
             "",
             "typedef struct XrStdlibEnumVariantDefEntry {",
             "    const char *name;",
@@ -1718,33 +1718,33 @@ def emit_defs_header(
             "",
         ]
     )
-    for record in records:
-        field_array = f"xr_stdlib_record_fields_{c_module_ident(record.module)}_{record.name}"
+    for object_shape in object_shapes:
+        field_array = f"xr_stdlib_object_fields_{c_module_ident(object_shape.module)}_{object_shape.name}"
         lines.append(f"static const XrStdlibHandleFieldDefEntry {field_array}[] = {{")
-        for field in record.fields:
+        for field in object_shape.fields:
             lines.append(
                 "    {"
-                f"{c_string(record.module)}, {c_string(record.name)}, {c_string(field.name)}, "
+                f"{c_string(object_shape.module)}, {c_string(object_shape.name)}, {c_string(field.name)}, "
                 f"{c_string(field.type)}, {'true' if field.is_const else 'false'}"
                 "},"
             )
         lines.append("};")
         lines.append("")
-    lines.append("static const XrStdlibRecordDefEntry xr_stdlib_record_def_entries[] = {")
-    for record in records:
-        field_array = f"xr_stdlib_record_fields_{c_module_ident(record.module)}_{record.name}"
+    lines.append("static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {")
+    for object_shape in object_shapes:
+        field_array = f"xr_stdlib_object_fields_{c_module_ident(object_shape.module)}_{object_shape.name}"
         lines.append(
             "    {"
-            f"{c_string(record.module)}, {c_string(record.name)}, {c_string(record.doc)}, "
-            f"{field_array}, {len(record.fields)}, {'true' if record.sealed else 'false'}"
+            f"{c_string(object_shape.module)}, {c_string(object_shape.name)}, {c_string(object_shape.doc)}, "
+            f"{field_array}, {len(object_shape.fields)}, {'true' if object_shape.exact else 'false'}"
             "},"
         )
     lines.extend(
         [
             "};",
-            "#define XR_STDLIB_RECORD_DEF_ENTRY_COUNT "
-            "((uint32_t) (sizeof(xr_stdlib_record_def_entries) / "
-            "sizeof(xr_stdlib_record_def_entries[0])))",
+            "#define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT "
+            "((uint32_t) (sizeof(xr_stdlib_object_shape_def_entries) / "
+            "sizeof(xr_stdlib_object_shape_def_entries[0])))",
             "",
         ]
     )
@@ -1920,7 +1920,7 @@ def output_paths(root: Path) -> dict[Path, str]:
         entries,
         constants,
         handles,
-        records,
+        object_shapes,
         enums,
         type_methods,
         native_classes,
@@ -1945,7 +1945,7 @@ def output_paths(root: Path) -> dict[Path, str]:
             entries,
             constants,
             handles,
-            records,
+            object_shapes,
             enums,
             type_methods,
             native_classes,

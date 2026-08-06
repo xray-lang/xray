@@ -177,7 +177,7 @@ static uint64_t type_hash_depth(const XrType *type, int depth) {
             h ^= type_hash_depth(type->fixed_array.element_type, depth + 1);
             h *= UINT64_C(1099511628211);
             break;
-        case XR_KIND_RECORD:
+        case XR_KIND_STRUCT_OBJECT:
         case XR_KIND_JSON:
             h = struct_hash_string(h, type->object.type_name);
             h ^= (uint64_t) (type->object.field_count < 0 ? 0 : type->object.field_count);

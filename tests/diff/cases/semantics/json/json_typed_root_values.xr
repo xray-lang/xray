@@ -1,0 +1,51 @@
+// anchor: json-typed-root-values
+// Task 260: JsonDecodable(T) applies to root scalars and containers, not only
+// fields nested inside an exact structural object.
+
+enum WireKind { Text, Binary }
+
+var parsedInt: int = Json.parse<int>("7")
+var parsedBool: bool = Json.parse<bool>("true")
+var parsedString: string = Json.parse<string>("\"ok\"")
+var parsedArray: Array<int> = Json.parse<Array<int>>("[1,2,3]")
+var parsedMap: Map<string, Array<int>> =
+    Json.parse<Map<string, Array<int>>>("{\"odd\":[1,3],\"even\":[2,4]}")
+
+print(parsedInt)
+print(parsedBool)
+print(parsedString)
+print(len(parsedArray))
+print(len(parsedMap))
+
+var decodedInt = Json.decode<int>(Json.parse("9"))
+var decodedArray = Json.decode<Array<int>>(Json.parse("[4,5]"))
+var decodedMap = Json.decode<Map<string, int>>(Json.parse("{\"a\":1,\"b\":2}"))
+print(decodedInt == null)
+print(decodedInt!)
+print(decodedArray == null)
+print(len(decodedArray!))
+print(decodedMap == null)
+print(len(decodedMap!))
+print(Json.decode<Array<int>>(Json.parse("[1,true]")) == null)
+print(Json.decode<Map<string, int>>(Json.parse("{\"a\":false}")) == null)
+
+var parsedKind: WireKind = Json.parse<WireKind>("\"Binary\"")
+var decodedKind = Json.decode<WireKind>(Json.parse("\"Binary\""))
+var parsedKinds = Json.parse<Array<WireKind>>("[\"Text\",\"Binary\"]")
+var decodedKinds = Json.decode<Map<string, WireKind>>(
+    Json.parse("{\"primary\":\"Binary\"}"))
+print(parsedKind == WireKind.Binary)
+print(decodedKind == null)
+print(decodedKind! == WireKind.Binary)
+print(decodedKinds == null)
+print(decodedKinds!["primary"] == WireKind.Binary)
+print(Json.stringify(parsedKinds))
+print(Json.decode<WireKind>(Json.parse("\"Missing\"")) == null)
+
+try {
+    var bad = Json.parse<Array<int>>("[1,false]")
+    print(len(bad))
+} catch panic (p) {
+    print(p.message)
+    print(p.code)
+}

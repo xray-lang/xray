@@ -65,6 +65,86 @@ static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object, const
 static const char *xa_call_object_module_name(XaInferContext *ctx, AstNode *object);
 static bool xa_type_layout_has_flexible_tail(const XrType *type);
 
+static bool xa_call_is_json_static_method(const CallExprNode *call, const char *method_name) {
+    if (!call || !method_name || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    const MemberAccessNode *member = &call->callee->as.member_access;
+    return member->name && strcmp(member->name, method_name) == 0 && member->object &&
+           member->object->type == AST_VARIABLE && member->object->as.variable.name &&
+           strcmp(member->object->as.variable.name, "Json") == 0;
+}
+
+static XrType *xa_json_resolve_target_type(XaInferContext *ctx, const XrTypeRef *target_ref) {
+    if (!ctx || !ctx->analyzer || !target_ref)
+        return NULL;
+    XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, target_ref);
+    if (target && target->kind == XR_KIND_CLASS && target->instance.class_name) {
+        XaSymbol *alias =
+            xa_scope_lookup(ctx->analyzer->current_scope, target->instance.class_name);
+        if (alias && alias->kind == XA_SYM_TYPE_ALIAS && alias->alias_type)
+            target = alias->alias_type;
+    }
+    return target;
+}
+
+static XrType *xa_visit_json_typed_parse(XaInferContext *ctx, AstNode *node,
+                                         const CallExprNode *call) {
+    XrLocation loc = {
+        .file = ctx ? ctx->file_path : NULL,
+        .line = node ? node->line : 0,
+        .column = node ? node->column : 0,
+    };
+    if (!ctx || !ctx->analyzer || !call)
+        return xr_type_new_error(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
+    if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   "Json.parse<T>() expects exactly 1 type argument", &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+    if (call->arg_count != 1) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WRONG_ARG_COUNT,
+                                   "Json.parse<T>() expects exactly 1 argument", &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+    if (xa_call_has_explicit_arg_access(call)) {
+        xa_report_arg_accesses_require_known_contract(ctx, node, call);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
+    XrType *target = xa_json_resolve_target_type(ctx, call->type_args[0]);
+    if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument",
+                                          "Json.parse<T>()", node ? node->line : 0,
+                                          node ? node->column : 0))
+        return xr_type_new_error(ctx->analyzer->isolate);
+
+    XaJsonCapabilityResult capability = xa_json_decodable(target);
+    if (!capability.supported) {
+        char msg[320];
+        snprintf(msg, sizeof(msg), "Json.parse<T>() target is not decodable: %s",
+                 xa_json_capability_reason_name(capability.reason));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+    if (!xr_type_is_json_decode_field_supported(target) && !XR_TYPE_IS_INSTANCE(target)) {
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
+            "Json.parse<T>() target is not decodable: UNSUPPORTED_TYPE", &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
+    XrType *input = xa_visit_infer_expr(ctx, call->arguments[0]);
+    if (!input || !XR_TYPE_IS_STRING(input) || input->is_nullable) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "Json.parse<T>() expects a non-null string argument", &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+    XrType *result = xr_type_copy(ctx->analyzer->isolate, target);
+    if (result)
+        result->is_nullable = false;
+    return result;
+}
+
 static XaSymbolLinks *xa_refresh_imported_symbol_metadata(XaInferContext *ctx, XaSymbol *sym) {
     if (!ctx || !ctx->analyzer || !sym)
         return NULL;
@@ -5923,6 +6003,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (mem_access)
         return xa_mem_access_return_type(ctx, node, call, mem_access);
 
+    if (xa_call_is_json_static_method(call, "parse") && call->type_arg_count > 0)
+        return xa_visit_json_typed_parse(ctx, node, call);
+
     if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
         strcmp(call->callee->as.variable.name, "typeName") == 0 && call->type_arg_count > 0) {
         if (call->type_arg_count != 1) {
@@ -5976,56 +6059,68 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         MemberAccessNode *ma = &call->callee->as.member_access;
         if (ma->name && strcmp(ma->name, "decode") == 0 && ma->object &&
             ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "Json") == 0) {
-            XrType *target_type =
-                call->type_args[0] ? xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0])
-                                   : NULL;
+            XrType *target_type = xa_json_resolve_target_type(ctx, call->type_args[0]);
             if (xa_reject_error_type_success_type(ctx->analyzer, target_type,
                                                   "generic type argument", "Json.decode<T>()",
                                                   node ? node->line : 0, node ? node->column : 0))
                 return xr_type_new_error(NULL);
 
-            // Resolve type alias to its underlying object type
-            if (target_type && target_type->kind == XR_KIND_CLASS &&
-                target_type->instance.class_name) {
-                XaSymbol *alias_sym =
-                    xa_scope_lookup(ctx->analyzer->current_scope, target_type->instance.class_name);
-                if (alias_sym && alias_sym->kind == XA_SYM_TYPE_ALIAS && alias_sym->alias_type) {
-                    target_type = alias_sym->alias_type;
-                }
-            }
-
-            // Validate: target must be a sealed Record type with known fields.
-            if (!target_type || !XR_TYPE_IS_RECORD(target_type) || !target_type->object.is_sealed ||
-                target_type->object.field_count == 0) {
+            XaJsonCapabilityResult target_capability = xa_json_decodable(target_type);
+            bool structural_target = XR_TYPE_IS_STRUCT_OBJECT(target_type);
+            bool class_target = XR_TYPE_IS_INSTANCE(target_type);
+            if ((class_target && !target_capability.supported) ||
+                (!structural_target && !class_target &&
+                 (!target_capability.supported ||
+                  !xr_type_is_json_decode_field_supported(target_type))) ||
+                (structural_target &&
+                 target_capability.reason == XA_JSON_CAPABILITY_OPEN_ROW_TARGET)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
-                xa_analyzer_add_diagnostic(
-                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
-                    "Json.decode<T>() requires T to be a sealed Record type alias with fields",
-                    &loc);
+                char msg[256];
+                snprintf(msg, sizeof(msg), "Json.decode<T>() target is not decodable: %s",
+                         xa_json_capability_reason_name(target_capability.supported
+                                                            ? XA_JSON_CAPABILITY_UNSUPPORTED_TYPE
+                                                            : target_capability.reason));
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
                 return xr_type_new_error(ctx->analyzer->isolate);
             }
 
-            for (int i = 0; i < target_type->object.field_count; i++) {
+            for (int i = 0; structural_target && i < target_type->object.field_count; i++) {
                 XrType *field_type =
                     target_type->object.field_types ? target_type->object.field_types[i] : NULL;
-                if (xr_type_is_json_decode_field_supported(field_type))
+                XaJsonCapabilityResult field_capability = xa_json_decodable(field_type);
+                if (field_capability.supported &&
+                    xr_type_is_json_decode_field_supported(field_type))
                     continue;
                 const char *field_name =
                     target_type->object.field_names ? target_type->object.field_names[i] : "?";
                 char msg[256];
                 snprintf(msg, sizeof(msg),
-                         "Json.decode<T>() field '%s' has unsupported type '%s'; supported field "
-                         "types are null, bool, int, float, string, Json, nested Record, "
-                         "Array<Json>, and "
-                         "nullable variants",
+                         "Json.decode<T>() field '%s' is not decodable: %s (type '%s')",
                          field_name ? field_name : "?",
+                         xa_json_capability_reason_name(field_capability.supported
+                                                            ? XA_JSON_CAPABILITY_UNSUPPORTED_TYPE
+                                                            : field_capability.reason),
                          field_type ? xr_type_to_string(field_type) : "unknown");
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
                 return xr_type_new_unknown(NULL);
+            }
+            if (structural_target && (!target_capability.supported ||
+                                      !xr_type_is_json_decode_field_supported(target_type))) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[256];
+                snprintf(msg, sizeof(msg), "Json.decode<T>() target is not decodable: %s",
+                         xa_json_capability_reason_name(target_capability.supported
+                                                            ? XA_JSON_CAPABILITY_UNSUPPORTED_TYPE
+                                                            : target_capability.reason));
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+                return xr_type_new_error(ctx->analyzer->isolate);
             }
 
             // Validate: exactly 1 argument
@@ -6907,7 +7002,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         param_type->enum_type.enum_name ? param_type->enum_type.enum_name : "Enum");
                 } else {
                     char reason[192];
-                    if (xr_type_record_mismatch_reason(param_type, arg_type, reason,
+                    if (xr_type_object_mismatch_reason(param_type, arg_type, reason,
                                                        sizeof(reason))) {
                         snprintf(
                             msg, sizeof(msg),

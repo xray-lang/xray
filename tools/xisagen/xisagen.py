@@ -20,6 +20,8 @@ Usage:
   python3 xisagen.py test
 """
 
+from __future__ import annotations
+
 import sys
 import re
 import os
@@ -135,7 +137,7 @@ class SList(SExpr):
             return v.str_value
         return default
 
-    def get_kw_list(self, keyword: str) -> 'SList' | None:
+    def get_kw_list(self, keyword: str) -> SList | None:
         v = self.get_kw(keyword)
         if isinstance(v, SList):
             return v
@@ -322,7 +324,7 @@ VALID_XI_TBAA_GROUPS = {
     'field',
     'fresh',
     'global',
-    'json',
+    'object',
     'none',
     'shared',
     'struct',
@@ -881,7 +883,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_TBAA_GLOBAL = 7,')
     lines.append('    XI_GEN_TBAA_UPVAL = 8,')
     lines.append('    XI_GEN_TBAA_TLS = 9,')
-    lines.append('    XI_GEN_TBAA_JSON = 10,')
+    lines.append('    XI_GEN_TBAA_OBJECT = 10,')
     lines.append('    XI_GEN_TBAA_TUPLE = 11,')
     lines.append('    XI_GEN_TBAA_CHAN = 12,')
     lines.append('    XI_GEN_TBAA_FRESH = 13,')

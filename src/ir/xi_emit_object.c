@@ -11,13 +11,16 @@
 
 #include "xi_emit_internal.h"
 #include "xi_own.h"
+#include "../analysis/xglobal_summary.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/class/xclass.h"
+#include "../runtime/class/xclass_info.h"
 #include "../runtime/class/xinstance.h"
 #include "../runtime/class/xmethod.h"
+#include "../runtime/class/xenum.h"
 #include "../runtime/closure/xclosure.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
@@ -25,9 +28,13 @@
 #include "../module/xmodule.h"
 #include "../base/xfileio.h"
 #include "../base/xmalloc.h"
+#include "../shared/xr_elem_type.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/analyzer/xa_selection.h"
+#include "../frontend/analyzer/xanalyzer_symbol.h"
+
+#include <limits.h>
 
 /* Recursively propagate shared_offset to a proto and all its descendants.
  * When a parent closure emits a child via xi_emit(), the child's sub-protos
@@ -583,69 +590,280 @@ XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_NEWSET, dst, b_field, 0));
 }
 
-static uint8_t *xi_json_record_value_kinds(const XrType *type, int field_count) {
-    if (!type || !XR_TYPE_IS_RECORD(type) || field_count <= 0 || !type->object.field_types ||
+static int xi_object_shape_type_ordinal(const XrType *type, const char *name, int fallback);
+
+static uint8_t *xi_json_struct_object_value_kinds(const XrType *type,
+                                                  const char *const *field_names, int field_count) {
+    if (!type || !XR_TYPE_IS_STRUCT_OBJECT(type) || field_count <= 0 || !type->object.field_types ||
         type->object.field_count != field_count)
         return NULL;
     uint8_t *kinds = (uint8_t *) xr_malloc((size_t) field_count);
     if (!kinds)
         return NULL;
-    for (int i = 0; i < field_count; i++)
-        kinds[i] = xr_type_json_value_kind(type->object.field_types[i]);
+    for (int i = 0; i < field_count; i++) {
+        int type_ordinal =
+            xi_object_shape_type_ordinal(type, field_names ? field_names[i] : NULL, i);
+        kinds[i] = xr_type_json_value_kind(type->object.field_types[type_ordinal]);
+    }
     return kinds;
 }
 
-static XrClass *xi_json_record_class_from_type_depth(EmitCtx *ctx, const XrType *type, int depth);
-
-static bool xi_json_record_nested_classes(EmitCtx *ctx, const XrType *type, int field_count,
-                                          int depth, XrClass ***out_nested_classes) {
-    *out_nested_classes = NULL;
-    bool has_nested = false;
-    for (int i = 0; i < field_count; i++) {
-        uint8_t kind = xr_type_json_value_kind(type->object.field_types[i]);
-        if (xr_json_value_kind_base(kind) == XR_JSON_VALUE_RECORD) {
-            has_nested = true;
-            break;
-        }
+static int xi_object_shape_type_ordinal(const XrType *type, const char *name, int fallback) {
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || !name || !type->object.field_names)
+        return fallback;
+    for (int i = 0; i < type->object.field_count; i++) {
+        if (type->object.field_names[i] && strcmp(type->object.field_names[i], name) == 0)
+            return i;
     }
-    if (!has_nested)
-        return true;
-
-    XrClass **nested_classes = (XrClass **) xr_calloc((size_t) field_count, sizeof(XrClass *));
-    if (!nested_classes)
-        return false;
-    for (int i = 0; i < field_count; i++) {
-        uint8_t kind = xr_type_json_value_kind(type->object.field_types[i]);
-        if (xr_json_value_kind_base(kind) != XR_JSON_VALUE_RECORD)
-            continue;
-        nested_classes[i] =
-            xi_json_record_class_from_type_depth(ctx, type->object.field_types[i], depth + 1);
-        if (!nested_classes[i]) {
-            xr_free(nested_classes);
-            return false;
-        }
-    }
-    *out_nested_classes = nested_classes;
-    return true;
+    return fallback;
 }
 
-static XrClass *xi_json_record_class_from_type_depth(EmitCtx *ctx, const XrType *type, int depth) {
-    if (!ctx || !ctx->isolate || !type || !XR_TYPE_IS_RECORD(type) || depth > 16 ||
+static uint64_t *xi_object_shape_stable_type_keys(const XrType *type,
+                                                  const char *const *field_names, int field_count) {
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || field_count <= 0 || !type->object.field_types ||
+        type->object.field_count != field_count)
+        return NULL;
+    uint64_t *keys = (uint64_t *) xr_malloc((size_t) field_count * sizeof(uint64_t));
+    if (!keys)
+        return NULL;
+    for (int i = 0; i < field_count; i++) {
+        int type_ordinal =
+            xi_object_shape_type_ordinal(type, field_names ? field_names[i] : NULL, i);
+        keys[i] = xr_type_stable_key(type->object.field_types[type_ordinal]);
+    }
+    return keys;
+}
+
+static uint8_t *xi_object_shape_field_flags(const XrType *type, const char *const *field_names,
+                                            int field_count) {
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || field_count <= 0 ||
+        type->object.field_count != field_count)
+        return NULL;
+    uint8_t *flags = (uint8_t *) xr_calloc((size_t) field_count, sizeof(uint8_t));
+    if (!flags)
+        return NULL;
+    for (int i = 0; i < field_count; i++) {
+        int type_ordinal =
+            xi_object_shape_type_ordinal(type, field_names ? field_names[i] : NULL, i);
+        if (type->object.field_readonly && type->object.field_readonly[type_ordinal])
+            flags[i] |= XR_OBJECT_SHAPE_FIELD_READONLY;
+    }
+    return flags;
+}
+
+static XrClass *xi_json_struct_object_class_from_type_depth(EmitCtx *ctx, const XrType *type,
+                                                            int depth,
+                                                            const char *const *canonical_names,
+                                                            int canonical_name_count);
+
+static uint8_t xi_json_decode_storage_type(const XrType *type) {
+    if (!type || type->is_nullable)
+        return XR_ELEM_ANY;
+    if (XR_TYPE_IS_RUNE(type))
+        return XR_ELEM_RUNE;
+    int native = xr_type_kind_to_native(type->kind, type->scalar_rep);
+    return native >= 0 ? (uint8_t) xr_native_type_to_elem_type((uint8_t) native) : XR_ELEM_ANY;
+}
+
+static void xi_json_decode_schema_dispose(XrJsonDecodeSchema *schema) {
+    if (!schema)
+        return;
+    if (schema->child) {
+        XrJsonDecodeSchema *child = (XrJsonDecodeSchema *) schema->child;
+        xi_json_decode_schema_dispose(child);
+        xr_free(child);
+    }
+    memset(schema, 0, sizeof(*schema));
+}
+
+static XrEnumType *xi_json_decode_enum_type_from_type(EmitCtx *ctx, const XrType *type) {
+    const XrEnumLayout *layout = type && XR_TYPE_IS_ENUM(type) ? type->enum_type.layout : NULL;
+    if (!ctx || !ctx->isolate || !layout || !layout->is_zero_payload || !layout->nominal_owner ||
+        !layout->nominal_owner[0] || !layout->name || layout->variant_count == 0 ||
+        layout->variant_count > INT_MAX || !layout->variants)
+        return NULL;
+    char **member_names = (char **) xr_malloc((size_t) layout->variant_count * sizeof(char *));
+    if (!member_names)
+        return NULL;
+    for (uint32_t i = 0; i < layout->variant_count; i++)
+        member_names[i] = (char *) layout->variants[i].name;
+    XrEnumType *result = xr_enum_type_new(ctx->isolate, layout->nominal_owner, layout->name,
+                                          member_names, (int) layout->variant_count);
+    xr_free(member_names);
+    return result;
+}
+
+static bool xi_json_decode_schema_from_type(EmitCtx *ctx, const XrType *type, int depth,
+                                            XrJsonDecodeSchema *out) {
+    if (!ctx || !type || !out || depth > 16)
+        return false;
+    memset(out, 0, sizeof(*out));
+    if (XR_TYPE_IS_INSTANCE(type) && type->instance.class_ref &&
+        (type->instance.class_ref->derive_flags & XR_DERIVE_JSON) != 0 &&
+        type->instance.class_name) {
+        XrString *class_name = xr_string_intern_permanent(ctx->isolate, type->instance.class_name,
+                                                          strlen(type->instance.class_name));
+        if (!class_name)
+            return false;
+        out->value_kind =
+            XR_JSON_VALUE_CLASS_INSTANCE | (type->is_nullable ? XR_JSON_VALUE_NULLABLE : 0u);
+        out->target_descriptor = class_name;
+        return true;
+    }
+    out->value_kind = xr_type_json_value_kind(type);
+    switch ((XrJsonValueKind) xr_json_value_kind_base(out->value_kind)) {
+        case XR_JSON_VALUE_STRUCT_OBJECT:
+            out->target_descriptor =
+                xi_json_struct_object_class_from_type_depth(ctx, type, depth + 1, NULL, 0);
+            return out->target_descriptor != NULL;
+        case XR_JSON_VALUE_ARRAY:
+        case XR_JSON_VALUE_MAP: {
+            const XrType *child_type =
+                XR_TYPE_IS_ARRAY(type) ? type->container.element_type : type->map.value_type;
+            if (!child_type)
+                return false;
+            out->storage_type = xi_json_decode_storage_type(child_type);
+            XrJsonDecodeSchema *child = (XrJsonDecodeSchema *) xr_calloc(1, sizeof(*child));
+            if (!child)
+                return false;
+            if (!xi_json_decode_schema_from_type(ctx, child_type, depth + 1, child)) {
+                xi_json_decode_schema_dispose(child);
+                xr_free(child);
+                return false;
+            }
+            out->child = child;
+            return true;
+        }
+        case XR_JSON_VALUE_ENUM:
+            out->target_descriptor = xi_json_decode_enum_type_from_type(ctx, type);
+            return out->target_descriptor != NULL;
+        case XR_JSON_VALUE_NULL:
+        case XR_JSON_VALUE_BOOL:
+        case XR_JSON_VALUE_INT:
+        case XR_JSON_VALUE_FLOAT:
+        case XR_JSON_VALUE_STRING:
+        case XR_JSON_VALUE_JSON:
+            return true;
+        case XR_JSON_VALUE_ANY:
+        default:
+            return false;
+    }
+}
+
+static XrClass *xi_json_struct_object_class_from_type_depth(EmitCtx *ctx, const XrType *type,
+                                                            int depth,
+                                                            const char *const *canonical_names,
+                                                            int canonical_name_count) {
+    if (!ctx || !ctx->isolate || !type || !XR_TYPE_IS_STRUCT_OBJECT(type) || depth > 16 ||
         type->object.field_count <= 0 || !type->object.field_names || !type->object.field_types)
         return NULL;
     int field_count = type->object.field_count;
-    uint8_t *value_kinds = xi_json_record_value_kinds(type, field_count);
-    if (!value_kinds)
+    const char **field_names =
+        (const char **) xr_malloc((size_t) field_count * sizeof(const char *));
+    if (!field_names)
         return NULL;
-    XrClass **nested_classes = NULL;
-    if (!xi_json_record_nested_classes(ctx, type, field_count, depth, &nested_classes)) {
+    if (canonical_names && canonical_name_count == field_count) {
+        for (int i = 0; i < field_count; i++)
+            field_names[i] = canonical_names[i];
+    } else {
+        for (int i = 0; i < field_count; i++)
+            field_names[i] = type->object.field_names[i];
+        for (int i = 1; i < field_count; i++) {
+            const char *current = field_names[i];
+            uint64_t current_stable = xg_object_stable_name_key(current);
+            uint32_t current_id = xg_name_id(current);
+            int j = i;
+            while (j > 0) {
+                uint64_t previous_stable = xg_object_stable_name_key(field_names[j - 1]);
+                uint32_t previous_id = xg_name_id(field_names[j - 1]);
+                if (previous_stable < current_stable ||
+                    (previous_stable == current_stable && previous_id <= current_id))
+                    break;
+                field_names[j] = field_names[j - 1];
+                j--;
+            }
+            field_names[j] = current;
+        }
+    }
+    uint8_t *value_kinds = xi_json_struct_object_value_kinds(type, field_names, field_count);
+    if (!value_kinds) {
+        xr_free(field_names);
+        return NULL;
+    }
+    XrClass **nested_classes = (XrClass **) xr_calloc((size_t) field_count, sizeof(XrClass *));
+    XrJsonDecodeSchema *schemas =
+        (XrJsonDecodeSchema *) xr_calloc((size_t) field_count, sizeof(XrJsonDecodeSchema));
+    if (!nested_classes || !schemas) {
+        xr_free(field_names);
+        xr_free(value_kinds);
+        xr_free(nested_classes);
+        xr_free(schemas);
+        return NULL;
+    }
+    for (int i = 0; i < field_count; i++) {
+        int type_ordinal =
+            xi_object_shape_type_ordinal(type, field_names ? field_names[i] : NULL, i);
+        if (!xi_json_decode_schema_from_type(ctx, type->object.field_types[type_ordinal], depth,
+                                             &schemas[i])) {
+            for (int j = 0; j <= i; j++)
+                xi_json_decode_schema_dispose(&schemas[j]);
+            xr_free(field_names);
+            xr_free(value_kinds);
+            xr_free(nested_classes);
+            xr_free(schemas);
+            return NULL;
+        }
+        if (xr_json_value_kind_base(schemas[i].value_kind) == XR_JSON_VALUE_STRUCT_OBJECT)
+            nested_classes[i] = (XrClass *) schemas[i].target_descriptor;
+    }
+    uint64_t *stable_type_keys = xi_object_shape_stable_type_keys(type, field_names, field_count);
+    uint8_t *shape_field_flags = xi_object_shape_field_flags(type, field_names, field_count);
+    if (!stable_type_keys || !shape_field_flags) {
+        xr_free(field_names);
+        xr_free(shape_field_flags);
+        xr_free(stable_type_keys);
+        xr_free(nested_classes);
+        for (int i = 0; i < field_count; i++)
+            xi_json_decode_schema_dispose(&schemas[i]);
+        xr_free(schemas);
         xr_free(value_kinds);
         return NULL;
     }
-    XrClass *cls = xr_class_build_record_chain(ctx->isolate, type->object.field_names, value_kinds,
-                                               field_count, nested_classes, type->object.is_sealed);
+    XrClass *cls = xr_class_build_struct_object_chain(ctx->isolate, field_names, value_kinds,
+                                                      field_count, nested_classes, schemas,
+                                                      stable_type_keys, shape_field_flags);
+    xr_free(field_names);
+    xr_free(shape_field_flags);
+    xr_free(stable_type_keys);
     xr_free(nested_classes);
+    for (int i = 0; i < field_count; i++)
+        xi_json_decode_schema_dispose(&schemas[i]);
+    xr_free(schemas);
     xr_free(value_kinds);
+    return cls;
+}
+
+static XrClass *xi_json_decode_root_class_from_type(EmitCtx *ctx, const XrType *type) {
+    if (!ctx || !ctx->isolate || !type || XR_TYPE_IS_STRUCT_OBJECT(type))
+        return NULL;
+    XrJsonDecodeSchema schema = {0};
+    if (!xi_json_decode_schema_from_type(ctx, type, 0, &schema))
+        return NULL;
+    static const char root_name[] = "\x1fjson_decode_root";
+    const char *names[] = {root_name};
+    uint8_t kinds[] = {schema.value_kind};
+    XrClass *nested[] = {
+        xr_json_value_kind_base(schema.value_kind) == XR_JSON_VALUE_STRUCT_OBJECT
+            ? (XrClass *) schema.target_descriptor
+            : NULL,
+    };
+    uint64_t stable_type_keys[] = {xr_type_stable_key(type)};
+    const uint8_t shape_flags[] = {0};
+    XrClass *cls = xr_class_build_struct_object_chain(ctx->isolate, names, kinds, 1, nested,
+                                                      &schema, stable_type_keys, shape_flags);
+    xi_json_decode_schema_dispose(&schema);
+    if (cls)
+        cls->flags |= XR_CLASS_JSON_DECODE_ROOT;
     return cls;
 }
 
@@ -664,14 +882,20 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, 0, 0));
         return;
     }
-    /* Build dynamic-layout class chain. Record and Json share the fixed-index
-     * field storage machinery but use separate roots and builtin kinds. */
+    /* Build a dynamic-layout class chain. Structural objects and Json share
+     * fixed-index storage but retain distinct domains and roots. */
     int n = field_count > 0 ? field_count : 0;
-    bool is_record = v->type && v->type->kind == XR_KIND_RECORD;
-    bool sealed = is_record ? v->type->object.is_sealed : false;
+    bool is_struct_object = v->type && v->type->kind == XR_KIND_STRUCT_OBJECT;
+    uint64_t *stable_type_keys = xi_object_shape_stable_type_keys(v->type, field_names, n);
+    uint8_t *shape_field_flags = xi_object_shape_field_flags(v->type, field_names, n);
     XrClass *cls =
-        is_record ? xr_class_build_record_chain(ctx->isolate, field_names, NULL, n, NULL, sealed)
-                  : xr_class_build_json_chain(ctx->isolate, field_names, n, false);
+        is_struct_object
+            ? xr_class_build_struct_object_chain(ctx->isolate, field_names, NULL, n, NULL, NULL,
+                                                 stable_type_keys, shape_field_flags)
+            : xr_class_build_json_chain(ctx->isolate, field_names, n, stable_type_keys,
+                                        shape_field_flags, false);
+    xr_free(shape_field_flags);
+    xr_free(stable_type_keys);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -690,7 +914,7 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 /* Json field init by index: OP_JSON_INIT A B C (A=json, B=field_idx, C=val) */
-XR_FUNC void xi_emit_json_init_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_object_init_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst; /* dst unused; this is a store op */
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -708,12 +932,25 @@ XR_FUNC void xi_emit_json_init_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 /* Json field read by index: OP_JSON_GET A B C (A=dst, B=json, C=field_idx) */
-XR_FUNC void xi_emit_json_get_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_object_get_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
     XiEmitReg json_reg = reg_of(ctx, v->args[0]);
+    if ((v->lowering_flags & XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH) != 0) {
+        const char *field_name = (const char *) v->aux;
+        if (!field_name) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        int symbol = add_symbol(ctx, field_name);
+        uint16_t symbol_arg = 0;
+        if (ctx->status != XI_EMIT_OK || !xi_emit_symbol_index_to_arg(ctx, symbol, &symbol_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_OBJECT_GETK, dst, json_reg, symbol_arg));
+        return;
+    }
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
         return;
@@ -724,7 +961,7 @@ XR_FUNC void xi_emit_json_get_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 /* Json field write by index: OP_JSON_SET A B C (A=json, B=field_idx, C=val) */
-XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_object_set_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst; /* dst unused; this is a store op */
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -732,6 +969,19 @@ XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     XiEmitReg json_reg = reg_of(ctx, v->args[0]);
     XiEmitReg val_reg = reg_of(ctx, v->args[1]);
+    if ((v->lowering_flags & XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH) != 0) {
+        const char *field_name = (const char *) v->aux;
+        if (!field_name) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        int symbol = add_symbol(ctx, field_name);
+        uint16_t symbol_arg = 0;
+        if (ctx->status != XI_EMIT_OK || !xi_emit_symbol_index_to_arg(ctx, symbol, &symbol_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_OBJECT_SETK, json_reg, symbol_arg, val_reg));
+        return;
+    }
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
         return;
@@ -769,7 +1019,9 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     int n = (int) v->aux_int;
     const char **field_names = (const char **) v->aux;
-    XR_DCHECK(n > 0 && field_names != NULL, "json_decode: no field info");
+    bool object_target = v->type && XR_TYPE_IS_STRUCT_OBJECT(v->type);
+    XR_DCHECK(!object_target || (n > 0 && field_names != NULL),
+              "json_decode: object target has no field info");
     if (n < 0 || n > UINT16_MAX) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -779,8 +1031,13 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    /* Build sealed Record class chain for typed Json.decode<T>. */
-    XrClass *cls = xi_json_record_class_from_type_depth(ctx, v->type, 0);
+    /* Object targets use their exact class directly. Other decodable targets
+     * use an internal one-field class solely as a bytecode-serializable root
+     * schema carrier; it is never allocated as a language value. */
+    XrClass *cls = object_target
+                       ? xi_json_struct_object_class_from_type_depth(
+                             ctx, v->type, 0, (const char *const *) v->aux, (int) v->aux_int)
+                       : xi_json_decode_root_class_from_type(ctx, v->type);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -794,7 +1051,10 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (!xi_emit_const_index_to_c(ctx, kidx, &karg))
         return;
 
-    emit_inst(ctx, CREATE_ABC(OP_JSON_DECODE, dst, data_reg, karg));
+    OpCode opcode = (v->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0
+                        ? OP_JSON_PARSE_TYPED
+                        : OP_JSON_DECODE;
+    emit_inst(ctx, CREATE_ABC(opcode, dst, data_reg, karg));
 }
 
 /* Range creation */
@@ -1195,7 +1455,7 @@ static XrValue ast_field_default_to_value(EmitCtx *ctx, AstNode *init) {
 }
 
 /* Populate instance and static fields on the descriptor from AST. */
-static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd,
+static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd, XrClassInfo *class_info,
                                            XrClassDescriptor *desc) {
     /* Instance fields */
     uint32_t fc = 0;
@@ -1221,6 +1481,19 @@ static bool emit_class_collect_fields_impl(EmitCtx *ctx, ClassDeclNode *cd,
                               : NULL;
             desc->instance_fields[idx].default_value =
                 ast_field_default_to_value(ctx, f->initializer);
+            if ((desc->flags & XR_CLASS_DERIVE_JSON) != 0) {
+                XaSymbol *field_symbol =
+                    class_info ? xa_class_info_lookup_instance_member(class_info, f->name) : NULL;
+                XrType *field_type =
+                    field_symbol && (field_symbol->links.type || field_symbol->links.declared_type)
+                        ? (field_symbol->links.type ? field_symbol->links.type
+                                                    : field_symbol->links.declared_type)
+                        : (f->field_type ? xr_tref_resolve(ctx->isolate, f->field_type) : NULL);
+                if (!field_type ||
+                    !xi_json_decode_schema_from_type(
+                        ctx, field_type, 0, &desc->instance_fields[idx].json_decode_schema))
+                    return false;
+            }
             if (f->is_private)
                 desc->instance_fields[idx].flags |= XR_FIELD_PRIVATE;
             if (f->is_final)
@@ -1352,7 +1625,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
     if (cdata->is_cycle_candidate)
         desc->flags |= XR_CLASS_CYCLE_CANDIDATE;
 
-    if (!emit_class_collect_fields_impl(ctx, cd, desc)) {
+    if (!emit_class_collect_fields_impl(ctx, cd, cdata->class_info, desc)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }

@@ -1,0 +1,9 @@
+args=--dump-global-evidence
+regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=parse action=parse_runtime_direct_typed input_type=[1-9][0-9]* target_type=[1-9][0-9]* input_shape=0 output_shape=[1-9][0-9]* fields=3 evidence=0xd1 reason=none
+c_contains=xrt_json_parse_typed_object_or_throw(
+c_contains=static const XrtObjectShape _xobj_shape_
+c_contains=(const XrJsonDecodeFieldSpec[])
+c_contains={"inner", 7,
+c_contains={"values", 8, NULL, 0, NULL}
+c_not_contains=xrt_json_parse(
+c_not_contains=xrt_json_decode_struct_object(

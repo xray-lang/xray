@@ -175,7 +175,7 @@ typedef struct PatternTupleNode {
  * variant is the AST_MEMBER_ACCESS / AST_ENUM_ACCESS node for the
  * variant name; sub-patterns are AST_PATTERN_* nodes for each payload
  * slot (bindings, wildcards, or literals). */
-// Object/record match pattern: `{ x, y }` or `{ x: sub }`. field_names[i] is the
+// Object match pattern: `{ x, y }` or `{ x: sub }`. field_names[i] is the
 // source field; patterns[i] is the sub-pattern bound to that field value (a
 // bare-name binding for shorthand `{ x }`, or a nested/renamed sub-pattern for
 // `{ x: sub }`). Matches any object/Json carrying those fields.

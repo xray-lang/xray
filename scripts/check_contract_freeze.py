@@ -134,6 +134,31 @@ CONTRACT_SPECS = (
             "src/frontend/canonical/xcanon.c",
         ),
     ),
+    ContractSpec(
+        "object-json-domain.md",
+        (
+            "src/shared/xobject_row.h",
+            "src/shared/xobject_shape.h",
+            "src/runtime/value/xtype.h",
+            "src/runtime/value/xtype.c",
+            "src/frontend/parser/xtype_ref.h",
+            "src/frontend/parser/xtype_ref.c",
+            "src/frontend/analyzer/xanalyzer_capability.h",
+            "src/frontend/analyzer/xanalyzer_capability.c",
+            "src/frontend/analyzer/xanalyzer_visitor_expr.c",
+            "src/analysis/xglobal_summary.h",
+            "src/ir/xi.h",
+            "xisa/xi/ops.def",
+            "src/aot/xrt_coll.h",
+            "src/aot/xi_cgen_dispatch_helpers.inc.c",
+            "src/aot/xi_cgen_program_entry.inc.c",
+            "src/runtime/class/xclass.h",
+            "src/runtime/class/xinstance.c",
+            "src/module/xbytecode_io.h",
+            "src/module/xbytecode_io.c",
+            "src/aot/xaot_verify.c",
+        ),
+    ),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")

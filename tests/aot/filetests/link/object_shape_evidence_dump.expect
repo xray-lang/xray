@@ -1,0 +1,11 @@
+args=--dump-global-evidence
+contains=object-shape
+contains=kind=literal
+contains=object-field
+contains=object-access
+contains=kind=field_get
+contains=object-shape-plan
+contains=action=exact
+contains=object-access-plan
+contains=action=direct_ordinal
+not_contains=json-dynamic-access

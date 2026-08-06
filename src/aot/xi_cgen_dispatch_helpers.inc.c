@@ -4082,10 +4082,10 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         } else if (xicgen_import_ref_is_core_math_member(ref)) {
             fprintf(out, "XR_NULL_VAL /* builtin math.%s */", ref->member_name);
         } else if (ref && ref->module_path && ref->member_name &&
-                   xa_builtin_get_record_type(ref->module_path, ref->member_name)) {
-            /* Native Record declarations are type-only imports. They have no
+                   xa_builtin_get_object_shape(ref->module_path, ref->member_name)) {
+            /* Native structural object declarations are type-only imports. They have no
              * runtime namespace value to resolve after type erasure. */
-            fprintf(out, "XR_NULL_VAL /* builtin record type: %s.%s */", ref->module_path,
+            fprintf(out, "XR_NULL_VAL /* builtin object type: %s.%s */", ref->module_path,
                     ref->member_name);
         } else if (ref && ref->module_path && ref->member_name &&
                    xa_builtin_get_enum_type(ref->module_path, ref->member_name)) {
@@ -6000,58 +6000,60 @@ static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
 static bool xicgen_verify_json_direct_index_access(XiCgenCtx *ctx, const XiValue *v,
                                                    uint8_t expected_kind, uint8_t alternate_kind) {
     const XaotBundle *bundle;
-    const XaotJsonAccessPlan *plan;
-    if (!v || v->xg_json_access_id == 0)
+    const XaotJsonDynamicAccessPlan *plan;
+    if (!v || v->xg_json_dynamic_access_id == 0)
         return true;
     bundle = cg_ctx_aot_bundle(ctx);
-    plan = xaot_bundle_find_json_access_plan(bundle, v->xg_json_access_id);
+    plan = xaot_bundle_find_json_dynamic_access_plan(bundle, v->xg_json_dynamic_access_id);
     if (!plan) {
         if (ctx)
             ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: missing verified Json access plan for Xi value v%u "
-                "(json_access=%u)\n",
-                v->id, v->xg_json_access_id);
+                "(json_dynamic_access=%u)\n",
+                v->id, v->xg_json_dynamic_access_id);
         return false;
     }
-    if (plan->action != XAOT_JSON_ACCESS_DIRECT_INDEX ||
+    if (plan->action != XAOT_JSON_DYNAMIC_ACCESS_DIRECT_INDEX ||
         (plan->access_kind != expected_kind && plan->access_kind != alternate_kind) ||
         plan->field_ordinal != (uint16_t) v->aux_int) {
         if (ctx)
             ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: stale Json direct-index plan for Xi value v%u "
-                "(json_access=%u action=%u kind=%u field=%u)\n",
-                v->id, v->xg_json_access_id, (unsigned) plan->action, (unsigned) plan->access_kind,
-                (unsigned) plan->field_ordinal);
+                "(json_dynamic_access=%u action=%u kind=%u field=%u)\n",
+                v->id, v->xg_json_dynamic_access_id, (unsigned) plan->action,
+                (unsigned) plan->access_kind, (unsigned) plan->field_ordinal);
         return false;
     }
     return true;
 }
 
-static const XaotJsonAccessPlan *xicgen_find_json_access_plan(XiCgenCtx *ctx, const XiValue *v) {
+static const XaotJsonDynamicAccessPlan *xicgen_find_json_dynamic_access_plan(XiCgenCtx *ctx,
+                                                                             const XiValue *v) {
     const XaotBundle *bundle;
-    const XaotJsonAccessPlan *plan;
-    if (!v || v->xg_json_access_id == 0)
+    const XaotJsonDynamicAccessPlan *plan;
+    if (!v || v->xg_json_dynamic_access_id == 0)
         return NULL;
     bundle = cg_ctx_aot_bundle(ctx);
-    plan = xaot_bundle_find_json_access_plan(bundle, v->xg_json_access_id);
+    plan = xaot_bundle_find_json_dynamic_access_plan(bundle, v->xg_json_dynamic_access_id);
     if (!plan) {
         if (ctx)
             ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: missing verified Json access plan for Xi value v%u "
-                "(json_access=%u)\n",
-                v->id, v->xg_json_access_id);
+                "(json_dynamic_access=%u)\n",
+                v->id, v->xg_json_dynamic_access_id);
         return NULL;
     }
     return plan;
 }
 
-static const XaotJsonAccessPlan *xicgen_json_shape_guard_plan(XiCgenCtx *ctx, const XiValue *v,
-                                                              uint8_t expected_kind,
-                                                              uint8_t alternate_kind) {
-    const XaotJsonAccessPlan *plan = xicgen_find_json_access_plan(ctx, v);
+static const XaotJsonDynamicAccessPlan *xicgen_json_shape_guard_plan(XiCgenCtx *ctx,
+                                                                     const XiValue *v,
+                                                                     uint8_t expected_kind,
+                                                                     uint8_t alternate_kind) {
+    const XaotJsonDynamicAccessPlan *plan = xicgen_find_json_dynamic_access_plan(ctx, v);
     if (!plan)
         return NULL;
     if (plan->access_kind != expected_kind && plan->access_kind != alternate_kind) {
@@ -6059,27 +6061,28 @@ static const XaotJsonAccessPlan *xicgen_json_shape_guard_plan(XiCgenCtx *ctx, co
             ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: stale Json shape-guard plan kind for Xi value v%u "
-                "(json_access=%u action=%u kind=%u)\n",
-                v->id, v->xg_json_access_id, (unsigned) plan->action, (unsigned) plan->access_kind);
+                "(json_dynamic_access=%u action=%u kind=%u)\n",
+                v->id, v->xg_json_dynamic_access_id, (unsigned) plan->action,
+                (unsigned) plan->access_kind);
         return NULL;
     }
-    if (plan->action == XAOT_JSON_ACCESS_SHAPE_GUARD_INDEX && plan->field_ordinal != UINT16_MAX &&
-        plan->key_name_id != 0)
+    if (plan->action == XAOT_JSON_DYNAMIC_ACCESS_SHAPE_GUARD_INDEX &&
+        plan->field_ordinal != UINT16_MAX && plan->key_name_id != 0)
         return plan;
-    if (plan->action == XAOT_JSON_ACCESS_REJECT) {
+    if (plan->action == XAOT_JSON_DYNAMIC_ACCESS_REJECT) {
         if (ctx)
             ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: rejected Json access plan for Xi value v%u "
-                "(json_access=%u)\n",
-                v->id, v->xg_json_access_id);
+                "(json_dynamic_access=%u)\n",
+                v->id, v->xg_json_dynamic_access_id);
     }
     return NULL;
 }
 
-static const XaotJsonAccessPlan *
+static const XaotJsonDynamicAccessPlan *
 xicgen_json_computed_key_guard_plan(XiCgenCtx *ctx, const XiValue *v, uint8_t expected_kind) {
-    const XaotJsonAccessPlan *plan = xicgen_find_json_access_plan(ctx, v);
+    const XaotJsonDynamicAccessPlan *plan = xicgen_find_json_dynamic_access_plan(ctx, v);
     if (!plan)
         return NULL;
     if (plan->access_kind != expected_kind) {
@@ -6087,56 +6090,166 @@ xicgen_json_computed_key_guard_plan(XiCgenCtx *ctx, const XiValue *v, uint8_t ex
             ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: stale Json computed-key plan kind for Xi value v%u "
-                "(json_access=%u action=%u kind=%u)\n",
-                v->id, v->xg_json_access_id, (unsigned) plan->action, (unsigned) plan->access_kind);
+                "(json_dynamic_access=%u action=%u kind=%u)\n",
+                v->id, v->xg_json_dynamic_access_id, (unsigned) plan->action,
+                (unsigned) plan->access_kind);
         return NULL;
     }
-    if (plan->action == XAOT_JSON_ACCESS_COMPUTED_KEY_GUARD)
+    if (plan->action == XAOT_JSON_DYNAMIC_ACCESS_COMPUTED_KEY_GUARD)
         return plan;
-    if (plan->action == XAOT_JSON_ACCESS_REJECT) {
+    if (plan->action == XAOT_JSON_DYNAMIC_ACCESS_REJECT) {
         if (ctx)
             ctx->error = true;
         fprintf(stderr,
                 "[xi_cgen] ERROR: rejected Json computed-key plan for Xi value v%u "
-                "(json_access=%u)\n",
-                v->id, v->xg_json_access_id);
+                "(json_dynamic_access=%u)\n",
+                v->id, v->xg_json_dynamic_access_id);
     }
     return NULL;
 }
 
-static bool xicgen_verify_record_direct_field_access(XiCgenCtx *ctx, const XiValue *v,
-                                                     uint8_t expected_kind) {
+static const XaotObjectAccessPlan *xicgen_require_object_field_access(XiCgenCtx *ctx,
+                                                                      const XiValue *v,
+                                                                      uint8_t expected_kind,
+                                                                      bool *out_unverified) {
     const XaotBundle *bundle;
-    const XaotRecordAccessPlan *plan;
-    if (!v || v->xg_record_access_id == 0)
-        return true;
+    const XaotObjectAccessPlan *plan;
+    if (out_unverified)
+        *out_unverified = false;
+    if (!v)
+        return NULL;
     bundle = cg_ctx_aot_bundle(ctx);
-    plan = xaot_bundle_find_record_access_plan(bundle, v->xg_record_access_id);
+    if (v->xg_object_access_id == 0) {
+        if (!bundle || !bundle->global_evidence_plan.evidence) {
+            if (out_unverified)
+                *out_unverified = true;
+            return NULL;
+        }
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: missing object access identity for Xi value v%u "
+                "(op=%s line=%u field=%" PRId64 ")\n",
+                v->id, xi_op_name(v->op), v->line, v->aux_int);
+        return NULL;
+    }
+    plan = xaot_bundle_find_object_access_plan(bundle, v->xg_object_access_id);
     if (!plan) {
         if (ctx)
             ctx->error = true;
         fprintf(stderr,
-                "[xi_cgen] ERROR: missing verified Record access plan for Xi value v%u "
-                "(record_access=%u)\n",
-                v->id, v->xg_record_access_id);
-        return false;
+                "[xi_cgen] ERROR: missing verified object access plan for Xi value v%u "
+                "(object_access=%u)\n",
+                v->id, v->xg_object_access_id);
+        return NULL;
     }
-    bool direct_field =
-        plan->action == XAOT_RECORD_ACCESS_DIRECT_FIELD && plan->access_kind == expected_kind;
-    bool destructure_copy = expected_kind == XG_RECORD_ACCESS_FIELD_GET &&
-                            plan->action == XAOT_RECORD_ACCESS_COPY_DESTRUCTURE &&
-                            plan->access_kind == XG_RECORD_ACCESS_DESTRUCTURE;
-    if ((!direct_field && !destructure_copy) || plan->field_ordinal != (uint16_t) v->aux_int) {
+    bool expected_access = plan->access_kind == expected_kind;
+    bool destructure_copy = expected_kind == XG_OBJECT_ACCESS_FIELD_GET &&
+                            plan->access_kind == XG_OBJECT_ACCESS_DESTRUCTURE;
+    bool action_valid = plan->action == XAOT_OBJECT_ACCESS_DIRECT_ORDINAL ||
+                        plan->action == XAOT_OBJECT_ACCESS_SHAPE_GUARD_ORDINAL ||
+                        plan->action == XAOT_OBJECT_ACCESS_SHAPE_DISPATCH_ORDINAL;
+    if ((!expected_access && !destructure_copy) || !action_valid ||
+        (plan->action == XAOT_OBJECT_ACCESS_DIRECT_ORDINAL &&
+         plan->field_ordinal != (uint16_t) v->aux_int) ||
+        plan->dispatch_case_start > bundle->nobject_access_case_plans ||
+        plan->receiver_shape_count >
+            bundle->nobject_access_case_plans - plan->dispatch_case_start) {
         if (ctx)
             ctx->error = true;
         fprintf(stderr,
-                "[xi_cgen] ERROR: stale Record direct-field plan for Xi value v%u "
-                "(record_access=%u action=%u kind=%u field=%u)\n",
-                v->id, v->xg_record_access_id, (unsigned) plan->action,
+                "[xi_cgen] ERROR: stale object field plan for Xi value v%u "
+                "(object_access=%u action=%u kind=%u field=%u)\n",
+                v->id, v->xg_object_access_id, (unsigned) plan->action,
                 (unsigned) plan->access_kind, (unsigned) plan->field_ordinal);
-        return false;
+        return NULL;
     }
-    return true;
+    return plan;
+}
+
+static void xicgen_emit_object_shape_case(XiCgenCtx *ctx, FILE *out, const XiValue *receiver,
+                                          const XaotObjectAccessCasePlan *access_case) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XgGlobalEvidence *evidence = bundle ? bundle->global_evidence_plan.evidence : NULL;
+    const XgObjectShapeSummary *shape =
+        evidence && access_case
+            ? xg_global_evidence_find_object_shape(evidence, access_case->receiver_shape_id)
+            : NULL;
+    if (!ctx || !access_case || !shape) {
+        if (ctx)
+            ctx->error = true;
+        fputs("0", out);
+        return;
+    }
+    fprintf(out, "(");
+    fprintf(out, "xrt_object_shape_matches_key(");
+    emit_vref(out, receiver);
+    fprintf(out, ", UINT64_C(0x%016" PRIx64 "), %u)", access_case->stable_shape_key,
+            (unsigned) access_case->domain);
+    for (uint16_t ordinal = 0; ordinal < shape->field_count; ordinal++) {
+        const XgObjectFieldSummary *field = NULL;
+        for (uint32_t i = 0; i < evidence->nobject_fields; i++) {
+            if (evidence->object_fields[i].shape_id == shape->object_shape_id &&
+                evidence->object_fields[i].field_ordinal == ordinal) {
+                field = &evidence->object_fields[i];
+                break;
+            }
+        }
+        if (!field) {
+            ctx->error = true;
+            fputs(" && 0", out);
+            continue;
+        }
+        fprintf(out, " && xrt_object_shape_field_matches_fingerprint(");
+        emit_vref(out, receiver);
+        fprintf(out,
+                ", %u, UINT64_C(0x%016" PRIx64 "), UINT32_C(0x%08" PRIx32
+                "), UINT64_C(0x%016" PRIx64 "), %u)",
+                (unsigned) ordinal, field->stable_name_key, field->name_id, field->stable_type_key,
+                (unsigned) (((field->flags & XG_OBJECT_FIELD_READONLY) != 0
+                                 ? XR_OBJECT_SHAPE_FIELD_READONLY
+                                 : 0) |
+                            ((field->flags & XG_OBJECT_FIELD_OPTIONAL) != 0
+                                 ? XR_OBJECT_SHAPE_FIELD_OPTIONAL
+                                 : 0)));
+    }
+    fprintf(out, ")");
+}
+
+static void xicgen_emit_object_guarded_get(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                           const XaotObjectAccessPlan *plan) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    for (uint32_t i = 0; i < plan->receiver_shape_count; i++) {
+        const XaotObjectAccessCasePlan *access_case =
+            &bundle->object_access_case_plans[plan->dispatch_case_start + i];
+        fprintf(out, "(");
+        xicgen_emit_object_shape_case(ctx, out, v->args[0], access_case);
+        fprintf(out, " ? xrt_json_get_field(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", %u) : ", (unsigned) access_case->field_ordinal);
+    }
+    fprintf(out, "xrt_object_access_plan_miss_get(%u)", plan->object_access_id);
+    for (uint32_t i = 0; i < plan->receiver_shape_count; i++)
+        fprintf(out, ")");
+}
+
+static void xicgen_emit_object_guarded_set(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                           const XaotObjectAccessPlan *plan) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    for (uint32_t i = 0; i < plan->receiver_shape_count; i++) {
+        const XaotObjectAccessCasePlan *access_case =
+            &bundle->object_access_case_plans[plan->dispatch_case_start + i];
+        fprintf(out, "(");
+        xicgen_emit_object_shape_case(ctx, out, v->args[0], access_case);
+        fprintf(out, " ? xrt_json_set_field(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", %u, ", (unsigned) access_case->field_ordinal);
+        emit_vref(out, v->args[1]);
+        fprintf(out, ") : ");
+    }
+    fprintf(out, "xrt_object_access_plan_miss_set(%u)", plan->object_access_id);
+    for (uint32_t i = 0; i < plan->receiver_shape_count; i++)
+        fprintf(out, ")");
 }
 
 static void xicgen_chan_recv_status(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -6195,14 +6308,25 @@ static void xicgen_go(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
             result_copy_shared ? "true" : "false", target->name ? target->name : "aot");
 }
 
-static void xicgen_emit_json_set_field_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    XR_DCHECK(v->nargs >= 2, "xicgen_emit_json_set_field_expr: missing operands");
-    if (v->op == XI_JSON_SET_F &&
-        (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_SET,
-                                                 XG_JSON_ACCESS_INDEX_SET) ||
-         !xicgen_verify_record_direct_field_access(ctx, v, XG_RECORD_ACCESS_FIELD_SET))) {
-        emit_codegen_abort_expr(out);
-        return;
+static void xicgen_emit_object_set_field_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    const XaotObjectAccessPlan *plan = NULL;
+    bool unverified = false;
+    XR_DCHECK(v->nargs >= 2, "xicgen_emit_object_set_field_expr: missing operands");
+    if (v->op == XI_OBJECT_SET_F) {
+        if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_DYNAMIC_ACCESS_FIELD_SET,
+                                                    XG_JSON_DYNAMIC_ACCESS_INDEX_SET)) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        plan = xicgen_require_object_field_access(ctx, v, XG_OBJECT_ACCESS_FIELD_SET, &unverified);
+        if (!plan && !unverified) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        if (plan && plan->action != XAOT_OBJECT_ACCESS_DIRECT_ORDINAL) {
+            xicgen_emit_object_guarded_set(ctx, out, v, plan);
+            return;
+        }
     }
     fprintf(out, "xrt_json_set_field(");
     emit_vref(out, v->args[0]);
@@ -6241,6 +6365,33 @@ static void xicgen_emit_c_string_literal(FILE *out, const char *s) {
     fputc('"', out);
 }
 
+static void cg_emit_object_shape_defs(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !out)
+        return;
+    for (int i = 0; i < ctx->nobject_shapes; i++) {
+        const CgObjectShape *shape = &ctx->object_shapes[i];
+        fprintf(out, "static const XrtObjectShapeField _xobj_shape_fields_%d[] = {\n", shape->id);
+        for (int64_t ordinal = 0; ordinal < shape->field_count; ordinal++) {
+            const char *name = shape->field_names && shape->field_names[ordinal]
+                                   ? shape->field_names[ordinal]
+                                   : "?";
+            uint64_t stable_type_key = cg_object_shape_field_type_key(shape->type, name, ordinal);
+            uint32_t symbol_hash = xr_hash_bytes(name, strlen(name));
+            fprintf(out, "    {");
+            xicgen_emit_c_string_literal(out, name);
+            fprintf(out, ", UINT64_C(0x%016" PRIx64 "), %" PRIu32 "u, %u, %u, 0},\n",
+                    stable_type_key, symbol_hash, (unsigned) ordinal,
+                    (unsigned) cg_object_shape_field_flags(shape->type, name, ordinal));
+        }
+        fprintf(out,
+                "};\nstatic const XrtObjectShape _xobj_shape_%d = "
+                "{UINT64_C(0x%016" PRIx64 "), %" PRId64
+                ", _xobj_shape_fields_%d, %u, XR_OBJECT_SHAPE_STATIC, 0, 0};\n\n",
+                shape->id, shape->stable_key, shape->field_count, shape->id,
+                (unsigned) shape->object_domain);
+    }
+}
+
 static const char *xicgen_static_string_const(const XiValue *v) {
     if (!v || v->op != XI_CONST || !v->type || v->type->kind != XR_KIND_STRING)
         return NULL;
@@ -6248,8 +6399,9 @@ static const char *xicgen_static_string_const(const XiValue *v) {
 }
 
 static void xicgen_emit_json_shape_guard_get(XiCgenCtx *ctx, FILE *out, const XiValue *receiver,
-                                             const XaotJsonAccessPlan *plan, const char *field,
-                                             const XrType *result_type, XrRep result_rep) {
+                                             const XaotJsonDynamicAccessPlan *plan,
+                                             const char *field, const XrType *result_type,
+                                             XrRep result_rep) {
     const char *conv_suffix = emit_conversion_prefix(out, result_type, XR_REP_TAGGED, result_rep);
     fprintf(out, "xrt_json_get_shape_guard_owned(");
     emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
@@ -6260,7 +6412,8 @@ static void xicgen_emit_json_shape_guard_get(XiCgenCtx *ctx, FILE *out, const Xi
 }
 
 static void xicgen_emit_json_shape_guard_set(XiCgenCtx *ctx, FILE *out, const XiValue *receiver,
-                                             const XiValue *value, const XaotJsonAccessPlan *plan,
+                                             const XiValue *value,
+                                             const XaotJsonDynamicAccessPlan *plan,
                                              const char *field) {
     fprintf(out, "xrt_json_set_shape_guard(");
     emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);
@@ -6295,13 +6448,12 @@ static void xicgen_emit_json_computed_key_guard_set(XiCgenCtx *ctx, FILE *out,
     fprintf(out, ")");
 }
 
-static void xicgen_emit_json_new_expr(FILE *out, const XiValue *v) {
+static void xicgen_emit_json_new_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     int64_t field_count = xi_json_field_count(v);
     uint8_t storage_mode = xi_json_storage_mode(v);
     const char **field_names = (const char **) v->aux;
-    const bool is_record = v && v->type && v->type->kind == XR_KIND_RECORD;
-    const char *ctor = is_record ? "xrt_record_new" : "xrt_json_new";
-    const char *ctor_named = is_record ? "xrt_record_new_named" : "xrt_json_new_named";
+    const bool is_struct_object = v && v->type && v->type->kind == XR_KIND_STRUCT_OBJECT;
+    const char *ctor = is_struct_object ? "xrt_struct_object_new" : "xrt_json_new";
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, "xrt_json_set_storage(");
     if (field_count <= 0 || !field_names) {
@@ -6310,33 +6462,44 @@ static void xicgen_emit_json_new_expr(FILE *out, const XiValue *v) {
             fprintf(out, ", %u)", (unsigned) storage_mode);
         return;
     }
-    fprintf(out, "%s(%" PRId64 ", (const char*[]){", ctor_named, field_count);
-    for (int64_t i = 0; i < field_count; i++) {
-        if (i > 0)
-            fprintf(out, ", ");
-        xicgen_emit_c_string_literal(out, field_names[i] ? field_names[i] : "?");
+    int shape_id = cg_intern_object_shape(ctx, v);
+    if (shape_id < 0) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
     }
-    fprintf(out, "})");
+    fprintf(out, "xrt_object_new_static_shape(&_xobj_shape_%d, %" PRId64 ")", shape_id,
+            field_count);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         fprintf(out, ", %u)", (unsigned) storage_mode);
 }
 
-static void xicgen_json_init_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                               const char *prefix) {
+static void xicgen_object_init_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                 const char *prefix) {
     (void) f;
     (void) prefix;
-    xicgen_emit_json_set_field_expr(ctx, out, v);
+    xicgen_emit_object_set_field_expr(ctx, out, v);
 }
 
-static void xicgen_json_get_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                              const char *prefix) {
+static void xicgen_object_get_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                const char *prefix) {
+    bool unverified = false;
+    const XaotObjectAccessPlan *plan;
     (void) f;
     (void) prefix;
-    XR_DCHECK(v->nargs >= 1, "xicgen_json_get_f: missing object");
-    if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_GET,
-                                                XG_JSON_ACCESS_INDEX_GET) ||
-        !xicgen_verify_record_direct_field_access(ctx, v, XG_RECORD_ACCESS_FIELD_GET)) {
+    XR_DCHECK(v->nargs >= 1, "xicgen_object_get_f: missing object");
+    if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_DYNAMIC_ACCESS_FIELD_GET,
+                                                XG_JSON_DYNAMIC_ACCESS_INDEX_GET)) {
         emit_codegen_abort_expr(out);
+        return;
+    }
+    plan = xicgen_require_object_field_access(ctx, v, XG_OBJECT_ACCESS_FIELD_GET, &unverified);
+    if (!plan && !unverified) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (plan && plan->action != XAOT_OBJECT_ACCESS_DIRECT_ORDINAL) {
+        xicgen_emit_object_guarded_get(ctx, out, v, plan);
         return;
     }
     fprintf(out, "xrt_json_get_field(");
@@ -6344,11 +6507,11 @@ static void xicgen_json_get_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     fprintf(out, ", %d)", (int) v->aux_int);
 }
 
-static void xicgen_json_set_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                              const char *prefix) {
+static void xicgen_object_set_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                const char *prefix) {
     (void) f;
     (void) prefix;
-    xicgen_emit_json_set_field_expr(ctx, out, v);
+    xicgen_emit_object_set_field_expr(ctx, out, v);
 }
 
 static int64_t xicgen_capacity_arg_or_default(const XiValue *v, int64_t fallback) {
@@ -7317,13 +7480,12 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     } else if (strcmp(bn, "set_new") == 0) {
         xicgen_set_new(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "json_new") == 0) {
-        xicgen_emit_json_new_expr(out, v);
+        xicgen_emit_json_new_expr(ctx, out, v);
     } else if (strcmp(bn, "json_init_f") == 0 || strcmp(bn, "json_set_f") == 0) {
-        xicgen_emit_json_set_field_expr(ctx, out, v);
+        xicgen_emit_object_set_field_expr(ctx, out, v);
     } else if (strcmp(bn, "json_get_f") == 0) {
-        if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_ACCESS_FIELD_GET,
-                                                    XG_JSON_ACCESS_INDEX_GET) ||
-            !xicgen_verify_record_direct_field_access(ctx, v, XG_RECORD_ACCESS_FIELD_GET)) {
+        if (!xicgen_verify_json_direct_index_access(ctx, v, XG_JSON_DYNAMIC_ACCESS_FIELD_GET,
+                                                    XG_JSON_DYNAMIC_ACCESS_INDEX_GET)) {
             emit_codegen_abort_expr(out);
             return;
         }
@@ -9887,6 +10049,9 @@ static bool xicgen_receiver_is_builtin_global(const XiValue *receiver, int globa
     return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == global_index;
 }
 
+static bool xicgen_emit_json_decode_class_target_spec(XiCgenCtx *ctx, FILE *out, const XrType *type,
+                                                      int depth);
+
 /* PanicInfo(message="", cause=null) constructs the lightweight exception value
  * shared with the runtime helpers (a json-named object with message/stack/cause/
  * code/data). The match-non-exhaustive and force-unwrap lowerings emit this. */
@@ -9918,9 +10083,49 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
 
     if (strcmp(method, "encode") == 0 && nargs == 1 && v->nargs >= 2) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_json_encode(");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ")");
+        const XiValue *input = v->args[1];
+        const XiClassData *input_class =
+            input ? cg_class_native_data_for_type(ctx, input->type) : NULL;
+        bool derived_value_struct = input_class && input_class->struct_layout &&
+                                    !input_class->instance_layout &&
+                                    (input_class->derive_flags & XR_DERIVE_JSON) != 0;
+        bool static_struct_object = input && xr_type_object_row_is_exact(input->type) &&
+                                    input->type->object.field_count > 0 &&
+                                    input->type->object.field_names;
+        if (static_struct_object) {
+            int shape_id =
+                cg_intern_object_shape_type_domain(ctx, input->type, XR_OBJECT_DOMAIN_JSON);
+            if (shape_id < 0) {
+                ctx->error = true;
+                emit_codegen_abort_expr(out);
+                emit_conversion_suffix(out, conv_suffix);
+                return true;
+            }
+            fprintf(out, "xrt_json_encode_static_object(");
+            emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+            fprintf(out, ", &_xobj_shape_%d, %u)", shape_id,
+                    (unsigned) input->type->object.field_count);
+        } else if (derived_value_struct) {
+            fprintf(out, "xrt_json_encode_native_struct(");
+            if (cg_value_plan_is_struct_aggregate(ctx, input)) {
+                fprintf(out, "&");
+                emit_vref(out, input);
+            } else {
+                fprintf(out, "(");
+                emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+                fprintf(out, ").ptr");
+            }
+            fprintf(out, ", ");
+            if (!xicgen_emit_json_decode_class_target_spec(ctx, out, input->type, 0)) {
+                ctx->error = true;
+                fprintf(out, "NULL");
+            }
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "xrt_json_encode(");
+            emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+            fprintf(out, ")");
+        }
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
@@ -9930,6 +10135,35 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
         fprintf(out, "xrt_json_parse(");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    if (strcmp(method, "kindOf") == 0 && nargs == 1 && v->nargs >= 2) {
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_json_static_kind_of(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
+
+    static const struct {
+        char method[9];
+        char kind[32];
+    } json_kind_predicates[] = {
+        {"isNull", "XRT_JSON_RUNTIME_NULL"},     {"isBool", "XRT_JSON_RUNTIME_BOOL"},
+        {"isInt", "XRT_JSON_RUNTIME_INT"},       {"isFloat", "XRT_JSON_RUNTIME_FLOAT"},
+        {"isString", "XRT_JSON_RUNTIME_STRING"}, {"isArray", "XRT_JSON_RUNTIME_ARRAY"},
+        {"isObject", "XRT_JSON_RUNTIME_OBJECT"},
+    };
+    for (size_t i = 0; i < sizeof(json_kind_predicates) / sizeof(json_kind_predicates[0]); i++) {
+        if (strcmp(method, json_kind_predicates[i].method) != 0 || nargs != 1 || v->nargs < 2)
+            continue;
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_json_static_is_kind(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", %s)", json_kind_predicates[i].kind);
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
@@ -9963,9 +10197,33 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
 
     if (strcmp(method, "stringify") == 0 && nargs == 1 && v->nargs >= 2) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_json_stringify(");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ")");
+        const XiValue *input = v->args[1];
+        const XiClassData *input_class =
+            input ? cg_class_native_data_for_type(ctx, input->type) : NULL;
+        bool derived_value_struct = input_class && input_class->struct_layout &&
+                                    !input_class->instance_layout &&
+                                    (input_class->derive_flags & XR_DERIVE_JSON) != 0;
+        if (derived_value_struct) {
+            fprintf(out, "xrt_json_stringify_native_struct(");
+            if (cg_value_plan_is_struct_aggregate(ctx, input)) {
+                fprintf(out, "&");
+                emit_vref(out, input);
+            } else {
+                fprintf(out, "(");
+                emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+                fprintf(out, ").ptr");
+            }
+            fprintf(out, ", ");
+            if (!xicgen_emit_json_decode_class_target_spec(ctx, out, input->type, 0)) {
+                ctx->error = true;
+                fprintf(out, "NULL");
+            }
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "xrt_json_stringify(");
+            emit_value_as_rep_ctx(ctx, out, input, XR_REP_TAGGED);
+            fprintf(out, ")");
+        }
         emit_conversion_suffix(out, conv_suffix);
         return true;
     }
@@ -11204,38 +11462,207 @@ static void xicgen_json_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     (void) ctx;
     (void) f;
     (void) prefix;
-    xicgen_emit_json_new_expr(out, v);
+    xicgen_emit_json_new_expr(ctx, out, v);
 }
 
-static bool xicgen_emit_json_decode_field_specs(FILE *out, const XrType *record_type,
-                                                int64_t field_count, int depth) {
-    if (!out || !record_type || !XR_TYPE_IS_RECORD(record_type) ||
-        !record_type->object.field_names || !record_type->object.field_types ||
-        record_type->object.field_count != field_count || depth > 16)
+static bool xicgen_emit_json_decode_value_spec(XiCgenCtx *ctx, FILE *out, const XrType *type,
+                                               int depth);
+
+static uint8_t xicgen_json_decode_storage_type(const XrType *type) {
+    if (!type || type->is_nullable)
+        return XR_ELEM_ANY;
+    return (uint8_t) xr_tid_to_elem_type(xr_type_to_tid((XrType *) type));
+}
+
+static bool xicgen_emit_json_decode_field_specs(XiCgenCtx *ctx, FILE *out,
+                                                const XrType *object_type,
+                                                const char *const *field_names, int64_t field_count,
+                                                int depth) {
+    if (!ctx || !out || !object_type || !XR_TYPE_IS_STRUCT_OBJECT(object_type) || !field_names ||
+        !object_type->object.field_names || !object_type->object.field_types ||
+        object_type->object.field_count != field_count || depth > 16)
         return false;
     fprintf(out, "(const XrJsonDecodeFieldSpec[]){");
     for (int64_t i = 0; i < field_count; i++) {
         if (i > 0)
             fprintf(out, ", ");
-        const XrType *field_type = record_type->object.field_types[i];
-        uint8_t value_kind = xr_type_json_value_kind(field_type);
+        const char *field_name = field_names[i] ? field_names[i] : "?";
+        int64_t type_ordinal = cg_object_shape_type_ordinal(object_type, field_name, i);
+        if (type_ordinal < 0 || type_ordinal >= object_type->object.field_count)
+            return false;
+        const XrType *field_type = object_type->object.field_types[type_ordinal];
         fprintf(out, "{");
-        xicgen_emit_c_string_literal(
-            out, record_type->object.field_names[i] ? record_type->object.field_names[i] : "?");
-        fprintf(out, ", %u, ", (unsigned) value_kind);
-        if (xr_json_value_kind_base(value_kind) == XR_JSON_VALUE_RECORD && field_type &&
-            XR_TYPE_IS_RECORD(field_type) && field_type->object.field_count > 0) {
-            if (!xicgen_emit_json_decode_field_specs(out, field_type,
-                                                     field_type->object.field_count, depth + 1))
-                return false;
-            fprintf(out, ", %u", (unsigned) field_type->object.field_count);
-        } else {
-            fprintf(out, "NULL, 0");
-        }
+        xicgen_emit_c_string_literal(out, field_name);
+        fprintf(out, ", ");
+        if (!xicgen_emit_json_decode_value_spec(ctx, out, field_type, depth))
+            return false;
         fprintf(out, "}");
     }
     fprintf(out, "}");
     return true;
+}
+
+static const XrType *xicgen_json_class_field_type(XiCgenCtx *ctx, const XiClassData *class_data,
+                                                  const char *field_name) {
+    for (const XiClassData *current = class_data; current;
+         current = cg_class_native_data_by_name(ctx, current->super_name)) {
+        for (uint16_t i = 0; i < current->instance_field_count; i++) {
+            const char *candidate =
+                current->instance_field_names ? current->instance_field_names[i] : NULL;
+            if (candidate && field_name && strcmp(candidate, field_name) == 0)
+                return current->instance_field_types ? current->instance_field_types[i] : NULL;
+        }
+    }
+    return NULL;
+}
+
+static bool xicgen_emit_json_decode_class_target_spec(XiCgenCtx *ctx, FILE *out, const XrType *type,
+                                                      int depth) {
+    const XiClassData *class_data = cg_class_native_data_for_type(ctx, type);
+    const XrAggregateLayout *layout =
+        class_data ? (class_data->instance_layout ? class_data->instance_layout
+                                                  : class_data->struct_layout)
+                   : NULL;
+    const bool value_struct =
+        class_data && !class_data->instance_layout && class_data->struct_layout;
+    if (!ctx || !out || !class_data || !layout || !layout->field_names ||
+        layout->field_count == 0 || depth > 16 ||
+        (class_data->derive_flags & XR_DERIVE_JSON) == 0) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: Json class schema unavailable for '%s' "
+                "(kind=%d, class=%s, layout=%s, fields=%u, depth=%d, derive=%u)\n",
+                type ? xr_type_to_string((XrType *) type) : "?", type ? (int) type->kind : -1,
+                class_data && class_data->class_name ? class_data->class_name : "?",
+                layout ? "yes" : "no", layout ? (unsigned) layout->field_count : 0u, depth,
+                class_data ? (unsigned) class_data->derive_flags : 0u);
+        return false;
+    }
+    const char *prefix = cg_class_native_prefix_for_data(ctx, class_data, NULL);
+    char value_struct_type_name[128];
+    if (value_struct)
+        cg_struct_heap_type_name(value_struct_type_name, sizeof(value_struct_type_name), prefix,
+                                 layout);
+    fprintf(out, "&(const XrJsonClassDecodeSpec){(uint16_t)(");
+    if (!emit_class_native_ensure_type_id_expr(ctx, out, class_data)) {
+        return false;
+    }
+    fprintf(out, "), %uu, (uint32_t)sizeof(", (unsigned) layout->field_count);
+    if (value_struct)
+        fprintf(out, "%s", value_struct_type_name);
+    else
+        emit_class_native_type_name(out, prefix, class_data->class_name);
+    fprintf(out, "), %s, {0, 0, 0}, (const XrJsonClassDecodeFieldSpec[]){",
+            value_struct ? "XR_JSON_NOMINAL_TARGET_VALUE_STRUCT" : "XR_JSON_NOMINAL_TARGET_CLASS");
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        const char *field_name = layout->field_names[i];
+        const XrAggregateFieldLayout *field_layout = cg_struct_field(layout, i);
+        const XrType *field_type = xicgen_json_class_field_type(ctx, class_data, field_name);
+        if (!field_name || !field_layout || !field_type) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: Json class field schema unavailable for '%s.%s' "
+                    "(layout=%s, type=%s)\n",
+                    class_data->class_name ? class_data->class_name : "?",
+                    field_name ? field_name : "?", field_layout ? "yes" : "no",
+                    field_type ? xr_type_to_string((XrType *) field_type) : "?");
+            return false;
+        }
+        if (i > 0)
+            fprintf(out, ", ");
+        fprintf(out, "{");
+        xicgen_emit_c_string_literal(out, field_name);
+        fprintf(out, ", (uint32_t)offsetof(");
+        if (value_struct)
+            fprintf(out, "%s", value_struct_type_name);
+        else
+            emit_class_native_type_name(out, prefix, class_data->class_name);
+        fprintf(out, ", ");
+        if (value_struct) {
+            char field_c_name[128];
+            cg_struct_field_c_name(layout, i, field_c_name, sizeof(field_c_name));
+            fprintf(out, "%s", field_c_name);
+        } else {
+            emit_class_native_field_path(ctx, out, class_data, i);
+        }
+        fprintf(out, "), %uu, {0, 0, 0}, {NULL, ", (unsigned) field_layout->native_type);
+        if (!xicgen_emit_json_decode_value_spec(ctx, out, field_type, depth + 1))
+            return false;
+        fprintf(out, "}}");
+    }
+    fprintf(out, "}}");
+    return true;
+}
+
+static bool xicgen_emit_json_decode_class_spec(XiCgenCtx *ctx, FILE *out, const XrType *type,
+                                               int depth) {
+    fprintf(out, "NULL, 0, ");
+    return xicgen_emit_json_decode_class_target_spec(ctx, out, type, depth);
+}
+
+static bool xicgen_emit_json_decode_value_spec(XiCgenCtx *ctx, FILE *out, const XrType *type,
+                                               int depth) {
+    if (!ctx || !out || !type || depth > 16)
+        return false;
+    uint8_t value_kind = xr_type_json_value_kind(type);
+    fprintf(out, "%u, ", (unsigned) value_kind);
+    switch ((XrJsonValueKind) xr_json_value_kind_base(value_kind)) {
+        case XR_JSON_VALUE_STRUCT_OBJECT: {
+            if (!XR_TYPE_IS_STRUCT_OBJECT(type) || type->object.field_count <= 0)
+                return false;
+            int nested_shape_id = cg_intern_object_shape_type(ctx, type);
+            if (nested_shape_id < 0)
+                return false;
+            const CgObjectShape *nested_shape = &ctx->object_shapes[nested_shape_id];
+            if (!xicgen_emit_json_decode_field_specs(ctx, out, type, nested_shape->field_names,
+                                                     type->object.field_count, depth + 1))
+                return false;
+            fprintf(out, ", %u, &_xobj_shape_%d", (unsigned) type->object.field_count,
+                    nested_shape_id);
+            return true;
+        }
+        case XR_JSON_VALUE_ARRAY:
+        case XR_JSON_VALUE_MAP: {
+            const XrType *child =
+                XR_TYPE_IS_ARRAY(type) ? type->container.element_type : type->map.value_type;
+            if (!child)
+                return false;
+            fprintf(out, "(const XrJsonDecodeFieldSpec[]){{NULL, ");
+            if (!xicgen_emit_json_decode_value_spec(ctx, out, child, depth + 1))
+                return false;
+            fprintf(out, "}}, 1, (const void *)(uintptr_t)%u",
+                    (unsigned) xicgen_json_decode_storage_type(child));
+            return true;
+        }
+        case XR_JSON_VALUE_ENUM: {
+            const XrEnumLayout *layout = XR_TYPE_IS_ENUM(type) ? type->enum_type.layout : NULL;
+            if (!layout || !layout->is_zero_payload || !layout->name || !layout->variants ||
+                layout->variant_count == 0 || layout->variant_count > UINT16_MAX)
+                return false;
+            const XaotEnumPlan *plan = cg_unit_enum_scalar_plan(ctx, type);
+            uint32_t plan_index = 0;
+            if (!plan || !cg_mark_enum_scalar_sidecar(ctx, plan, &plan_index))
+                return false;
+            const char *module_prefix = ctx->module && ctx->module->name && ctx->module->name[0]
+                                            ? ctx->module->name
+                                            : "mod";
+            fprintf(out, "NULL, 0, &(const XrJsonEnumDecodeSpec){%uu, %uu, 0, ",
+                    (unsigned) layout->layout_id, (unsigned) layout->variant_count);
+            xicgen_emit_c_string_literal(out, layout->name);
+            fprintf(out, ", (const char *const[]){");
+            for (uint32_t i = 0; i < layout->variant_count; i++) {
+                if (i > 0)
+                    fprintf(out, ", ");
+                xicgen_emit_c_string_literal(
+                    out, layout->variants[i].name ? layout->variants[i].name : "");
+            }
+            fprintf(out, "}, &_xenum_scalar_layout_%s_%u}", module_prefix, (unsigned) plan_index);
+            return true;
+        }
+        case XR_JSON_VALUE_CLASS_INSTANCE:
+            return xicgen_emit_json_decode_class_spec(ctx, out, type, depth + 1);
+        default:
+            fprintf(out, "NULL, 0, NULL");
+            return xr_json_value_kind_base(value_kind) != XR_JSON_VALUE_ANY;
+    }
 }
 
 static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -11243,23 +11670,88 @@ static void xicgen_json_decode(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     (void) f;
     (void) prefix;
     int64_t field_count = v ? v->aux_int : 0;
-    const XrType *record_type = v ? v->type : NULL;
-    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, XR_REP_TAGGED,
-                                                     v ? cg_rep(v) : XR_REP_TAGGED);
-    if (!v || v->nargs < 1 || field_count <= 0 || !record_type || !XR_TYPE_IS_RECORD(record_type) ||
-        !record_type->object.field_types || record_type->object.field_count != field_count) {
+    const XrType *object_type = v ? v->type : NULL;
+    const char *conv_suffix = v ? emit_tagged_to_value_storage_prefix(ctx, out, v) : NULL;
+    if (!v || v->nargs < 1 || !object_type ||
+        !xr_type_is_json_decode_field_supported(object_type)) {
         fprintf(out, "XR_NULL_VAL");
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
-    fprintf(out, "xrt_json_decode_record(");
+    bool typed_parse = (v->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0;
+    if (!XR_TYPE_IS_STRUCT_OBJECT(object_type)) {
+        fprintf(out, typed_parse ? "xrt_json_parse_typed_value_or_throw("
+                                 : "xrt_json_decode_typed_value(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", &(const XrJsonDecodeFieldSpec){NULL, ");
+        if (!xicgen_emit_json_decode_value_spec(ctx, out, object_type, 0)) {
+            ctx->error = true;
+            fprintf(out, "0, NULL, 0, NULL");
+        }
+        fprintf(out, "})");
+        emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
+    if (field_count <= 0 || !object_type->object.field_types ||
+        object_type->object.field_count != field_count || !v->aux) {
+        fprintf(out, "XR_NULL_VAL");
+        emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
+    int shape_id = cg_intern_object_shape(ctx, v);
+    if (shape_id < 0) {
+        ctx->error = true;
+        fprintf(out, "XR_NULL_VAL");
+        emit_conversion_suffix(out, conv_suffix);
+        return;
+    }
+    fprintf(out, typed_parse ? "xrt_json_parse_typed_object_or_throw("
+                             : "xrt_json_decode_struct_object(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ", %" PRId64 ", ", field_count);
-    if (!xicgen_emit_json_decode_field_specs(out, record_type, field_count, 0)) {
+    fprintf(out, ", &_xobj_shape_%d, %" PRId64 ", ", shape_id, field_count);
+    if (!xicgen_emit_json_decode_field_specs(ctx, out, object_type, (const char *const *) v->aux,
+                                             field_count, 0)) {
         fprintf(out, "NULL");
     }
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
+}
+
+static bool xicgen_emit_json_native_struct_decode_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                       const XiValue *v, const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (!ctx || !out || !v || v->op != XI_JSON_DECODE || v->nargs < 1 ||
+        (v->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) == 0 ||
+        !cg_value_plan_is_struct_aggregate(ctx, v))
+        return false;
+    const XiClassData *class_data = cg_class_native_data_for_type(ctx, v->type);
+    if (!class_data || !class_data->struct_layout || class_data->instance_layout ||
+        (class_data->derive_flags & XR_DERIVE_JSON) == 0)
+        return false;
+
+    if (ctx->pre_decl_all) {
+        fprintf(out, "    memset(&");
+        emit_vref(out, v);
+        fprintf(out, ", 0, sizeof(");
+        emit_vref(out, v);
+        fprintf(out, "));\n");
+    } else {
+        fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+        emit_vref(out, v);
+        fprintf(out, " = {0};\n");
+    }
+    fprintf(out, "    xrt_json_parse_typed_native_or_throw(");
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    if (!xicgen_emit_json_decode_class_target_spec(ctx, out, v->type, 0)) {
+        ctx->error = true;
+        return true;
+    }
+    fprintf(out, ", &");
+    emit_vref(out, v);
+    fprintf(out, ");\n");
+    return true;
 }
 
 static void xicgen_struct_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -12239,8 +12731,8 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_conversion_suffix(out, conv_suffix);
     } else {
         if (json_receiver) {
-            const XaotJsonAccessPlan *json_plan = xicgen_json_shape_guard_plan(
-                ctx, v, XG_JSON_ACCESS_FIELD_GET, XG_JSON_ACCESS_INDEX_GET);
+            const XaotJsonDynamicAccessPlan *json_plan = xicgen_json_shape_guard_plan(
+                ctx, v, XG_JSON_DYNAMIC_ACCESS_FIELD_GET, XG_JSON_DYNAMIC_ACCESS_INDEX_GET);
             if (ctx && ctx->error) {
                 emit_codegen_abort_expr(out);
                 return;
@@ -12282,8 +12774,8 @@ static void xicgen_store_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         return;
     const char *field = (const char *) v->aux;
     if (cg_value_type_is_json(v->args[0])) {
-        const XaotJsonAccessPlan *json_plan = xicgen_json_shape_guard_plan(
-            ctx, v, XG_JSON_ACCESS_FIELD_SET, XG_JSON_ACCESS_INDEX_SET);
+        const XaotJsonDynamicAccessPlan *json_plan = xicgen_json_shape_guard_plan(
+            ctx, v, XG_JSON_DYNAMIC_ACCESS_FIELD_SET, XG_JSON_DYNAMIC_ACCESS_INDEX_SET);
         if (ctx && ctx->error) {
             emit_codegen_abort_expr(out);
             return;
@@ -12839,12 +13331,13 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         return;
     if (cg_value_type_is_json(v->args[0])) {
         const char *static_key = xicgen_static_string_const(v->args[1]);
-        const XaotJsonAccessPlan *json_plan =
-            static_key ? xicgen_json_shape_guard_plan(ctx, v, XG_JSON_ACCESS_INDEX_GET,
-                                                      XG_JSON_ACCESS_FIELD_GET)
+        const XaotJsonDynamicAccessPlan *json_plan =
+            static_key ? xicgen_json_shape_guard_plan(ctx, v, XG_JSON_DYNAMIC_ACCESS_INDEX_GET,
+                                                      XG_JSON_DYNAMIC_ACCESS_FIELD_GET)
                        : NULL;
         if (!static_key)
-            json_plan = xicgen_json_computed_key_guard_plan(ctx, v, XG_JSON_ACCESS_INDEX_GET);
+            json_plan =
+                xicgen_json_computed_key_guard_plan(ctx, v, XG_JSON_DYNAMIC_ACCESS_INDEX_GET);
         if (ctx && ctx->error) {
             emit_codegen_abort_expr(out);
             return;
@@ -12906,12 +13399,13 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         return;
     if (cg_value_type_is_json(v->args[0])) {
         const char *static_key = xicgen_static_string_const(v->args[1]);
-        const XaotJsonAccessPlan *json_plan =
-            static_key ? xicgen_json_shape_guard_plan(ctx, v, XG_JSON_ACCESS_INDEX_SET,
-                                                      XG_JSON_ACCESS_FIELD_SET)
+        const XaotJsonDynamicAccessPlan *json_plan =
+            static_key ? xicgen_json_shape_guard_plan(ctx, v, XG_JSON_DYNAMIC_ACCESS_INDEX_SET,
+                                                      XG_JSON_DYNAMIC_ACCESS_FIELD_SET)
                        : NULL;
         if (!static_key)
-            json_plan = xicgen_json_computed_key_guard_plan(ctx, v, XG_JSON_ACCESS_INDEX_SET);
+            json_plan =
+                xicgen_json_computed_key_guard_plan(ctx, v, XG_JSON_DYNAMIC_ACCESS_INDEX_SET);
         if (ctx && ctx->error) {
             emit_codegen_abort_expr(out);
             return;
@@ -12940,26 +13434,26 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     fprintf(out, ")");
 }
 
-static const XgRecordFieldSummary *xicgen_record_field_by_shape_ordinal(const XgGlobalEvidence *ev,
-                                                                        XgRecordShapeId shape_id,
+static const XgObjectFieldSummary *xicgen_object_field_by_shape_ordinal(const XgGlobalEvidence *ev,
+                                                                        XgObjectShapeId shape_id,
                                                                         uint16_t ordinal) {
     if (!ev || shape_id == XG_NO_ID)
         return NULL;
-    for (uint32_t i = 0; i < ev->nrecord_fields; i++) {
-        const XgRecordFieldSummary *field = &ev->record_fields[i];
+    for (uint32_t i = 0; i < ev->nobject_fields; i++) {
+        const XgObjectFieldSummary *field = &ev->object_fields[i];
         if (field->shape_id == shape_id && field->field_ordinal == ordinal)
             return field;
     }
     return NULL;
 }
 
-static bool xicgen_record_shape_field_ordinal_by_name_id(const XgGlobalEvidence *ev,
-                                                         XgRecordShapeId shape_id, uint32_t name_id,
+static bool xicgen_object_shape_field_ordinal_by_name_id(const XgGlobalEvidence *ev,
+                                                         XgObjectShapeId shape_id, uint32_t name_id,
                                                          uint16_t *out_ordinal) {
     if (!ev || shape_id == XG_NO_ID || name_id == 0 || !out_ordinal)
         return false;
-    for (uint32_t i = 0; i < ev->nrecord_fields; i++) {
-        const XgRecordFieldSummary *field = &ev->record_fields[i];
+    for (uint32_t i = 0; i < ev->nobject_fields; i++) {
+        const XgObjectFieldSummary *field = &ev->object_fields[i];
         if (field->shape_id == shape_id && field->name_id == name_id) {
             *out_ordinal = field->field_ordinal;
             return true;
@@ -12968,29 +13462,30 @@ static bool xicgen_record_shape_field_ordinal_by_name_id(const XgGlobalEvidence 
     return false;
 }
 
-static bool xicgen_emit_record_merge_copy_table(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                                const XaotRecordMergePlan *plan) {
+static bool xicgen_emit_object_merge_copy_table(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                                const XaotObjectMergePlan *plan) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     const XgGlobalEvidence *ev = bundle ? bundle->global_evidence_plan.evidence : NULL;
     if (!ev || !v || !plan || plan->base_field_count == 0 || plan->result_field_count == 0) {
         if (ctx)
             ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: Record merge plan has no field evidence table\n");
+        fprintf(stderr,
+                "[xi_cgen] ERROR: structural object merge plan has no field evidence table\n");
         emit_codegen_abort_expr(out);
         return true;
     }
 
     for (uint16_t src_ord = 0; src_ord < plan->base_field_count; src_ord++) {
-        const XgRecordFieldSummary *src_field =
-            xicgen_record_field_by_shape_ordinal(ev, plan->base_shape_id, src_ord);
+        const XgObjectFieldSummary *src_field =
+            xicgen_object_field_by_shape_ordinal(ev, plan->base_shape_id, src_ord);
         uint16_t dst_ord = UINT16_MAX;
         if (!src_field || src_field->name_id == 0 ||
-            !xicgen_record_shape_field_ordinal_by_name_id(ev, plan->result_shape_id,
+            !xicgen_object_shape_field_ordinal_by_name_id(ev, plan->result_shape_id,
                                                           src_field->name_id, &dst_ord)) {
             if (ctx)
                 ctx->error = true;
             fprintf(stderr,
-                    "[xi_cgen] ERROR: Record merge plan %u cannot rederive copy table "
+                    "[xi_cgen] ERROR: structural object merge plan %u cannot rederive copy table "
                     "(src_ord=%u)\n",
                     plan->merge_id, (unsigned) src_ord);
             emit_codegen_abort_expr(out);
@@ -12998,16 +13493,16 @@ static bool xicgen_emit_record_merge_copy_table(XiCgenCtx *ctx, FILE *out, const
         }
     }
 
-    fprintf(out, "xrt_record_merge_copy_table(");
+    fprintf(out, "xrt_object_merge_copy_table(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", %u, (const uint16_t[]){", (unsigned) plan->base_field_count);
     for (uint16_t src_ord = 0; src_ord < plan->base_field_count; src_ord++) {
-        const XgRecordFieldSummary *src_field =
-            xicgen_record_field_by_shape_ordinal(ev, plan->base_shape_id, src_ord);
+        const XgObjectFieldSummary *src_field =
+            xicgen_object_field_by_shape_ordinal(ev, plan->base_shape_id, src_ord);
         uint16_t dst_ord = UINT16_MAX;
-        (void) xicgen_record_shape_field_ordinal_by_name_id(ev, plan->result_shape_id,
+        (void) xicgen_object_shape_field_ordinal_by_name_id(ev, plan->result_shape_id,
                                                             src_field->name_id, &dst_ord);
         if (src_ord > 0)
             fprintf(out, ", ");
@@ -13017,19 +13512,20 @@ static bool xicgen_emit_record_merge_copy_table(XiCgenCtx *ctx, FILE *out, const
     return true;
 }
 
-/* Object spread merge: verified Records use a direct ordinal copy table; Json stays dynamic. */
+/* Object spread merge: verified structural objects use a direct ordinal copy table; Json stays
+ * dynamic. */
 static void xicgen_json_merge(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 2, "xicgen_json_merge: need dst and src");
-    const XaotRecordMergePlan *record_plan =
-        v->xg_record_merge_id != XG_NO_ID
-            ? xaot_bundle_find_record_merge_plan(cg_ctx_aot_bundle(ctx), v->xg_record_merge_id)
+    const XaotObjectMergePlan *object_plan =
+        v->xg_object_merge_id != XG_NO_ID
+            ? xaot_bundle_find_object_merge_plan(cg_ctx_aot_bundle(ctx), v->xg_object_merge_id)
             : NULL;
-    if (record_plan && (record_plan->action == XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE ||
-                        record_plan->action == XAOT_RECORD_MERGE_COPY_APPEND)) {
-        xicgen_emit_record_merge_copy_table(ctx, out, v, record_plan);
+    if (object_plan && (object_plan->action == XAOT_OBJECT_MERGE_COPY_WITH_OVERWRITE ||
+                        object_plan->action == XAOT_OBJECT_MERGE_COPY_APPEND)) {
+        xicgen_emit_object_merge_copy_table(ctx, out, v, object_plan);
         return;
     }
     fprintf(out, "xrt_json_merge(");
@@ -16190,8 +16686,8 @@ static const char *xicgen_type_label_noalloc(const XrType *type) {
             return type->ptr_is_mut ? "MutPtr" : "Ptr";
         case XR_KIND_RUNE:
             return "rune";
-        case XR_KIND_RECORD:
-            return "record";
+        case XR_KIND_STRUCT_OBJECT:
+            return "object";
         case XR_KIND_COUNT:
             return "type";
     }

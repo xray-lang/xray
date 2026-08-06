@@ -1314,8 +1314,8 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
                 return xr_type_new_error(NULL);
             for (int i = 0; i < count; i++)
                 types[i] = resolve_impl(X, t->children[i]);
-            bool is_sealed = !t->extensible;
-            XrType *result = xr_type_new_record_with_fields(X, names, types, count, is_sealed);
+            XrType *result =
+                xr_type_new_struct_object_with_fields(X, names, types, count, t->object_row_mode);
             if (result && t->field_readonly)
                 xr_type_set_object_field_readonly(X, result, t->field_readonly, count);
             if (result && t->name)
@@ -1924,9 +1924,8 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
             return xr_type_new_error(NULL);
         for (int i = 0; i < count; i++)
             types[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
-        bool is_sealed = !tref->extensible;
-        XrType *result =
-            xr_type_new_record_with_fields(analyzer->isolate, names, types, count, is_sealed);
+        XrType *result = xr_type_new_struct_object_with_fields(analyzer->isolate, names, types,
+                                                               count, tref->object_row_mode);
         if (result && tref->field_readonly)
             xr_type_set_object_field_readonly(analyzer->isolate, result, tref->field_readonly,
                                               count);

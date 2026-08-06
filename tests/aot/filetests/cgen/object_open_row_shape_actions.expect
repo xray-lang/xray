@@ -1,0 +1,9 @@
+contains=xaot-plan v0
+regex=object-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=field_get domain=1 syntax=1 action=direct_ordinal shape_count=2
+regex=object-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=field_get domain=1 syntax=1 action=shape_guard_ordinal shape_count=1
+regex=object-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=field_get domain=1 syntax=2 action=shape_dispatch_ordinal shape_count=2
+c_contains=xrt_object_shape_matches_key(
+c_contains=xrt_object_shape_field_matches_fingerprint(
+c_contains=xrt_object_access_plan_miss_get(
+c_not_contains=xrt_json_get_name_owned(
+c_not_contains=xrt_json_get_shape_guard_owned(

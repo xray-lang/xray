@@ -80,6 +80,9 @@ typedef struct {
     const char *name;
     uint16_t offset;
     uint8_t native_type;
+    uint8_t json_value_kind;
+    uint16_t json_enum_member_count;
+    const char *const *json_enum_member_names;
 } XrtInspectField;
 
 typedef struct {
@@ -90,11 +93,11 @@ typedef struct {
     int vtable_size;
     const XrtInterfaceMethodTable *itable;
     uint16_t itable_size;
-    XrtDestructor destructor;  // NULL for classes without custom dtor
+    XrtDestructor destructor;           // NULL for classes without custom dtor
     XrtStoragePromoter promote_storage; /* recursively publishes owned reference fields */
-    uint32_t instance_size;    // byte size of instance fields
-    XrtUserHashFn hash_fn;     // compiled hash(); NULL unless user-Hashable
-    XrtUserEqFn eq_fn;         // compiled operator ==; NULL unless user-Hashable
+    uint32_t instance_size;             // byte size of instance fields
+    XrtUserHashFn hash_fn;              // compiled hash(); NULL unless user-Hashable
+    XrtUserEqFn eq_fn;                  // compiled operator ==; NULL unless user-Hashable
 } XrtTypeInfo;
 
 typedef struct {

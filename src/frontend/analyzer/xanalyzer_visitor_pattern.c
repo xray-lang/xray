@@ -49,8 +49,8 @@ static XrTypeKind type_member_to_kind(const char *name) {
         return XR_KIND_MAP;
     if (strcmp(name, "Set") == 0)
         return XR_KIND_SET;
-    if (strcmp(name, "Json") == 0)
-        return XR_KIND_JSON;
+    if (strcmp(name, "object") == 0)
+        return XR_KIND_STRUCT_OBJECT;
     if (strcmp(name, "function") == 0)
         return XR_KIND_FUNCTION;
     if (strcmp(name, "Regex") == 0)
@@ -86,7 +86,8 @@ static const char *kind_to_type_member(XrTypeKind kind) {
         case XR_KIND_SET:
             return "Type.Set";
         case XR_KIND_JSON:
-            return "Type.Json";
+        case XR_KIND_STRUCT_OBJECT:
+            return "Type.object";
         case XR_KIND_FUNCTION:
             return "Type.function";
         case XR_KIND_CHANNEL:
@@ -110,6 +111,8 @@ static void collect_matched_type_members(AstNode *pattern, XrTypeKind *kinds, in
             XrTypeKind k = type_member_to_kind(val->as.member_access.name);
             if (k != XR_KIND_COUNT && *count < cap) {
                 kinds[(*count)++] = k;
+                if (k == XR_KIND_STRUCT_OBJECT && *count < cap)
+                    kinds[(*count)++] = XR_KIND_JSON;
             }
         }
     } else if (pattern->type == AST_MEMBER_ACCESS && pattern->as.member_access.object &&
@@ -119,6 +122,8 @@ static void collect_matched_type_members(AstNode *pattern, XrTypeKind *kinds, in
         XrTypeKind k = type_member_to_kind(pattern->as.member_access.name);
         if (k != XR_KIND_COUNT && *count < cap) {
             kinds[(*count)++] = k;
+            if (k == XR_KIND_STRUCT_OBJECT && *count < cap)
+                kinds[(*count)++] = XR_KIND_JSON;
         }
     } else if (pattern->type == AST_PATTERN_MULTI) {
         PatternMultiNode *multi = &pattern->as.pattern_multi;

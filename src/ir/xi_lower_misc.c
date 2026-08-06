@@ -15,6 +15,7 @@
 #include "xi_lower_internal.h"
 #include "xi.h"
 #include "xi_effect.h"
+#include "../analysis/xglobal_summary.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -312,18 +313,14 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
         }
     }
 
-    XaSymbol *enum_symbol = ed->symbol_id
-                                ? xa_scope_lookup_by_id(l->analyzer->global_scope, ed->symbol_id)
-                                : NULL;
-    XaSymbolLinks *enum_links = enum_symbol
-                                    ? xa_analyzer_get_links(l->analyzer, enum_symbol)
-                                    : NULL;
-    const char *nominal_owner = enum_links && enum_links->enum_info
-                                    ? enum_links->enum_info->nominal_owner
-                                    : NULL;
-    XrEnumType *et = nominal_owner
-                         ? xr_enum_type_new(l->isolate, nominal_owner, ed->name, names, n)
-                         : NULL;
+    XaSymbol *enum_symbol =
+        ed->symbol_id ? xa_scope_lookup_by_id(l->analyzer->global_scope, ed->symbol_id) : NULL;
+    XaSymbolLinks *enum_links =
+        enum_symbol ? xa_analyzer_get_links(l->analyzer, enum_symbol) : NULL;
+    const char *nominal_owner =
+        enum_links && enum_links->enum_info ? enum_links->enum_info->nominal_owner : NULL;
+    XrEnumType *et =
+        nominal_owner ? xr_enum_type_new(l->isolate, nominal_owner, ed->name, names, n) : NULL;
     if (!et)
         l->had_error = true;
     if (et)
@@ -412,6 +409,102 @@ XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, AstNode *node) {
 
 /* ========== Object Literal ========== */
 
+static const XgObjectFieldSummary *xi_lower_object_shape_field_at(const XgGlobalEvidence *evidence,
+                                                                  XgObjectShapeId shape_id,
+                                                                  uint16_t ordinal) {
+    if (!evidence || shape_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nobject_fields; i++) {
+        const XgObjectFieldSummary *field = &evidence->object_fields[i];
+        if (field->shape_id == shape_id && field->field_ordinal == ordinal)
+            return field;
+    }
+    return NULL;
+}
+
+static bool xi_lower_fill_object_field_names_from_evidence(XiLower *l, const XrType *type,
+                                                           const char **names, int count,
+                                                           uint32_t source_span_id) {
+    if (!l || !l->global_evidence || !l->func || l->func->xg_body_func_id == XG_NO_ID || !type ||
+        !type->object.field_names || count <= 0 || count > (int) UINT16_MAX || source_span_id == 0)
+        return false;
+    const XgGlobalEvidence *evidence = l->global_evidence;
+    uint8_t domain =
+        type->kind == XR_KIND_STRUCT_OBJECT ? XG_OBJECT_DOMAIN_STRUCT : XG_OBJECT_DOMAIN_JSON;
+    for (uint32_t i = 0; i < evidence->nobject_shapes; i++) {
+        const XgObjectShapeSummary *shape = &evidence->object_shapes[i];
+        if (shape->owner_func_id != (XgFuncId) l->func->xg_body_func_id ||
+            shape->source_span_id != source_span_id || shape->field_count != (uint16_t) count ||
+            shape->domain != domain)
+            continue;
+        bool matches = true;
+        for (int ordinal = 0; ordinal < count; ordinal++) {
+            const XgObjectFieldSummary *field = xi_lower_object_shape_field_at(
+                evidence, shape->object_shape_id, (uint16_t) ordinal);
+            const char *matched_name = NULL;
+            if (!field) {
+                matches = false;
+                break;
+            }
+            for (int type_ordinal = 0; type_ordinal < count; type_ordinal++) {
+                const char *candidate = type->object.field_names[type_ordinal];
+                if (candidate && xg_name_id(candidate) == field->name_id &&
+                    xg_object_stable_name_key(candidate) == field->stable_name_key) {
+                    matched_name = candidate;
+                    break;
+                }
+            }
+            if (!matched_name) {
+                matches = false;
+                break;
+            }
+            names[ordinal] = matched_name;
+        }
+        if (!matches)
+            continue;
+        for (int ordinal = 0; ordinal < count; ordinal++) {
+            names[ordinal] = arena_strdup(l->func, names[ordinal]);
+            if (!names[ordinal])
+                return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+XR_FUNC bool xi_lower_fill_canonical_object_field_names(XiLower *l, const XrType *type,
+                                                        const char **names, int count,
+                                                        uint32_t source_span_id) {
+    if (!l || !type || !names || count <= 0 || !XR_TYPE_HAS_OBJECT_SHAPE(type) ||
+        type->object.field_count != count || !type->object.field_names)
+        return false;
+    if (xi_lower_fill_object_field_names_from_evidence(l, type, names, count, source_span_id))
+        return true;
+    for (int i = 0; i < count; i++) {
+        const char *name = type->object.field_names[i];
+        names[i] = arena_strdup(l->func, name ? name : "?");
+        if (!names[i])
+            return false;
+    }
+    for (int i = 1; i < count; i++) {
+        const char *current = names[i];
+        uint64_t current_stable = xg_object_stable_name_key(current);
+        uint32_t current_id = xg_name_id(current);
+        int j = i;
+        while (j > 0) {
+            uint64_t previous_stable = xg_object_stable_name_key(names[j - 1]);
+            uint32_t previous_id = xg_name_id(names[j - 1]);
+            if (previous_stable < current_stable ||
+                (previous_stable == current_stable && previous_id <= current_id))
+                break;
+            names[j] = names[j - 1];
+            j--;
+        }
+        names[j] = current;
+    }
+    return true;
+}
+
 /* Object literal with `...spread` entries: `{...base, x: 1}`.
  * The result Json is created pre-sized with the statically-known union shape
  * (from the analyzer's inferred type), then each part is applied in order:
@@ -433,10 +526,9 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
             l->func, (uint32_t) (sizeof(const char *) * (size_t) static_count));
         if (!key_names)
             return NULL;
-        for (int i = 0; i < static_count; i++) {
-            const char *nm = result_type->object.field_names[i];
-            key_names[i] = nm ? arena_strdup(l->func, nm) : "?";
-        }
+        if (!xi_lower_fill_canonical_object_field_names(l, result_type, key_names, static_count,
+                                                        (uint32_t) node->line))
+            return NULL;
     }
 
     XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
@@ -459,7 +551,7 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
             mg->args[1] = src;
             mg->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
             mg->line = (uint32_t) val->line;
-            xi_lower_bind_record_merge_id(l, mg,
+            xi_lower_bind_object_merge_id(l, mg,
                                           xi_lower_source_node_id(l, val->as.spread_expr.expr));
             continue;
         }
@@ -470,7 +562,7 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
         bool is_computed = obj->computed && obj->computed[i];
 
         /* Static literal key: write the field by its index in the union shape
-         * (XI_JSON_SET_F), matching how spread merges and member reads address
+         * (XI_OBJECT_SET_F), matching how spread merges and member reads address
          * the same slots. Computed keys are not part of the static shape and
          * fall back to a dynamic key set. */
         int field_idx = -1;
@@ -486,7 +578,7 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
         }
 
         if (field_idx >= 0) {
-            XiValue *set = xi_value_new(l->func, l->cur_block, XI_JSON_SET_F, l->type_unit, 2);
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_OBJECT_SET_F, l->type_unit, 2);
             if (!set)
                 return NULL;
             set->args[0] = obj_val;
@@ -551,16 +643,15 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
-    bool canonical_record_shape = result_type && result_type->kind == XR_KIND_RECORD &&
-                                  XR_TYPE_HAS_OBJECT_SHAPE(result_type) &&
+    bool canonical_object_shape = result_type && XR_TYPE_HAS_OBJECT_SHAPE(result_type) &&
                                   result_type->object.field_count > 0 &&
                                   result_type->object.field_names;
 
-    /* A contextual Record must retain its declared shape even when optional
+    /* A contextual structural object must retain its declared shape even when optional
      * fields are omitted. Otherwise a later supplied field is compacted into
      * an earlier optional slot and direct field reads observe the wrong value. */
     int static_count = 0;
-    if (canonical_record_shape) {
+    if (canonical_object_shape) {
         static_count = result_type->object.field_count;
     } else {
         for (int i = 0; i < n; i++) {
@@ -574,13 +665,10 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
         l->func, (uint32_t) (sizeof(const char *) * (static_count > 0 ? static_count : 1)));
     if (!key_names)
         return NULL;
-    if (canonical_record_shape) {
-        for (int i = 0; i < static_count; i++) {
-            const char *name = result_type->object.field_names[i];
-            key_names[i] = arena_strdup(l->func, name ? name : "?");
-            if (!key_names[i])
-                return NULL;
-        }
+    if (canonical_object_shape) {
+        if (!xi_lower_fill_canonical_object_field_names(l, result_type, key_names, static_count,
+                                                        (uint32_t) node->line))
+            return NULL;
         for (int i = 0; i < n; i++) {
             static_idx_map[i] = -1;
             if (key_vals[i] || !obj->keys[i] || obj->keys[i]->type != AST_LITERAL_STRING)
@@ -625,7 +713,7 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     for (int i = 0; i < n; i++) {
         if (!key_vals[i] && static_idx_map[i] >= 0) {
             /* Static key → indexed init */
-            XiValue *init = xi_value_new(l->func, l->cur_block, XI_JSON_INIT_F, l->type_unit, 2);
+            XiValue *init = xi_value_new(l->func, l->cur_block, XI_OBJECT_INIT_F, l->type_unit, 2);
             if (!init)
                 break;
             init->args[0] = obj_val;

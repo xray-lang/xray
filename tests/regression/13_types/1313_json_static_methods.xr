@@ -58,7 +58,7 @@ fn test_json_stringify_object() {
 
 // ===== Json.encode =====
 @test
-fn test_json_encode_record() {
+fn test_json_encode_object() {
     var user = { name: "Bob", scores: [10, 20] }
     var encoded = Json.encode(user)
     assert_eq(typeName(encoded), "Json")

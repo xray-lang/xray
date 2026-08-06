@@ -12,6 +12,7 @@
 #include "../test_framework.h"
 
 #include "xray_vm.h"
+#include "../../../src/frontend/analyzer/xanalyzer_builtins.h"
 #include "../../../src/frontend/analyzer/xanalyzer_native_types.h"
 #include "../../../src/runtime/class/xenum.h"
 #include "../../../stdlib/stdlib_cache.h"
@@ -22,8 +23,7 @@ static XrVMRuntime *make_full_isolate(void) {
     return xray_vm_new_full(&params);
 }
 
-static const XaBuiltinMember *find_module_member(const char *module_name,
-                                                 const char *member_name) {
+static const XaBuiltinMember *find_module_member(const char *module_name, const char *member_name) {
     const XaBuiltinModule *module = xa_builtin_get_module_info(module_name);
     if (!module || !member_name)
         return NULL;
@@ -49,23 +49,34 @@ TEST(native_type_protocol_rejects_null_isolate) {
     ASSERT_EQ_INT(xa_native_verify_protocol(NULL), -1);
 }
 
-TEST(native_module_record_and_enum_metadata) {
+TEST(native_type_lookup_and_typed_json_contract_are_total) {
+    ASSERT_NULL(xa_builtin_get_type_info(NULL));
+
+    const XaBuiltinType *json = xa_builtin_get_by_name("Json");
+    ASSERT_NOT_NULL(json);
+    const XaEffectContract *decode =
+        xa_builtin_get_named_type_member_effect_contract("Json", "decode", true);
+    ASSERT_NOT_NULL(decode);
+    ASSERT_EQ_INT(decode->kind, XA_EFFECT_CONTRACT_NOTHROW);
+}
+
+TEST(native_module_object_and_enum_metadata) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);
 
-    const XaBuiltinRecord *record =
-        xa_builtin_get_record_type("net", "__CopyBidirectionalResult");
-    ASSERT_NOT_NULL(record);
-    ASSERT_TRUE(record->is_sealed);
-    ASSERT_EQ_INT(record->field_count, 2);
-    ASSERT_TRUE(strcmp(record->fields[0].name, "aToB") == 0);
-    ASSERT_TRUE(strcmp(record->fields[1].name, "bToA") == 0);
+    const XaBuiltinObjectShape *object_shape =
+        xa_builtin_get_object_shape("net", "__CopyBidirectionalResult");
+    ASSERT_NOT_NULL(object_shape);
+    ASSERT_TRUE(object_shape->is_exact);
+    ASSERT_EQ_INT(object_shape->field_count, 2);
+    ASSERT_TRUE(strcmp(object_shape->fields[0].name, "aToB") == 0);
+    ASSERT_TRUE(strcmp(object_shape->fields[1].name, "bToA") == 0);
 
-    XrType *record_type = xa_builtin_record_decl_type(iso, record);
-    ASSERT_NOT_NULL(record_type);
-    ASSERT_EQ_INT(record_type->kind, XR_KIND_RECORD);
-    ASSERT_TRUE(record_type->object.is_sealed);
-    ASSERT_EQ_INT(record_type->object.field_count, 2);
+    XrType *object_shape_type = xa_builtin_object_shape_decl_type(iso, object_shape);
+    ASSERT_NOT_NULL(object_shape_type);
+    ASSERT_EQ_INT(object_shape_type->kind, XR_KIND_STRUCT_OBJECT);
+    ASSERT_EQ_INT(object_shape_type->object.row_mode, XR_OBJECT_ROW_EXACT);
+    ASSERT_EQ_INT(object_shape_type->object.field_count, 2);
 
     const XaBuiltinEnum *enum_decl = xa_builtin_get_enum_type("net", "NetError");
     ASSERT_NOT_NULL(enum_decl);
@@ -97,14 +108,14 @@ TEST(native_module_record_and_enum_metadata) {
     ASSERT_NOT_NULL(fn);
     ASSERT_EQ_INT(fn->kind, XR_KIND_FUNCTION);
     ASSERT_NOT_NULL(fn->function.return_type);
-    ASSERT_EQ_INT(fn->function.return_type->kind, XR_KIND_RECORD);
+    ASSERT_EQ_INT(fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);
 
     ASSERT_EQ_INT(copy_bidi->effect_contract.kind, XA_EFFECT_CONTRACT_ERRORS);
     ASSERT_EQ_INT(copy_bidi->effect_contract.error_count, 10);
 
-    const XaBuiltinRecord *ws_options = xa_builtin_get_record_type("ws", "WsConnectOptions");
+    const XaBuiltinObjectShape *ws_options = xa_builtin_get_object_shape("ws", "WsConnectOptions");
     ASSERT_NOT_NULL(ws_options);
-    ASSERT_TRUE(ws_options->is_sealed);
+    ASSERT_TRUE(ws_options->is_exact);
     ASSERT_EQ_INT(ws_options->field_count, 4);
     ASSERT_TRUE(strcmp(ws_options->fields[0].name, "timeout") == 0);
     ASSERT_TRUE(strcmp(ws_options->fields[3].name, "maxMessageSize") == 0);
@@ -116,23 +127,26 @@ TEST(native_module_record_and_enum_metadata) {
     ASSERT_EQ_INT(ws_fn->kind, XR_KIND_FUNCTION);
     ASSERT_EQ_INT(ws_fn->function.param_count, 2);
     ASSERT_NOT_NULL(ws_fn->function.params[1].type);
-    ASSERT_EQ_INT(ws_fn->function.params[1].type->kind, XR_KIND_RECORD);
+    ASSERT_EQ_INT(ws_fn->function.params[1].type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_TRUE(ws_fn->function.params[1].type->is_nullable);
 
-    const XaBuiltinRecord *cluster_config = xa_builtin_get_record_type("cluster", "ClusterConfig");
-    const XaBuiltinRecord *cluster_info = xa_builtin_get_record_type("cluster", "ClusterInfo");
+    const XaBuiltinObjectShape *cluster_config =
+        xa_builtin_get_object_shape("cluster", "ClusterConfig");
+    const XaBuiltinObjectShape *cluster_info =
+        xa_builtin_get_object_shape("cluster", "ClusterInfo");
     ASSERT_NOT_NULL(cluster_config);
     ASSERT_NOT_NULL(cluster_info);
-    ASSERT_TRUE(cluster_config->is_sealed);
-    ASSERT_TRUE(cluster_info->is_sealed);
+    ASSERT_TRUE(cluster_config->is_exact);
+    ASSERT_TRUE(cluster_info->is_exact);
     ASSERT_EQ_INT(cluster_config->field_count, 4);
     ASSERT_EQ_INT(cluster_info->field_count, 11);
     ASSERT_TRUE(strcmp(cluster_config->fields[3].name, "tls") == 0);
     ASSERT_TRUE(strcmp(cluster_info->fields[6].name, "deadNodes") == 0);
 
-    XrClass *cluster_info_class = xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo");
+    XrClass *cluster_info_class = xr_stdlib_object_shape_class_get(iso, "cluster", "ClusterInfo");
     ASSERT_NOT_NULL(cluster_info_class);
-    ASSERT_TRUE(cluster_info_class == xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo"));
+    ASSERT_TRUE(cluster_info_class ==
+                xr_stdlib_object_shape_class_get(iso, "cluster", "ClusterInfo"));
 
     const XaBuiltinEnum *cluster_state = xa_builtin_get_enum_type("cluster", "ClusterNodeState");
     ASSERT_NOT_NULL(cluster_state);
@@ -153,10 +167,10 @@ TEST(native_module_record_and_enum_metadata) {
     ASSERT_NOT_NULL(cluster_info_fn);
     ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
     ASSERT_EQ_INT(cluster_start_fn->function.param_count, 1);
-    ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_RECORD);
+    ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_EQ_INT(cluster_start_fn->function.return_type->kind, XR_KIND_BOOL);
     ASSERT_EQ_INT(cluster_info_fn->kind, XR_KIND_FUNCTION);
-    ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_RECORD);
+    ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_TRUE(cluster_info_fn->function.return_type->is_nullable);
 
     xray_vm_delete(iso);
@@ -166,5 +180,6 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("stdlib/native-type-surface");
 RUN_TEST(native_type_methods_match_runtime_tables);
 RUN_TEST(native_type_protocol_rejects_null_isolate);
-RUN_TEST(native_module_record_and_enum_metadata);
+RUN_TEST(native_type_lookup_and_typed_json_contract_are_total);
+RUN_TEST(native_module_object_and_enum_metadata);
 TEST_MAIN_END()

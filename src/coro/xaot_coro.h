@@ -123,9 +123,9 @@ typedef struct XrAotVmHostOps {
     XrValue (*exception_new)(void *host, int code, const char *message);
     bool (*is_exception)(void *host, XrValue value);
     XrValue (*exception_from_value)(void *host, XrValue value);
-    XrValue (*new_record)(void *host, const char *module, const char *name,
+    XrValue (*new_object)(void *host, const char *module, const char *name,
                           struct XrCoroutine *owner);
-    void (*record_set)(void *host, XrValue record, int64_t field_index, XrValue value);
+    void (*object_set)(void *host, XrValue object, int64_t field_index, XrValue value);
     XrValue (*enum_new)(void *host, const char *module, const char *enum_name,
                         const char *member_name, int64_t member_index);
     int64_t (*enum_ordinal)(void *host, XrValue value, int64_t fallback);
@@ -143,8 +143,8 @@ struct XrAotValueOps {
     bool (*map_delete)(XrValue map, XrValue key);
     XrValue (*array_new)(int64_t length);
     void (*array_push)(XrValue array, XrValue value);
-    XrValue (*record_new)(int64_t field_count, const char *const *field_names);
-    void (*record_set)(XrValue record, int64_t field_index, XrValue value);
+    XrValue (*object_new)(int64_t field_count, const char *const *field_names);
+    void (*object_set)(XrValue object, int64_t field_index, XrValue value);
     XrValue (*enum_new)(const char *enum_name, const char *member_name, int64_t member_index);
     int64_t (*enum_ordinal)(XrValue value, int64_t fallback);
     void (*retain)(XrValue value);

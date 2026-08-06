@@ -33,6 +33,7 @@
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
+#include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_ops_gen.h"
@@ -624,6 +625,19 @@ typedef struct CgStrLit {
     struct CgStrLit *next; /* hash bucket chain */
 } CgStrLit;
 
+/* Translation-unit-local descriptor registry. Names and type metadata are
+ * borrowed from the Xi/type arenas and remain live until the unit is emitted;
+ * only the growable registry storage is owned by XiCgenCtx. */
+typedef struct CgObjectShape {
+    uint64_t stable_key;
+    int64_t field_count;
+    const char *const *field_names; /* owned: Xi value/type arena; TU-scoped borrow */
+    const XrType *type;             /* owned: type pool; TU-scoped borrow */
+    uint8_t object_domain;
+    bool owns_field_names;
+    int id;
+} CgObjectShape;
+
 #define CG_STRLIT_BUCKETS 1024
 
 typedef struct CgFuncReachMemo {
@@ -762,6 +776,9 @@ struct XiCgenCtx {
     CgStrLit **strlit_list; /* ordered by id for definition emission */
     int nstrlit;
     int strlit_cap;
+    CgObjectShape *object_shapes;
+    int nobject_shapes;
+    int object_shapes_cap;
     CgFuncReachMemo *func_reach_memo;
     int nfunc_reach_memo;
     int func_reach_memo_cap;
@@ -1052,6 +1069,169 @@ static void cg_reset_str_lits(XiCgenCtx *ctx) {
     ctx->nstrlit = 0;
 }
 
+static int64_t cg_object_shape_type_ordinal(const XrType *type, const char *name,
+                                            int64_t fallback_ordinal) {
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || !name || !type->object.field_names)
+        return fallback_ordinal;
+    for (int64_t i = 0; i < type->object.field_count; i++) {
+        if (type->object.field_names[i] && strcmp(type->object.field_names[i], name) == 0)
+            return i;
+    }
+    return fallback_ordinal;
+}
+
+static uint8_t cg_object_shape_field_flags(const XrType *type, const char *name, int64_t ordinal) {
+    ordinal = cg_object_shape_type_ordinal(type, name, ordinal);
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || ordinal < 0 ||
+        ordinal >= type->object.field_count)
+        return 0;
+    return type->object.field_readonly && type->object.field_readonly[ordinal]
+               ? XR_OBJECT_SHAPE_FIELD_READONLY
+               : 0;
+}
+
+static uint64_t cg_object_shape_field_type_key(const XrType *type, const char *name,
+                                               int64_t ordinal) {
+    ordinal = cg_object_shape_type_ordinal(type, name, ordinal);
+    if (!type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || !type->object.field_types || ordinal < 0 ||
+        ordinal >= type->object.field_count)
+        return 0;
+    return xr_type_stable_key(type->object.field_types[ordinal]);
+}
+
+static void cg_reset_object_shapes(XiCgenCtx *ctx) {
+    if (!ctx)
+        return;
+    for (int i = 0; i < ctx->nobject_shapes; i++) {
+        if (ctx->object_shapes[i].owns_field_names)
+            xr_free((void *) ctx->object_shapes[i].field_names);
+    }
+    ctx->nobject_shapes = 0;
+}
+
+static bool cg_reserve_object_shapes(XiCgenCtx *ctx, int need) {
+    if (!ctx || need <= ctx->object_shapes_cap)
+        return ctx != NULL;
+    int cap = ctx->object_shapes_cap ? ctx->object_shapes_cap * 2 : 16;
+    while (cap < need)
+        cap *= 2;
+    CgObjectShape *shapes =
+        (CgObjectShape *) xr_realloc(ctx->object_shapes, (size_t) cap * sizeof(*shapes));
+    if (!shapes) {
+        ctx->error = true;
+        return false;
+    }
+    ctx->object_shapes = shapes;
+    ctx->object_shapes_cap = cap;
+    return true;
+}
+
+static bool cg_object_shape_matches(const CgObjectShape *shape, uint64_t stable_key,
+                                    int64_t field_count, const char *const *field_names,
+                                    const XrType *type, uint8_t object_domain) {
+    if (!shape || shape->stable_key != stable_key || shape->field_count != field_count ||
+        shape->object_domain != object_domain)
+        return false;
+    for (int64_t i = 0; i < field_count; i++) {
+        const char *left =
+            shape->field_names && shape->field_names[i] ? shape->field_names[i] : "?";
+        const char *right = field_names && field_names[i] ? field_names[i] : "?";
+        if (strcmp(left, right) != 0 ||
+            cg_object_shape_field_type_key(shape->type, left, i) !=
+                cg_object_shape_field_type_key(type, right, i) ||
+            cg_object_shape_field_flags(shape->type, left, i) !=
+                cg_object_shape_field_flags(type, right, i))
+            return false;
+    }
+    return true;
+}
+
+static int cg_intern_object_shape_parts(XiCgenCtx *ctx, int64_t field_count,
+                                        const char *const *field_names, const XrType *type,
+                                        uint8_t object_domain) {
+    if (!ctx || field_count <= 0 || field_count > UINT16_MAX || !field_names) {
+        if (ctx && field_count > UINT16_MAX)
+            ctx->error = true;
+        return -1;
+    }
+    uint64_t stable_key = xr_object_shape_key_begin(object_domain, field_count);
+    for (int64_t i = 0; i < field_count; i++) {
+        stable_key = xr_object_shape_key_add_field(
+            stable_key, field_names[i], cg_object_shape_field_type_key(type, field_names[i], i),
+            cg_object_shape_field_flags(type, field_names[i], i));
+    }
+    for (int i = 0; i < ctx->nobject_shapes; i++) {
+        if (cg_object_shape_matches(&ctx->object_shapes[i], stable_key, field_count, field_names,
+                                    type, object_domain))
+            return ctx->object_shapes[i].id;
+    }
+    if (!cg_reserve_object_shapes(ctx, ctx->nobject_shapes + 1))
+        return -1;
+    int id = ctx->nobject_shapes;
+    CgObjectShape *shape = &ctx->object_shapes[ctx->nobject_shapes++];
+    shape->stable_key = stable_key;
+    shape->field_count = field_count;
+    shape->field_names = field_names;
+    shape->type = type;
+    shape->object_domain = object_domain;
+    shape->owns_field_names = false;
+    shape->id = id;
+    return id;
+}
+
+static int cg_intern_object_shape_type_domain(XiCgenCtx *ctx, const XrType *type,
+                                              uint8_t object_domain) {
+    if (!ctx || !type || !XR_TYPE_HAS_OBJECT_SHAPE(type) || type->object.field_count <= 0 ||
+        !type->object.field_names)
+        return -1;
+    int field_count = type->object.field_count;
+    const char **names = (const char **) xr_malloc((size_t) field_count * sizeof(const char *));
+    if (!names) {
+        ctx->error = true;
+        return -1;
+    }
+    for (int i = 0; i < field_count; i++)
+        names[i] = type->object.field_names[i] ? type->object.field_names[i] : "?";
+    for (int i = 1; i < field_count; i++) {
+        const char *current = names[i];
+        uint64_t current_key = xg_object_stable_name_key(current);
+        uint32_t current_id = xg_name_id(current);
+        int j = i;
+        while (j > 0) {
+            uint64_t previous_key = xg_object_stable_name_key(names[j - 1]);
+            uint32_t previous_id = xg_name_id(names[j - 1]);
+            if (previous_key < current_key ||
+                (previous_key == current_key && previous_id <= current_id))
+                break;
+            names[j] = names[j - 1];
+            j--;
+        }
+        names[j] = current;
+    }
+    int id = cg_intern_object_shape_parts(ctx, field_count, names, type, object_domain);
+    if (id < 0) {
+        xr_free(names);
+        return -1;
+    }
+    if (ctx->object_shapes[id].field_names == names)
+        ctx->object_shapes[id].owns_field_names = true;
+    else
+        xr_free(names);
+    return id;
+}
+
+static int cg_intern_object_shape_type(XiCgenCtx *ctx, const XrType *type) {
+    return cg_intern_object_shape_type_domain(ctx, type, XR_OBJECT_DOMAIN_STRUCT);
+}
+
+static int cg_intern_object_shape(XiCgenCtx *ctx, const XiValue *value) {
+    const XrType *type = value ? value->type : NULL;
+    return cg_intern_object_shape_parts(
+        ctx, xi_json_field_count(value), value ? (const char *const *) value->aux : NULL, type,
+        type && type->kind == XR_KIND_STRUCT_OBJECT ? XR_OBJECT_DOMAIN_STRUCT
+                                                    : XR_OBJECT_DOMAIN_JSON);
+}
+
 /* Storage-class prefix for emitted top-level objects: external linkage in
  * multi-module separate-compilation mode, file-static otherwise.  Function
  * linkage is finer-grained (see cg_func_linkage): only symbols that form the
@@ -1068,6 +1248,7 @@ static bool cg_func_contains_stack_array(const XiFunc *f);
 static bool cg_func_stack_arrays_force_inline_safe(const XiFunc *f);
 static bool cg_func_should_noinline(const XiFunc *f);
 static bool cg_func_should_force_inline(XiCgenCtx *ctx, const XiFunc *f);
+static bool cg_func_small_static_object_loop_force_inline(const XiFunc *f);
 static bool cg_func_has_native_vector_width(const XiCgenCtx *ctx, const XiFunc *f, uint8_t width);
 static bool cg_func_requires_x86_vector_target(const XiCgenCtx *ctx, const XiFunc *f,
                                                uint8_t width);
@@ -1128,11 +1309,16 @@ static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *
             return "static XR_AINLINE ";
         if (cg_func_contains_stack_array(f) && !cg_func_stack_arrays_force_inline_safe(f))
             return "static XR_NOINLINE ";
-        return cg_func_should_force_inline(ctx, f) ? "static XR_AINLINE " : "static ";
+        return cg_func_should_force_inline(ctx, f) ||
+                       cg_func_small_static_object_loop_force_inline(f)
+                   ? "static XR_AINLINE "
+                   : "static ";
     }
     if (cg_func_should_noinline(f))
         return "static XR_NOINLINE ";
     if (f && f->inline_policy == XI_INLINE_PREFER)
+        return "static XR_AINLINE ";
+    if (cg_func_small_static_object_loop_force_inline(f))
         return "static XR_AINLINE ";
     return cg_linkage(ctx);
 }
@@ -7671,6 +7857,12 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (cg_fixed_array_value_clone_place_store(f, v))
         return;
 
+    if (xicgen_emit_json_native_struct_decode_stmt(ctx, out, f, v, prefix)) {
+        emit_value_generated_line_reset(ctx, out, v);
+        emit_debug_source_var_sync(ctx, out, f, v);
+        return;
+    }
+
     const XiValue *wide_mul_partner = NULL;
     bool wide_mul_is_first = false;
     if (cg_u64_mul_wide_pair(ctx, f, v, &wide_mul_partner, &wide_mul_is_first)) {
@@ -8394,6 +8586,39 @@ static bool cg_func_has_branching_call_fanout(XiCgenCtx *ctx, const XiFunc *f) {
 
 static bool cg_func_should_noinline(const XiFunc *f) {
     return f && f->inline_policy == XI_INLINE_PRESERVE_CALL;
+}
+
+/* A small leaf loop that constructs one verified exact structural object can
+ * otherwise cross MSVC's heuristic inlining threshold when the static shape
+ * descriptor replaces the old per-instance name table. Inlining this narrow
+ * form exposes the same scalar replacement and loop folding as W0. Calls,
+ * dynamic Json objects, large bodies, and source-declared noinline boundaries
+ * remain untouched. */
+static bool cg_func_small_static_object_loop_force_inline(const XiFunc *f) {
+    enum {
+        CG_STATIC_OBJECT_LOOP_INLINE_VALUE_LIMIT = 48
+    };
+    if (!f || cg_func_should_noinline(f) || !cg_func_has_backedge(f) ||
+        cg_func_value_count(f) > CG_STATIC_OBJECT_LOOP_INLINE_VALUE_LIMIT)
+        return false;
+    bool found = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value)
+                continue;
+            if (value->op == XI_CALL || value->op == XI_TAIL_CALL || value->op == XI_CALL_METHOD ||
+                value->op == XI_CALL_METHOD_DIRECT)
+                return false;
+            if (value->op == XI_JSON_NEW && XR_TYPE_IS_STRUCT_OBJECT(value->type) &&
+                value->aux_int > 0)
+                found = true;
+        }
+    }
+    return found;
 }
 
 static bool cg_func_should_force_inline(XiCgenCtx *ctx, const XiFunc *f) {
@@ -12329,8 +12554,14 @@ static bool cg_json_codec_site_contract(const XiValue *value, uint8_t *out_kind,
     if (!value || !out_kind || !out_allowed_actions)
         return false;
     if (value->op == XI_JSON_DECODE) {
-        kind = XG_JSON_CODEC_DECODE;
-        actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
+        if ((value->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0) {
+            kind = XG_JSON_CODEC_PARSE;
+            actions =
+                xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT_TYPED);
+        } else {
+            kind = XG_JSON_CODEC_DECODE;
+            actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
+        }
     } else if (value->op == XI_CALL_METHOD && value->nargs >= 1 && value->aux &&
                xicgen_receiver_is_builtin_global(value->args[0], XR_GLOBAL_VAR_JSON)) {
         const char *method = (const char *) value->aux;
@@ -12400,30 +12631,30 @@ static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *fun
         valid = false;
     }
 
-    const bool record_merge_site = value->op == XI_JSON_MERGE && value->nargs >= 2 &&
+    const bool object_merge_site = value->op == XI_JSON_MERGE && value->nargs >= 2 &&
                                    value->args[0] && value->args[0]->type &&
-                                   value->args[0]->type->kind == XR_KIND_RECORD;
-    const uint32_t record_merge_actions =
-        xaot_backend_record_merge_action_bit(XAOT_RECORD_MERGE_COPY_WITH_OVERWRITE) |
-        xaot_backend_record_merge_action_bit(XAOT_RECORD_MERGE_COPY_APPEND);
-    if (record_merge_site) {
-        if (value->xg_record_merge_id == XG_NO_ID) {
+                                   value->args[0]->type->kind == XR_KIND_STRUCT_OBJECT;
+    const uint32_t object_merge_actions =
+        xaot_backend_object_merge_action_bit(XAOT_OBJECT_MERGE_COPY_WITH_OVERWRITE) |
+        xaot_backend_object_merge_action_bit(XAOT_OBJECT_MERGE_COPY_APPEND);
+    if (object_merge_site) {
+        if (value->xg_object_merge_id == XG_NO_ID) {
             issue = XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN;
-            cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge", XG_NO_ID,
+            cg_report_mandatory_plan_contract_failure(ctx, func, value, "object-merge", XG_NO_ID,
                                                       issue);
             return false;
         }
-        const XaotRecordMergePlan *plan =
-            xaot_bundle_find_record_merge_plan(bundle, value->xg_record_merge_id);
-        if (!xaot_backend_contract_record_merge_plan_allowed(plan, record_merge_actions, &issue)) {
-            cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge",
-                                                      value->xg_record_merge_id, issue);
+        const XaotObjectMergePlan *plan =
+            xaot_bundle_find_object_merge_plan(bundle, value->xg_object_merge_id);
+        if (!xaot_backend_contract_object_merge_plan_allowed(plan, object_merge_actions, &issue)) {
+            cg_report_mandatory_plan_contract_failure(ctx, func, value, "object-merge",
+                                                      value->xg_object_merge_id, issue);
             valid = false;
         }
-    } else if (value->xg_record_merge_id != XG_NO_ID) {
+    } else if (value->xg_object_merge_id != XG_NO_ID) {
         issue = XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH;
-        cg_report_mandatory_plan_contract_failure(ctx, func, value, "record-merge",
-                                                  value->xg_record_merge_id, issue);
+        cg_report_mandatory_plan_contract_failure(ctx, func, value, "object-merge",
+                                                  value->xg_object_merge_id, issue);
         valid = false;
     }
     return valid;
