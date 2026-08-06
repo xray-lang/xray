@@ -1283,6 +1283,30 @@ xi_lower_json_dynamic_access_row_is_direct_index(const XgGlobalEvidence *ev,
     return !xi_lower_json_dynamic_access_row_requires_dynamic_lookup(ev, row);
 }
 
+/* The object-access mirror of the two predicates above. A field access on a
+ * Json receiver is published as an object access -- the json_dynamic_accesses
+ * table is empty for these -- so the same question has to be asked of the row
+ * that actually exists. A computed key has no name id, and a shape that can
+ * still grow computed keys cannot own a fixed ordinal. */
+static bool xi_lower_object_access_row_requires_dynamic_lookup(const XgGlobalEvidence *ev,
+                                                               const XgObjectAccessSummary *row) {
+    const XgObjectShapeSummary *shape;
+    if (!ev || !row)
+        return false;
+    if (row->field_name_id == 0 || row->receiver_shape_id == XG_NO_ID)
+        return true;
+    shape = xg_global_evidence_find_object_shape(ev, row->receiver_shape_id);
+    return !shape || (shape->flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) != 0 ||
+           row->field_ordinal >= shape->field_count;
+}
+
+static bool xi_lower_object_access_row_is_direct_ordinal(const XgGlobalEvidence *ev,
+                                                         const XgObjectAccessSummary *row) {
+    if (!row || (row->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) == 0)
+        return false;
+    return !xi_lower_object_access_row_requires_dynamic_lookup(ev, row);
+}
+
 XR_FUNC bool xi_lower_find_json_direct_field_ordinal(XiLower *l, const char *field_name,
                                                      uint32_t source_span_id, uint8_t access_kind,
                                                      uint16_t *out_ordinal) {
@@ -1308,15 +1332,24 @@ XR_FUNC bool xi_lower_find_json_direct_field_ordinal(XiLower *l, const char *fie
     ev = l->global_evidence;
     if (l->func)
         owner_func_id = (XgFuncId) l->func->xg_body_func_id;
-    for (uint32_t i = 0; i < ev->njson_dynamic_accesses; i++) {
-        const XgJsonDynamicAccessSummary *row = &ev->json_dynamic_accesses[i];
+    /* Read the object-access table, not json_dynamic_accesses.
+     *
+     * The object/JSON unification publishes a field access on a Json receiver
+     * as an object access; the json table is empty for these (measured:
+     * njson=0, nobj=1 on the direct-index filetests). Reading the empty table
+     * meant no ordinal was ever found, so lowering fell back to a name lookup
+     * and emitted xrt_json_get_name_owned even though the plan had already
+     * proven `action=direct_ordinal`. The backend consumes verified plans; it
+     * must not be handed a shape the plan says it does not have. */
+    for (uint32_t i = 0; i < ev->nobject_accesses; i++) {
+        const XgObjectAccessSummary *row = &ev->object_accesses[i];
         bool direct;
         if (!xi_lower_evidence_module_matches(l, row->module_id))
             continue;
-        if (row->source_span_id != source_span_id || row->key_name_id != key_name_id ||
+        if (row->source_span_id != source_span_id || row->field_name_id != key_name_id ||
             row->access_kind != access_kind)
             continue;
-        direct = xi_lower_json_dynamic_access_row_is_direct_index(ev, row);
+        direct = xi_lower_object_access_row_is_direct_ordinal(ev, row);
         if (owner_func_id != XG_NO_ID && row->owner_func_id == owner_func_id) {
             owner_seen = true;
             if (!direct) {
