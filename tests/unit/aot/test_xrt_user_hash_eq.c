@@ -63,6 +63,11 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     abort();
 }
 
+XRT_COLD _Noreturn void xrt_type_no_index(const char *message) {
+    fprintf(stderr, "unexpected xrt_type_no_index in test_xrt_user_hash_eq: %s\n", message);
+    abort();
+}
+
 #define ASSERT_TRUE(cond, msg)                                                                     \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
