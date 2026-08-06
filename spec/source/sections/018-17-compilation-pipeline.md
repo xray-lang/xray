@@ -14,11 +14,15 @@ order: 018
 
 ```
 源码 (.xr) -> lexer -> AST -> analyzer / canonical evidence
-                                  |-> bytecode compiler -> XrProto -> VM
-                                  `-> Xi IR -> optimization -> C source -> host/cross C toolchain -> native binary
+   -> xi_lower -> Xi IR -> optimization
+        |-> tagged 表示                        -> xi_emit -> XrProto -> VM
+        `-> native 表示 + backend lowering     -> C source
+                 -> host/cross C toolchain -> native binary
 ```
 
-Xray 当前没有 JIT。默认 `xray run` 和默认 `xray build` 使用字节码/VM 路径；`xray build --native` 才选择 AOT 路径。两条路径共享 parser、analyzer、模块图与运行时语义，但输出表示和后端优化并不相同。
+Xray 当前没有 JIT。默认 `xray run` 和默认 `xray build` 使用字节码/VM 路径；`xray build --native` 才选择 AOT 路径。
+
+两条路径共享 parser、analyzer、模块图、**Xi IR** 与运行时语义。分叉发生在 Xi 流水线内部的表示选择与后端下降阶段（`xi_pipeline_default_config` 与 `xi_pipeline_aot_config`）：VM 路径使用 tagged 表示政策，不运行 select-rep 与 backend lowering，由 `xi_emit` 发射 `XrProto`；AOT 路径运行 select-rep（native 表示政策）与 backend lowering，再由 `src/aot/` 生成 C。因此两者的输出表示和后端优化并不相同。
 
 ### 17.2 前端
 
@@ -29,7 +33,7 @@ Xray 当前没有 JIT。默认 `xray run` 和默认 `xray build` 使用字节码
 
 ### 17.3 字节码与 VM
 
-`src/frontend/codegen/xcompiler.c` 将已分析 AST 编译成 `XrProto` 字节码。opcode 的唯一清单是 `src/runtime/value/xopcode_def.h`，VM 实现在 `src/vm/`。VM 使用寄存器式指令布局，并包含属性/调用快路径以及 coroutine、错误通道、tail-call 等专用 opcode。
+`src/frontend/codegen/xcompiler.c` 运行分析流水线（类型推断、单态化、逃逸分析）后委托 Xi IR 流水线 `xi_pipeline_compile_program` 完成 lowering、验证、优化与字节码发射，产物是 `XrProto`；它没有独立于 Xi IR 的字节码生成路径。opcode 的唯一清单是 `src/runtime/value/xopcode_def.h`，VM 实现在 `src/vm/`。VM 使用寄存器式指令布局，并包含属性/调用快路径以及 coroutine、错误通道、tail-call 等专用 opcode。
 
 `xray compile file.xr` 默认生成 `.xrc`；`--format bytecode|c|header` 可显式选择序列化字节码或把字节码嵌入 C 源/头文件。这里的 `--format c` 是**字节码容器的 C 表示**，不是 native AOT C 后端。
 
@@ -37,7 +41,7 @@ Xray 当前没有 JIT。默认 `xray run` 和默认 `xray build` 使用字节码
 
 ### 17.4 Xi IR 与优化
 
-native 路径将程序 lowering 为 `src/ir/` 中的 Xi IR。优化流水线由 `xi_pipeline.c` / `xi_pass.h` 组织，当前实现包括 SCCP、DCE/CFG 简化、内联、devirtualization、tail-call、escape/ownership、循环优化、GVN/PRE、边界检查消除和向量化等 passes；具体启用集合由优化等级、目标和合法性检查决定，不能把某个 pass 的存在理解为每个程序都保证发生该优化。
+两条路径都将程序 lowering 为 `src/ir/` 中的 Xi IR，区别在优化等级与表示政策：VM 路径为 light 等级、tagged 表示政策，AOT 路径为 full 等级、native 表示政策。优化流水线由 `xi_pipeline.c` / `xi_pass.h` 组织，当前实现包括 SCCP、DCE/CFG 简化、内联、devirtualization、tail-call、escape/ownership、循环优化、GVN/PRE、边界检查消除和向量化等 passes；具体启用集合由优化等级、目标和合法性检查决定，不能把某个 pass 的存在理解为每个程序都保证发生该优化。
 
 ### 17.5 Native AOT
 
@@ -57,11 +61,15 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 
 ```
 source (.xr) -> lexer -> AST -> analyzer / canonical evidence
-                                  |-> bytecode compiler -> XrProto -> VM
-                                  `-> Xi IR -> optimization -> C source -> host/cross C toolchain -> native binary
+   -> xi_lower -> Xi IR -> optimization
+        |-> tagged representations                  -> xi_emit -> XrProto -> VM
+        `-> native representations + backend lower  -> C source
+                 -> host/cross C toolchain -> native binary
 ```
 
-Xray currently has no JIT. `xray run` and default `xray build` use the bytecode/VM path; `xray build --native` selects AOT. Both paths share the parser, analyzer, module graph, and runtime semantics, but their output representations and backend optimizations differ.
+Xray currently has no JIT. `xray run` and default `xray build` use the bytecode/VM path; `xray build --native` selects AOT.
+
+Both paths share the parser, analyzer, module graph, **Xi IR**, and runtime semantics. They diverge inside the Xi pipeline at representation selection and backend lowering (`xi_pipeline_default_config` versus `xi_pipeline_aot_config`): the VM path uses the tagged representation policy, runs neither select-rep nor backend lowering, and emits an `XrProto` through `xi_emit`; the AOT path runs select-rep under the native representation policy plus backend lowering, and then generates C from `src/aot/`. Their output representations and backend optimizations therefore differ.
 
 ### 17.2 Frontend
 
@@ -72,7 +80,7 @@ Xray currently has no JIT. `xray run` and default `xray build` use the bytecode/
 
 ### 17.3 Bytecode and VM
 
-`src/frontend/codegen/xcompiler.c` compiles analyzed AST into an `XrProto`. The single opcode list is `src/runtime/value/xopcode_def.h`; the VM lives in `src/vm/`. Its register-oriented instruction set includes property/call fast paths and dedicated coroutine, error-channel, and tail-call operations.
+`src/frontend/codegen/xcompiler.c` runs the analysis pipeline (type inference, monomorphization, escape analysis) and then delegates to the Xi IR pipeline `xi_pipeline_compile_program` for lowering, verification, optimization, and bytecode emission, producing an `XrProto`; there is no bytecode path independent of Xi IR. The single opcode list is `src/runtime/value/xopcode_def.h`; the VM lives in `src/vm/`. Its register-oriented instruction set includes property/call fast paths and dedicated coroutine, error-channel, and tail-call operations.
 
 `xray compile file.xr` emits `.xrc` by default. `--format bytecode|c|header` selects serialized bytecode or a C source/header representation that embeds the bytecode. `--format c` here is **not** the native AOT C backend.
 
@@ -80,7 +88,7 @@ Bytecode must serialize extern aggregate layouts and the target ABI fingerprint 
 
 ### 17.4 Xi IR and Optimization
 
-The native path lowers the program to Xi IR in `src/ir/`. `xi_pipeline.c` / `xi_pass.h` organize passes including SCCP, DCE/CFG simplification, inlining, devirtualization, tail-call rewriting, escape/ownership processing, loop transforms, GVN/PRE, bounds-check elimination, and vectorization. The enabled set depends on optimization level, target, and legality; the existence of a pass does not guarantee that every program is transformed by it.
+Both paths lower the program to Xi IR in `src/ir/`; they differ in optimization level and representation policy — light and tagged for the VM path, full and native for the AOT path. `xi_pipeline.c` / `xi_pass.h` organize passes including SCCP, DCE/CFG simplification, inlining, devirtualization, tail-call rewriting, escape/ownership processing, loop transforms, GVN/PRE, bounds-check elimination, and vectorization. The enabled set depends on optimization level, target, and legality; the existence of a pass does not guarantee that every program is transformed by it.
 
 ### 17.5 Native AOT
 
