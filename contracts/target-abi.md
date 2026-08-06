@@ -118,8 +118,8 @@ emission, and native linking:
   enabled, while implicit LLVM loop and SLP vectorization stay disabled until
   their fixed-trip-count lowering is valid for non-power-of-two vector lengths.
 - T4d: `--c-dialect c90` is valid only for the frozen restricted profile: an
-  LP64 Linux or Darwin target, scalar lowering, `--freestanding --shared
-  --emit-c-only`, no program main, and no reachable runtime, standard-library,
+  LP64 Linux or Darwin target, scalar lowering, `--profile freestanding
+  --artifact shared-library --c-only`, no program main, and no reachable runtime, standard-library,
   native-input, or aggregate public-ABI dependency. Unsupported profiles fail
   before generated C is handed to a host compiler. Dialect identity is part of
   both object and link cache keys.
@@ -230,19 +230,19 @@ the compiler core does not download a provider.
 
 ## Digest anchors
 
-anchor-sha256: src/aot/xaot_link.c 77db5eea55ef7ed4a31553ac05bf7efa88490b9e5b428c6d8c296744c05b797f
+anchor-sha256: src/aot/xaot_link.c a268bec7948a3a9cecf081d63d51545e3fe41af0b6ab32a9a38b21b031127da0
 anchor-sha256: src/aot/xaot_prepare.c aafc236f21231b6509fca91e544d948f7ea2d06b059fd0c8101f0286f4a66bbd
 anchor-sha256: src/aot/xaot_verify.c 7fe97d173ac206666af4d63052ee0abb41b26eac8451da308ab5f8110fad6e16
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 5cafb87f5a28356200cdd737e84e7e7f6896b7c8ec97461262e872cb5f05b698
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c a04c5d8bd89a69bf175d69c03e78b340d7ee348b2f405f250d23737f34d1d30f
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 02a4d35561f2cb234a6cc481700d9354d9e8517e24c9207f8b8f5a5fce68193f
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 1cf7a883c3ec5be610bcea153aec7016e28d1a1407a5272f163039daca94d19f
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 0bba73642490bb76d403a29495323b04852027bfabb83ecead32a833d23caa36
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 4ad72c173bf880b48ff9c232aee4d3648c7848d749c0a34881373e0e9ac051f7
-anchor-sha256: src/aot/xi_cgen.c 4d76bd8f1d0798ff1417f83762ce0c0a93a258815701fef243eb3a4f091fce9d
+anchor-sha256: src/aot/xi_cgen.c 66445b1c6b9e60fbc8b6d9ba210636685f67e83fadf66906385cbd3190657281
 anchor-sha256: src/aot/xrt_coll.h dee3abad0aaa99b66c0a23e3ff28bbb33e8cfdc70e0d108b93a52a362da975c0
 anchor-sha256: src/aot/xrt_core_freestanding.h 13af59f530ac1a77bb9f050bb391a65cbaebe941d77efd4f65043c4d811c7e00
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
-anchor-sha256: src/app/cli/xcmd_build.c 5176cb4b44a22335b74882f74be75ab08b05a18e04872e89acfadffe2fd8e61b
+anchor-sha256: src/app/cli/xcmd_build.c e0db985bb71be7b813ad01ba6ffdde4979b1075f7037f69b0bb730c22c8d16d9
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 4e59251373523665674da4c863fac624fadef9cf077ebf8b6e9301768573490d
 anchor-sha256: src/ir/xi.h 298de848b014831ded0c48e0f95ec176d45d356d2c0da85fb680fecf2372cea8

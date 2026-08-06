@@ -135,7 +135,7 @@ def main(argv: list[str]) -> int:
 
             out = ws.path(f"{module}.o")
             result = proc.run(
-                [xray, "build", "--native", "--profile", "freestanding", "--shared",
+                [xray, "build", "--native", "--profile", "freestanding", "--artifact", "shared-library",
                  "--keep-c", "--rebuild", "--dump-link-command",
                  "--cache-dir", build_cache, "-o", out, probe],
                 timeout=timeout,

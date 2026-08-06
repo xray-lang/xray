@@ -333,7 +333,7 @@ unit = "fixture"
 
         free_obj = free_dir / "kernel.o"
         r = proc.run(
-            [xray, "build", "--native", "--profile", "freestanding", "--shared",
+            [xray, "build", "--native", "--profile", "freestanding", "--artifact", "shared-library",
              "--keep-c", "--rebuild", "--dump-link-command", "--dump-link-manifest",
              "--cache-dir", cache, "-o", free_obj, free_dir / "main.xr"],
             timeout=timeout,

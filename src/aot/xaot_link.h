@@ -97,6 +97,7 @@ typedef struct XaotCompileRequirements {
 typedef struct XaotLinkRequirements {
     bool shared;
     bool relocatable;
+    bool resolve_from_host;
     bool strip;
     bool dead_strip;
     bool lto;

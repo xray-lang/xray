@@ -716,6 +716,9 @@ static bool cg_runtime_caps_need_runtime(uint32_t caps) {
  * exactly once before publishing any fragment function. */
 static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out, XiModule **modules,
                                                 int n) {
+    fprintf(out, "uint32_t xr_hosted_fragment_abi_version(void) {\n"
+                 "    return XR_HOSTED_FRAGMENT_ABI_VERSION;\n"
+                 "}\n\n");
     for (int m = 0; m < n; m++) {
         if (!modules[m] || !modules[m]->init)
             continue;
@@ -761,7 +764,7 @@ static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out, XiMod
                  "}\n\n");
 }
 
-/* Shared-library init: --shared exports a C ABI library, so loading it executes
+/* Shared-library init: a shared-library artifact exports a C ABI library, so loading it executes
  * the complete module graph before any manifest export wrapper can run. This is the
  * library equivalent of main's ordered module-init sequence: both initialized
  * globals and explicit top-level side effects retain normal Xray semantics. */
@@ -773,7 +776,9 @@ static void xi_cgen_shared_lib_ctor(XiCgenCtx *ctx, FILE *out, XiModule **module
     if (entry_is_coro)
         runtime_caps |= XR_AOT_CAP_CORO;
     if (entry_is_coro || cg_runtime_caps_need_runtime(runtime_caps)) {
-        fprintf(out, "/* --shared: runtime-backed bundle; no load-time init emitted. */\n");
+        fprintf(
+            out,
+            "/* shared-library artifact: runtime-backed bundle; no load-time init emitted. */\n");
         return;
     }
     const char *entry_source_path = cg_entry_source_path(ctx, modules, n, entry_index);
@@ -836,7 +841,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     cg_emit_main_stdio_policy(ctx, out);
     fprintf(out, "    xrt_arc_init();\n");
     // main() has the real argv, so process.args drops argv[0] (the program
-    // name); the --shared load-constructor path has no argv and passes "0"/NULL.
+    // name); the shared-library load-constructor path has no argv and passes "0"/NULL.
     emit_xrt_builtin_init(out, &builtin_plan, entry_source_path, "argc > 1 ? argc - 1 : 0",
                           "argc > 1 ? argv + 1 : NULL");
     if (entry_needs_runtime) {

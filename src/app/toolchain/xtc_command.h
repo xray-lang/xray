@@ -88,6 +88,7 @@ typedef struct XrNativeCompileSpec {
 typedef struct XrNativeLinkSpec {
     bool shared;
     bool relocatable;
+    bool resolve_from_host;
     bool strip;
     bool dead_strip;
     bool lto;

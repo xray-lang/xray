@@ -292,6 +292,9 @@ static bool emit_gnu_link(const XrToolchainSelection *selection, const XrToolcha
              target && target->os == XR_TOOLCHAIN_TARGET_OS_DARWIN ? "-dynamiclib" : "-shared", err,
              err_size))
         return false;
+    if (spec->resolve_from_host && target && target->os == XR_TOOLCHAIN_TARGET_OS_DARWIN &&
+        !add(sink, "-Wl,-undefined,dynamic_lookup", err, err_size))
+        return false;
     if (spec->lto && !add(sink, "-flto", err, err_size))
         return false;
     if (spec->dead_strip &&
@@ -318,7 +321,8 @@ static bool emit_msvc_link(const XrToolchainSelection *selection, const XrToolch
     (void) target;
     if (!spec)
         return command_error(err, err_size, "missing native link specification");
-    if (spec->relocatable || spec->strip || spec->linker_script || spec->no_standard_libraries)
+    if (spec->relocatable || spec->resolve_from_host || spec->strip || spec->linker_script ||
+        spec->no_standard_libraries)
         return command_error(err, err_size,
                              "requested native link intent is unsupported by MSVC provider");
     if (spec->shared && !add(sink, "/LD", err, err_size))

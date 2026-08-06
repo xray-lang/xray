@@ -10989,6 +10989,7 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
         if (ctx && ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT) {
             fprintf(out, "#include \"xray_hosted_fragment_abi.h\"\n");
             fprintf(out, "#define XR_HOSTED_FRAGMENT_SUSPENDABILITY_DECLARED 1\n\n");
+            fprintf(out, "uint32_t xr_hosted_fragment_abi_version(void);\n\n");
             fprintf(out, "bool xr_hosted_fragment_initialize(\n");
             fprintf(out, "    const XrHostedFragmentContext *context);\n\n");
         }

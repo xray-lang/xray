@@ -61,7 +61,7 @@ def main(argv: list[str]) -> int:
 
         out_bin = ws.path("raw-scalar")
         result = proc.run(
-            [xray, "build", "--native", "-O2", "--shared", "--rebuild",
+            [xray, "build", "--native", "-O2", "--artifact", "shared-library", "--rebuild",
              "-o", out_bin, source],
             timeout=timeout,
         )

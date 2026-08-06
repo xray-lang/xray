@@ -122,12 +122,10 @@ TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
     ASSERT_TRUE(
         xtc_command_emit_link(&selection, &selection.target, &link, &sink, err, sizeof(err)));
-    ASSERT_TRUE(
-        xtc_command_emit_system_library(selection.provider, &selection.target, "ws2_32", &sink,
-                                        err, sizeof(err)));
-    ASSERT_TRUE(
-        xtc_command_emit_system_library(selection.provider, &selection.target, "bcrypt", &sink,
-                                        err, sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target, "ws2_32",
+                                                &sink, err, sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target, "bcrypt",
+                                                &sink, err, sizeof(err)));
     ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target,
                                                 "api-ms-win-core-synch-l1-2-0", &sink, err,
                                                 sizeof(err)));
@@ -146,6 +144,25 @@ TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     ASSERT_TRUE(command_capture_has(&capture, "bcrypt.lib"));
     ASSERT_TRUE(command_capture_has(&capture, "synchronization.lib"));
     ASSERT_FALSE(command_capture_has(&capture, "-O2"));
+}
+
+TEST(hosted_fragment_link_resolves_runtime_from_darwin_host) {
+    XrToolchainSelection selection = {0};
+    XrNativeLinkSpec link = {0};
+    CommandCapture capture = {0};
+    XrToolchainArgSink sink = {&capture, command_capture_add, command_capture_joined};
+    char err[256];
+
+    selection.provider = XR_TOOLCHAIN_PROVIDER_APPLE_CLANG;
+    selection.program = selection.program_storage;
+    snprintf(selection.program_storage, sizeof(selection.program_storage), "%s", "/usr/bin/clang");
+    ASSERT_TRUE(xtc_target_parse("aarch64-apple-darwin", &selection.target, err, sizeof(err)));
+    link.shared = true;
+    link.resolve_from_host = true;
+    ASSERT_TRUE(
+        xtc_command_emit_link(&selection, &selection.target, &link, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-dynamiclib"));
+    ASSERT_TRUE(command_capture_has(&capture, "-Wl,-undefined,dynamic_lookup"));
 }
 
 TEST(msvc_command_plan_fails_closed_for_gnu_only_intent) {
@@ -670,9 +687,8 @@ TEST(process_capture_preserves_arbitrary_bytes_and_nul) {
     spec.argv[2] = "-NoProfile";
     spec.argv[3] = "-NonInteractive";
     spec.argv[4] = "-Command";
-    spec.argv[5] =
-        "$b=[byte[]](0x66,0x6f,0x80,0x00,0xff);"
-        "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
+    spec.argv[5] = "$b=[byte[]](0x66,0x6f,0x80,0x00,0xff);"
+                   "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
     spec.argv[6] = NULL;
 #else
     ASSERT_TRUE(xtc_find_executable("sh", shell, sizeof(shell)));
@@ -707,12 +723,12 @@ TEST(process_spawn_preserves_unicode_argv_env_and_cwd) {
     ASSERT_TRUE(temp_len > 0 && temp_len < sizeof(wide_temp) / sizeof(wide_temp[0]));
     _snwprintf_s(wide_leaf, sizeof(wide_leaf) / sizeof(wide_leaf[0]), _TRUNCATE,
                  L"xray-\u76ee\u5f55-%lu", (unsigned long) GetCurrentProcessId());
-    _snwprintf_s(wide_dir, sizeof(wide_dir) / sizeof(wide_dir[0]), _TRUNCATE, L"%ls%ls",
-                 wide_temp, wide_leaf);
+    _snwprintf_s(wide_dir, sizeof(wide_dir) / sizeof(wide_dir[0]), _TRUNCATE, L"%ls%ls", wide_temp,
+                 wide_leaf);
     ASSERT_TRUE(CreateDirectoryW(wide_dir, NULL) || GetLastError() == ERROR_ALREADY_EXISTS);
     ASSERT_TRUE(xr_win_utf16_to_utf8(wide_dir, wcslen(wide_dir), utf8_dir, sizeof(utf8_dir)) != 0);
-    ASSERT_TRUE(
-        xr_win_utf16_to_utf8(wide_leaf, wcslen(wide_leaf), utf8_leaf, sizeof(utf8_leaf)) != 0);
+    ASSERT_TRUE(xr_win_utf16_to_utf8(wide_leaf, wcslen(wide_leaf), utf8_leaf, sizeof(utf8_leaf)) !=
+                0);
     ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
     xtc_process_spec_init(&spec, shell, 5000);
     spec.cwd = utf8_dir;
@@ -723,11 +739,10 @@ TEST(process_spawn_preserves_unicode_argv_env_and_cwd) {
     spec.argv[2] = "-NoProfile";
     spec.argv[3] = "-NonInteractive";
     spec.argv[4] = "-Command";
-    spec.argv[5] =
-        "$t='\u53c2\u6570\u503c'+'|'+$env:XRAY_UNICODE_VALUE+'|'+"
-        "(Split-Path -Leaf (Get-Location).Path);"
-        "$u=[Text.UTF8Encoding]::new($false);$b=$u.GetBytes($t);"
-        "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
+    spec.argv[5] = "$t='\u53c2\u6570\u503c'+'|'+$env:XRAY_UNICODE_VALUE+'|'+"
+                   "(Split-Path -Leaf (Get-Location).Path);"
+                   "$u=[Text.UTF8Encoding]::new($false);$b=$u.GetBytes($t);"
+                   "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
     spec.argv[6] = NULL;
     snprintf(expected, sizeof(expected), "\u53c2\u6570\u503c|\u73af\u5883\u503c|%s", utf8_leaf);
     ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
@@ -940,6 +955,7 @@ RUN_TEST(parse_freestanding_targets);
 RUN_TEST(reject_retired_target_aliases);
 RUN_TEST(selector_and_provider_names_are_stable);
 RUN_TEST(semantic_command_plan_maps_gnu_and_msvc_dialects);
+RUN_TEST(hosted_fragment_link_resolves_runtime_from_darwin_host);
 RUN_TEST(msvc_command_plan_fails_closed_for_gnu_only_intent);
 RUN_TEST(assembly_oracle_io_maps_provider_dialects);
 RUN_TEST(semantic_simd_intent_maps_provider_dialects);
