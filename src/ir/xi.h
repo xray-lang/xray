@@ -801,6 +801,14 @@ typedef struct XiClassData {
     bool is_generic_skeleton; /* template class; concrete instances are separate classes */
     bool is_monomorphized;    /* true for mono-generated classes */
     bool is_cycle_candidate;  /* type graph forms a reference cycle (enables RC cycle collector) */
+    /* Does this aggregate need a runtime type identity -- a registered type id,
+     * an itable, a name? A class does: instanceof walks it, dispatch needs it.
+     * A value aggregate does not; its layout is fixed and its methods are
+     * ordinary functions. XiClassData carries both the method table (which a
+     * struct needs) and the runtime identity (which it does not), and only the
+     * lowering knows which declaration form this came from -- so it records the
+     * answer here rather than leaving the backend to re-derive it. */
+    bool needs_runtime_type;
     const char **mono_type_arg_names; /* concrete type display names (e.g. ["int","string"]) */
     int mono_type_arg_count;          /* element count */
     struct XrAggregateLayout *struct_layout;   /* non-NULL for VALUE_TYPE (struct) classes */

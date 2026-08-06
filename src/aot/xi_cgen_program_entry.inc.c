@@ -311,6 +311,19 @@ static uint8_t cg_static_x86_compile_width_for_module(const XiCgenCtx *ctx,
     return cg_static_x86_compile_width_for_func_tree(ctx, module->init);
 }
 
+static void emit_pragma_push_ignore_unused_function(FILE *out) {
+    fprintf(out, "#if defined(__GNUC__) || defined(__clang__)\n");
+    fprintf(out, "#pragma GCC diagnostic push\n");
+    fprintf(out, "#pragma GCC diagnostic ignored \"-Wunused-function\"\n");
+    fprintf(out, "#endif\n");
+}
+
+static void emit_pragma_pop(FILE *out) {
+    fprintf(out, "#if defined(__GNUC__) || defined(__clang__)\n");
+    fprintf(out, "#pragma GCC diagnostic pop\n");
+    fprintf(out, "#endif\n");
+}
+
 static void cg_emit_tu_includes(FILE *out, bool define_impl, bool freestanding_profile,
                                 bool runtime_bridge, uint32_t simd_features,
                                 uint8_t compile_simd_width, bool c90_dialect) {
@@ -340,7 +353,6 @@ static void cg_emit_tu_includes(FILE *out, bool define_impl, bool freestanding_p
      * while generated output remains portable across supported toolchains. */
     fprintf(out, "#if defined(__GNUC__) && !defined(__clang__)\n");
     fprintf(out, "#pragma GCC diagnostic ignored \"-Wattributes\"\n");
-    fprintf(out, "#pragma GCC diagnostic ignored \"-Wunused-function\"\n");
     fprintf(out, "#pragma GCC diagnostic ignored \"-Wunused-parameter\"\n");
     fprintf(out, "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n");
     fprintf(out, "#pragma GCC diagnostic ignored \"-Wunused-but-set-variable\"\n");
@@ -364,7 +376,6 @@ static void cg_emit_tu_includes(FILE *out, bool define_impl, bool freestanding_p
     fprintf(out, "#pragma GCC diagnostic ignored \"-Wswitch-enum\"\n");
     fprintf(out, "#endif\n");
     fprintf(out, "#if defined(__clang__)\n");
-    fprintf(out, "#pragma clang diagnostic ignored \"-Wunused-function\"\n");
     fprintf(out, "#pragma clang diagnostic ignored \"-Wunused-parameter\"\n");
     fprintf(out, "#pragma clang diagnostic ignored \"-Wunused-variable\"\n");
     fprintf(out, "#pragma clang diagnostic ignored \"-Wunused-but-set-variable\"\n");
@@ -403,12 +414,21 @@ static void cg_emit_tu_includes(FILE *out, bool define_impl, bool freestanding_p
         fprintf(out, "#include \"xrt_core_freestanding.h\"\n\n");
     } else {
         fprintf(out, "#define XRT_THREAD_USE_PENDING_ERROR 1\n");
+        /* -Wunused-function is suppressed for the runtime headers only. They
+         * are header-only libraries and no translation unit uses every static
+         * helper in them, so the warning says nothing there. It is left ON for
+         * the generated body below, where it does say something: a helper this
+         * generator emits and never calls is dead output, and the blanket
+         * suppression is what let three unused class-registration functions per
+         * struct program go unnoticed. */
+        emit_pragma_push_ignore_unused_function(out);
         fprintf(out, "#include <math.h>\n");
         fprintf(out, "#include \"xrt.h\"\n\n");
         if (runtime_bridge) {
             fprintf(out, "#include \"xaot_coro.h\"\n\n");
             fprintf(out, "#include \"xrt_thread_aot.h\"\n\n");
         }
+        emit_pragma_pop(out);
     }
     if ((simd_features & XAOT_SIMD_FEATURE_SVE) != 0) {
         fprintf(out, "#include <arm_sve.h>\n\n");
@@ -443,8 +463,7 @@ XR_FUNC void xi_cgen_header(XiCgenCtx *ctx, FILE *out) {
     XR_DCHECK(out != NULL, "xi_cgen_header: NULL output");
     bool hosted_fragment = ctx && ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT;
     bool runtime_bridge = hosted_fragment || cg_tu_needs_runtime_bridge(ctx);
-    cg_emit_tu_includes(out,
-                        !ctx || ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT,
+    cg_emit_tu_includes(out, !ctx || ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT,
                         ctx && ctx->freestanding_profile, runtime_bridge,
                         ctx && ctx->simd_active && ctx->target ? ctx->target->simd_features : 0,
                         cg_static_x86_compile_width_for_module(ctx, NULL),
@@ -454,8 +473,7 @@ XR_FUNC void xi_cgen_header(XiCgenCtx *ctx, FILE *out) {
     if (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
         return;
     if (hosted_fragment)
-        fprintf(out,
-                "extern XR_THREAD_LOCAL const XrAotContext *xrt_hosted_aot_context;\n");
+        fprintf(out, "extern XR_THREAD_LOCAL const XrAotContext *xrt_hosted_aot_context;\n");
     else if (runtime_bridge)
         fprintf(out, "static XrAotContext xrt_global_ctx;\n");
     fprintf(out, "static XrValue xrt_builtins[%d];\n\n", XR_USER_GLOBALS_START);
@@ -696,8 +714,8 @@ static bool cg_runtime_caps_need_runtime(uint32_t caps) {
  * constants and native class identities still require the same dependency-
  * ordered initialization as an executable.  The host serializes this entry
  * exactly once before publishing any fragment function. */
-static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out,
-                                                XiModule **modules, int n) {
+static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out, XiModule **modules,
+                                                int n) {
     for (int m = 0; m < n; m++) {
         if (!modules[m] || !modules[m]->init)
             continue;
@@ -706,25 +724,23 @@ static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out,
         fprintf(out, "(xrt_closure_t *_cl);\n");
     }
     fprintf(out, "\n");
-    fprintf(out,
-            "bool xr_hosted_fragment_initialize(\n"
-            "    const XrHostedFragmentContext *context) {\n"
-            "    if (!context || !context->runtime_ops || xrt_has_pending_error())\n"
-            "        return false;\n"
-            "    XrAotContext _hosted_runtime_context = {0};\n"
-            "    _hosted_runtime_context.coro = (struct XrCoroutine *)context->coroutine;\n"
-            "    _hosted_runtime_context.vm_host_ops =\n"
-            "        (const XrAotVmHostOps *)context->runtime_ops;\n"
-            "    _hosted_runtime_context.vm_host = context->host;\n"
-            "    const XrAotContext *_hosted_previous_runtime_context =\n"
-            "        xrt_hosted_aot_context;\n"
-            "    xrt_hosted_aot_context = &_hosted_runtime_context;\n");
+    fprintf(out, "bool xr_hosted_fragment_initialize(\n"
+                 "    const XrHostedFragmentContext *context) {\n"
+                 "    if (!context || !context->runtime_ops || xrt_has_pending_error())\n"
+                 "        return false;\n"
+                 "    XrAotContext _hosted_runtime_context = {0};\n"
+                 "    _hosted_runtime_context.coro = (struct XrCoroutine *)context->coroutine;\n"
+                 "    _hosted_runtime_context.vm_host_ops =\n"
+                 "        (const XrAotVmHostOps *)context->runtime_ops;\n"
+                 "    _hosted_runtime_context.vm_host = context->host;\n"
+                 "    const XrAotContext *_hosted_previous_runtime_context =\n"
+                 "        xrt_hosted_aot_context;\n"
+                 "    xrt_hosted_aot_context = &_hosted_runtime_context;\n");
     for (int m = 0; m < n; m++) {
         if (!modules[m] || !modules[m]->init)
             continue;
         if (cg_func_needs_aot_coro_ctx(ctx, modules[m]->init)) {
-            fprintf(stderr,
-                    "[xi_cgen] ERROR: hosted fragment module init '%s' must not suspend\n",
+            fprintf(stderr, "[xi_cgen] ERROR: hosted fragment module init '%s' must not suspend\n",
                     modules[m]->name ? modules[m]->name : "mod");
             ctx->error = true;
             continue;
@@ -732,19 +748,17 @@ static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out,
         fprintf(out, "    ");
         emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
         fprintf(out, "(NULL);\n");
-        fprintf(out,
-                "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n"
-                "        XrValue _hosted_init_error = xrt_pending_error;\n"
-                "        xrt_pending_error = XR_NULL_VAL;\n"
-                "        xrt_release(_hosted_init_error);\n"
-                "        xrt_hosted_aot_context = _hosted_previous_runtime_context;\n"
-                "        return false;\n"
-                "    }\n");
+        fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n"
+                     "        XrValue _hosted_init_error = xrt_pending_error;\n"
+                     "        xrt_pending_error = XR_NULL_VAL;\n"
+                     "        xrt_release(_hosted_init_error);\n"
+                     "        xrt_hosted_aot_context = _hosted_previous_runtime_context;\n"
+                     "        return false;\n"
+                     "    }\n");
     }
-    fprintf(out,
-            "    xrt_hosted_aot_context = _hosted_previous_runtime_context;\n"
-            "    return true;\n"
-            "}\n\n");
+    fprintf(out, "    xrt_hosted_aot_context = _hosted_previous_runtime_context;\n"
+                 "    return true;\n"
+                 "}\n\n");
 }
 
 /* Shared-library init: --shared exports a C ABI library, so loading it executes
@@ -1220,7 +1234,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
         if (ctx->artifact_kind == XAOT_ARTIFACT_EXECUTABLE)
             xi_cgen_main(ctx, body, modules, nmodules, entry_index);
         else if (ctx->artifact_kind == XAOT_ARTIFACT_SHARED_LIBRARY &&
-                  ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
+                 ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
             xi_cgen_shared_lib_ctor(ctx, body, modules, nmodules, entry_index);
         else if (ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT)
             xi_cgen_hosted_fragment_initializer(ctx, body, modules, nmodules);
@@ -1258,18 +1272,16 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
      * xrt_builtins, every other unit only declares them. */
     if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_INCLUDES)) {
         bool hosted_fragment = ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT;
-        cg_emit_tu_includes(unit,
-                            is_entry && ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT,
+        cg_emit_tu_includes(unit, is_entry && ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT,
                             ctx->freestanding_profile,
                             hosted_fragment || cg_tu_needs_runtime_bridge(ctx),
                             ctx->simd_active && ctx->target ? ctx->target->simd_features : 0,
                             cg_static_x86_compile_width_for_module(ctx, module),
                             ctx->c_dialect == XI_CGEN_C_DIALECT_C90);
         if (ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT)
-            fprintf(unit,
-                    "#include \"xray_hosted_fragment_abi.h\"\n\n"
-                    "extern XR_THREAD_LOCAL const XrAotContext "
-                    "*xrt_hosted_aot_context;\n\n");
+            fprintf(unit, "#include \"xray_hosted_fragment_abi.h\"\n\n"
+                          "extern XR_THREAD_LOCAL const XrAotContext "
+                          "*xrt_hosted_aot_context;\n\n");
         if (ctx->c_dialect != XI_CGEN_C_DIALECT_C90)
             cg_emit_cxx_linkage_begin(unit);
     }

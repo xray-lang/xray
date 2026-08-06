@@ -10606,9 +10606,8 @@ static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc
  * materialize the same operation as ordinary statements with a site-unique
  * temporary.  Native-layout classes are handled by the earlier native
  * constructor statement lowering. */
-static bool emit_hosted_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out,
-                                                  const XiFunc *f, const char *prefix,
-                                                  const XiValue *v) {
+static bool emit_hosted_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                  const char *prefix, const XiValue *v) {
     if (!ctx || ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT || !out || !f || !v ||
         v->op != XI_CALL || v->nargs == 0)
         return false;
@@ -11037,11 +11036,18 @@ static void xicgen_emit_class_itable_init(XiCgenCtx *ctx, FILE *out, const XiCla
 }
 
 static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                 const char *prefix) {
+                                const char *prefix) {
     (void) f;
     const XiClassData *cd = (const XiClassData *) v->aux;
     if (!cd) {
         fprintf(out, "XR_NULL_VAL /* class descriptor: no data */");
+        return;
+    }
+    if (!cd->needs_runtime_type) {
+        /* No registration helper exists for a value aggregate, so a descriptor
+         * for one cannot be materialized. Reaching here would mean the lowering
+         * emitted XI_CLASS_CREATE for something whose identity nothing needs. */
+        fprintf(out, "XR_NULL_VAL /* value aggregate: no runtime type */");
         return;
     }
     emit_class_native_type_register_helper_name(out, prefix, cd);
@@ -11049,8 +11055,7 @@ static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
 }
 
 static void emit_one_class_native_type_register_helper(XiCgenCtx *ctx, FILE *out,
-                                                       const XiClassData *cd,
-                                                       const char *prefix) {
+                                                       const XiClassData *cd, const char *prefix) {
     if (!ctx || !out || !cd)
         return;
     const char *name = cd->class_name ? cd->class_name : "?";
@@ -11106,8 +11111,14 @@ static void emit_class_native_type_register_helpers(XiCgenCtx *ctx, FILE *out, X
                                                     const char *prefix) {
     if (!module || !module->classes)
         return;
-    for (uint16_t ci = 0; ci < module->nclasses; ci++)
+    for (uint16_t ci = 0; ci < module->nclasses; ci++) {
+        /* A value aggregate has no runtime type identity, so the helper that
+         * registers one is dead output -- one per struct, and invisible while
+         * the generated unit suppressed -Wunused-function wholesale. */
+        if (module->classes[ci] && !module->classes[ci]->needs_runtime_type)
+            continue;
         emit_one_class_native_type_register_helper(ctx, out, module->classes[ci], prefix);
+    }
 }
 
 static void xicgen_throw(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

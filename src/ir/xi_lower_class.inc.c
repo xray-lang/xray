@@ -851,6 +851,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->instance_field_count = 0;
     data->is_generic_skeleton = cd->type_param_count > 0 || cd->is_generic_skeleton;
     data->is_monomorphized = cd->is_monomorphized;
+    data->needs_runtime_type = !owner_is_value_aggregate;
     /* Copy concrete type arg display names (arena-duplicated) */
     data->mono_type_arg_names = NULL;
     data->mono_type_arg_count = 0;
