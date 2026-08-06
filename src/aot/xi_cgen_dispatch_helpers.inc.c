@@ -11427,9 +11427,23 @@ static void xicgen_retain(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
     xicgen_ownership_call(ctx, out, f, v, prefix, "xrt_retain");
 }
 
+/* A stack closure's block is in the frame, so refcounting does not govern it
+ * and xrt_release is a no-op on it -- including the part that would have
+ * released what it captured. Route it to the scope-end drop instead, which
+ * releases the upvals without freeing the block. This is the one place that
+ * knows the allocation was a stack closure, because it is the same fact
+ * emit_closure_new used to pick xrt_closure_stack_new. */
+static bool cg_release_target_is_stack_closure(const XiValue *v) {
+    const XiValue *arg = (v && v->nargs >= 1) ? v->args[0] : NULL;
+    arg = cg_unwrap_identity_value(arg);
+    return arg && arg->op == XI_STACK_ALLOC && arg->aux_int == XI_CLOSURE_NEW;
+}
+
 static void xicgen_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
-    xicgen_ownership_call(ctx, out, f, v, prefix, "xrt_release");
+    xicgen_ownership_call(ctx, out, f, v, prefix,
+                          cg_release_target_is_stack_closure(v) ? "xrt_closure_stack_drop"
+                                                                : "xrt_release");
 }
 
 static void xicgen_stack_alloc(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
