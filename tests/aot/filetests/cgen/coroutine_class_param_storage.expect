@@ -1,0 +1,4 @@
+c_syntax=pass
+c_regex=typedef struct coroutine_class_param_storage_[0-9a-f]+_readLater_.*_aot_frame
+c_contains=XrValue p0;
+c_not_contains=xrt_box_obj(v0)

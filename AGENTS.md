@@ -57,6 +57,23 @@ Changes under `src/ir/`, `src/aot/`, or `src/analysis/` must preserve the Task 2
 - Strings and metadata crossing AST, analyzer, IR, plan, evidence, or CGen stage boundaries must be copied into the receiving arena/pool or transferred explicitly. Do not retain dynamic-array element pointers across operations that can grow the array.
 - The generated-C W1-W4 verifier is always on. Do not add a bypass, downgrade its ICE behavior, or hand malformed output to the host C compiler.
 
+**Generated C is portable C11 first.** The AOT backend and its runtime headers
+must compile with supported MSVC, Clang, GCC, and Zig C providers for the
+selected target.
+
+- Never emit GNU statement expressions (`({ ... })`) or another
+  provider-specific language extension on an unconditional generated-C path.
+- Express multi-statement value production with ordinary scoped statements or
+  a typed runtime helper. Provider intrinsics are allowed only behind an owned,
+  capability-gated runtime boundary with a portable implementation where the
+  feature is part of the supported language surface.
+- On Windows, automatic native-toolchain discovery prefers a ready MSVC, then
+  Clang, then Zig. A fallback is evidence of a failed capability probe, not the
+  normal path when MSVC is installed and ready.
+- A generated-C portability change needs a regression gate that compiles real
+  generated output with MSVC and rejects newly introduced GNU statement
+  expressions; a synthetic SDK probe alone is insufficient evidence.
+
 Document any platform-only LeakSanitizer suppression in `scripts/lsan.supp`; the suppression budget may shrink but may not grow without an explicit contract review.
 
 ## Coding and commit rules
@@ -93,10 +110,10 @@ The rules agents break most often:
   `Round 2`, 本次重构) — docs move and phases expire, but code history must
   stand alone. State the fact and the reason; long-lived design intent belongs
   in the doc comment of the owning function or type.
-- **Commits carry no AI attribution.** No `Co-Authored-By` trailer naming
-  Claude or any other tool, no tool as author or committer, no tool mentions
-  in the message. The only sanctioned trailer is `CONTRACT-CHANGE:` (next
-  section).
+- **Commits carry no AI attribution or process-specific trailers.** No
+  `Co-Authored-By` trailer naming Claude or any other tool, no tool as author
+  or committer, and no `CONTRACT-CHANGE:` trailer. Keep contract rationale in
+  the ordinary self-contained subject/body and in the governed evidence.
 - **Allocate only through `xr_malloc`/`xr_free`**, check for NULL, and pass
   `xr_realloc` results through a temporary pointer. Non-`static` functions
   carry `XRAY_API`/`XR_FUNC`; preprocessor OS checks use `XR_OS_*`, never
@@ -113,9 +130,8 @@ listed anchor, read the owning contract and decide whether existing diff cases,
 KATs, shape gates, or ports evidence must be migrated.
 
 - Refresh every affected `anchor-sha256` record in the same commit.
-- Add `CONTRACT-CHANGE: contracts/<file>.md <one-line reason>` to the commit
-  message for each affected contract.
+- Do not add a dedicated contract-change trailer to the commit message.
 - Record how affected evidence was rerun, regenerated, or retired. Retirement
   must use the governed tombstone inventory; never silently delete evidence.
 - Run `ctest --test-dir build --output-on-failure -R contract_freeze` after the
-  commit so trailer enforcement runs against the final commit message.
+  commit so anchors and governed evidence are checked against the final commit.

@@ -135,6 +135,18 @@ static xr_span_t xrt_c90_span_from_ptr(const void *ptr, int64_t length) {
     return span;
 }
 
+static void *xr_raw_mut_ptr_offset(void *ptr, intptr_t offset, int subtract) {
+    uint8_t *base = (uint8_t *) ptr;
+    XR_ASSUME(base != NULL);
+    return subtract ? (void *) (base - offset) : (void *) (base + offset);
+}
+
+static const void *xr_raw_const_ptr_offset(const void *ptr, intptr_t offset, int subtract) {
+    const uint8_t *base = (const uint8_t *) ptr;
+    XR_ASSUME(base != NULL);
+    return subtract ? (const void *) (base - offset) : (const void *) (base + offset);
+}
+
 static uint8_t xr_raw_load_u8_unaligned(const void *ptr) {
     uint8_t value;
     memcpy(&value, ptr, sizeof(value));

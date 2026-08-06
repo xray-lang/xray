@@ -2569,6 +2569,10 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     if (cg_shared_static_function_value_is_elided(ctx, f, v))
         return;
+    if (emit_enum_namespace_value_stmt(ctx, out, f, v, true))
+        return;
+    if (emit_closure_new_value_stmt(ctx, out, f, prefix, v, true))
+        return;
     if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1 &&
         (cg_value_is_borrowed_array_slot_alias(ctx, f, v->args[0]) ||
          xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v->args[0])))
@@ -2697,6 +2701,15 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
 
     if (emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, true))
+        return;
+
+    if (emit_portable_class_native_ctor_value_stmt(ctx, out, f, prefix, v, true))
+        return;
+
+    if (emit_portable_map_class_ctor_value_stmt(ctx, out, f, prefix, v))
+        return;
+
+    if (emit_str_concat_value_stmt(ctx, out, f, v))
         return;
 
     if (v->op == XI_GO) {
@@ -5020,7 +5033,7 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             fprintf(out, "    }\n");
             break;
         case XI_BLOCK_UNREACHABLE:
-            fprintf(out, "    __builtin_unreachable();\n");
+            fprintf(out, "    XR_ASSUME(0);\n");
             break;
         default:
             fprintf(out, "    return xr_aot_error(XR_NULL_VAL, false);\n");

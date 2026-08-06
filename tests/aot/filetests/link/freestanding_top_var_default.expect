@@ -7,7 +7,7 @@ contains="defines": ["XRT_IMPL", "XRAY_PROFILE_FREESTANDING=1"]
 c_contains=#include "xrt_core_freestanding.h"
 c_contains=static XrValue xrt_shared[
 c_contains=[0] = XR_FROM_INT(INT64_C(0)),
-c_contains=[1] = XR_FROM_FLOAT(0x0p+0),
+c_contains=[1] = XR_FROM_FLOAT(0x0.0000000000000p+0),
 c_contains=[2] = XR_FALSE_VAL,
 c_contains=[3] = XR_NULL_VAL,
 c_contains=[4] = XR_NULL_VAL,

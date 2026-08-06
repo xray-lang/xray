@@ -64,7 +64,7 @@ class Hit:
 
 
 def relative(root: Path, path: Path) -> str:
-    return str(path.resolve().relative_to(root.resolve()))
+    return path.resolve().relative_to(root.resolve()).as_posix()
 
 
 def iter_text_files(root: Path):

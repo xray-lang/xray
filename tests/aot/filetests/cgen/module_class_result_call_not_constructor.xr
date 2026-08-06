@@ -1,0 +1,8 @@
+import ws
+import { ParsedUpgradeResponse } from ws
+
+fn parseUpgrade(response: string, key: string) -> ParsedUpgradeResponse? {
+    return ws.parseUpgradeResponse(response, key, null, true)
+}
+
+print(parseUpgrade("HTTP/1.1 400 Bad Request\r\n\r\n", "key") == null)

@@ -2647,7 +2647,8 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
 }
 
 static bool emit_static_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                                   const CgFixedArrayLaneInfo *info) {
+                                                   const CgFixedArrayLaneInfo *info,
+                                                   bool as_statement) {
     if (!ctx || !out || !v || v->op != XI_INDEX_SET || v->nargs < 3 || !info)
         return false;
 
@@ -2730,7 +2731,7 @@ static bool emit_static_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, co
     else
         outer_unchecked = cg_fixed_array_index_bounds_proven(nested_access, nested_info.count);
 
-    fprintf(out, "({ ");
+    fprintf(out, as_statement ? "    { " : "({ ");
     if (!outer_unchecked) {
         fprintf(out, "int64_t _outer_idx = ");
         emit_value_as_rep_ctx(ctx, out,
@@ -2802,7 +2803,7 @@ static bool emit_static_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "_idx");
     fprintf(out, "] = ");
     emit_fixed_array_lane_store_value(ctx, out, info, v->args[2]);
-    fprintf(out, "; XR_NULL_VAL; })");
+    fprintf(out, as_statement ? "; }\n" : "; XR_NULL_VAL; })");
     return true;
 }
 
@@ -2811,7 +2812,7 @@ static bool emit_static_fixed_array_index_set_from_value(XiCgenCtx *ctx, FILE *o
     CgFixedArrayLaneInfo info;
     return v && v->op == XI_INDEX_SET && v->nargs >= 3 &&
            cg_fixed_array_lane_info_from_value(v->args[0], &info) &&
-           emit_static_fixed_array_index_set_expr(ctx, out, v, &info);
+           emit_static_fixed_array_index_set_expr(ctx, out, v, &info, false);
 }
 
 static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -2821,7 +2822,7 @@ static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
         !cg_fixed_array_lane_info_from_value(v->args[0], &info))
         return false;
 
-    if (emit_static_fixed_array_index_set_expr(ctx, out, v, &info))
+    if (emit_static_fixed_array_index_set_expr(ctx, out, v, &info, false))
         return true;
 
     bool unchecked = cg_fixed_array_index_bounds_proven(v, info.count);
@@ -2857,6 +2858,51 @@ static bool emit_fixed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     fprintf(out, "] = ");
     emit_fixed_array_lane_store_value(ctx, out, &info, v->args[2]);
     fprintf(out, "; XR_NULL_VAL; })");
+    return true;
+}
+
+static bool emit_fixed_array_index_set_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                            const char *prefix, const XiValue *v) {
+    CgFixedArrayLaneInfo info;
+    if (!ctx || !out || !v || v->op != XI_INDEX_SET || v->nargs < 3 ||
+        !cg_fixed_array_lane_info_from_value(v->args[0], &info))
+        return false;
+    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
+        return false;
+
+    if (emit_static_fixed_array_index_set_expr(ctx, out, v, &info, true)) {
+        emit_value_generated_line_reset(ctx, out, v);
+        return true;
+    }
+
+    bool unchecked = cg_fixed_array_index_bounds_proven(v, info.count);
+    fprintf(out, "    {\n");
+    if (!unchecked) {
+        fprintf(out, "        int64_t _idx_%u = ", v->id);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out,
+                ";\n        if (XR_UNLIKELY(_idx_%u < 0 || _idx_%u >= %u)) "
+                "xrt_fixed_index_oob(_idx_%u, %u);\n",
+                v->id, v->id, (unsigned) info.count, v->id, (unsigned) info.count);
+    }
+    fprintf(out, "        ");
+    const XiValue *field_ref = cg_trace_fixed_array_field_ref(v->args[0]);
+    if (field_ref) {
+        const XrAggregateLayout *layout = (const XrAggregateLayout *) field_ref->aux;
+        emit_struct_field_lvalue(ctx, out, f, layout, field_ref->aux_int, field_ref->args[0],
+                                 prefix);
+    } else {
+        emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
+    }
+    fprintf(out, "[");
+    if (unchecked)
+        emit_array_i64_arg(ctx, out, v->args[1]);
+    else
+        fprintf(out, "_idx_%u", v->id);
+    fprintf(out, "] = ");
+    emit_fixed_array_lane_store_value(ctx, out, &info, v->args[2]);
+    fprintf(out, ";\n    }\n");
+    emit_value_generated_line_reset(ctx, out, v);
     return true;
 }
 
@@ -4583,10 +4629,9 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
 
 static void emit_span_ref_expr(FILE *out, const XiValue *value);
 
-static bool emit_hosted_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out,
-                                                       const XiFunc *f, const XiValue *v,
-                                                       const char *prefix) {
-    if (!ctx || ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT || !out || !f || !v)
+static bool emit_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                const XiValue *v, const char *prefix) {
+    if (!ctx || !out || !f || !v)
         return false;
 
     if (v->op == XI_INDEX_GET && v->nargs >= 2) {
@@ -4602,41 +4647,61 @@ static bool emit_hosted_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out
                       cg_value_rep_is_typed_adt_aggregate(plan->rep))))
             return false;
 
-        bool unchecked = span
-                             ? cg_span_index_bounds_proven(ctx, f, v,
-                                                          XAOT_SLICE_ACCESS_INDEX_GET)
-                             : cg_array_index_access_bounds_proven(ctx, f, v);
+        const XrAggregateLayout *borrowed_layout = cg_type_struct_layout(v->type);
+        if (borrowed_layout && cg_struct_native_heap_supported(borrowed_layout))
+            return false;
+
+        bool unchecked = span ? cg_span_index_bounds_proven(ctx, f, v,
+                                                             XAOT_SLICE_ACCESS_INDEX_GET)
+                              : cg_array_index_access_bounds_proven(ctx, f, v);
         bool borrowed = info.rep == XR_REP_TAGGED &&
                         cg_tagged_array_index_get_can_borrow(ctx, f, v);
-        fprintf(out, "    XrValue _hosted_load_%u = ", v->id);
-        if (span) {
-            fprintf(out, "xrt_span_index_get_portable(");
-            emit_span_ref_expr(out, v->args[0]);
-            fprintf(out, ", ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ", %s, %d, %d);\n", info.elem_name, unchecked ? 0 : 1,
-                    borrowed ? 0 : 1);
-        } else {
-            fprintf(out, "xrt_array_index_get_portable((xrt_array_t *)");
-            emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
-            fprintf(out, ", ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ", %d, %d);\n", unchecked ? 0 : 1, borrowed ? 0 : 1);
-        }
         if (ctx->pre_decl_all) {
-            fprintf(out, "    ");
-            emit_vref(out, v);
-            fprintf(out, " = ");
+            /* The result slot is declared in the function prelude. */
         } else {
             fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
             emit_vref(out, v);
-            fprintf(out, " = ");
+            fprintf(out, ";\n");
         }
-        const char *suffix = emit_conversion_prefix_ctx(
-            ctx, out, v->type, XR_REP_TAGGED, cg_value_decl_storage_rep(ctx, f, v));
-        fprintf(out, "_hosted_load_%u", v->id);
-        emit_conversion_suffix(out, suffix);
+        fprintf(out, "    {\n");
+        if (span) {
+            fprintf(out, "        xr_span_t _s = ");
+            emit_span_ref_expr(out, v->args[0]);
+            fprintf(out, ";\n");
+        } else {
+            fprintf(out, "        xrt_array_t *_a = ");
+            emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
+            fprintf(out, ";\n");
+        }
+        fprintf(out, "        int64_t _idx = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, ";\n");
+        if (!unchecked) {
+            const char *length_expr = span ? "_s.length" : "_a->length";
+            fprintf(out,
+                    "        if (XR_UNLIKELY(_idx < 0 || _idx >= %s)) "
+                    "xrt_index_oob(_idx, %s);\n",
+                    length_expr, length_expr);
+        }
+        if (!span)
+            fprintf(out, "        XR_ASSUME(_a->data != NULL);\n");
+        fprintf(out, "        ");
+        emit_vref(out, v);
+        fprintf(out, " = ");
+        const char *suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
+        emit_typed_array_load_value(out, &info, borrowed);
+        const XiValue *cached_origin = NULL;
+        bool use_cache = !span && cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
+        if (span)
+            fprintf(out, "((%s*)_s.data)[_idx]", info.ctype);
+        else if (use_cache) {
+            emit_typed_array_data_cache_ref(out, cached_origin);
+            fprintf(out, "[_idx]");
+        } else
+            fprintf(out, "((%s*)_a->data)[_idx]", info.ctype);
+        emit_typed_array_load_value_end(out, &info, borrowed);
+        emit_conversion_suffix(out, suffix);
+        fprintf(out, ";\n    }\n");
         emit_value_generated_line_reset(ctx, out, v);
         emit_debug_source_var_sync(ctx, out, f, v);
         return true;
@@ -4651,41 +4716,37 @@ static bool emit_hosted_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out
                                                  CG_ARRAY_STORAGE_MUTABLE);
         if (!span && !array)
             return false;
-        bool unchecked = span
-                             ? cg_span_index_bounds_proven(ctx, f, v,
-                                                          XAOT_SLICE_ACCESS_INDEX_SET)
-                             : cg_array_index_access_bounds_proven(ctx, f, v);
-        fprintf(out, "    (void)");
+        bool unchecked = span ? cg_span_index_bounds_proven(ctx, f, v,
+                                                             XAOT_SLICE_ACCESS_INDEX_SET)
+                              : cg_array_index_access_bounds_proven(ctx, f, v);
+        fprintf(out, "    {\n");
         if (span) {
-            fprintf(out, "xrt_span_index_set_portable(");
+            fprintf(out, "        xr_span_t _s = ");
             emit_span_ref_expr(out, v->args[0]);
+            fprintf(out, ";\n");
         } else {
-            fprintf(out, "xrt_array_index_set_portable((xrt_array_t *)");
+            fprintf(out, "        xrt_array_t *_a = ");
             emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
+            fprintf(out, ";\n");
         }
-        fprintf(out, ", ");
+        fprintf(out, "        int64_t _idx = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ";\n");
+        if (!unchecked) {
+            const char *length_expr = span ? "_s.length" : "_a->length";
+            fprintf(out,
+                    "        if (XR_UNLIKELY(_idx < 0 || _idx >= %s)) "
+                    "xrt_index_oob(_idx, %s);\n",
+                    length_expr, length_expr);
+        }
+        if (!span)
+            fprintf(out, "        XR_ASSUME(_a->data != NULL);\n");
         if (span)
-            fprintf(out, ", %s, %d);\n", info.elem_name, unchecked ? 0 : 1);
+            fprintf(out, "        ((%s*)_s.data)[_idx] = ", info.ctype);
         else
-            fprintf(out, ", %d);\n", unchecked ? 0 : 1);
-        emit_value_generated_line_reset(ctx, out, v);
-        return true;
-    }
-
-    if (v->op == XI_CALL_METHOD && v->nargs == 2 && v->aux &&
-        strcmp((const char *) v->aux, "push") == 0) {
-        CgArrayElemInfo info;
-        if (!cg_array_value_storage_info(ctx, f, v->args[0], &info,
-                                         CG_ARRAY_STORAGE_MUTABLE))
-            return false;
-        fprintf(out, "    xrt_array_push(xr_mkptr((void *)");
-        emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
-        fprintf(out, ", XR_TAG_ARRAY), ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ");\n");
+            fprintf(out, "        ((%s*)_a->data)[_idx] = ", info.ctype);
+        emit_typed_array_store_value(ctx, out, &info, v->args[2]);
+        fprintf(out, ";\n    }\n");
         emit_value_generated_line_reset(ctx, out, v);
         return true;
     }
@@ -4983,6 +5044,71 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
     return true;
 }
 
+static bool emit_typed_array_push_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                       const char *prefix, const XiValue *call) {
+    CgArrayElemInfo info;
+    if (!call || call->nargs != 2 ||
+        !cg_array_value_storage_info(ctx, f, call->args[0], &info,
+                                     CG_ARRAY_STORAGE_MUTABLE))
+        return false;
+
+    CgArrayFillLoop fill;
+    bool unchecked = cg_array_fill_loop_match(ctx, f, call, &fill);
+    if (unchecked) {
+        CgArrayFillLoop unique;
+        unchecked = cg_array_unique_fill_loop_for_origin(ctx, f, fill.origin, &unique) &&
+                    unique.push == call;
+    }
+
+    fprintf(out, "    {\n        xrt_array_t *_a = ");
+    emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
+    fprintf(out, ";\n        ");
+    if (unchecked) {
+        const XiValue *cached_origin = NULL;
+        bool use_cache = cg_array_data_cache_for_value(ctx, fill.origin, &cached_origin);
+        bool use_final_len = use_cache && cg_array_can_use_final_len_store(ctx, &fill);
+        if (use_cache) {
+            if (use_final_len)
+                emit_aot_hot_region_begin(out, "typed_array_raw_access");
+            emit_typed_array_data_cache_ref(out, cached_origin);
+            fprintf(out, "[");
+        } else
+            fprintf(out, "((%s*)_a->data)[", info.ctype);
+        emit_value_as_rep(out, fill.index_value, XR_REP_I64);
+        fprintf(out, "] = ");
+        emit_typed_array_store_value(ctx, out, &info, call->args[1]);
+        if (use_cache && use_final_len)
+            emit_aot_hot_region_end(out, "typed_array_raw_access");
+        fprintf(out, ";\n");
+        if (!use_final_len) {
+            fprintf(out, "        _a->length = ");
+            if (fill.next_index_value && cg_array_value_available_at(fill.next_index_value, call))
+                emit_value_as_rep(out, fill.next_index_value, XR_REP_I64);
+            else {
+                fprintf(out, "(");
+                emit_value_as_rep(out, fill.index_value, XR_REP_I64);
+                fprintf(out, " + 1)");
+            }
+            fprintf(out, ";\n");
+        }
+    } else {
+        fprintf(out,
+                "if (_a->data_storage == XR_ARRAY_DATA_BORROWED) { fprintf(stderr, "
+                "\"xrt_array_push: cannot push to array slice\\n\"); abort(); }\n"
+                "        if (XR_UNLIKELY(_a->length >= _a->capacity)) { "
+                "xrt_array_data_grow(_a, _a->capacity == 0 ? 4 : _a->capacity * 2); }\n"
+                "        ((%s*)_a->data)[_a->length++] = ",
+                info.ctype);
+        emit_typed_array_store_value(ctx, out, &info, call->args[1]);
+        fprintf(out, ";\n");
+    }
+    if (info.rep == XR_REP_TAGGED)
+        fprintf(out, "        XR_ARRAY_MARK_MUTATED(_a);\n");
+    fprintf(out, "    }\n");
+    emit_value_generated_line_reset(ctx, out, call);
+    return true;
+}
+
 static bool emit_typed_array_set_unchecked_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                 const char *prefix, const XiValue *call) {
     CgArrayElemInfo info;
@@ -4995,7 +5121,7 @@ static bool emit_typed_array_set_unchecked_expr(XiCgenCtx *ctx, FILE *out, const
 
     const XiValue *cached_origin = NULL;
     bool use_cache = cg_array_data_cache_for_value(ctx, call->args[0], &cached_origin);
-    fprintf(out, "({ ");
+    fprintf(out, "(");
     if (use_cache) {
         emit_aot_hot_region_begin(out, "typed_array_raw_access");
         emit_typed_array_data_cache_ref(out, cached_origin);
@@ -5010,7 +5136,7 @@ static bool emit_typed_array_set_unchecked_expr(XiCgenCtx *ctx, FILE *out, const
     emit_typed_array_store_value(ctx, out, &info, call->args[2]);
     if (use_cache)
         emit_aot_hot_region_end(out, "typed_array_raw_access");
-    fprintf(out, "; XR_NULL_VAL; })");
+    fprintf(out, ", XR_NULL_VAL)");
     return true;
 }
 
@@ -5799,13 +5925,39 @@ static bool emit_typed_array_map_inline_stmt(XiCgenCtx *ctx, FILE *out, const Xi
     fprintf(out, "    %s *", map.dst_info.ctype);
     emit_typed_array_data_cache_ref(out, v);
     fprintf(out, " = NULL;\n");
-    fprintf(out, "    ");
-    if (!ctx->pre_decl_all)
-        fprintf(out, "%s ", ctype_str(cg_rep(v)));
+    if (!ctx->pre_decl_all) {
+        fprintf(out, "    %s ", ctype_str(cg_rep(v)));
+        emit_vref(out, v);
+        fprintf(out, ";\n");
+    }
+    const XiValue *cached_origin = NULL;
+    bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
+    fprintf(out, "    {\n        xrt_array_t *_src = (xrt_array_t*)");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out,
+            ".ptr;\n        int64_t _n = _src->length;\n        XrValue _outv = "
+            "xrt_array_new_typed_uninit(_n, %s);\n        "
+            "xrt_array_t *_out = (xrt_array_t*)_outv.ptr;\n        %s *_srcd = ",
+            map.dst_info.elem_name, map.src_info.ctype);
+    if (use_cache)
+        emit_typed_array_data_cache_ref(out, cached_origin);
+    else
+        fprintf(out, "(%s*)_src->data", map.src_info.ctype);
+    fprintf(out, ";\n        %s *_dstd = (%s*)_out->data;\n        ", map.dst_info.ctype,
+            map.dst_info.ctype);
+    emit_typed_array_data_cache_ref(out, v);
+    fprintf(out,
+            " = _dstd;\n        for (int64_t _i = 0; _i < _n; _i++) {\n            "
+            "_dstd[_i] = (%s)",
+            map.dst_info.ctype);
+    emit_fname(ctx, out, map.target_prefix, map.target);
+    fprintf(out,
+            "(NULL, (%s)_srcd[_i]);\n        }\n        _out->length = _n;\n        ",
+            ctype_str(map.param_rep));
     emit_vref(out, v);
-    fprintf(out, " = ");
-    emit_typed_array_map_inline_expr_cached(ctx, out, current, prefix, v, v);
-    fprintf(out, ";\n");
+    fprintf(out, " = %s;\n    }\n", cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, current, v);
     return true;
 }
 
@@ -5894,13 +6046,41 @@ static bool emit_typed_array_filter_inline_stmt(XiCgenCtx *ctx, FILE *out, const
     fprintf(out, "    %s *", filter.dst_info.ctype);
     emit_typed_array_data_cache_ref(out, v);
     fprintf(out, " = NULL;\n");
-    fprintf(out, "    ");
-    if (!ctx->pre_decl_all)
-        fprintf(out, "%s ", ctype_str(cg_rep(v)));
+    if (!ctx->pre_decl_all) {
+        fprintf(out, "    %s ", ctype_str(cg_rep(v)));
+        emit_vref(out, v);
+        fprintf(out, ";\n");
+    }
+    const XiValue *cached_origin = NULL;
+    bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
+    fprintf(out, "    {\n        xrt_array_t *_src = (xrt_array_t*)");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out,
+            ".ptr;\n        int64_t _n = _src->length;\n        XrValue _outv = "
+            "xrt_array_new_typed_uninit(_n, %s);\n        "
+            "xrt_array_t *_out = (xrt_array_t*)_outv.ptr;\n        %s *_srcd = ",
+            filter.dst_info.elem_name, filter.src_info.ctype);
+    if (use_cache)
+        emit_typed_array_data_cache_ref(out, cached_origin);
+    else
+        fprintf(out, "(%s*)_src->data", filter.src_info.ctype);
+    fprintf(out,
+            ";\n        %s *_dstd = (%s*)_out->data;\n        int64_t _out_len = 0;\n        ",
+            filter.dst_info.ctype, filter.dst_info.ctype);
+    emit_typed_array_data_cache_ref(out, v);
+    fprintf(out,
+            " = _dstd;\n        for (int64_t _i = 0; _i < _n; _i++) {\n            "
+            "%s _x = _srcd[_i];\n            if (",
+            filter.src_info.ctype);
+    emit_fname(ctx, out, filter.target_prefix, filter.target);
+    fprintf(out,
+            "(NULL, (%s)_x) != 0) {\n                _dstd[_out_len++] = (%s)_x;\n"
+            "            }\n        }\n        _out->length = _out_len;\n        ",
+            ctype_str(filter.param_rep), filter.dst_info.ctype);
     emit_vref(out, v);
-    fprintf(out, " = ");
-    emit_typed_array_filter_inline_expr_cached(ctx, out, current, prefix, v, v);
-    fprintf(out, ";\n");
+    fprintf(out, " = %s;\n    }\n", cg_rep(v) == XR_REP_PTR ? "_outv.ptr" : "_outv");
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, current, v);
     return true;
 }
 

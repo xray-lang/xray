@@ -1,2 +1,2 @@
-c_contains=xrt_os_exit(XR_FROM_INT(INT64_C(7)))
+c_regex=xrt_os_exit\(XR_FROM_INT\(v[0-9]+\)\)
 c_not_contains=unsupported AOT stdlib call

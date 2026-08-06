@@ -119,6 +119,18 @@ XR_RAW_ENDIAN_CONVERSIONS(64, uint64_t, xr_raw_bswap_u64)
 
 #undef XR_RAW_ENDIAN_CONVERSIONS
 
+static inline void *xr_raw_mut_ptr_offset(void *ptr, intptr_t offset, int subtract) {
+    uint8_t *base = (uint8_t *) ptr;
+    XR_RAW_ASSUME_NON_NULL(base);
+    return subtract ? (void *) (base - offset) : (void *) (base + offset);
+}
+
+static inline const void *xr_raw_const_ptr_offset(const void *ptr, intptr_t offset, int subtract) {
+    const uint8_t *base = (const uint8_t *) ptr;
+    XR_RAW_ASSUME_NON_NULL(base);
+    return subtract ? (const void *) (base - offset) : (const void *) (base + offset);
+}
+
 static inline uint8_t xr_raw_load_u8_unaligned(const void *ptr) {
     uint8_t value;
     XR_RAW_ASSUME_NON_NULL(ptr);

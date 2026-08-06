@@ -25,7 +25,8 @@ c_contains=xrt_array_new_typed(0, XR_ELEM_RUNE)
 c_contains=xrt_array_new_typed(0, XR_ELEM_I64)
 c_contains=xrt_array_new_typed_ptr(0, XR_ELEM_RUNE)
 c_contains=xrt_array_new_typed_uninit(
-c_regex=\(p0\)->f0 = \(xrt_array_t\*\)xrt_array_new_typed_uninit
+c_regex=xrt_release\(xr_mkptr\(\(p0\)->f0, XR_TAG_ARRAY\)\), \(p0\)->f0 = \(xrt_array_t \*\)\(v[0-9]+\)\.ptr
+c_not_regex=xrt_retain\(v[0-9]+\), xrt_release\(xr_mkptr\(\(p0\)->f0, XR_TAG_ARRAY\)\)
 c_regex=xrt_array_new_typed_ptr\([^,]+, XR_ELEM_U8\)
 c_contains=XR_FROM_RUNE((uint32_t)
 c_contains=XR_TO_RUNE(
@@ -38,3 +39,4 @@ c_contains=xrt_set_new_typed(0, XR_ELEM_U16)
 c_contains=xrt_map_set_i64_i64_typed
 c_contains=xrt_map_has_i64_typed
 c_contains=xrt_set_add_i64_typed
+c_not_contains=({

@@ -3,7 +3,7 @@ regex=function [0-9]+ name=run module=0 depth=1 abi=native boundary=none params=
 regex=class-field-plan [0-9]+ field=1 owner=1 .* slot=0 offset=0 .*storage=scalar action=native_scalar rep=native_scalar .*evidence=0x7f
 regex=class-field-plan [0-9]+ field=2 owner=2 .* slot=1 offset=8 .*storage=scalar action=native_scalar rep=native_scalar .*evidence=0x7f
 regex=class-field-plan [0-9]+ field=3 owner=2 .* slot=2 offset=16 .*storage=scalar action=native_scalar rep=native_scalar .*evidence=0x7f
-c_regex=typedef struct xrt_native_stack_native_class_descriptor_elision_[0-9a-f]{16}_Shape \{ int64_t f0; \}
+c_regex=typedef struct xrt_native_stack_native_class_descriptor_elision_[0-9a-f]{16}_Shape \{ XrObjHeader hdr; int64_t f0; \}
 c_regex=typedef struct xrt_native_stack_native_class_descriptor_elision_[0-9a-f]{16}_Rect \{ xrt_native_stack_native_class_descriptor_elision_[0-9a-f]{16}_Shape base; int64_t f1; int64_t f2; \}
 c_contains=&((p0)->base)
 c_contains=((p0)->f1 = (int64_t)v1)

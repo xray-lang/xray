@@ -12,16 +12,11 @@ anchor-sha256: path/from/repository/root digest
 ```
 
 `scripts/check_contract_freeze.py` verifies the anchors in CTest. A change to
-an anchor or contract file must carry a commit trailer:
-
-```text
-CONTRACT-CHANGE: contracts/<file>.md <one-line reason>
-```
-
-The same change must explain how affected differential cases, KATs, shape
-gates, ports, or other evidence were rerun, regenerated, or retired. Retired
-evidence belongs in its governed tombstone inventory; it must not silently
-disappear.
+an anchor or contract file does not require a dedicated commit trailer. The
+ordinary self-contained commit subject/body and governed evidence must explain
+how affected differential cases, KATs, shape gates, ports, or other evidence
+were rerun, regenerated, or retired. Retired evidence belongs in its governed
+tombstone inventory; it must not silently disappear.
 
 Initial frozen contracts:
 

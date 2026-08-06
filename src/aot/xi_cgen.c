@@ -1273,7 +1273,7 @@ static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *
                 return "XRT_INTERNAL XR_NOINLINE ";
             /* In a static SIMD build every caller is compiled for the selected
              * target, so an explicit source-level @inline contract is safe to
-             * preserve across module ABI boundaries.  Runtime dispatch must
+             * preserve across module ABI boundaries. Runtime dispatch must
              * keep the externally linkable ISA island: inlining its body into
              * a baseline caller would leak target-specific instructions. */
             if (ctx && ctx->target && ctx->target->simd_mode != XAOT_SIMD_DISPATCH && f &&
@@ -1325,7 +1325,7 @@ static const char *cg_func_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *
 
 /* A declaration emitted into a different translation unit cannot promise
  * always_inline: the function body is intentionally unavailable there and GCC
- * diagnoses a call through such a declaration at -O0.  Keep the definition's
+ * diagnoses a call through such a declaration at -O0. Keep the definition's
  * inline policy in its owning unit, but expose only the stable cross-unit ABI
  * linkage to importers. */
 static const char *cg_func_forward_linkage(XiCgenCtx *ctx, const XiFunc *f, const char *prefix,
@@ -2827,6 +2827,8 @@ static const XaotBulkPlan *cg_required_bulk_plan(XiCgenCtx *ctx, const XiFunc *f
 static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current,
                                            const XiValue *value, uint8_t depth);
 static bool cg_const_int_value(const XiValue *value, int64_t *out);
+static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *class_name,
+                                                 const char **out_prefix);
 
 #include "xi_cgen_class_native_helpers.inc.c"
 
@@ -7863,6 +7865,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
+    if (emit_enum_namespace_value_stmt(ctx, out, f, v, false))
+        return;
+
     const XiValue *wide_mul_partner = NULL;
     bool wide_mul_is_first = false;
     if (cg_u64_mul_wide_pair(ctx, f, v, &wide_mul_partner, &wide_mul_is_first)) {
@@ -8095,7 +8100,10 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (cg_class_native_set_field_value_is_elided(ctx, f, v))
         return;
 
-    if (emit_hosted_class_native_instance_field_store_stmt(ctx, out, f, v, prefix))
+    if (emit_portable_class_native_instance_field_store_stmt(ctx, out, f, v, prefix))
+        return;
+
+    if (emit_local_typed_map_get_stmt(ctx, out, f, v))
         return;
 
     if (emit_class_native_map_method_call_stmt(ctx, out, f, v))
@@ -8105,20 +8113,26 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (cg_class_native_ref_stack_return_takes_value(ctx, f, v))
         return;
 
-    if (emit_hosted_class_native_ctor_value_stmt(ctx, out, f, prefix, v))
+    if (emit_class_native_ctor_value_stmt(ctx, out, f, prefix, v))
         return;
 
-    if (emit_hosted_map_class_ctor_value_stmt(ctx, out, f, prefix, v))
+    if (emit_portable_class_native_ctor_value_stmt(ctx, out, f, prefix, v, false))
         return;
 
-    if (emit_hosted_portable_collection_value_stmt(ctx, out, f, v, prefix))
+    if (emit_portable_map_class_ctor_value_stmt(ctx, out, f, prefix, v))
+        return;
+
+    if (xicgen_emit_slice_stmt(ctx, out, f, v, prefix))
+        return;
+
+    if (emit_portable_collection_value_stmt(ctx, out, f, v, prefix))
         return;
 
     if (cg_array_typed_push_value_is_elided(ctx, f, v)) {
-        fprintf(out, "    ");
-        emit_value_rhs(ctx, out, f, v, prefix);
-        fprintf(out, ";\n");
-        emit_value_generated_line_reset(ctx, out, v);
+        if (!emit_typed_array_push_stmt(ctx, out, f, prefix, v)) {
+            fprintf(stderr, "[xi_cgen] ERROR: typed Array.push has no portable statement plan\n");
+            ctx->error = true;
+        }
         return;
     }
     if (v && v->uses == 0 &&
@@ -8130,9 +8144,6 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
     if (emit_class_native_array_method_call_stmt(ctx, out, f, v))
-        return;
-
-    if (emit_class_native_ctor_value_stmt(ctx, out, f, prefix, v))
         return;
 
     if (emit_thread_spawn_value_stmt(ctx, out, f, v, prefix, false))
@@ -8150,10 +8161,34 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (emit_typed_array_class_field_alloc_store_stmt(ctx, out, f, v))
         return;
 
+    if (emit_fixed_array_index_set_stmt(ctx, out, f, prefix, v))
+        return;
+
+    if (xicgen_emit_planned_type_switch_method_stmt(ctx, out, f, v, prefix))
+        return;
+
+    if (v->op == XI_PAR_MAP || v->op == XI_PAR_REDUCE) {
+        if (!ctx->pre_decl_all) {
+            fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+            emit_vref(out, v);
+            fprintf(out, ";\n");
+        }
+        if (v->op == XI_PAR_MAP)
+            xicgen_par_map(ctx, out, f, v, prefix, true);
+        else
+            xicgen_par_reduce(ctx, out, f, v, prefix, true);
+        emit_value_generated_line_reset(ctx, out, v);
+        emit_debug_source_var_sync(ctx, out, f, v);
+        return;
+    }
+
     if (xi_to_c_emit_stmt_generated(ctx, out, f, v, prefix))
         return;
 
     if (emit_str_concat_value_stmt(ctx, out, f, v))
+        return;
+
+    if (emit_closure_new_value_stmt(ctx, out, f, prefix, v, false))
         return;
 
     if (cg_unused_call_result_emits_statement(ctx, f, v)) {
@@ -8956,7 +8991,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
             break;
 
         case XI_BLOCK_UNREACHABLE:
-            fprintf(out, "    __builtin_unreachable();\n");
+            fprintf(out, "    XR_ASSUME(0);\n");
             break;
 
         default:
@@ -11227,6 +11262,11 @@ static bool hosted_vm_param_is_borrowed(const XiFunc *f, uint16_t index) {
            f->arc_borrow_sig->param_own[index] == XI_OWN_BORROWED;
 }
 
+static bool hosted_vm_string_param_needs_owned_copy(XiCgenCtx *ctx, const XiFunc *f,
+                                                    uint16_t index, bool coroutine_export) {
+    return coroutine_export || !cg_direct_ref_param_noescape(ctx, f, index, 0);
+}
+
 /* Release the adapter-materialized argument values after the call.
  *
  * `owned_args_consumed_by_call` distinguishes the two call shapes. The plain
@@ -11235,11 +11275,13 @@ static bool hosted_vm_param_is_borrowed(const XiFunc *f, uint16_t index) {
  * adapter. The coroutine export retains each ref argument before frame_new,
  * so the adapter keeps an owning reference of its own to drop regardless of
  * the parameter's ownership. */
-static void emit_hosted_vm_argument_cleanup(FILE *out, const XiFunc *f, bool materialized_strings,
+static void emit_hosted_vm_argument_cleanup(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                            bool coroutine_export,
                                             bool owned_args_consumed_by_call) {
     for (uint16_t i = 0; f && i < f->nparams; i++) {
         const XrType *type = f->params && f->params[i] ? f->params[i]->type : NULL;
-        if (!type || !((materialized_strings && type->kind == XR_KIND_STRING) ||
+        if (!type || !((type->kind == XR_KIND_STRING &&
+                        hosted_vm_string_param_needs_owned_copy(ctx, f, i, coroutine_export)) ||
                        type->kind == XR_KIND_ENUM || cg_hosted_vm_array_has_string_elements(type)))
             continue;
         if (owned_args_consumed_by_call && !hosted_vm_param_is_borrowed(f, i))
@@ -11394,15 +11436,13 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
      * `path.basename(path.from(s))` segfaulted, while the AOT backend (which
      * never builds a borrowed header) was correct.
      *
-     * Copying is always sound, so widen the owned-copy path rather than trying
-     * to prove non-escape here. Coroutine exports already needed it for the
-     * same reason: their frame outlives the call. */
-    bool string_arg_may_outlive_call =
-        coroutine_export || cg_hosted_vm_is_object_type(f->return_type);
-
+     * Keep the zero-copy borrowed representation when the use graph proves
+     * the parameter cannot escape; materialize an owned string otherwise. */
     for (uint16_t i = 0; i < f->nparams; i++) {
         const XrType *type = f->params && f->params[i] ? f->params[i]->type : NULL;
         if (type && type->kind == XR_KIND_STRING) {
+            bool string_arg_may_outlive_call =
+                hosted_vm_string_param_needs_owned_copy(ctx, f, i, coroutine_export);
             if (type->is_nullable) {
                 if (string_arg_may_outlive_call) {
                     fprintf(out,
@@ -11647,10 +11687,10 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
         fprintf(out, ";\n");
         fprintf(out, "    if (!_hosted_continuation) {\n");
         emit_hosted_vm_coroutine_param_ref_ops(out, f, "xrt_release");
-        emit_hosted_vm_argument_cleanup(out, f, true, false);
+        emit_hosted_vm_argument_cleanup(ctx, out, f, true, false);
         fprintf(out, "        return xr_hosted_fragment_invalid_call(context, 0u);\n"
                      "    }\n");
-        emit_hosted_vm_argument_cleanup(out, f, true, false);
+        emit_hosted_vm_argument_cleanup(ctx, out, f, true, false);
         fprintf(out, "_hosted_resume:;\n");
         emit_hosted_vm_runtime_scope_enter(out);
         fprintf(out, "    XrAotResult _hosted_run = ");
@@ -11695,7 +11735,7 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
         fprintf(out, ";\n");
         if (needs_runtime_context)
             emit_hosted_vm_runtime_scope_leave(out);
-        emit_hosted_vm_argument_cleanup(out, f, false, true);
+        emit_hosted_vm_argument_cleanup(ctx, out, f, false, true);
         if (may_error)
             emit_hosted_vm_pending_error_bridge(out);
         fprintf(out, "    return (XrValue){0};\n}\n\n");
@@ -11714,7 +11754,7 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
         fprintf(out, ";\n");
         if (needs_runtime_context)
             emit_hosted_vm_runtime_scope_leave(out);
-        emit_hosted_vm_argument_cleanup(out, f, false, true);
+        emit_hosted_vm_argument_cleanup(ctx, out, f, false, true);
         if (may_error)
             emit_hosted_vm_pending_error_bridge(out);
     }

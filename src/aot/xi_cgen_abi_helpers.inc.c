@@ -819,6 +819,23 @@ static bool emit_const_value_as_rep_expr(XiCgenCtx *ctx, FILE *out, const XiValu
     return true;
 }
 
+static XrRep cg_emitted_value_storage_rep(XiCgenCtx *ctx, const XiValue *v,
+                                          const XaotValuePlan *plan) {
+    XrRep rep = plan ? xaot_value_storage_rep(plan->rep)
+                     : (ctx ? cg_value_plan_storage_rep(ctx, v) : cg_rep(v));
+    const XiFunc *owner = v && v->block ? v->block->func : NULL;
+    if (!ctx || !v || v->op != XI_PARAM || !owner ||
+        !cg_func_needs_aot_coro_ctx(ctx, owner))
+        return rep;
+
+    uint32_t param_count = owner->nparams + (owner->is_vararg ? 1u : 0u);
+    if (v->aux_int < 0 || (uint64_t) v->aux_int >= param_count)
+        return rep;
+    if (v->aux_int == 0 && cg_class_func_uses_native_receiver(ctx, owner))
+        return XR_REP_PTR;
+    return cg_rep(v);
+}
+
 static void emit_unit_materialized_as_rep(FILE *out, XrRep target_rep) {
     switch (target_rep) {
         case XR_REP_F64:
@@ -900,6 +917,15 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
     if (v && v->op == XI_CONST) {
         XrRep from_rep = plan ? xaot_value_storage_rep(plan->rep)
                               : (ctx ? cg_value_plan_storage_rep(ctx, v) : cg_rep(v));
+        if (v->type &&
+            (v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE ||
+             (v->type->kind == XR_KIND_UNKNOWN && v->aux))) {
+            const char *conv_suffix =
+                emit_conversion_prefix_ctx(ctx, out, v->type, from_rep, target_rep);
+            emit_vref(out, v);
+            emit_conversion_suffix(out, conv_suffix);
+            return;
+        }
         emit_const_value_as_rep_expr(ctx, out, v, from_rep, target_rep);
         return;
     }
@@ -938,8 +964,7 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         emit_codegen_abort_expr(out);
         return;
     }
-    XrRep from_rep = plan ? xaot_value_storage_rep(plan->rep)
-                          : (ctx ? cg_value_plan_storage_rep(ctx, v) : cg_rep(v));
+    XrRep from_rep = cg_emitted_value_storage_rep(ctx, v, plan);
     if (target_rep == XR_REP_TAGGED && (from_rep == XR_REP_PTR || from_rep == XR_REP_RAWPTR) && v &&
         v->type && v->type->kind == XR_KIND_FIXED_ARRAY) {
         uint8_t native = XR_NATIVE_VALUE;
@@ -1061,33 +1086,22 @@ static bool emit_checked_tagged_direct_call_scalar_arg(XiCgenCtx *ctx, FILE *out
     if (!ctx || !out || !target || from_rep != XR_REP_TAGGED || to_rep != XR_REP_I64)
         return false;
     const XrType *param_type = cg_func_param_type(target, arg_index);
-    const char *predicate = NULL;
-    const char *extract_prefix = NULL;
-    const char *expected = NULL;
+    const char *helper = NULL;
     if (param_type && param_type->kind == XR_KIND_INT) {
-        predicate = "XR_IS_INT";
-        extract_prefix = "XR_TO_INT(";
-        expected = "int";
+        helper = "xrt_expect_int_arg";
     } else if (param_type && param_type->kind == XR_KIND_BOOL) {
-        predicate = "XR_IS_BOOL";
-        extract_prefix = "XR_TO_INT(";
-        expected = "bool";
+        helper = "xrt_expect_bool_arg";
     } else if (param_type && param_type->kind == XR_KIND_RUNE) {
-        predicate = "XR_IS_RUNE";
-        extract_prefix = "(int64_t)XR_TO_RUNE(";
-        expected = "rune";
+        helper = "xrt_expect_rune_arg";
     } else {
         return false;
     }
 
-    unsigned call_id = call ? call->id : 0;
-    fprintf(out, "({ XrValue _xarg_%u_%u = ", call_id, (unsigned) arg_index);
+    (void) call;
+    (void) arg_index;
+    fprintf(out, "%s(", helper);
     emit_value_as_rep_ctx(ctx, out, arg, XR_REP_TAGGED);
-    fprintf(out,
-            "; if (XR_UNLIKELY(!%s(_xarg_%u_%u))) "
-            "xrt_throw_exc(xr_box_str(\"E0404: expected %s argument\")); %s_xarg_%u_%u); })",
-            predicate, call_id, (unsigned) arg_index, expected, extract_prefix, call_id,
-            (unsigned) arg_index);
+    fprintf(out, ")");
     return true;
 }
 
@@ -1107,10 +1121,13 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
 
     if (!target_plan || arg_index >= target_plan->abi.nparams || !target_plan->abi.params) {
         fprintf(stderr,
-                "[xi_cgen] ERROR: AOT direct-call argument ABI mismatch at v%u "
-                "target=%s arg=%u abi_nparams=%u\n",
-                call ? call->id : 0, target && target->name ? target->name : "?",
-                (unsigned) arg_index, target_plan ? (unsigned) target_plan->abi.nparams : 0u);
+                "[xi_cgen] ERROR: AOT direct-call argument ABI mismatch in %s at v%u "
+                "target=%s arg=%u call_nargs=%u target_nparams=%u abi_nparams=%u\n",
+                f && f->name ? f->name : "?", call ? call->id : 0,
+                target && target->name ? target->name : "?", (unsigned) arg_index,
+                call ? (unsigned) call->nargs : 0u,
+                target ? (unsigned) target->nparams : 0u,
+                target_plan ? (unsigned) target_plan->abi.nparams : 0u);
         ctx->error = true;
         emit_codegen_abort_expr(out);
         return;

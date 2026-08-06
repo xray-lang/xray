@@ -258,28 +258,13 @@ static bool emit_native_rawptr_arith_expr(XiCgenCtx *ctx, FILE *out, const XiVal
     }
 
     bool is_mutable = ptr->type && ptr->type->kind == XR_KIND_POINTER && ptr->type->ptr_is_mut;
-    const char *qualifier = is_mutable ? "" : "const ";
-    if (ctx->c_dialect == XI_CGEN_C_DIALECT_C90) {
-        /* C90 has no statement expressions.  Xi operands are already
-         * materialized SSA values, so the direct expression retains the
-         * single-evaluation property of the ordinary lowering. */
-        fprintf(out, "((%svoid *)((%suint8_t *)(", qualifier, qualifier);
-        emit_value_as_rep_ctx(ctx, out, ptr, XR_REP_RAWPTR);
-        fprintf(out, ") %c (intptr_t)(", subtract ? '-' : '+');
-        emit_value_as_rep_ctx(ctx, out, offset, XR_REP_I64);
-        fprintf(out, ")))" );
-        return true;
-    }
-    /* Pointer arithmetic is an unsafe operation whose source-level contract
-     * requires a live, non-null base.  Materialize each operand once and carry
-     * that proof into C before doing the arithmetic; this both preserves the
-     * single-evaluation semantics and avoids manufacturing an invalid address
-     * from a null base. */
-    fprintf(out, "({ %suint8_t *_xr_base = (%suint8_t *)(", qualifier, qualifier);
+    /* Xi operands are materialized SSA values. The runtime-neutral helper
+     * therefore preserves single evaluation, carries the unsafe non-null proof,
+     * and keeps both generated dialects inside standard C. */
+    fprintf(out, "%s(", is_mutable ? "xr_raw_mut_ptr_offset" : "xr_raw_const_ptr_offset");
     emit_value_as_rep_ctx(ctx, out, ptr, XR_REP_RAWPTR);
-    fprintf(out, "); intptr_t _xr_offset = (intptr_t)(");
+    fprintf(out, ", (intptr_t)(");
     emit_value_as_rep_ctx(ctx, out, offset, XR_REP_I64);
-    fprintf(out, "); XR_ASSUME(_xr_base != NULL); (%svoid *)(_xr_base %c _xr_offset); })",
-            qualifier, subtract ? '-' : '+');
+    fprintf(out, "), %d)", subtract ? 1 : 0);
     return true;
 }

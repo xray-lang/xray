@@ -700,6 +700,11 @@ static inline void xrt_retain(XrValue v) {
     atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_relaxed);
 }
 
+static inline XrValue xrt_retain_identity(XrValue value) {
+    xrt_retain(value);
+    return value;
+}
+
 static inline bool xrt_rc_claim_release_last(XrObjHeader *hdr) {
     if (!hdr)
         return false;
@@ -873,6 +878,24 @@ _Static_assert(sizeof(xr_span_t) == 16, "release Slice ABI must be data + length
 #if !defined(_MSC_VER)
 _Static_assert(_Alignof(xr_span_t) == 8, "release Slice ABI must remain 8-byte aligned");
 #endif
+
+static inline int64_t xrt_expect_int_arg(XrValue value) {
+    if (XR_UNLIKELY(!XR_IS_INT(value)))
+        xrt_freestanding_trap("E0404: expected int argument");
+    return XR_TO_INT(value);
+}
+
+static inline int64_t xrt_expect_bool_arg(XrValue value) {
+    if (XR_UNLIKELY(!XR_IS_BOOL(value)))
+        xrt_freestanding_trap("E0404: expected bool argument");
+    return XR_TO_INT(value);
+}
+
+static inline int64_t xrt_expect_rune_arg(XrValue value) {
+    if (XR_UNLIKELY(!XR_IS_RUNE(value)))
+        xrt_freestanding_trap("E0404: expected rune argument");
+    return (int64_t) XR_TO_RUNE(value);
+}
 
 static inline XrValue xrt_span_to_value_ref(xr_span_t *span) {
     XrValue out = {0};

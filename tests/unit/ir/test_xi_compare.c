@@ -125,8 +125,9 @@ static XrProto *compile_legacy(const char *source) {
     /* Mirror the production compile path: bind the session module graph so
      * declaration analysis (e.g. enums) resolves the same way as the CLI. */
     xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
+    ctx->source_file = "compare.xr";
 
-    AstNode *program = xr_parse(session, source);
+    AstNode *program = xr_parse_with_source(session, source, ctx->source_file);
     if (!program) {
         xr_compiler_context_free(ctx);
         return NULL;
@@ -162,7 +163,7 @@ static XrProto *compile_xi(const char *source) {
      * declaration analysis (e.g. enums) resolves the same way as the CLI. */
     xa_analyzer_set_graph(analyzer, xr_compiler_session_module_graph(session));
 
-    AstNode *program = xr_parse(session, source);
+    AstNode *program = xr_parse_with_source(session, source, "compare.xr");
     if (!program) {
         xa_analyzer_free(analyzer);
         return NULL;

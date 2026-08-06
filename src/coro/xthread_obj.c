@@ -176,25 +176,12 @@ static void thread_apply_affinity(const uint32_t *cpus, uint8_t count) {
     }
 }
 
-/* Process-wide live count beside the per-isolate one: the deadlock detector
- * runs in the isolate-neutral scheduler and must not touch VM internals. VM
- * spawn paths all pass through enter/leave; the AOT thread
- * path does not, which is one of the reasons the detector only activates on
- * cores with a vm_owner. */
-static _Atomic int64_t g_sys_thread_live;
-
-int64_t xr_sys_thread_live_total(void) {
-    return atomic_load_explicit(&g_sys_thread_live, memory_order_acquire);
-}
-
 static void thread_runtime_enter(XrVMRuntime *isolate) {
-    atomic_fetch_add_explicit(&g_sys_thread_live, 1, memory_order_acq_rel);
     if (isolate)
         atomic_fetch_add_explicit(&isolate->sys_thread_count, 1, memory_order_acq_rel);
 }
 
 static void thread_runtime_leave(XrVMRuntime *isolate) {
-    atomic_fetch_sub_explicit(&g_sys_thread_live, 1, memory_order_acq_rel);
     if (isolate)
         atomic_fetch_sub_explicit(&isolate->sys_thread_count, 1, memory_order_acq_rel);
 }
@@ -516,11 +503,19 @@ static XrValue thread_join_blocking_value(XrVMRuntime *isolate, XrThread *thread
 static XrCFuncResult thread_join_yield_step(XrVMRuntime *isolate, XrThread *thread,
                                             XrValue *result);
 
+static bool thread_join_yield_is_pending(XrCFuncResult status) {
+    return status == XR_CFUNC_BLOCKED || status == XR_CFUNC_YIELD;
+}
+
 static XrCFuncResult thread_join_yield_continue(XrVMRuntime *isolate, int status,
                                                 XrValue resume_value, void *ctx, XrValue *result) {
     (void) status;
     (void) resume_value;
-    return thread_join_yield_step(isolate, (XrThread *) ctx, result);
+    XrThread *thread = (XrThread *) ctx;
+    XrCFuncResult join_status = thread_join_yield_step(isolate, thread, result);
+    if (!thread_join_yield_is_pending(join_status))
+        thread_release_ref(thread);
+    return join_status;
 }
 
 static XrCFuncResult thread_join_yield_wait(XrVMRuntime *isolate, XrThread *thread,
@@ -615,7 +610,14 @@ static XrCFuncResult ym_join(XrVMRuntime *isolate, XrValue self, XrValue *args, 
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
-    return thread_join_yield_step(isolate, thread, result);
+    /* The VM may release the receiver at its last language-level use while
+     * this native call is suspended. The continuation stores a raw pointer,
+     * so it must own a reference independently until the join terminates. */
+    xr_shared_retain(&thread->hdr);
+    XrCFuncResult status = thread_join_yield_step(isolate, thread, result);
+    if (!thread_join_yield_is_pending(status))
+        thread_release_ref(thread);
+    return status;
 }
 
 static XrValue m_detach(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {

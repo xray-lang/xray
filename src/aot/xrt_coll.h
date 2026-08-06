@@ -396,6 +396,14 @@ static inline XrValue xrt_array_new_typed(int64_t len, uint8_t etype) {
     return xr_mkptr(xrt_array_new_typed_ptr(len, etype), XR_TAG_ARRAY);
 }
 
+static inline xrt_array_t *xrt_array_new_typed_copy(int64_t len, uint8_t etype,
+                                                    const void *values) {
+    xrt_array_t *array = xrt_array_new_typed_ptr(len, etype);
+    if (len > 0 && values)
+        memcpy(array->data, values, (size_t) len * (size_t) array->elem_size);
+    return array;
+}
+
 static inline xrt_array_t *xrt_array_set_storage_ptr(xrt_array_t *array, uint8_t storage_mode) {
     if (array)
         xrt_coll_set_storage_header(&array->hdr, storage_mode);
@@ -625,6 +633,13 @@ _Static_assert(sizeof(xr_span_t) == 16, "release Slice ABI must be data + length
 #if !defined(_MSC_VER)
 _Static_assert(_Alignof(xr_span_t) == 8, "release Slice ABI must remain 8-byte aligned");
 #endif
+
+static inline XrValue xrt_array_from_values(int64_t count, const XrValue *values) {
+    XrValue array = xrt_array_with_capacity(count);
+    for (int64_t i = 0; i < count; i++)
+        xrt_array_push(array, values[i]);
+    return array;
+}
 
 static inline XrValue xrt_span_index_get_portable(xr_span_t span, int64_t index, uint8_t elem_type,
                                                   int checked, int owned) {

@@ -205,10 +205,40 @@ static inline bool xrt_stderr_is_tty(void) {
 }
 
 XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc);
+
+static inline int64_t xrt_expect_int_arg(XrValue value) {
+    if (XR_UNLIKELY(!XR_IS_INT(value)))
+        xrt_throw_exc(xr_box_str("E0404: expected int argument"));
+    return XR_TO_INT(value);
+}
+
+static inline int64_t xrt_expect_bool_arg(XrValue value) {
+    if (XR_UNLIKELY(!XR_IS_BOOL(value)))
+        xrt_throw_exc(xr_box_str("E0404: expected bool argument"));
+    return XR_TO_INT(value);
+}
+
+static inline int64_t xrt_expect_rune_arg(XrValue value) {
+    if (XR_UNLIKELY(!XR_IS_RUNE(value)))
+        xrt_throw_exc(xr_box_str("E0404: expected rune argument"));
+    return (int64_t) XR_TO_RUNE(value);
+}
 XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
 XRT_COLD _Noreturn void xrt_fixed_index_oob(int64_t idx, int64_t length);
 XRT_COLD _Noreturn void xrt_type_no_index(const char *message);
 XRT_COLD _Noreturn void xrt_throw_type_mismatch(int64_t expected_tid, int64_t actual_tid);
+
+/* A checked cast borrows its operand and therefore must establish a distinct
+ * owner when it returns the same runtime object.  Keep this header-inline so
+ * every separately compiled AOT module has an exact prototype and body. */
+static inline XrValue xrt_as_owned(XrValue value, int64_t expected_tid, bool is_safe) {
+    if (xrt_value_is_type_id(value, expected_tid))
+        return xrt_retain_identity(value);
+    if (is_safe)
+        return XR_NULL_VAL;
+    xrt_throw_type_mismatch(expected_tid, xrt_typeof_id(value));
+    return XR_NULL_VAL;
+}
 
 /* Header-only XrTypeId -> canonical name, mirroring the VM's xr_typeid_name with
  * the same TYPE_NAME_* literals. Inlined into the generated program so standalone
@@ -378,6 +408,7 @@ XRT_COLD _Noreturn void xrt_throw_type_mismatch(int64_t expected_tid, int64_t ac
                                        xrt_type_name(actual_tid));
     xrt_throw_exc(xrt_exception_new_value(XR_ERR_TYPE_MISMATCH, buf, strlen(buf)));
 }
+
 #endif
 
 #endif  // XRT_EXCEPTION_H

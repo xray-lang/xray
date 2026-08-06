@@ -397,6 +397,20 @@ TEST(find_missing_executable) {
     ASSERT_FALSE(xtc_find_executable("/definitely/not/xray-provider", out, sizeof(out)));
 }
 
+TEST(windows_auto_discovery_prefers_msvc) {
+#ifdef _WIN32
+    XrToolchainRequest request = {0};
+    XrToolchainCandidates candidates;
+    char err[256];
+
+    ASSERT_TRUE(xtc_target_parse("native", &request.target, err, sizeof(err)));
+    request.selector = XR_TOOLCHAIN_SELECTOR_AUTO;
+    ASSERT_TRUE(xtc_discover_candidates(&request, &candidates, err, sizeof(err)));
+    ASSERT_TRUE(candidates.count > 0);
+    ASSERT_EQ_INT(candidates.items[0].provider, XR_TOOLCHAIN_PROVIDER_MSVC);
+#endif
+}
+
 TEST(build_tree_runtime_manifest_matches_host_platform) {
     XrToolchainTarget target;
     XrRuntimeArtifactSet runtime;
@@ -947,6 +961,7 @@ RUN_TEST(zig_native_windows_msvc_keeps_exact_abi_target);
 
 RUN_TEST_SUITE("Toolchain discovery");
 RUN_TEST(find_missing_executable);
+RUN_TEST(windows_auto_discovery_prefers_msvc);
 RUN_TEST(build_tree_runtime_manifest_matches_host_platform);
 RUN_TEST(version_parser_reads_ascii_token_from_arbitrary_bytes);
 RUN_TEST(cross_target_rejects_explicit_host_without_fallback);

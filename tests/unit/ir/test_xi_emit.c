@@ -1187,6 +1187,34 @@ TEST(emit_is_check) {
     xi_func_free(f);
 }
 
+TEST(emit_identity_as_establishes_owned_result) {
+    XiFunc *f = make_func("identity_as", &stub_string);
+    XiBlock *entry = f->entry;
+
+    XiValue *source = xi_param(f, entry, 0, &stub_string);
+    XiValue *cast = xi_value_new(f, entry, XI_AS, &stub_string, 1);
+    assert(cast != NULL);
+    cast->args[0] = source;
+    cast->aux_int = ((int64_t) (uint32_t) -1 << 1);
+    xi_block_set_return(entry, cast);
+
+    XrProto *proto = NULL;
+    XiEmitStatus status = xi_emit(f, NULL, &proto);
+    assert(status == XI_EMIT_OK && proto != NULL);
+
+    bool found_dup = false;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == OP_DUP) {
+            found_dup = true;
+            break;
+        }
+    }
+    assert(found_dup && "identity XI_AS must retain its independently owned result");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 TEST(emit_cancelled_builtin) {
     /* CALL_BUILTIN(0) -> OP_CANCELLED */
     XiFunc *f = make_func("chk", &stub_bool);
@@ -1324,6 +1352,7 @@ int main(void) {
     run_emit_closure_new();
     run_emit_set_new();
     run_emit_is_check();
+    run_emit_identity_as_establishes_owned_result();
     run_emit_cancelled_builtin();
     run_emit_local_addr_pins_source_slot();
 

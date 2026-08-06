@@ -6,4 +6,4 @@ c_contains=groupTwoA
 c_contains=groupTwoB
 c_contains=groupTwoC
 c_contains=makeReexportPair
-c_contains=xrt_arc_alloc
+c_not_contains=xrt_arc_alloc(

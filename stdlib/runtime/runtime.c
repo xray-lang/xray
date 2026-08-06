@@ -76,7 +76,7 @@ static XrValue runtime_shared_bytes(XrVMRuntime *isolate, XrValue *args, int arg
     return xr_int((int64_t) xr_sysheap_shared_live_bytes_total());
 }
 
-// Bytes allocated into the MODULE_STATIC class/module arena (grows only).
+// Memory allocated into the MODULE_STATIC class/module arena (grows only).
 static XrValue runtime_static_bytes(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     (void) argc;

@@ -2,6 +2,6 @@ regex=closure [0-9]+ func=<main> value=v[0-9]+ target=run captures=0 repr=runtim
 regex=allocation-plan [0-9]+ func=run value=v[0-9]+ action=stack original=CLOSURE_NEW escape=0 evidence=0xf
 regex=closure [0-9]+ func=run value=v[0-9]+ target=<anonymous> captures=1 repr=stack evidence=xi_value\+target\+captures\+noescape_stack reason=none
 not_regex=fn-attr [0-9]+ func=run .* attr=(const|pure)
-c_regex=static const XrAotCallableDesc _xr_callable_[0-9]+ = \{.*\.sync_entry=\(void\*\)closure_evidence_plan_[0-9a-f]+___anonymous__
+c_regex=static const XrAotCallableDesc _xr_callable_[0-9]+ = \{.*\.sync_entry=\(void \(\*\)\(void\)\)closure_evidence_plan_[0-9a-f]+___anonymous__
 c_regex=xrt_closure_stack_new\(&_xr_callable_[0-9]+, 1\)
 c_not_regex=xrt_closure_new\(&_xr_callable_[0-9]+, 1\)

@@ -1,3 +1,3 @@
 contains=function 1 name=refKernel module=0 depth=1 abi=native boundary=none params=2 ret=void/void/void
-c_regex=XR_FORCEINLINE void _ref_place_inline_lib_[0-9a-f]+_refKernel_exp\(xrt_closure_t \*_cl, uint64_t \* p0, int64_t p1\)
+c_regex=XRT_INTERNAL void _ref_place_inline_lib_[0-9a-f]+_refKernel_exp\(xrt_closure_t \*_cl, uint64_t \* p0, int64_t p1\)
 c_syntax=pass

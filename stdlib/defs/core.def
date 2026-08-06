@@ -2714,7 +2714,7 @@ module runtime {
 
   fn staticBytes {
     signature: "(): int"
-    doc: "Bytes allocated into the MODULE_STATIC class/module arena (process-wide, grows only)"
+    doc: "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)"
     vm: "runtime_static_bytes"
     aot: "xr_aot_runtime_static_bytes"
     argc: 0

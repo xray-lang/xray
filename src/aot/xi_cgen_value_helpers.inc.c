@@ -172,6 +172,9 @@ static void emit_c_string_literal(FILE *out, const char *s) {
     emit_c_string_literal_bytes(out, s, s ? strlen(s) : 0);
 }
 
+static const XiEnumData *cg_enum_for_runtime_type(const XiCgenCtx *ctx,
+                                                  const void *runtime_type);
+
 static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed) {
     if (!ed) {
         fprintf(out, "XR_NULL_VAL");
@@ -196,6 +199,53 @@ static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed)
         fprintf(out, "); ");
     }
     fprintf(out, "_e; })");
+}
+
+static bool emit_enum_namespace_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v, bool storage_predeclared) {
+    if (!ctx || !out || !v || v->op != XI_CONST || !v->type)
+        return false;
+
+    const XiEnumData *ed = NULL;
+    if (v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE && v->aux)
+        ed = (const XiEnumData *)v->aux;
+    else if (v->type->kind == XR_KIND_UNKNOWN && v->aux)
+        ed = cg_enum_for_runtime_type(ctx, v->aux);
+    else
+        return false;
+
+    if (ctx->freestanding_profile)
+        return false;
+    if (!storage_predeclared && !ctx->pre_decl_all) {
+        fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+        emit_vref(out, v);
+        fprintf(out, ";\n");
+    }
+    fprintf(out, "    ");
+    emit_vref(out, v);
+    fprintf(out, " = xrt_map_new(%u);\n", (unsigned)(ed ? ed->member_count : 0));
+    for (uint32_t i = 0; ed && i < ed->member_count; i++) {
+        const XiEnumMemberData *member = &ed->members[i];
+        const char *name = member->name ? member->name : "";
+        fprintf(out, "    xrt_map_set((xrt_map_t*)");
+        emit_vref(out, v);
+        fprintf(out, ".ptr, ");
+        cg_emit_str_value(ctx, out, name);
+        fprintf(out, ", ");
+        if (ed->is_adt) {
+            fprintf(out, "XR_FROM_INT(%u)", (unsigned)i);
+        } else {
+            fprintf(out, "xrt_enum_box_new(%u, ", ed->layout_id);
+            emit_c_string_literal(out, ed->name ? ed->name : "");
+            fprintf(out, ", ");
+            emit_c_string_literal(out, name);
+            fprintf(out, ", %u)", (unsigned)i);
+        }
+        fprintf(out, ");\n");
+    }
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, f, v);
+    return true;
 }
 
 typedef struct CgPreludeEnumMember {
@@ -436,13 +486,11 @@ static void emit_prelude_enum_member_value_expr(FILE *out, const CgPreludeEnumDa
         fprintf(out, "XR_FROM_INT(%u)", (unsigned) member_index);
         return;
     }
-    fprintf(out,
-            "({ static const XrAotEnumBox _ev_%s_%s = {{0, 0}, NULL, \"%s\", "
-            "\"%s\", %u, 0, 0}; XrValue _v = {0}; "
-            "_v.tag = XR_TAG_ENUM; _v.ext = %u; "
-            "_v.ptr = (void *)&_ev_%s_%s; _v; })",
-            ed->enum_name, member->name, ed->enum_name, member->name, (unsigned) member_index,
-            (unsigned) member_index, ed->enum_name, member->name);
+    fprintf(out, "xrt_enum_box_new(0, ");
+    emit_c_string_literal(out, ed->enum_name ? ed->enum_name : "");
+    fprintf(out, ", ");
+    emit_c_string_literal(out, member->name ? member->name : "");
+    fprintf(out, ", %u)", (unsigned) member_index);
 }
 
 static bool emit_prelude_enum_type_expr(FILE *out, int builtin_index) {
@@ -495,21 +543,14 @@ static bool emit_static_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const 
         fprintf(out, "INT64_C(%u)", (unsigned) member_index);
     } else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, ed->name, NULL,
                                                              member_index)) {
-        fprintf(out, "({ static const XrAotEnumBox _xenum_%u_%u = {{0, 0}, NULL, ",
-                (unsigned) ed->layout_id, (unsigned) member_index);
-        /* Reaching a tagged static box is itself an erased representation
-         * boundary. Generic formatting, typeName(), or a later `.name` load
-         * may observe the nominal identity outside this local use site, so the
-         * box must carry its names even when descriptor metadata is otherwise
-         * unreachable. Fully typed scalar enum values still emit no box. */
+        /* Reaching a tagged value is an erased representation boundary.
+         * Preserve nominal identity in the runtime box; fully typed scalar
+         * enum values still take the allocation-free sidecar path above. */
+        fprintf(out, "xrt_enum_box_new(%u, ", (unsigned) ed->layout_id);
         emit_c_string_literal(out, ed->name ? ed->name : "");
         fprintf(out, ", ");
         emit_c_string_literal(out, member->name ? member->name : "");
-        fprintf(out,
-                ", %u, 0, %u}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
-                "_v.ptr = (void *)&_xenum_%u_%u; _v; })",
-                (unsigned) member_index, (unsigned) ed->layout_id, (unsigned) member_index,
-                (unsigned) ed->layout_id, (unsigned) member_index);
+        fprintf(out, ", %u)", (unsigned) member_index);
     }
     emit_conversion_suffix(out, conv_suffix);
     return true;
@@ -543,16 +584,11 @@ static bool emit_static_builtin_enum_member_value_expr(XiCgenCtx *ctx, FILE *out
         fprintf(out, "INT64_C(%u)", (unsigned) member_index);
     } else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, decl->name, NULL,
                                                              member_index)) {
-        fprintf(out, "({ static const XrAotEnumBox _xbuiltin_enum_%u_%u = {{0, 0}, NULL, ",
-                (unsigned) decl->layout_id, (unsigned) member_index);
+        fprintf(out, "xrt_enum_box_new(%u, ", (unsigned) decl->layout_id);
         emit_c_string_literal(out, decl->name ? decl->name : "");
         fprintf(out, ", ");
         emit_c_string_literal(out, member->name ? member->name : "");
-        fprintf(out,
-                ", %u, 0, %u}; XrValue _v = {0}; _v.tag = XR_TAG_ENUM; _v.ext = %u; "
-                "_v.ptr = (void *)&_xbuiltin_enum_%u_%u; _v; })",
-                (unsigned) member_index, (unsigned) decl->layout_id, (unsigned) member_index,
-                (unsigned) decl->layout_id, (unsigned) member_index);
+        fprintf(out, ", %u)", (unsigned) member_index);
     }
     emit_conversion_suffix(out, conv_suffix);
     return true;
@@ -1204,9 +1240,9 @@ static void emit_callable_descriptor(XiCgenCtx *ctx, FILE *out, const char *pref
             ".sync_entry=",
             descriptor_id, target_id, effects, signature);
     if (sync_entry_override) {
-        fprintf(out, "(void*)%s", sync_entry_override);
+        fprintf(out, "(void (*)(void))%s", sync_entry_override);
     } else if (target && !cg_func_needs_aot_coro_ctx(ctx, target)) {
-        fprintf(out, "(void*)");
+        fprintf(out, "(void (*)(void))");
         emit_closure_entry_pointer(ctx, out, prefix, target);
     } else {
         fprintf(out, "NULL");
@@ -1316,4 +1352,55 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
     } else {
         fprintf(out, "XR_NULL_VAL /* closure: unknown */");
     }
+}
+
+/* Closure construction needs a descriptor declaration, allocation, capture
+ * initialization, and a result assignment. Emit those as ordinary C11
+ * statements so the generated path is accepted by every supported provider. */
+static bool emit_closure_new_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                        const char *prefix, const XiValue *v,
+                                        bool storage_predeclared) {
+    if (!ctx || !out || !v ||
+        (v->op != XI_CLOSURE_NEW && !(v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)) ||
+        !v->aux)
+        return false;
+
+    XiFunc *child = (XiFunc *) v->aux;
+    if (cg_closure_new_value_can_emit_null_for_unreachable_body(ctx, current, v, child, 0))
+        return false;
+
+    if (child->is_extern) {
+        const XaotExternDecl *decl = NULL;
+        if (!cg_mark_extern_decl_adapter_used(ctx, child, &decl)) {
+            ctx->error = true;
+            return true;
+        }
+        char adapter[64];
+        snprintf(adapter, sizeof(adapter), "xr_ffi_closure_%u", decl->stable_id);
+        fprintf(out, "    ");
+        emit_callable_descriptor(ctx, out, prefix, v->id, v, NULL, decl->stable_id,
+                                 decl->signature_hash, adapter);
+    } else {
+        fprintf(out, "    ");
+        emit_callable_descriptor(ctx, out, prefix, v->id, v, child, 0, 0, NULL);
+    }
+    fprintf(out, "\n");
+
+    if (!storage_predeclared && !ctx->pre_decl_all) {
+        fprintf(out, "    %s ", local_ctype_str_ctx(ctx, current, v));
+        emit_vref(out, v);
+        fprintf(out, ";\n");
+    }
+    fprintf(out, "    {\n");
+    bool stack_closure = v->op == XI_STACK_ALLOC;
+    const char *alloc_fn = stack_closure ? "xrt_closure_stack_new" : "xrt_closure_new";
+    fprintf(out, "        xrt_closure_t *_c = (xrt_closure_t*)%s(&_xr_callable_%u, %u).ptr; ",
+            alloc_fn, v->id, (unsigned) child->ncaptures);
+    emit_closure_upval_initializers(ctx, out, current, v, true);
+    fprintf(out, "\n        ");
+    emit_vref(out, v);
+    fprintf(out, " = xr_mkptr(_c, XR_TAG_CLOSURE);\n    }\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, current, v);
+    return true;
 }

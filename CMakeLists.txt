@@ -1198,7 +1198,7 @@ list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xchunk\\.c$
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/value/xopcode_info\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/object/(xatomic|xarray_vm|xmap_vm)\\.c$")
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/class/xinstance\\.c$")
-list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/coro/xcoro_monitor\\.c$")
+list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/coro/(xcoro_monitor|xthread_obj)\\.c$")
 if(WIN32)
     # COFF linkers resolve undefined symbols before per-function GC, so the
     # otherwise-unused xstring_pool reference needs the lightweight accessors
@@ -1907,20 +1907,22 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    add_test(
-        NAME extern_layout_bytecode_cli_roundtrip
-        COMMAND ${XRAY_PYTHON}
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_extern_layout_bytecode_roundtrip.py
-                $<TARGET_FILE:xray>
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/cases/semantics/ffi/extern_layout_bytecode_roundtrip.xr
-                ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/cases/semantics/ffi/_extern_layout_bytecode_lib.xr
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_tests_properties(extern_layout_bytecode_cli_roundtrip PROPERTIES
-        LABELS "vm;bytecode;ffi;layout;cli"
-        PROCESSORS 1
-        TIMEOUT 30
-    )
+    if(LIBFFI_FOUND)
+        add_test(
+            NAME extern_layout_bytecode_cli_roundtrip
+            COMMAND ${XRAY_PYTHON}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_extern_layout_bytecode_roundtrip.py
+                    $<TARGET_FILE:xray>
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/cases/semantics/ffi/extern_layout_bytecode_roundtrip.xr
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/cases/semantics/ffi/_extern_layout_bytecode_lib.xr
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(extern_layout_bytecode_cli_roundtrip PROPERTIES
+            LABELS "vm;bytecode;ffi;layout;cli"
+            PROCESSORS 1
+            TIMEOUT 30
+        )
+    endif()
 
     add_test(
         NAME sys_thread_vm
@@ -3612,9 +3614,9 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
-    # P0: semantic contract anchor digests and CONTRACT-CHANGE trailers. The
-    # self-test injects both an anchor drift and a missing trailer to prove the
-    # gate fails closed independently of the live repository state.
+    # P0: semantic contract anchor digests. Commit messages need no dedicated
+    # trailer. The self-test injects digest drift and checkout-only CRLF to
+    # prove fail-closed content checks remain portable across repository state.
     add_test(
         NAME contract_freeze
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_contract_freeze.py

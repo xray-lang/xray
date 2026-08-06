@@ -16,7 +16,7 @@ c_regex=static xrt_native_tagged_boundary_[0-9a-f]+_Counter \* tagged_boundary_[
 c_regex=static int64_t tagged_boundary_[0-9a-f]+_read_counter_[0-9]+\(xrt_closure_t \*_cl, void \* \* p0\)
 # The seed argument is materialized into a value rather than spelled inline; what
 # this guards is the direct `_inst` receiver, with no boxing at the call.
-c_regex=tagged_boundary_[0-9a-f]+_constructor_[0-9]+\(NULL, _inst, (v[0-9]+|INT64_C\(41\))\)
+c_regex=tagged_boundary_[0-9a-f]+_constructor_[0-9]+\(NULL, _portable_inst_[0-9]+, (v[0-9]+|INT64_C\(41\))\)
 # A shared-slot store now goes through xrt_array_ref_ensure_owned instead of an
 # _xsv statement-expression; the instance is still boxed exactly once.
 c_regex=xrt_shared\[[0-9]+\] = xrt_array_ref_ensure_owned\(xrt_box_obj\(v[0-9]+\)\)

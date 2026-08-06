@@ -561,6 +561,13 @@ static inline void xrt_retain(XrValue v) {
     atomic_fetch_add_explicit(&hdr->refcount, 1, memory_order_relaxed);
 }
 
+/* Return the same value while establishing an independent owning reference.
+ * This is the value-producing counterpart of xrt_retain for identity casts. */
+static inline XrValue xrt_retain_identity(XrValue value) {
+    xrt_retain(value);
+    return value;
+}
+
 static inline int xrt_rc_claim_release_last(XrObjHeader *hdr) {
     if (!hdr || (hdr->extra & (XR_OBJ_IMMORTAL | XR_OBJ_STORAGE_STACK | XR_OBJ_AOT_SWEEP)))
         return 0;
@@ -809,6 +816,30 @@ static inline XrValue xrt_array_ref_clone_value(XrValue v) {
     xrt_clang_analyzer_escape_owned_pointer(dst);
 #endif
     return xr_array_ref_owned(dst, elem_type, elem_count);
+}
+
+/* Materialize a native aggregate at a tagged ABI boundary without relying on
+ * a compiler-specific statement expression. Header-bearing aggregates reserve
+ * their first two words for the byte size and layout identity. */
+static inline XrValue xrt_aggregate_clone_bytes(const void *src, size_t size,
+                                                uint32_t layout_id, int has_layout_header) {
+    if (XR_UNLIKELY(!src || size == 0 || size > UINT32_MAX)) {
+        fprintf(stderr, "xrt_aggregate_clone_bytes: invalid aggregate size\n");
+        abort();
+    }
+    void *dst = xrt_arc_alloc(size);
+    memcpy(dst, src, size);
+    if (has_layout_header) {
+        uint32_t *header = (uint32_t *) dst;
+        header[0] = (uint32_t) size;
+        header[1] = layout_id;
+        return xr_mkptr(dst, XR_TAG_AGG_REF);
+    }
+    if (XR_UNLIKELY(size > UINT16_MAX)) {
+        fprintf(stderr, "xrt_aggregate_clone_bytes: headerless aggregate is too large\n");
+        abort();
+    }
+    return xr_aggregate_ref(dst, (uint16_t) size);
 }
 
 static inline XrValue xrt_array_ref_to_owned(XrValue v) {
