@@ -309,7 +309,7 @@ static void test_decode_nested_object_field(void) {
     XrValue decoded = xrt_json_decode_struct_object(
         source, test_static_shape(2, envelope_names), 2, envelope_fields);
     ASSERT_TRUE(!XR_IS_NULL(decoded), "nested structural object field should decode");
-    XrValue decoded_nested = xrt_json_get_field(decoded, 0);
+    XrValue decoded_nested = xrt_json_get_name_owned(decoded, "nested");
     ASSERT_TRUE(decoded_nested.tag == XR_TAG_PTR && decoded_nested.ptr,
                 "nested structural object decode should materialize a nested object");
     ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded_nested.ptr) == XRT_OBJECT_STRUCT,
@@ -323,7 +323,6 @@ static void test_decode_nested_object_field(void) {
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_struct_object(
                     source, test_static_shape(2, envelope_names), 2, envelope_fields)),
                 "nested structural object validation should reject wrong nested primitive");
-    destroy_object(nested);
     destroy_object(source);
 }
 
@@ -358,8 +357,8 @@ static void test_decode_deep_nested_object_field(void) {
     XrValue decoded = xrt_json_decode_struct_object(
         source, test_static_shape(2, profile_names), 2, profile_fields);
     ASSERT_TRUE(!XR_IS_NULL(decoded), "deep nested structural object field should decode");
-    XrValue decoded_address = xrt_json_get_field(decoded, 1);
-    XrValue decoded_geo = xrt_json_get_field(decoded_address, 1);
+    XrValue decoded_address = xrt_json_get_name_owned(decoded, "address");
+    XrValue decoded_geo = xrt_json_get_name_owned(decoded_address, "geo");
     ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded_address.ptr) == XRT_OBJECT_STRUCT,
                 "second-level nested object should become a structural object");
     ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded_geo.ptr) == XRT_OBJECT_STRUCT,
@@ -375,8 +374,6 @@ static void test_decode_deep_nested_object_field(void) {
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_struct_object(
                     source, test_static_shape(2, profile_names), 2, profile_fields)),
                 "deep nested validation should reject wrong leaf type");
-    destroy_object(geo);
-    destroy_object(address);
     destroy_object(source);
 }
 
@@ -445,7 +442,7 @@ static void test_decode_mixed_nested_object_and_array_json_fields(void) {
     XrValue decoded_active = xrt_json_get_field(decoded, 3);
     ASSERT_TRUE(XR_IS_BOOL(decoded_active) && XR_TO_BOOL(decoded_active),
                 "bool field should be copied after nested structural object and Array<Json>");
-    XrValue decoded_address = xrt_json_get_field(decoded, 2);
+    XrValue decoded_address = xrt_json_get_name_owned(decoded, "address");
     ASSERT_TRUE(!XR_IS_NULL(decoded_address), "nested address should be materialized");
     ASSERT_TRUE(XR_TO_INT(xrt_json_get_field(decoded_address, 1)) == 310000,
                 "nested int field should survive mixed decode");
@@ -461,7 +458,6 @@ static void test_decode_mixed_nested_object_and_array_json_fields(void) {
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_struct_object(
                     source, test_static_shape(4, source_names), 4, fields)),
                 "mixed decode should reject non-array Array<Json> field");
-    destroy_object(address);
     destroy_object(source);
 }
 
