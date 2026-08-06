@@ -2365,6 +2365,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
         .summary = "",
     },
     {
+        .name = "Json.decode",
+        .signature = "(value: Json): T?",
+        .summary = "",
+    },
+    {
         .name = "Json.encode",
         .signature = "(value: T): Json",
         .summary = "",
@@ -8774,6 +8779,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `Json` | `Json` |  |\n"
             "| `Json.containsKey` | `(obj: Json, key: string): bool` |  |\n"
+            "| `Json.decode` | `(value: Json): T?` |  |\n"
             "| `Json.encode` | `(value: T): Json` |  |\n"
             "| `Json.entries` | `(): Array<(string, Json)>` |  |\n"
             "| `Json.entries` | `(obj: Json): Array<(string, Json)>` |  |\n"
