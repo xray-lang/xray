@@ -9,12 +9,12 @@ c_contains=static const xrt_str_t xrt_shared_init_str_5 = {INT64_C(4)
 c_contains=static XrValue xrt_shared[
 c_contains=[0] = XR_FROM_INT(INT64_C(1)),
 c_contains=[1] = XR_TRUE_VAL,
-c_contains=[2] = XR_FROM_FLOAT(0x1.0000000000000p-1),
+c_contains=[2] = XR_FROM_FLOAT(0x1p-1),
 c_contains=[3] = XR_FROM_RUNE(UINT32_C(65)),
 c_contains=[4] = XR_NULL_VAL,
 c_contains=[5] = {.tag = XR_TAG_STR, .ptr = (void *) &xrt_shared_init_str_5},
 c_contains=[6] = XR_FROM_INT(INT64_C(-3)),
-c_contains=[7] = XR_FROM_FLOAT(-0x1.0000000000000p-2),
+c_contains=[7] = XR_FROM_FLOAT(-0x1p-2),
 c_contains=[8] = XR_FROM_INT(INT64_C(-5)),
 c_contains=[9] = XR_FROM_INT(INT64_C(8)),
 c_contains=xray_top_var_static
