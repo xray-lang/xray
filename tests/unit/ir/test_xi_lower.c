@@ -1500,12 +1500,17 @@ TEST(json_open_shape_member_access_lowers_to_dynamic_lookup) {
                                           "print(readName(\"age\"))\n",
                                           &ev);
     REQUIRE_JSON_OPEN_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_OPEN_EVIDENCE(ev.nobject_shapes == 0,
-                               "computed-key Json literal should not claim an exact shape");
+    REQUIRE_JSON_OPEN_EVIDENCE(ev.nobject_shapes == 1,
+                               "computed-key Json literal should describe its static half");
+    REQUIRE_JSON_OPEN_EVIDENCE(
+        ev.object_shapes[0].concrete_exact == 0 &&
+            (ev.object_shapes[0].flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) != 0 &&
+            (ev.object_shapes[0].flags & XG_OBJECT_SHAPE_SEALED) == 0,
+        "that shape must stay open instead of claiming exactness");
     REQUIRE_JSON_OPEN_EVIDENCE(ev.njson_dynamic_accesses == 1,
                                "producer should record Json field get");
-    REQUIRE_JSON_OPEN_EVIDENCE(ev.json_dynamic_accesses[0].receiver_shape_id == XG_NO_ID,
-                               "computed-key receiver should remain dynamically shaped");
+    REQUIRE_JSON_OPEN_EVIDENCE(ev.json_dynamic_accesses[0].receiver_shape_id != XG_NO_ID,
+                               "an open shape still gives the run-time guard a candidate");
 
     XiFunc *read_name = func_tree_find_func_name(main_func, "readName");
     REQUIRE_JSON_OPEN_EVIDENCE(read_name != NULL, "target function should be present");
@@ -1557,12 +1562,17 @@ TEST(json_open_shape_static_key_index_lowers_to_dynamic_lookup) {
                                           "print(readName(\"age\"))\n",
                                           &ev);
     REQUIRE_JSON_OPEN_INDEX_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.nobject_shapes == 0,
-                                     "computed-key Json literal should not claim an exact shape");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.nobject_shapes == 1,
+                                     "computed-key Json literal should describe its static half");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(
+        ev.object_shapes[0].concrete_exact == 0 &&
+            (ev.object_shapes[0].flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) != 0 &&
+            (ev.object_shapes[0].flags & XG_OBJECT_SHAPE_SEALED) == 0,
+        "that shape must stay open instead of claiming exactness");
     REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.njson_dynamic_accesses == 1,
                                      "producer should record Json static-key index get");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_dynamic_accesses[0].receiver_shape_id == XG_NO_ID,
-                                     "computed-key receiver should remain dynamically shaped");
+    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_dynamic_accesses[0].receiver_shape_id != XG_NO_ID,
+                                     "an open shape still gives the run-time guard a candidate");
     REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_dynamic_accesses[0].access_kind ==
                                          XG_JSON_DYNAMIC_ACCESS_INDEX_GET,
                                      "access should be an index_get row");

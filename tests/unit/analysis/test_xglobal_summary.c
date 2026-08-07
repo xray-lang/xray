@@ -11677,10 +11677,23 @@ TEST(global_evidence_producer_records_json_open_shape_access) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 0);
+    /* The literal keeps one decided key, so it earns an open shape: the static
+     * half is described, the shape says outright that computed keys can add
+     * more, and it never claims to be exact. That candidate is what lets the
+     * access be planned as a guarded index instead of a name search. */
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
     ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_TRUE(ev.json_dynamic_accesses[0].receiver_shape_id != XG_NO_ID);
+    const XgObjectShapeSummary *open_shape =
+        xg_global_evidence_find_object_shape(&ev, ev.json_dynamic_accesses[0].receiver_shape_id);
+    ASSERT_NOT_NULL(open_shape);
+    ASSERT_EQ_UINT(open_shape->concrete_exact, 0);
+    ASSERT_TRUE((open_shape->flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) != 0);
+    ASSERT_TRUE((open_shape->flags & XG_OBJECT_SHAPE_SEALED) == 0);
+    ASSERT_TRUE((open_shape->flags & XG_OBJECT_SHAPE_STATIC_KEYS) == 0);
+    ASSERT_EQ_UINT(open_shape->field_count, 1);
     ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, 0);
     ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_STATIC_KEY) != 0);
 
     XaotBundle bundle;
@@ -11689,13 +11702,13 @@ TEST(global_evidence_producer_records_json_open_shape_access) {
     const XaotJsonDynamicAccessPlan *access_plan = xaot_bundle_find_json_dynamic_access_plan(
         &bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
-    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_SHAPE_GUARD_INDEX);
+    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_NONE);
 
     char *dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "kind=field_get action=dynamic_lookup"));
-    ASSERT_NOT_NULL(strstr(dump, "reason=receiver_shape_unknown"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=field_get action=shape_guard_index"));
+    ASSERT_NULL(strstr(dump, "reason=receiver_shape_unknown"));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);
@@ -11726,11 +11739,19 @@ TEST(global_evidence_producer_records_json_open_shape_static_key_index_access) {
     XgGlobalEvidence ev;
     ASSERT_TRUE(
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
-    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 0);
+    /* Same open shape as the member-access case, reached through `j["name"]`:
+     * a decided key is a decided key whichever syntax reads it. */
+    ASSERT_EQ_UINT(evidence_object_shape_count_by_domain(&ev, XG_OBJECT_DOMAIN_JSON), 1);
     ASSERT_EQ_UINT(ev.njson_dynamic_accesses, 1);
-    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].receiver_shape_id, XG_NO_ID);
+    ASSERT_TRUE(ev.json_dynamic_accesses[0].receiver_shape_id != XG_NO_ID);
+    const XgObjectShapeSummary *open_shape =
+        xg_global_evidence_find_object_shape(&ev, ev.json_dynamic_accesses[0].receiver_shape_id);
+    ASSERT_NOT_NULL(open_shape);
+    ASSERT_EQ_UINT(open_shape->concrete_exact, 0);
+    ASSERT_TRUE((open_shape->flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) != 0);
+    ASSERT_TRUE((open_shape->flags & XG_OBJECT_SHAPE_SEALED) == 0);
     ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].access_kind, XG_JSON_DYNAMIC_ACCESS_INDEX_GET);
-    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, UINT16_MAX);
+    ASSERT_EQ_UINT(ev.json_dynamic_accesses[0].field_ordinal, 0);
     ASSERT_TRUE((ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_STATIC_KEY) != 0);
 
     XaotBundle bundle;
@@ -11739,13 +11760,13 @@ TEST(global_evidence_producer_records_json_open_shape_static_key_index_access) {
     const XaotJsonDynamicAccessPlan *access_plan = xaot_bundle_find_json_dynamic_access_plan(
         &bundle, ev.json_dynamic_accesses[0].json_dynamic_access_id);
     ASSERT_NOT_NULL(access_plan);
-    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP);
-    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN);
+    ASSERT_EQ_UINT(access_plan->action, XAOT_JSON_DYNAMIC_ACCESS_SHAPE_GUARD_INDEX);
+    ASSERT_EQ_UINT(access_plan->unproven_reason, XAOT_JSON_UNPROVEN_NONE);
 
     char *dump = xaot_bundle_dump_plan(&bundle);
     ASSERT_NOT_NULL(dump);
-    ASSERT_NOT_NULL(strstr(dump, "kind=index_get action=dynamic_lookup"));
-    ASSERT_NOT_NULL(strstr(dump, "reason=receiver_shape_unknown"));
+    ASSERT_NOT_NULL(strstr(dump, "kind=index_get action=shape_guard_index"));
+    ASSERT_NULL(strstr(dump, "reason=receiver_shape_unknown"));
     xr_free(dump);
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);

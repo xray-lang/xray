@@ -6033,8 +6033,14 @@ static bool object_shape_add_key(const char **keys, uint32_t capacity, uint32_t 
     return true;
 }
 
+/* An open literal is one whose key set is only partly known at compile time:
+ * `{ name: "ada", [k]: 1 }` contributes a known `name` slot plus an entry whose
+ * key is not decided until the expression runs. Passing allow_computed skips
+ * those entries instead of abandoning the whole literal, so the static portion
+ * can still be described. */
 static bool object_shape_count_candidate_keys(XgBodyCollect *bc, const ObjectLiteralNode *obj,
-                                              uint32_t *count, uint32_t depth) {
+                                              uint32_t *count, bool allow_computed,
+                                              uint32_t depth) {
     if (!obj || !count || depth > 16)
         return false;
     for (int i = 0; i < obj->count; i++) {
@@ -6046,10 +6052,12 @@ static bool object_shape_count_candidate_keys(XgBodyCollect *bc, const ObjectLit
                     XG_NO_ID ||
                 !source_literal)
                 return false;
-            if (!object_shape_count_candidate_keys(bc, source_literal, count, depth + 1))
+            if (!object_shape_count_candidate_keys(bc, source_literal, count, allow_computed,
+                                                   depth + 1))
                 return false;
         } else if (!body_object_literal_static_key(obj, i)) {
-            return false;
+            if (!allow_computed)
+                return false;
         } else {
             (*count)++;
         }
@@ -6059,7 +6067,8 @@ static bool object_shape_count_candidate_keys(XgBodyCollect *bc, const ObjectLit
 
 static bool object_shape_collect_keys(XgBodyCollect *bc, const ObjectLiteralNode *obj,
                                       const char **keys, uint32_t capacity, uint32_t *count,
-                                      bool *has_spread, uint32_t depth) {
+                                      bool *has_spread, bool allow_computed, bool *has_computed,
+                                      uint32_t depth) {
     if (!obj || (!keys && capacity > 0) || !count || depth > 16)
         return false;
     for (int i = 0; i < obj->count; i++) {
@@ -6074,11 +6083,18 @@ static bool object_shape_collect_keys(XgBodyCollect *bc, const ObjectLiteralNode
                 !source_literal)
                 return false;
             if (!object_shape_collect_keys(bc, source_literal, keys, capacity, count, has_spread,
-                                           depth + 1))
+                                           allow_computed, has_computed, depth + 1))
                 return false;
         } else {
             const char *key = body_object_literal_static_key(obj, i);
-            if (!key || !object_shape_add_key(keys, capacity, count, key))
+            if (!key) {
+                if (!allow_computed)
+                    return false;
+                if (has_computed)
+                    *has_computed = true;
+                continue;
+            }
+            if (!object_shape_add_key(keys, capacity, count, key))
                 return false;
         }
     }
@@ -6105,30 +6121,35 @@ static void object_shape_canonicalize_keys(const char **keys, uint32_t count) {
 }
 
 static bool object_shape_collect_literal_keys(XgBodyCollect *bc, const ObjectLiteralNode *obj,
-                                              uint8_t domain, const char ***out_keys,
-                                              uint32_t *out_count, bool *out_has_spread,
+                                              uint8_t domain, bool allow_computed,
+                                              const char ***out_keys, uint32_t *out_count,
+                                              bool *out_has_spread, bool *out_has_computed,
                                               uint64_t *out_hash) {
     uint32_t capacity = 0;
     uint32_t count = 0;
     bool has_spread = false;
+    bool has_computed = false;
     const char **keys = NULL;
     uint64_t hash = XR_FNV64_OFFSET_BASIS;
     static const char struct_tag[] = "StructObjectShape";
     static const char json_tag[] = "JsonObjectShape";
-    if (!out_keys || !out_count || !out_has_spread || !out_hash)
+    static const char open_tag[] = "OpenKeys";
+    if (!out_keys || !out_count || !out_has_spread || !out_has_computed || !out_hash)
         return false;
     *out_keys = NULL;
     *out_count = 0;
     *out_has_spread = false;
+    *out_has_computed = false;
     *out_hash = 0;
-    if (!object_shape_count_candidate_keys(bc, obj, &capacity, 0))
+    if (!object_shape_count_candidate_keys(bc, obj, &capacity, allow_computed, 0))
         return false;
     if (capacity > 0) {
         keys = (const char **) xr_calloc((size_t) capacity, sizeof(*keys));
         if (!keys)
             return false;
     }
-    if (!object_shape_collect_keys(bc, obj, keys, capacity, &count, &has_spread, 0)) {
+    if (!object_shape_collect_keys(bc, obj, keys, capacity, &count, &has_spread, allow_computed,
+                                   &has_computed, 0)) {
         xr_free(keys);
         return false;
     }
@@ -6138,6 +6159,10 @@ static bool object_shape_collect_literal_keys(XgBodyCollect *bc, const ObjectLit
         hash = fold_bytes(hash, struct_tag, sizeof(struct_tag) - 1);
     else
         hash = fold_bytes(hash, json_tag, sizeof(json_tag) - 1);
+    /* An open literal never shares an identity with a closed one that lists the
+     * same static keys: the open one carries fields the key list cannot name. */
+    if (has_computed)
+        hash = fold_bytes(hash, open_tag, sizeof(open_tag) - 1);
     for (uint32_t i = 0; i < count; i++) {
         const char *key = keys[i] ? keys[i] : "";
         hash = fold_bytes(hash, key, strlen(key));
@@ -6145,6 +6170,7 @@ static bool object_shape_collect_literal_keys(XgBodyCollect *bc, const ObjectLit
     *out_keys = keys;
     *out_count = count;
     *out_has_spread = has_spread;
+    *out_has_computed = has_computed;
     *out_hash = hash;
     return true;
 }
@@ -6467,21 +6493,40 @@ static XgObjectShapeId body_add_object_shape_for_literal_domain(XgBodyCollect *b
     const char **shape_keys = NULL;
     uint32_t shape_key_count = 0;
     bool has_spread = false;
+    bool has_computed = false;
     uint64_t shape_hash = 0;
     uint32_t resolved_type_key;
     uint8_t shape_kind;
     if (!bc || !bc->evidence || !obj ||
         (domain != XG_OBJECT_DOMAIN_STRUCT && domain != XG_OBJECT_DOMAIN_JSON))
         return XG_NO_ID;
+    /* A Json spread stays all or nothing. Its entry carries a null key, so it
+     * used to be turned away by the same test that turned away computed keys;
+     * keep that, because a merge whose source is itself open would hand the
+     * object-merge plan a key list that cannot account for every field it
+     * copies. */
     if (domain == XG_OBJECT_DOMAIN_JSON) {
         for (int i = 0; i < obj->count; i++) {
-            if (!body_object_literal_static_key(obj, i))
+            if (body_object_literal_entry_is_spread(obj, i))
                 return XG_NO_ID;
         }
     }
-    if (!object_shape_collect_literal_keys(bc, obj, domain, &shape_keys, &shape_key_count,
-                                           &has_spread, &shape_hash))
+    /* A Json literal may otherwise mix decided keys with computed ones. Its
+     * static portion is still worth describing: each static key holds the slot
+     * its position gives it, which is what lets a field read compare one name
+     * at run time instead of searching for it. A struct literal stays all or
+     * nothing -- its shape is nominal, so a key it cannot name is a key that
+     * disqualifies it. */
+    if (!object_shape_collect_literal_keys(bc, obj, domain, domain == XG_OBJECT_DOMAIN_JSON,
+                                           &shape_keys, &shape_key_count, &has_spread,
+                                           &has_computed, &shape_hash))
         return XG_NO_ID;
+    /* Nothing static survived, so there is no slot to guard against and no
+     * description to give -- the receiver stays shapeless. */
+    if (has_computed && shape_key_count == 0) {
+        xr_free(shape_keys);
+        return XG_NO_ID;
+    }
     resolved_type_key =
         type_key ? type_key
                  : (domain == XG_OBJECT_DOMAIN_JSON ? hash_named_type_key32("Json", NULL, 0)
@@ -6520,6 +6565,16 @@ static XgObjectShapeId body_add_object_shape_for_literal_domain(XgBodyCollect *b
         row.flags |= XG_OBJECT_SHAPE_JSON_DOMAIN | XG_OBJECT_SHAPE_FRESH | XG_OBJECT_SHAPE_MUTABLE;
     if (has_spread)
         row.flags |= XG_OBJECT_SHAPE_HAS_SPREAD;
+    /* The listed keys are a floor, not the whole object: the computed entries
+     * add fields whose names are unknown here. Say so, so that a reader takes
+     * the guarded path rather than trusting an ordinal outright. OPEN_ROW is
+     * not the word for it -- that one marks an open row-typed constraint, and
+     * this row describes an allocation. */
+    if (has_computed) {
+        row.concrete_exact = 0;
+        row.flags &= ~(uint32_t) (XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS);
+        row.flags |= XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS;
+    }
     row.shape_hash = shape_hash;
     row.stable_type_key = row.type_key;
     row.stable_shape_key = shape_hash;
