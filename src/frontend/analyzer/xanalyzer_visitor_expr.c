@@ -5302,6 +5302,7 @@ bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_FIXED_ARRAY:
+        case XR_KIND_TUPLE:
         case XR_KIND_JSON:
         case XR_KIND_STRUCT_OBJECT:
             return true;
@@ -5435,7 +5436,7 @@ void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
         return;
     }
     if (xa_boundary_arg_is_explicit_copy(arg_node) || xa_boundary_arg_is_shared(ctx, arg_node) ||
-        (arg_type && xr_type_is_const(arg_type)))
+        (arg_type && xr_type_is_const(arg_type) && !XR_TYPE_IS_TUPLE(arg_type)))
         return;
 
     XrLocation loc = {.file = ctx->file_path,

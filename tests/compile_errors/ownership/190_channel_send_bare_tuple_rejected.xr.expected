@@ -1,0 +1,1 @@
+channel send argument transfer of type '(int, int, int)' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value

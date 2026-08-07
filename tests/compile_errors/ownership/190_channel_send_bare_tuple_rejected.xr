@@ -1,0 +1,2 @@
+const results: Channel<(int, int, int)> = Channel(1)
+results.send((1, 2, 3))
