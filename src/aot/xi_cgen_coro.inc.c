@@ -3013,7 +3013,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "        return xr_aot_error(XR_NULL_VAL, false);\n");
             fprintf(out, "    ");
             emit_vref(out, v);
-            fprintf(out, " = xrt_array_new_typed(_await_count_%u, %s);\n", v->id,
+            /* await-all collects task results, which are not Json values, so
+             * the element type id stays unset. */
+            fprintf(out, " = xrt_array_new_typed(_await_count_%u, %s, 0);\n", v->id,
                     await_all_elem_name);
             fprintf(out, "    if (!xr_aot_await_all_tasks_collect_into_array(ctx, ");
             emit_vref(out, v->args[0]);

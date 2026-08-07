@@ -162,7 +162,7 @@ static inline XrValue xr_aot_bridge_array_to_xrt(XrValue value) {
         return XR_NULL_VAL;
 
     uint8_t elem_type = src->elem_type < XR_ELEM_COUNT ? src->elem_type : XR_ELEM_ANY;
-    XrValue dst_value = xrt_array_new_typed((int64_t) src->length, elem_type);
+    XrValue dst_value = xrt_array_new_typed((int64_t) src->length, elem_type, src->elem_tid);
     xrt_array_t *dst = (xrt_array_t *) dst_value.ptr;
     dst->length = (int64_t) src->length;
     if (src->length == 0 || !src->data)

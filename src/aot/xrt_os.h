@@ -475,7 +475,7 @@ static inline XrValue xrt_os_loadavg(void) {
         avg[2] = 0.0;
     }
 #endif
-    XrValue arr = xrt_array_new_typed(3, XR_ELEM_F64);
+    XrValue arr = xrt_array_new_typed(3, XR_ELEM_F64, 0);
     xrt_array_t *typed = (xrt_array_t *) arr.ptr;
     ((double *) typed->data)[0] = avg[0];
     ((double *) typed->data)[1] = avg[1];

@@ -161,6 +161,10 @@ typedef enum {
     XR_TID_EVENTCOUNT,     /* 40 */
     XR_TID_THREAD,         /* 41 */
     XR_TID_BUFFER,         /* 42 */
+    /* 43 is XR_TID_RUNE, declared only in the runtime-side enum. Skipping it
+     * by hand is what keeps the two numbered alike; appending here instead
+     * would quietly hand this id RUNE's number. */
+    XR_TID_JSON = 44, /* the Json value domain; see the runtime enum */
     XR_TID_COUNT
 } XrTypeId;
 
@@ -280,6 +284,8 @@ static inline const char *xr_type_name_from_tid(XrTypeId tid) {
             return TYPE_NAME_THREAD;
         case XR_TID_BUFFER:
             return TYPE_NAME_BUFFER;
+        case XR_TID_JSON:
+            return TYPE_NAME_JSON;
         default:
             return TYPE_NAME_UNKNOWN;
     }

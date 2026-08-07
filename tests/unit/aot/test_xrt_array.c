@@ -273,7 +273,7 @@ static void test_slice_negative_bounds_and_aliasing(void) {
 
 static void test_fill_range_typed_fast_path(void) {
     reset_alloc_counts();
-    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64);
+    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64, 0);
     xrt_array_t *a = (xrt_array_t *) value.ptr;
     for (int64_t i = 0; i < 6; i++)
         xrt_array_push(value, XR_FROM_INT(i + 1));
@@ -324,7 +324,7 @@ static void test_typed_filled_constructor_uses_pod_storage_rules(void) {
 
 static void test_resize_reserve_use_shared_capacity_plan(void) {
     reset_alloc_counts();
-    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64);
+    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64, 0);
     xrt_array_t *a = (xrt_array_t *) value.ptr;
     for (int64_t i = 0; i < 3; i++)
         xrt_array_push(value, XR_FROM_INT(i + 1));
@@ -349,7 +349,7 @@ static void test_resize_reserve_use_shared_capacity_plan(void) {
 
 static void test_slice_resize_reserve_are_noops(void) {
     reset_alloc_counts();
-    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64);
+    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64, 0);
     xrt_array_t *a = (xrt_array_t *) value.ptr;
     for (int64_t i = 0; i < 5; i++)
         xrt_array_push(value, XR_FROM_INT(i + 10));
@@ -369,7 +369,7 @@ static void test_slice_resize_reserve_are_noops(void) {
 
 static void test_resize_reserve_type_errors_are_structured(void) {
     reset_alloc_counts();
-    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64);
+    XrValue value = xrt_array_new_typed(0, XR_ELEM_I64, 0);
     xrt_array_t *a = (xrt_array_t *) value.ptr;
 
     g_expect_throw = 1;
@@ -403,7 +403,7 @@ static void test_resize_reserve_type_errors_are_structured(void) {
 
 static void test_indexof_typed_fast_path_shared_rules(void) {
     reset_alloc_counts();
-    XrValue bytes = xrt_array_new_typed(0, XR_ELEM_U8);
+    XrValue bytes = xrt_array_new_typed(0, XR_ELEM_U8, 0);
     xrt_array_t *b = (xrt_array_t *) bytes.ptr;
     xrt_array_push(bytes, XR_FROM_INT(1));
     xrt_array_push(bytes, XR_FROM_INT(255));
@@ -418,7 +418,7 @@ static void test_indexof_typed_fast_path_shared_rules(void) {
     ASSERT_EQ_INT(xrt_array_indexof_typed_fast(b, XR_FROM_BOOL(1), &handled), -1,
                   "u8 search rejects bool needle");
 
-    XrValue bools = xrt_array_new_typed(0, XR_ELEM_BOOL);
+    XrValue bools = xrt_array_new_typed(0, XR_ELEM_BOOL, 0);
     xrt_array_t *flags = (xrt_array_t *) bools.ptr;
     xrt_array_push(bools, XR_FROM_BOOL(0));
     xrt_array_push(bools, XR_FROM_BOOL(1));
@@ -433,7 +433,7 @@ static void test_indexof_typed_fast_path_shared_rules(void) {
 
 static void test_byte_array_raw_helpers_share_core_rules(void) {
     reset_alloc_counts();
-    XrValue value = xrt_array_new_typed(0, XR_ELEM_U8);
+    XrValue value = xrt_array_new_typed(0, XR_ELEM_U8, 0);
     xrt_array_t *a = (xrt_array_t *) value.ptr;
     for (int64_t i = 1; i <= 8; i++)
         xrt_array_push(value, XR_FROM_INT(i));
@@ -454,7 +454,7 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     ASSERT_EQ_INT(((uint8_t *) a->data)[3], 2, "copyWithin writes second overlap byte");
     ASSERT_EQ_INT(((uint8_t *) a->data)[5], 4, "copyWithin writes last selected byte");
 
-    XrValue dst_value = xrt_array_new_typed(0, XR_ELEM_U8);
+    XrValue dst_value = xrt_array_new_typed(0, XR_ELEM_U8, 0);
     xrt_array_t *dst = (xrt_array_t *) dst_value.ptr;
     for (int64_t i = 0; i < 6; i++)
         xrt_array_push(dst_value, XR_FROM_INT(0));
@@ -480,7 +480,7 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
                            XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OOB_MSG,
                            "Array<byte> copy range value helper throws on range");
 
-    XrValue rep_value = xrt_array_new_typed(0, XR_ELEM_U8);
+    XrValue rep_value = xrt_array_new_typed(0, XR_ELEM_U8, 0);
     xrt_array_t *rep = (xrt_array_t *) rep_value.ptr;
     uint8_t seed[] = {65, 66, 67, 0, 0, 0, 0, 0, 0};
     for (int64_t i = 0; i < 9; i++)
@@ -539,12 +539,12 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
 }
 
 static void test_byte_runtime_u8_guards_are_defensive(void) {
-    XrValue bytes_value = xrt_array_new_typed(0, XR_ELEM_U8);
+    XrValue bytes_value = xrt_array_new_typed(0, XR_ELEM_U8, 0);
     xrt_array_t *bytes = (xrt_array_t *) bytes_value.ptr;
     for (int64_t i = 0; i < 4; i++)
         xrt_array_push(bytes_value, XR_FROM_INT(10 + i));
 
-    XrValue int_value = xrt_array_new_typed(4, XR_ELEM_I64);
+    XrValue int_value = xrt_array_new_typed(4, XR_ELEM_I64, 0);
     xrt_array_t *ints = (xrt_array_t *) int_value.ptr;
 
     EXPECT_XRT_ERROR_THROW(xrt_byte_array_load_u32_le(int_value, XR_FROM_INT(0)),
@@ -627,7 +627,7 @@ static XrValue dummy_closure_body(xrt_closure_t *cl) {
 
 static void test_stack_closure_borrows_cell_upval(void) {
     reset_alloc_counts();
-    XrValue arr = xrt_array_new_typed(0, XR_ELEM_I64);
+    XrValue arr = xrt_array_new_typed(0, XR_ELEM_I64, 0);
     XrValue cell = xrt_cell_new(XR_NULL_VAL);
     xrt_cell_set(cell, arr);
 

@@ -4318,9 +4318,10 @@ static bool emit_typed_array_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     } else if (v->nargs >= 1 && v->args[0] && v->args[0]->op != XI_CONST) {
         fprintf(out, "xrt_array_new_typed(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-        fprintf(out, ", %s)", info.elem_name);
+        fprintf(out, ", %s, %u)", info.elem_name, (unsigned) xr_type_to_tid(info.type));
     } else {
-        fprintf(out, "xrt_array_new_typed(%" PRId64 ", %s)", cap, info.elem_name);
+        fprintf(out, "xrt_array_new_typed(%" PRId64 ", %s, %u)", cap, info.elem_name,
+                (unsigned) xr_type_to_tid(info.type));
     }
     return true;
 }

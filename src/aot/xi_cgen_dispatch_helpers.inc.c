@@ -12630,6 +12630,16 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
         case XR_KIND_ENUM:
             xicgen_emit_enum_is_predicate(out, v->args[0], cg_enum_layout_id_for_type(ctx, target));
             break;
+        case XR_KIND_JSON:
+            /* Json spans seven runtime forms, so no tag settles it. Falling
+             * through to the tag mapping below would ask "is it a pointer",
+             * which every scalar-valued Json answers no to. The operand has to
+             * arrive tagged: the domain test reads a tag, and an unboxed
+             * operand carries none. */
+            fprintf(out, "xrt_value_in_json_domain(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ")");
+            break;
         default: {
             uint8_t tag = xr_type_to_xr_tag(target);
             if (tag != 0xFF) {
@@ -17721,7 +17731,8 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         if (typed_full_overwrite)
             fprintf(out, "xrt_array_new_typed_uninit(_xr_pm_count_%u, %s)", v->id, info.elem_name);
         else if (have_info)
-            fprintf(out, "xrt_array_new_typed(_xr_pm_count_%u, %s)", v->id, info.elem_name);
+            fprintf(out, "xrt_array_new_typed(_xr_pm_count_%u, %s, %u)", v->id, info.elem_name,
+                    (unsigned) xr_type_to_tid(info.type));
         else
             fprintf(out, "xrt_array_new(_xr_pm_count_%u)", v->id);
         fprintf(out, ";\n");

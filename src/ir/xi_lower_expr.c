@@ -9411,7 +9411,7 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             else if (strcmp(tref->name, "Set") == 0)
                 tid = 15;
             else if (strcmp(tref->name, "Json") == 0)
-                tid = 18;
+                tid = XR_TID_JSON;
             else if (strcmp(tref->name, "PanicInfo") == 0)
                 tid = 24; /* XR_TID_PANIC_INFO */
         }

@@ -392,8 +392,16 @@ static inline xrt_array_t *xrt_array_new_typed_ptr(int64_t len, uint8_t etype) {
     return a;
 }
 
-static inline XrValue xrt_array_new_typed(int64_t len, uint8_t etype) {
-    return xr_mkptr(xrt_array_new_typed_ptr(len, etype), XR_TAG_ARRAY);
+/* `etype` is the storage lane; `elem_tid` is the element's XrTypeId, 0 when the
+ * creator has none to give. The two answer different questions: Array<Json> and
+ * Array<string> share the tagged lane but not the element type, and the domain
+ * test needs the latter to tell a Json array from any other tagged one. The VM
+ * carries the same pair on its array-creation opcode. */
+static inline XrValue xrt_array_new_typed(int64_t len, uint8_t etype, uint8_t elem_tid) {
+    xrt_array_t *a = xrt_array_new_typed_ptr(len, etype);
+    if (a)
+        a->elem_tid = elem_tid;
+    return xr_mkptr(a, XR_TAG_ARRAY);
 }
 
 static inline xrt_array_t *xrt_array_new_typed_copy(int64_t len, uint8_t etype,
@@ -833,7 +841,7 @@ static inline xr_span_t xrt_span_reinterpret_checked_raw(xr_span_t span, uint8_t
 static inline XrValue xrt_span_to_owned_array(xr_span_t span, uint8_t elem_type, uint16_t elem_size,
                                               uint8_t elem_tid, uint8_t contains_refs) {
     int64_t len = span.length < 0 ? 0 : span.length;
-    XrValue outv = xrt_array_new_typed(len, elem_type);
+    XrValue outv = xrt_array_new_typed(len, elem_type, elem_tid);
     xrt_array_t *out = (xrt_array_t *) outv.ptr;
     out->elem_tid = elem_tid;
     out->contains_refs = contains_refs;
@@ -6841,7 +6849,7 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             xrt_array_t *src = (xrt_array_t *) val.ptr;
             if (!src)
                 return val;
-            XrValue dstv = xrt_array_new_typed(src->capacity, src->elem_type);
+            XrValue dstv = xrt_array_new_typed(src->capacity, src->elem_type, src->elem_tid);
             xrt_array_t *dst = (xrt_array_t *) dstv.ptr;
             dst->length = src->length;
             if (src->elem_type == XR_ELEM_ANY) {

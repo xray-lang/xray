@@ -176,6 +176,13 @@ typedef enum {
     XR_TID_BUFFER,          // 42
     // Analyzer-only type ID (not returned by typeof at runtime).
     XR_TID_RUNE,
+    /* The Json value domain. Never returned by typeof either: a Json value
+     * reports the tag it actually carries, which is any of null, bool, int,
+     * float, string, array or object. This id names the domain those forms
+     * belong to, so `is` against it asks about membership rather than tag
+     * equality. XR_TID_OBJECT stays what it says -- an object value -- and no
+     * longer doubles as the answer for Json. */
+    XR_TID_JSON,
     XR_TID_COUNT
 } XrTypeId;
 
@@ -184,6 +191,9 @@ typedef enum {
  * only in this enum, so its assertion has to be here. A renumbering that moves
  * it degrades every Slice<rune> to XR_ELEM_ANY at runtime and nowhere else. */
 _Static_assert(XR_TID_RUNE == 43, "xr_elem_type.h: update xr_tid_to_elem_type case for RUNE");
+/* Pinned so the two parallel enums cannot drift: xr_type_names_core.h stops at
+ * BUFFER and has no RUNE, so it has to spell this id out numerically. */
+_Static_assert(XR_TID_JSON == 44, "xr_type_names_core.h: XR_TID_JSON must match");
 
 // Range check macros
 #define XR_TID_IS_INT(tid) ((tid) >= XR_TID_I8 && (tid) <= XR_TID_U64)

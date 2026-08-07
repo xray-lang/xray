@@ -10692,7 +10692,7 @@ TEST(cgen_coro_await_all_uses_aggregate_bridge) {
     assert(await_call != NULL);
     assert(count_between(code, await_call, "xrt_value_clone_for_coro(") == 0 &&
            "inline await all literals must not clone a task array before suspension");
-    assert(!contains(code, "xrt_array_new_typed(2, XR_ELEM_ANY)") &&
+    assert(!contains(code, "xrt_array_new_typed(2, XR_ELEM_ANY,") &&
            "inline await all literals must not allocate an input task array");
     assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
            "scalarized await all result arrays should not be materialized");

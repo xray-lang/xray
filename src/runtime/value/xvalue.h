@@ -439,6 +439,9 @@ XR_FUNC XrTypeId xr_value_typeid(XrValue v);
  * width, so the test is exact representability in T rather than a tag compare;
  * xr_value_typeid alone would answer `int` for every integer. */
 XR_FUNC bool xr_value_is_type_id(XrValue v, XrTypeId tid);
+/* Membership in the Json value domain, which XR_TID_JSON names. Separate from
+ * the tag query because the domain spans seven runtime forms. */
+XR_FUNC bool xr_value_in_json_domain(XrValue v);
 XR_FUNC bool xr_value_deep_eq(XrValue a, XrValue b);
 /* Deep equality under the container key relation: reflexive on NaN, so a key
  * carrying a NaN field still finds itself. `==` keeps IEEE semantics. */

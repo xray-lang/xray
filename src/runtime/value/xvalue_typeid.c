@@ -15,6 +15,7 @@
 #include "../../base/xchecks.h"
 #include "../class/xenum.h"
 #include "../class/xinstance.h"
+#include "../object/xarray.h" /* elem_tid carries a Json array's domain */
 
 static const XrTypeId tag_to_typeid[8] = {
     [XR_TAG_NULL] = XR_TID_NULL,    [XR_TAG_BOOL] = XR_TID_BOOL,     [XR_TAG_RUNE] = XR_TID_RUNE,
@@ -102,7 +103,38 @@ XrTypeId xr_value_typeid(XrValue v) {
     return XR_TID_NULL;
 }
 
+/* Membership in the Json value domain: null, bool, int, float, string, a Json
+ * array, or a Json object. Every answer is a constant-time read. The two
+ * composite forms need one because their tags are shared with values outside
+ * the domain -- a struct object is an object, and Array<int> is an array --
+ * so each carries its own provenance: the object in its shape's domain, the
+ * array in the element type id it was built with. */
+bool xr_value_in_json_domain(XrValue v) {
+    XrTypeId tid = xr_value_typeid(v);
+    switch (tid) {
+        case XR_TID_NULL:
+        case XR_TID_BOOL:
+        case XR_TID_STRING:
+            return true;
+        case XR_TID_OBJECT: {
+            const XrInstance *inst = (v.tag == XR_TAG_PTR) ? (const XrInstance *) v.ptr : NULL;
+            return inst && inst->klass && inst->klass->builtin_kind == XR_BK_JSON;
+        }
+        case XR_TID_ARRAY: {
+            const XrArray *arr = (v.tag == XR_TAG_PTR) ? (const XrArray *) v.ptr : NULL;
+            return arr && arr->elem_tid == XR_TID_JSON;
+        }
+        default:
+            return XR_TID_IS_NUMBER(tid);
+    }
+}
+
 bool xr_value_is_type_id(XrValue v, XrTypeId tid) {
+    /* Json names a domain, not a tag, so membership cannot be a tag compare.
+     * Asking it that way is what made a string-valued Json answer `false` to
+     * `is Json`. */
+    if (tid == XR_TID_JSON)
+        return xr_value_in_json_domain(v);
     uint8_t rep = xr_typeid_scalar_rep(tid);
     if (rep != XR_SCALAR_REP_NONE) {
         if (xr_scalar_rep_is_integer(rep))
@@ -217,6 +249,11 @@ uint8_t xr_type_to_tid(const XrType *type) {
         case XR_KIND_CHANNEL:
             return XR_TID_CHANNEL;
         case XR_KIND_JSON:
+            /* Not XR_TID_OBJECT. A Json value is any member of the domain, and
+             * the object form is only one of seven; answering with the object
+             * id turns every membership question into "is it an object", which
+             * a string- or number-valued Json fails. */
+            return XR_TID_JSON;
         case XR_KIND_STRUCT_OBJECT:
             return XR_TID_OBJECT;
         case XR_KIND_INSTANCE:

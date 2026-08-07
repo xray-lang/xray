@@ -700,7 +700,31 @@ static inline int64_t xrt_typeof_id(XrValue v) {
  * answered by exact representability rather than a type-id compare — the id
  * side alone would report `int` for every integer and `float` for every
  * floating value. */
+/* Membership in the Json value domain -- the AOT mirror of the VM's
+ * xr_value_in_json_domain. The scalar forms are self-describing; the two
+ * composite forms share their tag with values outside the domain, so each is
+ * asked for its own provenance: the object for its shape's domain, the array
+ * for the element type id it was built with. */
+static inline int xrt_value_in_json_domain(XrValue v) {
+    int64_t tid = xrt_typeof_id(v);
+    switch (tid) {
+        case XR_TID_NULL:
+        case XR_TID_BOOL:
+        case XR_TID_STRING:
+            return 1;
+        case XR_TID_OBJECT:
+            return v.ptr && xrt_object_domain((const xrt_json_t *) v.ptr) == XRT_OBJECT_JSON;
+        case XR_TID_ARRAY:
+            return v.ptr && ((const xrt_array_t *) v.ptr)->elem_tid == XR_TID_JSON;
+        default:
+            return XR_TID_IS_NUMBER(tid);
+    }
+}
+
 static inline int xrt_value_is_type_id(XrValue v, int64_t tid) {
+    /* Json names a domain, not a tag, so membership cannot be a tag compare. */
+    if (tid == XR_TID_JSON)
+        return xrt_value_in_json_domain(v);
     uint8_t rep = xr_typeid_scalar_rep((XrTypeId) tid);
     if (rep != XR_SCALAR_REP_NONE) {
         if (xr_scalar_rep_is_integer(rep))
