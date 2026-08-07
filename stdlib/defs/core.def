@@ -3773,18 +3773,6 @@ module cluster {
     doc: "Lifecycle state of a remote cluster node"
   }
 
-  object ClusterTlsOptions {
-    fields: "const enabled: bool, const caFile: string?, const certFile: string?, const keyFile: string?, const insecure: bool"
-    exact: true
-    doc: "Typed TLS configuration for a cluster node"
-  }
-
-  object ClusterConfig {
-    fields: "const name: string, const port: int, const secret: string?, const tls: ClusterTlsOptions?"
-    exact: true
-    doc: "Typed cluster node startup configuration"
-  }
-
   object ClusterTlsStatus {
     fields: "const enabled: bool, const clientReady: bool, const serverReady: bool"
     exact: true
@@ -3803,27 +3791,31 @@ module cluster {
     doc: "Typed diagnostic snapshot for the local cluster runtime"
   }
 
-  fn start {
-    signature: "(config: ClusterConfig): bool"
-    doc: "Start cluster node"
-    vm: "cluster_start"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
+  fn __start {
+    signature: "(name: string, port: int, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool): bool"
+    doc: "Start the backend-neutral cluster runtime from normalized scalar configuration"
+    vm: "cluster_start_primitive"
+    argc: 8
+    arg_spec: "svsvsssv"
+    aot: "xrt_cluster_start"
+    aot_direct: true
+    link_object: true
     layer: "runtime"
+    caps: "channel"
   }
 
-  fn join {
+  fn __join {
     signature: "(addr: string): bool"
     doc: "Join cluster by address without blocking the scheduler worker"
     vm: "cluster_join"
     vm_binding: "yieldable"
     argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
+    arg_spec: "s"
+    aot: "xrt_cluster_join"
+    aot_direct: true
+    link_object: true
     layer: "runtime"
+    caps: "channel"
   }
 
   fn self {
@@ -3873,15 +3865,17 @@ module cluster {
     layer: "runtime"
   }
 
-  fn stop {
+  fn __stop {
     signature: "(): ()"
     doc: "Stop cluster node"
     vm: "cluster_stop_fn"
     argc: 0
     arg_spec: ""
-    aot_direct: false
-    link_object: false
+    aot: "xrt_cluster_stop"
+    aot_direct: true
+    link_object: true
     layer: "runtime"
+    caps: "channel"
   }
 
   fn info {
@@ -3896,28 +3890,31 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn send {
-    signature: "(topic: string, envelope: move Buffer): ClusterDelivery"
-    doc: "Hand one canonical opaque service envelope to local and connected transports"
-    vm: "cluster_send_fn"
+  fn __send {
+    signature: "(topic: string, envelope: move Buffer): int"
+    doc: "Hand one canonical opaque service envelope to local and connected transports and return the delivery ordinal"
+    vm: "cluster_send_primitive"
     argc: 2
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
+    arg_spec: "sv"
+    aot: "xrt_cluster_send"
+    aot_direct: true
+    link_object: true
     layer: "runtime"
-    return_ownership: "fresh"
+    caps: "channel"
   }
 
-  fn listen {
-    signature: "(pattern: string): Channel<Buffer>?"
+  fn __listen {
+    signature: "(pattern: string, capacity: int): Channel<Buffer>?"
     doc: "Create a bounded receiver for opaque canonical service envelopes"
     vm: "cluster_listen_fn"
-    argc: 1
-    arg_spec: ""
-    aot_direct: false
-    link_object: false
+    argc: 2
+    arg_spec: "sv"
+    aot: "xrt_cluster_listen"
+    aot_direct: true
+    link_object: true
     layer: "runtime"
     return_ownership: "fresh"
+    caps: "channel"
   }
 }
 

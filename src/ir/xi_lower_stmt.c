@@ -3719,6 +3719,18 @@ static void lower_reexport_stmt(XiLower *l, AstNode *node) {
     }
 }
 
+bool xi_lower_import_member_is_type_only(const XiLower *l, const ImportMember *member) {
+    XaSymbol *symbol;
+    const char *local_name;
+    if (!l || !l->analyzer || !l->analyzer->global_scope || !member || member->symbol_id == 0)
+        return false;
+    local_name = member->alias ? member->alias : member->name;
+    symbol = local_name ? xa_scope_lookup_local(l->analyzer->global_scope, local_name) : NULL;
+    if (!symbol || symbol->id != member->symbol_id)
+        return false;
+    return xa_symbol_is_type_alias(symbol);
+}
+
 /* Selective import: import { square, cube } from "./math_lib"
  * Creates XI_IMPORT_REF values for each member and binds them as local
  * variables.  The AOT driver resolves module_path + member_name to the
@@ -3777,6 +3789,9 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
     for (int i = 0; i < imp->member_count; i++) {
         ImportMember *m = &imp->members[i];
         const char *local_name = m->alias ? m->alias : m->name;
+
+        if (xi_lower_import_member_is_type_only(l, m))
+            continue;
 
         if (imp->module_name && strcmp(imp->module_name, "sync") == 0 &&
             xi_lower_sync_runtime_class_global_index(m->name) >= 0) {

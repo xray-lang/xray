@@ -27,6 +27,14 @@ error_channel = "vm_pending_error"
 ownership = "borrow_args_owned_result"
 unsupported_policy = "fail_closed"
 
+[[hosted_fragment_deferred]]
+symbol = "cluster.join"
+reason = "The facade must dispatch to the current VM or AOT cluster runtime instead of capturing an AOT direct shim in a VM native fastpath"
+
+[[hosted_fragment_deferred]]
+symbol = "cluster.stop"
+reason = "The facade must stop the current VM or AOT cluster runtime instead of capturing an AOT direct shim in a VM native fastpath"
+
 [dynamic_audit]
 # These modules still expose fixed-shape dynamic APIs and must be migrated
 # by task 196 after the typed enum error-channel and 191/197 consumer prerequisites land.
@@ -498,7 +506,7 @@ layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/cluster/cluster.xr"
 loader = "stdlib/cluster/cluster.c"
-public_native = ["ClusterConfig", "ClusterDelivery", "ClusterInfo", "ClusterNodeInfo", "ClusterNodeState", "ClusterTlsOptions", "ClusterTlsStatus", "discover", "info", "join", "listen", "monitor", "nodes", "self", "send", "start", "stop"]
+public_native = ["ClusterDelivery", "ClusterInfo", "ClusterNodeInfo", "ClusterNodeState", "ClusterTlsStatus", "discover", "info", "monitor", "nodes", "self"]
 private_native_sources = ["stdlib/cluster/*.c"]
 private_native_reason = "Distributed transport, discovery, channel and node lifecycle data plane consumed by cluster.xr"
 perf_suite = "stdlib/cluster"

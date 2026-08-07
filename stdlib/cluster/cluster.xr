@@ -10,6 +10,21 @@ export const TOPIC_DEFAULT_HOP_LIMIT = 3
 export const NODE_NAME_MAX = 63
 export const TOPIC_PATTERN_MAX = 127
 
+export type ClusterTlsOptions = {
+    enabled: bool,
+    caFile: string?,
+    certFile: string?,
+    keyFile: string?,
+    insecure: bool,
+}
+
+export type ClusterConfig = {
+    name: string,
+    port: int,
+    secret: string?,
+    tls: ClusterTlsOptions?,
+}
+
 export enum AddressError {
     MissingPort(string),
     InvalidHost(string),
@@ -119,4 +134,42 @@ export fn topicMatches(pattern: string, topic: string) -> bool {
         ti = ti + 1
     }
     return ti == len(t)
+}
+
+export fn start(config: ClusterConfig) -> bool {
+    var secret = config.secret ?? ""
+    if (config.tls == null) {
+        return __start(config.name, config.port, secret, false, "", "", "", false)
+    }
+    var tls = config.tls!
+    return __start(
+        config.name,
+        config.port,
+        secret,
+        tls.enabled,
+        tls.caFile ?? "",
+        tls.certFile ?? "",
+        tls.keyFile ?? "",
+        tls.insecure
+    )
+}
+
+export fn join(addr: string) -> bool { return __join(addr) }
+
+export fn stop() { __stop() }
+
+export fn send(topic: string, envelope: move Buffer) -> ClusterDelivery {
+    var ordinal = __send(topic, move envelope)
+    match (ordinal) {
+        0 -> { return ClusterDelivery.Accepted }
+        1 -> { return ClusterDelivery.InvalidTopic }
+        2 -> { return ClusterDelivery.InvalidEnvelope }
+        3 -> { return ClusterDelivery.Unavailable }
+        4 -> { return ClusterDelivery.Overloaded }
+        _ -> { return ClusterDelivery.Disconnected }
+    }
+}
+
+export fn listen(pattern: string, capacity: int = 1024) -> Channel<Buffer>? {
+    return __listen(pattern, capacity)
 }

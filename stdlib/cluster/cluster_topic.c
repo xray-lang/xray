@@ -37,6 +37,7 @@
  */
 
 #include "cluster_internal.h"
+#include "cluster_topic_core.h"
 #include "../mem/mem.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/coro/xchannel_ops.h"
@@ -346,44 +347,10 @@ void cluster_topics_destroy(XrCluster *c) {
 
 /* ========== Listen ========== */
 
-static bool transport_valid_name(const char *text, bool pattern) {
-    if (!text)
-        return false;
-    size_t length = strlen(text);
-    if (length == 0 || length > XR_TOPIC_PATTERN_MAX || text[0] == '.' || text[length - 1] == '.')
-        return false;
-    const char *segment = text;
-    for (const char *p = text;; p++) {
-        unsigned char c = (unsigned char) *p;
-        if (c != '\0' && (c < 0x21 || c > 0x7e))
-            return false;
-        if (c == '.' || c == '\0') {
-            size_t segment_length = (size_t) (p - segment);
-            if (segment_length == 0)
-                return false;
-            if (!pattern &&
-                (memchr(segment, '*', segment_length) || memchr(segment, '>', segment_length)))
-                return false;
-            if (pattern) {
-                bool star = segment_length == 1 && segment[0] == '*';
-                bool tail = segment_length == 1 && segment[0] == '>';
-                if (!star && !tail &&
-                    (memchr(segment, '*', segment_length) || memchr(segment, '>', segment_length)))
-                    return false;
-                if (tail && c != '\0')
-                    return false;
-            }
-            if (c == '\0')
-                break;
-            segment = p + 1;
-        }
-    }
-    return true;
-}
-
-struct XrChannel *cluster_transport_listen(XrVMRuntime *X, const char *pattern) {
+struct XrChannel *cluster_transport_listen(XrVMRuntime *X, const char *pattern, uint32_t capacity) {
     XrCluster *c = (XrCluster *) X->cluster;
-    if (!c || !c->topic_root || !transport_valid_name(pattern, true))
+    if (!c || !c->topic_root || !xr_cluster_topic_valid(pattern, true) || capacity == 0 ||
+        capacity > XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX)
         return NULL;
 
     XrTopicSubscription *sub = (XrTopicSubscription *) xr_calloc(1, sizeof(XrTopicSubscription));
@@ -394,7 +361,7 @@ struct XrChannel *cluster_transport_listen(XrVMRuntime *X, const char *pattern) 
     sub->pattern[XR_TOPIC_PATTERN_MAX] = '\0';
 
     // Buffered channel for receiving published values
-    XrChannel *ch = xr_channel_new_vm(X, 64);
+    XrChannel *ch = xr_channel_new_vm(X, capacity);
     if (!ch) {
         xr_free(sub);
         return NULL;
@@ -581,7 +548,7 @@ XrClusterDelivery cluster_transport_send(XrVMRuntime *X, const char *topic, cons
     XrCluster *c = (XrCluster *) X->cluster;
     if (!c || !atomic_load(&c->running))
         return XR_CLUSTER_DELIVERY_UNAVAILABLE;
-    if (!transport_valid_name(topic, false))
+    if (!xr_cluster_topic_valid(topic, false))
         return XR_CLUSTER_DELIVERY_INVALID_TOPIC;
     size_t topic_len = strlen(topic);
     if (!envelope || envelope_len < XR_CLUSTER_ENVELOPE_HEADER_SIZE ||

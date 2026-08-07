@@ -1092,70 +1092,33 @@ bool cluster_runtime_join_spawn(XrCluster *cluster, const char *host, uint16_t p
 
 /* ========== xray Function Bindings ========== */
 
-// cluster.start(config: ClusterConfig) -> bool
-//
-// The optional typed `tls` object maps 1:1 onto XrClusterTlsOptions:
-//     tls: {
-//         enabled: true,
-//         caFile:   "/etc/xray/ca.pem",
-//         certFile: "/etc/xray/node.crt",
-//         keyFile:  "/etc/xray/node.key",
-//         insecure: false
-//     }
-// Nullable string fields map to the struct's zero-initialised defaults. The
-// strings stay borrowed from the object for the duration of this
-// call — cluster_start_ex copies them into OpenSSL contexts before it
-// returns, so no lifetime surprise.
-static XrValue cluster_start(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !xr_value_is_struct_object(args[0]))
+// The pure-Xray public wrapper normalizes ClusterConfig into scalar values so
+// both backends consume one representation-independent runtime boundary.
+static XrValue cluster_start_primitive(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 8 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_STRING(args[2]) ||
+        !XR_IS_BOOL(args[3]) || !XR_IS_STRING(args[4]) || !XR_IS_STRING(args[5]) ||
+        !XR_IS_STRING(args[6]) || !XR_IS_BOOL(args[7]))
         return xr_bool(false);
 
-    XrJson *config = (XrJson *) XR_TO_PTR(args[0]);
-    XrValue v_name = xr_json_get_by_key(X, config, "name");
-    XrValue v_port = xr_json_get_by_key(X, config, "port");
-    XrValue v_secret = xr_json_get_by_key(X, config, "secret");
-
-    if (!XR_IS_STRING(v_name) || !XR_IS_INT(v_port))
-        return xr_bool(false);
-
-    XrString *name = XR_TO_STRING(v_name);
-    int64_t port_value = XR_TO_INT(v_port);
+    XrString *name = XR_TO_STRING(args[0]);
+    int64_t port_value = XR_TO_INT(args[1]);
     if (port_value < 0 || port_value > UINT16_MAX)
         return xr_bool(false);
     uint16_t port = (uint16_t) port_value;
-    const char *secret = "";
-    if (XR_IS_STRING(v_secret)) {
-        secret = XR_TO_STRING(v_secret)->data;
-    }
+    const char *secret = XR_TO_STRING(args[2])->data;
 
-    // Optional TLS block. Absent or non-object means explicit plain TCP.
     XrClusterTlsOptions tls_opts;
     memset(&tls_opts, 0, sizeof(tls_opts));
     const XrClusterTlsOptions *tls_ptr = NULL;
-
-    XrValue v_tls = xr_json_get_by_key(X, config, "tls");
-    if (xr_value_is_struct_object(v_tls)) {
-        XrJson *tls_cfg = (XrJson *) XR_TO_PTR(v_tls);
-
-        XrValue v_enabled = xr_json_get_by_key(X, tls_cfg, "enabled");
-        if (!XR_IS_BOOL(v_enabled))
-            return xr_bool(false);
-        tls_opts.enabled = XR_TO_BOOL(v_enabled);
-
-        XrValue v_ca = xr_json_get_by_key(X, tls_cfg, "caFile");
-        XrValue v_cert = xr_json_get_by_key(X, tls_cfg, "certFile");
-        XrValue v_key = xr_json_get_by_key(X, tls_cfg, "keyFile");
-        XrValue v_ins = xr_json_get_by_key(X, tls_cfg, "insecure");
-
-        if (XR_IS_STRING(v_ca))
-            tls_opts.ca_file = XR_TO_STRING(v_ca)->data;
-        if (XR_IS_STRING(v_cert))
-            tls_opts.cert_file = XR_TO_STRING(v_cert)->data;
-        if (XR_IS_STRING(v_key))
-            tls_opts.key_file = XR_TO_STRING(v_key)->data;
-        if (XR_IS_BOOL(v_ins))
-            tls_opts.insecure = XR_TO_BOOL(v_ins);
-
+    if (XR_TO_BOOL(args[3])) {
+        const char *ca_file = XR_TO_STRING(args[4])->data;
+        const char *cert_file = XR_TO_STRING(args[5])->data;
+        const char *key_file = XR_TO_STRING(args[6])->data;
+        tls_opts.enabled = true;
+        tls_opts.ca_file = ca_file[0] ? ca_file : NULL;
+        tls_opts.cert_file = cert_file[0] ? cert_file : NULL;
+        tls_opts.key_file = key_file[0] ? key_file : NULL;
+        tls_opts.insecure = XR_TO_BOOL(args[7]);
         tls_ptr = &tls_opts;
     }
 
@@ -1351,38 +1314,32 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
     }
 }
 
-static XrValue cluster_delivery_value(XrVMRuntime *X, XrClusterDelivery delivery) {
-    XrEnumType *type = xr_stdlib_enum_type_get(X, "cluster", "ClusterDelivery");
-    if (!type || delivery < XR_CLUSTER_DELIVERY_ACCEPTED ||
-        delivery > XR_CLUSTER_DELIVERY_DISCONNECTED)
-        return XR_NULL_VAL;
-    XrEnumAggregateValue *value = xr_enum_zero_payload_value(X, type, (uint32_t) delivery);
-    return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
-}
-
-// xray binding: cluster.send(topic, move envelope)
-static XrValue cluster_send_fn(XrVMRuntime *X, XrValue *args, int argc) {
+// xray binding: cluster.__send(topic, move envelope)
+static XrValue cluster_send_primitive(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]))
-        return cluster_delivery_value(X, XR_CLUSTER_DELIVERY_INVALID_TOPIC);
+        return xr_int(XR_CLUSTER_DELIVERY_INVALID_TOPIC);
 
     const uint8_t *envelope = NULL;
     size_t envelope_len = 0;
     if (!xr_mem_buffer_bytes(args[1], &envelope, &envelope_len) || envelope_len > UINT32_MAX)
-        return cluster_delivery_value(X, XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
+        return xr_int(XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
 
     XrString *topic = XR_TO_STRING(args[0]);
     XrClusterDelivery delivery =
         cluster_transport_send(X, topic->data, envelope, (uint32_t) envelope_len);
-    return cluster_delivery_value(X, delivery);
+    return xr_int(delivery);
 }
 
 // xray binding: cluster.listen(pattern)
 static XrValue cluster_listen_fn(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !XR_IS_STRING(args[0]))
+    if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]))
         return xr_null();
 
     XrString *pattern_str = XR_TO_STRING(args[0]);
-    XrChannel *ch = cluster_transport_listen(X, pattern_str->data);
+    int64_t capacity = XR_TO_INT(args[1]);
+    if (capacity <= 0 || capacity > XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX)
+        return xr_null();
+    XrChannel *ch = cluster_transport_listen(X, pattern_str->data, (uint32_t) capacity);
     if (!ch)
         return xr_null();
     return xr_value_from_channel(ch);

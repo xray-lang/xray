@@ -373,16 +373,16 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"net", "__recvFrom", "(handle: NetConn, maxlen?: int): __UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", "net_recv_from_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"http2", "supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", "h2_supported", "normal", "", "xrt_http_h2_supported", "", "value", "", "", "", "runtime", "method", 0, true},
     {"http2", "request", "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?", "Execute one typed HTTP/2 request", "h2_request_typed", "normal", "", "xrt_http_h2_request_unavailable", "vvvvvv", "value", "", "", "", "runtime", "method", 6, true},
-    {"cluster", "start", "(config: ClusterConfig): bool", "Start cluster node", "cluster_start", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
-    {"cluster", "join", "(addr: string): bool", "Join cluster by address without blocking the scheduler worker", "cluster_join", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 1, false},
+    {"cluster", "__start", "(name: string, port: int, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool): bool", "Start the backend-neutral cluster runtime from normalized scalar configuration", "cluster_start_primitive", "normal", "", "xrt_cluster_start", "svsvsssv", "value", "", "cluster.__start", "", "runtime", "method", 8, true},
+    {"cluster", "__join", "(addr: string): bool", "Join cluster by address without blocking the scheduler worker", "cluster_join", "yieldable", "", "xrt_cluster_join", "s", "value", "", "cluster.__join", "", "runtime", "method", 1, true},
     {"cluster", "self", "(): string", "Get own node name", "cluster_self", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "nodes", "(): Array<string>", "List cluster node names", "cluster_nodes", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
-    {"cluster", "stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
+    {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "xrt_cluster_stop", "", "value", "", "cluster.__stop", "", "runtime", "method", 0, true},
     {"cluster", "info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
-    {"cluster", "send", "(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", "cluster_send_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
-    {"cluster", "listen", "(pattern: string): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", "cluster_listen_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
+    {"cluster", "__send", "(topic: string, envelope: move Buffer): int", "Hand one canonical opaque service envelope to local and connected transports and return the delivery ordinal", "cluster_send_primitive", "normal", "", "xrt_cluster_send", "sv", "value", "", "cluster.__send", "", "runtime", "method", 2, true},
+    {"cluster", "__listen", "(pattern: string, capacity: int): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", "cluster_listen_fn", "normal", "", "xrt_cluster_listen", "sv", "value", "", "cluster.__listen", "", "runtime", "method", 2, true},
     {"ws", "connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"ws", "send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 3, false},
     {"ws", "recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", "ws_recv_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
@@ -455,21 +455,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_net___CopyBidir
     {"net", "__CopyBidirectionalResult", "bToA", "int", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterTlsOptions[] = {
-    {"cluster", "ClusterTlsOptions", "enabled", "bool", true},
-    {"cluster", "ClusterTlsOptions", "caFile", "string?", true},
-    {"cluster", "ClusterTlsOptions", "certFile", "string?", true},
-    {"cluster", "ClusterTlsOptions", "keyFile", "string?", true},
-    {"cluster", "ClusterTlsOptions", "insecure", "bool", true},
-};
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterConfig[] = {
-    {"cluster", "ClusterConfig", "name", "string", true},
-    {"cluster", "ClusterConfig", "port", "int", true},
-    {"cluster", "ClusterConfig", "secret", "string?", true},
-    {"cluster", "ClusterConfig", "tls", "ClusterTlsOptions?", true},
-};
-
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterTlsStatus[] = {
     {"cluster", "ClusterTlsStatus", "enabled", "bool", true},
     {"cluster", "ClusterTlsStatus", "clientReady", "bool", true},
@@ -521,8 +506,6 @@ static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = 
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},
     {"net", "__CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", xr_stdlib_object_fields_net___CopyBidirectionalResult, 2, true},
-    {"cluster", "ClusterTlsOptions", "Typed TLS configuration for a cluster node", xr_stdlib_object_fields_cluster_ClusterTlsOptions, 5, true},
-    {"cluster", "ClusterConfig", "Typed cluster node startup configuration", xr_stdlib_object_fields_cluster_ClusterConfig, 4, true},
     {"cluster", "ClusterTlsStatus", "Effective TLS posture of a running cluster node", xr_stdlib_object_fields_cluster_ClusterTlsStatus, 3, true},
     {"cluster", "ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", xr_stdlib_object_fields_cluster_ClusterNodeInfo, 16, true},
     {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_object_fields_cluster_ClusterInfo, 10, true},

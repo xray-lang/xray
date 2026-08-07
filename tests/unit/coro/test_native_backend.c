@@ -106,6 +106,32 @@ static _Atomic int64_t aot_par_for_seen_mask;
 static _Atomic int64_t aot_par_for_lane_begin[8];
 static _Atomic int64_t aot_par_for_lane_end[8];
 static _Atomic int64_t aot_par_for_lane_calls[8];
+static int aot_service_destroy_count;
+static _Atomic bool aot_service_lease_acquired;
+static _Atomic bool aot_service_lease_matched;
+
+typedef struct AotServiceLeaseFixture {
+    XrAotRuntime *runtime;
+    void *expected;
+} AotServiceLeaseFixture;
+
+static void aot_test_service_destroy(void *service) {
+    ASSERT_NOT_NULL(service);
+    aot_service_destroy_count++;
+}
+
+static void *aot_test_hold_service_lease(void *argument) {
+    AotServiceLeaseFixture *fixture = (AotServiceLeaseFixture *) argument;
+    void *service = xr_aot_runtime_service_acquire(fixture->runtime, XR_AOT_SERVICE_SLOT_CLUSTER);
+    atomic_store_explicit(&aot_service_lease_matched, service == fixture->expected,
+                          memory_order_relaxed);
+    atomic_store_explicit(&aot_service_lease_acquired, true, memory_order_release);
+    if (service != fixture->expected)
+        return NULL;
+    xr_thread_sleep_ms(20);
+    xr_aot_runtime_service_release(fixture->runtime, XR_AOT_SERVICE_SLOT_CLUSTER);
+    return NULL;
+}
 
 static void aot_par_for_reset_lane_records(void) {
     for (int i = 0; i < 8; i++) {
@@ -690,6 +716,53 @@ TEST(aot_runtime_owns_core_without_isolate) {
     ASSERT_STR_EQ(xr_aot_runtime_core(runtime)->script_info.file, "main.xr");
     ASSERT_EQ_INT(xr_aot_runtime_core(runtime)->script_info.argc, 2);
     ASSERT_EQ_PTR(xr_aot_runtime_core(runtime)->script_info.argv, argv);
+
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(aot_runtime_service_slots_lease_and_destroy_services) {
+    XrAotRuntime *runtime = aot_test_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    int first = 1;
+    int duplicate = 2;
+    int second = 3;
+    aot_service_destroy_count = 0;
+
+    ASSERT_TRUE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &first,
+                                               aot_test_service_destroy));
+    ASSERT_FALSE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &duplicate,
+                                                aot_test_service_destroy));
+    ASSERT_TRUE(xr_aot_runtime_service_acquire(runtime, XR_AOT_SERVICE_SLOT_CLUSTER) == &first);
+    xr_aot_runtime_service_release(runtime, XR_AOT_SERVICE_SLOT_CLUSTER);
+    ASSERT_TRUE(xr_aot_runtime_service_remove(runtime, XR_AOT_SERVICE_SLOT_CLUSTER));
+    ASSERT_EQ_INT(aot_service_destroy_count, 1);
+    ASSERT_FALSE(xr_aot_runtime_service_remove(runtime, XR_AOT_SERVICE_SLOT_CLUSTER));
+
+    ASSERT_TRUE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &second,
+                                               aot_test_service_destroy));
+    xr_aot_runtime_delete(runtime);
+    ASSERT_EQ_INT(aot_service_destroy_count, 2);
+}
+
+TEST(aot_runtime_service_removal_waits_for_active_lease) {
+    XrAotRuntime *runtime = aot_test_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    int service = 1;
+    aot_service_destroy_count = 0;
+    atomic_store_explicit(&aot_service_lease_acquired, false, memory_order_relaxed);
+    atomic_store_explicit(&aot_service_lease_matched, false, memory_order_relaxed);
+    ASSERT_TRUE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &service,
+                                               aot_test_service_destroy));
+
+    AotServiceLeaseFixture fixture = {.runtime = runtime, .expected = &service};
+    xr_thread_t holder;
+    ASSERT_TRUE(xr_thread_create(&holder, aot_test_hold_service_lease, &fixture));
+    while (!atomic_load_explicit(&aot_service_lease_acquired, memory_order_acquire))
+        xr_thread_yield();
+    ASSERT_TRUE(xr_aot_runtime_service_remove(runtime, XR_AOT_SERVICE_SLOT_CLUSTER));
+    ASSERT_EQ_INT(aot_service_destroy_count, 1);
+    ASSERT_EQ_INT(xr_thread_join(holder, NULL), 0);
+    ASSERT_TRUE(atomic_load_explicit(&aot_service_lease_matched, memory_order_relaxed));
 
     xr_aot_runtime_delete(runtime);
 }
@@ -1822,6 +1895,8 @@ RUN_TEST(aot_coroutine_create_failure_releases_frame);
 RUN_TEST(aot_frame_alloc_accepts_zero_state_frames);
 RUN_TEST(aot_frame_alloc_reuses_small_frames_locally);
 RUN_TEST(aot_runtime_owns_core_without_isolate);
+RUN_TEST(aot_runtime_service_slots_lease_and_destroy_services);
+RUN_TEST(aot_runtime_service_removal_waits_for_active_lease);
 RUN_TEST(aot_runtime_creates_scheduler_for_runtime_caps);
 RUN_TEST(aot_runtime_control_plane_uses_root_descriptor_heap);
 RUN_TEST(aot_test_yield_provider_preserves_scalar_and_atomic_contracts);

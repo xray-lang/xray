@@ -352,6 +352,9 @@ TOP_CONST_RE = re.compile(
     r"(?m)^(?:export\s+)?const\s+([A-Za-z_][A-Za-z0-9_]*)\s*"
     r"(?::\s*([^=\n]+))?\s*=\s*([^\n]+)"
 )
+TYPE_ALIAS_RE = re.compile(
+    r"(?m)^(?:export\s+)?type\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*=\s*"
+)
 MEMBER_METHOD_RE = re.compile(
     r"^\s*(static\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\("
 )
@@ -544,6 +547,70 @@ def parse_xray_classes(
                 doc_module,
             )
         )
+    return out
+
+
+def parse_xray_type_aliases(
+    root: Path,
+    path: Path,
+    category: str,
+    exported: set[str],
+    doc_surface: str,
+    doc_module: str,
+) -> list[dict[str, Any]]:
+    text = path.read_text(encoding="utf-8")
+    out: list[dict[str, Any]] = []
+    for match in TYPE_ALIAS_RE.finditer(text):
+        name = match.group(1)
+        if name not in exported:
+            continue
+        value_start = match.end()
+        open_index = value_start if value_start < len(text) and text[value_start] == "{" else -1
+        close_index = matching_brace_index(text, open_index) if open_index >= 0 else -1
+        if close_index >= 0:
+            signature = " ".join(text[value_start : close_index + 1].split())
+        else:
+            line_end = text.find("\n", value_start)
+            if line_end < 0:
+                line_end = len(text)
+            signature = " ".join(text[value_start:line_end].strip().split())
+        out.append(
+            item(
+                category=category,
+                namespace=path.parent.name,
+                name=name,
+                kind="type",
+                signature=signature,
+                source=rel(root, path),
+                line=line_for_offset(text, match.start()),
+                doc_surface=doc_surface,
+                doc_module=doc_module,
+            )
+        )
+        if close_index < 0:
+            continue
+        body = text[open_index + 1 : close_index]
+        for raw_field in split_top_level_commas(body):
+            field = " ".join(raw_field.strip().split())
+            field_match = re.fullmatch(
+                r"(?:const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)", field
+            )
+            if not field_match:
+                continue
+            out.append(
+                item(
+                    category=category,
+                    namespace=path.parent.name,
+                    name=f"{name}.{field_match.group(1)}",
+                    kind="field",
+                    signature=field_match.group(2).strip(),
+                    summary="Type alias field",
+                    source=rel(root, path),
+                    line=line_for_offset(text, open_index + 1 + body.find(raw_field)),
+                    doc_surface=doc_surface,
+                    doc_module=doc_module,
+                )
+            )
     return out
 
 
@@ -948,6 +1015,16 @@ def collect_pure_stdlib(root: Path) -> list[dict[str, Any]]:
                 exported=exported,
                 doc_surface="stdlib",
                 doc_module=module,
+            )
+        )
+        out.extend(
+            parse_xray_type_aliases(
+                root,
+                path,
+                "stdlib-module",
+                exported,
+                "stdlib",
+                module,
             )
         )
     return out

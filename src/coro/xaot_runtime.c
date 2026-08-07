@@ -686,6 +686,10 @@ XrAotRuntime *xr_aot_runtime_new(const XrAotRuntimeConfig *cfg) {
     runtime->value_ops = local_cfg.value_ops;
     runtime->coro_locals = XR_NULL_VAL;
     atomic_flag_clear_explicit(&runtime->coro_locals_lock, memory_order_relaxed);
+    for (uint32_t i = 0; i < XR_AOT_SERVICE_SLOT_COUNT; i++) {
+        xr_mutex_init(&runtime->service_slots[i].lock);
+        xr_cond_init(&runtime->service_slots[i].drained);
+    }
     for (int i = 0; i < XR_USER_GLOBALS_START; i++)
         runtime->builtins[i] = XR_NULL_VAL;
 
@@ -724,6 +728,8 @@ void xr_aot_runtime_delete(XrAotRuntime *runtime) {
         return;
     XrAotRuntime *expected = runtime;
     atomic_compare_exchange_strong(&g_aot_runtime_current, &expected, NULL);
+    for (uint32_t i = 0; i < XR_AOT_SERVICE_SLOT_COUNT; i++)
+        (void) xr_aot_runtime_service_remove(runtime, i);
     if (runtime->root_coro) {
         xr_coro_destroy(runtime->root_coro);
         runtime->root_coro = NULL;
@@ -757,6 +763,10 @@ void xr_aot_runtime_delete(XrAotRuntime *runtime) {
         xr_runtime_core_delete(runtime->core);
         runtime->core = NULL;
     }
+    for (uint32_t i = 0; i < XR_AOT_SERVICE_SLOT_COUNT; i++) {
+        xr_cond_destroy(&runtime->service_slots[i].drained);
+        xr_mutex_destroy(&runtime->service_slots[i].lock);
+    }
     xr_free(runtime);
 }
 
@@ -770,6 +780,71 @@ XrRuntimeCore *xr_aot_runtime_core(XrAotRuntime *runtime) {
 
 XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime) {
     return runtime ? runtime->scheduler : NULL;
+}
+
+const XrAotValueOps *xr_aot_runtime_value_ops(XrAotRuntime *runtime) {
+    return runtime ? runtime->value_ops : NULL;
+}
+
+bool xr_aot_runtime_service_install(XrAotRuntime *runtime, uint32_t slot, void *service,
+                                    XrAotServiceDestroyFn destroy) {
+    if (!runtime || slot >= XR_AOT_SERVICE_SLOT_COUNT || !service || !destroy)
+        return false;
+    XrAotServiceSlot *entry = &runtime->service_slots[slot];
+    xr_mutex_lock(&entry->lock);
+    bool installed = !entry->service && !entry->closing;
+    if (installed) {
+        entry->service = service;
+        entry->destroy = destroy;
+    }
+    xr_mutex_unlock(&entry->lock);
+    return installed;
+}
+
+void *xr_aot_runtime_service_acquire(XrAotRuntime *runtime, uint32_t slot) {
+    if (!runtime || slot >= XR_AOT_SERVICE_SLOT_COUNT)
+        return NULL;
+    XrAotServiceSlot *entry = &runtime->service_slots[slot];
+    xr_mutex_lock(&entry->lock);
+    void *service = !entry->closing ? entry->service : NULL;
+    if (service)
+        entry->active++;
+    xr_mutex_unlock(&entry->lock);
+    return service;
+}
+
+void xr_aot_runtime_service_release(XrAotRuntime *runtime, uint32_t slot) {
+    if (!runtime || slot >= XR_AOT_SERVICE_SLOT_COUNT)
+        return;
+    XrAotServiceSlot *entry = &runtime->service_slots[slot];
+    xr_mutex_lock(&entry->lock);
+    XR_CHECK(entry->active > 0, "AOT service release without an active lease");
+    entry->active--;
+    if (entry->closing && entry->active == 0)
+        xr_cond_broadcast(&entry->drained);
+    xr_mutex_unlock(&entry->lock);
+}
+
+bool xr_aot_runtime_service_remove(XrAotRuntime *runtime, uint32_t slot) {
+    if (!runtime || slot >= XR_AOT_SERVICE_SLOT_COUNT)
+        return false;
+    XrAotServiceSlot *entry = &runtime->service_slots[slot];
+    xr_mutex_lock(&entry->lock);
+    if (!entry->service || entry->closing) {
+        xr_mutex_unlock(&entry->lock);
+        return false;
+    }
+    entry->closing = true;
+    while (entry->active > 0)
+        xr_cond_wait(&entry->drained, &entry->lock);
+    void *service = entry->service;
+    XrAotServiceDestroyFn destroy = entry->destroy;
+    entry->service = NULL;
+    entry->destroy = NULL;
+    entry->closing = false;
+    xr_mutex_unlock(&entry->lock);
+    destroy(service);
+    return true;
 }
 
 XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index) {

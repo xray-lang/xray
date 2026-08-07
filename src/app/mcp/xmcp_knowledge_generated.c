@@ -296,28 +296,28 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "ClusterConfig",
-        .signature = "{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }",
-        .summary = "Typed cluster node startup configuration",
+        .signature = "{ name: string, port: int, secret: string?, tls: ClusterTlsOptions?, }",
+        .summary = "",
     },
     {
         .name = "ClusterConfig.name",
-        .signature = "const string",
-        .summary = "Object field",
+        .signature = "string",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterConfig.port",
-        .signature = "const int",
-        .summary = "Object field",
+        .signature = "int",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterConfig.secret",
-        .signature = "const string?",
-        .summary = "Object field",
+        .signature = "string?",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterConfig.tls",
-        .signature = "const ClusterTlsOptions?",
-        .summary = "Object field",
+        .signature = "ClusterTlsOptions?",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterDelivery",
@@ -526,33 +526,33 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterTlsOptions",
-        .signature = "{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }",
-        .summary = "Typed TLS configuration for a cluster node",
+        .signature = "{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool, }",
+        .summary = "",
     },
     {
         .name = "ClusterTlsOptions.caFile",
-        .signature = "const string?",
-        .summary = "Object field",
+        .signature = "string?",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterTlsOptions.certFile",
-        .signature = "const string?",
-        .summary = "Object field",
+        .signature = "string?",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterTlsOptions.enabled",
-        .signature = "const bool",
-        .summary = "Object field",
+        .signature = "bool",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterTlsOptions.insecure",
-        .signature = "const bool",
-        .summary = "Object field",
+        .signature = "bool",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterTlsOptions.keyFile",
-        .signature = "const string?",
-        .summary = "Object field",
+        .signature = "string?",
+        .summary = "Type alias field",
     },
     {
         .name = "ClusterTlsStatus",
@@ -627,12 +627,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "join",
         .signature = "(addr: string): bool",
-        .summary = "Join cluster by address",
+        .summary = "",
     },
     {
         .name = "listen",
-        .signature = "(pattern: string): Channel<Buffer>?",
-        .summary = "Create a bounded receiver for opaque canonical service envelopes",
+        .signature = "(pattern: string, capacity: int = 1024): Channel<Buffer>?",
+        .summary = "",
     },
     {
         .name = "monitor",
@@ -657,17 +657,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "send",
         .signature = "(topic: string, envelope: move Buffer): ClusterDelivery",
-        .summary = "Hand one canonical opaque service envelope to local and connected transports",
+        .summary = "",
     },
     {
         .name = "start",
         .signature = "(config: ClusterConfig): bool",
-        .summary = "Start cluster node",
+        .summary = "",
     },
     {
         .name = "stop",
         .signature = "(): ()",
-        .summary = "Stop cluster node",
+        .summary = "",
     },
     {
         .name = "topicMatches",
@@ -872,6 +872,71 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
         .summary = "",
     },
     {
+        .name = "CsvParseOptions",
+        .signature = "{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: int, maxRecords: int, maxInputBytes: int, maxFieldBytes: int, maxColumns: int }",
+        .summary = "",
+    },
+    {
+        .name = "CsvParseOptions.commentPrefix",
+        .signature = "string",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.delimiter",
+        .signature = "CsvDelimiter",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.escapeChar",
+        .signature = "rune",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.header",
+        .signature = "CsvHeader",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.maxColumns",
+        .signature = "int",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.maxFieldBytes",
+        .signature = "int",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.maxInputBytes",
+        .signature = "int",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.maxRecords",
+        .signature = "int",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.quoteChar",
+        .signature = "rune",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.skipEmptyLines",
+        .signature = "bool",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.skipRecords",
+        .signature = "int",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvParseOptions.trimFields",
+        .signature = "bool",
+        .summary = "Type alias field",
+    },
+    {
         .name = "CsvParseReport",
         .signature = "CsvParseReport",
         .summary = "",
@@ -905,6 +970,31 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
         .name = "CsvParseReport.truncated",
         .signature = ": bool",
         .summary = "",
+    },
+    {
+        .name = "CsvWriteOptions",
+        .signature = "{ delimiter: rune, quoteChar: rune, escapeChar: rune, linebreak: string }",
+        .summary = "",
+    },
+    {
+        .name = "CsvWriteOptions.delimiter",
+        .signature = "rune",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvWriteOptions.escapeChar",
+        .signature = "rune",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvWriteOptions.linebreak",
+        .signature = "string",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "CsvWriteOptions.quoteChar",
+        .signature = "rune",
+        .summary = "Type alias field",
     },
     {
         .name = "defaultParseOptions",
@@ -1534,6 +1624,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "HttpRequest.text",
         .signature = "(): string",
         .summary = "",
+    },
+    {
+        .name = "HttpRequestOptions",
+        .signature = "{ url: string, method?: HttpMethod, headers?: Headers, body?: Array<byte>, followRedirects?: bool, maxRedirects?: int, timeoutMs?: int, version?: HttpVersion }",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequestOptions.url",
+        .signature = "string",
+        .summary = "Type alias field",
     },
     {
         .name = "HttpResponse",
@@ -6067,6 +6167,31 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
         .summary = "",
     },
     {
+        .name = "XmlOptions",
+        .signature = "{ preserveWhitespace: bool, preserveComments: bool, preserveCData: bool, validateEntities: bool }",
+        .summary = "",
+    },
+    {
+        .name = "XmlOptions.preserveCData",
+        .signature = "bool",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "XmlOptions.preserveComments",
+        .signature = "bool",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "XmlOptions.preserveWhitespace",
+        .signature = "bool",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "XmlOptions.validateEntities",
+        .signature = "bool",
+        .summary = "Type alias field",
+    },
+    {
         .name = "XmlParseReport",
         .signature = "XmlParseReport",
         .summary = "",
@@ -6085,6 +6210,26 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
         .name = "XmlParseReport.doc",
         .signature = ": XmlNode?",
         .summary = "",
+    },
+    {
+        .name = "XmlWriteOptions",
+        .signature = "{ indent: int, declaration: bool, encoding: string }",
+        .summary = "",
+    },
+    {
+        .name = "XmlWriteOptions.declaration",
+        .signature = "bool",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "XmlWriteOptions.encoding",
+        .signature = "string",
+        .summary = "Type alias field",
+    },
+    {
+        .name = "XmlWriteOptions.indent",
+        .signature = "int",
+        .summary = "Type alias field",
     },
     {
         .name = "attr",
@@ -6265,6 +6410,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
         .summary = "",
     },
     {
+        .name = "YamlOptions",
+        .signature = "{ strict: bool }",
+        .summary = "",
+    },
+    {
+        .name = "YamlOptions.strict",
+        .signature = "bool",
+        .summary = "Type alias field",
+    },
+    {
         .name = "YamlParseReport",
         .signature = "YamlParseReport",
         .summary = "",
@@ -6328,6 +6483,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
         .name = "YamlTagged.value",
         .signature = ": YamlValue",
         .summary = "",
+    },
+    {
+        .name = "YamlWriteOptions",
+        .signature = "{ indent: int }",
+        .summary = "",
+    },
+    {
+        .name = "YamlWriteOptions.indent",
+        .signature = "int",
+        .summary = "Type alias field",
     },
     {
         .name = "aliasValue",
@@ -8191,11 +8356,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `cluster.ClusterConfig` | `{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }` | Typed cluster node startup configuration |\n"
-            "| `cluster.ClusterConfig.name` | `const string` | Object field |\n"
-            "| `cluster.ClusterConfig.port` | `const int` | Object field |\n"
-            "| `cluster.ClusterConfig.secret` | `const string?` | Object field |\n"
-            "| `cluster.ClusterConfig.tls` | `const ClusterTlsOptions?` | Object field |\n"
+            "| `cluster.ClusterConfig` | `{ name: string, port: int, secret: string?, tls: ClusterTlsOptions?, }` |  |\n"
+            "| `cluster.ClusterConfig.name` | `string` | Type alias field |\n"
+            "| `cluster.ClusterConfig.port` | `int` | Type alias field |\n"
+            "| `cluster.ClusterConfig.secret` | `string?` | Type alias field |\n"
+            "| `cluster.ClusterConfig.tls` | `ClusterTlsOptions?` | Type alias field |\n"
             "| `cluster.ClusterDelivery` | `enum ClusterDelivery` | Outcome of handing one opaque service envelope to the cluster transport |\n"
             "| `cluster.ClusterDelivery.Accepted` | `ClusterDelivery.Accepted` | Enum variant |\n"
             "| `cluster.ClusterDelivery.Disconnected` | `ClusterDelivery.Disconnected` | Enum variant |\n"
@@ -8237,12 +8402,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.ClusterNodeState.Connecting` | `ClusterNodeState.Connecting` | Enum variant |\n"
             "| `cluster.ClusterNodeState.Handshaking` | `ClusterNodeState.Handshaking` | Enum variant |\n"
             "| `cluster.ClusterNodeState.Idle` | `ClusterNodeState.Idle` | Enum variant |\n"
-            "| `cluster.ClusterTlsOptions` | `{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }` | Typed TLS configuration for a cluster node |\n"
-            "| `cluster.ClusterTlsOptions.caFile` | `const string?` | Object field |\n"
-            "| `cluster.ClusterTlsOptions.certFile` | `const string?` | Object field |\n"
-            "| `cluster.ClusterTlsOptions.enabled` | `const bool` | Object field |\n"
-            "| `cluster.ClusterTlsOptions.insecure` | `const bool` | Object field |\n"
-            "| `cluster.ClusterTlsOptions.keyFile` | `const string?` | Object field |\n"
+            "| `cluster.ClusterTlsOptions` | `{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool, }` |  |\n"
+            "| `cluster.ClusterTlsOptions.caFile` | `string?` | Type alias field |\n"
+            "| `cluster.ClusterTlsOptions.certFile` | `string?` | Type alias field |\n"
+            "| `cluster.ClusterTlsOptions.enabled` | `bool` | Type alias field |\n"
+            "| `cluster.ClusterTlsOptions.insecure` | `bool` | Type alias field |\n"
+            "| `cluster.ClusterTlsOptions.keyFile` | `string?` | Type alias field |\n"
             "| `cluster.ClusterTlsStatus` | `{ enabled: bool, clientReady: bool, serverReady: bool }` | Effective TLS posture of a running cluster node |\n"
             "| `cluster.ClusterTlsStatus.clientReady` | `const bool` | Object field |\n"
             "| `cluster.ClusterTlsStatus.enabled` | `const bool` | Object field |\n"
@@ -8257,15 +8422,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
             "| `cluster.discover` | `(): ()` | Start LAN auto-discovery |\n"
             "| `cluster.info` | `(): ClusterInfo?` | Get cluster status info |\n"
-            "| `cluster.join` | `(addr: string): bool` | Join cluster by address |\n"
-            "| `cluster.listen` | `(pattern: string): Channel<Buffer>?` | Create a bounded receiver for opaque canonical service envelopes |\n"
+            "| `cluster.join` | `(addr: string): bool` |  |\n"
+            "| `cluster.listen` | `(pattern: string, capacity: int = 1024): Channel<Buffer>?` |  |\n"
             "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
             "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
-            "| `cluster.send` | `(topic: string, envelope: move Buffer): ClusterDelivery` | Hand one canonical opaque service envelope to local and connected transports |\n"
-            "| `cluster.start` | `(config: ClusterConfig): bool` | Start cluster node |\n"
-            "| `cluster.stop` | `(): ()` | Stop cluster node |\n"
+            "| `cluster.send` | `(topic: string, envelope: move Buffer): ClusterDelivery` |  |\n"
+            "| `cluster.start` | `(config: ClusterConfig): bool` |  |\n"
+            "| `cluster.stop` | `(): ()` |  |\n"
             "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"
             "| `cluster.validNodeName` | `(name: string): bool` |  |\n"
             "| `cluster.validTopicName` | `(topic: string): bool` |  |\n"
@@ -8381,6 +8546,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CsvDocument.constructor` | `(): ()` |  |\n"
             "| `CsvDocument.headers` | `: Array<string>` |  |\n"
             "| `CsvDocument.rows` | `: Array<Array<string>>` |  |\n"
+            "| `csv.CsvParseOptions` | `{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: int, maxRecords: int, maxInputBytes: int, maxFieldBytes: int, maxColumns: int }` |  |\n"
+            "| `csv.CsvParseOptions.commentPrefix` | `string` | Type alias field |\n"
+            "| `csv.CsvParseOptions.delimiter` | `CsvDelimiter` | Type alias field |\n"
+            "| `csv.CsvParseOptions.escapeChar` | `rune` | Type alias field |\n"
+            "| `csv.CsvParseOptions.header` | `CsvHeader` | Type alias field |\n"
+            "| `csv.CsvParseOptions.maxColumns` | `int` | Type alias field |\n"
+            "| `csv.CsvParseOptions.maxFieldBytes` | `int` | Type alias field |\n"
+            "| `csv.CsvParseOptions.maxInputBytes` | `int` | Type alias field |\n"
+            "| `csv.CsvParseOptions.maxRecords` | `int` | Type alias field |\n"
+            "| `csv.CsvParseOptions.quoteChar` | `rune` | Type alias field |\n"
+            "| `csv.CsvParseOptions.skipEmptyLines` | `bool` | Type alias field |\n"
+            "| `csv.CsvParseOptions.skipRecords` | `int` | Type alias field |\n"
+            "| `csv.CsvParseOptions.trimFields` | `bool` | Type alias field |\n"
             "| `CsvParseReport` | `CsvParseReport` |  |\n"
             "| `CsvParseReport.constructor` | `(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()` |  |\n"
             "| `CsvParseReport.delimiter` | `: rune` |  |\n"
@@ -8388,6 +8566,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CsvParseReport.document` | `: CsvDocument` |  |\n"
             "| `CsvParseReport.linebreak` | `: string` |  |\n"
             "| `CsvParseReport.truncated` | `: bool` |  |\n"
+            "| `csv.CsvWriteOptions` | `{ delimiter: rune, quoteChar: rune, escapeChar: rune, linebreak: string }` |  |\n"
+            "| `csv.CsvWriteOptions.delimiter` | `rune` | Type alias field |\n"
+            "| `csv.CsvWriteOptions.escapeChar` | `rune` | Type alias field |\n"
+            "| `csv.CsvWriteOptions.linebreak` | `string` | Type alias field |\n"
+            "| `csv.CsvWriteOptions.quoteChar` | `rune` | Type alias field |\n"
             "| `csv.defaultParseOptions` | `(): CsvParseOptions` |  |\n"
             "| `csv.defaultWriteOptions` | `(): CsvWriteOptions` |  |\n"
             "| `csv.parse` | `(data: string, options: CsvParseOptions? = null): CsvDocument` |  |\n"
@@ -8566,6 +8749,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpRequest.path` | `: string` |  |\n"
             "| `HttpRequest.query` | `: QueryParams` |  |\n"
             "| `HttpRequest.text` | `(): string` |  |\n"
+            "| `http.HttpRequestOptions` | `{ url: string, method?: HttpMethod, headers?: Headers, body?: Array<byte>, followRedirects?: bool, maxRedirects?: int, timeoutMs?: int, version?: HttpVersion }` |  |\n"
+            "| `http.HttpRequestOptions.url` | `string` | Type alias field |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
             "| `HttpResponse.body` | `: Array<byte>` |  |\n"
             "| `HttpResponse.constructor` | `(version: HttpVersion, status: int, reason: string, headers: Headers, body: Array<byte>): ()` |  |\n"
@@ -9962,10 +10147,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `XmlName.local` | `: string` |  |\n"
             "| `XmlName.prefix` | `: string` |  |\n"
             "| `XmlName.qualified` | `(): string` |  |\n"
+            "| `xml.XmlOptions` | `{ preserveWhitespace: bool, preserveComments: bool, preserveCData: bool, validateEntities: bool }` |  |\n"
+            "| `xml.XmlOptions.preserveCData` | `bool` | Type alias field |\n"
+            "| `xml.XmlOptions.preserveComments` | `bool` | Type alias field |\n"
+            "| `xml.XmlOptions.preserveWhitespace` | `bool` | Type alias field |\n"
+            "| `xml.XmlOptions.validateEntities` | `bool` | Type alias field |\n"
             "| `XmlParseReport` | `XmlParseReport` |  |\n"
             "| `XmlParseReport.constructor` | `(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()` |  |\n"
             "| `XmlParseReport.diagnostics` | `: Array<XmlDiagnostic>` |  |\n"
             "| `XmlParseReport.doc` | `: XmlNode?` |  |\n"
+            "| `xml.XmlWriteOptions` | `{ indent: int, declaration: bool, encoding: string }` |  |\n"
+            "| `xml.XmlWriteOptions.declaration` | `bool` | Type alias field |\n"
+            "| `xml.XmlWriteOptions.encoding` | `string` | Type alias field |\n"
+            "| `xml.XmlWriteOptions.indent` | `int` | Type alias field |\n"
             "| `xml.attr` | `(node: XmlNode, key: string): string?` |  |\n"
             "| `xml.attributes` | `(node: XmlNode): Array<XmlAttribute>` |  |\n"
             "| `xml.cdata` | `(content: string): XmlNode` |  |\n"
@@ -10019,6 +10213,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `YamlMapping.set` | `(key: string, value: YamlValue): ()` |  |\n"
             "| `YamlMapping.size` | `(): int` |  |\n"
             "| `YamlMapping.values` | `: Array<YamlValue>` |  |\n"
+            "| `yaml.YamlOptions` | `{ strict: bool }` |  |\n"
+            "| `yaml.YamlOptions.strict` | `bool` | Type alias field |\n"
             "| `YamlParseReport` | `YamlParseReport` |  |\n"
             "| `YamlParseReport.anchors` | `: int` |  |\n"
             "| `YamlParseReport.constructor` | `(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: int): ()` |  |\n"
@@ -10032,6 +10228,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `YamlTagged.constructor` | `(tag: YamlTag, value: YamlValue): ()` |  |\n"
             "| `YamlTagged.tag` | `: YamlTag` |  |\n"
             "| `YamlTagged.value` | `: YamlValue` |  |\n"
+            "| `yaml.YamlWriteOptions` | `{ indent: int }` |  |\n"
+            "| `yaml.YamlWriteOptions.indent` | `int` | Type alias field |\n"
             "| `yaml.aliasValue` | `(name: string): YamlValue` |  |\n"
             "| `yaml.asBool` | `(value: YamlValue): bool?` |  |\n"
             "| `yaml.asFloat` | `(value: YamlValue): float?` |  |\n"

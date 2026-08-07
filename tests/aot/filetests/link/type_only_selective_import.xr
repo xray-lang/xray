@@ -1,0 +1,7 @@
+import { TypeOnlyConfig } from "./_type_only_selective_import_lib"
+
+fn total(config: TypeOnlyConfig) -> int {
+    return len(config.name) + config.count
+}
+
+print(total({ name: "cluster", count: 7 }))

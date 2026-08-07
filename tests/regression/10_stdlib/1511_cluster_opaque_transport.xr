@@ -38,7 +38,9 @@ fn test_cluster_transports_only_opaque_envelopes() {
     var disconnected = envelope(2)
     assert(cluster.send("service.none", move disconnected) == ClusterDelivery.Disconnected)
 
-    var inbox: Channel<Buffer> = cluster.listen("service.>")!
+    assert(cluster.listen("service.invalid", 0) == null)
+    assert(cluster.listen("service.invalid", 1048577) == null)
+    var inbox: Channel<Buffer> = cluster.listen("service.>", 64)!
     var payload = envelope(41)
     assert(cluster.send("service.echo", move payload) == ClusterDelivery.Accepted)
     var received = receive_buffer(inbox)

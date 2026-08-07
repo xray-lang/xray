@@ -127,23 +127,6 @@ static const XaBuiltinEnum g_gen_Coro_enums[] = {
 };
 #define GEN_CORO_ENUM_COUNT 3
 
-// cluster.ClusterTlsOptions object fields
-static const XaBuiltinObjectField g_gen_cluster_clustertlsoptions_object_fields[] = {
-    {"enabled", "bool"},
-    {"caFile", "string?"},
-    {"certFile", "string?"},
-    {"keyFile", "string?"},
-    {"insecure", "bool"},
-};
-
-// cluster.ClusterConfig object fields
-static const XaBuiltinObjectField g_gen_cluster_clusterconfig_object_fields[] = {
-    {"name", "string"},
-    {"port", "int"},
-    {"secret", "string?"},
-    {"tls", "ClusterTlsOptions?"},
-};
-
 // cluster.ClusterTlsStatus object fields
 static const XaBuiltinObjectField g_gen_cluster_clustertlsstatus_object_fields[] = {
     {"enabled", "bool"},
@@ -186,13 +169,11 @@ static const XaBuiltinObjectField g_gen_cluster_clusterinfo_object_fields[] = {
 };
 
 static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
-    {"ClusterTlsOptions", "Typed TLS configuration for a cluster node", g_gen_cluster_clustertlsoptions_object_fields, 5, true},
-    {"ClusterConfig", "Typed cluster node startup configuration", g_gen_cluster_clusterconfig_object_fields, 4, true},
     {"ClusterTlsStatus", "Effective TLS posture of a running cluster node", g_gen_cluster_clustertlsstatus_object_fields, 3, true},
     {"ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", g_gen_cluster_clusternodeinfo_object_fields, 16, true},
     {"ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", g_gen_cluster_clusterinfo_object_fields, 10, true},
 };
-#define GEN_CLUSTER_OBJECT_SHAPE_COUNT 5
+#define GEN_CLUSTER_OBJECT_SHAPE_COUNT 3
 
 static const XaBuiltinEnumVariant g_gen_cluster_clusterdelivery_variants[] = {
     {"Accepted", NULL, 0},
@@ -219,16 +200,16 @@ static const XaBuiltinEnum g_gen_cluster_enums[] = {
 
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
-    {"start", "(config: ClusterConfig): bool", "Start cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"join", "(addr: string): bool", "Join cluster by address without blocking the scheduler worker", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__start", "(name: string, port: int, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool): bool", "Start the backend-neutral cluster runtime from normalized scalar configuration", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__join", "(addr: string): bool", "Join cluster by address without blocking the scheduler worker", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"self", "(): string", "Get own node name", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"nodes", "(): Array<string>", "List cluster node names", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"discover", "(): ()", "Start LAN auto-discovery", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"stop", "(): ()", "Stop cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"info", "(): ClusterInfo?", "Get cluster status info", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"send", "(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"listen", "(pattern: string): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__send", "(topic: string, envelope: move Buffer): int", "Hand one canonical opaque service envelope to local and connected transports and return the delivery ordinal", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__listen", "(pattern: string, capacity: int): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_CLUSTER_FUNCTION_COUNT 10
 

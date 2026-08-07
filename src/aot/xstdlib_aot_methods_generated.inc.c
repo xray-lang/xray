@@ -198,6 +198,11 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__dialTLS", 3, "xrt_net_dial_tls", "svv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"http2", "supported", 0, "xrt_http_h2_supported", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"http2", "request", 6, "xrt_http_h2_request_unavailable", "vvvvvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"cluster", "__start", 8, "xrt_cluster_start", "svsvsssv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"cluster", "__join", 1, "xrt_cluster_join", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"cluster", "__stop", 0, "xrt_cluster_stop", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"cluster", "__send", 2, "xrt_cluster_send", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"cluster", "__listen", 2, "xrt_cluster_listen", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
 };
 #define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))
 

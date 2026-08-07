@@ -2477,7 +2477,7 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                 for (int mi = 0; mi < s->as.import_stmt.member_count; mi++) {
                     ImportMember *m = &s->as.import_stmt.members[mi];
                     const char *mname = m->alias ? m->alias : m->name;
-                    if (!mname)
+                    if (!mname || xi_lower_import_member_is_type_only(l, m))
                         continue;
                     int vid = xi_lower_var_create(l, m->symbol_id, mname, l->type_any);
                     XR_DCHECK(vid >= 0 && vid < l->var_cap,

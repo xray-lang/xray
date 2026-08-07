@@ -229,12 +229,12 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
 
     // Backfill field type_name from descriptor entries (for type metadata)
     if (cls->fields) {
-        for (uint32_t i = 0; i < desc->instance_field_count; i++) {
-            int field_index =
-                xr_class_lookup_field_by_name(isolate, cls, desc->instance_fields[i].name);
-            if (field_index < 0 || field_index >= xr_class_instance_field_count(cls))
-                continue;
-            XrFieldDescriptor *field = &cls->fields[field_index];
+        int own_instance_fields = cls->own_field_count - cls->static_field_count;
+        if (own_instance_fields < 0)
+            own_instance_fields = 0;
+        for (uint32_t i = 0; i < desc->instance_field_count && i < (uint32_t) own_instance_fields;
+             i++) {
+            XrFieldDescriptor *field = &cls->fields[i];
             field->type_name = desc->instance_fields[i].type_name;
             if (!xr_json_decode_schema_clone_for_class(isolate,
                                                        &desc->instance_fields[i].json_decode_schema,
@@ -245,11 +245,8 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
                 field->json_struct_object_class =
                     (XrClass *) field->json_decode_schema.target_descriptor;
         }
-        int sf_base = cls->own_field_count - cls->static_field_count;
-        if (sf_base < 0)
-            sf_base = 0;
         for (uint32_t i = 0; i < desc->static_field_count; i++) {
-            int idx = sf_base + (int) desc->instance_field_count + (int) i;
+            int idx = own_instance_fields + (int) i;
             if (idx < cls->own_field_count) {
                 cls->fields[idx].type_name = desc->static_fields[i].type_name;
             }

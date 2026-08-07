@@ -136,13 +136,10 @@ TEST(native_module_object_and_enum_metadata) {
         xa_builtin_get_object_shape("cluster", "ClusterConfig");
     const XaBuiltinObjectShape *cluster_info =
         xa_builtin_get_object_shape("cluster", "ClusterInfo");
-    ASSERT_NOT_NULL(cluster_config);
+    ASSERT_NULL(cluster_config);
     ASSERT_NOT_NULL(cluster_info);
-    ASSERT_TRUE(cluster_config->is_exact);
     ASSERT_TRUE(cluster_info->is_exact);
-    ASSERT_EQ_INT(cluster_config->field_count, 4);
     ASSERT_EQ_INT(cluster_info->field_count, 10);
-    ASSERT_TRUE(strcmp(cluster_config->fields[3].name, "tls") == 0);
     ASSERT_TRUE(strcmp(cluster_info->fields[4].name, "listeners") == 0);
     ASSERT_TRUE(strcmp(cluster_info->fields[5].name, "deadNodes") == 0);
 
@@ -171,16 +168,21 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_EQ_INT(runtime_cluster_state->layout->layout_id, cluster_state->layout_id);
 
     const char *cluster_start_signature = xa_builtin_get_module_func_signature("cluster", "start");
+    const XaBuiltinMember *cluster_start_primitive = find_module_member("cluster", "__start");
     const char *cluster_info_signature = xa_builtin_get_module_func_signature("cluster", "info");
-    ASSERT_NOT_NULL(cluster_start_signature);
+    ASSERT_NULL(cluster_start_signature);
+    ASSERT_NOT_NULL(cluster_start_primitive);
+    ASSERT_TRUE(cluster_start_primitive->is_internal);
     ASSERT_NOT_NULL(cluster_info_signature);
-    XrType *cluster_start_fn = xa_builtin_parse_full_signature(iso, cluster_start_signature);
+    XrType *cluster_start_fn =
+        xa_builtin_parse_full_signature(iso, cluster_start_primitive->signature);
     XrType *cluster_info_fn = xa_builtin_parse_full_signature(iso, cluster_info_signature);
     ASSERT_NOT_NULL(cluster_start_fn);
     ASSERT_NOT_NULL(cluster_info_fn);
     ASSERT_EQ_INT(cluster_start_fn->kind, XR_KIND_FUNCTION);
-    ASSERT_EQ_INT(cluster_start_fn->function.param_count, 1);
-    ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_STRUCT_OBJECT);
+    ASSERT_EQ_INT(cluster_start_fn->function.param_count, 8);
+    ASSERT_EQ_INT(cluster_start_fn->function.params[0].type->kind, XR_KIND_STRING);
+    ASSERT_EQ_INT(cluster_start_fn->function.params[1].type->kind, XR_KIND_INT);
     ASSERT_EQ_INT(cluster_start_fn->function.return_type->kind, XR_KIND_BOOL);
     ASSERT_EQ_INT(cluster_info_fn->kind, XR_KIND_FUNCTION);
     ASSERT_EQ_INT(cluster_info_fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);

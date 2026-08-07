@@ -1,0 +1,6 @@
+contains=xaot-plan v0
+contains=modules 2 entry 1
+contains=module 0 name=_type_only_selective_import_lib
+contains=module 1 name=type_only_selective_import
+not_contains=unresolved AOT import
+contains=function 2 name=total module=1 depth=1

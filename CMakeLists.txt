@@ -1191,6 +1191,9 @@ set(XRAY_RT_CORO_SOURCES
     ${CORO_SRC}
     ${IO_SRC}
     src/aot/xrt_gen_iter.c
+    stdlib/cluster/cluster_aot.c
+    stdlib/cluster/cluster_auth.c
+    stdlib/cluster/cluster_proto.c
 )
 list(REMOVE_DUPLICATES XRAY_RT_CORO_SOURCES)
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/xisolate_api\\.c$")

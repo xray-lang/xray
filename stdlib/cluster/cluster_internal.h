@@ -529,7 +529,10 @@ typedef struct XrTopicSubscription {
 // Supports wildcard: "*" matches one segment, ">" matches remaining segments.
 // Example: "events.*" matches "events.user" but not "events.user.login"
 //          "events.>" matches "events.user" and "events.user.login"
-struct XrChannel *cluster_transport_listen(struct XrVMRuntime *X, const char *pattern);
+#define XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX (1024u * 1024u)
+
+struct XrChannel *cluster_transport_listen(struct XrVMRuntime *X, const char *pattern,
+                                           uint32_t capacity);
 
 // Send an opaque canonical envelope to matching local listeners and peers.
 XrClusterDelivery cluster_transport_send(struct XrVMRuntime *X, const char *topic,

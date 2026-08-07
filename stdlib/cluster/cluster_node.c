@@ -14,7 +14,6 @@
  */
 
 #include "cluster_internal.h"
-#include "../crypto/crypto.h"
 #include "../../src/coro/xchannel.h"
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/coro/xsocket.h"
@@ -36,50 +35,6 @@ static void cluster_node_close(XrClusterNode *node);
 
 int64_t cluster_now_ms(void) {
     return (int64_t) xr_time_monotonic_ms();
-}
-
-/* ========== Proof Computation ========== */
-
-/*
- * proof = HMAC-SHA256(key = secret, data = nonce)
- *
- * The previous v1 scheme used SHA256(secret || nonce) which has two
- * issues compared to a MAC:
- *
- *   1. It is not a keyed MAC — just a prefixed hash. An attacker who
- *      learns a proof / nonce pair cannot forge, but any subtle hash
- *      misuse (e.g. length extension on variant constructions) is a
- *      gun pointed at our own foot.
- *   2. The concatenation is ambiguous: `secret="ab", nonce="cd"` and
- *      `secret="abc", nonce="d"` hash to the same digest. We limit the
- *      secret length so this is not exploitable today, but future
- *      variable-length secrets or nonce formats would re-introduce the
- *      hazard.
- *
- * HMAC-SHA256 eliminates both. xr_hmac_sha256 already owns the 64-byte
- * scratch buffer internally so we no longer stage `secret || nonce` on
- * the stack — the caller's secret never leaves the HMAC inner context.
- */
-void cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out) {
-    size_t secret_len = strlen(secret);
-    xr_hmac_sha256((const uint8_t *) secret, secret_len, nonce, XR_NONCE_SIZE, proof_out);
-}
-
-/*
- * Constant-time buffer comparison for handshake proofs.
- *
- * memcmp short-circuits on the first byte mismatch, leaking partial
- * information via timing. For 32-byte proofs the signal is tiny but we
- * have nothing to gain from being sloppy on the security boundary.
- * Keep this as a translation-unit static since the rest of cluster has
- * no other constant-time needs right now.
- */
-bool cluster_proof_equal(const uint8_t *a, const uint8_t *b) {
-    uint8_t diff = 0;
-    for (size_t i = 0; i < XR_PROOF_SIZE; i++) {
-        diff |= (uint8_t) (a[i] ^ b[i]);
-    }
-    return diff == 0;
 }
 
 /* ========== Output Queue ========== */
