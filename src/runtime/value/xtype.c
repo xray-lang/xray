@@ -1701,7 +1701,12 @@ bool xr_type_assignable(XrType *target, XrType *source) {
 
     // T? → T is NOT silently allowed here.
     // Analyzer must check via xa_check_null_safety and require explicit unwrap.
-    if (source->is_nullable && !target->is_nullable) {
+    // A sink that already includes null is the exception: the unwrap exists to
+    // stop a null reaching a type that cannot represent one, and Json can. It
+    // is the same reason the null-safety analyzer skips such a target, and
+    // without it `string?` could not reach a Json sink that plain `null` can.
+    if (source->is_nullable && !target->is_nullable &&
+        !xr_type_intrinsically_includes_null(target)) {
         return false;
     }
 

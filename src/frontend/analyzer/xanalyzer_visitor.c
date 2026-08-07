@@ -2387,8 +2387,13 @@ bool xa_check_null_safety(XaAnalyzer *analyzer, XrType *target, XrType *source,
         return true;
     }
 
-    // T? → T (nullable source to non-nullable target, without narrowing)
-    if (source->is_nullable && !target->is_nullable) {
+    // T? → T (nullable source to non-nullable target, without narrowing).
+    // The same intrinsic-null exception as above applies: a target whose value
+    // domain contains null has nothing to be unwrapped for. Without it a Json
+    // sink would reject `string?` while accepting the bare `null` that makes
+    // it nullable in the first place.
+    if (source->is_nullable && !target->is_nullable &&
+        !xr_type_intrinsically_includes_null(target)) {
         XrType *src_base = xr_type_non_nullable(analyzer->isolate, source);
         if (src_base && xr_type_assignable(target, src_base)) {
             char msg[256];

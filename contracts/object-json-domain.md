@@ -72,7 +72,7 @@ Status: frozen after object-surface convergence and typed nominal Json construct
 anchor-sha256: src/shared/xobject_row.h 5057c952ae0f809e3aaec6e4c48f64ece296af550a7cd2f23ac36185b2c0f170
 anchor-sha256: src/shared/xobject_shape.h 2f0746ea7c755edda74e5b64a661363a543eb8c96e6e13dfc5e3d339d32e4878
 anchor-sha256: src/runtime/value/xtype.h 3fc485e57ddc2bd95778f995f5df0e6f334b0f86197b40dfe468564e1b0b6426
-anchor-sha256: src/runtime/value/xtype.c 84761e16d37abaeffb9b5969812f1e1c34f7172874a28d52face5529ee149026
+anchor-sha256: src/runtime/value/xtype.c 791cc6b4018a2e226b0d6634fb3aad8c95b1006695792897bb06824810f27303
 anchor-sha256: src/frontend/parser/xtype_ref.h 4c3823b5f8ca3dc0164605a6824070710f6efb7e0209dc431726ae389ea9dd24
 anchor-sha256: src/frontend/parser/xtype_ref.c 3a2b839172e60f9801d5b54e4be986186884c3fabe5fcaacd1d006907a2678a3
 anchor-sha256: src/frontend/analyzer/xanalyzer_capability.h 94c7b2c2f02b92c6bd324e7719dba1afadb52faf0b0f03bf6dd4ac4164d96123
