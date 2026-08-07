@@ -486,6 +486,16 @@ XR_FUNC bool xi_lower_fill_canonical_object_field_names(XiLower *l, const XrType
         if (!names[i])
             return false;
     }
+    /* Only a struct object sorts. Its shape is nominal, so the global producer
+     * canonicalizes its keys by stable name key and this fallback has to land
+     * on the same order the evidence path above would have given it. A Json
+     * literal is positional: the producer numbers its fields as the source
+     * wrote them, and that order is what printing, iteration, and every
+     * ordinal read observe. Sorting one like the other gives the two backends
+     * different layouts for the same literal -- the field a Json ordinal names
+     * then depends on a name hash rather than on the source. */
+    if (type->kind != XR_KIND_STRUCT_OBJECT)
+        return true;
     for (int i = 1; i < count; i++) {
         const char *current = names[i];
         uint64_t current_stable = xg_object_stable_name_key(current);
