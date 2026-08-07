@@ -1908,6 +1908,20 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME bytecode_build_scheduler
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bytecode_build_scheduler_test.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    math(EXPR BYTECODE_BUILD_SCHEDULER_TIMEOUT "300 * ${XR_TEST_TIMEOUT_SCALE}")
+    set_tests_properties(bytecode_build_scheduler PROPERTIES
+        LABELS "vm;bytecode;build;scheduler;regression"
+        PROCESSORS 1
+        TIMEOUT ${BYTECODE_BUILD_SCHEDULER_TIMEOUT}
+    )
+
+    add_test(
         NAME extern_layout_bytecode_cli_roundtrip
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_extern_layout_bytecode_roundtrip.py

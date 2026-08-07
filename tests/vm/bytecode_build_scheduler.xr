@@ -1,0 +1,95 @@
+const REQUESTS = 50000
+
+fn serve(
+    requests: Channel<(int, int, int)>,
+    replies: Channel<(int, int, int)>
+) -> int {
+    var checksum = 0
+    while (true) {
+        match (requests.recv()) {
+            Recv.Value((requestId, slot, value)) -> {
+                checksum = checksum + value
+                replies.send(copy((requestId, slot, value)))
+            }
+            _ -> {
+                replies.close()
+                return checksum
+            }
+        }
+    }
+    return checksum
+}
+
+fn route(
+    replies: Channel<(int, int, int)>,
+    outputs: Array<Channel<(int, int, int)>>
+) -> int {
+    var routed = 0
+    while (true) {
+        match (replies.recv()) {
+            Recv.Value((requestId, slot, value)) -> {
+                outputs[slot].send(copy((requestId, slot, value)))
+                routed = routed + 1
+            }
+            _ -> { return routed }
+        }
+    }
+    return routed
+}
+
+fn produce(
+    requests: Channel<(int, int, int)>,
+    replies: Channel<(int, int, int)>,
+    ready: Channel<int>,
+    start: Channel<int>,
+    done: Channel<(int, int)>
+) {
+    ready.send(1)
+    var _start = start.recv()
+    var completed = 0
+    var checksum = 0
+    for (var requestId = 1; requestId <= REQUESTS; requestId++) {
+        requests.send(copy((requestId, 0, requestId)))
+        match (replies.recv()) {
+            Recv.Value((receivedId, _slot, value)) if (receivedId == requestId) -> {
+                completed = completed + 1
+                checksum = checksum + value
+            }
+            _ -> {}
+        }
+    }
+    var result = (completed, checksum)
+    done.send(move result)
+}
+
+const requests = Channel<(int, int, int)>(64)
+const serviceReplies = Channel<(int, int, int)>(64)
+const ready = Channel<int>(1)
+const start = Channel<int>(1)
+const done = Channel<(int, int)>(1)
+var outputs: Array<Channel<(int, int, int)>> = []
+outputs.push(Channel<(int, int, int)>(1))
+var service = go serve(requests, serviceReplies)
+var router = go route(serviceReplies, copy(outputs))
+var completed = 0
+var checksum = 0
+scope {
+    go produce(requests, outputs[0], ready, start, done)
+    var _ready = ready.recv()
+    start.send(1)
+    match (done.recv()) {
+        Recv.Value((count, value)) -> {
+            completed = count
+            checksum = value
+        }
+        _ -> {}
+    }
+}
+requests.close()
+var serviceChecksum = await service
+var routed = await router
+outputs[0].close()
+ready.close()
+start.close()
+done.close()
+print(completed == REQUESTS && routed == REQUESTS && checksum == serviceChecksum)
