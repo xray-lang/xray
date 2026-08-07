@@ -469,12 +469,15 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFl
     collect_imports_from_ast(&ctx, ast, ctx.base_dir);
 
     // Compile entry file and add to bundle (placed last to ensure dependencies come first)
+    bool entry_added = false;
     XrProto *proto = xr_compile_ast_with_source(session, ast, abs_path);
     if (proto) {
         size_t bc_size;
         uint8_t *bc = xr_bytecode_write(X, proto, 0, &bc_size, NULL);
         if (bc) {
+            int previous_count = bundle->count;
             bundle_add_entry(bundle, abs_path, bc, bc_size);
+            entry_added = bundle->count == previous_count + 1;
             xr_free(bc);
         }
     }
@@ -484,6 +487,11 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFl
     xr_hashmap_free(ctx.visited);
     xr_free(ctx.base_dir);
     xr_free(abs_path);
+    if (!entry_added) {
+        xr_log_warning("bundle", "entry compilation failed: %s", entry_file);
+        xr_bundle_free(bundle);
+        return NULL;
+    }
 
     return bundle;
 }
