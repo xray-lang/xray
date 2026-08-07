@@ -116,6 +116,7 @@ CATEGORIES = (
     "RUNTIME_UNKNOWN_TYPE_SINGLETON_OR_FACTORY",
     "XR_TYPE_IS_UNKNOWN_CONSUMER",
     "ASSIGNABILITY_OR_GENERIC_UNKNOWN_COMPAT",
+    "HOSTED_ABI_ERASURE_BOUNDARY",
     "TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK",
     "IR_UNKNOWN_ERASURE_CONSUMER",
     "AOT_UNKNOWN_ERASURE_CONSUMER",
@@ -243,7 +244,9 @@ def classify_line(rel_path: str, line: str) -> list[str]:
 
     has_unknown = "unknown" in line or "UNKNOWN" in line
     has_error = "error" in line or "ERROR" in line
-    has_erasure_slot = "type_any" in line or "XR_SLOT_ANY" in line
+    has_erasure_slot = (
+        "type_any" in line or "XR_SLOT_ANY" in line or "XR_ELEM_ANY" in line
+    )
     has_task_result = "Task" in line or "Failed(unknown)" in line
     has_stdlib_unknown_api = (
         "unknown APIs" in line
@@ -251,6 +254,11 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         or "Failed(unknown)" in line
         or "Success(Json)" in line
         or "Failed(Json)" in line
+    )
+    is_hosted_abi_erasure_boundary = (
+        rel_path == "src/aot/xi_cgen.c"
+        and has_erasure_slot
+        and "_hosted_" in line
     )
 
     if has_unknown and rel_path in ALLOWED_REMOVED_SOURCE_UNKNOWN_NEGATIVE_TESTS:
@@ -300,7 +308,13 @@ def classify_line(rel_path: str, line: str) -> list[str]:
         and ASSIGNABILITY_GENERIC_RE.search(line)
     ):
         categories.append("ASSIGNABILITY_OR_GENERIC_UNKNOWN_COMPAT")
-    if has_erasure_slot and ERASURE_FALLBACK_RE.search(line):
+    if is_hosted_abi_erasure_boundary:
+        categories.append("HOSTED_ABI_ERASURE_BOUNDARY")
+    if (
+        has_erasure_slot
+        and not is_hosted_abi_erasure_boundary
+        and ERASURE_FALLBACK_RE.search(line)
+    ):
         categories.append("TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK")
     if (
         rel_path.startswith("src/ir/")
@@ -311,6 +325,7 @@ def classify_line(rel_path: str, line: str) -> list[str]:
     if (
         rel_path.startswith("src/aot/")
         and (has_unknown or has_erasure_slot)
+        and not is_hosted_abi_erasure_boundary
         and AOT_UNKNOWN_RE.search(line)
     ):
         categories.append("AOT_UNKNOWN_ERASURE_CONSUMER")
@@ -342,7 +357,7 @@ def classify_line(rel_path: str, line: str) -> list[str]:
 
 def scan_file(root: Path, path: Path) -> list[Hit]:
     hits: list[Hit] = []
-    rel_path = str(rel(root, path))
+    rel_path = rel(root, path).as_posix()
     if rel_path in INVENTORY_SCRIPT_SELF_NOISE:
         return hits
     try:

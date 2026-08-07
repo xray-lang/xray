@@ -122,12 +122,10 @@ TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     ASSERT_TRUE(xtc_command_emit_compile(&selection, &compile, &sink, err, sizeof(err)));
     ASSERT_TRUE(
         xtc_command_emit_link(&selection, &selection.target, &link, &sink, err, sizeof(err)));
-    ASSERT_TRUE(
-        xtc_command_emit_system_library(selection.provider, &selection.target, "ws2_32", &sink,
-                                        err, sizeof(err)));
-    ASSERT_TRUE(
-        xtc_command_emit_system_library(selection.provider, &selection.target, "bcrypt", &sink,
-                                        err, sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target, "ws2_32",
+                                                &sink, err, sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target, "bcrypt",
+                                                &sink, err, sizeof(err)));
     ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target,
                                                 "api-ms-win-core-synch-l1-2-0", &sink, err,
                                                 sizeof(err)));
@@ -395,6 +393,20 @@ TEST(selector_and_provider_names_are_stable) {
 TEST(find_missing_executable) {
     char out[256];
     ASSERT_FALSE(xtc_find_executable("/definitely/not/xray-provider", out, sizeof(out)));
+}
+
+TEST(windows_auto_discovery_prefers_msvc) {
+#ifdef _WIN32
+    XrToolchainRequest request = {0};
+    XrToolchainCandidates candidates;
+    char err[256];
+
+    ASSERT_TRUE(xtc_target_parse("native", &request.target, err, sizeof(err)));
+    request.selector = XR_TOOLCHAIN_SELECTOR_AUTO;
+    ASSERT_TRUE(xtc_discover_candidates(&request, &candidates, err, sizeof(err)));
+    ASSERT_TRUE(candidates.count > 0);
+    ASSERT_EQ_INT(candidates.items[0].provider, XR_TOOLCHAIN_PROVIDER_MSVC);
+#endif
 }
 
 TEST(build_tree_runtime_manifest_matches_host_platform) {
@@ -670,9 +682,8 @@ TEST(process_capture_preserves_arbitrary_bytes_and_nul) {
     spec.argv[2] = "-NoProfile";
     spec.argv[3] = "-NonInteractive";
     spec.argv[4] = "-Command";
-    spec.argv[5] =
-        "$b=[byte[]](0x66,0x6f,0x80,0x00,0xff);"
-        "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
+    spec.argv[5] = "$b=[byte[]](0x66,0x6f,0x80,0x00,0xff);"
+                   "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
     spec.argv[6] = NULL;
 #else
     ASSERT_TRUE(xtc_find_executable("sh", shell, sizeof(shell)));
@@ -707,12 +718,12 @@ TEST(process_spawn_preserves_unicode_argv_env_and_cwd) {
     ASSERT_TRUE(temp_len > 0 && temp_len < sizeof(wide_temp) / sizeof(wide_temp[0]));
     _snwprintf_s(wide_leaf, sizeof(wide_leaf) / sizeof(wide_leaf[0]), _TRUNCATE,
                  L"xray-\u76ee\u5f55-%lu", (unsigned long) GetCurrentProcessId());
-    _snwprintf_s(wide_dir, sizeof(wide_dir) / sizeof(wide_dir[0]), _TRUNCATE, L"%ls%ls",
-                 wide_temp, wide_leaf);
+    _snwprintf_s(wide_dir, sizeof(wide_dir) / sizeof(wide_dir[0]), _TRUNCATE, L"%ls%ls", wide_temp,
+                 wide_leaf);
     ASSERT_TRUE(CreateDirectoryW(wide_dir, NULL) || GetLastError() == ERROR_ALREADY_EXISTS);
     ASSERT_TRUE(xr_win_utf16_to_utf8(wide_dir, wcslen(wide_dir), utf8_dir, sizeof(utf8_dir)) != 0);
-    ASSERT_TRUE(
-        xr_win_utf16_to_utf8(wide_leaf, wcslen(wide_leaf), utf8_leaf, sizeof(utf8_leaf)) != 0);
+    ASSERT_TRUE(xr_win_utf16_to_utf8(wide_leaf, wcslen(wide_leaf), utf8_leaf, sizeof(utf8_leaf)) !=
+                0);
     ASSERT_TRUE(xtc_find_executable("powershell.exe", shell, sizeof(shell)));
     xtc_process_spec_init(&spec, shell, 5000);
     spec.cwd = utf8_dir;
@@ -723,11 +734,10 @@ TEST(process_spawn_preserves_unicode_argv_env_and_cwd) {
     spec.argv[2] = "-NoProfile";
     spec.argv[3] = "-NonInteractive";
     spec.argv[4] = "-Command";
-    spec.argv[5] =
-        "$t='\u53c2\u6570\u503c'+'|'+$env:XRAY_UNICODE_VALUE+'|'+"
-        "(Split-Path -Leaf (Get-Location).Path);"
-        "$u=[Text.UTF8Encoding]::new($false);$b=$u.GetBytes($t);"
-        "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
+    spec.argv[5] = "$t='\u53c2\u6570\u503c'+'|'+$env:XRAY_UNICODE_VALUE+'|'+"
+                   "(Split-Path -Leaf (Get-Location).Path);"
+                   "$u=[Text.UTF8Encoding]::new($false);$b=$u.GetBytes($t);"
+                   "[Console]::OpenStandardOutput().Write($b,0,$b.Length)";
     spec.argv[6] = NULL;
     snprintf(expected, sizeof(expected), "\u53c2\u6570\u503c|\u73af\u5883\u503c|%s", utf8_leaf);
     ASSERT_TRUE(xtc_process_run(&spec, &result, err, sizeof(err)));
@@ -947,6 +957,7 @@ RUN_TEST(zig_native_windows_msvc_keeps_exact_abi_target);
 
 RUN_TEST_SUITE("Toolchain discovery");
 RUN_TEST(find_missing_executable);
+RUN_TEST(windows_auto_discovery_prefers_msvc);
 RUN_TEST(build_tree_runtime_manifest_matches_host_platform);
 RUN_TEST(version_parser_reads_ascii_token_from_arbitrary_bytes);
 RUN_TEST(cross_target_rejects_explicit_host_without_fallback);

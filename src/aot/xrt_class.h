@@ -436,6 +436,14 @@ static inline int xrt_instanceof(XrValue val, uint16_t target_tid) {
     return 0;
 }
 
+static inline void *xrt_checked_instance_ptr(XrValue val, uint16_t target_tid) {
+    if (XR_UNLIKELY(!xrt_instanceof(val, target_tid))) {
+        fprintf(stderr, "xray AOT: expected native class instance\n");
+        abort();
+    }
+    return val.ptr;
+}
+
 static inline XrtMethodFn xrt_itable_method(XrValue val, uint32_t interface_id, uint32_t slot) {
     if (interface_id == 0 || val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr) {
         fprintf(stderr, "xrt_itable_method: receiver is not an interface object\n");

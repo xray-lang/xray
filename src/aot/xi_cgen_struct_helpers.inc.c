@@ -1880,17 +1880,10 @@ static bool emit_struct_aggregate_box_expr(XiCgenCtx *ctx, FILE *out, const XiFu
         tname = tname_buf;
     }
 
-    fprintf(out, "({ %s *_s = (%s*)xrt_arc_alloc(sizeof(%s)); *_s = ", tname, tname, tname);
+    fprintf(out, "xrt_aggregate_clone_bytes(&");
     emit_vref(out, value);
-    fprintf(out, "; ");
-    if (xr_aggregate_layout_header_size(sl) == 0) {
-        fprintf(out, "xr_aggregate_ref(_s, (uint16_t)sizeof(%s)); })", tname);
-    } else {
-        fprintf(out,
-                "_s->_size = (uint32_t)sizeof(%s); _s->_layout = UINT32_C(%" PRIu32 "); "
-                "xr_mkptr(_s, XR_TAG_AGG_REF); })",
-                tname, (uint32_t) cg_struct_layout_hash(sl));
-    }
+    fprintf(out, ", sizeof(%s), UINT32_C(%" PRIu32 "), %d)", tname,
+            (uint32_t) cg_struct_layout_hash(sl), xr_aggregate_layout_header_size(sl) == 0 ? 0 : 1);
     return true;
 }
 

@@ -4706,7 +4706,10 @@ static XaSymbolLinks *xa_module_member_fn_links(XaInferContext *ctx, AstNode *ca
     XaSymbol *member_sym = (XaSymbol *) xr_hashmap_get(exports, ma->name);
     if (!member_sym || member_sym->kind != XA_SYM_FUNCTION)
         return NULL;
-    return xa_analyzer_get_links(ctx->analyzer, member_sym);
+    XaSymbolLinks *member_links = xa_analyzer_get_links(ctx->analyzer, member_sym);
+    if (member_links && !member_links->module_name)
+        member_links->module_name = mod_name;
+    return member_links;
 }
 
 static XaSymbol *xa_module_member_class_symbol(XaInferContext *ctx, AstNode *node) {
@@ -4903,6 +4906,7 @@ typedef struct XaDefaultArgBindCtx {
     XaInferContext *ctx;
     XrHashMap *exports;
     const char *decl_file;
+    const char *module_name;
 } XaDefaultArgBindCtx;
 
 static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, const char *name) {
@@ -4935,6 +4939,9 @@ static void xa_bind_default_arg_export_symbols(AstNode *node, XaDefaultArgBindCt
                 XaSymbol *sym = xa_default_arg_lookup_decl_symbol(bind, node->as.variable.name);
                 if (sym) {
                     node->as.variable.symbol_id = sym->id;
+                    XaSymbolLinks *links = xa_analyzer_get_links(bind->ctx->analyzer, sym);
+                    if (links && !links->module_name && bind->module_name)
+                        links->module_name = bind->module_name;
                     break;
                 }
                 XaSymbol *current = node->as.variable.symbol_id
@@ -5073,6 +5080,7 @@ static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *cal
         .ctx = ctx,
         .exports = decl_exports,
         .decl_file = links->file_path,
+        .module_name = links->module_name,
     };
     for (int i = call->arg_count; i < param_count; i++) {
         new_args[i] = xr_ast_clone_session(links->param_defaults[i], sess);
@@ -5927,11 +5935,16 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 ctx, node, feature,
                 "this builtin depends on hosted conversion, cloning, or debug helpers");
         }
-        fn_sym = xa_lookup_visible_symbol(ctx, fn_name);
-        if (!fn_sym && call->semantic_type_id != 0 && call->callee->as.variable.symbol_id != 0) {
-            fn_sym = xa_scope_lookup_by_id(ctx->analyzer->global_scope,
-                                           call->callee->as.variable.symbol_id);
-        }
+        /* A declaration-context expression (notably a cloned default argument)
+         * can name a symbol that is intentionally not imported into the caller.
+         * Its resolved identity is authoritative; falling back to caller-visible
+         * lookup first makes default semantics depend on unrelated imports. */
+        fn_sym = call->callee->as.variable.symbol_id
+                     ? xa_scope_lookup_by_id(ctx->analyzer->global_scope,
+                                             call->callee->as.variable.symbol_id)
+                     : NULL;
+        if (!fn_sym)
+            fn_sym = xa_lookup_visible_symbol(ctx, fn_name);
         if (fn_sym) {
             fn_links = xa_refresh_imported_symbol_metadata(ctx, fn_sym);
             if (fn_sym->kind == XA_SYM_CLASS)
@@ -6503,7 +6516,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             // Construction `T(args)`: resolve the class in any visible scope
             // (global, enclosing function for nested classes). new-expr used to
             // be the only path that handled non-global classes; unify here.
-            XaSymbol *sym = xa_lookup_visible_symbol(ctx, name);
+            XaSymbol *sym = fn_sym && fn_sym->kind == XA_SYM_CLASS ? fn_sym : NULL;
+            if (!sym)
+                sym = xa_lookup_visible_symbol(ctx, name);
             if (!sym || sym->kind != XA_SYM_CLASS)
                 sym = xa_scope_lookup(ctx->analyzer->global_scope, name);
             if (sym && sym->kind == XA_SYM_CLASS) {
@@ -6578,13 +6593,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                     "Thread handles can only be created by sys.Thread.spawn", &loc);
                 return xr_type_new_error(ctx->analyzer->isolate);
             }
-            XaSymbol *class_sym = xa_lookup_visible_symbol(ctx, class_name);
+            XaSymbol *class_sym = fn_sym && fn_sym->kind == XA_SYM_CLASS ? fn_sym : NULL;
+            if (!class_sym)
+                class_sym = xa_lookup_visible_symbol(ctx, class_name);
             if (!class_sym || class_sym->kind != XA_SYM_CLASS)
                 class_sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
-            if ((!class_sym || class_sym->kind != XA_SYM_CLASS) && call->semantic_type_id != 0 &&
-                fn_sym && fn_sym->kind == XA_SYM_CLASS) {
-                class_sym = fn_sym;
-            }
             if (class_sym && class_sym->kind == XA_SYM_CLASS) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, class_sym);
                 if (links && links->class_info) {

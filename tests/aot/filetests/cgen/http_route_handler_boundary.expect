@@ -1,6 +1,6 @@
 contains=xaot-plan v0
-contains=name=http.routeHandler
-c_regex=void http_[0-9a-f]+_routeHandler_exp\(xrt_closure_t \*_cl, void \* p0, void \* p1, XrValue p2\)
+regex=function [0-9]+ name=routeHandler module=[0-9]+ depth=1 abi=native boundary=none params=4 ret=uint8_t/scalar/bool
+c_regex=XRT_INTERNAL uint8_t http_[0-9a-f]+_Server_routeHandler_m\(xrt_closure_t \*_cl, XrValue p0, void \* p1, void \* p2, XrValue p3\)
 c_not_contains=xrt_typename(
 c_not_contains=xrt_map_set_class_name(_inst, "_RouteHandler")
 c_not_contains=xrt_json_get_name_owned

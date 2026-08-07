@@ -302,7 +302,7 @@ int xray_vm_dostring(XrVMRuntime *isolate, const char *source) {
     if (!prepare_graph_for_dostring(isolate, session, source, &graph_state))
         return -1;
 
-    XrProto *code = xr_compile_source_with_path(session, source, NULL);
+    XrProto *code = xr_compile_source_with_path(session, source, "<eval>");
     if (code == NULL) {
         dostring_graph_cleanup(session, &graph_state);
         fprintf(stderr, "Compilation error\n");

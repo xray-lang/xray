@@ -2176,6 +2176,8 @@ static bool body_owned_local_rebind_is_scalar(XgBodyCollect *bc, const char *nam
         return false;
     symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, symbol_id);
     type = symbol ? xa_analyzer_get_type(bc->producer->analyzer, symbol) : NULL;
+    if (symbol && symbol->kind == XA_SYM_PARAMETER && symbol->passing_mode == XR_PARAM_REF)
+        return false;
     if (!type || type->is_nullable)
         return false;
     switch (type->kind) {

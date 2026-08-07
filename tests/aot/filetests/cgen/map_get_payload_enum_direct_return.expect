@@ -1,1 +1,3 @@
-c_contains=_from_base(xrt_value_to_enum_aggregate(
+c_regex=XrValue v[0-9]+ = xrt_map_get_owned\(
+c_regex=return v[0-9]+;
+c_not_contains=xrt_value_to_enum_aggregate(

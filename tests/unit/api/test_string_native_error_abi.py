@@ -70,6 +70,10 @@ def embedded_native_def(name: str) -> str:
 class StringNativeErrorAbiTest(unittest.TestCase):
     xray: Path
 
+    @staticmethod
+    def normalized_output(output: bytes) -> bytes:
+        return output.replace(b"\r\n", b"\n")
+
     def run_checked(
         self, args: list[str], *, stdout: int = subprocess.PIPE
     ) -> subprocess.CompletedProcess[bytes]:
@@ -170,7 +174,8 @@ class StringNativeErrorAbiTest(unittest.TestCase):
 
     def test_uncaught_invalid_utf8_fails_instead_of_returning_null(self) -> None:
         valid_source = "var valid: Array<u8> = [111, 107]\nprint(string.fromUtf8(valid[:]))"
-        self.assertEqual(self.run_checked([str(self.xray), "-e", valid_source]).stdout, b"ok\n")
+        output = self.run_checked([str(self.xray), "-e", valid_source]).stdout
+        self.assertEqual(self.normalized_output(output), b"ok\n")
 
         self.assert_uncaught_pending_error(
             "var invalid: Array<u8> = [255]\nprint(string.fromUtf8(invalid[:]))\n",
@@ -186,7 +191,9 @@ class StringNativeErrorAbiTest(unittest.TestCase):
         )
 
     def test_vm_native_aot_typed_catch_parity(self) -> None:
-        vm = self.run_checked([str(self.xray), str(FIXTURE)]).stdout
+        vm = self.normalized_output(
+            self.run_checked([str(self.xray), str(FIXTURE)]).stdout
+        )
         self.assertEqual(EXPECTED_OUTPUT, vm)
 
         output_dir = ROOT / "build" / ".xray-test-tmp"
@@ -209,7 +216,7 @@ class StringNativeErrorAbiTest(unittest.TestCase):
                 ],
                 stdout=subprocess.DEVNULL,
             )
-            aot = self.run_checked([str(native)]).stdout
+            aot = self.normalized_output(self.run_checked([str(native)]).stdout)
         finally:
             native.unlink(missing_ok=True)
 

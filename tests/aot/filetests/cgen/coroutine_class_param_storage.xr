@@ -1,0 +1,19 @@
+class Box {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+fn addOne(value: int) -> int {
+    return value + 1
+}
+
+fn readLater(box: Box, enabled: bool) -> int {
+    if (!enabled) { return 0 }
+    const snapshot: Box = copy(box)
+    return await go addOne(snapshot.value)
+}
+
+print(readLater(Box(40), true))

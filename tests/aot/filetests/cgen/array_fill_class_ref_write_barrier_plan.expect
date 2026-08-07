@@ -5,7 +5,7 @@ c_contains=XrValue _fill =
 c_contains=xrt_retain(_fill)
 c_contains=((XrValue*)_a->data)[_idx] = _fill
 c_contains=xrt_release(_old)
-c_contains=XR_NULL_VAL); })).ptr
+c_contains=_portable_inst_
 c_not_contains=memset((uint8_t*)_a->data +
 c_not_contains=memcpy(_a->data
 c_not_contains=xrt_array_fill_value(

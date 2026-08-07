@@ -70,9 +70,9 @@ typedef int bool;
 #define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_NATIVE
 #define XR_ELEM_U8 6
 
-#define XR_BITS_ROTL32(value, count)                                                     \
-    ((uint32_t) (((uint32_t) (value) << ((uint32_t) (count) & UINT32_C(31))) |          \
-                 ((uint32_t) (value) >>                                                  \
+#define XR_BITS_ROTL32(value, count)                                                               \
+    ((uint32_t) (((uint32_t) (value) << ((uint32_t) (count) & UINT32_C(31))) |                     \
+                 ((uint32_t) (value) >>                                                            \
                   ((UINT32_C(32) - ((uint32_t) (count) & UINT32_C(31))) & UINT32_C(31)))))
 
 typedef struct xrt_closure {
@@ -135,6 +135,18 @@ static xr_span_t xrt_c90_span_from_ptr(const void *ptr, int64_t length) {
     return span;
 }
 
+static void *xr_raw_mut_ptr_offset(void *ptr, intptr_t offset, int subtract) {
+    uint8_t *base = (uint8_t *) ptr;
+    XR_ASSUME(base != NULL);
+    return subtract ? (void *) (base - offset) : (void *) (base + offset);
+}
+
+static const void *xr_raw_const_ptr_offset(const void *ptr, intptr_t offset, int subtract) {
+    const uint8_t *base = (const uint8_t *) ptr;
+    XR_ASSUME(base != NULL);
+    return subtract ? (const void *) (base - offset) : (const void *) (base + offset);
+}
+
 static uint8_t xr_raw_load_u8_unaligned(const void *ptr) {
     uint8_t value;
     memcpy(&value, ptr, sizeof(value));
@@ -171,10 +183,8 @@ static int xrt_c90_host_is_little_endian(void) {
 }
 
 static uint32_t xrt_c90_bswap32(uint32_t value) {
-    return ((value & UINT32_C(0x000000ff)) << 24) |
-           ((value & UINT32_C(0x0000ff00)) << 8) |
-           ((value & UINT32_C(0x00ff0000)) >> 8) |
-           ((value & UINT32_C(0xff000000)) >> 24);
+    return ((value & UINT32_C(0x000000ff)) << 24) | ((value & UINT32_C(0x0000ff00)) << 8) |
+           ((value & UINT32_C(0x00ff0000)) >> 8) | ((value & UINT32_C(0xff000000)) >> 24);
 }
 
 static uint64_t xrt_c90_bswap64(uint64_t value) {
@@ -190,7 +200,7 @@ static int xrt_c90_endian_matches_host(int64_t endian) {
 }
 
 static int64_t xrt_byte_slice_load_u32_unchecked_raw(xr_span_t span, int64_t offset,
-                                                      int64_t endian) {
+                                                     int64_t endian) {
     uint32_t value = xrt_c90_load_u32((const uint8_t *) span.data + offset);
     if (!xrt_c90_endian_matches_host(endian))
         value = xrt_c90_bswap32(value);
@@ -202,22 +212,22 @@ static int64_t xrt_byte_slice_load_u32_le_unchecked_raw(xr_span_t span, int64_t 
 }
 
 static int64_t xrt_byte_slice_load_u64_unchecked_raw(xr_span_t span, int64_t offset,
-                                                      int64_t endian) {
+                                                     int64_t endian) {
     uint64_t value = xrt_c90_load_u64((const uint8_t *) span.data + offset);
     if (!xrt_c90_endian_matches_host(endian))
         value = xrt_c90_bswap64(value);
     return (int64_t) value;
 }
 
-static void xrt_byte_slice_store_u32_unchecked_raw(xr_span_t span, int64_t offset,
-                                                    uint32_t value, int64_t endian) {
+static void xrt_byte_slice_store_u32_unchecked_raw(xr_span_t span, int64_t offset, uint32_t value,
+                                                   int64_t endian) {
     if (!xrt_c90_endian_matches_host(endian))
         value = xrt_c90_bswap32(value);
     xrt_c90_store_u32((uint8_t *) span.data + offset, value);
 }
 
-static void xrt_byte_slice_store_u64_unchecked_raw(xr_span_t span, int64_t offset,
-                                                    uint64_t value, int64_t endian) {
+static void xrt_byte_slice_store_u64_unchecked_raw(xr_span_t span, int64_t offset, uint64_t value,
+                                                   int64_t endian) {
     if (!xrt_c90_endian_matches_host(endian))
         value = xrt_c90_bswap64(value);
     xrt_c90_store_u64((uint8_t *) span.data + offset, value);
@@ -238,8 +248,8 @@ static void xrt_fixed_index_oob(int64_t index, int64_t length) {
     xrt_index_oob(index, length);
 }
 
-static xr_span_t xrt_c90_span_window_unchecked(xr_span_t source, int64_t start,
-                                                int64_t count, size_t element_size) {
+static xr_span_t xrt_c90_span_window_unchecked(xr_span_t source, int64_t start, int64_t count,
+                                               size_t element_size) {
     xr_span_t result;
     result.data = source.data;
     if (count > 0)
@@ -249,7 +259,7 @@ static xr_span_t xrt_c90_span_window_unchecked(xr_span_t source, int64_t start,
 }
 
 static xr_span_t xrt_c90_span_window(xr_span_t source, int64_t start, int64_t count,
-                                      size_t element_size) {
+                                     size_t element_size) {
     if (source.length < 0 || start < 0 || count < 0 || start > source.length ||
         count > source.length - start || (count > 0 && source.data == NULL))
         xrt_index_oob(start, source.length);
@@ -277,7 +287,7 @@ static void xrt_c90_span_u8_set(xr_span_t span, int64_t index, uint8_t value) {
 }
 
 static void xrt_c90_fixed_u8_set_unchecked(uint8_t *data, int64_t length, int64_t index,
-                                            uint8_t value) {
+                                           uint8_t value) {
     (void) length;
     data[index] = value;
 }

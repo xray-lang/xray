@@ -249,8 +249,8 @@ static bool xtc_windows_find_vswhere(char *out, size_t out_size) {
     char candidate[1200];
     int written = snprintf(candidate, sizeof(candidate),
                            "%s/Microsoft Visual Studio/Installer/vswhere.exe", program_files);
-    return written >= 0 && (size_t) written < sizeof(candidate) &&
-           xtc_is_executable(candidate) && xtc_copy_canonical_path(candidate, out, out_size);
+    return written >= 0 && (size_t) written < sizeof(candidate) && xtc_is_executable(candidate) &&
+           xtc_copy_canonical_path(candidate, out, out_size);
 }
 
 static bool xtc_windows_safe_batch_path(const char *path) {
@@ -291,7 +291,7 @@ static bool xtc_windows_apply_msvc_environment(const XrProcessByteBuffer *output
                 bool mirrored = key_size > 0 && (size_t) key_size <= sizeof(key) && utf8_value &&
                                 xr_win_utf16_to_utf8(line, wcslen(line), key, sizeof(key)) != 0 &&
                                 xr_win_utf16_to_utf8(value, wcslen(value), utf8_value,
-                                                    (size_t) value_size) != 0 &&
+                                                     (size_t) value_size) != 0 &&
                                 _putenv_s(key, utf8_value) == 0;
                 free(utf8_value);  // xr:allow-raw-alloc
                 if (!SetEnvironmentVariableW(line, value) || !mirrored) {
@@ -336,8 +336,7 @@ static bool xtc_windows_activate_latest_msvc(void) {
     if (!xtc_process_run(&spec, &result, err, sizeof(err)))
         return false;
     bool ok = !result.timed_out && result.exit_code == 0 &&
-              xtc_process_copy_utf8_line(&result.stdout_bytes, installation,
-                                         sizeof(installation));
+              xtc_process_copy_utf8_line(&result.stdout_bytes, installation, sizeof(installation));
     xtc_process_result_free(&result);
     if (!ok ||
         snprintf(script, sizeof(script), "%s/Common7/Tools/VsDevCmd.bat", installation) < 0 ||
@@ -367,8 +366,8 @@ static bool xtc_windows_activate_latest_msvc(void) {
 
 static void xtc_windows_add_msvc(const char *requested, XrToolchainCandidates *out) {
     if (requested && requested[0]) {
-        (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_MSVC,
-                                  XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, requested);
+        (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_MSVC, XR_TOOLCHAIN_OWNERSHIP_EXTERNAL,
+                                  requested);
         return;
     }
 
@@ -384,8 +383,8 @@ static void xtc_windows_add_msvc(const char *requested, XrToolchainCandidates *o
     const char *lib = getenv("LIB");
     if (!include || !include[0] || !lib || !lib[0])
         (void) xtc_windows_activate_latest_msvc();
-    (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_MSVC,
-                              XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, "cl");
+    (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_MSVC, XR_TOOLCHAIN_OWNERSHIP_EXTERNAL,
+                              "cl");
 }
 #endif
 
@@ -479,9 +478,9 @@ XR_FUNC bool xtc_discover_candidates(const XrToolchainRequest *request, XrToolch
     (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_LLVM_CLANG,
                               XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, "cc");
 #elif defined(XR_OS_WINDOWS)
+    xtc_windows_add_msvc(NULL, out);
     (void) xtc_candidates_add(out, XR_TOOLCHAIN_PROVIDER_LLVM_CLANG,
                               XR_TOOLCHAIN_OWNERSHIP_EXTERNAL, "clang");
-    xtc_windows_add_msvc(NULL, out);
 #endif
 
     if (request->selector == XR_TOOLCHAIN_SELECTOR_AUTO)

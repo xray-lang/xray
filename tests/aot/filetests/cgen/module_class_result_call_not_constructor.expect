@@ -1,0 +1,4 @@
+contains=xaot-plan v0
+c_syntax=pass
+c_regex=XrValue v[0-9]+ = ws_[0-9a-f]+_parseUpgradeResponse_exp
+c_not_regex=_portable_map_inst_[0-9]+ = ws_[0-9a-f]+_parseUpgradeResponse_exp

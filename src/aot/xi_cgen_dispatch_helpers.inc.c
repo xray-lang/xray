@@ -4196,19 +4196,15 @@ static void xicgen_assert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
     XR_DCHECK(v->nargs >= 1, "xicgen_assert: need cond");
     const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
     bool invert = (v->aux_int == 1);
-    fprintf(out, "({ bool _xr_assert_ok = %s(", invert ? "!" : "");
+    fprintf(out, "(%s(", invert ? "!" : "");
     xicgen_emit_assert_condition(ctx, out, v->args[0]);
-    fprintf(out, "); if (XR_UNLIKELY(!_xr_assert_ok)) { ");
+    fprintf(out, ") ? XR_NULL_VAL : (");
     if (ctx && ctx->freestanding_profile) {
-        fprintf(out,
-                "xrt_freestanding_trap(\"Assertion failed%s: %s\"); } "
-                "XR_ASSUME(_xr_assert_ok); XR_NULL_VAL; })",
+        fprintf(out, "xrt_freestanding_trap(\"Assertion failed%s: %s\"), XR_NULL_VAL))",
                 invert ? " (expected false)" : "", loc);
         return;
     }
-    fprintf(out,
-            "fprintf(stderr, \"Assertion failed%s: %s\\n\"); abort(); } "
-            "XR_ASSUME(_xr_assert_ok); XR_NULL_VAL; })",
+    fprintf(out, "fprintf(stderr, \"Assertion failed%s: %s\\n\"), abort(), XR_NULL_VAL))",
             invert ? " (expected false)" : "", loc);
 }
 
@@ -5228,6 +5224,7 @@ static bool xicgen_slice_value_only_used_by_stack_slice_direct_call(XiCgenCtx *c
 static void emit_vararg_rest_expr_values(XiCgenCtx *ctx, FILE *out, uint32_t site_id,
                                          XiValue *const *args, uint16_t nargs, const XiFunc *target,
                                          uint16_t arg_start) {
+    (void) site_id;
     uint16_t fixed = target->nparams;
     const XrType *rest_type =
         (target->params && target->params[fixed]) ? target->params[fixed]->type : NULL;
@@ -5235,34 +5232,46 @@ static void emit_vararg_rest_expr_values(XiCgenCtx *ctx, FILE *out, uint32_t sit
     CgArrayElemInfo rest_elem;
     bool rest_typed = cg_array_elem_info_from_type_ctx(ctx, rest_type, &rest_elem) &&
                       rest_elem.rep != XR_REP_TAGGED && rest_elem.ctype;
+    int64_t rest_count = (int64_t) nargs - (int64_t) arg_start - (int64_t) fixed;
+    if (rest_count < 0)
+        rest_count = 0;
     if (rest_typed) {
-        int64_t rest_count = (int64_t) nargs - (int64_t) arg_start - (int64_t) fixed;
-        if (rest_count < 0)
-            rest_count = 0;
-        fprintf(out, "({ xrt_array_t *_va%u = xrt_array_new_typed_ptr(%" PRId64 ", %s); ", site_id,
-                rest_count, rest_elem.elem_name);
-        int64_t idx = 0;
-        for (uint16_t a = (uint16_t) (arg_start + fixed); a < nargs; a++, idx++) {
-            fprintf(out, "((%s*)_va%u->data)[%" PRId64 "] = (%s)", rest_elem.ctype, site_id, idx,
-                    rest_elem.ctype);
-            emit_value_as_rep_ctx(ctx, out, args[a], rest_elem.rep);
-            fprintf(out, "; ");
-        }
         const char *rest_suffix = emit_conversion_prefix(out, rest_type, XR_REP_PTR, rest_rep);
-        fprintf(out, "_va%u", site_id);
-        emit_conversion_suffix(out, rest_suffix);
-        fprintf(out, "; })");
-    } else {
-        fprintf(out, "({ XrValue _va%u = xrt_array_new(0); ", site_id);
-        for (uint16_t a = (uint16_t) (arg_start + fixed); a < nargs; a++) {
-            fprintf(out, "xrt_array_push(_va%u, ", site_id);
-            emit_value_as_rep_ctx(ctx, out, args[a], XR_REP_TAGGED);
-            fprintf(out, "); ");
+        fprintf(out, "xrt_array_new_typed_copy(%" PRId64 ", %s, ", rest_count, rest_elem.elem_name);
+        if (rest_count == 0) {
+            fprintf(out, "NULL");
+        } else {
+            fprintf(out, "(const %s[]){", rest_elem.ctype);
+            bool first = true;
+            for (uint16_t a = (uint16_t) (arg_start + fixed); a < nargs; a++) {
+                if (!first)
+                    fprintf(out, ", ");
+                first = false;
+                fprintf(out, "(%s)", rest_elem.ctype);
+                emit_value_as_rep_ctx(ctx, out, args[a], rest_elem.rep);
+            }
+            fprintf(out, "}");
         }
-        const char *rest_suffix = emit_conversion_prefix(out, rest_type, XR_REP_TAGGED, rest_rep);
-        fprintf(out, "_va%u", site_id);
+        fprintf(out, ")");
         emit_conversion_suffix(out, rest_suffix);
-        fprintf(out, "; })");
+    } else {
+        const char *rest_suffix = emit_conversion_prefix(out, rest_type, XR_REP_TAGGED, rest_rep);
+        fprintf(out, "xrt_array_from_values(%" PRId64 ", ", rest_count);
+        if (rest_count == 0) {
+            fprintf(out, "NULL");
+        } else {
+            fprintf(out, "(const XrValue[]){");
+            bool first = true;
+            for (uint16_t a = (uint16_t) (arg_start + fixed); a < nargs; a++) {
+                if (!first)
+                    fprintf(out, ", ");
+                first = false;
+                emit_value_as_rep_ctx(ctx, out, args[a], XR_REP_TAGGED);
+            }
+            fprintf(out, "}");
+        }
+        fprintf(out, ")");
+        emit_conversion_suffix(out, rest_suffix);
     }
 }
 
@@ -5776,17 +5785,19 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                                                      cg_value_plan_storage_rep(ctx, v));
             if (span_result)
                 fprintf(out, "xrt_span_from_value_ref(");
-            fprintf(out, "({ xrt_closure_t *_icl = (xrt_closure_t *)");
-            emit_value_as_rep(out, callee, XR_REP_TAGGED);
-            fprintf(out, ".ptr; ((XrValue (*)(xrt_closure_t *");
+            fprintf(out, "((XrValue (*)(xrt_closure_t *");
             for (uint16_t a = 1; a < v->nargs; a++)
                 fprintf(out, ", XrValue");
-            fprintf(out, ")) _icl->callable->sync_entry)(_icl");
+            fprintf(out, ")) ((xrt_closure_t *)");
+            emit_value_as_rep(out, callee, XR_REP_TAGGED);
+            fprintf(out, ".ptr)->callable->sync_entry)((xrt_closure_t *)");
+            emit_value_as_rep(out, callee, XR_REP_TAGGED);
+            fprintf(out, ".ptr");
             for (uint16_t a = 1; a < v->nargs; a++) {
                 fprintf(out, ", ");
                 emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
             }
-            fprintf(out, "); })");
+            fprintf(out, ")");
             if (span_result)
                 fprintf(out, ")");
             emit_conversion_suffix(out, conv_suffix);
@@ -6533,7 +6544,7 @@ static XrRep xicgen_value_c_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const X
     if (ctx && f && !cg_func_needs_aot_coro_ctx(ctx, f) &&
         cg_array_value_uses_native_local(ctx, f, v))
         return XR_REP_PTR;
-    return cg_value_plan_storage_rep(ctx, v);
+    return cg_emitted_value_storage_rep(ctx, v, cg_value_plan(ctx, v));
 }
 
 static void xicgen_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -6790,7 +6801,13 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
          * Consume the verified value plan here so the representation boundary
          * is explicit (for example PTR -> xrt_box_obj) instead of emitting an
          * ill-typed C initializer. */
-        emit_value_as_rep_ctx(ctx, out, v->args[0], cg_value_plan_storage_rep(ctx, v));
+        XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
+        const char *suffix =
+            emit_conversion_prefix_ctx(ctx, out, v->type, XR_REP_TAGGED, target_rep);
+        fprintf(out, "xrt_retain_identity(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
         return;
     }
 
@@ -6827,17 +6844,12 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
         }
     }
 
-    fprintf(out, "({ XrValue _as = ");
+    XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
+    const char *suffix = emit_conversion_prefix_ctx(ctx, out, v->type, XR_REP_TAGGED, target_rep);
+    fprintf(out, "xrt_as_owned(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, "; xrt_value_is_type_id(_as, %" PRId32 ") ? _as : ", tid);
-    if (is_safe) {
-        fprintf(out, "XR_NULL_VAL; })");
-    } else {
-        /* Unsafe `as` mismatch: same TypeError shape (message + code 404) as the
-         * VM OP_CHECKTYPE path via the shared runtime helper. */
-        fprintf(out, "(xrt_throw_type_mismatch(%" PRId32 ", xrt_typeof_id(_as)), XR_NULL_VAL); })",
-                tid);
-    }
+    fprintf(out, ", %" PRId32 ", %d)", tid, is_safe ? 1 : 0);
+    emit_conversion_suffix(out, suffix);
 }
 
 static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -6971,6 +6983,80 @@ static void xicgen_slice(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
     fprintf(out, ")");
+}
+
+static bool xicgen_emit_slice_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix) {
+    (void) prefix;
+    if (!ctx || !out || !f || !v || v->op != XI_SLICE || v->nargs < 3 ||
+        !cg_value_plan_is_span_aggregate(ctx, v) || ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
+        return false;
+
+    if (!ctx->pre_decl_all) {
+        fprintf(out, "    xr_span_t ");
+        emit_vref(out, v);
+        fprintf(out, ";\n");
+    }
+
+    const XiValue *source = cg_unwrap_identity_value(v->args[0]);
+    CgFixedArrayLaneInfo fixed;
+    const XiModule *static_module = NULL;
+    int64_t static_slot = -1;
+    int64_t start = 0;
+    int64_t end = 0;
+    bool static_source =
+        cg_static_fixed_array_value_ex(ctx, source, &fixed, &static_slot, &static_module);
+    bool full_fixed = source &&
+                      (static_source || cg_fixed_array_lane_info_from_value(source, &fixed)) &&
+                      fixed.ctype && cg_const_int_value(v->args[1], &start) &&
+                      cg_const_int_value(v->args[2], &end) && start == 0 &&
+                      (end == INT64_MAX || end == (int64_t) fixed.count);
+
+    fprintf(out, "    {\n");
+    if (full_fixed) {
+        fprintf(out, "        ");
+        emit_vref(out, v);
+        fprintf(out, ".data = (void *)(");
+        if (static_source)
+            cg_emit_static_fixed_array_name(ctx, out, static_module, static_slot);
+        else
+            emit_value_as_rep_ctx(ctx, out, source, XR_REP_RAWPTR);
+        fprintf(out, ");\n        ");
+        emit_vref(out, v);
+        fprintf(out, ".length = INT64_C(%u);\n", (unsigned) fixed.count);
+    } else {
+        fprintf(out, "        XrValue _xr_slice_start = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ";\n        XrValue _xr_slice_end = ");
+        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ";\n        if (!XR_IS_INT(_xr_slice_start) || !XR_IS_INT(_xr_slice_end)) "
+                     "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
+                     "XR_ERROR_CORE_SLICE_BOUNDS_EXPECTS_MSG);\n        ");
+        emit_vref(out, v);
+        fprintf(out, " = ");
+        if (cg_value_plan_is_span_aggregate(ctx, v->args[0])) {
+            CgArrayElemInfo elem;
+            if (!cg_span_elem_info_from_value(ctx, v->args[0], &elem) || !elem.ctype) {
+                cg_ctx_set_error(ctx);
+                fprintf(out, "(xr_span_t){0};\n    }\n");
+                return true;
+            }
+            fprintf(out, "xrt_span_from_span_slice(");
+            emit_vref(out, v->args[0]);
+            fprintf(out,
+                    ", XR_TO_INT(_xr_slice_start), XR_TO_INT(_xr_slice_end), "
+                    "(uint16_t)sizeof(%s));\n",
+                    elem.ctype);
+        } else {
+            fprintf(out, "xrt_span_from_array_slice(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ", XR_TO_INT(_xr_slice_start), XR_TO_INT(_xr_slice_end));\n");
+        }
+    }
+    fprintf(out, "    }\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, f, v);
+    return true;
 }
 
 static void xicgen_slice_from_ptr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -8545,6 +8631,110 @@ static bool xicgen_emit_planned_type_switch_method(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, "XR_NULL_VAL; })");
     else
         fprintf(out, "_xr_ts_result_%u; })", v->id);
+    return true;
+}
+
+static bool xicgen_emit_planned_type_switch_method_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                        const XiValue *v, const char *prefix) {
+    if (!ctx || !out || !f || !v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT))
+        return false;
+    const XaotMethodDispatchPlan *dispatch_plan =
+        xaot_bundle_find_method_dispatch_plan_for_xi_call(cg_ctx_aot_bundle(ctx), v);
+    if (!dispatch_plan || dispatch_plan->kind != XAOT_DISPATCH_TYPE_SWITCH ||
+        dispatch_plan->receiver_static_interface_id == XG_NO_ID)
+        return false;
+
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
+    if (!xaot_backend_dispatch_plan_target_range_valid(bundle, dispatch_plan, &issue)) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: verified AOT type-switch dispatch plan at line %u has no "
+                "target cases\n",
+                (unsigned) v->line);
+        fprintf(out, "    ");
+        emit_codegen_abort_expr(out);
+        fprintf(out, ";\n");
+        return true;
+    }
+
+    bool void_like = cg_is_void_like(v);
+    fprintf(out, "    XrValue _xr_ts_recv_%u = ", v->id);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ";\n");
+    if (!void_like) {
+        if (ctx->pre_decl_all) {
+            fprintf(out, "    memset(&");
+            emit_vref(out, v);
+            fprintf(out, ", 0, sizeof(");
+            emit_vref(out, v);
+            fprintf(out, "));\n");
+        } else {
+            fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+            emit_vref(out, v);
+            fprintf(out, ";\n    memset(&");
+            emit_vref(out, v);
+            fprintf(out, ", 0, sizeof(");
+            emit_vref(out, v);
+            fprintf(out, "));\n");
+        }
+    }
+
+    for (uint16_t i = 0; i < dispatch_plan->target_count; i++) {
+        const XaotDispatchTargetCase *target =
+            &bundle->dispatch_target_cases[dispatch_plan->target_start - 1 + i];
+        const XiClassData *target_class =
+            xicgen_find_dispatch_class_data(ctx, bundle, target->receiver_class_id);
+        const char *target_prefix = NULL;
+        const XiFunc *target_func =
+            xaot_bundle_find_dispatch_target_func(bundle, target, &target_prefix);
+        if (!target_class || !target_func) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: verified AOT type-switch target %u/%u for method '%s' at "
+                    "line %u has no Xi class/function\n",
+                    (unsigned) target->receiver_class_id, (unsigned) target->method_id,
+                    v->aux ? (const char *) v->aux : "?", (unsigned) v->line);
+            fprintf(out, "    ");
+            emit_codegen_abort_expr(out);
+            fprintf(out, ";\n");
+            return true;
+        }
+        fprintf(out, "    %s (xrt_instanceof(_xr_ts_recv_%u, (uint16_t)", i == 0 ? "if" : "else if",
+                v->id);
+        if (!emit_class_native_type_id_expr(ctx, out, target_class)) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: verified AOT type-switch class %u for method '%s' at line "
+                    "%u has no native type id\n",
+                    (unsigned) target->receiver_class_id, v->aux ? (const char *) v->aux : "?",
+                    (unsigned) v->line);
+            emit_codegen_abort_expr(out);
+            fprintf(out, ";\n");
+            return true;
+        }
+        fprintf(out, ")) {\n        ");
+        if (void_like) {
+            fprintf(out, "(void)(");
+        } else {
+            emit_vref(out, v);
+            fprintf(out, " = ");
+        }
+        if (!xicgen_emit_direct_method(ctx, out, f, v, prefix, target_func, target_prefix)) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            fprintf(out, ";\n");
+            return true;
+        }
+        fprintf(out, void_like ? ");\n    }\n" : ";\n    }\n");
+    }
+    fprintf(out, "    else {\n"
+                 "        fprintf(stderr, \"xray AOT: verified interface type-switch dispatch "
+                 "missed\\n\");\n"
+                 "        abort();\n"
+                 "    }\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, f, v);
     return true;
 }
 
@@ -10868,21 +11058,20 @@ static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc
     return xicgen_emit_resolved_user_constructor(ctx, out, f, v, prefix, ctor, call_prefix, NULL);
 }
 
-/* Map-shaped class construction used to be emitted only as a GNU statement
- * expression.  Hosted fragments are consumed by the target C compiler, so
- * materialize the same operation as ordinary statements with a site-unique
- * temporary.  Native-layout classes are handled by the earlier native
- * constructor statement lowering. */
-static bool emit_hosted_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                  const char *prefix, const XiValue *v) {
-    if (!ctx || ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT || !out || !f || !v ||
-        v->op != XI_CALL || v->nargs == 0)
+/* Map-shaped class construction has ordered allocation and initialization
+ * effects. Materialize it as ordinary C11 statements for every artifact;
+ * native-layout classes are handled by the earlier native constructor path. */
+static bool emit_portable_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                    const char *prefix, const XiValue *v) {
+    if (!ctx || !out || !f || !v || (v->op != XI_CALL && v->op != XI_CALL_METHOD) || v->nargs == 0)
         return false;
 
     const XiFunc *ctor = NULL;
     const XiClassData *class_data = NULL;
     const char *call_prefix = NULL;
-    CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+    CgStaticFunctionCall call =
+        v->op == XI_CALL ? cg_resolve_static_function_call(ctx, f, v->args[0])
+                         : cg_resolve_module_member_call(ctx, f, v, (const char *) v->aux);
     if (call.is_class_constructor) {
         ctor = call.func;
         class_data = call.class_data;
@@ -10891,12 +11080,15 @@ static bool emit_hosted_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, con
         class_data = xicgen_shared_class_data(ctx, v->args[0]);
         if (class_data) {
             ctor = xicgen_find_constructor_for_class_data(ctx, f, class_data, &call_prefix);
-        } else if (!xicgen_resolve_direct_class_ctor(f, v->args[0], &ctor)) {
-            /* A normal function may return a class.  Its result type alone is
-             * not evidence that the call itself is a constructor. */
-            return false;
-        } else {
+        } else if (xicgen_resolve_direct_class_ctor(f, v->args[0], &ctor)) {
             call_prefix = cg_module_prefix_for_func(ctx, ctor);
+        } else {
+            /* A class-typed result does not make a call a constructor.  Factory,
+             * parser and forwarding functions routinely return class values;
+             * guessing their constructor from the result type changes both the
+             * callee and the ABI.  Require identity from the resolved call,
+             * shared class value or direct class-create operand above. */
+            return false;
         }
     }
     if (!ctor && class_data)
@@ -10905,29 +11097,31 @@ static bool emit_hosted_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, con
         return false;
     if (!class_data)
         class_data = cg_class_data_for_type_name(ctx, v->type);
-    if (!class_data || class_data->instance_layout)
+    if (!class_data && ctor)
+        class_data = cg_class_data_for_type_name(ctx, ctor->return_type);
+    if (ctor && cg_class_native_func(ctx, ctor).layout)
         return false;
 
     const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
-    if (!class_name)
+    if (!class_name && class_data)
         class_name = class_data->class_name ? class_data->class_name : class_data->display_name;
     if (!class_name)
         return false;
 
-    fprintf(out, "    XrValue _hosted_map_inst_%u = xrt_map_new(4);\n", v->id);
-    fprintf(out, "    xrt_map_set_class_name(_hosted_map_inst_%u, ", v->id);
+    fprintf(out, "    XrValue _portable_map_inst_%u = xrt_map_new(4);\n", v->id);
+    fprintf(out, "    xrt_map_set_class_name(_portable_map_inst_%u, ", v->id);
     xicgen_emit_c_string_literal(out, class_name);
     fprintf(out, ");\n");
-    if (cg_class_native_has_field_defaults(ctx, class_data)) {
+    if (class_data && cg_class_native_has_field_defaults(ctx, class_data)) {
         char inst[48];
-        snprintf(inst, sizeof(inst), "_hosted_map_inst_%u", v->id);
+        snprintf(inst, sizeof(inst), "_portable_map_inst_%u", v->id);
         fprintf(out, "    ");
         emit_class_map_field_default_stores(ctx, out, class_data, inst);
         fprintf(out, "\n");
     }
     fprintf(out, "    (void)");
     emit_fname(ctx, out, call_prefix ? call_prefix : prefix, ctor);
-    fprintf(out, "(NULL, _hosted_map_inst_%u", v->id);
+    fprintf(out, "(NULL, _portable_map_inst_%u", v->id);
     for (uint16_t a = 1; a < v->nargs; a++) {
         fprintf(out, ", ");
         emit_value_as_direct_call_arg(ctx, out, f, v, ctor, a, v->args[a]);
@@ -10935,7 +11129,7 @@ static bool emit_hosted_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, con
     fprintf(out, ");\n");
     uint8_t storage_mode = xi_value_allocation_storage_mode(v);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
-        fprintf(out, "    (void)xrt_value_set_storage(_hosted_map_inst_%u, %u);\n", v->id,
+        fprintf(out, "    (void)xrt_value_set_storage(_portable_map_inst_%u, %u);\n", v->id,
                 (unsigned) storage_mode);
 
     if (ctx->pre_decl_all) {
@@ -10949,7 +11143,7 @@ static bool emit_hosted_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, con
     }
     XrRep target_rep = cg_value_decl_storage_rep(ctx, f, v);
     const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
-    fprintf(out, "_hosted_map_inst_%u", v->id);
+    fprintf(out, "_portable_map_inst_%u", v->id);
     emit_conversion_suffix(out, suffix);
     fprintf(out, ";\n");
     emit_value_generated_line_reset(ctx, out, v);
@@ -11374,6 +11568,30 @@ static void emit_one_class_native_type_register_helper(XiCgenCtx *ctx, FILE *out
     fprintf(out, "\n    return XR_FROM_INT(_tid);\n}\n");
 }
 
+static bool cg_func_needs_class_native_type_register_helper(XiCgenCtx *ctx, const XiFunc *func,
+                                                            const XiClassData *cd) {
+    if (!ctx || !func || !cd)
+        return false;
+    for (uint16_t ci = 0; ci < func->nchildren; ci++) {
+        if (cg_func_needs_class_native_type_register_helper(ctx, func->children[ci], cd))
+            return true;
+    }
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_CLASS_CREATE || !value->aux ||
+                !cg_class_native_data_matches((const XiClassData *) value->aux, cd))
+                continue;
+            if (!cg_class_descriptor_create_is_elided(ctx, func, value))
+                return true;
+        }
+    }
+    return false;
+}
+
 static void emit_class_native_type_register_helpers(XiCgenCtx *ctx, FILE *out, XiModule *module,
                                                     const char *prefix) {
     if (!module || !module->classes)
@@ -11382,7 +11600,9 @@ static void emit_class_native_type_register_helpers(XiCgenCtx *ctx, FILE *out, X
         /* A value aggregate has no runtime type identity, so the helper that
          * registers one is dead output -- one per struct, and invisible while
          * the generated unit suppressed -Wunused-function wholesale. */
-        if (module->classes[ci] && !module->classes[ci]->needs_runtime_type)
+        if (module->classes[ci] && (!module->classes[ci]->needs_runtime_type ||
+                                    !cg_func_needs_class_native_type_register_helper(
+                                        ctx, module->init, module->classes[ci])))
             continue;
         emit_one_class_native_type_register_helper(ctx, out, module->classes[ci], prefix);
     }
@@ -16626,20 +16846,25 @@ static const XiValue *xicgen_find_par_for_unsupported_body_value(XiCgenCtx *ctx,
     return xicgen_find_par_for_unsupported_body_value_depth(ctx, body, stack, 0);
 }
 
-static void xicgen_par_reduce_emit_abort_expr(XiCgenCtx *ctx, FILE *out) {
-    if (ctx)
-        ctx->error = true;
-    fprintf(out, "(abort(), INT64_C(0))");
-}
-
 static void xicgen_par_reduce_emit_abort_value(XiCgenCtx *ctx, FILE *out, const char *agg_ctype) {
     if (ctx)
         ctx->error = true;
     if (agg_ctype && agg_ctype[0]) {
-        fprintf(out, "({ abort(); ((%s){0}); })", agg_ctype);
+        fprintf(out, "(abort(), (%s){0})", agg_ctype);
         return;
     }
     fprintf(out, "(abort(), INT64_C(0))");
+}
+
+static void xicgen_par_emit_abort(XiCgenCtx *ctx, FILE *out, bool as_statement,
+                                  const char *agg_ctype) {
+    if (as_statement) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(out, "    abort();\n");
+        return;
+    }
+    xicgen_par_reduce_emit_abort_value(ctx, out, agg_ctype);
 }
 
 static const char *xicgen_type_label_noalloc(const XrType *type) {
@@ -16914,10 +17139,10 @@ static void xicgen_par_reduce_emit_serial_agg_int64max(XiCgenCtx *ctx, FILE *out
 }
 
 static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                              const char *prefix) {
+                              const char *prefix, bool as_statement) {
     if (!ctx || !out || !f || !v || v->nargs < 6 || v->aux_kind != XI_AUX_KIND_PAR_REDUCE ||
         !v->aux) {
-        xicgen_par_reduce_emit_abort_expr(ctx, out);
+        xicgen_par_emit_abort(ctx, out, as_statement, NULL);
         return;
     }
 
@@ -16925,7 +17150,7 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     const XiFunc *body = data->body_func;
     const XiFunc *combine = data->combine_func;
     if (data->plan_state && v->nargs < 7) {
-        xicgen_par_reduce_emit_abort_expr(ctx, out);
+        xicgen_par_emit_abort(ctx, out, as_statement, NULL);
         return;
     }
     bool i64_accumulator = xicgen_par_reduce_value_has_i64_accumulator(v);
@@ -16934,7 +17159,7 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     if (data->range_body && data->inclusive_end) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: parallel.reduce range-body AOT requires an exclusive range\n");
-        xicgen_par_reduce_emit_abort_value(ctx, out, agg_ctype);
+        xicgen_par_emit_abort(ctx, out, as_statement, agg_ctype);
         return;
     }
     if (!i64_accumulator && !struct_accumulator) {
@@ -16942,7 +17167,7 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
                 "[xi_cgen] ERROR: parallel.reduce AOT supports only native int or native struct "
                 "accumulators; accumulator type '%s' is not native-reducible yet\n",
                 xicgen_type_label_noalloc(data->accumulator_type));
-        xicgen_par_reduce_emit_abort_value(ctx, out, agg_ctype);
+        xicgen_par_emit_abort(ctx, out, as_statement, agg_ctype);
         return;
     }
     uint16_t expected_body_params = data->plan_state ? 3 : (data->range_body ? 3 : 2);
@@ -16957,14 +17182,14 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         (struct_accumulator && !agg_ctype) ||
         !xicgen_par_reduce_validate_nothrow_body(ctx, body, "body") ||
         !xicgen_par_reduce_validate_nothrow_body(ctx, combine, "combine")) {
-        xicgen_par_reduce_emit_abort_value(ctx, out, agg_ctype);
+        xicgen_par_emit_abort(ctx, out, as_statement, agg_ctype);
         return;
     }
     if (combine->ncaptures != 0) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: parallel.reduce AOT combine cannot capture values yet: '%s'\n",
                 combine->name ? combine->name : "?");
-        xicgen_par_reduce_emit_abort_value(ctx, out, agg_ctype);
+        xicgen_par_emit_abort(ctx, out, as_statement, agg_ctype);
         return;
     }
 
@@ -16973,7 +17198,7 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     scoped_closure_name[0] = '\0';
     const char *aot_ctx_expr = xicgen_aot_context_expr(ctx, f);
 
-    fprintf(out, "({\n");
+    fprintf(out, as_statement ? "    {\n" : "({\n");
     fprintf(out, "        int64_t _xr_pr_start_%u = ", v->id);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
     fprintf(out, ";\n");
@@ -17147,6 +17372,10 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         }
     }
     fprintf(out, "        ");
+    if (as_statement) {
+        emit_vref(out, v);
+        fprintf(out, " = ");
+    }
     if (struct_accumulator) {
         fprintf(out, "_xr_pr_out_%u", v->id);
     } else {
@@ -17157,7 +17386,7 @@ static void xicgen_par_reduce(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, "_xr_pr_out_%u", v->id);
     }
     fprintf(out, ";\n");
-    fprintf(out, "    })");
+    fprintf(out, as_statement ? "    }\n" : "    })");
 }
 
 static void xicgen_par_map_emit_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -17219,9 +17448,9 @@ static void xicgen_par_map_emit_serial_exclusive(XiCgenCtx *ctx, FILE *out, cons
 }
 
 static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                           const char *prefix) {
+                           const char *prefix, bool as_statement) {
     if (!ctx || !out || !f || !v || v->nargs < 4 || v->aux_kind != XI_AUX_KIND_PAR_MAP || !v->aux) {
-        xicgen_par_reduce_emit_abort_expr(ctx, out);
+        xicgen_par_emit_abort(ctx, out, as_statement, NULL);
         return;
     }
 
@@ -17237,17 +17466,17 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             cg_func_param_abi_rep(ctx, body, 1) != XR_REP_I64 ||
             (range_body && cg_func_param_abi_rep(ctx, body, 2) != XR_REP_I64) ||
             !xicgen_par_reduce_validate_nothrow_body(ctx, body, "map lane body")) {
-            xicgen_par_reduce_emit_abort_expr(ctx, out);
+            xicgen_par_emit_abort(ctx, out, as_statement, NULL);
             return;
         }
         if (range_body && data->inclusive_end) {
             fprintf(stderr, "[xi_cgen] ERROR: parallel.map direct-lane initializer AOT requires an "
                             "exclusive range\n");
-            xicgen_par_reduce_emit_abort_expr(ctx, out);
+            xicgen_par_emit_abort(ctx, out, as_statement, NULL);
             return;
         }
 
-        fprintf(out, "({\n");
+        fprintf(out, as_statement ? "    {\n" : "({\n");
         fprintf(out, "        int64_t _xr_pm_start_%u = ", v->id);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
         fprintf(out, ";\n");
@@ -17277,15 +17506,19 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         uint16_t lane_count = data->lane_count;
         if (lane_count < 1 || lane_count > 16 || v->nargs < (uint16_t) (4u + lane_count)) {
             fprintf(stderr, "[xi_cgen] ERROR: parallel.map lane metadata mismatch\n");
-            xicgen_par_reduce_emit_abort_expr(ctx, out);
-            fprintf(out, ";\n    })");
+            if (ctx)
+                ctx->error = true;
+            fprintf(out, as_statement ? "        abort();\n    }\n"
+                                      : "        (abort(), INT64_C(0));\n    })");
             return;
         }
         if (!data->into_result && lane_count != 1) {
             fprintf(stderr,
                     "[xi_cgen] ERROR: returning parallel.map direct lanes require one lane\n");
-            xicgen_par_reduce_emit_abort_expr(ctx, out);
-            fprintf(out, ";\n    })");
+            if (ctx)
+                ctx->error = true;
+            fprintf(out, as_statement ? "        abort();\n    }\n"
+                                      : "        (abort(), INT64_C(0));\n    })");
             return;
         }
         for (uint16_t i = 0; i < lane_count; i++) {
@@ -17382,6 +17615,10 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         fprintf(out, ")) abort();\n");
         fprintf(out, "        }\n");
         fprintf(out, "        ");
+        if (as_statement) {
+            emit_vref(out, v);
+            fprintf(out, " = ");
+        }
         if (data->into_result)
             fprintf(out, "XR_NULL_VAL");
         else if (xicgen_value_c_storage_rep(ctx, f, v) == XR_REP_PTR)
@@ -17389,7 +17626,7 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         else
             fprintf(out, "_xr_pm_result_%u_0", v->id);
         fprintf(out, ";\n");
-        fprintf(out, "    })");
+        fprintf(out, as_statement ? "    }\n" : "    })");
         return;
     }
 
@@ -17406,12 +17643,12 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         (body->native_callback_kind == XI_NATIVE_CALLBACK_PAR_MAP_SCALAR_BODY &&
          !xicgen_par_map_validate_scalar_func(ctx, body, have_info ? &info : NULL)) ||
         callback_mode == XICGEN_PAR_CALLBACK_INVALID) {
-        xicgen_par_reduce_emit_abort_expr(ctx, out);
+        xicgen_par_emit_abort(ctx, out, as_statement, NULL);
         return;
     }
 
     XrRep storage_rep = xicgen_value_c_storage_rep(ctx, f, v);
-    fprintf(out, "({\n");
+    fprintf(out, as_statement ? "    {\n" : "({\n");
     fprintf(out, "        int64_t _xr_pm_start_%u = ", v->id);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
     fprintf(out, ";\n");
@@ -17551,6 +17788,10 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     }
     fprintf(out, "        }\n");
     fprintf(out, "        ");
+    if (as_statement) {
+        emit_vref(out, v);
+        fprintf(out, " = ");
+    }
     if (into_result)
         fprintf(out, "XR_NULL_VAL");
     else if (storage_rep == XR_REP_PTR)
@@ -17558,7 +17799,7 @@ static void xicgen_par_map(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     else
         fprintf(out, "_xr_pm_result_%u", v->id);
     fprintf(out, ";\n");
-    fprintf(out, "    })");
+    fprintf(out, as_statement ? "    }\n" : "    })");
 }
 
 static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -17750,10 +17991,10 @@ static bool xi_to_c_emit_generated(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             xicgen_par_for(ctx, out, f, v, prefix);
             return true;
         case XI_PAR_MAP:
-            xicgen_par_map(ctx, out, f, v, prefix);
+            xicgen_par_map(ctx, out, f, v, prefix, false);
             return true;
         case XI_PAR_REDUCE:
-            xicgen_par_reduce(ctx, out, f, v, prefix);
+            xicgen_par_reduce(ctx, out, f, v, prefix, false);
             return true;
 #define XICGEN_GENERATED_CASE(op, name, driver)                                                    \
     case XI_##op:                                                                                  \

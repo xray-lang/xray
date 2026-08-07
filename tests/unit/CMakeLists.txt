@@ -183,6 +183,9 @@ add_xray_unit_test(test_xi_emit ir/test_xi_emit.c)
 add_xray_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_unit_test(test_xi_cgen ir/test_xi_cgen.c)
+target_compile_definitions(test_xi_cgen PRIVATE
+    XRAY_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
 if(MSVC)
     # This exhaustive generator test recursively lowers hundreds of fixtures.
     # MSVC ASan expands the call frames beyond PE/COFF's 1 MiB default stack.
@@ -291,17 +294,25 @@ add_xray_unit_test(test_mpsc_queue coro/test_mpsc_queue.c)
 add_xray_unit_test(test_steal_queue coro/test_steal_queue.c)
 add_xray_unit_test(test_async_pool coro/test_async_pool.c)
 add_xray_unit_test(test_scheduler_runq coro/test_scheduler_runq.c)
-if(MSVC)
-    # Scheduler fixtures embed the complete isolate/runtime state and exceed
-    # the PE default 1 MiB stack before the first assertion can run.
-    target_link_options(test_scheduler_runq PRIVATE "/STACK:16777216")
-endif()
 add_xray_unit_test(test_timer_wheel coro/test_timer_wheel.c)
 add_xray_unit_test(test_channel_close coro/test_channel_close.c)
 add_xray_unit_test(test_scope_wait coro/test_scope_wait.c)
 add_xray_unit_test(test_work_queue_wait coro/test_work_queue_wait.c)
 add_xray_unit_test(test_result_group coro/test_result_group.c)
 add_xray_unit_test(test_native_backend coro/test_native_backend.c)
+if(MSVC)
+    # These white-box scheduler fixtures embed the complete isolate/runtime
+    # state and exceed the PE default 1 MiB stack before the first assertion.
+    foreach(target IN ITEMS
+            test_scheduler_runq
+            test_channel_close
+            test_scope_wait
+            test_work_queue_wait
+            test_result_group
+            test_native_backend)
+        target_link_options(${target} PRIVATE "/STACK:16777216")
+    endforeach()
+endif()
 
 # ============================================================================
 # module/ — Resolver, semver, lockfile, source cache

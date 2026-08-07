@@ -589,6 +589,7 @@ static XaotBoundaryReason tagged_reason_for_func(const XiFunc *func, bool is_mod
 XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, const XiFunc *func,
                                  bool is_module_init) {
     bool native_abi;
+    XaotClassNativeFunc class_native;
     uint16_t i;
 
     if (!abi || !func)
@@ -612,10 +613,13 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
      * does not require the function parameter/result ABI itself to be tagged. */
     bool native_runtime_callback =
         func->native_callback_kind != XI_NATIVE_CALLBACK_NONE && !is_module_init;
+    class_native = xaot_class_native_func(bundle, func);
+    bool native_constructor = class_native.layout && class_native.is_constructor;
 
     native_abi = !is_module_init && (native_runtime_callback || func->ncaptures == 0) &&
                  !func_has_op_class(func, XI_GEN_CLASS_COROUTINE) &&
-                 type_can_use_native_return_boundary(bundle, func, func->return_type);
+                 (native_constructor ||
+                  type_can_use_native_return_boundary(bundle, func, func->return_type));
 
     if (!native_abi) {
         abi->kind =
@@ -634,14 +638,19 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, con
 
     abi->kind = XAOT_ABI_NATIVE;
     abi->boundary_reason = XAOT_BOUNDARY_NONE;
-    if (type_can_use_compact_adt_return(bundle, func->return_type))
+    if (native_constructor)
+        abi->ret = ptr_slot(func->return_type);
+    else if (type_can_use_compact_adt_return(bundle, func->return_type))
         abi->ret = compact_adt_return_slot(bundle, func->return_type);
     else
         abi->ret = native_slot_for_type(bundle, func, func->return_type, NULL, true);
     for (i = 0; i < abi_nparams; i++) {
         const XiValue *param = func->params ? func->params[i] : NULL;
-        abi->params[i] =
-            native_slot_for_type(bundle, func, param ? param->type : NULL, param, false);
+        if (i == 0 && class_native.layout)
+            abi->params[i] = ptr_slot(param ? param->type : NULL);
+        else
+            abi->params[i] =
+                native_slot_for_type(bundle, func, param ? param->type : NULL, param, false);
     }
     return true;
 }

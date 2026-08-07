@@ -36,6 +36,10 @@ EXPECTED_OUTPUTS = {
 class ParamContractAotTest(unittest.TestCase):
     xray: Path
 
+    @staticmethod
+    def normalized_output(output: bytes) -> bytes:
+        return output.replace(b"\r\n", b"\n")
+
     def run_checked(self, args: list[str], *, stdout: int = subprocess.PIPE) -> subprocess.CompletedProcess[bytes]:
         return subprocess.run(
             args,
@@ -50,7 +54,9 @@ class ParamContractAotTest(unittest.TestCase):
         for rel in POSITIVE_AOT_CASES:
             with self.subTest(rel=rel):
                 src = ROOT / rel
-                vm = self.run_checked([str(self.xray), str(src)]).stdout
+                vm = self.normalized_output(
+                    self.run_checked([str(self.xray), str(src)]).stdout
+                )
                 self.assertEqual(EXPECTED_OUTPUTS[rel], vm, rel)
 
                 with tempfile.TemporaryDirectory(prefix="xray-param-contract-aot-") as tmp:
@@ -68,7 +74,7 @@ class ParamContractAotTest(unittest.TestCase):
                         ],
                         stdout=subprocess.DEVNULL,
                     )
-                    aot = self.run_checked([str(native)]).stdout
+                    aot = self.normalized_output(self.run_checked([str(native)]).stdout)
 
                 self.assertEqual(vm, aot, rel)
 

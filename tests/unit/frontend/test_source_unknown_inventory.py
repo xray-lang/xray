@@ -173,6 +173,15 @@ class SourceUnknownInventoryTest(unittest.TestCase):
         hits = scan_file(ROOT, ROOT / "scripts/check_error_effect_convergence.py")
         self.assertEqual([], hits)
 
+    def test_hosted_abi_erasure_is_not_legacy_aot_fallback(self) -> None:
+        categories = classify_line(
+            "src/aot/xi_cgen.c",
+            '"        _hosted_result_array->data, _hosted_i, XR_ELEM_ANY);\\n"',
+        )
+        self.assertIn("HOSTED_ABI_ERASURE_BOUNDARY", categories)
+        self.assertNotIn("TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK", categories)
+        self.assertNotIn("AOT_UNKNOWN_ERASURE_CONSUMER", categories)
+
     def test_inventory_readme_is_not_counted_as_source_residue(self) -> None:
         hits = scan_file(ROOT, ROOT / "scripts/README.md")
         self.assertEqual([], hits)

@@ -25,11 +25,15 @@
 #include "../../../src/ir/xi_backend_lower.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/module/xnative_package.h"
+#include "../../../src/module/xmodule.h"
+#include "../../../src/module/xmodule_graph.h"
+#include "../../../src/runtime/xisolate_api.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xstruct_layout.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
+#include "../../../src/frontend/analyzer/xanalyzer_xrd.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xmemstream.h"
 #include "../../../src/base/xglobal_indices.h"
@@ -811,6 +815,99 @@ static XiFunc *compile_to_ir(const char *source) {
     XiPipelineConfig cfg = xi_pipeline_default_config();
     cfg.run_optimize = false;
     return compile_to_ir_with_config(source, cfg);
+}
+
+/* Selective imports are resolved from the source module's semantic export
+ * table. Keep graph-sensitive tests on the same single-source-of-truth path as
+ * production compilation instead of duplicating .xr declarations as analyzer
+ * builtins. */
+static XiFunc *compile_to_ir_with_module_graph_config(const char *source, XiPipelineConfig cfg) {
+    assert(g_iso != NULL);
+
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(g_iso);
+    XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+    XrModuleGraph *graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
+    XaAnalyzer *analyzer = NULL;
+    XiFunc *ir = NULL;
+    if (!graph)
+        goto cleanup;
+
+    char *build_error = NULL;
+    if (xr_module_graph_build_source(graph, "<cgen-test>", source, &build_error) != 0) {
+        fprintf(stderr, "  MODULE GRAPH FAILED: %s\n",
+                build_error ? build_error : "unknown graph build error");
+        xr_free(build_error);
+        goto cleanup;
+    }
+    xr_free(build_error);
+    if (xr_module_graph_topological_sort(graph) != 0 || graph->has_cycle) {
+        fprintf(stderr, "  MODULE GRAPH FAILED: %s\n",
+                graph->cycle_desc ? graph->cycle_desc : "import cycle");
+        goto cleanup;
+    }
+
+    analyzer = xa_analyzer_new(session);
+    if (!analyzer)
+        goto cleanup;
+    xa_analyzer_set_graph(analyzer, graph);
+
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        if (!spec->ast)
+            continue;
+        const char *file = spec->source_path ? spec->source_path : "<cgen-test>";
+        xa_analyzer_analyze(analyzer, file, (XrAstNode *) spec->ast);
+
+        int diag_count = 0;
+        XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(analyzer, &diag_count);
+        bool has_error = false;
+        for (XaDiagnostic *diag = diagnostics; diag; diag = diag->next) {
+            if (diag->severity != XR_DIAG_SEV_ERROR)
+                continue;
+            fprintf(stderr, "  ANALYZE FAILED (%s:%u:%u): %s\n", file, diag->location.line,
+                    diag->location.column, diag->message);
+            has_error = true;
+        }
+        if (has_error)
+            goto cleanup;
+
+        XrHashMap *exports = NULL;
+        if (!xa_analyzer_collect_export_symbols_checked(analyzer, (XrAstNode *) spec->ast,
+                                                        &exports))
+            goto cleanup;
+        spec->export_symbols = exports;
+        xa_analyzer_clear_diagnostics(analyzer);
+    }
+
+    XrModuleSpec *entry = &graph->specs[graph->entry_index];
+    cfg.run_emit = false;
+    XiPipelineResult result = xi_pipeline_compile_program(entry->ast, analyzer, g_iso, &cfg);
+    if (result.status != XI_PIPE_OK) {
+        fprintf(stderr, "  PIPELINE FAILED: %s%s%s\n", xi_pipe_status_str(result.status),
+                result.error.detail[0] ? ": " : "", result.error.detail);
+        xi_pipeline_result_free(&result);
+        goto cleanup;
+    }
+    ir = result.ir;
+    result.ir = NULL;
+    xi_pipeline_result_free(&result);
+
+cleanup:
+    if (analyzer) {
+        xa_analyzer_set_graph(analyzer, NULL);
+        xa_analyzer_free(analyzer);
+    }
+    if (graph)
+        xr_module_graph_free(graph);
+    return ir;
+}
+
+static XiFunc *compile_to_ir_with_module_graph(const char *source) {
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.run_optimize = false;
+    return compile_to_ir_with_module_graph_config(source, cfg);
 }
 
 static void require_detached_semantic_snapshot(const XiFunc *func) {
@@ -3012,10 +3109,9 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
     assert((contains(buf, "\nstatic XR_AINLINE int64_t lib_helper_") ||
             contains(buf, "\nstatic XR_AINLINE XRT_FN_CONST int64_t lib_helper_")) &&
            "private helper should be file-local and inlineable in multi-module C");
-    assert((contains(buf, "\nXRT_INTERNAL XR_FORCEINLINE int64_t lib_public_exp(") ||
-            contains(buf, "\nXRT_INTERNAL XR_FORCEINLINE XRT_FN_CONST int64_t lib_public_exp(")) &&
-           "small module-ABI function should stay linkable across translation units while "
-           "remaining hidden and inlineable inside the final bundle");
+    assert((contains(buf, "\nXRT_INTERNAL int64_t lib_public_exp(") ||
+            contains(buf, "\nXRT_INTERNAL XRT_FN_CONST int64_t lib_public_exp(")) &&
+           "module-ABI functions need an out-of-line definition on every C provider");
     assert(!contains(buf, "static XR_AINLINE int64_t lib_public_exp(") &&
            !contains(buf, "static XR_AINLINE XRT_FN_CONST int64_t lib_public_exp(") &&
            "exported function must not become file-static");
@@ -3548,8 +3644,10 @@ TEST(cgen_native_bool_assert_does_not_materialize_box) {
     const char *check_end = next_static_after(check);
     TEST_REQUIRE(!contains_between(check, check_end, "XR_FROM_BOOL("),
                  "native bool assert conditions must not materialize tagged boxes");
-    TEST_REQUIRE(count_between(check, check_end, "bool _xr_assert_ok") == 2,
+    TEST_REQUIRE(count_between(check, check_end, "Assertion failed") == 2,
                  "both assertions must remain as native abort checks");
+    TEST_REQUIRE(!contains_between(check, check_end, "({"),
+                 "assert lowering must remain portable C11");
 
     printf("  Generated native unboxed assert conditions %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4058,7 +4156,7 @@ TEST(lower_parallel_call_plan_resolves_selective_aliases) {
                       "print(xs[3])\n"
                       "print(sum)\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiFunc *ir = compile_to_ir_with_module_graph(src);
     TEST_REQUIRE(ir != NULL, "selective alias parallel call-plan source should lower to IR");
 
     TEST_REQUIRE(count_op_in_func(ir, XI_PAR_FOR) == 1,
@@ -5282,8 +5380,10 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
     assert(read_fn != NULL && "raw pointer reader definition should exist");
     const char *read_end = next_static_after(read_fn);
     assert(read_end != NULL && "raw pointer reader should be bounded");
-    assert(contains_between(read_fn, read_end, "XR_ASSUME(_xr_base != NULL)") &&
-           "unsafe Ptr.offset must carry its non-null base proof into generated C");
+    assert(contains_between(read_fn, read_end, "xr_raw_const_ptr_offset(") &&
+           "unsafe Ptr.offset must use the standard-C helper carrying its non-null proof");
+    assert(!contains_between(read_fn, read_end, "({") &&
+           "Ptr.offset must not emit a GNU statement expression");
     assert(!contains_between(read_fn, read_end, "(uintptr_t)") &&
            "Ptr.offset must keep native pointer arithmetic without integer round-trips");
 
@@ -6822,6 +6922,87 @@ TEST(cgen_typename_as_and_slice_use_direct_drivers) {
            "AOT code must not reference stale typeof helper names");
 
     printf("  Generated typename/as/slice direct drivers %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_span_index_set_checks_readonly_flag) {
+    const char *src = "fn write(dst: ref Slice<byte>) {\n"
+                      "    dst[0] = 7\n"
+                      "}\n"
+                      "fn run() {\n"
+                      "    var values = Array<byte>(1)\n"
+                      "    var view: Slice<byte> = values[:]\n"
+                      "    write(ref view)\n"
+                      "}\n"
+                      "run()\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "Slice readonly fixture compiled to IR");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "Slice index write generated C");
+
+    const char *fn = find_static_function_definition(code, "test_write_");
+    TEST_REQUIRE(fn != NULL, "write definition exists");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(fn_end != NULL, "write function body is bounded");
+    TEST_REQUIRE(count_between(fn, fn_end, "xrt_span_require_mutable(_s);") == 0,
+                 "Slice index writes keep the 16-byte ABI free of runtime readonly checks");
+    TEST_REQUIRE(count_between(fn, fn_end, "((uint8_t*)_s.data)[_idx]") == 1,
+                 "Slice index writes remain in native span storage");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_same_type_as_lowers_away_without_arc) {
+    const char *src = "class Box {\n"
+                      "    value: int\n"
+                      "    constructor(value: int) { this.value = value }\n"
+                      "}\n"
+                      "fn pass(box: move Box) -> Box { return box }\n"
+                      "fn cast(box: move Box) -> Box { return pass(move box) as Box }\n"
+                      "print(cast(Box(7)).value)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "same-type class-cast fixture compiled");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "same-type class-cast C generated");
+    TEST_REQUIRE(!contains(code, "xrt_retain_identity("),
+                 "same-type as lowers away without redundant ARC traffic");
+    TEST_REQUIRE(!contains(code, "XrValue _as"),
+                 "same-type as leaves no C-level conversion temporary");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_closure_values_and_indirect_calls_use_portable_c) {
+    const char *src = "fn bump(value: ref int) -> int {\n"
+                      "    value = value + 1\n"
+                      "    return value\n"
+                      "}\n"
+                      "fn invoke(action: (ref int) -> int, value: ref int) -> int {\n"
+                      "    return action(ref value)\n"
+                      "}\n"
+                      "var value = 4\n"
+                      "print(invoke(bump, ref value))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "indirect closure-call fixture compiled");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "indirect closure-call C generated");
+    TEST_REQUIRE(!contains(code, "({"),
+                 "closure construction and indirect calls emit standard C11");
+    TEST_REQUIRE(contains(code, ".sync_entry=(void (*)(void))"),
+                 "callable descriptors use a standard generic function pointer");
+
     xr_free(code);
     xi_func_free(ir);
 }
@@ -9684,10 +9865,68 @@ TEST(cgen_hosted_native_field_store_uses_portable_c_statements) {
     char *code = generate_c_with_status_and_stats_for_artifact(ir, "test", &had_error, NULL,
                                                                XAOT_ARTIFACT_HOSTED_FRAGMENT);
     TEST_REQUIRE(code != NULL && !had_error, "hosted native field-store C generated");
-    TEST_REQUIRE(contains(code, "_hosted_native_"),
+    TEST_REQUIRE(contains(code, "_portable_native_"),
                  "native field store is hoisted to an ordinary scoped statement");
     TEST_REQUIRE(!contains(code, "({ xrt_native_"),
                  "hosted field store contains no GNU statement expression");
+    TEST_REQUIRE(contains(code, "_hosted_arg_1 = xrt_str_from_slice("),
+                 "hosted string arguments use AOT-owned storage that may escape the call");
+    TEST_REQUIRE(!contains(code, "_hosted_string_header_1"),
+                 "hosted string arguments never retain a stack-backed header");
+    TEST_REQUIRE(setter->arc_borrow_sig && setter->arc_borrow_sig->valid &&
+                     setter->arc_borrow_sig->nparams > 1 &&
+                     setter->arc_borrow_sig->param_own[1] == XI_OWN_OWNED,
+                 "native field store consumes the string parameter");
+    const char *setter_c = find_static_function_definition(code, "test_setText_");
+    TEST_REQUIRE(setter_c != NULL, "native field-store target emitted");
+    const char *setter_end = next_static_after(setter_c);
+    TEST_REQUIRE(!contains_between(setter_c, setter_end, "xrt_retain("),
+                 "native field store moves the owned string without redundant ARC traffic");
+    TEST_REQUIRE(!contains(code, "xrt_release(_hosted_arg_1)"),
+                 "hosted adapter transfers its owned string into the consuming call");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_hosted_non_escaping_string_argument_stays_zero_copy) {
+    const char *src = "fn stringLength(text: string) -> int { return len(text) }\n"
+                      "stringLength(\"value\")\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "hosted non-escaping string fixture compiled");
+
+    XiFunc *target = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "stringLength") == 0) {
+            target = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(target != NULL, "hosted non-escaping string function lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "stringLength",
+        .symbol = "xr_hosted_string_length",
+        .visibility = "hidden",
+        .abi = "hosted-vm-v1",
+        .header = true,
+    };
+    target->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status_and_stats_for_artifact(ir, "test", &had_error, NULL,
+                                                               XAOT_ARTIFACT_HOSTED_FRAGMENT);
+    TEST_REQUIRE(code != NULL && !had_error, "hosted non-escaping string C generated");
+    const char *stub = find_static_function_definition(code, "xr_hosted_string_length(");
+    TEST_REQUIRE(stub != NULL, "hosted non-escaping string stub emitted");
+    const char *stub_end = strstr(stub, "\n}\n");
+    TEST_REQUIRE(stub_end != NULL, "hosted non-escaping string stub is bounded");
+    TEST_REQUIRE(contains_between(stub, stub_end, "_hosted_string_header_0"),
+                 "non-escaping string uses a stack borrowed header");
+    TEST_REQUIRE(!contains_between(stub, stub_end, "xrt_str_from_slice("),
+                 "non-escaping string avoids allocation and byte copying");
+    TEST_REQUIRE(!contains_between(stub, stub_end, "xrt_release(_hosted_arg_0)"),
+                 "borrowed string header requires no ARC cleanup");
 
     xr_free(code);
     xi_func_free(ir);
@@ -10265,6 +10504,14 @@ TEST(cgen_coro_sleep_publishes_state_before_block) {
 }
 
 TEST(cgen_test_yield_calls_publish_resume_states) {
+    char descriptor_path[1024];
+    int descriptor_len = snprintf(descriptor_path, sizeof(descriptor_path),
+                                  "%s/stdlib/test_yield/test_yield.xrd", XRAY_TEST_SOURCE_DIR);
+    TEST_REQUIRE(descriptor_len > 0 && (size_t) descriptor_len < sizeof(descriptor_path),
+                 "test_yield descriptor path fits");
+    TEST_REQUIRE(xa_xrd_load_file(descriptor_path) != NULL,
+                 "test_yield native signatures loaded from XRD");
+
     const char *src = "import test_yield\n"
                       "import { add } from test_yield\n"
                       "Coro.yield()\n"
@@ -10717,7 +10964,7 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
                       "print(run())\n";
 
     XiPipelineConfig cfg = xi_pipeline_aot_config();
-    XiFunc *ir = compile_to_ir_with_config(src, cfg);
+    XiFunc *ir = compile_to_ir_with_module_graph_config(src, cfg);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -10766,7 +11013,7 @@ TEST(cgen_coro_result_group_reset_uses_native_helper) {
                       "}\n"
                       "print(run(2))\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiFunc *ir = compile_to_ir_with_module_graph(src);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -10810,7 +11057,7 @@ TEST(cgen_result_group_sync_methods_elide_dead_err_checks) {
                       "}\n"
                       "print(run())\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiFunc *ir = compile_to_ir_with_module_graph(src);
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
@@ -11095,7 +11342,7 @@ TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
                       "var task = go consumer()\n"
                       "print(await task)\n";
 
-    XiFunc *ir = compile_to_ir(src);
+    XiFunc *ir = compile_to_ir_with_module_graph(src);
     TEST_REQUIRE(ir != NULL, "IR compilation failed");
 
     bool had_error = false;
@@ -11346,6 +11593,7 @@ int main(void) {
     run_cgen_hosted_coroutine_export_publishes_resumable_continuation();
     run_cgen_hosted_class_boundary_uses_nominal_opaque_proxy();
     run_cgen_hosted_native_field_store_uses_portable_c_statements();
+    run_cgen_hosted_non_escaping_string_argument_stays_zero_copy();
     run_cgen_hosted_normal_class_result_call_is_not_a_constructor();
     run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();
@@ -11394,6 +11642,7 @@ int main(void) {
     run_cgen_rawptr_copy_forwarded_constant_has_no_release_local();
     run_cgen_rawptr_parallel_for_each_capture_is_rejected();
     run_cgen_span_index_get_elides_dead_err_check();
+    run_cgen_span_index_set_checks_readonly_flag();
     run_cgen_span_slice_elides_dead_err_check();
     run_cgen_byte_array_append_from_slice_elides_dead_err_check();
     run_cgen_byte_array_repeat_from_tail_elides_dead_err_check();
@@ -11430,6 +11679,8 @@ int main(void) {
     run_cgen_inherited_class_uses_native_base_layout();
     run_cgen_typed_array_slice_preserves_raw_storage_fast_path();
     run_cgen_typename_as_and_slice_use_direct_drivers();
+    run_cgen_same_type_as_lowers_away_without_arc();
+    run_cgen_closure_values_and_indirect_calls_use_portable_c();
     run_cgen_range_uses_direct_aot_driver();
     run_cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load();
     run_cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store();

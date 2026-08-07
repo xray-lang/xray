@@ -86,8 +86,6 @@ typedef struct XrThread {
 /* Spawn a real OS thread that drives `coro` to completion. `name`/`stack_size`
  * are best-effort (0/NULL = platform default). Returns NULL on allocation/spawn
  * failure. The returned handle is a system-heap shared object. */
-/* Deadlock-detector census: live sys.Thread entries spawned via the VM path. */
-XR_FUNC int64_t xr_sys_thread_live_total(void);
 XR_FUNC XrThread *xr_thread_obj_spawn_vm(struct XrVMRuntime *isolate, struct XrCoroutine *coro,
                                          const char *name, size_t stack_size,
                                          const uint32_t *affinity_cpus, uint16_t affinity_count);

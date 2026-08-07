@@ -494,7 +494,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
     {"liveBytes", XLSP_SYM_FUNCTION, "fn(): int", "Get live memory usage in bytes", NULL, 0},
     {"liveObjects", XLSP_SYM_FUNCTION, "fn(): int", "Get live object count", NULL, 0},
     {"sharedBytes", XLSP_SYM_FUNCTION, "fn(): int", "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak", NULL, 0},
-    {"staticBytes", XLSP_SYM_FUNCTION, "fn(): int", "Bytes allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", NULL, 0},
+    {"staticBytes", XLSP_SYM_FUNCTION, "fn(): int", "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): RuntimeInfo", "Get a typed snapshot of the current execution-local reclamation domain", NULL, 0},
     {"RuntimeInfo", XLSP_SYM_CLASS, "type RuntimeInfo = { liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }", "Typed snapshot of the current execution-local reclamation domain", NULL, 0},
 };

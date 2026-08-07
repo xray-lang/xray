@@ -482,6 +482,7 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (tid < 0) {
         if (dst != src)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+        emit_inst(ctx, CREATE_ABC(OP_DUP, dst, 0, 0));
         return;
     }
 
@@ -527,6 +528,7 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (!xi_emit_const_index_to_c(ctx, mask_k, &mask_arg))
             return;
         emit_inst(ctx, CREATE_ABC(OP_CHECKTYPE, dst, mask_arg, 0));
+        emit_inst(ctx, CREATE_ABC(OP_DUP, dst, 0, 0));
         return;
     }
 
@@ -562,6 +564,10 @@ XR_FUNC void xi_emit_as(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     *ok_inst = CREATE_sJ(OP_JMP, ok_target - (ok_jmp_pc + 1));
     XrInstruction *end_inst = PROTO_CODE_PTR(ctx->proto, end_jmp_pc);
     *end_inst = CREATE_sJ(OP_JMP, ok_target - (end_jmp_pc + 1));
+    /* XI_AS borrows its input but produces an owned result. Retaining null is
+     * a no-op, so one DUP at the control-flow join establishes the result's
+     * independent owner for both successful and failed safe casts. */
+    emit_inst(ctx, CREATE_ABC(OP_DUP, dst, 0, 0));
 }
 
 XR_FUNC void xi_emit_checktype(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {

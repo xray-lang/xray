@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib.util
 import shutil
 import sys
@@ -66,7 +65,7 @@ class UnicodeGraphemeGeneratorTests(unittest.TestCase):
             )
             entries = []
             for name in GENERATOR.REQUIRED_INPUTS:
-                digest = hashlib.sha256((target / name).read_bytes()).hexdigest()
+                digest = GENERATOR.sha256(target / name)
                 entries.append(f"{digest}  {name}\n")
             (target / "SHA256SUMS").write_text("".join(entries), encoding="utf-8")
             with self.assertRaises(GENERATOR.GenerationError):

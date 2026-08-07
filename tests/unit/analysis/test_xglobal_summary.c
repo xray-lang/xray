@@ -8357,6 +8357,9 @@ TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_
                          "    current = other\n"
                          "    return 0\n"
                          "}\n"
+                         "fn writeRef(value: ref int) {\n"
+                         "    value = 7\n"
+                         "}\n"
                          "fn makeCounter() -> () -> int {\n"
                          "    var count = 0\n"
                          "    return fn() -> int { count += 1; return count }\n"
@@ -8386,10 +8389,12 @@ TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_
     const XgBodySummary *local_round = evidence_find_body_by_name(&ev, "localRound");
     const XgBodySummary *slice_read = evidence_find_body_by_name(&ev, "sliceRead");
     const XgBodySummary *rebind_array = evidence_find_body_by_name(&ev, "rebindArray");
+    const XgBodySummary *write_ref = evidence_find_body_by_name(&ev, "writeRef");
     const XgBodySummary *make_counter = evidence_find_body_by_name(&ev, "makeCounter");
     ASSERT_NOT_NULL(local_round);
     ASSERT_NOT_NULL(slice_read);
     ASSERT_NOT_NULL(rebind_array);
+    ASSERT_NOT_NULL(write_ref);
     ASSERT_NOT_NULL(make_counter);
 
     ASSERT_TRUE((local_round->effect_bits & XG_BODY_MAY_MUTATE) == 0);
@@ -8405,9 +8410,10 @@ TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_
     ASSERT_TRUE((slice_read->capability_bits & XG_CAP_NATIVE) == 0);
 
     ASSERT_TRUE((rebind_array->effect_bits & XG_BODY_MAY_MUTATE) != 0);
+    ASSERT_TRUE((write_ref->effect_bits & XG_BODY_MAY_MUTATE) != 0);
 
     ASSERT_TRUE((make_counter->effect_bits & XG_BODY_MAY_MUTATE) == 0);
-    ASSERT_EQ_UINT(evidence_body_count_with_effect(&ev, XG_BODY_MAY_MUTATE), 2);
+    ASSERT_EQ_UINT(evidence_body_count_with_effect(&ev, XG_BODY_MAY_MUTATE), 3);
     ASSERT_EQ_UINT(ev.ncallsites, 2);
     for (uint32_t i = 0; i < ev.ncallsites; i++)
         ASSERT_EQ_UINT(ev.callsites[i].kind, XG_CALL_NATIVE);

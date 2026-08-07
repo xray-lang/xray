@@ -9,6 +9,7 @@
  */
 
 #include "../test_framework.h"
+#include "../test_win_compat.h"
 #include "module/xproject.h"
 
 #include <stdio.h>
@@ -16,6 +17,7 @@
 #include <string.h>
 #ifdef _WIN32
 #include <direct.h>
+#include <windows.h>
 #else
 #include <unistd.h>
 #endif
@@ -23,13 +25,15 @@
 static char g_tmpdir[512];
 
 static void setup_tmpdir(void) {
-    snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/xray_test_project_XXXXXX");
 #ifdef _WIN32
-    ASSERT_EQ_INT(_mkdir(g_tmpdir), 0);
+    char base[MAX_PATH];
+    DWORD length = GetTempPathA((DWORD) sizeof(base), base);
+    ASSERT_TRUE(length > 0 && length < sizeof(base));
+    snprintf(g_tmpdir, sizeof(g_tmpdir), "%sxray_test_project_XXXXXX", base);
 #else
-    char *d = mkdtemp(g_tmpdir);
-    ASSERT_NOT_NULL(d);
+    snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/xray_test_project_XXXXXX");
 #endif
+    ASSERT_NOT_NULL(xr_test_mkdtemp(g_tmpdir));
 }
 
 static void teardown_tmpdir(void) {
@@ -47,7 +51,7 @@ static void write_project_file(const char *content) {
     FILE *f;
 
     snprintf(path, sizeof(path), "%s/xray.toml", g_tmpdir);
-    f = fopen(path, "w");
+    f = fopen(path, "wb");
     ASSERT_NOT_NULL(f);
     fputs(content, f);
     fclose(f);
@@ -58,7 +62,7 @@ static void write_fixture_file(const char *name, const char *content) {
     FILE *f;
 
     snprintf(path, sizeof(path), "%s/%s", g_tmpdir, name);
-    f = fopen(path, "w");
+    f = fopen(path, "wb");
     ASSERT_NOT_NULL(f);
     fputs(content, f);
     fclose(f);

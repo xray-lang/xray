@@ -33,7 +33,7 @@
 #include <stdlib.h>
 #include "xasync.h"
 #include "xchannel.h"
-#include "xthread_obj.h"
+#include "../runtime/xisolate_api.h"
 
 static bool runtime_has_work(XrRuntime *runtime);
 
@@ -858,7 +858,8 @@ static bool runtime_check_deadlock(XrRuntime *runtime, XrWorker *worker, bool se
     /* v1 activates only for VM-owned cores: the AOT thread spawn path keeps
      * no census the neutral scheduler can read, so an AOT-standalone core
      * cannot prove "no live threads". Presence is the only fact read. */
-    if (!runtime->core || xr_runtime_core_vm_owner(runtime->core) == NULL)
+    XrVMRuntime *vm_owner = runtime->core ? xr_runtime_core_vm_owner(runtime->core) : NULL;
+    if (!vm_owner)
         return false;
 
     for (int pass = 0; pass < 2; pass++) {
@@ -873,7 +874,7 @@ static bool runtime_check_deadlock(XrRuntime *runtime, XrWorker *worker, bool se
             (atomic_load_explicit(&runtime->async_pool->in_flight, memory_order_acquire) != 0 ||
              runtime->async_pool->queue_head != NULL))
             return false;
-        if (xr_sys_thread_live_total() != 0)
+        if (xr_isolate_sys_thread_count(vm_owner) != 0)
             return false;
         /* Someone must actually be stuck. Channel waitq membership is the
          * precise census (maintained at the four link/unlink sites in

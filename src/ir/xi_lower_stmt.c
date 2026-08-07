@@ -2589,20 +2589,6 @@ static XiValue *lower_catch_narrow_value(XiLower *l, XiValue *catch_op, XrCatchC
     if (catch_op->type && xr_type_equals(catch_op->type, catch_type))
         return catch_op;
 
-    /* The type test immediately before this block proved that the cast is an
-     * identity alias of catch_op. XI_AS has an owned result and a borrowed
-     * input, so materialize the result's +1 explicitly before ARC releases
-     * the original ERR_CATCH owner. Without this retain the narrowed binding
-     * becomes a dangling enum object as soon as catch_op reaches its death
-     * point (nested rethrow used to expose this as a corrupted variant tag). */
-    if (xi_own_type_is_rc(catch_op->type) && xi_own_type_is_rc(catch_type)) {
-        XiValue *retain = xi_value_new(l->func, l->cur_block, XI_RETAIN, l->type_unit, 1);
-        if (!retain)
-            return catch_op;
-        retain->args[0] = catch_op;
-        retain->line = (uint32_t) (cc->var_line > 0 ? cc->var_line : 0);
-    }
-
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_AS, catch_type, 1);
     if (!v)
         return catch_op;

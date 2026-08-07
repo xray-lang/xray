@@ -41,7 +41,6 @@ static void test_free_aligned(void *ptr) {
 #define XRT_ALLOC_ALIGNED(sz) test_alloc_aligned(sz)
 #define XRT_FREE_ALIGNED(p) test_free_aligned(p)
 
-#define XRT_IMPL
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundefined-internal"
@@ -56,12 +55,6 @@ typedef struct {
     XrObjHeader hdr;
     int64_t value;
 } TestToken;
-
-XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
-    (void) exc;
-    fprintf(stderr, "unexpected xrt_throw_exc in test_xrt_user_hash_eq\n");
-    abort();
-}
 
 #define ASSERT_TRUE(cond, msg)                                                                     \
     do {                                                                                           \

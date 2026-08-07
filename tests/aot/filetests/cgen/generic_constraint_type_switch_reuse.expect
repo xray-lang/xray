@@ -6,7 +6,7 @@ regex=generic-body-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]
 regex=generic-code-size-plan [0-9]+ id=[1-9][0-9]* inst=[1-9][0-9]* module=[1-9][0-9]* body_use=[1-9][0-9]* origin=[1-9][0-9]* specialized=[1-9][0-9]* count=1 threshold=64 action=allow_clone evidence=row\+inst\+body_use\+threshold reason=none
 c_regex=static XRT_FN_PURE int64_t generic_constraint_type_switch_reuse_[0-9a-f]+_score_Shape_[0-9]+\(xrt_closure_t \*_cl, XrValue p0\)
 c_contains=xrt_instanceof(
-c_contains=_xr_ts_result_
+c_regex=v[0-9]+ = XR_TO_INT\(generic_constraint_type_switch_reuse_[0-9a-f]+_area_[0-9]+_boxed\(NULL, v[0-9]+\)\);
 c_contains=xray AOT: verified interface type-switch dispatch missed
 c_not_contains=xrt_interface_call
 c_not_contains=xrt_method_
