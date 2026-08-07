@@ -227,14 +227,27 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
         return NULL;
     }
 
-    // Backfill field type_name from descriptor entries (for type metadata)
+    // Backfill field type_name from descriptor entries (for type metadata).
+    //
+    // Two index spaces meet here and they are not the same one. A field
+    // lookup answers in the flattened instance space -- inherited fields
+    // first, then this class's own -- while cls->fields holds only the
+    // fields this class declares, its own instance fields followed by its
+    // own statics. Subtracting the inherited count converts one to the
+    // other; using the flattened index directly walks off the end of the
+    // array as soon as a superclass contributes a field.
     if (cls->fields) {
+        int inherited_fields = (int) cls->field_count - (int) cls->own_field_count;
+        if (inherited_fields < 0)
+            inherited_fields = 0;
         for (uint32_t i = 0; i < desc->instance_field_count; i++) {
             int field_index =
                 xr_class_lookup_field_by_name(isolate, cls, desc->instance_fields[i].name);
-            if (field_index < 0 || field_index >= xr_class_instance_field_count(cls))
+            // Below the inherited count the field belongs to a superclass,
+            // which owns its own descriptor and backfills it there.
+            if (field_index < inherited_fields || field_index >= xr_class_instance_field_count(cls))
                 continue;
-            XrFieldDescriptor *field = &cls->fields[field_index];
+            XrFieldDescriptor *field = &cls->fields[field_index - inherited_fields];
             field->type_name = desc->instance_fields[i].type_name;
             if (!xr_json_decode_schema_clone_for_class(isolate,
                                                        &desc->instance_fields[i].json_decode_schema,
@@ -245,11 +258,13 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
                 field->json_struct_object_class =
                     (XrClass *) field->json_decode_schema.target_descriptor;
         }
+        // Statics already start where this class's own instance fields end,
+        // so the descriptor's instance count must not be added a second time.
         int sf_base = cls->own_field_count - cls->static_field_count;
         if (sf_base < 0)
             sf_base = 0;
         for (uint32_t i = 0; i < desc->static_field_count; i++) {
-            int idx = sf_base + (int) desc->instance_field_count + (int) i;
+            int idx = sf_base + (int) i;
             if (idx < cls->own_field_count) {
                 cls->fields[idx].type_name = desc->static_fields[i].type_name;
             }
