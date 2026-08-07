@@ -35,6 +35,12 @@ bool xr_type_is_json_value(const XrType *type) {
         case XR_KIND_STRING:
         case XR_KIND_JSON:
             return true;
+        case XR_KIND_ARRAY:
+            /* Array<Json> is the domain's own array form. A typed container
+             * stays outside it however encodable its elements are: Array<int>
+             * is an int container that can be encoded, not a Json value. */
+            return type->container.element_type &&
+                   type->container.element_type->kind == XR_KIND_JSON;
         case XR_KIND_UNION:
             if (type->union_type.member_count <= 0 || !type->union_type.members)
                 return false;
@@ -1729,6 +1735,15 @@ bool xr_type_assignable(XrType *target, XrType *source) {
             case XR_KIND_STRING:
             case XR_KIND_BOOL:
                 return true;
+            case XR_KIND_ARRAY:
+                /* Array<Json> is the array form of the domain itself, so it
+                 * crosses like any other Json value. Every other container
+                 * stays out under the rule above -- Array<int> is a typed
+                 * container, not a Json array. */
+                if (source->container.element_type &&
+                    source->container.element_type->kind == XR_KIND_JSON)
+                    return true;
+                break;
             default:
                 break;
         }
