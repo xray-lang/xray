@@ -8307,12 +8307,39 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
            "reusable AOT frame init should reset entry state without clearing cached child frames");
     assert(contains(code, "    memset(f, 0, sizeof(*f));\n    if (!") &&
            "fresh AOT frame allocation should still clear owned frame storage once");
+    assert(contains(code, "runtime_cfg.scheduler_workers = 1;") &&
+           "single-scheduler entry plans must configure the same AOT default as VM");
     assert(!contains(code, "return (abort(), XR_NULL_VAL);") &&
            "direct suspend calls must not require a sync abort wrapper");
     assert(!contains(code, "unsupported AOT sync call") &&
            "diagnostics should go to stderr, not generated C comments");
 
     printf("  Generated direct suspend call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_direct_suspend_call_borrows_read_argument) {
+    const char *src = "fn worker(xs: Array<int>) -> int {\n"
+                      "    Coro.yield()\n"
+                      "    return len(xs)\n"
+                      "}\n"
+                      "var xs = [1, 2, 3]\n"
+                      "print(worker(xs))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "direct suspend call with READ argument should generate");
+    assert(contains(code, "((void)xrt_retain(") &&
+           "the child frame must retain its ordinary borrowed argument while suspended");
+    assert(!contains(code, "xrt_value_clone_for_coro(") &&
+           "ordinary suspend calls must not turn READ arguments into deep copies");
+
+    printf("  Generated borrowed direct suspend call %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -11488,6 +11515,7 @@ int main(void) {
     run_cgen_unknown_method_symbol_fails_fast();
     run_cgen_suspendable_function_has_no_sync_wrapper();
     run_cgen_direct_suspend_call_propagates_cps();
+    run_cgen_direct_suspend_call_borrows_read_argument();
     run_cgen_returned_suspendable_closure_uses_verified_child_frame();
     run_cgen_mixed_callable_targets_use_stable_descriptor_switch();
     run_cgen_direct_suspend_method_call_propagates_cps();

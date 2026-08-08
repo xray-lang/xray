@@ -1424,7 +1424,11 @@ static void emit_aot_frame_new_call_args(XiCgenCtx *ctx, FILE *out, const XiFunc
     for (uint16_t a = arg_start; a < arg_end; a++) {
         uint16_t transfer_slot = (uint16_t) (a - arg_start);
         const XaotTransferPlan *transfer_plan = NULL;
-        uint8_t transfer_mode = transfer_owner ? XR_TRANSFER_SHARE : XR_TRANSFER_COPY;
+        /* An ordinary suspend call is still one lexical call: the caller cannot
+         * run concurrently with its child frame, and READ parameters borrow the
+         * same graph as a synchronous call.  Only spawn sites carry transfer
+         * plans that may clone or move at an execution boundary. */
+        uint8_t transfer_mode = XR_TRANSFER_SHARE;
         if (transfer_owner_has_plans) {
             transfer_plan = cg_required_transfer_plan(ctx, transfer_owner, transfer_slot, args[a],
                                                       "frame argument");
