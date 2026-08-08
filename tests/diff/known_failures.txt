@@ -95,6 +95,5 @@
 #   nested_closure_transitive_capture.xr D10  closure inside a closure over a grandparent
 #                                             binding, rejected by the ownership pass
 tests/diff/cases/semantics/functions/parenthesized_function_type.xr
-tests/diff/cases/semantics/oop/method_as_value.xr
 tests/diff/cases/semantics/functions/unproven_callee_targets.xr
 tests/diff/cases/semantics/closure/nested_closure_transitive_capture.xr

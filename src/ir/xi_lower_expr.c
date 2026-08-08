@@ -2354,6 +2354,9 @@ static XiValue *lower_member_slot_load(XiLower *l, AstNode *node, XiValue *obj,
     return v;
 }
 
+static XiValue *lower_bound_method_closure(XiLower *l, AstNode *node, MemberAccessNode *ma,
+                                           const XaSelection *sel, XiValue *recv);
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
     XiSequenceEvidenceIds sequence_ids;
@@ -2397,6 +2400,17 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         v->aux_int = (int64_t) xi_lower_method_symbol(l, getter) << 1;
         v->line = (uint32_t) node->line;
         return v;
+    }
+
+    /* Method reference as a value: obj.method without a call. Synthesize a thunk
+     * that binds the receiver so the resulting closure calls the method on this
+     * instance. Builtin methods record no selection and fall through to the
+     * field/slot paths below. */
+    if (sel && sel->kind == XA_SEL_METHOD && sel->target_symbol &&
+        sel->target_symbol->kind == XA_SYM_METHOD && !sel->target_symbol->is_static) {
+        XiValue *bound = lower_bound_method_closure(l, node, ma, sel, obj);
+        if (bound)
+            return bound;
     }
 
     XiValue *module_constant = lower_module_member_constant(l, obj, ma->name);
@@ -7829,6 +7843,128 @@ static XiValue *parallel_call_child_closure(XiLower *l, XiFunc *child, int line)
     closure->aux_int = child_idx;
     closure->line = (uint32_t) line;
     return closure;
+}
+
+/* A method reference `obj.m` is a value: the type layer hands out the method
+ * signature without the receiver, but the method closure in the method table
+ * carries no bound receiver. Synthesize a thunk that captures the receiver and
+ * forwards to it, so `var f = obj.m; f(args)` invokes the method on the
+ * captured instance. Shared by the VM and AOT, which both already handle an
+ * ordinary closure capturing a value. */
+static XiValue *lower_bound_method_closure(XiLower *l, AstNode *node, MemberAccessNode *ma,
+                                           const XaSelection *sel, XiValue *recv) {
+    if (!l || !ma || !sel || !recv)
+        return NULL;
+    struct XrType *method_type = sel->result_type;
+    if (!method_type || method_type->kind != XR_KIND_FUNCTION ||
+        method_type->function.param_count < 0)
+        return NULL;
+    int nparams = method_type->function.param_count;
+    struct XrType *return_type =
+        method_type->function.return_type ? method_type->function.return_type : l->type_unit;
+
+    char name_buf[192];
+    snprintf(name_buf, sizeof(name_buf), "%s$bound_%s_%d",
+             l->func && l->func->name ? l->func->name : "<anon>", ma->name ? ma->name : "method",
+             l->synthetic_id++);
+
+    XiLower child_l;
+    xi_lower_init(&child_l, l->analyzer, l->isolate);
+    child_l.parent = l;
+    child_l.repl_mode = l->repl_mode;
+    xi_lower_inherit_evidence(&child_l, l);
+
+    child_l.func = xi_func_new(name_buf, return_type);
+    if (!child_l.func) {
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+    child_l.func->parent_func = l->func;
+    child_l.func->analyzer = l->analyzer;
+    child_l.func->is_generic_template = l->func && l->func->is_generic_template;
+    xi_lower_bind_function_body_id(&child_l, node ? xi_lower_source_node_id(&child_l, node) : 0,
+                                   node && node->line > 0 ? (uint32_t) node->line : 0);
+    child_l.func->nparams = (uint16_t) nparams;
+    child_l.func->min_params = (uint16_t) nparams;
+    child_l.func->entry_type = 0;
+    if (nparams > 0) {
+        child_l.func->params = (XiValue **) xr_calloc((size_t) nparams, sizeof(XiValue *));
+        if (!child_l.func->params) {
+            xi_func_free(child_l.func);
+            xi_lower_cleanup(&child_l);
+            return NULL;
+        }
+    }
+
+    XiBlock *entry = xi_block_new(child_l.func);
+    if (!entry) {
+        xi_func_free(child_l.func);
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+    entry->sealed = true;
+    child_l.cur_block = entry;
+
+    for (int i = 0; i < nparams; i++) {
+        struct XrType *ptype = xr_type_function_param_type(method_type, i);
+        XiValue *param =
+            xi_param(child_l.func, entry, (uint16_t) i, ptype ? ptype : child_l.type_any);
+        if (!param) {
+            xi_func_free(child_l.func);
+            xi_lower_cleanup(&child_l);
+            return NULL;
+        }
+        child_l.func->params[i] = param;
+    }
+
+    XiCapture *cap = &child_l.func->captures[0];
+    cap->source = XI_CAPTURE_SRC_REG;
+    cap->index = 0;
+    cap->name = arena_strdup(child_l.func, "__recv");
+    cap->type = recv->type ? recv->type : child_l.type_any;
+    cap->value = recv;
+    cap->cell_index = -1;
+    cap->env_offset = -1;
+    cap->is_reassigned = false;
+    cap->needs_cell = false;
+    child_l.func->ncaptures = 1;
+
+    XiValue *captured_recv =
+        xi_value_new(child_l.func, child_l.cur_block, XI_LOAD_UPVAL, cap->type, 0);
+    if (!captured_recv) {
+        xi_func_free(child_l.func);
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+    captured_recv->aux_int = 0;
+    captured_recv->line = (uint32_t) (node ? node->line : 0);
+
+    XiValue *call = xi_value_new(child_l.func, child_l.cur_block, XI_CALL_METHOD, return_type,
+                                 (uint16_t) (nparams + 1));
+    if (!call) {
+        xi_func_free(child_l.func);
+        xi_lower_cleanup(&child_l);
+        return NULL;
+    }
+    call->args[0] = captured_recv;
+    for (int i = 0; i < nparams; i++)
+        call->args[i + 1] = child_l.func->params[i];
+    call->aux = (void *) arena_strdup(child_l.func, ma->name);
+    call->aux_int = (int64_t) xi_lower_method_symbol(&child_l, ma->name) << 1;
+    call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    call->line = (uint32_t) (node ? node->line : 0);
+
+    xi_block_set_return(child_l.cur_block, XR_TYPE_IS_UNIT(return_type) ? NULL : call);
+
+    XiFunc *result = NULL;
+    if (!child_l.had_error && xi_lower_capture_source_vars(&child_l))
+        result = child_l.func;
+    else
+        xi_func_free(child_l.func);
+    xi_lower_cleanup(&child_l);
+    if (!result)
+        return NULL;
+    return parallel_call_child_closure(l, result, node ? node->line : 0);
 }
 
 static bool parallel_call_type_can_use_scalar_map_callback(const struct XrType *type) {
