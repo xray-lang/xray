@@ -6399,6 +6399,32 @@ static void lower_align_fresh_store_arguments(XiValue *receiver, const char *met
     }
 }
 
+/* obj.field(args) where `field` holds a function value is a call through a
+ * data member, not a method dispatch: read the field into a value and call it.
+ * The analyzer records XA_SEL_FIELD on the callee node for exactly this, so a
+ * function-typed field selection is routed here; builtin methods record no
+ * selection, so a NULL selection falls through to the OP_INVOKE method path.
+ * Object-shape / Json fields also record XA_SEL_FIELD and belong on the
+ * indirect-call path too, but a dynamic Json field with no resolved symbol has
+ * a NULL target_symbol and is left to the method path. */
+static XiValue *lower_member_function_field_call(XiLower *l, AstNode *node, CallExprNode *call) {
+    if (!l || !l->analyzer || !l->analyzer->selection_table || !call->callee ||
+        call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    const XaSelection *sel =
+        xa_selection_table_get((XaSelectionTable *) l->analyzer->selection_table, call->callee);
+    if (!sel || sel->kind != XA_SEL_FIELD || !sel->target_symbol)
+        return NULL;
+    struct XrType *field_type =
+        xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
+    if (!field_type || field_type->kind != XR_KIND_FUNCTION)
+        return NULL;
+    XiValue *callee_val = lower_member_access(l, call->callee);
+    if (!callee_val)
+        return NULL;
+    return lower_emit_function_call(l, node, call, callee_val, callee_val->type);
+}
+
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
@@ -6507,6 +6533,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     XiValue *raw_pointer_static = lower_raw_pointer_static_call(l, node, call);
     if (raw_pointer_static)
         return raw_pointer_static;
+
+    XiValue *field_call = lower_member_function_field_call(l, node, call);
+    if (field_call)
+        return field_call;
 
     /* Method call: callee is obj.method — emit XI_CALL_METHOD (→ OP_INVOKE).
      * This is required for builtin methods (set.size, array.push, etc.)
@@ -7129,7 +7159,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         XiValue *null_val = xi_const_null(l->func, l->cur_block, l->type_null);
         xi_block_set_jump(l->cur_block, merge);
 
-        /* Non-null path: emit XI_CALL_METHOD */
+        /* Non-null path: emit the call. A function-typed field is called
+         * indirectly (read the field, then XI_CALL the closure); a method
+         * dispatches through XI_CALL_METHOD. The analyzer records the selection
+         * kind on the optional-chain node, mirroring the obj.member path. */
         l->cur_block = call_blk;
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
         XiLowerArgList args;
@@ -7139,27 +7172,56 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return NULL;
         XiValue **arg_vals = args.items;
         int n = args.count;
-
-        xi_lower_check_map_method_args(l, node, oc->name, obj, arg_vals, n);
-        xi_lower_check_set_method_args(l, node, oc->name, obj, arg_vals, n);
-        xi_lower_narrow_map_method_args(l, node, oc->name, obj, arg_vals, n);
-        xi_lower_narrow_set_method_args(l, node, oc->name, obj, arg_vals, n);
-
         uint16_t nargs = (uint16_t) (n + 1);
-        XiValue *mcall = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
-        if (!mcall)
-            return NULL;
-        mcall->args[0] = obj;
-        for (int i = 0; i < n; i++)
-            mcall->args[i + 1] = arg_vals[i];
-        mcall->aux = (void *) arena_strdup(l->func, oc->name);
-        mcall->aux_int = (int64_t) xi_lower_method_symbol(l, oc->name) << 1;
-        XrType *optional_method_type =
+
+        const XaSelection *oc_sel =
+            l->analyzer && l->analyzer->selection_table
+                ? xa_selection_table_get((XaSelectionTable *) l->analyzer->selection_table,
+                                         call->callee)
+                : NULL;
+        struct XrType *oc_callee_type =
             xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
-        lower_instantiate_call_view_evidence(mcall, NULL, optional_method_type, true);
-        mcall->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-        mcall->line = (uint32_t) node->line;
-        xi_lower_bind_callsite_id(l, mcall, xi_lower_source_node_id(l, node));
+        XiValue *mcall;
+        if (oc_sel && oc_sel->kind == XA_SEL_FIELD && oc_sel->target_symbol && oc_callee_type &&
+            oc_callee_type->kind == XR_KIND_FUNCTION) {
+            XiValue *field = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, oc_callee_type, 1);
+            if (!field)
+                return NULL;
+            field->args[0] = obj;
+            field->aux = (void *) arena_strdup(l->func, oc->name);
+            field->aux_int = xi_lower_method_symbol(l, oc->name);
+            xi_lower_bind_class_field_id(l, field, obj->type, oc->name);
+            field->line = (uint32_t) node->line;
+            mcall = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, nargs);
+            if (!mcall)
+                return NULL;
+            mcall->args[0] = field;
+            for (int i = 0; i < n; i++)
+                mcall->args[i + 1] = arg_vals[i];
+            mcall->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+            mcall->line = (uint32_t) node->line;
+            xi_lower_bind_callsite_id(l, mcall, xi_lower_source_node_id(l, node));
+        } else {
+            xi_lower_check_map_method_args(l, node, oc->name, obj, arg_vals, n);
+            xi_lower_check_set_method_args(l, node, oc->name, obj, arg_vals, n);
+            xi_lower_narrow_map_method_args(l, node, oc->name, obj, arg_vals, n);
+            xi_lower_narrow_set_method_args(l, node, oc->name, obj, arg_vals, n);
+
+            mcall = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
+            if (!mcall)
+                return NULL;
+            mcall->args[0] = obj;
+            for (int i = 0; i < n; i++)
+                mcall->args[i + 1] = arg_vals[i];
+            mcall->aux = (void *) arena_strdup(l->func, oc->name);
+            mcall->aux_int = (int64_t) xi_lower_method_symbol(l, oc->name) << 1;
+            XrType *optional_method_type =
+                xr_type_non_nullable(l->isolate, xi_lower_node_type(l, call->callee));
+            lower_instantiate_call_view_evidence(mcall, NULL, optional_method_type, true);
+            mcall->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+            mcall->line = (uint32_t) node->line;
+            xi_lower_bind_callsite_id(l, mcall, xi_lower_source_node_id(l, node));
+        }
         XiBlock *call_exit = l->cur_block;
         xi_block_set_jump(call_exit, merge);
 

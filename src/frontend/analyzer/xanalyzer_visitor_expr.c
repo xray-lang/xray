@@ -4654,6 +4654,14 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
                 if (member) {
                     XaSymbolLinks *ml = xa_analyzer_get_links(ctx->analyzer, member);
                     if (ml && ml->type) {
+                        /* Record the selection so lowering can tell a data field
+                         * from a method on an optional chain, exactly as the
+                         * non-optional obj.member path does. Without this a
+                         * function-typed field call obj?.field(args) is lowered
+                         * as a method dispatch and misses. */
+                        XaSelectionKind sk =
+                            (member->kind == XA_SYM_METHOD) ? XA_SEL_METHOD : XA_SEL_FIELD;
+                        note_selection(ctx, node, sk, base_type, member, -1, ml->type, true);
                         return xa_optional_nullable_result(ctx, node, ml->type);
                     }
                 }

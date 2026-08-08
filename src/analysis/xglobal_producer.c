@@ -9279,7 +9279,24 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             XgClassId receiver_class = body_resolve_expr_class(bc, callee->as.member_access.object);
             XgMethodSummary *method = producer_find_method_by_name_in_hierarchy(
                 bc->producer, receiver_class, method_name_id, false);
-            if (receiver_class != XG_NO_ID) {
+            /* A function-typed field called directly (obj.field(args)) is an
+             * indirect closure call, not a method dispatch: the field holds a
+             * function value, so lowering emits XI_CALL. Recording it as a
+             * method would make closed-world reachability search for a method
+             * that does not exist and reject the build; the concrete target set
+             * is proven by the callable analysis instead. The analyzer records
+             * XA_SEL_FIELD on the callee for exactly this case. */
+            const XaSelection *field_sel =
+                bc->producer->analyzer ? xa_analyzer_get_selection(bc->producer->analyzer, callee)
+                                       : NULL;
+            XrType *field_result =
+                field_sel && field_sel->kind == XA_SEL_FIELD && field_sel->target_symbol &&
+                        field_sel->result_type
+                    ? xr_type_non_nullable(bc->producer->analyzer->isolate, field_sel->result_type)
+                    : NULL;
+            if (field_result && field_result->kind == XR_KIND_FUNCTION) {
+                row.kind = XG_CALL_CLOSURE;
+            } else if (receiver_class != XG_NO_ID) {
                 row.kind = XG_CALL_METHOD;
                 row.receiver_static_class_id = receiver_class;
                 row.method_id = method ? method->method_id : (XgMethodId) method_name_id;
