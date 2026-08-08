@@ -11,7 +11,10 @@ For every RC-managed value, including registered identity aliases:
   it is an ordinary consume/retain path. Emitters and ARC may not synthesize a
   hidden cell, cell destination, or cell-specific release exception.
 - C2: reference-count changes are path-balanced for local death, return
-  transfer, and move-out; double release is invalid.
+  transfer, and move-out; double release is invalid. An `XI_COPY` tagged
+  `VALUE_CLONE` realizes source-level value semantics by allocating independent
+  storage, so its result is a fresh +1 owner rather than the borrowed alias
+  described by the ordinary `XI_COPY` opcode contract.
 - C2a: every reference-capable function return publishes a complete ownership
   summary. `OWNED` is a fresh +1 result and may be consumed or dropped by the
   caller; `BORROWED_PARAM(n)` aliases parameter `n`; `BORROWED_STATIC` has
@@ -67,4 +70,4 @@ this one. A contract names what it proves; this line names what it does not.
 
 ## Digest anchors
 
-anchor-sha256: src/ir/xi_arc_verify.c d7468f7a17991d8fe650384a62ef6c86b0ba1c07c7b54e2b0d361f8c2ff9bcb5
+anchor-sha256: src/ir/xi_arc_verify.c 58d5224154e99dc36587c68c1a3250dbdb11b17e817ece51ce127bdcdd24af63

@@ -1,5 +1,10 @@
 import runtime
-import { makeOwnedArray, makeOwnedBuffer, borrowImportedArray } from "../../fixtures/return_ownership_lib"
+import {
+    makeOwnedArray,
+    makeOwnedBuffer,
+    makeOwnedValue,
+    borrowImportedArray,
+} from "../../fixtures/return_ownership_lib"
 
 @test
 fn test_imported_owned_return_is_reclaimed() {
@@ -19,6 +24,18 @@ fn test_imported_local_buffer_return_is_reclaimed() {
         assert_eq(len(buffer.asBytes()), 64)
     }
     assert(runtime.liveObjects() - before < 100)
+}
+
+@test
+fn test_imported_value_struct_return_is_reclaimed() {
+    var beforeBytes = runtime.liveBytes()
+    var beforeObjects = runtime.liveObjects()
+    for (var i = 0; i < 10000; i++) {
+        var value = makeOwnedValue(i)
+        assert_eq(value.value, i)
+    }
+    assert(runtime.liveBytes() - beforeBytes < 4096)
+    assert(runtime.liveObjects() - beforeObjects < 100)
 }
 
 @test

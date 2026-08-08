@@ -6958,6 +6958,7 @@ bool xa_expr_creates_fresh_root(XaInferContext *ctx, AstNode *value) {
         case AST_MAP_LITERAL:
         case AST_SET_LITERAL:
         case AST_OBJECT_LITERAL:
+        case AST_STRUCT_LITERAL:
         case AST_TUPLE_LITERAL:
         case AST_FUNCTION_EXPR:
         case AST_NEW_EXPR:

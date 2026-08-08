@@ -452,6 +452,19 @@ static bool op_produces_borrow(uint16_t op) {
     return op_result_ownership(op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
 }
 
+/* XI_COPY is normally an identity alias, but lowering marks source-level
+ * value-struct copies as VALUE_CLONE.  That variant allocates independent
+ * storage on both backends and therefore produces a fresh owning reference;
+ * treating it as the table's ordinary borrowed COPY leaks every clone. */
+static bool arc_value_produces_borrow(const XiValue *value) {
+    return value && !xi_copy_is_value_clone(value) && op_produces_borrow(value->op);
+}
+
+static bool arc_value_produces_owned(const XiValue *value) {
+    return value && (xi_copy_is_value_clone(value) ||
+                     op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_OWNED);
+}
+
 /* Representation selection runs after ordinary ARC insertion and may wrap a
  * borrowed RC value in BOX/UNBOX/CONVERT adapters.  Those adapters change only
  * the backend representation; they do not acquire ownership.  Late error-edge
@@ -465,7 +478,7 @@ static bool arc_value_is_borrow_alias(const XiValue *value, uint8_t depth) {
     /* A weak field load promotes (W1): its result is a fresh strong reference,
      * not a borrow of something the object owns — the object owns only the
      * handle. Treating it as a borrow would leak the promotion. */
-    if (op_produces_borrow(value->op))
+    if (arc_value_produces_borrow(value))
         return true;
     switch (value->op) {
         case XI_BOX:
@@ -918,9 +931,9 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
         return arc_return_unknown();
     }
 
-    if (op_produces_borrow(value->op))
+    if (arc_value_produces_borrow(value))
         return arc_return_unknown();
-    if (op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_OWNED)
+    if (arc_value_produces_owned(value))
         return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
     return arc_return_unknown();
 }
@@ -1228,7 +1241,7 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                 if (arc_raw_pointer_borrow_flows_to_user(member, u) ||
                     arc_span_view_borrow_flows_to_user(member, u)) {
                     is_member_borrow = true;
-                } else if (op_produces_borrow(u->op) && xi_own_type_may_be_ref(u->type)) {
+                } else if (arc_value_produces_borrow(u) && xi_own_type_may_be_ref(u->type)) {
                     /* A projection (GETFIELD / INDEX_GET / ...) borrows through
                      * any argument that is the tracked member. The result need
                      * only be a POSSIBLE reference: a Json field typed `null`
@@ -2515,7 +2528,7 @@ static bool arc_elim_can_remove_single_consumer_retain(const XiFunc *f, const Xi
             return false;
         return true;
     }
-    if (op_produces_borrow(target->op))
+    if (arc_value_produces_borrow(target))
         return false;
     if (op_is_call(target->op))
         return call_returns_fresh(f, target);

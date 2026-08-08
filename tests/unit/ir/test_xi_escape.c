@@ -70,6 +70,13 @@ static XrType t_custom_iterable = {
     .frozen = true,
     .instance = {.class_name = "CustomIterable"},
 };
+static XrType t_value_struct = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 15,
+    .frozen = true,
+    .is_value_type = true,
+    .instance = {.class_name = "OwnedValue"},
+};
 
 /* Helper: create function with sealed entry block */
 static XiFunc *make_func(const char *name, XrType *ret) {
@@ -889,6 +896,28 @@ static XiValue *find_release_for_value(const XiFunc *f, const XiValue *target) {
     return NULL;
 }
 
+static void test_arc_value_clone_is_fresh_owner(void) {
+    XiFunc *f = make_func("arc_value_clone_owner", &t_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *source = xi_value_new(f, entry, XI_AGG_NEW, &t_value_struct, 0);
+    XiValue *clone = xi_value_new(f, entry, XI_COPY, &t_value_struct, 1);
+    clone->args[0] = source;
+    clone->aux_int = XI_COPY_KIND_VALUE_CLONE;
+    xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(find_release_for_value(f, source) != NULL, true,
+              "discarded value-struct source must be released");
+    ASSERT_EQ(find_release_for_value(f, clone) != NULL, true,
+              "VALUE_CLONE must be released as an independent fresh owner");
+    XiArcVerifyReport report;
+    ASSERT_EQ(xi_arc_verify(f, &report), true,
+              "independent ARC verifier must accept VALUE_CLONE ownership");
+    xi_func_free(f);
+}
+
 static void assert_arc_iterator_method_result_is_fresh(XrType *receiver_type, uint16_t op,
                                                        const char *method, const char *message) {
     XiFunc *f = make_func("arc_fresh_iterator_method", &t_int);
@@ -1458,6 +1487,7 @@ int main(void) {
     test_arc_call_result_retain_before_same_block_phi_consume();
     test_arc_unknown_call_result_retains_before_single_consume();
     test_arc_stringbuilder_builtin_result_is_fresh();
+    test_arc_value_clone_is_fresh_owner();
     test_arc_builtin_iterator_results_are_fresh();
     test_arc_generator_iterator_result_is_fresh();
     test_arc_custom_iterator_method_stays_alias_uncertain();

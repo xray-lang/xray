@@ -1599,6 +1599,10 @@ TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference) {
                          "fn makeLocal() -> Buffer {\n"
                          "  var result = mem.allocZeroed(64)\n"
                          "  return result\n"
+                         "}\n"
+                         "struct LocalValue { value: int }\n"
+                         "fn makeLocalValue(value: int) -> LocalValue {\n"
+                         "  return LocalValue{value: value}\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -1607,13 +1611,17 @@ TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference) {
 
     XaSymbol *make = xa_analyzer_lookup_deep(a, "makeLocal");
     XaSymbol *forward = xa_analyzer_lookup_deep(a, "forwardLocal");
-    ASSERT(make != NULL && forward != NULL);
+    XaSymbol *make_value = xa_analyzer_lookup_deep(a, "makeLocalValue");
+    ASSERT(make != NULL && forward != NULL && make_value != NULL);
     ASSERT(make->links.return_ownership_scanned);
     ASSERT(make->links.return_ownership.complete);
     ASSERT(make->links.return_ownership.kind == XA_RETURN_OWNERSHIP_OWNED);
     ASSERT(forward->links.return_ownership_scanned);
     ASSERT(forward->links.return_ownership.complete);
     ASSERT(forward->links.return_ownership.kind == XA_RETURN_OWNERSHIP_OWNED);
+    ASSERT(make_value->links.return_ownership_scanned);
+    ASSERT(make_value->links.return_ownership.complete);
+    ASSERT(make_value->links.return_ownership.kind == XA_RETURN_OWNERSHIP_OWNED);
 
     xr_program_destroy(program);
     xa_analyzer_free(a);
