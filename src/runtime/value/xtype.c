@@ -2210,8 +2210,14 @@ static bool function_type_params_equal(XrType *a, XrType *b) {
 bool xr_type_function_signature_assignable(XrType *target, XrType *source) {
     if (!target || !source || target->kind != XR_KIND_FUNCTION || source->kind != XR_KIND_FUNCTION)
         return false;
+    /* min_params is not part of signature compatibility: it drives default-value
+     * filling at a direct call, not the shape of the function value. A function
+     * with defaults (min_params < param_count) may be assigned to the matching
+     * function type, and a call through the value supplies every argument --
+     * the "defaults apply only to direct calls" rule is enforced separately by
+     * symbol kind, not here. Comparing it produced the self-contradictory
+     * "X is not assignable to X" diagnostic, since the renderer omits it. */
     if (target->function.param_count != source->function.param_count ||
-        target->function.min_params != source->function.min_params ||
         target->function.is_variadic != source->function.is_variadic ||
         target->function.is_c_abi != source->function.is_c_abi ||
         target->function.view_return_source != source->function.view_return_source ||

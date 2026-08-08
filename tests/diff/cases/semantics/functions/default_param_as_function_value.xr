@@ -1,0 +1,16 @@
+// anchor: default-param-as-function-value
+// Task 264 D8. A function with a default parameter (min_params < param_count)
+// is assignable to the matching function type: min_params drives default-value
+// filling at a direct call, not signature compatibility. Before the fix the
+// assignment was rejected with a self-contradictory "X is not assignable to X",
+// because the exact-signature check compared min_params, which the renderer
+// omits. A call through the value supplies every argument.
+fn connect(host: string, port: int = 8080) -> string { return "${host}:${port}" }
+
+fn main() {
+    print(connect("a"))                       // a:8080 -- direct call fills the default
+    var f: (string, int) -> string = connect
+    print(f("b", 9))                          // b:9 -- through the value, all args given
+}
+
+main()
