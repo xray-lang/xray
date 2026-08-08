@@ -73,7 +73,7 @@ def main(argv: list[str]) -> int:
             and result.stdout_text().strip() == "60"
             and not result.stderr.strip()
             and typed_result.ok
-            and typed_result.stdout_text().strip() == "1560/64/64"
+            and typed_result.stdout_text().strip() == "1560/64/64/64"
             and not typed_result.stderr.strip()
         ):
             print("bytecode build multimodule: PASS")

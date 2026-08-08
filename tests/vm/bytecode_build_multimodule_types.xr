@@ -15,6 +15,16 @@ fn inspect(payload: Array<byte>) -> int {
     return len(bytes) + (bytes[0] as int) + (bytes[len(bytes) - 1] as int)
 }
 
+fn consumeEncoded(encoded: move Buffer) -> int {
+    return len(encoded.asBytes())
+}
+
+fn encodeAsync(payload: Array<byte>) -> Task<int> {
+    var envelope = ByteEnvelope(77, 1, 2, 9, 3, 1000000, 1, 11, payload)
+    var encoded = encodePayload(envelope)
+    return go consumeEncoded(move encoded)
+}
+
 var payload = Array<byte>(64, 7)
 var checksum = 0
 for (var index = 0; index < 20; index++) {
@@ -22,4 +32,5 @@ for (var index = 0; index < 20; index++) {
 }
 var envelope = ByteEnvelope(77, 1, 2, 9, 3, 1000000, 1, 11, payload)
 var view = payloadView(envelope)
-print(checksum.toString() + "/" + view.length.toString() + "/" + len(payload).toString())
+var asyncLength = await encodeAsync(payload)
+print(checksum.toString() + "/" + view.length.toString() + "/" + len(payload).toString() + "/" + asyncLength.toString())

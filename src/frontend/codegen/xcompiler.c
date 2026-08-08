@@ -120,6 +120,8 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
     /* Post-mono: re-analyze monomorphized declarations for struct layouts */
     if (ctx->analyzer) {
         xa_analyzer_analyze(ctx->analyzer, ctx->source_file, ast);
+        if (drain_analyzer_diagnostics(ctx) > 0)
+            return NULL;
     }
 
     /* Mark all diagnostics as reported before escape analysis */

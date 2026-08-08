@@ -7728,14 +7728,21 @@ void xa_ensure_function_return_ownership_prepass(XaInferContext *ctx, XaSymbolLi
  * This is a semantic finalization pass shared by VM and AOT.  Fixing the gap
  * only in CGen would leave bytecode ARC and generated C with different owner
  * counts at exactly the VM/AOT boundary Xray is meant to unify. */
-static void xa_reset_function_return_ownership_scope(XaScope *scope) {
-    if (!scope)
+static bool xa_function_return_ownership_is_current_file(const XaInferContext *ctx,
+                                                         const XaSymbol *symbol) {
+    return ctx && symbol && ctx->file_path && symbol->links.file_path &&
+           strcmp(ctx->file_path, symbol->links.file_path) == 0;
+}
+
+static void xa_reset_function_return_ownership_scope(XaInferContext *ctx, XaScope *scope) {
+    if (!ctx || !scope)
         return;
     int count = 0;
     XaSymbol **symbols = xa_scope_get_all_symbols(scope, &count);
     for (int i = 0; i < count; i++) {
         XaSymbol *symbol = symbols ? symbols[i] : NULL;
         if (!symbol || symbol->is_imported ||
+            !xa_function_return_ownership_is_current_file(ctx, symbol) ||
             (symbol->kind != XA_SYM_FUNCTION && symbol->kind != XA_SYM_METHOD) ||
             !symbol->links.function_decl_node)
             continue;
@@ -7745,7 +7752,7 @@ static void xa_reset_function_return_ownership_scope(XaScope *scope) {
     }
     xr_free(symbols);
     for (int i = 0; i < scope->child_count; i++)
-        xa_reset_function_return_ownership_scope(scope->children[i]);
+        xa_reset_function_return_ownership_scope(ctx, scope->children[i]);
 }
 
 static void xa_recompute_function_return_ownership_scope(XaInferContext *ctx, XaScope *scope) {
@@ -7756,6 +7763,7 @@ static void xa_recompute_function_return_ownership_scope(XaInferContext *ctx, Xa
     for (int i = 0; i < count; i++) {
         XaSymbol *symbol = symbols ? symbols[i] : NULL;
         if (!symbol || symbol->is_imported ||
+            !xa_function_return_ownership_is_current_file(ctx, symbol) ||
             (symbol->kind != XA_SYM_FUNCTION && symbol->kind != XA_SYM_METHOD) ||
             !symbol->links.function_decl_node)
             continue;
@@ -7769,7 +7777,7 @@ static void xa_recompute_function_return_ownership_scope(XaInferContext *ctx, Xa
 void xa_finalize_function_return_ownership(XaInferContext *ctx) {
     if (!ctx || !ctx->analyzer || !ctx->analyzer->global_scope)
         return;
-    xa_reset_function_return_ownership_scope(ctx->analyzer->global_scope);
+    xa_reset_function_return_ownership_scope(ctx, ctx->analyzer->global_scope);
     xa_recompute_function_return_ownership_scope(ctx, ctx->analyzer->global_scope);
 }
 
