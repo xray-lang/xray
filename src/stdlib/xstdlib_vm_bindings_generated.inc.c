@@ -24,7 +24,7 @@ static void xr_stdlib_vm_bind_cluster_generated(XrVMRuntime *isolate, XrModule *
     XRS_EXPORT(module, isolate, "discover", cluster_discover_fn);
     XRS_EXPORT(module, isolate, "__stop", cluster_stop_fn);
     XRS_EXPORT(module, isolate, "info", cluster_info_fn);
-    XRS_EXPORT(module, isolate, "__send", cluster_send_primitive);
+    XRS_EXPORT(module, isolate, "send", cluster_send_primitive);
     XRS_EXPORT(module, isolate, "__listen", cluster_listen_fn);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_CLUSTER */

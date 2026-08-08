@@ -1314,20 +1314,29 @@ void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type
     }
 }
 
-// xray binding: cluster.__send(topic, move envelope)
+static XrValue cluster_delivery_value(XrVMRuntime *X, XrClusterDelivery delivery) {
+    XrEnumType *type = xr_stdlib_enum_type_get(X, "cluster", "ClusterDelivery");
+    if (!type || delivery < XR_CLUSTER_DELIVERY_ACCEPTED ||
+        delivery > XR_CLUSTER_DELIVERY_DISCONNECTED)
+        return XR_NULL_VAL;
+    XrEnumAggregateValue *value = xr_enum_zero_payload_value(X, type, (uint32_t) delivery);
+    return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
+}
+
+// xray binding: cluster.send(topic, move envelope)
 static XrValue cluster_send_primitive(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 2 || !XR_IS_STRING(args[0]))
-        return xr_int(XR_CLUSTER_DELIVERY_INVALID_TOPIC);
+        return cluster_delivery_value(X, XR_CLUSTER_DELIVERY_INVALID_TOPIC);
 
     const uint8_t *envelope = NULL;
     size_t envelope_len = 0;
     if (!xr_mem_buffer_bytes(args[1], &envelope, &envelope_len) || envelope_len > UINT32_MAX)
-        return xr_int(XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
+        return cluster_delivery_value(X, XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
 
     XrString *topic = XR_TO_STRING(args[0]);
     XrClusterDelivery delivery =
         cluster_transport_send(X, topic->data, envelope, (uint32_t) envelope_len);
-    return xr_int(delivery);
+    return cluster_delivery_value(X, delivery);
 }
 
 // xray binding: cluster.listen(pattern)

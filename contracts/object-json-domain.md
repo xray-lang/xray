@@ -66,6 +66,10 @@ Status: frozen after object-surface convergence and typed nominal Json construct
     constructor; native value structs decode into their established aggregate
     layout, and stringify streams that layout without first materializing a
     Json object.
+17. Translation-unit static-data emission may also contain immutable scalar
+    enum sidecars required by tagged stdlib boundaries. Those sidecars are not
+    object/Json shape descriptors, do not change structural-object layout or
+    identity, and do not allocate an extension map.
 
 ## Digest anchors
 
@@ -83,7 +87,7 @@ anchor-sha256: src/ir/xi.h 6554b79d6ed76c21291d0b4f95e6d8de99cdba742691bc529b1e0
 anchor-sha256: xisa/xi/ops.def 9091256d150269d3b16cd9b7f60371292a5d8d357d48f513e0608cb32d663ce5
 anchor-sha256: src/aot/xrt_coll.h d486fb006def4b702fc9a2e47642f954a4d9e5dacbbf4a7e00f938b83d0a2d30
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2803a9189904ea6e4dc3100bb741aae456d32b544cdcb74a62ffcb0dff04af14
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4bc0066e76afeecbd0d0ef71800b817c03908ac62aa8ccb75bda6262693ddfc1
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 0087cc612d3b9f0d2377d5d94827349d7953e10eae9d092236dfa3a78906f014
 anchor-sha256: src/runtime/class/xclass.h 5d92a59177ecf5550463fb81740f68f344a1f6abe669a5220151f681b0ffdf75
 anchor-sha256: src/runtime/class/xinstance.c 6d0b1501e7d8790aa9f6476d96f45162199026d5fc7913071d8cc742c6feddea
 anchor-sha256: src/module/xbytecode_io.h 8ba68bcfe8a8dcddf16ece7678be7d8ead446f1163be8889d5e2ece8bd08e55f

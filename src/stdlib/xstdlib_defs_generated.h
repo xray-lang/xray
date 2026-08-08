@@ -25,7 +25,7 @@ typedef struct XrStdlibDefEntry {
     const char *aot;
     const char *arg_spec;
     const char *ret;
-    const char *aot_error_enum;
+    const char *aot_enum;
     const char *link_object;
     const char *define;
     const char *layer;
@@ -381,7 +381,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "xrt_cluster_stop", "", "value", "", "cluster.__stop", "", "runtime", "method", 0, true},
     {"cluster", "info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
-    {"cluster", "__send", "(topic: string, envelope: move Buffer): int", "Hand one canonical opaque service envelope to local and connected transports and return the delivery ordinal", "cluster_send_primitive", "normal", "", "xrt_cluster_send", "sv", "value", "", "cluster.__send", "", "runtime", "method", 2, true},
+    {"cluster", "send", "(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", "cluster_send_primitive", "normal", "", "xrt_cluster_send", "sv", "enum_i64", "ClusterDelivery", "cluster.send", "", "runtime", "method", 2, true},
     {"cluster", "__listen", "(pattern: string, capacity: int): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", "cluster_listen_fn", "normal", "", "xrt_cluster_listen", "sv", "value", "", "cluster.__listen", "", "runtime", "method", 2, true},
     {"ws", "connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"ws", "send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 3, false},

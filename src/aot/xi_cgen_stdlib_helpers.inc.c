@@ -23,6 +23,8 @@
 /* How a shim returns its result. */
 typedef enum {
     CG_AOT_RET_VALUE,           /* tagged XrValue, converted to the call's rep */
+    CG_AOT_RET_I64,             /* unboxed int64_t, converted to the call's rep */
+    CG_AOT_RET_ENUM_I64,        /* enum ordinal; boxed only at a tagged boundary */
     CG_AOT_RET_STR_BORROWED,    /* (const char *data, int64_t *out_len) slice into an
                                  * input/static buffer; copied into an AOT string */
     CG_AOT_RET_I64_PAIR_RESULT, /* XrtI64PairResult, materialized as a typed
@@ -47,10 +49,12 @@ typedef struct CgAotStdlibMethod {
     const char *arg_spec; /* owned: static literal (generated table) */
     CgAotRetKind ret_kind;
     const char *extern_decl; /* owned: static literal; forward decl emitted into generated C */
-    uint32_t error_layout_id;
-    const char *error_enum_name;            /* owned: static literal; generated enum name */
-    const char *const *error_variant_names; /* owned: static generated literal table */
-    uint16_t error_variant_count;
+    /* `enum_*` describes either the enum returned by CG_AOT_RET_ENUM_I64 or
+     * the error enum carried by CG_AOT_RET_I64_PAIR_RESULT. */
+    uint32_t enum_layout_id;
+    const char *enum_name;            /* owned: static literal; generated enum name */
+    const char *const *variant_names; /* owned: static generated literal table */
+    uint16_t variant_count;
 } CgAotStdlibMethod;
 
 #include "xstdlib_aot_methods_generated.inc.c"
@@ -67,6 +71,90 @@ static const CgAotStdlibMethod *cg_aot_stdlib_method_at(int index) {
 
 static int cg_aot_stdlib_method_count(void) {
     return CG_AOT_STDLIB_GENERATED_METHOD_COUNT;
+}
+
+static int cg_aot_stdlib_method_index(const CgAotStdlibMethod *method) {
+    if (!method)
+        return -1;
+    for (int i = 0; i < cg_aot_stdlib_method_count(); i++) {
+        if (cg_aot_stdlib_method_at(i) == method)
+            return i;
+    }
+    return -1;
+}
+
+static bool cg_mark_aot_stdlib_enum_scalar_sidecar(XiCgenCtx *ctx, const CgAotStdlibMethod *method,
+                                                   uint32_t *out_index) {
+    int index = cg_aot_stdlib_method_index(method);
+    int count = cg_aot_stdlib_method_count();
+    if (!ctx || index < 0 || method->ret_kind != CG_AOT_RET_ENUM_I64 || !method->enum_name ||
+        !method->variant_names || method->variant_count == 0) {
+        if (ctx)
+            ctx->error = true;
+        return false;
+    }
+    if ((uint32_t) count > ctx->stdlib_enum_scalar_sidecar_cap) {
+        uint32_t old_cap = ctx->stdlib_enum_scalar_sidecar_cap;
+        uint8_t *used = (uint8_t *) xr_realloc(ctx->stdlib_enum_scalar_sidecar_used,
+                                               (size_t) count * sizeof(uint8_t));
+        if (!used) {
+            ctx->error = true;
+            return false;
+        }
+        memset(used + old_cap, 0, (size_t) count - old_cap);
+        ctx->stdlib_enum_scalar_sidecar_used = used;
+        ctx->stdlib_enum_scalar_sidecar_cap = (uint32_t) count;
+    }
+    ctx->stdlib_enum_scalar_sidecar_used[index] = 1;
+    if (out_index)
+        *out_index = (uint32_t) index;
+    return true;
+}
+
+static void cg_reset_aot_stdlib_enum_scalar_sidecars(XiCgenCtx *ctx) {
+    if (ctx && ctx->stdlib_enum_scalar_sidecar_used && ctx->stdlib_enum_scalar_sidecar_cap > 0)
+        memset(ctx->stdlib_enum_scalar_sidecar_used, 0,
+               ctx->stdlib_enum_scalar_sidecar_cap * sizeof(uint8_t));
+}
+
+static void cg_emit_aot_stdlib_enum_scalar_sidecar_defs(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !out || !ctx->stdlib_enum_scalar_sidecar_used)
+        return;
+    const char *module_prefix =
+        ctx->module && ctx->module->name && ctx->module->name[0] ? ctx->module->name : "mod";
+    int count = cg_aot_stdlib_method_count();
+    for (int i = 0; i < count; i++) {
+        if ((uint32_t) i >= ctx->stdlib_enum_scalar_sidecar_cap ||
+            !ctx->stdlib_enum_scalar_sidecar_used[i])
+            continue;
+        const CgAotStdlibMethod *method = cg_aot_stdlib_method_at(i);
+        if (!method || method->ret_kind != CG_AOT_RET_ENUM_I64 || !method->enum_name ||
+            !method->variant_names || method->variant_count == 0) {
+            ctx->error = true;
+            return;
+        }
+        fprintf(out, "static const char *const _xaot_stdlib_enum_names_%s_%d[%u] = {",
+                module_prefix, i, (unsigned) method->variant_count);
+        for (uint16_t variant = 0; variant < method->variant_count; variant++) {
+            if (variant > 0)
+                fprintf(out, ",");
+            emit_c_string_literal(out, method->variant_names[variant]);
+        }
+        fprintf(out, "};\n");
+        fprintf(out,
+                "static const XrAotEnumScalarLayout _xaot_stdlib_enum_layout_%s_%d = "
+                "{{XR_TENUM_SCALAR_LAYOUT, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0, 0}, ",
+                module_prefix, i);
+        emit_c_string_literal(out, method->enum_name);
+        fprintf(out, ", _xaot_stdlib_enum_names_%s_%d, %u, %u};\n", module_prefix, i,
+                (unsigned) method->variant_count, (unsigned) method->enum_layout_id);
+        fprintf(out,
+                "static XrValue _xaot_stdlib_enum_box_%s_%d(int64_t ordinal) { "
+                "if ((uint64_t) ordinal >= UINT64_C(%u)) { "
+                "fputs(\"invalid direct stdlib enum ordinal\\n\", stderr); abort(); } "
+                "return xrt_enum_scalar_box(&_xaot_stdlib_enum_layout_%s_%d, ordinal); }\n\n",
+                module_prefix, i, (unsigned) method->variant_count, module_prefix, i);
+    }
 }
 
 /* Whether `module` is a stdlib module with AOT direct-call support. The
@@ -449,8 +537,8 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
                      object_type->object.field_types[1] &&
                      XR_TYPE_IS_INT(object_type->object.field_types[0]) &&
                      XR_TYPE_IS_INT(object_type->object.field_types[1]);
-    if (!ctx || !out || !v || !m || (!layout_ok && !object_ok) || !m->error_enum_name ||
-        !m->error_variant_names || m->error_variant_count == 0) {
+    if (!ctx || !out || !v || !m || (!layout_ok && !object_ok) || !m->enum_name ||
+        !m->variant_names || m->variant_count == 0) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: invalid i64-pair result contract for %s.%s "
                 "(layout=%p fields=%u error-enum=%s variants=%u)\n",
@@ -460,8 +548,7 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
                        : (XR_TYPE_HAS_OBJECT_SHAPE(object_type)
                               ? (unsigned) object_type->object.field_count
                               : 0),
-                m && m->error_enum_name ? m->error_enum_name : "?",
-                m ? (unsigned) m->error_variant_count : 0);
+                m && m->enum_name ? m->enum_name : "?", m ? (unsigned) m->variant_count : 0);
         if (ctx)
             ctx->error = true;
         emit_codegen_abort_expr(out);
@@ -484,14 +571,14 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
             "{ fputs(\"invalid direct stdlib error ordinal\\n\", stderr); abort(); } "
             "xrt_pending_error = "
             "xrt_enum_box_new(UINT32_C(%u), ",
-            id, id, id, id, (unsigned) m->error_variant_count, (unsigned) m->error_layout_id);
-    emit_c_string_literal(out, m->error_enum_name);
+            id, id, id, id, (unsigned) m->variant_count, (unsigned) m->enum_layout_id);
+    emit_c_string_literal(out, m->enum_name);
     fprintf(out, ", ");
     fprintf(out, "((const char *const[]){");
-    for (uint16_t i = 0; i < m->error_variant_count; i++) {
+    for (uint16_t i = 0; i < m->variant_count; i++) {
         if (i > 0)
             fprintf(out, ", ");
-        emit_c_string_literal(out, m->error_variant_names[i]);
+        emit_c_string_literal(out, m->variant_names[i]);
     }
     fprintf(out, "})[_are%u], _are%u); } ", id, id);
 
@@ -528,6 +615,37 @@ static bool cg_emit_aot_stdlib_direct_call(XiCgenCtx *ctx, FILE *out, const XiFu
         return false;
 
     XrRep target_rep = xicgen_value_c_storage_rep(ctx, f, v);
+
+    if (m->ret_kind == CG_AOT_RET_I64) {
+        const char *suffix = emit_conversion_prefix_ctx(ctx, out, v->type, XR_REP_I64, target_rep);
+        fprintf(out, "%s(", m->shim);
+        cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc, arg_base);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
+        return true;
+    }
+
+    if (m->ret_kind == CG_AOT_RET_ENUM_I64) {
+        if (target_rep == XR_REP_I64) {
+            fprintf(out, "%s(", m->shim);
+            cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc, arg_base);
+            fprintf(out, ")");
+            return true;
+        }
+        uint32_t index = 0;
+        if (!cg_mark_aot_stdlib_enum_scalar_sidecar(ctx, m, &index)) {
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        const char *module_prefix =
+            ctx->module && ctx->module->name && ctx->module->name[0] ? ctx->module->name : "mod";
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, target_rep);
+        fprintf(out, "_xaot_stdlib_enum_box_%s_%u(%s(", module_prefix, (unsigned) index, m->shim);
+        cg_emit_aot_stdlib_args(ctx, out, f, v, m, call_argc, arg_base);
+        fprintf(out, "))");
+        emit_conversion_suffix(out, suffix);
+        return true;
+    }
 
     /* The common value-returning ABI is already declared by the layered xrt
      * headers.  Emit it as an ordinary C expression so hosted fragments remain

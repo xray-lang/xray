@@ -95,6 +95,7 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
         xr_free(ctx->func_residues[i].entries);
     xr_free(ctx->func_residues);
     xr_free(ctx->enum_scalar_sidecar_used);
+    xr_free(ctx->stdlib_enum_scalar_sidecar_used);
     xr_free(ctx);
 }
 

@@ -723,16 +723,16 @@ XrValue xrt_cluster_stop(void) {
     return XR_NULL_VAL;
 }
 
-XrValue xrt_cluster_send(const char *topic_text, int64_t topic_len, XrValue envelope) {
+int64_t xrt_cluster_send(const char *topic_text, int64_t topic_len, XrValue envelope) {
     XrAotRuntime *runtime = NULL;
     XrAotClusterState *cluster = aot_cluster_acquire(&runtime);
     char topic[XR_TOPIC_PATTERN_MAX + 1];
     if (!cluster)
-        return xr_int(XR_CLUSTER_DELIVERY_UNAVAILABLE);
+        return XR_CLUSTER_DELIVERY_UNAVAILABLE;
     if (!aot_cluster_copy_text(topic, sizeof(topic), topic_text, topic_len, false) ||
         !xr_cluster_topic_valid(topic, false)) {
         aot_cluster_release(runtime);
-        return xr_int(XR_CLUSTER_DELIVERY_INVALID_TOPIC);
+        return XR_CLUSTER_DELIVERY_INVALID_TOPIC;
     }
     const uint8_t *bytes = NULL;
     size_t length = 0;
@@ -740,7 +740,7 @@ XrValue xrt_cluster_send(const char *topic_text, int64_t topic_len, XrValue enve
         length < XR_CLUSTER_ENVELOPE_HEADER_SIZE ||
         length > XR_FRAME_MAX_PAYLOAD - 2 - (size_t) topic_len) {
         aot_cluster_release(runtime);
-        return xr_int(XR_CLUSTER_DELIVERY_INVALID_ENVELOPE);
+        return XR_CLUSTER_DELIVERY_INVALID_ENVELOPE;
     }
 
     XrClusterDelivery local = aot_cluster_deliver_local(cluster, topic, bytes, (uint32_t) length);
@@ -748,7 +748,7 @@ XrValue xrt_cluster_send(const char *topic_text, int64_t topic_len, XrValue enve
     uint8_t *payload = (uint8_t *) xr_malloc(payload_length);
     if (!payload) {
         aot_cluster_release(runtime);
-        return xr_int(XR_CLUSTER_DELIVERY_OVERLOADED);
+        return XR_CLUSTER_DELIVERY_OVERLOADED;
     }
     payload[0] = XR_TOPIC_DEFAULT_HOP_LIMIT;
     payload[1] = (uint8_t) topic_len;
@@ -774,7 +774,7 @@ XrValue xrt_cluster_send(const char *topic_text, int64_t topic_len, XrValue enve
     else if (local == XR_CLUSTER_DELIVERY_OVERLOADED || connected > 0)
         result = XR_CLUSTER_DELIVERY_OVERLOADED;
     aot_cluster_release(runtime);
-    return xr_int(result);
+    return result;
 }
 
 XrValue xrt_cluster_listen(const char *pattern_text, int64_t pattern_len, XrValue capacity_value) {

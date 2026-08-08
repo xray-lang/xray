@@ -15,6 +15,12 @@ stdlib entries. A fragment has no program entry or runtime ownership, and an
 entry is admitted only after the ordinary post-CGen W1-W4 verifier plus its
 typed ABI gate pass. The residue categories, allowance set, and measurement
 point remain unchanged.
+Direct stdlib helpers that return a payload-free enum may carry only its
+ordinal across the native shim ABI. CGen keeps that ordinal unboxed in an I64
+storage plan and, only at a tagged boundary, attaches one immutable
+translation-unit enum-layout sidecar. The boundary is R5; the sidecar is not
+R2, creates no per-call map or enum object, and does not alter the R1/R7
+partition.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -90,6 +96,6 @@ that cite the affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h 696ddc204e161c42bee708528a2eddc90eaaa8dfc1f8f2bb9590cc5b798371b0
-anchor-sha256: src/aot/xi_cgen.c 2d40c91d0c9e984588ddffbddc2a91ce9be5f49f37ecdb6d4006ddbd58ff35ca
-anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 744327ffb824c99493221431771df2f6f3f325154cea193ebcec17627c6a88f7
+anchor-sha256: src/aot/xi_cgen.c d5def56c508774fe4880711e0c729d257827a6afe398b8cd02bffe20f4b6612f
+anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 94d85a40ae5a6b8d3b237984a7457ce15d76f6b1fd5e6095719969a7515ad582
 anchor-sha256: src/app/cli/xcmd_verify.c ca122153d89cbc4fa2b2fcffe08604c109729941a5a9b34ff0d72b1d0226e8a8

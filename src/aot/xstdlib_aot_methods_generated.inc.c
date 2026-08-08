@@ -7,7 +7,7 @@
 
 /* clang-format off */
 
-static const char *const g_aot_stdlib_net___copyBidirectional_error_variants[] = {
+static const char *const g_aot_stdlib_net___copyBidirectional_enum_variants[] = {
     "Timeout",
     "Closed",
     "Reset",
@@ -18,6 +18,15 @@ static const char *const g_aot_stdlib_net___copyBidirectional_error_variants[] =
     "Invalid",
     "Cancelled",
     "OutOfMemory",
+};
+
+static const char *const g_aot_stdlib_cluster_send_enum_variants[] = {
+    "Accepted",
+    "InvalidTopic",
+    "InvalidEnvelope",
+    "Unavailable",
+    "Overloaded",
+    "Disconnected",
 };
 
 static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
@@ -180,7 +189,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__readInto", 3, "xrt_net_read_into", "vvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__write", 2, "xrt_net_write", "vs", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__writeBytes", 2, "xrt_net_write_bytes", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"net", "__copyBidirectional", 2, "xrt_net_copy_bidirectional", "vv", CG_AOT_RET_I64_PAIR_RESULT, NULL, UINT32_C(2184710811), "NetError", g_aot_stdlib_net___copyBidirectional_error_variants, 10},
+    {"net", "__copyBidirectional", 2, "xrt_net_copy_bidirectional", "vv", CG_AOT_RET_I64_PAIR_RESULT, NULL, UINT32_C(2184710811), "NetError", g_aot_stdlib_net___copyBidirectional_enum_variants, 10},
     {"net", "__shutdownRead", 1, "xrt_net_shutdown_read", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__shutdownWrite", 1, "xrt_net_shutdown_write", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__shutdown", 1, "xrt_net_shutdown", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
@@ -201,7 +210,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"cluster", "__start", 8, "xrt_cluster_start", "svsvsssv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__join", 1, "xrt_cluster_join", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"cluster", "__stop", 0, "xrt_cluster_stop", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"cluster", "__send", 2, "xrt_cluster_send", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"cluster", "send", 2, "xrt_cluster_send", "sv", CG_AOT_RET_ENUM_I64, NULL, UINT32_C(4282747530), "ClusterDelivery", g_aot_stdlib_cluster_send_enum_variants, 6},
     {"cluster", "__listen", 2, "xrt_cluster_listen", "sv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
 };
 #define CG_AOT_STDLIB_GENERATED_METHOD_COUNT ((int) (sizeof(g_aot_stdlib_generated_methods) / sizeof(g_aot_stdlib_generated_methods[0])))

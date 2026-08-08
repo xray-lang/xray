@@ -764,6 +764,11 @@ struct XiCgenCtx {
     uint8_t *enum_scalar_sidecar_used;
     uint32_t enum_scalar_sidecar_cap;
     uint32_t prelude_enum_scalar_sidecar_mask;
+    /* Direct stdlib methods may return compact enum ordinals.  Mark only the
+     * methods whose result actually crosses into a tagged representation, then
+     * emit one immutable enum layout sidecar per marked method. */
+    uint8_t *stdlib_enum_scalar_sidecar_used;
+    uint32_t stdlib_enum_scalar_sidecar_cap;
     const XiFunc *sync_go_targets[CG_MAX_SYNC_GO_TARGETS];
     int nsync_go_targets;
     const XiFunc *sync_heartbeat_targets[CG_MAX_SYNC_HEARTBEAT_TARGETS];

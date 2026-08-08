@@ -26,7 +26,7 @@ XR_FUNC XrValue xrt_cluster_start(const char *name, int64_t name_len, XrValue po
                                   XrValue insecure);
 XR_FUNC XrValue xrt_cluster_join(const char *address, int64_t address_len);
 XR_FUNC XrValue xrt_cluster_stop(void);
-XR_FUNC XrValue xrt_cluster_send(const char *topic, int64_t topic_len, XrValue envelope);
+XR_FUNC int64_t xrt_cluster_send(const char *topic, int64_t topic_len, XrValue envelope);
 XR_FUNC XrValue xrt_cluster_listen(const char *pattern, int64_t pattern_len, XrValue capacity);
 
 #endif  // XRT_CLUSTER_H

@@ -3486,7 +3486,7 @@ module net {
     argc: 2
     arg_spec: "vv"
     ret: "i64_pair_result"
-    aot_error_enum: "NetError"
+    aot_enum: "NetError"
     aot_direct: true
     link_object: false
     layer: "runtime"
@@ -3890,17 +3890,20 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn __send {
-    signature: "(topic: string, envelope: move Buffer): int"
-    doc: "Hand one canonical opaque service envelope to local and connected transports and return the delivery ordinal"
+  fn send {
+    signature: "(topic: string, envelope: move Buffer): ClusterDelivery"
+    doc: "Hand one canonical opaque service envelope to local and connected transports"
     vm: "cluster_send_primitive"
     argc: 2
     arg_spec: "sv"
     aot: "xrt_cluster_send"
+    ret: "enum_i64"
+    aot_enum: "ClusterDelivery"
     aot_direct: true
     link_object: true
     layer: "runtime"
     caps: "channel"
+    return_ownership: "borrowed_static"
   }
 
   fn __listen {

@@ -1,0 +1,9 @@
+import cluster
+import mem
+
+fn sendOrdinal() -> int {
+    var envelope = mem.allocZeroed(64)
+    return cluster.send("service.echo", move envelope).ordinal
+}
+
+print(sendOrdinal())

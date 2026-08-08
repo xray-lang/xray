@@ -71,6 +71,12 @@ with null bytecode. The runtime initializes every non-entry slot in that order
 before evaluating the entry, so graph-resolved import and re-export operands
 retain identical module indices after source removal. A compressed runtime
 module table or a separate preload list is not a valid bundle representation.
+Payload-free enums returned by direct stdlib helpers use a declared compact
+`int64_t` ordinal shim ABI. This is an internal provider boundary, not the
+public tagged value ABI: an I64 consumer keeps the ordinal, while a tagged or
+erased consumer receives the existing `XR_TAG_ENUM` representation backed by
+one immutable scalar-layout sidecar. Invalid ordinals abort at that boundary;
+enum tags, layout identifiers, names, and calling conventions do not drift.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -250,9 +256,9 @@ anchor-sha256: src/aot/xaot_verify.c 7fe97d173ac206666af4d63052ee0abb41b26eac845
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 5cafb87f5a28356200cdd737e84e7e7f6896b7c8ec97461262e872cb5f05b698
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c a04c5d8bd89a69bf175d69c03e78b340d7ee348b2f405f250d23737f34d1d30f
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2803a9189904ea6e4dc3100bb741aae456d32b544cdcb74a62ffcb0dff04af14
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4bc0066e76afeecbd0d0ef71800b817c03908ac62aa8ccb75bda6262693ddfc1
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 0087cc612d3b9f0d2377d5d94827349d7953e10eae9d092236dfa3a78906f014
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 4ad72c173bf880b48ff9c232aee4d3648c7848d749c0a34881373e0e9ac051f7
-anchor-sha256: src/aot/xi_cgen.c 2d40c91d0c9e984588ddffbddc2a91ce9be5f49f37ecdb6d4006ddbd58ff35ca
+anchor-sha256: src/aot/xi_cgen.c d5def56c508774fe4880711e0c729d257827a6afe398b8cd02bffe20f4b6612f
 anchor-sha256: src/aot/xrt_coll.h d486fb006def4b702fc9a2e47642f954a4d9e5dacbbf4a7e00f938b83d0a2d30
 anchor-sha256: src/aot/xrt_core_freestanding.h 13af59f530ac1a77bb9f050bb391a65cbaebe941d77efd4f65043c4d811c7e00
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7

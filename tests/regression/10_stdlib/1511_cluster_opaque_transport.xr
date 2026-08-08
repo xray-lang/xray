@@ -2,6 +2,12 @@ import cluster
 import mem
 import { ClusterConfig, ClusterDelivery } from cluster
 
+type DeliveryBoundary = ClusterDelivery | int
+
+fn erase_delivery(value: ClusterDelivery) -> DeliveryBoundary {
+    return value
+}
+
 fn envelope(seed: u8) -> Buffer {
     var out = mem.allocZeroed(64)
     {
@@ -30,7 +36,13 @@ fn test_cluster_transports_only_opaque_envelopes() {
     assert(cluster.start(config))
 
     var invalid_topic = envelope(1)
-    assert(cluster.send("service.*", move invalid_topic) == ClusterDelivery.InvalidTopic)
+    var invalid_topic_delivery = cluster.send("service.*", move invalid_topic)
+    assert(invalid_topic_delivery == ClusterDelivery.InvalidTopic)
+    var erased_delivery = erase_delivery(invalid_topic_delivery)
+    assert(erased_delivery is ClusterDelivery)
+    var restored_delivery = erased_delivery as ClusterDelivery
+    assert_eq(restored_delivery.name, "InvalidTopic")
+    assert_eq(restored_delivery.ordinal, 1)
 
     var invalid_envelope = mem.allocZeroed(63)
     assert(cluster.send("service.echo", move invalid_envelope) == ClusterDelivery.InvalidEnvelope)

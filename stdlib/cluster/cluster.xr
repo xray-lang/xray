@@ -158,18 +158,6 @@ export fn join(addr: string) -> bool { return __join(addr) }
 
 export fn stop() { __stop() }
 
-export fn send(topic: string, envelope: move Buffer) -> ClusterDelivery {
-    var ordinal = __send(topic, move envelope)
-    match (ordinal) {
-        0 -> { return ClusterDelivery.Accepted }
-        1 -> { return ClusterDelivery.InvalidTopic }
-        2 -> { return ClusterDelivery.InvalidEnvelope }
-        3 -> { return ClusterDelivery.Unavailable }
-        4 -> { return ClusterDelivery.Overloaded }
-        _ -> { return ClusterDelivery.Disconnected }
-    }
-}
-
 export fn listen(pattern: string, capacity: int = 1024) -> Channel<Buffer>? {
     return __listen(pattern, capacity)
 }
