@@ -690,6 +690,29 @@ TEST(deterministic_runtime_forces_single_worker_and_virtual_clock) {
     restore_test_env("XRAY_CORO_SEED", old_seed);
 }
 
+TEST(worker_env_overrides_single_worker_entry_default) {
+    char *old_workers = dup_env_value(getenv("XRAY_WORKERS"));
+    set_test_env("XRAY_WORKERS", "4");
+
+    XrVMRuntime isolate;
+    XrRuntimeCore core;
+    XrSystemHeap sys_heap;
+    memset(&isolate, 0, sizeof(isolate));
+    memset(&core, 0, sizeof(core));
+    ASSERT_TRUE(xr_sysheap_init(&sys_heap, NULL));
+    core.sys_heap = &sys_heap;
+    isolate.core_rt = &core;
+    core.vm_owner = &isolate;
+
+    XrRuntime *runtime = xr_scheduler_runtime_new(&core, 1);
+    ASSERT_NOT_NULL(runtime);
+    ASSERT_EQ_INT(runtime->worker_count, 4);
+
+    xr_scheduler_runtime_delete(runtime);
+    xr_sysheap_destroy(&sys_heap);
+    restore_test_env("XRAY_WORKERS", old_workers);
+}
+
 TEST(current_monotonic_uses_virtual_time_in_deterministic_runtime) {
     SchedulerFixture f;
     ASSERT_TRUE(scheduler_fixture_init(&f));
@@ -889,6 +912,7 @@ RUN_TEST(aot_poll_yield_kind_bumps_backedge_heartbeat);
 RUN_TEST(aot_poll_yield_kind_cost_batches_reductions);
 RUN_TEST(aot_sync_backedge_heartbeat_uses_current_worker);
 RUN_TEST(deterministic_runtime_forces_single_worker_and_virtual_clock);
+RUN_TEST(worker_env_overrides_single_worker_entry_default);
 RUN_TEST(current_monotonic_uses_virtual_time_in_deterministic_runtime);
 RUN_TEST(work_stealing_moves_batch_and_returns_direct_item);
 RUN_TEST(spawn_burst_shares_same_parent_fanout);

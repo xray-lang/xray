@@ -205,6 +205,15 @@ static uint32_t cg_runtime_caps_from_entry_plan(XiCgenCtx *ctx) {
     return caps;
 }
 
+static int cg_scheduler_workers_from_entry_plan(XiCgenCtx *ctx) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!bundle || !bundle->has_entry_plan) {
+        ctx->error = true;
+        return 0;
+    }
+    return bundle->entry_plan.scheduler_mode == XR_SCHED_SINGLE ? 1 : 0;
+}
+
 static bool cg_entry_uses_resumable_frame(XiCgenCtx *ctx) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     if (!bundle || !bundle->has_entry_plan) {
@@ -718,9 +727,12 @@ static void emit_xrt_runtime_builtin_sync(FILE *out, const CgBuiltinInitPlan *pl
 }
 
 static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint32_t runtime_caps,
-                                  const char *source_path, bool has_value_ops) {
+                                  int scheduler_workers, const char *source_path,
+                                  bool has_value_ops) {
     fprintf(out, "    XrAotRuntimeConfig runtime_cfg;\n");
     fprintf(out, "    xr_aot_runtime_config_init(&runtime_cfg);\n");
+    if (scheduler_workers > 0)
+        fprintf(out, "    runtime_cfg.scheduler_workers = %d;\n", scheduler_workers);
     if (has_value_ops)
         fprintf(out, "    runtime_cfg.value_ops = &xrt_runtime_value_ops;\n");
     if (cg_runtime_caps_need_destroy_config(runtime_caps))
@@ -884,7 +896,8 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     emit_xrt_builtin_init(out, &builtin_plan, entry_source_path, "argc > 1 ? argc - 1 : 0",
                           "argc > 1 ? argv + 1 : NULL");
     if (entry_needs_runtime) {
-        emit_xrt_runtime_init(out, &builtin_plan, runtime_caps, entry_source_path,
+        emit_xrt_runtime_init(out, &builtin_plan, runtime_caps,
+                              cg_scheduler_workers_from_entry_plan(ctx), entry_source_path,
                               has_runtime_value_ops);
     } else {
         fprintf(out, "    (void) argc;\n");
@@ -1055,7 +1068,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         emit_xrt_builtin_init(body, &builtin_plan, entry_source_path, "argc > 1 ? argc - 1 : 0",
                               "argc > 1 ? argv + 1 : NULL");
         if (entry_needs_runtime) {
-            emit_xrt_runtime_init(body, &builtin_plan, runtime_caps, entry_source_path,
+            emit_xrt_runtime_init(body, &builtin_plan, runtime_caps,
+                                  cg_scheduler_workers_from_entry_plan(ctx), entry_source_path,
                                   has_runtime_value_ops);
         }
         if (entry_has_descriptor)
