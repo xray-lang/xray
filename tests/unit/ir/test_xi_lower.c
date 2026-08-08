@@ -2748,7 +2748,7 @@ TEST(optional_chain) {
 }
 
 TEST(optional_call) {
-    XiFunc *f = lower_source("type IntFn = (int) -> int\n"
+    XiFunc *f = lower_source("type IntFn = fn(int) -> int\n"
                              "fn bump(x: int) -> int { return x + 1 }\n"
                              "var fnv: IntFn? = bump\n"
                              "var n = fnv?.(41)\n"

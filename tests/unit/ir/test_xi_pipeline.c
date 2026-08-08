@@ -621,7 +621,7 @@ TEST(e2e_generator_completion_has_no_normal_return_value) {
 /* ========== Closure (nested function) ========== */
 
 TEST(e2e_closure) {
-    XrProto *p = compile_source("fn make() ->() -> int {\n"
+    XrProto *p = compile_source("fn make() -> fn() -> int {\n"
                                 "  fn inner() -> int { return 42 }\n"
                                 "  return inner\n"
                                 "}\nvar f = make()\nprint(f())",
