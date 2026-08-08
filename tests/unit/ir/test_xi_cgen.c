@@ -6218,6 +6218,10 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
                       "        this.values = next\n"
                       "        return len(this.values)\n"
                       "    }\n"
+                      "    selfAssign() -> int {\n"
+                      "        this.values = this.values\n"
+                      "        return len(this.values)\n"
+                      "    }\n"
                       "}\n"
                       "fn make(values: Array<int>) -> Bag {\n"
                       "    return Bag(values)\n"
@@ -6234,7 +6238,7 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
                       "    var a = [1]\n"
                       "    var b = [2, 3]\n"
                       "    var bag = make(a)\n"
-                      "    return bag.replace(b) + swap(ref bag, a) + local(a)\n"
+                      "    return bag.replace(b) + bag.selfAssign() + swap(ref bag, a) + local(a)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -6267,19 +6271,34 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
     replace = strstr(replace + 1, "static int64_t test_replace_");
     assert(replace != NULL && "replace method definition should follow its declaration");
     const char *replace_end = next_static_after(replace);
-    /* The store is one comma expression: retain the new container, release the
-     * old one, then assign. Retain-before-release is what keeps
-     * `this.values = this.values` from freeing the value being stored. The
-     * temporary is an SSA value (`vN`), so match the shape, not a fixed name. */
+    /* XI_STORE_FIELD consumes the new owner. ARC inserts a RETAIN only when
+     * the source must remain live; the C store itself releases the old field
+     * and transfers the already-owned value without manufacturing another
+     * reference. */
     const char *store = strstr(replace, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY)), "
                                         "(p0)->f0 = (xrt_array_t *)");
     assert(store && store < replace_end &&
            count_between(replace, replace_end, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY))") ==
                1 &&
            "direct native receiver collection ref stores release the old container once");
-    const char *retain = strstr(replace, "xrt_retain(");
-    assert(retain && retain < store &&
-           "the new container is retained before the old one is released");
+    assert(count_between(replace, replace_end, "xrt_retain(") == 0 &&
+           "last-use field transfer must not add an unbalanced retain");
+
+    const char *self_assign = strstr(code, "static int64_t test_selfAssign_");
+    assert(self_assign != NULL && "selfAssign method should use typed ABI");
+    self_assign = strstr(self_assign + 1, "static int64_t test_selfAssign_");
+    assert(self_assign != NULL && "selfAssign method definition should follow its declaration");
+    const char *self_assign_end = next_static_after(self_assign);
+    const char *self_assign_retain = strstr(self_assign, "xrt_retain(");
+    const char *self_assign_store =
+        strstr(self_assign, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY)), "
+                            "(p0)->f0 = (xrt_array_t *)");
+    assert(self_assign_retain && self_assign_retain < self_assign_store &&
+           self_assign_store < self_assign_end &&
+           count_between(self_assign, self_assign_end, "xrt_retain(") == 1 &&
+           count_between(self_assign, self_assign_end,
+                         "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY))") == 1 &&
+           "ARC must retain a self-assigned field before the consuming store releases it");
 
     const char *swap = strstr(code, "static int64_t test_swap_");
     assert(swap != NULL && "swap function should use typed scalar return ABI");
@@ -6292,17 +6311,16 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
            count_between(swap, swap_end, "xrt_map_get(") == 0 &&
            count_between(swap, swap_end, "xrt_map_set(") == 0 &&
            "native class pointer parameters should access ref fields without Map fallback");
-    /* Same comma-expression store as the direct receiver above, through the
-     * heap instance pointer this time. */
+    /* Same consuming store as the direct receiver above, through the heap
+     * instance pointer this time. */
     const char *swap_store = strstr(swap, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY)), "
                                           "(_native)->f0 = (xrt_array_t *)");
     assert(swap_store && swap_store < swap_end &&
            count_between(swap, swap_end, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY))") ==
                1 &&
            "heap native instance collection ref stores release the old container once");
-    const char *swap_retain = strstr(swap, "xrt_retain(");
-    assert(swap_retain && swap_retain < swap_store &&
-           "the new container is retained before the old one is released");
+    assert(count_between(swap, swap_end, "xrt_retain(") == 0 &&
+           "pointer field transfer must not add an unbalanced retain");
 
     const char *local = strstr(code, "static int64_t test_local_");
     assert(local != NULL && "local function should use typed scalar return ABI");

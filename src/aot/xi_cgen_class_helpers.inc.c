@@ -57,13 +57,13 @@ static bool cg_class_field_cache_add(CgClassFieldCache *cache, const char *name,
     if (cache->layout && layout_index < 0)
         return false;
 
-    /* Fields stored as a tagged XrValue in the native struct (strings and other
-     * boxed values) must not be scalar-cached: the cache would declare the local
-     * with the value rep (e.g. void*) while the struct member is an XrValue. Let
-     * them use the direct tagged field access path instead. */
+    /* Reference fields carry transferred ownership at every semantic store.
+     * Caching only the raw pointer would hide intermediate overwrites from ARC,
+     * so keep every reference store on the direct ownership-aware path. */
     if (cache->layout && layout_index >= 0) {
         const XrAggregateFieldLayout *fl = cg_struct_field(cache->layout, (uint16_t) layout_index);
-        if (fl && (fl->native_type == XR_NATIVE_STRING || fl->native_type == XR_NATIVE_VALUE))
+        if (fl && (fl->native_type == XR_NATIVE_STRING || fl->native_type == XR_NATIVE_VALUE ||
+                   xaot_layout_ref_tag_name_for_native_type(fl->native_type) != NULL))
             return false;
     }
 
@@ -421,29 +421,10 @@ static void emit_class_field_cache_flush(XiCgenCtx *ctx, FILE *out) {
         if (!entry->dirty)
             continue;
         if (cache->native_receiver && entry->layout_index >= 0) {
-            const XrAggregateFieldLayout *field =
-                cg_struct_field(cache->layout, (uint16_t) entry->layout_index);
-            const char *tag_name =
-                field ? cg_class_native_ref_field_tag_name(field->native_type) : NULL;
             fprintf(out, "    ");
-            if (field && cg_class_native_field_is_ref(field) && tag_name) {
-                fprintf(out, "{ XrValue _new = xr_mkptr(");
-                emit_class_field_cache_var(out, i);
-                fprintf(out, ", %s); ", tag_name);
-                if (cg_class_native_field_plan_has_release_drop(
-                        ctx, cache->class_data, (uint32_t) entry->layout_index, field)) {
-                    fprintf(out, "xrt_retain(_new); xrt_release(xr_mkptr(");
-                    emit_class_field_cache_native_ref(ctx, out, cache, entry->layout_index);
-                    fprintf(out, ", %s)); ", tag_name);
-                }
-                emit_class_field_cache_native_ref(ctx, out, cache, entry->layout_index);
-                fprintf(out, " = (%s)_new.ptr; }",
-                        cg_struct_field_c_type(cache->layout, entry->layout_index));
-            } else {
-                emit_class_field_cache_native_ref(ctx, out, cache, entry->layout_index);
-                fprintf(out, " = (%s)", cg_struct_field_c_type(cache->layout, entry->layout_index));
-                emit_class_field_cache_var(out, i);
-            }
+            emit_class_field_cache_native_ref(ctx, out, cache, entry->layout_index);
+            fprintf(out, " = (%s)", cg_struct_field_c_type(cache->layout, entry->layout_index));
+            emit_class_field_cache_var(out, i);
             fprintf(out, ";\n");
         } else {
             fprintf(out, "    xrt_map_set((xrt_map_t*)");

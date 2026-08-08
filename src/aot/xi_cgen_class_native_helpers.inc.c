@@ -879,9 +879,7 @@ static bool emit_class_native_ref_field_store_expr(XiCgenCtx *ctx, FILE *out, co
         return false;
     const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
     if (cg_class_native_field_plan_has_release_drop(ctx, cd, idx, field)) {
-        fprintf(out, "(xrt_retain(");
-        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
-        fprintf(out, "), xrt_release(");
+        fprintf(out, "(xrt_release(");
         emit_class_native_ref_field_value(ctx, out, cd, layout, idx, object_expr);
         fprintf(out, "), ");
     } else {
@@ -910,9 +908,7 @@ static bool emit_class_native_receiver_ref_field_store_expr(XiCgenCtx *ctx, FILE
         return false;
     const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
     if (cg_class_native_field_plan_has_release_drop(ctx, cd, idx, field)) {
-        fprintf(out, "(xrt_retain(");
-        emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
-        fprintf(out, "), xrt_release(");
+        fprintf(out, "(xrt_release(");
         emit_class_native_receiver_ref_field_value(ctx, out, f, cd, layout, idx, recv);
         fprintf(out, "), ");
     } else {

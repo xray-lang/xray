@@ -220,6 +220,13 @@ emission, and native linking:
   compile-time size/alignment/offset assertions on both sides. A fragment may
   borrow these objects but cannot invent a second layout, retain an unowned
   runtime root, or bypass the declared argument/return ownership convention.
+- T13: `XI_STORE_FIELD` consumes its stored value on every backend. Native-class
+  CGen therefore releases the previous reference field and transfers the
+  compiler-provided owner without adding an implicit retain. If the source must
+  remain live, including exact self-assignment, XI ARC must materialize the
+  balancing retain before the consuming store. Native reference fields cannot
+  use scalar field caching because doing so would hide intermediate consuming
+  overwrites from ARC.
 
 The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
@@ -254,7 +261,8 @@ anchor-sha256: src/aot/xaot_link.c a268bec7948a3a9cecf081d63d51545e3fe41af0b6ab3
 anchor-sha256: src/aot/xaot_prepare.c aafc236f21231b6509fca91e544d948f7ea2d06b059fd0c8101f0286f4a66bbd
 anchor-sha256: src/aot/xaot_verify.c 7fe97d173ac206666af4d63052ee0abb41b26eac8451da308ab5f8110fad6e16
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 5cafb87f5a28356200cdd737e84e7e7f6896b7c8ec97461262e872cb5f05b698
-anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c a04c5d8bd89a69bf175d69c03e78b340d7ee348b2f405f250d23737f34d1d30f
+anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 495a6b15c1a963c95bc26d98f4791adf0b6d16c1b33660900587a07bf738d7a1
+anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 618628f3a903675d603562435acafe6ee76baeea66f1ecf4524169b55dd85b2f
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2803a9189904ea6e4dc3100bb741aae456d32b544cdcb74a62ffcb0dff04af14
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 0087cc612d3b9f0d2377d5d94827349d7953e10eae9d092236dfa3a78906f014
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 4ad72c173bf880b48ff9c232aee4d3648c7848d749c0a34881373e0e9ac051f7

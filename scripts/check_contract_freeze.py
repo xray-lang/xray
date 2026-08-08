@@ -104,6 +104,7 @@ CONTRACT_SPECS = (
             "src/aot/xaot_prepare.c",
             "src/aot/xaot_verify.c",
             "src/aot/xi_cgen_abi_helpers.inc.c",
+            "src/aot/xi_cgen_class_helpers.inc.c",
             "src/aot/xi_cgen_class_native_helpers.inc.c",
             "src/aot/xi_cgen_dispatch_helpers.inc.c",
             "src/aot/xi_cgen_program_entry.inc.c",
