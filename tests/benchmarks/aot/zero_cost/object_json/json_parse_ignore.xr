@@ -1,0 +1,21 @@
+type Profile = { id: int, active: bool }
+
+fn run(n: int) -> int {
+    var i = 0
+    var total = 0
+    while (i < n) {
+        var profile: Profile = JSON.parse<Profile>(
+            "{\"id\":7,\"active\":true,\"future\":9}",
+            JSON.UnknownFields.Ignore
+        )
+        total = total + profile.id
+        i = i + 1
+    }
+    return total
+}
+
+var iterations = 20000
+if (len(process.args) > 0) {
+    iterations = int(process.args[0]) ?? iterations
+}
+print(run(iterations))

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 from ctypes import wintypes
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -19,21 +20,53 @@ import time
 
 
 CASES = {
-    "exact_dot": "6000000",
-    "exact_static_index": "6000000",
+    "exact_dot": "60000000",
+    "exact_static_index": "60000000",
     "construct_destroy": "2000000",
-    "json_scalar_widening": "2000000",
+    "width_constraint_call": "120000000",
+    "object_spread": "4000000",
+    "json_scalar_widening": "20000000",
     "json_parse_typed": "3500000",
+    "json_parse_ignore": "3500000",
+    "json_parse_object_map": "500000",
+    "json_decode_object": "3500000",
+    "json_parse_with_rest": "4000000",
+    "json_path_ops": "600000",
     "json_encode_stringify": "18500000",
+    "json_stringify_map": "10500000",
+    "json_stringify_with_rest": "16500000",
 }
 
 CASE_ARGS = {
-    "exact_dot": ["2000000"],
-    "exact_static_index": ["2000000"],
+    "exact_dot": ["20000000"],
+    "exact_static_index": ["20000000"],
     "construct_destroy": ["2000000"],
-    "json_scalar_widening": ["2000000"],
+    "width_constraint_call": ["20000000"],
+    "object_spread": ["2000000"],
+    "json_scalar_widening": ["20000000"],
     "json_parse_typed": ["500000"],
+    "json_parse_ignore": ["500000"],
+    "json_parse_object_map": ["500000"],
+    "json_decode_object": ["500000"],
+    "json_parse_with_rest": ["500000"],
+    "json_path_ops": ["200000"],
     "json_encode_stringify": ["500000"],
+    "json_stringify_map": ["500000"],
+    "json_stringify_with_rest": ["500000"],
+}
+
+# These APIs did not exist at the frozen pre-263 revision.  They receive a
+# reproducible 30-sample candidate baseline rather than a fabricated
+# before/after ratio.  Paired cases still gate at the frozen 1% CI threshold.
+RECORD_ONLY_CASES = {
+    "json_parse_ignore",
+    "json_parse_with_rest",
+    "json_path_ops",
+    "json_stringify_with_rest",
+}
+
+CASE_COMPARISONS = {
+    "json_decode_object": "JSON.decode(JSON.value(object)) reference built by candidate compiler",
 }
 
 
@@ -148,6 +181,48 @@ def pe_sections(binary: Path) -> dict[str, int]:
     return result
 
 
+def macho_sections(binary: Path) -> dict[str, int]:
+    data = binary.read_bytes()
+    if len(data) < 32 or data[:4] != b"\xcf\xfa\xed\xfe":
+        return {}
+    command_count = struct.unpack_from("<I", data, 16)[0]
+    offset = 32
+    result: dict[str, int] = {}
+    for _ in range(command_count):
+        if offset + 8 > len(data):
+            return {}
+        command, command_size = struct.unpack_from("<II", data, offset)
+        if command_size < 8 or offset + command_size > len(data):
+            return {}
+        if command == 0x19 and command_size >= 72:  # LC_SEGMENT_64
+            segment = data[offset + 8 : offset + 24].split(b"\0", 1)[0].decode(
+                "ascii", "replace"
+            )
+            file_size = struct.unpack_from("<Q", data, offset + 48)[0]
+            section_count = struct.unpack_from("<I", data, offset + 64)[0]
+            result[f"{segment}.__file"] = file_size
+            section_offset = offset + 72
+            for _ in range(section_count):
+                if section_offset + 80 > offset + command_size:
+                    return {}
+                section = data[section_offset : section_offset + 16].split(b"\0", 1)[0].decode(
+                    "ascii", "replace"
+                )
+                section_size = struct.unpack_from("<Q", data, section_offset + 40)[0]
+                result[f"{segment}.{section}"] = section_size
+                section_offset += 80
+        offset += command_size
+    return result
+
+
+def native_sections(binary: Path) -> dict[str, int]:
+    return pe_sections(binary) or macho_sections(binary)
+
+
+def sha256_file(binary: Path) -> str:
+    return hashlib.sha256(binary.read_bytes()).hexdigest()
+
+
 def classify(interval: tuple[float, float], limit: float) -> str:
     if interval[1] <= limit:
         return "pass"
@@ -233,6 +308,48 @@ def main() -> int:
     for case_index, name in enumerate(selected):
         expected = CASES[name]
         case_args = CASE_ARGS.get(name, [])
+        if name in RECORD_ONLY_CASES:
+            binary = resolve_binary(args.candidate_dir, name)
+            for _ in range(args.warmups):
+                run_once(binary, expected, case_args)
+            elapsed: list[int] = []
+            peaks: list[int] = []
+            for _ in range(args.samples):
+                duration_total = 0
+                batch_peaks: list[int] = []
+                for _ in range(args.batch):
+                    duration, peak = run_once(binary, expected, case_args)
+                    duration_total += duration
+                    if peak is not None:
+                        batch_peaks.append(peak)
+                elapsed.append(duration_total)
+                if batch_peaks:
+                    peaks.append(max(batch_peaks))
+            if not peaks:
+                for _ in range(3):
+                    peak = measure_posix_peak(binary, expected, case_args)
+                    if peak is not None:
+                        peaks.append(peak)
+            case_result = {
+                "qualification": "new-baseline",
+                "expectedOutput": expected,
+                "args": case_args,
+                "candidateNs": elapsed,
+                "candidateMedianNs": statistics.median(elapsed),
+                "candidateP95Ns": percentile(elapsed, 0.95),
+                "status": "recorded",
+                "candidatePeakWorkingSetBytes": peaks,
+                "candidateImageBytes": binary.stat().st_size,
+                "candidatePeSections": pe_sections(binary),
+                "candidateNativeSections": native_sections(binary),
+                "candidateSha256": sha256_file(binary),
+            }
+            payload["cases"][name] = case_result
+            print(
+                f"{name}: recorded median={case_result['candidateMedianNs']:.0f}ns "
+                f"p95={case_result['candidateP95Ns']:.0f}ns"
+            )
+            continue
         binaries = {
             "baseline": resolve_binary(args.baseline_dir, name),
             "candidate": resolve_binary(args.candidate_dir, name),
@@ -283,6 +400,8 @@ def main() -> int:
             overall = status
 
         case_result = {
+            "qualification": "paired-regression",
+            "comparison": CASE_COMPARISONS.get(name, "frozen pre-263 implementation"),
             "expectedOutput": expected,
             "args": case_args,
             "baselineNs": elapsed["baseline"],
@@ -302,6 +421,10 @@ def main() -> int:
             "candidateImageBytes": binaries["candidate"].stat().st_size,
             "baselinePeSections": pe_sections(binaries["baseline"]),
             "candidatePeSections": pe_sections(binaries["candidate"]),
+            "baselineNativeSections": native_sections(binaries["baseline"]),
+            "candidateNativeSections": native_sections(binaries["candidate"]),
+            "baselineSha256": sha256_file(binaries["baseline"]),
+            "candidateSha256": sha256_file(binaries["candidate"]),
         }
         payload["cases"][name] = case_result
         print(

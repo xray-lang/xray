@@ -1,14 +1,10 @@
-import codegen
-
-fn isJsonInt(value: JSON.Value) -> int {
-    return JSON.isInt(value) ? 1 : 0
-}
-
 fn run(n: int) -> int {
     var i = 0
     var total = 0
     while (i < n) {
-        total = total + isJsonInt(codegen.opaque(i))
+        var base = { x: i, y: i + 1 }
+        var expanded = { ...base, z: i + 2 }
+        total = total + expanded.z - expanded.x
         i = i + 1
     }
     return total

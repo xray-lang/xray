@@ -1,20 +1,15 @@
-import codegen
-
-fn isJsonInt(value: JSON.Value) -> int {
-    return JSON.isInt(value) ? 1 : 0
-}
-
 fn run(n: int) -> int {
+    var object = JSON.parseObject("{\"id\":7,\"name\":\"Ada\"}")
     var i = 0
     var total = 0
     while (i < n) {
-        total = total + isJsonInt(codegen.opaque(i))
+        total = total + len(JSON.stringify(object))
         i = i + 1
     }
     return total
 }
 
-var iterations = 200000
+var iterations = 20000
 if (len(process.args) > 0) {
     iterations = int(process.args[0]) ?? iterations
 }
