@@ -1422,6 +1422,8 @@ static void write_bytecode_main(FILE *f, const char *bundle_source) {
     // and runtime exception objects behave like `xray run`.
     fprintf(f, "\n"
                "int main(int argc, char **argv) {\n"
+               "    setvbuf(stdout, NULL, _IONBF, 0);\n"
+               "    setvbuf(stderr, NULL, _IONBF, 0);\n"
                "    XrVMConfig params;\n"
                "    xray_vm_config_init(&params);\n"
                "    params.script_argc = argc > 1 ? argc - 1 : 0;\n"

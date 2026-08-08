@@ -1951,6 +1951,19 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME bytecode_build_stdio
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bytecode_build_stdio_test.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(bytecode_build_stdio PROPERTIES
+        LABELS "vm;bytecode;build;bundle;stdio;regression"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
+    add_test(
         NAME extern_layout_bytecode_cli_roundtrip
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_extern_layout_bytecode_roundtrip.py
