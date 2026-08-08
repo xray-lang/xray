@@ -765,8 +765,8 @@ TEST(parameter_modes_roundtrip) {
                       "interface ParamModeIface {\n"
                       "    touch(a: int, b: ref int, c: move Buffer) -> int\n"
                       "}\n"
-                      "type ComplexHandler = (Array<int>, ref Slice<u8>?, "
-                      "move Buffer, (int, string), (ref int) -> bool,) -> Array<string>\n";
+                      "type ComplexHandler = fn(Array<int>, ref Slice<u8>?, "
+                      "move Buffer, (int, string), fn(ref int) -> bool,) -> Array<string>\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "fn param_modes(a: int, b: ref int, c: move Buffer)"));
@@ -774,8 +774,8 @@ TEST(parameter_modes_roundtrip) {
     ASSERT_TRUE(contains(fmt1, "touch(a: int, b: ref int, c: move Buffer)"));
     ASSERT_TRUE(contains(fmt1, "configure(limit: int = 4)"));
     ASSERT_TRUE(contains(fmt1, "collect(...values: int)"));
-    ASSERT_TRUE(contains(fmt1, "type ComplexHandler = (Array<int>, ref Slice<u8>?, "
-                               "move Buffer, (int, string), (ref int) -> bool) -> "
+    ASSERT_TRUE(contains(fmt1, "type ComplexHandler = fn(Array<int>, ref Slice<u8>?, "
+                               "move Buffer, (int, string), fn(ref int) -> bool) -> "
                                "Array<string>"));
     ASSERT_FALSE(contains(fmt1, "bool,) -> Array<string>"));
     ASSERT_FALSE(contains(fmt1, "ref b:"));
@@ -847,7 +847,7 @@ TEST(parameter_modes_comments_roundtrip) {
                       "    touch(ref b, move c) // call marker note\n"
                       "}\n"
                       "/* function type docs */\n"
-                      "type CommentedHandler = (int, ref string, move Buffer) -> bool\n"
+                      "type CommentedHandler = fn(int, ref string, move Buffer) -> bool\n"
                       "class CommentedBox {\n"
                       "    // method docs\n"
                       "    touch(value: ref int, job: move Buffer) { } // method marker note\n"
@@ -866,7 +866,7 @@ TEST(parameter_modes_comments_roundtrip) {
     ASSERT_TRUE(contains(fmt1, "// signature docs"));
     ASSERT_TRUE(contains(fmt1, "commented_modes(a: int, b: ref int, c: move Buffer)"));
     ASSERT_TRUE(contains(fmt1, "touch(ref b, move c)"));
-    ASSERT_TRUE(contains(fmt1, "type CommentedHandler = (int, ref string, move Buffer) -> bool"));
+    ASSERT_TRUE(contains(fmt1, "type CommentedHandler = fn(int, ref string, move Buffer) -> bool"));
     ASSERT_TRUE(contains(fmt1, "touch(value: ref int, job: move Buffer)"));
     ASSERT_TRUE(contains(fmt1, "call(value: int, job: move Buffer) -> int"));
     ASSERT_FALSE(contains(fmt1, "ref value:"));

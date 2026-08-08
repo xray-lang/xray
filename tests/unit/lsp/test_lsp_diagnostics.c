@@ -221,7 +221,7 @@ TEST(diagnostics_closure_cycle_reaches_lsp) {
     ASSERT(server != NULL);
 
     const char *code = "class Button {\n"
-                       "    onClick: () -> int\n"
+                       "    onClick: fn() -> int\n"
                        "    clicks: int\n"
                        "    constructor() {\n"
                        "        this.onClick = fn() -> int { return 0 }\n"

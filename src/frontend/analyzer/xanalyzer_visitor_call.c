@@ -6637,6 +6637,17 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             return ret_union;
     }
 
+    /* A nullable callee must be narrowed before the call even when the value it
+     * would hold is a function: a `(fn(...) -> R)?` type has kind FUNCTION with
+     * the nullable bit set, so the not-callable branch below never sees it and
+     * the call would otherwise slip through to a run-time null panic (spec
+     * §2.13 N-12). Check nullability up front, independent of callability. */
+    if (XR_TYPE_IS_NULLABLE(callee_type) &&
+        xa_check_nullable_access(ctx, node, call->callee, callee_type, "call", true)) {
+        xa_report_arg_accesses_require_known_contract(ctx, node, call);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
     // Check if callee is callable
     if (!XR_TYPE_IS_FUNCTION(callee_type)) {
         // Builtin method call: container.method() where member_access returned

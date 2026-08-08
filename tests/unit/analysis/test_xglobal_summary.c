@@ -8248,11 +8248,11 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
                          "fn spawnIt() {\n"
                          "    go touch([1, 2, 3])\n"
                          "}\n"
-                         "fn makeAdder(base: int) -> (int) -> int {\n"
+                         "fn makeAdder(base: int) -> fn(int) -> int {\n"
                          "    var bias = 1\n"
                          "    return fn(v: int) -> int { return base + bias + v }\n"
                          "}\n"
-                         "fn makeIdentity() -> (int) -> int {\n"
+                         "fn makeIdentity() -> fn(int) -> int {\n"
                          "    return fn(v: int) -> int { return v }\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -8360,7 +8360,7 @@ TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_
                          "fn writeRef(value: ref int) {\n"
                          "    value = 7\n"
                          "}\n"
-                         "fn makeCounter() -> () -> int {\n"
+                         "fn makeCounter() -> fn() -> int {\n"
                          "    var count = 0\n"
                          "    return fn() -> int { count += 1; return count }\n"
                          "}\n";
@@ -16638,7 +16638,7 @@ TEST(global_evidence_publishes_allocation_contracts) {
     setup_parser_session();
     const char *source = "export fn scalar(x: int) -> int { return x + 1 }\n"
                          "fn allocates() { var values = [1, 2, 3] }\n"
-                         "fn unknown(cb: () -> ()) { cb() }\n";
+                         "fn unknown(cb: fn()) { cb() }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 

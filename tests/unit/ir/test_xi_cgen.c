@@ -4830,7 +4830,7 @@ TEST(cgen_direct_call_converts_bytes_to_byte_slice_arg) {
 }
 
 TEST(cgen_boxed_adapter_converts_byte_slice_arg) {
-    const char *src = "fn apply(f: (Slice<byte>) -> int, src: Array<byte>) -> int {\n"
+    const char *src = "fn apply(f: fn(Slice<byte>) -> int, src: Array<byte>) -> int {\n"
                       "    return f(src[:])\n"
                       "}\n"
                       "fn run() -> int {\n"
@@ -6986,7 +6986,7 @@ TEST(cgen_closure_values_and_indirect_calls_use_portable_c) {
                       "    value = value + 1\n"
                       "    return value\n"
                       "}\n"
-                      "fn invoke(action: (ref int) -> int, value: ref int) -> int {\n"
+                      "fn invoke(action: fn(ref int) -> int, value: ref int) -> int {\n"
                       "    return action(ref value)\n"
                       "}\n"
                       "var value = 4\n"
@@ -7325,7 +7325,7 @@ TEST(cgen_typed_array_map_captured_callback_uses_runtime_helper) {
 }
 
 TEST(cgen_dynamic_uncaptured_callback_keeps_boxed_adapter) {
-    const char *src = "fn apply(f: (int) -> int, x: int) -> int {\n"
+    const char *src = "fn apply(f: fn(int) -> int, x: int) -> int {\n"
                       "    return f(x)\n"
                       "}\n"
                       "fn run() -> int {\n"
@@ -8479,7 +8479,7 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
 }
 
 TEST(cgen_returned_suspendable_closure_uses_verified_child_frame) {
-    const char *src = "fn makeWorker() -> () -> int {\n"
+    const char *src = "fn makeWorker() -> fn() -> int {\n"
                       "    return fn() -> int {\n"
                       "        Coro.yield()\n"
                       "        return 41\n"

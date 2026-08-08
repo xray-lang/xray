@@ -187,14 +187,14 @@ EXTERN_PARAM_WRAPPER_REQUIRED_SNIPPETS = {
     ),
     Path("tests/compile_errors/ffi/044_cfn_callback_ref_param_mode_rejected.xr"): (
         'extern "C"',
-        "CFn<(ref i32) -> i32>",
+        "CFn<fn(ref i32) -> i32>",
     ),
     Path("tests/compile_errors/ffi/044_cfn_callback_ref_param_mode_rejected.xr.expected"): (
         "extern CFn parameter 'cb' uses unsupported callback parameter mode 'ref' at callback parameter 1 before verified extern callback ABI wrapper contract",
     ),
     Path("tests/compile_errors/ffi/046_cfn_return_ref_param_mode_rejected.xr"): (
         'extern "C"',
-        "CFn<(ref i32) -> i32>",
+        "CFn<fn(ref i32) -> i32>",
     ),
     Path("tests/compile_errors/ffi/046_cfn_return_ref_param_mode_rejected.xr.expected"): (
         "extern CFn return uses unsupported callback parameter mode 'ref' at callback parameter 1 before verified extern callback ABI wrapper contract",

@@ -1294,7 +1294,7 @@ TEST(cmp_for_in_range) {
 
 TEST(cmp_closure_capture) {
     run_compare((CompareSpec) {
-        .source = "fn make_adder(x: int) ->(int) -> int {\n"
+        .source = "fn make_adder(x: int) -> fn(int) -> int {\n"
                   "  fn adder(y: int) -> int { return x + y }\n"
                   "  return adder\n"
                   "}\n"
@@ -1506,7 +1506,7 @@ TEST(cmp_string_method) {
 
 TEST(cmp_higher_order) {
     run_compare((CompareSpec) {
-        .source = "fn makeAdder(x: int) ->(int) -> int {\n"
+        .source = "fn makeAdder(x: int) -> fn(int) -> int {\n"
                   "    return fn(y: int) -> int { return x + y }\n"
                   "}\n"
                   "var add5 = makeAdder(5)\n"
@@ -1629,7 +1629,7 @@ TEST(cmp_transitive_capture) {
 
 TEST(cmp_closure_counter) {
     run_compare((CompareSpec) {
-        .source = "fn counter() ->() -> int {\n"
+        .source = "fn counter() -> fn() -> int {\n"
                   "    var n = 0\n"
                   "    return fn() -> int { n += 1; return n }\n"
                   "}\n"
@@ -1648,7 +1648,7 @@ TEST(cmp_closure_counter) {
 
 TEST(cmp_compose) {
     run_compare((CompareSpec) {
-        .source = "fn compose(f: (int) -> int, g: (int) -> int) ->(int) -> int {\n"
+        .source = "fn compose(f: fn(int) -> int, g: fn(int) -> int) -> fn(int) -> int {\n"
                   "    return fn(x: int) -> int { return f(g(x)) }\n"
                   "}\n"
                   "fn add1(x: int) -> int { return x + 1 }\n"
@@ -1666,7 +1666,7 @@ TEST(cmp_compose) {
 
 TEST(cmp_apply_fn) {
     run_compare((CompareSpec) {
-        .source = "fn apply(f: (int) -> int, x: int) -> int {\n"
+        .source = "fn apply(f: fn(int) -> int, x: int) -> int {\n"
                   "    return f(x)\n"
                   "}\n"
                   "fn double(x: int) -> int { return x * 2 }\n"
@@ -1881,7 +1881,7 @@ TEST(cmp_for_in_map) {
 
 TEST(cmp_closure_adder) {
     run_compare((CompareSpec) {
-        .source = "fn make_adder(n: int) ->(int) -> int {\n"
+        .source = "fn make_adder(n: int) -> fn(int) -> int {\n"
                   "    return fn(x: int) -> int { return x + n }\n"
                   "}\n"
                   "var add5 = make_adder(5)\n"
@@ -1897,7 +1897,7 @@ TEST(cmp_closure_adder) {
 
 TEST(cmp_closure_accumulator) {
     run_compare((CompareSpec) {
-        .source = "fn make_acc() ->(int) -> int {\n"
+        .source = "fn make_acc() -> fn(int) -> int {\n"
                   "    var total = 0\n"
                   "    return fn(n: int) -> int { total += n; return total }\n"
                   "}\n"
@@ -1916,9 +1916,9 @@ TEST(cmp_closure_accumulator) {
 
 TEST(cmp_nested_closure) {
     run_compare((CompareSpec) {
-        .source = "fn outer() ->() ->() -> int {\n"
+        .source = "fn outer() -> fn() -> fn() -> int {\n"
                   "    var val = 42\n"
-                  "    return fn() ->() -> int {\n"
+                  "    return fn() -> fn() -> int {\n"
                   "        return fn() -> int { return val }\n"
                   "    }\n"
                   "}\n"

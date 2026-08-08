@@ -1,1 +1,2 @@
-type '{url,stream}' is not assignable to parameter type 'HttpRequestOptions'
+is not assignable to parameter type 'HttpRequestOptions'
+extra field 'stream'

@@ -386,9 +386,9 @@ TEST(type_to_string) {
     ASSERT(strcmp(xr_type_to_string(t_arr), "Array<string>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_byte_arr), "Array<byte>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_byte_slice), "Slice<byte>") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(i32): i32>") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_byte_fn), "fn(byte): byte") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(int, ref string, move bool): ()") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(i32) -> i32>") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_byte_fn), "fn(byte) -> byte") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(int, ref string, move bool)") == 0);
 }
 
 TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
@@ -1007,7 +1007,7 @@ TEST(compile_type_function) {
 
 TEST(compile_type_ref_function_modes) {
     AstNode *program =
-        xr_parse(g_session, "type Handler = (int, ref string, move Array<bool>) -> int");
+        xr_parse(g_session, "type Handler = fn(int, ref string, move Array<bool>) -> int");
     ASSERT(program != NULL);
     ASSERT(program->type == AST_PROGRAM);
     ASSERT(program->as.program.count == 1);
@@ -1434,14 +1434,13 @@ TEST(analyzer_parameter_effect_is_canonical_product) {
 TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source =
-        "fn grow(data: ref Array<int>) { data.push(1) }\n"
-        "fn growViaCall(data: ref Array<int>) { grow(data) }\n"
-        "fn shrink(data: ref Array<int>) { data.pop() }\n"
-        "fn rebind(data: ref Array<int>) { data = [1, 2] }\n"
-        "fn dynamic(cb: (ref Array<int>) -> (), data: ref Array<int>) { cb(data) }\n"
-        "fn readOnly(data: ref Array<int>) -> int { return data.length }\n"
-        "fn sliceLen(data: Slice<byte>) -> int { return len(data) }\n";
+    const char *source = "fn grow(data: ref Array<int>) { data.push(1) }\n"
+                         "fn growViaCall(data: ref Array<int>) { grow(data) }\n"
+                         "fn shrink(data: ref Array<int>) { data.pop() }\n"
+                         "fn rebind(data: ref Array<int>) { data = [1, 2] }\n"
+                         "fn dynamic(cb: fn(ref Array<int>), data: ref Array<int>) { cb(data) }\n"
+                         "fn readOnly(data: ref Array<int>) -> int { return data.length }\n"
+                         "fn sliceLen(data: Slice<byte>) -> int { return len(data) }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "memory_effect_summary.xr", program);
@@ -1632,7 +1631,7 @@ TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint) {
     const char *source = "fn worker() -> int { return 1 }\n"
                          "fn suspends() { var task = go worker(); await task }\n"
                          "fn transitive() { suspends() }\n"
-                         "fn dynamic(cb: () -> ()) { cb() }\n";
+                         "fn dynamic(cb: fn()) { cb() }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "canonical_suspend_effect.xr", program);
@@ -1739,7 +1738,7 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
                          "fn cycleEntry(n: int) -> int { return cycleA(n) }\n"
                          "fn allocateLeaf() { var values = [1, 2, 3] }\n"
                          "fn twoHop() { allocateLeaf() }\n"
-                         "fn unknownCall(cb: () -> ()) { cb() }\n"
+                         "fn unknownCall(cb: fn()) { cb() }\n"
                          "fn callbackOk(xs: Array<int>) {\n"
                          "  xs.forEach(fn(value: int, index: int) { var sum = value + index })\n"
                          "}\n"
@@ -1915,7 +1914,7 @@ TEST(analyzer_throw_effect_bit_matches_effect_summary) {
                          "fn throwsDirect() { throw IoErr.Boom }\n"
                          "fn propagates() { throwsDirect() }\n"
                          "fn guarded() { try { throwsDirect() } catch (e: IoErr) {} }\n"
-                         "fn viaDynamic(f: () -> ()) { f() }\n";
+                         "fn viaDynamic(f: fn()) { f() }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "throw_effect_bit.xr", program);
@@ -1939,11 +1938,11 @@ TEST(analyzer_inferred_effects_accept_function_values) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     const char *source = "fn increment(value: int) -> int { return value + 1 }\n"
-                         "fn applyPure(callback: (int) -> int, value: int) -> int {\n"
+                         "fn applyPure(callback: fn(int) -> int, value: int) -> int {\n"
                          "  return callback(value)\n"
                          "}\n"
                          "fn main() -> int {\n"
-                         "  const local: (int) -> int = fn(value: int) -> int {\n"
+                         "  const local: fn(int) -> int = fn(value: int) -> int {\n"
                          "    return value * 2\n"
                          "  }\n"
                          "  return applyPure(increment, local(2))\n"
@@ -2093,7 +2092,7 @@ TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
     ASSERT(a != NULL);
     const char *source =
         "enum HofEffectErr { Boom }\n"
-        "fn apply<T>(callback: (T) -> T, value: T) -> T { return callback(value) }\n"
+        "fn apply<T>(callback: fn(T) -> T, value: T) -> T { return callback(value) }\n"
         "fn plusOne(value: int) -> int { return value + 1 }\n"
         "fn plusTwo(value: int) -> int { return value + 2 }\n"
         "fn checked(value: int) -> int {\n"
@@ -2237,31 +2236,31 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "fn failOtherDynamic() { throw OtherDynamicErr.Boom }\n"
         "fn noThrowDynamic() { }\n"
         "fn maybeDynamic(flag: bool) { if (flag) { throw DynamicErr.Boom } }\n"
-        "fn chooseDynamic(flag: bool) -> () -> () {\n"
+        "fn chooseDynamic(flag: bool) -> fn() {\n"
         "  if (flag) { return failDynamic }\n"
         "  return failOtherDynamic\n"
         "}\n"
-        "fn chooseNoThrowOrThrow(flag: bool) -> () -> () {\n"
+        "fn chooseNoThrowOrThrow(flag: bool) -> fn() {\n"
         "  if (flag) { return failDynamic }\n"
         "  return noThrowDynamic\n"
         "}\n"
-        "fn chooseUnknownDynamic(cb: () -> ()) -> () -> () {\n"
+        "fn chooseUnknownDynamic(cb: fn()) -> fn() {\n"
         "  return cb\n"
         "}\n"
-        "fn makeCapturedFunctionValue(flag: bool) -> () -> () {\n"
+        "fn makeCapturedFunctionValue(flag: bool) -> fn() {\n"
         "  var f = noThrowDynamic\n"
         "  if (flag) { f = failDynamic } else { f = failOtherDynamic }\n"
         "  return fn() { f() }\n"
         "}\n"
-        "fn makeCapturedUnknownFunctionValue(cb: () -> ()) -> () -> () {\n"
+        "fn makeCapturedUnknownFunctionValue(cb: fn()) -> fn() {\n"
         "  var f = failDynamic\n"
         "  f = cb\n"
         "  return fn() { f() }\n"
         "}\n"
-        "fn invokeCallback(cb: () -> ()) {\n"
+        "fn invokeCallback(cb: fn()) {\n"
         "  cb()\n"
         "}\n"
-        "fn chooseCallback(flag: bool, a: () -> (), b: () -> ()) {\n"
+        "fn chooseCallback(flag: bool, a: fn(), b: fn()) {\n"
         "  var cb = a\n"
         "  if (flag) { cb = b }\n"
         "  cb()\n"
@@ -2285,7 +2284,7 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  f = failDynamic\n"
         "  f()\n"
         "}\n"
-        "fn viaUnknownReboundVarAlias(cb: () -> ()) {\n"
+        "fn viaUnknownReboundVarAlias(cb: fn()) {\n"
         "  var f = failDynamic\n"
         "  f = cb\n"
         "  f()\n"
@@ -2300,7 +2299,7 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  if (flag) { f = failDynamic } else { f = failOtherDynamic }\n"
         "  f()\n"
         "}\n"
-        "fn viaConditionalUnknownVarAlias(flag: bool, cb: () -> ()) {\n"
+        "fn viaConditionalUnknownVarAlias(flag: bool, cb: fn()) {\n"
         "  var f = failDynamic\n"
         "  if (flag) { f = cb }\n"
         "  f()\n"
@@ -2325,7 +2324,7 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  for (i in 0..3) { f = failDynamic }\n"
         "  f()\n"
         "}\n"
-        "fn viaLoopUnknownVarAlias(flag: bool, cb: () -> ()) {\n"
+        "fn viaLoopUnknownVarAlias(flag: bool, cb: fn()) {\n"
         "  var f = failDynamic\n"
         "  while (flag) { f = cb }\n"
         "  f()\n"
@@ -2341,7 +2340,7 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  try { maybeDynamic(flag) } catch (e: DynamicErr) { f = failDynamic }\n"
         "  f()\n"
         "}\n"
-        "fn viaTryCatchUnknownVarAlias(flag: bool, cb: () -> ()) {\n"
+        "fn viaTryCatchUnknownVarAlias(flag: bool, cb: fn()) {\n"
         "  var f = failDynamic\n"
         "  try { maybeDynamic(flag) } catch (e: DynamicErr) { f = cb }\n"
         "  f()\n"
@@ -2361,7 +2360,7 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "  var f = chooseNoThrowOrThrow(flag)\n"
         "  f()\n"
         "}\n"
-        "fn viaReturnedFunctionValueUnknown(cb: () -> ()) {\n"
+        "fn viaReturnedFunctionValueUnknown(cb: fn()) {\n"
         "  var f = chooseUnknownDynamic(cb)\n"
         "  f()\n"
         "}\n"
@@ -2372,7 +2371,7 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "fn viaCapturedFunctionValueDirect(flag: bool) {\n"
         "  makeCapturedFunctionValue(flag)()\n"
         "}\n"
-        "fn viaCapturedFunctionValueUnknown(cb: () -> ()) {\n"
+        "fn viaCapturedFunctionValueUnknown(cb: fn()) {\n"
         "  var run = makeCapturedUnknownFunctionValue(cb)\n"
         "  run()\n"
         "}\n"
@@ -2385,7 +2384,7 @@ TEST(analyzer_error_effect_propagates_stable_var_function_values) {
         "fn viaHigherOrderUnion(flag: bool) {\n"
         "  chooseCallback(flag, failDynamic, failOtherDynamic)\n"
         "}\n"
-        "fn viaHigherOrderUnknown(cb: () -> ()) {\n"
+        "fn viaHigherOrderUnknown(cb: fn()) {\n"
         "  invokeCallback(cb)\n"
         "}\n"
         "fn viaConstAliasStillExact() {\n"
@@ -2591,7 +2590,7 @@ TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
         "fn failGenericInt(x: int) -> int { throw GenericIntErr.Boom }\n"
         "fn failGenericOtherInt(x: int) -> int { throw GenericOtherIntErr.Boom }\n"
         "fn failGenericString(x: string) -> string { throw GenericStringErr.Boom }\n"
-        "fn runGeneric<T>(x: T, cb: (T) -> T) -> T {\n"
+        "fn runGeneric<T>(x: T, cb: fn(T) -> T) -> T {\n"
         "  return cb(x)\n"
         "}\n"
         "fn viaGenericInt() {\n"
@@ -2695,7 +2694,7 @@ TEST(analyzer_error_effect_propagates_immediate_function_expr_calls) {
                          "  f = fn() { throw LambdaErr.Boom }\n"
                          "  f()\n"
                          "}\n"
-                         "fn viaUnknownReboundStoredLambda(cb: () -> ()) {\n"
+                         "fn viaUnknownReboundStoredLambda(cb: fn()) {\n"
                          "  var f = fn() { throw LambdaErr.Boom }\n"
                          "  f = cb\n"
                          "  f()\n"
@@ -2955,9 +2954,9 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
                          "  constructor() { }\n"
                          "  fail() { throw MethodErr.Boom }\n"
                          "  static failStatic() { throw MethodErr.Boom }\n"
-                         "  invoke(cb: () -> ()) { cb() }\n"
-                         "  static invokeStatic(cb: () -> ()) { cb() }\n"
-                         "  choose(flag: bool, a: () -> (), b: () -> ()) {\n"
+                         "  invoke(cb: fn()) { cb() }\n"
+                         "  static invokeStatic(cb: fn()) { cb() }\n"
+                         "  choose(flag: bool, a: fn(), b: fn()) {\n"
                          "    var cb = a\n"
                          "    if (flag) { cb = b }\n"
                          "    cb()\n"
@@ -2998,7 +2997,7 @@ TEST(analyzer_error_effect_propagates_direct_method_calls) {
                          "fn viaMethodHigherOrderUnion(flag: bool) {\n"
                          "  Thrower().choose(flag, failMethodCallback, failOtherMethodCallback)\n"
                          "}\n"
-                         "fn viaMethodHigherOrderUnknown(cb: () -> ()) {\n"
+                         "fn viaMethodHigherOrderUnknown(cb: fn()) {\n"
                          "  Thrower().invoke(cb)\n"
                          "}\n"
                          "fn viaFinalMethod() {\n"
@@ -3080,7 +3079,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     const char *lib_source = "export enum ImportedErr { Selective, Namespace }\n"
                              "export fn failSelective() { throw ImportedErr.Selective }\n"
                              "export fn failNamespace() { throw ImportedErr.Namespace }\n"
-                             "export fn applyImported(cb: () -> ()) { cb() }\n"
+                             "export fn applyImported(cb: fn()) { cb() }\n"
                              "export fn importedScalar(x: int) -> int { return x + 1 }\n"
                              "export fn importedAlloc() { var values = [1, 2, 3] }\n";
     const char *reexport_source =
@@ -3974,7 +3973,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "    catch (other: OtherErr) { }; throw alias "
         "  } "
         "}\n"
-        "fn makeCatchBindingClosure() -> () -> () {\n"
+        "fn makeCatchBindingClosure() -> fn() {\n"
         "  try { fail() } catch (e: CatchErr) {\n"
         "    return fn() { throw e }\n"
         "  }\n"
@@ -3984,7 +3983,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "  var run = makeCatchBindingClosure()\n"
         "  run()\n"
         "}\n"
-        "fn makeCatchAliasClosure() -> () -> () {\n"
+        "fn makeCatchAliasClosure() -> fn() {\n"
         "  try { fail() } catch (e: CatchErr) {\n"
         "    const alias = e\n"
         "    return fn() { throw alias }\n"
@@ -3995,7 +3994,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "  var run = makeCatchAliasClosure()\n"
         "  run()\n"
         "}\n"
-        "fn makeCatchAliasClosureInvalidated() -> () -> () {\n"
+        "fn makeCatchAliasClosureInvalidated() -> fn() {\n"
         "  try { fail() } catch (e: CatchErr) {\n"
         "    var alias = e\n"
         "    alias = CatchErr.Other\n"
@@ -4070,7 +4069,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "    throw box.kept\n"
         "  }\n"
         "}\n"
-        "fn makeCatchArrayClosure() -> () -> () {\n"
+        "fn makeCatchArrayClosure() -> fn() {\n"
         "  try { fail() } catch (e: CatchErr) {\n"
         "    const box = [e]\n"
         "    return fn() { throw box[0] }\n"
@@ -6003,7 +6002,7 @@ TEST(analyzer_struct_literal_unknown_fields_offer_lambda_return_hint) {
     ASSERT(a != NULL);
 
     const char *source = "struct Point { x: int; y: int }\n"
-                         "var f: (int) -> Point = value -> Point{result: value}\n";
+                         "var f: fn(int) -> Point = value -> Point{result: value}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "lambda_struct_literal_hint.xr", program);
@@ -6056,9 +6055,9 @@ TEST(analyzer_ref_arrow_hint_is_advisory_and_fail_closed) {
                          "var delegated = (x: ref int) -> { mutate(ref x) }\n"
                          "var indexed = (xs: ref Array<int>) -> { xs[0] = 1 }\n"
                          "var receiver = (xs: ref Array<int>) -> { xs.push(1) }\n"
-                         "var required: (ref int) -> int = (x: ref int) -> x * 2\n"
-                         "var inferred: (ref int) -> int = x -> x * 2\n"
-                         "var uncertain = (x: ref int, callback: (ref int) -> ()) -> {\n"
+                         "var required: fn(ref int) -> int = (x: ref int) -> x * 2\n"
+                         "var inferred: fn(ref int) -> int = x -> x * 2\n"
+                         "var uncertain = (x: ref int, callback: fn(ref int)) -> {\n"
                          "    callback(ref x)\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);

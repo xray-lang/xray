@@ -589,7 +589,7 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
 TEST(parser_function_type_param_modes) {
     setup();
 
-    AstNode *alias = parse_first("type Handler = (int, ref string, move bool) -> int");
+    AstNode *alias = parse_first("type Handler = fn(int, ref string, move bool) -> int");
     ASSERT_EQ_INT(alias->type, AST_TYPE_ALIAS);
     XrTypeRef *tref = alias->as.type_alias.resolved_type;
     ASSERT_NOT_NULL(tref);
@@ -602,11 +602,11 @@ TEST(parser_function_type_param_modes) {
 
     char buf[128];
     xr_tref_to_string_buf(tref, buf, sizeof(buf));
-    ASSERT_STR_EQ(buf, "(int, ref string, move bool) -> int");
+    ASSERT_STR_EQ(buf, "fn(int, ref string, move bool) -> int");
 
     AstNode *complex_alias =
-        parse_first("type ComplexHandler = (Array<int>, ref Slice<u8>?, "
-                    "move [u8; 16], (int, string), (ref int) -> bool,) -> Array<string>");
+        parse_first("type ComplexHandler = fn(Array<int>, ref Slice<u8>?, "
+                    "move [u8; 16], (int, string), fn(ref int) -> bool,) -> Array<string>");
     XrTypeRef *complex = complex_alias->as.type_alias.resolved_type;
     ASSERT_NOT_NULL(complex);
     ASSERT_EQ_INT(complex->kind, XR_TREF_FUNCTION);
@@ -633,8 +633,8 @@ TEST(parser_function_type_param_modes) {
     ASSERT_STR_EQ(complex->children[5]->name, "Array");
     char complex_buf[512];
     xr_tref_to_string_buf(complex, complex_buf, sizeof(complex_buf));
-    ASSERT_STR_EQ(complex_buf, "(Array<int>, ref Slice<u8>?, move [u8; 16], (int, string), "
-                               "(ref int) -> bool) -> Array<string>");
+    ASSERT_STR_EQ(complex_buf, "fn(Array<int>, ref Slice<u8>?, move [u8; 16], (int, string), "
+                               "fn(ref int) -> bool) -> Array<string>");
 
     teardown();
 }
@@ -1134,8 +1134,7 @@ TEST(parser_arrow_fn_not_tuple) {
 
 TEST(parser_arrow_parameters_support_independent_annotations_and_modes) {
     setup();
-    AstNode *stmt =
-        parse_first("var f = (a: int, b, c: ref int, d: move Buffer,) -> a + b");
+    AstNode *stmt = parse_first("var f = (a: int, b, c: ref int, d: move Buffer,) -> a + b");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     ASSERT_EQ_INT(init->as.function_expr.param_count, 4);
@@ -1157,7 +1156,7 @@ TEST(parser_arrow_parameters_support_independent_annotations_and_modes) {
 
 TEST(parser_bare_lambda_in_expression_position) {
     setup();
-    AstNode *stmt = parse_first("var f: (int) -> int = x -> x * 2");
+    AstNode *stmt = parse_first("var f: fn(int) -> int = x -> x * 2");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     ASSERT_EQ_INT(init->as.function_expr.param_count, 1);
