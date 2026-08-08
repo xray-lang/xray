@@ -3903,6 +3903,8 @@ module cluster {
     link_object: true
     layer: "runtime"
     caps: "channel"
+    effect: "nothrow"
+    allocation: "may_heap"
     return_ownership: "borrowed_static"
   }
 
