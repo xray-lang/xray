@@ -1198,6 +1198,58 @@ TEST(analyzer_typed_json_calls_complete_all_analysis_passes) {
     setup_pool();
 }
 
+TEST(analyzer_json_path_result_context_writes_codec_type_evidence) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "var root = JSON.parseObject(\"{\\\"count\\\":7}\")\n"
+                         "fn takesInt(value: int) -> int { return value }\n"
+                         "var count = takesInt(JSON.require(root, [\"count\"]))\n"
+                         "var maybe: int? = JSON.get(root, [\"missing\"])\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "json_path_contextual_result.xr", program);
+    ASSERT(a->diagnostic_count == 0);
+    ASSERT(program->type == AST_PROGRAM && program->as.program.count == 4);
+
+    AstNode *count_decl = program->as.program.statements[2];
+    ASSERT(count_decl && count_decl->type == AST_VAR_DECL);
+    AstNode *outer = count_decl->as.var_decl.initializer;
+    ASSERT(outer && outer->type == AST_CALL_EXPR && outer->as.call_expr.arg_count == 1);
+    AstNode *require_call = outer->as.call_expr.arguments[0];
+    ASSERT(require_call && require_call->type == AST_CALL_EXPR);
+    ASSERT(require_call->as.call_expr.type_arg_count == 1);
+    XrType *require_target =
+        xr_tref_resolve_in_analyzer(a, require_call->as.call_expr.type_args[0]);
+    ASSERT(require_target && XR_TYPE_IS_INT(require_target) && !require_target->is_nullable);
+    XrType *require_type = xa_analyzer_get_node_type(a, require_call);
+    ASSERT(require_type && XR_TYPE_IS_INT(require_type) && !require_type->is_nullable);
+
+    AstNode *maybe_decl = program->as.program.statements[3];
+    ASSERT(maybe_decl && maybe_decl->type == AST_VAR_DECL);
+    AstNode *get_call = maybe_decl->as.var_decl.initializer;
+    ASSERT(get_call && get_call->type == AST_CALL_EXPR);
+    ASSERT(get_call->as.call_expr.type_arg_count == 1);
+    XrType *get_target = xr_tref_resolve_in_analyzer(a, get_call->as.call_expr.type_args[0]);
+    ASSERT(get_target && XR_TYPE_IS_INT(get_target) && !get_target->is_nullable);
+    XrType *get_type = xa_analyzer_get_node_type(a, get_call);
+    ASSERT(get_type && XR_TYPE_IS_INT(get_type) && get_type->is_nullable);
+
+    xr_program_destroy(program);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_json_path_result_without_type_context_is_rejected) {
+    XaAnalyzer *a = analyzer_run_source("json_path_missing_result_type.xr",
+                                        "var root = JSON.parseObject(\"{\\\"count\\\":7}\")\n"
+                                        "var count = JSON.require(root, [\"count\"])\n");
+    ASSERT(a != NULL);
+    ASSERT(analyzer_diag_contains(
+        a, "cannot infer JSON.require result type; add explicit JSON.require<T>(...)"));
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 static int analyzer_diag_message_count(XaAnalyzer *analyzer, const char *message) {
     int ignored = 0;
     int matches = 0;
@@ -6780,6 +6832,8 @@ int main(void) {
     RUN_TEST(object_exact_assignment_and_width_constraint_matrix);
     RUN_TEST(json_value_and_codec_capability_matrix);
     RUN_TEST(analyzer_typed_json_calls_complete_all_analysis_passes);
+    RUN_TEST(analyzer_json_path_result_context_writes_codec_type_evidence);
+    RUN_TEST(analyzer_json_path_result_without_type_context_is_rejected);
     RUN_TEST(typecheck_assignable_rejects_unknown_source);
     RUN_TEST(typecheck_assignable_rejects_unknown_container_member);
     RUN_TEST(analyzer_check_assignment_rejects_unknown_source);

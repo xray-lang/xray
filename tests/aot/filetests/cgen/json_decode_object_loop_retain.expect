@@ -1,0 +1,5 @@
+args=--dump-global-evidence
+c_syntax=pass
+regex=json-codec [0-9]+ .*kind=decode
+c_contains=xrt_json_decode_struct_object_consume(
+c_regex=xrt_retain\((v[0-9]+)\)\);\n#line [^\n]+\n    v[0-9]+ = xrt_json_decode_struct_object_consume\(\1,

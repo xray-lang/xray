@@ -1,0 +1,11 @@
+type Profile = {id: int, active: bool}
+
+var object = JSON.parseObject("{\"id\":7,\"active\":true}")
+var i = 0
+var total = 0
+while (i < 3) {
+    var profile = JSON.decodeObject<Profile>(object)!
+    total += profile.id
+    i += 1
+}
+print(total)

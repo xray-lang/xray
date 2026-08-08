@@ -133,6 +133,69 @@ static XrType *xa_json_resolve_target_type(XaInferContext *ctx, const XrTypeRef 
     return target;
 }
 
+/* JSON.get/require have a result-only type parameter: neither the root nor the
+ * path carries evidence for T.  Resolve it from an explicit `<T>` or from the
+ * surrounding expected type and persist the latter on the call so Xi lowering
+ * receives the same codec evidence in VM and AOT builds. */
+static XrType *xa_json_path_target_type(XaInferContext *ctx, AstNode *node, CallExprNode *call,
+                                        bool is_get) {
+    if (!ctx || !ctx->analyzer || !node || !call)
+        return NULL;
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    if (call->type_arg_count > 1) {
+        char msg[160];
+        snprintf(msg, sizeof(msg), "JSON.%s<T>() expects exactly 1 type argument",
+                 is_get ? "get" : "require");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
+    XrType *target = NULL;
+    if (call->type_arg_count == 1 && call->type_args && call->type_args[0]) {
+        target = xa_json_resolve_target_type(ctx, call->type_args[0]);
+    } else if (ctx->expected_type && !XR_TYPE_IS_UNKNOWN(ctx->expected_type) &&
+               !XR_TYPE_IS_ERROR(ctx->expected_type) && !XR_TYPE_IS_NULL(ctx->expected_type)) {
+        target = xr_type_copy(ctx->analyzer->isolate, ctx->expected_type);
+        /* get<T> adds absence nullability itself.  A contextual `int?`
+         * therefore means get<int>, while require<T> preserves an explicit
+         * nullable target because JSON null is part of its value domain. */
+        if (is_get && target && target->is_nullable)
+            target = xr_type_non_nullable(ctx->analyzer->isolate, target);
+        XrType *inferred[1] = {target};
+        xa_writeback_inferred_type_args(ctx->analyzer->compiler_session, call, inferred, 1);
+    } else {
+        char msg[224];
+        snprintf(msg, sizeof(msg),
+                 "cannot infer JSON.%s result type; add explicit JSON.%s<T>(...) type arguments "
+                 "or use a typed context",
+                 is_get ? "get" : "require", is_get ? "get" : "require");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
+    if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument",
+                                          is_get ? "JSON.get<T>()" : "JSON.require<T>()",
+                                          node->line, node->column))
+        return xr_type_new_error(ctx->analyzer->isolate);
+    XaJsonCapabilityResult capability = xa_json_decodable_in_context(ctx, target);
+    if (!capability.supported ||
+        (!XR_TYPE_IS_INSTANCE(target) && !XR_TYPE_IS_STRUCT_OBJECT(target) &&
+         !XR_TYPE_IS_TYPE_PARAM(target) && !xr_type_is_json_decode_field_supported(target))) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "JSON.%s<T>() target is not decodable: %s",
+                 is_get ? "get" : "require",
+                 xa_json_capability_reason_name(capability.supported
+                                                    ? XA_JSON_CAPABILITY_UNSUPPORTED_TYPE
+                                                    : capability.reason));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_GENERIC_CONSTRAINT, msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+    return target;
+}
+
 static bool xa_json_unknown_policy_expr(const AstNode *node, bool *ignore) {
     if (!node || node->type != AST_MEMBER_ACCESS)
         return false;
@@ -4255,6 +4318,10 @@ static bool xa_expr_needs_parameter_context(AstNode *expr) {
         return xa_expr_needs_parameter_context(expr->as.unary.operand);
     if (expr->type == AST_FUNCTION_EXPR || xa_expr_needs_contextual_view_type(expr))
         return true;
+    if (expr->type == AST_CALL_EXPR && expr->as.call_expr.type_arg_count == 0 &&
+        (xa_call_is_json_static_method(&expr->as.call_expr, "get") ||
+         xa_call_is_json_static_method(&expr->as.call_expr, "require")))
+        return true;
     /* Every array literal can be a fixed array when the parameter contract
      * supplies that layout.  Eagerly inferring only non-empty literals loses
      * the contract and misclassifies them as heap-backed Array<T>. */
@@ -6096,6 +6163,14 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_error(NULL);
 
     CallExprNode *call = &node->as.call_expr;
+    bool json_path_get = xa_call_is_json_static_method(call, "get");
+    bool json_path_require = xa_call_is_json_static_method(call, "require");
+    XrType *json_path_target = NULL;
+    if (json_path_get || json_path_require) {
+        json_path_target = xa_json_path_target_type(ctx, node, call, json_path_get);
+        if (!json_path_target || XR_TYPE_IS_ERROR(json_path_target))
+            return json_path_target ? json_path_target : xr_type_new_error(ctx->analyzer->isolate);
+    }
     /* `f?.(args)` (chain_type 3) and `obj?.method(args)` (chain_type 2) both
      * short-circuit to null when the receiver is null, so the call's result is
      * nullable in both shapes (spec §3.6). */
@@ -7641,6 +7716,12 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         return_type =
             xa_substitute_generic_call(ctx, fn_links, callee_type, return_type, call, arg_count,
                                        effective_arg_types, fn_sym && !fn_sym->is_imported);
+    }
+
+    if (json_path_target) {
+        return_type = xr_type_copy(ctx->analyzer->isolate, json_path_target);
+        if (return_type && json_path_get)
+            return_type->is_nullable = true;
     }
 
     XrType *math_shape_type =

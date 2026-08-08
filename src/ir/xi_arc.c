@@ -2546,6 +2546,67 @@ static bool arc_elim_can_remove_single_consumer_retain(const XiFunc *f, const Xi
     return true;
 }
 
+/* A syntactically single consuming use can execute repeatedly when its block
+ * is part of a CFG cycle.  In that shape ARC inserted the RETAIN once per
+ * dynamic consume so the loop-carried owner survives the next iteration; the
+ * static use count used by Pattern 2 cannot distinguish that from a one-shot
+ * forward.  Treat allocation failure as cyclic (keep the retain) so this
+ * optimization stays fail-closed for ownership correctness. */
+static bool arc_block_is_in_cycle(const XiFunc *f, const XiBlock *start) {
+    if (!f || !start || start->rpo == 0)
+        return true;
+
+    bool *seen = (bool *) xr_calloc(f->nblocks ? f->nblocks : 1, sizeof(bool));
+    const XiBlock **queue =
+        (const XiBlock **) xr_malloc((f->nblocks ? f->nblocks : 1) * sizeof(*queue));
+    if (!seen || !queue) {
+        xr_free(seen);
+        xr_free(queue);
+        return true;
+    }
+
+    uint32_t head = 0;
+    uint32_t tail = 0;
+    for (int si = 0; si < 2; si++) {
+        const XiBlock *succ = start->succs[si];
+        if (!succ || succ->rpo == 0)
+            continue;
+        if (succ == start) {
+            xr_free(seen);
+            xr_free(queue);
+            return true;
+        }
+        uint32_t pos = succ->rpo - 1;
+        if (pos >= f->nblocks || seen[pos])
+            continue;
+        seen[pos] = true;
+        queue[tail++] = succ;
+    }
+
+    bool cyclic = false;
+    while (head < tail && !cyclic) {
+        const XiBlock *block = queue[head++];
+        for (int si = 0; si < 2; si++) {
+            const XiBlock *succ = block->succs[si];
+            if (!succ || succ->rpo == 0)
+                continue;
+            if (succ == start) {
+                cyclic = true;
+                break;
+            }
+            uint32_t pos = succ->rpo - 1;
+            if (pos >= f->nblocks || seen[pos])
+                continue;
+            seen[pos] = true;
+            queue[tail++] = succ;
+        }
+    }
+
+    xr_free(seen);
+    xr_free(queue);
+    return cyclic;
+}
+
 /* Single-block dup/drop pair elimination.
  *
  * Pattern 1 — "Redundant bracket":
@@ -2561,6 +2622,7 @@ static bool arc_elim_can_remove_single_consumer_retain(const XiFunc *f, const Xi
  *   XI_RELEASE(v) does NOT exist elsewhere (no double-drop)
  *   The value v has exactly 1 real (non-RC) use in the function
  *   v is a true owned/fresh value, not a borrowed projection/parameter
+ *   the consuming block is not in a CFG cycle
  *   → The retain is redundant because there is only one consumer: it already
  *     receives ownership via the last-use move rule. Remove the retain.
  *
@@ -2614,6 +2676,20 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live
         }
     }
 
+    /* Most blocks contain no remaining retain after Pattern 1.  Avoid a graph
+     * walk for those blocks; a block that reaches Pattern 2 computes cycle
+     * membership once and shares it across all of its candidates. */
+    bool has_retain = false;
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        if (blk->values[i] && blk->values[i]->op == XI_RETAIN) {
+            has_retain = true;
+            break;
+        }
+    }
+    if (!has_retain)
+        return eliminated;
+    bool block_is_cyclic = arc_block_is_in_cycle(f, blk);
+
     /* Pattern 2: single-consumer retain elimination.
      * After removing redundant bracket pairs, check remaining RETAINs:
      * if the target value has exactly 1 real use (excluding RC ops) in the
@@ -2628,7 +2704,7 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live
 
         int real_uses = count_real_uses(f, target);
         if (real_uses <= 1 && value_has_consuming_use(f, target) &&
-            arc_elim_can_remove_single_consumer_retain(f, target) &&
+            arc_elim_can_remove_single_consumer_retain(f, target) && !block_is_cyclic &&
             !arc_value_is_coro_frame_pinned(f, coro_live, target)) {
             /* The value flows to at most one real consumer; the retain is
              * dead weight only when that use consumes ownership. A sole

@@ -11561,6 +11561,51 @@ TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
     xi_func_free(ir);
 }
 
+TEST(cgen_json_decode_loop_keeps_per_iteration_retain) {
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 940, .frozen = true};
+    XrType bool_type = {.kind = XR_KIND_BOOL, .id = 941, .frozen = true};
+    XrType map_type = {.kind = XR_KIND_MAP, .id = 942, .frozen = true};
+    XrType object_type = {.kind = XR_KIND_STRUCT_OBJECT, .id = 943, .frozen = true};
+    XiFunc *ir = xi_func_new("json_decode_loop_arc", &unit_type);
+    TEST_REQUIRE(ir != NULL, "manual JSON decode ARC function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    XiBlock *header = xi_block_new(ir);
+    XiBlock *body = xi_block_new(ir);
+    XiBlock *exit = xi_block_new(ir);
+    TEST_REQUIRE(entry && header && body && exit, "manual JSON decode ARC blocks allocated");
+
+    XiValue *object = xi_value_new(ir, entry, XI_MAP_NEW, &map_type, 0);
+    XiValue *cond = xi_const_bool(ir, header, true, &bool_type);
+    XiValue *retain = xi_value_new(ir, body, XI_RETAIN, &map_type, 1);
+    XiValue *decode = xi_value_new(ir, body, XI_JSON_DECODE, &object_type, 1);
+    XiValue *release = xi_value_new(ir, exit, XI_RELEASE, &map_type, 1);
+    TEST_REQUIRE(object && cond && retain && decode && release,
+                 "manual JSON decode ARC values allocated");
+    retain->args[0] = object;
+    decode->args[0] = object;
+    release->args[0] = object;
+    xi_block_set_jump(entry, header);
+    xi_block_set_if(header, cond, body, exit);
+    xi_block_set_jump(body, header);
+    xi_block_set_return(exit, NULL);
+    entry->sealed = header->sealed = body->sealed = exit->sealed = true;
+
+    int eliminated = xi_arc_elim(ir);
+    TEST_REQUIRE(eliminated == 0,
+                 "single-consumer elimination must not remove a retain in a CFG cycle");
+    bool retained = false;
+    for (uint32_t i = 0; i < body->nvalues; i++) {
+        if (body->values[i] == retain) {
+            retained = true;
+            break;
+        }
+    }
+    TEST_REQUIRE(retained,
+                 "loop-carried JSON object must retain once before every consuming decode");
+
+    xi_func_free(ir);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -11822,6 +11867,7 @@ int main(void) {
     run_cgen_work_queue_native_methods_use_aot_helpers();
     run_cgen_coro_task_status_uses_native_enum_status();
     run_cgen_structural_field_named_like_builtin_property_uses_ordinal();
+    run_cgen_json_decode_loop_keeps_per_iteration_retain();
 
     teardown();
 
