@@ -94,7 +94,6 @@
 #                                             upvalue, a Map, or a loop-built array
 #   nested_closure_transitive_capture.xr D10  closure inside a closure over a grandparent
 #                                             binding, rejected by the ownership pass
-tests/diff/cases/semantics/functions/unit_return_expression.xr
 tests/diff/cases/semantics/functions/unit_value_rendering.xr
 tests/diff/cases/semantics/functions/parenthesized_function_type.xr
 tests/diff/cases/semantics/collections/hof_index_param.xr

@@ -3390,6 +3390,14 @@ static void lower_return(XiLower *l, AstNode *node) {
                                                         l->func ? l->func->return_type : NULL);
         if (!val)
             return;
+        /* A unit-typed return carries no control value: the expression above
+         * is lowered only for its side effects, which are already emitted into
+         * the current block. Dropping the value below leaves the RETURN block
+         * with no control operand, which the IR verifier requires for a unit
+         * return, and forcing is_direct_call false keeps tail-call marking off
+         * a call that is no longer the block's control value. */
+        bool return_is_unit =
+            l->func && l->func->return_type && l->func->return_type->kind == XR_KIND_UNIT;
         /* Tail-call detection: mark calls in return position so the emitter
          * uses OP_TAILCALL / OP_INVOKE_TAIL (constant-space recursion).
          *
@@ -3405,7 +3413,7 @@ static void lower_return(XiLower *l, AstNode *node) {
          * XI_CALL with callee typed as function → safe.
          * Other XI_CALL (class constructors, etc.) → NOT safe; OP_TAILCALL
          * only handles closures and would fail on class objects. */
-        bool is_direct_call = (ret->values[0]->type == AST_CALL_EXPR);
+        bool is_direct_call = !return_is_unit && (ret->values[0]->type == AST_CALL_EXPR);
         /* A `T(args)` construction lowers to an XI_CALL_METHOD whose aux is
          * "constructor". Constructors must materialize and return the new
          * object, so they are never tail calls (and AOT has no TAIL_CALL). */
@@ -3421,7 +3429,10 @@ static void lower_return(XiLower *l, AstNode *node) {
                 val->flags |= XI_FLAG_TAIL;
             }
         }
-        val = xi_lower_checktype_for_type(l, node, val, l->func ? l->func->return_type : NULL);
+        if (!return_is_unit)
+            val = xi_lower_checktype_for_type(l, node, val, l->func ? l->func->return_type : NULL);
+        else
+            val = NULL;
     } else if (ret->value_count > 1) {
         XR_CHECK(false, "obsolete multi-value return reached Xi lowering");
         return;
