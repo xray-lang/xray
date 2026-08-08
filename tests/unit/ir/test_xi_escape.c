@@ -551,6 +551,76 @@ static void test_arc_elim_keeps_retain_before_sole_borrowing_alias(void) {
     xi_func_free(f);
 }
 
+/* ========== Test: ARC elim keeps a repeated loop transfer ============== */
+
+static void test_arc_elim_keeps_single_consumer_retain_inside_loop(void) {
+    XiFunc *f = make_func("arc_loop_single_consume", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *exit = xi_block_new(f);
+    header->sealed = true;
+    body->sealed = true;
+    exit->sealed = true;
+
+    XiValue *value = xi_param(f, entry, 0, &t_array);
+    set_single_param(f, value);
+    xi_block_set_jump(entry, header);
+
+    XiValue *condition = xi_const_bool(f, header, true, &t_bool);
+    xi_block_set_if(header, condition, body, exit);
+
+    XiValue *consume = xi_value_new(f, body, XI_SET_SHARED, &t_any, 1);
+    consume->args[0] = value;
+    consume->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_jump(body, header);
+
+    XiValue *zero = xi_const_int(f, exit, 0, &t_int);
+    xi_block_set_return(exit, zero);
+
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "loop consume needs one retain executed per iteration");
+    xi_arc_elim(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "ARC elim must keep a single-consumer retain inside a loop");
+    xi_func_free(f);
+}
+
+static void test_arc_elim_removes_retain_for_loop_local_owner(void) {
+    XiFunc *f = make_func("arc_loop_local_single_consume", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *exit = xi_block_new(f);
+    header->sealed = true;
+    body->sealed = true;
+    exit->sealed = true;
+
+    xi_block_set_jump(entry, header);
+    XiValue *condition = xi_const_bool(f, header, true, &t_bool);
+    xi_block_set_if(header, condition, body, exit);
+
+    XiValue *fresh = xi_value_new(f, body, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *retain = xi_value_new(f, body, XI_RETAIN, &t_unit, 1);
+    retain->args[0] = fresh;
+    retain->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *consume = xi_value_new(f, body, XI_SET_SHARED, &t_any, 1);
+    consume->args[0] = fresh;
+    consume->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_jump(body, header);
+
+    XiValue *zero = xi_const_int(f, exit, 0, &t_int);
+    xi_block_set_return(exit, zero);
+
+    xi_escape_analyze(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "loop-local owner starts with one retain");
+    xi_arc_elim(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 0,
+              "loop-local owner forwards without repeated retain overhead");
+    xi_func_free(f);
+}
+
 /* ========== Test: ARC handles more than the old fixed site cap ========== */
 
 static void test_arc_many_consume_sites(void) {
@@ -1378,6 +1448,8 @@ int main(void) {
     test_arc_heap_gets_retain_release();
     test_arc_elim_keeps_borrowed_single_consumer_retain();
     test_arc_elim_keeps_retain_before_sole_borrowing_alias();
+    test_arc_elim_keeps_single_consumer_retain_inside_loop();
+    test_arc_elim_removes_retain_for_loop_local_owner();
     test_arc_many_consume_sites();
     test_arc_owner_forward_tracks_repeated_consumes();
     test_arc_tracks_owner_forward_through_phi();

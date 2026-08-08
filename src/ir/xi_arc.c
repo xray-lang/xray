@@ -37,6 +37,7 @@
 #include "xi_analysis.h"
 #include "xi_cfg_edit.h"
 #include "xi_core_api.h"
+#include "xi_loop.h"
 #include "xi_module.h"
 #include "xi_coro_analyze.h"
 #include "xi_value_query.h"
@@ -2521,6 +2522,24 @@ static bool arc_elim_can_remove_single_consumer_retain(const XiFunc *f, const Xi
     return true;
 }
 
+/* A static single-consumer use inside a loop may execute more than once for
+ * one owner produced outside that loop.  Its retain replenishes ownership on
+ * every iteration and cannot be folded into a one-time move.  Values produced
+ * in the same innermost loop have a fresh ownership epoch for every dynamic
+ * use, so they remain eligible for the copy-to-move optimization. */
+static bool arc_retain_reuses_owner_across_iterations(const XiLoopInfo *loops,
+                                                      const XiBlock *retain_block,
+                                                      const XiValue *target) {
+    if (!loops || !retain_block || retain_block->id >= loops->nblocks)
+        return false;
+    const XiLoop *retain_loop = loops->block_to_loop[retain_block->id];
+    if (!retain_loop)
+        return false;
+    if (!target || !target->block || target->block->id >= loops->nblocks)
+        return true;
+    return loops->block_to_loop[target->block->id] != retain_loop;
+}
+
 /* Single-block dup/drop pair elimination.
  *
  * Pattern 1 — "Redundant bracket":
@@ -2540,7 +2559,8 @@ static bool arc_elim_can_remove_single_consumer_retain(const XiFunc *f, const Xi
  *     receives ownership via the last-use move rule. Remove the retain.
  *
  * We apply Pattern 1 iteratively (removing a pair may expose new pairs). */
-static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live) {
+static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live,
+                      const XiLoopInfo *loops) {
     int eliminated = 0;
     bool changed = true;
 
@@ -2602,7 +2622,8 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live
             continue;
 
         int real_uses = count_real_uses(f, target);
-        if (real_uses <= 1 && value_has_consuming_use(f, target) &&
+        if (real_uses <= 1 && !arc_retain_reuses_owner_across_iterations(loops, blk, target) &&
+            value_has_consuming_use(f, target) &&
             arc_elim_can_remove_single_consumer_retain(f, target) &&
             !arc_value_is_coro_frame_pinned(f, coro_live, target)) {
             /* The value flows to at most one real consumer; the retain is
@@ -2610,6 +2631,14 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live
              * borrowing use can intentionally sit between RETAIN and RELEASE
              * to create an independent owned alias; removing that retain
              * turns the alias into a dangling reference.
+             *
+             * A retain of an owner produced outside its consuming loop is
+             * also excluded: one static consumer can execute repeatedly, so
+             * the retain replenishes ownership on every iteration. Removing
+             * it turns the first iteration into a move and leaves the next
+             * iteration with a dangling reference. A value produced inside
+             * the same innermost loop has a fresh owner each iteration and is
+             * still eligible for forwarding.
              *
              * A coroutine frame member is excluded for the same reason in a
              * different shape: its retain is not a forwarding copy but the
@@ -2641,6 +2670,7 @@ XR_FUNC int xi_arc_elim(XiFunc *f) {
      * frame members must survive elimination. Insertion may have split CFG
      * edges, so re-establish RPO before computing liveness. */
     xi_ensure_rpo(f);
+    const XiLoopInfo *loops = xi_ensure_loops(f);
     XiLiveness *coro_live = arc_coro_frame_pin_liveness(f);
 
     /* Eliminate within each block. */
@@ -2648,7 +2678,7 @@ XR_FUNC int xi_arc_elim(XiFunc *f) {
         XiBlock *blk = f->blocks[b];
         if (!blk || blk->nvalues == 0)
             continue;
-        total += elim_block(blk, f, coro_live);
+        total += elim_block(blk, f, coro_live, loops);
     }
 
     if (coro_live)
