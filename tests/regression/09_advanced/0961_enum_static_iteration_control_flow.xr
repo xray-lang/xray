@@ -70,7 +70,7 @@ fn test_enum_descriptor_checked_indexing() {
 
 @test
 fn test_enum_descriptor_closure_capture_keeps_iteration_value() {
-    var readers: Array<() -> int> = []
+    var readers: Array<fn() -> int> = []
     for (variant in Event.variants) {
         var captured = variant
         fn readOrdinal() -> int {

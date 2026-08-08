@@ -191,7 +191,7 @@ fn test_repeat_value() {
 // ===== Generic Higher-Order Functions =====
 @test
 fn test_generic_apply() {
-    fn apply<T, R>(x: T, f: (T) -> R) -> R {
+    fn apply<T, R>(x: T, f: fn(T) -> R) -> R {
         return f(x)
     }
     var doubled = apply(5, fn(n) {
@@ -206,7 +206,7 @@ fn test_generic_apply() {
 
 @test
 fn test_generic_transform() {
-    fn transform<T>(arr: Array<T>, f: (T) -> T) -> Array<T> {
+    fn transform<T>(arr: Array<T>, f: fn(T) -> T) -> Array<T> {
         var result = Array<T>()
         for (item in arr) {
             result.push(f(item))
@@ -237,7 +237,7 @@ fn test_safe_get() {
 
 @test
 fn test_find_element() {
-    fn find<T>(arr: Array<T>, predicate: (T) -> bool) -> T? {
+    fn find<T>(arr: Array<T>, predicate: fn(T) -> bool) -> T? {
         for (item in arr) {
             if (predicate(item)) {
                 return item

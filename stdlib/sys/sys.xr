@@ -20,7 +20,7 @@ fn _signalCode(signal: Signal) -> int {
     }
 }
 
-export fn onSignal(signal: Signal, handler: () -> ()) -> bool {
+export fn onSignal(signal: Signal, handler: fn()) -> bool {
     return __onSignal(_signalCode(signal), handler)
 }
 
@@ -192,9 +192,9 @@ export class ThreadLocal<T> {
     _lock: OsMutex
     _values: Map<int, T>
     _initializing: Map<int, bool>
-    _init: () -> T
+    _init: fn() -> T
 
-    constructor(init: () -> T) {
+    constructor(init: fn() -> T) {
         this._lock = __osMutexNew()
         this._values = #{}
         this._initializing = #{}

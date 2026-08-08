@@ -678,37 +678,18 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         return result;
     }
 
-    /* Legacy `fn(T1, T2): R` form is no longer accepted. Function types are
-     * now written `(T1, T2) -> R` (no `fn` prefix). Emit a clear migration
-     * hint and recover by parsing the rest as a function type. */
-    if (xr_parser_check(parser, TK_FN)) {
-        xr_parser_error(parser,
-                        "function types are written `(T1, T2) -> R` (drop the `fn` prefix)");
-        xr_parser_advance(parser);  // consume 'fn' so caller can keep parsing
-        /* fall through to the `(...)` path below */
-    }
-
-    /* Parenthesized type starting with `(` covers three grammar forms:
-     *   ()             -> unit (canonical procedure return type)
-     *   (T1, T2)       -> tuple
-     *   (T1, T2) -> R  -> function type
-     *
-     * The empty form `()` is *not* an empty tuple: xr_tref_tuple asserts
-     * count > 0, so we explicitly decode it to xr_tref_unit, matching
-     * what the function-return path in xparse_decl manufactures when the
-     * colon is omitted (e.g. `fn deep(): () { throw "boom" }`). Tuple
-     * and function type share the leading `(` and the same internal
-     * type-list grammar, so we collect the list once and branch on the
-     * trailing `->`. */
-    if (xr_parser_match(parser, TK_LPAREN)) {
-        if (xr_parser_match(parser, TK_RPAREN)) {
-            // `() -> R` is a zero-arity function type; bare `()` is unit.
-            if (xr_parser_match(parser, TK_ARROW)) {
-                XrTypeRef *ret = xr_parse_type_annotation(parser);
-                return xr_tref_function(parser->compiler_session, NULL, 0, ret);
-            }
-            return xr_tref_unit(parser->compiler_session);
+    /* Function type: `fn` `(` ParamTypeList? `)` (`->` Type)?. The `fn` keyword
+     * is the sole lead token for a function type, so a `(` in type position is
+     * only ever a tuple or a grouping (handled below). A missing arrow means
+     * the function returns unit; an explicit `-> ()` is rejected, since a unit
+     * return is spelled by omitting the arrow. */
+    if (xr_parser_match(parser, TK_FN)) {
+        if (xr_parser_check(parser, TK_LT)) {
+            /* fn<T>(...) is a diagnostics-only rendering: a generic function is
+             * not a first-class value, so it cannot be written in source. */
+            xr_parser_error(parser, "a generic function type cannot be written in source");
         }
+        xr_parser_consume(parser, TK_LPAREN, "expected '(' after 'fn' in a function type");
         int cap = 8;
         XrTypeRef **elems = (XrTypeRef **) xr_malloc((size_t) cap * sizeof(XrTypeRef *));
         XrParamMode *param_modes = (XrParamMode *) xr_malloc((size_t) cap * sizeof(XrParamMode));
@@ -717,16 +698,14 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 xr_free(elems);
             if (param_modes)
                 xr_free(param_modes);
-            xr_parser_error(parser, "out of memory while parsing type list");
+            xr_parser_error(parser, "out of memory while parsing function type");
             return xr_tref_error(parser->compiler_session);
         }
         int count = 0;
-        bool saw_param_mode = false;
         while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
             if (count > 0) {
                 if (!xr_parser_match(parser, TK_COMMA)) {
-                    xr_parser_error(parser,
-                                    "expected ',' between tuple or function parameter types");
+                    xr_parser_error(parser, "expected ',' between function parameter types");
                     break;
                 }
                 if (xr_parser_check(parser, TK_RPAREN))
@@ -745,7 +724,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                         param_modes = resized_modes;
                     xr_free(elems);
                     xr_free(param_modes);
-                    xr_parser_error(parser, "out of memory while growing type list");
+                    xr_parser_error(parser, "out of memory while growing function type");
                     return xr_tref_error(parser->compiler_session);
                 }
                 elems = resized;
@@ -753,32 +732,100 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
                 cap = new_cap;
             }
             param_modes[count] = XR_PARAM_READ;
-            if (xr_parse_optional_param_mode(parser, true, &param_modes[count]))
-                saw_param_mode = true;
+            xr_parse_optional_param_mode(parser, true, &param_modes[count]);
             elems[count] = xr_parse_type_annotation(parser);
             xr_parse_reject_move_const_parameter(parser, param_modes[count], elems[count]);
             count++;
         }
-        xr_parser_consume(parser, TK_RPAREN, "expected ')'");
+        xr_parser_consume(parser, TK_RPAREN, "expected ')' to close the function parameter list");
+        XrTypeRef *ret;
         if (xr_parser_match(parser, TK_ARROW)) {
+            ret = xr_parse_type_annotation(parser);
+            if (ret && ret->kind == XR_TREF_UNIT)
+                xr_parser_error(parser, "a unit return is written by omitting `->`, not `-> ()`");
+        } else {
+            ret = xr_tref_unit(parser->compiler_session);
+        }
+        XrTypeRef *result =
+            xr_tref_function_with_modes(parser->compiler_session, elems, param_modes, count, ret);
+        xr_free(elems);
+        xr_free(param_modes);
+        return result;
+    }
+
+    /* A `(` in type position is a tuple or a grouping, never a function type
+     * (that is `fn(...)`). Mirror the expression side: any comma makes a tuple,
+     * a single element with no comma just groups, and `()` is unit. A trailing
+     * `->` here is the removed `(...) -> R` spelling; emit a migration hint and
+     * recover as a function type. */
+    if (xr_parser_match(parser, TK_LPAREN)) {
+        if (xr_parser_match(parser, TK_RPAREN)) {
+            if (xr_parser_check(parser, TK_ARROW)) {
+                xr_parser_error(parser,
+                                "function types are written `fn(...) -> R` (add the `fn` prefix)");
+                xr_parser_advance(parser);
+                XrTypeRef *ret = xr_parse_type_annotation(parser);
+                return xr_tref_function(parser->compiler_session, NULL, 0, ret);
+            }
+            return xr_tref_unit(parser->compiler_session);
+        }
+        int cap = 8;
+        XrTypeRef **elems = (XrTypeRef **) xr_malloc((size_t) cap * sizeof(XrTypeRef *));
+        if (!elems) {
+            xr_parser_error(parser, "out of memory while parsing type list");
+            return xr_tref_error(parser->compiler_session);
+        }
+        int count = 0;
+        bool saw_comma = false;
+        while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
+            if (count > 0) {
+                if (!xr_parser_match(parser, TK_COMMA)) {
+                    xr_parser_error(parser, "expected ',' between tuple element types");
+                    break;
+                }
+                saw_comma = true;
+                if (xr_parser_check(parser, TK_RPAREN))
+                    break;
+            }
+            if (count == cap) {
+                int new_cap = cap * 2;
+                XrTypeRef **resized =
+                    (XrTypeRef **) xr_realloc(elems, (size_t) new_cap * sizeof(XrTypeRef *));
+                if (!resized) {
+                    xr_free(elems);
+                    xr_parser_error(parser, "out of memory while growing type list");
+                    return xr_tref_error(parser->compiler_session);
+                }
+                elems = resized;
+                cap = new_cap;
+            }
+            elems[count] = xr_parse_type_annotation(parser);
+            count++;
+        }
+        xr_parser_consume(parser, TK_RPAREN, "expected ')'");
+        if (xr_parser_check(parser, TK_ARROW)) {
+            xr_parser_error(parser,
+                            "function types are written `fn(...) -> R` (add the `fn` prefix)");
+            xr_parser_advance(parser);
             XrTypeRef *ret = xr_parse_type_annotation(parser);
-            XrTypeRef *result = xr_tref_function_with_modes(parser->compiler_session, elems,
-                                                            param_modes, count, ret);
+            XrTypeRef *result = xr_tref_function(parser->compiler_session, elems, count, ret);
             xr_free(elems);
-            xr_free(param_modes);
             return result;
         }
-        if (saw_param_mode)
-            xr_parser_error(parser, "parameter modes are only valid in function types");
-        // `()` with no trailing `->` is the unit type, not an empty tuple.
+        /* A single element with no comma is a grouping, not a 1-tuple; `(T,)`
+         * (a trailing comma) is the 1-tuple. This mirrors the expression side
+         * and spec 2.7. */
+        if (count == 1 && !saw_comma) {
+            XrTypeRef *grouped = elems[0];
+            xr_free(elems);
+            return grouped;
+        }
         if (count == 0) {
             xr_free(elems);
-            xr_free(param_modes);
             return xr_tref_unit(parser->compiler_session);
         }
         XrTypeRef *result = xr_tref_tuple(parser->compiler_session, elems, count);
         xr_free(elems);
-        xr_free(param_modes);
         return result;
     }
 

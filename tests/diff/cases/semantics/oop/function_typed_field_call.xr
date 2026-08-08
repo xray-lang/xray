@@ -8,7 +8,7 @@
 // node with the field symbol and its function type, and lowering already reads
 // the selection table for other purposes. Builtin methods record no selection
 // at all, so gating on XA_SEL_FIELD leaves OP_INVOKE dispatch untouched.
-type Mapper = (int) -> int
+type Mapper = fn(int) -> int
 
 class R {
     handler: Mapper

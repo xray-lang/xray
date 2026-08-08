@@ -42,13 +42,13 @@ export fn probeDeferValue(base: int) -> int {
     return total
 }
 
-export fn probeMakeAdder(base: int) -> (int) -> int {
+export fn probeMakeAdder(base: int) -> fn(int) -> int {
     return fn(v: int) -> int {
         return base + v
     }
 }
 
-export fn probeApply(value: int, body: (int) -> int) -> int {
+export fn probeApply(value: int, body: fn(int) -> int) -> int {
     return body(value)
 }
 
@@ -89,7 +89,7 @@ export class ProbeCell<T> {
         this.value = v
     }
 
-    map<U>(body: (T) -> U) -> U {
+    map<U>(body: fn(T) -> U) -> U {
         return body(this.value)
     }
 }

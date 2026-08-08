@@ -1,2 +1,2 @@
-fn use(f: CFn<(int) -> int>) -> bool { return true }
+fn use(f: CFn<fn(int) -> int>) -> bool { return true }
 print(true)

@@ -8,10 +8,10 @@
 // borrow, it does not write the result back. Returning `x * 2` must leave the
 // caller's binding alone; assigning inside a block body must not.
 
-fn apply(f: (int) -> int, x: int) -> int { return f(x) }
-fn apply2(f: (int, int) -> int, a: int, b: int) -> int { return f(a, b) }
-fn call0(f: () -> int) -> int { return f() }
-fn takeRef(f: (ref int) -> int, x: ref int) -> int { return f(ref x) }
+fn apply(f: fn(int) -> int, x: int) -> int { return f(x) }
+fn apply2(f: fn(int, int) -> int, a: int, b: int) -> int { return f(a, b) }
+fn call0(f: fn() -> int) -> int { return f() }
+fn takeRef(f: fn(ref int) -> int, x: ref int) -> int { return f(ref x) }
 
 fn main() {
     print(apply(x -> x * 2, 21))              // bare arrow, one parameter

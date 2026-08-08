@@ -9,7 +9,7 @@ fn connect(host: string, port: int = 8080) -> string { return "${host}:${port}" 
 
 fn main() {
     print(connect("a"))                       // a:8080 -- direct call fills the default
-    var f: (string, int) -> string = connect
+    var f: fn(string, int) -> string = connect
     print(f("b", 9))                          // b:9 -- through the value, all args given
 }
 

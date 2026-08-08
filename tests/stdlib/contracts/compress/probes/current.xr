@@ -4,7 +4,7 @@ fn emit(name: string, ok: bool) {
     print("{\"case\":\"" + name + "\",\"outcome\":\"value\",\"value\":" + string(ok) + ",\"error\":null,\"effects\":{}}")
 }
 
-fn rejects(body: () -> ()) -> bool {
+fn rejects(body: fn()) -> bool {
     try {
         body()
         return false

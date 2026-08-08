@@ -1,11 +1,11 @@
 @test
 fn test_closure_contextual_ref_out_modes() {
-    var bump: (ref int) -> int = fn(x) -> int {
+    var bump: fn(ref int) -> int = fn(x) -> int {
         x = x + 1
         return x
     }
 
-    var fill: (ref int) -> int = fn(x) -> int {
+    var fill: fn(ref int) -> int = fn(x) -> int {
         x = 42
         return 7
     }

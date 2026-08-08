@@ -20,7 +20,7 @@ fn main() {
     var c = Counter()
     print(c.get())          // 7 -- ordinary call
 
-    var f: () -> int = c.get
+    var f: fn() -> int = c.get
     print(f())              // 7 -- receiver stays bound
 
     var g = c.bump

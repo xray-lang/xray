@@ -41,7 +41,7 @@ class Box<T> {
         return this.value
     }
 
-    transform<U>(f: (T) -> U) -> U {
+    transform<U>(f: fn(T) -> U) -> U {
         return f(this.value)
     }
 }

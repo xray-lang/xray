@@ -94,7 +94,7 @@ fn test_closure_captures() {
 
 @test
 fn test_counter_closure() {
-    fn makeCounter() ->() -> int {
+    fn makeCounter() -> fn() -> int {
         var count = 0
         return fn() {
             count = count + 1

@@ -11,7 +11,7 @@ export class Box<T> {
     get() -> T {
         return this.value
     }
-    map<U>(f: (T) -> U) -> U {
+    map<U>(f: fn(T) -> U) -> U {
         return f(this.value)
     }
 }

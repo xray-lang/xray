@@ -13,7 +13,7 @@ class Box<T> {
 
     get() -> T { return this.value }
 
-    map(f: (T) -> T) -> Box<T> {
+    map(f: fn(T) -> T) -> Box<T> {
         return Box(f(this.value))
     }
 

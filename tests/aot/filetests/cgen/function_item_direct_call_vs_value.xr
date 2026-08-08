@@ -6,7 +6,7 @@ const inc_value = fn(x: int) -> int {
     return x + 2
 }
 
-fn use_value(f: (int) -> int, x: int) -> int {
+fn use_value(f: fn(int) -> int, x: int) -> int {
     return f(x)
 }
 

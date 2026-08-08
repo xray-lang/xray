@@ -1,7 +1,7 @@
 class WorkerBox {
-    worker: () -> int
+    worker: fn() -> int
 
-    constructor(worker: () -> int) {
+    constructor(worker: fn() -> int) {
         this.worker = worker
     }
 
@@ -11,7 +11,7 @@ class WorkerBox {
     }
 }
 
-fn make_worker(base: int) -> () -> int {
+fn make_worker(base: int) -> fn() -> int {
     return fn() -> int {
         return yield_then_add(base)
     }

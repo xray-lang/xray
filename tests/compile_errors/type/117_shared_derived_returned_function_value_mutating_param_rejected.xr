@@ -2,7 +2,7 @@ fn overwrite(view: ref Slice<byte>) {
     view[0] = 1
 }
 
-fn choose() -> (ref Slice<byte>) -> () {
+fn choose() -> fn(ref Slice<byte>) {
     return overwrite
 }
 

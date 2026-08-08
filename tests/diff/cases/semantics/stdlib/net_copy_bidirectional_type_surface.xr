@@ -5,7 +5,7 @@ fn counts(result: CopyBidirectionalResult) -> int {
 }
 
 fn accepts(
-    copier: (NetConn, NetConn) -> CopyBidirectionalResult,
+    copier: fn(NetConn, NetConn) -> CopyBidirectionalResult,
 ) -> bool {
     return true
 }

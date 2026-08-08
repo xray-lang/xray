@@ -1,4 +1,4 @@
-extern "C" { fn call_cfn(cb: CFn<(i32) -> i32>, x: i32) -> i32 }
+extern "C" { fn call_cfn(cb: CFn<fn(i32) -> i32>, x: i32) -> i32 }
 
 fn wrongArity(x: i32, y: i32) -> i32 {
     return x + y

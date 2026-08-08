@@ -20,15 +20,15 @@ fn fb(x: int) -> int {
     return x + 2
 }
 
-fn call_first(fns: Array<(int) -> int>, x: int) -> int {
+fn call_first(fns: Array<fn(int) -> int>, x: int) -> int {
     return fns[0](x)
 }
 
 @test
 fn test_error_set_not_in_function_type() {
-    // [fa, fb] only type-checks as Array<(int) -> int> if fa and fb share the
+    // [fa, fb] only type-checks as Array<fn(int) -> int> if fa and fb share the
     // same function type despite throwing different enum errors.
-    var fns: Array<(int) -> int> = [fa, fb]
+    var fns: Array<fn(int) -> int> = [fa, fb]
     assert_eq(len(fns), 2)
     assert_eq(fns[0](10), 11)
     assert_eq(fns[1](10), 12)

@@ -1,6 +1,6 @@
 // anchor: hof-index-param
 // Task 264 D3. stdlib/types/array.xr declares the index parameter --
-//   map(fn: (item: T, index: int) -> U)
+//   map(fn: fn(item: T, index: int) -> U)
 // -- but both runtimes only ever pass one argument (xarray_vm.c calls
 // xr_vm_call_closure with 1; the AOT helper casts the callback to a one-arg
 // function pointer). The two-argument form the contract promises therefore

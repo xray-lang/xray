@@ -1,4 +1,4 @@
-fn make(data: Array<int>) -> () -> int {
+fn make(data: Array<int>) -> fn() -> int {
     return fn() -> int {
         return len(data)
     }

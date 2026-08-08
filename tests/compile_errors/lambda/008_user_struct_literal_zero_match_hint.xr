@@ -3,4 +3,4 @@ struct Point {
     y: int
 }
 
-var make: (int) -> Point = value -> Point{result: value}
+var make: fn(int) -> Point = value -> Point{result: value}

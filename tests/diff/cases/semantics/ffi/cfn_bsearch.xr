@@ -3,7 +3,7 @@
 extern "C" {
     fn malloc(n: usize) -> MutPtr<byte>
     fn free(p: MutPtr<byte>)
-    fn bsearch(key: Ptr<byte>, base: Ptr<byte>, count: usize, size: usize, cmp: CFn<(Ptr<byte>, Ptr<byte>) -> i32>) -> Ptr<byte>
+    fn bsearch(key: Ptr<byte>, base: Ptr<byte>, count: usize, size: usize, cmp: CFn<fn(Ptr<byte>, Ptr<byte>) -> i32>) -> Ptr<byte>
 }
 
 fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> i32 {

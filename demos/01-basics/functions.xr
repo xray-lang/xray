@@ -38,7 +38,7 @@ var clamp = fn(x: int, lo: int, hi: int) -> int {
 print("clamp(15, 0, 10) = ${clamp(15, 0, 10)}")
 
 // === Higher-order functions ===
-fn apply(f: (int) -> int, x: int) -> int {
+fn apply(f: fn(int) -> int, x: int) -> int {
     return f(x)
 }
 print("apply(square, 7) = ${apply(square, 7)}")

@@ -6,19 +6,19 @@ struct Point {
     y: float
 }
 
-fn apply(f: (int) -> int, value: int) -> int {
+fn apply(f: fn(int) -> int, value: int) -> int {
     return f(value)
 }
 
 fn main() {
-    var bound: (int) -> int = x -> x + 1
+    var bound: fn(int) -> int = x -> x + 1
     print(bound(2))
     print(apply(x -> x * 3, 4))
-    var transforms: Array<(int) -> int> = [x -> x - 1]
+    var transforms: Array<fn(int) -> int> = [x -> x - 1]
     print(transforms[0](9))
-    var add: (int, int) -> int = (x: int, y) -> x + y
+    var add: fn(int, int) -> int = (x: int, y) -> x + y
     print(add(4, 5))
-    var make: (float) -> Point = a -> Point{x: a, y: a}
+    var make: fn(float) -> Point = a -> Point{x: a, y: a}
     print(make(1.0).x)
     var value = 5
     var mutate = (x: ref int) -> {
@@ -28,7 +28,7 @@ fn main() {
     print(value)
     // A ref parameter can be read without being written. The expected
     // callable contract deliberately suppresses the advisory lint here.
-    var calculate: (ref int) -> int = (x: ref int) -> x * 2
+    var calculate: fn(ref int) -> int = (x: ref int) -> x * 2
     print(calculate(ref value))
     print(value)
     var update = (x: ref int) -> {

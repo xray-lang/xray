@@ -8,7 +8,7 @@
 // 直接形态在 tests/compile_errors/cycles/247_closure_cycle_direct.xr。
 
 class Holder {
-    handler: () -> int
+    handler: fn() -> int
     constructor() { this.handler = fn() -> int { return 0 } }
 }
 

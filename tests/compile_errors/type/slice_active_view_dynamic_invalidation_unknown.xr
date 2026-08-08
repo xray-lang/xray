@@ -1,4 +1,4 @@
-type Grow = (ref Array<byte>) -> ()
+type Grow = fn(ref Array<byte>)
 
 fn grow(data: ref Array<byte>) {
     data.push(99)

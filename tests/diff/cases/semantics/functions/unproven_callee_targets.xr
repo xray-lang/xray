@@ -22,8 +22,8 @@
 // provenance and suggests a rewrite, while the VM runs the program. This case
 // checks the VM run; the native rejection is a compile-time diagnostic and is
 // covered separately, so the differential net runs the VM backend only.
-type Mapper = (int) -> int
-type IntThunk = () -> int
+type Mapper = fn(int) -> int
+type IntThunk = fn() -> int
 
 fn double(x: int) -> int { return x * 2 }
 fn negate(x: int) -> int { return 0 - x }

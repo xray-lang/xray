@@ -2,7 +2,7 @@
 // VM/AOT differential coverage for generic type aliases.
 
 type Pair<T> = { first: T, second: T }
-type Mapper<T, U> = (T) -> U
+type Mapper<T, U> = fn(T) -> U
 type Vec<T> = Array<T>
 type Forward<T> = Box<T>
 type Box<T> = { value: T }

@@ -3,7 +3,7 @@ fn buildBuffer() -> Array<byte> {
     return move result
 }
 
-fn consume(f: () -> Array<byte>) {
+fn consume(f: fn() -> Array<byte>) {
     var local = f()
     print(len(local))
 }

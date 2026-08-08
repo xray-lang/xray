@@ -2,7 +2,7 @@ fn overwrite(view: ref Slice<byte>) {
     view[0] = 1
 }
 
-fn callIt(f: (ref Slice<byte>) -> (), view: ref Slice<byte>) {
+fn callIt(f: fn(ref Slice<byte>), view: ref Slice<byte>) {
     f(ref view)
 }
 

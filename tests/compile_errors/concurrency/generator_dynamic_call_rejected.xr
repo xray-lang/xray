@@ -1,6 +1,6 @@
 // Fail closed on unproven evidence, the same boundary rule sys.Thread.spawn and
 // the parallel callbacks use: an unresolved function value may suspend.
-fn gen(f: () -> int) -> Iterator<int> {
+fn gen(f: fn() -> int) -> Iterator<int> {
     yield f()
 }
 

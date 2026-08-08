@@ -97,7 +97,7 @@ fn test_arrow_closure() {
 
 @test
 fn test_arrow_capture_param() {
-    fn makeMultiplier(n: int) ->(int) -> int {
+    fn makeMultiplier(n: int) -> fn(int) -> int {
         return (x: int) -> x * n
     }
     
@@ -150,7 +150,7 @@ fn test_arrow_immediate_call() {
 
 @test
 fn test_arrow_as_method_arg() {
-    fn apply(f: (int) -> int, x: int) -> int {
+    fn apply(f: fn(int) -> int, x: int) -> int {
         return f(x)
     }
     

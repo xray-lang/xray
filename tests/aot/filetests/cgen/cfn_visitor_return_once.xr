@@ -1,4 +1,4 @@
-type Visitor = CFn<(int, int) -> int>
+type Visitor = CFn<fn(int, int) -> int>
 
 var visits = 0
 

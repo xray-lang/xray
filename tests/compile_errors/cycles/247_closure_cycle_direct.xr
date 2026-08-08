@@ -9,7 +9,7 @@
 // runtime detector.
 
 class Button {
-    onClick: () -> int
+    onClick: fn() -> int
     clicks: int
 
     constructor() {

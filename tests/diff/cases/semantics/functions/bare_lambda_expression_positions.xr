@@ -1,4 +1,4 @@
-type IntFn = (int) -> int
+type IntFn = fn(int) -> int
 
 var double: IntFn = x -> x * 2
 print(double(21))

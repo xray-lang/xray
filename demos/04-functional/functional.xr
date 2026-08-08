@@ -4,7 +4,7 @@
 // Run: xray demos/04-functional/functional.xr
 
 // === Closures ===
-fn makeCounter(start: int) -> () -> int {
+fn makeCounter(start: int) -> fn() -> int {
     var count = start
     return fn() -> int {
         count = count + 1
@@ -16,14 +16,14 @@ var counter = makeCounter(0)
 print("counter: ${counter()}, ${counter()}, ${counter()}")
 
 // === Higher-order functions ===
-fn twice(f: (int) -> int, x: int) -> int {
+fn twice(f: fn(int) -> int, x: int) -> int {
     return f(f(x))
 }
 var addOne = fn(x: int) -> int { return x + 1 }
 print("twice(addOne, 5) = ${twice(addOne, 5)}")
 
 // === Function composition ===
-fn compose(f: (int) -> int, g: (int) -> int) -> (int) -> int {
+fn compose(f: fn(int) -> int, g: fn(int) -> int) -> fn(int) -> int {
     return fn(x: int) -> int { return f(g(x)) }
 }
 
@@ -33,7 +33,7 @@ var doubleThenAdd = compose(addTen, doubleIt)
 print("doubleThenAdd(5) = ${doubleThenAdd(5)}")
 
 // === Currying ===
-fn multiply(a: int) -> (int) -> int {
+fn multiply(a: int) -> fn(int) -> int {
     return fn(b: int) -> int { return a * b }
 }
 var triple = multiply(3)
@@ -52,7 +52,7 @@ var result = data
 print("sum of even squares: ${result}")
 
 // === Memoization pattern ===
-fn makeFibMemo() -> (int) -> int {
+fn makeFibMemo() -> fn(int) -> int {
     var cache = #{"0": 0, "1": 1}
     var fib_inner = fn(n: int) -> int {
         var key = string(n)

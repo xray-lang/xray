@@ -57,7 +57,7 @@ fn test_nested_string_key_survival() {
 // Exercises: traverse_closure + upvalue marking
 @test
 fn test_closure_upvalue_gc() {
-    var closures: Array<() -> string> = []
+    var closures: Array<fn() -> string> = []
     for (var i = 0; i < 100; i++) {
         var captured = "captured_" + string(i)
         var arr = [i, i * 2]

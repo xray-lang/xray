@@ -1,4 +1,4 @@
-var closures: Array<() -> int> = []
+var closures: Array<fn() -> int> = []
 
 fn stash(data: Array<int>) {
     closures.push(fn() -> int {

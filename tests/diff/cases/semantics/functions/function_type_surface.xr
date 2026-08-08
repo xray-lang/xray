@@ -9,7 +9,7 @@
 // Calling a function value held in an upvalue (the composition combinator) is
 // task 264 D9 and is pinned separately -- AOT native cannot lower it yet.
 
-type Mapper = (int) -> int
+type Mapper = fn(int) -> int
 
 fn applyM(f: Mapper, x: int) -> int { return f(x) }
 fn mapInt(xs: Array<int>, f: Mapper) -> Array<int> {

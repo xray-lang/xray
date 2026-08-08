@@ -1,4 +1,4 @@
-type AmbiguousBorrow = (Slice<byte>, Slice<byte>) -> Slice<byte>
+type AmbiguousBorrow = fn(Slice<byte>, Slice<byte>) -> Slice<byte>
 
 fn main() {}
 

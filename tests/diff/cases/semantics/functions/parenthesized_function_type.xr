@@ -1,26 +1,24 @@
 // anchor: parenthesized-function-type
-// Task 264 D7. In type position a parenthesised single type is read as a
-// 1-tuple, so `(() -> int)` is `(fn(): int,)`. The expression side already has
-// the right rule -- a comma makes a tuple, otherwise the parens group -- and
-// spec 2.7 states it; only the type side is missing it.
-//
-// The nullable case is why this matters beyond the spec 7.2 example: without
-// grouping there is no way to spell a nullable function type except through an
-// alias, because `() -> int?` parses as a function returning `int?`.
-fn makeCounter() -> (() -> int) {
+// Task 264 D7, resolved by task 265. With the `fn` prefix a `(` in type
+// position is only ever a tuple or a grouping, never a function type, so the
+// comma rule the expression side already has (spec 2.7) applies to types too:
+// a single type with no comma just groups. `(fn() -> int)` is therefore a
+// grouped function type, not a 1-tuple, and a nullable function type can
+// finally be spelled directly as `(fn() -> int)?` rather than through an alias.
+fn makeCounter() -> (fn() -> int) {
     var count = 0
     return fn() -> int { count = count + 1
                          return count }
 }
 
-fn takesParen(f: ((int) -> int)) -> int { return f(1) }
+fn takesParen(f: (fn(int) -> int)) -> int { return f(1) }
 
 fn main() {
     var c = makeCounter()
     print(c())                        // 1
     print(takesParen(x -> x + 41))    // 42
 
-    var nf: (() -> int)? = null
+    var nf: (fn() -> int)? = null
     print(nf == null)                 // true
     nf = c
     print(nf!())                      // 2

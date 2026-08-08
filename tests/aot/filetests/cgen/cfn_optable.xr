@@ -5,7 +5,7 @@
 // This is the wasm3-style zero-cost dispatch primitive.
 extern "C" { fn malloc(n: usize) -> MutPtr<i32> }
 
-type Op = CFn<(int, MutPtr<i32>, int) -> int>
+type Op = CFn<fn(int, MutPtr<i32>, int) -> int>
 
 fn opConst(pc: int, stack: MutPtr<i32>, sp: int) -> int {
     var target = stack

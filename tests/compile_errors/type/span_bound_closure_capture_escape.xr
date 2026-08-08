@@ -1,4 +1,4 @@
-fn make() -> () -> int {
+fn make() -> fn() -> int {
     var owner = [1, 2, 3]
     var view: Slice<int> = owner[0:2]
     var read = fn() -> int {

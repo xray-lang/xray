@@ -2,7 +2,7 @@ fn readFirst(view: Slice<byte>) -> int {
     return int(view[0]) + len(view)
 }
 
-fn choose() -> (Slice<byte>) -> int {
+fn choose() -> fn(Slice<byte>) -> int {
     return readFirst
 }
 

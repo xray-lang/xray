@@ -389,7 +389,7 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
             break;
 
         case XR_TREF_FUNCTION: {
-            tref_append(buf, pos, cap, "(");
+            tref_append(buf, pos, cap, "fn(");
             int nparam = t->nchildren > 0 ? t->nchildren - 1 : 0;
             for (int i = 0; i < nparam; i++) {
                 if (i > 0)
@@ -402,11 +402,13 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
                 }
                 tref_to_str_impl(t->children[i], buf, pos, cap);
             }
-            tref_append(buf, pos, cap, ") -> ");
-            if (t->nchildren > 0)
-                tref_to_str_impl(t->children[t->nchildren - 1], buf, pos, cap);
-            else
-                tref_append(buf, pos, cap, "()");
+            tref_append(buf, pos, cap, ")");
+            /* A unit return is spelled by omission: `fn(A)`, not `fn(A) -> ()`. */
+            XrTypeRef *fn_ret = t->nchildren > 0 ? t->children[t->nchildren - 1] : NULL;
+            if (fn_ret && fn_ret->kind != XR_TREF_UNIT) {
+                tref_append(buf, pos, cap, " -> ");
+                tref_to_str_impl(fn_ret, buf, pos, cap);
+            }
             break;
         }
 

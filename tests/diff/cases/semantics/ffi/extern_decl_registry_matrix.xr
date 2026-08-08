@@ -5,7 +5,7 @@ extern "C" {
     fn memchr(s: Ptr<byte>, c: i32, n: usize) -> Ptr<byte>
     fn sinf(x: f32) -> f32
     fn srand(seed: u32) -> ()
-    fn bsearch(key: Ptr<byte>, base: Ptr<byte>, count: usize, size: usize, cmp: CFn<(Ptr<byte>, Ptr<byte>) -> i32>) -> Ptr<byte>
+    fn bsearch(key: Ptr<byte>, base: Ptr<byte>, count: usize, size: usize, cmp: CFn<fn(Ptr<byte>, Ptr<byte>) -> i32>) -> Ptr<byte>
 
     fn task208LabsA(x: isize) -> isize
 
@@ -20,7 +20,7 @@ fn zeroCompare(left: Ptr<byte>, right: Ptr<byte>) -> i32 {
     return 0
 }
 
-fn callNativeSize(f: (Ptr<byte>) -> usize, bytes: Ptr<byte>) -> usize {
+fn callNativeSize(f: fn(Ptr<byte>) -> usize, bytes: Ptr<byte>) -> usize {
     return f(bytes)
 }
 

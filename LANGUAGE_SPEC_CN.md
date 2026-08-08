@@ -557,7 +557,7 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 | `??` | 空值合并 (`a ?? b`) |
 | `!` | 强制解包（后缀，`expr!`）/ 逻辑非（前缀） |
 | `\|` | union 类型 (`int \| string`) / 位或 |
-| `->` | 统一箭头：函数返回类型、函数类型、闭包、`match` / `select` 分支 |
+| `->` | 统一箭头：函数返回类型、闭包、`match` / `select` 分支；函数类型以 `fn` 引导（`fn(T) -> R`），返回 unit 时省略箭头（`fn(T)`） |
 | `...` | rest / spread |
 | `..` | 半开范围 (`0..10`) |
 | `..=` | 闭区间范围 (`0..=10`) |
@@ -624,7 +624,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
-| FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<(T) -> R>`、`usize`、`isize` |
+| FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<fn(T) -> R>`、`usize`、`isize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
@@ -818,7 +818,7 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 | `isize` | `ptrdiff_t` / 平台有符号宽度 | 宽度由编译目标决定；不得按宿主机 `i64` 代用 |
 | `Ptr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
 | `MutPtr<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `Ptr<T>` 的位置 |
-| `CFn<(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `extern "C"` 函数 |
+| `CFn<fn(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `extern "C"` 函数 |
 
 裸指针值可以安全地保存、传递、比较和用 `offset(i)` 做按元素宽度缩放的指针偏移；真正读写外部内存必须写在 `unsafe { }` 内：
 
@@ -840,7 +840,7 @@ unsafe {
 
 `usize` / `isize` 在 FFI 调用、`mem.load/store<T>`、manifest 绑定的 C layout 和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
 
-`CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
+`CFn<fn(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
 
 ### 2.4 复合类型
 
@@ -1300,10 +1300,10 @@ main()
 
 ```xray
 type Result = int | string
-type Mapper = (int) -> int
+type Mapper = fn(int) -> int
 type Point = { x: float, y: float }
 type Pair<T> = { first: T, second: T }
-type Mapper2<T, U> = (T) -> U
+type Mapper2<T, U> = fn(T) -> U
 ```
 
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
@@ -1314,6 +1314,8 @@ var f: Mapper2<int, string> = (n) -> string(n)
 ```
 
 泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
+
+**函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref int) -> int`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> int)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
 ### 2.9 类型推断
 
@@ -1326,7 +1328,7 @@ var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<int>
 var m = #{"a": 1}    // m: Map<string, int>
 var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
-var f = (x: int) -> x   // f: (int) -> int —— 箭头参数显式、返回类型推断
+var f = (x: int) -> x   // f: fn(int) -> int —— 箭头参数显式、返回类型推断
 ```
 
 ### 2.10 类型兼容性与转换
@@ -1757,7 +1759,7 @@ xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）
 ```xray
 fn t(tag: string, v: int) -> int { print(tag); return v }
 fn add(a: int, b: int) -> int { return a + b }
-fn pick(tag: string) -> (int, int) -> int { print(tag); return add }
+fn pick(tag: string) -> fn(int, int) -> int { print(tag); return add }
 
 class Counter {
     hits: int = 0
@@ -3038,7 +3040,7 @@ print(mem.offsetOf<CHeader>("count"))
 - 普通 Xray 函数没有 output parameter mode，返回值统一写 `return value`，不写 `return move value`。
 - 每个编译目标只有一份 canonical target data layout。Analyzer、VM、AOT、Slice/layout 查询与 header verifier共用 size/alignment/field-offset 结果。
 - 跨 VM/AOT 后端已收口的边界类型包括 `bool`、精确整数、`f32` / `f64`、`usize` / `isize`、`Ptr<T>`、`MutPtr<T>`，以及 `()` 返回。
-- C 回调参数必须写成 `CFn<(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
+- C 回调参数必须写成 `CFn<fn(A, B) -> R>`，不能使用普通 xray 函数类型 `(A, B) -> R`。
 - 当前 `CFn` 实参必须是模块级、非捕获、签名精确匹配的 xray 函数；匿名函数、捕获闭包和 extern 函数本身会被拒绝。
 
 ```xray
@@ -3048,7 +3050,7 @@ extern "C" {
         base: Ptr<byte>,
         count: usize,
         size: usize,
-        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> i32>
+        cmp: CFn<fn(Ptr<byte>, Ptr<byte>) -> i32>
     ) -> Ptr<byte>
 }
 
@@ -3123,7 +3125,7 @@ allow = []
 闭包捕获与高阶函数：
 
 ```xray
-fn apply(f: (int) -> int, x: int) -> int {
+fn apply(f: fn(int) -> int, x: int) -> int {
     return f(x)
 }
 
@@ -3885,7 +3887,7 @@ AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
 ```xray
 type Outcome = int | string                          // union 别名
-type Mapper = (int) -> int                              // 函数类型别名
+type Mapper = fn(int) -> int                              // 函数类型别名
 type Point = { x: float, y: float }                  // 结构化对象别名（sealed）
 type Pair<T> = { first: T, second: T }                // 泛型别名
 ```
@@ -5116,7 +5118,7 @@ describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 
 **为什么是永久决定**：HKT 与全程序单态化在根本上冲突。对类型构造器抽象意味着实例集合在编译期不再有限可枚举，实现只能退回字典传递或类型擦除——两者都会重新引入 Xray 的整条 AOT 路线（无装箱表示、精确布局、`xray verify` 的 shape 合同）明确要消除的间接层。这与"轻量脚本语言"的定位也不一致。
 
-需要类似抽象能力时，使用 interface + 具体类型参数（`interface Mappable { map(f: (T) -> U) -> Self<U> }` 这类签名同样不提供），或在调用点用具体实例化。
+需要类似抽象能力时，使用 interface + 具体类型参数（`interface Mappable { map(f: fn(T) -> U) -> Self<U> }` 这类签名同样不提供），或在调用点用具体实例化。
 
 ### 9.7 泛型与类型身份
 
@@ -7064,7 +7066,7 @@ ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
 FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
 // Note: arrow lambdas cannot declare an explicit return type;
-// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 
 ComptimeExpr ::= 'comptime' (Expression | Block)
 

@@ -1,5 +1,5 @@
 extern "C" {
-    fn call_cfn(cb: CFn<(ref i32) -> i32>, x: i32) -> i32
+    fn call_cfn(cb: CFn<fn(ref i32) -> i32>, x: i32) -> i32
 }
 
 fn bump(x: ref i32) -> i32 {

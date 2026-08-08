@@ -18,13 +18,13 @@ class Mutex<T> {
         this.value = v
     }
 
-    lock<U>(body: (T) -> U) -> U {
+    lock<U>(body: fn(T) -> U) -> U {
         this._sem.acquire()
         defer { this._sem.release() }
         return body(this.value)
     }
 
-    replace(body: (T) -> T) -> T {
+    replace(body: fn(T) -> T) -> T {
         this._sem.acquire()
         defer { this._sem.release() }
         this.value = body(this.value)

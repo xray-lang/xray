@@ -1,7 +1,7 @@
 // 0381_optional_call.xr
 // Test: optional function call operator (?.()).
 
-type IntFn = (int) -> int
+type IntFn = fn(int) -> int
 
 @test
 fn test_optional_call_on_value() {

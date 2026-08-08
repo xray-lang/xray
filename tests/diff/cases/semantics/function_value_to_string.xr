@@ -8,7 +8,7 @@ fn helper(n: int) -> int {
     return n + 1
 }
 
-fn apply(f: (int) -> int, n: int) -> int {
+fn apply(f: fn(int) -> int, n: int) -> int {
     return f(n)
 }
 

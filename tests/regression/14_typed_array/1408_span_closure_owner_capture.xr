@@ -1,6 +1,6 @@
 @test
 fn test_closure_captures_owner_and_uses_local_span() {
-    fn make_reader(owner: Array<int>) -> () -> int {
+    fn make_reader(owner: Array<int>) -> fn() -> int {
         return fn() -> int {
             var view: Slice<int> = owner[0:2]
             return len(view) + view[0]

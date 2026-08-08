@@ -1,5 +1,5 @@
 extern "C" {
-    fn make_cfn() -> CFn<(ref i32) -> i32>
+    fn make_cfn() -> CFn<fn(ref i32) -> i32>
 }
 
 print("ok")

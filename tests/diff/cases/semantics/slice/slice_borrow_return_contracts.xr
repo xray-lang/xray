@@ -2,7 +2,7 @@ fn tail(data: Slice<byte>) -> Slice<byte> {
     return data[1:]
 }
 
-fn throughValue(transform: (Slice<byte>) -> Slice<byte>, data: Slice<byte>) -> Slice<byte> {
+fn throughValue(transform: fn(Slice<byte>) -> Slice<byte>, data: Slice<byte>) -> Slice<byte> {
     return transform(data)
 }
 

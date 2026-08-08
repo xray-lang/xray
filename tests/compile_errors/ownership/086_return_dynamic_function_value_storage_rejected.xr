@@ -3,7 +3,7 @@ fn buildBuffer() -> Array<byte> {
     return move result
 }
 
-fn wrap(f: () -> Array<byte>) -> Array<byte> {
+fn wrap(f: fn() -> Array<byte>) -> Array<byte> {
     return f()
 }
 

@@ -27,8 +27,8 @@ fn test_struct_alias() {
 
 // ===== Function type alias =====
 
-type Mapper = (int) -> int
-type Predicate = (int) -> bool
+type Mapper = fn(int) -> int
+type Predicate = fn(int) -> bool
 
 @test
 fn test_fn_type_alias() {
@@ -65,7 +65,7 @@ fn test_optional_alias() {
 
 // ===== Nested type alias =====
 
-type Callback = (int) -> int
+type Callback = fn(int) -> int
 
 @test
 fn test_nested_alias() {
@@ -88,7 +88,7 @@ fn test_alias_in_return() {
 
 // ===== Type alias with void function =====
 
-type Action = (int) -> ()
+type Action = fn(int)
 
 @test
 fn test_void_fn_alias() {

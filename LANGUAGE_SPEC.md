@@ -556,7 +556,7 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `??` | null coalescing (`a ?? b`) |
 | `!` | force unwrap (postfix, `expr!`) / logical not (prefix) |
 | `\|` | union type (`int \| string`) / bitwise or |
-| `->` | unified arrow: function return type, function type, closures, `match` / `select` arms |
+| `->` | unified arrow: function return type, closures, `match` / `select` arms; a function type is led by `fn` (`fn(T) -> R`) and drops the arrow when it returns unit (`fn(T)`) |
 | `...` | rest / spread |
 | `..` | half-open range (`0..10`) |
 | `..=` | inclusive range (`0..=10`) |
@@ -623,7 +623,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
-| FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<(T) -> R>`, `usize`, `isize` |
+| FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<fn(T) -> R>`, `usize`, `isize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
@@ -817,7 +817,7 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 | `isize` | `ptrdiff_t` / platform signed width | width comes from the compilation target; it must not be substituted with the host's `i64` |
 | `Ptr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
 | `MutPtr<T>` | `void *` boundary value | mutable raw pointer; assignable where `Ptr<T>` is expected |
-| `CFn<(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `extern "C"` function |
+| `CFn<fn(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `extern "C"` function |
 
 Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
 
@@ -839,7 +839,7 @@ unsafe {
 
 `usize` / `isize` use one target-ABI scalar descriptor across FFI calls, `mem.load/store<T>`, extern-layout fields, and generated C. The VM, AOT backend, and layout introspection must use the compilation target's width and alignment; cross-compilation never derives language semantics from the build host's `sizeof(size_t)`.
 
-`CFn<(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and extern functions themselves cannot be used as `CFn` callback arguments.
+`CFn<fn(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and extern functions themselves cannot be used as `CFn` callback arguments.
 
 ### 2.4 Composite Types
 
@@ -1299,10 +1299,10 @@ main()
 
 ```xray
 type Result = int | string
-type Mapper = (int) -> int
+type Mapper = fn(int) -> int
 type Point = { x: float, y: float }
 type Pair<T> = { first: T, second: T }
-type Mapper2<T, U> = (T) -> U
+type Mapper2<T, U> = fn(T) -> U
 ```
 
 Aliases are **purely syntactic** equivalences; they do not introduce new types,
@@ -1320,6 +1320,18 @@ struct / enum / interface that uses the alias. Aliases may be forward
 referenced, but cyclic aliases, including recursive object aliases, are compile
 errors.
 
+**Function-type syntax.** A function type is led by `fn`, written
+`fn(T1, T2) -> R`; parameters may carry a `ref` / `move` mode (e.g.
+`fn(ref int) -> int`). When the return is `unit` the arrow segment is omitted,
+written `fn(T)` / `fn()` — an explicit `-> ()` is **not** allowed in type
+position. This is a deliberate asymmetry with the declaration position, where
+both `fn f() -> ()` and `fn f()` are valid (§5.2); a type appears in dense
+inline positions (parameters, generic arguments, container elements) and keeps
+a single spelling. A bare `(` in type position is only a tuple or a grouping,
+matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups — so
+a nullable function type is written directly as `(fn() -> int)?`. `CFn<...>`
+uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
+
 ### 2.9 Type Inference
 
 See §7.4 for details. In summary:
@@ -1331,7 +1343,7 @@ var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<int>
 var m = #{"a": 1}    // m: Map<string, int>
 var p = { name: "A" }   // p: { name: string } — structured object type
-var f = (x: int) -> x   // f: (int) -> int — explicit parameter, inferred return
+var f = (x: int) -> x   // f: fn(int) -> int — explicit parameter, inferred return
 ```
 
 ### 2.10 Type Compatibility and Conversion
@@ -1762,7 +1774,7 @@ This is a requirement rather than a conservative preference. Differential testin
 ```xray
 fn t(tag: string, v: int) -> int { print(tag); return v }
 fn add(a: int, b: int) -> int { return a + b }
-fn pick(tag: string) -> (int, int) -> int { print(tag); return add }
+fn pick(tag: string) -> fn(int, int) -> int { print(tag); return add }
 
 class Counter {
     hits: int = 0
@@ -3045,7 +3057,7 @@ Rules:
 - Ordinary Xray functions have no output parameter mode. Returns always use `return value`, never `return move value`.
 - Each target has one canonical data layout shared by the analyzer, VM, AOT, Slice/layout queries, and header verifier.
 - The aligned VM/AOT boundary types are `bool`, sized integers, `f32` / `f64`, `usize` / `isize`, `Ptr<T>`, `MutPtr<T>`, and `()` returns.
-- C callbacks use `CFn<(A, B) -> R>`, not ordinary Xray function types. A `CFn` value must be a module-level, noncapturing Xray function with an exact signature match.
+- C callbacks use `CFn<fn(A, B) -> R>`, not ordinary Xray function types. A `CFn` value must be a module-level, noncapturing Xray function with an exact signature match.
 
 ```xray
 extern "C" {
@@ -3054,7 +3066,7 @@ extern "C" {
         base: Ptr<byte>,
         count: usize,
         size: usize,
-        cmp: CFn<(Ptr<byte>, Ptr<byte>) -> i32>
+        cmp: CFn<fn(Ptr<byte>, Ptr<byte>) -> i32>
     ) -> Ptr<byte>
 }
 
@@ -3121,7 +3133,7 @@ Run `xray verify --contract perf-contracts.toml`. A contract checks existing sem
 Closure capture and higher-order functions:
 
 ```xray
-fn apply(f: (int) -> int, x: int) -> int {
+fn apply(f: fn(int) -> int, x: int) -> int {
     return f(x)
 }
 
@@ -3883,7 +3895,7 @@ AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 
 ```xray
 type Outcome = int | string                          // union alias
-type Mapper = (int) -> int                           // function-type alias
+type Mapper = fn(int) -> int                           // function-type alias
 type Point = { x: float, y: float }                  // structural object alias (sealed)
 type Pair<T> = { first: T, second: T }                // generic alias
 ```
@@ -5132,7 +5144,7 @@ describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 
 **Why this is permanent**: HKT is fundamentally at odds with whole-program monomorphization. Abstracting over a type constructor means the instance set is no longer finitely enumerable at compile time, leaving only dictionary passing or type erasure — and both reintroduce exactly the indirection that Xray's AOT line (unboxed representations, exact layout, `xray verify` shape contracts) exists to remove. It is also inconsistent with the lightweight-scripting-language positioning.
 
-Where similar abstraction is wanted, use an interface with concrete type parameters (signatures like `interface Mappable { map(f: (T) -> U) -> Self<U> }` are likewise not provided), or instantiate concretely at the call site.
+Where similar abstraction is wanted, use an interface with concrete type parameters (signatures like `interface Mappable { map(f: fn(T) -> U) -> Self<U> }` are likewise not provided), or instantiate concretely at the call site.
 
 ### 9.7 Generics and Type Identity
 
@@ -7079,7 +7091,7 @@ ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
 FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
 // Note: arrow lambdas cannot declare an explicit return type;
-// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 
 ComptimeExpr ::= 'comptime' (Expression | Block)
 

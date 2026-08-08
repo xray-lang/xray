@@ -385,10 +385,17 @@ const char *xr_type_to_string(XrType *type) {
             remaining -= n;
         }
 
-        const char *ret_str = type->function.return_type
-                                  ? xr_type_to_string(type->function.return_type)
-                                  : TYPE_NAME_UNIT;
-        snprintf(ptr, remaining, "): %s%s", ret_str, type->function.is_c_abi ? ">" : "");
+        /* A unit return is spelled by omission: `fn(A)`, not `fn(A) -> ()`.
+         * The arrow replaces the old colon so the diagnostic surface matches
+         * the parser's `fn(...) -> R` spelling. */
+        bool ret_is_unit =
+            !type->function.return_type || XR_TYPE_IS_UNIT(type->function.return_type);
+        if (ret_is_unit) {
+            snprintf(ptr, remaining, ")%s", type->function.is_c_abi ? ">" : "");
+        } else {
+            const char *ret_str = xr_type_to_string(type->function.return_type);
+            snprintf(ptr, remaining, ") -> %s%s", ret_str, type->function.is_c_abi ? ">" : "");
+        }
         return xr_pool_strdup(pool, buf);
     }
 

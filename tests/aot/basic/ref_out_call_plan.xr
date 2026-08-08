@@ -8,11 +8,11 @@ fn fill(value: ref int) -> int {
     return value
 }
 
-fn invokeBump(action: (ref int) -> int, value: ref int) -> int {
+fn invokeBump(action: fn(ref int) -> int, value: ref int) -> int {
     return action(ref value)
 }
 
-fn invokeFill(action: (ref int) -> int, value: ref int) -> int {
+fn invokeFill(action: fn(ref int) -> int, value: ref int) -> int {
     return action(ref value)
 }
 

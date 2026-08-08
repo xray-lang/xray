@@ -20,7 +20,7 @@ fn last<T>(arr: Array<T>) -> T? {
     }
     return null
 }
-fn apply<T, R>(x: T, f: (T) -> R) -> R {
+fn apply<T, R>(x: T, f: fn(T) -> R) -> R {
     return f(x)
 }
 fn wrap<T>(x: T) -> Array<T> {

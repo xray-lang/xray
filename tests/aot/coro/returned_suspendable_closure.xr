@@ -1,4 +1,4 @@
-fn make_worker() -> () -> int {
+fn make_worker() -> fn() -> int {
     return fn() -> int {
         Coro.yield()
         return 41

@@ -7,7 +7,7 @@
 
 @test
 fn test_cell_counter_basic() {
-    fn make() ->() -> int {
+    fn make() -> fn() -> int {
         var n = 0
         fn inc() -> int {
             n++
@@ -25,7 +25,7 @@ fn test_cell_counter_basic() {
 
 @test
 fn test_two_cells() {
-    fn make() ->(bool) -> int {
+    fn make() -> fn(bool) -> int {
         var a = 0
         var b = 100
         fn step(use_a: bool) -> int {
@@ -50,9 +50,9 @@ fn test_two_cells() {
 
 @test
 fn test_transitive_capture() {
-    fn outer() ->() -> int {
+    fn outer() -> fn() -> int {
         var x = 10
-        fn middle() ->() -> int {
+        fn middle() -> fn() -> int {
             fn inner() -> int {
                 x += 5
                 return x
@@ -70,7 +70,7 @@ fn test_transitive_capture() {
 
 @test
 fn test_const_capture() {
-    fn make(base: int) ->(int) -> int {
+    fn make(base: int) -> fn(int) -> int {
         const FACTOR = 3
         fn calc(x: int) -> int {
             return base + x * FACTOR
@@ -103,7 +103,7 @@ fn test_cell_shared_by_closures() {
 
 @test
 fn test_cell_hot_loop() {
-    fn make() ->(int) -> int {
+    fn make() -> fn(int) -> int {
         var total = 0
         fn add(n: int) -> int {
             total += n
@@ -123,7 +123,7 @@ fn test_cell_hot_loop() {
 
 @test
 fn test_cell_string_value() {
-    fn make() ->(string) -> string {
+    fn make() -> fn(string) -> string {
         var result = ""
         fn append(s: string) -> string {
             result = result + s
@@ -139,7 +139,7 @@ fn test_cell_string_value() {
 
 @test
 fn test_cell_float_value() {
-    fn make() ->(float) -> float {
+    fn make() -> fn(float) -> float {
         var total = 0.0
         fn add(x: float) -> float {
             total += x
@@ -156,7 +156,7 @@ fn test_cell_float_value() {
 
 @test
 fn test_many_instances() {
-    fn make() ->() -> int {
+    fn make() -> fn() -> int {
         var n = 0
         fn inc() -> int {
             n++
@@ -164,7 +164,7 @@ fn test_many_instances() {
         }
         return inc
     }
-    var counters: Array<() -> int> = []
+    var counters: Array<fn() -> int> = []
     for (var i = 0; i < 10; i++) {
         counters.push(make())
     }

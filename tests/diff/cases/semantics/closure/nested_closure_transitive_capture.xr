@@ -6,7 +6,7 @@
 //
 // capture_forms.xr covers every other capture shape; this one is split out
 // because it is the only shape that does not reach a native binary.
-type IntThunk = () -> int
+type IntThunk = fn() -> int
 
 fn transitive() -> IntThunk {
     var x = 10

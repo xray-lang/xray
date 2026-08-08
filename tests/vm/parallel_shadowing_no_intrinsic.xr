@@ -1,5 +1,5 @@
 class FakeParallel {
-    forEach(range: Range, body: (int) -> ()) {
+    forEach(range: Range, body: fn(int)) {
         body(1)
         body(2)
     }

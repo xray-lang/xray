@@ -1,4 +1,4 @@
-export fn forEach(range: Range, body: (int) -> ()) {
+export fn forEach(range: Range, body: fn(int)) {
     for (offset in 0..len(range)) {
         body(range[offset])
     }

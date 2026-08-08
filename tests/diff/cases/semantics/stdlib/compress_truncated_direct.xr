@@ -2,7 +2,7 @@
 // decompression failure through the converged typed native error channel.
 import compress
 
-fn compressionInvalidData(body: () -> ()) -> bool {
+fn compressionInvalidData(body: fn()) -> bool {
     try {
         body()
         return false

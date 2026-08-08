@@ -6,7 +6,7 @@
 
 @test
 fn test_closure_basic() {
-    fn makeCounter() ->() -> int {
+    fn makeCounter() -> fn() -> int {
         var count = 0
         fn increment() -> int {
             count++
@@ -23,7 +23,7 @@ fn test_closure_basic() {
 
 @test
 fn test_closure_multiple_instances() {
-    fn makeCounter() ->() -> int {
+    fn makeCounter() -> fn() -> int {
         var count = 0
         fn increment() -> int {
             count++
@@ -46,7 +46,7 @@ fn test_closure_multiple_instances() {
 
 @test
 fn test_capture_param() {
-    fn makeAdder(x: int) ->(int) -> int {
+    fn makeAdder(x: int) -> fn(int) -> int {
         fn add(y: int) -> int {
             return x + y
         }
@@ -63,7 +63,7 @@ fn test_capture_param() {
 
 @test
 fn test_capture_multiple_params() {
-    fn makeRange(min: int, max: int) ->(int) -> bool {
+    fn makeRange(min: int, max: int) -> fn(int) -> bool {
         fn isInRange(x: int) -> bool {
             return x >= min && x <= max
         }
@@ -95,7 +95,7 @@ fn test_modify_outer() {
 
 @test
 fn test_accumulator() {
-    fn makeAccumulator() ->(int) -> int {
+    fn makeAccumulator() -> fn(int) -> int {
         var total = 0
         fn add(n: int) -> int {
             total += n
@@ -114,8 +114,8 @@ fn test_accumulator() {
 
 @test
 fn test_nested_closure() {
-    fn outer(x: int) ->(int) ->(int) -> int {
-        fn middle(y: int) ->(int) -> int {
+    fn outer(x: int) -> fn(int) -> fn(int) -> int {
+        fn middle(y: int) -> fn(int) -> int {
             fn inner(z: int) -> int {
                 return x + y + z
             }
@@ -130,9 +130,9 @@ fn test_nested_closure() {
 
 @test
 fn test_deeply_nested() {
-    fn level1(a: int) ->(int) ->(int) ->(int) -> int {
-        fn level2(b: int) ->(int) ->(int) -> int {
-            fn level3(c: int) ->(int) -> int {
+    fn level1(a: int) -> fn(int) -> fn(int) -> fn(int) -> int {
+        fn level2(b: int) -> fn(int) -> fn(int) -> int {
+            fn level3(c: int) -> fn(int) -> int {
                 fn level4(d: int) -> int {
                     return a + b + c + d
                 }
@@ -151,7 +151,7 @@ fn test_deeply_nested() {
 
 @test
 fn test_multiplier_factory() {
-    fn createMultiplier(factor: int) ->(int) -> int {
+    fn createMultiplier(factor: int) -> fn(int) -> int {
         fn multiply(x: int) -> int {
             return x * factor
         }
@@ -167,7 +167,7 @@ fn test_multiplier_factory() {
 
 @test
 fn test_greeting_factory() {
-    fn createGreeter(greeting: string) ->(string) -> string {
+    fn createGreeter(greeting: string) -> fn(string) -> string {
         fn greet(name: string) -> string {
             return greeting + ", " + name + "!"
         }
@@ -185,7 +185,7 @@ fn test_greeting_factory() {
 
 @test
 fn test_closure_captures_value() {
-    var funcs: Array<() -> int> = []
+    var funcs: Array<fn() -> int> = []
     for (var i = 0; i < 3; i++) {
         var val = i  // 每次循环创建新变量
         fn capture() -> int {
@@ -203,7 +203,7 @@ fn test_closure_captures_value() {
 
 @test
 fn test_closure_no_capture() {
-    fn outer() ->() -> int {
+    fn outer() -> fn() -> int {
         fn inner() -> int {
             return 42
         }
@@ -218,7 +218,7 @@ fn test_closure_no_capture() {
 fn test_closure_capture_const() {
     const VALUE = 100
     
-    fn getClosure() ->() -> int {
+    fn getClosure() -> fn() -> int {
         fn inner() -> int {
             return VALUE
         }

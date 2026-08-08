@@ -33,19 +33,19 @@ export class Mutex<T> {
         this.value = v
     }
 
-    lock<U>(body: (T) -> U) -> U {
+    lock<U>(body: fn(T) -> U) -> U {
         this._sem.acquire()
         defer { this._sem.release() }
         return body(this.value)
     }
 
-    tryLock<U>(body: (T) -> U) -> U? {
+    tryLock<U>(body: fn(T) -> U) -> U? {
         if (!this._sem.tryAcquire()) { return null }
         defer { this._sem.release() }
         return body(this.value)
     }
 
-    replace(body: (T) -> T) -> T {
+    replace(body: fn(T) -> T) -> T {
         this._sem.acquire()
         defer { this._sem.release() }
         this.value = body(this.value)
@@ -80,7 +80,7 @@ export class RwLock<T> {
         }
     }
 
-    read<U>(body: (T) -> U) -> U {
+    read<U>(body: fn(T) -> U) -> U {
         this._entry.acquire()
         this._lockCounter()
         this._readers = this._readers + 1
@@ -98,7 +98,7 @@ export class RwLock<T> {
         return body(this.value)
     }
 
-    write<U>(body: (T) -> U) -> U {
+    write<U>(body: fn(T) -> U) -> U {
         this._entry.acquire()
         this._gate.acquire()
         this._entry.release()
@@ -106,7 +106,7 @@ export class RwLock<T> {
         return body(this.value)
     }
 
-    replace(body: (T) -> T) -> T {
+    replace(body: fn(T) -> T) -> T {
         this._entry.acquire()
         this._gate.acquire()
         this._entry.release()
@@ -126,7 +126,7 @@ export class Once {
         this._done = false
     }
 
-    call(body: () -> ()) {
+    call(body: fn()) {
         this._sem.acquire()
         defer { this._sem.release() }
         if (!this._done) {

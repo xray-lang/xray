@@ -1892,7 +1892,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "Server.routeHandler",
-        .signature = "(method: string, path: string, handler: (HttpRequest) -> HttpResponse): bool",
+        .signature = "(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse): bool",
         .summary = "",
     },
     {
@@ -3559,22 +3559,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "Plan.constructor",
-        .signature = "(options: Options, init: (int) -> S): ()",
+        .signature = "(options: Options, init: fn(int) -> S): ()",
         .summary = "",
     },
     {
         .name = "Plan.forEach",
-        .signature = "(range: Range, body: (S, int) -> ()): ()",
+        .signature = "(range: Range, body: fn(S, int)): ()",
         .summary = "",
     },
     {
         .name = "Plan.map",
-        .signature = "(range: Range, body: (S, int) -> T): Array<T>",
+        .signature = "(range: Range, body: fn(S, int) -> T): Array<T>",
         .summary = "",
     },
     {
         .name = "Plan.mapInto",
-        .signature = "(range: Range, output: ref Array<T>, body: (S, int) -> T): ()",
+        .signature = "(range: Range, output: ref Array<T>, body: fn(S, int) -> T): ()",
         .summary = "",
     },
     {
@@ -3584,27 +3584,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "Plan.reduce",
-        .signature = "(range: Range, initial: A, body: (S, int) -> A, combine: (A, A) -> A): A",
+        .signature = "(range: Range, initial: A, body: fn(S, int) -> A, combine: fn(A, A) -> A): A",
         .summary = "",
     },
     {
         .name = "forEach",
-        .signature = "(range: Range, body: (int) -> (), options: Options = Options()): ()",
+        .signature = "(range: Range, body: fn(int), options: Options = Options()): ()",
         .summary = "",
     },
     {
         .name = "map",
-        .signature = "(range: Range, body: (int) -> T, options: Options = Options()): Array<T>",
+        .signature = "(range: Range, body: fn(int) -> T, options: Options = Options()): Array<T>",
         .summary = "",
     },
     {
         .name = "mapInto",
-        .signature = "(range: Range, output: ref Array<T>, body: (int) -> T, options: Options = Options()): ()",
+        .signature = "(range: Range, output: ref Array<T>, body: fn(int) -> T, options: Options = Options()): ()",
         .summary = "",
     },
     {
         .name = "reduce",
-        .signature = "(range: Range, initial: A, body: (int) -> A, combine: (A, A) -> A, options: Options = Options()): A",
+        .signature = "(range: Range, initial: A, body: fn(int) -> A, combine: fn(A, A) -> A, options: Options = Options()): A",
         .summary = "",
     },
 };
@@ -4652,17 +4652,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "Mutex.lock",
-        .signature = "(body: (T) -> U): U",
+        .signature = "(body: fn(T) -> U): U",
         .summary = "",
     },
     {
         .name = "Mutex.replace",
-        .signature = "(body: (T) -> T): T",
+        .signature = "(body: fn(T) -> T): T",
         .summary = "",
     },
     {
         .name = "Mutex.tryLock",
-        .signature = "(body: (T) -> U): U?",
+        .signature = "(body: fn(T) -> U): U?",
         .summary = "",
     },
     {
@@ -4677,7 +4677,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "Once.call",
-        .signature = "(body: () -> ()): ()",
+        .signature = "(body: fn()): ()",
         .summary = "",
     },
     {
@@ -4697,12 +4697,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "RwLock.read",
-        .signature = "(body: (T) -> U): U",
+        .signature = "(body: fn(T) -> U): U",
         .summary = "",
     },
     {
         .name = "RwLock.replace",
-        .signature = "(body: (T) -> T): T",
+        .signature = "(body: fn(T) -> T): T",
         .summary = "",
     },
     {
@@ -4712,7 +4712,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "RwLock.write",
-        .signature = "(body: (T) -> U): U",
+        .signature = "(body: fn(T) -> U): U",
         .summary = "",
     },
     {
@@ -4910,7 +4910,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "ThreadLocal.constructor",
-        .signature = "(init: () -> T): ()",
+        .signature = "(init: fn() -> T): ()",
         .summary = "",
     },
     {
@@ -4930,7 +4930,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "onSignal",
-        .signature = "(signal: Signal, handler: () -> ()): bool",
+        .signature = "(signal: Signal, handler: fn()): bool",
         .summary = "",
     },
     {
@@ -7962,10 +7962,10 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Type aliases\n"
             "```xray\n"
             "type Result = int | string\n"
-            "type Mapper = (int) -> int\n"
+            "type Mapper = fn(int) -> int\n"
             "type Point = { x: float, y: float }\n"
             "type Pair<T> = { first: T, second: T }\n"
-            "type Mapper2<T, U> = (T) -> U\n"
+            "type Mapper2<T, U> = fn(T) -> U\n"
             "```\n"
             "\n"
             "### Type inference\n"
@@ -7976,7 +7976,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var a = [1, 2, 3]       // a: Array<int>\n"
             "var m = #{\"a\": 1}    // m: Map<string, int>\n"
             "var p = { name: \"A\" }   // p: { name: string } \xe2\x80\x94 structured object type\n"
-            "var f = (x: int) -> x   // f: (int) -> int \xe2\x80\x94 explicit parameter, inferred return\n"
+            "var f = (x: int) -> x   // f: fn(int) -> int \xe2\x80\x94 explicit parameter, inferred return\n"
             "```\n"
             "\n"
             "### Explicit casts\n"
@@ -8622,7 +8622,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Server.constructor` | `(): ()` |  |\n"
             "| `Server.listen` | `(port: int, running: Atomic<bool>): bool` |  |\n"
             "| `Server.route` | `(method: string, path: string, value: T): bool` |  |\n"
-            "| `Server.routeHandler` | `(method: string, path: string, handler: (HttpRequest) -> HttpResponse): bool` |  |\n"
+            "| `Server.routeHandler` | `(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse): bool` |  |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
@@ -9176,16 +9176,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Options.workers` | `: int` |  |\n"
             "| `Plan` | `Plan` |  |\n"
             "| `Plan.close` | `(): ()` |  |\n"
-            "| `Plan.constructor` | `(options: Options, init: (int) -> S): ()` |  |\n"
-            "| `Plan.forEach` | `(range: Range, body: (S, int) -> ()): ()` |  |\n"
-            "| `Plan.map` | `(range: Range, body: (S, int) -> T): Array<T>` |  |\n"
-            "| `Plan.mapInto` | `(range: Range, output: ref Array<T>, body: (S, int) -> T): ()` |  |\n"
+            "| `Plan.constructor` | `(options: Options, init: fn(int) -> S): ()` |  |\n"
+            "| `Plan.forEach` | `(range: Range, body: fn(S, int)): ()` |  |\n"
+            "| `Plan.map` | `(range: Range, body: fn(S, int) -> T): Array<T>` |  |\n"
+            "| `Plan.mapInto` | `(range: Range, output: ref Array<T>, body: fn(S, int) -> T): ()` |  |\n"
             "| `Plan.options` | `: Options` |  |\n"
-            "| `Plan.reduce` | `(range: Range, initial: A, body: (S, int) -> A, combine: (A, A) -> A): A` |  |\n"
-            "| `parallel.forEach` | `(range: Range, body: (int) -> (), options: Options = Options()): ()` |  |\n"
-            "| `parallel.map` | `(range: Range, body: (int) -> T, options: Options = Options()): Array<T>` |  |\n"
-            "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: (int) -> T, options: Options = Options()): ()` |  |\n"
-            "| `parallel.reduce` | `(range: Range, initial: A, body: (int) -> A, combine: (A, A) -> A, options: Options = Options()): A` |  |\n"
+            "| `Plan.reduce` | `(range: Range, initial: A, body: fn(S, int) -> A, combine: fn(A, A) -> A): A` |  |\n"
+            "| `parallel.forEach` | `(range: Range, body: fn(int), options: Options = Options()): ()` |  |\n"
+            "| `parallel.map` | `(range: Range, body: fn(int) -> T, options: Options = Options()): Array<T>` |  |\n"
+            "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: fn(int) -> T, options: Options = Options()): ()` |  |\n"
+            "| `parallel.reduce` | `(range: Range, initial: A, body: fn(int) -> A, combine: fn(A, A) -> A, options: Options = Options()): A` |  |\n"
             "",
         .symbols = _symbols_parallel,
         .symbol_count = (int)(sizeof(_symbols_parallel) / sizeof(_symbols_parallel[0])),
@@ -9535,19 +9535,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Condvar.wait` | `(): ()` |  |\n"
             "| `Mutex` | `Mutex` |  |\n"
             "| `Mutex.constructor` | `(v: T): ()` |  |\n"
-            "| `Mutex.lock` | `(body: (T) -> U): U` |  |\n"
-            "| `Mutex.replace` | `(body: (T) -> T): T` |  |\n"
-            "| `Mutex.tryLock` | `(body: (T) -> U): U?` |  |\n"
+            "| `Mutex.lock` | `(body: fn(T) -> U): U` |  |\n"
+            "| `Mutex.replace` | `(body: fn(T) -> T): T` |  |\n"
+            "| `Mutex.tryLock` | `(body: fn(T) -> U): U?` |  |\n"
             "| `Mutex.value` | `: T` |  |\n"
             "| `Once` | `Once` |  |\n"
-            "| `Once.call` | `(body: () -> ()): ()` |  |\n"
+            "| `Once.call` | `(body: fn()): ()` |  |\n"
             "| `Once.constructor` | `(): ()` |  |\n"
             "| `RwLock` | `RwLock` |  |\n"
             "| `RwLock.constructor` | `(v: T): ()` |  |\n"
-            "| `RwLock.read` | `(body: (T) -> U): U` |  |\n"
-            "| `RwLock.replace` | `(body: (T) -> T): T` |  |\n"
+            "| `RwLock.read` | `(body: fn(T) -> U): U` |  |\n"
+            "| `RwLock.replace` | `(body: fn(T) -> T): T` |  |\n"
             "| `RwLock.value` | `: T` |  |\n"
-            "| `RwLock.write` | `(body: (T) -> U): U` |  |\n"
+            "| `RwLock.write` | `(body: fn(T) -> U): U` |  |\n"
             "| `sync.fence` | `(order: Ordering): ()` |  |\n"
             "",
         .symbols = _symbols_sync,
@@ -9604,11 +9604,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ProcessOptions.stdin` | `: int?` |  |\n"
             "| `ProcessOptions.stdout` | `: int?` |  |\n"
             "| `ThreadLocal` | `ThreadLocal` |  |\n"
-            "| `ThreadLocal.constructor` | `(init: () -> T): ()` |  |\n"
+            "| `ThreadLocal.constructor` | `(init: fn() -> T): ()` |  |\n"
             "| `ThreadLocal.get` | `(): T` |  |\n"
             "| `ThreadLocal.set` | `(value: T): ()` |  |\n"
             "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"
-            "| `sys.onSignal` | `(signal: Signal, handler: () -> ()): bool` |  |\n"
+            "| `sys.onSignal` | `(signal: Signal, handler: fn()): bool` |  |\n"
             "| `sys.pinToCpu` | `(cpu: int): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
             "| `sys.sleepMs` | `(ms: int): ()` | Block the current OS thread for at least ms milliseconds |\n"
             "| `sys.threadYield` | `(): ()` | Yield the current OS thread to another runnable OS thread |\n"

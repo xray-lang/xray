@@ -36,15 +36,15 @@ class Array<T> {
     reverse() -> Array<T>
     // @receiver_write
     // @returns_receiver
-    sort(compareFn?: (a: T, b: T) -> int) -> Array<T>
-    map(fn: (item: T, index: int) -> U) -> Array<U>
-    filter(fn: (item: T, index: int) -> bool) -> Array<T>
-    reduce(fn: (acc: U, item: T) -> U, initial: U) -> U
-    forEach(fn: (item: T, index: int) -> ()) -> ()
-    find(fn: (item: T) -> bool) -> T?
-    findIndex(fn: (item: T) -> bool) -> int
-    every(fn: (item: T) -> bool) -> bool
-    some(fn: (item: T) -> bool) -> bool
+    sort(compareFn?: fn(a: T, b: T) -> int) -> Array<T>
+    map(fn: fn(item: T, index: int) -> U) -> Array<U>
+    filter(fn: fn(item: T, index: int) -> bool) -> Array<T>
+    reduce(fn: fn(acc: U, item: T) -> U, initial: U) -> U
+    forEach(fn: fn(item: T, index: int)) -> ()
+    find(fn: fn(item: T) -> bool) -> T?
+    findIndex(fn: fn(item: T) -> bool) -> int
+    every(fn: fn(item: T) -> bool) -> bool
+    some(fn: fn(item: T) -> bool) -> bool
     // @receiver_write
     // @returns_receiver
     fill(value: T, start?: int, end?: int) -> Array<T>

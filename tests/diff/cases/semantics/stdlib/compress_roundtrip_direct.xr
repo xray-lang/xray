@@ -1,7 +1,7 @@
 // AOT direct-call compress helpers must match VM stdlib dispatch.
 import compress
 
-fn compressionInvalidData(body: () -> ()) -> bool {
+fn compressionInvalidData(body: fn()) -> bool {
     try {
         body()
         return false

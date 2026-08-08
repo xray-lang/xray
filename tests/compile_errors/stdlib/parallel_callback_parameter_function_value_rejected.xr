@@ -1,6 +1,6 @@
 import parallel
 
-fn apply(f: (int) -> int) {
+fn apply(f: fn(int) -> int) {
     parallel.forEach(0..4, (i) -> {
         print(f(i))
     }, parallel.Options(2))

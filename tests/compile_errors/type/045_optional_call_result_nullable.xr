@@ -1,4 +1,4 @@
-type IntFn = (int) -> int
+type IntFn = fn(int) -> int
 
 fn bump(x: int) -> int {
     return x + 1

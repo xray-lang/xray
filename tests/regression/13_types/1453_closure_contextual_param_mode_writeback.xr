@@ -6,7 +6,7 @@
 
 @test
 fn test_contextual_read_closure_reads_value() {
-    var reader: (int) -> int = fn(x) -> int {
+    var reader: fn(int) -> int = fn(x) -> int {
         return x + 100
     }
     var v = 5
@@ -16,7 +16,7 @@ fn test_contextual_read_closure_reads_value() {
 
 @test
 fn test_contextual_ref_closure_writes_back() {
-    var bump: (ref int) -> int = fn(x) -> int {
+    var bump: fn(ref int) -> int = fn(x) -> int {
         x = x + 1
         return x
     }
@@ -27,7 +27,7 @@ fn test_contextual_ref_closure_writes_back() {
 
 @test
 fn test_contextual_move_closure_consumes_owner() {
-    var take: (move Array<int>) -> int = fn(x) -> int {
+    var take: fn(move Array<int>) -> int = fn(x) -> int {
         return len(x)
     }
     var values = [1, 2, 3]

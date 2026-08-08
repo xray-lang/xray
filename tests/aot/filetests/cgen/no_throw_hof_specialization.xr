@@ -1,6 +1,6 @@
 enum HofError { Negative }
 
-fn apply<T>(callback: (T) -> T, value: T) -> T {
+fn apply<T>(callback: fn(T) -> T, value: T) -> T {
     return callback(value)
 }
 

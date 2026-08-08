@@ -10,12 +10,12 @@
 // 对应的正例（必须被拒绝）在 tests/compile_errors/cycles/247_closure_cycle_direct.xr。
 
 class Button {
-    onClick: () -> int
+    onClick: fn() -> int
     clicks: int
     constructor() { this.onClick = fn() -> int { return 0 }; this.clicks = 0 }
     render() -> int { this.clicks = this.clicks + 1; return this.clicks }
 }
-class Holder { handler: () -> int
+class Holder { handler: fn() -> int
     constructor() { this.handler = fn() -> int { return 0 } } }
 
 // 1. 闭包不捕获任何外层名

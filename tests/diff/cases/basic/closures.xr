@@ -1,5 +1,5 @@
 // anchor: basic-closures-recursion
-fn makeCounter() -> () -> int {
+fn makeCounter() -> fn() -> int {
     var n = 0
     return () -> {
         n = n + 1

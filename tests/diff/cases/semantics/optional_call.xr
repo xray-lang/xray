@@ -1,8 +1,8 @@
 // optional_call.xr
 // VM/AOT differential coverage for func?.(args).
 
-type IntFn = (int) -> int
-type FloatFn = (float) -> float
+type IntFn = fn(int) -> int
+type FloatFn = fn(float) -> float
 
 var calls = 0
 

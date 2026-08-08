@@ -8,7 +8,7 @@ class Set<T: Hashable> {
     // @receiver_write
     clear()
     values() -> Array<T>
-    forEach(fn: (value: T) -> ()) -> ()
+    forEach(fn: fn(value: T)) -> ()
     union(other: Set<T>) -> Set<T>
     intersection(other: Set<T>) -> Set<T>
     difference(other: Set<T>) -> Set<T>

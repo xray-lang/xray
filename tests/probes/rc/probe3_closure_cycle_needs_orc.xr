@@ -24,7 +24,7 @@ import runtime
 // 后者当前被解析成单元素元组的可空版本（`(fn(): int,)?`），赋闭包字面量
 // 时报 E0352——那是独立于本任务的类型解析问题。
 class Button {
-    onClick: () -> int
+    onClick: fn() -> int
     clicks: int
 
     constructor() {
@@ -43,7 +43,7 @@ class Button {
 // 不报的一级间接形态：闭包存入 b 的字段所指的另一个对象。零误报优先，这一
 // 类交给阶段 D 的运行期检测器兜底。
 class Slot {
-    handler: () -> int
+    handler: fn() -> int
 
     constructor() {
         this.handler = fn() -> int { return 0 }
@@ -75,7 +75,7 @@ fn make_direct_closure_cycle() {
 // 间接形态：闭包存入另一个对象，而那个对象由被捕获的对象持有。
 // A.6 明确**不**报这一形态（零误报优先），由阶段 D 的检测器兜底。
 class Holder {
-    handler: () -> int
+    handler: fn() -> int
 
     constructor() {
         this.handler = fn() -> int { return 0 }

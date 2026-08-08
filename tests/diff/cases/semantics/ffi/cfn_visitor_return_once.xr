@@ -1,7 +1,7 @@
 // A CFn visitor passed to a wider helper must execute once. The helper has
 // hidden-closure + 3 parameters; the visitor has hidden-closure + 2, so AOT
 // must return the stored call result instead of replaying it as musttail.
-type Visitor = CFn<(int, int) -> int>
+type Visitor = CFn<fn(int, int) -> int>
 
 var visits = 0
 

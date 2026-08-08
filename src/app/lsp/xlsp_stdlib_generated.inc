@@ -440,15 +440,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
 
 // parallel module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_parallel_symbols[] = {
-    {"forEach", XLSP_SYM_FUNCTION, "fn(range: Range, body: (int): (), options: Options = Options())", "", NULL, 0},
-    {"map", XLSP_SYM_FUNCTION, "fn(range: Range, body: (int): T, options: Options = Options()) -> Array<T>", "", NULL, 0},
-    {"mapInto", XLSP_SYM_FUNCTION, "fn(range: Range, output: ref Array<T>, body: (int): T, options: Options = Options())", "", NULL, 0},
-    {"reduce", XLSP_SYM_FUNCTION, "fn(range: Range, initial: A, body: (int): A, combine: (A, A) -> A, options: Options = Options()) -> A", "", NULL, 0},
+    {"map", XLSP_SYM_FUNCTION, "fn(range: Range, body: fn(int): T, options: Options = Options()) -> Array<T>", "", NULL, 0},
+    {"mapInto", XLSP_SYM_FUNCTION, "fn(range: Range, output: ref Array<T>, body: fn(int): T, options: Options = Options())", "", NULL, 0},
+    {"reduce", XLSP_SYM_FUNCTION, "fn(range: Range, initial: A, body: fn(int): A, combine: fn(A, A) -> A, options: Options = Options()) -> A", "", NULL, 0},
     {"ParallelError", XLSP_SYM_CLASS, "type ParallelError", "Enum type", NULL, 0},
     {"Options", XLSP_SYM_CLASS, "type Options", "Class type", NULL, 0},
     {"Plan", XLSP_SYM_CLASS, "type Plan", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_PARALLEL_SYMBOL_COUNT 7
+#define GEN_XLSP_STDLIB_PARALLEL_SYMBOL_COUNT 6
 
 // path module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
@@ -548,7 +547,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "Yield the current OS thread to another runnable OS thread", NULL, 0},
     {"sleepMs", XLSP_SYM_FUNCTION, "fn(ms: int): ()", "Block the current OS thread for at least ms milliseconds", NULL, 0},
     {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: int): bool", "Best-effort pin of the current OS thread to a CPU index", NULL, 0},
-    {"onSignal", XLSP_SYM_FUNCTION, "fn(signal: Signal, handler: (): ()) -> bool", "", NULL, 0},
     {"Signal", XLSP_SYM_CLASS, "type Signal", "Enum type", NULL, 0},
     {"Pipe", XLSP_SYM_CLASS, "type Pipe", "Class type", NULL, 0},
     {"ProcessOptions", XLSP_SYM_CLASS, "type ProcessOptions", "Class type", NULL, 0},
@@ -556,7 +554,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"ThreadLocal", XLSP_SYM_CLASS, "type ThreadLocal", "Class type", NULL, 0},
     {"Dylib", XLSP_SYM_CLASS, "type Dylib", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 16
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 15
 
 // text module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_text_symbols[] = {

@@ -1,7 +1,7 @@
 class Box<T> {
     values: Array<T>
 
-    constructor(init: (int) -> T) {
+    constructor(init: fn(int) -> T) {
         var states: Array<T> = []
         for (lane in 0..3) {
             states.push(init(lane))

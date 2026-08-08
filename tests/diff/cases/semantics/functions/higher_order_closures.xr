@@ -3,11 +3,11 @@
 // lower to a `void` C function under AOT (dropping the returned value -> null/0
 // at every call site), while the VM was unaffected. See task 147 §0.7.
 
-fn apply(f: (int) -> int, x: int) -> int { return f(x) }
-fn applyTwice(f: (int) -> int, x: int) -> int { return f(f(x)) }
-fn toStr(f: (int) -> string, x: int) -> string { return f(x) }
+fn apply(f: fn(int) -> int, x: int) -> int { return f(x) }
+fn applyTwice(f: fn(int) -> int, x: int) -> int { return f(f(x)) }
+fn toStr(f: fn(int) -> string, x: int) -> string { return f(x) }
 
-fn mapInt(xs: Array<int>, f: (int) -> int) -> Array<int> {
+fn mapInt(xs: Array<int>, f: fn(int) -> int) -> Array<int> {
     var out: Array<int> = []
     for (x in xs) { out.push(f(x)) }
     return out
@@ -16,8 +16,8 @@ fn mapInt(xs: Array<int>, f: (int) -> int) -> Array<int> {
 class Cell<T> {
     value: T
     constructor(v: T) { this.value = v }
-    map<U>(f: (T) -> U) -> U { return f(this.value) }
-    update(f: (T) -> T) -> T { this.value = f(this.value); return this.value }
+    map<U>(f: fn(T) -> U) -> U { return f(this.value) }
+    update(f: fn(T) -> T) -> T { this.value = f(this.value); return this.value }
 }
 
 // inferred-return lambdas passed to free functions
