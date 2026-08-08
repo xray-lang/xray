@@ -1,20 +1,20 @@
-fn xray_no_alloc_json_values_reject(value: Json) -> int {
+fn xray_no_alloc_json_values_reject(value: JSON.Object) -> int {
     return len(value.values())
 }
 
-fn xray_no_alloc_json_entries_reject(value: Json) -> int {
+fn xray_no_alloc_json_entries_reject(value: JSON.Object) -> int {
     return len(value.entries())
 }
 
-fn xray_no_alloc_json_iterator_reject(value: Json) -> bool {
+fn xray_no_alloc_json_iterator_reject(value: JSON.Object) -> bool {
     return value.iterator().hasNext()
 }
 
-fn xray_no_alloc_json_entries_iterator_reject(value: Json) -> bool {
+fn xray_no_alloc_json_entries_iterator_reject(value: JSON.Object) -> bool {
     return value.entriesIterator().hasNext()
 }
 
-fn xray_no_alloc_json_tostring_reject(value: Json) -> string {
+fn xray_no_alloc_json_tostring_reject(value: JSON.Object) -> string {
     return value.toString()
 }
 
@@ -22,7 +22,8 @@ fn xray_no_alloc_range_values_reject(value: Range) -> int {
     return len(value.values())
 }
 
-var xray_no_alloc_json_range_obj: Json = { answer: 42, label: "edge" }
+var xray_no_alloc_json_range_obj: JSON.Object =
+    JSON.parseObject("{\"answer\":42,\"label\":\"edge\"}")
 
 print(xray_no_alloc_json_values_reject(xray_no_alloc_json_range_obj))
 print(xray_no_alloc_json_entries_reject(xray_no_alloc_json_range_obj))

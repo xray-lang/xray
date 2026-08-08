@@ -79,21 +79,26 @@ static bool reject_removed_source_type_name(Parser *parser, const char *name) {
     if (!name)
         return false;
     if (strcmp(name, "JsonValue") == 0) {
-        report_removed_source_type_name(parser,
-                                        "Type 'JsonValue' has been removed. Use 'Json' instead.");
+        report_removed_source_type_name(
+            parser, "Type 'JsonValue' has been removed. Use 'JSON.Value' instead.");
+        return true;
+    }
+    if (strcmp(name, "Json") == 0) {
+        report_removed_source_type_name(
+            parser, "Type 'Json' has been removed. Use 'JSON.Value' or 'JSON.Object'.");
         return true;
     }
     if (strcmp(name, "any") == 0) {
         report_removed_source_type_name(
             parser,
-            "'any' type is not supported. Use a concrete type or 'Json' for dynamic values.");
+            "'any' type is not supported. Use a concrete type or 'JSON.Value' for dynamic JSON.");
         return true;
     }
     if (strcmp(name, "unknown") == 0) {
         report_removed_source_type_name(
             parser,
             "'unknown' type has been removed. Use a concrete type, a generic type parameter, or "
-            "'Json' for JSON-domain values.");
+            "'JSON.Value' for schema-less JSON values.");
         return true;
     }
     if (strcmp(name, "owned") == 0 || strcmp(name, "shared") == 0) {
@@ -272,7 +277,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             for (int i = 0; i < count; i++)
                 fields[i] = clone_subst_type_ref(parser, src->children[i], subst_alias, type_args);
             XrTypeRef *obj = xr_tref_object(parser->compiler_session, src->field_names, fields,
-                                            src->field_readonly, count, src->object_row_mode);
+                                            src->field_readonly, count);
             if (src->name)
                 obj->name = ast_strdup(parser->compiler_session, src->name);
             return obj;
@@ -293,7 +298,7 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
 static XrTypeRef *parse_type_annotation_base(Parser *parser);
 
 static bool tref_is_json(const XrTypeRef *t) {
-    return t && t->kind == XR_TREF_NAMED && t->name && strcmp(t->name, "Json") == 0;
+    return t && t->kind == XR_TREF_NAMED && t->name && strcmp(t->name, "JSON.Value") == 0;
 }
 
 static bool tref_is_null(const XrTypeRef *t) {
@@ -306,7 +311,8 @@ static bool tref_intrinsically_includes_null(const XrTypeRef *t) {
 
 static XrTypeRef *parse_nullable_suffix(Parser *parser, XrTypeRef *base) {
     if (tref_intrinsically_includes_null(base)) {
-        xr_parser_error(parser, "Json already includes null; use 'Json' instead of 'Json?'");
+        xr_parser_error(parser, "JSON.Value already includes null; use 'JSON.Value' instead of "
+                                "'JSON.Value?'");
         return base;
     }
     return xr_tref_optional(parser->compiler_session, base);
@@ -322,7 +328,8 @@ static void reject_redundant_null_union(Parser *parser, XrTypeRef **members, int
             has_intrinsic_null = true;
     }
     if (has_null && has_intrinsic_null) {
-        xr_parser_error(parser, "Json already includes null; use 'Json' instead of 'Json | null'");
+        xr_parser_error(parser, "JSON.Value already includes null; use 'JSON.Value' instead of "
+                                "'JSON.Value | null'");
     }
 }
 
@@ -615,11 +622,10 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
 #include "../../shared/xr_scalar_type.def"
 #undef XR_SCALAR_TYPE
 
-    /* Struct type literal: { x: float, y: float } or { x: float, ... } */
+    /* Exact struct type literal: { x: float, y: float }. */
     if (xr_parser_match(parser, TK_LBRACE)) {
         int capacity = 16;
         int field_count = 0;
-        bool allow_extension = false;
         const char **fnames = xr_malloc((size_t) capacity * sizeof(const char *));
         XrTypeRef **ftypes = xr_malloc((size_t) capacity * sizeof(XrTypeRef *));
         bool *freadonly = xr_malloc((size_t) capacity * sizeof(bool));
@@ -629,7 +635,9 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
 
         while (!xr_parser_check(parser, TK_RBRACE) && !xr_parser_check(parser, TK_EOF)) {
             if (xr_parser_match(parser, TK_DOT_DOT_DOT)) {
-                allow_extension = true;
+                xr_parser_error(parser,
+                                "structural object types are exact; express width with a generic "
+                                "constraint such as `<T: { name: string }>`");
                 xr_parser_match(parser, TK_COMMA);
                 continue;
             }
@@ -652,6 +660,10 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             fnames[field_count] = strndup(parser->previous.start, parser->previous.length);
 
             bool is_optional = xr_parser_match(parser, TK_QUESTION);
+            if (is_optional)
+                xr_parser_error(parser,
+                                "object field `?` suffix was removed; write the nullable type "
+                                "after `:`, for example `age: int?`");
             if (!xr_parser_match(parser, TK_COLON)) {
                 xr_parser_error(parser, "expected ':'");
                 xr_free((void *) fnames[field_count]);
@@ -668,8 +680,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         xr_parser_consume(parser, TK_RBRACE, "expected '}'");
 
         XrTypeRef *result =
-            xr_tref_object(parser->compiler_session, fnames, ftypes, freadonly, field_count,
-                           allow_extension ? XR_OBJECT_ROW_OPEN : XR_OBJECT_ROW_EXACT);
+            xr_tref_object(parser->compiler_session, fnames, ftypes, freadonly, field_count);
         for (int i = 0; i < field_count; i++)
             xr_free((void *) fnames[i]);
         xr_free(fnames);
@@ -790,10 +801,31 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         strncpy(temp_name, name_token.start, (size_t) name_len);
         temp_name[name_len] = '\0';
 
+        /* Module-qualified type names share one type-ref identity. JSON uses
+         * this path for Value/Object/Path rather than introducing a source
+         * type named `JSON`. */
+        if (xr_parser_match(parser, TK_DOT)) {
+            if (!xr_parser_check(parser, TK_NAME)) {
+                xr_parser_error(parser, "expected type name after '.'");
+                return xr_tref_error(parser->compiler_session);
+            }
+            xr_parser_advance(parser);
+            Token member_token = parser->previous;
+            int member_len = member_token.length;
+            if (name_len + 1 + member_len >= (int) sizeof(temp_name)) {
+                xr_parser_error(parser, "qualified type name is too long");
+                return xr_tref_error(parser->compiler_session);
+            }
+            temp_name[name_len] = '.';
+            memcpy(temp_name + name_len + 1, member_token.start, (size_t) member_len);
+            temp_name[name_len + 1 + member_len] = '\0';
+            name_len += 1 + member_len;
+        }
+
         /* Misspelling detection (purely syntactic, kept in parser) */
         if (strcmp(temp_name, "JsonValue") == 0) {
             reject_removed_source_type_name(parser, temp_name);
-            return xr_tref_named(parser->compiler_session, "Json");
+            return xr_tref_error(parser->compiler_session);
         }
         if (reject_removed_source_type_name(parser, temp_name))
             return xr_tref_error(parser->compiler_session);

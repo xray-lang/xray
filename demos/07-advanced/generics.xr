@@ -92,7 +92,10 @@ var bad = safeDivide(10.0, 0.0)
 print("10/3 = ${ok ?? 0.0}")
 print("10/0 = ${bad ?? 0.0} (fallback)")
 
-// Optional chaining
-var obj: Json = { inner: { value: 42 } }
+// Optional chaining on a statically known nullable field
+type InnerValue = { value: int }
+type OptionalWrapper = { inner: InnerValue? }
+var obj: OptionalWrapper = { inner: { value: 42 } }
+var empty: OptionalWrapper = { inner: null }
 print("optional chain: ${obj?.inner?.value}")
-print("missing chain: ${obj?.missing?.value}")
+print("missing chain: ${empty?.inner?.value}")

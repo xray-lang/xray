@@ -1,6 +1,6 @@
-// Guard: options are typed `XmlOptions`, not an untyped `Json` bag.
+// Guard: options are typed `XmlOptions`, not a schema-less JSON object.
 import xml
 
-var opts: Json = { preserveComments: true }
+var opts: JSON.Object = JSON.parseObject("{\"preserveComments\":true}")
 var doc = xml.parse("<a/>", opts)
 print(doc)

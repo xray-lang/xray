@@ -1,41 +1,21 @@
-// Test Json for-in iteration
-// Expected output:
-// name = Alice
-// age = 30
-// city = Beijing
-// localhost
-// 8080
-// empty ok
-// count -> 42
-// label -> test
-// flag -> true
-// ALL TESTS PASSED
-
-// Test 1: Fast mode (static shape)
+// Iteration over JSON.Object follows Map key and entry protocols.
 
 @test
-fn test_json_forin() {
-    var user: Json = {name: "Alice", age: "30", city: "Beijing"}
-    for (k, v in user) {
-        print(k + " = " + v)
-    }
+fn test_json_object_for_in() {
+    var obj: JSON.Object = JSON.parseObject("{\"a\":1,\"b\":2,\"c\":3}")
+    var keys = ""
+    for (key in obj) { keys += key }
+    assert_eq(keys, "abc")
 
-    // Test 2: Blank key (only value)
-    var config: Json = {host: "localhost", port: "8080"}
-    for (_, v in config) {
-        print(v)
-    }
+    var total = 0
+    for (_, value in obj) { total += int(value) }
+    assert_eq(total, 6)
+}
 
-    // Test 3: Empty Json
-    var empty: Json = {}
-    for (k, v in empty) {
-        print("unreachable")
-    }
-    print("empty ok")
-
-    // Test 4: Mixed value types
-    var data: Json = {count: 42, label: "test", flag: true}
-    for (k, v in data) {
-        print(k + " -> " + string(v))
-    }
+@test
+fn test_empty_json_object_for_in() {
+    var obj: JSON.Object = JSON.parseObject("{}")
+    var count = 0
+    for (_ in obj) { count++ }
+    assert_eq(count, 0)
 }

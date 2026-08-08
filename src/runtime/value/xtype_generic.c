@@ -323,9 +323,6 @@ static XrType *iterable_element_of(XrType *type) {
             return type->map.key_type;
         case XR_KIND_STRING:
             return xr_type_new_rune(NULL);
-        case XR_KIND_JSON:
-            // Single-variable Json iteration yields field names.
-            return xr_type_new_string(NULL);
         case XR_KIND_INTERFACE:
         case XR_KIND_INSTANCE:
             // Prelude `Range` iterates its int domain; Iterator<E> yields E.
@@ -342,7 +339,7 @@ static XrType *iterable_element_of(XrType *type) {
 }
 
 /* Types `for-in` drives without a user-defined `iterator()`: the built-in
- * container kinds plus Json, the prelude `Range` class, and an `Iterator<E>`
+ * container kinds, the prelude `Range` class, and an `Iterator<E>`
  * value. The last two are INSTANCE / INTERFACE types, so a bare kind test
  * cannot see them. Keep this in sync with iterable_element_of and the
  * analyzer's for-in domains.
@@ -355,19 +352,19 @@ static XrType *iterable_element_of(XrType *type) {
 static bool builtin_iterable_type(XrType *type) {
     if (!type)
         return false;
-    if (xr_kind_is_builtin_iterable(type->kind) || type->kind == XR_KIND_JSON)
+    if (xr_kind_is_builtin_iterable(type->kind))
         return true;
     return is_prelude_range(type) || is_iterator_protocol_type(type);
 }
 
-// Types `len()` answers directly: sized containers, string, Json, and the
+// Types `len()` answers directly: sized containers, string, and the
 // prelude `Range` class.
 static bool builtin_lengthable_type(XrType *type) {
     if (!type)
         return false;
     XrTypeKind k = type->kind;
     if (k == XR_KIND_ARRAY || k == XR_KIND_SLICE || k == XR_KIND_STRING || k == XR_KIND_MAP ||
-        k == XR_KIND_SET || k == XR_KIND_JSON)
+        k == XR_KIND_SET)
         return true;
     return is_prelude_range(type);
 }
@@ -427,6 +424,33 @@ static bool interface_type_matches_constraint(XrType *type, XrType *constraint) 
         return false;
     for (int i = 0; i < constraint_arg_count; i++) {
         if (!type_arg_match(constraint_args[i], type_args[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool struct_object_satisfies_constraint(const XrType *type, const XrType *constraint) {
+    if (!XR_TYPE_IS_STRUCT_OBJECT(type) || !XR_TYPE_IS_STRUCT_OBJECT(constraint))
+        return false;
+    if (constraint->object.field_count > 0 &&
+        (!constraint->object.field_names || !constraint->object.field_types ||
+         !type->object.field_names || !type->object.field_types))
+        return false;
+    for (int ci = 0; ci < constraint->object.field_count; ci++) {
+        const char *required_name = constraint->object.field_names[ci];
+        XrType *required_type = constraint->object.field_types[ci];
+        bool found = false;
+        for (int ti = 0; ti < type->object.field_count; ti++) {
+            const char *actual_name = type->object.field_names[ti];
+            if (!required_name || !actual_name || strcmp(required_name, actual_name) != 0)
+                continue;
+            if (!required_type || !type->object.field_types[ti] ||
+                !xr_type_equals(required_type, type->object.field_types[ti]))
+                return false;
+            found = true;
+            break;
+        }
+        if (!found)
             return false;
     }
     return true;
@@ -535,6 +559,9 @@ bool xr_type_satisfies_constraint(XrType *type, XrType *constraint) {
         return xr_type_is_subclass_of(type, constraint);
     }
 
+    if (XR_TYPE_IS_STRUCT_OBJECT(constraint))
+        return struct_object_satisfies_constraint(type, constraint);
+
     return xr_type_assignable(constraint, type);
 }
 
@@ -576,17 +603,6 @@ bool xr_type_is_iterable(XrType *type, XrType **out_element_type) {
     if (type->kind == XR_KIND_STRING) {
         if (out_element_type) {
             *out_element_type = xr_type_new_rune(NULL);
-        }
-        return true;
-    }
-
-    if (type->kind == XR_KIND_JSON) {
-        // Single-variable iteration yields each field name (a string),
-        // matching Map.iterator(). Pair iteration goes through
-        // entriesIterator() and is handled by the analyzer's keyvalue
-        // branch.
-        if (out_element_type) {
-            *out_element_type = xr_type_new_string(NULL);
         }
         return true;
     }

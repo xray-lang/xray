@@ -1755,6 +1755,18 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 
     MemberAccessNode *ma = &node->as.member_access;
 
+    /* JSON.UnknownFields is a compiler-owned enum namespace. It deliberately
+     * has no runtime class or source declaration, so recognize its two values
+     * before ordinary module/enum lookup. */
+    if (ma->object && ma->object->type == AST_MEMBER_ACCESS && ma->name) {
+        MemberAccessNode *owner = &ma->object->as.member_access;
+        if (owner->name && strcmp(owner->name, "UnknownFields") == 0 && owner->object &&
+            owner->object->type == AST_VARIABLE && owner->object->as.variable.name &&
+            strcmp(owner->object->as.variable.name, "JSON") == 0 &&
+            (strcmp(ma->name, "Reject") == 0 || strcmp(ma->name, "Ignore") == 0))
+            return xr_type_new_enum(ctx->analyzer->isolate, "JSON.UnknownFields");
+    }
+
     /* A type parameter is not a runtime namespace and does not describe a
      * finite enum domain.  Diagnose `E.variants` at the selection itself so it
      * cannot degrade into the misleading receiver error "Undeclared E". */
@@ -1851,6 +1863,29 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
                         return class_type ? class_type : xr_type_new_unknown(NULL);
                     }
                 }
+            }
+
+            /* JSON is a prelude namespace backed by the runtime's fixed
+             * utility-class slot, not an importable module or a source type.
+             * Its signatures come from the embedded namespace declaration. */
+            if (strcmp(mod_name, "JSON") == 0) {
+                const XaBuiltinType *namespace_type = xa_builtin_get_by_name("JSON");
+                if (namespace_type) {
+                    for (int i = 0; i < namespace_type->member_count; i++) {
+                        const XaBuiltinMember *member = &namespace_type->members[i];
+                        if (!member->is_static || strcmp(member->name, ma->name) != 0)
+                            continue;
+                        XrType *member_type = xa_builtin_parse_full_signature(
+                            ctx->analyzer->isolate, member->signature);
+                        if (member_type)
+                            note_selection(ctx, node, XA_SEL_MODULE_EXPORT, obj_type, sym, -1,
+                                           member_type, false);
+                        return member_type ? member_type
+                                           : xr_type_new_error(ctx->analyzer->isolate);
+                    }
+                }
+                xa_report_unknown_stdlib_member(ctx, node, mod_name, ma->name);
+                return xr_type_new_error(ctx->analyzer->isolate);
             }
 
             const XaBuiltinModule *mod = xa_builtin_get_module_info(mod_name);
@@ -2685,30 +2720,46 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Handle Json/structural-object field access.
-    // Plain Json represents any JSON value (including null), so field access returns Json.
-    if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count == 0) {
-        // Bare Json type (e.g. function parameter) — no static field info,
-        // return Json since any field access is valid at runtime.
-        return xr_type_new_json(ctx->analyzer->isolate);
+    XrType *object_shape_type = obj_type;
+    int constrained_field_index = -1;
+    if (obj_type && obj_type->kind == XR_KIND_TYPE_PARAM) {
+        XrType *constraint =
+            xa_type_param_object_constraint(ctx, obj_type, ma->name, &constrained_field_index);
+        if (constraint)
+            object_shape_type = constraint;
     }
-    if (XR_TYPE_HAS_OBJECT_SHAPE(obj_type) && obj_type->object.field_count > 0) {
-        int field_idx = object_shape_field_index(obj_type, ma->name);
-        if (field_idx >= 0 && obj_type->object.field_types) {
-            XrType *ft = obj_type->object.field_types[field_idx];
+
+    // JSON.Value is a recursive data domain, not an object with dynamically resolved members.
+    // Dynamic traversal is explicit so misspelling a key cannot silently become a nullable read.
+    if (XR_TYPE_IS_JSON(object_shape_type)) {
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "JSON.Value does not support dot access for '%s'; use JSON.get/require with a "
+                 "JSON.Path or JSON.asObject",
+                 ma->name ? ma->name : "");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNKNOWN_FIELD,
+                                   msg, &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+    if (XR_TYPE_HAS_OBJECT_SHAPE(object_shape_type) && object_shape_type->object.field_count > 0) {
+        int field_idx = constrained_field_index >= 0
+                            ? constrained_field_index
+                            : object_shape_field_index(object_shape_type, ma->name);
+        if (field_idx >= 0 && object_shape_type->object.field_types) {
+            XrType *ft = object_shape_type->object.field_types[field_idx];
             if (!ft)
                 return xr_type_new_unknown(NULL);
-            XrType *result_ft =
-                XR_TYPE_IS_JSON(obj_type) ? xr_type_make_nullable(ctx->analyzer->isolate, ft) : ft;
+            XrType *result_ft = ft;
             result_ft = xa_const_projection_type(ctx, obj_type, result_ft);
             note_selection(ctx, node, XA_SEL_FIELD, obj_type, NULL, field_idx, result_ft, false);
             return result_ft;
         }
-        if (xr_type_object_fields_are_closed(obj_type)) {
+        if (xr_type_object_fields_are_closed(object_shape_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             char msg[256];
             snprintf(msg, sizeof(msg), "type '%s' has no field '%s'",
-                     object_shape_type_label(obj_type), ma->name);
+                     object_shape_type_label(object_shape_type), ma->name);
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_UNKNOWN_FIELD, msg, &loc);
             return xr_type_new_error(ctx->analyzer->isolate);
@@ -2839,60 +2890,52 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_error(ctx->analyzer->isolate);
     }
 
-    // Json subscript access: json["key"] → Json (or nullable schema field type if known).
+    // JSON.Value traversal is explicit through JSON.Path. Bracket access remains Map/Array syntax
+    // after an explicit asObject/asArray narrowing.
     if (XR_TYPE_IS_JSON(container)) {
-        // If index is a string literal and Json has schema, look up field type
-        if (ig->index && ig->index->type == AST_LITERAL_STRING &&
-            container->object.field_count > 0 && container->object.field_names &&
-            container->object.field_types) {
-            const char *key = ig->index->as.literal.raw_value.string_val;
-            for (int i = 0; i < container->object.field_count; i++) {
-                if (container->object.field_names[i] &&
-                    strcmp(container->object.field_names[i], key) == 0) {
-                    XrType *ft = container->object.field_types[i];
-                    if (ft) {
-                        XrType *result = xr_type_make_nullable(ctx->analyzer->isolate, ft);
-                        result = xa_const_projection_type(ctx, container, result);
-                        note_selection(ctx, node, XA_SEL_FIELD, container, NULL, i, result, false);
-                        return result;
-                    }
-                }
-            }
-            if (xr_type_object_fields_are_closed(container)) {
-                XrLocation loc = {
-                    .file = ctx->file_path, .line = node->line, .column = node->column};
-                char msg[256];
-                snprintf(msg, sizeof(msg), "type '%s' has no field '%s'",
-                         object_shape_type_label(container), key);
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_UNKNOWN_FIELD, msg, &loc);
-                return xr_type_new_error(ctx->analyzer->isolate);
-            }
-        }
-        // No schema or unknown key → result is Json (any JSON value including null)
-        return xr_type_new_json(ctx->analyzer->isolate);
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            "JSON.Value does not support bracket access; use JSON.get/require with a JSON.Path "
+            "or narrow with JSON.asObject/asArray",
+            &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
+    XrType *object_container = container;
+    int constrained_field_index = -1;
+    if (container && container->kind == XR_KIND_TYPE_PARAM) {
+        const char *key = ig->index && ig->index->type == AST_LITERAL_STRING
+                              ? ig->index->as.literal.raw_value.string_val
+                              : NULL;
+        XrType *constraint =
+            xa_type_param_object_constraint(ctx, container, key, &constrained_field_index);
+        if (constraint)
+            object_container = constraint;
     }
 
     // Structural-object subscript is only a fixed-field shorthand with string literal keys.
-    if (XR_TYPE_IS_STRUCT_OBJECT(container)) {
-        if (ig->index && ig->index->type == AST_LITERAL_STRING && container->object.field_names &&
-            container->object.field_types) {
+    if (XR_TYPE_IS_STRUCT_OBJECT(object_container)) {
+        if (ig->index && ig->index->type == AST_LITERAL_STRING &&
+            object_container->object.field_names && object_container->object.field_types) {
             const char *key = ig->index->as.literal.raw_value.string_val;
-            int field_idx = object_shape_field_index(container, key);
+            int field_idx = constrained_field_index >= 0
+                                ? constrained_field_index
+                                : object_shape_field_index(object_container, key);
             if (field_idx >= 0) {
-                XrType *result = container->object.field_types[field_idx]
-                                     ? container->object.field_types[field_idx]
+                XrType *result = object_container->object.field_types[field_idx]
+                                     ? object_container->object.field_types[field_idx]
                                      : xr_type_new_unknown(NULL);
                 result = xa_const_projection_type(ctx, container, result);
                 note_selection(ctx, node, XA_SEL_FIELD, container, NULL, field_idx, result, false);
                 return result;
             }
-            if (xr_type_object_fields_are_closed(container)) {
+            if (xr_type_object_fields_are_closed(object_container)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];
                 snprintf(msg, sizeof(msg), "type '%s' has no field '%s'",
-                         object_shape_type_label(container), key);
+                         object_shape_type_label(object_container), key);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_UNKNOWN_FIELD, msg, &loc);
                 return xr_type_new_error(ctx->analyzer->isolate);
@@ -3278,48 +3321,11 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         "no-heap layout is required");
 
     if (ctx->expected_type && XR_TYPE_IS_JSON(ctx->expected_type)) {
-        XrType *saved_expected = ctx->expected_type;
-        XrType *json_type = xr_type_new_json(ctx->analyzer->isolate);
-        bool poisoned = false;
-        for (int i = 0; i < arr->count; i++) {
-            AstNode *child = arr->elements[i];
-            if (!child)
-                continue;
-            if (child->type == AST_SPREAD_EXPR) {
-                XrLocation loc = {
-                    .file = ctx->file_path, .line = child->line, .column = child->column};
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                           "Json array literal cannot spread an external Array; "
-                                           "use Json.encode(array) at the boundary",
-                                           &loc);
-                continue;
-            }
-            ctx->expected_type = json_type;
-            XrType *elem_type = xa_visit_infer_expr(ctx, child);
-            xa_check_span_value_escape(ctx, child, elem_type,
-                                       "store Slice view in Json array literal");
-            xa_note_owner_escapes_into_heap(ctx, child);
-            if (elem_type && XR_TYPE_IS_ERROR(elem_type)) {
-                poisoned = true;
-                continue;
-            }
-            if (elem_type && !xr_type_is_json_field_compatible(elem_type)) {
-                XrLocation loc = {
-                    .file = ctx->file_path, .line = child->line, .column = child->column};
-                char msg[256];
-                snprintf(msg, sizeof(msg),
-                         "Json array element has type '%s'; use Json.encode(...) for external "
-                         "Xray values",
-                         xr_type_to_string(elem_type));
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-            }
-        }
-        ctx->expected_type = saved_expected;
-        if (poisoned)
-            return xr_type_new_error(ctx->analyzer->isolate);
-        return json_type;
+        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+            "array values require explicit JSON.value(...) before entering JSON.Value", &loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
     }
 
     XrType *target_elem_type = NULL;
@@ -3533,21 +3539,11 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
 
     ObjectLiteralNode *obj = &node->as.object_literal;
     XrType *expected = ctx->expected_type;
-    bool json_context = expected && XR_TYPE_IS_JSON(expected);
     bool object_context = expected && XR_TYPE_IS_STRUCT_OBJECT(expected);
-    bool result_is_json = json_context;
 
     if (obj->count == 0) {
-        if (json_context)
-            return xr_type_new_json(ctx->analyzer->isolate);
-        if (!object_context) {
-            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(
-                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                "empty object literal '{}' requires an explicit object-shape or Json context",
-                &loc);
-            return xr_type_new_error(ctx->analyzer->isolate);
-        }
+        if (!object_context)
+            return xr_type_new_struct_object_with_fields(ctx->analyzer->isolate, NULL, NULL, 0);
     }
 
     // Pass 1: infer each entry's contributing type exactly once (a spread
@@ -3564,44 +3560,30 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
             entry_types[i] = src;
             xa_check_span_value_escape(ctx, val, src,
                                        "spread Slice view fields into object literal");
-            bool src_ok = result_is_json ? (src && XR_TYPE_IS_JSON(src))
-                                         : (src && XR_TYPE_IS_STRUCT_OBJECT(src));
+            bool src_ok = src && XR_TYPE_IS_STRUCT_OBJECT(src);
             if (src_ok) {
                 cap += src->object.field_count;
             } else if (src && !XR_TYPE_IS_UNKNOWN(src)) {
                 XrLocation loc = {.file = ctx->file_path, .line = val->line, .column = val->column};
                 char msg[160];
-                snprintf(msg, sizeof(msg), "object spread '...' source must be %s, got '%s'",
-                         result_is_json ? "a Json object" : "a structural object",
+                snprintf(msg, sizeof(msg),
+                         "object spread '...' source must be a structural object, got '%s'",
                          xr_type_to_string(src));
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
             }
         } else {
-            bool is_computed = obj->computed && obj->computed[i];
-            if (is_computed && !result_is_json) {
-                XrLocation loc = {.file = ctx->file_path,
-                                  .line = obj->keys[i] ? obj->keys[i]->line : node->line,
-                                  .column = obj->keys[i] ? obj->keys[i]->column : node->column};
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                           "exact object literal requires static field names; "
-                                           "use an explicit Json context for computed keys",
-                                           &loc);
-            }
             XrType *saved_expected = ctx->expected_type;
             XrType *field_expected = NULL;
             const char *static_name = NULL;
-            if (!is_computed && obj->keys[i]) {
+            if (obj->keys[i]) {
                 if (obj->keys[i]->type == AST_VARIABLE)
                     static_name = obj->keys[i]->as.variable.name;
                 else if (obj->keys[i]->type == AST_LITERAL_STRING)
                     static_name = obj->keys[i]->as.literal.raw_value.string_val;
             }
-            if (json_context) {
-                field_expected = xr_type_new_json(ctx->analyzer->isolate);
-            } else if (object_context && static_name && expected->object.field_names &&
-                       expected->object.field_types) {
+            if (object_context && static_name && expected->object.field_names &&
+                expected->object.field_types) {
                 int idx = object_shape_field_index(expected, static_name);
                 if (idx >= 0)
                     field_expected = expected->object.field_types[idx];
@@ -3615,27 +3597,6 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
             xa_note_owner_escapes_into_heap(ctx, obj->values[i]);
             ctx->expected_type = saved_expected;
             cap += 1;
-
-            if (result_is_json && entry_types[i] &&
-                !xr_type_is_json_field_compatible(entry_types[i])) {
-                const char *fname = "<computed>";
-                if (!(obj->computed && obj->computed[i]) && obj->keys[i]) {
-                    if (obj->keys[i]->type == AST_VARIABLE)
-                        fname = obj->keys[i]->as.variable.name;
-                    else if (obj->keys[i]->type == AST_LITERAL_STRING)
-                        fname = obj->keys[i]->as.literal.raw_value.string_val;
-                }
-                XrLocation loc = {.file = ctx->file_path,
-                                  .line = obj->values[i]->line,
-                                  .column = obj->values[i]->column};
-                char msg[256];
-                snprintf(msg, sizeof(msg),
-                         "Json field '%s' has type '%s'; use Json.encode(...) for external "
-                         "Xray values",
-                         fname, xr_type_to_string(entry_types[i]));
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-            }
         }
     }
     if (cap < 1)
@@ -3650,8 +3611,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
         AstNode *val = obj->values[i];
         if (val && val->type == AST_SPREAD_EXPR) {
             XrType *src = entry_types[i];
-            bool src_ok = result_is_json ? (src && XR_TYPE_IS_JSON(src))
-                                         : (src && XR_TYPE_IS_STRUCT_OBJECT(src));
+            bool src_ok = src && XR_TYPE_IS_STRUCT_OBJECT(src);
             if (src_ok && src->object.field_count > 0 && src->object.field_names) {
                 for (int j = 0; j < src->object.field_count; j++) {
                     const char *fname = src->object.field_names[j];
@@ -3664,12 +3624,9 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
                                      readonly);
                 }
             }
-            // Dynamic Json source: fields unknown at compile time; they are merged
-            // at runtime and not part of the static shape.
         } else {
-            bool is_computed = obj->computed && obj->computed[i];
             const char *fname = NULL;
-            if (!is_computed && obj->keys[i]) {
+            if (obj->keys[i]) {
                 if (obj->keys[i]->type == AST_VARIABLE)
                     fname = obj->keys[i]->as.variable.name;
                 else if (obj->keys[i]->type == AST_LITERAL_STRING)
@@ -3720,15 +3677,40 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    XrType *type;
-    if (result_is_json && n == 0)
-        type = xr_type_new_json(ctx->analyzer->isolate);
-    else if (result_is_json)
-        type =
-            xr_type_new_json_with_fields(ctx->analyzer->isolate, field_names, field_types, n, true);
-    else
-        type = xr_type_new_struct_object_with_fields(ctx->analyzer->isolate, field_names,
-                                                     field_types, n, XR_OBJECT_ROW_EXACT);
+    /* Exact structural object identity and field ordinals are independent of
+     * literal/spread source order. Keep the analyzer's inferred type in the
+     * same stable-name order used by monomorphization and whole-program shape
+     * evidence, so every later phase observes one canonical ABI. */
+    {
+        for (int i = 1; i < n; i++) {
+            const char *current_name = field_names[i];
+            XrType *current_type = field_types[i];
+            bool current_readonly = field_readonly[i];
+            uint64_t current_key = xr_hash_bytes64(current_name, strlen(current_name));
+            uint32_t current_symbol = xr_hash_bytes(current_name, strlen(current_name));
+            int j = i;
+            while (j > 0) {
+                const char *prior_name = field_names[j - 1];
+                uint64_t prior_key = xr_hash_bytes64(prior_name, strlen(prior_name));
+                uint32_t prior_symbol = xr_hash_bytes(prior_name, strlen(prior_name));
+                int name_cmp = strcmp(prior_name, current_name);
+                if (prior_key < current_key ||
+                    (prior_key == current_key && prior_symbol < current_symbol) ||
+                    (prior_key == current_key && prior_symbol == current_symbol && name_cmp <= 0))
+                    break;
+                field_names[j] = field_names[j - 1];
+                field_types[j] = field_types[j - 1];
+                field_readonly[j] = field_readonly[j - 1];
+                j--;
+            }
+            field_names[j] = current_name;
+            field_types[j] = current_type;
+            field_readonly[j] = current_readonly;
+        }
+    }
+
+    XrType *type =
+        xr_type_new_struct_object_with_fields(ctx->analyzer->isolate, field_names, field_types, n);
     if (type && n > 0)
         xr_type_set_object_field_readonly(ctx->analyzer->isolate, type, field_readonly, n);
     xr_free(entry_types);
@@ -3741,7 +3723,7 @@ XrType *xa_visit_object_literal(XaInferContext *ctx, AstNode *node) {
      * optional fields as null slots instead of compacting later fields into
      * the wrong ordinal. Invalid literals retain their inferred shape so the
      * caller still reports the normal assignment mismatch. */
-    if (object_context && xr_type_object_row_is_exact(expected) &&
+    if (object_context && xr_type_is_exact_struct_object(expected) &&
         xa_typecheck_assignable(expected, type))
         return expected;
 
@@ -4661,10 +4643,14 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
             return xr_type_new_unknown(NULL);
         }
 
-        // Plain Json is an explicit dynamic data domain. Optional field access stays inside Json
-        // instead of falling back to the language-wide unknown type.
-        if (XR_TYPE_IS_JSON(base_type) && base_type->object.field_count == 0)
-            return xa_optional_nullable_result(ctx, node, xr_type_new_json(ctx->analyzer->isolate));
+        if (XR_TYPE_IS_JSON(base_type)) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                "JSON.Value does not support optional dot access; use JSON.get with a JSON.Path",
+                &loc);
+            return xa_optional_error(ctx);
+        }
 
         // Structural-object/Json field access through optional chain: result is nullable
         // because the receiver may be null.

@@ -41,6 +41,8 @@ bool xr_type_is_json_value(const XrType *type) {
              * is an int container that can be encoded, not a Json value. */
             return type->container.element_type &&
                    type->container.element_type->kind == XR_KIND_JSON;
+        case XR_KIND_MAP:
+            return xr_type_is_json_object(type);
         case XR_KIND_UNION:
             if (type->union_type.member_count <= 0 || !type->union_type.members)
                 return false;
@@ -122,7 +124,7 @@ static bool xr_type_is_json_decode_field_supported_depth(const XrType *type, int
         return type->instance.class_ref != NULL && type->instance.class_name != NULL;
     uint8_t base = xr_json_value_kind_base(xr_type_json_value_kind(type));
     if (base == XR_JSON_VALUE_STRUCT_OBJECT) {
-        if (!XR_TYPE_IS_STRUCT_OBJECT(type) || !xr_type_object_row_is_exact(type) ||
+        if (!XR_TYPE_IS_STRUCT_OBJECT(type) || !xr_type_is_exact_struct_object(type) ||
             type->object.field_count <= 0 || !type->object.field_names || !type->object.field_types)
             return false;
         for (int i = 0; i < type->object.field_count; i++) {
@@ -206,7 +208,6 @@ static void xr_type_global_init_once(void) {
     // returning nothing and as the unique value of the empty tuple literal.
     init_singleton(&g_type_unit, XR_KIND_UNIT, id++, false, XR_SCALAR_REP_NONE);
     init_singleton(&g_type_json, XR_KIND_JSON, id++, false, XR_SCALAR_REP_NONE);
-    g_type_json.object.allows_runtime_extension = true;
 
     init_singleton(&g_type_int_nullable, XR_KIND_INT, id++, true, XR_NATIVE_I64);
     init_singleton(&g_type_float_nullable, XR_KIND_FLOAT, id++, true, XR_NATIVE_F64);
@@ -423,17 +424,14 @@ XrType *xr_type_new_json(XrVMRuntime *X) {
     return &g_type_json;  // Process-level singleton (plain Json without fields)
 }
 
-static XrType *xr_type_new_object_shape(XrVMRuntime *X, XrTypeKind kind, const char **names,
-                                        XrType **types, int count, XrObjectRowMode row_mode,
-                                        bool allows_runtime_extension) {
+static XrType *xr_type_new_object_shape(XrVMRuntime *X, const char **names, XrType **types,
+                                        int count) {
     if (count < 0)
         return NULL;
     if (count > 0 && (!names || !types))
         return NULL;
-    if (!xr_kind_has_object_shape(kind))
-        return NULL;
     X = resolve_isolate(X);
-    XrType *type = type_alloc(X, kind);
+    XrType *type = type_alloc(X, XR_KIND_STRUCT_OBJECT);
     if (!type)
         return NULL;
     XrTypePool *pool = resolve_type_pool(X);
@@ -451,14 +449,12 @@ static XrType *xr_type_new_object_shape(XrVMRuntime *X, XrTypeKind kind, const c
             type->object.field_types[i] = types[i];
         }
     }
-    type->object.row_mode = row_mode;
-    type->object.allows_runtime_extension = allows_runtime_extension;
     return type;
 }
 
 XrType *xr_type_new_struct_object_with_fields(XrVMRuntime *X, const char **names, XrType **types,
-                                              int count, XrObjectRowMode row_mode) {
-    return xr_type_new_object_shape(X, XR_KIND_STRUCT_OBJECT, names, types, count, row_mode, false);
+                                              int count) {
+    return xr_type_new_object_shape(X, names, types, count);
 }
 
 uint64_t xr_type_stable_key(const XrType *type) {
@@ -468,12 +464,6 @@ uint64_t xr_type_stable_key(const XrType *type) {
     uint64_t key = xr_hash_bytes64(canonical ? canonical : "<error>",
                                    canonical ? strlen(canonical) : sizeof("<error>") - 1);
     return key ? key : 1;
-}
-
-XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types, int count,
-                                     bool allows_runtime_extension) {
-    return xr_type_new_object_shape(X, XR_KIND_JSON, names, types, count, XR_OBJECT_ROW_EXACT,
-                                    allows_runtime_extension);
 }
 
 XR_FUNC void xr_type_set_object_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
@@ -1396,8 +1386,6 @@ XrType *xr_type_copy(XrVMRuntime *X, XrType *type) {
                            field_readonly_size);
                 }
             }
-            copy->object.row_mode = type->object.row_mode;
-            copy->object.allows_runtime_extension = type->object.allows_runtime_extension;
             break;
         case XR_KIND_TYPE_PARAM:
             copy->type_param.name =
@@ -1724,9 +1712,9 @@ bool xr_type_assignable(XrType *target, XrType *source) {
     if (XR_TYPE_IS_NUMERIC(target) && XR_TYPE_IS_NUMERIC(source))
         return xr_type_numeric_implicitly_convertible(target, source);
 
-    // Json value-domain compatibility. External heap/container values do not
-    // implicitly cross into Json; literal contexts must type them as Json.
-    if (XR_TYPE_IS_JSON(target) && target->object.allows_runtime_extension) {
+    // JSON.Value admits scalars implicitly. Its own Map/Array arms already
+    // carry the domain type; arbitrary composite values require JSON.value.
+    if (XR_TYPE_IS_JSON(target)) {
         switch (source->kind) {
             case XR_KIND_JSON:
             case XR_KIND_NULL:
@@ -1749,19 +1737,13 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         }
     }
 
-    // Structural object subtyping. structural object and Json object shapes are distinct
-    // semantic domains, so this branch never bridges between them.
+    // Exact structural object assignment.
     bool target_is_struct = XR_TYPE_HAS_OBJECT_SHAPE(target);
     bool source_is_struct = XR_TYPE_HAS_OBJECT_SHAPE(source);
     if (target_is_struct && source_is_struct && target->kind == source->kind) {
-        if (XR_TYPE_IS_JSON(target) && target->object.field_count == 0)
-            return true;
-        if (XR_TYPE_IS_JSON(source) && source->object.field_count == 0)
-            return true;
-        if (XR_TYPE_IS_STRUCT_OBJECT(target) && target->object.row_mode == XR_OBJECT_ROW_EXACT &&
-            source->object.row_mode == XR_OBJECT_ROW_OPEN)
+        if (XR_TYPE_IS_STRUCT_OBJECT(target) &&
+            target->object.field_count != source->object.field_count)
             return false;
-
         // Check structural compatibility (source has all target fields)
         for (int i = 0; i < target->object.field_count; i++) {
             XrType *target_field_type =
@@ -1782,8 +1764,8 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                         if (!xr_type_assignable(target_field_type, source_field_type)) {
                             return false;
                         }
-                        /* Object fields are invariant because an open-row view
-                         * may write a declared field through an alias. A literal
+                        /* Object fields are invariant because a mutable alias
+                         * may write a declared field. A literal
                          * null is the sole value-level exception: it initializes
                          * an absent nullable slot and does not create a narrower
                          * mutable field contract. Contextual object literals use
@@ -1809,7 +1791,7 @@ bool xr_type_assignable(XrType *target, XrType *source) {
                     break;
                 }
             }
-            if (!found && !is_optional) {
+            if (!found && (XR_TYPE_IS_STRUCT_OBJECT(target) || !is_optional)) {
                 return false;
             }
         }
@@ -2333,9 +2315,6 @@ bool xr_type_equals(XrType *a, XrType *b) {
     }
     if (XR_TYPE_HAS_OBJECT_SHAPE(a)) {
         if (a->object.field_count != b->object.field_count)
-            return false;
-        if (a->object.row_mode != b->object.row_mode ||
-            a->object.allows_runtime_extension != b->object.allows_runtime_extension)
             return false;
         for (int i = 0; i < a->object.field_count; i++) {
             if (!a->object.field_names || !b->object.field_names)

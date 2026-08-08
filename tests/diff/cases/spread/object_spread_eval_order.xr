@@ -1,6 +1,6 @@
 // anchor: spread-object-eval-order
 // 181: pin strict left-to-right evaluation order and overwrite precedence of
-// object/object and Json spread operands interleaved with explicit fields that
+// structural-object spread operands interleaved with explicit fields that
 // carry observable side effects. A backend that reorders operand evaluation or
 // mis-resolves overwrite precedence diverges from the pinned output below.
 
@@ -50,12 +50,3 @@ print(order)       // 789
 print(chained.x)   // 8: inline spread overrides source x
 print(chained.y)   // 200: retained from first spread
 print(chained.w)   // 9
-
-// Json spread with a computed key: base spread evaluates before computed entry.
-order = 0
-var key = "dyn"
-var jsonBase: Json = { a: mark(1), b: mark(2) }
-var computed: Json = { ...jsonBase, [key]: mark(3) }
-print(order)          // 123
-print(computed.a)     // 1
-print(computed["dyn"])// 3

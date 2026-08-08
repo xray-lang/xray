@@ -1,10 +1,8 @@
 // anchor: array-capacity-panic-shared-core
-var dyn: Json = {
-    "bad": true
-}
+var dyn: JSON.Object = JSON.parseObject("{\"bad\":true}")
 
 try {
-    var xs = Array<int>(dyn.bad, 1)
+    var xs = Array<int>(JSON.require<int>(dyn, ["bad"]), 1)
     print(len(xs))
 } catch panic (p) {
     print(p.message)
@@ -12,7 +10,7 @@ try {
 }
 
 try {
-    var ys = Array.withCapacity(dyn.bad)
+    var ys = Array.withCapacity(JSON.require<int>(dyn, ["bad"]))
     print(len(ys))
 } catch panic (p) {
     print(p.message)

@@ -162,16 +162,6 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         return XR_DISP_NEXT;
     }
 
-    // Json property set
-    if (xr_value_is_json(obj)) {
-        XrJson *json = xr_value_to_json(obj);
-        if (!xr_json_set(isolate, json, prop_symbol, value)) {
-            VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                     "cannot add property to sealed Json object");
-        }
-        return XR_DISP_NEXT;
-    }
-
     // Null type error
     if (XR_IS_NULL(obj)) {
         VM_THROW(frame, pc, XR_ERR_NULL_PROPERTY, "null type does not support property access");
@@ -820,13 +810,6 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         return XR_DISP_NEXT;
     }
 
-    // Json property access
-    if (xr_value_is_json(obj)) {
-        XrJson *json = xr_value_to_json(obj);
-        base[a] = xr_json_get(isolate, json, prop_symbol);
-        return XR_DISP_NEXT;
-    }
-
     // Channel property access error
     if (xr_value_is_channel(obj)) {
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
@@ -1138,10 +1121,8 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_
         if (constructor && constructor->type == XMETHOD_PRIMITIVE) {
             int base_offset = (int) (base - vm_ctx->stack);
             int frame_index = (int) (frame - vm_ctx->frames);
-            XrValue result = constructor->as.primitive(
-                isolate, fn_val, &base[a + 2], nargs);
-            if (!vm_rebind_after_native_call(
-                    vm_ctx, base_offset, frame_index, &base, &frame))
+            XrValue result = constructor->as.primitive(isolate, fn_val, &base[a + 2], nargs);
+            if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
                 return XR_DISP_FATAL;
             base[a] = result;
             return XR_DISP_NEXT;

@@ -254,6 +254,26 @@ static bool builtin_string_static_arg_is_borrowed(const XiValue *user, uint16_t 
            strcmp(method, "join") == 0;
 }
 
+/* JSON kind/validity queries are observational: they never retain, store, or
+ * return an alias of the inspected value.  Keeping their sole value argument
+ * borrowed preserves scalar widening as a tag check instead of adding a
+ * generic RC release to every predicate call.  JSON operations that create,
+ * mutate, or return values keep the ordinary fail-closed consuming rule. */
+static bool builtin_json_query_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
+    if ((user->op != XI_CALL_METHOD && user->op != XI_CALL_METHOD_DIRECT) || arg_idx != 1 ||
+        user->nargs < 2 || !user->args[0] || !user->args[0]->aux || !user->aux)
+        return false;
+    const XiValue *receiver = user->args[0];
+    if (receiver->op != XI_GET_BUILTIN || strcmp((const char *) receiver->aux, "JSON") != 0)
+        return false;
+    const char *method = (const char *) user->aux;
+    return strcmp(method, "kindOf") == 0 || strcmp(method, "isNull") == 0 ||
+           strcmp(method, "isBool") == 0 || strcmp(method, "isInt") == 0 ||
+           strcmp(method, "isFloat") == 0 || strcmp(method, "isString") == 0 ||
+           strcmp(method, "isArray") == 0 || strcmp(method, "isObject") == 0 ||
+           strcmp(method, "isValid") == 0;
+}
+
 static bool builtin_module_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) {
     if (!user || arg_idx == 0 || arg_idx >= user->nargs || !user->args[0])
         return false;
@@ -345,6 +365,8 @@ XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx
     if (builtin_call_arg_is_borrowed(user, arg_idx))
         return false;
     if (builtin_string_static_arg_is_borrowed(user, arg_idx))
+        return false;
+    if (builtin_json_query_arg_is_borrowed(user, arg_idx))
         return false;
     if (builtin_module_call_arg_is_borrowed(user, arg_idx))
         return false;

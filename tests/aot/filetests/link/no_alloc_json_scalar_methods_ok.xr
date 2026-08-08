@@ -1,19 +1,20 @@
-fn xray_no_alloc_json_scalar_methods_ok(value: Json) -> int {
+fn xray_no_alloc_json_scalar_methods_ok(value: JSON.Object) -> int {
     var score = len(value)
-    if (Json.containsKey(value, "answer")) {
+    if (value.containsKey("answer")) {
         score = score + 10
     }
-    if (Json.containsKey(value, "label")) {
+    if (value.containsKey("label")) {
         score = score + 20
     }
     if (len(value) != 0) {
         score = score + 30
     }
-    if (Json.get(value, "answer", 0) == 42) {
+    if (value.get("answer") == 42) {
         score = score + 40
     }
     return score
 }
 
-var xray_no_alloc_json_scalar_methods_value: Json = { answer: 42, label: "edge" }
+var xray_no_alloc_json_scalar_methods_value: JSON.Object =
+    JSON.parseObject("{\"answer\":42,\"label\":\"edge\"}")
 print(xray_no_alloc_json_scalar_methods_ok(xray_no_alloc_json_scalar_methods_value))

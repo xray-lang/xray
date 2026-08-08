@@ -1,1 +1,1 @@
-@derive requires at least one target: Inspect, Json, Eq, Hash, or Clone
+@derive requires at least one target: Inspect, JSON, Eq, Hash, or Clone

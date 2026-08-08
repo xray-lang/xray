@@ -194,7 +194,7 @@ fn test_typeof_regex() {
     assert_eq(typeName(r), "Regex")
 }
 
-// ===== Json Type =====
+// ===== Structural Object Type =====
 
 @test
 fn test_typeof_json_object() {

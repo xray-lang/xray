@@ -37,7 +37,6 @@ extern void xr_int_register_native_type(XrVMRuntime *);
 extern void xr_float_register_native_type(XrVMRuntime *);
 extern void xr_bool_register_native_type(XrVMRuntime *);
 extern void xr_bigint_register_class(XrVMRuntime *);
-extern void xr_json_register_instance_methods(XrVMRuntime *);
 extern void xr_atomic_register_native_type(XrVMRuntime *);
 extern void xr_work_queue_register_native_type(XrVMRuntime *);
 extern void xr_result_group_register_native_type(XrVMRuntime *);
@@ -86,17 +85,6 @@ void xr_core_init(XrVMRuntime *X) {
     X->core->mapClass = xr_isolate_get_native_type_class(X, XR_TMAP);
     xr_set_register_native_type(X);
     X->core->setClass = xr_isolate_get_native_type_class(X, XR_TSET);
-    // Json instance methods: build a plain XrClass with instance methods
-    // (iterator, toString, keys, values, has, etc.). The class is wired as
-    // jsonRootClass->super so dynamic-layout instances find these methods
-    // via normal class-chain lookup.
-    xr_json_register_instance_methods(X);
-
-    // Dynamic-layout root class for Json: open hidden-class chain, 8 in-object
-    // slots (7 logical + 1 overflow pointer reservation). All Json objects
-    // start at this class and transition as fields are added.
-    X->core->jsonRootClass = xr_class_new_dynamic_root(X, "Json", 8, false, XR_BK_JSON);
-    X->core->jsonRootClass->super = X->core->jsonInstanceMethodClass;
     X->core->structObjectRootClass =
         xr_class_new_dynamic_root(X, TYPE_NAME_OBJECT, 8, false, XR_BK_STRUCT_OBJECT);
 

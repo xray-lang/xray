@@ -1,9 +1,9 @@
-type Meta = { label: string, payload: Json }
+type Meta = { label: string, payload: JSON.Value }
 type Envelope = { id: int, meta: Meta, note: string }
 
 var base: Envelope = {
     id: 7,
-    meta: { label: "base", payload: Json.parse("{\"ok\":true}") },
+    meta: { label: "base", payload: JSON.parseValue("{\"ok\":true}") },
     note: "old",
 }
 
@@ -11,5 +11,5 @@ var merged = { ...base, note: "new" }
 
 print(merged.id)
 print(merged.meta.label)
-print(merged.meta.payload.ok)
+print(JSON.require<bool>(merged.meta.payload, ["ok"]))
 print(merged.note)

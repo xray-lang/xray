@@ -41,13 +41,11 @@ typedef uint32_t XgEncodingOpId;
 typedef uint32_t XgDeriveId;
 typedef uint32_t XgDerivedFieldId;
 typedef uint32_t XgDerivedMethodId;
-typedef uint32_t XgJsonDynamicAccessId;
 typedef uint32_t XgJsonCodecId;
 typedef uint32_t XgObjectShapeId;
 typedef uint32_t XgObjectFieldId;
 typedef uint32_t XgObjectAccessId;
 typedef uint32_t XgObjectAccessCaseId;
-typedef uint32_t XgObjectShapeFlowId;
 typedef uint32_t XgObjectMergeId;
 typedef uint32_t XgOptionsId;
 typedef uint32_t XgMapShapeId;
@@ -291,14 +289,6 @@ typedef enum XgDerivedMethodKind {
     XG_DERIVED_METHOD_CLONE,
 } XgDerivedMethodKind;
 
-typedef enum XgJsonDynamicAccessKind {
-    XG_JSON_DYNAMIC_ACCESS_FIELD_GET = 1,
-    XG_JSON_DYNAMIC_ACCESS_FIELD_SET,
-    XG_JSON_DYNAMIC_ACCESS_INDEX_GET,
-    XG_JSON_DYNAMIC_ACCESS_INDEX_SET,
-    XG_JSON_DYNAMIC_ACCESS_GET_DEFAULT,
-} XgJsonDynamicAccessKind;
-
 typedef enum XgJsonCodecKind {
     XG_JSON_CODEC_PARSE = 1,
     XG_JSON_CODEC_DECODE,
@@ -321,8 +311,7 @@ typedef enum XgObjectAccessKind {
 } XgObjectAccessKind;
 
 typedef enum XgObjectDomain {
-    XG_OBJECT_DOMAIN_JSON = 0,
-    XG_OBJECT_DOMAIN_STRUCT = 1,
+    XG_OBJECT_DOMAIN_STRUCT = 0,
 } XgObjectDomain;
 
 typedef enum XgObjectAccessSyntax {
@@ -541,13 +530,6 @@ enum {
 };
 
 enum {
-    XG_JSON_DYNAMIC_ACCESS_STATIC_KEY = 1u << 0,
-    XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY = 1u << 1,
-    XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN = 1u << 2,
-    XG_JSON_DYNAMIC_ACCESS_MUTATING = 1u << 3,
-};
-
-enum {
     XG_JSON_CODEC_HAS_INPUT_SHAPE = 1u << 0,
     XG_JSON_CODEC_HAS_OUTPUT_SHAPE = 1u << 1,
     XG_JSON_CODEC_HAS_TARGET_TYPE = 1u << 2,
@@ -561,29 +543,20 @@ enum {
     XG_OBJECT_SHAPE_STATIC_KEYS = 1u << 1,
     XG_OBJECT_SHAPE_HAS_SPREAD = 1u << 2,
     XG_OBJECT_SHAPE_HAS_OPTIONS = 1u << 3,
-    XG_OBJECT_SHAPE_JSON_BRIDGEABLE = 1u << 4,
-    XG_OBJECT_SHAPE_JSON_DOMAIN = 1u << 5,
+    XG_OBJECT_SHAPE_JSON_ENCODABLE = 1u << 4,
     XG_OBJECT_SHAPE_FRESH = 1u << 6,
     XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS = 1u << 7,
     XG_OBJECT_SHAPE_MUTABLE = 1u << 8,
-    XG_OBJECT_SHAPE_OPEN_ROW = 1u << 9,
 };
 
 enum {
     XG_OBJECT_ACCESS_STATIC_FIELD = 1u << 0,
     XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN = 1u << 1,
     XG_OBJECT_ACCESS_MUTATING = 1u << 2,
-    XG_OBJECT_ACCESS_OPEN_ROW = 1u << 3,
-};
-
-enum {
-    XG_OBJECT_SHAPE_FLOW_CONCRETE = 1u << 0,
-    XG_OBJECT_SHAPE_FLOW_FORWARDED = 1u << 1,
 };
 
 enum {
     XG_OBJECT_FIELD_REQUIRED = 1u << 0,
-    XG_OBJECT_FIELD_OPTIONAL = 1u << 1,
     XG_OBJECT_FIELD_DEFAULTED = 1u << 2,
     XG_OBJECT_FIELD_READONLY = 1u << 3,
     XG_OBJECT_FIELD_STATIC_KEY = 1u << 4,
@@ -594,7 +567,6 @@ enum {
     XG_OBJECT_MERGE_PATCH_SHAPE_PROVEN = 1u << 1,
     XG_OBJECT_MERGE_RESULT_SHAPE_PROVEN = 1u << 2,
     XG_OBJECT_MERGE_OVERWRITES = 1u << 3,
-    XG_OBJECT_MERGE_JSON_BRIDGE = 1u << 4,
 };
 
 enum {
@@ -1049,19 +1021,6 @@ typedef struct XgDerivedMethodSummary {
     uint32_t flags;
 } XgDerivedMethodSummary;
 
-typedef struct XgJsonDynamicAccessSummary {
-    XgJsonDynamicAccessId json_dynamic_access_id;
-    XgModuleId module_id;
-    XgFuncId owner_func_id;
-    XgObjectShapeId receiver_shape_id;
-    uint32_t source_span_id;
-    uint32_t key_name_id;
-    uint32_t result_type_key;
-    uint16_t field_ordinal;
-    uint8_t access_kind;
-    uint32_t flags;
-} XgJsonDynamicAccessSummary;
-
 typedef struct XgJsonCodecSummary {
     XgJsonCodecId codec_id;
     XgModuleId module_id;
@@ -1140,17 +1099,6 @@ typedef struct XgObjectAccessCaseSummary {
     uint16_t field_ordinal;
     uint8_t domain;
 } XgObjectAccessCaseSummary;
-
-typedef struct XgObjectShapeFlowSummary {
-    XgObjectShapeFlowId flow_id;
-    XgCallsiteId callsite_id;
-    XgFuncId source_func_id;
-    XgFuncId target_func_id;
-    XgObjectShapeId concrete_shape_id;
-    uint16_t source_param_ordinal;
-    uint16_t target_param_ordinal;
-    uint32_t flags;
-} XgObjectShapeFlowSummary;
 
 typedef struct XgObjectMergeSummary {
     XgObjectMergeId merge_id;
@@ -1269,13 +1217,11 @@ typedef struct XgGlobalEvidence {
     XgDeriveSummary *derives;
     XgDerivedFieldSummary *derived_fields;
     XgDerivedMethodSummary *derived_methods;
-    XgJsonDynamicAccessSummary *json_dynamic_accesses;
     XgJsonCodecSummary *json_codecs;
     XgObjectShapeSummary *object_shapes;
     XgObjectFieldSummary *object_fields;
     XgObjectAccessSummary *object_accesses;
     XgObjectAccessCaseSummary *object_access_cases;
-    XgObjectShapeFlowSummary *object_shape_flows;
     XgObjectMergeSummary *object_merges;
     XgOptionsBagSummary *options_bags;
     XgMapShapeSummary *map_shapes;
@@ -1307,13 +1253,11 @@ typedef struct XgGlobalEvidence {
     uint32_t nderives;
     uint32_t nderived_fields;
     uint32_t nderived_methods;
-    uint32_t njson_dynamic_accesses;
     uint32_t njson_codecs;
     uint32_t nobject_shapes;
     uint32_t nobject_fields;
     uint32_t nobject_accesses;
     uint32_t nobject_access_cases;
-    uint32_t nobject_shape_flows;
     uint32_t nobject_merges;
     uint32_t noptions_bags;
     uint32_t nmap_shapes;
@@ -1345,13 +1289,11 @@ typedef struct XgGlobalEvidence {
     uint32_t derive_cap;
     uint32_t derived_field_cap;
     uint32_t derived_method_cap;
-    uint32_t json_dynamic_access_cap;
     uint32_t json_codec_cap;
     uint32_t object_shape_cap;
     uint32_t object_field_cap;
     uint32_t object_access_cap;
     uint32_t object_access_case_cap;
-    uint32_t object_shape_flow_cap;
     uint32_t object_merge_cap;
     uint32_t options_bag_cap;
     uint32_t map_shape_cap;
@@ -1384,7 +1326,6 @@ XR_FUNC const char *xg_bulk_op_kind_name(uint8_t kind);
 XR_FUNC const char *xg_encoding_op_kind_name(uint8_t kind);
 XR_FUNC const char *xg_derive_kind_name(uint8_t kind);
 XR_FUNC const char *xg_derived_method_kind_name(uint8_t kind);
-XR_FUNC const char *xg_json_dynamic_access_kind_name(uint8_t kind);
 XR_FUNC const char *xg_json_codec_kind_name(uint8_t kind);
 XR_FUNC const char *xg_object_shape_kind_name(uint8_t kind);
 XR_FUNC const char *xg_object_access_kind_name(uint8_t kind);
@@ -1446,8 +1387,6 @@ XR_FUNC bool xg_global_evidence_reserve_derived_fields(XgGlobalEvidence *evidenc
                                                        uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_derived_methods(XgGlobalEvidence *evidence,
                                                         uint32_t capacity);
-XR_FUNC bool xg_global_evidence_reserve_json_dynamic_accesses(XgGlobalEvidence *evidence,
-                                                              uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_json_codecs(XgGlobalEvidence *evidence, uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_object_shapes(XgGlobalEvidence *evidence,
                                                       uint32_t capacity);
@@ -1457,8 +1396,6 @@ XR_FUNC bool xg_global_evidence_reserve_object_accesses(XgGlobalEvidence *eviden
                                                         uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_object_access_cases(XgGlobalEvidence *evidence,
                                                             uint32_t capacity);
-XR_FUNC bool xg_global_evidence_reserve_object_shape_flows(XgGlobalEvidence *evidence,
-                                                           uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_object_merges(XgGlobalEvidence *evidence,
                                                       uint32_t capacity);
 XR_FUNC bool xg_global_evidence_reserve_options_bags(XgGlobalEvidence *evidence, uint32_t capacity);
@@ -1528,9 +1465,6 @@ xg_global_evidence_add_derived_field(XgGlobalEvidence *evidence,
 XR_FUNC XgDerivedMethodSummary *
 xg_global_evidence_add_derived_method(XgGlobalEvidence *evidence,
                                       const XgDerivedMethodSummary *summary);
-XR_FUNC XgJsonDynamicAccessSummary *
-xg_global_evidence_add_json_dynamic_access(XgGlobalEvidence *evidence,
-                                           const XgJsonDynamicAccessSummary *summary);
 XR_FUNC XgJsonCodecSummary *xg_global_evidence_add_json_codec(XgGlobalEvidence *evidence,
                                                               const XgJsonCodecSummary *summary);
 XR_FUNC XgObjectShapeSummary *
@@ -1545,9 +1479,6 @@ xg_global_evidence_add_object_access(XgGlobalEvidence *evidence,
 XR_FUNC XgObjectAccessCaseSummary *
 xg_global_evidence_add_object_access_case(XgGlobalEvidence *evidence,
                                           const XgObjectAccessCaseSummary *summary);
-XR_FUNC XgObjectShapeFlowSummary *
-xg_global_evidence_add_object_shape_flow(XgGlobalEvidence *evidence,
-                                         const XgObjectShapeFlowSummary *summary);
 XR_FUNC XgObjectMergeSummary *
 xg_global_evidence_add_object_merge(XgGlobalEvidence *evidence,
                                     const XgObjectMergeSummary *summary);

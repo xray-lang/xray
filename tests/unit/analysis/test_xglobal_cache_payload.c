@@ -269,12 +269,10 @@ static void add_sample_global_extra_summary(XgGlobalEvidence *ev) {
     XgEncodingOpSummary enc = {0};
     XgObjectShapeSummary json_object_shape = {0};
     XgObjectFieldSummary json_object_field = {0};
-    XgJsonDynamicAccessSummary json_dynamic_access = {0};
     XgJsonCodecSummary json_codec = {0};
     XgObjectShapeSummary object_shape = {0};
     XgObjectFieldSummary object_field = {0};
     XgObjectAccessSummary object_access = {0};
-    XgObjectShapeFlowSummary object_shape_flow = {0};
     XgObjectMergeSummary object_merge = {0};
     XgOptionsBagSummary options = {0};
     XgMapShapeSummary map_shape = {0};
@@ -384,29 +382,17 @@ static void add_sample_global_extra_summary(XgGlobalEvidence *ev) {
     json_object_shape.field_name_start = 610;
     json_object_shape.field_count = 1;
     json_object_shape.shape_kind = XG_OBJECT_SHAPE_LITERAL;
-    json_object_shape.domain = XG_OBJECT_DOMAIN_JSON;
+    json_object_shape.domain = XG_OBJECT_DOMAIN_STRUCT;
     json_object_shape.provenance = XG_OBJECT_SHAPE_LITERAL;
     json_object_shape.concrete_exact = 1;
-    json_object_shape.flags = XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_JSON_DOMAIN;
+    json_object_shape.flags =
+        XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_JSON_ENCODABLE;
     json_object_shape.stable_type_key = json_object_shape.type_key;
     ASSERT_TRUE(xg_object_shape_stable_key(json_object_shape.domain, &json_object_field, 1,
                                            &json_object_shape.stable_shape_key));
     json_object_shape.shape_hash = json_object_shape.stable_shape_key;
     ASSERT_NOT_NULL(xg_global_evidence_add_object_shape(ev, &json_object_shape));
     ASSERT_NOT_NULL(xg_global_evidence_add_object_field(ev, &json_object_field));
-
-    json_dynamic_access.json_dynamic_access_id = 103;
-    json_dynamic_access.module_id = 7;
-    json_dynamic_access.owner_func_id = 11;
-    json_dynamic_access.receiver_shape_id = 101;
-    json_dynamic_access.source_span_id = 26;
-    json_dynamic_access.key_name_id = json_object_field.name_id;
-    json_dynamic_access.result_type_key = 601;
-    json_dynamic_access.field_ordinal = 0;
-    json_dynamic_access.access_kind = XG_JSON_DYNAMIC_ACCESS_FIELD_GET;
-    json_dynamic_access.flags =
-        XG_JSON_DYNAMIC_ACCESS_STATIC_KEY | XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN;
-    ASSERT_NOT_NULL(xg_global_evidence_add_json_dynamic_access(ev, &json_dynamic_access));
 
     json_codec.codec_id = 104;
     json_codec.module_id = 7;
@@ -460,16 +446,6 @@ static void add_sample_global_extra_summary(XgGlobalEvidence *ev) {
     object_access.flags = XG_OBJECT_ACCESS_STATIC_FIELD | XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN;
     finalize_object_access_fixture(&object_access);
     ASSERT_NOT_NULL(xg_global_evidence_add_object_access(ev, &object_access));
-
-    object_shape_flow.flow_id = 204;
-    object_shape_flow.callsite_id = 1;
-    object_shape_flow.source_func_id = 11;
-    object_shape_flow.target_func_id = 11;
-    object_shape_flow.concrete_shape_id = 201;
-    object_shape_flow.source_param_ordinal = UINT16_MAX;
-    object_shape_flow.target_param_ordinal = 0;
-    object_shape_flow.flags = XG_OBJECT_SHAPE_FLOW_CONCRETE;
-    ASSERT_NOT_NULL(xg_global_evidence_add_object_shape_flow(ev, &object_shape_flow));
 
     object_merge.merge_id = 204;
     object_merge.module_id = 7;
@@ -786,7 +762,7 @@ TEST(cache_payload_materializes_global_evidence) {
     payload = xg_global_evidence_cache_payload_dump(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT_NOT_NULL(payload);
     ASSERT_NOT_NULL(strstr(payload, "payload-global v1"));
-    ASSERT_NOT_NULL(strstr(payload, "payload-extra v7 generic_body_uses=1"));
+    ASSERT_NOT_NULL(strstr(payload, "payload-extra v9 generic_body_uses=1"));
     expected = xg_global_evidence_cache_key(&ev, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
     ASSERT(xg_evidence_cache_payload_materialize(payload, &materialized));
     materialized_key =
@@ -803,12 +779,10 @@ TEST(cache_payload_materializes_global_evidence) {
     ASSERT_EQ_UINT(materialized.ncapacity_ops, 1);
     ASSERT_EQ_UINT(materialized.nbulk_ops, 1);
     ASSERT_EQ_UINT(materialized.nencoding_ops, 1);
-    ASSERT_EQ_UINT(materialized.njson_dynamic_accesses, 1);
     ASSERT_EQ_UINT(materialized.njson_codecs, 1);
     ASSERT_EQ_UINT(materialized.nobject_shapes, 2);
     ASSERT_EQ_UINT(materialized.nobject_fields, 2);
     ASSERT_EQ_UINT(materialized.nobject_accesses, 1);
-    ASSERT_EQ_UINT(materialized.nobject_shape_flows, 1);
     ASSERT_EQ_UINT(materialized.nobject_merges, 1);
     ASSERT_EQ_UINT(materialized.noptions_bags, 1);
     ASSERT_EQ_UINT(materialized.nmap_shapes, 1);
@@ -818,14 +792,11 @@ TEST(cache_payload_materializes_global_evidence) {
     ASSERT_EQ_UINT(materialized.modules[0].flags, XG_MODULE_EMBEDDED_SOURCE);
     ASSERT_EQ_UINT(materialized.generic_body_uses[0].use_id, 91);
     ASSERT_EQ_UINT(materialized.object_shapes[0].object_shape_id, 101);
-    ASSERT_EQ_UINT(materialized.object_shapes[0].domain, XG_OBJECT_DOMAIN_JSON);
-    ASSERT_EQ_UINT(materialized.json_dynamic_accesses[0].receiver_shape_id, 101);
+    ASSERT_EQ_UINT(materialized.object_shapes[0].domain, XG_OBJECT_DOMAIN_STRUCT);
     ASSERT_EQ_UINT(materialized.json_codecs[0].input_shape_id, 101);
     ASSERT_EQ_UINT(materialized.json_codecs[0].output_shape_id, 201);
     ASSERT_EQ_UINT(materialized.object_merges[0].merge_id, 204);
     ASSERT_EQ_UINT(materialized.object_merges[0].source_node_id, 31);
-    ASSERT_EQ_UINT(materialized.object_shape_flows[0].callsite_id, 1);
-    ASSERT_EQ_UINT(materialized.object_shape_flows[0].concrete_shape_id, 201);
     ASSERT_EQ_UINT(materialized.key_accesses[0].access_id, 303);
 
     xg_global_evidence_free(&materialized);
@@ -929,10 +900,11 @@ TEST(cache_payload_imports_package_with_id_remap) {
     consumer_object.module_id = consumer_module.module_id;
     consumer_object.owner_func_id = consumer_body.func_id;
     consumer_object.shape_kind = XG_OBJECT_SHAPE_LITERAL;
-    consumer_object.domain = XG_OBJECT_DOMAIN_JSON;
+    consumer_object.domain = XG_OBJECT_DOMAIN_STRUCT;
     consumer_object.provenance = XG_OBJECT_SHAPE_LITERAL;
     consumer_object.concrete_exact = 1;
-    consumer_object.flags = XG_OBJECT_SHAPE_JSON_DOMAIN;
+    consumer_object.flags =
+        XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_JSON_ENCODABLE;
     ASSERT_TRUE(xg_object_shape_stable_key(consumer_object.domain, NULL, 0,
                                            &consumer_object.stable_shape_key));
     consumer_object.stable_type_key = consumer_object.stable_shape_key;
@@ -956,7 +928,7 @@ TEST(cache_payload_imports_package_with_id_remap) {
     ASSERT_EQ_UINT(report.package_hash, package_hash);
     ASSERT_EQ_UINT(report.modules_remapped, 1);
     ASSERT_EQ_UINT(report.modules_added, 1);
-    ASSERT_EQ_UINT(report.rows_imported, 39);
+    ASSERT_EQ_UINT(report.rows_imported, 37);
 
     ASSERT_EQ_UINT(target.nmodules, 2);
     ASSERT_EQ_UINT(target.modules[1].module_id, 101);
@@ -1004,15 +976,9 @@ TEST(cache_payload_imports_package_with_id_remap) {
     ASSERT_EQ_UINT(target.generic_body_uses[0].owner_func_id, 511);
     ASSERT_EQ_UINT(target.object_shapes[1].object_shape_id, 901);
     ASSERT_EQ_UINT(target.object_shapes[1].module_id, 101);
-    ASSERT_EQ_UINT(target.object_shapes[1].domain, XG_OBJECT_DOMAIN_JSON);
-    ASSERT_EQ_UINT(target.json_dynamic_accesses[0].receiver_shape_id, 901);
+    ASSERT_EQ_UINT(target.object_shapes[1].domain, XG_OBJECT_DOMAIN_STRUCT);
     ASSERT_EQ_UINT(target.json_codecs[0].input_shape_id, 901);
     ASSERT_EQ_UINT(target.json_codecs[0].output_shape_id, 1001);
-    ASSERT_EQ_UINT(target.object_shape_flows[0].flow_id, 204);
-    ASSERT_EQ_UINT(target.object_shape_flows[0].callsite_id, 402);
-    ASSERT_EQ_UINT(target.object_shape_flows[0].source_func_id, 511);
-    ASSERT_EQ_UINT(target.object_shape_flows[0].target_func_id, 511);
-    ASSERT_EQ_UINT(target.object_shape_flows[0].concrete_shape_id, 1001);
     ASSERT_EQ_UINT(target.map_shapes[1].shape_id, 1201);
     ASSERT_EQ_UINT(target.map_shapes[1].entry_start, 2);
     ASSERT_EQ_UINT(target.map_entries[1].entry_id, 1252);
@@ -1049,7 +1015,7 @@ TEST(cache_payload_import_reuses_module_stub_without_duplicate_module) {
     ASSERT(xg_global_evidence_import_package_payload(&target, payload, &report));
     ASSERT_EQ_UINT(report.modules_remapped, 1);
     ASSERT_EQ_UINT(report.modules_added, 0);
-    ASSERT_EQ_UINT(report.rows_imported, 39);
+    ASSERT_EQ_UINT(report.rows_imported, 37);
     ASSERT_EQ_UINT(target.nmodules, 1);
     ASSERT_EQ_UINT(target.modules[0].module_id, 100);
     ASSERT_EQ_UINT(target.decls[0].module_id, 100);
@@ -1129,7 +1095,7 @@ TEST(cache_payload_import_set_imports_multiple_payloads) {
     ASSERT_EQ_UINT(report.modules_remapped, 2);
     ASSERT_EQ_UINT(report.modules_added, 2);
     /* The second package reuses the already imported link dependency. */
-    ASSERT_EQ_UINT(report.rows_imported, 77);
+    ASSERT_EQ_UINT(report.rows_imported, 73);
     ASSERT_EQ_UINT(target.nmodules, 2);
     ASSERT_EQ_UINT(target.ndecls, 4);
     ASSERT_EQ_UINT(target.nbodies, 2);

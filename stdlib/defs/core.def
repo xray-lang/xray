@@ -3903,7 +3903,7 @@ module cluster {
   }
 
   fn publish {
-    signature: "(topic: string, value: Json): bool"
+    signature: "(topic: string, value: JSON.Value): bool"
     doc: "Publish to topic"
     vm: "cluster_publish_fn"
     argc: 2

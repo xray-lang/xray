@@ -256,13 +256,13 @@ static void cg_emit_runtime_info_value(XiCgenCtx *ctx, FILE *out, const XiFunc *
     fprintf(out,
             "({ XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
             "XrValue _riv = xrt_object_new_shape(&_xobj_shape_%d); "
-            "xrt_json_set_field(_riv, 0, XR_FROM_INT(_ri.live_bytes)); "
-            "xrt_json_set_field(_riv, 1, XR_FROM_FLOAT(_ri.live_kb)); "
-            "xrt_json_set_field(_riv, 2, XR_FROM_INT(_ri.live_objects)); "
-            "xrt_json_set_field(_riv, 3, XR_FROM_INT(_ri.finalizer_count)); "
-            "xrt_json_set_field(_riv, 4, XR_FROM_INT(_ri.blocks)); "
-            "xrt_json_set_field(_riv, 5, XR_FROM_INT(_ri.free_blocks)); "
-            "xrt_json_set_field(_riv, 6, XR_FROM_INT(_ri.full_blocks)); "
+            "xrt_object_set_field(_riv, 0, XR_FROM_INT(_ri.live_bytes)); "
+            "xrt_object_set_field(_riv, 1, XR_FROM_FLOAT(_ri.live_kb)); "
+            "xrt_object_set_field(_riv, 2, XR_FROM_INT(_ri.live_objects)); "
+            "xrt_object_set_field(_riv, 3, XR_FROM_INT(_ri.finalizer_count)); "
+            "xrt_object_set_field(_riv, 4, XR_FROM_INT(_ri.blocks)); "
+            "xrt_object_set_field(_riv, 5, XR_FROM_INT(_ri.free_blocks)); "
+            "xrt_object_set_field(_riv, 6, XR_FROM_INT(_ri.full_blocks)); "
             "_riv; })",
             aot_ctx, shape_id);
 }
@@ -515,8 +515,8 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
     }
     fprintf(out,
             "xrt_object_new_shape(&_xobj_shape_%d); "
-            "xrt_json_set_field(_arr%u, 0, XR_FROM_INT(_arp%u.first)); "
-            "xrt_json_set_field(_arr%u, 1, XR_FROM_INT(_arp%u.second)); _arr%u; })",
+            "xrt_object_set_field(_arr%u, 0, XR_FROM_INT(_arp%u.first)); "
+            "xrt_object_set_field(_arr%u, 1, XR_FROM_INT(_arp%u.second)); _arr%u; })",
             shape_id, id, id, id, id, id);
     return true;
 }

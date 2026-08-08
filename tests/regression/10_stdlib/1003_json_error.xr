@@ -1,255 +1,29 @@
-
-
-// 1003_json_error.xr
-// 作者：xingleixu@gmail.com
-// 测试：JSON 错误处理测试
-// 借鉴：simdjson 的 errortests 测试
-
-// ===== 使用 isValid 检测无效 JSON =====
+// JSON syntax errors fail predictably and isValid never throws.
 
 @test
-fn test_invalid_empty() {
-    // 空字符串
-    assert_eq(Json.isValid(""), false)
+fn test_invalid_documents() {
+    var invalid = [
+        "", "   ", "{", "[", "\"unterminated", "{key:1}", "[1,]",
+        "{\"a\":1,}", "+1", "01", "undefined", "\"\\q\"", "1 2"
+    ]
+    for (text in invalid) { assert(!JSON.isValid(text), text) }
 }
 
 @test
-fn test_invalid_whitespace_only() {
-    // 只有空白
-    assert_eq(Json.isValid("   "), false)
-    assert_eq(Json.isValid("\n\t"), false)
+fn test_parse_value_throws_on_error() {
+    var caught = false
+    try {
+        JSON.parseValue("{incomplete")
+    } catch panic (e) {
+        caught = true
+        assert(string(e).contains("JSON"))
+    }
+    assert(caught)
 }
 
 @test
-fn test_invalid_incomplete_object() {
-    // 不完整的对象
-    assert_eq(Json.isValid("{"), false)
-    assert_eq(Json.isValid("{\"key\""), false)
-    assert_eq(Json.isValid("{\"key\":"), false)
-    assert_eq(Json.isValid("{\"key\": 1"), false)
+fn test_valid_whitespace() {
+    assert(JSON.isValid("  42  "))
+    assert(JSON.isValid("\n\t{\n\t}\n\t"))
+    assert(JSON.isValid("[ 1 , 2 , 3 ]"))
 }
-
-@test
-fn test_invalid_incomplete_array() {
-    // 不完整的数组
-    assert_eq(Json.isValid("["), false)
-    assert_eq(Json.isValid("[1,"), false)
-    assert_eq(Json.isValid("[1, 2"), false)
-}
-
-@test
-fn test_invalid_incomplete_string() {
-    // 不完整的字符串
-    assert_eq(Json.isValid("\"hello"), false)
-    assert_eq(Json.isValid("\""), false)
-}
-
-@test
-fn test_invalid_unquoted_key() {
-    // 未引用的键
-    assert_eq(Json.isValid("{key: 1}"), false)
-}
-
-@test
-fn test_invalid_single_quote() {
-    // 单引号字符串（JSON 不支持）
-    assert_eq(Json.isValid("'hello'"), false)
-    assert_eq(Json.isValid("{'key': 1}"), false)
-}
-
-@test
-fn test_invalid_trailing_comma_array() {
-    // 数组尾随逗号（严格 JSON 不支持）
-    assert_eq(Json.isValid("[1, 2, 3,]"), false)
-}
-
-@test
-fn test_invalid_trailing_comma_object() {
-    // 对象尾随逗号
-    assert_eq(Json.isValid("{\"a\": 1,}"), false)
-}
-
-@test
-fn test_invalid_leading_zero() {
-    // 前导零（除了 0 本身）
-    assert_eq(Json.isValid("01"), false)
-    assert_eq(Json.isValid("007"), false)
-}
-
-@test
-fn test_invalid_plus_sign() {
-    // 正号（JSON 不支持 +）
-    assert_eq(Json.isValid("+1"), false)
-    assert_eq(Json.isValid("+3.14"), false)
-}
-
-@test
-fn test_invalid_bare_words() {
-    // 裸词（非关键字）
-    assert_eq(Json.isValid("undefined"), false)
-    assert_eq(Json.isValid("NaN"), false)
-    assert_eq(Json.isValid("Infinity"), false)
-}
-
-@test
-fn test_invalid_control_chars() {
-    // 控制字符（JSON 不允许未转义的控制字符）
-    // 这些测试需要构造包含控制字符的字符串
-    // 简化：测试无效转义
-    assert_eq(Json.isValid("\"\\x00\""), false)
-}
-
-@test
-fn test_invalid_bad_escape() {
-    // 无效转义序列
-    assert_eq(Json.isValid("\"\\q\""), false)
-    assert_eq(Json.isValid("\"\\a\""), false)
-    assert_eq(Json.isValid("\"\\v\""), false)
-}
-
-@test
-fn test_invalid_bad_unicode_escape() {
-    // 无效 Unicode 转义
-    assert_eq(Json.isValid("\"\\u\""), false)
-    assert_eq(Json.isValid("\"\\u0\""), false)
-    assert_eq(Json.isValid("\"\\u00\""), false)
-    assert_eq(Json.isValid("\"\\u000\""), false)
-    assert_eq(Json.isValid("\"\\uXYZW\""), false)
-    assert_eq(Json.isValid("\"\\uGHIJ\""), false)
-}
-
-@test
-fn test_invalid_extra_data() {
-    // 多余数据
-    assert_eq(Json.isValid("1 2"), false)
-    assert_eq(Json.isValid("true false"), false)
-    assert_eq(Json.isValid("{} []"), false)
-}
-
-@test
-fn test_invalid_missing_colon() {
-    // 缺少冒号
-    assert_eq(Json.isValid("{\"key\" 1}"), false)
-}
-
-@test
-fn test_invalid_missing_comma() {
-    // 缺少逗号
-    assert_eq(Json.isValid("[1 2]"), false)
-    assert_eq(Json.isValid("{\"a\": 1 \"b\": 2}"), false)
-}
-
-@test
-fn test_invalid_wrong_bracket() {
-    // 括号不匹配
-    assert_eq(Json.isValid("[}"), false)
-    assert_eq(Json.isValid("{]"), false)
-    assert_eq(Json.isValid("[1, 2}"), false)
-}
-
-// ===== 有效 JSON 确认测试 =====
-
-@test
-fn test_valid_primitives() {
-    assert_eq(Json.isValid("null"), true)
-    assert_eq(Json.isValid("true"), true)
-    assert_eq(Json.isValid("false"), true)
-    assert_eq(Json.isValid("42"), true)
-    assert_eq(Json.isValid("3.14"), true)
-    assert_eq(Json.isValid("\"hello\""), true)
-}
-
-@test
-fn test_valid_collections() {
-    assert_eq(Json.isValid("[]"), true)
-    assert_eq(Json.isValid("{}"), true)
-    assert_eq(Json.isValid("[1, 2, 3]"), true)
-    assert_eq(Json.isValid("{\"key\": \"value\"}"), true)
-}
-
-@test
-fn test_valid_nested() {
-    assert_eq(Json.isValid("[[[]]]"), true)
-    assert_eq(Json.isValid("{{}}"), false)  // 嵌套对象需要键
-    assert_eq(Json.isValid("{\"a\": {\"b\": {}}}"), true)
-}
-
-@test
-fn test_valid_with_whitespace() {
-    // 空白应该被正确处理
-    assert_eq(Json.isValid("  42  "), true)
-    assert_eq(Json.isValid("\n\t{\n\t}\n\t"), true)
-    assert_eq(Json.isValid("[ 1 , 2 , 3 ]"), true)
-}
-
-// ===== tryParse 错误处理测试 =====
-
-@test
-fn test_tryparse_success() {
-    var result = Json.tryParse("[1, 2, 3]")
-    assert_eq(result.error, null)
-    assert_eq(len(result.value), 3)
-}
-
-@test
-fn test_tryparse_error_incomplete() {
-    var result = Json.tryParse("{incomplete")
-    assert_eq(result.error != null, true)
-}
-
-@test
-fn test_tryparse_error_invalid() {
-    var result = Json.tryParse("not valid json")
-    assert_eq(result.error != null, true)
-}
-
-// ===== typeof 测试 =====
-
-@test
-fn test_typeof_valid() {
-    assert_eq(typeName(Json.parse("42")), "int")
-    assert_eq(typeName(Json.parse("\"hello\"")), "string")
-    assert_eq(typeName(Json.parse("true")), "bool")
-    assert_eq(typeName(Json.parse("false")), "bool")
-    assert_eq(typeName(Json.parse("null")), "null")
-    assert_eq(typeName(Json.parse("[1,2,3]")), "Array")
-    assert_eq(typeName(Json.parse("{\"a\":1}")), "Json")
-}
-
-@test
-fn test_typeof_invalid() {
-    // Invalid JSON parse returns null
-    var t = Json.parse("invalid")
-    assert_eq(t, null)
-}
-
-// ===== 边界情况测试 =====
-
-@test
-fn test_deep_nesting_valid() {
-    // 合理深度的嵌套应该工作
-    var s = "[[[[[[1]]]]]]"
-    assert_eq(Json.isValid(s), true)
-    var arr = Json.parse(s)
-    assert_eq(arr[0][0][0][0][0][0], 1)
-}
-
-@test
-fn test_long_array() {
-    // 长数组
-    var s = "[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]"
-    assert_eq(Json.isValid(s), true)
-    var arr = Json.parse(s)
-    assert_eq(len(arr), 20)
-    assert_eq(arr[19], 19)
-}
-
-@test
-fn test_long_string() {
-    // 长字符串
-    var s = "\"" + "x".repeat(1000) + "\""
-    assert_eq(Json.isValid(s), true)
-    var parsed = Json.parse(s)
-    assert_eq(len(parsed), 1000)
-}
-

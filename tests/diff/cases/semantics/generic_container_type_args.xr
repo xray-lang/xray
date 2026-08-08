@@ -1,7 +1,7 @@
 // anchor: generic-container-type-args
 // A generic call whose type argument is inferred to a container must reach
 // monomorphization exactly like an explicitly written one: the analyzer writes
-// the inferred Array/Slice/Set/Map/Json back onto the call node, the clone is
+// the inferred Array/Slice/Set/Map/structural object back onto the call node, the clone is
 // keyed on the full type argument (Array<int> and Array<string> are distinct
 // instances), and AOT specializes the body instead of running it erased.
 //

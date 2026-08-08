@@ -327,7 +327,7 @@ static void test_heap_alloc_check(void) {
     ASSERT_EQ(xi_op_is_heap_alloc(XI_ARRAY_NEW), 1, "ARRAY_NEW is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_MAP_NEW), 1, "MAP_NEW is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_SET_NEW), 1, "SET_NEW is heap alloc");
-    ASSERT_EQ(xi_op_is_heap_alloc(XI_JSON_NEW), 1, "JSON_NEW is heap alloc");
+    ASSERT_EQ(xi_op_is_heap_alloc(XI_OBJECT_NEW), 1, "OBJECT_NEW is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_CLOSURE_NEW), 1, "CLOSURE_NEW is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_STR_CONCAT), 1, "STR_CONCAT is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_REGEX_COMPILE), 1, "REGEX_COMPILE is heap alloc");

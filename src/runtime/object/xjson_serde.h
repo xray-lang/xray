@@ -60,9 +60,6 @@ XR_FUNC XrJsonEncodeResult xr_json_encode_core(XrVMRuntime *X, XrValue val);
 // isValid(str, strict?) → bool (zero-allocation validator)
 XR_FUNC XrValue xr_json_fn_is_valid(XrVMRuntime *X, XrValue self, XrValue *args, int argc);
 
-// tryParse(str) → Json {value, error}
-XR_FUNC XrValue xr_json_fn_try_parse(XrVMRuntime *X, XrValue self, XrValue *args, int argc);
-
 /* ========== C API ========== */
 
 // Serialize XrValue to a malloc'd C-string (caller frees with xr_free)
@@ -72,11 +69,17 @@ XR_FUNC char *xr_json_stringify_to_cstr(XrVMRuntime *X, XrValue val, size_t *out
 XR_FUNC XrValue xr_json_parse_from_cstr(XrVMRuntime *X, const char *json_str, size_t len);
 XR_FUNC bool xr_json_parse_typed_object_from_cstr(XrVMRuntime *X, struct XrCoroutine *coro,
                                                   const char *json_str, size_t len,
-                                                  struct XrClass *target_class, XrValue *out,
+                                                  struct XrClass *target_class,
+                                                  bool ignore_unknown_fields, XrValue *out,
                                                   XrJsonTypedParseError *error);
 XR_FUNC bool xr_json_parse_typed_value_from_cstr(XrVMRuntime *X, struct XrCoroutine *coro,
                                                  const char *json_str, size_t len,
-                                                 const XrJsonDecodeSchema *schema, XrValue *out,
+                                                 const XrJsonDecodeSchema *schema,
+                                                 bool ignore_unknown_fields, XrValue *out,
                                                  XrJsonTypedParseError *error);
+XR_FUNC bool xr_json_parse_typed_object_with_rest_from_cstr(
+    XrVMRuntime *X, struct XrCoroutine *coro, const char *json_str, size_t len,
+    struct XrClass *target_class, struct XrClass *wrapper_class, bool ignore_nested_unknown_fields,
+    XrValue *out, XrJsonTypedParseError *error);
 
 #endif  // XJSON_SERDE_H

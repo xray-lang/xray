@@ -119,7 +119,7 @@ static inline void xrt_coll_release(XrValue v);
 #define XRT_ARC_KIND_BUFFER 10u
 #define XRT_ARC_KIND_NET_CONN 11u
 #define XRT_ARC_KIND_NET_LISTENER 12u
-#define XRT_ARC_KIND_JSON 13u
+#define XRT_ARC_KIND_OBJECT 13u
 
 /* `_rsv` is an ABI-stable auxiliary word whose meaning is selected by the
  * object's storage/runtime domain. Generic prefix allocations use the small

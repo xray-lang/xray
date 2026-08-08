@@ -4,7 +4,7 @@ fn run(n: int) -> int {
     var i = 0
     var sum = 0
     while (i < n) {
-        var profile: Profile = Json.parse<Profile>("{\"id\":7,\"active\":true}")
+        var profile: Profile = JSON.parse<Profile>("{\"id\":7,\"active\":true}")
         sum = sum + profile.id
         i = i + 1
     }

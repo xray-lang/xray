@@ -5,12 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xjson_builtins.h - Json utility class (static methods only)
+ * xjson_builtins.h - JSON namespace class (static methods only)
  *
  * KEY CONCEPT:
- *   Json objects have no instance methods to avoid name conflicts
- *   with user-defined fields. All operations go through Json.xxx()
- *   static methods (e.g. Json.keys(obj), Json.containsKey(obj, "key")).
+ *   JSON object values have no instance methods to avoid name conflicts
+ *   with user-defined fields. All operations go through JSON.xxx()
+ *   static methods (e.g. JSON.keys(obj), JSON.containsKey(obj, "key")).
  */
 
 #ifndef XJSON_BUILTINS_H

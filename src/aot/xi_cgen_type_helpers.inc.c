@@ -86,13 +86,6 @@ static bool cg_type_is_json(const XrType *type) {
     return false;
 }
 
-static bool cg_value_type_is_json(const XiValue *v) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v)) &&
-           v->nargs >= 1)
-        v = v->args[0];
-    return v && cg_type_is_json(v->type);
-}
-
 static const char *cg_task_field_helper(const char *field) {
     if (!field)
         return NULL;

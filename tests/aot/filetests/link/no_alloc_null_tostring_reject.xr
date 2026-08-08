@@ -1,5 +1,0 @@
-fn xray_no_alloc_null_tostring_reject() -> string {
-    return null.toString()
-}
-
-print(xray_no_alloc_null_tostring_reject())

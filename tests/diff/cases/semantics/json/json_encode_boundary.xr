@@ -1,22 +1,22 @@
 var user = { name: "Bob", scores: [10, 20], nested: { ok: true } }
-var encoded = Json.encode(user)
+var encoded = JSON.value(user)
 print(typeName(encoded))
-print(encoded.name)
-print(encoded.scores[1])
-print(encoded.nested.ok)
+print(JSON.require<string>(encoded, ["name"]))
+print(JSON.require<int>(encoded, ["scores", 1]))
+print(JSON.require<bool>(encoded, ["nested", "ok"]))
 
 var m = #{ "a": 1, "b": { tag: "bee" } }
-var jm = Json.encode(m)
+var jm = JSON.value(m)
 print(typeName(jm))
-print(jm.a)
-print(jm.b.tag)
+print(JSON.require<int>(jm, ["a"]))
+print(JSON.require<string>(jm, ["b", "tag"]))
 
-var im = #{ 7: { tag: "seven" } }
-var jim = Json.encode(im)
-print(jim["7"].tag)
+var im = #{ "7": { tag: "seven" } }
+var jim = JSON.value(im)
+print(JSON.require<string>(jim, ["7", "tag"]))
 
 var s: Set<int> = #[1, 2, 3]
-var arr = Json.encode(s)
+var arr = JSON.asArray(JSON.value(s))!
 print(len(arr))
 print(arr[0])
 print(arr[2])

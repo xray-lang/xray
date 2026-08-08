@@ -1,1 +1,1 @@
-Type 'Array<TomlDiagnostic>' is not assignable to type 'Array<Json>'
+Type 'Array<TomlDiagnostic>' is not assignable to type 'Array<JSON.Value>'

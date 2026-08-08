@@ -7,7 +7,7 @@ fn test_json_stringify_catches_function() {
     var obj = { handler: f }
     var caught = false
     try {
-        Json.stringify(obj)
+        JSON.stringify(obj)
     } catch panic (e) {
         caught = true
     }
@@ -21,7 +21,7 @@ fn test_json_stringify_catches_nested() {
     var caught = false
     var msg = ""
     try {
-        Json.stringify(obj)
+        JSON.stringify(obj)
     } catch panic (e) {
         caught = true
         msg = string(e)
@@ -32,7 +32,7 @@ fn test_json_stringify_catches_nested() {
 
 @test
 fn test_json_stringify_normal_succeeds() {
-    var result = Json.stringify({a: 1, b: "hello"})
+    var result = JSON.stringify({a: 1, b: "hello"})
     assert_eq(len(result) > 0, true)
 }
 
@@ -43,7 +43,7 @@ fn test_exception_after_catch_continues() {
     var step1 = false
     var step2 = false
     try {
-        Json.stringify(obj)
+        JSON.stringify(obj)
     } catch panic (e) {
         step1 = true
     }
@@ -59,7 +59,7 @@ fn test_multiple_catch_blocks() {
     for (i in 0..3) {
         var obj = { handler: f }
         try {
-            Json.stringify(obj)
+            JSON.stringify(obj)
         } catch panic (e) {
             count = count + 1
         }

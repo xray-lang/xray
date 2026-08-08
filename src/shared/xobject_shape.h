@@ -17,8 +17,7 @@
 #include <string.h>
 
 enum {
-    XR_OBJECT_DOMAIN_JSON = 0,
-    XR_OBJECT_DOMAIN_STRUCT = 1,
+    XR_OBJECT_DOMAIN_STRUCT = 0,
 };
 
 enum {
@@ -28,7 +27,6 @@ enum {
 
 enum {
     XR_OBJECT_SHAPE_FIELD_READONLY = 1u << 0,
-    XR_OBJECT_SHAPE_FIELD_OPTIONAL = 1u << 1,
 };
 
 typedef struct XrtObjectShapeField {

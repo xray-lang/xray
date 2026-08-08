@@ -296,8 +296,8 @@ char *xr_value_to_debug_string(XrVMRuntime *isolate, XrValue val) {
         void *ptr = XR_TO_PTR(val);
         snprintf(buf, sizeof(buf), "Set{...} @%p", ptr);
     } else if (xr_value_is_json(val)) {
-        XrJson *json = xr_value_to_json(val);
-        int count = xr_json_field_count(isolate, json);
+        XrObjectInstance *json = xr_value_to_object_instance(val);
+        int count = xr_object_instance_field_count(isolate, json);
         snprintf(buf, sizeof(buf), "Object(%d) @%p", count, (void *) json);
     } else if (XR_IS_PTR(val)) {
         XrObjHeader *hdr = XR_TO_PTR(val);

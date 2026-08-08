@@ -1,5 +1,0 @@
-fn jsonTernaryExpressionReceiverDirectIndexPlan(flag: bool) -> int {
-    return (flag ? { name: "ada", age: 1 } : { name: "bob", age: 2 }).age
-}
-
-print(jsonTernaryExpressionReceiverDirectIndexPlan(true))

@@ -1,8 +1,0 @@
-contains=xaot-plan v0
-regex=closure [0-9]+ func=jsonArrayClosureContainerReceiverPlan value=v[0-9]+ target=<anonymous> captures=1 repr=stack
-regex=object-shape-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ type=[0-9]+ stable_type=[0-9a-f]+ kind=literal domain=0 action=exact fields=[0-9]+\+2 key=[0-9a-f]+ evidence=0x7 reason=none
-regex=json-dynamic-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=field_get action=direct_index key=[0-9]+ result_type=0 field=1 evidence=0xf reason=none
-c_regex=static const XrAotCallableDesc _xr_callable_[0-9]+ = \{.*\.sync_entry=\(void\*\)json_array_closure_container_receiver_direct_index_plan_[0-9a-f]+___anonymous__[0-9]+
-c_regex=xrt_closure_stack_new\(&_xr_callable_[0-9]+, 1\)
-c_regex=XrValue v[0-9]+ = xrt_json_get_field\(v[0-9]+, 1\);
-c_not_contains=xrt_json_get_name_owned

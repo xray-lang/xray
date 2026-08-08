@@ -341,21 +341,21 @@ def decode_c_string(raw: str) -> str:
 
 CLASS_RE = re.compile(
     r"(?m)^(?:@[A-Za-z_][^\n]*\n)*(?:export\s+)?(?:(?:final|packed)\s+)?"
-    r"(?:class|struct|union|interface)\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?"
+    r"(?:class|struct|union|interface)\s+([A-Za-z_][A-Za-z0-9_]*)(?:<[^>]+>)?"
     r"(?:\s+align\s*\([^\n)]*\))?\s*\{"
 )
 TOP_FN_RE = re.compile(
     r"(?m)^(?:export\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*"
-    r"(?:<[^>{]+>)?\("
+    r"(?:<[^>]+>)?\("
 )
 TOP_CONST_RE = re.compile(
     r"(?m)^(?:export\s+)?const\s+([A-Za-z_][A-Za-z0-9_]*)\s*"
     r"(?::\s*([^=\n]+))?\s*=\s*([^\n]+)"
 )
 MEMBER_METHOD_RE = re.compile(
-    r"^\s*(static\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:<[^>{]+>)?\s*\("
+    r"^\s*(static\s+)?([A-Za-z_][A-Za-z0-9_]*)(?:<[^>]+>)?\s*\("
 )
-MEMBER_SIGNATURE_START_RE = re.compile(r"^\s*(?:static\s+)?[A-Za-z_][A-Za-z0-9_]*(?:<[^>{]+>)?\s*\(")
+MEMBER_SIGNATURE_START_RE = re.compile(r"^\s*(?:static\s+)?[A-Za-z_][A-Za-z0-9_]*(?:<[^>]+>)?\s*\(")
 MEMBER_FIELD_RE = re.compile(r"^\s*(?:const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*([^=\n]+)$")
 
 

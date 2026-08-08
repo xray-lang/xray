@@ -314,7 +314,7 @@ def test_resources_read_protocol_paths(xray: Path) -> None:
         assert modules_response.get("id") == 5, modules_response
         modules_text = modules_response["result"]["contents"][0].get("text", "")
         assert "| `json` |" not in modules_text, modules_response
-        assert "Json.parse()" in modules_text, modules_response
+        assert "JSON.parse<T>()" in modules_text, modules_response
 
         session.send(request("resources/read", 3, {"uri": "xray://spec/topic/class"}))
         topic_response = session.recv()
@@ -331,7 +331,7 @@ def test_resources_read_protocol_paths(xray: Path) -> None:
         assert isinstance(stdlib_contents, list), stdlib_response
         assert stdlib_contents[0]["uri"] == "xray://stdlib/json", stdlib_response
         stdlib_text = stdlib_contents[0].get("text", "")
-        assert "Json.parse(text)" in stdlib_text, stdlib_response
+        assert "JSON.parse" in stdlib_text, stdlib_response
         assert "import json" not in stdlib_text, stdlib_response
     finally:
         session.close()

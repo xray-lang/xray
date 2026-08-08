@@ -13,13 +13,6 @@ class MapNode {
     constructor() { this.peers = #{} }
 }
 
-// L0 的通配边（G2）：Json 字段可装任意对象
-class JsonNode {
-    blob: Json
-    peer: JsonNode?
-    constructor() { this.blob = {}; this.peer = null }
-}
-
 // 直接字段环
 class Plain {
     peer: Plain?
@@ -41,7 +34,6 @@ class BigNode {
 }
 
 fn map_cycle() { var a = MapNode(); var b = MapNode(); a.peers["n"] = b; b.peers["n"] = a }
-fn json_cycle() { var a = JsonNode(); var b = JsonNode(); a.peer = b; b.peer = a }
 fn plain_cycle() { var a = Plain(1); var b = Plain(2); a.peer = b; b.peer = a }
 fn union_cycle() { var a = UnionNode(); var b = UnionNode(); a.peer = b; b.peer = a }
 fn big_cycle() { var a = BigNode(); var b = BigNode(); a.peer = b; b.peer = a }
@@ -68,7 +60,6 @@ fn triangle() {
 // 这也更贴近检测器要服务的场景：它扫的就是协程堆，L2 边界也是按协程算的。
 fn build_all() {
     map_cycle()
-    json_cycle()
     plain_cycle()
     union_cycle()
     big_cycle()

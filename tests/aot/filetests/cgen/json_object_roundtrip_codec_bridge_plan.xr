@@ -1,10 +1,10 @@
 type User = { name: string, age: int }
 
-fn jsonObjectRoundtripCodecBridgePlan() -> Json {
+fn jsonObjectRoundtripCodecBridgePlan() -> JSON.Value {
     var user: User = { name: "Ada", age: 37 }
-    var encoded = Json.encode(user)
-    var decoded = Json.decode<User>(encoded)
-    return Json.encode(decoded!)
+    var encoded = JSON.value(user)
+    var decoded = JSON.decode<User>(encoded)
+    return JSON.value(decoded!)
 }
 
 print(jsonObjectRoundtripCodecBridgePlan())

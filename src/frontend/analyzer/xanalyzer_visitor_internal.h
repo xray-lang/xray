@@ -27,6 +27,8 @@
 XR_FUNC XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC XaSymbol *xa_lookup_visible_symbol(XaInferContext *ctx, const char *name);
+XR_FUNC XrType *xa_type_param_object_constraint(XaInferContext *ctx, XrType *type_param,
+                                                const char *field_name, int *out_field_index);
 
 // Utility functions (defined in xanalyzer_visitor.c)
 XR_FUNC bool xa_check_null_safety(XaAnalyzer *analyzer, XrType *target, XrType *source,

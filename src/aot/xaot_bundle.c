@@ -286,10 +286,6 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
     bundle->nderived_clone_plans = 0;
     bundle->derived_clone_plan_cap = 0;
 
-    xr_free(bundle->json_dynamic_access_plans);
-    bundle->json_dynamic_access_plans = NULL;
-    bundle->njson_dynamic_access_plans = 0;
-    bundle->json_dynamic_access_plan_cap = 0;
     xr_free(bundle->json_codec_plans);
     bundle->json_codec_plans = NULL;
     bundle->njson_codec_plans = 0;
@@ -2240,113 +2236,6 @@ static bool xaot_bundle_add_derived_clone_plans(XaotBundle *bundle,
     return true;
 }
 
-static bool json_dynamic_access_kind_valid(uint8_t kind) {
-    switch ((XgJsonDynamicAccessKind) kind) {
-        case XG_JSON_DYNAMIC_ACCESS_FIELD_GET:
-        case XG_JSON_DYNAMIC_ACCESS_FIELD_SET:
-        case XG_JSON_DYNAMIC_ACCESS_INDEX_GET:
-        case XG_JSON_DYNAMIC_ACCESS_INDEX_SET:
-        case XG_JSON_DYNAMIC_ACCESS_GET_DEFAULT:
-            return true;
-        default:
-            return false;
-    }
-}
-
-static uint8_t json_dynamic_access_action_for(const XgGlobalEvidence *evidence,
-                                              const XgJsonDynamicAccessSummary *access) {
-    const XgObjectShapeSummary *shape;
-    if (!access || !json_dynamic_access_kind_valid(access->access_kind))
-        return XAOT_JSON_DYNAMIC_ACCESS_REJECT;
-    if ((access->flags & XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY) != 0)
-        return access->receiver_shape_id != XG_NO_ID ? XAOT_JSON_DYNAMIC_ACCESS_COMPUTED_KEY_GUARD
-                                                     : XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP;
-    if (access->key_name_id == 0)
-        return XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP;
-    if (access->receiver_shape_id == XG_NO_ID)
-        return XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP;
-    shape = xg_global_evidence_find_object_shape(evidence, access->receiver_shape_id);
-    if (!shape || access->field_ordinal >= shape->field_count)
-        return XAOT_JSON_DYNAMIC_ACCESS_REJECT;
-    if ((shape->flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) != 0)
-        return XAOT_JSON_DYNAMIC_ACCESS_SHAPE_GUARD_INDEX;
-    return (access->flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) != 0
-               ? XAOT_JSON_DYNAMIC_ACCESS_DIRECT_INDEX
-               : XAOT_JSON_DYNAMIC_ACCESS_SHAPE_GUARD_INDEX;
-}
-
-static uint8_t json_dynamic_access_reason_for(const XgGlobalEvidence *evidence,
-                                              const XgJsonDynamicAccessSummary *access) {
-    const XgObjectShapeSummary *shape;
-    if (!access || !json_dynamic_access_kind_valid(access->access_kind))
-        return XAOT_JSON_UNPROVEN_INVALID_KIND;
-    if ((access->flags & XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY) != 0)
-        return access->receiver_shape_id != XG_NO_ID ? XAOT_JSON_UNPROVEN_NONE
-                                                     : XAOT_JSON_UNPROVEN_COMPUTED_KEY;
-    if (access->key_name_id == 0)
-        return XAOT_JSON_UNPROVEN_COMPUTED_KEY;
-    if (access->receiver_shape_id == XG_NO_ID)
-        return XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN;
-    shape = xg_global_evidence_find_object_shape(evidence, access->receiver_shape_id);
-    if (!shape || access->field_ordinal >= shape->field_count)
-        return XAOT_JSON_UNPROVEN_STALE_SHAPE;
-    return XAOT_JSON_UNPROVEN_NONE;
-}
-
-static uint32_t json_dynamic_access_evidence_for(const XgGlobalEvidence *evidence,
-                                                 const XgJsonDynamicAccessSummary *access) {
-    const XgObjectShapeSummary *shape;
-    uint32_t evidence_bits = XAOT_JSON_EV_GLOBAL_ROW;
-    if (!access)
-        return evidence_bits;
-    if ((access->flags & XG_JSON_DYNAMIC_ACCESS_STATIC_KEY) != 0 && access->key_name_id != 0)
-        evidence_bits |= XAOT_JSON_EV_STATIC_KEY;
-    if (access->receiver_shape_id != XG_NO_ID)
-        evidence_bits |= XAOT_JSON_EV_RECEIVER_SHAPE;
-    shape = xg_global_evidence_find_object_shape(evidence, access->receiver_shape_id);
-    if (shape && access->field_ordinal < shape->field_count)
-        evidence_bits |= XAOT_JSON_EV_FIELD_INDEX;
-    return evidence_bits;
-}
-
-static bool xaot_bundle_add_json_dynamic_access_plan(XaotBundle *bundle,
-                                                     const XgGlobalEvidence *evidence,
-                                                     const XgJsonDynamicAccessSummary *access) {
-    XaotJsonDynamicAccessPlan *plan;
-    if (!bundle || !evidence || !access)
-        return false;
-    if (!reserve_plan_array(
-            (void **) &bundle->json_dynamic_access_plans, &bundle->json_dynamic_access_plan_cap,
-            bundle->njson_dynamic_access_plans + 1, sizeof(XaotJsonDynamicAccessPlan), 8))
-        return false;
-    plan = &bundle->json_dynamic_access_plans[bundle->njson_dynamic_access_plans++];
-    memset(plan, 0, sizeof(*plan));
-    plan->json_dynamic_access_id = access->json_dynamic_access_id;
-    plan->module_id = access->module_id;
-    plan->owner_func_id = access->owner_func_id;
-    plan->receiver_shape_id = access->receiver_shape_id;
-    plan->key_name_id = access->key_name_id;
-    plan->result_type_key = access->result_type_key;
-    plan->field_ordinal = access->field_ordinal;
-    plan->access_kind = access->access_kind;
-    plan->action = json_dynamic_access_action_for(evidence, access);
-    plan->evidence = json_dynamic_access_evidence_for(evidence, access);
-    plan->unproven_reason = json_dynamic_access_reason_for(evidence, access);
-    return true;
-}
-
-static bool xaot_bundle_add_json_dynamic_access_plans(XaotBundle *bundle,
-                                                      const XgGlobalEvidence *evidence) {
-    if (!bundle || !evidence)
-        return false;
-    for (uint32_t i = 0; i < evidence->njson_dynamic_accesses; i++) {
-        if (!xaot_bundle_add_json_dynamic_access_plan(bundle, evidence,
-                                                      &evidence->json_dynamic_accesses[i]))
-            return false;
-    }
-    return true;
-}
-
 static bool json_codec_kind_valid(uint8_t kind) {
     switch ((XgJsonCodecKind) kind) {
         case XG_JSON_CODEC_PARSE:
@@ -2485,8 +2374,6 @@ static bool object_access_kind_valid(uint8_t kind) {
 static uint8_t object_shape_action_for(const XgObjectShapeSummary *shape) {
     if (!shape || !object_shape_kind_valid(shape->shape_kind))
         return XAOT_OBJECT_SHAPE_REJECT;
-    if ((shape->flags & XG_OBJECT_SHAPE_OPEN_ROW) != 0)
-        return XAOT_OBJECT_SHAPE_CONSTRAINT;
     switch ((XgObjectShapeKind) shape->shape_kind) {
         case XG_OBJECT_SHAPE_LITERAL:
             return XAOT_OBJECT_SHAPE_EXACT;
@@ -2505,8 +2392,7 @@ static uint8_t object_shape_action_for(const XgObjectShapeSummary *shape) {
 
 static uint8_t object_shape_reason_for(const XgObjectShapeSummary *shape) {
     return shape && object_shape_kind_valid(shape->shape_kind) &&
-                   (shape->domain == XG_OBJECT_DOMAIN_STRUCT ||
-                    shape->domain == XG_OBJECT_DOMAIN_JSON)
+                   shape->domain == XG_OBJECT_DOMAIN_STRUCT
                ? XAOT_OBJECT_UNPROVEN_NONE
                : XAOT_OBJECT_UNPROVEN_INVALID_KIND;
 }
@@ -2519,8 +2405,8 @@ static uint32_t object_shape_evidence_for(const XgObjectShapeSummary *shape) {
         evidence |= XAOT_OBJECT_EV_SEALED;
     if ((shape->flags & XG_OBJECT_SHAPE_STATIC_KEYS) != 0)
         evidence |= XAOT_OBJECT_EV_STATIC_FIELD;
-    if ((shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) != 0)
-        evidence |= XAOT_OBJECT_EV_JSON_BRIDGE;
+    if ((shape->flags & XG_OBJECT_SHAPE_JSON_ENCODABLE) != 0)
+        evidence |= XAOT_OBJECT_EV_JSON_ENCODE;
     return evidence;
 }
 
@@ -2568,11 +2454,9 @@ static bool xaot_bundle_add_object_shape_plans(XaotBundle *bundle,
 }
 
 static bool object_access_cases_valid(const XgGlobalEvidence *evidence,
-                                      const XgObjectAccessSummary *access, bool *out_same_ordinal) {
+                                      const XgObjectAccessSummary *access) {
     uint32_t count = 0;
-    uint16_t first_ordinal = UINT16_MAX;
-    bool same_ordinal = true;
-    if (!evidence || !access || access->receiver_shape_count == 0 ||
+    if (!evidence || !access || access->receiver_shape_count != 1 ||
         access->receiver_shape_set_id == 0)
         return false;
     for (uint32_t i = 0; i < evidence->nobject_access_cases; i++) {
@@ -2599,41 +2483,27 @@ static bool object_access_cases_valid(const XgGlobalEvidence *evidence,
         }
         if (!field || field->name_id != access->field_name_id)
             return false;
-        if (count == 0)
-            first_ordinal = access_case->field_ordinal;
-        else if (access_case->field_ordinal != first_ordinal)
-            same_ordinal = false;
         count++;
     }
-    if (out_same_ordinal)
-        *out_same_ordinal = same_ordinal;
     return count == access->receiver_shape_count;
 }
 
 static uint8_t object_access_action_for(const XgGlobalEvidence *evidence,
                                         const XgObjectAccessSummary *access) {
     const XgObjectShapeSummary *shape;
-    bool same_ordinal = false;
     if (!access || !object_access_kind_valid(access->access_kind))
         return XAOT_OBJECT_ACCESS_REJECT;
     if ((access->flags & XG_OBJECT_ACCESS_STATIC_FIELD) == 0 || access->field_name_id == 0)
         return XAOT_OBJECT_ACCESS_REJECT;
-    if (!object_access_cases_valid(evidence, access, &same_ordinal))
+    if (!object_access_cases_valid(evidence, access))
         return XAOT_OBJECT_ACCESS_REJECT;
-    if (access->receiver_shape_count > 1)
-        return same_ordinal ? XAOT_OBJECT_ACCESS_DIRECT_ORDINAL
-                            : XAOT_OBJECT_ACCESS_SHAPE_DISPATCH_ORDINAL;
     if (access->receiver_shape_id == XG_NO_ID)
         return XAOT_OBJECT_ACCESS_REJECT;
     shape = xg_global_evidence_find_object_shape(evidence, access->receiver_shape_id);
     if (!shape || access->field_ordinal >= shape->field_count || access->domain != shape->domain ||
         access->mutation_epoch != shape->mutation_epoch)
         return XAOT_OBJECT_ACCESS_REJECT;
-    if (access->access_kind == XG_OBJECT_ACCESS_DESTRUCTURE)
-        return XAOT_OBJECT_ACCESS_DIRECT_ORDINAL;
-    return (access->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0
-               ? XAOT_OBJECT_ACCESS_DIRECT_ORDINAL
-               : XAOT_OBJECT_ACCESS_SHAPE_GUARD_ORDINAL;
+    return XAOT_OBJECT_ACCESS_DIRECT_ORDINAL;
 }
 
 static uint8_t object_access_reason_for(const XgGlobalEvidence *evidence,
@@ -2643,7 +2513,7 @@ static uint8_t object_access_reason_for(const XgGlobalEvidence *evidence,
         return XAOT_OBJECT_UNPROVEN_INVALID_KIND;
     if ((access->flags & XG_OBJECT_ACCESS_STATIC_FIELD) == 0 || access->field_name_id == 0)
         return XAOT_OBJECT_UNPROVEN_DYNAMIC_FIELD;
-    if (!object_access_cases_valid(evidence, access, NULL))
+    if (!object_access_cases_valid(evidence, access))
         return XAOT_OBJECT_UNPROVEN_STALE_SHAPE;
     if (access->receiver_shape_id == XG_NO_ID)
         return XAOT_OBJECT_UNPROVEN_RECEIVER_SHAPE_UNKNOWN;
@@ -2757,8 +2627,6 @@ static uint8_t object_merge_action_for(const XgGlobalEvidence *evidence,
                                        const XgObjectMergeSummary *merge) {
     if (object_merge_reason_for(evidence, merge) != XAOT_OBJECT_UNPROVEN_NONE)
         return XAOT_OBJECT_MERGE_REJECT;
-    if ((merge->flags & XG_OBJECT_MERGE_JSON_BRIDGE) != 0)
-        return XAOT_OBJECT_MERGE_JSON_BRIDGE;
     return merge->overwrite_count != 0 ? XAOT_OBJECT_MERGE_COPY_WITH_OVERWRITE
                                        : XAOT_OBJECT_MERGE_COPY_APPEND;
 }
@@ -2776,8 +2644,6 @@ static uint32_t object_merge_evidence_for(const XgGlobalEvidence *evidence,
         evidence_bits |= XAOT_OBJECT_EV_RESULT_SHAPE;
     if (merge->copy_table_id != 0)
         evidence_bits |= XAOT_OBJECT_EV_COPY_TABLE;
-    if ((merge->flags & XG_OBJECT_MERGE_JSON_BRIDGE) != 0)
-        evidence_bits |= XAOT_OBJECT_EV_JSON_BRIDGE;
     return evidence_bits;
 }
 
@@ -4152,10 +4018,6 @@ static bool xaot_bundle_populate_global_lowered_plans(XaotBundle *bundle,
         bundle->error_msg = "failed to allocate AOT derived Clone plan";
         return false;
     }
-    if (!xaot_bundle_add_json_dynamic_access_plans(bundle, evidence)) {
-        bundle->error_msg = "failed to allocate AOT Json access plan";
-        return false;
-    }
     if (!xaot_bundle_add_json_codec_plans(bundle, evidence)) {
         bundle->error_msg = "failed to allocate AOT Json codec plan";
         return false;
@@ -4661,18 +4523,6 @@ XR_FUNC const XaotDerivedClonePlan *xaot_bundle_find_derived_clone_plan(const Xa
     for (uint32_t i = 0; i < bundle->nderived_clone_plans; i++) {
         if (bundle->derived_clone_plans[i].type_key == type_key)
             return &bundle->derived_clone_plans[i];
-    }
-    return NULL;
-}
-
-XR_FUNC const XaotJsonDynamicAccessPlan *
-xaot_bundle_find_json_dynamic_access_plan(const XaotBundle *bundle,
-                                          XgJsonDynamicAccessId json_dynamic_access_id) {
-    if (!bundle || json_dynamic_access_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < bundle->njson_dynamic_access_plans; i++) {
-        if (bundle->json_dynamic_access_plans[i].json_dynamic_access_id == json_dynamic_access_id)
-            return &bundle->json_dynamic_access_plans[i];
     }
     return NULL;
 }
@@ -6494,23 +6344,6 @@ static const char *derived_clone_unproven_reason_name(uint8_t reason) {
     }
 }
 
-static const char *json_dynamic_access_action_name(uint8_t action) {
-    switch ((XaotJsonDynamicAccessAction) action) {
-        case XAOT_JSON_DYNAMIC_ACCESS_DIRECT_INDEX:
-            return "direct_index";
-        case XAOT_JSON_DYNAMIC_ACCESS_SHAPE_GUARD_INDEX:
-            return "shape_guard_index";
-        case XAOT_JSON_DYNAMIC_ACCESS_COMPUTED_KEY_GUARD:
-            return "computed_key_guard";
-        case XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP:
-            return "dynamic_lookup";
-        case XAOT_JSON_DYNAMIC_ACCESS_REJECT:
-            return "reject";
-        default:
-            return "unknown";
-    }
-}
-
 static const char *json_codec_action_name(uint8_t action) {
     switch ((XaotJsonCodecAction) action) {
         case XAOT_JSON_CODEC_PARSE_DOM_BRIDGE:
@@ -6569,8 +6402,6 @@ static const char *object_shape_action_name(uint8_t action) {
             return "static";
         case XAOT_OBJECT_SHAPE_PATCH:
             return "patch";
-        case XAOT_OBJECT_SHAPE_CONSTRAINT:
-            return "constraint";
         case XAOT_OBJECT_SHAPE_REJECT:
             return "reject";
         default:
@@ -6582,12 +6413,6 @@ static const char *object_access_action_name(uint8_t action) {
     switch ((XaotObjectAccessAction) action) {
         case XAOT_OBJECT_ACCESS_DIRECT_ORDINAL:
             return "direct_ordinal";
-        case XAOT_OBJECT_ACCESS_SHAPE_GUARD_ORDINAL:
-            return "shape_guard_ordinal";
-        case XAOT_OBJECT_ACCESS_SHAPE_DISPATCH_ORDINAL:
-            return "shape_dispatch_ordinal";
-        case XAOT_OBJECT_ACCESS_DYNAMIC_JSON_LOOKUP:
-            return "dynamic_json_lookup";
         case XAOT_OBJECT_ACCESS_REJECT:
             return "reject";
         default:
@@ -6601,8 +6426,6 @@ static const char *object_merge_action_name(uint8_t action) {
             return "copy_with_overwrite";
         case XAOT_OBJECT_MERGE_COPY_APPEND:
             return "copy_append";
-        case XAOT_OBJECT_MERGE_JSON_BRIDGE:
-            return "json_bridge";
         case XAOT_OBJECT_MERGE_REJECT:
             return "reject";
         default:
@@ -8054,18 +7877,6 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 derived_clone_action_name(dp->action), dp->field_start, (unsigned) dp->field_count,
                 dp->clone_body_func_id, dp->transfer_plan_id, dp->evidence,
                 derived_clone_unproven_reason_name(dp->unproven_reason));
-    }
-
-    for (uint32_t ji = 0; ji < bundle->njson_dynamic_access_plans; ji++) {
-        const XaotJsonDynamicAccessPlan *jp = &bundle->json_dynamic_access_plans[ji];
-        fprintf(out,
-                "json-dynamic-access-plan %u id=%u module=%u func=%u shape=%u kind=%s action=%s "
-                "key=%u result_type=%u field=%u evidence=0x%x reason=%s\n",
-                ji, jp->json_dynamic_access_id, jp->module_id, jp->owner_func_id,
-                jp->receiver_shape_id, xg_json_dynamic_access_kind_name(jp->access_kind),
-                json_dynamic_access_action_name(jp->action), jp->key_name_id, jp->result_type_key,
-                (unsigned) jp->field_ordinal, jp->evidence,
-                json_unproven_reason_name(jp->unproven_reason));
     }
 
     for (uint32_t ji = 0; ji < bundle->njson_codec_plans; ji++) {

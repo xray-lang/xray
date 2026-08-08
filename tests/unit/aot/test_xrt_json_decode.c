@@ -69,13 +69,22 @@ static void destroy_object(XrValue value) {
     xrt_release(value);
 }
 
+static XrValue json_object_new(int64_t capacity) {
+    return xrt_map_new(capacity);
+}
+
+static void json_object_set(XrValue object, const char *key, XrValue value) {
+    if (!XR_IS_MAP(object) || !key)
+        abort();
+    xrt_map_set((xrt_map_t *) object.ptr, xr_box_str(key), value);
+}
+
 static XrValue user_json(void) {
-    static const char *names[] = {"name", "age", "active", "score"};
-    XrValue value = xrt_json_new_named(4, names);
-    xrt_json_set_field(value, 0, xr_box_str("Ada"));
-    xrt_json_set_field(value, 1, XR_FROM_INT(37));
-    xrt_json_set_field(value, 2, XR_TRUE_VAL);
-    xrt_json_set_field(value, 3, XR_FROM_FLOAT(9.5));
+    XrValue value = json_object_new(4);
+    json_object_set(value, "name", xr_box_str("Ada"));
+    json_object_set(value, "age", XR_FROM_INT(37));
+    json_object_set(value, "active", XR_TRUE_VAL);
+    json_object_set(value, "score", XR_FROM_FLOAT(9.5));
     return value;
 }
 
@@ -144,15 +153,14 @@ static void test_static_shape_is_zero_copy_and_header_shrinks(void) {
     size_t allocations_before = g_allocations;
     size_t frees_before = g_frees;
     XrValue object = xrt_object_new_shape(&shape);
-    xrt_json_t *raw = (xrt_json_t *) object.ptr;
+    xrt_object_t *raw = (xrt_object_t *) object.ptr;
 
-    ASSERT_TRUE(sizeof(xrt_json_t) <= 40, "descriptor object header should shrink to at most 40B");
+    ASSERT_TRUE(sizeof(xrt_object_t) <= 40,
+                "descriptor object header should shrink to at most 40B");
     ASSERT_TRUE(g_allocations == allocations_before + 1,
                 "static shape construction should allocate only the object body");
     ASSERT_TRUE(raw->shape == &shape, "object should borrow the file-static descriptor");
-    ASSERT_TRUE(raw->dynamic_fields == NULL,
-                "structural object construction should not allocate an extension map");
-    ASSERT_TRUE(xrt_json_find_field(raw, "x") == 0, "descriptor name should map to ordinal zero");
+    ASSERT_TRUE(xrt_object_find_field(raw, "x") == 0, "descriptor name should map to ordinal zero");
     destroy_object(object);
     ASSERT_TRUE(g_frees == frees_before + 1,
                 "destruction should free the object allocation but not the static descriptor");
@@ -165,20 +173,42 @@ static void test_clone_and_storage_keep_static_shape(void) {
     static const XrtObjectShape shape = {UINT64_C(0x2),          1, fields, XRT_OBJECT_STRUCT,
                                          XR_OBJECT_SHAPE_STATIC, 0, 0};
     XrValue source = xrt_object_new_shape(&shape);
-    xrt_json_set_field(source, 0, XR_FROM_INT(42));
+    xrt_object_set_field(source, 0, XR_FROM_INT(42));
     size_t allocations_before = g_allocations;
-    XrValue clone = xrt_json_clone_for_coro(source);
+    XrValue clone = xrt_object_clone_for_coro(source);
 
     ASSERT_TRUE(g_allocations == allocations_before + 1,
                 "cloning a static-shape object should allocate only the clone body");
-    ASSERT_TRUE(((xrt_json_t *) clone.ptr)->shape == &shape,
+    ASSERT_TRUE(((xrt_object_t *) clone.ptr)->shape == &shape,
                 "clone should share the process-lifetime descriptor");
-    ASSERT_TRUE(XR_TO_INT(xrt_json_get_field(clone, 0)) == 42,
+    ASSERT_TRUE(XR_TO_INT(xrt_object_get_field(clone, 0)) == 42,
                 "clone should preserve the fixed field value");
-    (void) xrt_json_set_storage(clone, XR_OBJ_STORAGE_NORMAL);
-    ASSERT_TRUE(((xrt_json_t *) clone.ptr)->shape == &shape,
+    (void) xrt_object_set_storage(clone, XR_OBJ_STORAGE_NORMAL);
+    ASSERT_TRUE(((xrt_object_t *) clone.ptr)->shape == &shape,
                 "storage promotion should not replace or own the descriptor");
     destroy_object(clone);
+    destroy_object(source);
+}
+
+static void test_json_encode_retains_borrowed_source_strings(void) {
+    static const char *names[] = {"name"};
+    XrValue source = xrt_object_new_shape(test_static_shape(1, names));
+    XrValue name = xr_box_str("Ada");
+    xrt_object_set_field(source, 0, name);
+    XrObjHeader *name_header = XRT_ARC_HDR(name.ptr);
+
+    ASSERT_TRUE(atomic_load_explicit(&name_header->refcount, memory_order_relaxed) == XR_RC_INIT,
+                "the source structural object should initially be the string's sole owner");
+    XrValue encoded = xrt_json_encode(source);
+    ASSERT_TRUE(XR_IS_MAP(encoded), "JSON.value should encode a structural object as a Map");
+    ASSERT_TRUE(atomic_load_explicit(&name_header->refcount, memory_order_relaxed) ==
+                    XR_RC_INIT + 1,
+                "the encoded Map should independently retain a borrowed source string");
+    xrt_release(encoded);
+    ASSERT_TRUE(atomic_load_explicit(&name_header->refcount, memory_order_relaxed) == XR_RC_INIT,
+                "releasing the encoded Map should leave the source string alive");
+    ASSERT_TRUE(strcmp(xr_str_data(xrt_object_get_field(source, 0)), "Ada") == 0,
+                "releasing the encoded Map must not corrupt the source object");
     destroy_object(source);
 }
 
@@ -207,8 +237,8 @@ static void test_shape_guard_checks_table_after_key_hit(void) {
     destroy_object(object);
 }
 
-static XrValue decode_with_kinds(XrValue data, int64_t field_count, const char *const *names,
-                                 const uint8_t *kinds) {
+static XrValue decode_with_kinds_policy(XrValue data, int64_t field_count, const char *const *names,
+                                        const uint8_t *kinds, int ignore_unknown_fields) {
     XrJsonDecodeFieldSpec *fields =
         (XrJsonDecodeFieldSpec *) calloc((size_t) field_count, sizeof(XrJsonDecodeFieldSpec));
     if (!fields)
@@ -218,9 +248,14 @@ static XrValue decode_with_kinds(XrValue data, int64_t field_count, const char *
         fields[i].value_kind = kinds[i];
     }
     XrValue decoded = xrt_json_decode_struct_object(data, test_static_shape(field_count, names),
-                                                    field_count, fields);
+                                                    field_count, fields, ignore_unknown_fields);
     free(fields);
     return decoded;
+}
+
+static XrValue decode_with_kinds(XrValue data, int64_t field_count, const char *const *names,
+                                 const uint8_t *kinds) {
+    return decode_with_kinds_policy(data, field_count, names, kinds, 0);
 }
 
 static void test_decode_validates_each_primitive_field(void) {
@@ -230,23 +265,23 @@ static void test_decode_validates_each_primitive_field(void) {
     XrValue source = user_json();
     XrValue decoded = decode_with_kinds(source, 4, names, kinds);
     ASSERT_TRUE(!XR_IS_NULL(decoded), "valid typed Json should decode");
-    ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded.ptr) == XRT_OBJECT_STRUCT,
+    ASSERT_TRUE(xrt_object_domain((xrt_object_t *) decoded.ptr) == XRT_OBJECT_STRUCT,
                 "decode should construct a structural object");
     destroy_object(decoded);
 
-    xrt_json_set_field(source, 0, XR_FROM_INT(1));
+    json_object_set(source, "name", XR_FROM_INT(1));
     ASSERT_TRUE(XR_IS_NULL(decode_with_kinds(source, 4, names, kinds)),
                 "string field must reject an integer");
-    xrt_json_set_field(source, 0, xr_box_str("Ada"));
-    xrt_json_set_field(source, 1, XR_FROM_FLOAT(37.0));
+    json_object_set(source, "name", xr_box_str("Ada"));
+    json_object_set(source, "age", XR_FROM_FLOAT(37.0));
     ASSERT_TRUE(XR_IS_NULL(decode_with_kinds(source, 4, names, kinds)),
                 "int field must reject a float");
-    xrt_json_set_field(source, 1, XR_FROM_INT(37));
-    xrt_json_set_field(source, 2, XR_FROM_INT(1));
+    json_object_set(source, "age", XR_FROM_INT(37));
+    json_object_set(source, "active", XR_FROM_INT(1));
     ASSERT_TRUE(XR_IS_NULL(decode_with_kinds(source, 4, names, kinds)),
                 "bool field must reject an integer");
-    xrt_json_set_field(source, 2, XR_TRUE_VAL);
-    xrt_json_set_field(source, 3, XR_FROM_INT(9));
+    json_object_set(source, "active", XR_TRUE_VAL);
+    json_object_set(source, "score", XR_FROM_INT(9));
     ASSERT_TRUE(XR_IS_NULL(decode_with_kinds(source, 4, names, kinds)),
                 "float field must reject an integer");
     destroy_object(source);
@@ -256,8 +291,8 @@ static void test_decode_distinguishes_nullable_and_missing(void) {
     static const char *names[] = {"name"};
     const uint8_t nullable[] = {XR_JSON_VALUE_STRING | XR_JSON_VALUE_NULLABLE};
     const uint8_t required[] = {XR_JSON_VALUE_STRING};
-    XrValue source = xrt_json_new_named(1, names);
-    xrt_json_set_field(source, 0, XR_NULL_VAL);
+    XrValue source = json_object_new(1);
+    json_object_set(source, "name", XR_NULL_VAL);
 
     XrValue decoded = decode_with_kinds(source, 1, names, nullable);
     ASSERT_TRUE(!XR_IS_NULL(decoded), "nullable string field should accept null");
@@ -265,10 +300,10 @@ static void test_decode_distinguishes_nullable_and_missing(void) {
     ASSERT_TRUE(XR_IS_NULL(decode_with_kinds(source, 1, names, required)),
                 "required string field should reject null");
 
-    static const char *missing_names[] = {"other"};
-    XrValue missing = xrt_json_new_named(1, missing_names);
-    ASSERT_TRUE(XR_IS_NULL(decode_with_kinds(missing, 1, names, nullable)),
-                "nullable does not make a missing field optional");
+    XrValue missing = json_object_new(0);
+    XrValue missing_decoded = decode_with_kinds(missing, 1, names, nullable);
+    ASSERT_TRUE(!XR_IS_NULL(missing_decoded), "a missing nullable field should decode to null");
+    destroy_object(missing_decoded);
     destroy_object(missing);
     destroy_object(source);
 }
@@ -276,11 +311,26 @@ static void test_decode_distinguishes_nullable_and_missing(void) {
 static void test_decode_json_field_accepts_null(void) {
     static const char *names[] = {"payload"};
     static const uint8_t kinds[] = {XR_JSON_VALUE_JSON};
-    XrValue source = xrt_json_new_named(1, names);
-    xrt_json_set_field(source, 0, XR_NULL_VAL);
+    XrValue source = json_object_new(1);
+    json_object_set(source, "payload", XR_NULL_VAL);
 
     XrValue decoded = decode_with_kinds(source, 1, names, kinds);
     ASSERT_TRUE(!XR_IS_NULL(decoded), "Json includes null without a redundant nullable wrapper");
+    destroy_object(decoded);
+    destroy_object(source);
+}
+
+static void test_decode_unknown_field_policy_is_explicit(void) {
+    static const char *names[] = {"name"};
+    static const uint8_t kinds[] = {XR_JSON_VALUE_STRING};
+    XrValue source = json_object_new(2);
+    json_object_set(source, "name", xr_box_str("Ada"));
+    json_object_set(source, "future", XR_FROM_INT(1));
+
+    ASSERT_TRUE(XR_IS_NULL(decode_with_kinds_policy(source, 1, names, kinds, 0)),
+                "typed decode should reject unknown fields by default");
+    XrValue decoded = decode_with_kinds_policy(source, 1, names, kinds, 1);
+    ASSERT_TRUE(!XR_IS_NULL(decoded), "explicit Ignore should admit unknown fields");
     destroy_object(decoded);
     destroy_object(source);
 }
@@ -298,29 +348,29 @@ static void test_decode_nested_object_field(void) {
         {"label", XR_JSON_VALUE_STRING, NULL, 0, NULL},
     };
 
-    XrValue nested = xrt_struct_object_new_named(2, nested_names);
-    xrt_json_set_field(nested, 0, XR_FROM_INT(7));
-    xrt_json_set_field(nested, 1, XR_TRUE_VAL);
-    XrValue source = xrt_json_new_named(2, envelope_names);
-    xrt_json_set_field(source, 0, nested);
-    xrt_json_set_field(source, 1, xr_box_str("ok"));
+    XrValue nested = json_object_new(2);
+    json_object_set(nested, "id", XR_FROM_INT(7));
+    json_object_set(nested, "ok", XR_TRUE_VAL);
+    XrValue source = json_object_new(2);
+    json_object_set(source, "nested", nested);
+    json_object_set(source, "label", xr_box_str("ok"));
 
     XrValue decoded = xrt_json_decode_struct_object(source, test_static_shape(2, envelope_names), 2,
-                                                    envelope_fields);
+                                                    envelope_fields, 0);
     ASSERT_TRUE(!XR_IS_NULL(decoded), "nested structural object field should decode");
-    XrValue decoded_nested = xrt_json_get_name_owned(decoded, "nested");
+    XrValue decoded_nested = xrt_object_get_name_owned(decoded, "nested");
     ASSERT_TRUE(decoded_nested.tag == XR_TAG_PTR && decoded_nested.ptr,
                 "nested structural object decode should materialize a nested object");
-    ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded_nested.ptr) == XRT_OBJECT_STRUCT,
+    ASSERT_TRUE(xrt_object_domain((xrt_object_t *) decoded_nested.ptr) == XRT_OBJECT_STRUCT,
                 "nested field should become a structural object");
-    ASSERT_TRUE(XR_TO_INT(xrt_json_get_field(decoded_nested, 0)) == 7,
+    ASSERT_TRUE(XR_TO_INT(xrt_object_get_field(decoded_nested, 0)) == 7,
                 "nested int field should be copied");
     destroy_object(decoded_nested);
     destroy_object(decoded);
 
-    xrt_json_set_field(nested, 0, xr_box_str("bad"));
+    json_object_set(nested, "id", xr_box_str("bad"));
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_struct_object(
-                    source, test_static_shape(2, envelope_names), 2, envelope_fields)),
+                    source, test_static_shape(2, envelope_names), 2, envelope_fields, 0)),
                 "nested structural object validation should reject wrong nested primitive");
     destroy_object(source);
 }
@@ -343,35 +393,35 @@ static void test_decode_deep_nested_object_field(void) {
          test_static_shape(2, address_names)},
     };
 
-    XrValue geo = xrt_json_new_named(2, geo_names);
-    xrt_json_set_field(geo, 0, XR_FROM_FLOAT(30.25));
-    xrt_json_set_field(geo, 1, XR_TRUE_VAL);
-    XrValue address = xrt_json_new_named(2, address_names);
-    xrt_json_set_field(address, 0, xr_box_str("Hangzhou"));
-    xrt_json_set_field(address, 1, geo);
-    XrValue source = xrt_json_new_named(2, profile_names);
-    xrt_json_set_field(source, 0, xr_box_str("Dana"));
-    xrt_json_set_field(source, 1, address);
+    XrValue geo = json_object_new(2);
+    json_object_set(geo, "lat", XR_FROM_FLOAT(30.25));
+    json_object_set(geo, "verified", XR_TRUE_VAL);
+    XrValue address = json_object_new(2);
+    json_object_set(address, "city", xr_box_str("Hangzhou"));
+    json_object_set(address, "geo", geo);
+    XrValue source = json_object_new(2);
+    json_object_set(source, "name", xr_box_str("Dana"));
+    json_object_set(source, "address", address);
 
     XrValue decoded = xrt_json_decode_struct_object(source, test_static_shape(2, profile_names), 2,
-                                                    profile_fields);
+                                                    profile_fields, 0);
     ASSERT_TRUE(!XR_IS_NULL(decoded), "deep nested structural object field should decode");
-    XrValue decoded_address = xrt_json_get_name_owned(decoded, "address");
-    XrValue decoded_geo = xrt_json_get_name_owned(decoded_address, "geo");
-    ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded_address.ptr) == XRT_OBJECT_STRUCT,
+    XrValue decoded_address = xrt_object_get_name_owned(decoded, "address");
+    XrValue decoded_geo = xrt_object_get_name_owned(decoded_address, "geo");
+    ASSERT_TRUE(xrt_object_domain((xrt_object_t *) decoded_address.ptr) == XRT_OBJECT_STRUCT,
                 "second-level nested object should become a structural object");
-    ASSERT_TRUE(xrt_object_domain((xrt_json_t *) decoded_geo.ptr) == XRT_OBJECT_STRUCT,
+    ASSERT_TRUE(xrt_object_domain((xrt_object_t *) decoded_geo.ptr) == XRT_OBJECT_STRUCT,
                 "third-level nested object should become a structural object");
-    ASSERT_TRUE(XR_IS_BOOL(xrt_json_get_field(decoded_geo, 1)) &&
-                    XR_TO_BOOL(xrt_json_get_field(decoded_geo, 1)),
+    ASSERT_TRUE(XR_IS_BOOL(xrt_object_get_field(decoded_geo, 1)) &&
+                    XR_TO_BOOL(xrt_object_get_field(decoded_geo, 1)),
                 "deep nested bool field should be copied");
     destroy_object(decoded_geo);
     destroy_object(decoded_address);
     destroy_object(decoded);
 
-    xrt_json_set_field(geo, 1, xr_box_str("bad"));
+    json_object_set(geo, "verified", xr_box_str("bad"));
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_struct_object(
-                    source, test_static_shape(2, profile_names), 2, profile_fields)),
+                    source, test_static_shape(2, profile_names), 2, profile_fields, 0)),
                 "deep nested validation should reject wrong leaf type");
     destroy_object(source);
 }
@@ -385,20 +435,21 @@ static void test_decode_validates_array_json_field(void) {
         {"items", XR_JSON_VALUE_ARRAY, item_schema, 1,
          (const XrtObjectShape *) (uintptr_t) XR_ELEM_ANY},
     };
-    XrValue source = xrt_json_new_named(1, names);
+    XrValue source = json_object_new(1);
     XrValue items = xrt_array_with_capacity(2);
     xrt_array_push(items, XR_FROM_INT(1));
     xrt_array_push(items, XR_TRUE_VAL);
-    xrt_json_set_field(source, 0, items);
+    json_object_set(source, "items", items);
 
-    XrValue decoded = xrt_json_decode_struct_object(source, test_static_shape(1, names), 1, fields);
+    XrValue decoded =
+        xrt_json_decode_struct_object(source, test_static_shape(1, names), 1, fields, 0);
     ASSERT_TRUE(!XR_IS_NULL(decoded), "Array<Json> field should accept a JSON array");
     destroy_object(decoded);
 
-    xrt_json_set_field(source, 0, xr_box_str("not-array"));
-    ASSERT_TRUE(
-        XR_IS_NULL(xrt_json_decode_struct_object(source, test_static_shape(1, names), 1, fields)),
-        "Array<Json> field should reject a scalar");
+    json_object_set(source, "items", xr_box_str("not-array"));
+    ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_struct_object(source, test_static_shape(1, names), 1,
+                                                         fields, 0)),
+                "Array<Json> field should reject a scalar");
     destroy_object(source);
 }
 
@@ -421,52 +472,53 @@ static void test_decode_mixed_nested_object_and_array_json_fields(void) {
         {"active", XR_JSON_VALUE_BOOL, NULL, 0, NULL},
     };
 
-    XrValue source = xrt_json_new_named(4, source_names);
+    XrValue source = json_object_new(4);
     XrValue tags = xrt_array_with_capacity(3);
     xrt_array_push(tags, xr_box_str("ops"));
     xrt_array_push(tags, XR_FROM_INT(3));
     xrt_array_push(tags, XR_NULL_VAL);
-    XrValue address = xrt_json_new_named(2, nested_names);
-    xrt_json_set_field(address, 0, xr_box_str("Hangzhou"));
-    xrt_json_set_field(address, 1, XR_FROM_INT(310000));
-    xrt_json_set_field(source, 0, xr_box_str("Dana"));
-    xrt_json_set_field(source, 1, tags);
-    xrt_json_set_field(source, 2, address);
-    xrt_json_set_field(source, 3, XR_TRUE_VAL);
+    XrValue address = json_object_new(2);
+    json_object_set(address, "city", xr_box_str("Hangzhou"));
+    json_object_set(address, "zip", XR_FROM_INT(310000));
+    json_object_set(source, "name", xr_box_str("Dana"));
+    json_object_set(source, "tags", tags);
+    json_object_set(source, "address", address);
+    json_object_set(source, "active", XR_TRUE_VAL);
 
     XrValue decoded =
-        xrt_json_decode_struct_object(source, test_static_shape(4, source_names), 4, fields);
+        xrt_json_decode_struct_object(source, test_static_shape(4, source_names), 4, fields, 0);
     ASSERT_TRUE(!XR_IS_NULL(decoded), "mixed typed Json should decode");
-    XrValue decoded_active = xrt_json_get_field(decoded, 3);
+    XrValue decoded_active = xrt_object_get_field(decoded, 3);
     ASSERT_TRUE(XR_IS_BOOL(decoded_active) && XR_TO_BOOL(decoded_active),
                 "bool field should be copied after nested structural object and Array<Json>");
-    XrValue decoded_address = xrt_json_get_name_owned(decoded, "address");
+    XrValue decoded_address = xrt_object_get_name_owned(decoded, "address");
     ASSERT_TRUE(!XR_IS_NULL(decoded_address), "nested address should be materialized");
-    ASSERT_TRUE(XR_TO_INT(xrt_json_get_field(decoded_address, 1)) == 310000,
+    ASSERT_TRUE(XR_TO_INT(xrt_object_get_field(decoded_address, 1)) == 310000,
                 "nested int field should survive mixed decode");
     destroy_object(decoded_address);
     destroy_object(decoded);
 
-    xrt_json_set_field(address, 1, xr_box_str("bad"));
+    json_object_set(address, "zip", xr_box_str("bad"));
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_struct_object(source, test_static_shape(4, source_names),
-                                                         4, fields)),
+                                                         4, fields, 0)),
                 "mixed decode should reject wrong nested primitive");
-    xrt_json_set_field(address, 1, XR_FROM_INT(310000));
-    xrt_json_set_field(source, 1, xr_box_str("not-array"));
+    json_object_set(address, "zip", XR_FROM_INT(310000));
+    json_object_set(source, "tags", xr_box_str("not-array"));
     ASSERT_TRUE(XR_IS_NULL(xrt_json_decode_struct_object(source, test_static_shape(4, source_names),
-                                                         4, fields)),
+                                                         4, fields, 0)),
                 "mixed decode should reject non-array Array<Json> field");
     destroy_object(source);
 }
 
 static int parse_typed_for_test(const char *text, const XrtObjectShape *shape, int64_t field_count,
                                 const XrJsonDecodeFieldSpec *fields, XrValue *out,
-                                XrtJsonTypedParseError *error) {
+                                XrtJsonTypedParseError *error, int ignore_unknown_fields) {
     xrt_json_parser_t parser = {
         .src = text,
         .end = text ? text + strlen(text) : text,
         .pos = text,
         .depth = 0,
+        .ignore_unknown_fields = ignore_unknown_fields != 0,
     };
     memset(error, 0, sizeof(*error));
     *out = XR_NULL_VAL;
@@ -495,7 +547,7 @@ static void test_parse_typed_direct_has_no_intermediate_dom(void) {
     XrValue parsed = XR_NULL_VAL;
     XrtJsonTypedParseError error;
 
-    ASSERT_TRUE(parse_typed_for_test("{\"count\":7}", shape, 1, fields, &parsed, &error),
+    ASSERT_TRUE(parse_typed_for_test("{\"count\":7}", shape, 1, fields, &parsed, &error, 0),
                 "typed parse baseline should construct the target object");
     destroy_object(parsed);
     size_t baseline_allocations = g_allocations - baseline_allocations_before;
@@ -505,12 +557,19 @@ static void test_parse_typed_direct_has_no_intermediate_dom(void) {
 
     size_t allocations_before = g_allocations;
     size_t frees_before = g_frees;
+    ASSERT_TRUE(!parse_typed_for_test("{\"ignored\":{\"deep\":[1,2,3]},\"count\":7}", shape, 1,
+                                      fields, &parsed, &error, 0),
+                "typed parse should reject unknown fields by default");
+    ASSERT_TRUE(strcmp(error.path, "$.ignored") == 0 && strcmp(error.actual, "unknown") == 0,
+                "unknown-field rejection should identify the exact path");
+    allocations_before = g_allocations;
+    frees_before = g_frees;
     ASSERT_TRUE(parse_typed_for_test("{\"ignored\":{\"deep\":[1,2,3]},\"count\":7}", shape, 1,
-                                     fields, &parsed, &error),
-                "typed parse should skip unknown Json without materializing it");
+                                     fields, &parsed, &error, 1),
+                "explicit Ignore should skip unknown JSON without materializing it");
     ASSERT_TRUE(g_allocations - allocations_before == baseline_allocations + 1,
                 "ignored nested Json should allocate only its top-level key scratch");
-    ASSERT_TRUE(XR_TO_INT(xrt_json_get_field(parsed, 0)) == 7,
+    ASSERT_TRUE(XR_TO_INT(xrt_object_get_field(parsed, 0)) == 7,
                 "typed parse should populate the canonical target slot");
     destroy_object(parsed);
     ASSERT_TRUE(g_frees - frees_before == g_allocations - allocations_before,
@@ -536,7 +595,7 @@ static void test_parse_typed_direct_reports_stable_errors_and_unwinds(void) {
     XrtJsonTypedParseError error;
 
     ASSERT_TRUE(!parse_typed_for_test("{\"nested\":{\"label\":\"owned\",\"ok\":1},\"id\":7}", shape,
-                                      2, fields, &parsed, &error),
+                                      2, fields, &parsed, &error, 0),
                 "typed parse should reject a wrong nested token kind");
     ASSERT_TRUE(strcmp(error.path, "$.nested.ok") == 0,
                 "typed parse should retain the precise nested Json path");
@@ -547,13 +606,13 @@ static void test_parse_typed_direct_reports_stable_errors_and_unwinds(void) {
 
     ASSERT_TRUE(
         !parse_typed_for_test("{\"nested\":{\"label\":\"x\",\"ok\":true},\"id\":7,\"id\":8}", shape,
-                              2, fields, &parsed, &error),
+                              2, fields, &parsed, &error, 0),
         "typed parse should reject duplicate target fields");
     ASSERT_TRUE(strcmp(error.path, "$.id") == 0 && strcmp(error.actual, "duplicate") == 0,
                 "duplicate-field errors should identify the target path");
 
     ASSERT_TRUE(!parse_typed_for_test("{\"nested\":{\"label\":\"x\",\"ok\":true}}", shape, 2,
-                                      fields, &parsed, &error),
+                                      fields, &parsed, &error, 0),
                 "typed parse should reject missing required fields");
     ASSERT_TRUE(strcmp(error.path, "$.id") == 0 && strcmp(error.actual, "missing") == 0,
                 "missing-field errors should identify the target path");
@@ -689,10 +748,12 @@ static void test_derived_value_struct_parse_and_decode_own_references(void) {
 int main(void) {
     test_static_shape_is_zero_copy_and_header_shrinks();
     test_clone_and_storage_keep_static_shape();
+    test_json_encode_retains_borrowed_source_strings();
     test_shape_guard_checks_table_after_key_hit();
     test_decode_validates_each_primitive_field();
     test_decode_distinguishes_nullable_and_missing();
     test_decode_json_field_accepts_null();
+    test_decode_unknown_field_policy_is_explicit();
     test_decode_nested_object_field();
     test_decode_deep_nested_object_field();
     test_decode_validates_array_json_field();

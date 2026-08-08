@@ -623,7 +623,7 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "    return xrt_struct_object_new_named(field_count, field_names);\n"
         "}\n"
         "static void xrt_runtime_object_set(XrValue object, int64_t field_index, XrValue value) {\n"
-        "    xrt_json_set_field(object, (int)field_index, value);\n"
+        "    xrt_object_set_field(object, (int)field_index, value);\n"
         "}\n"
         "static XrValue xrt_runtime_enum_new(const char *enum_name, const char *member_name, "
         "int64_t member_index) {\n"

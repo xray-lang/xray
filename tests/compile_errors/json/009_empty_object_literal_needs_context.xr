@@ -1,2 +1,1 @@
-var empty = {}
-
+type User = { name?: string }

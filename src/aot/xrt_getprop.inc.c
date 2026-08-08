@@ -46,15 +46,5 @@ static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
     }
     if (obj.tag == XR_TAG_BUFFER)
         return xrt_buffer_method_0(obj, (int) symbol_id);
-    if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0) {
-        if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE) {
-            XrValue v = xrt_json_get_name(obj, "length");
-            if (!XR_IS_NULL(v))
-                return v;
-            return xrt_json_get_name(obj, "size");
-        }
-        if (symbol_id == XRT_SYM_IS_EMPTY)
-            return xrt_json_get_name(obj, "isEmpty");
-    }
     return XR_NULL_VAL;
 }

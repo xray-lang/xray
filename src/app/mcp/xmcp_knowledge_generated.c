@@ -626,7 +626,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "publish",
-        .signature = "(topic: string, value: Json): bool",
+        .signature = "(topic: string, value: JSON.Value): bool",
         .summary = "Publish to topic",
     },
     {
@@ -1496,6 +1496,26 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "HttpRequest.json",
+        .signature = "(): T",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.jsonObject",
+        .signature = "(): JSON.Object",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.jsonValue",
+        .signature = "(): JSON.Value",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.jsonWithRest",
+        .signature = "(): JSON.WithRest<T>",
+        .summary = "",
+    },
+    {
         .name = "HttpRequest.method",
         .signature = ": HttpMethod",
         .summary = "",
@@ -1547,7 +1567,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpResponse.json",
-        .signature = "(): Json",
+        .signature = "(): T",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.jsonObject",
+        .signature = "(): JSON.Object",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.jsonValue",
+        .signature = "(): JSON.Value",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.jsonWithRest",
+        .signature = "(): JSON.WithRest<T>",
         .summary = "",
     },
     {
@@ -1913,6 +1948,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "isRedirectStatus",
         .signature = "(status: int): bool",
+        .summary = "",
+    },
+    {
+        .name = "json",
+        .signature = "(value: T, status: int = 200): HttpResponse",
         .summary = "",
     },
     {
@@ -2355,133 +2395,133 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     {
-        .name = "Json",
-        .signature = "Json",
+        .name = "JSON",
+        .signature = "JSON",
         .summary = "",
     },
     {
-        .name = "Json.containsKey",
-        .signature = "(obj: Json, key: string): bool",
+        .name = "JSON.asArray",
+        .signature = "(value: JSON.Value): Array<JSON.Value>?",
         .summary = "",
     },
     {
-        .name = "Json.decode",
-        .signature = "(value: Json): T?",
+        .name = "JSON.asObject",
+        .signature = "(value: JSON.Value): JSON.Object?",
         .summary = "",
     },
     {
-        .name = "Json.encode",
-        .signature = "(value: T): Json",
+        .name = "JSON.containsPath",
+        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): bool",
         .summary = "",
     },
     {
-        .name = "Json.entries",
-        .signature = "(): Array<(string, Json)>",
+        .name = "JSON.decode",
+        .signature = "(value: JSON.Value, unknown?: JSON.UnknownFields): T?",
         .summary = "",
     },
     {
-        .name = "Json.entries",
-        .signature = "(obj: Json): Array<(string, Json)>",
+        .name = "JSON.decodeObject",
+        .signature = "(value: JSON.Object, unknown?: JSON.UnknownFields): T?",
         .summary = "",
     },
     {
-        .name = "Json.entriesIterator",
-        .signature = "(): Iterator<(string, Json)>",
+        .name = "JSON.get",
+        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): T?",
         .summary = "",
     },
     {
-        .name = "Json.get",
-        .signature = "(obj: Json, key: string, default?: T): Json",
+        .name = "JSON.isArray",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isArray",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isBool",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isBool",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isFloat",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isFloat",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isInt",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isInt",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isNull",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isNull",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isObject",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isObject",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isString",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isString",
-        .signature = "(value: Json): bool",
-        .summary = "",
-    },
-    {
-        .name = "Json.isValid",
+        .name = "JSON.isValid",
         .signature = "(text: string, strict?: bool): bool",
         .summary = "",
     },
     {
-        .name = "Json.iterator",
-        .signature = "(): Iterator<string>",
+        .name = "JSON.kindOf",
+        .signature = "(value: JSON.Value): string",
         .summary = "",
     },
     {
-        .name = "Json.keys",
-        .signature = "(): Array<string>",
+        .name = "JSON.merge",
+        .signature = "(parts: JSON.WithRest<T>): JSON.Object",
         .summary = "",
     },
     {
-        .name = "Json.keys",
-        .signature = "(obj: Json): Array<string>",
+        .name = "JSON.parse",
+        .signature = "(text: string, unknown?: JSON.UnknownFields): T",
         .summary = "",
     },
     {
-        .name = "Json.kindOf",
-        .signature = "(value: Json): string",
+        .name = "JSON.parseObject",
+        .signature = "(text: string): JSON.Object",
         .summary = "",
     },
     {
-        .name = "Json.parse",
-        .signature = "(text: string): Json",
+        .name = "JSON.parseValue",
+        .signature = "(text: string): JSON.Value",
         .summary = "",
     },
     {
-        .name = "Json.stringify",
+        .name = "JSON.parseWithRest",
+        .signature = "(text: string, nestedUnknownFields?: JSON.UnknownFields): JSON.WithRest<T>",
+        .summary = "",
+    },
+    {
+        .name = "JSON.remove",
+        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): bool",
+        .summary = "",
+    },
+    {
+        .name = "JSON.require",
+        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): T",
+        .summary = "",
+    },
+    {
+        .name = "JSON.set",
+        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path, value: JSON.Value, createParents?: bool): ()",
+        .summary = "",
+    },
+    {
+        .name = "JSON.stringify",
         .signature = "(value: T, indent?: int): string",
         .summary = "",
     },
     {
-        .name = "Json.toString",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "Json.tryParse",
-        .signature = "(text: string): Json",
-        .summary = "",
-    },
-    {
-        .name = "Json.values",
-        .signature = "(): Array<Json>",
-        .summary = "",
-    },
-    {
-        .name = "Json.values",
-        .signature = "(obj: Json): Array<Json>",
+        .name = "JSON.value",
+        .signature = "(value: T): JSON.Value",
         .summary = "",
     },
 };
@@ -2499,7 +2539,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.child",
-        .signature = "(...fields: Json): Logger",
+        .signature = "(...fields: JSON.Value): Logger",
         .summary = "",
     },
     {
@@ -2509,17 +2549,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.debug",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
         .name = "Logger.error",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
         .name = "Logger.fatal",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
@@ -2529,7 +2569,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.info",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
@@ -2559,17 +2599,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.warn",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
         .name = "child",
-        .signature = "(...fields: Json): Logger",
+        .signature = "(...fields: JSON.Value): Logger",
         .summary = "",
     },
     {
         .name = "debug",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
@@ -2584,12 +2624,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "error",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
         .name = "fatal",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
@@ -2599,7 +2639,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "info",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
@@ -2624,7 +2664,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "warn",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
 };
@@ -6687,14 +6727,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var view: Slice<int> = arr[1:4]\n"
             "```\n"
             "\n"
-            "### Structural object / Json object\n"
+            "### Exact structural object / dynamic JSON object\n"
+            "Structural objects have compile-time-known fields and exact shapes. Dynamic JSON objects use `JSON.Object`, a pure alias for `Map<string, JSON.Value>`.\n"
             "```xray\n"
-            "// Object-shape/Json object literal: identifier or string key + colon ':'\n"
-            "var data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
-            "var user = { name: \"Bob\", age: 25 }       // default type is an exact object shape\n"
+            "// Structural-object literal: identifier or static string key + colon ':'\n"
+            "var user = { name: \"Bob\", age: 25 }       // exact object shape\n"
             "typeName(user)                            // \"object\"\n"
-            "data.name              // type: Json (field access returns Json)\n"
-            "data[\"name\"]           // equivalent\n"
             "user.name              // type: string; direct ordinal\n"
             "user[\"name\"]           // exactly equivalent to user.name; same direct ordinal\n"
             "\n"
@@ -6705,6 +6743,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "// Map literal: `#{}` prefix + `:`\n"
             "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, int>\n"
+            "var data: JSON.Object = #{\"name\": \"Alice\", \"age\": 30}\n"
+            "data[\"traceId\"] = \"req-1\"               // only Map has dynamic keys\n"
             "```\n"
             "```xray\n"
             "var p = { name: \"Alice\", age: 30 }\n"
@@ -6748,7 +6788,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Move into coroutine\n"
             "```xray\n"
             "var data = { value: 10 }\n"
-            "var task = go fn(d: Json) -> int {\n"
+            "var task = go fn(d: JSON.Object) -> int {\n"
             "    return d.value + 1\n"
             "}(move data)        // transfer data ownership to the coroutine; data is unusable afterwards\n"
             "```\n"
@@ -6848,7 +6888,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "for (i in 0..n) { print(i) }                  // range iteration (half-open)\n"
             "for (ch in \"hello\") { print(ch) }             // string characters (by Unicode scalar)\n"
             "for (key in someMap) { print(key) }           // single variable over Map \xe2\x86\x92 key\n"
-            "for (key in someJson) { print(key) }          // single variable over Json \xe2\x86\x92 key\n"
+            "for (key in jsonObject) { print(key) }        // JSON.Object is a Map; single variable \xe2\x86\x92 key\n"
             "for (color in Color) { print(color.name) }    // unit-only enum; yields Color values\n"
             "for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>\n"
             "    print(variant.name)\n"
@@ -6982,7 +7022,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var t1 = go worker(0, channel)\n"
             "\n"
             "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-            "var t2 = go fn(d: Json) -> int {\n"
+            "var t2 = go fn(d: JSON.Object) -> int {\n"
             "    return d.value * 2\n"
             "}(payload)\n"
             "\n"
@@ -7876,7 +7916,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "- `string` \xe2\x80\x94 UTF-8 string\n"
             "- `bool` \xe2\x80\x94 `true` / `false`\n"
             "- `()` \xe2\x80\x94 Unit, no return value\n"
-            "- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Json`, `Array<byte>`, `BigInt`\n"
+            "- exact structural objects `{ field: T }`\n"
+            "- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<byte>`, `BigInt`\n"
             "\n"
             "### Explicit conditions\n"
             "```xray\n"
@@ -8242,7 +8283,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
             "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
-            "| `cluster.publish` | `(topic: string, value: Json): bool` | Publish to topic |\n"
+            "| `cluster.publish` | `(topic: string, value: JSON.Value): bool` | Publish to topic |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
             "| `cluster.start` | `(config: ClusterConfig): bool` | Start cluster node |\n"
             "| `cluster.stop` | `(): ()` | Stop cluster node |\n"
@@ -8543,6 +8584,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpRequest.constructor` | `(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<byte>, contentLength: int, params: Map<string, string>): ()` |  |\n"
             "| `HttpRequest.contentLength` | `: int` |  |\n"
             "| `HttpRequest.headers` | `: Headers` |  |\n"
+            "| `HttpRequest.json` | `(): T` |  |\n"
+            "| `HttpRequest.jsonObject` | `(): JSON.Object` |  |\n"
+            "| `HttpRequest.jsonValue` | `(): JSON.Value` |  |\n"
+            "| `HttpRequest.jsonWithRest` | `(): JSON.WithRest<T>` |  |\n"
             "| `HttpRequest.method` | `: HttpMethod` |  |\n"
             "| `HttpRequest.params` | `: Map<string, string>` |  |\n"
             "| `HttpRequest.path` | `: string` |  |\n"
@@ -8553,7 +8598,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpResponse.constructor` | `(version: HttpVersion, status: int, reason: string, headers: Headers, body: Array<byte>): ()` |  |\n"
             "| `HttpResponse.headers` | `: Headers` |  |\n"
             "| `HttpResponse.isSuccess` | `(): bool` |  |\n"
-            "| `HttpResponse.json` | `(): Json` |  |\n"
+            "| `HttpResponse.json` | `(): T` |  |\n"
+            "| `HttpResponse.jsonObject` | `(): JSON.Object` |  |\n"
+            "| `HttpResponse.jsonValue` | `(): JSON.Value` |  |\n"
+            "| `HttpResponse.jsonWithRest` | `(): JSON.WithRest<T>` |  |\n"
             "| `HttpResponse.reason` | `: string` |  |\n"
             "| `HttpResponse.status` | `: int` |  |\n"
             "| `HttpResponse.text` | `(): string` |  |\n"
@@ -8627,6 +8675,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
+            "| `http.json` | `(value: T, status: int = 200): HttpResponse` |  |\n"
             "| `http.jsonResponse` | `(value: T, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
             "| `http.parseMethod` | `(token: string): HttpMethod?` |  |\n"
@@ -8755,53 +8804,57 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "json",
-        .summary = "Built-in Json utility class for parse/encode/stringify and object helpers",
+        .summary = "Typed and schema-less JSON boundaries, path operations, and serialization",
         .body =
-            "# Json built-in utility\n"
+            "# JSON prelude namespace\n"
             "\n"
-            "Json is a built-in utility class; use Json.parse(), Json.encode(), and Json.stringify() directly without import.\n"
+            "JSON is a prelude namespace, not a value type or importable module. Use JSON.Value for any JSON root and JSON.Object, an alias for Map<string, JSON.Value>, for dynamic object keys.\n"
             "\n"
-            "Use it directly without `import`.\n"
+            "Use `JSON.*` directly without `import`; choose typed parsing whenever the schema is known.\n"
             "\n"
-            "### Common helpers\n"
-            "- `Json.parse(text)`\n"
-            "- `Json.encode(value)`\n"
-            "- `Json.stringify(value, indent?)`\n"
-            "- `Json.isValid(text)` / `Json.tryParse(text)`\n"
-            "- `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)`\n"
-            "- `Json.containsKey(obj, key)` / `Json.get(obj, key, default?)`\n"
-            "- `len(obj)` for object, array, or string variants\n"
+            "### Parse and encode\n"
+            "- `JSON.parse<T>(text)` rejects unknown fields by default; pass `JSON.UnknownFields.Ignore` explicitly when required\n"
+            "- `JSON.parseObject(text)` returns `JSON.Object`; `JSON.parseValue(text)` accepts any JSON root\n"
+            "- `JSON.value(value)` explicitly encodes a composite value; JSON scalars widen implicitly\n"
+            "- `JSON.stringify(value, indent?)` serializes any value satisfying `JSON.Encodable`\n"
+            "- `JSON.parseWithRest<T>(text)` keeps unknown top-level fields in `rest: JSON.Object`\n"
+            "\n"
+            "### Dynamic access\n"
+            "- Use `JSON.Object` Map methods and subscripts for one-level dynamic keys\n"
+            "- Use `JSON.get<T>()`, `JSON.require<T>()`, `JSON.containsPath()`, `JSON.set()`, and `JSON.remove()` with `JSON.Path` for deep access\n"
+            "- Use `JSON.asObject()` / `JSON.asArray()` to unwrap a `JSON.Value` without copying\n"
+            "- `JSON.Value` itself has no dot access, subscript, iteration, or `len`\n"
             "\n"
             "## API\n"
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `Json` | `Json` |  |\n"
-            "| `Json.containsKey` | `(obj: Json, key: string): bool` |  |\n"
-            "| `Json.decode` | `(value: Json): T?` |  |\n"
-            "| `Json.encode` | `(value: T): Json` |  |\n"
-            "| `Json.entries` | `(): Array<(string, Json)>` |  |\n"
-            "| `Json.entries` | `(obj: Json): Array<(string, Json)>` |  |\n"
-            "| `Json.entriesIterator` | `(): Iterator<(string, Json)>` |  |\n"
-            "| `Json.get` | `(obj: Json, key: string, default?: T): Json` |  |\n"
-            "| `Json.isArray` | `(value: Json): bool` |  |\n"
-            "| `Json.isBool` | `(value: Json): bool` |  |\n"
-            "| `Json.isFloat` | `(value: Json): bool` |  |\n"
-            "| `Json.isInt` | `(value: Json): bool` |  |\n"
-            "| `Json.isNull` | `(value: Json): bool` |  |\n"
-            "| `Json.isObject` | `(value: Json): bool` |  |\n"
-            "| `Json.isString` | `(value: Json): bool` |  |\n"
-            "| `Json.isValid` | `(text: string, strict?: bool): bool` |  |\n"
-            "| `Json.iterator` | `(): Iterator<string>` |  |\n"
-            "| `Json.keys` | `(): Array<string>` |  |\n"
-            "| `Json.keys` | `(obj: Json): Array<string>` |  |\n"
-            "| `Json.kindOf` | `(value: Json): string` |  |\n"
-            "| `Json.parse` | `(text: string): Json` |  |\n"
-            "| `Json.stringify` | `(value: T, indent?: int): string` |  |\n"
-            "| `Json.toString` | `(): string` |  |\n"
-            "| `Json.tryParse` | `(text: string): Json` |  |\n"
-            "| `Json.values` | `(): Array<Json>` |  |\n"
-            "| `Json.values` | `(obj: Json): Array<Json>` |  |\n"
+            "| `JSON` | `JSON` |  |\n"
+            "| `JSON.asArray` | `(value: JSON.Value): Array<JSON.Value>?` |  |\n"
+            "| `JSON.asObject` | `(value: JSON.Value): JSON.Object?` |  |\n"
+            "| `JSON.containsPath` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): bool` |  |\n"
+            "| `JSON.decode` | `(value: JSON.Value, unknown?: JSON.UnknownFields): T?` |  |\n"
+            "| `JSON.decodeObject` | `(value: JSON.Object, unknown?: JSON.UnknownFields): T?` |  |\n"
+            "| `JSON.get` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): T?` |  |\n"
+            "| `JSON.isArray` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isBool` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isFloat` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isInt` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isNull` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isObject` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isString` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isValid` | `(text: string, strict?: bool): bool` |  |\n"
+            "| `JSON.kindOf` | `(value: JSON.Value): string` |  |\n"
+            "| `JSON.merge` | `(parts: JSON.WithRest<T>): JSON.Object` |  |\n"
+            "| `JSON.parse` | `(text: string, unknown?: JSON.UnknownFields): T` |  |\n"
+            "| `JSON.parseObject` | `(text: string): JSON.Object` |  |\n"
+            "| `JSON.parseValue` | `(text: string): JSON.Value` |  |\n"
+            "| `JSON.parseWithRest` | `(text: string, nestedUnknownFields?: JSON.UnknownFields): JSON.WithRest<T>` |  |\n"
+            "| `JSON.remove` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): bool` |  |\n"
+            "| `JSON.require` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): T` |  |\n"
+            "| `JSON.set` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path, value: JSON.Value, createParents?: bool): ()` |  |\n"
+            "| `JSON.stringify` | `(value: T, indent?: int): string` |  |\n"
+            "| `JSON.value` | `(value: T): JSON.Value` |  |\n"
             "",
         .symbols = _symbols_json,
         .symbol_count = (int)(sizeof(_symbols_json) / sizeof(_symbols_json[0])),
@@ -8822,32 +8875,32 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `Logger` | `Logger` |  |\n"
             "| `Logger.asyncMode` | `: bool` |  |\n"
-            "| `Logger.child` | `(...fields: Json): Logger` |  |\n"
+            "| `Logger.child` | `(...fields: JSON.Value): Logger` |  |\n"
             "| `Logger.constructor` | `(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()` |  |\n"
-            "| `Logger.debug` | `(...args: Json): ()` |  |\n"
-            "| `Logger.error` | `(...args: Json): ()` |  |\n"
-            "| `Logger.fatal` | `(...args: Json): ()` |  |\n"
+            "| `Logger.debug` | `(...args: JSON.Value): ()` |  |\n"
+            "| `Logger.error` | `(...args: JSON.Value): ()` |  |\n"
+            "| `Logger.fatal` | `(...args: JSON.Value): ()` |  |\n"
             "| `Logger.format` | `: LogFormat` |  |\n"
-            "| `Logger.info` | `(...args: Json): ()` |  |\n"
+            "| `Logger.info` | `(...args: JSON.Value): ()` |  |\n"
             "| `Logger.jsonContext` | `: string` |  |\n"
             "| `Logger.level` | `: LogLevel` |  |\n"
             "| `Logger.output` | `: Path?` |  |\n"
             "| `Logger.source` | `: bool` |  |\n"
             "| `Logger.textContext` | `: string` |  |\n"
-            "| `Logger.warn` | `(...args: Json): ()` |  |\n"
-            "| `log.child` | `(...fields: Json): Logger` |  |\n"
-            "| `log.debug` | `(...args: Json): ()` |  |\n"
+            "| `Logger.warn` | `(...args: JSON.Value): ()` |  |\n"
+            "| `log.child` | `(...fields: JSON.Value): Logger` |  |\n"
+            "| `log.debug` | `(...args: JSON.Value): ()` |  |\n"
             "| `log.enableAsync` | `(enabled: bool = true): ()` |  |\n"
             "| `log.enableSource` | `(enabled: bool = true): ()` |  |\n"
-            "| `log.error` | `(...args: Json): ()` |  |\n"
-            "| `log.fatal` | `(...args: Json): ()` |  |\n"
+            "| `log.error` | `(...args: JSON.Value): ()` |  |\n"
+            "| `log.fatal` | `(...args: JSON.Value): ()` |  |\n"
             "| `log.flush` | `(): ()` |  |\n"
-            "| `log.info` | `(...args: Json): ()` |  |\n"
+            "| `log.info` | `(...args: JSON.Value): ()` |  |\n"
             "| `log.isEnabled` | `(level: LogLevel): bool` |  |\n"
             "| `log.setFormat` | `(format: LogFormat): ()` |  |\n"
             "| `log.setLevel` | `(level: LogLevel): ()` |  |\n"
             "| `log.setOutput` | `(path: Path): ()` |  |\n"
-            "| `log.warn` | `(...args: Json): ()` |  |\n"
+            "| `log.warn` | `(...args: JSON.Value): ()` |  |\n"
             "",
         .symbols = _symbols_log,
         .symbol_count = (int)(sizeof(_symbols_log) / sizeof(_symbols_log[0])),
@@ -10099,7 +10152,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "## Types\n"
     "`int`, `float`, `string`, `bool`, `()` | `Array<T>`, `Map<K,V>`, `Set<T>`\n"
     "\n"
-    "`T?` for nullable values | `A | B` for unions | `Json`, `Array<byte>`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
+    "`T?` for nullable values | `A | B` for unions | exact `{ field: T }` objects | `JSON.Value`, `JSON.Object`, `Array<byte>`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
     "\n"
     "## Quoted literals\n"
     "`\"...\"` / `r\"...\"`: escaped / raw strings (both interpolate `${...}`)\n"
@@ -10125,7 +10178,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "for (i in 0..n) { print(i) }                  // range iteration (half-open)\n"
     "for (ch in \"hello\") { print(ch) }             // string characters (by Unicode scalar)\n"
     "for (key in someMap) { print(key) }           // single variable over Map \xe2\x86\x92 key\n"
-    "for (key in someJson) { print(key) }          // single variable over Json \xe2\x86\x92 key\n"
+    "for (key in jsonObject) { print(key) }        // JSON.Object is a Map; single variable \xe2\x86\x92 key\n"
     "for (color in Color) { print(color.name) }    // unit-only enum; yields Color values\n"
     "for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>\n"
     "    print(variant.name)\n"
@@ -10255,12 +10308,9 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var s: Set<int> = #[1, 2, 3]\n"
     "```\n"
     "```xray\n"
-    "// Object-shape/Json object literal: identifier or string key + colon ':'\n"
-    "var data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
-    "var user = { name: \"Bob\", age: 25 }       // default type is an exact object shape\n"
+    "// Structural-object literal: identifier or static string key + colon ':'\n"
+    "var user = { name: \"Bob\", age: 25 }       // exact object shape\n"
     "typeName(user)                            // \"object\"\n"
-    "data.name              // type: Json (field access returns Json)\n"
-    "data[\"name\"]           // equivalent\n"
     "user.name              // type: string; direct ordinal\n"
     "user[\"name\"]           // exactly equivalent to user.name; same direct ordinal\n"
     "\n"
@@ -10271,6 +10321,8 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "\n"
     "// Map literal: `#{}` prefix + `:`\n"
     "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, int>\n"
+    "var data: JSON.Object = #{\"name\": \"Alice\", \"age\": 30}\n"
+    "data[\"traceId\"] = \"req-1\"               // only Map has dynamic keys\n"
     "```\n"
     "\n"
     "## Concurrency\n"
@@ -10279,7 +10331,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var t1 = go worker(0, channel)\n"
     "\n"
     "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-    "var t2 = go fn(d: Json) -> int {\n"
+    "var t2 = go fn(d: JSON.Object) -> int {\n"
     "    return d.value * 2\n"
     "}(payload)\n"
     "\n"
@@ -10468,7 +10520,7 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "var t1 = go worker(0, channel)\n"
     "\n"
     "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-    "var t2 = go fn(d: Json) -> int {\n"
+    "var t2 = go fn(d: JSON.Object) -> int {\n"
     "    return d.value * 2\n"
     "}(payload)\n"
     "\n"
@@ -10482,7 +10534,7 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "```\n"
     "```xray\n"
     "var data = { value: 10 }\n"
-    "var task = go fn(d: Json) -> int {\n"
+    "var task = go fn(d: JSON.Object) -> int {\n"
     "    return d.value + 1\n"
     "}(move data)        // transfer data ownership to the coroutine; data is unusable afterwards\n"
     "```\n"
@@ -10618,7 +10670,7 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "\n"
     "Usage: `import <module>` then call `module.function()`. All listed modules ship in the Xray standard-library installation unit.\n"
     "\n"
-    "Built-in JSON helpers are exposed as `Json.parse()` / `Json.encode()` / `Json.stringify()` without `import`.\n"
+    "The prelude `JSON` namespace exposes `JSON.parse<T>()`, `JSON.parseObject()`, `JSON.value()`, and `JSON.stringify()` without an import; it is not an importable module or a value type.\n"
     "";
 
 // clang-format on

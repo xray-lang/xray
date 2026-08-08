@@ -1,7 +1,0 @@
-fn updateAge() -> int {
-    var j: Json = { name: "ada", age: 1 }
-    j.age = 2
-    return j.age
-}
-
-print(updateAge())

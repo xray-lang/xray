@@ -273,21 +273,6 @@ static inline XrValue xrt_string_entries(XrValue recv) {
     return arr;
 }
 
-static inline XrValue xrt_json_collect(XrValue recv, uint8_t kind) {
-    xrt_json_t *j = (xrt_json_t *) recv.ptr;
-    XrValue arr = xrt_array_with_capacity(xrt_json_iter_count(j));
-    xrt_iterator_t iter = {
-        .coll = recv,
-        .cursor = 0,
-        .index = 0,
-        .kind = kind,
-        .gen = NULL,
-    };
-    while (xrt_iterator_has_next(&iter))
-        xrt_array_push(arr, xrt_iterator_next(&iter));
-    return arr;
-}
-
 /* Return the receiver as an OWNED (+1) result.
  *
  * An arm that answers with its own receiver must still hand back a reference
@@ -561,23 +546,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return xrt_map_keys(m);
         if (sym == XRT_SYM_VALUES)
             return xrt_map_values(m);
-        if (sym == XRT_SYM_ITERATOR)
-            return xrt_iterator_new(recv, XRT_ITER_KEYS);
-        if (sym == XRT_SYM_ENTRIES_ITERATOR)
-            return xrt_iterator_new(recv, XRT_ITER_PAIRS);
-    }
-    if (xrt_is_json_object_value(recv)) {
-        xrt_json_t *j = (xrt_json_t *) recv.ptr;
-        if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
-            return XR_FROM_INT(xrt_json_iter_count(j));
-        if (sym == XRT_SYM_IS_EMPTY)
-            return XR_FROM_BOOL(xrt_json_iter_count(j) == 0);
-        if (sym == XRT_SYM_KEYS)
-            return xrt_json_collect(recv, XRT_ITER_KEYS);
-        if (sym == XRT_SYM_VALUES)
-            return xrt_json_collect(recv, XRT_ITER_VALUES);
         if (sym == XRT_SYM_ENTRIES)
-            return xrt_json_collect(recv, XRT_ITER_PAIRS);
+            return xrt_map_entries(m);
         if (sym == XRT_SYM_ITERATOR)
             return xrt_iterator_new(recv, XRT_ITER_KEYS);
         if (sym == XRT_SYM_ENTRIES_ITERATOR)
@@ -851,13 +821,10 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
     return XR_NULL_VAL;
 }
 
-static inline XrValue xrt_len_value(XrValue recv, int json_dynamic) {
+static inline XrValue xrt_len_value(XrValue recv) {
     XrValue result = xrt_method_0(recv, XRT_SYM_LENGTH);
     if (!XR_IS_NULL(result))
         return result;
-    if (json_dynamic)
-        xrt_throw_error(XR_ERR_TYPE_MISMATCH,
-                        "len(Json) requires an object, array, or string variant");
     xrt_throw_error(XR_ERR_TYPE_MISMATCH, "value does not implement Lengthable");
     return XR_NULL_VAL;
 }
@@ -866,10 +833,10 @@ static inline XrValue xrt_len_value(XrValue recv, int json_dynamic) {
  * inside an inline function gives the same single-evaluation guarantee as the
  * old GNU statement expression without leaking a compiler extension into
  * generated C. */
-static inline int64_t xrt_len_i64(XrValue recv, int json_dynamic) {
+static inline int64_t xrt_len_i64(XrValue recv) {
     if (recv.tag == XR_TAG_RANGE)
         return xrt_range_length_ptr((const xrt_range_t *) recv.ptr);
-    return XR_TO_INT(xrt_len_value(recv, json_dynamic));
+    return XR_TO_INT(xrt_len_value(recv));
 }
 
 static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {

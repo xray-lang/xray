@@ -1,7 +1,7 @@
-// Task 260: @derive(Json) nominal targets are constructed from verified schemas.
+// Task 260: @derive(JSON) nominal targets are constructed from verified schemas.
 // Class constructors are deliberately bypassed by both decode and direct typed parse.
 
-@derive(Json)
+@derive(JSON)
 class User {
     name: string
     age: int
@@ -13,7 +13,7 @@ class User {
     }
 }
 
-@derive(Json)
+@derive(JSON)
 class Envelope {
     user: User
     tags: Array<string>
@@ -27,13 +27,13 @@ class Envelope {
     }
 }
 
-@derive(Json)
+@derive(JSON)
 struct Point {
     x: int
     y: int
 }
 
-@derive(Json)
+@derive(JSON)
 struct Box {
     point: Point
     label: string
@@ -44,7 +44,7 @@ enum WireState {
     Done
 }
 
-@derive(Json)
+@derive(JSON)
 class Packet {
     state: WireState
     note: string?
@@ -56,57 +56,57 @@ class Packet {
     }
 }
 
-var parsed: User = Json.parse<User>("{\"name\":\"Ada\",\"age\":37}")
-var parsedJson = Json.encode(parsed)
-print(parsedJson.name)
-print(parsedJson.age)
+var parsed: User = JSON.parse<User>("{\"name\":\"Ada\",\"age\":37}")
+var parsedJson = JSON.value(parsed)
+print(JSON.require<string>(parsedJson, ["name"]))
+print(JSON.require<int>(parsedJson, ["age"]))
 
-var decoded = Json.decode<User>(Json.parse("{\"name\":\"Grace\",\"age\":42}"))
+var decoded = JSON.decode<User>(JSON.parseValue("{\"name\":\"Grace\",\"age\":42}"))
 print(decoded == null)
-var decodedJson = Json.encode(decoded!)
-print(decodedJson.name)
-print(decodedJson.age)
+var decodedJson = JSON.value(decoded!)
+print(JSON.require<string>(decodedJson, ["name"]))
+print(JSON.require<int>(decodedJson, ["age"]))
 
-var nested: Envelope = Json.parse<Envelope>(
+var nested: Envelope = JSON.parse<Envelope>(
     "{\"user\":{\"name\":\"Lin\",\"age\":29},\"tags\":[\"compiler\",\"vm\"],\"scores\":{\"a\":9}}"
 )
-var nestedJson = Json.encode(nested)
-print(nestedJson.user.name)
-print(nestedJson.tags[1])
-print(nestedJson.scores["a"])
+var nestedJson = JSON.value(nested)
+print(JSON.require<string>(nestedJson, ["user", "name"]))
+print(JSON.require<string>(nestedJson, ["tags", 1]))
+print(JSON.require<int>(nestedJson, ["scores", "a"]))
 
-print(Json.decode<User>(Json.parse("{\"name\":\"bad\",\"age\":true}")) == null)
+print(JSON.decode<User>(JSON.parseValue("{\"name\":\"bad\",\"age\":true}")) == null)
 
 fn exerciseDerivedStructs() {
-    var point: Point = Json.parse<Point>("{\"x\":3,\"y\":4}")
+    var point: Point = JSON.parse<Point>("{\"x\":3,\"y\":4}")
     print(point.x)
     print(point.y)
 
-    var box: Box = Json.parse<Box>("{\"point\":{\"x\":8,\"y\":9},\"label\":\"nested\"}")
+    var box: Box = JSON.parse<Box>("{\"point\":{\"x\":8,\"y\":9},\"label\":\"nested\"}")
     print(box.point.x)
     print(box.label)
-    var boxJson = Json.encode(box)
-    print(boxJson.point.x)
-    print(boxJson.label)
-    print(Json.stringify(box))
+    var boxJson = JSON.value(box)
+    print(JSON.require<int>(boxJson, ["point", "x"]))
+    print(JSON.require<string>(boxJson, ["label"]))
+    print(JSON.stringify(box))
 
-    var decodedBox = Json.decode<Box>(
-        Json.parse("{\"point\":{\"x\":11,\"y\":12},\"label\":\"decoded\"}")
+    var decodedBox = JSON.decode<Box>(
+        JSON.parseValue("{\"point\":{\"x\":11,\"y\":12},\"label\":\"decoded\"}")
     )
     print(decodedBox == null)
     var presentBox = decodedBox!
     print(presentBox.point.y)
     print(presentBox.label)
-    print(Json.decode<Box>(Json.parse("{\"point\":{\"x\":1},\"label\":\"bad\"}")) == null)
+    print(JSON.decode<Box>(JSON.parseValue("{\"point\":{\"x\":1},\"label\":\"bad\"}")) == null)
 
-    var packet: Packet = Json.parse<Packet>(
+    var packet: Packet = JSON.parse<Packet>(
         "{\"state\":\"Ready\",\"note\":null}"
     )
     print(packet.state.toString())
     print(packet.note == null)
-    var packetJson = Json.encode(packet)
-    print(packetJson.state)
-    print(Json.stringify(packet))
+    var packetJson = JSON.value(packet)
+    print(JSON.require<string>(packetJson, ["state"]))
+    print(JSON.stringify(packet))
 }
 
 exerciseDerivedStructs()

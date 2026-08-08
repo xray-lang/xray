@@ -27,7 +27,7 @@ semantics are unchanged.
 
 ## Inventory
 
-`python scripts/check_object_json_domain.py --root . --json` records:
+`python scripts/check_structural_object_json_map_boundary.py --root . --json` records:
 
 | Class | Matches |
 |---|---:|
@@ -51,7 +51,7 @@ Generated with `build/xray.exe build --native -O 2 -c`:
 
 | Workload | Generated C bytes | Hot access | Native image bytes |
 |---|---:|---|---:|
-| exact dot | 6,795 | `xrt_json_get_field(v, ordinal)` | 163,840 |
+| exact dot | 6,795 | `xrt_object_get_field(v, ordinal)` | 163,840 |
 | exact static bracket | 7,350 | `xrt_index_get(v, string)` | 182,272 |
 | construct/destroy | 6,779 | ordinal get + named construction | 163,840 |
 
@@ -87,7 +87,7 @@ cmake --preset default
 cmake --build build --target xray
 build/xray.exe --version --json
 build/xray.exe toolchain doctor --target native --json
-python scripts/check_object_json_domain.py --root . --json
+python scripts/check_structural_object_json_map_boundary.py --root . --json
 build/xray.exe build --native -O 2 -c -o <case>.c <case>.xr
 build/xray.exe build --native -O 2 -o <case>.exe <case>.xr
 ```

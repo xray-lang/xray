@@ -1,5 +1,0 @@
-contains=xaot-plan v0
-regex=object-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=field_set domain=0 syntax=1 action=direct_ordinal shape_count=1 shape_set=1 epoch=0 field_name=[0-9]+ result_type=0 field=1 evidence=0x1d reason=none
-regex=object-access-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ shape=[0-9]+ kind=field_get domain=0 syntax=1 action=direct_ordinal shape_count=1 shape_set=2 epoch=0 field_name=[0-9]+ result_type=0 field=1 evidence=0x1d reason=none
-c_regex=xrt_json_set_field\(v[0-9]+, 1, v[0-9]+\)
-c_regex=XrValue v[0-9]+ = xrt_json_get_field\(v[0-9]+, 1\);

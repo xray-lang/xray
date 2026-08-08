@@ -5,18 +5,18 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xjson_builtins.c - Json utility class (static methods only)
+ * xjson_builtins.c - JSON namespace class (static methods only)
  *
  * KEY CONCEPT:
- *   Json objects have no instance methods to avoid name conflicts
- *   with user-defined fields. All operations go through Json.xxx()
+ *   JSON object values have no instance methods to avoid name conflicts
+ *   with user-defined fields. All operations go through JSON.xxx()
  *   static methods. This eliminates the conflict between builtin
  *   method names (has, delete, keys, etc.) and user field names.
  *
  * WHY THIS DESIGN:
  *   - Json is an open-property data container, any property name
  *     could be user data, so instance methods would conflict.
- *   - Static methods (Json.keys(obj)) keep the `.` namespace
+ *   - Static methods (JSON.keys(obj)) keep the `.` namespace
  *     entirely for user data.
  */
 
@@ -65,7 +65,7 @@ static XrJsonRuntimeKind xr_json_runtime_kind(XrValue value) {
         return XR_JSON_RUNTIME_STRING;
     if (XR_IS_ARRAY(value))
         return XR_JSON_RUNTIME_ARRAY;
-    if (xr_value_is_json(value))
+    if (XR_IS_MAP(value))
         return XR_JSON_RUNTIME_OBJECT;
     return XR_JSON_RUNTIME_INVALID;
 }
@@ -75,7 +75,8 @@ static XrValue xr_json_static_kind_of(XrVMRuntime *X, XrValue self, XrValue *arg
     static const char *const names[] = {"null",   "bool",  "int",   "float",
                                         "string", "array", "object"};
     XrJsonRuntimeKind kind = nargs >= 1 ? xr_json_runtime_kind(args[0]) : XR_JSON_RUNTIME_INVALID;
-    XR_DCHECK(kind != XR_JSON_RUNTIME_INVALID, "Json.kindOf: value is outside the Json domain");
+    XR_DCHECK(kind != XR_JSON_RUNTIME_INVALID,
+              "JSON.kindOf: value is outside the JSON.Value domain");
     if (kind == XR_JSON_RUNTIME_INVALID)
         return xr_null();
     const char *name = names[kind];
@@ -99,128 +100,7 @@ XR_JSON_KIND_PREDICATE(xr_json_static_is_object, XR_JSON_RUNTIME_OBJECT)
 
 #undef XR_JSON_KIND_PREDICATE
 
-// Json.keys(obj) -> Array<string>
-static XrValue xr_json_static_keys(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
-    (void) self;
-    if (nargs < 1 || !xr_value_is_json(args[0]))
-        return xr_value_from_array(xr_array_new(NULL));
-
-    XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !json->klass)
-        return xr_value_from_array(xr_array_new(NULL));
-
-    XrArray *keys = xr_array_new(NULL);
-    XrClass *cls = json->klass;
-    for (uint16_t i = 0; i < cls->field_count; i++) {
-        const char *name = cls->fields[i].name;
-        if (name) {
-            xr_array_push(keys, xr_string_value(xr_string_intern(isolate, name, strlen(name), 0)));
-        }
-    }
-
-    return xr_value_from_array(keys);
-}
-
-// Json.values(obj) -> Array
-static XrValue xr_json_static_values(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
-    (void) isolate;
-    (void) self;
-    if (nargs < 1 || !xr_value_is_json(args[0]))
-        return xr_value_from_array(xr_array_new(NULL));
-
-    XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !json->klass)
-        return xr_value_from_array(xr_array_new(NULL));
-
-    XrArray *values = xr_array_new(NULL);
-    XrClass *cls = json->klass;
-    for (uint16_t i = 0; i < cls->field_count; i++) {
-        xr_array_push(values, xr_instance_get_dynamic_field(json, i));
-    }
-
-    return xr_value_from_array(values);
-}
-
-// Json.entries(obj) -> Array<(string, Json)>
-static XrValue xr_json_static_entries(XrVMRuntime *isolate, XrValue self, XrValue *args,
-                                      int nargs) {
-    (void) self;
-    if (nargs < 1 || !xr_value_is_json(args[0]))
-        return xr_value_from_array(xr_array_new(NULL));
-
-    XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !json->klass)
-        return xr_value_from_array(xr_array_new(NULL));
-
-    XrArray *entries = xr_array_new(NULL);
-    XrCoroutine *coro = NULL;
-    XrClass *cls = json->klass;
-    for (uint16_t i = 0; i < cls->field_count; i++) {
-        /* Each entry is a (key, value) tuple: heterogeneous arity-2
-         * product that destructures cleanly in user code via
-         * `for ((k, v) in Json.entries(obj))`. */
-        XrTuple *pair = xr_tuple_new(coro, 2);
-        if (pair) {
-            const char *name = cls->fields[i].name;
-            XrValue key_v = name ? xr_string_value(xr_string_intern(isolate, name, strlen(name), 0))
-                                 : xr_string_value(xr_string_intern(isolate, "", 0, 0));
-            xr_tuple_set(pair, 0, key_v);
-            xr_tuple_set(pair, 1, xr_instance_get_dynamic_field(json, i));
-        }
-        xr_array_push(entries, xr_value_from_tuple(pair));
-    }
-
-    return xr_value_from_array(entries);
-}
-
-// Json.containsKey(obj, key) -> bool
-static XrValue xr_json_static_contains_key(XrVMRuntime *isolate, XrValue self, XrValue *args,
-                                           int nargs) {
-    (void) self;
-    if (nargs < 2 || !xr_value_is_json(args[0]))
-        return xr_bool(false);
-
-    XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !json->klass)
-        return xr_bool(false);
-    if (!XR_IS_STRING(args[1]))
-        return xr_bool(false);
-
-    XrString *key_str = XR_TO_STRING(args[1]);
-    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
-    SymbolId sym = xr_symbol_lookup_in_table(symtab, key_str->data);
-    if (sym == SYMBOL_INVALID)
-        return xr_bool(false);
-
-    return xr_bool(xr_json_has_field(isolate, json, sym));
-}
-
-// Json.get(obj, key, default?) -> any
-static XrValue xr_json_static_get(XrVMRuntime *isolate, XrValue self, XrValue *args, int nargs) {
-    (void) self;
-    if (nargs < 2)
-        return xr_null();
-    if (!xr_value_is_json(args[0]))
-        return (nargs >= 3) ? args[2] : xr_null();
-
-    XrJson *json = xr_value_to_json(args[0]);
-    if (!json || !json->klass)
-        return (nargs >= 3) ? args[2] : xr_null();
-    if (!XR_IS_STRING(args[1]))
-        return (nargs >= 3) ? args[2] : xr_null();
-
-    XrString *key_str = XR_TO_STRING(args[1]);
-    XrSymbolTable *symtab = (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
-    SymbolId sym = xr_symbol_lookup_in_table(symtab, key_str->data);
-    if (sym == SYMBOL_INVALID)
-        return (nargs >= 3) ? args[2] : xr_null();
-
-    if (!xr_json_has_field(isolate, json, sym))
-        return (nargs >= 3) ? args[2] : xr_null();
-    return xr_json_get_by_key(isolate, json, key_str->data);
-}
-
-// Json.stringify(value, indent?) — thin wrapper that calls the core
+// JSON.stringify(value, indent?) — thin wrapper that calls the core
 // stringify engine and throws a TypeError on non-serializable types.
 static XrValue xr_json_builtin_stringify(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
     (void) self;
@@ -234,14 +114,14 @@ static XrValue xr_json_builtin_stringify(XrVMRuntime *X, XrValue self, XrValue *
 
     XrJsonStringifyResult r = xr_json_stringify_core(X, args[0], indent);
     if (r.has_error) {
-        XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID, "Json.stringify: %s", r.error_msg);
+        XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID, "JSON.stringify: %s", r.error_msg);
         xr_vm_unwind_with_trace(X, exc);
         return xr_null();
     }
     return r.result;
 }
 
-// Json.encode(value) — explicit typed-value -> Json boundary. This uses the
+// JSON.value(value) — explicit typed-value -> JSON.Value boundary. This uses the
 // serde encoder directly so the hot path avoids stringify/parse round-trips.
 static XrValue xr_json_builtin_encode(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
     (void) self;
@@ -250,11 +130,244 @@ static XrValue xr_json_builtin_encode(XrVMRuntime *X, XrValue self, XrValue *arg
 
     XrJsonEncodeResult r = xr_json_encode_core(X, args[0]);
     if (r.has_error) {
-        XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID, "Json.encode: %s", r.error_msg);
+        XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID, "JSON.value: %s", r.error_msg);
         xr_vm_unwind_with_trace(X, exc);
         return xr_null();
     }
     return r.result;
+}
+
+static XrValue xr_json_builtin_merge_with_rest(XrVMRuntime *X, XrValue self, XrValue *args,
+                                               int argc) {
+    (void) self;
+    XrObjectInstance *parts = argc >= 1 ? xr_value_to_object_instance(args[0]) : NULL;
+    XrValue rest_value = parts ? xr_object_instance_get_by_key(X, parts, "rest") : xr_null();
+    XrValue typed_value = parts ? xr_object_instance_get_by_key(X, parts, "value") : xr_null();
+    if (!parts || !XR_IS_MAP(rest_value)) {
+        XrValue exc =
+            xr_panic_info_newf(X, XR_ERR_JSON_INVALID, "JSON.merge: expected JSON.WithRest<T>");
+        xr_vm_unwind_with_trace(X, exc);
+        return xr_null();
+    }
+
+    XrJsonEncodeResult encoded = xr_json_encode_core(X, typed_value);
+    if (encoded.has_error || !XR_IS_MAP(encoded.result)) {
+        XrValue exc = xr_panic_info_newf(
+            X, XR_ERR_JSON_INVALID, "JSON.merge: %s",
+            encoded.has_error ? encoded.error_msg : "typed value did not encode as an object");
+        xr_vm_unwind_with_trace(X, exc);
+        return xr_null();
+    }
+
+    XrMap *dst = XR_TO_MAP(encoded.result);
+    XrMap *rest = XR_TO_MAP(rest_value);
+    for (uint32_t i = 0; rest && i < rest->nentries; i++) {
+        XrMapEntry *entry = xr_map_entry(rest, i);
+        if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+            continue;
+        if (!XR_IS_STRING(entry->key) || xr_map_has(dst, entry->key)) {
+            xr_rc_release_value(xr_current_coro_heap(), encoded.result);
+            XrValue exc = xr_panic_info_newf(
+                X, XR_ERR_JSON_INVALID,
+                XR_IS_STRING(entry->key)
+                    ? "JSON.merge: rest conflicts with a declared top-level field"
+                    : "JSON.merge: rest contains a non-string key");
+            xr_vm_unwind_with_trace(X, exc);
+            return xr_null();
+        }
+        xr_rc_retain_value(entry->key);
+        xr_rc_retain_value(entry->value);
+        xr_map_set(dst, entry->key, entry->value);
+    }
+    return encoded.result;
+}
+
+static XrValue xr_json_builtin_parse_value(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
+    return xr_json_fn_parse(X, self, args, argc);
+}
+
+static XrValue xr_json_builtin_parse_object(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
+    XrValue value = xr_json_fn_parse(X, self, args, argc);
+    if (XR_IS_MAP(value))
+        return value;
+    XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID,
+                                     "JSON.parseObject: root value must be an object");
+    xr_vm_unwind_with_trace(X, exc);
+    return xr_null();
+}
+
+static XrValue xr_json_builtin_as_object(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
+    (void) X;
+    (void) self;
+    XrValue result = argc >= 1 && XR_IS_MAP(args[0]) ? args[0] : xr_null();
+    xr_rc_retain_value(result);
+    return result;
+}
+
+static XrValue xr_json_builtin_as_array(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
+    (void) X;
+    (void) self;
+    XrValue result = argc >= 1 && XR_IS_ARRAY(args[0]) ? args[0] : xr_null();
+    xr_rc_retain_value(result);
+    return result;
+}
+
+static bool xr_json_path_read(XrValue root, XrArray *path, XrValue *out) {
+    if (!path || !out)
+        return false;
+    XrValue current = root;
+    for (int i = 0; i < path->length; i++) {
+        XrValue segment = xr_array_get(path, i);
+        if (XR_IS_STRING(segment) && XR_IS_MAP(current)) {
+            bool found = false;
+            current = xr_map_get(XR_TO_MAP(current), segment, &found);
+            if (!found)
+                return false;
+            continue;
+        }
+        if (XR_IS_INT(segment) && XR_IS_ARRAY(current)) {
+            int64_t index = XR_TO_INT(segment);
+            XrArray *array = XR_TO_ARRAY(current);
+            if (index < 0 || index >= array->length)
+                return false;
+            current = xr_array_get(array, (int) index);
+            continue;
+        }
+        return false;
+    }
+    *out = current;
+    return true;
+}
+
+static XrValue xr_json_builtin_get_path(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
+    (void) X;
+    (void) self;
+    XrValue result = xr_null();
+    if (argc < 2 || !XR_IS_ARRAY(args[1]))
+        return result;
+    if (!xr_json_path_read(args[0], XR_TO_ARRAY(args[1]), &result))
+        return xr_null();
+    xr_rc_retain_value(result);
+    return result;
+}
+
+static XrValue xr_json_builtin_require_path(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    XrValue result = xr_null();
+    if (argc >= 2 && XR_IS_ARRAY(args[1]) &&
+        xr_json_path_read(args[0], XR_TO_ARRAY(args[1]), &result)) {
+        xr_rc_retain_value(result);
+        return result;
+    }
+    XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID,
+                                     "JSON.require: path does not exist or crosses a wrong kind");
+    xr_vm_unwind_with_trace(X, exc);
+    return xr_null();
+}
+
+static XrValue xr_json_builtin_contains_path(XrVMRuntime *X, XrValue self, XrValue *args,
+                                             int argc) {
+    (void) X;
+    (void) self;
+    XrValue ignored = xr_null();
+    return xr_bool(argc >= 2 && XR_IS_ARRAY(args[1]) &&
+                   xr_json_path_read(args[0], XR_TO_ARRAY(args[1]), &ignored));
+}
+
+static bool xr_json_path_parent(XrValue root, XrArray *path, bool create_parents,
+                                XrValue *out_parent, XrValue *out_last) {
+    if (!path || path->length == 0 || !out_parent || !out_last)
+        return false;
+    XrValue current = root;
+    for (int i = 0; i + 1 < path->length; i++) {
+        XrValue segment = xr_array_get(path, i);
+        XrValue next_segment = xr_array_get(path, i + 1);
+        if (XR_IS_STRING(segment) && XR_IS_MAP(current)) {
+            XrMap *map = XR_TO_MAP(current);
+            bool found = false;
+            XrValue next = xr_map_get(map, segment, &found);
+            if (!found && create_parents && XR_IS_STRING(next_segment)) {
+                XrMap *child = xr_map_new(NULL);
+                if (!child)
+                    return false;
+                xr_rc_retain_value(segment);
+                next = xr_value_from_map(child);
+                xr_map_set(map, segment, next);
+                found = true;
+            }
+            if (!found)
+                return false;
+            current = next;
+            continue;
+        }
+        if (XR_IS_INT(segment) && XR_IS_ARRAY(current)) {
+            int64_t index = XR_TO_INT(segment);
+            XrArray *array = XR_TO_ARRAY(current);
+            if (index < 0 || index >= array->length)
+                return false;
+            current = xr_array_get(array, (int) index);
+            continue;
+        }
+        return false;
+    }
+    *out_parent = current;
+    *out_last = xr_array_get(path, path->length - 1);
+    return true;
+}
+
+static XrValue xr_json_builtin_set_path(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    bool create_parents = argc >= 4 && XR_IS_BOOL(args[3]) && XR_TO_BOOL(args[3]);
+    XrValue parent = xr_null();
+    XrValue last = xr_null();
+    if (argc >= 3 && XR_IS_ARRAY(args[1]) &&
+        xr_json_path_parent(args[0], XR_TO_ARRAY(args[1]), create_parents, &parent, &last)) {
+        if (XR_IS_STRING(last) && XR_IS_MAP(parent)) {
+            xr_rc_retain_value(last);
+            xr_rc_retain_value(args[2]);
+            xr_map_set(XR_TO_MAP(parent), last, args[2]);
+            return xr_null();
+        }
+        if (XR_IS_INT(last) && XR_IS_ARRAY(parent)) {
+            int64_t index = XR_TO_INT(last);
+            XrArray *array = XR_TO_ARRAY(parent);
+            if (index >= 0 && index < array->length) {
+                xr_array_set(array, (int) index, args[2]);
+                return xr_null();
+            }
+        }
+    }
+    XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID,
+                                     "JSON.set: path does not exist or crosses a wrong kind");
+    xr_vm_unwind_with_trace(X, exc);
+    return xr_null();
+}
+
+static bool xr_json_array_remove(XrArray *array, int64_t index) {
+    if (!array || index < 0 || index >= array->length)
+        return false;
+    for (int64_t i = index; i + 1 < array->length; i++)
+        xr_array_set(array, (int) i, xr_array_get(array, (int) i + 1));
+    XrValue removed = xr_array_pop(array);
+    xr_rc_release_value(xr_current_coro_heap(), removed);
+    return true;
+}
+
+static XrValue xr_json_builtin_remove_path(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
+    (void) self;
+    XrValue parent = xr_null();
+    XrValue last = xr_null();
+    if (argc >= 2 && XR_IS_ARRAY(args[1]) &&
+        xr_json_path_parent(args[0], XR_TO_ARRAY(args[1]), false, &parent, &last)) {
+        if (XR_IS_STRING(last) && XR_IS_MAP(parent))
+            return xr_bool(xr_map_delete(XR_TO_MAP(parent), last));
+        if (XR_IS_INT(last) && XR_IS_ARRAY(parent))
+            return xr_bool(xr_json_array_remove(XR_TO_ARRAY(parent), XR_TO_INT(last)));
+    }
+    XrValue exc =
+        xr_panic_info_newf(X, XR_ERR_JSON_INVALID, "JSON.remove: path crosses a wrong kind");
+    xr_vm_unwind_with_trace(X, exc);
+    return xr_bool(false);
 }
 
 /* ========== Class Creation ========== */
@@ -262,15 +375,10 @@ static XrValue xr_json_builtin_encode(XrVMRuntime *X, XrValue self, XrValue *arg
 static XrClass *create_json_utility_class(XrVMRuntime *X) {
     XR_DCHECK(X != NULL, "create_json_utility_class: NULL isolate");
     XrClassBuilder *builder =
-        xr_class_builder_new(X, "Json", xr_isolate_get_core_classes(X)->objectClass);
+        xr_class_builder_new(X, "JSON", xr_isolate_get_core_classes(X)->objectClass);
     if (!builder)
         return NULL;
 
-    xr_class_builder_add_static_method(builder, "keys", xr_json_static_keys, 1, 0);
-    xr_class_builder_add_static_method(builder, "values", xr_json_static_values, 1, 0);
-    xr_class_builder_add_static_method(builder, "entries", xr_json_static_entries, 1, 0);
-    xr_class_builder_add_static_method(builder, "containsKey", xr_json_static_contains_key, 2, 0);
-    xr_class_builder_add_static_method(builder, "get", xr_json_static_get, 2, 0);
     xr_class_builder_add_static_method(builder, "kindOf", xr_json_static_kind_of, 1, 0);
     xr_class_builder_add_static_method(builder, "isNull", xr_json_static_is_null, 1, 0);
     xr_class_builder_add_static_method(builder, "isBool", xr_json_static_is_bool, 1, 0);
@@ -282,10 +390,20 @@ static XrClass *create_json_utility_class(XrVMRuntime *X) {
 
     // JSON parse/stringify — core engine in xjson_serde.c, throw wrapper above
     xr_class_builder_add_static_method(builder, "parse", xr_json_fn_parse, 1, 0);
+    xr_class_builder_add_static_method(builder, "parseValue", xr_json_builtin_parse_value, 1, 0);
+    xr_class_builder_add_static_method(builder, "parseObject", xr_json_builtin_parse_object, 1, 0);
     xr_class_builder_add_static_method(builder, "stringify", xr_json_builtin_stringify, 2, 0);
-    xr_class_builder_add_static_method(builder, "encode", xr_json_builtin_encode, 1, 0);
-    xr_class_builder_add_static_method(builder, "isValid", xr_json_fn_is_valid, 1, 0);
-    xr_class_builder_add_static_method(builder, "tryParse", xr_json_fn_try_parse, 1, 0);
+    xr_class_builder_add_static_method(builder, "value", xr_json_builtin_encode, 1, 0);
+    xr_class_builder_add_static_method(builder, "asObject", xr_json_builtin_as_object, 1, 0);
+    xr_class_builder_add_static_method(builder, "asArray", xr_json_builtin_as_array, 1, 0);
+    xr_class_builder_add_static_method(builder, "get", xr_json_builtin_get_path, 2, 0);
+    xr_class_builder_add_static_method(builder, "require", xr_json_builtin_require_path, 2, 0);
+    xr_class_builder_add_static_method(builder, "containsPath", xr_json_builtin_contains_path, 2,
+                                       0);
+    xr_class_builder_add_static_method(builder, "set", xr_json_builtin_set_path, 4, 0);
+    xr_class_builder_add_static_method(builder, "remove", xr_json_builtin_remove_path, 2, 0);
+    xr_class_builder_add_static_method(builder, "merge", xr_json_builtin_merge_with_rest, 1, 0);
+    xr_class_builder_add_static_method(builder, "isValid", xr_json_fn_is_valid, 2, 0);
 
     return xr_class_builder_finalize(builder);
 }

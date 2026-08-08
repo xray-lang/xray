@@ -153,20 +153,21 @@ fn test_reduce_build_nested_map() {
         { group: "veg", item: "pea" }
     ]
     // Group by category
-    var seed: Json = {}
+    var seed: Map<string, Array<string>> = #{}
     var grouped = entries.reduce(fn(acc, e) {
         var next = copy(acc)
-        if (next[e.group] == null) {
-            var emptyItems: Json = []
-            next[e.group] = emptyItems
+        var items = next.get(e.group)
+        if (items == null) {
+            items = []
+            next.set(e.group, items!)
         }
-        next[e.group].push(e.item)
+        items!.push(e.item)
         return next
     }, seed)
-    assert_eq(len(grouped.fruit), 2)
-    assert_eq(len(grouped.veg), 2)
-    assert_eq(grouped.fruit[0], "apple")
-    assert_eq(grouped.veg[1], "pea")
+    assert_eq(len(grouped.get("fruit")!), 2)
+    assert_eq(len(grouped.get("veg")!), 2)
+    assert_eq(grouped.get("fruit")![0], "apple")
+    assert_eq(grouped.get("veg")![1], "pea")
 }
 
 // ===== Chain with closure capturing loop variable =====

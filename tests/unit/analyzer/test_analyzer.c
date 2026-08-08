@@ -317,10 +317,8 @@ TEST(object_nullable_field_accepts_explicit_null) {
         xr_type_make_nullable(g_isolate, xr_type_new_string(g_isolate)),
     };
     XrType *source_fields[] = {xr_type_new_null(g_isolate)};
-    XrType *target = xr_type_new_struct_object_with_fields(g_isolate, names, target_fields, 1,
-                                                           XR_OBJECT_ROW_EXACT);
-    XrType *source = xr_type_new_struct_object_with_fields(g_isolate, names, source_fields, 1,
-                                                           XR_OBJECT_ROW_EXACT);
+    XrType *target = xr_type_new_struct_object_with_fields(g_isolate, names, target_fields, 1);
+    XrType *source = xr_type_new_struct_object_with_fields(g_isolate, names, source_fields, 1);
 
     ASSERT(xr_type_assignable(target, source));
     ASSERT(xa_typecheck_assignable(target, source));
@@ -854,8 +852,6 @@ TEST(type_rejects_invalid_counts) {
     ASSERT(xr_type_new_generic_instance(g_isolate, "Box", NULL, NULL, 1) == NULL);
     ASSERT(xr_type_new_tuple(g_isolate, NULL, 1) == NULL);
     ASSERT(xr_type_new_tuple(g_isolate, param_types, -1) == NULL);
-    ASSERT(xr_type_new_json_with_fields(g_isolate, NULL, field_types, 1, false) == NULL);
-    ASSERT(xr_type_new_json_with_fields(g_isolate, field_names, NULL, 1, false) == NULL);
 }
 
 TEST(type_function_copy_preserves_metadata) {
@@ -1070,39 +1066,32 @@ static bool analyzer_diag_contains(XaAnalyzer *analyzer, const char *needle) {
     return false;
 }
 
-TEST(object_row_assignment_matrix_and_field_invariance) {
+TEST(object_exact_assignment_and_width_constraint_matrix) {
     const char *a_names[] = {"name"};
     XrType *a_fields[] = {xr_type_new_string(g_isolate)};
     const char *b_names[] = {"age", "name"};
     XrType *b_fields[] = {xr_type_new_int(g_isolate), xr_type_new_string(g_isolate)};
-    XrType *a =
-        xr_type_new_struct_object_with_fields(g_isolate, a_names, a_fields, 1, XR_OBJECT_ROW_EXACT);
-    XrType *b =
-        xr_type_new_struct_object_with_fields(g_isolate, b_names, b_fields, 2, XR_OBJECT_ROW_EXACT);
-    XrType *open_a =
-        xr_type_new_struct_object_with_fields(g_isolate, a_names, a_fields, 1, XR_OBJECT_ROW_OPEN);
+    XrType *a = xr_type_new_struct_object_with_fields(g_isolate, a_names, a_fields, 1);
+    XrType *b = xr_type_new_struct_object_with_fields(g_isolate, b_names, b_fields, 2);
 
     ASSERT(xr_type_assignable(a, a));
     ASSERT(!xr_type_assignable(a, b));
     ASSERT(!xr_type_assignable(b, a));
-    ASSERT(xr_type_assignable(open_a, b));
-    ASSERT(xr_type_assignable(open_a, a));
-    ASSERT(!xr_type_assignable(a, open_a));
+    ASSERT(xr_type_satisfies_constraint(b, a));
+    ASSERT(xr_type_satisfies_constraint(a, a));
 
     XrType *name_union =
         xr_type_union(g_isolate, xr_type_new_string(g_isolate), xr_type_new_int(g_isolate));
     XrType *wide_fields[] = {name_union};
-    XrType *wide_name = xr_type_new_struct_object_with_fields(g_isolate, a_names, wide_fields, 1,
-                                                              XR_OBJECT_ROW_EXACT);
-    ASSERT(!xr_type_assignable(open_a, wide_name));
+    XrType *wide_name = xr_type_new_struct_object_with_fields(g_isolate, a_names, wide_fields, 1);
+    ASSERT(!xr_type_satisfies_constraint(wide_name, a));
 
     bool readonly[] = {true};
-    XrType *readonly_a =
-        xr_type_new_struct_object_with_fields(g_isolate, a_names, a_fields, 1, XR_OBJECT_ROW_EXACT);
+    XrType *readonly_a = xr_type_new_struct_object_with_fields(g_isolate, a_names, a_fields, 1);
     xr_type_set_object_field_readonly(g_isolate, readonly_a, readonly, 1);
     ASSERT(xr_type_assignable(readonly_a, a));
     ASSERT(!xr_type_assignable(a, readonly_a));
-    ASSERT(strstr(xr_type_to_string(open_a), "...") != NULL);
+    ASSERT(strstr(xr_type_to_string(a), "...") == NULL);
 }
 
 TEST(json_value_and_codec_capability_matrix) {
@@ -1113,25 +1102,16 @@ TEST(json_value_and_codec_capability_matrix) {
 
     const char *names[] = {"value"};
     XrType *fields[] = {xr_type_new_int(g_isolate)};
-    XrType *exact =
-        xr_type_new_struct_object_with_fields(g_isolate, names, fields, 1, XR_OBJECT_ROW_EXACT);
-    XrType *open =
-        xr_type_new_struct_object_with_fields(g_isolate, names, fields, 1, XR_OBJECT_ROW_OPEN);
+    XrType *exact = xr_type_new_struct_object_with_fields(g_isolate, names, fields, 1);
     ASSERT(xa_json_encodable(exact).supported);
     ASSERT(xa_json_decodable(exact).supported);
     ASSERT(!xr_type_assignable(xr_type_new_json(g_isolate), exact));
     ASSERT(!xr_type_assignable(exact, xr_type_new_json(g_isolate)));
 
-    XaJsonCapabilityResult result = xa_json_decodable(open);
-    ASSERT(!result.supported);
-    ASSERT(result.reason == XA_JSON_CAPABILITY_OPEN_ROW_TARGET);
-    ASSERT(strcmp(xa_json_capability_reason_name(result.reason), "OPEN_ROW_TARGET") == 0);
-
     XrType *fn = xr_type_new_function(g_isolate, NULL, 0, xr_type_new_int(g_isolate), false);
     XrType *fn_fields[] = {fn};
-    XrType *with_function =
-        xr_type_new_struct_object_with_fields(g_isolate, names, fn_fields, 1, XR_OBJECT_ROW_EXACT);
-    result = xa_json_encodable(with_function);
+    XrType *with_function = xr_type_new_struct_object_with_fields(g_isolate, names, fn_fields, 1);
+    XaJsonCapabilityResult result = xa_json_encodable(with_function);
     ASSERT(!result.supported);
     ASSERT(result.reason == XA_JSON_CAPABILITY_FUNCTION_FIELD);
 
@@ -1185,8 +1165,7 @@ TEST(json_value_and_codec_capability_matrix) {
     XrType *instantiated = xr_type_substitute(g_isolate, generic_array, params, args, 1);
     ASSERT(xa_json_encodable(instantiated).supported);
 
-    XrType *recursive =
-        xr_type_new_struct_object_with_fields(g_isolate, names, fields, 1, XR_OBJECT_ROW_EXACT);
+    XrType *recursive = xr_type_new_struct_object_with_fields(g_isolate, names, fields, 1);
     recursive->object.field_types[0] = recursive;
     result = xa_json_encodable(recursive);
     ASSERT(!result.supported);
@@ -1201,9 +1180,9 @@ TEST(analyzer_typed_json_calls_complete_all_analysis_passes) {
     const char *source =
         "type User = { name: string, age: int }\n"
         "fn main() {\n"
-        "    var data = Json.parse(\"{\\\"name\\\":\\\"Ada\\\",\\\"age\\\":37}\")\n"
-        "    var decoded = Json.decode<User>(data)\n"
-        "    var parsed = Json.parse<User>(\"{\\\"name\\\":\\\"Grace\\\",\\\"age\\\":38}\")\n"
+        "    var data = JSON.parseValue(\"{\\\"name\\\":\\\"Ada\\\",\\\"age\\\":37}\")\n"
+        "    var decoded = JSON.decode<User>(data)\n"
+        "    var parsed = JSON.parse<User>(\"{\\\"name\\\":\\\"Grace\\\",\\\"age\\\":38}\")\n"
         "    print(decoded == null, parsed.name)\n"
         "}\n";
     AstNode *program = xr_parse(g_session, source);
@@ -1263,22 +1242,18 @@ TEST(analyzer_structural_object_dot_and_static_index_diagnostics_match) {
     setup_pool();
 }
 
-TEST(analyzer_open_row_is_width_only_and_literal_stays_exact) {
+TEST(analyzer_structural_width_is_generic_constraint_and_literal_stays_exact) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "type OpenNamed = { name: string, ... }\n"
-                         "var concrete: OpenNamed = { name: \"Ada\", age: 37 }\n"
-                         "fn probe(value: ref OpenNamed) {\n"
+    const char *source = "fn probe<T: { name: string }>(value: ref T) {\n"
                          "    value.name = \"Grace\"\n"
                          "    value[\"name\"] = \"Grace\"\n"
-                         "    print(value.age)\n"
-                         "    print(value[\"age\"])\n"
-                         "    value.age = 38\n"
-                         "    value[\"age\"] = 38\n"
-                         "}\n";
+                         "}\n"
+                         "var concrete = { name: \"Ada\", age: 37 }\n"
+                         "probe(ref concrete)\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
-    xa_analyzer_analyze(a, "object_open_row.xr", program);
+    xa_analyzer_analyze(a, "object_width_constraint.xr", program);
 
     ASSERT(program->type == AST_PROGRAM);
     ASSERT(program->as.program.count >= 2);
@@ -1286,14 +1261,38 @@ TEST(analyzer_open_row_is_width_only_and_literal_stays_exact) {
     ASSERT(decl != NULL && decl->type == AST_VAR_DECL);
     XrType *literal_type = xa_analyzer_get_node_type(a, decl->as.var_decl.initializer);
     ASSERT(literal_type != NULL && XR_TYPE_IS_STRUCT_OBJECT(literal_type));
-    ASSERT(literal_type->object.row_mode == XR_OBJECT_ROW_EXACT);
     ASSERT(literal_type->object.field_count == 2);
-    ASSERT(analyzer_diag_message_count(a, "type 'OpenNamed' has no field 'age'") == 2);
-    ASSERT(analyzer_diag_message_count(a, "type 'OpenNamed' does not allow adding field 'age'") ==
-           2);
-    ASSERT(!analyzer_diag_contains(a, "name' (declared const)"));
+    ASSERT(a->diagnostic_count == 0);
 
     xr_program_destroy(program);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_structural_constraint_limits_visible_fields_and_dynamic_indexing) {
+    XaAnalyzer *a = analyzer_run_source("object_constraint_visibility.xr",
+                                        "fn probe<T: { name: string }>(value: T, key: string) {\n"
+                                        "    print(value.missing)\n"
+                                        "    print(value[\"missing\"])\n"
+                                        "    print(value[key])\n"
+                                        "}\n");
+    ASSERT(a != NULL);
+    ASSERT(analyzer_diag_message_count(a, "type '{name}' has no field 'missing'") == 2);
+    ASSERT(analyzer_diag_message_count(
+               a, "structural object index requires a string literal field name") == 1);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
+TEST(analyzer_named_structural_constraint_erases_readonly_for_body_analysis) {
+    XaAnalyzer *a =
+        analyzer_run_source("object_constraint_readonly_erasure.xr",
+                            "type Entity = { const id: int }\n"
+                            "fn bump<T: Entity>(value: ref T) { value.id = value.id + 1 }\n"
+                            "var mutable = { id: 1, age: 2 }\n"
+                            "bump(ref mutable)\n");
+    ASSERT(a != NULL);
+    ASSERT(a->diagnostic_count == 0);
     xa_analyzer_free(a);
     setup_pool();
 }
@@ -6778,7 +6777,7 @@ int main(void) {
     RUN_TEST(type_error_recovery);
     RUN_TEST(type_assignable);
     RUN_TEST(object_nullable_field_accepts_explicit_null);
-    RUN_TEST(object_row_assignment_matrix_and_field_invariance);
+    RUN_TEST(object_exact_assignment_and_width_constraint_matrix);
     RUN_TEST(json_value_and_codec_capability_matrix);
     RUN_TEST(analyzer_typed_json_calls_complete_all_analysis_passes);
     RUN_TEST(typecheck_assignable_rejects_unknown_source);
@@ -6799,7 +6798,9 @@ int main(void) {
     RUN_TEST(analyzer_type_telemetry_splits_unknown_and_error);
     RUN_TEST(analyzer_scope_management);
     RUN_TEST(analyzer_structural_object_dot_and_static_index_diagnostics_match);
-    RUN_TEST(analyzer_open_row_is_width_only_and_literal_stays_exact);
+    RUN_TEST(analyzer_structural_width_is_generic_constraint_and_literal_stays_exact);
+    RUN_TEST(analyzer_structural_constraint_limits_visible_fields_and_dynamic_indexing);
+    RUN_TEST(analyzer_named_structural_constraint_erases_readonly_for_body_analysis);
     RUN_TEST(analyzer_inferred_unique_alias_nll_guards_move);
     RUN_TEST(analyzer_parameter_effect_is_canonical_product);
     RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);

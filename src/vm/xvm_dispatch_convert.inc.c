@@ -162,7 +162,7 @@ vmcase(OP_TYPENAME) {
     if (type_name == NULL && xr_value_is_instance(val)) {
         XrInstance *inst = xr_value_to_instance(val);
         XrClass *cls = xr_instance_get_class(inst);
-        if (cls && (cls->builtin_kind == XR_BK_JSON || cls->builtin_kind == XR_BK_STRUCT_OBJECT))
+        if (cls && cls->builtin_kind == XR_BK_STRUCT_OBJECT)
             type_name = TYPE_NAME_OBJECT;
         else if (cls && cls->name)
             type_name = cls->name;

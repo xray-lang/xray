@@ -1,34 +1,34 @@
 var structural = { name: "Ada", age: 37 }
-var dynamicObject: Json = { name: "Ada", age: 37 }
+var dynamicObject: JSON.Value = JSON.value({ name: "Ada", age: 37 })
 
 print(typeName(structural))
 print(typeName(dynamicObject))
-print(typeName<Json>())
+print(typeName<JSON.Value>())
 print(typeOf(structural) == Type.object)
 print(typeOf(dynamicObject) == Type.object)
 
-var jnull: Json = null
-var jbool: Json = true
-var jint: Json = 7
-var jfloat: Json = 1.5
-var jstring: Json = "x"
-var jarray: Json = [1, true, null]
+var jnull: JSON.Value = null
+var jbool: JSON.Value = true
+var jint: JSON.Value = 7
+var jfloat: JSON.Value = 1.5
+var jstring: JSON.Value = "x"
+var jarray: JSON.Value = JSON.value([1, true, null])
 
-print(Json.kindOf(jnull))
-print(Json.kindOf(jbool))
-print(Json.kindOf(jint))
-print(Json.kindOf(jfloat))
-print(Json.kindOf(jstring))
-print(Json.kindOf(jarray))
-print(Json.kindOf(dynamicObject))
+print(JSON.kindOf(jnull))
+print(JSON.kindOf(jbool))
+print(JSON.kindOf(jint))
+print(JSON.kindOf(jfloat))
+print(JSON.kindOf(jstring))
+print(JSON.kindOf(jarray))
+print(JSON.kindOf(dynamicObject))
 
-var pnull: bool = Json.isNull(jnull)
-var pbool: bool = Json.isBool(jbool)
-var pint: bool = Json.isInt(jint)
-var pfloat: bool = Json.isFloat(jfloat)
-var pstring: bool = Json.isString(jstring)
-var parray: bool = Json.isArray(jarray)
-var pobject: bool = Json.isObject(dynamicObject)
+var pnull: bool = JSON.isNull(jnull)
+var pbool: bool = JSON.isBool(jbool)
+var pint: bool = JSON.isInt(jint)
+var pfloat: bool = JSON.isFloat(jfloat)
+var pstring: bool = JSON.isString(jstring)
+var parray: bool = JSON.isArray(jarray)
+var pobject: bool = JSON.isObject(dynamicObject)
 print(pnull)
 print(pbool)
 print(pint)

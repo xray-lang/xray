@@ -40,7 +40,7 @@ typedef enum {
     XR_PRELUDE_KIND_SIMPLE,     // XR_KIND_INSTANCE with class_name == name
     XR_PRELUDE_KIND_GENERIC_1,  // requires <T>, e.g. Array<int>, Set<T>, Channel<T>
     XR_PRELUDE_KIND_GENERIC_2,  // requires <K, V>, e.g. Map<string, int>
-    XR_PRELUDE_KIND_SINGLETON,  // process-wide singleton XrType (e.g. Json)
+    XR_PRELUDE_KIND_SINGLETON,  // process-wide singleton XrType
 } XrPreludeKind;
 
 /*

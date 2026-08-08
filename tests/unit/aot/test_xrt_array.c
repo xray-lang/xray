@@ -133,10 +133,10 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
             ASSERT_TRUE(false, msg);                                                               \
         }                                                                                          \
         g_expect_throw = 0;                                                                        \
-        XrValue _code = xrt_json_get_name(g_thrown_exc, "code");                                   \
+        XrValue _code = xrt_object_get_name(g_thrown_exc, "code");                                 \
         ASSERT_TRUE(XR_IS_INT(_code), msg " code is int");                                         \
         ASSERT_EQ_INT(XR_TO_INT(_code), expected_code, msg " code");                               \
-        ASSERT_XR_STR_EQ(xrt_json_get_name(g_thrown_exc, "message"), expected_message,             \
+        ASSERT_XR_STR_EQ(xrt_object_get_name(g_thrown_exc, "message"), expected_message,           \
                          msg " message");                                                          \
     } while (0)
 
@@ -379,9 +379,9 @@ static void test_resize_reserve_type_errors_are_structured(void) {
         ASSERT_TRUE(false, "reserve with non-int capacity throws");
     }
     g_expect_throw = 0;
-    ASSERT_XR_STR_EQ(xrt_json_get_name(g_thrown_exc, "message"),
+    ASSERT_XR_STR_EQ(xrt_object_get_name(g_thrown_exc, "message"),
                      XR_ERROR_CORE_ARRAY_RESERVE_EXPECTS_MSG, "reserve type error message");
-    XrValue code = xrt_json_get_name(g_thrown_exc, "code");
+    XrValue code = xrt_object_get_name(g_thrown_exc, "code");
     ASSERT_TRUE(XR_IS_INT(code), "reserve type error code is int");
     ASSERT_EQ_INT(XR_TO_INT(code), XR_ERR_TYPE_MISMATCH, "reserve type error code");
 
@@ -392,9 +392,9 @@ static void test_resize_reserve_type_errors_are_structured(void) {
         ASSERT_TRUE(false, "resize with non-int length throws");
     }
     g_expect_throw = 0;
-    ASSERT_XR_STR_EQ(xrt_json_get_name(g_thrown_exc, "message"),
+    ASSERT_XR_STR_EQ(xrt_object_get_name(g_thrown_exc, "message"),
                      XR_ERROR_CORE_ARRAY_RESIZE_EXPECTS_MSG, "resize type error message");
-    code = xrt_json_get_name(g_thrown_exc, "code");
+    code = xrt_object_get_name(g_thrown_exc, "code");
     ASSERT_TRUE(XR_IS_INT(code), "resize type error code is int");
     ASSERT_EQ_INT(XR_TO_INT(code), XR_ERR_TYPE_MISMATCH, "resize type error code");
 
@@ -629,6 +629,7 @@ static void test_stack_closure_borrows_cell_upval(void) {
     reset_alloc_counts();
     XrValue arr = xrt_array_new_typed(0, XR_ELEM_I64, 0);
     XrValue cell = xrt_cell_new(XR_NULL_VAL);
+    xrt_retain(arr);
     xrt_cell_set(cell, arr);
 
     int nupvals = 1;

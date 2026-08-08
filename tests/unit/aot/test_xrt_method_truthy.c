@@ -165,6 +165,23 @@ static void test_xrt_to_bool_reuses_truthy_core_for_sized_containers(void) {
     ASSERT_BOOL(xrt_to_bool(set), true, "nonempty set is truthy");
 }
 
+static void test_map_entries_dispatch_returns_tuple_array(void) {
+    XrValue map = xrt_map_new(0);
+    xrt_map_set((xrt_map_t *) map.ptr, xr_box_str("name"), XR_FROM_INT(7));
+
+    XrValue entries = xrt_method_0(map, XRT_SYM_ENTRIES);
+    ASSERT_TRUE_MSG(XR_IS_ARRAY(entries), "Map.entries returns an array");
+    xrt_array_t *array = (xrt_array_t *) entries.ptr;
+    ASSERT_TRUE_MSG(array->length == 1, "Map.entries returns every entry");
+    XrValue pair = xr_typed_get(array->data, 0, array->elem_type);
+    ASSERT_TRUE_MSG(pair.tag == XR_TAG_TUPLE, "Map.entries elements are tuples");
+    ASSERT_CSTR(xr_str_data(xrt_tuple_get(pair, 0)), "name", "Map.entries preserves the key");
+    ASSERT_INT(xrt_tuple_get(pair, 1), 7, "Map.entries preserves the value");
+
+    xrt_release(entries);
+    xrt_release(map);
+}
+
 static void test_xrt_type_metadata_uses_hot_name_and_derive_tables(void) {
     uint16_t tid = xrt_type_register_hot(0, NULL, 0, NULL, NULL, 16);
     const XrtTypeInfo *hot = xrt_type_info(tid);
@@ -258,6 +275,7 @@ static void test_xrt_threadlocal_live_registry(void) {
 int main(void) {
     test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings();
     test_xrt_to_bool_reuses_truthy_core_for_sized_containers();
+    test_map_entries_dispatch_returns_tuple_array();
     test_xrt_type_metadata_uses_hot_name_and_derive_tables();
     test_xrt_thread_handle_methods();
     test_xrt_threadlocal_live_registry();

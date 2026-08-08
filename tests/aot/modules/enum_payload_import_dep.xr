@@ -3,18 +3,20 @@ export enum SharedError {
     Invalid(string)
 }
 
+export type SharedValue = JSON.Value
+
 export enum SharedResult {
-    Ok(Json),
+    Ok(SharedValue),
     Err(SharedError)
 }
 
 export enum MirroredResult {
-    Ok(Json),
+    Ok(SharedValue),
     Err(SharedError)
 }
 
 export fn produce(ok: bool) -> SharedResult {
-    return ok ? SharedResult.Ok({ "answer": 42 }) : SharedResult.Err(SharedError.Invalid("bad"))
+    return ok ? SharedResult.Ok(JSON.value({ answer: 42 })) : SharedResult.Err(SharedError.Invalid("bad"))
 }
 
 export fn mirror(result: SharedResult) -> MirroredResult {

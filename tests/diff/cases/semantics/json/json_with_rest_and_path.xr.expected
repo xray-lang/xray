@@ -1,0 +1,12 @@
+ada
+{"extra":7}
+{"name":"ada","age":null,"nested":{"id":1},"extra":7}
+ada
+true
+bob
+true
+false
+true
+caught-nullable-require
+lin
+true

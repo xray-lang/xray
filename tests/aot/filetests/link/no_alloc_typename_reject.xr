@@ -1,4 +1,4 @@
-fn xray_no_alloc_typename_reject(value: Json) -> string {
+fn xray_no_alloc_typename_reject(value: JSON.Value) -> string {
     return typeName(value)
 }
 

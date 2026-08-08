@@ -1,12 +1,12 @@
-fn json_param(x: Json) -> int {
+fn json_param(x: JSON.Value) -> int {
     return int(x)
 }
 
-fn json_return() -> Json {
+fn json_return() -> JSON.Value {
     return 7
 }
 
 fn xray_tagged_type_reject() -> int {
-    var x: Json = 42
+    var x: JSON.Value = 42
     return json_param(x) + int(json_return())
 }

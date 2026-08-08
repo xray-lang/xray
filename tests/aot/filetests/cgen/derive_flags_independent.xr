@@ -7,7 +7,7 @@ class InspectOnly {
     }
 }
 
-@derive(Json)
+@derive(JSON)
 class JsonOnly {
     value: int
 
@@ -20,6 +20,6 @@ var inspect_only = InspectOnly(7)
 print(inspect_only)
 
 var json_only = JsonOnly(9)
-var encoded = Json.encode(json_only)
-print(encoded.value)
+var encoded = JSON.value(json_only)
+print(JSON.require<int>(encoded, ["value"]))
 print(json_only)

@@ -1,7 +1,7 @@
 // xml - typed pure-Xray XML parser and writer.
 //
 // XML is an L4 format module: the public parse/stringify/node-builder
-// semantics live here. The node model is a typed `XmlNode` ADT (no Json
+// semantics live here. The node model is a typed `XmlNode` ADT (no JSON.Value
 // discriminator tree). src/base/xxml remains as a low-level C parser for base
 // unit tests and non-stdlib tooling boundaries.
 

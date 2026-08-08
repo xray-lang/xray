@@ -9,32 +9,32 @@
 
 @test
 fn test_empty_string() {
-    var s = Json.parse("\"\"")
+    var s = JSON.parseValue("\"\"")
     assert_eq(s, "")
     assert_eq(len(s), 0)
 }
 
 @test
 fn test_simple_string() {
-    assert_eq(Json.parse("\"hello\""), "hello")
-    assert_eq(Json.parse("\"world\""), "world")
-    assert_eq(Json.parse("\"Hello, World!\""), "Hello, World!")
+    assert_eq(JSON.parseValue("\"hello\""), "hello")
+    assert_eq(JSON.parseValue("\"world\""), "world")
+    assert_eq(JSON.parseValue("\"Hello, World!\""), "Hello, World!")
 }
 
 @test
 fn test_string_with_spaces() {
-    assert_eq(Json.parse("\"hello world\""), "hello world")
-    assert_eq(Json.parse("\"  leading spaces\""), "  leading spaces")
-    assert_eq(Json.parse("\"trailing spaces  \""), "trailing spaces  ")
-    assert_eq(Json.parse("\"  both  \""), "  both  ")
+    assert_eq(JSON.parseValue("\"hello world\""), "hello world")
+    assert_eq(JSON.parseValue("\"  leading spaces\""), "  leading spaces")
+    assert_eq(JSON.parseValue("\"trailing spaces  \""), "trailing spaces  ")
+    assert_eq(JSON.parseValue("\"  both  \""), "  both  ")
 }
 
 @test
 fn test_single_character_string() {
-    assert_eq(Json.parse("\"a\""), "a")
-    assert_eq(Json.parse("\"Z\""), "Z")
-    assert_eq(Json.parse("\"0\""), "0")
-    assert_eq(Json.parse("\" \""), " ")
+    assert_eq(JSON.parseValue("\"a\""), "a")
+    assert_eq(JSON.parseValue("\"Z\""), "Z")
+    assert_eq(JSON.parseValue("\"0\""), "0")
+    assert_eq(JSON.parseValue("\" \""), " ")
 }
 
 // ===== 转义字符测试 =====
@@ -42,63 +42,63 @@ fn test_single_character_string() {
 @test
 fn test_escape_quote() {
     // 转义引号
-    var s = Json.parse("\"hello\\\"world\"")
+    var s = JSON.parseValue("\"hello\\\"world\"")
     assert_eq(s, "hello\"world")
 }
 
 @test
 fn test_escape_backslash() {
     // 转义反斜杠
-    var s = Json.parse("\"hello\\\\world\"")
+    var s = JSON.parseValue("\"hello\\\\world\"")
     assert_eq(s, "hello\\world")
 }
 
 @test
 fn test_escape_slash() {
     // 转义正斜杠（可选但应支持）
-    var s = Json.parse("\"hello\\/world\"")
+    var s = JSON.parseValue("\"hello\\/world\"")
     assert_eq(s, "hello/world")
 }
 
 @test
 fn test_escape_newline() {
     // 换行符
-    var s = Json.parse("\"hello\\nworld\"")
+    var s = JSON.parseValue("\"hello\\nworld\"")
     assert_eq(s.contains("\n"), true)
 }
 
 @test
 fn test_escape_tab() {
     // 制表符
-    var s = Json.parse("\"hello\\tworld\"")
+    var s = JSON.parseValue("\"hello\\tworld\"")
     assert_eq(s.contains("\t"), true)
 }
 
 @test
 fn test_escape_carriage_return() {
     // 回车符
-    var s = Json.parse("\"hello\\rworld\"")
+    var s = JSON.parseValue("\"hello\\rworld\"")
     assert_eq(s.contains("\r"), true)
 }
 
 @test
 fn test_escape_backspace() {
     // 退格符
-    var s = Json.parse("\"hello\\bworld\"")
+    var s = JSON.parseValue("\"hello\\bworld\"")
     assert_eq(len(s), 11)  // hello + \b + world
 }
 
 @test
 fn test_escape_formfeed() {
     // 换页符
-    var s = Json.parse("\"hello\\fworld\"")
+    var s = JSON.parseValue("\"hello\\fworld\"")
     assert_eq(len(s), 11)  // hello + \f + world
 }
 
 @test
 fn test_multiple_escapes() {
     // 多个转义字符
-    var s = Json.parse("\"line1\\nline2\\ttabbed\"")
+    var s = JSON.parseValue("\"line1\\nline2\\ttabbed\"")
     assert_eq(s.contains("\n"), true)
     assert_eq(s.contains("\t"), true)
 }
@@ -106,7 +106,7 @@ fn test_multiple_escapes() {
 @test
 fn test_consecutive_escapes() {
     // 连续转义
-    var s = Json.parse("\"\\n\\n\\n\"")
+    var s = JSON.parseValue("\"\\n\\n\\n\"")
     assert_eq(s, "\n\n\n")
     assert_eq(len(s), 3)
 }
@@ -116,49 +116,49 @@ fn test_consecutive_escapes() {
 @test
 fn test_unicode_escape_basic() {
     // 基本 Unicode 转义
-    var s = Json.parse("\"\\u0041\"")  // 'A'
+    var s = JSON.parseValue("\"\\u0041\"")  // 'A'
     assert_eq(s, "A")
 }
 
 @test
 fn test_unicode_escape_space() {
     // Unicode 空格
-    var s = Json.parse("\"\\u0020\"")  // 空格
+    var s = JSON.parseValue("\"\\u0020\"")  // 空格
     assert_eq(s, " ")
 }
 
 @test
 fn test_unicode_escape_chinese() {
     // 中文字符
-    var s = Json.parse("\"\\u4e2d\\u6587\"")  // "中文"
+    var s = JSON.parseValue("\"\\u4e2d\\u6587\"")  // "中文"
     assert_eq(s, "中文")
 }
 
 @test
 fn test_unicode_escape_emoji_bmp() {
     // BMP 范围内的字符
-    var s = Json.parse("\"\\u2603\"")  // 雪人 ☃
+    var s = JSON.parseValue("\"\\u2603\"")  // 雪人 ☃
     assert_eq(len(s), 1)
 }
 
 @test
 fn test_unicode_escape_mixed() {
     // 混合 Unicode 和普通文本
-    var s = Json.parse("\"Hello \\u4e16\\u754c\"")  // "Hello 世界"
+    var s = JSON.parseValue("\"Hello \\u4e16\\u754c\"")  // "Hello 世界"
     assert_eq(s, "Hello 世界")
 }
 
 @test
 fn test_unicode_lowercase() {
     // 小写十六进制
-    var s = Json.parse("\"\\u0041\\u0042\\u0043\"")  // ABC
+    var s = JSON.parseValue("\"\\u0041\\u0042\\u0043\"")  // ABC
     assert_eq(s, "ABC")
 }
 
 @test
 fn test_unicode_uppercase() {
     // 大写十六进制
-    var s = Json.parse("\"\\u0061\\u0062\\u0063\"")  // abc
+    var s = JSON.parseValue("\"\\u0061\\u0062\\u0063\"")  // abc
     assert_eq(s, "abc")
 }
 
@@ -167,14 +167,14 @@ fn test_unicode_uppercase() {
 @test
 fn test_surrogate_pair_emoji() {
     // 笑脸 😀 = U+1F600 = \uD83D\uDE00
-    var s = Json.parse("\"\\uD83D\\uDE00\"")
+    var s = JSON.parseValue("\"\\uD83D\\uDE00\"")
     assert_eq(len(s), 1)  // 应该是 1 个字符
 }
 
 @test
 fn test_surrogate_pair_another_emoji() {
     // 心形 ❤️ 或其他 emoji
-    var s = Json.parse("\"\\uD83D\\uDC96\"")  // 💖
+    var s = JSON.parseValue("\"\\uD83D\\uDC96\"")  // 💖
     assert_eq(len(s), 1)
 }
 
@@ -182,32 +182,32 @@ fn test_surrogate_pair_another_emoji() {
 
 @test
 fn test_direct_chinese() {
-    var s = Json.parse("\"你好世界\"")
+    var s = JSON.parseValue("\"你好世界\"")
     assert_eq(s, "你好世界")
     assert_eq(len(s), 4)
 }
 
 @test
 fn test_direct_japanese() {
-    var s = Json.parse("\"こんにちは\"")
+    var s = JSON.parseValue("\"こんにちは\"")
     assert_eq(s, "こんにちは")
 }
 
 @test
 fn test_direct_korean() {
-    var s = Json.parse("\"안녕하세요\"")
+    var s = JSON.parseValue("\"안녕하세요\"")
     assert_eq(s, "안녕하세요")
 }
 
 @test
 fn test_direct_emoji() {
-    var s = Json.parse("\"🎉🎊🎈\"")
+    var s = JSON.parseValue("\"🎉🎊🎈\"")
     assert_eq(len(s), 3)
 }
 
 @test
 fn test_mixed_unicode_ascii() {
-    var s = Json.parse("\"Hello 世界 123 🌍\"")
+    var s = JSON.parseValue("\"Hello 世界 123 🌍\"")
     assert_eq(s.contains("Hello"), true)
     assert_eq(s.contains("世界"), true)
     assert_eq(s.contains("123"), true)
@@ -217,32 +217,32 @@ fn test_mixed_unicode_ascii() {
 
 @test
 fn test_string_with_numbers() {
-    assert_eq(Json.parse("\"12345\""), "12345")
-    assert_eq(Json.parse("\"3.14\""), "3.14")
-    assert_eq(Json.parse("\"-100\""), "-100")
+    assert_eq(JSON.parseValue("\"12345\""), "12345")
+    assert_eq(JSON.parseValue("\"3.14\""), "3.14")
+    assert_eq(JSON.parseValue("\"-100\""), "-100")
 }
 
 @test
 fn test_string_with_keywords() {
     // 看起来像关键字的字符串
-    assert_eq(Json.parse("\"true\""), "true")
-    assert_eq(Json.parse("\"false\""), "false")
-    assert_eq(Json.parse("\"null\""), "null")
+    assert_eq(JSON.parseValue("\"true\""), "true")
+    assert_eq(JSON.parseValue("\"false\""), "false")
+    assert_eq(JSON.parseValue("\"null\""), "null")
 }
 
 @test
 fn test_string_with_json_chars() {
     // 包含 JSON 特殊字符
-    assert_eq(Json.parse("\"{}\""), "{}")
-    assert_eq(Json.parse("\"[]\""), "[]")
-    assert_eq(Json.parse("\"[1,2,3]\""), "[1,2,3]")
+    assert_eq(JSON.parseValue("\"{}\""), "{}")
+    assert_eq(JSON.parseValue("\"[]\""), "[]")
+    assert_eq(JSON.parseValue("\"[1,2,3]\""), "[1,2,3]")
 }
 
 // ===== 字符串数组测试 =====
 
 @test
 fn test_string_array() {
-    var arr = Json.parse("[\"a\", \"b\", \"c\"]")
+    var arr = JSON.parseValue("[\"a\", \"b\", \"c\"]")
     assert_eq(len(arr), 3)
     assert_eq(arr[0], "a")
     assert_eq(arr[1], "b")
@@ -251,7 +251,7 @@ fn test_string_array() {
 
 @test
 fn test_mixed_string_array() {
-    var arr = Json.parse("[\"hello\", \"世界\", \"🎉\"]")
+    var arr = JSON.parseValue("[\"hello\", \"世界\", \"🎉\"]")
     assert_eq(len(arr), 3)
     assert_eq(arr[0], "hello")
     assert_eq(arr[1], "世界")
@@ -261,7 +261,7 @@ fn test_mixed_string_array() {
 
 @test
 fn test_string_object_keys() {
-    var obj = Json.parse("{\"name\": \"Alice\", \"city\": \"北京\"}")
+    var obj = JSON.parseValue("{\"name\": \"Alice\", \"city\": \"北京\"}")
     assert_eq(obj.name, "Alice")
     assert_eq(obj.city, "北京")
 }
@@ -269,9 +269,9 @@ fn test_string_object_keys() {
 @test
 fn test_unicode_object_keys() {
     // Unicode 键名
-    var obj = Json.parse("{\"名字\": \"张三\", \"城市\": \"上海\"}")
+    var obj = JSON.parseValue("{\"名字\": \"张三\", \"城市\": \"上海\"}")
     // 通过 stringify 再 parse 验证
-    var jsonStr = Json.stringify(obj)
+    var jsonStr = JSON.stringify(obj)
     assert_eq(jsonStr.contains("张三"), true)
     assert_eq(jsonStr.contains("上海"), true)
 }
@@ -280,31 +280,31 @@ fn test_unicode_object_keys() {
 
 @test
 fn test_stringify_escape_quote() {
-    var s = Json.parse("\"hello\\\"world\"")
-    var jsonStr = Json.stringify(s)
+    var s = JSON.parseValue("\"hello\\\"world\"")
+    var jsonStr = JSON.stringify(s)
     assert_eq(jsonStr.contains("hello"), true)
 }
 
 @test
 fn test_stringify_escape_backslash() {
-    var s = Json.parse("\"hello\\\\world\"")
-    var jsonStr = Json.stringify(s)
+    var s = JSON.parseValue("\"hello\\\\world\"")
+    var jsonStr = JSON.stringify(s)
     assert_eq(jsonStr.contains("hello"), true)
 }
 
 @test
 fn test_stringify_escape_newline() {
-    var s = Json.parse("\"hello\\nworld\"")
-    var jsonStr = Json.stringify(s)
+    var s = JSON.parseValue("\"hello\\nworld\"")
+    var jsonStr = JSON.stringify(s)
     assert_eq(jsonStr.contains("n"), true)
 }
 
 @test
 fn test_stringify_unicode() {
     var s = "你好"
-    var jsonStr = Json.stringify(s)
+    var jsonStr = JSON.stringify(s)
     // 可能是直接输出或 \uXXXX 格式
-    var parsed = Json.parse(jsonStr)
+    var parsed = JSON.parseValue(jsonStr)
     assert_eq(parsed, s)
 }
 

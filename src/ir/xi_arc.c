@@ -685,6 +685,29 @@ static bool arc_builtin_iterator_method_returns_fresh(const XiValue *v) {
     }
 }
 
+/* Bodyless JSON namespace calls need an explicit +1 result contract.  Parsing,
+ * stringification, path reads, merge, and JSON.value all return an owned value.
+ * The JSON.value encoder recursively materializes containers and retains
+ * borrowed string scalars, including a scalar root. */
+static bool arc_builtin_json_method_returns_owned(const XiValue *v) {
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1 ||
+        !v->args[0] || !v->args[0]->aux || !v->aux)
+        return false;
+    const XiValue *recv = v->args[0];
+    if (recv->op != XI_GET_BUILTIN || strcmp((const char *) recv->aux, "JSON") != 0)
+        return false;
+
+    const char *method = (const char *) v->aux;
+    if (strcmp(method, "parse") == 0 || strcmp(method, "parseValue") == 0 ||
+        strcmp(method, "parseObject") == 0 || strcmp(method, "parseWithRest") == 0 ||
+        strcmp(method, "stringify") == 0 || strcmp(method, "merge") == 0 ||
+        strcmp(method, "get") == 0 || strcmp(method, "require") == 0 ||
+        strcmp(method, "asObject") == 0 || strcmp(method, "asArray") == 0 ||
+        strcmp(method, "value") == 0)
+        return true;
+    return false;
+}
+
 static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
     if (!v)
         return false;
@@ -711,6 +734,8 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
     if (arc_mem_allocator_returns_fresh_buffer(f, v))
         return true;
     if (arc_builtin_iterator_method_returns_fresh(v))
+        return true;
+    if (arc_builtin_json_method_returns_owned(v))
         return true;
     if (v->op != XI_CALL_METHOD || v->nargs < 1 || !v->args[0])
         return false;

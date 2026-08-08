@@ -5607,6 +5607,17 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
     if (!XR_TYPE_IS_FUNCTION(target_type) && xr_is_json_coercion(target_type, value_type))
         return;
 
+    if (XR_TYPE_IS_JSON(target_type)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "composite type '%s' cannot widen implicitly to JSON.Value; wrap the value "
+                 "with JSON.value(...) explicitly",
+                 xr_type_to_string(value_type));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+        return;
+    }
+
     char msg[256];
     char reason[192];
     const char *tail = "";
@@ -5742,11 +5753,6 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
             case AST_OBJECT_LITERAL: {
                 ObjectLiteralNode *obj = &expr->as.object_literal;
                 for (int i = 0; i < obj->count; i++) {
-                    if (obj->computed && obj->computed[i]) {
-                        XaSymbol *root = xa_borrowed_param_root_symbol(ctx, obj->keys[i]);
-                        if (root)
-                            return root;
-                    }
                     XaSymbol *root = xa_borrowed_param_root_symbol(ctx, obj->values[i]);
                     if (root)
                         return root;
@@ -8706,8 +8712,13 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                     !xr_is_json_coercion(links->declared_type, init_type)) {
                     char msg[256];
                     char reason[192];
-                    if (xr_type_object_mismatch_reason(links->declared_type, init_type, reason,
-                                                       sizeof(reason))) {
+                    if (XR_TYPE_IS_JSON(links->declared_type)) {
+                        snprintf(msg, sizeof(msg),
+                                 "composite type '%s' cannot widen implicitly to JSON.Value; "
+                                 "wrap the value with JSON.value(...) explicitly",
+                                 xr_type_to_string(init_type));
+                    } else if (xr_type_object_mismatch_reason(links->declared_type, init_type,
+                                                              reason, sizeof(reason))) {
                         snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'; %s",
                                  xr_type_to_string(init_type),
                                  xr_type_to_string(links->declared_type), reason);

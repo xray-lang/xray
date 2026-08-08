@@ -170,7 +170,7 @@ static bool xr_derive_target_bit(Token token, uint32_t *bit_out) {
         *bit_out = XR_DERIVE_INSPECT;
         return true;
     }
-    if (token.length == 4 && memcmp(token.start, "Json", 4) == 0) {
+    if (token.length == 4 && memcmp(token.start, "JSON", 4) == 0) {
         *bit_out = XR_DERIVE_JSON;
         return true;
     }
@@ -248,7 +248,7 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after @derive");
         if (xr_parser_check(parser, TK_RPAREN)) {
             xr_parser_error(
-                parser, "@derive requires at least one target: Inspect, Json, Eq, Hash, or Clone");
+                parser, "@derive requires at least one target: Inspect, JSON, Eq, Hash, or Clone");
         } else {
             uint32_t seen_flags = 0;
             do {
@@ -263,7 +263,7 @@ XrAttribute *xr_parse_single_attribute(Parser *parser) {
                 if (!xr_derive_target_bit(target, &bit)) {
                     char msg[160];
                     snprintf(msg, sizeof(msg),
-                             "unknown derive target '%s'; expected Inspect, Json, "
+                             "unknown derive target '%s'; expected Inspect, JSON, "
                              "Eq, Hash, or Clone",
                              name_buf);
                     xr_parser_error(parser, msg);
@@ -694,7 +694,9 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                                 param->type = xr_tref_named(parser->compiler_session, "Set");
                                 break;
                             case AST_OBJECT_LITERAL:
-                                param->type = xr_tref_named(parser->compiler_session, "Json");
+                                if (dv->as.object_literal.count == 0)
+                                    param->type = xr_tref_object(parser->compiler_session, NULL,
+                                                                 NULL, NULL, 0);
                                 break;
                             default:
                                 break;
@@ -1060,9 +1062,8 @@ AstNode *xr_parse_array_literal(Parser *parser) {
 }
 
 /*
- * Parse Json/Object literal `{ key: value }`.
+ * Parse an exact structural object literal `{ key: value }`.
  * Map literals use the prefixed `#{ key: value }` form.
- * Supports computed property syntax: `{ [expr]: value }`.
  */
 AstNode *xr_parse_object_literal(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_object_literal: NULL parser");
@@ -1070,16 +1071,14 @@ AstNode *xr_parse_object_literal(Parser *parser) {
 
     // '{' already consumed
 
-    // Empty object {} -> Json
+    // Empty exact structural object.
     if (xr_parser_match(parser, TK_RBRACE)) {
-        return xr_ast_object_literal(parser->compiler_session, NULL, NULL, NULL, 0, line);
+        return xr_ast_object_literal(parser->compiler_session, NULL, NULL, 0, line);
     }
 
     // Collect key-value pairs
     AstNode **keys = NULL;
     AstNode **values = NULL;
-    bool *computed = NULL;
-    bool has_computed = false;
     int count = 0;
     int capacity = 0;
 
@@ -1099,12 +1098,6 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             if (_old_cap_capacity > 0 && values)
                 memcpy(_new_values, values, sizeof(AstNode *) * (size_t) _old_cap_capacity);
             values = _new_values;
-
-            bool *_new_computed =
-                (bool *) ast_alloc_array(parser->compiler_session, sizeof(bool), (size_t) capacity);
-            if (_old_cap_capacity > 0 && computed)
-                memcpy(_new_computed, computed, sizeof(bool) * (size_t) _old_cap_capacity);
-            computed = _new_computed;
         }
 
         // Spread entry: `{ ...base }` splices another object's fields in.
@@ -1118,22 +1111,19 @@ AstNode *xr_parse_object_literal(Parser *parser) {
                 return xr_ast_literal_null(parser->compiler_session, line);
             keys[count] = NULL;
             values[count] = xr_ast_spread_expr(parser->compiler_session, src, spread_line);
-            computed[count] = false;
             count++;
             continue;
         }
 
         // Parse key
         AstNode *key = NULL;
-        bool is_computed = false;
         const char *shorthand_name = NULL;
 
-        // Computed property syntax: [expr]
+        // Computed keys belong to Map literals, never structural objects.
         if (xr_parser_match(parser, TK_LBRACKET)) {
-            key = xr_parse_expression(parser);
-            xr_parser_consume(parser, TK_RBRACKET, "expected ']' after computed property");
-            is_computed = true;
-            has_computed = true;
+            xr_parser_error(
+                parser, "structural object keys must be static; use `#{ [key]: value }` for Map");
+            return xr_ast_literal_null(parser->compiler_session, line);
         }
         // String literal as key
         else if (xr_parser_check(parser, TK_LITERAL_STRING)) {
@@ -1159,14 +1149,14 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             key = xr_ast_literal_string(parser->compiler_session, key_str, key_token.escape_mode,
                                         key_token.source_form, line);
             xr_quoted_payload_free(&payload);
-            is_computed = false;
         }
         // Numeric literal as key: only Map allows this, and Map literals must
         // use the `#{ ... }` prefix form.
         else if (xr_parser_check(parser, TK_LITERAL_INT) ||
                  xr_parser_check(parser, TK_LITERAL_FLOAT)) {
             xr_parser_error(
-                parser, "Json object does not support numeric keys; use `#{ key: value }` for Map");
+                parser,
+                "structural object does not support numeric keys; use `#{ key: value }` for Map");
             return xr_ast_literal_null(parser->compiler_session, line);
         }
         // Identifier or keyword as key (allow keywords like 'type', 'int', etc.)
@@ -1188,7 +1178,6 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             key_str[key_token.length] = '\0';
             key = xr_ast_literal_string(parser->compiler_session, key_str, XR_LITERAL_ESCAPED,
                                         XR_LITERAL_INLINE, line);
-            is_computed = false;
             if (key_token.type == TK_NAME)
                 shorthand_name = key_str;
         } else {
@@ -1199,9 +1188,8 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         }
 
         keys[count] = key;
-        computed[count] = is_computed;
 
-        // `{ ... }` is always a Json/Object literal in xray.
+        // `{ ... }` is always a structural-object literal in Xray.
         // The only legal key-value separator is `:`. Map literals must use
         // the `#{ k: v }` prefix form. The unified arrow `->` is reserved
         // for function / branch arrows and is rejected here with a hint.
@@ -1209,7 +1197,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         } else if (xr_parser_check(parser, TK_ARROW)) {
             xr_parser_error(
                 parser,
-                "`->` is not a valid separator in Json literal; use `#{ key: value }` for Map");
+                "`->` is not a valid separator in object literal; use `#{ key: value }` for Map");
             return xr_ast_literal_null(parser->compiler_session, line);
         } else if (shorthand_name &&
                    (xr_parser_check(parser, TK_COMMA) || xr_parser_check(parser, TK_RBRACE))) {
@@ -1217,7 +1205,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
             count++;
             continue;
         } else {
-            xr_parser_error(parser, "expected ':' after key in Json literal");
+            xr_parser_error(parser, "expected ':' after key in object literal");
             return xr_ast_literal_null(parser->compiler_session, line);
         }
 
@@ -1230,8 +1218,7 @@ AstNode *xr_parse_object_literal(Parser *parser) {
     // Expect closing brace
     xr_parser_consume(parser, TK_RBRACE, "expected '}' at end of literal");
 
-    AstNode *result = xr_ast_object_literal(parser->compiler_session, keys, values,
-                                            has_computed ? computed : NULL, count, line);
+    AstNode *result = xr_ast_object_literal(parser->compiler_session, keys, values, count, line);
 
     // Free temporary array
 
@@ -1280,7 +1267,7 @@ AstNode *xr_parse_empty_map_literal(Parser *parser) {
         keys[count] = xr_parse_expression(parser);
 
         // Expect ':' as the key-value separator inside `#{ ... }` Map literal.
-        // The `#` prefix already disambiguates a Map from a Json/Object literal.
+        // The `#` prefix disambiguates a Map from a structural-object literal.
         xr_parser_consume(parser, TK_COLON, "expected ':' after Map key in #{...}");
 
         // Parse value expression
@@ -1597,8 +1584,7 @@ AstNode *xr_parse_type_alias_declaration(Parser *parser) {
     // Stash the resolved type in TypeAliasNode::resolved_type so that
     // the analyzer can read it without going through any backchannel
     // on AstNode itself.
-    AstNode *node =
-        xr_ast_type_alias(parser->compiler_session, alias_name, NULL, NULL, NULL, 0, line);
+    AstNode *node = xr_ast_type_alias(parser->compiler_session, alias_name, NULL, NULL, 0, line);
     xr_free(alias_name);  // xr_ast_type_alias copies the name, so we can free the original
     if (!node) {
         return NULL;

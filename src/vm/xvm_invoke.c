@@ -881,7 +881,7 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrVMRuntime *isolate, XrVMContext *vm_c
             if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
                 return XR_DISP_FATAL;
             base[a] = result;
-            /* Check if the builtin raised an exception (e.g. Json.stringify
+            /* Check if the builtin raised an exception (e.g. JSON.stringify
              * on non-serializable types calls xr_vm_unwind_with_trace). */
             if (!XR_IS_NULL(vm_ctx->current_exception)) {
                 return XR_DISP_RAISE;

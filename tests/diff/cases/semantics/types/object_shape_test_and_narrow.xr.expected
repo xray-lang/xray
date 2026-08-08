@@ -1,10 +1,9 @@
-ok is User=true
-missing is User=false
-extra is User=true
-wrongKind is User=false
+ok decodes User=true
+missing decodes User=false
+extra rejects by default=true
+extra ignores explicitly=true
+wrongKind decodes User=false
 narrowed=Alice/30
-safe reject=true
-safe accept=true
-scalar is User=false
+scalar decodes User=false
 tagged:9
 user:Eve

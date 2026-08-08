@@ -1,3 +1,2 @@
 var xs = [1, 2, 3]
-var j: Json = xs
-
+var value: JSON.Value = xs

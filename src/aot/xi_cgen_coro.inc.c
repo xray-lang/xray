@@ -233,7 +233,7 @@ static void emit_coro_transfer_plan_xrvalue(XiCgenCtx *ctx, FILE *out, const XiV
     }
     if (plan->action == XR_TRANSFER_EXPLICIT_COPY && cg_transfer_plan_has_boundary_clone(plan)) {
         fprintf(out, "%s(",
-                xi_coro_value_has_json_type(v) ? "xrt_json_clone_for_coro"
+                xi_coro_value_has_json_type(v) ? "xrt_object_clone_for_coro"
                                                : "xrt_value_clone_for_coro");
         emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
         fprintf(out, ")");
@@ -264,7 +264,7 @@ static void emit_coro_transfer_plan_as_rep(XiCgenCtx *ctx, FILE *out, const XiVa
     if (plan->action == XR_TRANSFER_EXPLICIT_COPY && cg_transfer_plan_has_boundary_clone(plan)) {
         fprintf(out, "(");
         fprintf(out, "%s(",
-                xi_coro_value_has_json_type(v) ? "xrt_json_clone_for_coro"
+                xi_coro_value_has_json_type(v) ? "xrt_object_clone_for_coro"
                                                : "xrt_value_clone_for_coro");
         emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
         fprintf(out, ")).ptr");
@@ -285,7 +285,7 @@ static void emit_coro_transfer_plan_as_rep(XiCgenCtx *ctx, FILE *out, const XiVa
 static void emit_coro_transfer_xrvalue(XiCgenCtx *ctx, FILE *out, const XiValue *v, uint8_t mode) {
     if (mode == XR_TRANSFER_COPY && xi_coro_value_needs_boundary_clone(v)) {
         fprintf(out, "%s(",
-                xi_coro_value_has_json_type(v) ? "xrt_json_clone_for_coro"
+                xi_coro_value_has_json_type(v) ? "xrt_object_clone_for_coro"
                                                : "xrt_value_clone_for_coro");
         emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
         fprintf(out, ")");
@@ -311,7 +311,7 @@ static void emit_coro_transfer_as_rep(XiCgenCtx *ctx, FILE *out, const XiValue *
     if (mode == XR_TRANSFER_COPY && xi_coro_value_needs_boundary_clone(v)) {
         fprintf(out, "(");
         fprintf(out, "%s(",
-                xi_coro_value_has_json_type(v) ? "xrt_json_clone_for_coro"
+                xi_coro_value_has_json_type(v) ? "xrt_object_clone_for_coro"
                                                : "xrt_value_clone_for_coro");
         emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
         fprintf(out, ")).ptr");
@@ -3053,7 +3053,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = %s(",
-                    xi_coro_value_has_json_type(v) ? "xrt_json_clone_for_coro"
+                    xi_coro_value_has_json_type(v) ? "xrt_object_clone_for_coro"
                                                    : "xrt_value_clone_for_coro");
             emit_vref(out, v);
             fprintf(out, ");\n");

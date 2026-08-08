@@ -1,0 +1,16 @@
+// A container copy recursively duplicates native-layout class instances.
+// Mutating the copied instance must not affect the original object graph.
+class Box {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+var original = Box(1)
+var source = [original]
+var cloned = copy(source)
+cloned[0].value = 2
+print(original.value)
+print(cloned[0].value)

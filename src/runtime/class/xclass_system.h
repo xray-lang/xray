@@ -48,16 +48,7 @@ typedef struct XrayCoreClasses {
     // Json utility (static methods only: Json.parse, Json.stringify, etc.)
     XrClass *jsonClass;
 
-    // Json instance methods (iterator, toString, keys, values, has, etc.).
-    // Wired as jsonRootClass->super so dynamic-layout instances find these
-    // methods via normal class-chain lookup.
-    XrClass *jsonInstanceMethodClass;
-
-    // Dynamic-layout root classes for Json objects and structural objects.
-    // Json inherits Json instance methods. Structural objects use one domain
-    // root; every concrete runtime shape is sealed, while open rows remain a
-    // compile-time compatibility view rather than a second runtime identity.
-    XrClass *jsonRootClass;
+    // Structural objects use one domain root; every concrete runtime shape is sealed.
     XrClass *structObjectRootClass;
 
     // Exception (populated when stdlib/types/exception.xr is loaded)

@@ -5,10 +5,12 @@
 //
 // Usage: xray gc_hashmap_resize.xr -- [iterations]
 
+type DataRecord = { data: int }
+
 fn run(n: int) {
     // Phase 1: Build a long-lived map, then repeatedly overwrite values
     // This forces write barriers: old container ← young value
-    var bigMap: Map<string, Json> = #{}
+    var bigMap: JSON.Object = JSON.parseObject("{}")
     var i = 0
     while (i < 1000) {
         bigMap["key_" + i] = i
@@ -21,20 +23,20 @@ fn run(n: int) {
     while (round < n) {
         i = 0
         while (i < 1000) {
-            bigMap["key_" + i] = { "v": round * 1000 + i }
+            bigMap.set("key_" + i, JSON.value({ v: round * 1000 + i }))
             i = i + 1
         }
         round = round + 1
     }
     // Verify
-    var check = bigMap["key_500"].v
+    var check = JSON.require<int>(bigMap, ["key_500", "v"])
     print("Phase 1 done: " + n + " rounds, check=" + check)
 
     // Phase 2: Create and discard many small maps (allocation churn)
     var total = 0
     i = 0
     while (i < n * 10) {
-        var m = {}
+        var m: Map<string, int> = Map()
         var j = 0
         while (j < 20) {
             m["k" + j] = j * j
@@ -46,19 +48,19 @@ fn run(n: int) {
     print("Phase 2 (small map churn x" + (n * 10) + "): total=" + total)
 
     // Phase 3: Nested maps (deep reference chains, mark traversal stress)
-    var root = {}
+    var root: Map<string, Map<string, DataRecord>> = Map()
     i = 0
     while (i < n) {
-        var inner = {}
+        var inner: Map<string, DataRecord> = Map()
         var j = 0
         while (j < 10) {
-            inner["field_" + j] = { "data": i * 10 + j }
+            inner["field_" + j] = { data: i * 10 + j }
             j = j + 1
         }
         root["node_" + (i % 100)] = inner
         i = i + 1
     }
-    var deepCheck = root["node_0"]["field_5"].data
+    var deepCheck = root.get("node_0")!.get("field_5")!.data
     print("Phase 3 (nested maps): check=" + deepCheck)
 }
 

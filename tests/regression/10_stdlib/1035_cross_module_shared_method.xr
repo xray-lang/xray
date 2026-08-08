@@ -6,13 +6,18 @@
 // OP_GETSHARED to load the wrong shared variable and method lookup
 // to fail silently.
 
-import { Counter } from "./modules/shared_class_lib"
+import { Counter, CounterStats } from "./modules/shared_class_lib"
+
+type CombinedStats = {
+    first: CounterStats,
+    second: CounterStats,
+}
 
 var counter1 = Counter()
 var counter2 = Counter()
 
-fn call_stats_nested() -> Json {
-    fn inner() -> Json {
+fn call_stats_nested() -> CombinedStats {
+    fn inner() -> CombinedStats {
         var a = counter1.stats()
         var b = counter2.stats()
         return { first: a, second: b }

@@ -26,7 +26,6 @@
 #include "../../base/xdefs.h"
 #include "../../shared/xr_param_mode.h"
 #include "../../shared/xr_scalar_type.h"
-#include "../../shared/xobject_row.h"
 
 struct XrCompilerSession;
 struct AstNode;
@@ -80,7 +79,6 @@ typedef struct XrTypeRef {
     int column;
     uint8_t scalar_rep;                /* XrNativeType scalar representation */
     uint8_t builtin_spelling;          /* XrSourceTypeSpelling or NONE       */
-    XrObjectRowMode object_row_mode;   /* OBJECT: exact or trailing ...    */
     bool requires_nothrow;             /* FUNCTION: compiler-inferred HOF specialization */
     int fixed_length;                  /* FIXED_ARRAY: literal length if known, 0 otherwise */
     struct AstNode *fixed_length_expr; /* FIXED_ARRAY: source expression for N */
@@ -144,10 +142,9 @@ XR_FUNC XrTypeRef *xr_tref_function_with_modes(struct XrCompilerSession *session
 /* Tuple: (T1, T2, ...) */
 XR_FUNC XrTypeRef *xr_tref_tuple(struct XrCompilerSession *session, XrTypeRef **elems, int count);
 
-/* Object / struct type literal: { f1: T1, f2: T2 } or { f1: T1, ... }. */
+/* Exact object / struct type literal: { f1: T1, f2: T2 }. */
 XR_FUNC XrTypeRef *xr_tref_object(struct XrCompilerSession *session, const char **field_names,
-                                  XrTypeRef **field_types, const bool *field_readonly, int count,
-                                  XrObjectRowMode row_mode);
+                                  XrTypeRef **field_types, const bool *field_readonly, int count);
 
 /* Fixed-length array: [T; N] */
 XR_FUNC XrTypeRef *xr_tref_fixed_array(struct XrCompilerSession *session, XrTypeRef *elem,

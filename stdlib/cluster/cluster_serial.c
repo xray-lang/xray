@@ -47,7 +47,6 @@
 #define XR_STAG_ARRAY 0x07
 #define XR_STAG_MAP 0x08
 #define XR_STAG_SET 0x09
-#define XR_STAG_JSON 0x0A
 #define XR_STAG_ARRAY_I32 0x0B
 #define XR_STAG_ARRAY_I64 0x0C
 #define XR_STAG_ARRAY_F32 0x0D
@@ -253,33 +252,6 @@ static int encode_value(XrVMRuntime *X, XrValue value, XrSerialBuf *buf, int dep
                             if (encode_value(X, set->entries[i].value, buf, depth + 1) != 0)
                                 return -1;
                             written++;
-                        }
-                    }
-                    return 0;
-                }
-
-                case XR_TINSTANCE: {
-                    // Json dynamic-layout instances have builtin_kind == XR_BK_JSON
-                    XrInstance *_cinst = (XrInstance *) value.ptr;
-                    if (!_cinst->klass || _cinst->klass->builtin_kind != XR_BK_JSON)
-                        return -1;  // non-Json instances are not serializable
-                    XrJson *json = (XrJson *) value.ptr;
-                    buf_put_u8(buf, XR_STAG_JSON);
-
-                    {
-                        XrClass *cls = json->klass;
-                        uint16_t count = cls ? cls->field_count : 0;
-                        buf_put_varint(buf, (uint64_t) count);
-                        for (uint16_t i = 0; i < count; i++) {
-                            const char *fname = cls->fields[i].name;
-                            if (!fname)
-                                fname = "";
-                            size_t flen = strlen(fname);
-                            buf_put_varint(buf, (uint64_t) flen);
-                            buf_put_bytes(buf, fname, flen);
-                            XrValue fval = xr_instance_get_dynamic_field(json, i);
-                            if (encode_value(X, fval, buf, depth + 1) != 0)
-                                return -1;
                         }
                     }
                     return 0;
@@ -576,52 +548,6 @@ static int decode_value(XrSerialReader *r, XrValue *out) {
             memcpy(arr->data, raw, byte_len);
             arr->length = (int32_t) count;
             *out = xr_value_from_array(arr);
-            return 0;
-        }
-
-        case XR_STAG_JSON: {
-            // Direct binary decoding: [count varint] [key_len varint, key, value] ...
-            uint32_t count;
-            if (reader_varint32(r, &count) != 0)
-                return -1;
-            XrJson *json = xr_json_new(NULL);
-            if (!json)
-                return -1;
-            r->depth++;
-            for (uint32_t i = 0; i < count; i++) {
-                // Read key length (varint)
-                uint32_t klen;
-                if (reader_varint32(r, &klen) != 0) {
-                    r->depth--;
-                    return -1;
-                }
-                const uint8_t *kdata;
-                if (reader_bytes(r, klen, &kdata) != 0) {
-                    r->depth--;
-                    return -1;
-                }
-                // Read value
-                XrValue val;
-                if (decode_value(r, &val) != 0) {
-                    r->depth--;
-                    return -1;
-                }
-                // Set field by key name (heap alloc for long keys)
-                char stack_key[256];
-                char *key_buf =
-                    (klen < sizeof(stack_key)) ? stack_key : (char *) xr_malloc(klen + 1);
-                if (!key_buf) {
-                    r->depth--;
-                    return -1;
-                }
-                memcpy(key_buf, kdata, klen);
-                key_buf[klen] = '\0';
-                xr_json_set_by_key(r->X, json, key_buf, val);
-                if (key_buf != stack_key)
-                    xr_free(key_buf);
-            }
-            r->depth--;
-            *out = xr_json_value(json);
             return 0;
         }
 

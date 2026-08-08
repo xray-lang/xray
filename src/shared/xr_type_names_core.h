@@ -61,7 +61,7 @@
 #define TYPE_NAME_MODULE "module"
 #define TYPE_NAME_ITERATOR "iterator"
 #define TYPE_NAME_STRUCT "struct"
-#define TYPE_NAME_JSON "Json"
+#define TYPE_NAME_JSON "JSON.Value"
 #define TYPE_NAME_STRINGBUILDER "StringBuilder"
 #define TYPE_NAME_BUFFER "Buffer"
 #define TYPE_NAME_UNKNOWN "unknown"

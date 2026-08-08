@@ -20,7 +20,7 @@
  *
  * THREADING (R2-4):
  *   The table is isolate-shared metadata. Runtime registration happens on
- *   parallel worker threads (e.g. dynamic Json keys via xr_json_set_by_key),
+ *   parallel worker threads (e.g. dynamic Json keys via xr_object_instance_set_by_key),
  *   so every access goes through the embedded rwlock: register takes the
  *   write lock (cold path), lookup/get_name take the read lock. Same model
  *   as the global string pool (R1 P1-4). Returned name pointers stay valid

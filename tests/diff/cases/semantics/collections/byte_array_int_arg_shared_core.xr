@@ -1,10 +1,7 @@
 // anchor: bytes-int-arg-shared-core
-var dyn: Json = {
-    "badOffset": true,
-    "badDst": false,
-    "badSrc": "src",
-    "badCount": null
-}
+var dyn: JSON.Object = JSON.parseObject(
+    "{\"badOffset\":true,\"badDst\":false,\"badSrc\":\"src\",\"badCount\":null}"
+)
 
 var bytes = Array<byte>(8, 1)
 var src = Array<byte>(8, 2)
@@ -13,7 +10,7 @@ fn show_load_u32() {
     var loadBytes = Array<byte>(8, 1)
     var view: Slice<byte> = loadBytes[:]
     try {
-        var value: u32 = view.load<u32>(dyn.badOffset, Endian.LE)
+        var value: u32 = view.load<u32>(JSON.require<int>(dyn, ["badOffset"]), Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)
@@ -25,7 +22,7 @@ fn show_load_u64() {
     var loadBytes = Array<byte>(8, 1)
     var view: Slice<byte> = loadBytes[:]
     try {
-        var value: u64 = view.load<u64>(dyn.badOffset, Endian.LE)
+        var value: u64 = view.load<u64>(JSON.require<int>(dyn, ["badOffset"]), Endian.LE)
         print(int(value))
     } catch panic (p) {
         print(p.message)
@@ -35,7 +32,7 @@ fn show_load_u64() {
 
 fn show_append_from() {
     try {
-        bytes.appendFrom(src[dyn.badOffset:2])
+        bytes.appendFrom(src[JSON.require<int>(dyn, ["badOffset"]):2])
         print(bytes[0])
     } catch panic (p) {
         print(p.message)
@@ -45,7 +42,7 @@ fn show_append_from() {
 
 fn show_repeat_distance() {
     try {
-        bytes.repeatFrom(dyn.badDst, 1)
+        bytes.repeatFrom(JSON.require<int>(dyn, ["badDst"]), 1)
         print(bytes[0])
     } catch panic (p) {
         print(p.message)
@@ -55,7 +52,7 @@ fn show_repeat_distance() {
 
 fn show_repeat_from() {
     try {
-        bytes.repeatFrom(1, dyn.badCount)
+        bytes.repeatFrom(1, JSON.require<int>(dyn, ["badCount"]))
         print(bytes[0])
     } catch panic (p) {
         print(p.message)

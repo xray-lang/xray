@@ -1,7 +1,0 @@
-fn readAlias() -> Json {
-    var a: Json = { name: "ada", age: 1 }
-    var b: Json = a
-    return b.age
-}
-
-print(readAlias())

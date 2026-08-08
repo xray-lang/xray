@@ -786,10 +786,9 @@ AstNode *xr_ast_tuple_literal(XrCompilerSession *session, AstNode **elements, in
 // Create object literal node (static structure)
 // keys: key expression array (usually string literals)
 // values: value expression array
-// computed: computed property flag array (can be NULL)
 // count: key-value pair count
 AstNode *xr_ast_object_literal(XrCompilerSession *session, AstNode **keys, AstNode **values,
-                               bool *computed, int count, int line) {
+                               int count, int line) {
     AstNode *node = alloc_node(session, AST_OBJECT_LITERAL, line);
     node->as.object_literal.count = count;
 
@@ -803,20 +802,9 @@ AstNode *xr_ast_object_literal(XrCompilerSession *session, AstNode **keys, AstNo
             node->as.object_literal.keys[i] = keys[i];
             node->as.object_literal.values[i] = values[i];
         }
-        // Copy computed property flags (if any)
-        if (computed) {
-            node->as.object_literal.computed =
-                (bool *) ast_alloc_array(session, sizeof(bool), (size_t) count);
-            for (int i = 0; i < count; i++) {
-                node->as.object_literal.computed[i] = computed[i];
-            }
-        } else {
-            node->as.object_literal.computed = NULL;
-        }
     } else {
         node->as.object_literal.keys = NULL;
         node->as.object_literal.values = NULL;
-        node->as.object_literal.computed = NULL;
     }
 
     return node;
@@ -2248,10 +2236,9 @@ AstNode *xr_ast_destructure_assign(XrCompilerSession *session, XrDestructurePatt
 /* ========== Type Alias Node ========== */
 
 // Create type alias node
-// type User = { name: string, age: int, email?: string }
+// type User = { name: string, age: int, email: string? }
 AstNode *xr_ast_type_alias(XrCompilerSession *session, const char *name, char **field_names,
-                           XrTypeRef **field_types, bool *field_optional, int field_count,
-                           int line) {
+                           XrTypeRef **field_types, int field_count, int line) {
     AstNode *node = alloc_node(session, AST_TYPE_ALIAS, line);
 
     // Copy type name
@@ -2271,14 +2258,9 @@ AstNode *xr_ast_type_alias(XrCompilerSession *session, const char *name, char **
             (XrTypeRef **) ast_alloc_array(session, sizeof(XrTypeRef *), (size_t) field_count);
         memcpy(node->as.type_alias.field_types, field_types, sizeof(XrTypeRef *) * field_count);
 
-        // Copy optional flags array
-        node->as.type_alias.field_optional =
-            (bool *) ast_alloc_array(session, sizeof(bool), (size_t) field_count);
-        memcpy(node->as.type_alias.field_optional, field_optional, sizeof(bool) * field_count);
     } else {
         node->as.type_alias.field_names = NULL;
         node->as.type_alias.field_types = NULL;
-        node->as.type_alias.field_optional = NULL;
     }
 
     return node;

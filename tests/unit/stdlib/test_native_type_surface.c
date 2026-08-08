@@ -52,10 +52,10 @@ TEST(native_type_protocol_rejects_null_isolate) {
 TEST(native_type_lookup_and_typed_json_contract_are_total) {
     ASSERT_NULL(xa_builtin_get_type_info(NULL));
 
-    const XaBuiltinType *json = xa_builtin_get_by_name("Json");
+    const XaBuiltinType *json = xa_builtin_get_by_name("JSON");
     ASSERT_NOT_NULL(json);
     const XaEffectContract *decode =
-        xa_builtin_get_named_type_member_effect_contract("Json", "decode", true);
+        xa_builtin_get_named_type_member_effect_contract("JSON", "decode", true);
     ASSERT_NOT_NULL(decode);
     ASSERT_EQ_INT(decode->kind, XA_EFFECT_CONTRACT_NOTHROW);
 }
@@ -75,7 +75,6 @@ TEST(native_module_object_and_enum_metadata) {
     XrType *object_shape_type = xa_builtin_object_shape_decl_type(iso, object_shape);
     ASSERT_NOT_NULL(object_shape_type);
     ASSERT_EQ_INT(object_shape_type->kind, XR_KIND_STRUCT_OBJECT);
-    ASSERT_EQ_INT(object_shape_type->object.row_mode, XR_OBJECT_ROW_EXACT);
     ASSERT_EQ_INT(object_shape_type->object.field_count, 2);
 
     const XaBuiltinEnum *enum_decl = xa_builtin_get_enum_type("net", "NetError");

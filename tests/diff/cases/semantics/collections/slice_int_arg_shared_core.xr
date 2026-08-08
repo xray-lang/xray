@@ -1,9 +1,11 @@
 // anchor: slice-int-arg-shared-core
 fn main() {
-    var dyn: Json = { "badStart": true, "end": 2 }
+    var dyn: JSON.Object = JSON.parseObject("{\"badStart\":true,\"end\":2}")
     var arr = [10, 20, 30]
     print("before-slice")
-    var view: Slice<int> = arr[dyn.badStart:dyn.end]
+    var view: Slice<int> = arr[
+        JSON.require<int>(dyn, ["badStart"]):JSON.require<int>(dyn, ["end"])
+    ]
     print(len(view))
     print("unreachable")
 }

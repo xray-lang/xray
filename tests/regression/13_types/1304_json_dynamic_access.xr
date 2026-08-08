@@ -1,101 +1,29 @@
-// 0512_json_dynamic_access.xr
-// 作者：xingleixu@gmail.com
-// 测试：动态字段访问 obj[expr]
-// ===== 基本动态访问 =====
+// Schema-less traversal and mutation are explicit JSON.Path operations.
+
 @test
-fn test_dynamic_get() {
-    var obj: Json = { "name": "Alice", "age": 30 }
+fn test_path_get_and_require() {
+    var root = JSON.parseValue("{\"user\":{\"name\":\"Alice\",\"age\":30}}")
     var key = "name"
-    assert_eq(obj[key], "Alice")
-    var key2 = "age"
-    assert_eq(obj[key2], 30)
+    var path: JSON.Path = ["user", key]
+    assert_eq(JSON.get<string>(root, path), "Alice")
+    assert_eq(JSON.require<int>(root, ["user", "age"]), 30)
+    assert_eq(JSON.get<string>(root, ["user", "missing"]), null)
 }
 
 @test
-fn test_dynamic_set() {
-    var obj: Json = { "x": 1 }
-    var key = "y"
-    obj[key] = 2
-    assert_eq(obj.y, 2)
-    assert_eq(obj["y"], 2)
+fn test_path_set_and_remove() {
+    var root = JSON.parseValue("{\"config\":{}}")
+    JSON.set(root, ["config", "host"], "localhost")
+    JSON.set(root, ["config", "port"], 8080)
+    assert(JSON.containsPath(root, ["config", "host"]))
+    assert_eq(JSON.require<int>(root, ["config", "port"]), 8080)
+    assert(JSON.remove(root, ["config", "host"]))
+    assert(!JSON.containsPath(root, ["config", "host"]))
 }
 
 @test
-fn test_dynamic_add_field() {
-    var obj: Json = {}
-    var key = "newField"
-    obj[key] = "value"
-    assert_eq(obj.newField, "value")
+fn test_path_create_parents() {
+    var root = JSON.parseValue("{}")
+    JSON.set(root, ["service", "limits", "retries"], 3, true)
+    assert_eq(JSON.require<int>(root, ["service", "limits", "retries"]), 3)
 }
-
-// ===== 表达式作为键 =====
-@test
-fn test_expression_key_get() {
-    var obj: Json = { "field_1": "one", "field_2": "two" }
-    var prefix = "field_"
-    assert_eq(obj[prefix + "1"], "one")
-    assert_eq(obj[prefix + "2"], "two")
-}
-
-@test
-fn test_expression_key_set() {
-    var obj: Json = {}
-    var prefix = "user_"
-    obj[prefix + "name"] = "Alice"
-    obj[prefix + "age"] = 25
-    assert_eq(obj["user_name"], "Alice")
-    assert_eq(obj["user_age"], 25)
-}
-
-// ===== 循环中的动态访问 =====
-@test
-fn test_dynamic_in_loop() {
-    var obj: Json = {}
-    var keys = ["a", "b", "c"]
-    var values = [1, 2, 3]
-    for (i in 0..3) {
-        obj[keys[i]] = values[i]
-    }
-    assert_eq(obj.a, 1)
-    assert_eq(obj.b, 2)
-    assert_eq(obj.c, 3)
-}
-
-@test
-fn test_dynamic_read_loop() {
-    var data: Json = { "x": 10, "y": 20, "z": 30 }
-    var keys = ["x", "y", "z"]
-    var sum = 0
-    for (key in keys) {
-        sum = sum + int(data[key])
-    }
-    assert_eq(sum, 60)
-}
-
-// ===== 混合静态和动态访问 =====
-@test
-fn test_mixed_access() {
-    var obj: Json = { "name": "test", "value": 42 }
-    // 静态访问
-    assert_eq(obj.name, "test")
-    // 动态访问同一字段
-    var key = "name"
-    assert_eq(obj[key], "test")
-    // 动态修改
-    obj[key] = "modified"
-    // 静态读取修改后的值
-    assert_eq(obj.name, "modified")
-}
-
-// ===== 嵌套对象动态访问 =====
-@test
-fn test_nested_dynamic_access() {
-    var data: Json = { "user": { "name": "Alice", "role": "admin" }, "config": { "debug": true } }
-    var section = "user"
-    var field = "name"
-    assert_eq(data[section][field], "Alice")
-    data[section][field] = "Bob"
-    assert_eq(data.user.name, "Bob")
-}
-
-print("json_dynamic_access: all tests passed")

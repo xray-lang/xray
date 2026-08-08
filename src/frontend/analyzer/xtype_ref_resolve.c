@@ -29,6 +29,7 @@
 #include "../../shared/xr_numeric_conversion_core.h"
 #include "../../base/xchecks.h"
 #include "../../base/xarena.h"
+#include "../../base/xhash.h"
 #include "../../../stdlib/prelude/prelude.h"
 #include <limits.h>
 #include <stdint.h>
@@ -38,6 +39,35 @@
 
 /* Resolve child type refs recursively. */
 static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t);
+
+static void canonicalize_object_fields(const char **names, XrType **types, bool *readonly,
+                                       int count) {
+    for (int i = 1; i < count; i++) {
+        const char *current_name = names[i];
+        XrType *current_type = types[i];
+        bool current_readonly = readonly[i];
+        uint64_t current_key = xr_hash_bytes64(current_name, strlen(current_name));
+        uint32_t current_symbol = xr_hash_bytes(current_name, strlen(current_name));
+        int j = i;
+        while (j > 0) {
+            const char *prior_name = names[j - 1];
+            uint64_t prior_key = xr_hash_bytes64(prior_name, strlen(prior_name));
+            uint32_t prior_symbol = xr_hash_bytes(prior_name, strlen(prior_name));
+            int name_cmp = strcmp(prior_name, current_name);
+            if (prior_key < current_key ||
+                (prior_key == current_key && prior_symbol < current_symbol) ||
+                (prior_key == current_key && prior_symbol == current_symbol && name_cmp <= 0))
+                break;
+            names[j] = names[j - 1];
+            types[j] = types[j - 1];
+            readonly[j] = readonly[j - 1];
+            j--;
+        }
+        names[j] = current_name;
+        types[j] = current_type;
+        readonly[j] = current_readonly;
+    }
+}
 
 #define XA_CONSTEVAL_MAX_DEPTH 64
 
@@ -1086,6 +1116,13 @@ static int builtin_interface_type_arity(const char *name) {
 static int known_type_head_arity(const char *name) {
     if (!name)
         return -1;
+    if (strcmp(name, "JSON.Value") == 0 || strcmp(name, "JSON.Object") == 0 ||
+        strcmp(name, "JSON.PathSegment") == 0 || strcmp(name, "JSON.Path") == 0 ||
+        strcmp(name, "JSON.UnknownFields") == 0 || strcmp(name, "JSON.Encodable") == 0 ||
+        strcmp(name, "JSON.Decodable") == 0)
+        return 0;
+    if (strcmp(name, "JSON.WithRest") == 0)
+        return 1;
 #define XR_BUILTIN_PRELUDE_TYPE(type_name, type_arity, native_type, prelude_kind)                  \
     if (strcmp(name, type_name) == 0)                                                              \
         return (type_arity);
@@ -1102,6 +1139,23 @@ static XrType *resolve_known_named(XrVMRuntime *X, const char *name) {
     int arity = known_type_head_arity(name);
     if (arity > 0)
         return xr_type_new_error(NULL);
+
+    if (strcmp(name, "JSON.Value") == 0)
+        return xr_type_new_json(X);
+    if (strcmp(name, "JSON.Object") == 0)
+        return xr_type_new_map(X, xr_type_new_string(NULL), xr_type_new_json(X));
+    if (strcmp(name, "JSON.PathSegment") == 0) {
+        XrType *members[2] = {xr_type_new_string(NULL), xr_type_new_int(NULL)};
+        return xr_type_new_union(X, members, 2);
+    }
+    if (strcmp(name, "JSON.Path") == 0) {
+        XrType *members[2] = {xr_type_new_string(NULL), xr_type_new_int(NULL)};
+        return xr_type_new_array(X, xr_type_new_union(X, members, 2));
+    }
+    if (strcmp(name, "JSON.UnknownFields") == 0)
+        return xr_type_new_enum(X, "JSON.UnknownFields");
+    if (strcmp(name, "JSON.Encodable") == 0 || strcmp(name, "JSON.Decodable") == 0)
+        return xr_type_new_interface(X, name);
 
     /* Built-in interfaces (Comparable, Hashable, Stringable, Equatable, ...).
      * These must be resolved as XR_KIND_INTERFACE so generic-constraint checks
@@ -1120,8 +1174,6 @@ static XrType *resolve_known_named(XrVMRuntime *X, const char *name) {
                 case XR_PRELUDE_KIND_SIMPLE:
                     return xr_type_new_named_instance(X, entry->name);
                 case XR_PRELUDE_KIND_SINGLETON:
-                    if (strcmp(entry->name, "Json") == 0)
-                        return xr_type_new_json(X);
                     return xr_type_new_named_instance(X, entry->name);
                 case XR_PRELUDE_KIND_GENERIC_1:
                 case XR_PRELUDE_KIND_GENERIC_2:
@@ -1170,6 +1222,8 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
     int expected_arity = known_type_head_arity(name);
     if (expected_arity >= 0 && nargs != expected_arity) {
         result = xr_type_new_error(NULL);
+    } else if (nargs == 0 && expected_arity == 0) {
+        result = resolve_known_named(X, name);
     } else if (strcmp(name, "Array") == 0 && nargs == 1) {
         result = xr_type_new_array(X, args[0]);
     } else if (strcmp(name, TYPE_NAME_SLICE) == 0 && nargs == 1) {
@@ -1180,6 +1234,13 @@ static XrType *resolve_generic(XrVMRuntime *X, const XrTypeRef *t) {
         result = xr_type_new_channel(X, args[0]);
     } else if (strcmp(name, "Map") == 0 && nargs == 2) {
         result = xr_type_new_map(X, args[0], args[1]);
+    } else if (strcmp(name, "JSON.WithRest") == 0 && nargs == 1) {
+        const char *field_names[2] = {"rest", "value"};
+        XrType *field_types[2] = {xr_type_new_map(X, xr_type_new_string(NULL), xr_type_new_json(X)),
+                                  args[0]};
+        result = xr_type_new_struct_object_with_fields(X, field_names, field_types, 2);
+        if (result)
+            result->object.type_name = "JSON.WithRest";
     } else if (strcmp(name, "Task") == 0 && nargs == 1) {
         result = xr_type_new_task(X, args[0]);
     } else if (strcmp(name, "Ptr") == 0 && nargs == 1) {
@@ -1304,24 +1365,43 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
         }
 
         case XR_TREF_OBJECT: {
-            const char **names = (const char **) t->field_names;
             int count = t->nchildren;
+            const char *stack_names[16];
             XrType *stack_types[16];
-            XrType **types = (count <= 16)
-                                 ? stack_types
-                                 : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
-            if (count > 0 && !types)
+            bool stack_readonly[16];
+            const char **names =
+                count <= 16 ? stack_names
+                            : (const char **) xr_malloc((size_t) count * sizeof(const char *));
+            XrType **types = count <= 16 ? stack_types
+                                         : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
+            bool *readonly =
+                count <= 16 ? stack_readonly : (bool *) xr_malloc((size_t) count * sizeof(bool));
+            if (count > 0 && (!names || !types || !readonly)) {
+                if (names != stack_names)
+                    xr_free((void *) names);
+                if (types != stack_types)
+                    xr_free(types);
+                if (readonly != stack_readonly)
+                    xr_free(readonly);
                 return xr_type_new_error(NULL);
-            for (int i = 0; i < count; i++)
+            }
+            for (int i = 0; i < count; i++) {
+                names[i] = t->field_names[i];
                 types[i] = resolve_impl(X, t->children[i]);
-            XrType *result =
-                xr_type_new_struct_object_with_fields(X, names, types, count, t->object_row_mode);
+                readonly[i] = t->field_readonly ? t->field_readonly[i] : false;
+            }
+            canonicalize_object_fields(names, types, readonly, count);
+            XrType *result = xr_type_new_struct_object_with_fields(X, names, types, count);
             if (result && t->field_readonly)
-                xr_type_set_object_field_readonly(X, result, t->field_readonly, count);
+                xr_type_set_object_field_readonly(X, result, readonly, count);
             if (result && t->name)
                 xr_type_set_object_type_name(X, result, t->name);
+            if (names != stack_names)
+                xr_free((void *) names);
             if (types != stack_types)
                 xr_free(types);
+            if (readonly != stack_readonly)
+                xr_free(readonly);
             return result;
         }
 
@@ -1677,7 +1757,9 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
     }
 
     XrType *result = NULL;
-    if (strcmp(name, "Array") == 0 && nargs == 1) {
+    if (nargs == 0 && expected_arity == 0) {
+        result = resolve_known_named(X, name);
+    } else if (strcmp(name, "Array") == 0 && nargs == 1) {
         result = xr_type_new_array(X, args[0]);
     } else if (strcmp(name, TYPE_NAME_SLICE) == 0 && nargs == 1) {
         result = xr_type_new_slice(X, args[0]);
@@ -1687,6 +1769,13 @@ static XrType *resolve_known_generic_in_analyzer(XaAnalyzer *analyzer, const XrT
         result = xr_type_new_channel(X, args[0]);
     } else if (strcmp(name, "Map") == 0 && nargs == 2) {
         result = xr_type_new_map(X, args[0], args[1]);
+    } else if (strcmp(name, "JSON.WithRest") == 0 && nargs == 1) {
+        const char *field_names[2] = {"rest", "value"};
+        XrType *field_types[2] = {xr_type_new_map(X, xr_type_new_string(NULL), xr_type_new_json(X)),
+                                  args[0]};
+        result = xr_type_new_struct_object_with_fields(X, field_names, field_types, 2);
+        if (result)
+            result->object.type_name = "JSON.WithRest";
     } else if (strcmp(name, "Task") == 0 && nargs == 1) {
         result = xr_type_new_task(X, args[0]);
     } else if (strcmp(name, "Ptr") == 0 && nargs == 1) {
@@ -1802,7 +1891,7 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
         if (expected_arity >= 0 && tref->nchildren != expected_arity)
             return report_generic_arity_error(analyzer, tref->name, expected_arity,
                                               tref->nchildren);
-        if (xa_is_builtin_interface_name(tref->name))
+        if (expected_arity >= 0)
             return resolve_known_generic_in_analyzer(analyzer, tref);
         XaSymbol *sym = resolve_type_symbol(analyzer, tref->name);
         if (sym && sym->kind == XA_SYM_TYPE_ALIAS)
@@ -1915,24 +2004,44 @@ XR_FUNC XrType *xr_tref_resolve_in_analyzer(XaAnalyzer *analyzer, const XrTypeRe
     }
 
     if (tref->kind == XR_TREF_OBJECT) {
-        const char **names = (const char **) tref->field_names;
         int count = tref->nchildren;
+        const char *stack_names[16];
         XrType *stack_types[16];
+        bool stack_readonly[16];
+        const char **names = count <= 16
+                                 ? stack_names
+                                 : (const char **) xr_malloc((size_t) count * sizeof(const char *));
         XrType **types =
-            (count <= 16) ? stack_types : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
-        if (count > 0 && !types)
+            count <= 16 ? stack_types : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
+        bool *readonly =
+            count <= 16 ? stack_readonly : (bool *) xr_malloc((size_t) count * sizeof(bool));
+        if (count > 0 && (!names || !types || !readonly)) {
+            if (names != stack_names)
+                xr_free((void *) names);
+            if (types != stack_types)
+                xr_free(types);
+            if (readonly != stack_readonly)
+                xr_free(readonly);
             return xr_type_new_error(NULL);
-        for (int i = 0; i < count; i++)
+        }
+        for (int i = 0; i < count; i++) {
+            names[i] = tref->field_names[i];
             types[i] = xr_tref_resolve_in_analyzer(analyzer, tref->children[i]);
-        XrType *result = xr_type_new_struct_object_with_fields(analyzer->isolate, names, types,
-                                                               count, tref->object_row_mode);
+            readonly[i] = tref->field_readonly ? tref->field_readonly[i] : false;
+        }
+        canonicalize_object_fields(names, types, readonly, count);
+        XrType *result =
+            xr_type_new_struct_object_with_fields(analyzer->isolate, names, types, count);
         if (result && tref->field_readonly)
-            xr_type_set_object_field_readonly(analyzer->isolate, result, tref->field_readonly,
-                                              count);
+            xr_type_set_object_field_readonly(analyzer->isolate, result, readonly, count);
         if (result && tref->name)
             xr_type_set_object_type_name(analyzer->isolate, result, tref->name);
+        if (names != stack_names)
+            xr_free((void *) names);
         if (types != stack_types)
             xr_free(types);
+        if (readonly != stack_readonly)
+            xr_free(readonly);
         return result;
     }
 

@@ -93,7 +93,6 @@ XR_BUILTIN_PRELUDE_TYPE("Channel",       1, XR_TCHANNEL,  GENERIC_1)
  * a concrete sealed class declared in stdlib/types/iterator.xr, and annotations
  * such as `var it: Iterator<int>` must resolve to that class. */
 XR_BUILTIN_PRELUDE_TYPE("Iterator",      1, XR_TINSTANCE, GENERIC_1)
-XR_BUILTIN_PRELUDE_TYPE("Json",          0, 0,            SINGLETON)
 XR_BUILTIN_PRELUDE_TYPE("Map",           2, XR_TMAP,      GENERIC_2)
 XR_BUILTIN_PRELUDE_TYPE("NetConn",       0, XR_TINSTANCE, SIMPLE)
 XR_BUILTIN_PRELUDE_TYPE("NetListener",   0, XR_TINSTANCE, SIMPLE)

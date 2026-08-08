@@ -501,9 +501,9 @@ char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query, const c
                 kb_appendf(text, cap, &len, "%s\n\n", m->symbol->summary);
         } else {
             if (strcmp(m->module->name, "json") == 0) {
-                kb_appendf(text, cap, &len, "## Built-in: Json\n\n");
+                kb_appendf(text, cap, &len, "## Built-in: JSON\n\n");
                 kb_appendf(text, cap, &len,
-                           "Use directly: `Json.parse()` / `Json.stringify()`\n\n");
+                           "Use directly: `JSON.parse()` / `JSON.stringify()`\n\n");
             } else {
                 kb_appendf(text, cap, &len, "## Module: %s\n\n", m->module->name);
                 kb_appendf(text, cap, &len, "Import: `import %s`\n\n", m->module->name);

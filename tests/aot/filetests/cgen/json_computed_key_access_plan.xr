@@ -1,7 +1,0 @@
-fn readKey(k: string) -> Json {
-    var j: Json = { name: "ada", age: 1 }
-    return j[k]
-}
-
-var key = "name"
-print(readKey(key))

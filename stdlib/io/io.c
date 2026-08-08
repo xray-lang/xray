@@ -951,8 +951,7 @@ static XrClass *io_get_stat_class(XrVMRuntime *X) {
     if (cache->io_stat_class)
         return cache->io_stat_class;
 
-    XrClass *cls = xr_class_build_json_chain(X, XR_IO_CORE_STAT_FIELD_NAMES,
-                                             XR_IO_CORE_STAT_FIELD_COUNT, NULL, NULL, false);
+    XrClass *cls = xr_stdlib_object_shape_class_get(X, "io", "__FileStat");
     if (!cls)
         return NULL;
     cache->io_stat_class = cls;
@@ -993,12 +992,12 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
         S_ISDIR(st.st_mode), is_symlink);
 #endif
 
-    extern XrValue xr_json_value(XrJson * json);
+    extern XrValue xr_object_instance_value(XrObjectInstance * json);
 
     XrClass *stat_cls = io_get_stat_class(X);
     if (!stat_cls)
         return xr_null();
-    XrJson *obj = xr_json_new_with_class(xr_current_coro(X), stat_cls);
+    XrObjectInstance *obj = xr_object_instance_new_with_class(xr_current_coro(X), stat_cls);
     if (!obj)
         return xr_null();
 
@@ -1013,7 +1012,7 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_DIR, xr_bool(fields.is_dir));
     xr_instance_set_dynamic_field(X, obj, XR_IO_CORE_STAT_IS_SYMLINK, xr_bool(fields.is_symlink));
 
-    return xr_json_value(obj);
+    return xr_object_instance_value(obj);
 }
 
 static int io_mkdirp_mkdir(void *ctx, const char *path) {

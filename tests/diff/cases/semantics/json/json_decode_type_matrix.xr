@@ -1,15 +1,15 @@
 // anchor: json-decode-type-matrix
-// 177: pin the Json.decode<T> typed-field validation matrix across VM/AOT.
-// Covers per-field kind mismatch, missing required fields, extra-field tolerance,
-// null vs non-nullable, nested object validation, Array<Json> shape, and the
-// permissive Json field. Any backend whose decode validation drifts (accepts a
+// 177: pin the JSON.decode<T> typed-field validation matrix across VM/AOT.
+// Covers per-field kind mismatch, missing required fields, exact extra-field rejection,
+// null vs non-nullable, nested object validation, Array<JSON.Value> shape, and the
+// permissive JSON.Value field. Any backend whose decode validation drifts (accepts a
 // wrong kind, over-rejects, or diverges VM vs AOT) fails here.
 
 type Scalars = { i: int, f: float, s: string, b: bool }
 type Nested = { id: int, inner: Scalars }
-type Items = { items: Array<Json> }
+type Items = { items: Array<JSON.Value> }
 type Opt = { name: string, note: string? }
-type AnyF = { v: Json }
+type AnyF = { v: JSON.Value }
 type Item = { id: int, label: string }
 type Containers = {
     ints: Array<int>,
@@ -18,65 +18,65 @@ type Containers = {
     buckets: Map<string, Array<int>>
 }
 
-fn p(text: string) -> Json {
-    return Json.parse(text)
+fn p(text: string) -> JSON.Value {
+    return JSON.parseValue(text)
 }
 
 // All-correct scalar decode keeps every field value.
-var ok = Json.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":\"hi\",\"b\":true}"))
+var ok = JSON.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":\"hi\",\"b\":true}"))
 print(ok == null)   // false
 print(ok!.i)        // 1
 print(ok!.f)        // 2.5
 print(ok!.s)        // hi
 print(ok!.b)        // true
 
-// Extra input field is ignored, decode still succeeds.
-print(Json.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":\"hi\",\"b\":true,\"x\":9}")) == null)  // false
+// Extra input fields are rejected by the default exact decode policy.
+print(JSON.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":\"hi\",\"b\":true,\"x\":9}")) == null)  // true
 
 // Per-field kind mismatches all reject (int/float are strictly distinct).
-print(Json.decode<Scalars>(p("{\"i\":1.5,\"f\":2.5,\"s\":\"hi\",\"b\":true}")) == null)  // true
-print(Json.decode<Scalars>(p("{\"i\":1,\"f\":2,\"s\":\"hi\",\"b\":true}")) == null)      // true
-print(Json.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":3,\"b\":true}")) == null)         // true
-print(Json.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":\"hi\",\"b\":1}")) == null)       // true
-print(Json.decode<Scalars>(p("{\"i\":true,\"f\":2.5,\"s\":\"hi\",\"b\":true}")) == null) // true
+print(JSON.decode<Scalars>(p("{\"i\":1.5,\"f\":2.5,\"s\":\"hi\",\"b\":true}")) == null)  // true
+print(JSON.decode<Scalars>(p("{\"i\":1,\"f\":2,\"s\":\"hi\",\"b\":true}")) == null)      // true
+print(JSON.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":3,\"b\":true}")) == null)         // true
+print(JSON.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":\"hi\",\"b\":1}")) == null)       // true
+print(JSON.decode<Scalars>(p("{\"i\":true,\"f\":2.5,\"s\":\"hi\",\"b\":true}")) == null) // true
 
 // Missing required field rejects; null for a non-nullable field rejects.
-print(Json.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":\"hi\"}")) == null)               // true
-print(Json.decode<Scalars>(p("{\"i\":null,\"f\":2.5,\"s\":\"hi\",\"b\":true}")) == null) // true
+print(JSON.decode<Scalars>(p("{\"i\":1,\"f\":2.5,\"s\":\"hi\"}")) == null)               // true
+print(JSON.decode<Scalars>(p("{\"i\":null,\"f\":2.5,\"s\":\"hi\",\"b\":true}")) == null) // true
 
 // Nested object validated recursively.
-var nok = Json.decode<Nested>(p("{\"id\":7,\"inner\":{\"i\":1,\"f\":2.5,\"s\":\"hi\",\"b\":true}}"))
+var nok = JSON.decode<Nested>(p("{\"id\":7,\"inner\":{\"i\":1,\"f\":2.5,\"s\":\"hi\",\"b\":true}}"))
 print(nok == null)   // false
 print(nok!.inner.i)  // 1
-print(Json.decode<Nested>(p("{\"id\":7,\"inner\":{\"i\":1,\"f\":2.5,\"s\":\"hi\"}}")) == null)  // true
-print(Json.decode<Nested>(p("{\"id\":7,\"inner\":42}")) == null)                                // true
+print(JSON.decode<Nested>(p("{\"id\":7,\"inner\":{\"i\":1,\"f\":2.5,\"s\":\"hi\"}}")) == null)  // true
+print(JSON.decode<Nested>(p("{\"id\":7,\"inner\":42}")) == null)                                // true
 
-// Array<Json> accepts any array, rejects non-arrays.
-var it = Json.decode<Items>(p("{\"items\":[1,\"a\",null,{\"k\":2}]}"))
+// Array<JSON.Value> accepts any array, rejects non-arrays.
+var it = JSON.decode<Items>(p("{\"items\":[1,\"a\",null,{\"k\":2}]}"))
 print(it == null)     // false
 print(len(it!.items)) // 4
-print(Json.decode<Items>(p("{\"items\":5}")) == null)  // true
+print(JSON.decode<Items>(p("{\"items\":5}")) == null)  // true
 
-// Nullable field must be present (may be null); missing rejects.
-print(Json.decode<Opt>(p("{\"name\":\"x\",\"note\":null}")) == null)  // false
-print(Json.decode<Opt>(p("{\"name\":\"x\",\"note\":\"n\"}")) == null)  // false
-print(Json.decode<Opt>(p("{\"name\":\"x\"}")) == null)                 // true
+// Nullable fields may be present with a value/null or omitted and materialized as null.
+print(JSON.decode<Opt>(p("{\"name\":\"x\",\"note\":null}")) == null)  // false
+print(JSON.decode<Opt>(p("{\"name\":\"x\",\"note\":\"n\"}")) == null)  // false
+print(JSON.decode<Opt>(p("{\"name\":\"x\"}")) == null)                 // false
 
-// A Json field accepts scalars, arrays, objects, and null.
-print(Json.decode<AnyF>(p("{\"v\":null}")) == null)     // false
-print(Json.decode<AnyF>(p("{\"v\":[1,2]}")) == null)    // false
-print(Json.decode<AnyF>(p("{\"v\":{\"a\":1}}")) == null)// false
-print(Json.decode<AnyF>(p("{\"v\":true}")) == null)     // false
+// A JSON.Value field accepts scalars, arrays, objects, and null.
+print(JSON.decode<AnyF>(p("{\"v\":null}")) == null)     // false
+print(JSON.decode<AnyF>(p("{\"v\":[1,2]}")) == null)    // false
+print(JSON.decode<AnyF>(p("{\"v\":{\"a\":1}}")) == null)// false
+print(JSON.decode<AnyF>(p("{\"v\":true}")) == null)     // false
 
 // Typed arrays and string-key maps recursively validate and materialize their
-// element/value contracts rather than retaining Json-DOM containers.
-var containers = Json.decode<Containers>(p("{\"ints\":[1,2,3],\"items\":[{\"id\":7,\"label\":\"a\"},{\"id\":8,\"label\":\"b\"}],\"scores\":{\"ada\":9,\"lin\":8},\"buckets\":{\"odd\":[1,3],\"even\":[2,4]}}"))
+// element/value contracts rather than retaining JSON.Value-DOM containers.
+var containers = JSON.decode<Containers>(p("{\"ints\":[1,2,3],\"items\":[{\"id\":7,\"label\":\"a\"},{\"id\":8,\"label\":\"b\"}],\"scores\":{\"ada\":9,\"lin\":8},\"buckets\":{\"odd\":[1,3],\"even\":[2,4]}}"))
 print(containers == null)             // false
 print(len(containers!.ints))          // 3
 print(len(containers!.items))         // 2
 print(len(containers!.scores))        // 2
 print(len(containers!.buckets))       // 2
-print(Json.decode<Containers>(p("{\"ints\":[1,true],\"items\":[],\"scores\":{},\"buckets\":{}}")) == null) // true
-print(Json.decode<Containers>(p("{\"ints\":[],\"items\":[{\"id\":7,\"label\":9}],\"scores\":{},\"buckets\":{}}")) == null) // true
-print(Json.decode<Containers>(p("{\"ints\":[],\"items\":[],\"scores\":{\"ada\":true},\"buckets\":{}}")) == null) // true
-print(Json.decode<Containers>(p("{\"ints\":[],\"items\":[],\"scores\":{},\"buckets\":{\"odd\":[1,false]}}")) == null) // true
+print(JSON.decode<Containers>(p("{\"ints\":[1,true],\"items\":[],\"scores\":{},\"buckets\":{}}")) == null) // true
+print(JSON.decode<Containers>(p("{\"ints\":[],\"items\":[{\"id\":7,\"label\":9}],\"scores\":{},\"buckets\":{}}")) == null) // true
+print(JSON.decode<Containers>(p("{\"ints\":[],\"items\":[],\"scores\":{\"ada\":true},\"buckets\":{}}")) == null) // true
+print(JSON.decode<Containers>(p("{\"ints\":[],\"items\":[],\"scores\":{},\"buckets\":{\"odd\":[1,false]}}")) == null) // true

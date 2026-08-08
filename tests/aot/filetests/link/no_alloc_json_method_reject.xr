@@ -1,6 +1,6 @@
-fn xray_no_alloc_json_keys_reject(value: Json) -> int {
+fn xray_no_alloc_json_keys_reject(value: JSON.Object) -> int {
     return len(value.keys())
 }
 
-var obj: Json = { answer: 42 }
+var obj: JSON.Object = JSON.parseObject("{\"answer\":42}")
 print(xray_no_alloc_json_keys_reject(obj))

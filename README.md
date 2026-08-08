@@ -177,7 +177,7 @@ Importable standard-library modules include:
 
 The prelude makes these types available without an explicit import:
 
-`Array`, `Atomic`, `BigInt`, `Channel`, `Json`, `Map`, `NetConn`, `NetListener`, `OsBarrier`, `OsCondvar`, `OsMutex`, `OsOnce`, `OsRwLock`, `PanicInfo`, `Path`, `Range`, `Regex`, `Set`, `StringBuilder`, and `Thread`.
+`Array`, `Atomic`, `BigInt`, `Channel`, `Map`, `NetConn`, `NetListener`, `OsBarrier`, `OsCondvar`, `OsMutex`, `OsOnce`, `OsRwLock`, `PanicInfo`, `Path`, `Range`, `Regex`, `Set`, `StringBuilder`, `Thread`, and the JSON boundary types `JSON.Value` / `JSON.Object`. `JSON` is a prelude namespace rather than a value type and needs no import.
 
 Module-owned types are imported explicitly. For example, `DateTime` comes from `datetime`, synchronization primitives such as `Mutex` come from `sync`, and CPU-parallel `Plan` comes from `parallel`.
 

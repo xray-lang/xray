@@ -670,13 +670,13 @@ export fn router<T>() -> Router<T> {
 }
 
 class _ServerRouteMatch {
-    value: Json
+    value: JSON.Value
     handler: (HttpRequest) -> HttpResponse
     hasHandler: bool
     params: Map<string, string>
 
     constructor(
-        value: Json,
+        value: JSON.Value,
         params: Map<string, string>,
         handler: (HttpRequest) -> HttpResponse,
         hasHandler: bool
@@ -691,14 +691,14 @@ class _ServerRouteMatch {
 class _ServerRouteEntry {
     method: string
     path: string
-    value: Json
+    value: JSON.Value
     handler: (HttpRequest) -> HttpResponse
     hasHandler: bool
 
     constructor(
         method: string,
         path: string,
-        value: Json,
+        value: JSON.Value,
         handler: (HttpRequest) -> HttpResponse,
         hasHandler: bool
     ) {
@@ -727,19 +727,19 @@ class _ServerRouter {
         this.routes = []
     }
 
-    add<T>(method: string, path: string, value: T) -> bool {
-        return this.addRouteJson(method, path, Json.encode(value), _serverDefaultHandler, false)
+    add<T: JSON.Encodable>(method: string, path: string, value: T) -> bool {
+        return this.addRouteJson(method, path, JSON.value(value), _serverDefaultHandler, false)
     }
 
     addHandler(method: string, path: string, handler: (HttpRequest) -> HttpResponse) -> bool {
-        var value: Json = {}
+        var value: JSON.Value = null
         return this.addRouteJson(method, path, value, handler, true)
     }
 
     addRouteJson(
         method: string,
         path: string,
-        value: Json,
+        value: JSON.Value,
         handler: (HttpRequest) -> HttpResponse,
         hasHandler: bool
     ) -> bool {
@@ -809,21 +809,20 @@ fn _serverStatusResponse(status: int, body: string, keepAlive: bool = false) -> 
     return "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 21\r\nConnection: close\r\n\r\nInternal Server Error"
 }
 
-fn _serverHeadersFrom(value: Json) -> Headers? {
+fn _serverHeadersFrom(value: JSON.Value) -> Headers? {
     var headers = Headers()
     if (value == null) { return headers }
-    if (typeName(value) != "Json") { return null }
-    var object = value as Json
-    for (key in object) {
-        var name = string(key)
-        var rawValue = Json.get(object, name, null)
+    var object: JSON.Object? = JSON.asObject(value)
+    if (object == null) { return null }
+    var fields: JSON.Object = object!
+    for (name, rawValue in fields) {
         if (rawValue != null) { headers.add(name, string(rawValue)) }
     }
     return headers
 }
 
-fn _serverArrayResponse(value: Json, keepAlive: bool) -> string {
-    var arr = value as Array<Json>
+fn _serverArrayResponse(value: JSON.Value, keepAlive: bool) -> string {
+    var arr = value as Array<JSON.Value>
     var status = 200
     var contentType = "text/plain; charset=utf-8"
     var body = ""
@@ -845,8 +844,8 @@ fn _serverArrayResponse(value: Json, keepAlive: bool) -> string {
     return _serverStatusResponse(500, "Internal Server Error", false)
 }
 
-fn _serverResponseFor(value: Json, keepAlive: bool) -> string {
-    var kind = typeName(value)
+fn _serverResponseFor(value: JSON.Value, keepAlive: bool) -> string {
+    var kind = JSON.kindOf(value)
     if (kind == "null") { return _serverStatusResponse(204, "", keepAlive) }
     if (kind == "Array") { return _serverArrayResponse(value, keepAlive) }
     if (kind == "string") {
@@ -855,7 +854,7 @@ fn _serverResponseFor(value: Json, keepAlive: bool) -> string {
     if (kind == "int" || kind == "float" || kind == "bool") {
         return responseText(200, string(value), "text/plain; charset=utf-8", null, keepAlive)!
     }
-    return responseText(200, Json.stringify(value), "application/json; charset=utf-8", null,
+    return responseText(200, JSON.stringify(value), "application/json; charset=utf-8", null,
                         keepAlive)!
 }
 
@@ -1063,7 +1062,7 @@ export class Server {
         this.router = _ServerRouter()
     }
 
-    route<T>(method: string, path: string, value: T) -> bool {
+    route<T: JSON.Encodable>(method: string, path: string, value: T) -> bool {
         return this.router.add(method, path, value)
     }
 
@@ -1347,17 +1346,17 @@ export class Headers {
 // Optional fields use protocol-safe defaults inside the module.
 export type HttpRequestOptions = {
     url: string,
-    method?: HttpMethod,
-    headers?: Headers,
-    body?: Array<byte>,
-    followRedirects?: bool,
-    maxRedirects?: int,
-    timeoutMs?: int,
-    version?: HttpVersion
+    method: HttpMethod?,
+    headers: Headers?,
+    body: Array<byte>?,
+    followRedirects: bool?,
+    maxRedirects: int?,
+    timeoutMs: int?,
+    version: HttpVersion?
 }
 
-fn _headersJson(headers: Headers) -> Json {
-    var out: Json = {}
+fn _headersJson(headers: Headers) -> JSON.Object {
+    var out: JSON.Object = #{}
     var pairs = headers.entries()
     for (var i = 0; i < len(pairs); i++) {
         out[pairs[i].0] = pairs[i].1
@@ -1635,6 +1634,16 @@ export class HttpRequest {
     }
 
     text() -> string { return string.fromUtf8(this.body[:]) }
+
+    json<T: JSON.Decodable>() -> T { return JSON.parse<T>(this.text()) }
+
+    jsonObject() -> JSON.Object { return JSON.parseObject(this.text()) }
+
+    jsonValue() -> JSON.Value { return JSON.parseValue(this.text()) }
+
+    jsonWithRest<T: JSON.Decodable & {}>() -> JSON.WithRest<T> {
+        return JSON.parseWithRest<T>(this.text())
+    }
 }
 
 // HttpResponse carries bytes so HTTP bodies are not forced through UTF-8.
@@ -1664,9 +1673,14 @@ export class HttpResponse {
 
     text() -> string { return string.fromUtf8(this.body[:]) }
 
-    json() -> Json {
-        var decoded = this.text()
-        return Json.parse(decoded)
+    json<T: JSON.Decodable>() -> T { return JSON.parse<T>(this.text()) }
+
+    jsonObject() -> JSON.Object { return JSON.parseObject(this.text()) }
+
+    jsonValue() -> JSON.Value { return JSON.parseValue(this.text()) }
+
+    jsonWithRest<T: JSON.Decodable & {}>() -> JSON.WithRest<T> {
+        return JSON.parseWithRest<T>(this.text())
     }
 }
 
@@ -1684,7 +1698,7 @@ export fn textResponse(
     )
 }
 
-export fn jsonResponse<T>(
+export fn jsonResponse<T: JSON.Encodable>(
     value: T,
     status: int = 200,
     headers: Headers? = null
@@ -1698,8 +1712,12 @@ export fn jsonResponse<T>(
         status,
         _statusReason(status),
         responseHeaders,
-        Json.stringify(Json.encode(value)).copyBytes()
+        JSON.stringify(value).copyBytes()
     )
+}
+
+export fn json<T: JSON.Encodable>(value: T, status: int = 200) -> HttpResponse {
+    return jsonResponse(value, status, null)
 }
 
 fn _firstAuthorityEnd(raw: string, start: int) -> int {

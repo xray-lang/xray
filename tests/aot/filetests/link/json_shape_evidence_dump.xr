@@ -1,6 +1,0 @@
-fn readName() -> Json {
-    var user: Json = { name: "ada", age: 1 }
-    return user.name
-}
-
-print(readName())

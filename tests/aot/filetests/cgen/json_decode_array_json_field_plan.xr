@@ -1,8 +1,8 @@
-type JsonBag = { items: Array<Json> }
+type JsonBag = { items: Array<JSON.Value> }
 
 fn main() -> int {
-    var data = Json.parse("{\"items\":[1,true,null]}")
-    var bag = Json.decode<JsonBag>(data)
+    var data = JSON.parseValue("{\"items\":[1,true,null]}")
+    var bag = JSON.decode<JsonBag>(data)
     if (bag == null) {
         return -1
     }

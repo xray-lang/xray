@@ -1,1 +1,1 @@
-cannot assign to read-only field 'Entity.id' (declared const)
+structural object types are exact; express width with a generic constraint

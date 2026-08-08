@@ -225,6 +225,14 @@ fn test_concurrent_threshold_boundary() {
 }
 
 // ===== 测试6: 并发数据隔离性验证 =====
+type IsolationResult = {
+    id: int,
+    result: string,
+    prefix_ok: bool,
+    suffix_ok: bool,
+    contains_id: bool,
+}
+
 @test
 fn test_concurrent_data_isolation() {
     print("\n[测试6] 并发数据隔离性验证")
@@ -236,7 +244,7 @@ fn test_concurrent_data_isolation() {
                  "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
                  "U", "V", "W", "X", "Y", "Z"]
     
-    fn isolation_task(id: int, unique_char: string) -> Json {
+    fn isolation_task(id: int, unique_char: string) -> IsolationResult {
         // 每个协程使用唯一的字符串内容
         var prefix = unique_char.repeat(30)
         var suffix = unique_char.repeat(30)
@@ -256,7 +264,7 @@ fn test_concurrent_data_isolation() {
     }
     
     var n = 50
-    var tasks: Array<Task<Json>> = []
+    var tasks: Array<Task<IsolationResult>> = []
     for (var i = 0; i < n; i++) {
         var unique_char = chars[i % 26]
         tasks.push(go isolation_task(i, unique_char))
@@ -267,10 +275,10 @@ fn test_concurrent_data_isolation() {
     var correct = 0
     for (var i = 0; i < n; i++) {
         var r = results[i]
-        if (r["prefix_ok"] == true && r["suffix_ok"] == true && r["contains_id"] == true) {
+        if (r.prefix_ok && r.suffix_ok && r.contains_id) {
             correct = correct + 1
         } else {
-            var task_id = r["id"]
+            var task_id = r.id
             print("  错误: task " + string(task_id) + " 数据隔离失败")
         }
     }

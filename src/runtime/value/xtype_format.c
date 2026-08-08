@@ -89,6 +89,8 @@ const char *xr_type_to_string(XrType *type) {
         return TYPE_NAME_RUNE;
     if (XR_TYPE_IS_NULL(type))
         return TYPE_NAME_NULL;
+    if (XR_TYPE_IS_JSON(type) && !type->is_nullable)
+        return TYPE_NAME_JSON;
 
     // Complex types need pool for arena allocation
     XrTypePool *pool = xr_type_get_current_pool();
@@ -142,6 +144,8 @@ const char *xr_type_to_string(XrType *type) {
     }
 
     if (XR_TYPE_IS_MAP(type)) {
+        if (xr_type_is_json_object(type))
+            return "JSON.Object";
         const char *key = type->map.key_type ? xr_type_to_string(type->map.key_type) : "<error>";
         const char *val =
             type->map.value_type ? xr_type_to_string(type->map.value_type) : "<error>";
@@ -182,8 +186,6 @@ const char *xr_type_to_string(XrType *type) {
     }
 
     if (XR_TYPE_HAS_OBJECT_SHAPE(type)) {
-        if (XR_TYPE_IS_JSON(type) && type->object.field_count == 0)
-            return TYPE_NAME_JSON;
         if (type->object.type_name) {
             return type->object.type_name;
         }
@@ -219,9 +221,7 @@ const char *xr_type_to_string(XrType *type) {
                     remaining -= n;
                     printed++;
                 }
-                if ((has_computed || (XR_TYPE_IS_STRUCT_OBJECT(type) &&
-                                      type->object.row_mode == XR_OBJECT_ROW_OPEN)) &&
-                    remaining > 5) {
+                if (has_computed && remaining > 5) {
                     n = snprintf(ptr, remaining, ",...");
                     ptr += n;
                     remaining -= n;
@@ -230,7 +230,7 @@ const char *xr_type_to_string(XrType *type) {
                 return xr_pool_strdup(pool, buf);
             }
         }
-        return XR_TYPE_IS_JSON(type) ? TYPE_NAME_JSON : "{}";
+        return "{}";
     }
 
     if (type->kind == XR_KIND_TYPE_PARAM) {

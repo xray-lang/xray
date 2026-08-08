@@ -867,10 +867,10 @@ static XrClass *xi_json_decode_root_class_from_type(EmitCtx *ctx, const XrType *
     return cls;
 }
 
-/* Json object creation: build Shape, store in constant pool, emit OP_NEWJSON */
-XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    int field_count = xi_json_field_count(v);
-    uint8_t storage_mode = xi_json_storage_mode(v);
+/* Structural object creation: build the exact shape and emit OP_NEWOBJECT. */
+XR_FUNC void xi_emit_object_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    int field_count = xi_object_field_count(v);
+    uint8_t storage_mode = xi_object_storage_mode(v);
     const char **field_names = (const char **) v->aux;
     if (field_count < 0 || field_count > UINT16_MAX) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -882,18 +882,12 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_NEWMAP, dst, 0, 0));
         return;
     }
-    /* Build a dynamic-layout class chain. Structural objects and Json share
-     * fixed-index storage but retain distinct domains and roots. */
+    /* Build the sealed structural-object shape class. */
     int n = field_count > 0 ? field_count : 0;
-    bool is_struct_object = v->type && v->type->kind == XR_KIND_STRUCT_OBJECT;
     uint64_t *stable_type_keys = xi_object_shape_stable_type_keys(v->type, field_names, n);
     uint8_t *shape_field_flags = xi_object_shape_field_flags(v->type, field_names, n);
-    XrClass *cls =
-        is_struct_object
-            ? xr_class_build_struct_object_chain(ctx->isolate, field_names, NULL, n, NULL, NULL,
-                                                 stable_type_keys, shape_field_flags)
-            : xr_class_build_json_chain(ctx->isolate, field_names, n, stable_type_keys,
-                                        shape_field_flags, false);
+    XrClass *cls = xr_class_build_struct_object_chain(ctx->isolate, field_names, NULL, n, NULL,
+                                                      NULL, stable_type_keys, shape_field_flags);
     xr_free(shape_field_flags);
     xr_free(stable_type_keys);
     if (!cls) {
@@ -910,17 +904,17 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (!xi_emit_const_index_to_c(ctx, kidx, &karg))
         return;
 
-    emit_inst(ctx, CREATE_ABC(OP_NEWJSON, dst, karg, storage_mode));
+    emit_inst(ctx, CREATE_ABC(OP_NEWOBJECT, dst, karg, storage_mode));
 }
 
-/* Json field init by index: OP_JSON_INIT A B C (A=json, B=field_idx, C=val) */
+/* Structural-object field init by ordinal: OP_OBJECT_INIT A B C. */
 XR_FUNC void xi_emit_object_init_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst; /* dst unused; this is a store op */
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    XiEmitReg json_reg = reg_of(ctx, v->args[0]);
+    XiEmitReg object_reg = reg_of(ctx, v->args[0]);
     XiEmitReg val_reg = reg_of(ctx, v->args[1]);
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
@@ -928,71 +922,45 @@ XR_FUNC void xi_emit_object_init_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     uint16_t field_arg = 0;
     if (!xi_emit_index_to_arg(ctx, field_idx, XI_EMIT_ERR_INTERNAL, &field_arg))
         return;
-    emit_inst(ctx, CREATE_ABC(OP_JSON_INIT, json_reg, field_arg, val_reg));
+    emit_inst(ctx, CREATE_ABC(OP_OBJECT_INIT, object_reg, field_arg, val_reg));
 }
 
-/* Json field read by index: OP_JSON_GET A B C (A=dst, B=json, C=field_idx) */
+/* Structural-object field read by ordinal: OP_OBJECT_GET A B C. */
 XR_FUNC void xi_emit_object_get_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    XiEmitReg json_reg = reg_of(ctx, v->args[0]);
-    if ((v->lowering_flags & XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH) != 0) {
-        const char *field_name = (const char *) v->aux;
-        if (!field_name) {
-            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-            return;
-        }
-        int symbol = add_symbol(ctx, field_name);
-        uint16_t symbol_arg = 0;
-        if (ctx->status != XI_EMIT_OK || !xi_emit_symbol_index_to_arg(ctx, symbol, &symbol_arg))
-            return;
-        emit_inst(ctx, CREATE_ABC(OP_OBJECT_GETK, dst, json_reg, symbol_arg));
-        return;
-    }
+    XiEmitReg object_reg = reg_of(ctx, v->args[0]);
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
         return;
     uint16_t field_arg = 0;
     if (!xi_emit_index_to_arg(ctx, field_idx, XI_EMIT_ERR_INTERNAL, &field_arg))
         return;
-    emit_inst(ctx, CREATE_ABC(OP_JSON_GET, dst, json_reg, field_arg));
+    emit_inst(ctx, CREATE_ABC(OP_OBJECT_GET, dst, object_reg, field_arg));
 }
 
-/* Json field write by index: OP_JSON_SET A B C (A=json, B=field_idx, C=val) */
+/* Structural-object field write by ordinal: OP_OBJECT_SET A B C. */
 XR_FUNC void xi_emit_object_set_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst; /* dst unused; this is a store op */
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    XiEmitReg json_reg = reg_of(ctx, v->args[0]);
+    XiEmitReg object_reg = reg_of(ctx, v->args[0]);
     XiEmitReg val_reg = reg_of(ctx, v->args[1]);
-    if ((v->lowering_flags & XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH) != 0) {
-        const char *field_name = (const char *) v->aux;
-        if (!field_name) {
-            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-            return;
-        }
-        int symbol = add_symbol(ctx, field_name);
-        uint16_t symbol_arg = 0;
-        if (ctx->status != XI_EMIT_OK || !xi_emit_symbol_index_to_arg(ctx, symbol, &symbol_arg))
-            return;
-        emit_inst(ctx, CREATE_ABC(OP_OBJECT_SETK, json_reg, symbol_arg, val_reg));
-        return;
-    }
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
         return;
     uint16_t field_arg = 0;
     if (!xi_emit_index_to_arg(ctx, field_idx, XI_EMIT_ERR_INTERNAL, &field_arg))
         return;
-    emit_inst(ctx, CREATE_ABC(OP_JSON_SET, json_reg, field_arg, val_reg));
+    emit_inst(ctx, CREATE_ABC(OP_OBJECT_SET, object_reg, field_arg, val_reg));
 }
 
-/* Json merge: OP_JSON_MERGE A B (A=dst Json, B=src Json).  In-place store. */
-XR_FUNC void xi_emit_json_merge(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+/* Exact structural-object spread merge: OP_OBJECT_MERGE A B. */
+XR_FUNC void xi_emit_object_merge(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -1002,15 +970,15 @@ XR_FUNC void xi_emit_json_merge(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg src_reg = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_JSON_MERGE, dst_reg, src_reg, 0));
+    emit_inst(ctx, CREATE_ABC(OP_OBJECT_MERGE, dst_reg, src_reg, 0));
 }
 
 /* Typed JSON decode: OP_JSON_DECODE A B C
- * A=dst (result: T? sealed Json or null)
+ * A=dst (result: T? exact object or null)
  * B=data register (string to parse)
  * C=Shape constant index (built from field names)
  *
- * Reuses the same Shape-building logic as xi_emit_json_new. */
+ * Reuses the same Shape-building logic as xi_emit_object_new. */
 XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -1019,7 +987,10 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     int n = (int) v->aux_int;
     const char **field_names = (const char **) v->aux;
-    bool object_target = v->type && XR_TYPE_IS_STRUCT_OBJECT(v->type);
+    XrType *target_type = v->json_decode_target_type ? v->json_decode_target_type : v->type;
+    bool object_target = target_type && XR_TYPE_IS_STRUCT_OBJECT(target_type);
+    bool with_rest = (v->lowering_flags & XI_LOWERING_FLAG_JSON_WITH_REST) != 0;
+    bool require = (v->lowering_flags & XI_LOWERING_FLAG_JSON_REQUIRE) != 0;
     XR_DCHECK(!object_target || (n > 0 && field_names != NULL),
               "json_decode: object target has no field info");
     if (n < 0 || n > UINT16_MAX) {
@@ -1034,10 +1005,19 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* Object targets use their exact class directly. Other decodable targets
      * use an internal one-field class solely as a bytecode-serializable root
      * schema carrier; it is never allocated as a language value. */
-    XrClass *cls = object_target
-                       ? xi_json_struct_object_class_from_type_depth(
-                             ctx, v->type, 0, (const char *const *) v->aux, (int) v->aux_int)
-                       : xi_json_decode_root_class_from_type(ctx, v->type);
+    XrClass *cls = NULL;
+    if (with_rest) {
+        const char *const *wrapper_names = v->type && XR_TYPE_IS_STRUCT_OBJECT(v->type)
+                                               ? (const char *const *) v->type->object.field_names
+                                               : NULL;
+        cls = wrapper_names ? xi_json_struct_object_class_from_type_depth(
+                                  ctx, v->type, 0, wrapper_names, v->type->object.field_count)
+                            : NULL;
+    } else {
+        cls = object_target && !require
+                  ? xi_json_struct_object_class_from_type_depth(ctx, target_type, 0, field_names, n)
+                  : xi_json_decode_root_class_from_type(ctx, target_type);
+    }
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -1051,9 +1031,14 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (!xi_emit_const_index_to_c(ctx, kidx, &karg))
         return;
 
-    OpCode opcode = (v->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0
-                        ? OP_JSON_PARSE_TYPED
-                        : OP_JSON_DECODE;
+    bool ignore = (v->lowering_flags & XI_LOWERING_FLAG_JSON_UNKNOWN_IGNORE) != 0;
+    OpCode opcode = require ? OP_JSON_DECODE_REQUIRE : OP_JSON_DECODE;
+    if (with_rest)
+        opcode = ignore ? OP_JSON_PARSE_WITH_REST_IGNORE : OP_JSON_PARSE_WITH_REST;
+    else if ((v->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0)
+        opcode = ignore ? OP_JSON_PARSE_TYPED_IGNORE : OP_JSON_PARSE_TYPED;
+    else if (!require)
+        opcode = ignore ? OP_JSON_DECODE_IGNORE : OP_JSON_DECODE;
     emit_inst(ctx, CREATE_ABC(opcode, dst, data_reg, karg));
 }
 

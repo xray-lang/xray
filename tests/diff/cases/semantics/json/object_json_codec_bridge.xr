@@ -1,6 +1,6 @@
 // anchor: object-json-codec-bridge
-// 181/177: pin the Object <-> Json codec bridge across VM/AOT. A Object encodes
-// to a shaped Json through its field table, decodes back through the same bridge
+// 181/177: pin the Object <-> JSON.Value codec bridge across VM/AOT. A Object encodes
+// to a shaped JSON.Value through its field table, decodes back through the same bridge
 // shape, and survives a full roundtrip including a nested Object.
 
 type Address = { city: string, zip: int }
@@ -8,15 +8,15 @@ type User = { name: string, age: int, address: Address }
 
 var user: User = { name: "Ada", age: 37, address: { city: "Hangzhou", zip: 310000 } }
 
-// Object -> Json field-table encode is observable as a shaped Json.
-var encoded = Json.encode(user)
-print(encoded.name)          // Ada
-print(encoded.age)           // 37
-print(encoded.address.city)  // Hangzhou
-print(encoded.address.zip)   // 310000
+// Object -> JSON.Value field-table encode is observable as a shaped JSON.
+var encoded = JSON.value(user)
+print(JSON.require<string>(encoded, ["name"]))             // Ada
+print(JSON.require<int>(encoded, ["age"]))                 // 37
+print(JSON.require<string>(encoded, ["address", "city"])) // Hangzhou
+print(JSON.require<int>(encoded, ["address", "zip"]))     // 310000
 
-// Json -> Object decode consumes the same bridge shape.
-var decoded = Json.decode<User>(encoded)
+// JSON.Value -> Object decode consumes the same bridge shape.
+var decoded = JSON.decode<User>(encoded)
 print(decoded == null)       // false
 print(decoded!.name)         // Ada
 print(decoded!.age)          // 37
@@ -24,4 +24,4 @@ print(decoded!.address.city) // Hangzhou
 print(decoded!.address.zip)  // 310000
 
 // Full roundtrip re-encode is stable and printable.
-print(Json.stringify(Json.encode(decoded!)))
+print(JSON.stringify(JSON.value(decoded!)))

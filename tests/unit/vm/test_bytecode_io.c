@@ -368,7 +368,7 @@ TEST(bytecode_reader_rejects_previous_layout_version) {
     xray_vm_delete(iso);
 }
 
-TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
+TEST(bytecode_roundtrips_exact_structural_shape_across_isolates) {
     XrVMRuntime *writer = new_test_isolate();
     ASSERT_NOT_NULL(writer);
     XrVMRuntime *reader = new_test_isolate();
@@ -380,22 +380,22 @@ TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
     const char *names[] = {"host", "port"};
     const uint64_t stable_type_keys[] = {UINT64_C(0x1111), UINT64_C(0x2222)};
     const uint8_t shape_flags[] = {XR_OBJECT_SHAPE_FIELD_READONLY, 0};
-    XrClass *shape =
-        xr_class_build_json_chain(writer, names, 2, stable_type_keys, shape_flags, false);
+    XrClass *shape = xr_class_build_struct_object_chain(writer, names, NULL, 2, NULL, NULL,
+                                                        stable_type_keys, shape_flags);
     ASSERT_NOT_NULL(shape);
     const XrtObjectShapeField manifest[] = {
         {"host", stable_type_keys[0], 0, 0, shape_flags[0], 0},
         {"port", stable_type_keys[1], 0, 1, shape_flags[1], 0},
     };
     ASSERT_EQ_UINT(xr_class_stable_shape_key(shape),
-                   xr_object_shape_stable_key(XR_OBJECT_DOMAIN_JSON, manifest, 2));
+                   xr_object_shape_stable_key(XR_OBJECT_DOMAIN_STRUCT, manifest, 2));
 
     int kidx = xr_valuearray_add(&proto->constants, xr_int((int64_t) (intptr_t) shape));
     ASSERT_EQ_INT(kidx, 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     proto->maxstacksize = 1;
-    xr_vm_proto_write(proto, CREATE_ABC(OP_NEWJSON, 0, kidx, 0), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_NEWOBJECT, 0, kidx, 0), 1);
     xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
@@ -412,10 +412,11 @@ TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
     ASSERT_TRUE(XR_IS_INT(cls_val));
     XrClass *roundtrip_shape = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
     ASSERT_NOT_NULL(roundtrip_shape);
-    ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_JSON);
+    ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_STRUCT_OBJECT);
     ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_DYNAMIC_LAYOUT) != 0);
+    ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_DYNAMIC_SEALED) != 0);
     ASSERT_EQ_UINT(roundtrip_shape->field_count, 2);
-    ASSERT_EQ_UINT(xr_class_object_domain(roundtrip_shape), XR_OBJECT_DOMAIN_JSON);
+    ASSERT_EQ_UINT(xr_class_object_domain(roundtrip_shape), XR_OBJECT_DOMAIN_STRUCT);
     ASSERT_EQ_UINT(xr_class_stable_shape_key(roundtrip_shape), xr_class_stable_shape_key(shape));
     ASSERT_EQ_UINT(roundtrip_shape->fields[0].stable_type_key, stable_type_keys[0]);
     ASSERT_EQ_UINT(roundtrip_shape->fields[0].shape_flags, shape_flags[0]);
@@ -461,8 +462,7 @@ TEST(bytecode_roundtrips_typed_object_decode_shape) {
          .child = &array_item_schema},
     };
     const uint64_t stable_type_keys[] = {UINT64_C(0x4101), UINT64_C(0x4102), UINT64_C(0x4103)};
-    const uint8_t shape_flags[] = {XR_OBJECT_SHAPE_FIELD_READONLY, 0,
-                                   XR_OBJECT_SHAPE_FIELD_OPTIONAL};
+    const uint8_t shape_flags[] = {XR_OBJECT_SHAPE_FIELD_READONLY, 0, 0};
     XrClass *shape = xr_class_build_struct_object_chain(writer, names, kinds, 3, nested_shapes,
                                                         schemas, stable_type_keys, shape_flags);
     ASSERT_NOT_NULL(shape);
@@ -1304,7 +1304,7 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_roundtrips_rune_constants);
     RUN_TEST(bytecode_reader_assigns_unique_proto_ids);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
-    RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);
+    RUN_TEST(bytecode_roundtrips_exact_structural_shape_across_isolates);
     RUN_TEST(bytecode_roundtrips_typed_object_decode_shape);
     RUN_TEST(bytecode_roundtrips_typed_json_root_schema);
     RUN_TEST(bytecode_roundtrips_class_descriptor_constants);

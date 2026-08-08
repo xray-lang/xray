@@ -42,7 +42,7 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
 #define CHECK(cond, message)                                                                       \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
-            fprintf(stderr, "FAIL: %s\n", message);                                               \
+            fprintf(stderr, "FAIL: %s\n", message);                                                \
             return 1;                                                                              \
         }                                                                                          \
     } while (0)
@@ -76,7 +76,7 @@ int main(void) {
     CHECK(xrt_execution_arena_live_objects(arena) == 0,
           "normal RC release unlinks and reclaims an acyclic object");
 
-    XrValue json = xrt_json_new(0);
+    XrValue json = xrt_struct_object_new(0);
     CHECK(((XrObjHeader *) json.ptr)->type == XR_TINSTANCE,
           "JSON uses the canonical instance object kind");
     CHECK(xrt_aot_class_type_id((XrObjHeader *) json.ptr) == 0,
@@ -130,7 +130,7 @@ int main(void) {
     CHECK(arena != NULL, "native-class publication arena is created");
     previous = xrt_execution_arena_enter(arena);
     uint16_t box_type = xrt_type_register_hot(0, NULL, 0, arena_test_box_destroy,
-                                               arena_test_box_promote, sizeof(ArenaTestBox));
+                                              arena_test_box_promote, sizeof(ArenaTestBox));
     ArenaTestBox *box = (ArenaTestBox *) xrt_obj_alloc(box_type, sizeof(*box));
     box->child = xrt_str_from_cstr("native-field");
     XrValue published_box = xrt_box_obj(box);

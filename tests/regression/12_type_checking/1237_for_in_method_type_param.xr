@@ -2,7 +2,7 @@
 // `for (i in xs)` where xs is typed by a METHOD's own generic parameter.
 //
 // 1236_generic_iterable_constraint.xr covers the same rule for top-level
-// functions, along with which types satisfy Iterable at all (Range, Json,
+// functions, along with which types satisfy Iterable at all (Range, Map,
 // Lengthable, the iterator() protocol). None of that is repeated here: this
 // file only pins the declaration sites that used to be unable to carry a bound
 // — instance methods, static methods, methods of a generic class, and

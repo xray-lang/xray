@@ -164,8 +164,7 @@ XrClass *xr_class_new_dynamic_root(XrVMRuntime *X, const char *name, uint16_t ca
     cls->name = name;
     cls->flags = XR_CLASS_DYNAMIC_LAYOUT | (sealed ? XR_CLASS_DYNAMIC_SEALED : 0);
     cls->builtin_kind = builtin_kind;
-    cls->object_domain =
-        builtin_kind == XR_BK_STRUCT_OBJECT ? XR_OBJECT_DOMAIN_STRUCT : XR_OBJECT_DOMAIN_JSON;
+    cls->object_domain = XR_OBJECT_DOMAIN_STRUCT;
     cls->stable_shape_key = xr_object_shape_key_begin(cls->object_domain, 0);
     cls->in_object_capacity = capacity;
     cls->field_count = 0;

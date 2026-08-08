@@ -186,7 +186,7 @@
     _(ARRAY_SETC, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A]:Array[B] = R[C]")                            \
     _(ARRAY_PUSH, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.push(R[B])")                                 \
     _(ARRAY_LEN, FMT_AB, KOP_AB_UNARY, "R[A] = len(R[B]:Array)")                                   \
-    _(LEN, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = len(R[B]), C=json-dynamic")                           \
+    _(LEN, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = len(R[B]), C=0")                                      \
     _(ARRAY_CLEAR, FMT_A, KOP_A_INOUT, "R[A]:Array.clear()")                                       \
     _(ARRAY_RESERVE, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.reserve(R[B])")                           \
     _(ARRAY_RESIZE, FMT_ABC, KOP_ABC_INPLACE, "R[A]:Array.resize(R[B], R[C])")                     \
@@ -257,18 +257,24 @@
     _(GETFIELD, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B]:Instance.fields[C]")                        \
     _(SETFIELD, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A]:Instance.fields[B] = R[C]")                    \
     _(GETFIELD_IC, FMT_ABC, KOP_SPECIAL, "R[A] = R[B].K[C] (IC)")                                  \
-    _(NEWJSON, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = new Json(K[B]:Shape, storage_mode=C)")            \
-    _(JSON_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B].fields[C]")                                 \
-    _(JSON_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A].fields[B] = R[C]")                             \
-    _(JSON_GETK, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B].get(symbol=C)")                            \
-    _(JSON_SETK, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A].set(symbol=B, R[C])")                         \
+    _(NEWOBJECT, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = new Object(K[B]:Shape, storage_mode=C)")        \
+    _(OBJECT_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B].fields[C]")                               \
+    _(OBJECT_SET, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A].fields[B] = R[C]")                           \
     _(OBJECT_GETK, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B].verifiedField(symbol=C)")                \
     _(OBJECT_SETK, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A].verifiedField(symbol=B) = R[C]")            \
-    _(JSON_INIT, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A].fields[B] = R[C]")                            \
-    _(JSON_INIT_I, FMT_ABC, KOP_SPECIAL, "R[A].fields[B] = C")                                     \
-    _(JSON_INIT_N, FMT_ABC, KOP_SPECIAL, "R[A].fields[B] = null")                                  \
+    _(OBJECT_INIT, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A].fields[B] = R[C]")                          \
+    _(OBJECT_INIT_I, FMT_ABC, KOP_SPECIAL, "R[A].fields[B] = C")                                   \
+    _(OBJECT_INIT_N, FMT_ABC, KOP_SPECIAL, "R[A].fields[B] = null")                                \
     _(JSON_DECODE, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = decode(R[B]:string, K[C]:Shape)")             \
+    _(JSON_DECODE_IGNORE, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = decode_ignore(R[B], K[C]:Shape)")      \
+    _(JSON_DECODE_REQUIRE, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = decode_require(R[B], K[C]:Shape)")    \
     _(JSON_PARSE_TYPED, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = parse_typed(R[B]:string, K[C]:Shape)")   \
+    _(JSON_PARSE_TYPED_IGNORE, FMT_ABC, KOP_ABC_BIN_LIT,                                           \
+      "R[A] = parse_typed_ignore(R[B]:string, K[C]:Shape)")                                        \
+    _(JSON_PARSE_WITH_REST, FMT_ABC, KOP_ABC_BIN_LIT,                                              \
+      "R[A] = parse_with_rest(R[B]:string, K[C]:WithRestShape)")                                   \
+    _(JSON_PARSE_WITH_REST_IGNORE, FMT_ABC, KOP_ABC_BIN_LIT,                                       \
+      "R[A] = parse_with_rest_ignore(R[B]:string, K[C]:WithRestShape)")                            \
     _(GETBUILTIN, FMT_GLOBAL, KOP_GLOBAL_GET, "R[A] = builtins[Bx]")                               \
     _(PRINT, FMT_A, KOP_PRINT, "print(R[A], add_space=B, packed=C)")                               \
     _(TYPEOF, FMT_AB, KOP_AB_UNARY_HINT, "R[A] = typeof(R[B]) -> int")                             \
@@ -403,7 +409,7 @@
      * (the embedded bytecode smoke blob uses only those), while NOP — unused by                 \
      * the blob — may shift as internal VM-only ops are added. */                                \
     _(ARRAY_EXTEND, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.extend(R[B]:Array) — splice + retain")     \
-    _(JSON_MERGE, FMT_AB, KOP_AB_INPLACE, "R[A]:Json.merge(R[B]:Json) — object spread")            \
+    _(OBJECT_MERGE, FMT_AB, KOP_AB_INPLACE, "R[A]:Object.merge(R[B]:Object) — object spread")      \
     _(TORUNE, FMT_AB, KOP_AB_UNARY, "R[A] = rune(R[B]) — int codepoint to Unicode scalar")         \
     _(GEN_YIELD, FMT_A, KOP_A_USE, "generator yield: hand R[A] to the driver, suspend")            \
     _(GEN_START, FMT_ABC, KOP_ABC_BIN_LIT,                                                         \

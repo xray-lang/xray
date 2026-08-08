@@ -1,20 +1,27 @@
 {
   "module": "json",
-  "title": "Json built-in utility",
-  "summary": "Built-in Json utility class for parse/encode/stringify and object helpers",
-  "lead": "Json is a built-in utility class; use Json.parse(), Json.encode(), and Json.stringify() directly without import.",
-  "usage": "Use it directly without `import`.",
+  "title": "JSON prelude namespace",
+  "summary": "Typed and schema-less JSON boundaries, path operations, and serialization",
+  "lead": "JSON is a prelude namespace, not a value type or importable module. Use JSON.Value for any JSON root and JSON.Object, an alias for Map<string, JSON.Value>, for dynamic object keys.",
+  "usage": "Use `JSON.*` directly without `import`; choose typed parsing whenever the schema is known.",
   "sections": [
     {
-      "heading": "Common helpers",
+      "heading": "Parse and encode",
       "bullets": [
-        "`Json.parse(text)`",
-        "`Json.encode(value)`",
-        "`Json.stringify(value, indent?)`",
-        "`Json.isValid(text)` / `Json.tryParse(text)`",
-        "`Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)`",
-        "`Json.containsKey(obj, key)` / `Json.get(obj, key, default?)`",
-        "`len(obj)` for object, array, or string variants"
+        "`JSON.parse<T>(text)` rejects unknown fields by default; pass `JSON.UnknownFields.Ignore` explicitly when required",
+        "`JSON.parseObject(text)` returns `JSON.Object`; `JSON.parseValue(text)` accepts any JSON root",
+        "`JSON.value(value)` explicitly encodes a composite value; JSON scalars widen implicitly",
+        "`JSON.stringify(value, indent?)` serializes any value satisfying `JSON.Encodable`",
+        "`JSON.parseWithRest<T>(text)` keeps unknown top-level fields in `rest: JSON.Object`"
+      ]
+    },
+    {
+      "heading": "Dynamic access",
+      "bullets": [
+        "Use `JSON.Object` Map methods and subscripts for one-level dynamic keys",
+        "Use `JSON.get<T>()`, `JSON.require<T>()`, `JSON.containsPath()`, `JSON.set()`, and `JSON.remove()` with `JSON.Path` for deep access",
+        "Use `JSON.asObject()` / `JSON.asArray()` to unwrap a `JSON.Value` without copying",
+        "`JSON.Value` itself has no dot access, subscript, iteration, or `len`"
       ]
     }
   ]

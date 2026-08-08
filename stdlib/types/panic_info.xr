@@ -13,7 +13,7 @@ class PanicInfo {
     stack: Array<string>
     cause: PanicInfo?
     code: int
-    data: Json
+    data: JSON.Value
     constructor(message: string = "", cause: PanicInfo? = null)
     toString() -> string
 }

@@ -2703,14 +2703,14 @@ TEST(cgen_standalone_prelude_enum_globals_generate_static_members) {
      * whether ANY of its variants carries a payload -- see
      * cg_mark_prelude_enum_scalar_sidecar. SendResult is payload-free
      * throughout and lowers to the scalar layout; Recv.Value carries one, so
-     * Recv keeps the boxed form and its payload-free members still need stable
-     * enum keys. Asserting both halves is what keeps a future change from
-     * silently moving an enum between them. */
+     * Recv keeps the boxed form and its payload-free members retain nominal
+     * enum identity in the lightweight enum map. */
     assert(contains(code, "xrt_enum_scalar_box(&_xprelude_enum_scalar_layout_") &&
            "a payload-free prelude enum lowers to the scalar layout");
     assert(!contains(code, "_ev_SendResult_") &&
            "a scalar-lowered enum must not also emit boxed member globals");
-    assert(contains(code, "_ev_Recv_Empty") && "no-payload Recv members must be stable enum keys");
+    assert(contains(code, "xrt_enum_box_new(0, \"Recv\", \"Empty\", 1)") &&
+           "no-payload Recv members must retain boxed nominal identity");
     assert(!contains(code, "xr_aot_load_builtin_field(ctx,") &&
            "standalone AOT must not require a coroutine isolate for prelude enum fields");
 
@@ -3110,7 +3110,9 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
             contains(buf, "\nstatic XR_AINLINE XRT_FN_CONST int64_t lib_helper_")) &&
            "private helper should be file-local and inlineable in multi-module C");
     assert((contains(buf, "\nXRT_INTERNAL int64_t lib_public_exp(") ||
-            contains(buf, "\nXRT_INTERNAL XRT_FN_CONST int64_t lib_public_exp(")) &&
+            contains(buf, "\nXRT_INTERNAL XRT_FN_CONST int64_t lib_public_exp(") ||
+            contains(buf, "\nXRT_INTERNAL XR_FORCEINLINE int64_t lib_public_exp(") ||
+            contains(buf, "\nXRT_INTERNAL XRT_FN_CONST XR_FORCEINLINE int64_t lib_public_exp(")) &&
            "module-ABI functions need an out-of-line definition on every C provider");
     assert(!contains(buf, "static XR_AINLINE int64_t lib_public_exp(") &&
            !contains(buf, "static XR_AINLINE XRT_FN_CONST int64_t lib_public_exp(") &&
@@ -5599,7 +5601,7 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
     assert(!had_error && "escaping struct heap-native path should generate");
     assert(contains(code, "typedef struct xrt_struct_abi_") &&
            "escaping primitive struct must emit a native heap layout");
-    assert(contains(code, "xr_aggregate_ref(") &&
+    assert(contains(code, "xrt_aggregate_clone_bytes(") &&
            "escaping primitive struct must allocate as an AOT struct reference");
     assert(contains(code, "->x") && contains(code, "->y") && contains(code, "->ok") &&
            contains(code, "->octet") && "escaping primitive struct fields must use direct access");
@@ -5712,7 +5714,7 @@ TEST(cgen_fixed_layout_struct_omits_native_header) {
            "fixed-layout i32 field must be placed at payload offset 0");
     assert(count_between(typedef_start, typedef_end, "uint8_t b") == 1 &&
            "fixed-layout u8 field must be emitted as raw C storage");
-    assert(contains(code, "xr_aggregate_ref(_s, (uint16_t)sizeof(") &&
+    assert(contains(code, "xrt_aggregate_clone_bytes(") &&
            "fixed-layout struct refs must carry storage size outside the payload");
 
     printf("  Generated fixed-layout struct path %zu bytes of C code\n", strlen(code));
@@ -5980,6 +5982,44 @@ TEST(cgen_static_method_call_elides_class_descriptor_receiver) {
     xi_func_free(app_ir);
 }
 
+TEST(cgen_map_class_static_factory_is_not_constructor) {
+    const char *src = "class Box {\n"
+                      "    kind: string\n"
+                      "    value: int\n"
+                      "    constructor(kind: string) {\n"
+                      "        this.kind = kind\n"
+                      "        this.value = 0\n"
+                      "    }\n"
+                      "    static Int(value: int) -> Box {\n"
+                      "        var out = Box(\"int\")\n"
+                      "        out.value = value\n"
+                      "        return out\n"
+                      "    }\n"
+                      "}\n"
+                      "fn make() -> Box { return Box.Int(42) }\n"
+                      "print(make().value)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "map-backed class static factory should generate");
+    const char *make = find_static_function_definition(code, "make_");
+    TEST_REQUIRE(make != NULL, "make definition should exist");
+    const char *make_end = next_static_after(make);
+    TEST_REQUIRE(make_end != NULL, "make function body should be bounded");
+    TEST_REQUIRE(!contains_between(make, make_end, "Box_constructor_m"),
+                 "static factory call must not be rewritten as a constructor");
+    TEST_REQUIRE(!contains_between(make, make_end, "_portable_map_inst_"),
+                 "caller must not allocate a second map-backed instance");
+
+    printf("  Generated map-backed static factory call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     const char *src = "struct Cell {\n"
                       "    a: int\n"
@@ -6018,7 +6058,7 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
            "run function body should be bounded");
 
-    assert(contains(code, "xr_aggregate_ref(") &&
+    assert(contains(code, "xrt_aggregate_clone_bytes(") &&
            "shared primitive struct must use native heap storage");
     assert(count_between(fn_body, fn_end, "xrt_value_clone_for_coro(") > 0 &&
            "mutable local struct copy should clone the shared slot value before mutation");
@@ -6187,11 +6227,11 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
      * the text outright also outlawed that storage tag, which a constructor
      * inlined into its caller legitimately emits, so the rule is spelled as
      * "every boxing is a storage tag" instead. */
-    assert(
-        count_between(code, code + strlen(code), "xrt_box_obj(_inst)") ==
-            count_between(code, code + strlen(code), "xrt_value_set_storage(xrt_box_obj(_inst)") &&
-        "the only boxing of a native instance is the storage-class tag");
-    assert(contains(code, "_inst; })") &&
+    assert(count_between(code, code + strlen(code), "xrt_box_obj(_portable_inst_") ==
+               count_between(code, code + strlen(code),
+                             "xrt_value_set_storage(xrt_box_obj(_portable_inst_") &&
+           "the only boxing of a native instance is the storage-class tag");
+    assert(contains(code, "= _portable_inst_") &&
            "native class constructor values should stay as pointers inside typed AOT code");
     assert(!contains(code, "heap_type == XR_TINSTANCE") &&
            "closed-world typed class flow should not retain boxed instance discrimination");
@@ -6209,8 +6249,8 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
     /* Same rule as above, scoped to the producer: it returns a native pointer
      * (the signature matched on says so) and boxes only to stamp the storage
      * class on the header. */
-    assert(count_between(make, make_end, "xrt_box_obj(_inst)") ==
-               count_between(make, make_end, "xrt_value_set_storage(xrt_box_obj(_inst)") &&
+    assert(count_between(make, make_end, "xrt_box_obj(_portable_inst_") ==
+               count_between(make, make_end, "xrt_value_set_storage(xrt_box_obj(_portable_inst_") &&
            "the producer boxes only to stamp the storage class");
     assert(count_between(make, make_end, "xrt_map_new(") == 0 &&
            "escaping native class constructor must not allocate a map instance");
@@ -6358,6 +6398,12 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
                           "xrt_native_test_Bag_promote_storage, "
                           "(uint32_t)sizeof(xrt_native_test_Bag))") &&
            "class hot type registration should wire destructor and storage promoter");
+    assert(contains(code, "static void *xrt_native_test_Bag_runtime_clone(void *obj)") &&
+           contains(code, "xrt_value_clone_for_coro(xr_mkptr((src)->f0, XR_TAG_ARRAY))") &&
+           "language-level copy should recursively clone owned native class fields");
+    assert(contains(code, "xrt_type_set_runtime_clone(_tid, "
+                          "xrt_native_test_Bag_runtime_clone)") &&
+           "native classes should register their language-level copy callback");
     assert(contains(code, "xrt_type_set_name(_tid, \"Bag\", NULL)") &&
            "default hosted AOT should install class name metadata");
 
@@ -6366,19 +6412,17 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
     replace = strstr(replace + 1, "static int64_t test_replace_");
     assert(replace != NULL && "replace method definition should follow its declaration");
     const char *replace_end = next_static_after(replace);
-    /* The store is one comma expression: retain the new container, release the
-     * old one, then assign. Retain-before-release is what keeps
-     * `this.values = this.values` from freeing the value being stored. The
-     * temporary is an SSA value (`vN`), so match the shape, not a fixed name. */
+    /* The incoming value parameter already owns the reference transferred by
+     * the caller. The store releases the old field and moves that owned
+     * reference into place without retaining it a second time. */
     const char *store = strstr(replace, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY)), "
                                         "(p0)->f0 = (xrt_array_t *)");
     assert(store && store < replace_end &&
            count_between(replace, replace_end, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY))") ==
                1 &&
            "direct native receiver collection ref stores release the old container once");
-    const char *retain = strstr(replace, "xrt_retain(");
-    assert(retain && retain < store &&
-           "the new container is retained before the old one is released");
+    assert(count_between(replace, replace_end, "xrt_retain(") == 0 &&
+           "owned value parameters move into collection fields without a second retain");
 
     const char *swap = strstr(code, "static int64_t test_swap_");
     assert(swap != NULL && "swap function should use typed scalar return ABI");
@@ -6391,17 +6435,15 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
            count_between(swap, swap_end, "xrt_map_get(") == 0 &&
            count_between(swap, swap_end, "xrt_map_set(") == 0 &&
            "native class pointer parameters should access ref fields without Map fallback");
-    /* Same comma-expression store as the direct receiver above, through the
+    /* Same ownership-transfer store as the direct receiver above, through the
      * heap instance pointer this time. */
-    const char *swap_store = strstr(swap, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY)), "
-                                          "(_native)->f0 = (xrt_array_t *)");
+    const char *swap_store = strstr(swap, "xrt_release(xr_mkptr((_portable_native_");
     assert(swap_store && swap_store < swap_end &&
-           count_between(swap, swap_end, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY))") ==
-               1 &&
+           count_between(swap, swap_end, "xrt_release(xr_mkptr((_portable_native_") == 1 &&
+           count_between(swap, swap_end, ")->f0 = (xrt_array_t *)") == 1 &&
            "heap native instance collection ref stores release the old container once");
-    const char *swap_retain = strstr(swap, "xrt_retain(");
-    assert(swap_retain && swap_retain < swap_store &&
-           "the new container is retained before the old one is released");
+    assert(count_between(swap, swap_end, "xrt_retain(") == 0 &&
+           "owned swap parameters move into collection fields without a second retain");
 
     const char *local = strstr(code, "static int64_t test_local_");
     assert(local != NULL && "local function should use typed scalar return ABI");
@@ -11493,11 +11535,12 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
     xi_func_free(ir);
 }
 
-TEST(cgen_json_field_named_like_builtin_property_uses_json_lookup) {
-    const char *src = "fn read_count(data: Json) -> int {\n"
-                      "    return int(data.count)\n"
+TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
+    const char *src = "type Counted = {count: int}\n"
+                      "fn read_count(data: Counted) -> int {\n"
+                      "    return data.count\n"
                       "}\n"
-                      "var data: Json = {count: 10}\n"
+                      "var data: Counted = {count: 10}\n"
                       "print(read_count(data))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -11506,12 +11549,13 @@ TEST(cgen_json_field_named_like_builtin_property_uses_json_lookup) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Json field access should generate");
-    assert((contains(code, "xrt_json_get_shape_guard_owned(") ||
-            contains(code, "xrt_json_get_name_owned(")) &&
-           "Json fields must use Json lookup even when their name is a builtin symbol");
+    assert(!had_error && "structural field access should generate");
+    assert(contains(code, "xrt_object_get_field(") &&
+           "structural fields must use their verified ordinal");
+    assert(!contains(code, "xrt_object_get_name_owned(") &&
+           "structural fields must not fall back to name lookup");
     assert(!contains(code, "xrt_getprop(v0, 234)") &&
-           "Json.count must not lower as the builtin count property");
+           "a structural count field must not lower as the builtin count property");
 
     xr_free(code);
     xi_func_free(ir);
@@ -11664,6 +11708,7 @@ int main(void) {
     run_cgen_fixed_array_local_return_clones_borrowed_stack_storage();
     run_cgen_fixed_array_index_ops_elide_boxed_operands();
     run_cgen_static_method_call_elides_class_descriptor_receiver();
+    run_cgen_map_class_static_factory_is_not_constructor();
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
@@ -11776,7 +11821,7 @@ int main(void) {
     run_cgen_coro_result_group_recv_i64_optional_uses_typed_abi();
     run_cgen_work_queue_native_methods_use_aot_helpers();
     run_cgen_coro_task_status_uses_native_enum_status();
-    run_cgen_json_field_named_like_builtin_property_uses_json_lookup();
+    run_cgen_structural_field_named_like_builtin_property_uses_ordinal();
 
     teardown();
 

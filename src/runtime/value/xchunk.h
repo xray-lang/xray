@@ -124,7 +124,7 @@ _Static_assert(NUM_OPCODES <= 65536, "Opcode count exceeds 16-bit encoding limit
 #define CORO_CTRL_SELF 11
 #define CORO_CTRL_KILL 12
 
-// OP_JSON_INIT mode flags (encoded in high bits of C)
+// OP_OBJECT_INIT mode flags (encoded in high bits of C)
 #define JSON_INIT_REG 0   // C = register index
 #define JSON_INIT_IMM 1   // C = signed immediate int (use GETARG_sC)
 #define JSON_INIT_NULL 2  // C ignored, value = null

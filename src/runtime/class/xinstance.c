@@ -461,16 +461,6 @@ static XrClass *xr_class_build_dynamic_chain(
     return cur;
 }
 
-XrClass *xr_class_build_json_chain(XrVMRuntime *X, const char *const *names, int count,
-                                   const uint64_t *stable_type_keys,
-                                   const uint8_t *shape_field_flags, bool sealed) {
-    XR_DCHECK(X != NULL, "build_json_chain: NULL isolate");
-    XR_DCHECK(X->core != NULL && X->core->jsonRootClass != NULL,
-              "build_json_chain: jsonRootClass not initialized");
-    return xr_class_build_dynamic_chain(X, X->core->jsonRootClass, names, NULL, NULL, count, NULL,
-                                        stable_type_keys, shape_field_flags, sealed, "Json");
-}
-
 XrClass *xr_class_build_struct_object_chain(XrVMRuntime *X, const char *const *names,
                                             const uint8_t *json_value_kinds, int count,
                                             XrClass *const *json_struct_object_classes,

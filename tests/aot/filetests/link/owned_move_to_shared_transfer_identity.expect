@@ -7,5 +7,5 @@ regex=  value v[0-9]+ op=SOURCE_MOVE kind=ptr rep=ptr c_type=void \*
 not_regex=transfer [0-9]+ func=publish_(len|grouped_len|cast_len)
 c_contains=xrt_array_new_filled_value(
 c_not_contains=xrt_value_clone_for_coro(
-c_not_contains=xrt_json_clone_for_coro(
+c_not_contains=xrt_object_clone_for_coro(
 c_not_contains=xr_aot_runtime_init

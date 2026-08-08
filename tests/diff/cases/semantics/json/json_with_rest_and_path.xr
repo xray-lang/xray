@@ -1,0 +1,33 @@
+type Profile = { name: string, age: int?, nested: { id: int }? }
+
+var parts = JSON.parseWithRest<Profile>(
+    "{\"name\":\"ada\",\"extra\":7,\"nested\":{\"id\":1,\"ignored\":true}}",
+    JSON.UnknownFields.Ignore
+)
+print(parts.value.name)
+print(JSON.stringify(parts.rest))
+print(JSON.stringify(JSON.merge(parts)))
+
+var root = JSON.parseValue("{\"user\":{\"profile\":{\"name\":\"ada\"}}}")
+var path: JSON.Path = ["user", "profile", "name"]
+print(JSON.require<string>(root, path))
+print(JSON.containsPath(root, path))
+JSON.set(root, path, "bob")
+print(JSON.require<string>(root, path))
+print(JSON.remove(root, path))
+print(JSON.containsPath(root, path))
+
+var nullableRoot = JSON.parseValue("{\"value\":null,\"wrong\":\"x\"}")
+var nullableValue: int? = JSON.require<int?>(nullableRoot, ["value"])
+print(nullableValue == null)
+try {
+    JSON.require<int?>(nullableRoot, ["wrong"])
+    print("bad-nullable-require")
+} catch panic(e) {
+    print("caught-nullable-require")
+}
+
+var profileRoot = JSON.parseValue("{\"name\":\"lin\"}")
+var profile = JSON.get<Profile>(profileRoot, [])
+print(profile!.name)
+print(JSON.get<int>(profileRoot, []) == null)

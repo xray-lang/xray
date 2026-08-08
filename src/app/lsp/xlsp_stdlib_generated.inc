@@ -43,7 +43,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
     {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "Start LAN auto-discovery", NULL, 0},
     {"stop", XLSP_SYM_FUNCTION, "fn(): ()", "Stop cluster node", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): ClusterInfo?", "Get cluster status info", NULL, 0},
-    {"publish", XLSP_SYM_FUNCTION, "fn(topic: string, value: Json): bool", "Publish to topic", NULL, 0},
+    {"publish", XLSP_SYM_FUNCTION, "fn(topic: string, value: JSON.Value): bool", "Publish to topic", NULL, 0},
     {"subscribe", XLSP_SYM_FUNCTION, "fn(pattern: string): Channel", "Subscribe to topic pattern", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"validChannelName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
@@ -159,6 +159,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"parseMethod", XLSP_SYM_FUNCTION, "fn(token: string): HttpMethod?", "", NULL, 0},
     {"textResponse", XLSP_SYM_FUNCTION, "fn(body: string, status?: int, headers?: Headers?): HttpResponse", "", NULL, 0},
     {"jsonResponse", XLSP_SYM_FUNCTION, "fn(value: T, status?: int, headers?: Headers?): HttpResponse", "", NULL, 0},
+    {"json", XLSP_SYM_FUNCTION, "fn(value: T, status?: int): HttpResponse", "", NULL, 0},
     {"request", XLSP_SYM_FUNCTION, "fn(options: HttpRequestOptions): HttpResponse", "", NULL, 0},
     {"parseChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int, maxTrailerHeaders?: int): ChunkedBody?", "Decode a complete Transfer-Encoding: chunked body.", NULL, 0},
     {"decodeChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int): string?", "Decode a chunked body and discard trailers.", NULL, 0},
@@ -193,7 +194,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"RequestMessage", XLSP_SYM_CLASS, "type RequestMessage", "Parsed HTTP/1.x request head and decoded body.", NULL, 0},
     {"ResponseMessage", XLSP_SYM_CLASS, "type ResponseMessage", "Parsed HTTP/1.x response head and decoded body.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 40
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 41
 
 // http2 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http2_symbols[] = {
@@ -249,11 +250,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
 
 // log module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {
-    {"debug", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
-    {"warn", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
-    {"error", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
-    {"fatal", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
+    {"debug", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
+    {"warn", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
+    {"error", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
+    {"fatal", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
     {"setLevel", XLSP_SYM_FUNCTION, "fn(level: LogLevel): ()", "", NULL, 0},
     {"setFormat", XLSP_SYM_FUNCTION, "fn(format: LogFormat): ()", "", NULL, 0},
     {"setOutput", XLSP_SYM_FUNCTION, "fn(path: Path): ()", "", NULL, 0},
@@ -261,7 +262,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {
     {"enableSource", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
     {"enableAsync", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
     {"flush", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
-    {"child", XLSP_SYM_FUNCTION, "fn(...fields: Json): Logger", "", NULL, 0},
+    {"child", XLSP_SYM_FUNCTION, "fn(...fields: JSON.Value): Logger", "", NULL, 0},
     {"LogLevel", XLSP_SYM_CLASS, "type LogLevel", "Enum type", NULL, 0},
     {"LogFormat", XLSP_SYM_CLASS, "type LogFormat", "Enum type", NULL, 0},
     {"Logger", XLSP_SYM_CLASS, "type Logger", "Class type", NULL, 0},

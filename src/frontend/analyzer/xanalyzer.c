@@ -225,7 +225,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_func(analyzer, "print", fn_print);
 
     // Modules/namespaces (XA_SYM_MODULE enables member signature lookup)
-    register_builtin_module(analyzer, "Json");
+    register_builtin_module(analyzer, "JSON");
     register_builtin_module(analyzer, "Coro");
     register_builtin_module_types_in_prelude(analyzer, "Coro");
     register_builtin_module(analyzer, "CoroPool");

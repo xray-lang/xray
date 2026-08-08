@@ -1160,9 +1160,9 @@ static bool lower_match_is_exhaustive_adt(XiLower *l, struct XrType *subject_typ
     return false;
 }
 
-/* Read object/Json field `fname` from `subject` (static Json index when known,
- * else a dynamic string-keyed index get; both null-safe on a missing field). */
-static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *fname) {
+/* Read a statically declared object field from a match subject. */
+static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *fname,
+                                      uint32_t source_span_id) {
     int fidx = subject->type ? stmt_json_field_index(subject->type, fname) : -1;
     if (fidx >= 0) {
         struct XrType *ft =
@@ -1171,6 +1171,8 @@ static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *
         if (v) {
             v->args[0] = subject;
             v->aux_int = fidx;
+            v->line = source_span_id;
+            xi_lower_bind_object_access_id(l, v, fname, source_span_id, XG_OBJECT_ACCESS_FIELD_GET);
         }
         return v;
     }
@@ -1364,7 +1366,8 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
                 AstNode *sub = op->patterns[i];
                 if (pattern_is_irrefutable_binding(sub))
                     continue;
-                XiValue *fv = lower_match_field_get(l, subject, op->field_names[i]);
+                XiValue *fv =
+                    lower_match_field_get(l, subject, op->field_names[i], (uint32_t) pattern->line);
                 if (!fv)
                     continue;
                 XiValue *t = xi_lower_pattern_test(l, fv, sub);
@@ -1468,7 +1471,8 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
             AstNode *sub = op->patterns[i];
             if (!sub || sub->type == AST_PATTERN_WILDCARD)
                 continue;
-            XiValue *fv = lower_match_field_get(l, subject, op->field_names[i]);
+            XiValue *fv =
+                lower_match_field_get(l, subject, op->field_names[i], (uint32_t) pattern->line);
             if (!fv)
                 continue;
             lower_pattern_bindings(l, fv, sub);
@@ -2343,10 +2347,9 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
 /* Whether the collection's static type is iterable via the fast
  * length + INDEX_GET path. Only Array, Slice and Set qualify: those
  * have integer indexable layouts that produce the loop variable's
- * canonical type directly. Map / Json instead route through the
+ * canonical type directly. Map instead routes through the
  * iterator() / hasNext() / next() protocol, which lets `for (k in m)`
- * yield real keys and `for (k in obj)` yield string keys, matching
- * the analyzer's item-type inference and Python / Go conventions.
+ * yield real keys, matching the analyzer's item-type inference.
  *
  * A `Range` value qualifies too: it carries no iterator() method, but both
  * backends answer len()/[i] on it lazily (VM: OP_LEN / OP_GETINDEX fast
@@ -2492,7 +2495,7 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         return;
     }
 
-    /* Anything that isn't a fast index-iterable collection (Map, Json,
+    /* Anything that isn't a fast index-iterable collection (Map,
      * tuple, struct, custom class) goes through the iterator() protocol.
      * The analyzer is responsible for rejecting collection types that
      * have no iterator() method (tuple / struct without one). */
@@ -2941,7 +2944,6 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                         val->aux_int = fidx;
                         val->line = source_span_id;
                         xi_lower_bind_object_access_id(l, val, fname, source_span_id,
-                                                       (uint16_t) fidx,
                                                        XG_OBJECT_ACCESS_DESTRUCTURE);
                     }
                 } else {

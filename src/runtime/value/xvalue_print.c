@@ -224,7 +224,7 @@ static void dump_set(XrSet *set, DumpContext *ctx) {
 }
 
 // Dump Json
-static void dump_json(XrJson *json, DumpContext *ctx) {
+static void dump_json(XrObjectInstance *json, DumpContext *ctx) {
     printf("{");
     if (!json) {
         printf("}");
@@ -324,9 +324,8 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
                 return;
             case XR_TINSTANCE: {
                 XrInstance *inst = (XrInstance *) gc;
-                if (inst->klass && (inst->klass->builtin_kind == XR_BK_JSON ||
-                                    inst->klass->builtin_kind == XR_BK_STRUCT_OBJECT)) {
-                    dump_json((XrJson *) gc, ctx);
+                if (inst->klass && inst->klass->builtin_kind == XR_BK_STRUCT_OBJECT) {
+                    dump_json((XrObjectInstance *) gc, ctx);
                     return;
                 }
                 if (inst->klass && inst->klass->builtin_kind == XR_BK_TUPLE) {

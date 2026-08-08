@@ -56,6 +56,7 @@
 
 typedef void (*XrtDestructor)(void *obj);
 typedef void (*XrtStoragePromoter)(void *obj, uint8_t storage_mode);
+typedef void *(*XrtRuntimeClone)(void *obj);
 typedef XrValue (*XrtMethodFn)(void);  // generic fn ptr placeholder
 
 /* Compiled hash() / operator == of a class that implements Hashable by hand,
@@ -95,6 +96,7 @@ typedef struct {
     uint16_t itable_size;
     XrtDestructor destructor;           // NULL for classes without custom dtor
     XrtStoragePromoter promote_storage; /* recursively publishes owned reference fields */
+    XrtRuntimeClone runtime_clone;      /* deep copy for the language-level copy operation */
     uint32_t instance_size;             // byte size of instance fields
     XrtUserHashFn hash_fn;              // compiled hash(); NULL unless user-Hashable
     XrtUserEqFn eq_fn;                  // compiled operator ==; NULL unless user-Hashable
@@ -186,6 +188,7 @@ static inline uint16_t xrt_type_register_hot(uint16_t parent_id, XrtMethodFn *vt
     ti->itable_size = 0;
     ti->destructor = dtor;
     ti->promote_storage = promote_storage;
+    ti->runtime_clone = NULL;
     ti->instance_size = inst_size;
     ti->hash_fn = NULL;
     ti->eq_fn = NULL;
@@ -206,6 +209,12 @@ static inline void xrt_type_set_itable(uint16_t type_id, const XrtInterfaceMetho
     XrtTypeInfo *ti = &xrt_type_table[type_id];
     ti->itable = itable;
     ti->itable_size = itable ? itable_size : 0;
+}
+
+static inline void xrt_type_set_runtime_clone(uint16_t type_id, XrtRuntimeClone clone_fn) {
+    if (type_id == 0 || type_id >= xrt_type_count)
+        return;
+    xrt_type_table[type_id].runtime_clone = clone_fn;
 }
 
 /* Record a class's own hash() / operator == so the runtime keys Map/Set by

@@ -91,14 +91,14 @@ vmcase(OP_TARRAY_PUSH) {
 
 vmcase(OP_TFIELD_GET) {
     TRACE_EXECUTION();
-    XrJson *json = (XrJson *) XR_TO_PTR(R(GETARG_B(i)));
+    XrObjectInstance *json = (XrObjectInstance *) XR_TO_PTR(R(GETARG_B(i)));
     R(GETARG_A(i)) = json->fields[GETARG_C(i)];
     vmbreak;
 }
 
 vmcase(OP_TFIELD_SET) {
     TRACE_EXECUTION();
-    XrJson *json = (XrJson *) XR_TO_PTR(R(GETARG_A(i)));
+    XrObjectInstance *json = (XrObjectInstance *) XR_TO_PTR(R(GETARG_A(i)));
     XrValue _tfv = R(GETARG_C(i));
     json->fields[GETARG_B(i)] = _tfv;
     vmbreak;

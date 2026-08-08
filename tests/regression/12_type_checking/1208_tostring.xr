@@ -57,7 +57,7 @@ fn test_tostring() {
     var ss = string(st)
     assert(ss.indexOf("#[") == 0)
 
-    // === 7. Json toString ===
+    // === 7. Structural object toString ===
     var obj = { name: "Alice", age: 30 }
     var js = string(obj)
     assert(js.indexOf("name") >= 0)

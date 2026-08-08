@@ -1,17 +1,8 @@
 import math
 
-var dyn: Json = {
-    "intMin": 7,
-    "intMax": 7,
-    "floatMin": 5.8,
-    "floatMax": 5.8,
-    "boolMin": true,
-    "boolMax": true,
-    "nullMin": null,
-    "zero": 0
-}
+var dyn: JSON.Object = JSON.parseObject("{\"intMin\":7,\"intMax\":7,\"floatMin\":5.8,\"floatMax\":5.8,\"boolMin\":true,\"boolMax\":true,\"nullMin\":null,\"zero\":0}")
 
-print(math.randomInt(dyn.intMin, dyn.intMax))
-print(math.randomInt(dyn.floatMin, dyn.floatMax))
-print(math.randomInt(dyn.boolMin, dyn.boolMax))
-print(math.randomInt(dyn.nullMin, dyn.zero))
+print(math.randomInt(JSON.require(dyn, ["intMin"]), JSON.require(dyn, ["intMax"])))
+print(math.randomInt(JSON.require(dyn, ["floatMin"]), JSON.require(dyn, ["floatMax"])))
+print(math.randomInt(JSON.require(dyn, ["boolMin"]), JSON.require(dyn, ["boolMax"])))
+print(math.randomInt(JSON.require(dyn, ["nullMin"]), JSON.require(dyn, ["zero"])))

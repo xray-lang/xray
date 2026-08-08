@@ -1,9 +1,9 @@
-fn count_after_yield(...args: Json) -> int {
+fn count_after_yield(...args: JSON.Value) -> int {
     Coro.yield()
     return len(args)
 }
 
-fn invoke(a: Json, b: Json, c: Json, d: Json) -> int {
+fn invoke(a: JSON.Value, b: JSON.Value, c: JSON.Value, d: JSON.Value) -> int {
     return count_after_yield(a, b, c, d)
 }
 

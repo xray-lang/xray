@@ -27,7 +27,7 @@ xray demos/01-basics/hello.xr
 |------|--------|
 | [arrays.xr](02-collections/arrays.xr) | Array creation, slicing, map/filter/reduce |
 | [maps_and_sets.xr](02-collections/maps_and_sets.xr) | Map, Set, object literals |
-| [json_processing.xr](02-collections/json_processing.xr) | Json type (prelude), dynamic access, structural typing |
+| [json_processing.xr](02-collections/json_processing.xr) | JSON namespace, typed decoding, and Map-backed dynamic objects |
 
 ### 03 — Object-Oriented Programming
 

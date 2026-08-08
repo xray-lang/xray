@@ -22,31 +22,33 @@ fn test_strict_type_modify_existing() {
     assert_eq(p.y, 200)
 }
 
-// ===== 可扩展类型别名（使用 ... 语法）=====
+// ===== spread 构造新的精确 shape =====
 
 @test
-fn test_extensible_type_alias() {
-    type Config = { port: int, host: string, ... }
+fn test_spread_adds_static_fields() {
+    type Config = { port: int, host: string }
     var cfg: Config = { port: 8080, host: "localhost" }
-    cfg.timeout = 30       // 允许添加
-    cfg.debug = true       // 允许添加
-    assert_eq(cfg.port, 8080)
-    assert_eq(cfg.host, "localhost")
-    assert_eq(cfg.timeout, 30)
-    assert_eq(cfg.debug, true)
+    var extended = { ...cfg, timeout: 30, debug: true }
+    assert_eq(extended.port, 8080)
+    assert_eq(extended.host, "localhost")
+    assert_eq(extended.timeout, 30)
+    assert_eq(extended.debug, true)
 }
 
 @test
-fn test_extensible_type_with_any_extra() {
-    type Server = { id: int, ... }
+fn test_spread_adds_nested_static_field() {
+    type Server = { id: int }
     var s: Server = { id: 1 }
-    s.name = "main"
-    s.status = "running"
-    s.metrics = { cpu: 0.5, mem: 0.8 }
-    assert_eq(s.id, 1)
-    assert_eq(s.name, "main")
-    assert_eq(s.status, "running")
-    assert_eq(s.metrics.cpu, 0.5)
+    var extended = {
+        ...s,
+        name: "main",
+        status: "running",
+        metrics: { cpu: 0.5, mem: 0.8 }
+    }
+    assert_eq(extended.id, 1)
+    assert_eq(extended.name, "main")
+    assert_eq(extended.status, "running")
+    assert_eq(extended.metrics.cpu, 0.5)
 }
 
 // ===== 带 const 的只读字段 =====
@@ -60,20 +62,11 @@ fn test_readonly_field() {
     assert_eq(u.name, "Bob")
 }
 
-@test
-fn test_readonly_with_extensible() {
-    type Entity1 = { const id: int, name: string, ... }
-    var e: Entity1 = { id: 100, name: "test" }
-    e.extra = "data"     // 可以添加扩展字段
-    assert_eq(e.id, 100)
-    assert_eq(e.extra, "data")
-}
-
 // ===== 可选字段 =====
 
 @test
 fn test_optional_field() {
-    type Profile1 = { name: string, email?: string }
+    type Profile1 = { name: string, email: string? }
     var p1: Profile1 = { name: "Alice" }
     assert_eq(p1.name, "Alice")
     

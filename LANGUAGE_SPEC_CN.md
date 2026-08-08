@@ -264,7 +264,7 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `stdlib/prelude/builtin_symbols.def` 自动引入的类型符号：
-> `Array` · `Atomic` · `BigInt` · `Channel` · `Json` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`。
+> `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`。
 > `Array<byte>` 是 `Array` 的特化而不是独立名字。`DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
 > 这些名字**不可被重新声明**：`class Array {}`、`enum TaskResult {}`、`interface Stringable {}` 一律是编译错误。
 > 完整的保留集是该注册表的全部条目（类型、枚举、约束接口），不止上面列出的 prelude 类型；
@@ -604,7 +604,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 2. **Nullable 分离**：`T` 永不为 `null`；`T?` 是 `T | null` 的语法糖。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
-5. **三个互不连通的兼容域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`structural object` 按**结构**兼容且字段集精确（sealed，无 width subtyping）；`Json` 是**运行期开放**的数据交换值域。域之间没有隐式转换，只有 `Json.encode(value)` 与 `json as T` 两条显式桥。
+5. **三个职责清晰的类型域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`structural object` 按**结构**兼容且普通类型位置字段集精确，泛型约束位置可表达最小字段集；`JSON.Value` 是 schema-less 递归数据交换值域。JSON 标量可零物化 widening，复合 typed value 必须经 `JSON.value` 显式编码。
 6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
@@ -617,7 +617,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<byte>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
 | 借用视图 | `Slice<T>`（不拥有数据，受借用生命周期约束，见 §2.4.2） |
-| Prelude 特殊类型 | `Json`、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
+| Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
 | 模块导出类型 | `DateTime`、`Logger`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
 | Nullable | `T?` |
@@ -650,7 +650,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `EnumVariant<T>` | 解析器内建 |
 | `EnumVariants<T>` | 解析器内建 |
 | `Iterator<T>` | prelude |
-| `Json` | prelude |
+| `JSON.Value` / `JSON.Object` | prelude `JSON` 命名空间 |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | 解析器内建 |
 | `NetConn` | prelude |
@@ -727,7 +727,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 - 静态类型为 `byte`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
 - `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
 - 已定型表达式不能通过赋值隐式窄化、改变符号或改变目标相关宽度；这些转换必须显式写 `as`。显式整数转换按目标位宽取模并以目标类型的二补码位型解释。
-- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
+- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `JSON.Value` / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
 
@@ -962,7 +962,7 @@ main()
 1. **元素写允许**：`o[i] = x` 合法。元素写不改变 `o` 的存储地址，视图仍然有效。
 2. **失效操作拒绝**（`E0382`）：任何可能使 `o` 的元素存储重新定位、缩短或整体失效的操作都被拒绝。判据不是方法名白名单，而是被调用函数的 memory effect：地址稳定性（`ADDRESS_STABLE` / `MAY_RELOCATE`）、长度收缩（`NEVER_SHORTENS` / `MAY_SHORTEN`）、视图失效（`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`）。`o.push(x)`、重新给 `o` 赋值、`move o`、`freeze o`、`return o` 都属于此类。
 3. **存活期按最后一次使用判定**（非词法生命周期）：借用在 `v` 的最后一次使用处结束，而不是在词法块末尾。因此紧随其后的 owner 变更是合法的。
-4. **不得逃逸**（`E0383`）：视图不得离开 owner 的作用域。以下位置一律拒绝——函数返回值（除非满足下面的返回契约）、class/struct/structural object 字段、Array / Map / Set / tuple / Json / enum payload 元素、闭包捕获、generator `yield`、模块级绑定、泛型类/结构体的类型实参、`go` 或 channel 等跨执行边界的传递、通过 `as` 擦除类型。
+4. **不得逃逸**（`E0383`）：视图不得离开 owner 的作用域。以下位置一律拒绝——函数返回值（除非满足下面的返回契约）、class/struct/structural object 字段、Array / Map / Set / tuple / JSON.Value / enum payload 元素、闭包捕获、generator `yield`、模块级绑定、泛型类/结构体的类型实参、`go` 或 channel 等跨执行边界的传递、通过 `as` 擦除类型。
 
 ```xray
 fn ok() {
@@ -1022,7 +1022,7 @@ var owned: Array<int> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
 
 哈希字典，**保持插入顺序**。详见 §14.8。
 
-**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 structural object / Json 对象一致，靠 `#` 前缀消歧）：
+**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`；`JSON.Object` 使用同一个 Map 字面量：
 
 ```xray
 var m: Map<string, int> = #{"a": 1, "b": 2}
@@ -1036,7 +1036,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 
 | 字面量形式 | 类型 | 用途 |
 |---|---|---|
-| `{ key: value }`（无前缀） | sealed `structural object`（期望类型为 `Json` 时是 `Json`） | 见 §2.4.7 |
+| `{ key: value }`（无前缀） | exact `structural object` | 见 §2.4.7 |
 | `#{ "k": v }`（`#` 前缀 + `:`） | `Map<K, V>`（哈希字典） | 本节 |
 | `#{}` | `Map<K, V>`（空） | 显式空 Map |
 | `[]` | `Array<T>` | 数组 |
@@ -1069,19 +1069,16 @@ var buf = Array<byte>(1024)
 var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.7 对象形状 / `Json` 与对象字面量
+#### 2.4.7 静态结构对象、`JSON.Value` 与对象字面量
 
-裸对象字面量默认推断为 exact 对象形状，用于普通业务对象、options 和多字段返回值。`Json` 是显式 opt-in 的 JSON 值域类型：它用于外部数据交换边界，可以装载 JSON 等价的任意结构，并且本身包含 `null`。
+裸对象字面量永远形成字段集精确的静态结构对象，用于普通业务对象、options 和多字段返回值。运行期未知键由 `Map` 承担；JSON object 的标准拼写 `JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名。`JSON` 是无需 import 的 prelude 命名空间，不是值类型。
 
 **对象字面量** `{ field: value, ... }` 与 Map 字面量的关键区别：
 
 ```xray
-// 对象形状/Json 对象字面量：标识符或字符串 key + 冒号 ':'
-var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-var user = { name: "Bob", age: 25 }       // 默认类型为 exact 对象形状
+// 结构对象字面量：标识符或静态字符串 key + 冒号 ':'
+var user = { name: "Bob", age: 25 }       // exact 对象形状
 typeName(user)                            // "object"
-data.name              // 类型: Json（字段访问返回 Json）
-data["name"]           // 等价
 user.name              // 类型: string；direct ordinal
 user["name"]           // 与 user.name 完全等价；同一 direct ordinal
 
@@ -1092,6 +1089,8 @@ var user = { name, age }                  // 等价 { name: name, age: age }
 
 // Map 字面量：`#{}` 前缀 + `:`
 var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
+var data: JSON.Object = #{"name": "Alice", "age": 30}
+data["traceId"] = "req-1"               // 动态键只属于 Map
 ```
 
 **对照表**：
@@ -1099,12 +1098,12 @@ var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 | 写法 | 类型 | 备注 |
 |---|---|---|
 | `{ name: "x", age: 1 }` | exact 匿名对象形状 | 标识符或字符串 key 后跟 `:` |
-| `var j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
 | `{ x: y }`（`x` 是字段名，`y` 是变量名） | exact 匿名对象形状 | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
 | `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
+| `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object；可遍历、增删动态键 |
 | `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
 
-**对象形状类型**：裸对象字面量和 `type T = {...}` 都是 exact 对象形状；访问或赋值未声明字段是编译错误。`type T = { known: U, ... }` 是 open row 约束，只表示“至少含有这些已声明字段”：它允许接收更宽的 concrete exact shape，但不授予读取、写入或枚举隐藏字段的能力。需要 JSON 边界时显式标注 `Json` 或调用 `Json.encode(value)`。
+**对象形状类型**：裸对象字面量和 `type T = {...}` 都是 exact 对象形状；访问或赋值未声明字段是编译错误。结构宽度只出现在泛型约束满足关系中：`T: { name: string }` 表示 T 至少包含该字段，调用点仍按实参的具体 exact shape 单态化。尾部 `...` 不属于类型语法。
 
 ```xray
 type User = { name: string, age: int }
@@ -1116,28 +1115,29 @@ print(u.name)         // OK
 var u2 = { name: "Alice", age: 30 }      // exact 对象形状
 // u2.extra = "x"     // 编译错误
 
-type Named = { name: string, ... }
-fn showName(value: Named) {
-    print(value.name)                     // open row 只暴露已声明字段
+type Named = { name: string }
+fn showName<T: Named>(value: T) {
+    print(value.name)                     // 约束只暴露已声明字段
     print(value["name"])                  // 与 .name 相同
     // print(value.age)                    // 编译错误：隐藏字段不可见
 }
 showName(u)                               // OK：u 的 concrete exact shape 更宽
 
-var j: Json = { name: "Alice", age: 30 } // 动态 Json object
-j.extra = "x"        // OK（Json 是动态的）
+var j: JSON.Object = #{"name": "Alice", "age": 30}
+j["extra"] = "x"                        // OK：Map 动态键
+var encoded: JSON.Value = JSON.value(u)  // 复合值显式进入 JSON 值域
 ```
 
-**乘积类型的职责划分**：结构化域与名义域的界线是"有没有方法"。
+**乘积类型的职责划分**：
 
 | | 身份 | 字段集 | 用户可定义方法 | 用途 |
 |---|---|---|---|---|
-| 对象形状 | 结构化 | exact，或显式 open row 约束 | **否** | options、多字段返回值、普通业务数据 |
-| `Json` | 值域（无身份） | 任意，运行期解析 | **否** | 外部数据交换边界 |
+| 对象形状 | 结构化 | exact；泛型约束可要求最小字段集 | **否** | options、多字段返回值、普通业务数据 |
+| `JSON.Object` | Map 别名 | 任意字符串键，运行期确定 | Map API | schema-less JSON object |
 | `struct` | 名义 | 声明的，编译期检查 | 是 | 值语义、固定布局、FFI 聚合、数学类型 |
 | `class` | 名义 | 声明的，编译期检查 | 是 | 引用语义、继承、封装 |
 
-**规范性承诺**：对象形状与 `Json` 是纯数据形态，字段**只能承载数据，永远不能承载函数**，用户也不能为它们声明方法。因此 `j.name` 恒为字段读取，而内置成员只能以调用形式 `j.name()` 出现——两种写法在语法上始终可判定，字段名与内置成员名不会争用同一个表达式。需要行为时使用 `struct` 或 `class`。`Json` 的通用查询与编解码同时提供静态形态（`Json.keys(obj)`，见 §14.11），在字段名可能与内置成员同名时优先使用静态形态。
+结构对象字段可承载任意满足普通类型规则的静态值，包括函数引用、Map 或 class 实例；用户不能在结构对象类型上声明方法。能存储不等于能序列化：`JSON.value` / `JSON.stringify` 在编译期要求 `JSON.Encodable`，函数字段等不支持类型会被拒绝。
 
 #### 2.4.8 `BigInt`
 
@@ -1179,7 +1179,7 @@ var y: int? = 42        // OK
 var z: int = null       // 编译错误：null 不是 int
 ```
 
-`Json` 本身包含 `null`，因此 `Json?` 与 `Json | null` 是语义重复并在解析阶段报错。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
+`JSON.Value` 本身包含 `null`，因此 `JSON.Value?` 与 `JSON.Value | null` 是语义重复并在解析阶段报错。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
 
 **可空原始类型一等公民**：`int?` / `float?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
 
@@ -1344,29 +1344,27 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数显式、返回类
 | 已定型整数 | 任意浮点类型 | ❌ 必须显式 `as` |
 | 已定型浮点 | 任意整数类型或 `f64 → f32` | ❌ 必须显式 `as` |
 | `T` | `T?` | ✅ |
-| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON 标量进入值域 |
-| 其它任意类型 | `Json` | ❌ 必须写 `Json.encode(value)` |
+| `int` / `float` / `string` / `bool` / `null` | `JSON.Value` | ✅ JSON 标量零物化 widening |
+| 复合类型 | `JSON.Value` | ❌ 必须写 `JSON.value(value)`，并满足 `JSON.Encodable` |
+| `Map<string, JSON.Value>` | `JSON.Object` | ✅ 纯别名 identity |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype（class）| ✅ |
 | 字段集不同的 exact 对象形状 | exact 对象形状 | ❌ exact target 要求精确字段集 |
-| 更宽的 exact 对象形状 | 显式 open row `{ a: A, ... }` | ✅ 包含全部声明字段且同名字段类型不变 |
+| exact 对象形状 | 泛型约束 `T: { a: A }` | ✅ 约束满足关系；不是普通赋值转换 |
 
-> **exact/open row 规则**：exact target 要求**精确字段集**——源字段名集合必须与目标一致；目标中类型可空的字段允许缺省。只有显式 `{ a: A, ... }` open row target 接受额外字段，并且同名字段类型保持不变。open row 是静态视图，不是动态字典；隐藏字段不可读、不可写、不可枚举，open row 也不能作为 `Json.parse<T>` 的构造目标。
+> **exact / width-constraint 规则**：普通类型位置要求**精确字段集**——源字段名集合必须与目标一致；目标中类型可空的字段允许缺省。泛型约束位置的结构类型表示“至少包含这些字段”，同名字段类型保持不变；它不产生运行时宽度对象或动态字典。
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
 > // var u: User = full            // 编译错误 E0352：extra field 'age'
-> type Named = { name: string, ... }
-> var named: Named = full          // OK：显式 open row
-> // print(named.age)              // 编译错误：隐藏字段不可见
+> fn nameOf<T: User>(value: T) -> string { return value.name }
+> print(nameOf(full))              // OK：T 保留 full 的 concrete exact shape
 >
 > type Opt = { name: string, age: int? }
 > var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
 > ```
 
-> **对象形状与 Json 是两个互不连通的语义域**：对象形状由编译器检查字段约束，`Json` 是运行期开放的数据交换值域。两者之间没有隐式转换，只有两条显式桥：
-> - `Json.encode(value)`：typed value → `Json`
-> - `json as T` / `json as T?`：`Json` → structural object 或其它 typed value（结构化 narrowing）
+> **静态对象与 JSON 动态边界**：已知 schema 使用 exact target 与 `JSON.parse<T>`；schema-less object 使用 `JSON.Object` / Map。typed 复合值通过 `JSON.value(value)` 显式编码，动态 object 通过 `JSON.decodeObject<T>(object)` 显式验证回 typed target。
 
 #### 2.10.2 显式 `as`
 
@@ -1376,8 +1374,8 @@ var n = x as int?       // 失败返回 null（安全转换）
 ```
 
 适用于：
-- 数值之间（含 `Json → int`，运行时检查）。
-- `Json → User`（结构化 narrowing）。
+- 数值之间（含 `JSON.Value → int`，运行时检查）。
+- `JSON.Value` 到标量类型的运行期检查；复合 typed 解码使用 `JSON.decode<T>` / `JSON.decodeObject<T>`。
 - 父类 → 子类（向下转）。
 
 数值 `as` 的结果与主机 C 编译器、优化级别和 VM/AOT 后端无关：整数到整数按目标位宽取模，并按目标有符号性解释同一位型；整数到浮点以及 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even，溢出产生带原符号的无穷大，NaN 规范化为 Xray 的 canonical quiet NaN；浮点到整数向零截断，NaN、无穷大或超出目标范围时抛 `XR_ERR_OVERFLOW` (E0422)，消息为 `numeric conversion is out of range`。
@@ -1404,7 +1402,7 @@ typeName(value)   // 返回类型名字符串
 `Type` 枚举成员：
 
 `Type.int`、`Type.float`、`Type.string`、`Type.bool`、`Type.null`、
-`Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、`Type.Json`、
+`Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、
 `Type.function`、`Type.class`、`Type.struct`、`Type.enum`、`Type.module`、`Type.bigint`、...
 
 使用 `typeName(value)` 可以取得具体值的调试类型名。
@@ -1547,7 +1545,7 @@ Xray 不要求写生命周期，也不提供借用检查器语法。但**所有�
 
 #### 2.14.1 所有权根
 
-**所有权根**是一个可独立回收的堆对象图的入口。`Array` / `Map` / `Set` / `Json` / `structural object` / class 实例 / 唯一结果 `Task<T>` 各有自己的根；标量、`string`、`Slice<T>`、裸指针、值 struct、定长数组**没有**根——它们要么按值复制，要么是借用视图。
+**所有权根**是一个可独立回收的堆对象图的入口。`Array` / `Map`（含 `JSON.Object`）/ `Set` / `JSON.Value` 的复合 arm / `structural object` / class 实例 / 唯一结果 `Task<T>` 各有自己的根；标量、`string`、`Slice<T>`、裸指针、值 struct、定长数组**没有**根——它们要么按值复制，要么是借用视图。
 
 只有拥有根的绑定才谈得上所有权转移。对没有根的值写 `move` 是编译错误（`E0391`：`move is not meaningful for value type`）。
 
@@ -1658,7 +1656,7 @@ move 成功后源绑定在编译期标记为已 moved，再次引用是编译错
 
 #### 2.14.6 值拷贝与 managed 字段
 
-值 struct 按值复制。为了让「按值复制」始终是完整语义，**struct 字段的类型是受限的**：只允许标量、`string`、裸指针、定长数组、以及其他值 struct。`Array` / `Map` / `Set` / `Json` / class 实例**不能**作为 struct 字段（`E0352`）。
+值 struct 按值复制。为了让「按值复制」始终是完整语义，**struct 字段的类型是受限的**：只允许标量、`string`、裸指针、定长数组、以及其他值 struct。`Array` / `Map` / `Set` / `JSON.Value` / class 实例**不能**作为 struct 字段（`E0352`）。
 
 因此不存在「struct 值拷贝携带可变 managed 字段」的情形，也就不需要在浅拷贝与深拷贝之间做选择。唯一的 managed 字段是 `string`，而 `string` 不可变：共享它不产生任何可观察差异，唯一性判定也不受影响。
 
@@ -2029,7 +2027,7 @@ if (v is User) {
 
 - 结果类型 `bool`。
 - **类型守卫**：`v` 是简单绑定时，分析器按 §2.13 N-4 / N-6 在 true 分支把 `v` 收窄为与 `T` 的交，在 false 分支移除该交集。
-- 适用于 union、可空、class 层级、`Json` 结构匹配。
+- 适用于 union、可空、class 层级与 `JSON.Value` 运行期类别检查。
 - **定宽数值类型**：动态擦除后的值只保留 i64 / f64 两个族，不保留位宽，因此 `v is i32` 问的是"该值能否被 `i32` 精确表示"——这是擦除后唯一可回答的形式。`is int` / `is float` 对整个族恒为真；`v as T?` 用同一个判定，不通过时返回 `null`。
 
 #### `as` 类型转换
@@ -2051,7 +2049,7 @@ var n = v as int?          // 失败返回 null（"as nullable" 安全形式）
 
 **支持的转换**：
 - 数值之间：整数到整数按目标位宽取模后按目标有符号性解释；整数到浮点和 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even；浮点到整数向零截断，NaN、无穷大或越界抛 `XR_ERR_OVERFLOW` (E0422)。数值转换只使用 `expr as T`，不用 nullable 形式。
-- `Json → T`（运行时按 T 结构检查）。
+- `JSON.Value →` 标量类型（运行期类别检查）；复合解码使用 `JSON.decode<T>`。
 - 父类 → 子类（运行时 instanceof）。
 - Union 成员 → 具体成员。
 
@@ -2127,7 +2125,7 @@ var m = #{"a": 1, "b": 2}
 var empty = #{}                           // 空 Map
 ```
 
-**关键区别**：`{}` 始终是**Json / Object**；`#{}` 始终是 **Map**。两者都用 `:` 作键值分隔，靠 `#` 前缀区分。
+**关键区别**：`{}` 始终是 exact **structural object**；`#{}` 始终是 **Map**，也是 `JSON.Object` 的字面量形式。两者都用 `:` 作键值分隔，靠 `#` 前缀区分。
 
 #### Set `#[...]`
 
@@ -2156,7 +2154,7 @@ var obj = { users }              // shorthand
 ```
 
 - 默认推断为 exact 对象形状（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
-- 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
+- 对象字面量不因期望类型变成动态对象；typed 复合值进入 JSON 边界使用 `JSON.value(value)`，动态 object 使用 `JSON.Object` / Map。
 - 用 `type` 别名命名 structural object：`var u: User = {...}`（编译期检查字段集，密封）。
 
 #### Array<byte> `Array<byte>(...)`
@@ -2500,7 +2498,7 @@ for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
 for (ch in "hello") { print(ch) }             // 字符串字符（按 Unicode scalar）
 for (key in someMap) { print(key) }           // Map 单变量 → key
-for (key in someJson) { print(key) }          // Json 单变量 → key
+for (key in jsonObject) { print(key) }        // JSON.Object 即 Map，单变量 → key
 for (color in Color) { print(color.name) }    // 仅无 payload enum；产出 Color 值
 for (variant in Event.variants) {             // 任意具体 enum；产出 EnumVariant<Event>
     print(variant.name)
@@ -2534,7 +2532,7 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 |---|---|---|
 | `Array<T>` / `T[]` | element | (index, element) |
 | `Map<K, V>` | key | (key, value) |
-| `Json` | key (string) | (key, value) |
+| `JSON.Object` / Map | key | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range`（`a..b`） | int | — |
 | 仅含无 payload 变体的具体 enum 类型 `E` | `E` 的实际值（声明顺序） | — |
@@ -3895,7 +3893,7 @@ type Pair<T> = { first: T, second: T }                // 泛型别名
 - 泛型别名在使用处做类型实参代入；代入发生在编译期，不引入运行时表示或 AOT 分支。
 - 泛型别名形参只允许名字列表；不支持约束。约束应写在使用该别名的泛型声明上。
 - `type Point = {...}` 的对象类型在使用此别名标注时**密封**：未声明的字段访问/赋值是编译错误。
-- `type T = Json` 等于 `Json`（不密封）。
+- `type T = JSON.Value` 等于 `JSON.Value`；`type O = JSON.Object` 等于 `Map<string, JSON.Value>`。
 - 别名可前向引用，但**禁止循环别名**。
 
 详见 [§2.4.7](#247-json) 与 [§2.8](#28-类型别名)。
@@ -4114,7 +4112,7 @@ match (p) {
 }
 ```
 
-- 对象模式匹配任意带这些字段的对象/Json；字段读取对缺失字段安全（为 `null`）。字段子模式可为可反驳模式（如 `{ mode: 2 }`）。
+- 对象模式匹配静态类型已知包含这些字段的 exact structural object；schema-less JSON 请先用 `JSON.get/require` 或 `JSON.decodeObject<T>` 提交结构。字段子模式可为可反驳模式（如 `{ mode: 2 }`）。
 - 数组模式按**长度**匹配：无 `..rest` 时要求长度恰等于元素数，有 `..rest` 时要求长度 ≥ 元素数。元素子模式只能是绑定或通配（`..rest` 之外的元素不做按值测试——元素越界读取会陷入 panic）；需要按元素值判断时改用 `if` 守卫。
 - or-pattern `|` 暂不支持（逗号多值已覆盖等价能力）。
 
@@ -4270,7 +4268,7 @@ print(arr)                  // [1, 2, 3] 未变
 
 // 方法 2：const 零拷贝只读（可被捕获）
 const config = { rate: 100 }
-var t2 = go fn(c: Json) -> int {
+var t2 = go fn(c: JSON.Object) -> int {
     return c.rate
 }(config)
 
@@ -4549,7 +4547,7 @@ class PanicInfo {
     stack: Array<string>        // 自动捕获的调用栈
     cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码
-    data: Json                  // 附加数据；无数据时为 JSON null
+    data: JSON.Value            // 附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -4736,15 +4734,15 @@ main()
 ```xray
 enum ConfigErr { Missing(string) }
 
-fn requirePort(cfg: Json) {
-    if (!Json.containsKey(cfg, "port")) { throw ConfigErr.Missing("port") }
-    print("port:", Json.get(cfg, "port"))
+fn requirePort(cfg: JSON.Object) {
+    if (!cfg.containsKey("port")) { throw ConfigErr.Missing("port") }
+    print("port:", cfg["port"])
 }
 
 fn main() {
     try {
-        requirePort(Json.parse("{\"port\": 8080}"))   // => port: 8080
-        requirePort(Json.parse("{}"))                  // 抛出 ConfigErr.Missing
+        requirePort(JSON.parseObject("{\"port\": 8080}"))   // => port: 8080
+        requirePort(JSON.parseObject("{}"))                  // 抛出 ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
             ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
@@ -4930,7 +4928,7 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 | `Comparable` | 可用 `<` `<=` `>` `>=` 比较；int/float/string/Comparable 实现者 |
 | `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `int` / `float` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==` 与 `hash() -> int`（签名见下） |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
-| `Iterable<T>` | 通过 iterator 协议被 `for-in` 遍历；Array、Slice、Map、Set、string、Json、Range、生成器返回的 `Iterator<T>` 与自定义 `iterator()` 满足此约束。`Channel<T>` 虽可用 `for-in` 接收，但走专用接收循环而非 iterator 协议，不满足此约束。unit-only enum 的 `for (value in E)` 与 concrete enum 的 `E.variants` 是编译期有限域语法，不使 enum 满足 `Iterable<T>`，也不能替代泛型 `Iterable<T>` 约束 |
+| `Iterable<T>` | 通过 iterator 协议被 `for-in` 遍历；Array、Slice、Map（含 `JSON.Object`）、Set、string、Range、生成器返回的 `Iterator<T>` 与自定义 `iterator()` 满足此约束。`JSON.Value` 不可直接迭代。`Channel<T>` 虽可用 `for-in` 接收，但走专用接收循环而非 iterator 协议，不满足此约束。unit-only enum 的 `for (value in E)` 与 concrete enum 的 `E.variants` 是编译期有限域语法，不使 enum 满足 `Iterable<T>`，也不能替代泛型 `Iterable<T>` 约束 |
 
 `Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==` 与 `hash() -> int`。`operator==` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
 
@@ -5168,7 +5166,7 @@ GoOption ::= 'name' ':' StringLiteral
 var t1 = go worker(0, channel)
 
 // 内联逻辑：lambda 也必须形成完整调用，并显式传参
-var t2 = go fn(d: Json) -> int {
+var t2 = go fn(d: JSON.Object) -> int {
     return d.value * 2
 }(payload)
 
@@ -5185,7 +5183,7 @@ var named = go(name: "worker-1") worker(1, channel)
 
 ```xray
 var data = { value: 10 }
-var task = go fn(d: Json) -> int {
+var task = go fn(d: JSON.Object) -> int {
     return d.value + 1
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
@@ -5204,7 +5202,7 @@ var task = go fn(x: int) -> int {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `Json` / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
+- 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `JSON.Object` / `JSON.Value` 的复合 arm / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
 - `go(name: ...)` 中 `name` 仅是诊断/调试元数据；语义修饰符是前缀 `linked go`，不进入 `GoOptions`。
 - 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
 - `linked go call()` 仍只接受调用表达式并返回普通 `Task<T>`。在独立 scope 之外，它把子 Task 挂到当前父 Task：父任务取消会递归取消子任务，子任务失败会取消父任务及其关联子树，父任务在已完成自身正文后仍等待链接子任务终结。在 `scope` 内，成员关系与错误传播统一由该 scope 的策略管理，不再叠加第二套父子关系。
@@ -5253,7 +5251,7 @@ var firstOk = await anySuccess [t1, t2, t3]
   - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
   - `await anySuccess` 类似 `await any`，但**跳过**抛异常的任务，只等成功完成的。
 - `all` / `any` / `anySuccess` 在 `await` 后面是**上下文关键字**，仅在此位置生效。
-- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<int>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / Json 结果类型。
+- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<int>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / `JSON.Value` 结果类型。
 
 ### 10.4 `Task<T>` 句柄
 
@@ -5872,7 +5870,7 @@ xray 的公开注解来自唯一 attribute registry；可用 `xray language attr
 | `@before_all` / `@after_all` | 单文件 suite 前后各执行一次 |
 | `@before_each` / `@after_each` | 每个未跳过测试前后执行 |
 
-其它公开注解包括 `@deprecated("...")`、`@derive(Inspect, Json, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`），以及稳定但仅面向低层代码的 AOT code-shape directive：`@inline` / `@noinline`。公开表面是 7 个普通/test/metadata 注解加 2 个 code-shape directive；数量不是兼容目标，类别与语义正交性才是约束。后两者只能标注函数或方法、不能带参数，也不能同时标注同一声明；它们不改变语言语义、effect 或 ABI，VM 会忽略它们，AOT 则分别优先请求展开或保留原生调用边界。它们只应用于有真实基准与生成代码形态门禁的低层热路径，不会解锁普通优化，也不保证所有调用边均可兑现。
+其它公开注解包括 `@deprecated("...")`、`@derive(Inspect, JSON, Eq, Hash, Clone)`（其中 `Hash` 要求同时 `Eq`），以及稳定但仅面向低层代码的 AOT code-shape directive：`@inline` / `@noinline`。公开表面是 7 个普通/test/metadata 注解加 2 个 code-shape directive；数量不是兼容目标，类别与语义正交性才是约束。后两者只能标注函数或方法、不能带参数，也不能同时标注同一声明；它们不改变语言语义、effect 或 ABI，VM 会忽略它们，AOT 则分别优先请求展开或保留原生调用边界。它们只应用于有真实基准与生成代码形态门禁的低层热路径，不会解锁普通优化，也不保证所有调用边均可兑现。
 
 `codegen.opaque(value)` 与 `codegen.compilerFence()` 属于同一专家控制层，但它们是标准库 intrinsic，不是注解。前者在保持整数或指针的静态类型、值、ownership 与 provenance 不变的同时阻断原生常量传播；后者只阻止有内存效果的操作跨越该编译器调度点。`compilerFence` 不是 CPU memory fence，不建立 happens-before，也不能用于修复 data race。普通代码无需使用这些控制；硬形状要求由 `xray verify --contract` 验证，而不是由源码请求自行宣称成功。
 
@@ -5932,7 +5930,7 @@ fn measuredKernel(value: u64) -> u64 {
 |--|--|--|
 | `print` | `(...values) -> ()` | 输出到 stdout，自动追加换行；多参以空格分隔 |
 | `dump` | `(value, indent?) -> ()` | 结构化调试输出 |
-| `len` | `(value) -> int` | 查询实现 `Lengthable` 的 string、容器、Range、Slice、Json 等长度；不读取 `.length` |
+| `len` | `(value) -> int` | 查询实现 `Lengthable` 的 string、容器、Range、Slice 等长度；`JSON.Value` 不实现 `Lengthable` |
 
 ### 13.2 类型转换
 
@@ -5997,7 +5995,7 @@ print(x is int)                 // true
 | `Set.from(iterable)` | 从 string / Array / Set 创建 Set |
 | `Set.range(start, end)` | 创建闭区间整数 Set |
 
-BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / `Json.encode` / `Json.stringify`；DateTime 使用 `datetime` 模块工厂函数。
+BigInt 使用 `123n` 字面量或 `int.toBigInt()`；JSON 使用 `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`；DateTime 使用 `datetime` 模块工厂函数。
 
 ---
 
@@ -6135,7 +6133,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `forEach(fn)` | 遍历 |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
-**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 structural object/Json 对象字面量。
+**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于精确结构对象字面量 `{ field: value }`。
 
 `m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
 
@@ -6168,27 +6166,43 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 `Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<int?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
 
-### 14.11 `Json`
+### 14.11 `JSON` 命名空间
 
-`Json` 是动态结构化数据类型。普通字段访问使用 `j.field` / `j["field"]`；通用查询和编解码通过 `Json` 静态函数完成，避免与用户字段名冲突。
+`JSON` 是 prelude 命名空间，不是可声明变量的值类型，也不需要 `import json`。schema-less JSON 使用 `JSON.Value`；确定为 object 的动态 JSON 使用 `JSON.Object`。`JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名，因此枚举、动态下标、增删字段和 `len` 都直接使用 §14.8 的 Map API。
+
+`JSON.Value` 是 `null | bool | int | float | string | Array<JSON.Value> | JSON.Object` 的递归边界值。它没有 dot、下标、迭代或 `len` 魔法：先用 typed decode 提交 schema，用 `asObject` / `asArray` 显式解包，或用 path API 访问任意深度。
 
 | 静态函数 | 说明 |
 |--|--|
-| `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)` | Object 字段枚举 |
-| `Json.containsKey(obj, key)` | 字段存在性 |
-| `Json.get(obj, key, default?)` | 字段读取，不存在返回 default 或 null |
-| `len(obj)` | Object / Array / String variant 的元素数量；scalar 抛 TypeError |
-| `Json.parse(s)` / `Json.parse<T>(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON 解析与校验；typed parse 直接按 schema 构造 `T` |
-| `Json.encode(value)` | 显式 typed value → Json 边界转换 |
-| `Json.stringify(value, indent?)` | 序列化 |
-| `Json.kindOf(value)` | 返回 `null/bool/int/float/string/array/object` |
-| `Json.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | Json 类别谓词 |
+| `JSON.parse<T>(text, unknown?)` | 直接按 `T` 构造 typed value；未知字段默认 `Reject`，可显式传 `JSON.UnknownFields.Ignore` |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | 分别解析 object 根或任意 JSON 根，不构造结构对象中间层 |
+| `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | 构造已知字段 `value: T`，并将顶层未知字段保留在 `rest: JSON.Object` |
+| `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | 从已有 schema-less 值尝试构造 `T`，失败返回 `null` |
+| `JSON.value<T>(value)` | 显式把可编码的复合值物化为 `JSON.Value` |
+| `JSON.stringify<T>(value, indent?)` | 序列化可编码值；`indent` 必须是非空 `int` |
+| `JSON.isValid(text, strict?)` | 校验 JSON 文本 |
+| `JSON.kindOf(value)` / `JSON.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | 查询 JSON arm |
+| `JSON.asObject(value)` / `JSON.asArray(value)` | 返回共享底层存储的可空 object/array 视图，不复制 |
+| `JSON.get<T>(root, path)` / `JSON.require<T>(root, path)` | 按 `JSON.Path` 读取并解码；前者失败返回 `null`，后者抛 `JSON.PathError` |
+| `JSON.containsPath(root, path)` | 判断完整路径是否存在 |
+| `JSON.set(root, path, value, createParents?)` / `JSON.remove(root, path)` | 修改或删除路径；路径可穿过 object key 与 array index |
+| `JSON.merge(parts)` | 将 `JSON.WithRest<T>` 的 typed 部分和顶层 rest 重新组成 `JSON.Object` |
 
-`keys()` / `values()` / `entries()` / `toString()` 也有实例形态。Json 的字段只能承载数据、永远不能承载函数，所以 `j.keys` 恒为字段读取、`j.keys()` 恒为内置成员调用，两者始终可判定。但当数据里可能存在与内置成员同名的字段时，**优先使用静态形态**，让读者不必依赖调用括号来区分意图。
+`JSON.Path` 是 `Array<string | int>`：string segment 是完整 object key，int segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
 
-**字面量**：`{ name: "alice", age: 30 }` 默认是 exact 对象形状。显式写 `var j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。`Json.parse<T>` 的 `T` 必须满足 `JsonDecodable`，open row 不是合法构造目标；解析器直接消费 token stream，不先物化中间 Json DOM。
+```xray
+type Request = { action: string, userId: int }
 
-**格式化前应先提交类型**：`Json` 内在含 `null`，缺失字段读出来是 `null`，直接插值会格式化成 `"null"`——一个拼错的字段名因此看起来像一个合理结果。把 `Json` 值直接放进模板字符串会产生警告；写 `${j.field as string}` 提交类型，或写 `${j.field ?? "-"}` 给默认值。这与语言对 `T?` 的解包纪律一致。
+var request = JSON.parse<Request>(body)       // 未知字段默认拒绝
+var payload = JSON.parseObject(body)          // JSON.Object，即 Map
+payload["traceId"] = "req-42"               // 标量隐式 widening
+
+var path: JSON.Path = ["user", "profile", "name"]
+var name = JSON.get<string>(payload, path)
+JSON.set(payload, path, "Ada", true)
+```
+
+JSON 标量 `null`、`bool`、`int`、`float`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；结构对象、数组和其他复合值必须写 `JSON.value(...)`。因此 `{ name: "alice" }` 始终是精确结构对象，不会因上下文悄悄变成动态 object。
 
 ### 14.12 `Range`
 
@@ -6293,7 +6307,7 @@ print(len(empty))           // 0
 >
 > `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`strconv`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的 prelude 类型为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`Json`、`Map`、`OsMutex`、`NetConn`、`NetListener`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<byte>` 是 `Array` 的具体化；`DateTime`、`Logger` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
+> 不需要 import 的 prelude 类型/命名空间为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`JSON`（含 `JSON.Value` / `JSON.Object`）、`Map`、`OsMutex`、`NetConn`、`NetListener`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<byte>` 是 `Array` 的具体化；`DateTime`、`Logger` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
@@ -6344,7 +6358,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 | `base64` | Base64 编/解 |
 | `encoding` | hex / UTF-8 等通用编码（不含 Base64，base64 在自身模块） |
 
-> JSON 编解码**不在**单独的 `json` 模块；通过内置类型 `Json` 的静态方法 `Json.parse(s)` / `Json.encode(v)` / `Json.stringify(v)` 使用（无需 import；见 §14.11）。
+> JSON 编解码**不在**单独的 `json` 模块；通过 prelude `JSON` 命名空间的 `JSON.parse<T>(s)` / `JSON.parseObject(s)` / `JSON.value(v)` / `JSON.stringify(v)` 使用（无需 import；见 §14.11）。
 
 ### 15.4 加密与哈希
 
@@ -6584,7 +6598,7 @@ class PanicInfo {
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
     cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
-    data: Json                  // 运行时故障的结构化附加数据；无数据时为 JSON null
+    data: JSON.Value            // 运行时故障的结构化附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -7393,12 +7407,12 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 
 | 维度 | JS/TS | xray |
 |--|--|--|
-| 静态类型 | TS 可选 | **强制**（除 `Json` 是动态） |
+| 静态类型 | TS 可选 | **强制**；schema-less 数据显式使用 `JSON.Value` / `JSON.Object` |
 | 数值 | 仅 `number`（双精度） | `int` `float` `BigInt` 严格区分 |
 | 条件 | truthy / falsy | 条件必须是 `bool`，或使用 nullable `T?` 的存在性；int/string 不做 truthy 转换 |
 | 相等比较 | `===` 强、`==` 弱（string↔number 自动转） | 仅 `==`/`!=`；值相等只做数值 int↔float 提升，不提供 `===`/`!==` |
 | 闭包捕获 | 引用 | 引用（默认）；`go` 闭包严格受限 |
-| 对象 | 动态字段 | `{...}` 默认形成 sealed structural object；动态对象需显式 `Json` 边界 |
+| 对象 | 动态字段 | `{...}` 形成 exact structural object；动态键使用 `Map` / `JSON.Object` |
 | import | ES Module | 自有 import 语法（含 stdlib 无引号形式） |
 | 并发 | 异步/Promise | 协程 + Channel |
 

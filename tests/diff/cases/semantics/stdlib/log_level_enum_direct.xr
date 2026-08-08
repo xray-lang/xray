@@ -8,7 +8,7 @@ print(LogLevel.Warn)
 print(LogLevel.Error)
 print(LogLevel.Fatal)
 print(LogFormat.Text)
-print(LogFormat.Json)
+print(LogFormat.JSON)
 
 print(LogLevel.Debug == LogLevel.Debug)
 print(LogLevel.Warn == LogLevel.Error)

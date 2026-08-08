@@ -203,8 +203,8 @@ static int get_map_children(XrVMRuntime *isolate, XrMap *map, XdapVarInfo **out_
     return idx;
 }
 
-static int get_json_children(XrVMRuntime *isolate, XrJson *json, XdapVarInfo **out_vars) {
-    uint16_t count = xr_json_field_count(isolate, json);
+static int get_json_children(XrVMRuntime *isolate, XrObjectInstance *json, XdapVarInfo **out_vars) {
+    uint16_t count = xr_object_instance_field_count(isolate, json);
     if (count == 0) {
         *out_vars = NULL;
         return 0;
@@ -344,8 +344,8 @@ int xr_debug_get_var_children(XrVMRuntime *isolate, int ref_id, XdapVarInfo **ou
                 XrObjHeader *hdr = XR_TO_PTR(ref->value);
                 if (hdr->type == XR_TINSTANCE) {
                     XrInstance *_inst = (XrInstance *) hdr;
-                    if (_inst->klass && _inst->klass->builtin_kind == XR_BK_JSON)
-                        return get_json_children(isolate, (XrJson *) hdr, out_vars);
+                    if (_inst->klass && _inst->klass->builtin_kind == XR_BK_STRUCT_OBJECT)
+                        return get_json_children(isolate, (XrObjectInstance *) hdr, out_vars);
                 }
             }
             break;
@@ -559,8 +559,8 @@ char *xr_debug_set_variable(XrVMRuntime *isolate, int var_ref, const char *name,
 
     // Json object field
     if (ref->type == XDAP_REF_OBJECT && XR_IS_PTR(ref->value)) {
-        XrJson *json = (XrJson *) XR_TO_PTR(ref->value);
-        xr_json_set_by_key(isolate, json, name, new_val);
+        XrObjectInstance *json = (XrObjectInstance *) XR_TO_PTR(ref->value);
+        xr_object_instance_set_by_key(isolate, json, name, new_val);
         return xr_value_to_debug_string(isolate, new_val);
     }
 

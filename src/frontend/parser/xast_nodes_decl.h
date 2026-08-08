@@ -210,7 +210,6 @@ typedef struct TypeAliasNode {
     int type_param_count;
     char **field_names;
     XrTypeRef **field_types;
-    bool *field_optional;
     int field_count;
     // Parser stores the fully-resolved RHS type here so the analyzer
     // can pick it up without re-resolving. May be NULL when the alias

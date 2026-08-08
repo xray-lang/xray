@@ -64,6 +64,20 @@ static void xa_publish_deprecated_attrs(XaSymbolLinks *links, XrAttribute **attr
     xa_symbol_links_set_deprecated(links, false, NULL);
 }
 
+static XrType *xa_normalize_structural_constraint(XaInferContext *ctx, XrType *constraint) {
+    if (!ctx || !ctx->analyzer || !constraint || !XR_TYPE_IS_STRUCT_OBJECT(constraint))
+        return constraint;
+    XrType *normalized = xr_type_new_struct_object_with_fields(
+        ctx->analyzer->isolate, constraint->object.field_names, constraint->object.field_types,
+        constraint->object.field_count);
+    if (!normalized)
+        return constraint;
+    if (constraint->object.type_name)
+        xr_type_set_object_type_name(ctx->analyzer->isolate, normalized,
+                                     constraint->object.type_name);
+    return normalized;
+}
+
 // Store `<T, U: A & B>` generic params, with every intersection-style
 // constraint resolved to a runtime XrType, on the declaration's symbol links.
 // Shared by functions, classes and methods so a method's own constraints are
@@ -93,6 +107,23 @@ static void xa_store_type_params_with_constraints(XaInferContext *ctx, XaSymbolL
                         gp->constraints[j]
                             ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
                             : NULL;
+                    if (gp->constraints[j] && gp->constraints[j]->kind == XR_TREF_OBJECT &&
+                        !gp->constraints[j]->name && gp->constraints[j]->field_readonly) {
+                        for (uint8_t k = 0; k < gp->constraints[j]->nchildren; k++) {
+                            if (!gp->constraints[j]->field_readonly[k])
+                                continue;
+                            XrLocation loc = {.file = ctx->file_path,
+                                              .line = gp->constraints[j]->line,
+                                              .column = gp->constraints[j]->column};
+                            xa_analyzer_add_diagnostic(
+                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                "structural generic constraints cannot declare const fields; "
+                                "field writability is inferred from the generic body",
+                                &loc);
+                            break;
+                        }
+                    }
+                    resolved[j] = xa_normalize_structural_constraint(ctx, resolved[j]);
                     xa_reject_error_type_success_type(ctx->analyzer, resolved[j],
                                                       "generic constraint", gp->name, node->line,
                                                       node->column);
@@ -2593,7 +2624,7 @@ static XrType *xa_infer_return_object_type(XrVMRuntime *X, FunctionDeclNode *fn)
     ObjectLiteralNode *first = &rets[0]->as.object_literal;
     int fc = 0;
     for (int i = 0; i < first->count; i++) {
-        if ((!first->computed || !first->computed[i]) && first->keys[i]->type == AST_LITERAL_STRING)
+        if (first->keys[i]->type == AST_LITERAL_STRING)
             fc++;
     }
     if (fc == 0 || fc > MAX_FIELDS)
@@ -2604,20 +2635,16 @@ static XrType *xa_infer_return_object_type(XrVMRuntime *X, FunctionDeclNode *fn)
         ObjectLiteralNode *o = &rets[r]->as.object_literal;
         int ofc = 0;
         for (int i = 0; i < o->count; i++)
-            if ((!o->computed || !o->computed[i]) && o->keys[i]->type == AST_LITERAL_STRING)
+            if (o->keys[i]->type == AST_LITERAL_STRING)
                 ofc++;
         if (ofc != fc)
             return NULL;
         for (int i = 0; i < first->count; i++) {
-            if (first->computed && first->computed[i])
-                continue;
             if (first->keys[i]->type != AST_LITERAL_STRING)
                 continue;
             const char *fname = first->keys[i]->as.literal.raw_value.string_val;
             bool found = false;
             for (int j = 0; j < o->count; j++) {
-                if (o->computed && o->computed[j])
-                    continue;
                 if (o->keys[j]->type != AST_LITERAL_STRING)
                     continue;
                 if (strcmp(o->keys[j]->as.literal.raw_value.string_val, fname) == 0) {
@@ -2635,8 +2662,6 @@ static XrType *xa_infer_return_object_type(XrVMRuntime *X, FunctionDeclNode *fn)
     XrType *types[32];
     int idx = 0;
     for (int i = 0; i < first->count && idx < 32; i++) {
-        if (first->computed && first->computed[i])
-            continue;
         if (first->keys[i]->type != AST_LITERAL_STRING)
             continue;
         names[idx] = first->keys[i]->as.literal.raw_value.string_val;
@@ -2674,7 +2699,7 @@ static XrType *xa_infer_return_object_type(XrVMRuntime *X, FunctionDeclNode *fn)
         }
         idx++;
     }
-    return xr_type_new_struct_object_with_fields(X, names, types, fc, XR_OBJECT_ROW_EXACT);
+    return xr_type_new_struct_object_with_fields(X, names, types, fc);
 }
 
 // Phase 2: Collect function body (parameters and body declarations).

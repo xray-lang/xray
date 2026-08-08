@@ -429,8 +429,7 @@ static bool xi_lower_fill_object_field_names_from_evidence(XiLower *l, const XrT
         !type->object.field_names || count <= 0 || count > (int) UINT16_MAX || source_span_id == 0)
         return false;
     const XgGlobalEvidence *evidence = l->global_evidence;
-    uint8_t domain =
-        type->kind == XR_KIND_STRUCT_OBJECT ? XG_OBJECT_DOMAIN_STRUCT : XG_OBJECT_DOMAIN_JSON;
+    uint8_t domain = XG_OBJECT_DOMAIN_STRUCT;
     for (uint32_t i = 0; i < evidence->nobject_shapes; i++) {
         const XgObjectShapeSummary *shape = &evidence->object_shapes[i];
         if (shape->owner_func_id != (XgFuncId) l->func->xg_body_func_id ||
@@ -516,12 +515,11 @@ XR_FUNC bool xi_lower_fill_canonical_object_field_names(XiLower *l, const XrType
 }
 
 /* Object literal with `...spread` entries: `{...base, x: 1}`.
- * The result Json is created pre-sized with the statically-known union shape
+ * The result object is created pre-sized with the exact, statically-known union shape
  * (from the analyzer's inferred type), then each part is applied in order:
- * spread sources are merged field-by-field (XI_JSON_MERGE), literal fields are
+ * spread sources are merged field-by-field (XI_OBJECT_MERGE), literal fields are
  * written by key (XI_INDEX_SET). Later writes override earlier ones, matching
- * the union semantics. Dynamic source fields not in the static shape are added
- * at runtime via overflow. */
+ * the union semantics. */
 static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
                                                struct XrType *result_type) {
     ObjectLiteralNode *obj = &node->as.object_literal;
@@ -541,7 +539,7 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
             return NULL;
     }
 
-    XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
+    XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_OBJECT_NEW, result_type, 0);
     if (!obj_val)
         return NULL;
     obj_val->aux_int = static_count;
@@ -554,7 +552,7 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
             XiValue *src = xi_lower_expr(l, val->as.spread_expr.expr);
             if (!src)
                 return NULL;
-            XiValue *mg = xi_value_new(l->func, l->cur_block, XI_JSON_MERGE, l->type_unit, 2);
+            XiValue *mg = xi_value_new(l->func, l->cur_block, XI_OBJECT_MERGE, l->type_unit, 2);
             if (!mg)
                 return NULL;
             mg->args[0] = obj_val;
@@ -569,15 +567,12 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
         XiValue *v = xi_lower_expr(l, obj->values[i]);
         if (!v)
             return NULL;
-        bool is_computed = obj->computed && obj->computed[i];
-
         /* Static literal key: write the field by its index in the union shape
          * (XI_OBJECT_SET_F), matching how spread merges and member reads address
-         * the same slots. Computed keys are not part of the static shape and
-         * fall back to a dynamic key set. */
+         * the same slots. */
         int field_idx = -1;
-        if (!is_computed && obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING &&
-            static_count > 0 && key_names) {
+        if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING && static_count > 0 &&
+            key_names) {
             const char *kn = obj->keys[i]->as.literal.raw_value.string_val;
             for (int k = 0; kn && k < static_count; k++) {
                 if (key_names[k] && strcmp(key_names[k], kn) == 0) {
@@ -598,18 +593,9 @@ static XiValue *xi_lower_object_literal_spread(XiLower *l, AstNode *node,
             set->lowering_flags |= XI_LOWERING_FLAG_OBJECT_LITERAL_INIT;
             set->line = (uint32_t) node->line;
         } else {
-            XiValue *key = is_computed ? xi_lower_expr(l, obj->keys[i])
-                                       : xi_const_str(l->func, l->cur_block, "?", l->type_string);
-            if (!key)
-                return NULL;
-            XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
-            if (!set)
-                return NULL;
-            set->args[0] = obj_val;
-            set->args[1] = key;
-            set->args[2] = v;
-            set->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
-            set->line = (uint32_t) node->line;
+            fprintf(stderr, "[LOWER] structural object literal has no static field ordinal\n");
+            l->had_error = true;
+            return NULL;
         }
     }
     return obj_val;
@@ -633,23 +619,17 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     }
     int n = count;
 
-    /* Evaluate all values and computed key expressions first */
+    /* Evaluate all values first. Structural object keys are always static. */
     int alloc_n = n > 0 ? n : 1;
     XiValue **val_vals =
         (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
-    XiValue **key_vals =
-        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
     int *static_idx_map =
         (int *) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(int)));
-    if (!val_vals || !key_vals || !static_idx_map)
+    if (!val_vals || !static_idx_map)
         return NULL;
     for (int i = 0; i < n; i++) {
         val_vals[i] = xi_lower_expr(l, obj->values[i]);
         if (!val_vals[i])
-            return NULL;
-        bool is_computed = obj->computed && obj->computed[i];
-        key_vals[i] = is_computed ? xi_lower_expr(l, obj->keys[i]) : NULL;
-        if (is_computed && !key_vals[i])
             return NULL;
     }
 
@@ -665,10 +645,7 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     if (canonical_object_shape) {
         static_count = result_type->object.field_count;
     } else {
-        for (int i = 0; i < n; i++) {
-            if (!key_vals[i])
-                static_count++;
-        }
+        static_count = n;
     }
 
     /* Collect static key names (arena-allocated) */
@@ -682,7 +659,7 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
             return NULL;
         for (int i = 0; i < n; i++) {
             static_idx_map[i] = -1;
-            if (key_vals[i] || !obj->keys[i] || obj->keys[i]->type != AST_LITERAL_STRING)
+            if (!obj->keys[i] || obj->keys[i]->type != AST_LITERAL_STRING)
                 continue;
             const char *literal_name = obj->keys[i]->as.literal.raw_value.string_val;
             for (int k = 0; literal_name && k < static_count; k++) {
@@ -695,60 +672,38 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     } else {
         int si = 0;
         for (int i = 0; i < n; i++) {
-            if (!key_vals[i]) {
-                if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
-                    const char *name = obj->keys[i]->as.literal.raw_value.string_val;
-                    key_names[si] = arena_strdup(l->func, name ? name : "?");
-                } else {
-                    key_names[si] = arena_strdup(l->func, "?");
-                }
-                if (!key_names[si])
-                    return NULL;
-                static_idx_map[i] = si;
-                si++;
+            if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
+                const char *name = obj->keys[i]->as.literal.raw_value.string_val;
+                key_names[si] = arena_strdup(l->func, name ? name : "?");
             } else {
-                static_idx_map[i] = -1;
+                key_names[si] = arena_strdup(l->func, "?");
             }
+            if (!key_names[si])
+                return NULL;
+            static_idx_map[i] = si;
+            si++;
         }
     }
 
-    /* Create Json object with Shape built from static keys only */
-    XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_JSON_NEW, result_type, 0);
+    /* Create a structural object with an exact static-key shape. */
+    XiValue *obj_val = xi_value_new(l->func, l->cur_block, XI_OBJECT_NEW, result_type, 0);
     if (!obj_val)
         return NULL;
     obj_val->aux_int = static_count;
     obj_val->aux = (void *) key_names;
     obj_val->line = (uint32_t) node->line;
 
-    /* Init static fields by index, computed fields by dynamic key */
+    /* Initialize every structural field by its canonical index. */
     for (int i = 0; i < n; i++) {
-        if (!key_vals[i] && static_idx_map[i] >= 0) {
-            /* Static key → indexed init */
-            XiValue *init = xi_value_new(l->func, l->cur_block, XI_OBJECT_INIT_F, l->type_unit, 2);
-            if (!init)
-                break;
-            init->args[0] = obj_val;
-            init->args[1] = val_vals[i];
-            init->aux_int = static_idx_map[i];
-            init->flags |= XI_FLAG_SIDE_EFFECT;
-        } else {
-            /* Computed key → dynamic index-set: obj[key] = val */
-            XiValue *dynamic_key = key_vals[i];
-            if (!dynamic_key && obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING) {
-                const char *name = obj->keys[i]->as.literal.raw_value.string_val;
-                dynamic_key =
-                    xi_const_str(l->func, l->cur_block, name ? name : "?", l->type_string);
-            }
-            if (!dynamic_key)
-                break;
-            XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
-            if (!set)
-                break;
-            set->args[0] = obj_val;
-            set->args[1] = dynamic_key;
-            set->args[2] = val_vals[i];
-            set->flags |= XI_FLAG_SIDE_EFFECT;
-        }
+        if (static_idx_map[i] < 0)
+            return NULL;
+        XiValue *init = xi_value_new(l->func, l->cur_block, XI_OBJECT_INIT_F, l->type_unit, 2);
+        if (!init)
+            return NULL;
+        init->args[0] = obj_val;
+        init->args[1] = val_vals[i];
+        init->aux_int = static_idx_map[i];
+        init->flags |= XI_FLAG_SIDE_EFFECT;
     }
     return obj_val;
 }

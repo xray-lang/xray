@@ -141,11 +141,11 @@
     X(GEN_CALL, "xi.gen.call", xicgen_gen_call) \
     X(CHAN_RECV_STATUS, "xi.chan.recv.status", xicgen_chan_recv_status) \
     X(DEFER_MARK, "xi.defer.mark", xicgen_defer_mark) \
-    X(JSON_NEW, "xi.json.new", xicgen_json_new) \
+    X(OBJECT_NEW, "xi.object.new", xicgen_object_new) \
     X(OBJECT_INIT_F, "xi.object.init.f", xicgen_object_init_f) \
     X(OBJECT_GET_F, "xi.object.get.f", xicgen_object_get_f) \
     X(OBJECT_SET_F, "xi.object.set.f", xicgen_object_set_f) \
-    X(JSON_MERGE, "xi.json.merge", xicgen_json_merge) \
+    X(OBJECT_MERGE, "xi.object.merge", xicgen_object_merge) \
     X(JSON_DECODE, "xi.json.decode", xicgen_json_decode) \
     X(AGG_NEW, "xi.agg.new", xicgen_struct_new) \
     X(AGG_GET, "xi.agg.get", xicgen_struct_get) \

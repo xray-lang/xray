@@ -1226,10 +1226,9 @@ static int cg_intern_object_shape_type(XiCgenCtx *ctx, const XrType *type) {
 
 static int cg_intern_object_shape(XiCgenCtx *ctx, const XiValue *value) {
     const XrType *type = value ? value->type : NULL;
-    return cg_intern_object_shape_parts(
-        ctx, xi_json_field_count(value), value ? (const char *const *) value->aux : NULL, type,
-        type && type->kind == XR_KIND_STRUCT_OBJECT ? XR_OBJECT_DOMAIN_STRUCT
-                                                    : XR_OBJECT_DOMAIN_JSON);
+    return cg_intern_object_shape_parts(ctx, xi_object_field_count(value),
+                                        value ? (const char *const *) value->aux : NULL, type,
+                                        XR_OBJECT_DOMAIN_STRUCT);
 }
 
 /* Storage-class prefix for emitted top-level objects: external linkage in
@@ -8648,7 +8647,7 @@ static bool cg_func_small_static_object_loop_force_inline(const XiFunc *f) {
             if (value->op == XI_CALL || value->op == XI_TAIL_CALL || value->op == XI_CALL_METHOD ||
                 value->op == XI_CALL_METHOD_DIRECT)
                 return false;
-            if (value->op == XI_JSON_NEW && XR_TYPE_IS_STRUCT_OBJECT(value->type) &&
+            if (value->op == XI_OBJECT_NEW && XR_TYPE_IS_STRUCT_OBJECT(value->type) &&
                 value->aux_int > 0)
                 found = true;
         }
@@ -9694,7 +9693,8 @@ static uint32_t cg_scan_r1_runtime_calls(const char *text) {
             cg_name_matches(p, len, "xrt_array_with_capacity") ||
             cg_name_matches(p, len, "xrt_map_new") || cg_name_matches(p, len, "xrt_set_new") ||
             cg_name_matches(p, len, "xrt_tuple_new") ||
-            cg_name_matches(p, len, "xrt_closure_new") || cg_name_matches(p, len, "xrt_json_new") ||
+            cg_name_matches(p, len, "xrt_closure_new") ||
+            cg_name_matches(p, len, "xrt_struct_object_new") ||
             cg_name_matches(p, len, "xrt_str_concat") || cg_name_matches(p, len, "xrt_gc_alloc") ||
             cg_name_matches(p, len, "xrt_alloc"))
             continue;
@@ -9720,12 +9720,12 @@ static void cg_scan_function_residue(XiCgenCtx *ctx, const XiFunc *f, const char
                         : 0;
 
     /* R2 heap allocation. */
-    uint32_t r2 = cg_scan_count(body, "xrt_array_new(") +
-                  cg_scan_count(body, "xrt_array_with_capacity(") +
-                  cg_scan_count(body, "xrt_map_new(") + cg_scan_count(body, "xrt_set_new(") +
-                  cg_scan_count(body, "xrt_tuple_new(") + cg_scan_count(body, "xrt_closure_new(") +
-                  cg_scan_count(body, "xrt_json_new(") + cg_scan_count(body, "xrt_str_concat(") +
-                  cg_scan_count(body, "xrt_gc_alloc(") + cg_scan_count(body, "xrt_alloc(");
+    uint32_t r2 =
+        cg_scan_count(body, "xrt_array_new(") + cg_scan_count(body, "xrt_array_with_capacity(") +
+        cg_scan_count(body, "xrt_map_new(") + cg_scan_count(body, "xrt_set_new(") +
+        cg_scan_count(body, "xrt_tuple_new(") + cg_scan_count(body, "xrt_closure_new(") +
+        cg_scan_count(body, "xrt_struct_object_new(") + cg_scan_count(body, "xrt_str_concat(") +
+        cg_scan_count(body, "xrt_gc_alloc(") + cg_scan_count(body, "xrt_alloc(");
     cg_residue_add(r, XI_RESIDUE_R2_HEAP_ALLOC, r2, line,
                    "heap allocation not elided (escape evidence incomplete)");
 
@@ -12605,10 +12605,11 @@ static bool cg_json_codec_site_contract(const XiValue *value, uint8_t *out_kind,
     } else if (value->op == XI_CALL_METHOD && value->nargs >= 1 && value->aux &&
                xicgen_receiver_is_builtin_global(value->args[0], XR_GLOBAL_VAR_JSON)) {
         const char *method = (const char *) value->aux;
-        if (strcmp(method, "parse") == 0) {
+        if (strcmp(method, "parse") == 0 || strcmp(method, "parseValue") == 0 ||
+            strcmp(method, "parseObject") == 0) {
             kind = XG_JSON_CODEC_PARSE;
             actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT);
-        } else if (strcmp(method, "encode") == 0) {
+        } else if (strcmp(method, "value") == 0) {
             kind = XG_JSON_CODEC_ENCODE;
             actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_ENCODE_FIELD_TABLE) |
                       xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR);
@@ -12671,7 +12672,7 @@ static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *fun
         valid = false;
     }
 
-    const bool object_merge_site = value->op == XI_JSON_MERGE && value->nargs >= 2 &&
+    const bool object_merge_site = value->op == XI_OBJECT_MERGE && value->nargs >= 2 &&
                                    value->args[0] && value->args[0]->type &&
                                    value->args[0]->type->kind == XR_KIND_STRUCT_OBJECT;
     const uint32_t object_merge_actions =

@@ -62,7 +62,7 @@ fn test_mem_live_bytes_decreases_after_collect() {
     var baseline = runtime.liveBytes()
     // Create objects in a scope that makes them collectable
     fn make_garbage() {
-        var temp: Array<Json> = []
+        var temp: Array<JSON.Value> = []
         for (var i = 0; i < 200; i++) {
             temp.push({"garbage": i})
         }
@@ -79,7 +79,7 @@ fn test_mem_live_bytes_decreases_after_collect() {
 @test
 fn test_mem_live_objects_tracks_alloc() {
     var before = runtime.liveObjects()
-    var arr: Array<Json> = []
+    var arr: Array<JSON.Value> = []
     for (var i = 0; i < 10; i++) {
         arr.push({"k": i})
     }

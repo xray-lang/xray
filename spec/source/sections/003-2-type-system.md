@@ -18,7 +18,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 2. **Nullable 分离**：`T` 永不为 `null`；`T?` 是 `T | null` 的语法糖。
 3. **Union 类型**：`A | B | ...`（最多 6 个成员）。
 4. **泛型单态化**：泛型定义在构建期按具体类型特化，同时保留名义类型身份。
-5. **三个互不连通的兼容域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`structural object` 按**结构**兼容且字段集精确（sealed，无 width subtyping）；`Json` 是**运行期开放**的数据交换值域。域之间没有隐式转换，只有 `Json.encode(value)` 与 `json as T` 两条显式桥。
+5. **三个职责清晰的类型域**：`class` / `struct` / `interface` 按**名义**兼容（显式 `implements`，无隐式实现）；`structural object` 按**结构**兼容且普通类型位置字段集精确，泛型约束位置可表达最小字段集；`JSON.Value` 是 schema-less 递归数据交换值域。JSON 标量可零物化 widening，复合 typed value 必须经 `JSON.value` 显式编码。
 6. **最小类型身份**：`typeOf` / `typeName` / `is` / `as`；默认没有运行时 `Reflect` 模块。
 
 ### 2.2 类型分类
@@ -31,7 +31,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<byte>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
 | 借用视图 | `Slice<T>`（不拥有数据，受借用生命周期约束，见 §2.4.2） |
-| Prelude 特殊类型 | `Json`、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
+| Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
 | 模块导出类型 | `DateTime`、`Logger`、`Plan`、`Mutex<T>` 等；必须从定义它们的模块显式 import |
 | 错误处理 prelude | `PanicInfo`（见 §8） |
 | Nullable | `T?` |
@@ -64,7 +64,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `EnumVariant<T>` | 解析器内建 |
 | `EnumVariants<T>` | 解析器内建 |
 | `Iterator<T>` | prelude |
-| `Json` | prelude |
+| `JSON.Value` / `JSON.Object` | prelude `JSON` 命名空间 |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | 解析器内建 |
 | `NetConn` | prelude |
@@ -141,7 +141,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 - 静态类型为 `byte`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
 - `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
 - 已定型表达式不能通过赋值隐式窄化、改变符号或改变目标相关宽度；这些转换必须显式写 `as`。显式整数转换按目标位宽取模并以目标类型的二补码位型解释。
-- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `any` / Json / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
+- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `JSON.Value` / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
 
 #### 2.3.2 浮点类型
 
@@ -376,7 +376,7 @@ main()
 1. **元素写允许**：`o[i] = x` 合法。元素写不改变 `o` 的存储地址，视图仍然有效。
 2. **失效操作拒绝**（`E0382`）：任何可能使 `o` 的元素存储重新定位、缩短或整体失效的操作都被拒绝。判据不是方法名白名单，而是被调用函数的 memory effect：地址稳定性（`ADDRESS_STABLE` / `MAY_RELOCATE`）、长度收缩（`NEVER_SHORTENS` / `MAY_SHORTEN`）、视图失效（`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`）。`o.push(x)`、重新给 `o` 赋值、`move o`、`freeze o`、`return o` 都属于此类。
 3. **存活期按最后一次使用判定**（非词法生命周期）：借用在 `v` 的最后一次使用处结束，而不是在词法块末尾。因此紧随其后的 owner 变更是合法的。
-4. **不得逃逸**（`E0383`）：视图不得离开 owner 的作用域。以下位置一律拒绝——函数返回值（除非满足下面的返回契约）、class/struct/structural object 字段、Array / Map / Set / tuple / Json / enum payload 元素、闭包捕获、generator `yield`、模块级绑定、泛型类/结构体的类型实参、`go` 或 channel 等跨执行边界的传递、通过 `as` 擦除类型。
+4. **不得逃逸**（`E0383`）：视图不得离开 owner 的作用域。以下位置一律拒绝——函数返回值（除非满足下面的返回契约）、class/struct/structural object 字段、Array / Map / Set / tuple / JSON.Value / enum payload 元素、闭包捕获、generator `yield`、模块级绑定、泛型类/结构体的类型实参、`go` 或 channel 等跨执行边界的传递、通过 `as` 擦除类型。
 
 ```xray
 fn ok() {
@@ -436,7 +436,7 @@ var owned: Array<int> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
 
 哈希字典，**保持插入顺序**。详见 §14.8。
 
-**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`（与 structural object / Json 对象一致，靠 `#` 前缀消歧）：
+**Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`；`JSON.Object` 使用同一个 Map 字面量：
 
 ```xray @id=types-map
 var m: Map<string, int> = #{"a": 1, "b": 2}
@@ -450,7 +450,7 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 
 | 字面量形式 | 类型 | 用途 |
 |---|---|---|
-| `{ key: value }`（无前缀） | sealed `structural object`（期望类型为 `Json` 时是 `Json`） | 见 §2.4.7 |
+| `{ key: value }`（无前缀） | exact `structural object` | 见 §2.4.7 |
 | `#{ "k": v }`（`#` 前缀 + `:`） | `Map<K, V>`（哈希字典） | 本节 |
 | `#{}` | `Map<K, V>`（空） | 显式空 Map |
 | `[]` | `Array<T>` | 数组 |
@@ -483,19 +483,16 @@ var buf = Array<byte>(1024)
 var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.7 对象形状 / `Json` 与对象字面量
+#### 2.4.7 静态结构对象、`JSON.Value` 与对象字面量
 
-裸对象字面量默认推断为 exact 对象形状，用于普通业务对象、options 和多字段返回值。`Json` 是显式 opt-in 的 JSON 值域类型：它用于外部数据交换边界，可以装载 JSON 等价的任意结构，并且本身包含 `null`。
+裸对象字面量永远形成字段集精确的静态结构对象，用于普通业务对象、options 和多字段返回值。运行期未知键由 `Map` 承担；JSON object 的标准拼写 `JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名。`JSON` 是无需 import 的 prelude 命名空间，不是值类型。
 
 **对象字面量** `{ field: value, ... }` 与 Map 字面量的关键区别：
 
 ```xray @id=types-json-object
-// 对象形状/Json 对象字面量：标识符或字符串 key + 冒号 ':'
-var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-var user = { name: "Bob", age: 25 }       // 默认类型为 exact 对象形状
+// 结构对象字面量：标识符或静态字符串 key + 冒号 ':'
+var user = { name: "Bob", age: 25 }       // exact 对象形状
 typeName(user)                            // "object"
-data.name              // 类型: Json（字段访问返回 Json）
-data["name"]           // 等价
 user.name              // 类型: string；direct ordinal
 user["name"]           // 与 user.name 完全等价；同一 direct ordinal
 
@@ -506,6 +503,8 @@ var user = { name, age }                  // 等价 { name: name, age: age }
 
 // Map 字面量：`#{}` 前缀 + `:`
 var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
+var data: JSON.Object = #{"name": "Alice", "age": 30}
+data["traceId"] = "req-1"               // 动态键只属于 Map
 ```
 
 **对照表**：
@@ -513,12 +512,12 @@ var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
 | 写法 | 类型 | 备注 |
 |---|---|---|
 | `{ name: "x", age: 1 }` | exact 匿名对象形状 | 标识符或字符串 key 后跟 `:` |
-| `var j: Json = { name: "x" }` | `Json` object | 只有显式 `Json` 期望类型时按动态 Json 解释 |
 | `{ x: y }`（`x` 是字段名，`y` 是变量名） | exact 匿名对象形状 | 字段简写 `{ x }` 等价 `{ x: x }`，仅裸 key |
 | `#{"a": 1}` | `Map<K, V>` | `#` 前缀消歧，分隔符用 `:` |
+| `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object；可遍历、增删动态键 |
 | `Point{x: 1.0, y: 2.0}` | `Point`（struct） | 类型名 + `{...}` 字面量 |
 
-**对象形状类型**：裸对象字面量和 `type T = {...}` 都是 exact 对象形状；访问或赋值未声明字段是编译错误。`type T = { known: U, ... }` 是 open row 约束，只表示“至少含有这些已声明字段”：它允许接收更宽的 concrete exact shape，但不授予读取、写入或枚举隐藏字段的能力。需要 JSON 边界时显式标注 `Json` 或调用 `Json.encode(value)`。
+**对象形状类型**：裸对象字面量和 `type T = {...}` 都是 exact 对象形状；访问或赋值未声明字段是编译错误。结构宽度只出现在泛型约束满足关系中：`T: { name: string }` 表示 T 至少包含该字段，调用点仍按实参的具体 exact shape 单态化。尾部 `...` 不属于类型语法。
 
 ```xray
 type User = { name: string, age: int }
@@ -530,28 +529,29 @@ print(u.name)         // OK
 var u2 = { name: "Alice", age: 30 }      // exact 对象形状
 // u2.extra = "x"     // 编译错误
 
-type Named = { name: string, ... }
-fn showName(value: Named) {
-    print(value.name)                     // open row 只暴露已声明字段
+type Named = { name: string }
+fn showName<T: Named>(value: T) {
+    print(value.name)                     // 约束只暴露已声明字段
     print(value["name"])                  // 与 .name 相同
     // print(value.age)                    // 编译错误：隐藏字段不可见
 }
 showName(u)                               // OK：u 的 concrete exact shape 更宽
 
-var j: Json = { name: "Alice", age: 30 } // 动态 Json object
-j.extra = "x"        // OK（Json 是动态的）
+var j: JSON.Object = #{"name": "Alice", "age": 30}
+j["extra"] = "x"                        // OK：Map 动态键
+var encoded: JSON.Value = JSON.value(u)  // 复合值显式进入 JSON 值域
 ```
 
-**乘积类型的职责划分**：结构化域与名义域的界线是"有没有方法"。
+**乘积类型的职责划分**：
 
 | | 身份 | 字段集 | 用户可定义方法 | 用途 |
 |---|---|---|---|---|
-| 对象形状 | 结构化 | exact，或显式 open row 约束 | **否** | options、多字段返回值、普通业务数据 |
-| `Json` | 值域（无身份） | 任意，运行期解析 | **否** | 外部数据交换边界 |
+| 对象形状 | 结构化 | exact；泛型约束可要求最小字段集 | **否** | options、多字段返回值、普通业务数据 |
+| `JSON.Object` | Map 别名 | 任意字符串键，运行期确定 | Map API | schema-less JSON object |
 | `struct` | 名义 | 声明的，编译期检查 | 是 | 值语义、固定布局、FFI 聚合、数学类型 |
 | `class` | 名义 | 声明的，编译期检查 | 是 | 引用语义、继承、封装 |
 
-**规范性承诺**：对象形状与 `Json` 是纯数据形态，字段**只能承载数据，永远不能承载函数**，用户也不能为它们声明方法。因此 `j.name` 恒为字段读取，而内置成员只能以调用形式 `j.name()` 出现——两种写法在语法上始终可判定，字段名与内置成员名不会争用同一个表达式。需要行为时使用 `struct` 或 `class`。`Json` 的通用查询与编解码同时提供静态形态（`Json.keys(obj)`，见 §14.11），在字段名可能与内置成员同名时优先使用静态形态。
+结构对象字段可承载任意满足普通类型规则的静态值，包括函数引用、Map 或 class 实例；用户不能在结构对象类型上声明方法。能存储不等于能序列化：`JSON.value` / `JSON.stringify` 在编译期要求 `JSON.Encodable`，函数字段等不支持类型会被拒绝。
 
 #### 2.4.8 `BigInt`
 
@@ -593,7 +593,7 @@ var y: int? = 42        // OK
 var z: int = null       // 编译错误：null 不是 int
 ```
 
-`Json` 本身包含 `null`，因此 `Json?` 与 `Json | null` 是语义重复并在解析阶段报错。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
+`JSON.Value` 本身包含 `null`，因此 `JSON.Value?` 与 `JSON.Value | null` 是语义重复并在解析阶段报错。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
 
 **可空原始类型一等公民**：`int?` / `float?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
 
@@ -758,29 +758,27 @@ var f = (x: int) -> x   // f: (int) -> int —— 箭头参数显式、返回类
 | 已定型整数 | 任意浮点类型 | ❌ 必须显式 `as` |
 | 已定型浮点 | 任意整数类型或 `f64 → f32` | ❌ 必须显式 `as` |
 | `T` | `T?` | ✅ |
-| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON 标量进入值域 |
-| 其它任意类型 | `Json` | ❌ 必须写 `Json.encode(value)` |
+| `int` / `float` / `string` / `bool` / `null` | `JSON.Value` | ✅ JSON 标量零物化 widening |
+| 复合类型 | `JSON.Value` | ❌ 必须写 `JSON.value(value)`，并满足 `JSON.Encodable` |
+| `Map<string, JSON.Value>` | `JSON.Object` | ✅ 纯别名 identity |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype（class）| ✅ |
 | 字段集不同的 exact 对象形状 | exact 对象形状 | ❌ exact target 要求精确字段集 |
-| 更宽的 exact 对象形状 | 显式 open row `{ a: A, ... }` | ✅ 包含全部声明字段且同名字段类型不变 |
+| exact 对象形状 | 泛型约束 `T: { a: A }` | ✅ 约束满足关系；不是普通赋值转换 |
 
-> **exact/open row 规则**：exact target 要求**精确字段集**——源字段名集合必须与目标一致；目标中类型可空的字段允许缺省。只有显式 `{ a: A, ... }` open row target 接受额外字段，并且同名字段类型保持不变。open row 是静态视图，不是动态字典；隐藏字段不可读、不可写、不可枚举，open row 也不能作为 `Json.parse<T>` 的构造目标。
+> **exact / width-constraint 规则**：普通类型位置要求**精确字段集**——源字段名集合必须与目标一致；目标中类型可空的字段允许缺省。泛型约束位置的结构类型表示“至少包含这些字段”，同名字段类型保持不变；它不产生运行时宽度对象或动态字典。
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
 > // var u: User = full            // 编译错误 E0352：extra field 'age'
-> type Named = { name: string, ... }
-> var named: Named = full          // OK：显式 open row
-> // print(named.age)              // 编译错误：隐藏字段不可见
+> fn nameOf<T: User>(value: T) -> string { return value.name }
+> print(nameOf(full))              // OK：T 保留 full 的 concrete exact shape
 >
 > type Opt = { name: string, age: int? }
 > var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
 > ```
 
-> **对象形状与 Json 是两个互不连通的语义域**：对象形状由编译器检查字段约束，`Json` 是运行期开放的数据交换值域。两者之间没有隐式转换，只有两条显式桥：
-> - `Json.encode(value)`：typed value → `Json`
-> - `json as T` / `json as T?`：`Json` → structural object 或其它 typed value（结构化 narrowing）
+> **静态对象与 JSON 动态边界**：已知 schema 使用 exact target 与 `JSON.parse<T>`；schema-less object 使用 `JSON.Object` / Map。typed 复合值通过 `JSON.value(value)` 显式编码，动态 object 通过 `JSON.decodeObject<T>(object)` 显式验证回 typed target。
 
 #### 2.10.2 显式 `as`
 
@@ -790,8 +788,8 @@ var n = x as int?       // 失败返回 null（安全转换）
 ```
 
 适用于：
-- 数值之间（含 `Json → int`，运行时检查）。
-- `Json → User`（结构化 narrowing）。
+- 数值之间（含 `JSON.Value → int`，运行时检查）。
+- `JSON.Value` 到标量类型的运行期检查；复合 typed 解码使用 `JSON.decode<T>` / `JSON.decodeObject<T>`。
 - 父类 → 子类（向下转）。
 
 数值 `as` 的结果与主机 C 编译器、优化级别和 VM/AOT 后端无关：整数到整数按目标位宽取模，并按目标有符号性解释同一位型；整数到浮点以及 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even，溢出产生带原符号的无穷大，NaN 规范化为 Xray 的 canonical quiet NaN；浮点到整数向零截断，NaN、无穷大或超出目标范围时抛 `XR_ERR_OVERFLOW` (E0422)，消息为 `numeric conversion is out of range`。
@@ -818,7 +816,7 @@ typeName(value)   // 返回类型名字符串
 `Type` 枚举成员：
 
 `Type.int`、`Type.float`、`Type.string`、`Type.bool`、`Type.null`、
-`Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、`Type.Json`、
+`Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、
 `Type.function`、`Type.class`、`Type.struct`、`Type.enum`、`Type.module`、`Type.bigint`、...
 
 使用 `typeName(value)` 可以取得具体值的调试类型名。
@@ -961,7 +959,7 @@ Xray 不要求写生命周期，也不提供借用检查器语法。但**所有�
 
 #### 2.14.1 所有权根
 
-**所有权根**是一个可独立回收的堆对象图的入口。`Array` / `Map` / `Set` / `Json` / `structural object` / class 实例 / 唯一结果 `Task<T>` 各有自己的根；标量、`string`、`Slice<T>`、裸指针、值 struct、定长数组**没有**根——它们要么按值复制，要么是借用视图。
+**所有权根**是一个可独立回收的堆对象图的入口。`Array` / `Map`（含 `JSON.Object`）/ `Set` / `JSON.Value` 的复合 arm / `structural object` / class 实例 / 唯一结果 `Task<T>` 各有自己的根；标量、`string`、`Slice<T>`、裸指针、值 struct、定长数组**没有**根——它们要么按值复制，要么是借用视图。
 
 只有拥有根的绑定才谈得上所有权转移。对没有根的值写 `move` 是编译错误（`E0391`：`move is not meaningful for value type`）。
 
@@ -1072,7 +1070,7 @@ move 成功后源绑定在编译期标记为已 moved，再次引用是编译错
 
 #### 2.14.6 值拷贝与 managed 字段
 
-值 struct 按值复制。为了让「按值复制」始终是完整语义，**struct 字段的类型是受限的**：只允许标量、`string`、裸指针、定长数组、以及其他值 struct。`Array` / `Map` / `Set` / `Json` / class 实例**不能**作为 struct 字段（`E0352`）。
+值 struct 按值复制。为了让「按值复制」始终是完整语义，**struct 字段的类型是受限的**：只允许标量、`string`、裸指针、定长数组、以及其他值 struct。`Array` / `Map` / `Set` / `JSON.Value` / class 实例**不能**作为 struct 字段（`E0352`）。
 
 因此不存在「struct 值拷贝携带可变 managed 字段」的情形，也就不需要在浅拷贝与深拷贝之间做选择。唯一的 managed 字段是 `string`，而 `string` 不可变：共享它不产生任何可观察差异，唯一性判定也不受影响。
 
@@ -1149,7 +1147,7 @@ Xray is statically typed; every expression has a determined type at compile time
 2. **Nullable separation**: `T` is never `null`; `T?` is sugar for `T | null`.
 3. **Union types**: `A | B | ...` (up to 6 members).
 4. **Monomorphized generics**: generic definitions are specialized at build time while keeping nominal type identity.
-5. **Three disconnected compatibility domains**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `structural object` is **structural with an exact field set** (sealed, no width subtyping); `Json` is an **open, run-time** data-exchange value domain. There is no implicit conversion between domains — only the two explicit bridges `Json.encode(value)` and `json as T`.
+5. **Three type domains with distinct responsibilities**: `class` / `struct` / `interface` are **nominal** (explicit `implements`, no implicit conformance); `structural object` is structural and exact in ordinary type positions, while generic constraint positions may require a minimum field set; `JSON.Value` is the schema-less recursive data-exchange domain. JSON scalars widen without materialization, while typed composites require explicit `JSON.value` encoding.
 6. **Minimal type identity**: `typeOf`, `typeName`, `is`, and `as`; there is no default runtime `Reflect` module.
 
 ### 2.2 Type Categories
@@ -1162,7 +1160,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<byte>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
 | Borrowed view | `Slice<T>` (owns no data; constrained by borrow lifetimes, see §2.4.2) |
-| Special prelude types | `Json`, `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
+| Special prelude types/namespaces | `JSON` (including `JSON.Value` / `JSON.Object`), `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
 | Module-exported types | `DateTime`, `Logger`, `Plan`, `Mutex<T>`, and others; these require explicit imports from their defining modules |
 | Error-handling prelude | `PanicInfo` (see §8) |
 | Nullable | `T?` |
@@ -1195,7 +1193,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `EnumVariant<T>` | resolver built-in |
 | `EnumVariants<T>` | resolver built-in |
 | `Iterator<T>` | prelude |
-| `Json` | prelude |
+| `JSON.Value` / `JSON.Object` | prelude `JSON` namespace |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | resolver built-in |
 | `NetConn` | prelude |
@@ -1272,7 +1270,7 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 - Values with static type `byte`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
 - `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
 - An already-typed expression cannot be implicitly narrowed, change signedness, or cross a target-dependent width at assignment. Such conversions require an explicit `as`. Explicit integer conversion reduces modulo the target width and interprets the resulting two's-complement bit pattern as the target type.
-- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `any` / Json / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
+- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `JSON.Value` / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
 
@@ -1507,7 +1505,7 @@ Let view `v` borrow owner `o`. While `v` is **live**:
 1. **Element writes are allowed**: `o[i] = x` is legal. An element write does not move the owner's storage, so the view stays valid.
 2. **Invalidating operations are rejected** (`E0382`): any operation that may relocate, shorten, or otherwise invalidate `o`'s element storage. The criterion is not a method-name allowlist but the callee's memory effect: address stability (`ADDRESS_STABLE` / `MAY_RELOCATE`), shortening (`NEVER_SHORTENS` / `MAY_SHORTEN`), and view invalidation (`NEVER_INVALIDATES` / `INVALIDATES_VIEWS`). `o.push(x)`, reassigning `o`, `move o`, `freeze o`, and `return o` all fall in this class.
 3. **Liveness ends at the last use** (non-lexical lifetimes): the borrow ends at `v`'s last use, not at the end of the enclosing block, so an owner mutation placed after that point is legal.
-4. **No escape** (`E0383`): a view must not outlive the owner's scope. All of the following are rejected — function return values (unless the return contract below is satisfied), class / struct / structural object fields, Array / Map / Set / tuple / Json / enum-payload elements, closure captures, generator `yield`, module-level bindings, type arguments of a generic class or struct, crossing an execution boundary via `go` or a channel, and erasing the type with `as`.
+4. **No escape** (`E0383`): a view must not outlive the owner's scope. All of the following are rejected — function return values (unless the return contract below is satisfied), class / struct / structural object fields, Array / Map / Set / tuple / JSON.Value / enum-payload elements, closure captures, generator `yield`, module-level bindings, type arguments of a generic class or struct, crossing an execution boundary via `go` or a channel, and erasing the type with `as`.
 
 ```xray
 fn ok() {
@@ -1567,7 +1565,7 @@ var owned: Array<int> = copy(arr[1:3])   // an independent Array<T>, unrelated t
 
 Hash table that **preserves insertion order**. See §14.8.
 
-**Map literals** must use the `#{ ... }` prefix with `:` separators (consistent with Json; disambiguated by the `#` prefix):
+**Map literals** must use the `#{ ... }` prefix with `:` separators; `JSON.Object` uses the same Map literal:
 
 ```xray @id=types-map
 var m: Map<string, int> = #{"a": 1, "b": 2}
@@ -1581,7 +1579,7 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 
 | Literal form | Type | Purpose |
 |---|---|---|
-| `{ key: value }` (no prefix) | sealed `structural object` (`Json` when the expected type is `Json`) | see §2.4.7 |
+| `{ key: value }` (no prefix) | exact `structural object` | see §2.4.7 |
 | `#{ "k": v }` (`#` prefix + `:`) | `Map<K, V>` (hash table) | this section |
 | `#{}` | `Map<K, V>` (empty) | explicit empty Map |
 | `[]` | `Array<T>` | array |
@@ -1614,19 +1612,16 @@ var buf = Array<byte>(1024)
 var init = Array<byte>([72, 101, 108, 108, 111])
 ```
 
-#### 2.4.7 Object Shapes / `Json` and Object Literals
+#### 2.4.7 Static Structural Objects, `JSON.Value`, and Object Literals
 
-Bare object literals default to exact object shapes, for ordinary business objects, options, and multi-field returns. `Json` is an explicit opt-in JSON value-domain type: it is used at external data-exchange boundaries, can hold any JSON-equivalent structure, and intrinsically includes `null`.
+A bare object literal always forms a static structural object with an exact field set. It is used for ordinary business objects, options, and multi-field returns. Runtime-unknown keys belong to `Map`; the canonical JSON-object spelling `JSON.Object` is a pure alias of `Map<string, JSON.Value>`. `JSON` is a prelude namespace that needs no import, not a value type.
 
 The key difference between an **object literal** `{ field: value, ... }` and a Map literal:
 
 ```xray @id=types-json-object
-// Object-shape/Json object literal: identifier or string key + colon ':'
-var data: Json = { name: "Alice", tags: ["a", "b"], age: 30 }
-var user = { name: "Bob", age: 25 }       // default type is an exact object shape
+// Structural-object literal: identifier or static string key + colon ':'
+var user = { name: "Bob", age: 25 }       // exact object shape
 typeName(user)                            // "object"
-data.name              // type: Json (field access returns Json)
-data["name"]           // equivalent
 user.name              // type: string; direct ordinal
 user["name"]           // exactly equivalent to user.name; same direct ordinal
 
@@ -1637,6 +1632,8 @@ var user = { name, age }                  // equivalent to { name: name, age: ag
 
 // Map literal: `#{}` prefix + `:`
 var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
+var data: JSON.Object = #{"name": "Alice", "age": 30}
+data["traceId"] = "req-1"               // only Map has dynamic keys
 ```
 
 **Comparison**:
@@ -1644,12 +1641,12 @@ var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
 | Form | Type | Notes |
 |---|---|---|
 | `{ name: "x", age: 1 }` | exact anonymous object shape | identifier or string key followed by `:` |
-| `var j: Json = { name: "x" }` | `Json` object | interpreted as dynamic Json only with an explicit `Json` expected type |
 | `{ x: y }` (`x` is field name, `y` is variable) | exact anonymous object shape | shorthand `{ x }` equivalent to `{ x: x }`; bare key only |
 | `#{"a": 1}` | `Map<K, V>` | `#` prefix disambiguates; separator `:` |
+| `var j: JSON.Object = #{"a": 1}` | `Map<string, JSON.Value>` | schema-less JSON object; supports iteration and dynamic-key mutation |
 | `Point{x: 1.0, y: 2.0}` | `Point` (struct) | type name + `{...}` literal |
 
-**Object-shape types**: bare object literals and `type T = {...}` are exact object shapes, so accessing or assigning an undeclared field is a compile error. `type T = { known: U, ... }` is an open-row constraint: it accepts a wider concrete exact shape but does not grant access to, mutation of, or enumeration of hidden fields. Use an explicit `Json` annotation or `Json.encode(value)` at JSON boundaries.
+**Object-shape types**: bare object literals and `type T = {...}` are exact object shapes, so accessing or assigning an undeclared field is a compile error. Structural width exists only in generic constraint satisfaction: `T: { name: string }` means that T contains at least that field, while each call is still monomorphized for the argument's concrete exact shape. A trailing `...` is not type syntax.
 
 ```xray
 type User = { name: string, age: int }
@@ -1661,28 +1658,29 @@ print(u.name)         // OK
 var u2 = { name: "Alice", age: 30 }      // exact object shape
 // u2.extra = "x"     // compile error
 
-type Named = { name: string, ... }
-fn showName(value: Named) {
-    print(value.name)                     // the open row exposes declared fields only
+type Named = { name: string }
+fn showName<T: Named>(value: T) {
+    print(value.name)                     // the constraint exposes declared fields only
     print(value["name"])                  // identical to .name
     // print(value.age)                    // compile error: hidden field
 }
 showName(u)                               // OK: u has a wider concrete exact shape
 
-var j: Json = { name: "Alice", age: 30 } // dynamic Json object
-j.extra = "x"        // OK (Json is dynamic)
+var j: JSON.Object = #{"name": "Alice", "age": 30}
+j["extra"] = "x"                        // OK: a Map dynamic key
+var encoded: JSON.Value = JSON.value(u)  // composites enter JSON explicitly
 ```
 
-**Responsibilities of the product types**: the line between the structural and nominal domains is whether a type carries methods.
+**Responsibilities of product types**:
 
 | | Identity | Field set | User-defined methods | Use for |
 |---|---|---|---|---|
-| object shape | structural | exact, or an explicit open-row constraint | **no** | options, multi-field returns, ordinary business data |
-| `Json` | value domain (no identity) | arbitrary, resolved at run time | **no** | external data-exchange boundaries |
+| object shape | structural | exact; a generic constraint may require a minimum field set | **no** | options, multi-field returns, ordinary business data |
+| `JSON.Object` | Map alias | arbitrary string keys resolved at run time | Map API | schema-less JSON objects |
 | `struct` | nominal | declared, checked at compile time | yes | value semantics, fixed layout, FFI aggregates, math types |
 | `class` | nominal | declared, checked at compile time | yes | reference semantics, inheritance, encapsulation |
 
-**Normative commitment**: object shapes and `Json` are pure data shapes. Their fields **carry data only and can never hold a function**, and users cannot declare methods on them. Consequently `j.name` is always a field read, while a built-in member can only appear in call form `j.name()` — the two forms stay syntactically decidable, so a field name never contends with a built-in member name for the same expression. Use `struct` or `class` when behavior is required. `Json` also exposes its generic queries and conversions as static functions (`Json.keys(obj)`, see §14.11); prefer the static form whenever a field name may collide with a built-in member name.
+Structural-object fields may carry any statically typed value allowed by the ordinary type rules, including function references, Maps, and class instances; users cannot declare methods on a structural-object type. Storage does not imply serialization: `JSON.value` and `JSON.stringify` require `JSON.Encodable` at compile time, so unsupported types such as function fields are rejected.
 
 #### 2.4.8 `BigInt`
 
@@ -1724,7 +1722,7 @@ var y: int? = 42        // OK
 var z: int = null       // compile error: null is not int
 ```
 
-`Json` intrinsically includes `null`, so `Json?` and `Json | null` are redundant and rejected during parsing. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a structural object with an explicit status field. Do not introduce a global `Result<T,E>`.
+`JSON.Value` intrinsically includes `null`, so `JSON.Value?` and `JSON.Value | null` are redundant and rejected during parsing. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a structural object with an explicit status field. Do not introduce a global `Result<T,E>`.
 
 **Nullable primitives are first-class**: `int?` / `float?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
 
@@ -1895,29 +1893,27 @@ var f = (x: int) -> x   // f: (int) -> int — explicit parameter, inferred retu
 | Typed integer | any floating type | ❌ explicit `as` required |
 | Typed float | any integer type or `f64 → f32` | ❌ explicit `as` required |
 | `T` | `T?` | ✅ |
-| `int` / `float` / `string` / `bool` / `null` | `Json` | ✅ JSON scalar enters the value domain |
-| Any other type | `Json` | ❌ `Json.encode(value)` required |
+| `int` / `float` / `string` / `bool` / `null` | `JSON.Value` | ✅ zero-materialization JSON scalar widening |
+| composite type | `JSON.Value` | ❌ `JSON.value(value)` required, and the type must satisfy `JSON.Encodable` |
+| `Map<string, JSON.Value>` | `JSON.Object` | ✅ pure-alias identity |
 | `null` | `T?` | ✅ |
 | Subtype | Supertype (class) | ✅ |
 | exact object shape with a different field set | exact object shape | ❌ an exact target requires an exact field set |
-| wider exact object shape | explicit open row `{ a: A, ... }` | ✅ contains every declared field with invariant field types |
+| exact object shape | generic constraint `T: { a: A }` | ✅ constraint satisfaction; not an ordinary assignment conversion |
 
-> **Exact/open row rule**: an exact target requires an **exact field set** — source field names must match the target; nullable target fields may be omitted. Only an explicit `{ a: A, ... }` open-row target accepts extra fields, with invariant types for fields present on both sides. An open row is a static view, not a dynamic dictionary: hidden fields cannot be read, written, or enumerated, and an open row cannot be a `Json.parse<T>` construction target.
+> **Exact / width-constraint rule**: an ordinary type position requires an **exact field set** — source field names must match the target; nullable target fields may be omitted. A structural type in generic constraint position means "contains at least these fields", with invariant types for common fields. It creates neither a runtime width object nor a dynamic dictionary.
 > ```xray
 > type User = { name: string }
 > var full = { name: "A", age: 18 }
 > // var u: User = full            // compile error E0352: extra field 'age'
-> type Named = { name: string, ... }
-> var named: Named = full          // OK: explicit open row
-> // print(named.age)              // compile error: hidden field
+> fn nameOf<T: User>(value: T) -> string { return value.name }
+> print(nameOf(full))              // OK: T retains full's concrete exact shape
 >
 > type Opt = { name: string, age: int? }
 > var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
 > ```
 
-> **Object shapes and Json are two disconnected semantic domains**: an object shape is checked by the compiler; `Json` is an open data-exchange value domain resolved at run time. There is no implicit conversion between them, only two explicit bridges:
-> - `Json.encode(value)`: typed value → `Json`
-> - `json as T` / `json as T?`: `Json` → a structural object or other typed value (structural narrowing)
+> **Static objects and the dynamic JSON boundary**: known schemas use exact targets and `JSON.parse<T>`; schema-less objects use `JSON.Object` / Map. Typed composites are encoded explicitly with `JSON.value(value)`, and a dynamically processed object is validated back to a typed target with `JSON.decodeObject<T>(object)`.
 
 #### 2.10.2 Explicit `as`
 
@@ -1927,8 +1923,8 @@ var n = x as int?       // returns null on failure (safe cast)
 ```
 
 Applies to:
-- Between numeric types (including `Json → int`, checked at runtime).
-- `Json → User` (structural narrowing).
+- Between numeric types (including `JSON.Value → int`, checked at runtime).
+- Runtime checks from `JSON.Value` to scalar types; composite typed decoding uses `JSON.decode<T>` / `JSON.decodeObject<T>`.
 - Parent → child (downcast).
 
 Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-float and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; float-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
@@ -1955,7 +1951,7 @@ typeName(value)   // returns the type name as a string
 `Type` enum members:
 
 `Type.int`, `Type.float`, `Type.string`, `Type.bool`, `Type.null`,
-`Type.Array`, `Type.Map`, `Type.Set`, `Type.Channel`, `Type.Json`,
+`Type.Array`, `Type.Map`, `Type.Set`, `Type.Channel`,
 `Type.function`, `Type.class`, `Type.struct`, `Type.enum`, `Type.module`, `Type.bigint`, ...
 
 Use `typeName(value)` to obtain the concrete debug name of a value's type.
@@ -2098,7 +2094,7 @@ Xray has no lifetime syntax and no borrow-checker annotations. Ownership is none
 
 #### 2.14.1 Ownership roots
 
-An **ownership root** is the entry point of a heap object graph that can be reclaimed on its own. `Array`, `Map`, `Set`, `Json`, `structural object`, class instances, and a unique-result `Task<T>` each have their own root. Scalars, `string`, `Slice<T>`, raw pointers, value structs, and fixed arrays have **no** root: they are copied by value or they are borrowed views.
+An **ownership root** is the entry point of a heap object graph that can be reclaimed on its own. `Array`, `Map` (including `JSON.Object`), `Set`, composite `JSON.Value` arms, `structural object`, class instances, and a unique-result `Task<T>` each have their own root. Scalars, `string`, `Slice<T>`, raw pointers, value structs, and fixed arrays have **no** root: they are copied by value or they are borrowed views.
 
 Only a binding that owns a root can transfer ownership. Writing `move` on a rootless value is a compile error (`E0391`: `move is not meaningful for value type`).
 
@@ -2209,7 +2205,7 @@ Rejection reasons are named in the diagnostic so the failing axis is identifiabl
 
 #### 2.14.6 Value copies and managed fields
 
-A value struct is copied by value. So that "copied by value" is always the complete semantics, **struct field types are restricted**: only scalars, `string`, raw pointers, fixed arrays, and other value structs are allowed. `Array`, `Map`, `Set`, `Json`, and class instances **cannot** be struct fields (`E0352`).
+A value struct is copied by value. So that "copied by value" is always the complete semantics, **struct field types are restricted**: only scalars, `string`, raw pointers, fixed arrays, and other value structs are allowed. `Array`, `Map`, `Set`, `JSON.Value`, and class instances **cannot** be struct fields (`E0352`).
 
 A struct value copy therefore never carries a mutable managed field, and there is no shallow-versus-deep choice to make. The one managed field type is `string`, and `string` is immutable: sharing it produces no observable difference and does not affect the uniqueness decision.
 

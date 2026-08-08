@@ -1,4 +1,4 @@
-var obj: Json = { name: "Alice", age: 30 }
+var obj: JSON.Object = JSON.parseObject("{\"name\":\"Alice\",\"age\":30}")
 var staticSeen = 0
 for (k in obj) {
     if (k == "name") { staticSeen = staticSeen + 1 }
@@ -13,7 +13,7 @@ for (k, v in obj) {
 }
 print("static pairs=" + staticPairs.toString())
 
-var dyn: Json = {}
+var dyn: JSON.Object = #{}
 dyn["msg"] = "hello world"
 dyn["key"] = "a&b"
 

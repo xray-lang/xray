@@ -61,8 +61,8 @@ static inline bool xi_lower_mark_storage_allocation(XiValue *v, uint8_t storage_
         case XI_SET_NEW:
             xi_value_set_allocation_storage_mode(v, storage_mode);
             return true;
-        case XI_JSON_NEW:
-            xi_json_set_storage_mode(v, storage_mode);
+        case XI_OBJECT_NEW:
+            xi_object_set_storage_mode(v, storage_mode);
             return true;
         case XI_TUPLE_NEW:
             xi_tuple_set_storage_mode(v, storage_mode);
@@ -172,20 +172,8 @@ XR_FUNC void xi_lower_bind_class_field_id(XiLower *l, XiValue *access,
                                           const char *field_name);
 XR_FUNC void xi_lower_bind_json_codec_id(XiLower *l, XiValue *value, uint32_t source_node_id,
                                          uint8_t expected_kind);
-XR_FUNC void xi_lower_bind_json_dynamic_access_id(XiLower *l, XiValue *access,
-                                                  const char *field_name, uint32_t source_span_id,
-                                                  uint16_t field_ordinal, uint8_t access_kind);
-XR_FUNC bool xi_lower_json_dynamic_access_requires_dynamic_lookup(XiLower *l,
-                                                                  const char *field_name,
-                                                                  uint32_t source_span_id,
-                                                                  uint16_t field_ordinal,
-                                                                  uint8_t access_kind);
-XR_FUNC bool xi_lower_find_json_direct_field_ordinal(XiLower *l, const char *field_name,
-                                                     uint32_t source_span_id, uint8_t access_kind,
-                                                     uint16_t *out_ordinal);
 XR_FUNC void xi_lower_bind_object_access_id(XiLower *l, XiValue *access, const char *field_name,
-                                            uint32_t source_span_id, uint16_t field_ordinal,
-                                            uint8_t access_kind);
+                                            uint32_t source_span_id, uint8_t access_kind);
 XR_FUNC void xi_lower_bind_object_merge_id(XiLower *l, XiValue *merge, uint32_t source_node_id);
 XR_FUNC void xi_lower_bind_key_access_id(XiLower *l, XiValue *access, uint32_t source_span_id,
                                          uint32_t body_ordinal, uint8_t access_op);

@@ -1312,10 +1312,10 @@ TEST(cmp_closure_capture) {
 TEST(cmp_type_convert) {
     /* as cast: type matches -> value passes through */
     run_compare((CompareSpec) {
-        .source = "var x: Json = 42\n"
+        .source = "var x: JSON.Value = 42\n"
                   "var y = x as int\n"
                   "print(y)",
-        .label = "as cast: Json(int) as int succeeds",
+        .label = "as cast: JSON.Value(int) as int succeeds",
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
@@ -1325,10 +1325,10 @@ TEST(cmp_type_convert) {
 TEST(cmp_as_safe_match) {
     /* as? (safe cast) -> type matches -> value passes through */
     run_compare((CompareSpec) {
-        .source = "var x: Json = \"hello\"\n"
+        .source = "var x: JSON.Value = \"hello\"\n"
                   "var y = x as string?\n"
                   "print(y)",
-        .label = "as? safe cast: Json(string) as string? succeeds",
+        .label = "as? safe cast: JSON.Value(string) as string? succeeds",
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
@@ -1338,10 +1338,10 @@ TEST(cmp_as_safe_match) {
 TEST(cmp_as_safe_mismatch) {
     /* as? (safe cast) -> type mismatch -> null */
     run_compare((CompareSpec) {
-        .source = "var x: Json = \"hello\"\n"
+        .source = "var x: JSON.Value = \"hello\"\n"
                   "var y = x as int?\n"
                   "print(y)",
-        .label = "as? safe cast: Json(string) as int? -> null",
+        .label = "as? safe cast: JSON.Value(string) as int? -> null",
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
@@ -1351,10 +1351,10 @@ TEST(cmp_as_safe_mismatch) {
 TEST(cmp_as_unsafe_mismatch) {
     /* as (unsafe cast) -> type mismatch -> throw (both legacy and Xi throw) */
     run_compare((CompareSpec) {
-        .source = "var x: Json = \"hello\"\n"
+        .source = "var x: JSON.Value = \"hello\"\n"
                   "var y = x as int\n"
                   "print(y)",
-        .label = "as unsafe cast: Json(string) as int -> throw",
+        .label = "as unsafe cast: JSON.Value(string) as int -> throw",
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
@@ -1797,11 +1797,8 @@ TEST(cmp_class_method) {
 
 /* --- Struct literal --- */
 
-/* A bare object literal is an exact object shape, whose fields are reached with
- * '.' -- ['name'] indexing panics with E0402 (LANGUAGE_SPEC.md §2.4.7).
- * Keep this case on the structural-object path and use field access; the Json path,
- * where ['name'] is the equivalent spelling, is covered by
- * cmp_object_literal below. */
+/* A bare object literal is an exact object shape. Dot and static-string
+ * bracket access resolve to the same field ordinal. */
 TEST(cmp_struct_literal) {
     run_compare((CompareSpec) {
         .source = "var obj = { name: \"Alice\", age: 30 }\n"
@@ -2010,14 +2007,11 @@ TEST(cmp_set_literal) {
     });
 }
 
-/* Bracket access is the Json spelling of field access (LANGUAGE_SPEC.md
- * §2.4.7: `data["name"]` is equivalent to `data.name` for Json).  The
- * annotation is what opts this literal out of the exact object-shape default;
- * without it the bracket form panics with E0402, which the never-executed
- * comparison could not catch. */
+/* Static bracket access is the exact-object spelling of the same field
+ * ordinal selected by dot access. */
 TEST(cmp_object_literal) {
     run_compare((CompareSpec) {
-        .source = "var obj: Json = { name: \"alice\", age: 30 }\n"
+        .source = "var obj = { name: \"alice\", age: 30 }\n"
                   "print(obj[\"name\"])\n"
                   "print(obj[\"age\"])",
         .label = "object literal bracket access",

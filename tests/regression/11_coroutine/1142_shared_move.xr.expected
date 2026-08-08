@@ -1,5 +1,5 @@
 === Test shared ===
-{name: "test", value: 42}
+{value: 42, name: "test"}
 coro1: 42
 coro2: 84
 results: 42 84

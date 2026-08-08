@@ -116,7 +116,7 @@ fn test_for_in_empty_map() {
     assert_eq(count, 0)
 }
 
-// ===== Map / Json single-var iteration yields keys =====
+// ===== Map / JSON.Object single-var iteration yields keys =====
 
 @test
 fn test_for_in_map_single_var_yields_key() {
@@ -131,7 +131,7 @@ fn test_for_in_map_single_var_yields_key() {
 
 @test
 fn test_for_in_json_single_var_yields_key() {
-    var j: Json = {x: 1, y: 2, z: 3}
+    var j: JSON.Object = JSON.parseObject("{\"x\":1,\"y\":2,\"z\":3}")
     var keys: Array<string> = []
     for (k in j) {
         keys.push(k)

@@ -1,5 +1,5 @@
 // 1010_json_serialize_types.xr
-// Test: Json.stringify for Enum, DateTime, and non-serializable type error
+// Test: JSON.stringify for Enum, DateTime, and non-serializable type error
 
 import datetime
 
@@ -8,20 +8,20 @@ enum Color { Red, Green, Blue }
 @test
 fn test_stringify_enum() {
     var obj = { color: Color.Red }
-    var s = Json.stringify(obj)
+    var s = JSON.stringify(obj)
     assert_eq(s, "{\"color\":\"Red\"}")
 }
 
 @test
 fn test_stringify_enum_value_direct() {
-    var s = Json.stringify(Color.Blue)
+    var s = JSON.stringify(Color.Blue)
     assert_eq(s, "\"Blue\"")
 }
 
 @test
 fn test_stringify_datetime() {
     var dt = datetime.createUTC(2026, 4, 30, 9, 0, 0)
-    var s = Json.stringify(dt)
+    var s = JSON.stringify(dt)
     // ISO 8601 format
     assert(s.contains("2026"))
     assert(s.contains("04"))
@@ -32,7 +32,7 @@ fn test_stringify_datetime() {
 fn test_stringify_datetime_in_object() {
     var dt = datetime.createUTC(2026, 1, 15, 12, 30, 0)
     var obj = { created: dt, name: "test" }
-    var s = Json.stringify(obj)
+    var s = JSON.stringify(obj)
     assert(s.contains("\"created\""))
     assert(s.contains("2026"))
     assert(s.contains("\"name\":\"test\""))
@@ -44,7 +44,7 @@ fn test_stringify_non_serializable_throws() {
     var obj = { handler: f }
     var caught = false
     try {
-        Json.stringify(obj)
+        JSON.stringify(obj)
     } catch panic (e) {
         caught = true
         var msg = string(e)

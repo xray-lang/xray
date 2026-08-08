@@ -2,10 +2,10 @@ type Geo = { lat: float, verified: bool }
 type Address = { city: string, geo: Geo }
 type Profile = { name: string, address: Address }
 
-fn jsonDecodeDeepNestedObjectPlan() -> Json {
-    var data: Json = Json.parse("{\"name\":\"Dana\",\"address\":{\"city\":\"Hangzhou\",\"geo\":{\"lat\":30.25,\"verified\":true}}}")
-    var profile = Json.decode<Profile>(data)
-    return Json.encode(profile!)
+fn jsonDecodeDeepNestedObjectPlan() -> JSON.Value {
+    var data: JSON.Value = JSON.parseValue("{\"name\":\"Dana\",\"address\":{\"city\":\"Hangzhou\",\"geo\":{\"lat\":30.25,\"verified\":true}}}")
+    var profile = JSON.decode<Profile>(data)
+    return JSON.value(profile!)
 }
 
 print(jsonDecodeDeepNestedObjectPlan())

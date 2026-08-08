@@ -52,7 +52,7 @@ fn test_log_with_attrs() {
 
 @test
 fn test_log_json_format() {
-    log.setFormat(LogFormat.Json)
+    log.setFormat(LogFormat.JSON)
     log.info("json format test", "key", "value")
     log.setFormat(LogFormat.Text)
 }

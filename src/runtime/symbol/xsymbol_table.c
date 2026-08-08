@@ -407,7 +407,7 @@ static SymbolId symbol_lookup_unlocked(XrSymbolTable *table, const char *name) {
 }
 
 /* Registration is isolate-shared and reachable from parallel worker threads
- * (dynamic Json keys → xr_json_set_by_key → here), so it serializes on the
+ * (dynamic Json keys → xr_object_instance_set_by_key → here), so it serializes on the
  * table write lock; the existing-symbol check re-runs under the lock so two
  * racing registrations of the same name agree on one id (R2-4). */
 SymbolId xr_symbol_register_in_table(XrSymbolTable *table, const char *name) {

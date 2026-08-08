@@ -28,7 +28,6 @@
 #include "../../shared/xr_json_type.h"
 #include "../../shared/xr_scalar_type.h"
 #include "../../shared/xr_conversion.h"
-#include "../../shared/xobject_row.h"
 
 /* ========== XrRep - Machine Representation ========== */
 /*
@@ -132,7 +131,7 @@ static inline bool xr_kind_is_reference_counted(XrTypeKind k) {
     }
 }
 static inline bool xr_kind_has_object_shape(XrTypeKind k) {
-    return k == XR_KIND_STRUCT_OBJECT || k == XR_KIND_JSON;
+    return k == XR_KIND_STRUCT_OBJECT;
 }
 static inline bool xr_kind_is_object_like(XrTypeKind k) {
     return xr_kind_has_object_shape(k) || k == XR_KIND_INSTANCE || k == XR_KIND_MAP;
@@ -199,16 +198,13 @@ typedef enum XrViewReturnSourceKind {
     XR_VIEW_RETURN_UNKNOWN,
 } XrViewReturnSourceKind;
 
-// Object-shape metadata shared by structural and Json object types. Row
-// compatibility and runtime Json extension are deliberately orthogonal.
+// Compile-time metadata for exact structural object types.
 typedef struct XrObjectType {
-    const char **field_names;       // Field names array
-    XrType **field_types;           // Field types array (parallel to names)
-    bool *field_readonly;           // Per-field readonly flags (optional)
-    int field_count;                // Number of fields
-    const char *type_name;          // NULL for anonymous, name for type alias
-    XrObjectRowMode row_mode;       // structural assignment relation
-    bool allows_runtime_extension;  // Json-only dynamic field transition
+    const char **field_names;  // Field names array
+    XrType **field_types;      // Field types array (parallel to names)
+    bool *field_readonly;      // Per-field readonly flags (optional)
+    int field_count;           // Number of fields
+    const char *type_name;     // NULL for anonymous, name for type alias
 } XrObjectType;
 
 // Type structure
@@ -469,6 +465,15 @@ static inline bool xr_type_is_runtime_managed(const XrType *t) {
 #define XR_TYPE_HAS_OBJECT_SHAPE(t) ((t) && xr_kind_has_object_shape((t)->kind))
 #define XR_TYPE_IS_TYPE_PARAM(t) ((t)->kind == XR_KIND_TYPE_PARAM)
 #define XR_TYPE_IS_TUPLE(t) ((t)->kind == XR_KIND_TUPLE)
+
+/* JSON.Object is a pure alias, not a nominal wrapper. Recognizing the exact
+ * Map instantiation here gives diagnostics and formatting one canonical public
+ * spelling while type identity remains Map<string, JSON.Value>. */
+static inline bool xr_type_is_json_object(const XrType *t) {
+    return t && t->kind == XR_KIND_MAP && t->map.key_type && t->map.value_type &&
+           t->map.key_type->kind == XR_KIND_STRING && !t->map.key_type->is_nullable &&
+           t->map.value_type->kind == XR_KIND_JSON && !t->map.value_type->is_nullable;
+}
 // Unit type is the canonical "no meaningful value" type for functions
 // returning nothing. Spelled `()` in user syntax (0-arity tuple literal),
 // stored internally as a dedicated XR_KIND_UNIT kind for fast dispatch.
@@ -790,10 +795,7 @@ XR_FUNC XrType *xr_type_new_json(XrVMRuntime *X);
  * the Json value domain. This is deliberately narrower than encodability. */
 XR_FUNC bool xr_type_is_json_value(const XrType *type);
 XR_FUNC XrType *xr_type_new_struct_object_with_fields(XrVMRuntime *X, const char **names,
-                                                      XrType **types, int count,
-                                                      XrObjectRowMode row_mode);
-XR_FUNC XrType *xr_type_new_json_with_fields(XrVMRuntime *X, const char **names, XrType **types,
-                                             int count, bool allows_runtime_extension);
+                                                      XrType **types, int count);
 XR_FUNC void xr_type_set_object_field_readonly(XrVMRuntime *X, XrType *type, const bool *readonly,
                                                int count);
 XR_FUNC void xr_type_set_object_type_name(XrVMRuntime *X, XrType *type, const char *name);
@@ -888,33 +890,26 @@ static inline bool xr_type_intrinsically_includes_null(const XrType *t) {
     return t && t->kind == XR_KIND_JSON;
 }
 
-static inline bool xr_type_object_row_is_exact(const XrType *type) {
-    return type && XR_TYPE_IS_STRUCT_OBJECT(type) && type->object.row_mode == XR_OBJECT_ROW_EXACT;
+static inline bool xr_type_is_exact_struct_object(const XrType *type) {
+    return type && XR_TYPE_IS_STRUCT_OBJECT(type);
 }
 
 static inline bool xr_type_object_fields_are_closed(const XrType *type) {
-    if (!XR_TYPE_HAS_OBJECT_SHAPE(type))
-        return false;
-    return XR_TYPE_IS_STRUCT_OBJECT(type) || !type->object.allows_runtime_extension;
+    return XR_TYPE_IS_STRUCT_OBJECT(type);
 }
 
 static inline bool xr_type_object_accepts_extra_fields(const XrType *type) {
-    if (!XR_TYPE_HAS_OBJECT_SHAPE(type))
-        return false;
-    if (XR_TYPE_IS_STRUCT_OBJECT(type))
-        return type->object.row_mode == XR_OBJECT_ROW_OPEN;
-    return type->object.allows_runtime_extension;
+    (void) type;
+    return false;
 }
 
-// Json is a closed data-exchange value domain. External Xray heap values do
-// not flow into it implicitly; use Json.encode at that boundary. Json literal
-// contexts are handled by the analyzer by typing nested array/object literals
-// as Json directly.
+// JSON.Value is a closed data-exchange value domain. Scalars widen implicitly;
+// composite Xray values cross through JSON.value so encoding stays explicit.
 static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
     if (!target || !source)
         return false;
 
-    if (target->kind == XR_KIND_JSON && target->object.allows_runtime_extension) {
+    if (target->kind == XR_KIND_JSON) {
         switch (source->kind) {
             case XR_KIND_JSON:
             case XR_KIND_UNKNOWN:
@@ -933,7 +928,7 @@ static inline bool xr_is_json_coercion(XrType *target, XrType *source) {
         return false;
     if (xr_kind_is_primitive(target->kind))
         return true;
-    if (target->kind == XR_KIND_JSON && target->object.allows_runtime_extension)
+    if (target->kind == XR_KIND_JSON)
         return true;
     // Union of Json-compatible types.
     if (target->kind == XR_KIND_UNION) {

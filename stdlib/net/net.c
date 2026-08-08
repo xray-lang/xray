@@ -1849,7 +1849,7 @@ static XrValue net_bidi_result_object(XrVMRuntime *X, NetBidiWaitState *state) {
     XrClass *cls = xr_stdlib_object_shape_class_get(X, "net", "__CopyBidirectionalResult");
     if (!cls)
         return XR_NULL_VAL;
-    XrJson *object = xr_json_new_with_class(xr_current_coro(X), cls);
+    XrObjectInstance *object = xr_object_instance_new_with_class(xr_current_coro(X), cls);
     if (!object)
         return XR_NULL_VAL;
     xr_instance_set_dynamic_field(
@@ -1858,7 +1858,7 @@ static XrValue net_bidi_result_object(XrVMRuntime *X, NetBidiWaitState *state) {
     xr_instance_set_dynamic_field(
         X, object, 1,
         xr_int((xr_Integer) atomic_load_explicit(&state->shared->ba, memory_order_acquire)));
-    return xr_json_value(object);
+    return xr_object_instance_value(object);
 }
 
 static XrCFuncResult net_bidi_wait_step(XrVMRuntime *X, NetBidiWaitState *state, XrValue *result) {
@@ -2634,21 +2634,25 @@ static XrCFuncResult net_recv_from_step(XrVMRuntime *X, NetRecvFromState *state,
 
         // Build UdpPacket handle: { data: string, host: string, port: int }
         // Flat layout — direct .field access instead of .addr.host / .addr.port.
-        XrJson *json = xr_json_new(xr_current_coro(X));
+        XrClass *packet_class = xr_stdlib_object_shape_class_get(X, "net", "__UdpPacket");
+        XrObjectInstance *json =
+            packet_class ? xr_object_instance_new_with_class(xr_current_coro(X), packet_class)
+                         : NULL;
         if (!json) {
             xr_free(state);
             *result = XR_NULL_VAL;
             return XR_CFUNC_DONE;
         }
-        xr_json_set_by_key(X, json, "data",
-                           xr_string_value(xr_string_intern(X, g_udp_recv_buf, n, 0)));
-        xr_json_set_by_key(X, json, "host",
-                           xr_string_value(xr_string_intern(X, g_udp_recv_addr.host,
-                                                            strlen(g_udp_recv_addr.host), 0)));
-        xr_json_set_by_key(X, json, "port", xr_int(g_udp_recv_addr.port));
+        xr_object_instance_set_by_key(X, json, "data",
+                                      xr_string_value(xr_string_intern(X, g_udp_recv_buf, n, 0)));
+        xr_object_instance_set_by_key(
+            X, json, "host",
+            xr_string_value(
+                xr_string_intern(X, g_udp_recv_addr.host, strlen(g_udp_recv_addr.host), 0)));
+        xr_object_instance_set_by_key(X, json, "port", xr_int(g_udp_recv_addr.port));
 
         xr_free(state);
-        *result = xr_json_value(json);
+        *result = xr_object_instance_value(json);
         return XR_CFUNC_DONE;
     }
 

@@ -389,7 +389,7 @@ static bool class_name_is_generated_plain_class(const char *name) {
 
 /* Runtime-populated builtin type table (indexed by XrTypeId). */
 static XaBuiltinType native_builtin_types[XR_TID_COUNT];
-static XaBuiltinType compiler_builtin_json;
+static XaBuiltinType compiler_builtin_json_namespace;
 static XaBuiltinType compiler_builtin_corolocal;
 static xr_once_t native_types_once = XR_ONCE_INITIALIZER;
 static atomic_bool native_types_initialized = false;
@@ -421,10 +421,10 @@ static void load_one_source(const char *source) {
             const char *display_name = NULL;
             XrTypeId tid = class_name_to_tid(class_name, &display_name);
 
-            if (strcmp(class_name, "Json") == 0) {
-                compiler_builtin_json.name = TYPE_NAME_JSON;
-                compiler_builtin_json.members = members;
-                compiler_builtin_json.member_count = member_count;
+            if (strcmp(class_name, "JSON") == 0) {
+                compiler_builtin_json_namespace.name = TYPE_NAME_JSON;
+                compiler_builtin_json_namespace.members = members;
+                compiler_builtin_json_namespace.member_count = member_count;
             } else if (tid != XR_TID_NULL) {
                 native_builtin_types[tid].name = display_name;
                 native_builtin_types[tid].members = members;
@@ -536,8 +536,8 @@ XR_FUNC const XaBuiltinType *xa_native_get_compiler_builtin_type(const char *nam
         xa_native_types_init();
     if (name && strcmp(name, "CoroLocal") == 0 && compiler_builtin_corolocal.members)
         return &compiler_builtin_corolocal;
-    if (name && strcmp(name, "Json") == 0 && compiler_builtin_json.members)
-        return &compiler_builtin_json;
+    if (name && strcmp(name, "JSON") == 0 && compiler_builtin_json_namespace.members)
+        return &compiler_builtin_json_namespace;
     return NULL;
 }
 
@@ -663,7 +663,7 @@ XR_FUNC int xa_native_verify_protocol(XrVMRuntime *X) {
         const bool is_json_surface = type_index < 0;
         const XrTypeId tid = is_json_surface ? XR_TID_OBJECT : (XrTypeId) type_index;
         const XaBuiltinType *bt =
-            is_json_surface ? &compiler_builtin_json : &native_builtin_types[type_index];
+            is_json_surface ? &compiler_builtin_json_namespace : &native_builtin_types[type_index];
         if (!bt->members || bt->member_count == 0)
             continue;
 
@@ -679,9 +679,7 @@ XR_FUNC int xa_native_verify_protocol(XrVMRuntime *X) {
 
             XrayCoreClasses *core = is_json_surface ? xr_isolate_get_core_classes(X) : NULL;
             XrClass *cls = is_json_surface
-                               ? (core ? ((mem && mem->is_static) ? core->jsonClass
-                                                                  : core->jsonInstanceMethodClass)
-                                       : NULL)
+                               ? (core && mem && mem->is_static ? core->jsonClass : NULL)
                                : xa_native_protocol_runtime_class(X, tid, mem);
             if (!cls) {
                 xr_log_warning("protocol", "native class '%s' has no runtime method table for %s",

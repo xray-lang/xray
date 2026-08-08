@@ -363,8 +363,8 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
             return;
         }
         case XR_TAG_PTR: {
-            if (xrt_is_json_object_value(v)) {
-                xrt_json_t *j = (xrt_json_t *) v.ptr;
+            if (xrt_is_struct_object_value(v)) {
+                xrt_object_t *j = (xrt_object_t *) v.ptr;
                 int64_t emitted = 0;
                 int64_t total = 0;
                 xrt_fmt_char(sb, '{');
@@ -380,25 +380,6 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
                     xrt_fmt_cstr(sb, name);
                     xrt_fmt_cstr(sb, ": ");
                     xrt_format_value(j->fields[i], sb, depth + 1);
-                    emitted++;
-                }
-                xrt_map_t *dynamic = j->dynamic_fields;
-                int64_t n_slots = dynamic ? (int64_t) dynamic->nentries : 0;
-                for (int64_t i = 0; i < n_slots; i++) {
-                    if (!xrt_map_slot_is_full(dynamic, i))
-                        continue;
-                    total++;
-                    if (emitted >= XRT_FORMAT_MAX_ELEMENTS)
-                        continue;
-                    if (emitted > 0)
-                        xrt_fmt_cstr(sb, ", ");
-                    XrValue key = xrt_map_slot_key(dynamic, i);
-                    if (XR_IS_STR(key))
-                        xrt_fmt_puts(sb, xr_str_data(key), (size_t) xr_str_len(key));
-                    else
-                        xrt_format_value(key, sb, 0);
-                    xrt_fmt_cstr(sb, ": ");
-                    xrt_format_value(xrt_map_slot_value(dynamic, i), sb, depth + 1);
                     emitted++;
                 }
                 if (total > emitted) {
@@ -459,7 +440,7 @@ static inline int xrt_value_kind_is_formattable_aggregate(XrValue v) {
         case XR_TAG_CLOSURE:
             return 1;
         case XR_TAG_PTR:
-            return v.ptr && (xrt_is_json_object_value(v) || v.heap_type == XR_TINSTANCE);
+            return v.ptr && (xrt_is_struct_object_value(v) || v.heap_type == XR_TINSTANCE);
         default:
             return 0;
     }
@@ -700,11 +681,9 @@ static inline int64_t xrt_typeof_id(XrValue v) {
  * answered by exact representability rather than a type-id compare — the id
  * side alone would report `int` for every integer and `float` for every
  * floating value. */
-/* Membership in the Json value domain -- the AOT mirror of the VM's
+/* Membership in the JSON.Value domain -- the AOT mirror of the VM's
  * xr_value_in_json_domain. The scalar forms are self-describing; the two
- * composite forms share their tag with values outside the domain, so each is
- * asked for its own provenance: the object for its shape's domain, the array
- * for the element type id it was built with. */
+ * composite forms use the canonical Map and JSON-element Array storage. */
 static inline int xrt_value_in_json_domain(XrValue v) {
     int64_t tid = xrt_typeof_id(v);
     switch (tid) {
@@ -712,8 +691,8 @@ static inline int xrt_value_in_json_domain(XrValue v) {
         case XR_TID_BOOL:
         case XR_TID_STRING:
             return 1;
-        case XR_TID_OBJECT:
-            return v.ptr && xrt_object_domain((const xrt_json_t *) v.ptr) == XRT_OBJECT_JSON;
+        case XR_TID_MAP:
+            return v.ptr != NULL;
         case XR_TID_ARRAY:
             return v.ptr && ((const xrt_array_t *) v.ptr)->elem_tid == XR_TID_JSON;
         default:

@@ -382,7 +382,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
-    {"cluster", "publish", "(topic: string, value: Json): bool", "Publish to topic", "cluster_publish_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
+    {"cluster", "publish", "(topic: string, value: JSON.Value): bool", "Publish to topic", "cluster_publish_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", "cluster_subscribe_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
     {"ws", "connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"ws", "send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 3, false},

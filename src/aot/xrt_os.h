@@ -552,10 +552,10 @@ static inline bool xrt_os_exec_buffer_append(char **buf, size_t *len, size_t *ca
 static inline XrValue xrt_os_exec_result(const char *stdout_buf, const char *stderr_buf,
                                          int64_t exit_code) {
     static const char *const fields[] = {"stdout", "stderr", "exitCode"};
-    XrValue obj = xrt_json_new_named(3, fields);
-    xrt_json_set_field(obj, 0, xrt_os_cstr_value(stdout_buf ? stdout_buf : ""));
-    xrt_json_set_field(obj, 1, xrt_os_cstr_value(stderr_buf ? stderr_buf : ""));
-    xrt_json_set_field(obj, 2, XR_FROM_INT(exit_code));
+    XrValue obj = xrt_struct_object_new_named(3, fields);
+    xrt_object_set_field(obj, 0, xrt_os_cstr_value(stdout_buf ? stdout_buf : ""));
+    xrt_object_set_field(obj, 1, xrt_os_cstr_value(stderr_buf ? stderr_buf : ""));
+    xrt_object_set_field(obj, 2, XR_FROM_INT(exit_code));
     return obj;
 }
 

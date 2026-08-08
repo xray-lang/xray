@@ -163,7 +163,6 @@ typedef struct TemplateStringNode {
 typedef struct ObjectLiteralNode {
     AstNode **keys;
     AstNode **values;
-    bool *computed;
     int count;
 } ObjectLiteralNode;
 

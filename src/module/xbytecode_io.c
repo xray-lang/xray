@@ -683,7 +683,6 @@ static bool bc_read_layout_table(BcReader *r) {
 #define BC_VAL_ENUM_TYPE 7
 #define BC_VAL_RUNE 8
 
-#define BC_SHAPE_JSON 1
 #define BC_SHAPE_STRUCT_OBJECT 2
 #define BC_SHAPE_JSON_DECODE_ROOT 3
 
@@ -729,8 +728,6 @@ static bool bc_write_dynamic_shape(BcWriter *w, XrValue val) {
     uint8_t kind = 0;
     if ((cls->flags & XR_CLASS_JSON_DECODE_ROOT) != 0) {
         kind = BC_SHAPE_JSON_DECODE_ROOT;
-    } else if (cls->builtin_kind == XR_BK_JSON) {
-        kind = BC_SHAPE_JSON;
     } else if (cls->builtin_kind == XR_BK_STRUCT_OBJECT) {
         kind = BC_SHAPE_STRUCT_OBJECT;
     } else {
@@ -1359,8 +1356,8 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
     uint32_t count = bc_get_u32(r);
     if (r->error != XR_BC_OK)
         return xr_null();
-    if (count > UINT16_MAX || (kind != BC_SHAPE_JSON && kind != BC_SHAPE_STRUCT_OBJECT &&
-                               kind != BC_SHAPE_JSON_DECODE_ROOT)) {
+    if (count > UINT16_MAX ||
+        (kind != BC_SHAPE_STRUCT_OBJECT && kind != BC_SHAPE_JSON_DECODE_ROOT)) {
         r->error = XR_BC_ERR_CORRUPT;
         return xr_null();
     }
@@ -1400,9 +1397,7 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
         }
         stable_type_keys[i] = bc_get_u64(r);
         shape_field_flags[i] = bc_get_u8(r);
-        if (r->error != XR_BC_OK ||
-            (shape_field_flags[i] &
-             ~(XR_OBJECT_SHAPE_FIELD_READONLY | XR_OBJECT_SHAPE_FIELD_OPTIONAL)) != 0) {
+        if (r->error != XR_BC_OK || (shape_field_flags[i] & ~XR_OBJECT_SHAPE_FIELD_READONLY) != 0) {
             if (r->error == XR_BC_OK)
                 r->error = XR_BC_ERR_CORRUPT;
             goto fail;
@@ -1416,25 +1411,19 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
 
     XrClass *cls = NULL;
     bool sealed = sealed_raw != 0;
-    if (kind == BC_SHAPE_JSON) {
-        cls = xr_class_build_json_chain(r->X, (const char *const *) names, (int) count,
-                                        stable_type_keys, shape_field_flags, sealed);
+    if (!sealed) {
+        r->error = XR_BC_ERR_CORRUPT;
+        cls = NULL;
     } else {
-        if (!sealed) {
-            r->error = XR_BC_ERR_CORRUPT;
-            cls = NULL;
-        } else {
-            cls = xr_class_build_struct_object_chain(
-                r->X, (const char *const *) names, json_value_kinds, (int) count,
-                json_struct_object_classes, json_decode_schemas, stable_type_keys,
-                shape_field_flags);
-            if (cls && kind == BC_SHAPE_JSON_DECODE_ROOT) {
-                if (count != 1) {
-                    r->error = XR_BC_ERR_CORRUPT;
-                    cls = NULL;
-                } else {
-                    cls->flags |= XR_CLASS_JSON_DECODE_ROOT;
-                }
+        cls = xr_class_build_struct_object_chain(
+            r->X, (const char *const *) names, json_value_kinds, (int) count,
+            json_struct_object_classes, json_decode_schemas, stable_type_keys, shape_field_flags);
+        if (cls && kind == BC_SHAPE_JSON_DECODE_ROOT) {
+            if (count != 1) {
+                r->error = XR_BC_ERR_CORRUPT;
+                cls = NULL;
+            } else {
+                cls->flags |= XR_CLASS_JSON_DECODE_ROOT;
             }
         }
     }
@@ -1611,9 +1600,11 @@ static bool *bc_collect_dynamic_shape_constants(XrProto *proto, uint32_t const_c
         XrInstruction inst = PROTO_CODE(proto, i);
         OpCode op = GET_OPCODE(inst);
         int kidx = -1;
-        if (op == OP_NEWJSON) {
+        if (op == OP_NEWOBJECT) {
             kidx = GETARG_B(inst);
-        } else if (op == OP_JSON_DECODE || op == OP_JSON_PARSE_TYPED) {
+        } else if (op == OP_JSON_DECODE || op == OP_JSON_DECODE_IGNORE ||
+                   op == OP_JSON_PARSE_TYPED || op == OP_JSON_PARSE_TYPED_IGNORE ||
+                   op == OP_JSON_PARSE_WITH_REST || op == OP_JSON_PARSE_WITH_REST_IGNORE) {
             kidx = GETARG_C(inst);
         }
         if (kidx >= 0 && (uint32_t) kidx < const_count) {

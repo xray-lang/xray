@@ -16,6 +16,7 @@
 
 #include "ws_internal.h"
 #include "../../stdlib/common.h"
+#include "../../stdlib/stdlib_cache.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
@@ -58,6 +59,19 @@ static XrValue ws_make_string(XrVMRuntime *X, const char *str, size_t len) {
     if (!s)
         return xr_null();
     return xr_string_value(s);
+}
+
+static XrObjectInstance *ws_shape_new(XrVMRuntime *X, const char *name) {
+    XrClass *cls = xr_stdlib_object_shape_class_get(X, "ws", name);
+    return cls ? xr_object_instance_new_with_class(xr_current_coro(X), cls) : NULL;
+}
+
+static XrObjectInstance *ws_conn_new(XrVMRuntime *X) {
+    return ws_shape_new(X, "WsConn");
+}
+
+static XrObjectInstance *ws_message_new(XrVMRuntime *X) {
+    return ws_shape_new(X, "WsMessage");
 }
 
 // Get raw data from XrString or Array<uint8>
@@ -111,7 +125,6 @@ typedef struct XrWsContext {
     SymbolId sym_error;
     SymbolId sym_state;
     SymbolId sym_url;
-    SymbolId sym_is_svr;
 
     // Class transitions (xr_class_build_json_chain) replace the previous
     // explicit shape cache; the runtime memoises identical field
@@ -133,7 +146,6 @@ static void ws_ctx_init_cache(XrVMRuntime *X, XrWsContext *ctx) {
     ctx->sym_error = xr_symbol_register_in_table(table, "error");
     ctx->sym_state = xr_symbol_register_in_table(table, "state");
     ctx->sym_url = xr_symbol_register_in_table(table, "url");
-    ctx->sym_is_svr = xr_symbol_register_in_table(table, "_isServer");
 }
 
 // Get or create per-isolate WebSocket context
@@ -296,13 +308,13 @@ typedef struct WsConnectState {
 static XrCFuncResult ws_connect_finish_ok(XrVMRuntime *X, WsConnectState *state, XrValue *result) {
     XrWsContext *ctx = get_ws_context(X);
     int id = store_ws(X, state->ws);
-    XrJson *r = xr_json_new(xr_current_coro(X));
+    XrObjectInstance *r = ws_conn_new(X);
     if (ctx) {
-        xr_json_set(X, r, ctx->sym_wsid, xr_int(id));
-        xr_json_set(X, r, ctx->sym_url, ws_make_string(X, state->url, state->url_len));
-        xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "open"));
+        xr_object_instance_set(X, r, ctx->sym_wsid, xr_int(id));
+        xr_object_instance_set(X, r, ctx->sym_url, ws_make_string(X, state->url, state->url_len));
+        xr_object_instance_set(X, r, ctx->sym_state, xrs_string_value_c(X, "open"));
     }
-    *result = xr_json_value(r);
+    *result = xr_object_instance_value(r);
     xr_free(state->url);
     xr_free(state);
     return XR_CFUNC_DONE;
@@ -312,13 +324,9 @@ static XrCFuncResult ws_connect_finish_ok(XrVMRuntime *X, WsConnectState *state,
 static XrCFuncResult ws_connect_finish_err(XrVMRuntime *X, WsConnectState *state, XrWsError err,
                                            XrValue *result) {
     XrWsContext *ctx = get_ws_context(X);
-    XrJson *r = xr_json_new(xr_current_coro(X));
-    if (ctx) {
-        xr_json_set(X, r, ctx->sym_wsid, xr_int(-1));
-        xr_json_set(X, r, ctx->sym_error, xrs_string_value_c(X, ws_error_string(err)));
-        xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "closed"));
-    }
-    *result = xr_json_value(r);
+    (void) ctx;
+    (void) err;
+    *result = xr_null();
     ws_free(state->ws);
     xr_free(state->url);
     xr_free(state);
@@ -388,19 +396,19 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
     config.url = url_copy;
 
     if (argc >= 2 && XR_IS_PTR(args[1])) {
-        XrJson *opts = (XrJson *) XR_TO_PTR(args[1]);
+        XrObjectInstance *opts = (XrObjectInstance *) XR_TO_PTR(args[1]);
         if (opts) {
             XrValue v;
-            v = xr_json_get_by_key(X, opts, "timeout");
+            v = xr_object_instance_get_by_key(X, opts, "timeout");
             if (XR_IS_INT(v))
                 config.connect_timeout_ms = (int) XR_TO_INT(v);
-            v = xr_json_get_by_key(X, opts, "pingInterval");
+            v = xr_object_instance_get_by_key(X, opts, "pingInterval");
             if (XR_IS_INT(v))
                 config.ping_interval_ms = (int) XR_TO_INT(v);
-            v = xr_json_get_by_key(X, opts, "pongTimeout");
+            v = xr_object_instance_get_by_key(X, opts, "pongTimeout");
             if (XR_IS_INT(v))
                 config.pong_timeout_ms = (int) XR_TO_INT(v);
-            v = xr_json_get_by_key(X, opts, "maxMessageSize");
+            v = xr_object_instance_get_by_key(X, opts, "maxMessageSize");
             if (XR_IS_INT(v))
                 config.max_message_size = (size_t) XR_TO_INT(v);
         }
@@ -408,11 +416,7 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
 
     XrWsError url_err = ws_url_validate(config.url);
     if (url_err != WS_OK) {
-        XrJson *r = xr_json_new(xr_current_coro(X));
-        xr_json_set(X, r, ctx->sym_wsid, xr_int(-1));
-        xr_json_set(X, r, ctx->sym_error, xrs_string_value_c(X, ws_error_string(url_err)));
-        xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "closed"));
-        *result = xr_json_value(r);
+        *result = xr_null();
         xr_free(url_copy);
         return XR_CFUNC_DONE;
     }
@@ -421,11 +425,7 @@ static XrCFuncResult ws_connect_yieldable(XrVMRuntime *X, XrValue *args, int arg
     xr_free(url_copy);
 
     if (!ws) {
-        XrJson *r = xr_json_new(xr_current_coro(X));
-        xr_json_set(X, r, ctx->sym_wsid, xr_int(-1));
-        xr_json_set(X, r, ctx->sym_error, xrs_string_value_c(X, "Failed to create WebSocket"));
-        xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "closed"));
-        *result = xr_json_value(r);
+        *result = xr_null();
         return XR_CFUNC_DONE;
     }
 
@@ -538,7 +538,7 @@ static XrCFuncResult ws_send_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
     }
 
     // Get connection
-    if (!xr_value_is_json(args[0])) {
+    if (!xr_value_has_object_shape(args[0])) {
         *result = xr_bool(false);
         return XR_CFUNC_DONE;
     }
@@ -549,8 +549,8 @@ static XrCFuncResult ws_send_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
         return XR_CFUNC_DONE;
     }
 
-    XrJson *conn = (XrJson *) XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
+    XrObjectInstance *conn = (XrObjectInstance *) XR_TO_PTR(args[0]);
+    XrValue id_val = xr_object_instance_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val)) {
         *result = xr_bool(false);
@@ -629,7 +629,7 @@ typedef struct WsRecvState {
 static XrValue make_recv_result(XrVMRuntime *X, XrWsContext *ctx, XrWebSocket *ws,
                                 XrWsMessage *msg) {
     XrCoroutine *coro = xr_current_coro(X);
-    XrJson *result = xr_json_new(coro);
+    XrObjectInstance *result = ws_message_new(X);
     if (!result) {
         if (msg)
             ws_message_free(msg);
@@ -664,11 +664,11 @@ static XrValue make_recv_result(XrVMRuntime *X, XrWsContext *ctx, XrWebSocket *w
         error_val = xrs_string_value_c(X, err_msg);
     }
 
-    xr_json_set(X, result, ctx ? ctx->sym_data : 0, data_val);
-    xr_json_set(X, result, ctx ? ctx->sym_binary : 0, xr_bool(is_binary));
-    xr_json_set(X, result, ctx ? ctx->sym_error : 0, error_val);
+    xr_object_instance_set(X, result, ctx ? ctx->sym_data : 0, data_val);
+    xr_object_instance_set(X, result, ctx ? ctx->sym_binary : 0, xr_bool(is_binary));
+    xr_object_instance_set(X, result, ctx ? ctx->sym_error : 0, error_val);
 
-    return xr_json_value(result);
+    return xr_object_instance_value(result);
 }
 
 // Forward declaration
@@ -682,9 +682,11 @@ static XrCFuncResult ws_recv_continue(XrVMRuntime *X, int status, XrValue resume
 
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         XrWsContext *ctx = get_ws_context(X);
-        XrJson *res = xr_json_new(xr_current_coro(X));
-        xr_json_set(X, res, ctx ? ctx->sym_error : 0, xrs_string_value_c(X, "Timeout"));
-        *result = xr_json_value(res);
+        XrObjectInstance *res = ws_message_new(X);
+        xr_object_instance_set(X, res, ctx ? ctx->sym_data : 0, xr_null());
+        xr_object_instance_set(X, res, ctx ? ctx->sym_binary : 0, xr_bool(false));
+        xr_object_instance_set(X, res, ctx ? ctx->sym_error : 0, xrs_string_value_c(X, "Timeout"));
+        *result = xr_object_instance_value(res);
         xr_free(state);
         return XR_CFUNC_DONE;
     }
@@ -740,7 +742,7 @@ static XrCFuncResult ws_recv_step(XrVMRuntime *X, WsRecvState *state, XrValue *r
  *   args[1]: timeout in milliseconds (optional, -1 = infinite)
  */
 static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, XrValue *result) {
-    if (argc < 1 || !xr_value_is_json(args[0])) {
+    if (argc < 1 || !xr_value_has_object_shape(args[0])) {
         *result = xr_null();
         return XR_CFUNC_ERROR;
     }
@@ -751,13 +753,16 @@ static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
         return XR_CFUNC_ERROR;
     }
 
-    XrJson *conn = (XrJson *) XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
+    XrObjectInstance *conn = (XrObjectInstance *) XR_TO_PTR(args[0]);
+    XrValue id_val = xr_object_instance_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val)) {
-        XrJson *res = xr_json_new(xr_current_coro(X));
-        xr_json_set(X, res, ctx->sym_error, xrs_string_value_c(X, "Invalid connection object"));
-        *result = xr_json_value(res);
+        XrObjectInstance *res = ws_message_new(X);
+        xr_object_instance_set(X, res, ctx->sym_data, xr_null());
+        xr_object_instance_set(X, res, ctx->sym_binary, xr_bool(false));
+        xr_object_instance_set(X, res, ctx->sym_error,
+                               xrs_string_value_c(X, "Invalid connection object"));
+        *result = xr_object_instance_value(res);
         return XR_CFUNC_DONE;
     }
 
@@ -765,9 +770,12 @@ static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
     XrWebSocket *ws = get_ws_from_ctx(ctx, id);
 
     if (!ws) {
-        XrJson *res = xr_json_new(xr_current_coro(X));
-        xr_json_set(X, res, ctx->sym_error, xrs_string_value_c(X, "Connection not found"));
-        *result = xr_json_value(res);
+        XrObjectInstance *res = ws_message_new(X);
+        xr_object_instance_set(X, res, ctx->sym_data, xr_null());
+        xr_object_instance_set(X, res, ctx->sym_binary, xr_bool(false));
+        xr_object_instance_set(X, res, ctx->sym_error,
+                               xrs_string_value_c(X, "Connection not found"));
+        *result = xr_object_instance_value(res);
         return XR_CFUNC_DONE;
     }
 
@@ -798,9 +806,11 @@ static XrCFuncResult ws_recv_yieldable(XrVMRuntime *X, XrValue *args, int argc, 
     // Slow path: no data available, allocate state and yield to kqueue
     WsRecvState *state = (WsRecvState *) xr_malloc(sizeof(WsRecvState));
     if (!state) {
-        XrJson *res = xr_json_new(xr_current_coro(X));
-        xr_json_set(X, res, ctx->sym_error, xrs_string_value_c(X, "Out of memory"));
-        *result = xr_json_value(res);
+        XrObjectInstance *res = ws_message_new(X);
+        xr_object_instance_set(X, res, ctx->sym_data, xr_null());
+        xr_object_instance_set(X, res, ctx->sym_binary, xr_bool(false));
+        xr_object_instance_set(X, res, ctx->sym_error, xrs_string_value_c(X, "Out of memory"));
+        *result = xr_object_instance_value(res);
         return XR_CFUNC_ERROR;
     }
 
@@ -824,11 +834,11 @@ static XrValue ws_close(XrVMRuntime *X, XrValue *args, int argc) {
     if (!ctx)
         return xr_bool(false);
 
-    if (!xr_value_is_json(args[0]))
+    if (!xr_value_has_object_shape(args[0]))
         return xr_bool(false);
 
-    XrJson *conn = (XrJson *) XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
+    XrObjectInstance *conn = (XrObjectInstance *) XR_TO_PTR(args[0]);
+    XrValue id_val = xr_object_instance_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val)) {
         return xr_bool(false);
@@ -873,8 +883,8 @@ static XrValue ws_close(XrVMRuntime *X, XrValue *args, int argc) {
     ws_free(ws);
     remove_ws(ctx, id);
 
-    xr_json_set(X, conn, ctx->sym_state, xrs_string_value_c(X, "closed"));
-    xr_json_set(X, conn, ctx->sym_wsid, xr_int(-1));
+    xr_object_instance_set(X, conn, ctx->sym_state, xrs_string_value_c(X, "closed"));
+    xr_object_instance_set(X, conn, ctx->sym_wsid, xr_int(-1));
 
     return xr_bool(true);
 }
@@ -885,7 +895,7 @@ static XrValue ws_close(XrVMRuntime *X, XrValue *args, int argc) {
  * Send ping frame.
  */
 static XrValue ws_ping(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1 || !xr_value_is_json(args[0])) {
+    if (argc < 1 || !xr_value_has_object_shape(args[0])) {
         return xr_bool(false);
     }
 
@@ -893,8 +903,8 @@ static XrValue ws_ping(XrVMRuntime *X, XrValue *args, int argc) {
     if (!ctx)
         return xr_bool(false);
 
-    XrJson *conn = (XrJson *) XR_TO_PTR(args[0]);
-    XrValue id_val = xr_json_get(X, conn, ctx->sym_wsid);
+    XrObjectInstance *conn = (XrObjectInstance *) XR_TO_PTR(args[0]);
+    XrValue id_val = xr_object_instance_get(X, conn, ctx->sym_wsid);
 
     if (!XR_IS_INT(id_val))
         return xr_bool(false);
@@ -925,15 +935,14 @@ static XrValue ws_wrap_server_conn(XrVMRuntime *X, XrWebSocket *ws, const char *
 
     int id = store_ws(X, ws);
 
-    XrJson *result = xr_json_new(xr_current_coro(X));
-    xr_json_set(X, result, ctx->sym_wsid, xr_int(id));
+    XrObjectInstance *result = ws_conn_new(X);
+    xr_object_instance_set(X, result, ctx->sym_wsid, xr_int(id));
     XrValue url_val =
         (url_str && url_len > 0) ? ws_make_string(X, url_str, url_len) : ws_make_string(X, "", 0);
-    xr_json_set(X, result, ctx->sym_url, url_val);
-    xr_json_set(X, result, ctx->sym_state, xrs_string_value_c(X, "open"));
-    xr_json_set(X, result, ctx->sym_is_svr, xr_bool(true));
+    xr_object_instance_set(X, result, ctx->sym_url, url_val);
+    xr_object_instance_set(X, result, ctx->sym_state, xrs_string_value_c(X, "open"));
 
-    return xr_json_value(result);
+    return xr_object_instance_value(result);
 }
 
 /* ========== WebSocket Server (Stackless) ========== */
@@ -1111,8 +1120,8 @@ static XrCFuncResult ws_conn_handler_done(XrVMRuntime *X, int status, XrValue re
     // Always close when handler exits (safe even if already closed)
     XrWsContext *ws_ctx = get_ws_context(X);
     if (ws_ctx && !XR_IS_NULL(ctx->conn)) {
-        XrJson *conn_obj = (XrJson *) XR_TO_PTR(ctx->conn);
-        XrValue id_val = xr_json_get(X, conn_obj, ws_ctx->sym_wsid);
+        XrObjectInstance *conn_obj = (XrObjectInstance *) XR_TO_PTR(ctx->conn);
+        XrValue id_val = xr_object_instance_get(X, conn_obj, ws_ctx->sym_wsid);
         if (XR_IS_INT(id_val)) {
             int id = (int) XR_TO_INT(id_val);
             XrWebSocket *w = get_ws_from_ctx(ws_ctx, id);

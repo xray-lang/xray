@@ -48,8 +48,8 @@ typedef enum XrStdlibVmMemberKind {
     XR_STDLIB_VM_MEMBER_SETTER = 5,
 } XrStdlibVmMemberKind;
 
-typedef XrValue (*XrStdlibVmFastpathMethodFn)(XrVMRuntime *isolate, XrValue self,
-                                              XrValue *args, int nargs);
+typedef XrValue (*XrStdlibVmFastpathMethodFn)(XrVMRuntime *isolate, XrValue self, XrValue *args,
+                                              int nargs);
 
 typedef struct XrStdlibVmFastpathClassEntry {
     const char *module;
@@ -67,6 +67,7 @@ typedef struct XrStdlibVmFastpathMethodEntry {
 } XrStdlibVmFastpathMethodEntry;
 
 extern void xr_stdlib_vm_fastpath_release_native(XrValue value);
+extern void xr_stdlib_vm_fastpath_retain_native(XrValue value);
 extern const XrHostedFragmentHostOps xr_stdlib_vm_fastpath_host_ops;
 extern const void *xr_stdlib_vm_fastpath_runtime_ops(void);
 extern void *xr_stdlib_vm_fastpath_current_coroutine(XrVMRuntime *isolate);
@@ -76,8 +77,7 @@ static XR_THREAD_LOCAL const XrHostedFragmentContext *g_stdlib_vm_fastpath_init_
 static bool g_stdlib_vm_fastpath_init_ok;
 
 static void stdlib_vm_fastpath_initialize_once(void) {
-    g_stdlib_vm_fastpath_init_ok =
-        xr_hosted_fragment_initialize(g_stdlib_vm_fastpath_init_context);
+    g_stdlib_vm_fastpath_init_ok = xr_hosted_fragment_initialize(g_stdlib_vm_fastpath_init_context);
 }
 
 static bool stdlib_vm_fastpath_ensure_initialized(XrVMRuntime *isolate) {
@@ -116,13 +116,28 @@ static void stdlib_hosted_proxy_body_destroy(void *raw_body) {
     }
 }
 
+static bool stdlib_hosted_proxy_body_deep_copy(XrCopyContext *ctx, XrInstance *src,
+                                               XrInstance *dst) {
+    (void) ctx;
+    XrStdlibHostedProxyBody *src_body = (XrStdlibHostedProxyBody *) xr_instance_native_body(src);
+    XrStdlibHostedProxyBody *dst_body = (XrStdlibHostedProxyBody *) xr_instance_native_body(dst);
+    if (!src_body || !dst_body || XR_IS_NULL(src_body->native_value) || !src_body->nominal_owner ||
+        !src_body->type_name)
+        return false;
+    xr_stdlib_vm_fastpath_retain_native(src_body->native_value);
+    dst_body->native_value = src_body->native_value;
+    dst_body->nominal_owner = src_body->nominal_owner;
+    dst_body->type_name = src_body->type_name;
+    return true;
+}
+
 static XrNativeBodyDesc g_stdlib_hosted_proxy_body_desc = {
     .body_size = sizeof(XrStdlibHostedProxyBody),
     .body_align = (uint16_t) _Alignof(XrStdlibHostedProxyBody),
-    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .copy_policy = XR_NATIVE_BODY_COPY_DEEP,
     .init = stdlib_hosted_proxy_body_init,
     .destroy = stdlib_hosted_proxy_body_destroy,
-    .deep_copy = NULL,
+    .deep_copy = stdlib_hosted_proxy_body_deep_copy,
 };
 
 static XrClassBuilder *stdlib_hosted_proxy_class_builder_new(XrVMRuntime *isolate,
@@ -130,8 +145,7 @@ static XrClassBuilder *stdlib_hosted_proxy_class_builder_new(XrVMRuntime *isolat
     XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
     if (!isolate || !core || !core->objectClass || !type_name)
         return NULL;
-    XrClassBuilder *builder =
-        xr_class_builder_new(isolate, type_name, core->objectClass);
+    XrClassBuilder *builder = xr_class_builder_new(isolate, type_name, core->objectClass);
     if (!builder)
         return NULL;
     xr_class_builder_set_flags(builder, XR_CLASS_FINAL | XR_CLASS_HAS_NATIVE_BODY);
@@ -139,8 +153,7 @@ static XrClassBuilder *stdlib_hosted_proxy_class_builder_new(XrVMRuntime *isolat
     return builder;
 }
 
-static bool stdlib_host_object_view(void *host, XrValue value,
-                                    XrHostedFragmentObjectView *out) {
+static bool stdlib_host_object_view(void *host, XrValue value, XrHostedFragmentObjectView *out) {
     (void) host;
     if (!out || !xr_value_is_instance(value))
         return false;
@@ -148,8 +161,7 @@ static bool stdlib_host_object_view(void *host, XrValue value,
     if (!instance || !instance->klass ||
         instance->klass->native_body != &g_stdlib_hosted_proxy_body_desc)
         return false;
-    XrStdlibHostedProxyBody *body =
-        (XrStdlibHostedProxyBody *) xr_instance_native_body(instance);
+    XrStdlibHostedProxyBody *body = (XrStdlibHostedProxyBody *) xr_instance_native_body(instance);
     if (!body || XR_IS_NULL(body->native_value) || !body->nominal_owner || !body->type_name)
         return false;
     out->nominal_owner = body->nominal_owner;
@@ -158,8 +170,8 @@ static bool stdlib_host_object_view(void *host, XrValue value,
     return true;
 }
 
-static XrValue stdlib_host_object_new(void *host, const char *nominal_owner,
-                                      const char *type_name, XrValue native_value) {
+static XrValue stdlib_host_object_new(void *host, const char *nominal_owner, const char *type_name,
+                                      XrValue native_value) {
     XrVMRuntime *isolate = (XrVMRuntime *) host;
     if (!isolate || !nominal_owner || !type_name || XR_IS_NULL(native_value) ||
         native_value.tag != XR_TAG_PTR || !native_value.ptr)
@@ -175,8 +187,8 @@ static XrValue stdlib_host_object_new(void *host, const char *nominal_owner,
     XrValue module_value = xr_module_import(isolate, nominal_owner);
     if (!xr_value_is_module(module_value))
         return xr_null();
-    XrValue class_value = xr_module_get_export(
-        isolate, xr_value_to_module(module_value), type_name);
+    XrValue class_value =
+        xr_module_get_export(isolate, xr_value_to_module(module_value), type_name);
     if (!xr_value_is_class(class_value))
         return xr_null();
     XrClass *proxy_class = xr_value_to_class(class_value);
@@ -185,8 +197,7 @@ static XrValue stdlib_host_object_new(void *host, const char *nominal_owner,
     XrInstance *instance = xr_instance_new(isolate, proxy_class);
     if (!instance)
         return xr_null();
-    XrStdlibHostedProxyBody *body =
-        (XrStdlibHostedProxyBody *) xr_instance_native_body(instance);
+    XrStdlibHostedProxyBody *body = (XrStdlibHostedProxyBody *) xr_instance_native_body(instance);
     if (!body)
         return xr_null();
     body->native_value = native_value;
@@ -195,8 +206,7 @@ static XrValue stdlib_host_object_new(void *host, const char *nominal_owner,
     return xr_value_from_instance(instance);
 }
 
-static bool stdlib_host_string_view(void *host, XrValue value,
-                                    XrHostedFragmentStringView *out) {
+static bool stdlib_host_string_view(void *host, XrValue value, XrHostedFragmentStringView *out) {
     (void) host;
     if (!out || !XR_IS_STRING(value))
         return false;
@@ -211,9 +221,8 @@ static bool stdlib_host_string_view(void *host, XrValue value,
 static XrValue stdlib_host_string_new_utf8(void *host, const char *data, size_t byte_length,
                                            size_t rune_length, uint32_t hash) {
     XrVMRuntime *isolate = (XrVMRuntime *) host;
-    XrString *string = isolate
-                           ? xr_string_new_valid_utf8(isolate, data, byte_length, rune_length)
-                           : NULL;
+    XrString *string =
+        isolate ? xr_string_new_valid_utf8(isolate, data, byte_length, rune_length) : NULL;
     if (!string)
         return xr_null();
     if (hash != 0)
@@ -231,8 +240,8 @@ static XrValue stdlib_host_error_new_utf8(void *host, int32_t code, const char *
                               message ? message : "");
 }
 
-static XrValue stdlib_host_enum_new(void *host, const char *module_name,
-                                    const char *enum_name, const char *member_name,
+static XrValue stdlib_host_enum_new(void *host, const char *module_name, const char *enum_name,
+                                    const char *member_name,
                                     const XrHostedFragmentValueView *payload_views,
                                     uint32_t payload_count) {
     XrVMRuntime *isolate = (XrVMRuntime *) host;
@@ -242,8 +251,7 @@ static XrValue stdlib_host_enum_new(void *host, const char *module_name,
     XrValue module_value = xr_module_import(isolate, module_name);
     if (!xr_value_is_module(module_value))
         return xr_null();
-    XrValue type_value = xr_module_get_export(
-        isolate, xr_value_to_module(module_value), enum_name);
+    XrValue type_value = xr_module_get_export(isolate, xr_value_to_module(module_value), enum_name);
     if (!XR_IS_ENUM_TYPE(type_value))
         return xr_null();
     XrEnumType *type = XR_TO_ENUM_TYPE(type_value);
@@ -271,8 +279,8 @@ static XrValue stdlib_host_enum_new(void *host, const char *module_name,
         }
         if (view->kind == XR_HOSTED_FRAGMENT_VALUE_STRING_UTF8 &&
             (view->data || view->byte_length == 0)) {
-            XrString *string = xr_string_new(isolate, view->data ? view->data : "",
-                                             view->byte_length);
+            XrString *string =
+                xr_string_new(isolate, view->data ? view->data : "", view->byte_length);
             if (string) {
                 payloads[materialized] = xr_string_value(string);
                 continue;
@@ -282,13 +290,12 @@ static XrValue stdlib_host_enum_new(void *host, const char *module_name,
     }
     if (materialized != payload_count)
         return xr_null();
-    XrEnumAggregateValue *value = xr_enum_adt_construct(
-        isolate, type, member_index, payloads, (int) payload_count);
+    XrEnumAggregateValue *value =
+        xr_enum_adt_construct(isolate, type, member_index, payloads, (int) payload_count);
     return value ? XR_FROM_PTR(value) : xr_null();
 }
 
-static bool stdlib_host_enum_view(void *host, XrValue value,
-                                  XrHostedFragmentEnumView *out) {
+static bool stdlib_host_enum_view(void *host, XrValue value, XrHostedFragmentEnumView *out) {
     XrVMRuntime *isolate = (XrVMRuntime *) host;
     if (!isolate || !out || !xr_value_is_enum_aggregate(value))
         return false;
@@ -325,8 +332,7 @@ static bool stdlib_host_enum_view(void *host, XrValue value,
     return out->nominal_owner && out->enum_name && out->member_name;
 }
 
-static bool stdlib_host_array_view(void *host, XrValue value,
-                                   XrHostedFragmentArrayView *out) {
+static bool stdlib_host_array_view(void *host, XrValue value, XrHostedFragmentArrayView *out) {
     (void) host;
     if (!out || !XR_IS_ARRAY(value) || !value.ptr)
         return false;
@@ -339,8 +345,7 @@ static bool stdlib_host_array_view(void *host, XrValue value,
     return true;
 }
 
-static bool stdlib_host_array_get(void *host, XrValue value, uint64_t index,
-                                  XrValue *out) {
+static bool stdlib_host_array_get(void *host, XrValue value, uint64_t index, XrValue *out) {
     (void) host;
     if (!out || !XR_IS_ARRAY(value) || !value.ptr || index > (uint64_t) INT_MAX)
         return false;
@@ -355,16 +360,14 @@ static XrValue stdlib_host_array_new(void *host, uint64_t length, uint8_t elem_t
     (void) host;
     if (length > (uint64_t) INT_MAX || elem_type >= XR_ELEM_COUNT)
         return xr_null();
-    XrArray *array = xr_array_with_capacity_typed(
-        NULL, (int) length, (XrArrayElemType) elem_type);
+    XrArray *array = xr_array_with_capacity_typed(NULL, (int) length, (XrArrayElemType) elem_type);
     if (!array)
         return xr_null();
     array->length = (int32_t) length;
     return xr_value_from_array(array);
 }
 
-static bool stdlib_host_array_set(void *host, XrValue value, uint64_t index,
-                                  XrValue element) {
+static bool stdlib_host_array_set(void *host, XrValue value, uint64_t index, XrValue element) {
     (void) host;
     if (!XR_IS_ARRAY(value) || !value.ptr || index > (uint64_t) INT_MAX)
         return false;
@@ -440,14 +443,15 @@ XrValue xr_stdlib_vm_fastpath_handle_signal(XrVMRuntime *isolate, const char *sy
              "%s hosted fragment rejected the call (status=%u, argument=%u)",
              symbol ? symbol : "stdlib", signal ? signal->status : UINT32_MAX,
              signal ? signal->argument_index : UINT32_MAX);
-    xr_vm_set_pending_error(isolate,
-                            xr_panic_info_new(isolate, XR_ERR_TYPE_MISMATCH, message));
+    xr_vm_set_pending_error(isolate, xr_panic_info_new(isolate, XR_ERR_TYPE_MISMATCH, message));
     return xr_null();
 }
 
-XrCFuncResult xr_stdlib_vm_fastpath_handle_yieldable_signal(
-    XrVMRuntime *isolate, const char *symbol, const XrHostedFragmentSignal *signal,
-    XrContinuation continuation, XrValue value, XrValue *result) {
+XrCFuncResult xr_stdlib_vm_fastpath_handle_yieldable_signal(XrVMRuntime *isolate,
+                                                            const char *symbol,
+                                                            const XrHostedFragmentSignal *signal,
+                                                            XrContinuation continuation,
+                                                            XrValue value, XrValue *result) {
     if (!isolate || !signal || !result)
         return XR_CFUNC_ERROR;
     switch ((XrHostedFragmentStatus) signal->status) {
@@ -465,9 +469,8 @@ XrCFuncResult xr_stdlib_vm_fastpath_handle_yieldable_signal(
                 (void) xr_stdlib_vm_fastpath_handle_signal(isolate, symbol, signal);
                 return XR_CFUNC_ERROR;
             }
-            return signal->suspend_kind == XR_HOSTED_FRAGMENT_SUSPEND_BLOCKED
-                       ? XR_CFUNC_BLOCKED
-                       : XR_CFUNC_YIELD;
+            return signal->suspend_kind == XR_HOSTED_FRAGMENT_SUSPEND_BLOCKED ? XR_CFUNC_BLOCKED
+                                                                              : XR_CFUNC_YIELD;
         case XR_HOSTED_FRAGMENT_INVALID_CALL:
         default:
             (void) xr_stdlib_vm_fastpath_handle_signal(isolate, symbol, signal);
@@ -485,16 +488,13 @@ _Static_assert(XR_STDLIB_VM_FASTPATH_GENERATED_ABI_VERSION == XR_HOSTED_OBJECT_A
 #endif
 
 static bool stdlib_hosted_proxy_install_class(XrVMRuntime *isolate, XrModule *module,
-                                              const char *module_name,
-                                              const char *type_name) {
-    XrClassBuilder *builder =
-        stdlib_hosted_proxy_class_builder_new(isolate, type_name);
+                                              const char *module_name, const char *type_name) {
+    XrClassBuilder *builder = stdlib_hosted_proxy_class_builder_new(isolate, type_name);
     if (!builder)
         return false;
     for (size_t i = 0; i < XR_STDLIB_VM_FASTPATH_GENERATED_METHOD_COUNT; i++) {
         const XrStdlibVmFastpathMethodEntry *entry = &g_stdlib_vm_fastpath_methods[i];
-        if (strcmp(entry->module, module_name) != 0 ||
-            strcmp(entry->type_name, type_name) != 0)
+        if (strcmp(entry->module, module_name) != 0 || strcmp(entry->type_name, type_name) != 0)
             continue;
         int rc = -1;
         char accessor_name[256];
@@ -502,43 +502,40 @@ static bool stdlib_hosted_proxy_install_class(XrVMRuntime *isolate, XrModule *mo
             case XR_STDLIB_VM_MEMBER_CONSTRUCTOR:
                 rc = entry->yieldable_entry
                          ? xr_class_builder_add_yieldable_method(
-                               builder, "call", entry->yieldable_entry,
-                               entry->parameter_count, XMETHOD_FLAG_STATIC)
-                         : xr_class_builder_add_static_method(
-                               builder, "call", entry->entry, entry->parameter_count, 0);
+                               builder, "call", entry->yieldable_entry, entry->parameter_count,
+                               XMETHOD_FLAG_STATIC)
+                         : xr_class_builder_add_static_method(builder, "call", entry->entry,
+                                                              entry->parameter_count, 0);
                 break;
             case XR_STDLIB_VM_MEMBER_METHOD:
                 rc = entry->yieldable_entry
-                         ? xr_class_builder_add_yieldable_method(
-                               builder, entry->member, entry->yieldable_entry,
-                               entry->parameter_count, 0)
-                         : xr_class_builder_add_method(
-                               builder, entry->member, entry->entry,
-                               entry->parameter_count, 0);
+                         ? xr_class_builder_add_yieldable_method(builder, entry->member,
+                                                                 entry->yieldable_entry,
+                                                                 entry->parameter_count, 0)
+                         : xr_class_builder_add_method(builder, entry->member, entry->entry,
+                                                       entry->parameter_count, 0);
                 break;
             case XR_STDLIB_VM_MEMBER_STATIC:
                 rc = entry->yieldable_entry
                          ? xr_class_builder_add_yieldable_method(
                                builder, entry->member, entry->yieldable_entry,
                                entry->parameter_count, XMETHOD_FLAG_STATIC)
-                         : xr_class_builder_add_static_method(
-                               builder, entry->member, entry->entry,
-                               entry->parameter_count, 0);
+                         : xr_class_builder_add_static_method(builder, entry->member, entry->entry,
+                                                              entry->parameter_count, 0);
                 break;
             case XR_STDLIB_VM_MEMBER_GETTER:
             case XR_STDLIB_VM_MEMBER_SETTER: {
                 const char *prefix = entry->kind == XR_STDLIB_VM_MEMBER_GETTER ? "get:" : "set:";
-                int count = snprintf(accessor_name, sizeof(accessor_name), "%s%s", prefix,
-                                     entry->member);
+                int count =
+                    snprintf(accessor_name, sizeof(accessor_name), "%s%s", prefix, entry->member);
                 if (count <= 0 || (size_t) count >= sizeof(accessor_name))
                     break;
                 rc = entry->yieldable_entry
-                         ? xr_class_builder_add_yieldable_method(
-                               builder, accessor_name, entry->yieldable_entry,
-                               entry->parameter_count, 0)
-                         : xr_class_builder_add_method(
-                               builder, accessor_name, entry->entry,
-                               entry->parameter_count, 0);
+                         ? xr_class_builder_add_yieldable_method(builder, accessor_name,
+                                                                 entry->yieldable_entry,
+                                                                 entry->parameter_count, 0)
+                         : xr_class_builder_add_method(builder, accessor_name, entry->entry,
+                                                       entry->parameter_count, 0);
                 break;
             }
             default:
@@ -554,8 +551,8 @@ static bool stdlib_hosted_proxy_install_class(XrVMRuntime *isolate, XrModule *mo
         xr_class_builder_destroy(builder);
         return false;
     }
-    return xr_module_set_initializing_export(
-        isolate, module, type_name, xr_value_from_class(proxy), true);
+    return xr_module_set_initializing_export(isolate, module, type_name, xr_value_from_class(proxy),
+                                             true);
 }
 
 size_t xr_stdlib_vm_fastpath_count(void) {
@@ -583,13 +580,12 @@ bool xr_stdlib_vm_fastpath_install(XrVMRuntime *isolate, XrModule *module,
         return false;
     if (!stdlib_vm_fastpath_ensure_initialized(isolate))
         return false;
-    xr_runtime_core_set_aot_native_value_release(
-        xr_isolate_get_runtime_core(isolate), xr_stdlib_vm_fastpath_release_native);
+    xr_runtime_core_set_aot_native_value_release(xr_isolate_get_runtime_core(isolate),
+                                                 xr_stdlib_vm_fastpath_release_native);
     for (size_t i = 0; i < XR_STDLIB_VM_FASTPATH_GENERATED_CLASS_COUNT; i++) {
         const XrStdlibVmFastpathClassEntry *entry = &g_stdlib_vm_fastpath_classes[i];
         if (strcmp(entry->module, module_name) == 0 &&
-            !stdlib_hosted_proxy_install_class(
-                isolate, module, module_name, entry->type_name))
+            !stdlib_hosted_proxy_install_class(isolate, module, module_name, entry->type_name))
             return false;
     }
     for (size_t i = 0; i < XR_STDLIB_VM_FASTPATH_GENERATED_COUNT; i++) {
@@ -598,14 +594,14 @@ bool xr_stdlib_vm_fastpath_install(XrVMRuntime *isolate, XrModule *module,
             return false;
         if (strcmp(entry->module, module_name) != 0)
             continue;
-        XrCFunction *function = entry->yieldable_entry
-                                   ? xr_vm_yieldable_cfunction_new(
-                                         isolate, entry->yieldable_entry, entry->member)
-                                   : xr_vm_cfunction_new(isolate, entry->entry, entry->member);
+        XrCFunction *function =
+            entry->yieldable_entry
+                ? xr_vm_yieldable_cfunction_new(isolate, entry->yieldable_entry, entry->member)
+                : xr_vm_cfunction_new(isolate, entry->entry, entry->member);
         if (!function)
             return false;
-        if (!xr_module_set_initializing_export(
-                isolate, module, entry->member, xr_value_from_cfunction(function), true))
+        if (!xr_module_set_initializing_export(isolate, module, entry->member,
+                                               xr_value_from_cfunction(function), true))
             return false;
     }
     return true;

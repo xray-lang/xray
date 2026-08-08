@@ -1,1 +1,1 @@
-unknown derive target 'Debug'; expected Inspect, Json, Eq, Hash, or Clone
+unknown derive target 'Debug'; expected Inspect, JSON, Eq, Hash, or Clone

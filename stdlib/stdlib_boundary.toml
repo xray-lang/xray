@@ -27,126 +27,47 @@ error_channel = "vm_pending_error"
 ownership = "borrow_args_owned_result"
 unsupported_policy = "fail_closed"
 
+# `log` owns mutable module state shared by its variadic source implementation.
+# A hosted fragment has a separate generated-C module image, so exporting only
+# the fixed-arity control functions would split one logical logger into two
+# state stores. Keep the complete stateful surface on the canonical VM module
+# until hosted fragments can bind directly to VM-owned module slots.
+[[hosted_fragment_deferred]]
+symbol = "log.enableAsync"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.enableSource"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.flush"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.isEnabled"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.setFormat"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.setLevel"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.setOutput"
+reason = "stateful-module-slot-identity"
+
 [dynamic_audit]
 # These modules still expose fixed-shape dynamic APIs and must be migrated
 # by task 196 after the typed enum error-channel and 191/197 consumer prerequisites land.
 migration_modules = [
   "Coro", "CoroPool", "csv", "log", "toml", "url", "xml", "yaml",
 ]
-# Exact, reviewed dynamic boundaries live in the structured entries below.
-# New entries require a source API and all ownership/domain metadata.
-
-[[dynamic_allowlist]]
-symbol = "Logger.child"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured logging fields intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "Logger.debug"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured log arguments intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "Logger.error"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured log arguments intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "Logger.fatal"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured log arguments intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "Logger.info"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured log arguments intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "Logger.warn"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured log arguments intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "HttpResponse.json"
-direction = "output"
-domain = "json_wire_payload"
-reason = "Explicitly decodes an arbitrary HTTP response body as JSON"
-owner = "stdlib/http"
-review_task = "task-221"
-
-[[dynamic_allowlist]]
-symbol = "cluster.publish"
-direction = "input"
-domain = "json_wire_payload"
-reason = "Cluster publication intentionally serializes arbitrary Json values onto the wire"
-owner = "stdlib/cluster"
-review_task = "task-256"
-
-[[dynamic_allowlist]]
-symbol = "log.child"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured logging fields intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "log.debug"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured log arguments intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "log.error"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured log arguments intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "log.fatal"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured log arguments intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "log.info"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured log arguments intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
-
-[[dynamic_allowlist]]
-symbol = "log.warn"
-direction = "input"
-domain = "explicit_bridge"
-reason = "Structured log arguments intentionally accept arbitrary Json values"
-owner = "stdlib/log"
-review_task = "task-196"
+# Exact dynamic boundaries require a current source API and complete
+# ownership/domain metadata before an allowlist entry may be added.
 
 [[module]]
 name = "prelude"

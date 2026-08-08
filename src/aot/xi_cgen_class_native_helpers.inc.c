@@ -628,6 +628,12 @@ static void emit_class_native_storage_promoter_name(FILE *out, const char *prefi
     fprintf(out, "_promote_storage");
 }
 
+static void emit_class_native_runtime_clone_name(FILE *out, const char *prefix,
+                                                 const XiClassData *cd) {
+    emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
+    fprintf(out, "_runtime_clone");
+}
+
 static void emit_class_native_clone_name(FILE *out, const char *prefix, const XiClassData *cd) {
     emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
     fprintf(out, "_derived_clone");
@@ -807,6 +813,43 @@ static void emit_class_native_cloned_ref_field(XiCgenCtx *ctx, FILE *out, const 
                 cg_struct_field_c_type(cd->instance_layout, slot), (unsigned) slot);
     else
         fprintf(out, " = _field_clone_%u; }\n", (unsigned) slot);
+}
+
+static void emit_class_native_runtime_clone_helper(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                                   const char *prefix) {
+    if (!cd || !cd->instance_layout)
+        return;
+    fprintf(out, "static void *");
+    emit_class_native_runtime_clone_name(out, prefix, cd);
+    fprintf(out, "(void *obj) {\n");
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *src = (");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, "*)obj;\n");
+    fprintf(out, "    if (!src) return NULL;\n");
+    fprintf(out, "    uint16_t type_id = xrt_aot_class_type_id((const XrObjHeader *)src);\n");
+    fprintf(out, "    if (type_id == 0) return NULL;\n");
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *dst = (");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, "*)xrt_obj_alloc(type_id, (uint32_t)sizeof(*dst));\n");
+    for (uint16_t slot = 0; slot < cd->instance_layout->field_count; slot++) {
+        const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, slot);
+        if (cg_class_native_field_is_ref(field) &&
+            cg_class_native_field_plan_has_release_drop(ctx, cd, slot, field)) {
+            emit_class_native_cloned_ref_field(ctx, out, cd, slot);
+            continue;
+        }
+        fprintf(out, "    ");
+        emit_class_native_field_ref(ctx, out, cd, "dst", slot);
+        fprintf(out, " = ");
+        emit_class_native_field_ref(ctx, out, cd, "src", slot);
+        fprintf(out, ";\n");
+    }
+    fprintf(out, "    return dst;\n");
+    fprintf(out, "}\n");
 }
 
 static void emit_class_native_clone_helper(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
@@ -1053,7 +1096,7 @@ static bool emit_class_native_ensure_type_id_expr_depth(XiCgenCtx *ctx, FILE *ou
     return true;
 }
 
-/* Json.parse<T>/Json.decode<T> can be the only reference that keeps a class
+/* JSON.parse<T>/JSON.decode<T> can be the only reference that keeps a class
  * alive in generated C.  In that case the ordinary class-declaration init op
  * is absent, so materializing the decode schema must also initialize the
  * shared type-id slot.  The conditional preserves the one-registration
@@ -6401,6 +6444,7 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
         fprintf(out, "};\n");
     }
     emit_class_native_derived_eq_hash_callbacks(ctx, out, cd, prefix);
+    emit_class_native_runtime_clone_helper(ctx, out, cd, prefix);
     if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
         fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
         return;

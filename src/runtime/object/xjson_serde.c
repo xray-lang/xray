@@ -78,6 +78,9 @@ typedef struct {
     const char *end;
     const char *pos;
     int depth;
+    uint16_t typed_object_depth;
+    bool ignore_unknown_fields;
+    XrMap *top_level_rest;
 } JsonDirectParser;
 
 static void direct_skip_whitespace(JsonDirectParser *p) {
@@ -400,10 +403,10 @@ static bool direct_parse_object(JsonDirectParser *p, XrValue *out) {
         return false;
     p->pos++;
 
-    XrJson *json = xr_json_new(NULL);
-    if (!json)
+    XrMap *object = xr_map_new(NULL);
+    if (!object)
         return false;
-    XrValue obj_value = xr_json_value(json);
+    XrValue obj_value = xr_value_from_map(object);
 
     direct_skip_whitespace(p);
     if (p->pos < p->end && *p->pos == '}') {
@@ -413,20 +416,17 @@ static bool direct_parse_object(JsonDirectParser *p, XrValue *out) {
     }
 
     while (true) {
-        size_t key_len = 0;
-        char *key;
+        XrValue key = xr_null();
         XrValue val = xr_null();
         direct_skip_whitespace(p);
-        key = direct_parse_string_content(p, &key_len);
-        (void) key_len;
-        if (!key) {
+        if (!direct_parse_string(p, &key)) {
             direct_release_owned_value(obj_value);
             return false;
         }
 
         direct_skip_whitespace(p);
         if (p->pos >= p->end || *p->pos != ':') {
-            xr_free(key);
+            direct_release_owned_value(key);
             direct_release_owned_value(obj_value);
             return false;
         }
@@ -434,17 +434,11 @@ static bool direct_parse_object(JsonDirectParser *p, XrValue *out) {
 
         direct_skip_whitespace(p);
         if (!direct_parse_value(p, &val)) {
-            xr_free(key);
+            direct_release_owned_value(key);
             direct_release_owned_value(obj_value);
             return false;
         }
-        if (!xr_json_set_by_key(p->X, json, key, val)) {
-            xr_free(key);
-            direct_release_owned_value(val);
-            direct_release_owned_value(obj_value);
-            return false;
-        }
-        xr_free(key);
+        xr_map_set(object, key, val);
 
         direct_skip_whitespace(p);
         if (p->pos < p->end && *p->pos == '}') {
@@ -683,7 +677,7 @@ static const char *direct_expected_kind(uint8_t encoded_kind) {
         case XR_JSON_VALUE_STRING:
             return "string";
         case XR_JSON_VALUE_JSON:
-            return "Json";
+            return "JSON.Value";
         case XR_JSON_VALUE_STRUCT_OBJECT:
             return "object";
         case XR_JSON_VALUE_ARRAY:
@@ -696,7 +690,7 @@ static const char *direct_expected_kind(uint8_t encoded_kind) {
             return "object";
         case XR_JSON_VALUE_ANY:
         default:
-            return "supported Json value";
+            return "supported JSON value";
     }
 }
 
@@ -959,6 +953,8 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
     }
     p->pos++;
     p->depth++;
+    bool collect_rest = p->top_level_rest != NULL && p->typed_object_depth == 0;
+    p->typed_object_depth++;
 
     uint16_t field_count = (uint16_t) instance_fields;
     XrValue *values = (XrValue *) xr_malloc((size_t) field_count * sizeof(XrValue));
@@ -966,6 +962,7 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
     if (!values || !seen) {
         xr_free(values);
         xr_free(seen);
+        p->typed_object_depth--;
         p->depth--;
         direct_typed_error(p, error, path, "available memory", "out_of_memory");
         return false;
@@ -1001,9 +998,28 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
             if (field_index >= field_count)
                 field_index = -1;
             if (field_index < 0) {
-                ok = direct_skip_value(p);
-                if (!ok)
-                    direct_typed_error(p, error, path, "valid Json value", NULL);
+                if (collect_rest) {
+                    XrValue rest_value = xr_null();
+                    ok = direct_parse_value(p, &rest_value);
+                    if (ok) {
+                        XrString *rest_key = xr_string_intern(p->X, key, strlen(key), 0);
+                        if (!rest_key) {
+                            direct_release_owned_value(rest_value);
+                            ok = false;
+                        } else {
+                            xr_map_set(p->top_level_rest, xr_string_value(rest_key), rest_value);
+                        }
+                    }
+                } else if (p->ignore_unknown_fields) {
+                    ok = direct_skip_value(p);
+                } else {
+                    char field_path[160];
+                    snprintf(field_path, sizeof(field_path), "%s.%s", path, key);
+                    direct_typed_error(p, error, field_path, "declared field", "unknown");
+                    ok = false;
+                }
+                if (!ok && (!error || error->expected[0] == '\0'))
+                    direct_typed_error(p, error, path, "valid JSON.Value", NULL);
             } else if (seen[field_index]) {
                 char field_path[160];
                 snprintf(field_path, sizeof(field_path), "%s.%s", path, key);
@@ -1039,6 +1055,8 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
         for (uint16_t i = 0; i < field_count; i++) {
             if (seen[i])
                 continue;
+            if (xr_json_value_kind_is_nullable(target->fields[i].json_decode_schema.value_kind))
+                continue;
             char missing_path[160];
             snprintf(missing_path, sizeof(missing_path), "%s.%s", path,
                      target->fields[i].name ? target->fields[i].name : "?");
@@ -1051,7 +1069,7 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
     XrValue result = xr_null();
     if (ok) {
         XrInstance *object = (target->flags & XR_CLASS_DYNAMIC_LAYOUT)
-                                 ? (XrInstance *) xr_json_new_with_class(coro, target)
+                                 ? (XrInstance *) xr_object_instance_new_with_class(coro, target)
                                  : xr_instance_new(p->X, target);
         if (!object) {
             direct_typed_error(p, error, path, "available memory", "out_of_memory");
@@ -1059,10 +1077,10 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
         } else {
             result = XR_FROM_PTR(object);
             for (uint16_t i = 0; i < field_count; i++) {
-                bool stored =
-                    (target->flags & XR_CLASS_DYNAMIC_LAYOUT)
-                        ? xr_instance_set_dynamic_field_direct((XrJson *) object, i, values[i])
-                        : xr_instance_set_decoded_field(object, i, values[i]);
+                bool stored = (target->flags & XR_CLASS_DYNAMIC_LAYOUT)
+                                  ? xr_instance_set_dynamic_field_direct(
+                                        (XrObjectInstance *) object, i, values[i])
+                                  : xr_instance_set_decoded_field(object, i, values[i]);
                 if (!stored) {
                     for (uint16_t j = i; j < field_count; j++)
                         direct_release_owned_value(values[j]);
@@ -1084,6 +1102,7 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
     }
     xr_free(seen);
     xr_free(values);
+    p->typed_object_depth--;
     p->depth--;
     if (!ok)
         return false;
@@ -1092,7 +1111,8 @@ static bool direct_parse_typed_object(JsonDirectParser *p, XrCoroutine *coro, Xr
 }
 
 bool xr_json_parse_typed_object_from_cstr(XrVMRuntime *X, XrCoroutine *coro, const char *json_str,
-                                          size_t len, XrClass *target_class, XrValue *out,
+                                          size_t len, XrClass *target_class,
+                                          bool ignore_unknown_fields, XrValue *out,
                                           XrJsonTypedParseError *error) {
     if (out)
         *out = xr_null();
@@ -1101,7 +1121,7 @@ bool xr_json_parse_typed_object_from_cstr(XrVMRuntime *X, XrCoroutine *coro, con
     if (!X || !json_str || len == 0 || !target_class || !out) {
         if (error) {
             snprintf(error->path, sizeof(error->path), "$");
-            snprintf(error->expected, sizeof(error->expected), "typed Json input");
+            snprintf(error->expected, sizeof(error->expected), "typed JSON input");
             snprintf(error->actual, sizeof(error->actual), "invalid_argument");
         }
         return false;
@@ -1112,6 +1132,7 @@ bool xr_json_parse_typed_object_from_cstr(XrVMRuntime *X, XrCoroutine *coro, con
         .end = json_str + len,
         .pos = json_str,
         .depth = 0,
+        .ignore_unknown_fields = ignore_unknown_fields,
     };
     XrValue result = xr_null();
     if (!direct_parse_typed_object(&parser, coro, target_class, "$", &result, error))
@@ -1126,8 +1147,73 @@ bool xr_json_parse_typed_object_from_cstr(XrVMRuntime *X, XrCoroutine *coro, con
     return true;
 }
 
+bool xr_json_parse_typed_object_with_rest_from_cstr(XrVMRuntime *X, XrCoroutine *coro,
+                                                    const char *json_str, size_t len,
+                                                    XrClass *target_class, XrClass *wrapper_class,
+                                                    bool ignore_nested_unknown_fields, XrValue *out,
+                                                    XrJsonTypedParseError *error) {
+    if (out)
+        *out = xr_null();
+    if (error)
+        memset(error, 0, sizeof(*error));
+    if (!X || !json_str || len == 0 || !target_class || !wrapper_class || !out) {
+        if (error) {
+            snprintf(error->path, sizeof(error->path), "$");
+            snprintf(error->expected, sizeof(error->expected), "typed JSON object");
+            snprintf(error->actual, sizeof(error->actual), "invalid_argument");
+        }
+        return false;
+    }
+    XrMap *rest = xr_map_new(coro);
+    if (!rest)
+        return false;
+    rest->key_tid = XR_TID_STRING;
+    rest->value_tid = XR_TID_JSON;
+    JsonDirectParser parser = {
+        .X = X,
+        .src = json_str,
+        .end = json_str + len,
+        .pos = json_str,
+        .depth = 0,
+        .ignore_unknown_fields = ignore_nested_unknown_fields,
+        .top_level_rest = rest,
+    };
+    XrValue value = xr_null();
+    bool ok = direct_parse_typed_object(&parser, coro, target_class, "$", &value, error);
+    direct_skip_whitespace(&parser);
+    if (ok && parser.pos != parser.end) {
+        direct_release_owned_value(value);
+        value = xr_null();
+        direct_typed_error(&parser, error, "$", "end_of_input", NULL);
+        ok = false;
+    }
+    if (!ok) {
+        direct_release_owned_value(xr_value_from_map(rest));
+        return false;
+    }
+
+    int rest_index = xr_class_lookup_field_by_name(X, wrapper_class, "rest");
+    int value_index = xr_class_lookup_field_by_name(X, wrapper_class, "value");
+    XrObjectInstance *wrapper = xr_object_instance_new_with_class(coro, wrapper_class);
+    if (!wrapper || rest_index < 0 || value_index < 0 ||
+        !xr_instance_set_dynamic_field_direct(wrapper, (uint16_t) rest_index,
+                                              xr_value_from_map(rest)) ||
+        !xr_instance_set_dynamic_field_direct(wrapper, (uint16_t) value_index, value)) {
+        if (wrapper)
+            direct_release_owned_value(xr_object_instance_value(wrapper));
+        else {
+            direct_release_owned_value(value);
+            direct_release_owned_value(xr_value_from_map(rest));
+        }
+        return false;
+    }
+    *out = xr_object_instance_value(wrapper);
+    return true;
+}
+
 bool xr_json_parse_typed_value_from_cstr(XrVMRuntime *X, XrCoroutine *coro, const char *json_str,
-                                         size_t len, const XrJsonDecodeSchema *schema, XrValue *out,
+                                         size_t len, const XrJsonDecodeSchema *schema,
+                                         bool ignore_unknown_fields, XrValue *out,
                                          XrJsonTypedParseError *error) {
     if (out)
         *out = xr_null();
@@ -1136,7 +1222,7 @@ bool xr_json_parse_typed_value_from_cstr(XrVMRuntime *X, XrCoroutine *coro, cons
     if (!X || !json_str || len == 0 || !schema || !out) {
         if (error) {
             snprintf(error->path, sizeof(error->path), "$");
-            snprintf(error->expected, sizeof(error->expected), "typed Json input");
+            snprintf(error->expected, sizeof(error->expected), "typed JSON input");
             snprintf(error->actual, sizeof(error->actual), "invalid_argument");
         }
         return false;
@@ -1147,6 +1233,7 @@ bool xr_json_parse_typed_value_from_cstr(XrVMRuntime *X, XrCoroutine *coro, cons
         .end = json_str + len,
         .pos = json_str,
         .depth = 0,
+        .ignore_unknown_fields = ignore_unknown_fields,
     };
     XrValue result = xr_null();
     if (!direct_parse_typed_schema(&parser, coro, schema, "$", &result, error))
@@ -1340,14 +1427,8 @@ static void stringify_array(JsonWriter *w, XrArray *arr) {
     writer_char(w, ']');
 }
 
-// Stringify Map.
-//
-// NOTE: ordering. XrMap is a chained hash table (xmap.h) and does not
-// track insertion order. We iterate node slots in index order, which
-// is deterministic for a given map instance but unrelated to the order
-// entries were inserted. Scripts that need insertion-preserving
-// round-trip should build their object via XrJson (shape-backed, which
-// `stringify_json` preserves exactly).
+// Stringify a Map in its stable insertion order. JSON.Object is the pure
+// Map<string, JSON.Value> alias, so this is the only dynamic object path.
 static void stringify_map(JsonWriter *w, XrMap *map) {
     writer_char(w, '{');
 
@@ -1362,35 +1443,21 @@ static void stringify_map(JsonWriter *w, XrMap *map) {
         if (node->key_tt == 0)
             continue;
 
-        // Keys must be JSON-representable. Strings are emitted
-        // verbatim; integers are stringified (acceptable per common
-        // JSON-as-config usage). Any other key type (float, array,
-        // map, instance) is skipped — previously we emitted the
-        // placeholder `"<key>"`, which silently collides on read-back
-        // and is worse than losing the entry.
-        char intkey_buf[32];
-        const char *key_ptr = NULL;
-        size_t key_len = 0;
-        if (XR_IS_STRING(node->key)) {
-            XrString *key = XR_TO_STRING(node->key);
-            key_ptr = key->data;
-            key_len = key->length;
-        } else if (XR_IS_INT(node->key)) {
-            int n =
-                snprintf(intkey_buf, sizeof(intkey_buf), "%lld", (long long) XR_TO_INT(node->key));
-            if (n > 0) {
-                key_ptr = intkey_buf;
-                key_len = (size_t) n;
+        if (!XR_IS_STRING(node->key)) {
+            if (!w->has_error) {
+                w->has_error = true;
+                snprintf(w->error_msg, sizeof(w->error_msg),
+                         "JSON object keys must have type 'string'");
             }
-        } else {
-            continue;  // skip entries with non-stringifiable keys
+            break;
         }
+        XrString *key = XR_TO_STRING(node->key);
 
         if (output_count > 0)
             writer_char(w, ',');
         writer_newline(w);
 
-        stringify_string(w, key_ptr, key_len);
+        stringify_string(w, key->data, key->length);
         writer_char(w, ':');
         if (w->indent > 0)
             writer_char(w, ' ');
@@ -1407,8 +1474,8 @@ static void stringify_map(JsonWriter *w, XrMap *map) {
     writer_char(w, '}');
 }
 
-// Stringify XrJson object
-static void stringify_json(JsonWriter *w, XrJson *json) {
+// Stringify XrObjectInstance object
+static void stringify_json(JsonWriter *w, XrObjectInstance *json) {
     writer_char(w, '{');
 
     if (!json || !json->klass) {
@@ -1459,7 +1526,7 @@ static void stringify_instance(JsonWriter *w, XrInstance *inst) {
     if ((cls->flags & XR_CLASS_DERIVE_JSON) == 0) {
         if (!w->has_error) {
             w->has_error = true;
-            snprintf(w->error_msg, sizeof(w->error_msg), "type '%s' does not derive Json",
+            snprintf(w->error_msg, sizeof(w->error_msg), "type '%s' does not derive JSON",
                      xr_class_display_name(cls));
         }
         writer_str(w, "null");
@@ -1584,8 +1651,8 @@ static void stringify_value(JsonWriter *w, XrValue val) {
             stringify_array(w, arr);
             stringify_leave(w);
         }
-    } else if (xr_value_is_json(val) || xr_value_is_struct_object(val)) {
-        XrJson *json = (XrJson *) XR_TO_PTR(val);
+    } else if (xr_value_is_struct_object(val)) {
+        XrObjectInstance *json = (XrObjectInstance *) XR_TO_PTR(val);
         if (stringify_enter(w, json)) {
             stringify_json(w, json);
             stringify_leave(w);
@@ -1651,8 +1718,8 @@ static void encode_array(JsonEncoder *e, XrArray *arr, XrValue *out) {
 
 static void encode_object_fields(JsonEncoder *e, XrInstance *inst, bool dynamic_fields,
                                  XrValue *out) {
-    XrJson *json = xr_json_new(NULL);
-    if (!json) {
+    XrMap *object = xr_map_new(NULL);
+    if (!object) {
         encode_error(e, "out of memory while encoding object to JSON");
         *out = xr_null();
         return;
@@ -1660,7 +1727,7 @@ static void encode_object_fields(JsonEncoder *e, XrInstance *inst, bool dynamic_
 
     XrClass *cls = xr_instance_get_class(inst);
     if (!cls) {
-        *out = xr_json_value(json);
+        *out = xr_value_from_map(object);
         return;
     }
 
@@ -1675,22 +1742,28 @@ static void encode_object_fields(JsonEncoder *e, XrInstance *inst, bool dynamic_
                                        : xr_instance_get_field_fast(inst, i);
         XrValue encoded = xr_null();
         encode_value(e, field, &encoded);
-        if (!e->has_error)
-            xr_json_set_by_key(e->isolate, json, name, encoded);
+        if (!e->has_error) {
+            XrString *key = xr_string_intern(e->isolate, name, strlen(name), 0);
+            if (!key) {
+                encode_error(e, "out of memory while encoding object key to JSON");
+                break;
+            }
+            xr_map_set(object, xr_string_value(key), encoded);
+        }
     }
 
-    *out = e->has_error ? xr_null() : xr_json_value(json);
+    *out = e->has_error ? xr_null() : xr_value_from_map(object);
 }
 
 static void encode_map(JsonEncoder *e, XrMap *map, XrValue *out) {
-    XrJson *json = xr_json_new(NULL);
-    if (!json) {
+    XrMap *object = xr_map_new(NULL);
+    if (!object) {
         encode_error(e, "out of memory while encoding Map to JSON");
         *out = xr_null();
         return;
     }
     if (!map || (map->flags & XR_MAP_FLAG_DUMMY)) {
-        *out = xr_json_value(json);
+        *out = xr_value_from_map(object);
         return;
     }
 
@@ -1699,25 +1772,20 @@ static void encode_map(JsonEncoder *e, XrMap *map, XrValue *out) {
         if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
             continue;
 
-        char int_key[32];
-        const char *key = NULL;
-        if (XR_IS_STRING(entry->key)) {
-            key = XR_TO_STRING(entry->key)->data;
-        } else if (XR_IS_INT(entry->key)) {
-            snprintf(int_key, sizeof(int_key), "%lld", (long long) XR_TO_INT(entry->key));
-            key = int_key;
-        } else {
-            encode_error(e, "Json.encode(Map) requires string or int keys");
+        if (!XR_IS_STRING(entry->key)) {
+            encode_error(e, "JSON.value(Map) requires string keys");
             break;
         }
 
         XrValue encoded = xr_null();
         encode_value(e, entry->value, &encoded);
-        if (!e->has_error)
-            xr_json_set_by_key(e->isolate, json, key, encoded);
+        if (!e->has_error) {
+            xr_rc_retain_value(entry->key);
+            xr_map_set(object, entry->key, encoded);
+        }
     }
 
-    *out = e->has_error ? xr_null() : xr_json_value(json);
+    *out = e->has_error ? xr_null() : xr_value_from_map(object);
 }
 
 static void encode_set(JsonEncoder *e, XrSet *set, XrValue *out) {
@@ -1773,7 +1841,7 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
     e->depth++;
     if (XR_IS_ARRAY(val)) {
         encode_array(e, XR_TO_ARRAY(val), out);
-    } else if (xr_value_is_json(val) || xr_value_is_struct_object(val)) {
+    } else if (xr_value_is_struct_object(val)) {
         encode_object_fields(e, (XrInstance *) XR_TO_PTR(val), true, out);
     } else if (XR_IS_MAP(val)) {
         encode_map(e, XR_TO_MAP(val), out);
@@ -1796,7 +1864,7 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
         XrClass *cls = xr_instance_get_class(inst);
         if (!cls || (cls->flags & XR_CLASS_DERIVE_JSON) == 0) {
             char msg[160];
-            snprintf(msg, sizeof(msg), "type '%s' does not derive Json",
+            snprintf(msg, sizeof(msg), "type '%s' does not derive JSON",
                      cls ? xr_class_display_name(cls) : "<instance>");
             encode_error(e, msg);
             *out = xr_null();
@@ -2123,12 +2191,6 @@ XrValue xr_json_fn_is_valid(XrVMRuntime *X, XrValue self, XrValue *args, int arg
     bool strict = false;
     if (argc >= 2 && XR_IS_BOOL(args[1])) {
         strict = XR_TO_BOOL(args[1]);
-    } else if (argc >= 2 && xr_value_is_json(args[1])) {
-        // Legacy: accept {strict: true} options object
-        XrJson *opts = xr_value_to_json(args[1]);
-        XrValue sv = xr_json_get_by_key(X, opts, "strict");
-        if (XR_IS_BOOL(sv))
-            strict = XR_TO_BOOL(sv);
     }
 
     XrString *str = XR_TO_STRING(args[0]);
@@ -2143,33 +2205,4 @@ XrValue xr_json_fn_is_valid(XrVMRuntime *X, XrValue self, XrValue *args, int arg
         return xr_bool(false);
 
     return xr_bool(true);
-}
-
-// tryParse(str) - Try to parse JSON
-// Returns Json: {value: parsed result, error: error message or null}
-XrValue xr_json_fn_try_parse(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
-    (void) self;
-    XrJson *result = xr_json_new(NULL);
-
-    if (argc < 1 || !XR_IS_STRING(args[0])) {
-        xr_json_set_by_key(
-            X, result, "error",
-            xr_string_value(xr_string_intern(X, "Argument must be a string", 25, 0)));
-        xr_json_set_by_key(X, result, "value", xr_null());
-        return xr_json_value(result);
-    }
-
-    XrString *str = XR_TO_STRING(args[0]);
-    XrValue parsed = xr_null();
-    if (!json_parse_runtime_direct(X, str->data, str->length, &parsed)) {
-        const char *msg = "Invalid JSON";
-        xr_json_set_by_key(X, result, "value", xr_null());
-        xr_json_set_by_key(X, result, "error",
-                           xr_string_value(xr_string_intern(X, msg, strlen(msg), 0)));
-    } else {
-        xr_json_set_by_key(X, result, "value", parsed);
-        xr_json_set_by_key(X, result, "error", xr_null());
-    }
-
-    return xr_json_value(result);
 }

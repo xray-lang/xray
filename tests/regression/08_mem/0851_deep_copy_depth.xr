@@ -10,56 +10,56 @@
 
 @test
 fn test_deep_chain_within_limit() {
-    var a: Json = {}
-    a["tag"] = "leaf"
+    var a: JSON.Object = JSON.parseObject("{}")
+    a.set("tag", "leaf")
     var i = 0
     while (i < 900) {
-        var b: Json = {}
-        b["child"] = a
+        var b: JSON.Object = JSON.parseObject("{}")
+        b.set("child", JSON.value(a))
         a = b
         i += 1
     }
     var c = copy(a)
     // 拷贝是独立的：改原件不影响副本
-    a["extra"] = 1
-    var probe = c
+    a.set("extra", 1)
+    var probe: JSON.Value = JSON.value(c)
     var depth = 0
-    while (probe["child"] != null) {
-        probe = probe["child"]
+    while (JSON.containsPath(probe, ["child"])) {
+        probe = JSON.require<JSON.Value>(probe, ["child"])
         depth += 1
     }
     assert_eq(depth, 900)
-    assert_eq(probe["tag"], "leaf")
+    assert_eq(JSON.require<string>(probe, ["tag"]), "leaf")
 }
 
 // ===== 环结构依旧安全（seen 表路径不受深度改动影响）=====
 
 @test
 fn test_cycle_still_safe() {
-    var a: Json = {}
-    var b: Json = {}
-    a["next"] = b
-    b["next"] = a
+    var a: JSON.Object = JSON.parseObject("{}")
+    var b: JSON.Object = JSON.parseObject("{}")
+    a.set("next", JSON.value(b))
+    b.set("next", JSON.value(a))
     var c = copy(a)
     // 环被保留：c.next.next 指回 c
-    assert_true(c["next"] != null)
+    assert_true(JSON.containsPath(c, ["next", "next"]))
 }
 
 // ===== 宽而浅的结构不受影响 =====
 
 @test
 fn test_wide_shallow() {
-    var arr: Array<Json> = []
+    var arr: Array<JSON.Value> = []
     var i = 0
     while (i < 5000) {
-        var o: Json = {}
-        o["v"] = i
-        arr.push(o)
+        var o: JSON.Object = JSON.parseObject("{}")
+        o.set("v", i)
+        arr.push(JSON.value(o))
         i += 1
     }
     var c = copy(arr)
     assert_eq(len(c), 5000)
-    assert_eq(c[4999]["v"], 4999)
+    assert_eq(JSON.require<int>(c[4999], ["v"]), 4999)
 }
 
 print("=== deep_copy depth tests completed ===")

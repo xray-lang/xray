@@ -1,10 +1,10 @@
 type Address = { city: string, zip: int }
-type Profile = { name: string, tags: Array<Json>, address: Address, active: bool }
+type Profile = { name: string, tags: Array<JSON.Value>, address: Address, active: bool }
 
-fn jsonDecodeMixedObjectArrayPlan() -> Json {
-    var data: Json = Json.parse("{\"name\":\"Dana\",\"tags\":[\"ops\",3,null],\"address\":{\"city\":\"Hangzhou\",\"zip\":310000},\"active\":true}")
-    var profile = Json.decode<Profile>(data)
-    return Json.encode(profile!)
+fn jsonDecodeMixedObjectArrayPlan() -> JSON.Value {
+    var data: JSON.Value = JSON.parseValue("{\"name\":\"Dana\",\"tags\":[\"ops\",3,null],\"address\":{\"city\":\"Hangzhou\",\"zip\":310000},\"active\":true}")
+    var profile = JSON.decode<Profile>(data)
+    return JSON.value(profile!)
 }
 
 print(jsonDecodeMixedObjectArrayPlan())

@@ -1,0 +1,2 @@
+var value = JSON.parseValue("{\"name\":\"Ada\"}")
+for (key in value) { print(key) }

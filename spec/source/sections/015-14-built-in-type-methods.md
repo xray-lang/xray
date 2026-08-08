@@ -140,7 +140,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `forEach(fn)` | 遍历 |
 | `iterator()` / `entriesIterator()` | 迭代协议 |
 
-**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于 structural object/Json 对象字面量。
+**Map 字面量**：`#{"k1": v1, "k2": v2}` 或 `#{}`；使用 `:`，靠 `#` 前缀区别于精确结构对象字面量 `{ field: value }`。
 
 `m[k]` 要求键存在；缺失键触发运行时错误 `E0431`。需要可选读取时使用 `m.get(k)`。
 
@@ -173,27 +173,43 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 `Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<int?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
 
-### 14.11 `Json`
+### 14.11 `JSON` 命名空间
 
-`Json` 是动态结构化数据类型。普通字段访问使用 `j.field` / `j["field"]`；通用查询和编解码通过 `Json` 静态函数完成，避免与用户字段名冲突。
+`JSON` 是 prelude 命名空间，不是可声明变量的值类型，也不需要 `import json`。schema-less JSON 使用 `JSON.Value`；确定为 object 的动态 JSON 使用 `JSON.Object`。`JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名，因此枚举、动态下标、增删字段和 `len` 都直接使用 §14.8 的 Map API。
+
+`JSON.Value` 是 `null | bool | int | float | string | Array<JSON.Value> | JSON.Object` 的递归边界值。它没有 dot、下标、迭代或 `len` 魔法：先用 typed decode 提交 schema，用 `asObject` / `asArray` 显式解包，或用 path API 访问任意深度。
 
 | 静态函数 | 说明 |
 |--|--|
-| `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)` | Object 字段枚举 |
-| `Json.containsKey(obj, key)` | 字段存在性 |
-| `Json.get(obj, key, default?)` | 字段读取，不存在返回 default 或 null |
-| `len(obj)` | Object / Array / String variant 的元素数量；scalar 抛 TypeError |
-| `Json.parse(s)` / `Json.parse<T>(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON 解析与校验；typed parse 直接按 schema 构造 `T` |
-| `Json.encode(value)` | 显式 typed value → Json 边界转换 |
-| `Json.stringify(value, indent?)` | 序列化 |
-| `Json.kindOf(value)` | 返回 `null/bool/int/float/string/array/object` |
-| `Json.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | Json 类别谓词 |
+| `JSON.parse<T>(text, unknown?)` | 直接按 `T` 构造 typed value；未知字段默认 `Reject`，可显式传 `JSON.UnknownFields.Ignore` |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | 分别解析 object 根或任意 JSON 根，不构造结构对象中间层 |
+| `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | 构造已知字段 `value: T`，并将顶层未知字段保留在 `rest: JSON.Object` |
+| `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | 从已有 schema-less 值尝试构造 `T`，失败返回 `null` |
+| `JSON.value<T>(value)` | 显式把可编码的复合值物化为 `JSON.Value` |
+| `JSON.stringify<T>(value, indent?)` | 序列化可编码值；`indent` 必须是非空 `int` |
+| `JSON.isValid(text, strict?)` | 校验 JSON 文本 |
+| `JSON.kindOf(value)` / `JSON.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | 查询 JSON arm |
+| `JSON.asObject(value)` / `JSON.asArray(value)` | 返回共享底层存储的可空 object/array 视图，不复制 |
+| `JSON.get<T>(root, path)` / `JSON.require<T>(root, path)` | 按 `JSON.Path` 读取并解码；前者失败返回 `null`，后者抛 `JSON.PathError` |
+| `JSON.containsPath(root, path)` | 判断完整路径是否存在 |
+| `JSON.set(root, path, value, createParents?)` / `JSON.remove(root, path)` | 修改或删除路径；路径可穿过 object key 与 array index |
+| `JSON.merge(parts)` | 将 `JSON.WithRest<T>` 的 typed 部分和顶层 rest 重新组成 `JSON.Object` |
 
-`keys()` / `values()` / `entries()` / `toString()` 也有实例形态。Json 的字段只能承载数据、永远不能承载函数，所以 `j.keys` 恒为字段读取、`j.keys()` 恒为内置成员调用，两者始终可判定。但当数据里可能存在与内置成员同名的字段时，**优先使用静态形态**，让读者不必依赖调用括号来区分意图。
+`JSON.Path` 是 `Array<string | int>`：string segment 是完整 object key，int segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
 
-**字面量**：`{ name: "alice", age: 30 }` 默认是 exact 对象形状。显式写 `var j: Json = {...}` 时才是动态 Json object；typed value 进入 JSON 边界使用 `Json.encode(value)`。`Json.parse<T>` 的 `T` 必须满足 `JsonDecodable`，open row 不是合法构造目标；解析器直接消费 token stream，不先物化中间 Json DOM。
+```xray @id=json-boundary-and-path
+type Request = { action: string, userId: int }
 
-**格式化前应先提交类型**：`Json` 内在含 `null`，缺失字段读出来是 `null`，直接插值会格式化成 `"null"`——一个拼错的字段名因此看起来像一个合理结果。把 `Json` 值直接放进模板字符串会产生警告；写 `${j.field as string}` 提交类型，或写 `${j.field ?? "-"}` 给默认值。这与语言对 `T?` 的解包纪律一致。
+var request = JSON.parse<Request>(body)       // 未知字段默认拒绝
+var payload = JSON.parseObject(body)          // JSON.Object，即 Map
+payload["traceId"] = "req-42"               // 标量隐式 widening
+
+var path: JSON.Path = ["user", "profile", "name"]
+var name = JSON.get<string>(payload, path)
+JSON.set(payload, path, "Ada", true)
+```
+
+JSON 标量 `null`、`bool`、`int`、`float`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；结构对象、数组和其他复合值必须写 `JSON.value(...)`。因此 `{ name: "alice" }` 始终是精确结构对象，不会因上下文悄悄变成动态 object。
 
 ### 14.12 `Range`
 
@@ -424,7 +440,7 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 | `forEach(fn)` | traversal |
 | `iterator()` / `entriesIterator()` | iteration protocol |
 
-**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished from structural object/Json object literals by the `#` prefix.
+**Map literal**: `#{"k1": v1, "k2": v2}` or `#{}`; entries use `:`, distinguished by the `#` prefix from exact structural-object literals of the form `{ field: value }`.
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
@@ -459,23 +475,43 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 
 `Recv.Value(v)` carries the channel payload, so `Channel<int?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
 
-### 14.11 `Json`
+### 14.11 `JSON` Namespace
 
-`Json` is a dynamic structured-data type. Ordinary field access uses `j.field` / `j["field"]`; generic queries and serialization go through `Json` static functions to avoid colliding with user field names.
+`JSON` is a prelude namespace, not a value type that variables can use, and it needs no `import json`. Use `JSON.Value` for schema-less JSON and `JSON.Object` when the dynamic value is known to be an object. `JSON.Object` is a pure alias for `Map<string, JSON.Value>`, so enumeration, dynamic subscripts, field insertion/removal, and `len` use the Map API in §14.8 directly.
+
+`JSON.Value` is the recursive boundary domain `null | bool | int | float | string | Array<JSON.Value> | JSON.Object`. It has no magic dot access, subscript, iteration, or `len`: commit to a schema with typed decode, explicitly unwrap it with `asObject` / `asArray`, or use the path API for arbitrary depth.
 
 | Static function | Description |
 |--|--|
-| `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)` | enumerate object fields |
-| `Json.containsKey(obj, key)` | field existence |
-| `Json.get(obj, key, default?)` | field read; returns `default` or `null` if absent |
-| `len(obj)` | element count for Object / Array / String variants; scalar values throw TypeError |
-| `Json.parse(s)` / `Json.parse<T>(s)` / `Json.tryParse(s)` / `Json.isValid(s)` | JSON parsing and validation; typed parse constructs `T` directly from its schema |
-| `Json.encode(value)` | explicit typed value → Json boundary conversion |
-| `Json.stringify(value, indent?)` | serialization |
-| `Json.kindOf(value)` | returns `null/bool/int/float/string/array/object` |
-| `Json.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | Json category predicates |
+| `JSON.parse<T>(text, unknown?)` | constructs a typed value directly; unknown fields default to `Reject`, with explicit `JSON.UnknownFields.Ignore` available |
+| `JSON.parseObject(text)` / `JSON.parseValue(text)` | parses an object root or any JSON root without a structural-object intermediate |
+| `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | constructs known fields as `value: T` and keeps unknown top-level fields in `rest: JSON.Object` |
+| `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | attempts to construct `T` from an existing schema-less value; failure returns `null` |
+| `JSON.value<T>(value)` | explicitly materializes an encodable composite value as `JSON.Value` |
+| `JSON.stringify<T>(value, indent?)` | serializes an encodable value; `indent` must be a non-null `int` |
+| `JSON.isValid(text, strict?)` | validates JSON text |
+| `JSON.kindOf(value)` / `JSON.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | inspects the active JSON arm |
+| `JSON.asObject(value)` / `JSON.asArray(value)` | returns a nullable view sharing the underlying object/array storage, without copying |
+| `JSON.get<T>(root, path)` / `JSON.require<T>(root, path)` | reads and decodes at a `JSON.Path`; the former returns `null` on failure, the latter throws `JSON.PathError` |
+| `JSON.containsPath(root, path)` | tests whether the complete path exists |
+| `JSON.set(root, path, value, createParents?)` / `JSON.remove(root, path)` | mutates or removes a path through object keys and array indices |
+| `JSON.merge(parts)` | recombines the typed and top-level rest parts of `JSON.WithRest<T>` as a `JSON.Object` |
 
-**Literal**: `{ name: "alice", age: 30 }` defaults to an exact object shape. It becomes a dynamic Json object only with an explicit `Json` annotation such as `var j: Json = {...}`; use `Json.encode(value)` when a typed value crosses a JSON boundary. `T` in `Json.parse<T>` must satisfy `JsonDecodable`; an open row is not a construction target. The parser consumes the token stream directly without first materializing an intermediate Json DOM.
+`JSON.Path` is `Array<string | int>`: a string segment is one complete object key, and an int segment is an array index. `["user", "profile", "name"]` addresses nested fields; `"user.profile"` is only one key containing dots. A dynamic object key can also use the Map subscript and methods on `JSON.Object` directly.
+
+```xray @id=json-boundary-and-path-en
+type Request = { action: string, userId: int }
+
+var request = JSON.parse<Request>(body)       // unknown fields reject by default
+var payload = JSON.parseObject(body)          // JSON.Object, therefore a Map
+payload["traceId"] = "req-42"               // scalar widening is implicit
+
+var path: JSON.Path = ["user", "profile", "name"]
+var name = JSON.get<string>(payload, path)
+JSON.set(payload, path, "Ada", true)
+```
+
+JSON scalars (`null`, `bool`, `int`, `float`, and `string`) widen implicitly when an explicit `JSON.Value` target exists. Structural objects, arrays, and other composites require `JSON.value(...)`. Therefore `{ name: "alice" }` always remains an exact structural object; context never silently turns it into a dynamic object.
 
 ### 14.12 `Range`
 

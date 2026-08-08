@@ -52,6 +52,7 @@ static XrType t_str = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType t_any = {.kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true};
 static XrType t_span = {.kind = XR_KIND_SLICE, .id = 5, .frozen = true};
 static XrType t_function = {.kind = XR_KIND_FUNCTION, .id = 6, .frozen = true};
+static XrType t_json_namespace = {.kind = XR_KIND_CLASS, .id = 7, .frozen = true};
 
 static XiFunc *make_func(const char *name, XrType *ret) {
     XiFunc *f = xi_func_new(name, ret);
@@ -100,6 +101,28 @@ static void test_use_policy(void) {
     ASSERT_EQ(xi_own_value_arg_is_consuming(&string_byte_slice, 0), false,
               "string bytes view borrows its string owner");
 
+    XiValue json_namespace = {
+        .op = XI_GET_BUILTIN,
+        .type = &t_json_namespace,
+        .aux = (void *) "JSON",
+    };
+    XiValue *json_stringify_args[] = {&json_namespace, &string_value};
+    XiValue json_stringify = {
+        .op = XI_CALL_METHOD,
+        .type = &t_str,
+        .nargs = 2,
+        .args = json_stringify_args,
+        .aux = (void *) "stringify",
+    };
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&json_stringify, 1), true,
+              "bodyless JSON calls preserve the ordinary consuming call convention");
+
+    XiValue json_is_int = json_stringify;
+    json_is_int.type = &t_int;
+    json_is_int.aux = (void *) "isInt";
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&json_is_int, 1), false,
+              "JSON kind queries borrow the inspected value");
+
     XiImportRef net_write_ref = {
         .module_path = "net",
         .member_name = "write",
@@ -125,12 +148,8 @@ static void test_use_policy(void) {
               "public Xray net payload without a lowering plan fails closed");
 
     XiCallArgPlan net_write_arg_plans[2] = {
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = &net_conn},
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = &string_value},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = &net_conn},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = &string_value},
     };
     XiCallPlan net_write_plan = {
         .args = net_write_arg_plans,
@@ -187,12 +206,8 @@ static void test_use_policy(void) {
               "shared-slot public Xray payload without a lowering plan fails closed");
 
     XiCallArgPlan method_write_arg_plans[2] = {
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = conn_value},
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = payload_value},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = conn_value},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = payload_value},
     };
     XiCallPlan method_write_plan = {
         .args = method_write_arg_plans,

@@ -118,8 +118,7 @@ deep_compare: {
     if (XR_OBJ_GET_TYPE(gc_a) == XR_TINSTANCE) {
         XrInstance *ia = (XrInstance *) gc_a;
         XrInstance *ib = (XrInstance *) gc_b;
-        if (ia->klass && (ia->klass->builtin_kind == XR_BK_JSON ||
-                          ia->klass->builtin_kind == XR_BK_STRUCT_OBJECT))
+        if (ia->klass && ia->klass->builtin_kind == XR_BK_STRUCT_OBJECT)
             result = xr_json_equals_deep(ctx, a, b);
         else if (ia->klass && ia->klass == ib->klass &&
                  (ia->klass->flags & XR_CLASS_DERIVE_EQ) != 0) {
@@ -161,8 +160,8 @@ bool xr_value_deep_eq(XrValue a, XrValue b) {
 }
 
 static bool xr_json_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b) {
-    XrJson *ja = xr_value_to_json(a);
-    XrJson *jb = xr_value_to_json(b);
+    XrObjectInstance *ja = xr_value_to_object_instance(a);
+    XrObjectInstance *jb = xr_value_to_object_instance(b);
     if (!ja || !jb)
         return false;
 

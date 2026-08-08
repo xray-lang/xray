@@ -1,2 +1,1 @@
-Type 'Array<int>' is not assignable to type 'Json'
-
+cannot widen implicitly to JSON.Value; wrap the value with JSON.value(...) explicitly

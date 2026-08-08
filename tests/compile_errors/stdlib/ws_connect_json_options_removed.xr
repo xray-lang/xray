@@ -1,4 +1,4 @@
 import ws
 
-var legacy: Json = { timeout: 25 }
+var legacy: JSON.Object = JSON.parseObject("{\"timeout\":25}")
 ws.connect("ws://example.com:0/", legacy)

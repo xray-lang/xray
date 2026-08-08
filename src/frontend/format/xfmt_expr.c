@@ -324,8 +324,7 @@ static CallExprNode *match_defer_capture(AstNode *node, bool *has_receiver) {
     for (int k = 0; k < call->arg_count; k++) {
         AstNode *arg = call->arguments[k];
         int snapshot_index = receiver_count + k;
-        if (!is_defer_temp(arg, AST_VARIABLE, arg ? arg->as.variable.name : NULL,
-                           snapshot_index))
+        if (!is_defer_temp(arg, AST_VARIABLE, arg ? arg->as.variable.name : NULL, snapshot_index))
             return NULL;
     }
     *has_receiver = receiver_count != 0;
@@ -346,8 +345,7 @@ bool xfmt_emit_defer_capture(XrFmtContext *ctx, AstNode *node) {
     int argument_count = block->count - 1 - receiver_count;
     AstNode **arguments = NULL;
     if (argument_count > 0) {
-        arguments =
-            (AstNode **) xr_malloc(sizeof(AstNode *) * (size_t) argument_count);
+        arguments = (AstNode **) xr_malloc(sizeof(AstNode *) * (size_t) argument_count);
         if (!arguments)
             return false;
         for (int k = 0; k < argument_count; k++)
@@ -364,8 +362,8 @@ bool xfmt_emit_defer_capture(XrFmtContext *ctx, AstNode *node) {
 
     xfmt_write_indent(ctx);
     xfmt_write_str(ctx, "defer ");
-    fmt_call_like(ctx, callee, call->type_args, call->type_arg_count, arguments,
-                  call->arg_accesses, argument_count);
+    fmt_call_like(ctx, callee, call->type_args, call->type_arg_count, arguments, call->arg_accesses,
+                  argument_count);
     xfmt_write_newline(ctx);
 
     xr_free(arguments);
@@ -749,13 +747,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             for (int i = 0; i < obj->count; i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
-                if (obj->computed && obj->computed[i]) {
-                    xfmt_write_char(ctx, '[');
-                    xfmt_emit_expression(ctx, obj->keys[i]);
-                    xfmt_write_char(ctx, ']');
-                } else {
-                    xfmt_emit_expression(ctx, obj->keys[i]);
-                }
+                xfmt_emit_expression(ctx, obj->keys[i]);
                 xfmt_write_str(ctx, ": ");
                 xfmt_emit_expression(ctx, obj->values[i]);
             }
@@ -767,13 +759,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 ctx->indent_level++;
                 for (int i = 0; i < obj->count; i++) {
                     xfmt_write_indent(ctx);
-                    if (obj->computed && obj->computed[i]) {
-                        xfmt_write_char(ctx, '[');
-                        xfmt_emit_expression(ctx, obj->keys[i]);
-                        xfmt_write_char(ctx, ']');
-                    } else {
-                        xfmt_emit_expression(ctx, obj->keys[i]);
-                    }
+                    xfmt_emit_expression(ctx, obj->keys[i]);
                     xfmt_write_str(ctx, ": ");
                     xfmt_emit_expression(ctx, obj->values[i]);
                     if (ctx->config->multiline_trailing_comma || i < obj->count - 1)
@@ -1047,8 +1033,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             /* Return annotations and generics are fn-only. Otherwise arrow is
              * the canonical inferred-return form, including typed/mode params
              * and multi-statement blocks. */
-            bool use_fn_form =
-                ctx->force_fn_expr || fn->return_type || fn->type_param_count > 0;
+            bool use_fn_form = ctx->force_fn_expr || fn->return_type || fn->type_param_count > 0;
 
             if (use_fn_form) {
                 xfmt_write_str(ctx, "fn");

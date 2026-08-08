@@ -1,7 +1,8 @@
 import parallel
 import { readFile } from io
+import path
 
 parallel.forEach(0..4, (i) -> {
-    var text = readFile("missing.txt")
+    var text = readFile(path.from("missing.txt"))
     print(text)
 }, parallel.Options(2))
