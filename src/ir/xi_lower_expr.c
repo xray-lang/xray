@@ -4076,6 +4076,10 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
             XiValue *arg = xi_lower_expr(l, call->arguments[i]);
             if (!arg)
                 return xi_const_null(l->func, l->cur_block, l->type_null);
+            /* Render a unit-typed argument as `()` rather than `null`; see
+             * lower_print for why this is driven by the static type. */
+            if (arg->type && arg->type->kind == XR_KIND_UNIT)
+                arg = xi_const_str(l->func, l->cur_block, "()", l->type_string);
             if (!xi_lower_value_list_push(l, &args, arg, XI_LOWER_MAX_VARIADIC_VALUES,
                                           "print argument count", line))
                 return xi_const_null(l->func, l->cur_block, l->type_null);
@@ -9198,6 +9202,10 @@ static XiValue *lower_template_string(XiLower *l, AstNode *node) {
         XiValue *part = xi_lower_expr(l, ts->parts[i]);
         if (!part)
             return NULL;
+        /* Render a unit-typed interpolation as `()` rather than `null`; see
+         * lower_print for why this is driven by the static type. */
+        if (part->type && part->type->kind == XR_KIND_UNIT)
+            part = xi_const_str(l->func, l->cur_block, "()", l->type_string);
         if (!xi_lower_value_list_push(l, &parts, part, XI_LOWER_MAX_VARIADIC_VALUES,
                                       "template string part count", node->line))
             return NULL;

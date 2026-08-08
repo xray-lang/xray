@@ -3304,6 +3304,13 @@ static void lower_print(XiLower *l, AstNode *node) {
         arg_vals[i] = xi_lower_expr(l, p->exprs[i]);
         if (!arg_vals[i])
             return;
+        /* Unit shares null's runtime tag, so a unit-typed argument would print
+         * as `null`. Render it as `()` from its static type instead: the
+         * expression above still runs for its side effects, only the shown
+         * value changes. This mirrors how a function value renders as `<fn>`
+         * rather than exposing its representation. */
+        if (arg_vals[i]->type && arg_vals[i]->type->kind == XR_KIND_UNIT)
+            arg_vals[i] = xi_const_str(l->func, l->cur_block, "()", l->type_string);
     }
 
     /* Emit one XI_PRINT per argument with correct spacing/newline flags.
