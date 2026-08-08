@@ -1101,6 +1101,19 @@ static void insert_dup_after(XiFunc *f, XiBlock *blk, XiValue *anchor, XiValue *
     dup->args[0] = target;
     dup->flags = XI_FLAG_SIDE_EFFECT;
     dup->escape = target->escape;
+    /* A NULL anchor from phi_dup_anchor means the block is nothing but its
+     * trailing XI_RELEASE run: the dup belongs BEFORE those releases, at the
+     * head. xi_value_insert_after(NULL) appends to the tail instead, which
+     * places the retain AFTER the releases. When the promoted phi value aliases
+     * a loop-carried owner released in that same run (a ref-loaded Array<T>
+     * reloaded via PLACE_LOAD), releasing first drops the shared object to zero
+     * and frees it, so the trailing retain resurrects freed memory. Rotate the
+     * appended dup to the head, matching insert_dup_before's first-value case. */
+    if (anchor == NULL && blk->nvalues > 1 && blk->values[blk->nvalues - 1] == dup) {
+        for (uint32_t i = blk->nvalues - 1; i > 0; i--)
+            blk->values[i] = blk->values[i - 1];
+        blk->values[0] = dup;
+    }
 }
 
 /* Anchor for an end-of-block dup (a phi-edge consume): the last value that is
