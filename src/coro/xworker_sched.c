@@ -349,6 +349,50 @@ static XrCoroutine *worker_claim_io_ready_list(XrWorker *worker, XrCoroutine *he
     return claimed_first;
 }
 
+static XrCoroutine *worker_take_direct_io_ready(XrWorker *worker, XrReadyList *ready) {
+    if (!worker || !ready)
+        return NULL;
+
+    XrCoroutine *previous = NULL;
+    XrCoroutine *candidate = ready->head;
+    while (candidate) {
+        XrCoroutine *next = candidate->sched_link;
+        int target_id = xr_coro_wake_target_id(candidate);
+        if (!xr_coro_is_thread_locked(candidate) || target_id == worker->p.id) {
+            if (previous) {
+                previous->sched_link = next;
+            } else {
+                ready->head = next;
+            }
+            if (ready->tail == candidate)
+                ready->tail = previous;
+            candidate->sched_link = NULL;
+            ready->count--;
+
+            XrCoroutine *claimed = worker_claim_io_ready_coro(worker, candidate);
+            if (claimed)
+                return claimed;
+        } else {
+            previous = candidate;
+        }
+        candidate = next;
+    }
+    return NULL;
+}
+
+static void worker_publish_io_ready_batch(XrRuntime *runtime, XrCoroutine *claimed) {
+    XR_DCHECK(runtime != NULL, "publish_io_ready_batch: NULL runtime");
+    XR_DCHECK(claimed != NULL, "publish_io_ready_batch: NULL claimed list");
+
+    XrCoroutine *last = claimed;
+    int count = 1;
+    while (last->sched_link) {
+        last = last->sched_link;
+        count++;
+    }
+    xr_injectq_push_batch(runtime, claimed, last, count);
+}
+
 static bool worker_advance_deterministic_timer(XrWorker *worker, int64_t *now_out,
                                                bool require_idle) {
     if (!worker)
@@ -422,15 +466,22 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
     XrProc *p = &worker->p;
     XrCoroutine *fast_coro = NULL;
     int total_io_events = 0;
+    bool published_io_batch = false;
 
     // ===== Fast path: per-worker local poll (zero contention) =====
     if (p->local_poll.poll_fd >= 0) {
         XrReadyList local_ready = {0};
         xr_local_poll_events(&p->local_poll, 0, &local_ready);
         total_io_events += local_ready.count;
+        fast_coro = worker_take_direct_io_ready(worker, &local_ready);
         XrCoroutine *claimed = worker_claim_io_ready_list(worker, local_ready.head);
         if (claimed) {
-            (void) xr_worker_push_lifo_batch(worker, claimed);
+            if (fast_coro) {
+                worker_publish_io_ready_batch(runtime, claimed);
+                published_io_batch = true;
+            } else {
+                (void) xr_worker_push_lifo_batch(worker, claimed);
+            }
         }
     }
 
@@ -455,26 +506,25 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
         XrReadyList ready = xr_netpoll_poll(&runtime->netpoll, 0);
         total_io_events += ready.count;
 
-        // Zero-copy fast path: single IO wakeup targeting this worker
-        // — skip queue push/pop, return directly for execution.
-        // Thread-locked coros must match this worker to use the fast path.
-        if (ready.count == 1 && ready.head) {
-            XrCoroutine *io_coro = ready.head;
-            int aff = xr_coro_wake_target_id(io_coro);
-            if (aff == p->id) {
-                fast_coro = worker_claim_io_ready_coro(worker, io_coro);
-                goto after_netpoll;
-            }
-        }
+        // Run one migratable I/O coroutine immediately and publish the rest
+        // globally so idle workers can consume a readiness burst without a
+        // steal round-trip through this worker's private deque.
+        if (!fast_coro)
+            fast_coro = worker_take_direct_io_ready(worker, &ready);
 
-        // Normal path: enqueue all ready coroutines to LIFO slot.
+        // Enqueue any remaining locked or unclaimed wakeups locally unless a
+        // direct candidate lets us fan the burst out through the inject queue.
         XrCoroutine *claimed = worker_claim_io_ready_list(worker, ready.head);
         if (claimed) {
-            (void) xr_worker_push_lifo_batch(worker, claimed);
+            if (fast_coro) {
+                worker_publish_io_ready_batch(runtime, claimed);
+                published_io_batch = true;
+            } else {
+                (void) xr_worker_push_lifo_batch(worker, claimed);
+            }
         }
     }
 
-after_netpoll:
     // Adaptive poll_skip feedback: EWMA of I/O event frequency.
     // Decay 7/8: io_ewma = io_ewma * 7/8 + sample * 1/8
     // Sample: 256 if events, 0 if none. Range [0, 256].
@@ -499,7 +549,8 @@ after_netpoll:
 
     // Drain MPSC inbox
     worker_drain_inbox(worker);
-    worker_pull_inject(worker, XR_INJECT_POP_BATCH);
+    if (!published_io_batch)
+        worker_pull_inject(worker, XR_INJECT_POP_BATCH);
 
     // Drain channel wake command queue (ownership-safe routing).
     // Commands arrive from remote workers that need us to wake our local

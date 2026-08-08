@@ -16,10 +16,14 @@
 #include "coro/xaot_coro.h"
 #include "coro/xtask.h"
 #include "coro/xworker_internal.h"
+#include "os/os_net.h"
 #include "runtime/mem/xsystem_heap.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
 #include <string.h>
+#if !defined(XR_OS_WINDOWS)
+#include <sys/socket.h>
+#endif
 
 static char *dup_env_value(const char *value) {
     if (!value)
@@ -231,6 +235,17 @@ static void init_ready_coro(XrCoroutine *coro, int id, XrVMRuntime *isolate) {
     atomic_store(&coro->affinity_p, 0);
 }
 
+static void init_blocked_io_probe(XrCoroutine *coro, XrCoroExt *ext, int id, XrVMRuntime *isolate,
+                                  int fd) {
+    init_ready_coro(coro, id, isolate);
+    memset(ext, 0, sizeof(*ext));
+    xr_coro_ext_init(ext);
+    coro->ext = ext;
+    atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_IO);
+    xr_io_wait_token_prepare(&ext->wait.io_token, fd, XR_WAIT_READ, 0, -1);
+    xr_io_wait_token_commit(&ext->wait.io_token);
+}
+
 typedef enum SpawnProbeAfterSpawns {
     SPAWN_PROBE_DONE,
     SPAWN_PROBE_YIELD_ONCE,
@@ -351,6 +366,69 @@ TEST(global_inject_spill_preserves_all_work) {
     ASSERT_TRUE(xr_proc_local_runq_len(&f.worker.p) > 0);
 
     scheduler_fixture_cleanup(&f);
+}
+
+TEST(io_ready_burst_runs_one_direct_and_publishes_the_rest) {
+#if defined(XR_OS_WINDOWS)
+    ASSERT_TRUE(true);
+#else
+    StealFixture f;
+    ASSERT_TRUE(steal_fixture_init(&f));
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = f.workers[0].m;
+    ASSERT_EQ_INT(xr_netpoll_init(&f.runtime.netpoll), 0);
+
+    enum {
+        TOTAL = 3
+    };
+    int sockets[TOTAL][2];
+    XrPollDesc *poll_descs[TOTAL];
+    XrCoroutine coros[TOTAL];
+    XrCoroExt extensions[TOTAL];
+    memset(sockets, -1, sizeof(sockets));
+    memset(poll_descs, 0, sizeof(poll_descs));
+
+    for (int i = 0; i < TOTAL; i++) {
+        ASSERT_EQ_INT(socketpair(AF_UNIX, SOCK_STREAM, 0, sockets[i]), 0);
+        ASSERT_EQ_INT(xr_socket_set_nonblocking((xr_socket_t) sockets[i][0]), 0);
+        ASSERT_EQ_INT(xr_socket_set_nonblocking((xr_socket_t) sockets[i][1]), 0);
+        poll_descs[i] = xr_netpoll_open(&f.runtime.netpoll, sockets[i][0]);
+        ASSERT_NOT_NULL(poll_descs[i]);
+        ASSERT_EQ_INT(xr_netpoll_bind_worker(poll_descs[i]), 0);
+        init_blocked_io_probe(&coros[i], &extensions[i], 400 + i, &f.isolate_storage,
+                              sockets[i][0]);
+        poll_descs[i]->user_data = &coros[i];
+        atomic_store(&poll_descs[i]->rg, (uintptr_t) &coros[i]);
+        atomic_fetch_add(&f.runtime.netpoll.waiters, 1);
+    }
+    atomic_store(&extensions[0].lock_count, 1);
+    extensions[0].locked_worker = 1;
+
+    for (int i = 0; i < TOTAL; i++) {
+        char byte = (char) i;
+        ASSERT_EQ_INT((int) xr_socket_send((xr_socket_t) sockets[i][1], &byte, 1), 1);
+    }
+    xr_thread_sleep_ms(1);
+
+    XrCoroutine *direct = worker_poll_sources(&f.workers[0]);
+    ASSERT_NOT_NULL(direct);
+    ASSERT_FALSE(xr_coro_is_thread_locked(direct));
+    ASSERT_EQ_INT(atomic_load(&direct->resume_status), XR_RESUME_IO_READY);
+    ASSERT_EQ_INT(atomic_load(&f.runtime.netpoll.waiters), 0);
+    ASSERT_EQ_INT(atomic_load(&f.runtime.injectq.len), TOTAL - 1);
+    ASSERT_EQ_INT(xr_proc_local_runq_len(&f.workers[0].p), 0);
+
+    ASSERT_EQ_INT(worker_pull_inject(&f.workers[0], XR_INJECT_POP_BATCH), TOTAL - 1);
+    ASSERT_EQ_INT(xr_proc_local_runq_len(&f.workers[0].p), TOTAL - 1);
+
+    for (int i = 0; i < TOTAL; i++) {
+        xr_netpoll_close(&f.runtime.netpoll, poll_descs[i]);
+        xr_closesocket((xr_socket_t) sockets[i][0]);
+        xr_closesocket((xr_socket_t) sockets[i][1]);
+    }
+    xr_netpoll_cleanup(&f.runtime.netpoll);
+    steal_fixture_cleanup(&f);
+#endif
 }
 
 TEST(global_coro_pool_get_pops_bounded_batches) {
@@ -799,6 +877,7 @@ RUN_TEST_SUITE("Scheduler Run Queue");
 RUN_TEST(local_runq_pops_recent_owner_items_first);
 RUN_TEST(lifo_budget_flushes_run_next_to_local_queue);
 RUN_TEST(global_inject_spill_preserves_all_work);
+RUN_TEST(io_ready_burst_runs_one_direct_and_publishes_the_rest);
 RUN_TEST(global_coro_pool_get_pops_bounded_batches);
 RUN_TEST(coro_ext_init_sets_timer_and_owner_sentinels);
 RUN_TEST(single_worker_ensure_skips_sysmon_thread);
