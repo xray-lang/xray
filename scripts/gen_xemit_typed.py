@@ -117,8 +117,6 @@ KOP_SIGS: dict[str, tuple[list[tuple[str, str]], str, tuple[str, ...]]] = {
     # Calls / invokes / opcode-specific shapes.
     "KOP_CALL":          ([("int", "base"), ("int", "nargs"), ("int", "nresults")],
                           "abc", ("base", "nargs", "nresults")),
-    "KOP_CALL_KEEP":     ([("int", "base"), ("int", "nargs"), ("int", "keep_dst")],
-                          "abc", ("base", "nargs", "keep_dst")),
     "KOP_RETURN":        ([("int", "base"), ("int", "nret")],
                           "abc", ("base", "nret", "0")),
     "KOP_INVOKE_K":      ([("int", "base"), ("int", "k_idx"), ("int", "nargs")],

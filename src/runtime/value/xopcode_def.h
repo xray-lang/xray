@@ -79,7 +79,6 @@
 #define KOP_ABx_LIT XR_OPF_REG_OUT, XR_OPF_LIT, XR_OPF_NONE
 #define KOP_ABx_INOUT_LIT XR_OPF_REG_INOUT, XR_OPF_LIT, XR_OPF_NONE
 #define KOP_CALL XR_OPF_REG_BASE, XR_OPF_LIT, XR_OPF_LIT
-#define KOP_CALL_KEEP XR_OPF_REG_BASE, XR_OPF_LIT, XR_OPF_REG_OUT
 #define KOP_RETURN XR_OPF_REG_BASE, XR_OPF_LIT, XR_OPF_NONE
 #define KOP_INVOKE_K XR_OPF_REG_BASE, XR_OPF_K_IDX, XR_OPF_LIT
 #define KOP_INVOKE_SYM XR_OPF_REG_BASE, XR_OPF_SYMBOL_IDX, XR_OPF_LIT
@@ -162,7 +161,6 @@
     _(TEST, FMT_AB_IMM, KOP_A_TEST, "if R[A] != k then PC++")                                      \
     _(TESTSET, FMT_ABC, KOP_ABC_BIN_LIT, "if R[B] != k then PC++ else R[A]=R[B]")                  \
     _(CALL, FMT_ABC, KOP_CALL, "R[A] = R[A](R[A+1]...R[A+B-1])")                                   \
-    _(CALL_KEEP, FMT_ABC, KOP_CALL_KEEP, "R[C] = R[A](R[A+1]...R[A+B]); R[A] kept")                \
     _(CALL_STATIC, FMT_ABC, KOP_CALL, "R[A](R[A+1]...R[A+B-1]) - known closure")                   \
     _(CALLSELF, FMT_ABC, KOP_CALL, "recursive call opt")                                           \
     _(TAILCALL, FMT_ABC, KOP_CALL, "tail call opt")                                                \

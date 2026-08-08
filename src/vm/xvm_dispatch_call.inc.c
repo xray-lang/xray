@@ -19,7 +19,6 @@
  *
  * Owns:
  *   - OP_CALL          : unified closure / cfunc / class / bound-method call
- *   - OP_CALL_KEEP     : preserves caller register window
  *   - OP_CALL_STATIC   : direct closure call, no closure-resolve
  *   - OP_LOOP_BACK     : back-edge to entry of same closure
  *   - OP_CALLSELF      : recursive self-call shortcut
@@ -381,92 +380,6 @@ op_call_closure:
 
     // Error: non-callable value (catchable by try/catch)
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "attempt to call a non-function value");
-}
-
-vmcase(OP_CALL_KEEP) {
-    /* OP_CALL_KEEP A B C: call R[A] with B args, result to R[C], R[A] preserved
-    ** Used by higher-order function inline (map/filter/reduce/forEach)
-    ** to avoid callback register being overwritten by return value
-    */
-    int a = GETARG_A(i);
-    int nargs = GETARG_B(i);
-    int result_reg = GETARG_C(i);
-    XrValue func_val = R(a);
-
-    if (XR_UNLIKELY(!XR_IS_FUNCTION(func_val))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "attempt to call a non-function value");
-    }
-
-    XrClosure *closure = xr_value_to_closure(func_val);
-    XrProto *proto = closure->proto;
-
-    /* OP_CALL_KEEP preserves the callable in R[A], but extern closures still
-     * use exactly the same libffi path as OP_CALL.  Entering the synthesized
-     * proto body would execute its verifier-only zero stub and silently turn
-     * every higher-order foreign call into zero/null. */
-    if (XR_UNLIKELY(proto->is_extern)) {
-        XrValue result = xr_ffi_call_proto(isolate, proto, &R(a + 1), nargs);
-        VM_REBIND_AFTER_NATIVE_CALL();
-        R(result_reg) = result;
-        vmbreak;
-    }
-
-    // Argument count: silently truncate extra args
-    int effective_nargs = nargs;
-    if (!proto->is_vararg && nargs > proto->numparams) {
-        effective_nargs = proto->numparams;
-    }
-
-    if (XR_UNLIKELY(effective_nargs < proto->min_params)) {
-        VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "expected %d arguments, got %d", proto->min_params,
-                         effective_nargs);
-    }
-
-    if (XR_UNLIKELY(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
-        VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow: recursion exceeds %d levels",
-                         XR_FRAMES_MAX);
-    }
-
-    VM_STACK_CHECK(a + 1 + proto->maxstacksize);
-
-    if (proto->is_vararg) {
-        // Fill missing optional fixed params, then collect the trailing args
-        // into the rest array at the numparams slot (mirrors OP_CALL). Without
-        // this a variadic callee reached through OP_CALL_KEEP (e.g. a namespace
-        // member call `mod.fn(...)`) would read a scalar where it expects the
-        // rest array.
-        for (int j = nargs; j < proto->numparams; j++) {
-            R(a + 1 + j) = xr_null();
-        }
-        int extra_args = nargs > proto->numparams ? nargs - proto->numparams : 0;
-        XrArray *rest_array = VM_CURRENT_CORO ? xr_array_new(VM_CURRENT_CORO)
-                                              : vm_root_array_new(isolate, 4, XR_ELEM_ANY);
-        if (extra_args > 0) {
-            XrValue *arg_base = &R(a + 1 + proto->numparams);
-            for (int j = 0; j < extra_args; j++) {
-                xr_array_push(rest_array, arg_base[j]);
-            }
-        }
-        R(a + 1 + proto->numparams) = xr_value_from_array(rest_array);
-    } else {
-        // Fill missing optional arguments with null
-        for (int j = effective_nargs; j < proto->numparams; j++) {
-            R(a + 1 + j) = xr_null();
-        }
-    }
-
-    savepc();
-
-    int _fidx = VM_FRAME_COUNT;
-    VM_INC_FRAME_COUNT;
-    XrBcCallFrame *new_frame = &VM_FRAMES[_fidx];
-    new_frame->closure = closure;
-    new_frame->pc = PROTO_CODE_BASE(proto);
-    new_frame->base_offset = (int) ((base + a + 1) - VM_STACK);
-    new_frame->result_offset = (int) ((base + result_reg) - VM_STACK);
-    new_frame->call_status = XR_CALL_KEEP_FUNC;
-
-    goto startfunc;
 }
 
 vmcase(OP_CALL_STATIC) {
