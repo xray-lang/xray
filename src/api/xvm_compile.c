@@ -71,7 +71,7 @@ static bool compile_session_available(XrCompilerSession *session, const char *wh
 static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
                                      const char *source_file, const XrModuleGraph *graph,
                                      XiModule **graph_modules, int graph_module_count,
-                                     XiModule **out_module) {
+                                     XiModule **out_module, XaAnalyzer *shared_analyzer) {
     if (out_module)
         *out_module = NULL;
     if (!compile_session_available(session, "compile_ast_internal"))
@@ -84,7 +84,9 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
         ast->type == AST_PROGRAM && ast->as.program.arena &&
         xr_compiler_session_push_arena(session, ast->as.program.arena, source_file, &ast_scope);
 
-    XrCompilerContext *ctx = xr_compiler_context_new(session);
+    XrCompilerContext *ctx = shared_analyzer
+                                 ? xr_compiler_context_new_with_analyzer(session, shared_analyzer)
+                                 : xr_compiler_context_new(session);
     if (ctx == NULL) {
         xr_log_warning("vm", "failed to create compiler context");
         if (has_ast_scope)
@@ -126,16 +128,17 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
 
 XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
                                     const char *source_file) {
-    return compile_ast_internal(session, ast, source_file, NULL, NULL, 0, NULL);
+    return compile_ast_internal(session, ast, source_file, NULL, NULL, 0, NULL, NULL);
 }
 
-XrProto *xr_compile_ast_in_graph(XrCompilerSession *session, AstNode *ast, const char *source_file,
-                                 const XrModuleGraph *graph, XiModule **graph_modules,
-                                 int graph_module_count, XiModule **out_module) {
-    if (!graph || !graph_modules || graph_module_count <= 0 || !out_module)
+XrProto *xr_compile_ast_in_graph(XrCompilerSession *session, XaAnalyzer *shared_analyzer,
+                                 AstNode *ast, const char *source_file, const XrModuleGraph *graph,
+                                 XiModule **graph_modules, int graph_module_count,
+                                 XiModule **out_module) {
+    if (!shared_analyzer || !graph || !graph_modules || graph_module_count <= 0 || !out_module)
         return NULL;
     return compile_ast_internal(session, ast, source_file, graph, graph_modules, graph_module_count,
-                                out_module);
+                                out_module, shared_analyzer);
 }
 
 XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,

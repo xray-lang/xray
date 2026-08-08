@@ -1,0 +1,59 @@
+import mem
+
+export final class ByteEnvelope {
+    contractId: int
+    methodId: int
+    requestId: int
+    serviceId: int
+    generation: int
+    deadline: int
+    flags: int
+    traceId: int
+    payload: Array<byte>
+
+    constructor(
+        contractId: int,
+        methodId: int,
+        requestId: int,
+        serviceId: int,
+        generation: int,
+        deadline: int,
+        flags: int,
+        traceId: int,
+        payload: Array<byte>
+    ) {
+        this.contractId = contractId
+        this.methodId = methodId
+        this.requestId = requestId
+        this.serviceId = serviceId
+        this.generation = generation
+        this.deadline = deadline
+        this.flags = flags
+        this.traceId = traceId
+        this.payload = payload
+    }
+}
+
+export struct PayloadView {
+    length: int
+    first: int
+    last: int
+}
+
+export fn payloadView(envelope: ByteEnvelope) -> PayloadView {
+    return PayloadView{
+        length: len(envelope.payload),
+        first: envelope.payload[0] as int,
+        last: envelope.payload[len(envelope.payload) - 1] as int,
+    }
+}
+
+export fn encodePayload(envelope: ByteEnvelope) -> Buffer {
+    var out = mem.allocZeroed(len(envelope.payload))
+    if (len(envelope.payload) > 0) {
+        var target: Slice<u8> = out.asMutBytes()
+        var source: Slice<byte> = envelope.payload[:]
+        target.copyFrom(source)
+    }
+    return out
+}

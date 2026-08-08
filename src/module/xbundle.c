@@ -141,8 +141,8 @@ fail:
     return NULL;
 }
 
-static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XrModuleGraph *graph,
-                                 XrBundleFlags flags, XrBundle *bundle) {
+static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaAnalyzer *analyzer,
+                                 XrModuleGraph *graph, XrBundleFlags flags, XrBundle *bundle) {
     XiModule **graph_modules =
         (XiModule **) xr_calloc((size_t) graph->topo_count, sizeof(XiModule *));
     XrProto **compiled = (XrProto **) xr_calloc((size_t) graph->topo_count, sizeof(XrProto *));
@@ -174,8 +174,8 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XrM
         }
 
         XrProto *proto =
-            xr_compile_ast_in_graph(session, spec->ast, spec->source_path, graph, graph_modules,
-                                    graph->topo_count, &graph_modules[ti]);
+            xr_compile_ast_in_graph(session, analyzer, spec->ast, spec->source_path, graph,
+                                    graph_modules, graph->topo_count, &graph_modules[ti]);
         if (!proto) {
             xr_log_warning("bundle", "compilation failed: %s", spec->source_path);
             goto cleanup;
@@ -259,7 +259,8 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFl
     const char *entry_path =
         entry_spec->source_path ? entry_spec->source_path : entry_spec->canonical;
     bundle->entry_path = xr_strdup(entry_path);
-    bool complete = bundle->entry_path && bundle_compile_graph(X, session, graph, flags, bundle);
+    bool complete = bundle->entry_path &&
+                    bundle_compile_graph(X, session, graph_analyzer, graph, flags, bundle);
     xr_compiler_session_set_module_graph(session, previous_graph);
     xa_analyzer_set_graph(graph_analyzer, NULL);
     xa_analyzer_free(graph_analyzer);

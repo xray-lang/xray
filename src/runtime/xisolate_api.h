@@ -121,9 +121,11 @@ struct AstNode;
 struct XrCompilerSession;
 struct XiModule;
 struct XrModuleGraph;
+struct XaAnalyzer;
 XR_FUNC XrProto *xr_compile_ast_with_source(struct XrCompilerSession *session, struct AstNode *ast,
                                             const char *source_file);
-XR_FUNC XrProto *xr_compile_ast_in_graph(struct XrCompilerSession *session, struct AstNode *ast,
+XR_FUNC XrProto *xr_compile_ast_in_graph(struct XrCompilerSession *session,
+                                         struct XaAnalyzer *shared_analyzer, struct AstNode *ast,
                                          const char *source_file, const struct XrModuleGraph *graph,
                                          struct XiModule **graph_modules, int graph_module_count,
                                          struct XiModule **out_module);

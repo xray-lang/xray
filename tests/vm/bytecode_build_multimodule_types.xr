@@ -1,0 +1,25 @@
+import {
+    ByteEnvelope,
+    encodePayload,
+    payloadView
+} from "./modules/bytecode_build_multimodule_payload"
+
+fn encodeOne(payload: Array<byte>) -> Buffer {
+    var envelope = ByteEnvelope(77, 1, 2, 9, 3, 1000000, 1, 11, payload)
+    return encodePayload(envelope)
+}
+
+fn inspect(payload: Array<byte>) -> int {
+    var encoded = encodeOne(payload)
+    var bytes: Slice<u8> = encoded.asBytes()
+    return len(bytes) + (bytes[0] as int) + (bytes[len(bytes) - 1] as int)
+}
+
+var payload = Array<byte>(64, 7)
+var checksum = 0
+for (var index = 0; index < 20; index++) {
+    checksum = checksum + inspect(payload)
+}
+var envelope = ByteEnvelope(77, 1, 2, 9, 3, 1000000, 1, 11, payload)
+var view = payloadView(envelope)
+print(checksum.toString() + "/" + view.length.toString() + "/" + len(payload).toString())
