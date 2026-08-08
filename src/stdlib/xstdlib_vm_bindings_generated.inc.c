@@ -208,6 +208,7 @@ static void xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT_YIELDABLE(module, isolate, "__accept", net_accept_handle_yieldable);
     XRS_EXPORT_YIELDABLE(module, isolate, "__read", net_read_handle_yieldable);
     XRS_EXPORT_YIELDABLE(module, isolate, "__readInto", net_read_into_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__readExactInto", net_read_exact_into_yieldable);
     XRS_EXPORT_YIELDABLE(module, isolate, "__write", net_write_handle_yieldable);
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeBytes", net_write_bytes_yieldable);
     XRS_EXPORT_YIELDABLE(module, isolate, "__copy", net_copy_yieldable);

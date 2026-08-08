@@ -48,8 +48,8 @@ static inline bool xr_stdlib_metadata_func_resumes_by_netpoll_retry(const char *
         !xr_stdlib_metadata_func_is_yieldable(module, name))
         return false;
     return strcmp(name, "__accept") == 0 || strcmp(name, "__read") == 0 ||
-           strcmp(name, "__readInto") == 0 || strcmp(name, "__write") == 0 ||
-           strcmp(name, "__writeBytes") == 0;
+           strcmp(name, "__readInto") == 0 || strcmp(name, "__readExactInto") == 0 ||
+           strcmp(name, "__write") == 0 || strcmp(name, "__writeBytes") == 0;
 }
 
 #endif  // XSTDLIB_METADATA_H

@@ -773,7 +773,7 @@ static bool cg_coro_call_needs_child_frame(XiCgenCtx *ctx, const XiFunc *current
 static bool cg_coro_test_yield_add_call(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 static const char *cg_coro_net_call_name(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
                                          uint16_t *arg_base_out);
-static bool cg_coro_net_write_call(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
+static bool cg_coro_net_progress_call(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 
 /* The shared coroutine plan for 'f', wired to the ctx-level resolver.  Cached
  * on f->coro_plan by xi_coro_analyze, so repeated lookups are cheap. */
@@ -997,7 +997,7 @@ static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
             const XiValue *v = blk->values[vi];
             if (cg_coro_test_yield_add_call(ctx, f, v))
                 cg_coro_layout_add(&size, &max_align, sizeof(int64_t), _Alignof(int64_t));
-            if (cg_coro_net_write_call(ctx, f, v))
+            if (cg_coro_net_progress_call(ctx, f, v))
                 cg_coro_layout_add(&size, &max_align, sizeof(int64_t), _Alignof(int64_t));
             if (cg_coro_call_needs_child_frame(ctx, f, v)) {
                 cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
@@ -1904,8 +1904,8 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             const XiValue *v = blk->values[vi];
             if (cg_coro_test_yield_add_call(ctx, f, v))
                 fprintf(out, "    int64_t test_yield_value_%u;\n", v->id);
-            if (cg_coro_net_write_call(ctx, f, v))
-                fprintf(out, "    int64_t net_write_progress_%u;\n", v->id);
+            if (cg_coro_net_progress_call(ctx, f, v))
+                fprintf(out, "    int64_t net_io_progress_%u;\n", v->id);
             if (cg_coro_call_needs_child_frame(ctx, f, v)) {
                 fprintf(out, "    void *call_frame_%u;\n", v->id);
                 if (cg_coro_callable_target_switch_plan(ctx, v))
@@ -2524,17 +2524,18 @@ static const char *cg_coro_net_call_name(XiCgenCtx *ctx, const XiFunc *f, const 
             method = ref->member_name;
     }
     if (!method || (strcmp(method, "__accept") != 0 && strcmp(method, "__read") != 0 &&
-                    strcmp(method, "__readInto") != 0 && strcmp(method, "__write") != 0 &&
-                    strcmp(method, "__writeBytes") != 0))
+                    strcmp(method, "__readInto") != 0 && strcmp(method, "__readExactInto") != 0 &&
+                    strcmp(method, "__write") != 0 && strcmp(method, "__writeBytes") != 0))
         return NULL;
     if (arg_base_out)
         *arg_base_out = 1;
     return method;
 }
 
-static bool cg_coro_net_write_call(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+static bool cg_coro_net_progress_call(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     const char *method = cg_coro_net_call_name(ctx, f, v, NULL);
-    return method && (strcmp(method, "__write") == 0 || strcmp(method, "__writeBytes") == 0);
+    return method && (strcmp(method, "__readExactInto") == 0 || strcmp(method, "__write") == 0 ||
+                      strcmp(method, "__writeBytes") == 0);
 }
 
 static bool emit_coro_net_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -2549,6 +2550,7 @@ static bool emit_coro_net_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
         (strcmp(method, "__accept") == 0 && argc == 1) ||
         (strcmp(method, "__read") == 0 && (argc == 1 || argc == 2)) ||
         (strcmp(method, "__readInto") == 0 && argc == 3) ||
+        (strcmp(method, "__readExactInto") == 0 && argc == 3) ||
         ((strcmp(method, "__write") == 0 || strcmp(method, "__writeBytes") == 0) && argc == 2);
     if (!valid_arity) {
         ctx->error = true;
@@ -2559,10 +2561,11 @@ static bool emit_coro_net_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     }
 
     int sid = ++(*state_id);
-    bool write = strcmp(method, "__write") == 0 || strcmp(method, "__writeBytes") == 0;
+    bool tracks_progress = strcmp(method, "__readExactInto") == 0 ||
+                           strcmp(method, "__write") == 0 || strcmp(method, "__writeBytes") == 0;
     emit_value_source_line(ctx, out, v);
-    if (write)
-        fprintf(out, "    f->net_write_progress_%u = 0;\n", v->id);
+    if (tracks_progress)
+        fprintf(out, "    f->net_io_progress_%u = 0;\n", v->id);
     fprintf(out, "N%u_RETRY:;\n", v->id);
     fprintf(out, "    XrValue _net_value_%u = XR_NULL_VAL;\n", v->id);
     fprintf(out, "    int _net_step_%u = ", v->id);
@@ -2587,6 +2590,14 @@ static bool emit_coro_net_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[arg_base + 2], XR_REP_TAGGED);
         fprintf(out, ", &_net_value_%u);\n", v->id);
+    } else if (strcmp(method, "__readExactInto") == 0) {
+        fprintf(out, "xrt_net_read_exact_into_step(");
+        emit_value_as_rep_ctx(ctx, out, v->args[arg_base], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[arg_base + 1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[arg_base + 2], XR_REP_TAGGED);
+        fprintf(out, ", &f->net_io_progress_%u, &_net_value_%u);\n", v->id, v->id);
     } else if (strcmp(method, "__write") == 0) {
         fprintf(out, "xrt_net_write_step(");
         emit_value_as_rep_ctx(ctx, out, v->args[arg_base], XR_REP_TAGGED);
@@ -2594,13 +2605,13 @@ static bool emit_coro_net_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
         emit_value_as_rep_ctx(ctx, out, v->args[arg_base + 1], XR_REP_TAGGED);
         fprintf(out, "), xr_str_len(");
         emit_value_as_rep_ctx(ctx, out, v->args[arg_base + 1], XR_REP_TAGGED);
-        fprintf(out, "), &f->net_write_progress_%u, &_net_value_%u);\n", v->id, v->id);
+        fprintf(out, "), &f->net_io_progress_%u, &_net_value_%u);\n", v->id, v->id);
     } else {
         fprintf(out, "xrt_net_write_bytes_step(");
         emit_value_as_rep_ctx(ctx, out, v->args[arg_base], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[arg_base + 1], XR_REP_TAGGED);
-        fprintf(out, ", &f->net_write_progress_%u, &_net_value_%u);\n", v->id, v->id);
+        fprintf(out, ", &f->net_io_progress_%u, &_net_value_%u);\n", v->id, v->id);
     }
     emit_value_generated_line_reset(ctx, out, v);
     fprintf(out,

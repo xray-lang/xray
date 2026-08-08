@@ -187,6 +187,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"net", "__read", 1, "xrt_net_read_default", "v", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__read", 2, "xrt_net_read", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__readInto", 3, "xrt_net_read_into", "vvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"net", "__readExactInto", 3, "xrt_net_read_exact_into", "vvv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__write", 2, "xrt_net_write", "vs", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__writeBytes", 2, "xrt_net_write_bytes", "vv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"net", "__copyBidirectional", 2, "xrt_net_copy_bidirectional", "vv", CG_AOT_RET_I64_PAIR_RESULT, NULL, UINT32_C(2184710811), "NetError", g_aot_stdlib_net___copyBidirectional_enum_variants, 10},

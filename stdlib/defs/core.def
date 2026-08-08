@@ -3439,6 +3439,19 @@ module net {
     layer: "runtime"
   }
 
+  fn __readExactInto {
+    signature: "(conn: NetConn, buffer: Array<byte>, length: int): int"
+    doc: "Fill a reusable Array<byte> buffer up to an exact length"
+    vm: "net_read_exact_into_yieldable"
+    vm_binding: "yieldable"
+    argc: 3
+    arg_spec: "vvv"
+    aot: "xrt_net_read_exact_into"
+    aot_direct: true
+    link_object: false
+    layer: "runtime"
+  }
+
   fn __write {
     signature: "(conn: NetConn, data: string): int"
     doc: "Write data to connection"

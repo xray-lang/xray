@@ -467,7 +467,7 @@ static const XaBuiltinEnum g_gen_net_enums[] = {
 };
 #define GEN_NET_ENUM_COUNT 1
 
-static const char *g_gen_net___copybidirectional_8_errors[] = {
+static const char *g_gen_net___copybidirectional_9_errors[] = {
     "NetError.Timeout",
     "NetError.Closed",
     "NetError.Reset",
@@ -487,10 +487,11 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readInto", "(conn: NetConn, buffer: Array<byte>, maxlen?: int): int", "Read data into a reusable Array<byte> buffer", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__readExactInto", "(conn: NetConn, buffer: Array<byte>, length: int): int", "Fill a reusable Array<byte> buffer up to an exact length", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__write", "(conn: NetConn, data: string): int", "Write data to connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__copy", "(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, true, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net___copybidirectional_8_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, true, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net___copybidirectional_9_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__shutdownRead", "(conn: NetConn): bool", "Shut down the read side of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__shutdown", "(conn: NetConn): bool", "Shut down both sides of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -510,7 +511,7 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__recvFrom", "(handle: NetConn, maxlen?: int): __UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_NET_FUNCTION_COUNT 27
+#define GEN_NET_FUNCTION_COUNT 28
 
 // os.__ExecResult handle fields
 static const XaBuiltinHandleField g_gen_os___execresult_fields[] = {

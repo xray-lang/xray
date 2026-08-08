@@ -80,6 +80,10 @@ export fn readInto(conn: NetConn, buffer: ref Array<byte>, maxlen: int = 1048576
     return __readInto(conn, buffer, maxlen)
 }
 
+export fn readExactInto(conn: NetConn, buffer: ref Array<byte>, length: int) -> int {
+    return __readExactInto(conn, buffer, length)
+}
+
 export fn write(conn: NetConn, data: string) -> int { return __write(conn, data) }
 
 export fn writeBytes(conn: NetConn, data: Array<byte>) -> int {

@@ -366,6 +366,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"accept", XLSP_SYM_FUNCTION, "fn(listener: NetListener): NetConn?", "", NULL, 0},
     {"read", XLSP_SYM_FUNCTION, "fn(conn: NetConn, maxlen?: int): string?", "", NULL, 0},
     {"readInto", XLSP_SYM_FUNCTION, "fn(conn: NetConn, buffer: ref Array<byte>, maxlen?: int): int", "", NULL, 0},
+    {"readExactInto", XLSP_SYM_FUNCTION, "fn(conn: NetConn, buffer: ref Array<byte>, length: int): int", "", NULL, 0},
     {"write", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: string): int", "", NULL, 0},
     {"writeBytes", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: Array<byte>): int", "", NULL, 0},
     {"copy", XLSP_SYM_FUNCTION, "fn(src: NetConn, dst: NetConn, bufferSize?: int): int", "", NULL, 0},
@@ -397,7 +398,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"__CopyBidirectionalResult", XLSP_SYM_CLASS, "type __CopyBidirectionalResult = { aToB: int, bToA: int }", "Byte counts copied in each direction by copyBidirectional", NULL, 0},
     {"NetError", XLSP_SYM_CLASS, "enum NetError", "Typed failure from native network operations", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 36
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 37
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
