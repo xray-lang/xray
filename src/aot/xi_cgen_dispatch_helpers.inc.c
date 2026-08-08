@@ -7806,6 +7806,8 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
             emit_typed_array_filter_expr(ctx, out, f, prefix, v)) ||
            (nargs == 2 && strcmp(method, "reduce") == 0 &&
             emit_typed_array_reduce_expr(ctx, out, f, prefix, v)) ||
+           (nargs == 1 && strcmp(method, "forEach") == 0 &&
+            emit_typed_array_for_each_expr(ctx, out, f, prefix, v)) ||
            (nargs == 1 && strcmp(method, "find") == 0 &&
             emit_typed_array_predicate_hof_expr(ctx, out, f, prefix, v, "xrt_array_find_typed")) ||
            (nargs == 1 && strcmp(method, "findIndex") == 0 &&

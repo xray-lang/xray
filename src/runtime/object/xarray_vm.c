@@ -32,9 +32,17 @@ void xr_array_foreach(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *c
     XR_DCHECK(arr != NULL, "xr_array_foreach: NULL arr");
     XR_DCHECK(callback != NULL, "xr_array_foreach: NULL callback");
     for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
+        XrValue args[2];
+        int nargs = 1;
         args[0] = xr_array_get_element(arr, i);
-        xr_vm_call_closure(iso, callback, args, 1);
+        /* The contract's index is optional: pass it only to a callback that
+         * declares the second parameter, so a one-parameter lambda keeps
+         * working while a two-parameter one receives the element index. */
+        if (callback->proto && callback->proto->numparams >= 2) {
+            args[1] = xr_int(i);
+            nargs = 2;
+        }
+        xr_vm_call_closure(iso, callback, args, nargs);
     }
 }
 
@@ -55,9 +63,15 @@ XrArray *xr_array_map(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure *c
     result->elem_tid = elem_tid;
 
     for (int i = 0; i < arr->length; i++) {
-        XrValue args[1];
+        XrValue args[2];
+        int nargs = 1;
         args[0] = xr_array_get_element(arr, i);
-        xr_array_set_element(result, i, xr_vm_call_closure(iso, callback, args, 1));
+        /* Optional index: see xr_array_foreach. */
+        if (callback->proto && callback->proto->numparams >= 2) {
+            args[1] = xr_int(i);
+            nargs = 2;
+        }
+        xr_array_set_element(result, i, xr_vm_call_closure(iso, callback, args, nargs));
     }
     result->length = arr->length;
 
@@ -72,9 +86,15 @@ XrArray *xr_array_filter(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure
 
     for (int i = 0; i < arr->length; i++) {
         XrValue elem = xr_array_get_element(arr, i);
-        XrValue args[1];
+        XrValue args[2];
+        int nargs = 1;
         args[0] = elem;
-        XrValue test_result = xr_vm_call_closure(iso, callback, args, 1);
+        /* Optional index: see xr_array_foreach. */
+        if (callback->proto && callback->proto->numparams >= 2) {
+            args[1] = xr_int(i);
+            nargs = 2;
+        }
+        XrValue test_result = xr_vm_call_closure(iso, callback, args, nargs);
 
         if (xr_value_is_truthy(test_result)) {
             xr_rc_retain_value(elem);
@@ -92,10 +112,16 @@ XrValue xr_array_reduce(struct XrVMRuntime *iso, XrArray *arr, struct XrClosure 
     XrValue accumulator = initial;
 
     for (int i = 0; i < arr->length; i++) {
-        XrValue args[2];
+        XrValue args[3];
+        int nargs = 2;
         args[0] = accumulator;
         args[1] = xr_array_get_element(arr, i);
-        accumulator = xr_vm_call_closure(iso, callback, args, 2);
+        /* Optional index as the third parameter: see xr_array_foreach. */
+        if (callback->proto && callback->proto->numparams >= 3) {
+            args[2] = xr_int(i);
+            nargs = 3;
+        }
+        accumulator = xr_vm_call_closure(iso, callback, args, nargs);
     }
 
     return accumulator;

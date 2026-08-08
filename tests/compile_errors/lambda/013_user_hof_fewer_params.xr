@@ -5,8 +5,9 @@
 // a user-declared HOF has nothing that accommodates it and calls with the
 // arity it wrote, so the closure traps.
 //
-// The missing diagnostic is the only defect here: with a two-parameter lambda
-// the program runs to completion.
+// A two-parameter lambda compiles and runs to completion; the one-parameter
+// short form is now rejected at compile time by the parameter-count lower
+// bound in xr_type_assignable, so this file expects a compile error.
 fn userHof(f: (int, int) -> int) -> int { return f(10, 5) }
 
 fn main() {

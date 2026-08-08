@@ -21,6 +21,7 @@ static inline void xrt_array_write_preallocated(xrt_array_t *a, int64_t index, X
 
 typedef XrValue (*xrt_array_hof_fn1_t)(xrt_closure_t *, XrValue);
 typedef XrValue (*xrt_array_hof_fn2_t)(xrt_closure_t *, XrValue, XrValue);
+typedef XrValue (*xrt_array_hof_fn3_t)(xrt_closure_t *, XrValue, XrValue, XrValue);
 
 typedef struct XrtArrayHofCtx {
     xrt_array_t *input;
@@ -118,6 +119,74 @@ static inline XrValue xrt_array_for_each_typed(XrValue recv, XrValue callback) {
     (void) xr_array_core_hof_for_each(a->length, xrt_array_hof_read, xrt_array_hof_each, &ctx,
                                       NULL);
     return XR_NULL_VAL;
+}
+
+/* Indexed variants: the callback declares the trailing index parameter, so the
+ * closure body is the boxed two/three-argument form and is called with the
+ * element index. The codegen picks these by the callback's static arity; the
+ * closure's C ABI is fixed at generation time, so a runtime dispatch on arity
+ * is neither possible (the callable descriptor carries none) nor needed. */
+static inline XrValue xrt_array_map_indexed_typed(XrValue recv, XrValue callback,
+                                                  uint8_t result_elem_type) {
+    if (!XR_IS_ARRAY(recv) || callback.tag != XR_TAG_CLOSURE)
+        return XR_NULL_VAL;
+    if (result_elem_type >= XR_ELEM_COUNT)
+        result_elem_type = XR_ELEM_ANY;
+    xrt_array_t *a = (xrt_array_t *) recv.ptr;
+    xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
+    xrt_array_hof_fn2_t fn2 = (xrt_array_hof_fn2_t) cl->callable->sync_entry;
+    XrValue arr = xrt_array_new_typed_uninit(a->length, result_elem_type);
+    xrt_array_t *out = (xrt_array_t *) arr.ptr;
+    for (int64_t i = 0; i < a->length; i++) {
+        XrValue mapped = fn2(cl, xr_typed_get(a->data, (int32_t) i, a->elem_type), XR_FROM_INT(i));
+        xrt_array_write_preallocated(out, i, mapped);
+    }
+    out->length = a->length;
+    return arr;
+}
+
+static inline XrValue xrt_array_filter_indexed_typed(XrValue recv, XrValue callback) {
+    if (!XR_IS_ARRAY(recv) || callback.tag != XR_TAG_CLOSURE)
+        return XR_NULL_VAL;
+    xrt_array_t *a = (xrt_array_t *) recv.ptr;
+    xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
+    xrt_array_hof_fn2_t fn2 = (xrt_array_hof_fn2_t) cl->callable->sync_entry;
+    XrValue arr = xrt_array_new_typed_uninit(a->length, a->elem_type);
+    xrt_array_t *out = (xrt_array_t *) arr.ptr;
+    int64_t kept = 0;
+    for (int64_t i = 0; i < a->length; i++) {
+        XrValue value = xr_typed_get(a->data, (int32_t) i, a->elem_type);
+        if (xr_truthy(fn2(cl, value, XR_FROM_INT(i)))) {
+            xrt_array_write_preallocated(out, kept, value);
+            kept++;
+        }
+    }
+    out->length = kept;
+    return arr;
+}
+
+static inline XrValue xrt_array_for_each_indexed_typed(XrValue recv, XrValue callback) {
+    if (!XR_IS_ARRAY(recv) || callback.tag != XR_TAG_CLOSURE)
+        return XR_NULL_VAL;
+    xrt_array_t *a = (xrt_array_t *) recv.ptr;
+    xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
+    xrt_array_hof_fn2_t fn2 = (xrt_array_hof_fn2_t) cl->callable->sync_entry;
+    for (int64_t i = 0; i < a->length; i++)
+        (void) fn2(cl, xr_typed_get(a->data, (int32_t) i, a->elem_type), XR_FROM_INT(i));
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_array_reduce_indexed_typed(XrValue recv, XrValue callback,
+                                                     XrValue initial) {
+    if (!XR_IS_ARRAY(recv) || callback.tag != XR_TAG_CLOSURE)
+        return XR_NULL_VAL;
+    xrt_array_t *a = (xrt_array_t *) recv.ptr;
+    xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
+    xrt_array_hof_fn3_t fn3 = (xrt_array_hof_fn3_t) cl->callable->sync_entry;
+    XrValue acc = initial;
+    for (int64_t i = 0; i < a->length; i++)
+        acc = fn3(cl, acc, xr_typed_get(a->data, (int32_t) i, a->elem_type), XR_FROM_INT(i));
+    return acc;
 }
 
 static inline XrValue xrt_array_find_typed(XrValue recv, XrValue callback) {

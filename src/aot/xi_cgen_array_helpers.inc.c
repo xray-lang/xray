@@ -6245,6 +6245,16 @@ static bool cg_array_closure_value_only_used_by_inline_map(XiCgenCtx *ctx, const
            cg_array_value_only_feeds_inline_map(ctx, current, prefix, value, 0, &used) && used;
 }
 
+/* A HOF callback that declares more than its base parameters (the element for
+ * map/filter/forEach, accumulator+element for reduce) opts into the trailing
+ * index parameter, so codegen must call the indexed runtime helper. The static
+ * callback type is authoritative here; the AOT callable descriptor carries no
+ * arity, so this decision has to be made at generation time. */
+static bool cg_array_hof_callback_wants_index(const XiValue *callback, int base_arity) {
+    return callback && callback->type && callback->type->kind == XR_KIND_FUNCTION &&
+           callback->type->function.param_count > base_arity;
+}
+
 static bool emit_typed_array_map_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
                                       const char *prefix, const XiValue *v) {
     CgArrayElemInfo info;
@@ -6254,7 +6264,8 @@ static bool emit_typed_array_map_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *c
         return true;
 
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-    fprintf(out, "xrt_array_map_typed(");
+    fprintf(out, cg_array_hof_callback_wants_index(v->args[1], 1) ? "xrt_array_map_indexed_typed("
+                                                                  : "xrt_array_map_typed(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
@@ -6272,7 +6283,9 @@ static bool emit_typed_array_filter_expr(XiCgenCtx *ctx, FILE *out, const XiFunc
         return true;
 
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-    fprintf(out, "xrt_array_filter_typed(");
+    fprintf(out, cg_array_hof_callback_wants_index(v->args[1], 1)
+                     ? "xrt_array_filter_indexed_typed("
+                     : "xrt_array_filter_typed(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
@@ -6291,12 +6304,36 @@ static bool emit_typed_array_reduce_expr(XiCgenCtx *ctx, FILE *out, const XiFunc
         return true;
 
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-    fprintf(out, "xrt_array_reduce_typed(");
+    fprintf(out, cg_array_hof_callback_wants_index(v->args[1], 2)
+                     ? "xrt_array_reduce_indexed_typed("
+                     : "xrt_array_reduce_typed(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+/* forEach returns unit and, unlike map/filter, has no inline fast path; it still
+ * needs the arity split so a two-parameter callback receives the element index
+ * rather than reading a zero the fixed one-argument helper never wrote. */
+static bool emit_typed_array_for_each_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                           const char *prefix, const XiValue *v) {
+    (void) current;
+    (void) prefix;
+    if (!v || v->nargs != 2 || !v->args[0] || !v->args[0]->type ||
+        v->args[0]->type->kind != XR_KIND_ARRAY)
+        return false;
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    fprintf(out, cg_array_hof_callback_wants_index(v->args[1], 1)
+                     ? "xrt_array_for_each_indexed_typed("
+                     : "xrt_array_for_each_typed(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
     return true;

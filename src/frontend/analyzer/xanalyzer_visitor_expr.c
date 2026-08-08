@@ -426,22 +426,37 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
                                ? receiver->container.element_type
                                : xr_type_new_unknown(X);
             XrType *params[2] = {elem, xr_type_new_int(X)};
-            return xr_type_new_function(X, params, 2, xr_type_new_bool(X), false);
+            XrType *fn = xr_type_new_function(X, params, 2, xr_type_new_bool(X), false);
+            /* The trailing index is optional: filter(x -> ...) and
+             * filter((x, i) -> ...) are both valid. */
+            if (fn)
+                fn->function.min_params = 1;
+            return fn;
         }
         case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_UNIT_FN: {
             XrType *elem = receiver && receiver->container.element_type
                                ? receiver->container.element_type
                                : xr_type_new_unknown(X);
             XrType *params[2] = {elem, xr_type_new_int(X)};
-            return xr_type_new_function(X, params, 2, xr_type_new_unit(X), false);
+            XrType *fn = xr_type_new_function(X, params, 2, xr_type_new_unit(X), false);
+            /* The trailing index is optional: forEach(x -> ...) and
+             * forEach((x, i) -> ...) are both valid. */
+            if (fn)
+                fn->function.min_params = 1;
+            return fn;
         }
         case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN: {
             XrType *elem = receiver && receiver->container.element_type
                                ? receiver->container.element_type
                                : xr_type_new_unknown(X);
             XrType *params[2] = {elem, xr_type_new_int(X)};
-            return xr_type_new_function(
+            XrType *fn = xr_type_new_function(
                 X, params, 2, type_param0 ? type_param0 : xr_type_new_type_param(X, "T", 0), false);
+            /* The trailing index is optional: map(x -> ...) and
+             * map((x, i) -> ...) are both valid. */
+            if (fn)
+                fn->function.min_params = 1;
+            return fn;
         }
         case XA_BUILTIN_TYPE_PARAM_0_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN: {
             XrType *acc = type_param0 ? type_param0 : xr_type_new_type_param(X, "T", 0);
@@ -449,7 +464,12 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
                                ? receiver->container.element_type
                                : xr_type_new_unknown(X);
             XrType *params[3] = {acc, elem, xr_type_new_int(X)};
-            return xr_type_new_function(X, params, 3, acc, false);
+            XrType *fn = xr_type_new_function(X, params, 3, acc, false);
+            /* The trailing index is optional: reduce((acc, x) -> ...) and
+             * reduce((acc, x, i) -> ...) are both valid. */
+            if (fn)
+                fn->function.min_params = 2;
+            return fn;
         }
         case XA_BUILTIN_TYPE_SLICE_OF_PARAM_0:
             return xr_type_new_slice(X,

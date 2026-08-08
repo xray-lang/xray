@@ -1983,6 +1983,15 @@ bool xr_type_assignable(XrType *target, XrType *source) {
         if (source->function.param_count > target->function.param_count) {
             return false;
         }
+        /* Lower bound: the source must accept at least as many parameters as the
+         * target is guaranteed to pass. Without it the fewer-parameter case is
+         * silently tolerated, so a one-parameter lambda satisfies a
+         * two-parameter contract and then reads a missing argument at run time.
+         * A contract that admits a shorter callback says so by lowering its own
+         * min_params (as the array HOFs do for the optional index). */
+        if (source->function.param_count < target->function.min_params) {
+            return false;
+        }
 
         // Return type: covariant - source return must be assignable to target return
         // Special case: void target accepts any return type
