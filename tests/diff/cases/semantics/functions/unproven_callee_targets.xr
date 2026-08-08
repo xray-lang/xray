@@ -1,4 +1,5 @@
 // anchor: unproven-callee-targets
+// diff-backends: vm
 // Task 264 D9. AOT native plans every indirect call by proving a finite set of
 // target functions for it. When the callee's provenance is opaque the plan is
 // rejected and the build fails with an internal dump:
@@ -15,11 +16,12 @@
 // worth pinning: a callback parameter, a local initialised from a lambda, a
 // class field, a returned lambda, and an array whose elements are literals.
 //
-// The closed-world planner is deliberate, so the fix may well be a real
-// diagnostic plus a spec statement of the limit rather than making these
-// compile. Either way the current behaviour -- an internal verifier dump for
-// ordinary first-class-function code, and nothing in the spec about it -- is
-// not the end state.
+// The closed-world planner is deliberate, so the resolution is a real user
+// diagnostic plus a spec statement of the limit, not making these compile: the
+// AOT backend rejects each shape with an actionable message that names the
+// provenance and suggests a rewrite, while the VM runs the program. This case
+// checks the VM run; the native rejection is a compile-time diagnostic and is
+// covered separately, so the differential net runs the VM backend only.
 type Mapper = (int) -> int
 type IntThunk = () -> int
 

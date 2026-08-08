@@ -1015,6 +1015,22 @@ XR_FUNC bool xaot_callable_plans_build(XaotBundle *bundle) {
     return ok;
 }
 
+/* Human-readable provenance for an indirect callee the closed-world planner
+ * cannot resolve. The op is the callee value's op: an upvalue capture, a copy
+ * (a map lookup lowers to one), or a collection element read. */
+static const char *callable_unprovable_provenance_hint(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_LOAD_UPVAL:
+            return "a captured value (an upvalue)";
+        case XI_COPY:
+            return "a copied value, such as a map lookup result";
+        case XI_INDEX_GET:
+            return "an element read from a collection";
+        default:
+            return "an opaque data-flow path";
+    }
+}
+
 static bool callable_verify_error(char *errbuf, size_t errbuf_len, const char *message) {
     if (errbuf && errbuf_len)
         snprintf(errbuf, errbuf_len, "%s", message);
@@ -1114,12 +1130,14 @@ XR_FUNC bool xaot_callable_plans_verify(const XaotBundle *bundle, char *errbuf, 
                                              "open AOT callable boundary did not reject");
             if (errbuf && errbuf_len)
                 snprintf(errbuf, errbuf_len,
-                         "open AOT callable target set owner=%s call=v%u line=%u callee-op=%s "
-                         "callee-id=v%u callee-aux=%" PRId64 " reason=%u",
-                         plan->owner->name ? plan->owner->name : "?", plan->call->id,
-                         plan->call->line, xi_op_name((XiOp) plan->call->args[0]->op),
-                         plan->call->args[0]->id, plan->call->args[0]->aux_int,
-                         plan->unproven_reason);
+                         "native compilation cannot prove the target of an indirect call at "
+                         "line %u: the callee comes from %s, whose target set the closed-world "
+                         "AOT backend cannot determine statically. Pass the function directly as "
+                         "an argument, or bind it to a local initialized from a lambda or a named "
+                         "function so the target is provable. The bytecode VM runs this program "
+                         "unchanged.",
+                         plan->call->line,
+                         callable_unprovable_provenance_hint(plan->call->args[0]->op));
             return false;
         } else {
             uint8_t expected = plan->target_count > 1

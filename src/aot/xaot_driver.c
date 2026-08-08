@@ -2054,7 +2054,13 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
              * unstable Xi names or ad-hoc instrumentation. */
             if (emit_global_evidence_dump && global_evidence_dump)
                 fputs(global_evidence_dump, stdout);
-            fprintf(stderr, "Error: AOT verifier failed: %s\n", verify_err);
+            /* An unprovable closed-world callee is a user-actionable limit, not
+             * an internal inconsistency, so it gets a plain diagnostic rather
+             * than the verifier-failure prefix. */
+            if (strncmp(verify_err, "native compilation cannot", 25) == 0)
+                fprintf(stderr, "Error: %s\n", verify_err);
+            else
+                fprintf(stderr, "Error: AOT verifier failed: %s\n", verify_err);
             goto fail_free_ir;
         }
     }
