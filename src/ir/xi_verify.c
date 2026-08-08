@@ -405,12 +405,16 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
     }
 
     /* Each arg should be a plausible value (non-NULL, has type).
-     * Exception: CLOSURE_NEW args may be NULL for upvalue-chain captures
-     * that have no local SSA value (source is parent's upvalue, not a reg). */
+     * Exception: closure capture args may be NULL for an upvalue-chain capture
+     * whose source is the parent's upvalue rather than a local register. This
+     * covers a stack-allocated closure too (XI_STACK_ALLOC wrapping
+     * XI_CLOSURE_NEW), which a non-escaping inner closure lowers to; a
+     * transitive capture from a grandparent scope reaches this path. */
     for (uint16_t a = 0; a < v->nargs; a++) {
         if (!v->args[a]) {
-            if (v->op == XI_CLOSURE_NEW)
-                continue; /* NULL capture arg is valid */
+            if (v->op == XI_CLOSURE_NEW ||
+                (v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW))
+                continue;
             verr(ctx, "func '%s': value v%u in b%u arg[%u] is NULL", f->name, v->id, blk->id, a);
             return;
         }
@@ -1808,15 +1812,13 @@ static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
                 }
                 if (f->stage == XI_STAGE_CLOSED && f->captures[idx].needs_cell &&
                     v->op == XI_LOAD_UPVAL && !closed_cell_load_has_only_explicit_uses(f, v)) {
-                    verr(ctx,
-                         "func '%s': v%u loads a mutable capture cell but has a non-cell use",
+                    verr(ctx, "func '%s': v%u loads a mutable capture cell but has a non-cell use",
                          f->name, v->id);
                     return;
                 }
             }
 
-            if (f->stage == XI_STAGE_CLOSED &&
-                (v->op == XI_CELL_GET || v->op == XI_CELL_SET) &&
+            if (f->stage == XI_STAGE_CLOSED && (v->op == XI_CELL_GET || v->op == XI_CELL_SET) &&
                 (v->nargs == 0 || !closed_is_cell_reference(f, v->args[0]))) {
                 verr(ctx, "func '%s': v%u %s does not reference an explicit cell value", f->name,
                      v->id, xi_op_name(v->op));
