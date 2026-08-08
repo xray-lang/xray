@@ -1546,7 +1546,8 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
 
             if (v->op == XI_PLACE_LOAD && v->nargs == 1 && v->args[0] &&
                 xi_own_type_may_be_ref(v->type) &&
-                xi_coro_value_live_across_suspend(f, live, v, NULL)) {
+                xi_coro_value_live_across_suspend(f, live, v, NULL) &&
+                !xi_coro_value_is_retry_suspend_operand(f, v)) {
                 verr(ctx, "func '%s': borrowed place load v%u is live across a suspension point",
                      f->name, v->id);
                 break;
@@ -1808,15 +1809,13 @@ static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
                 }
                 if (f->stage == XI_STAGE_CLOSED && f->captures[idx].needs_cell &&
                     v->op == XI_LOAD_UPVAL && !closed_cell_load_has_only_explicit_uses(f, v)) {
-                    verr(ctx,
-                         "func '%s': v%u loads a mutable capture cell but has a non-cell use",
+                    verr(ctx, "func '%s': v%u loads a mutable capture cell but has a non-cell use",
                          f->name, v->id);
                     return;
                 }
             }
 
-            if (f->stage == XI_STAGE_CLOSED &&
-                (v->op == XI_CELL_GET || v->op == XI_CELL_SET) &&
+            if (f->stage == XI_STAGE_CLOSED && (v->op == XI_CELL_GET || v->op == XI_CELL_SET) &&
                 (v->nargs == 0 || !closed_is_cell_reference(f, v->args[0]))) {
                 verr(ctx, "func '%s': v%u %s does not reference an explicit cell value", f->name,
                      v->id, xi_op_name(v->op));

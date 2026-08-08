@@ -192,6 +192,8 @@ static uint32_t cg_runtime_caps_from_entry_plan(XiCgenCtx *ctx) {
         caps |= XR_AOT_CAP_SEMAPHORE;
     if ((required & XG_CAP_EVENT_COUNT) != 0)
         caps |= XR_AOT_CAP_EVENT_COUNT;
+    if ((required & XG_CAP_NETPOLL) != 0)
+        caps |= XR_AOT_CAP_NETPOLL;
     /* Parallel was the one capability this projection dropped.  Without it the
      * translation unit is judged not to need the runtime bridge, so
      * xaot_coro.h is never included -- while the parallel lowering still emits
@@ -267,10 +269,28 @@ static void cg_emit_main_pending_error_return(FILE *out, bool entry_needs_runtim
  * on the profile while the use is not left a freestanding provider object
  * referencing an undeclared xrt_global_ctx.  A freestanding image with no hosted
  * capability still gets false here, because its capability set is empty. */
+static bool cg_func_tree_needs_runtime_bridge(XiCgenCtx *ctx, const XiFunc *func) {
+    if (!ctx || !func)
+        return false;
+    if (cg_func_needs_aot_coro_ctx(ctx, func))
+        return true;
+    for (uint16_t i = 0; i < func->nchildren; i++) {
+        if (cg_func_tree_needs_runtime_bridge(ctx, func->children[i]))
+            return true;
+    }
+    return false;
+}
+
 static bool cg_tu_needs_runtime_bridge(XiCgenCtx *ctx) {
     if (!ctx)
         return false;
     uint32_t caps = cg_runtime_caps_from_entry_plan(ctx);
+    /* A split dependency translation unit may own a resumable child even when
+     * the executable entry itself is synchronous.  The TU emits coroutine
+     * descriptors and provider calls in that case, so its own function tree is
+     * an independent include requirement rather than an entry-plan property. */
+    if (ctx->module && cg_func_tree_needs_runtime_bridge(ctx, ctx->module->init))
+        return true;
     return cg_entry_uses_resumable_frame(ctx) || cg_entry_uses_root_descriptor(ctx) ||
            (caps & ~XR_AOT_CAP_OBJECTS) != XR_AOT_CAP_NONE;
 }
@@ -534,6 +554,7 @@ static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
         {XR_AOT_CAP_SEMAPHORE, "XR_AOT_CAP_SEMAPHORE"},
         {XR_AOT_CAP_EVENT_COUNT, "XR_AOT_CAP_EVENT_COUNT"},
         {XR_AOT_CAP_PARALLEL, "XR_AOT_CAP_PARALLEL"},
+        {XR_AOT_CAP_NETPOLL, "XR_AOT_CAP_NETPOLL"},
     };
 
     if (caps == XR_AOT_CAP_NONE) {

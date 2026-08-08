@@ -1493,6 +1493,37 @@ TEST(coro_plan_rejects_root_count_mismatch) {
     xi_func_free(f);
 }
 
+TEST(coro_plan_does_not_own_borrowed_place_load) {
+    XiFunc *f = xi_func_new("coro_borrowed_place_slot", &stub_array_i8);
+    ASSERT(f != NULL);
+    XiBlock *entry = xi_block_new(f);
+    ASSERT(entry != NULL);
+    entry->sealed = true;
+
+    XiValue *owner = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_array_i8, 0);
+    XiValue *place = xi_value_new(f, entry, XI_LOCAL_ADDR, &stub_array_i8, 1);
+    XiValue *alias = xi_value_new(f, entry, XI_PLACE_LOAD, &stub_array_i8, 1);
+    XiValue *suspend = xi_value_new(f, entry, XI_YIELD, &stub_unit, 0);
+    ASSERT(owner != NULL && place != NULL && alias != NULL && suspend != NULL);
+    owner->rep = XR_REP_TAGGED;
+    place->args[0] = owner;
+    alias->args[0] = place;
+    alias->rep = XR_REP_PTR;
+    xi_block_set_return(entry, alias);
+
+    XiCoroPlan *plan = xi_coro_analyze(f, NULL);
+    ASSERT(plan != NULL);
+    const XiCoroSlot *slot = xi_coro_plan_find_slot(plan, alias);
+    ASSERT(slot != NULL);
+    ASSERT(slot->live_across);
+    ASSERT(slot->is_root);
+    ASSERT(!slot->needs_release);
+    ASSERT(!slot->frame_root);
+    ASSERT(!slot->frame_release);
+
+    xi_func_free(f);
+}
+
 /* ========== Backend legality ========== */
 
 TEST(backend_rejects_unlowered_iter_op) {
@@ -1909,6 +1940,7 @@ int main(void) {
     run_coro_plan_rejects_live_value_without_slot();
     run_coro_plan_rejects_stale_point_op();
     run_coro_plan_rejects_root_count_mismatch();
+    run_coro_plan_does_not_own_borrowed_place_load();
     run_backend_rejects_unlowered_iter_op();
     run_backend_rejects_malformed_call_method();
 

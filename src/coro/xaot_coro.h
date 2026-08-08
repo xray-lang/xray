@@ -59,7 +59,13 @@ typedef enum {
     XR_AOT_CAP_SEMAPHORE = 1u << 11,
     XR_AOT_CAP_EVENT_COUNT = 1u << 12,
     XR_AOT_CAP_PARALLEL = 1u << 13,
+    XR_AOT_CAP_NETPOLL = 1u << 14,
 } XrAotRuntimeCap;
+
+typedef enum {
+    XR_AOT_IO_READ = 1,
+    XR_AOT_IO_WRITE = 2,
+} XrAotIoEvent;
 
 typedef enum {
     XR_AOT_ORDERING_RELAXED = 0,
@@ -408,6 +414,8 @@ XR_FUNC XrValue xr_aot_gen_iterator_new(const XrAotContext *ctx, const XrAotCoro
                                         void *frame);
 
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
+XR_FUNC XrAotResult xr_aot_wait_fd(const XrAotContext *ctx, int64_t fd, int events,
+                                   int64_t timeout_ms);
 XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode);
 // A scope block is a statement: exiting one produces no value. The result the
 // scope settles on already rides in XrAotResult.value, so there is no second

@@ -52,6 +52,7 @@
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../shared/xr_encoding_constants.h"
+#include "../stdlib/xstdlib_metadata.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -5240,6 +5241,21 @@ static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *c
     return result;
 }
 
+static bool lower_call_resumes_by_netpoll_retry(XiLower *l, CallExprNode *call,
+                                                XiValue *callee_value) {
+    if (!l || !call)
+        return false;
+    const XiImportRef *import_ref = lower_import_ref_from_value(l, callee_value);
+    const char *module_path = import_ref ? import_ref->module_path : NULL;
+    if (!module_path)
+        module_path = lower_call_namespace_module_name(l, call);
+    const char *member_name = import_ref ? import_ref->member_name : NULL;
+    if (!member_name && call->callee && call->callee->type == AST_MEMBER_ACCESS)
+        member_name = call->callee->as.member_access.name;
+    return module_path && member_name &&
+           xr_stdlib_metadata_func_resumes_by_netpoll_retry(module_path, member_name);
+}
+
 static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode *call,
                                          XiValue *callee_val, struct XrType *callee_type) {
     if (!callee_val)
@@ -5408,6 +5424,10 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     for (int i = 0; i < n; i++)
         v->args[i + 1] = arg_vals[i];
     v->flags |= XI_FLAG_SIDE_EFFECT;
+    if (lower_call_resumes_by_netpoll_retry(l, call, callee_val)) {
+        v->flags |= XI_FLAG_MAY_SUSPEND;
+        v->lowering_flags |= XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS;
+    }
     v->line = (uint32_t) node->line;
     if (is_self_call)
         v->aux_int = 1;
@@ -7069,6 +7089,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->lowering_flags |= XI_LOWERING_FLAG_TIME_SLEEP;
         lower_instantiate_call_view_evidence(v, NULL, method_type, true);
         v->flags |= XI_FLAG_SIDE_EFFECT;
+        if (lower_call_resumes_by_netpoll_retry(l, call, recv)) {
+            v->flags |= XI_FLAG_MAY_SUSPEND;
+            v->lowering_flags |= XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS;
+        }
         if (xi_lower_method_may_suspend(recv->type, ma->name, n))
             v->flags |= XI_FLAG_MAY_SUSPEND;
         v->line = (uint32_t) node->line;

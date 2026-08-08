@@ -111,6 +111,12 @@ XR_FUNC XrCoroBlockResult xr_coro_await_any_task(struct XrCoroutine *coro, struc
  * resume it on another worker at any moment. */
 XR_FUNC bool xr_coro_publish_wait_block(struct XrCoroutine *coro);
 
+/* Park an AOT/runtime-owned coroutine on the shared netpoll without installing
+ * a VM C-function continuation.  The caller replays its non-blocking syscall
+ * step after XR_CORO_BLOCK_BLOCKED is resumed. */
+XR_FUNC XrCoroBlockResult xr_coro_wait_io(struct XrCoroutine *coro, int fd, int events,
+                                          int64_t timeout_ms);
+
 /* Submission paths use this when a coroutine must become BLOCKED before an
  * enqueue that can still fail. Rollback restores only state/shadow bits and
  * preserves concurrent non-state flag updates. */

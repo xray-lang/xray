@@ -183,6 +183,12 @@ XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness
                                                const XiValue *target,
                                                const XiCoroResolver *resolver);
 
+/* True when 'target' is an evaluated operand of a suspension operation whose
+ * resume contract retries that same operation.  Such an operand is a logical
+ * post-suspend use even when ordinary SSA liveness sees only the original
+ * call. */
+XR_FUNC bool xi_coro_value_is_retry_suspend_operand(const XiFunc *f, const XiValue *target);
+
 /* True if 'v' is a logical coroutine frame member: it survives a suspend because
  * it is live across one, needs a runtime result slot, is an await aggregate, is
  * a go handle, or reuses a typed recv/await slot.  This is the backend-neutral

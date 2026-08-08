@@ -30,6 +30,7 @@
 #include "xscope_transfer.h"
 #include "xtask.h"
 #include "xworker.h"
+#include "xyieldable.h"
 
 typedef struct XrAotCoroState {
     const XrAotCoroDesc *desc;
@@ -284,9 +285,10 @@ static void aot_mark_running(XrCoroutine *coro) {
 }
 
 static bool aot_caps_need_scheduler(uint32_t caps) {
-    return (caps & (XR_AOT_CAP_CORO | XR_AOT_CAP_TIMER | XR_AOT_CAP_CHANNEL |
-                    XR_AOT_CAP_WORK_QUEUE | XR_AOT_CAP_RESULT_GROUP | XR_AOT_CAP_COUNTDOWN_LATCH |
-                    XR_AOT_CAP_SEMAPHORE | XR_AOT_CAP_EVENT_COUNT | XR_AOT_CAP_PARALLEL)) != 0;
+    return (caps &
+            (XR_AOT_CAP_CORO | XR_AOT_CAP_TIMER | XR_AOT_CAP_CHANNEL | XR_AOT_CAP_WORK_QUEUE |
+             XR_AOT_CAP_RESULT_GROUP | XR_AOT_CAP_COUNTDOWN_LATCH | XR_AOT_CAP_SEMAPHORE |
+             XR_AOT_CAP_EVENT_COUNT | XR_AOT_CAP_PARALLEL | XR_AOT_CAP_NETPOLL)) != 0;
 }
 
 static void *aot_host_backend_context(void *ctx) {
@@ -1052,6 +1054,23 @@ XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds) {
     if (aot_coro_cancelled(ctx->coro))
         return xr_aot_result(XR_AOT_RUN_CANCELLED);
     XrCoroBlockResult block = xr_coro_sleep(ctx->coro, milliseconds);
+    if (aot_coro_cancelled(ctx->coro))
+        return xr_aot_result(XR_AOT_RUN_CANCELLED);
+    if (block.kind == XR_CORO_BLOCK_BLOCKED)
+        return xr_aot_blocked();
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return xr_aot_result(XR_AOT_RUN_DONE);
+    return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrAotResult xr_aot_wait_fd(const XrAotContext *ctx, int64_t fd, int events, int64_t timeout_ms) {
+    if (!ctx || !ctx->coro || fd < 0 || (events != XR_AOT_IO_READ && events != XR_AOT_IO_WRITE))
+        return xr_aot_error(XR_NULL_VAL, false);
+    if (aot_coro_cancelled(ctx->coro))
+        return xr_aot_result(XR_AOT_RUN_CANCELLED);
+
+    int wait_events = events == XR_AOT_IO_READ ? XR_WAIT_READ : XR_WAIT_WRITE;
+    XrCoroBlockResult block = xr_coro_wait_io(ctx->coro, (int) fd, wait_events, timeout_ms);
     if (aot_coro_cancelled(ctx->coro))
         return xr_aot_result(XR_AOT_RUN_CANCELLED);
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
