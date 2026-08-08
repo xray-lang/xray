@@ -101,19 +101,25 @@ complete effect product.
     contribute, is a contract change.
 14. Return ownership is a typed-program sidecar fact, not an allocation-effect
     heuristic. Reference-capable source functions publish `OWNED`,
-    `BORROWED_PARAM(n)`, `BORROWED_STATIC`, or fail-closed `UNKNOWN`; recursive
-    call graphs are solved to a fixed point. Reference capability, not movable
+    `BORROWED_PARAM(n)`, `BORROWED_STATIC`, or fail-closed `UNKNOWN`.
+    Acyclic call graphs are source-order independent; ownership cycles that
+    cannot be proved without assuming their own result remain `UNKNOWN`.
+    Reference capability, not movable
     roots, decides which functions publish: a returned `string` has no movable
     root yet is refcounted, so its ownership at the return boundary is exactly
-    the fact a caller needs. Publication is unconditional and happens while the
-    declaration's own scope is current, because the scan resolves returned
-    names through that scope; a summary computed on demand from a later phase
-    resolves them elsewhere or not at all. Cross-analyzer symbol copies
-    preserve the semantic kind and parameter identity rather than a database
-    address. Native reference returns must declare the same metadata in the
-    standard-library definition, including explicit `UNKNOWN` when no stronger
-    fact is valid. Xi consumes the published summary at each statically known
-    call and does not re-infer it from a callee name or allocation effects.
+    the fact a caller needs. Declaration collection may publish a provisional,
+    fail-closed answer, but every source function is finalized after body type
+    inference while its typed bindings and declaration scope remain available.
+    Finalization resets the complete local source set before recursively
+    resolving callees, so a provisional answer cannot become permanent and
+    source order cannot change an acyclic result. Imported symbols retain the
+    exporting analyzer's finalized summary; re-running the importer must not
+    erase it. Cross-analyzer symbol copies preserve the semantic kind and
+    parameter identity rather than a database address. Native reference
+    returns must declare the same metadata in the standard-library definition,
+    including explicit `UNKNOWN` when no stronger fact is valid. Xi consumes
+    the finalized summary at each statically known call and does not re-infer
+    it from a callee name or allocation effects.
     A call through an interface has no single declaration to read, so the
     whole-program evidence answers it by meeting the published ownership of
     every implementor. This is agreement, not devirtualization: the caller
@@ -146,14 +152,14 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c d4cd4b47a2e498d1602d
 anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b71501e112a6aee3caa413c03e883fbd3f05e9d458dfdbeb8240025cd431ff92
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 19585145d88b00d1c1e4fad9fe23ac841e75c941eeaf7c18be3779befc872367
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c dc666a71819aa81f3573754e55626d8bec56766e16eed6191cbcfa293914b723
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 49c446c2994e1b96958c7f019f80920b88455dc254341ed00c57488481c127e4
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h d1a21de9cb65ad823b3a4a01890027c879eb11d7712b4c6788fda305d30ab1e8
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c e1ab23a79c4aeafabda086cc71005e9ad66407d2584102e8647ad7136dc6b5e4
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c e196521cf096f758056c2e7b400635acbd3406d4bc9371211d24ec11950442f1
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c fd7b76ec46a37e8ba63b4cf5ba5a5aabd2acf130dc189d26e348f2f6e22aa6d0
 anchor-sha256: src/runtime/value/xtype.h 3fc485e57ddc2bd95778f995f5df0e6f334b0f86197b40dfe468564e1b0b6426
 anchor-sha256: src/ir/xi.h 6554b79d6ed76c21291d0b4f95e6d8de99cdba742691bc529b1e0185770a9130
 anchor-sha256: src/ir/xi_lower.c c8f52944253aefb107a73a138cc417e310e61419ca988e37b3f178c22f13f664
 anchor-sha256: src/app/cli/xcmd_verify.c ca122153d89cbc4fa2b2fcffe08604c109729941a5a9b34ff0d72b1d0226e8a8
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
-anchor-sha256: tests/unit/analyzer/test_analyzer.c 161a330ac0c183a24403ea982443a13d4a5a7bc6a420da32deee176633e94bcd
+anchor-sha256: tests/unit/analyzer/test_analyzer.c f525265a83474296bbb7aa1db0fa1e00dab843f3eecb9b5d15f27d8003b3d99f
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1
 anchor-sha256: tests/unit/ir/test_xi_lower.c b6d33d070c520333a85a8a7a245502aeb6723b3cea0131d37c057744ed41333e

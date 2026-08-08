@@ -1,5 +1,12 @@
+import mem
+
 export fn makeOwnedArray(value: int) -> Array<int> {
     return [value]
+}
+
+export fn makeOwnedBuffer(size: int) -> Buffer {
+    var buffer = mem.allocZeroed(size)
+    return buffer
 }
 
 export fn borrowImportedArray(value: Array<int>) -> Array<int> {

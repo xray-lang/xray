@@ -220,6 +220,7 @@ XR_FUNC XrType *xa_visit_as_expr(XaInferContext *ctx, AstNode *node);
 XR_FUNC bool xa_boundary_transfer_type_needs_explicit(const XrType *type);
 XR_FUNC bool xa_expr_creates_fresh_root(XaInferContext *ctx, AstNode *value);
 XR_FUNC void xa_ensure_function_return_ownership_prepass(XaInferContext *ctx, XaSymbolLinks *links);
+XR_FUNC void xa_finalize_function_return_ownership(XaInferContext *ctx);
 XR_FUNC bool xa_boundary_arg_is_explicit_copy(AstNode *arg_node);
 XR_FUNC bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node);
 XR_FUNC XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node);

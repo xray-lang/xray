@@ -7518,6 +7518,11 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     // Pass 2: Infer types
     xa_visit_infer(ctx, ast);
 
+    // Pass 2b: seal source return ownership from fully typed local bindings.
+    // Collection-time summaries are provisional because initializer ownership
+    // facts do not exist until Pass 2 has visited the body.
+    xa_finalize_function_return_ownership(ctx);
+
     // Pass 3: Infer error sets for functions (value-return error system)
     xa_infer_error_sets(analyzer, ast);
 
