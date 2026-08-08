@@ -144,6 +144,9 @@ typedef struct {
 
 int cluster_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload,
                         uint32_t payload_len);
+int cluster_frame_write_transport(uint8_t *buf, size_t buf_size, uint8_t hop_limit,
+                                  const char *topic, uint8_t topic_len, const uint8_t *envelope,
+                                  uint32_t envelope_len);
 int cluster_frame_encode_handshake_req(uint8_t *buf, size_t buf_size,
                                        const XrFrameHandshakeReq *req);
 int cluster_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size,
@@ -278,6 +281,9 @@ void cluster_node_release(XrClusterNode *node);
 int cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len);
 int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
                             uint32_t payload_len);
+int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, const char *topic,
+                                      uint8_t topic_len, const uint8_t *envelope,
+                                      uint32_t envelope_len);
 int cluster_conn_read_try(XrIOConn *conn, uint8_t *data, size_t len, int *wait_events);
 int cluster_conn_write_try(XrIOConn *conn, const uint8_t *data, size_t len, int *wait_events);
 void cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out);

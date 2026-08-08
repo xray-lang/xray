@@ -63,6 +63,32 @@ int cluster_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload
     return (int) (4 + total_payload);
 }
 
+int cluster_frame_write_transport(uint8_t *buf, size_t buf_size, uint8_t hop_limit,
+                                  const char *topic, uint8_t topic_len, const uint8_t *envelope,
+                                  uint32_t envelope_len) {
+    if (!buf || !topic || topic_len == 0 || !envelope ||
+        envelope_len < XR_CLUSTER_ENVELOPE_HEADER_SIZE)
+        return -1;
+
+    size_t payload_len_wide = 2u + (size_t) topic_len + envelope_len;
+    if (payload_len_wide > XR_FRAME_MAX_PAYLOAD - 1u)
+        return -1;
+
+    uint32_t payload_len = (uint32_t) payload_len_wide;
+    size_t frame_len = (size_t) XR_FRAME_HEADER_SIZE + 1u + payload_len;
+    if (frame_len > buf_size)
+        return -1;
+
+    put_u32(buf, 1u + payload_len);
+    buf[XR_FRAME_HEADER_SIZE] = XR_FRAME_TRANSPORT_ENVELOPE;
+    uint8_t *payload = buf + XR_FRAME_HEADER_SIZE + 1u;
+    payload[0] = hop_limit;
+    payload[1] = topic_len;
+    memcpy(payload + 2, topic, topic_len);
+    memcpy(payload + 2 + topic_len, envelope, envelope_len);
+    return (int) frame_len;
+}
+
 /* ========== Frame Header Read ========== */
 
 int cluster_frame_read_header(const uint8_t *data, size_t data_len, uint8_t *frame_type,

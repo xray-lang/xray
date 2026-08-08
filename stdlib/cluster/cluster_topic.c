@@ -447,39 +447,14 @@ XrClusterDelivery cluster_transport_deliver_local(XrCluster *c, const char *topi
     return XR_CLUSTER_DELIVERY_DISCONNECTED;
 }
 
-/*
- * Build the transport payload shared by local send and forwarding. Layout:
- *
- *   [hop_limit 1B] [topic_len 1B] [topic ...] [opaque envelope ...]
- *
- * Returns 0 on success, -1 on alloc failure. On success the caller
- * owns fb and must free with cluster_frame_buf_free.
- */
-static int transport_build_frame(const char *topic, const uint8_t *envelope, uint32_t envelope_len,
-                                 uint8_t hop_limit, XrFrameBuf *fb_out) {
-    if (!topic || !envelope || !fb_out)
-        return -1;
-
+/* Build each peer's final wire frame once and transfer it directly into that
+ * peer's output queue.  The previous path first allocated a shared transport
+ * payload and then copied it into a second framed allocation per peer. */
+static XrClusterDelivery transport_broadcast_envelope(XrCluster *c, XrClusterNode *exclude,
+                                                      uint8_t hop_limit, const char *topic,
+                                                      const uint8_t *envelope,
+                                                      uint32_t envelope_len) {
     uint8_t topic_len = (uint8_t) strlen(topic);
-    uint32_t payload_len = 2 + topic_len + envelope_len;
-    cluster_frame_buf_init(fb_out, payload_len);
-    if (!fb_out->data)
-        return -1;
-    fb_out->data[0] = hop_limit;
-    fb_out->data[1] = topic_len;
-    memcpy(fb_out->data + 2, topic, topic_len);
-    memcpy(fb_out->data + 2 + topic_len, envelope, envelope_len);
-
-    return (int) payload_len;
-}
-
-/*
- * Send the already-built opaque envelope frame to every connected peer
- * except `exclude` (used for split-horizon forwarding). Caller owns
- * the XrFrameBuf and is responsible for freeing it.
- */
-static XrClusterDelivery transport_broadcast_frame(XrCluster *c, XrClusterNode *exclude,
-                                                   const uint8_t *payload, uint32_t payload_len) {
     int connected = 0;
     int accepted = 0;
     xr_amutex_lock(&c->nodes_lock);
@@ -487,8 +462,8 @@ static XrClusterDelivery transport_broadcast_frame(XrCluster *c, XrClusterNode *
     while (node) {
         if (node != exclude && node->state == XR_NODE_CONNECTED) {
             connected++;
-            if (cluster_node_send_frame(node, XR_FRAME_TRANSPORT_ENVELOPE, payload, payload_len) ==
-                0)
+            if (cluster_node_send_transport_frame(node, hop_limit, topic, topic_len, envelope,
+                                                  envelope_len) == 0)
                 accepted++;
         }
         node = node->next;
@@ -532,15 +507,8 @@ void cluster_transport_handle_frame(XrCluster *c, XrClusterNode *from, const cha
     if (hop_limit == 0)
         return;
 
-    uint8_t next_hop = (uint8_t) (hop_limit - 1);
-
-    XrFrameBuf fb;
-    int payload_len = transport_build_frame(topic, envelope, envelope_len, next_hop, &fb);
-    if (payload_len < 0)
-        return;
-
-    (void) transport_broadcast_frame(c, from, fb.data, (uint32_t) payload_len);
-    cluster_frame_buf_free(&fb);
+    (void) transport_broadcast_envelope(c, from, (uint8_t) (hop_limit - 1), topic, envelope,
+                                        envelope_len);
 }
 
 XrClusterDelivery cluster_transport_send(XrVMRuntime *X, const char *topic, const uint8_t *envelope,
@@ -563,16 +531,10 @@ XrClusterDelivery cluster_transport_send(XrVMRuntime *X, const char *topic, cons
      * detailed comment on XR_TOPIC_DEFAULT_HOP_LIMIT in
      * cluster_internal.h for the depth-vs-damage trade-off.
      */
-    XrFrameBuf fb;
-    int payload_len =
-        transport_build_frame(topic, envelope, envelope_len, XR_TOPIC_DEFAULT_HOP_LIMIT, &fb);
-    if (payload_len < 0)
-        return XR_CLUSTER_DELIVERY_OVERLOADED;
-
     // Forward to all connected nodes (no split-horizon — we are the
     // origin, so every peer is a valid destination).
-    XrClusterDelivery remote = transport_broadcast_frame(c, NULL, fb.data, (uint32_t) payload_len);
-    cluster_frame_buf_free(&fb);
+    XrClusterDelivery remote = transport_broadcast_envelope(c, NULL, XR_TOPIC_DEFAULT_HOP_LIMIT,
+                                                            topic, envelope, envelope_len);
     if (local == XR_CLUSTER_DELIVERY_ACCEPTED || remote == XR_CLUSTER_DELIVERY_ACCEPTED)
         return XR_CLUSTER_DELIVERY_ACCEPTED;
     if (local == XR_CLUSTER_DELIVERY_OVERLOADED || remote == XR_CLUSTER_DELIVERY_OVERLOADED)
