@@ -1,0 +1,45 @@
+// anchor: lambda-forms
+// Task 251 settled two anonymous-function concepts; this pins every spelling
+// each one admits, because both parse paths converge on one AST_FUNCTION_EXPR
+// and the arrow expression body is desugared to `{ return e }` in the parser.
+// A backend that saw a difference between the two forms would diverge here.
+//
+// The two `ref` cases are the load-bearing pair: `ref` grants a writable
+// borrow, it does not write the result back. Returning `x * 2` must leave the
+// caller's binding alone; assigning inside a block body must not.
+
+fn apply(f: (int) -> int, x: int) -> int { return f(x) }
+fn apply2(f: (int, int) -> int, a: int, b: int) -> int { return f(a, b) }
+fn call0(f: () -> int) -> int { return f() }
+fn takeRef(f: (ref int) -> int, x: ref int) -> int { return f(ref x) }
+
+fn main() {
+    print(apply(x -> x * 2, 21))              // bare arrow, one parameter
+    print(apply((x) -> x * 2, 21))            // same concept, parenthesised
+    print(apply2((a, b) -> a + b, 3, 4))      // several parameters
+    print(apply2((a: int, b) -> a * b, 3, 4)) // per-parameter annotation mix
+    print(call0(() -> 99))                    // zero parameters
+
+    print(apply(x -> { var y = x + 1
+                       return y * 10 }, 4))   // block body, explicit return
+
+    var inc = fn(x: int) -> int { var y = x + 1
+                                  return y }
+    print(inc(41))                            // fn lambda, explicit return type
+
+    var id = fn<T>(x: T) -> T { return x }
+    print(id(7))                              // generic fn lambda
+
+    var v = 10
+    print(takeRef((x: ref int) -> x * 2, ref v))
+    print(v)                                  // 10 -- ref does not write back
+
+    var w = 10
+    takeRef((x: ref int) -> { x = x * 3
+                              return x }, ref w)
+    print(w)                                  // 30 -- assignment does
+
+    print((fn(a: int) -> int { return a + 1 })(100))  // immediately invoked
+}
+
+main()

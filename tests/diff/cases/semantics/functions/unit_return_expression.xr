@@ -1,0 +1,22 @@
+// anchor: unit-return-expression
+// Task 264 D1. Returning a unit-typed expression is unrepresentable: the IR
+// verifier requires a unit RETURN block to carry no value, but lower_return
+// sets the expression result as the control operand unconditionally, so the
+// pipeline aborts before either backend runs.
+//
+// Three spellings reach the same lowering, which is why the fix belongs in
+// lower_return and not in the arrow desugaring: the parser rewrites `-> expr`
+// to `{ return expr }`, but a named function and an fn lambda get there on
+// their own. A block body (`x -> { print(x) }`) is the current workaround.
+fn inner() { print("inner") }
+
+fn namedForm() -> () { return inner() }
+
+fn main() {
+    namedForm()
+    var f = fn() -> () { return inner() }
+    f()
+    [1, 2].forEach(x -> print(x))
+}
+
+main()

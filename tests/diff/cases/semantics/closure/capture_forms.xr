@@ -1,0 +1,53 @@
+// anchor: closure-capture-forms
+// The capture matrix around shared_mutable_capture_cell.xr, which owns the
+// one case that file already pins (two closures over one mutable local share a
+// cell regardless of creation order). Everything else a capture can be lives
+// here: read-only capture, a closure outliving the scope that made the
+// binding, two instances of one factory staying independent, an upvalue
+// and a write from inside a closure being visible outside. Per-iteration loop
+// bindings are exercised in unproven_callee_targets.xr instead: collecting the
+// closures to call them needs a container, and calling out of one is D9. A closure nested inside another closure is not here: it
+// does not survive AOT native lowering yet (task 264 D10), and that case is
+// pinned separately.
+//
+// Read-only captures take the by-copy path and never allocate a cell, so a
+// backend that conflated the two paths would answer 3.1 or 3.6 differently.
+
+type IntThunk = () -> int
+type IntFn = (int) -> int
+
+fn makeCounter() -> IntThunk {
+    var count = 0
+    return fn() -> int { count = count + 1
+                         return count }
+}
+
+fn makeAdder(base: int) -> IntFn { return (n) -> n + base }
+
+fn main() {
+    var greeting = "hi"
+    var sayIt = () -> greeting + "!"
+    print(sayIt())                   // hi! -- read-only capture
+
+    var c = makeCounter()
+    print(c())                       // 1 -- binding outlives its scope
+    print(c())                       // 2
+    print(c())                       // 3
+
+    var c2 = makeCounter()
+    print(c2())                      // 1 -- instances do not share
+    print(c())                       // 4
+
+    var add10 = makeAdder(10)
+    var add99 = makeAdder(99)
+    print(add10(5))                  // 15
+    print(add99(5))                  // 104
+
+    var total = 0
+    var accumulate = (v: int) -> { total = total + v }
+    accumulate(5)
+    accumulate(7)
+    print(total)                     // 12 -- the write is visible outside
+}
+
+main()

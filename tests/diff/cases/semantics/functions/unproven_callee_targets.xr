@@ -1,0 +1,45 @@
+// anchor: unproven-callee-targets
+// Task 264 D9. AOT native plans every indirect call by proving a finite set of
+// target functions for it. When the callee's provenance is opaque the plan is
+// rejected and the build fails with an internal dump:
+//   AOT verifier failed: open AOT callable target set ... callee-op=LOAD_UPVAL
+// The VM runs all of it.
+//
+// Three provenances reach the same wall, and assigning to a local first does
+// not help -- the planner traces through SSA, so the local is just a COPY:
+//   * a function value captured as an upvalue
+//   * a function value read out of a Map
+//   * a function value read out of an array the loop built
+//
+// These shapes are proven and do compile, which is what makes the boundary
+// worth pinning: a callback parameter, a local initialised from a lambda, a
+// class field, a returned lambda, and an array whose elements are literals.
+//
+// The closed-world planner is deliberate, so the fix may well be a real
+// diagnostic plus a spec statement of the limit rather than making these
+// compile. Either way the current behaviour -- an internal verifier dump for
+// ordinary first-class-function code, and nothing in the spec about it -- is
+// not the end state.
+type Mapper = (int) -> int
+type IntThunk = () -> int
+
+fn double(x: int) -> int { return x * 2 }
+fn negate(x: int) -> int { return 0 - x }
+
+fn compose(f: Mapper, g: Mapper) -> Mapper { return (x) -> g(f(x)) }
+
+fn main() {
+    var dn = compose(double, negate)
+    print(dn(5))                     // -10 -- callee is an upvalue
+
+    var table = Map<string, Mapper>()
+    table.set("dbl", double)
+    print(table.get("dbl")!(7))      // 14 -- callee comes out of a Map
+
+    var fs: Array<IntThunk> = []
+    for (i in 0..3) { fs.push(() -> i) }
+    print(fs[0]())                   // 0 -- array built by a loop
+    print(fs[2]())                   // 2
+}
+
+main()

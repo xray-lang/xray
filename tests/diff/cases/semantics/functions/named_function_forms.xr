@@ -1,0 +1,40 @@
+// anchor: named-function-forms
+// The declaration surface of a named function: explicit and omitted unit
+// return, default arguments filled in per omitted trailing parameter, tuple
+// return with destructuring, generic instantiation both explicit and inferred,
+// and a named function used as a value. All of it must read the same under VM
+// and AOT -- a named function is lowered as a closure with zero captures, so a
+// backend that special-cased "function symbol" would show up right here.
+
+fn add(a: int, b: int) -> int { return a + b }
+fn logMsg(msg: string) -> () { print("log " + msg) }
+fn ping() { print("pong") }
+fn connect(host: string, port: int = 8080, tls: bool = false) {
+    print("${host}:${port} tls=${tls}")
+}
+fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
+fn identity<T>(x: T) -> T { return x }
+fn triple(x: int) -> int { return x * 3 }
+
+fn main() {
+    print(add(3, 4))                  // 7
+
+    logMsg("explicit-unit")           // explicit `-> ()`
+    ping()                            // omitted return type == `-> ()`
+
+    connect("localhost")              // both defaults
+    connect("localhost", 443)         // tls defaulted
+    connect("localhost", 443, true)   // none defaulted
+
+    var (q, r) = divmod(17, 5)
+    print(q)                          // 3
+    print(r)                          // 2
+
+    print(identity<int>(42))          // explicit type argument
+    print(identity("xyz"))            // inferred type argument
+
+    var f = triple                    // named function as a value
+    print(f(5))                       // 15
+}
+
+main()

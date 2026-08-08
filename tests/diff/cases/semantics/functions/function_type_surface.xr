@@ -1,0 +1,50 @@
+// anchor: function-type-surface
+// Everywhere a function type is allowed to appear: a type alias, a parameter,
+// a reassignable binding, a return type, an array element, and a class field. Function values carry no source name (see
+// function_value_to_string.xr), so identity here is behavioural: each call must
+// produce the same number under both backends.
+//
+// The field case reads `this.handler` into a local before calling it. Calling
+// a function-typed field directly is task 264 D6; see the case that pins it.
+// Calling a function value held in an upvalue (the composition combinator) is
+// task 264 D9 and is pinned separately -- AOT native cannot lower it yet.
+
+type Mapper = (int) -> int
+
+fn applyM(f: Mapper, x: int) -> int { return f(x) }
+fn mapInt(xs: Array<int>, f: Mapper) -> Array<int> {
+    var out: Array<int> = []
+    for (x in xs) { out.push(f(x)) }
+    return out
+}
+fn double(x: int) -> int { return x * 2 }
+fn negate(x: int) -> int { return 0 - x }
+
+class Registry {
+    handler: Mapper
+    constructor(h: Mapper) { this.handler = h }
+    run(v: int) -> int { var h = this.handler
+                         return h(v) }
+}
+
+fn main() {
+    print(applyM(x -> x + 1, 41))         // 42 -- alias as a parameter type
+    print(applyM(double, 21))             // 42 -- named function satisfies it
+
+    var f: Mapper = double
+    print(f(10))                          // 20
+    f = negate                            // function bindings are reassignable
+    print(f(10))                          // -10
+
+    var ops: Array<Mapper> = [double, negate, x -> x * x]
+    print(ops[0](6))                      // 12
+    print(ops[1](6))                      // -6
+    print(ops[2](6))                      // 36
+
+    var r = Registry(x -> x + 1000)
+    print(r.run(1))                       // 1001 -- function type as a field
+
+    print(mapInt([1, 2, 3], x -> x * 100))  // [100, 200, 300]
+}
+
+main()

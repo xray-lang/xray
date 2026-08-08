@@ -1,0 +1,16 @@
+// Task 264 D4. A callback may declare fewer parameters than the function type
+// it is passed as: xr_type_assignable checks only an upper bound on parameter
+// count, so nothing rejects the short form. Builtin HOFs tolerate it because
+// their contract over-declares an index parameter the runtime never passes;
+// a user-declared HOF has nothing that accommodates it and calls with the
+// arity it wrote, so the closure traps.
+//
+// The missing diagnostic is the only defect here: with a two-parameter lambda
+// the program runs to completion.
+fn userHof(f: (int, int) -> int) -> int { return f(10, 5) }
+
+fn main() {
+    print(userHof((a) -> a * 100))
+}
+
+main()

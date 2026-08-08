@@ -1,0 +1,22 @@
+// anchor: hof-index-param
+// Task 264 D3. stdlib/types/array.xr declares the index parameter --
+//   map(fn: (item: T, index: int) -> U)
+// -- but both runtimes only ever pass one argument (xarray_vm.c calls
+// xr_vm_call_closure with 1; the AOT helper casts the callback to a one-arg
+// function pointer). The two-argument form the contract promises therefore
+// fails: the VM warns and returns null, which then trips a typed-array check
+// as a FATAL abort, and the AOT callback reads the index as null.
+//
+// The one-argument form must keep working: it is what the fewer-parameter
+// tolerance in xr_type_assignable exists to admit, and the fix is expected to
+// make that tolerance explicit (min_params) rather than implicit.
+//
+// forEach uses a block body so this case does not also depend on D1.
+fn main() {
+    print([10, 20, 30].map(x -> x * 100))
+    print([10, 20, 30].map((x, i) -> x * 100 + i))
+    print([10, 20, 30].filter((x, i) -> i < 2))
+    [10, 20].forEach((x, i) -> { print("${i}:${x}") })
+}
+
+main()

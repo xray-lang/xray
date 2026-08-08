@@ -1,0 +1,31 @@
+// anchor: method-as-value
+// Task 264 D5, and the one defect in that task where the two backends
+// disagree: the type layer hands out `() -> int` for `c.get`, but GETPROP
+// returns the method closure with no receiver bound. The VM catches the arity
+// (the proto counts the implicit receiver) and panics; the AOT read falls
+// through to xrt_getprop, which returns null for a user class instance, so the
+// call dereferences null instead.
+//
+// This case assumes the binding-closure fix: lowering synthesises a thunk that
+// captures the receiver. If the decision instead lands on rejecting method
+// references at compile time, this case moves to tests/compile_errors/oop/.
+class Counter {
+    n: int = 7
+    get() -> int { return this.n }
+    bump(d: int) -> int { this.n = this.n + d
+                          return this.n }
+}
+
+fn main() {
+    var c = Counter()
+    print(c.get())          // 7 -- ordinary call
+
+    var f: () -> int = c.get
+    print(f())              // 7 -- receiver stays bound
+
+    var g = c.bump
+    print(g(5))             // 12 -- and mutations land on the same instance
+    print(c.get())          // 12
+}
+
+main()

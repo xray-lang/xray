@@ -1,0 +1,15 @@
+// anchor: unit-value-rendering
+// Task 264 D2. Unit renders as `null` because XR_KIND_UNIT and XR_KIND_NULL
+// map to one value tag. The type layer already keeps them apart -- `u == null`
+// is rejected as a comparison against a non-nullable type -- so the confusion
+// is confined to rendering, and a function value already shows that non-data
+// values get their own spelling (`<fn>`, see function_value_to_string.xr).
+fn nothing() {}
+
+fn main() {
+    var u: () = nothing()
+    print(u)          // () -- not null
+    print((1, 2))     // tuples already render structurally
+}
+
+main()

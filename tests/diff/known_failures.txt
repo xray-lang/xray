@@ -58,3 +58,47 @@
 # retaining it: `for (v in gen)` inside a generator put the generator and its
 # iterator into two frame slots that both get released. See
 # xrt_method_return_self in src/aot/xrt_method.h.
+
+# --- Group 5: task 264 function-value defects ---------------------------------
+# Added 2026-08-08 with task 264. Six cases that encode the behaviour each fix
+# must produce, so the acceptance criteria live next to the net rather than in
+# a document. Each line is deleted by the change that fixes its defect.
+#
+# Only method_as_value.xr is a VM/AOT divergence in the strict sense (the VM
+# catches the unbound receiver on arity, the AOT read returns null and the call
+# dereferences it). The other five fail identically on both backends and are
+# caught here by the .xr.expected oracle, not by the VM-vs-AOT comparison --
+# agreeing on the wrong answer is still the wrong answer, and leaving them
+# unwritten would have left the fixes with nothing to verify against.
+#
+#   unit_return_expression.xr     D1  IR verifier aborts on `return <unit expr>`
+#   unit_value_rendering.xr       D2  unit renders as `null`
+#   hof_index_param.xr            D3  contract's index parameter never passed
+#   function_typed_field_call.xr  D6  `obj.field(x)` dispatched as a method call
+#   method_as_value.xr            D5  method reference leaves the receiver unbound
+#   parenthesized_function_type.xr D7 `(F)` in type position parses as a 1-tuple
+#
+# D4 (fewer-parameter tolerance leaking to user HOFs) is not here: it must end
+# as a compile-time rejection, so it lives at
+# tests/compile_errors/lambda/013_user_hof_fewer_params.xr with an
+# .expected-runtime sibling declaring the gap.
+#
+# D9 and D10 were found by the regression baselines added alongside these
+# cases, not by the investigation: both are AOT-native lowering failures on
+# code the VM runs, and both are ordinary shapes that no existing case covered
+# because every higher-order test passes its callback as a parameter rather
+# than capturing it.
+#
+#   unproven_callee_targets.xr           D9   AOT native cannot prove a target set for
+#                                             an indirect call whose callee comes from an
+#                                             upvalue, a Map, or a loop-built array
+#   nested_closure_transitive_capture.xr D10  closure inside a closure over a grandparent
+#                                             binding, rejected by the ownership pass
+tests/diff/cases/semantics/functions/unit_return_expression.xr
+tests/diff/cases/semantics/functions/unit_value_rendering.xr
+tests/diff/cases/semantics/functions/parenthesized_function_type.xr
+tests/diff/cases/semantics/collections/hof_index_param.xr
+tests/diff/cases/semantics/oop/function_typed_field_call.xr
+tests/diff/cases/semantics/oop/method_as_value.xr
+tests/diff/cases/semantics/functions/unproven_callee_targets.xr
+tests/diff/cases/semantics/closure/nested_closure_transitive_capture.xr

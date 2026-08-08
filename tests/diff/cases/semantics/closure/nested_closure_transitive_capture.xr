@@ -1,0 +1,24 @@
+// anchor: nested-closure-transitive-capture
+// Task 264 D10. A closure created inside another closure, capturing a binding
+// from the grandparent scope, aborts AOT native lowering at the ownership
+// pass with "value v1 in b0 arg[0] is NULL". The VM resolves the transitive
+// upvalue and runs it.
+//
+// capture_forms.xr covers every other capture shape; this one is split out
+// because it is the only shape that does not reach a native binary.
+type IntThunk = () -> int
+
+fn transitive() -> IntThunk {
+    var x = 10
+    return () -> {
+        var inner = () -> x * 2        // x comes from two scopes out
+        return inner() + 1
+    }
+}
+
+fn main() {
+    var t = transitive()
+    print(t())                         // 21
+}
+
+main()

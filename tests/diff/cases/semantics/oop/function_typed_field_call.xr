@@ -1,0 +1,32 @@
+// anchor: function-typed-field-call
+// Task 264 D6. `obj.name(args)` is lowered as a method call unconditionally,
+// so a function-typed field is looked up in the method table and missed.
+// Reading the field into a local first already works, which is what every
+// existing test does -- the direct form has never been covered.
+//
+// The analyzer already knows the answer: it records XA_SEL_FIELD on the callee
+// node with the field symbol and its function type, and lowering already reads
+// the selection table for other purposes. Builtin methods record no selection
+// at all, so gating on XA_SEL_FIELD leaves OP_INVOKE dispatch untouched.
+type Mapper = (int) -> int
+
+class R {
+    handler: Mapper
+    constructor(h: Mapper) { this.handler = h }
+    runDirect(v: int) -> int { return this.handler(v) }
+}
+
+fn main() {
+    var r = R(x -> x + 1000)
+
+    var g = r.handler
+    print(g(2))            // 1002 -- via a local, works today
+
+    print(r.handler(3))    // 1003 -- direct call on the field
+    print(r.runDirect(4))  // 1004 -- same through `this`
+
+    var opt: R? = r
+    print(opt?.handler(5)) // 1005 -- optional chain takes the same path
+}
+
+main()
