@@ -64,6 +64,13 @@ C. Decoding a derived value struct writes its existing native aggregate layout;
 heap materialization uses the registered type destructor and storage promoter.
 This adds no public field, tag, calling-convention change, or per-instance
 metadata to the target ABI.
+The public bytecode-bundle ABI preserves the compiler module graph's complete
+topological order. Source-backed modules carry embedded bytecode; native,
+standard-library, and dynamically linked package modules occupy explicit slots
+with null bytecode. The runtime initializes every non-entry slot in that order
+before evaluating the entry, so graph-resolved import and re-export operands
+retain identical module indices after source removal. A compressed runtime
+module table or a separate preload list is not a valid bundle representation.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -243,14 +250,14 @@ anchor-sha256: src/aot/xaot_verify.c 7fe97d173ac206666af4d63052ee0abb41b26eac845
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 5cafb87f5a28356200cdd737e84e7e7f6896b7c8ec97461262e872cb5f05b698
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c a04c5d8bd89a69bf175d69c03e78b340d7ee348b2f405f250d23737f34d1d30f
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2803a9189904ea6e4dc3100bb741aae456d32b544cdcb74a62ffcb0dff04af14
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 0bba73642490bb76d403a29495323b04852027bfabb83ecead32a833d23caa36
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4bc0066e76afeecbd0d0ef71800b817c03908ac62aa8ccb75bda6262693ddfc1
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 4ad72c173bf880b48ff9c232aee4d3648c7848d749c0a34881373e0e9ac051f7
 anchor-sha256: src/aot/xi_cgen.c 2d40c91d0c9e984588ddffbddc2a91ce9be5f49f37ecdb6d4006ddbd58ff35ca
 anchor-sha256: src/aot/xrt_coll.h d486fb006def4b702fc9a2e47642f954a4d9e5dacbbf4a7e00f938b83d0a2d30
 anchor-sha256: src/aot/xrt_core_freestanding.h 13af59f530ac1a77bb9f050bb391a65cbaebe941d77efd4f65043c4d811c7e00
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
-anchor-sha256: src/app/cli/xcmd_build.c e0db985bb71be7b813ad01ba6ffdde4979b1075f7037f69b0bb730c22c8d16d9
+anchor-sha256: src/app/cli/xcmd_build.c ecc165858a88abc38eaaa92eb060ecf852c7ae4868089b7dc026f7a82faa28ae
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 4e59251373523665674da4c863fac624fadef9cf077ebf8b6e9301768573490d
-anchor-sha256: src/ir/xi.h 298de848b014831ded0c48e0f95ec176d45d356d2c0da85fb680fecf2372cea8
+anchor-sha256: src/ir/xi.h 6554b79d6ed76c21291d0b4f95e6d8de99cdba742691bc529b1e0185770a9130
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24

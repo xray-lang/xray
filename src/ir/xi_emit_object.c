@@ -1291,9 +1291,9 @@ XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 /* Try to resolve an import reference at emit time by looking up the
- * pre-loaded module_table on the registry.  For selective imports,
- * fills both resolved_mod_index and resolved_shared_slot.  For
- * whole-module imports, fills only resolved_mod_index. */
+ * pre-loaded module_table on the registry.  For selective imports, fills
+ * resolved_mod_index and resolved_export_slot.  For whole-module imports,
+ * fills only resolved_mod_index. */
 static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
     XR_DCHECK(ctx != NULL && ref != NULL, "try_emit_time_resolve: NULL arg");
     if (!ctx->isolate)
@@ -1346,14 +1346,14 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
     if (target->symbol_to_index && sym >= target->min_symbol && sym <= target->max_symbol) {
         int32_t slot = target->symbol_to_index[sym - target->min_symbol];
         if (slot >= 0 && (uint64_t) slot <= MAXARG_C) {
-            ref->resolved_shared_slot = slot;
+            ref->resolved_export_slot = slot;
             return true;
         }
     }
     /* Fallback: linear scan */
     for (uint16_t ei = 0; ei < target->export_count; ei++) {
         if (target->export_symbols[ei] == sym) {
-            ref->resolved_shared_slot = (int) ei;
+            ref->resolved_export_slot = (int) ei;
             return true;
         }
     }
@@ -1378,12 +1378,12 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         try_emit_time_resolve(ctx, ref);
 
     /* Selective import: OP_LOAD_MODULE_SLOT */
-    if (ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 && ref->member_name) {
+    if (ref->resolved_mod_index >= 0 && ref->resolved_export_slot >= 0 && ref->member_name) {
         uint16_t mod_arg = 0;
         uint16_t slot_arg = 0;
         if (!xi_emit_index_to_arg(ctx, ref->resolved_mod_index, XI_EMIT_ERR_TOO_MANY_CONSTS,
                                   &mod_arg) ||
-            !xi_emit_index_to_arg(ctx, ref->resolved_shared_slot, XI_EMIT_ERR_TOO_MANY_CONSTS,
+            !xi_emit_index_to_arg(ctx, ref->resolved_export_slot, XI_EMIT_ERR_TOO_MANY_CONSTS,
                                   &slot_arg))
             return;
         emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, dst, mod_arg, slot_arg));

@@ -10,9 +10,9 @@
  * KEY CONCEPT:
  *   After lowering, XI_IMPORT_REF values carry module_path and
  *   member_name but have resolved_mod_index = -1.  This utility
- *   walks the Xi IR and fills resolved_mod_index + resolved_shared_slot
- *   using the XrModuleGraph, enabling downstream emission of
- *   OP_LOAD_MODULE_SLOT (selective) or OP_LOAD_MODULE (whole-module).
+ *   walks the Xi IR and fills resolved_mod_index plus the semantic shared
+ *   slot and dense VM export slot.  The VM emitter consumes the dense export
+ *   slot for OP_LOAD_MODULE_SLOT; AOT consumers retain the semantic slot.
  */
 
 #ifndef XI_IMPORT_RESOLVE_H

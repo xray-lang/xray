@@ -9,9 +9,8 @@
  *
  * KEY CONCEPT:
  *   Walks Xi IR functions and resolves import references against the
- *   XrModuleGraph.  Fills resolved_mod_index (topo position) and
- *   resolved_shared_slot (export slot in target module) so the emitter
- *   can generate OP_LOAD_MODULE_SLOT (selective) or OP_LOAD_MODULE (whole-module).
+ *   XrModuleGraph. Fills the topological module index, the semantic shared
+ *   slot used by AOT, and the dense runtime export slot used by VM bytecode.
  *
  *   Used by both the AOT driver and the VM multi-module compilation path.
  */
@@ -32,6 +31,7 @@
 typedef struct XiResolvedExport {
     int mod_index;
     int shared_slot;
+    int export_slot;
     XiFunc *function; /* exported function, NULL for value/class exports */
 } XiResolvedExport;
 
@@ -132,6 +132,7 @@ static bool resolve_export_target(const XrModuleGraph *graph, XiModule **modules
         if (exp->name && strcmp(exp->name, member_name) == 0) {
             out->mod_index = mod_index;
             out->shared_slot = (int) exp->shared_slot;
+            out->export_slot = (int) ei;
             out->function = exp->function;
             visiting[mod_index] = 0;
             return true;
@@ -178,6 +179,123 @@ static bool resolve_export_target(const XrModuleGraph *graph, XiModule **modules
 }
 
 /* ========== Single-Function Resolution ========== */
+
+typedef struct XiExportNameCollector {
+    const char **names;
+    uint32_t count;
+    uint32_t capacity;
+} XiExportNameCollector;
+
+static void collect_export_name(const char *key, void *value, void *userdata) {
+    (void) value;
+    XiExportNameCollector *collector = (XiExportNameCollector *) userdata;
+    if (!collector || !key || collector->count >= collector->capacity)
+        return;
+    collector->names[collector->count++] = key;
+}
+
+static int compare_export_name(const void *left, const void *right) {
+    const char *const *a = (const char *const *) left;
+    const char *const *b = (const char *const *) right;
+    return strcmp(*a, *b);
+}
+
+static char *copy_reexport_name(XiFunc *f, const char *name) {
+    size_t size = strlen(name) + 1;
+    char *copy = (char *) xi_func_arena_alloc(f, (uint32_t) size);
+    if (copy)
+        memcpy(copy, name, size);
+    return copy;
+}
+
+static void resolve_func_reexports(XiFunc *f, const XrModuleGraph *graph, XiModule **modules,
+                                   int nmodules) {
+    if (!f || !f->module || !f->reexports)
+        return;
+
+    for (uint16_t ri = 0; ri < f->reexport_count; ri++) {
+        XiReexportEntry *re = &f->reexports[ri];
+        int source_topo = resolve_reexport_source_topo(graph, f->module, re->from_path, nmodules);
+        if (source_topo < 0)
+            continue;
+        int source_spec_index = graph->topo_order[source_topo];
+        XrModuleSpec *source_spec = &graph->specs[source_spec_index];
+
+        re->resolution_attempted = true;
+        if (re->name) {
+            uint8_t *visiting = (uint8_t *) xr_calloc((size_t) nmodules, sizeof(uint8_t));
+            XiResolvedExport resolved = {-1, -1, -1, NULL};
+            if (visiting && resolve_export_target(graph, modules, nmodules, source_topo, re->name,
+                                                  visiting, &resolved)) {
+                re->resolved_mod_index = resolved.mod_index;
+                re->resolved_export_slot = resolved.export_slot;
+                re->resolution_complete = true;
+            } else if (source_spec->kind != XR_MOD_FILE) {
+                /* External native/stdlib/package exports stay name-resolved at
+                 * runtime while retaining the graph-derived source identity. */
+                re->resolution_complete = true;
+            }
+            xr_free(visiting);
+            continue;
+        }
+
+        XrHashMap *exports = source_spec->export_symbols;
+        if (!exports && source_spec->kind != XR_MOD_FILE) {
+            /* Native/stdlib/package modules do not necessarily publish an
+             * analyzer-owned export map.  Their star exports must retain the
+             * runtime metadata path instead of being mistaken for a failed
+             * file-graph resolution. */
+            re->resolution_attempted = false;
+            continue;
+        }
+        uint32_t count = xr_hashmap_count(exports);
+        if (!exports || count > UINT16_MAX)
+            continue;
+        if (count == 0) {
+            re->resolution_complete = true;
+            continue;
+        }
+
+        const char **names = (const char **) xr_calloc(count, sizeof(const char *));
+        XiResolvedReexport *members = (XiResolvedReexport *) xi_func_arena_alloc(
+            f, (uint32_t) ((size_t) count * sizeof(XiResolvedReexport)));
+        if (!names || !members) {
+            xr_free(names);
+            continue;
+        }
+        XiExportNameCollector collector = {.names = names, .count = 0, .capacity = count};
+        xr_hashmap_foreach(exports, collect_export_name, &collector);
+        if (collector.count != count) {
+            xr_free(names);
+            continue;
+        }
+        qsort(names, count, sizeof(const char *), compare_export_name);
+
+        bool complete = true;
+        for (uint32_t i = 0; i < count; i++) {
+            XiResolvedExport resolved = {-1, -1, -1, NULL};
+            uint8_t *visiting = (uint8_t *) xr_calloc((size_t) nmodules, sizeof(uint8_t));
+            char *name = copy_reexport_name(f, names[i]);
+            if (!name || !visiting ||
+                !resolve_export_target(graph, modules, nmodules, source_topo, names[i], visiting,
+                                       &resolved)) {
+                complete = false;
+                xr_free(visiting);
+                break;
+            }
+            xr_free(visiting);
+            members[i].export_name = name;
+            members[i].mod_index = resolved.mod_index;
+            members[i].export_slot = resolved.export_slot;
+        }
+        xr_free(names);
+        if (complete) {
+            re->resolved_members = members;
+            re->resolved_member_count = (uint16_t) count;
+            re->resolution_complete = true;
+        }
+    }
+}
 
 /* Walk a single XiFunc (non-recursive) and resolve XI_IMPORT_REF values. */
 static void resolve_func_imports(XiFunc *f, const XrModuleGraph *graph, const char *importer_path,
@@ -240,11 +358,12 @@ static void resolve_func_imports(XiFunc *f, const XrModuleGraph *graph, const ch
             }
 
             uint8_t *visiting = (uint8_t *) xr_calloc((size_t) nmodules, sizeof(uint8_t));
-            XiResolvedExport resolved = {-1, -1, NULL};
+            XiResolvedExport resolved = {-1, -1, -1, NULL};
             if (visiting && resolve_export_target(graph, modules, nmodules, target_topo,
                                                   ref->member_name, visiting, &resolved)) {
                 ref->resolved_mod_index = resolved.mod_index;
                 ref->resolved_shared_slot = resolved.shared_slot;
+                ref->resolved_export_slot = resolved.export_slot;
                 ref->resolved_module = modules[resolved.mod_index];
                 ref->resolved_func = resolved.function;
                 if (!ref->resolved_func) {
@@ -265,6 +384,7 @@ XR_FUNC void xi_resolve_imports(XiFunc *f, const XrModuleGraph *graph, const cha
                                 XiModule **modules, int nmodules) {
     if (!f)
         return;
+    resolve_func_reexports(f, graph, modules, nmodules);
     resolve_func_imports(f, graph, importer_path, modules, nmodules);
     for (uint16_t c = 0; c < f->nchildren; c++)
         xi_resolve_imports(f->children[c], graph, importer_path, modules, nmodules);

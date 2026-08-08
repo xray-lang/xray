@@ -40,7 +40,7 @@ def main(argv: list[str]) -> int:
         if binary.exists():
             sys.stderr.write(f"failed bytecode build left an executable behind: {binary}\n")
             return 1
-        if "entry compilation failed" not in build.combined_text():
+        if "compilation failed:" not in build.combined_text():
             sys.stderr.write("failed bytecode build did not report the entry failure\n")
             sys.stderr.write(build.combined_text())
             return 1

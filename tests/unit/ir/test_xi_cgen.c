@@ -2026,6 +2026,7 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     ref->member_name = "__fileClose";
     ref->resolved_mod_index = -1;
     ref->resolved_shared_slot = -1;
+    ref->resolved_export_slot = -1;
     XiValue *import = xi_value_new(ir, entry, XI_IMPORT_REF, &func_type, 0);
     TEST_REQUIRE(import != NULL, "direct stdlib import token allocated");
     import->aux = ref;
@@ -8085,6 +8086,7 @@ TEST(cgen_unresolved_import_fails_fast) {
     ref->member_name = "value";
     ref->resolved_mod_index = -1;
     ref->resolved_shared_slot = -1;
+    ref->resolved_export_slot = -1;
 
     XiValue *import = xi_value_new(ir, entry, XI_IMPORT_REF, &stub_string, 0);
     assert(import != NULL);

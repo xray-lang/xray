@@ -77,6 +77,7 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_constructor_call_target(const XaotBu
             const XiModule *owner = NULL;
             class_ref.member_name = (const char *) call->aux;
             class_ref.resolved_shared_slot = -1;
+            class_ref.resolved_export_slot = -1;
             const XiClassData *cls = resolve_imported_class(bundle, &class_ref, &owner);
             if (cls && owner && owner->init)
                 target = boundary_find_constructor(owner->init, cls);
@@ -297,6 +298,7 @@ static const XiFunc *resolve_module_member_target(const XaotBundle *bundle, cons
     member_ref = *module_ref;
     member_ref.member_name = member_name;
     member_ref.resolved_shared_slot = -1;
+    member_ref.resolved_export_slot = -1;
     return resolve_import_ref(bundle, &member_ref);
 }
 
@@ -375,6 +377,7 @@ static const XiFunc *resolve_imported_static_method_target(const XaotBundle *bun
             nested_ref = *module_ref;
             nested_ref.member_name = (const char *) receiver->aux;
             nested_ref.resolved_shared_slot = -1;
+            nested_ref.resolved_export_slot = -1;
             ref = &nested_ref;
         }
     }

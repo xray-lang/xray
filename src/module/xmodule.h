@@ -174,6 +174,7 @@ typedef XrModule *(*NativeModuleLoader)(struct XrVMRuntime *isolate);
 /* ========== Module Registry ========== */
 
 struct XrModuleResolver;
+struct XrBytecodeModule;
 
 typedef AstNode *(*XrModuleParseHook)(XrCompilerSession *session, const char *source,
                                       const char *source_file);
@@ -199,6 +200,10 @@ typedef struct XrModuleRegistry {
     // Populated during graph-driven initialization; indexed by topo position.
     XrModule **module_table;
     int module_table_count;
+
+    // Bytecode modules embedded by `xray build`; borrowed from static artifact data.
+    const struct XrBytecodeModule *embedded_modules;
+    size_t embedded_module_count;
 
     // Compiler hooks — per-Isolate, NULL in lite/bytecode-only mode.
     // The module runtime stores an opaque compiler session pointer and only

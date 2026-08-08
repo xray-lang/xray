@@ -315,6 +315,7 @@ static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
 
     ref->resolved_mod_index = -1;
     ref->resolved_shared_slot = -1;
+    ref->resolved_export_slot = -1;
 
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type ? type : l->type_any, 0);
     if (!v)

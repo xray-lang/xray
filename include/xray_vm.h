@@ -23,6 +23,21 @@ extern "C" {
 
 typedef struct XrVMRuntime XrVMRuntime;
 
+typedef struct XrBytecodeModule {
+    const char *path;
+    /* NULL with bytecode_size zero denotes an external module occupying its
+     * compile-time topological slot. */
+    const uint8_t *bytecode;
+    size_t bytecode_size;
+} XrBytecodeModule;
+
+typedef struct XrBytecodeBundle {
+    /* Complete compile-time topological order, including external slots. */
+    const XrBytecodeModule *modules;
+    size_t module_count;
+    size_t entry_index;
+} XrBytecodeBundle;
+
 typedef enum {
     XR_VM_BACKEND_BYTECODE,
 } XrVMBackendType;
@@ -56,6 +71,8 @@ XRAY_API void xray_vm_delete(XrVMRuntime *vm);
 XRAY_API int xray_vm_dostring(XrVMRuntime *vm, const char *source);
 XRAY_API int xray_vm_dofile(XrVMRuntime *vm, const char *filename);
 XRAY_API int xray_vm_dofile_debug(XrVMRuntime *vm, const char *filename, void **out_proto);
+
+XRAY_API int xray_vm_eval_bundle(XrVMRuntime *vm, const XrBytecodeBundle *bundle);
 
 XRAY_API XrVMBackendType xray_vm_get_backend(XrVMRuntime *vm);
 

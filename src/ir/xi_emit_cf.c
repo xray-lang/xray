@@ -242,6 +242,36 @@ static bool emit_star_reexports(EmitCtx *ctx, XiReexportEntry *re, XrModule *src
     return true;
 }
 
+static bool emit_graph_resolved_reexport(EmitCtx *ctx, XiReexportEntry *re, XiEmitReg member_reg,
+                                         uint32_t *next_export_slot) {
+    if (!re->resolution_complete) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return false;
+    }
+
+    if (re->name) {
+        if (!emit_reexport_load(ctx, member_reg, member_reg, re->from_path, re->name,
+                                re->resolved_mod_index, re->resolved_export_slot))
+            return false;
+        const char *export_name = re->alias ? re->alias : re->name;
+        if (!emit_set_export_checked(ctx, *next_export_slot, member_reg, export_name))
+            return false;
+        (*next_export_slot)++;
+        return true;
+    }
+
+    for (uint16_t i = 0; i < re->resolved_member_count; i++) {
+        XiResolvedReexport *member = &re->resolved_members[i];
+        if (!member->export_name ||
+            !emit_reexport_load(ctx, member_reg, member_reg, re->from_path, member->export_name,
+                                member->mod_index, member->export_slot) ||
+            !emit_set_export_checked(ctx, *next_export_slot, member_reg, member->export_name))
+            return false;
+        (*next_export_slot)++;
+    }
+    return true;
+}
+
 /* Emit re-export bytecodes using OP_LOAD_MODULE_SLOT + OP_SET_EXPORT.
  * For star re-exports without graph resolution, falls back to
  * GETPROP-based extraction from the module object. */
@@ -269,6 +299,11 @@ static void emit_reexports(EmitCtx *ctx) {
             continue;
         if (ctx->status != XI_EMIT_OK)
             return;
+        if (re->resolution_attempted) {
+            if (!emit_graph_resolved_reexport(ctx, re, val_reg, &next_export_slot))
+                return;
+            continue;
+        }
 
         /* Resolve the source module (already loaded via topo-order pre-load
          * or runtime import cache). */

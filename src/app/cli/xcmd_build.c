@@ -1413,14 +1413,14 @@ static void write_bytecode_main(FILE *f, const char *bundle_source) {
                "#include <stdint.h>\n"
                "#include <stddef.h>\n\n");
 
-    // Bundle-generated data (module bytecode arrays, module table, lookup function)
+    fprintf(f, "#include \"xray_vm.h\"\n\n");
+
+    // Bundle-generated data (module bytecode arrays and module table)
     fprintf(f, "%s\n\n", bundle_source);
 
     // Main: default bytecode bundles run with full runtime support so imports
     // and runtime exception objects behave like `xray run`.
-    fprintf(f, "#include \"xray_vm.h\"\n"
-               "extern int xr_eval_bytecode(XrVMRuntime*, const uint8_t*, size_t);\n"
-               "\n"
+    fprintf(f, "\n"
                "int main(int argc, char **argv) {\n"
                "    XrVMConfig params;\n"
                "    xray_vm_config_init(&params);\n"
@@ -1428,12 +1428,10 @@ static void write_bytecode_main(FILE *f, const char *bundle_source) {
                "    params.script_argv = argc > 1 ? argv + 1 : NULL;\n"
                "    XrVMRuntime *X = xray_vm_new_full(&params);\n"
                "    if (!X) { fprintf(stderr, \"Failed to create runtime\\n\"); return 1; }\n"
-               "    const XrEmbeddedModule *entry = &xr_app_modules[xr_app_entry_index];\n"
+               "    const XrBytecodeModule *entry = &xr_app_modules[xr_app_entry_index];\n"
                "    xray_vm_set_script_info(X, entry->path, params.script_argc, "
                "params.script_argv);\n"
-               "    /* xr_eval_bytecode initializes the scheduler from the serialized "
-               "entry plan. */\n"
-               "    int result = xr_eval_bytecode(X, entry->bc, entry->size);\n"
+               "    int result = xray_vm_eval_bundle(X, &xr_app_bundle);\n"
                "    xray_vm_multicore_destroy(X);\n"
                "    xray_vm_delete(X);\n"
                "    return result;\n"

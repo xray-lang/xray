@@ -211,8 +211,15 @@ struct XrVMRuntime {
 //
 // ========== Compilation and Execution API ==========
 
+struct XiModule;
+struct XrModuleGraph;
+
 XR_FUNC XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
                                             const char *source_file);
+XR_FUNC XrProto *xr_compile_ast_in_graph(XrCompilerSession *session, AstNode *ast,
+                                         const char *source_file, const struct XrModuleGraph *graph,
+                                         struct XiModule **graph_modules, int graph_module_count,
+                                         struct XiModule **out_module);
 XR_FUNC XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,
                                              const char *source_file);
 

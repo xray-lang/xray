@@ -20,6 +20,9 @@
 #include "../frontend/codegen/xcompiler_context.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xparse.h"
+#include "../ir/xi.h"
+#include "../ir/xi_module.h"
+#include "../module/xmodule_graph.h"
 #include "../os/os_thread.h"
 #include "../runtime/value/xchunk.h"
 #include "../toolchain/xcompiler_session.h"
@@ -66,7 +69,11 @@ static bool compile_session_available(XrCompilerSession *session, const char *wh
 // Re-enter the program arena through the active compiler session so these
 // synthetic nodes share the AST lifetime without mutating VM isolate state.
 static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
-                                     const char *source_file) {
+                                     const char *source_file, const XrModuleGraph *graph,
+                                     XiModule **graph_modules, int graph_module_count,
+                                     XiModule **out_module) {
+    if (out_module)
+        *out_module = NULL;
     if (!compile_session_available(session, "compile_ast_internal"))
         return NULL;
     XR_DCHECK(ast != NULL, "compile_ast_internal: NULL ast");
@@ -87,11 +94,22 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
     xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
 
     ctx->source_file = source_file;
+    ctx->module_graph = graph;
+    ctx->graph_modules = graph_modules;
+    ctx->graph_module_count = graph_module_count;
 
     XrProto *proto = xr_compile(ctx, ast);
     if (proto && !xr_vm_entry_plan_derive(proto)) {
         xr_vm_proto_free(proto);
         proto = NULL;
+    }
+    if (proto && out_module) {
+        XiFunc *ir = (XiFunc *) proto->xi_func;
+        *out_module = ir ? ir->module : NULL;
+        if (!*out_module) {
+            xr_vm_proto_free(proto);
+            proto = NULL;
+        }
     }
 
     xr_compiler_context_free(ctx);
@@ -108,7 +126,16 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
 
 XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
                                     const char *source_file) {
-    return compile_ast_internal(session, ast, source_file);
+    return compile_ast_internal(session, ast, source_file, NULL, NULL, 0, NULL);
+}
+
+XrProto *xr_compile_ast_in_graph(XrCompilerSession *session, AstNode *ast, const char *source_file,
+                                 const XrModuleGraph *graph, XiModule **graph_modules,
+                                 int graph_module_count, XiModule **out_module) {
+    if (!graph || !graph_modules || graph_module_count <= 0 || !out_module)
+        return NULL;
+    return compile_ast_internal(session, ast, source_file, graph, graph_modules, graph_module_count,
+                                out_module);
 }
 
 XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,

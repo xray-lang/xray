@@ -105,6 +105,7 @@ static void test_use_policy(void) {
         .member_name = "write",
         .resolved_mod_index = -1,
         .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
     };
     XiValue net_write_callee = {
         .op = XI_IMPORT_REF,
@@ -125,12 +126,8 @@ static void test_use_policy(void) {
               "public Xray net payload without a lowering plan fails closed");
 
     XiCallArgPlan net_write_arg_plans[2] = {
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = &net_conn},
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = &string_value},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = &net_conn},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = &string_value},
     };
     XiCallPlan net_write_plan = {
         .args = net_write_arg_plans,
@@ -148,6 +145,7 @@ static void test_use_policy(void) {
         .member_name = "__write",
         .resolved_mod_index = -1,
         .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
     };
     net_write_callee.aux = &net_native_write_ref;
     net_write.call_plan = NULL;
@@ -161,6 +159,7 @@ static void test_use_policy(void) {
         .member_name = NULL,
         .resolved_mod_index = -1,
         .resolved_shared_slot = 0,
+        .resolved_export_slot = -1,
     };
     XiFunc *method_func = make_func("native_module_method_borrow", &t_int);
     XiModule *module = xi_module_new("test.xr", "test", method_func);
@@ -187,12 +186,8 @@ static void test_use_policy(void) {
               "shared-slot public Xray payload without a lowering plan fails closed");
 
     XiCallArgPlan method_write_arg_plans[2] = {
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = conn_value},
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = payload_value},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = conn_value},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = payload_value},
     };
     XiCallPlan method_write_plan = {
         .args = method_write_arg_plans,

@@ -51,6 +51,7 @@ static void test_imported_scalar_const_refreshes_native_representations(void) {
         .member_name = "LIMIT",
         .resolved_mod_index = 0,
         .resolved_shared_slot = 0,
+        .resolved_export_slot = -1,
     };
     XiValue *length = xi_const_int(app_init, app_entry, 16, &t_u64);
     XiValue *imported = xi_value_new(app_init, app_entry, XI_GET_SHARED, &t_unknown, 0);
