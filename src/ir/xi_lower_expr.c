@@ -22,6 +22,7 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 #include "../shared/xr_scalar_type.h"
+#include "../shared/xobject_shape.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -51,6 +52,7 @@
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../shared/xr_encoding_constants.h"
+#include "../stdlib/xstdlib_metadata.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -333,6 +335,7 @@ static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
 
     ref->resolved_mod_index = -1;
     ref->resolved_shared_slot = -1;
+    ref->resolved_export_slot = -1;
 
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type ? type : l->type_any, 0);
     if (!v)
@@ -1503,19 +1506,8 @@ static int object_field_runtime_ordinal(struct XrType *type, const char *name) {
     int source_ordinal = json_field_index(type, name);
     if (source_ordinal < 0 || !type || type->kind != XR_KIND_STRUCT_OBJECT)
         return source_ordinal;
-
-    uint64_t stable_name_key = xg_object_stable_name_key(name);
-    uint32_t name_id = xg_name_id(name);
-    int canonical_ordinal = 0;
-    for (int i = 0; i < type->object.field_count; i++) {
-        const char *candidate = type->object.field_names[i];
-        uint64_t candidate_stable_key = xg_object_stable_name_key(candidate);
-        uint32_t candidate_id = xg_name_id(candidate);
-        if (candidate_stable_key < stable_name_key ||
-            (candidate_stable_key == stable_name_key && candidate_id < name_id))
-            canonical_ordinal++;
-    }
-    return canonical_ordinal;
+    return (int) xr_object_shape_canonical_ordinal((const char *const *) type->object.field_names,
+                                                   type->object.field_count, name);
 }
 
 static const char *lower_static_string_key(AstNode *node) {
@@ -5274,10 +5266,34 @@ static const char *lower_call_namespace_module_name(XiLower *l, CallExprNode *ca
     return links ? links->module_name : NULL;
 }
 
+/* A payload-enum variant call constructs a new inline aggregate whose active
+ * lanes own the values moved into them.  It is therefore a fresh +1 result even
+ * though, unlike a class constructor, it allocates no object header.  Publish
+ * that semantic fact at lowering so ARC, VM, and every AOT representation read
+ * one backend-neutral ownership contract. */
+static bool lower_call_is_payload_enum_constructor(XiLower *l, CallExprNode *call) {
+    if (!l || !l->analyzer || !call || !call->callee)
+        return false;
+    const XaSelection *selection = xa_analyzer_get_selection(l->analyzer, call->callee);
+    if (!selection || selection->kind != XA_SEL_ENUM_MEMBER || !selection->target_symbol ||
+        selection->target_symbol->kind != XA_SYM_ENUM)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, selection->target_symbol);
+    XaEnumInfo *info = links ? links->enum_info : NULL;
+    return info && info->variants && selection->field_index >= 0 &&
+           (uint32_t) selection->field_index < info->variant_count &&
+           info->variants[selection->field_index].payload_count > 0;
+}
+
 static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *call,
                                                      XiValue *callee_value) {
     XiReturnOwnership result = {
         .kind = XI_RETURN_OWNERSHIP_UNKNOWN, .param_index = -1, .complete = false};
+    if (lower_call_is_payload_enum_constructor(l, call)) {
+        result.kind = XI_RETURN_OWNERSHIP_OWNED;
+        result.complete = true;
+        return result;
+    }
     XaSymbolLinks *links = lower_call_return_ownership_links(l, call);
     if (links && links->return_ownership.complete) {
         switch ((XaReturnOwnershipKind) links->return_ownership.kind) {
@@ -5330,6 +5346,21 @@ static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *c
         }
     }
     return result;
+}
+
+static bool lower_call_resumes_by_netpoll_retry(XiLower *l, CallExprNode *call,
+                                                XiValue *callee_value) {
+    if (!l || !call)
+        return false;
+    const XiImportRef *import_ref = lower_import_ref_from_value(l, callee_value);
+    const char *module_path = import_ref ? import_ref->module_path : NULL;
+    if (!module_path)
+        module_path = lower_call_namespace_module_name(l, call);
+    const char *member_name = import_ref ? import_ref->member_name : NULL;
+    if (!member_name && call->callee && call->callee->type == AST_MEMBER_ACCESS)
+        member_name = call->callee->as.member_access.name;
+    return module_path && member_name &&
+           xr_stdlib_metadata_func_resumes_by_netpoll_retry(module_path, member_name);
 }
 
 static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode *call,
@@ -5500,6 +5531,10 @@ static XiValue *lower_emit_function_call(XiLower *l, AstNode *node, CallExprNode
     for (int i = 0; i < n; i++)
         v->args[i + 1] = arg_vals[i];
     v->flags |= XI_FLAG_SIDE_EFFECT;
+    if (lower_call_resumes_by_netpoll_retry(l, call, callee_val)) {
+        v->flags |= XI_FLAG_MAY_SUSPEND;
+        v->lowering_flags |= XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS;
+    }
     v->line = (uint32_t) node->line;
     if (is_self_call)
         v->aux_int = 1;
@@ -7191,6 +7226,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->lowering_flags |= XI_LOWERING_FLAG_TIME_SLEEP;
         lower_instantiate_call_view_evidence(v, NULL, method_type, true);
         v->flags |= XI_FLAG_SIDE_EFFECT;
+        if (lower_call_resumes_by_netpoll_retry(l, call, recv)) {
+            v->flags |= XI_FLAG_MAY_SUSPEND;
+            v->lowering_flags |= XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS;
+        }
         if (xi_lower_method_may_suspend(recv->type, ma->name, n))
             v->flags |= XI_FLAG_MAY_SUSPEND;
         v->line = (uint32_t) node->line;

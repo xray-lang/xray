@@ -70,6 +70,35 @@ static void native_increment(void *arg) {
         (*value)++;
 }
 
+typedef struct NativeYieldableFixture {
+    int entries;
+    int destroys;
+} NativeYieldableFixture;
+
+static XrCFuncResult native_yieldable_done(XrVMRuntime *isolate, void *context, XrValue *result) {
+    (void) isolate;
+    NativeYieldableFixture *fixture = (NativeYieldableFixture *) context;
+    fixture->entries++;
+    *result = xr_int(42);
+    return XR_CFUNC_DONE;
+}
+
+static XrCFuncResult native_yieldable_test_continuation(XrVMRuntime *isolate, int status,
+                                                        XrValue resume_value, void *context,
+                                                        XrValue *result) {
+    (void) isolate;
+    (void) status;
+    (void) resume_value;
+    (void) context;
+    *result = xr_null();
+    return XR_CFUNC_DONE;
+}
+
+static void native_yieldable_fixture_destroy(void *context) {
+    NativeYieldableFixture *fixture = (NativeYieldableFixture *) context;
+    fixture->destroys++;
+}
+
 static _Atomic int64_t aot_par_for_sum;
 
 static _Atomic int64_t aot_par_for_bad_worker_id;
@@ -77,6 +106,32 @@ static _Atomic int64_t aot_par_for_seen_mask;
 static _Atomic int64_t aot_par_for_lane_begin[8];
 static _Atomic int64_t aot_par_for_lane_end[8];
 static _Atomic int64_t aot_par_for_lane_calls[8];
+static int aot_service_destroy_count;
+static _Atomic bool aot_service_lease_acquired;
+static _Atomic bool aot_service_lease_matched;
+
+typedef struct AotServiceLeaseFixture {
+    XrAotRuntime *runtime;
+    void *expected;
+} AotServiceLeaseFixture;
+
+static void aot_test_service_destroy(void *service) {
+    ASSERT_NOT_NULL(service);
+    aot_service_destroy_count++;
+}
+
+static void *aot_test_hold_service_lease(void *argument) {
+    AotServiceLeaseFixture *fixture = (AotServiceLeaseFixture *) argument;
+    void *service = xr_aot_runtime_service_acquire(fixture->runtime, XR_AOT_SERVICE_SLOT_CLUSTER);
+    atomic_store_explicit(&aot_service_lease_matched, service == fixture->expected,
+                          memory_order_relaxed);
+    atomic_store_explicit(&aot_service_lease_acquired, true, memory_order_release);
+    if (service != fixture->expected)
+        return NULL;
+    xr_thread_sleep_ms(20);
+    xr_aot_runtime_service_release(fixture->runtime, XR_AOT_SERVICE_SLOT_CLUSTER);
+    return NULL;
+}
 
 static void aot_par_for_reset_lane_records(void) {
     for (int i = 0; i < 8; i++) {
@@ -456,6 +511,32 @@ TEST(native_coroutine_uses_native_backend_without_vm_state) {
     xr_coro_destroy(coro);
 }
 
+TEST(native_yieldable_coroutine_uses_backend_neutral_continuation_contract) {
+    XrVMRuntime isolate;
+    memset(&isolate, 0, sizeof(isolate));
+    NativeYieldableFixture fixture = {0};
+
+    XrCoroutine *coro =
+        xr_coro_create_native_yieldable(&isolate, native_yieldable_done, &fixture,
+                                        native_yieldable_fixture_destroy, "native_yieldable");
+    ASSERT_NOT_NULL(coro);
+    ASSERT_EQ_INT(coro->backend->kind, XR_CORO_BACKEND_NATIVE);
+    ASSERT_NOT_NULL(coro->backend->setup_yield_continuation);
+    ASSERT_TRUE(coro->backend->setup_yield_continuation(
+        &isolate, coro, (void *) native_yieldable_test_continuation, &fixture));
+    ASSERT_TRUE(xr_coro_has_continuation(coro));
+
+    XrCoroEvent event = {.kind = XR_CORO_EVENT_START};
+    XrCoroRunContext run_context = {0};
+    XrCoroRunResult run_result = coro->backend->resume(coro, &event, &run_context);
+    ASSERT_EQ_INT(run_result.kind, XR_CORO_RUN_DONE);
+    ASSERT_EQ_INT(XR_TO_INT(run_result.value), 42);
+    ASSERT_EQ_INT(fixture.entries, 1);
+
+    xr_coro_destroy(coro);
+    ASSERT_EQ_INT(fixture.destroys, 1);
+}
+
 TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done) {
     XrAotRuntime *runtime = aot_test_runtime_new();
     ASSERT_NOT_NULL(runtime);
@@ -635,6 +716,53 @@ TEST(aot_runtime_owns_core_without_isolate) {
     ASSERT_STR_EQ(xr_aot_runtime_core(runtime)->script_info.file, "main.xr");
     ASSERT_EQ_INT(xr_aot_runtime_core(runtime)->script_info.argc, 2);
     ASSERT_EQ_PTR(xr_aot_runtime_core(runtime)->script_info.argv, argv);
+
+    xr_aot_runtime_delete(runtime);
+}
+
+TEST(aot_runtime_service_slots_lease_and_destroy_services) {
+    XrAotRuntime *runtime = aot_test_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    int first = 1;
+    int duplicate = 2;
+    int second = 3;
+    aot_service_destroy_count = 0;
+
+    ASSERT_TRUE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &first,
+                                               aot_test_service_destroy));
+    ASSERT_FALSE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &duplicate,
+                                                aot_test_service_destroy));
+    ASSERT_TRUE(xr_aot_runtime_service_acquire(runtime, XR_AOT_SERVICE_SLOT_CLUSTER) == &first);
+    xr_aot_runtime_service_release(runtime, XR_AOT_SERVICE_SLOT_CLUSTER);
+    ASSERT_TRUE(xr_aot_runtime_service_remove(runtime, XR_AOT_SERVICE_SLOT_CLUSTER));
+    ASSERT_EQ_INT(aot_service_destroy_count, 1);
+    ASSERT_FALSE(xr_aot_runtime_service_remove(runtime, XR_AOT_SERVICE_SLOT_CLUSTER));
+
+    ASSERT_TRUE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &second,
+                                               aot_test_service_destroy));
+    xr_aot_runtime_delete(runtime);
+    ASSERT_EQ_INT(aot_service_destroy_count, 2);
+}
+
+TEST(aot_runtime_service_removal_waits_for_active_lease) {
+    XrAotRuntime *runtime = aot_test_runtime_new();
+    ASSERT_NOT_NULL(runtime);
+    int service = 1;
+    aot_service_destroy_count = 0;
+    atomic_store_explicit(&aot_service_lease_acquired, false, memory_order_relaxed);
+    atomic_store_explicit(&aot_service_lease_matched, false, memory_order_relaxed);
+    ASSERT_TRUE(xr_aot_runtime_service_install(runtime, XR_AOT_SERVICE_SLOT_CLUSTER, &service,
+                                               aot_test_service_destroy));
+
+    AotServiceLeaseFixture fixture = {.runtime = runtime, .expected = &service};
+    xr_thread_t holder;
+    ASSERT_TRUE(xr_thread_create(&holder, aot_test_hold_service_lease, &fixture));
+    while (!atomic_load_explicit(&aot_service_lease_acquired, memory_order_acquire))
+        xr_thread_yield();
+    ASSERT_TRUE(xr_aot_runtime_service_remove(runtime, XR_AOT_SERVICE_SLOT_CLUSTER));
+    ASSERT_EQ_INT(aot_service_destroy_count, 1);
+    ASSERT_EQ_INT(xr_thread_join(holder, NULL), 0);
+    ASSERT_TRUE(atomic_load_explicit(&aot_service_lease_matched, memory_order_relaxed));
 
     xr_aot_runtime_delete(runtime);
 }
@@ -1330,7 +1458,9 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_FALSE(xr_coro_backend_prepare_recycle(native, NULL));
     ASSERT_FALSE(xr_coro_backend_reset_reusable(native));
     ASSERT_FALSE(xr_coro_has_continuation(native));
-    ASSERT_NULL(native->backend->setup_yield_continuation);
+    ASSERT_NOT_NULL(native->backend->setup_yield_continuation);
+    ASSERT_FALSE(native->backend->setup_yield_continuation(
+        &isolate, native, (void *) native_yieldable_test_continuation, &counter));
     ASSERT_NULL(native->backend->call_closure);
     ASSERT_NULL(native->backend->prepare_execution_state);
     ASSERT_NULL(native->backend->bind_closure_entry);
@@ -1758,12 +1888,15 @@ TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Native Coroutine Backend");
 RUN_TEST(native_coroutine_uses_native_backend_without_vm_state);
+RUN_TEST(native_yieldable_coroutine_uses_backend_neutral_continuation_contract);
 RUN_TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done);
 RUN_TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results);
 RUN_TEST(aot_coroutine_create_failure_releases_frame);
 RUN_TEST(aot_frame_alloc_accepts_zero_state_frames);
 RUN_TEST(aot_frame_alloc_reuses_small_frames_locally);
 RUN_TEST(aot_runtime_owns_core_without_isolate);
+RUN_TEST(aot_runtime_service_slots_lease_and_destroy_services);
+RUN_TEST(aot_runtime_service_removal_waits_for_active_lease);
 RUN_TEST(aot_runtime_creates_scheduler_for_runtime_caps);
 RUN_TEST(aot_runtime_control_plane_uses_root_descriptor_heap);
 RUN_TEST(aot_test_yield_provider_preserves_scalar_and_atomic_contracts);

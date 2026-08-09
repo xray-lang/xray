@@ -1,0 +1,3 @@
+c_contains=xrt_enum_aggregate_take_from_boxed(_call_value_
+c_contains=xrt_enum_aggregate_box_from_borrowed(
+c_contains=xrt_enum_aggregate_release(

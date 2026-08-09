@@ -1,0 +1,6 @@
+fn pair() -> (int, int) {
+    return (10, 20)
+}
+
+var task = go pair()
+print(await task)

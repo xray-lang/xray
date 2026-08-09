@@ -8,14 +8,13 @@
  * cluster_internal.h - Private distributed cluster runtime/data-plane API
  *
  * KEY CONCEPT:
- *   Decentralized cluster with Named Channel as the core abstraction.
+ *   Decentralized cluster transport for opaque service envelopes.
  *   Each node is identified by a unique name. Nodes connect via TCP
  *   with challenge-response handshake (SHA-256).
  *
  * WHY THIS DESIGN:
- *   - Owner model for Named Channels: single source of truth, no
- *     distributed queue coordination needed
- *   - Pure C module, no .xr layer: all functions are I/O or yieldable
+ *   - Transport frames never encode or inspect Xray values
+ *   - Xray owns contract codecs and RPC lifecycle above this boundary
  *   - at-most-once delivery: consistent with Go/Erlang/NATS semantics
  */
 
@@ -85,6 +84,15 @@ struct XrChannel;
 typedef struct XrCluster XrCluster;
 typedef struct XrClusterDiscovery XrClusterDiscovery;
 
+typedef enum XrClusterDelivery {
+    XR_CLUSTER_DELIVERY_ACCEPTED = 0,
+    XR_CLUSTER_DELIVERY_INVALID_TOPIC,
+    XR_CLUSTER_DELIVERY_INVALID_ENVELOPE,
+    XR_CLUSTER_DELIVERY_UNAVAILABLE,
+    XR_CLUSTER_DELIVERY_OVERLOADED,
+    XR_CLUSTER_DELIVERY_DISCONNECTED,
+} XrClusterDelivery;
+
 /* ========== Cluster Wire Protocol ========== */
 
 typedef enum {
@@ -94,28 +102,21 @@ typedef enum {
     XR_FRAME_HANDSHAKE_ERR = 0x04,
     XR_FRAME_HEARTBEAT_PING = 0x05,
     XR_FRAME_HEARTBEAT_PONG = 0x06,
-    XR_FRAME_CHANNEL_SEND = 0x07,
-    XR_FRAME_CHANNEL_RECV_REQ = 0x08,
-    XR_FRAME_CHANNEL_RECV_RSP = 0x09,
-    XR_FRAME_CHANNEL_CLOSE = 0x0A,
-    XR_FRAME_CHANNEL_SUBSCRIBE = 0x0F,
-    XR_FRAME_CHANNEL_UNSUBSCRIBE = 0x10,
-    XR_FRAME_CHANNEL_PUSH = 0x11,
-    XR_FRAME_TOPIC_PUBLISH = 0x14,
-    XR_FRAME_CORO_MONITOR = 0x15,
-    XR_FRAME_CORO_DEMONITOR = 0x16,
-    XR_FRAME_CORO_EXIT = 0x17,
+    XR_FRAME_TRANSPORT_ENVELOPE = 0x07,
+    XR_FRAME_CORO_MONITOR = 0x08,
+    XR_FRAME_CORO_DEMONITOR = 0x09,
+    XR_FRAME_CORO_EXIT = 0x0A,
 } XrFrameType;
 
 #define XR_FRAME_HEADER_SIZE 4
 #define XR_FRAME_MAX_PAYLOAD (16 * 1024 * 1024)
+#define XR_CLUSTER_ENVELOPE_HEADER_SIZE 64
 #define XR_NONCE_SIZE 16
 #define XR_PROOF_SIZE 32
-#define XR_CLUSTER_HANDSHAKE_VERSION 5
+#define XR_CLUSTER_HANDSHAKE_VERSION 6
 #define XR_CLUSTER_HANDSHAKE_TIMEOUT_MS 5000
 #define XR_TOPIC_DEFAULT_HOP_LIMIT 3
 #define XR_NODE_NAME_MAX 63
-#define XR_CHANNEL_NAME_MAX 127
 #define XR_CORO_NAME_MAX 127
 
 typedef struct {
@@ -141,38 +142,11 @@ typedef struct {
     int64_t timestamp;
 } XrFrameHeartbeat;
 
-typedef struct {
-    char channel_name[XR_CHANNEL_NAME_MAX + 1];
-    uint8_t channel_name_len;
-    uint8_t *value_data;
-    uint32_t value_len;
-} XrFrameChannelSend;
-
-typedef struct {
-    char channel_name[XR_CHANNEL_NAME_MAX + 1];
-    uint8_t channel_name_len;
-} XrFrameChannelRecvReq;
-
-typedef struct {
-    bool has_value;
-    uint8_t *value_data;
-    uint32_t value_len;
-} XrFrameChannelRecvRsp;
-
-typedef struct {
-    char channel_name[XR_CHANNEL_NAME_MAX + 1];
-    uint8_t channel_name_len;
-} XrFrameChannelSubscribe;
-
-typedef struct {
-    char channel_name[XR_CHANNEL_NAME_MAX + 1];
-    uint8_t channel_name_len;
-    uint8_t *value_data;
-    uint32_t value_len;
-} XrFrameChannelPush;
-
 int cluster_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload,
                         uint32_t payload_len);
+int cluster_frame_write_transport(uint8_t *buf, size_t buf_size, uint8_t hop_limit,
+                                  const char *topic, uint8_t topic_len, const uint8_t *envelope,
+                                  uint32_t envelope_len);
 int cluster_frame_encode_handshake_req(uint8_t *buf, size_t buf_size,
                                        const XrFrameHandshakeReq *req);
 int cluster_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size,
@@ -180,14 +154,6 @@ int cluster_frame_encode_handshake_ack(uint8_t *buf, size_t buf_size,
 int cluster_frame_encode_handshake_done(uint8_t *buf, size_t buf_size,
                                         const XrFrameHandshakeDone *done);
 int cluster_frame_encode_heartbeat(uint8_t *buf, size_t buf_size, uint8_t type, int64_t timestamp);
-int cluster_frame_encode_channel_send(uint8_t *buf, size_t buf_size, const char *channel_name,
-                                      const uint8_t *value_data, uint32_t value_len);
-int cluster_frame_encode_channel_close(uint8_t *buf, size_t buf_size, const char *channel_name);
-int cluster_frame_encode_channel_subscribe(uint8_t *buf, size_t buf_size, const char *channel_name);
-int cluster_frame_encode_channel_unsubscribe(uint8_t *buf, size_t buf_size,
-                                             const char *channel_name);
-int cluster_frame_encode_channel_push(uint8_t *buf, size_t buf_size, const char *channel_name,
-                                      const uint8_t *value_data, uint32_t value_len);
 int cluster_frame_read_header(const uint8_t *data, size_t data_len, uint8_t *frame_type,
                               uint32_t *payload_len);
 int cluster_frame_decode_handshake_req(const uint8_t *payload, uint32_t len,
@@ -197,16 +163,6 @@ int cluster_frame_decode_handshake_ack(const uint8_t *payload, uint32_t len,
 int cluster_frame_decode_handshake_done(const uint8_t *payload, uint32_t len,
                                         XrFrameHandshakeDone *done);
 int cluster_frame_decode_heartbeat(const uint8_t *payload, uint32_t len, int64_t *timestamp);
-int cluster_frame_decode_channel_send(const uint8_t *payload, uint32_t len,
-                                      XrFrameChannelSend *out);
-int cluster_frame_decode_channel_close(const uint8_t *payload, uint32_t len, char *channel_name,
-                                       size_t name_size);
-int cluster_frame_decode_channel_subscribe(const uint8_t *payload, uint32_t len,
-                                           XrFrameChannelSubscribe *out);
-int cluster_frame_decode_channel_unsubscribe(const uint8_t *payload, uint32_t len,
-                                             char *channel_name, size_t name_size);
-int cluster_frame_decode_channel_push(const uint8_t *payload, uint32_t len,
-                                      XrFrameChannelPush *out);
 int cluster_frame_encode_coro_monitor(uint8_t *buf, size_t buf_size, uint8_t frame_type,
                                       const char *coro_name);
 int cluster_frame_encode_coro_exit(uint8_t *buf, size_t buf_size, const char *coro_name,
@@ -264,6 +220,7 @@ typedef struct XrOutputQueue {
     int64_t high_watermark;
     int64_t low_watermark;
     _Atomic(bool) is_full;
+    _Atomic(uint64_t) pending_frames;
     int notify_pipe[2];
     XrAdaptiveMutex lock;
 } XrOutputQueue;
@@ -291,16 +248,9 @@ typedef struct XrPhiDetector {
     int64_t last_heartbeat_ts;
 } XrPhiDetector;
 
-typedef struct XrPendingRequest {
-    uint64_t request_id;
-    struct XrChannel *response_ch;
-    struct XrPendingRequest *next;
-} XrPendingRequest;
-
-#define XR_PENDING_BUCKETS 32
-#define XR_MAX_PENDING_REQUESTS 256
-
 typedef struct XrClusterNode {
+    _Atomic(uint32_t) ref_count;
+    _Atomic(bool) shutdown_started;
     char name[XR_NODE_NAME_MAX + 1];
     char host[256];
     uint16_t port;
@@ -310,10 +260,6 @@ typedef struct XrClusterNode {
     int64_t last_heartbeat_recv;
     uint32_t flags;
     uint32_t missed_heartbeats;
-
-    XrPendingRequest *pending_buckets[XR_PENDING_BUCKETS];
-    int pending_count;
-    XrAdaptiveMutex pending_lock;
 
     struct XrVMRuntime *isolate;
 
@@ -329,78 +275,26 @@ typedef struct XrClusterNode {
 } XrClusterNode;
 
 XrClusterNode *cluster_node_new(const char *name, const char *host, uint16_t port);
-void cluster_node_free(XrClusterNode *node);
-int cluster_node_connect(struct XrCluster *cluster, XrClusterNode *node);
-XrClusterNode *cluster_node_accept(struct XrCluster *cluster, XrIOConn *conn);
+void cluster_node_retain(XrClusterNode *node);
+void cluster_node_shutdown(XrClusterNode *node);
+void cluster_node_release(XrClusterNode *node);
 int cluster_node_enqueue(XrClusterNode *node, const uint8_t *data, uint32_t len);
 int cluster_node_send_frame(XrClusterNode *node, uint8_t frame_type, const uint8_t *payload,
                             uint32_t payload_len);
-int cluster_node_recv_frame(XrClusterNode *node, uint8_t *frame_type_out, uint8_t *buf,
-                            uint32_t buf_size, uint32_t *payload_len_out);
+int cluster_node_send_transport_frame(XrClusterNode *node, uint8_t hop_limit, const char *topic,
+                                      uint8_t topic_len, const uint8_t *envelope,
+                                      uint32_t envelope_len);
+int cluster_conn_read_try(XrIOConn *conn, uint8_t *data, size_t len, int *wait_events);
+int cluster_conn_write_try(XrIOConn *conn, const uint8_t *data, size_t len, int *wait_events);
+void cluster_compute_proof(const char *secret, const uint8_t *nonce, uint8_t *proof_out);
+bool cluster_proof_equal(const uint8_t *a, const uint8_t *b);
 int cluster_node_send_ping(XrClusterNode *node);
-void cluster_node_start_writer(XrClusterNode *node, struct XrVMRuntime *X);
-void cluster_node_start_reader(struct XrCluster *cluster, XrClusterNode *node);
+bool cluster_node_start_io(struct XrCluster *cluster, XrClusterNode *node);
 void cluster_phi_init(XrPhiDetector *det);
 void cluster_phi_record_heartbeat(XrPhiDetector *det, int64_t now_ms);
 double cluster_phi_value(XrPhiDetector *det, int64_t now_ms);
 bool cluster_node_is_slow(XrClusterNode *node);
-struct XrChannel *cluster_node_add_pending(XrClusterNode *node, uint64_t request_id,
-                                           struct XrVMRuntime *X, int max_pending);
-struct XrChannel *cluster_node_take_pending(XrClusterNode *node, uint64_t request_id);
 int64_t cluster_now_ms(void);
-
-/* ========== Channel Subscriber (for select push model) ========== */
-
-#define XR_MAX_SUBSCRIBERS 32
-
-typedef struct XrChannelSubscribers {
-    XrClusterNode *nodes[XR_MAX_SUBSCRIBERS];  // subscriber node array
-    int count;
-} XrChannelSubscribers;
-
-/* ========== Distributed Channel Entry ========== */
-
-typedef struct XrDistChannel {
-    char name[XR_CHANNEL_NAME_MAX + 1];
-    bool is_owner;                     // true = this node owns the buffer
-    XrClusterNode *owner_node;         // valid when is_owner == false
-    struct XrChannel *channel;         // local XrChannel object
-    struct XrDistChannel *next;        // hash chain
-    XrCluster *cluster;                // owning cluster instance
-    XrChannelSubscribers subscribers;  // subscriber array (Owner only)
-    int rr_index;                      // round-robin index for push
-} XrDistChannel;
-
-/* ========== Value Wire Serialization ========== */
-
-typedef struct XrSerialBuf {
-    uint8_t *data;
-    size_t len;
-    size_t cap;
-    bool error;
-} XrSerialBuf;
-
-typedef struct XrSerialReader {
-    const uint8_t *data;
-    size_t len;
-    size_t pos;
-    int depth;
-    struct XrVMRuntime *X;
-} XrSerialReader;
-
-void cluster_serial_buf_init(XrSerialBuf *buf);
-void cluster_serial_buf_free(XrSerialBuf *buf);
-int cluster_encode(struct XrVMRuntime *X, XrValue value, XrSerialBuf *buf);
-void cluster_serial_reader_init(XrSerialReader *r, struct XrVMRuntime *X, const uint8_t *data,
-                                size_t len);
-int cluster_decode(XrSerialReader *r, XrValue *out);
-
-static inline int cluster_decode_value(struct XrVMRuntime *X, const uint8_t *data, size_t len,
-                                       XrValue *out) {
-    XrSerialReader r;
-    cluster_serial_reader_init(&r, X, data, len);
-    return cluster_decode(&r, out);
-}
 
 /* ========== Forward Declarations ========== */
 
@@ -408,12 +302,13 @@ typedef struct XrRemoteCoroMonitor XrRemoteCoroMonitor;
 
 /* ========== Cluster State ========== */
 
-#define XR_CLUSTER_CHANNEL_BUCKETS 64
 #define XR_TOPIC_PATTERN_MAX 127
 
 struct XrTopicTrieNode;  // forward decl — definition in cluster_topic.c
 
 typedef struct XrCluster {
+    _Atomic(uint32_t) ref_count;
+    _Atomic(bool) stop_started;
     char self_name[XR_NODE_NAME_MAX + 1];
     uint16_t listen_port;
     char secret[64];
@@ -425,17 +320,12 @@ typedef struct XrCluster {
     int node_count;
     XrAdaptiveMutex nodes_lock;
 
-    // Named Channel registry (hash table, protected by channels_lock)
-    XrDistChannel *channel_buckets[XR_CLUSTER_CHANNEL_BUCKETS];
-    int channel_count;
-    XrAdaptiveMutex channels_lock;
-
     /*
      * Topic Pub/Sub registry.
      *
      * Route lookups go through a NATS-style segment trie (see
      * cluster_topic.c) instead of the old flat hash of subscriptions.
-     * The trie makes publish() cost O(topic_depth) instead of
+     * The trie makes send() cost O(topic_depth) instead of
      * O(total_subscriptions) — critical for applications that maintain
      * thousands of subscriptions of which only a handful match any
      * given message. The root node is embedded to keep the hot path
@@ -449,17 +339,10 @@ typedef struct XrCluster {
     int topic_sub_count;
     XrAdaptiveMutex topics_lock;
 
-    // Request ID counter for channel recv proxies.
-    _Atomic(uint64_t) next_request_id;
-
     // Heartbeat configuration
     int heartbeat_interval_ms;  // default 5000
     int heartbeat_timeout_ms;   // default 15000 (3x interval)
     int max_missed_heartbeats;  // default 3
-
-    // Per-node pending request cap (default XR_MAX_PENDING_REQUESTS).
-    // Controls backpressure on concurrent channel recv proxies.
-    int max_pending_requests;
 
     // Dead node tombstones prevent immediate rejoin of recently departed nodes.
     struct {
@@ -479,22 +362,8 @@ typedef struct XrCluster {
     _Atomic(bool) running;
 
     /*
-     * Stop-signalling pipe for coroutine-friendly interruptible sleep.
-     *
-     * Every long-lived cluster coroutine uses
-     * cluster_sleep_interruptible(c, ms) which reads from
-     * stop_pipe[0] with a read deadline. cluster_runtime_stop closes
-     * stop_pipe[1] early, turning every outstanding read into an
-     * immediate EOF. Both ends non-blocking.
-     *
-     * Created in start_ex — pipe() failure is fatal.
-     */
-    int stop_pipe[2];
-
-    /*
-     * Heartbeat coroutine — spawned in cluster_runtime_start, yields via
-     * cluster_sleep_interruptible between ticks, observes running
-     * (+ EOF on stop_pipe) to exit.
+     * Heartbeat coroutine — spawned in cluster_runtime_start, yields on the
+     * shared timer wheel between ticks, and observes running to exit.
      *
      * heartbeat_running is flipped to false by the coroutine on exit so
      * cluster_runtime_stop can wait briefly before freeing the cluster
@@ -531,7 +400,7 @@ typedef struct XrCluster {
      *
      *   tls_enabled     — flip to turn on TLS for every inbound and
      *                     outbound cluster connection.
-     *   tls_client_ctx  — used by cluster_node_connect when TLS is on.
+     *   tls_client_ctx  — used by the outgoing join state machine when TLS is on.
      *                     Built at start_ex time with caller-supplied CA
      *                     bundle, optional client cert/key (for mTLS), and
      *                     optional verify_peer toggle.
@@ -594,9 +463,11 @@ typedef struct XrClusterTlsOptions {
  */
 int cluster_runtime_start(struct XrVMRuntime *X, const char *name, uint16_t port,
                           const char *secret, const XrClusterTlsOptions *tls);
+void cluster_runtime_retain(XrCluster *c);
+void cluster_runtime_release(XrCluster *c);
 
-// Connect to a remote node (host:port)
-int cluster_runtime_join(XrCluster *c, const char *host, uint16_t port);
+// Start a netpoll-driven outgoing join without blocking the caller's worker.
+bool cluster_runtime_join_spawn(XrCluster *c, const char *host, uint16_t port);
 
 // Stop the cluster and close all connections
 void cluster_runtime_stop(XrCluster *c);
@@ -604,75 +475,26 @@ void cluster_runtime_stop(XrCluster *c);
 // Check if cluster is running
 bool cluster_runtime_is_running(XrCluster *c);
 
-/*
- * Coroutine-friendly interruptible sleep.
- *
- * Sleeps for up to `ms` milliseconds or until cluster_runtime_stop signals
- * shutdown. Intended for use inside cluster-owned native coroutines
- * (heartbeat, accept retry, discovery tick) that
- * need periodic wake-up without blocking the worker thread with
- * nanosleep/usleep.
- *
- * Mechanism: reads from the cluster's stop_pipe[0] with a read
- * deadline set via xr_socket_set_read_timeout. cluster_runtime_stop closes
- * stop_pipe[1] early so every outstanding read returns EOF
- * immediately. Each worker's netpoll integration unblocks the
- * coroutine on deadline even if no data arrives.
- *
- * Returns:
- *   true  — the full `ms` elapsed normally (continue looping)
- *   false — the cluster was stopped or stop_pipe is unavailable
- *           (caller should exit its loop)
- *
- * Falls back to a plain nanosleep if stop_pipe was never set up
- * (pipe() failed at start_ex); the cluster is still functional in
- * that case, just not interruptible on the sleep boundary.
- */
-bool cluster_sleep_interruptible(XrCluster *c, int ms);
-
 // Get self node name
 const char *cluster_runtime_self_name(XrCluster *c);
 
 /* ========== Node Query API ========== */
 
-// Find a node by name (must hold nodes_lock or accept stale reads)
+// Find a node by name and return a retained reference. Caller releases it.
 XrClusterNode *cluster_node_find(XrCluster *c, const char *name);
 
-// Add a connected node to the cluster
-void cluster_node_add(XrCluster *c, XrClusterNode *node);
+// Transfer the caller's node reference into the live-node list.
+bool cluster_node_add(XrCluster *c, XrClusterNode *node);
 
-// Remove a node from the cluster
-void cluster_node_remove(XrCluster *c, XrClusterNode *node);
-
-/* ========== Named Channel Registry ========== */
-
-// Register a Named Channel (called when Channel(N, "name") is created)
-void cluster_channel_register(XrCluster *c, const char *name, struct XrChannel *ch);
-
-// Lookup a Named Channel by name
-XrDistChannel *cluster_channel_find(XrCluster *c, const char *name);
-
-// Unregister a Named Channel
-void cluster_channel_unregister(XrCluster *c, const char *name);
-
-/* ========== Named Channel Distributed Routing ========== */
-
-void cluster_channel_install_hooks(struct XrVMRuntime *X);
-void cluster_channel_uninstall_hooks(struct XrVMRuntime *X);
-
-int cluster_channel_handle_send(XrCluster *c, const char *channel_name, const uint8_t *value_data,
-                                uint32_t value_len);
-void cluster_channel_handle_close(XrCluster *c, const char *channel_name);
-void cluster_channel_push_to_subscribers(XrCluster *c, const char *name);
-int cluster_channel_handle_push(XrCluster *c, const char *channel_name, const uint8_t *value_data,
-                                uint32_t value_len);
-void cluster_channel_subscribe(struct XrChannel *ch);
-void cluster_channel_unsubscribe(struct XrChannel *ch);
+// Detach the list-owned reference. The caller releases it when true.
+bool cluster_node_remove(XrCluster *c, XrClusterNode *node);
 
 /* ========== Frame Processing ========== */
 
-// Process incoming frames from a connected node (runs in a coroutine)
-void cluster_process_node(XrCluster *c, XrClusterNode *node);
+// Process one fully decoded frame. Socket framing is owned by the yieldable
+// native reader backend in cluster_node.c.
+void cluster_process_frame(XrCluster *c, XrClusterNode *node, uint8_t frame_type,
+                           const uint8_t *payload, uint32_t payload_len);
 
 /* ========== Health & Robustness ========== */
 
@@ -709,18 +531,21 @@ typedef struct XrTopicSubscription {
     struct XrTopicSubscription *next;        // Hash chain
 } XrTopicSubscription;
 
-// Subscribe to a topic pattern. Returns a Channel that receives published values.
+// Listen on a topic pattern. Returns a Channel that receives opaque Buffer values.
 // Supports wildcard: "*" matches one segment, ">" matches remaining segments.
 // Example: "events.*" matches "events.user" but not "events.user.login"
 //          "events.>" matches "events.user" and "events.user.login"
-struct XrChannel *cluster_topic_subscribe(struct XrVMRuntime *X, const char *pattern);
+#define XR_CLUSTER_SUBSCRIPTION_CAPACITY_MAX (1024u * 1024u)
 
-// Publish a value to a topic. Delivers to all matching local subscriptions
-// and forwards to all connected nodes.
-int cluster_topic_publish(struct XrVMRuntime *X, const char *topic, XrValue value);
+struct XrChannel *cluster_transport_listen(struct XrVMRuntime *X, const char *pattern,
+                                           uint32_t capacity);
+
+// Send an opaque canonical envelope to matching local listeners and peers.
+XrClusterDelivery cluster_transport_send(struct XrVMRuntime *X, const char *topic,
+                                         const uint8_t *envelope, uint32_t envelope_len);
 
 /*
- * Handle incoming TOPIC_PUBLISH frame from a remote node.
+ * Handle an incoming opaque envelope frame from a remote node.
  *
  *   from       — the XrClusterNode the frame arrived from, used for
  *                split-horizon so we never echo the frame back to
@@ -731,13 +556,15 @@ int cluster_topic_publish(struct XrVMRuntime *X, const char *topic, XrValue valu
  *                Non-zero causes a decrement and a re-send to every
  *                other connected peer.
  *
- * The value is delivered to local subscribers regardless of hop_limit.
+ * The envelope is delivered to local listeners regardless of hop_limit.
  */
-void cluster_topic_handle_publish(XrCluster *c, struct XrClusterNode *from, const char *topic,
-                                  const uint8_t *value_data, uint32_t value_len, uint8_t hop_limit);
+void cluster_transport_handle_frame(XrCluster *c, struct XrClusterNode *from, const char *topic,
+                                    const uint8_t *envelope, uint32_t envelope_len,
+                                    uint8_t hop_limit);
 
 // Deliver to local subscribers matching the topic
-void cluster_topic_deliver_local(XrCluster *c, const char *topic, XrValue value);
+XrClusterDelivery cluster_transport_deliver_local(XrCluster *c, const char *topic,
+                                                  const uint8_t *envelope, uint32_t envelope_len);
 
 /*
  * Topic trie lifecycle. cluster_topics_init must be called once
@@ -772,12 +599,6 @@ void cluster_monitor_handle_coro_exit(XrCluster *c, const char *coro_name, const
 // Handle incoming CORO_MONITOR request from a remote node
 void cluster_monitor_handle_coro_request(XrCluster *c, struct XrClusterNode *node,
                                          const char *coro_name);
-
-/* ========== Subscriber Management (for select push model) ========== */
-
-void cluster_subscriber_add(XrCluster *c, const char *channel_name, XrClusterNode *node);
-void cluster_subscriber_remove(XrCluster *c, const char *channel_name, XrClusterNode *node);
-void cluster_subscriber_remove_all_for_node(XrCluster *c, XrClusterNode *node);
 
 /* ========== LAN Discovery ========== */
 

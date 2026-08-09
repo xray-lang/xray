@@ -489,6 +489,15 @@ XR_FUNC XrCoroutine *xr_coro_create_runtime_empty(struct XrRuntimeCore *core,
 XR_FUNC void xr_coro_discard_runtime_empty(struct XrRuntime *runtime, XrCoroutine *coro);
 XR_FUNC XrCoroutine *xr_coro_create_native(struct XrVMRuntime *X, void (*func)(void *), void *arg,
                                            const char *name);
+/* Create a scheduler-native coroutine whose C entry obeys the canonical
+ * yieldable ABI. The entry and every installed continuation run on an M:N
+ * worker and may suspend through xr_yield_for_io/xr_yield_for_timeout without
+ * pinning that worker. destroy_context is called exactly once when the
+ * coroutine backend is destroyed, including cancellation and setup failure. */
+XR_FUNC XrCoroutine *xr_coro_create_native_yieldable(struct XrVMRuntime *X, XrNativeCoroEntry entry,
+                                                     void *context,
+                                                     XrNativeCoroContextDestroy destroy_context,
+                                                     const char *name);
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_destroy(XrCoroutine *coro);
 /* Detach a coroutine's embedded wheel-timer node during single-threaded

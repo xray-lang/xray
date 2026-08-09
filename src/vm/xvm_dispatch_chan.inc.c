@@ -60,59 +60,6 @@ vmcase(OP_CHAN_NEW_CAP) {
     vmbreak;
 }
 
-vmcase(OP_CHAN_NEW_NAMED) {
-    /* R[A] = Channel(R[B], R[C]) - Named Channel
-     * R[B] = buffer size (int)
-     * R[C] = channel name (string)
-     * If cluster is running, registers as Named Channel.
-     * Otherwise creates a normal local channel.
-     */
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-
-    uint32_t buf_size = 0;
-    if (XR_IS_INT(R(b))) {
-        int64_t v = XR_TO_INT(R(b));
-        if (v > 0 && (uint64_t) v <= MAXARG_Bx)
-            buf_size = (uint32_t) v;
-    }
-
-    // Check for existing Named Channel (e.g. Proxy from CHANNEL_SYNC)
-#ifdef XR_HAS_CLUSTER
-    if (XR_IS_STRING(R(c))) {
-        if (cluster_bridge_is_running(isolate)) {
-            XrChannel *existing_ch =
-                cluster_bridge_find_channel_local(isolate, XR_TO_STRING(R(c))->data);
-            if (existing_ch) {
-                R(a) = xr_value_from_channel(existing_ch);
-                vmbreak;
-            }
-        }
-    }
-#endif
-
-    XrChannel *ch = xr_channel_new_vm(isolate, buf_size);
-    if (!ch) {
-        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Channel creation failed");
-    }
-
-    // Register as Named Channel if cluster is running and name is string
-    if (XR_IS_STRING(R(c))) {
-        XrString *name_str = XR_TO_STRING(R(c));
-#ifdef XR_HAS_CLUSTER
-        if (cluster_bridge_is_running(isolate)) {
-            cluster_bridge_register_channel_local(isolate, name_str->data, ch);
-        }
-#else
-        (void) name_str;
-#endif
-    }
-
-    R(a) = xr_value_from_channel(ch);
-    vmbreak;
-}
-
 vmcase(OP_CHAN_SEND) {
     TRACE_EXECUTION();
     uint8_t _transfer_mode = vm_channel_transfer_mode_before(frame, pc);
@@ -130,8 +77,7 @@ vmcase(OP_CHAN_SEND) {
         if (!xr_value_is_channel(_chv))
             break;
         XrChannel *_ch = xr_value_to_channel(_chv);
-        if (_ch->buf_size == 0 || _ch->dist ||
-            atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
+        if (_ch->buf_size == 0 || atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
             break;
         XrRuntime *_rt = (XrRuntime *) isolate->vm.scheduler;
         if (XR_UNLIKELY(_rt && _rt->sched_stats_enabled))
@@ -181,8 +127,7 @@ vmcase(OP_CHAN_RECV) {
         if (!xr_value_is_channel(_chv))
             break;
         XrChannel *_ch = xr_value_to_channel(_chv);
-        if (_ch->buf_size == 0 || _ch->dist ||
-            atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
+        if (_ch->buf_size == 0 || atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
             break;
         XrRuntime *_rt = (XrRuntime *) isolate->vm.scheduler;
         if (XR_UNLIKELY(_rt && _rt->sched_stats_enabled))

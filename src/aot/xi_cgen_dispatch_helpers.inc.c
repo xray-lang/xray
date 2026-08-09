@@ -9991,9 +9991,13 @@ static bool xicgen_emit_channel_method(FILE *out, const XiValue *v, const char *
         fprintf(out, "%s(", helper);
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1],
-                          (send_rep == XR_REP_I64 || send_rep == XR_REP_F64) ? send_rep
-                                                                             : XR_REP_TAGGED);
+        if (send_rep == XR_REP_I64 || send_rep == XR_REP_F64) {
+            emit_value_as_rep(out, v->args[1], send_rep);
+        } else {
+            fprintf(out, "xr_aot_bridge_xrt_to_runtime(&xrt_global_ctx, ");
+            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            fprintf(out, ")");
+        }
         fprintf(out, ")");
     } else if (is_try_recv) {
         fprintf(out, "xr_aot_bridge_value_to_xrt(xr_aot_chan_try_recv_sync(");
@@ -10066,7 +10070,7 @@ static bool xicgen_emit_work_queue_method(FILE *out, const XiValue *v, const cha
         else
             fprintf(out, "-1");
         fprintf(out,
-                ", &_wq_tpv_%u); xrt_tuple_make(2, (XrValue[]){"
+                ", &_wq_tpv_%u); xrt_tuple_make_consuming(2, (XrValue[]){"
                 "xr_aot_bridge_value_to_xrt(_wq_tpv_%u), XR_FROM_BOOL(_wq_tpok_%u)}); })",
                 v->id, v->id, v->id);
         emit_conversion_suffix(out, conv_suffix);
@@ -10129,7 +10133,7 @@ static bool xicgen_emit_result_group_method(FILE *out, const XiValue *v, const c
         fprintf(out, "xr_aot_result_group_try_recv_sync(");
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out,
-                ", &_rg_trv_%u); xrt_tuple_make(2, (XrValue[]){_rg_trv_%u, "
+                ", &_rg_trv_%u); xrt_tuple_make_consuming(2, (XrValue[]){_rg_trv_%u, "
                 "XR_FROM_BOOL(_rg_trok_%u)}); })",
                 v->id, v->id, v->id);
         emit_conversion_suffix(out, conv_suffix);
@@ -11714,8 +11718,16 @@ static void xicgen_ownership_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, "((void)0)");
         return;
     }
-    if (cg_value_plan_is_aggregate(ctx, cg_unwrap_identity_value(arg)) ||
-        cg_value_plan_is_vector(ctx, cg_unwrap_identity_value(arg))) {
+    const XiValue *storage = cg_unwrap_identity_value(arg);
+    if (cg_value_plan_is_adt_aggregate(ctx, storage)) {
+        fprintf(out, "%s(",
+                strcmp(fn_name, "xrt_retain") == 0 ? "xrt_enum_aggregate_retain"
+                                                   : "xrt_enum_aggregate_release");
+        emit_adt_aggregate_as_base_expr(ctx, out, arg);
+        fprintf(out, ")");
+        return;
+    }
+    if (cg_value_plan_is_aggregate(ctx, storage) || cg_value_plan_is_vector(ctx, storage)) {
         fprintf(out, "((void)0)");
         return;
     }
@@ -13922,10 +13934,10 @@ static void xicgen_tuple_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     (void) f;
     (void) prefix;
     if (v->nargs == 0) {
-        fprintf(out, "xrt_tuple_new(0)");
+        fprintf(out, "xrt_tuple_make_storage(0, NULL, %u)", (unsigned) xi_tuple_storage_mode(v));
         return;
     }
-    fprintf(out, "xrt_tuple_make(%" PRIu16 ", (XrValue[]){", v->nargs);
+    fprintf(out, "xrt_tuple_make_storage(%" PRIu16 ", (XrValue[]){", v->nargs);
     for (uint16_t a = 0; a < v->nargs; a++) {
         if (a > 0)
             fprintf(out, ", ");
@@ -13936,7 +13948,7 @@ static void xicgen_tuple_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
          * tuple lanes), which reads back as null/zero. */
         emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
     }
-    fprintf(out, "})");
+    fprintf(out, "}, %u)", (unsigned) xi_tuple_storage_mode(v));
 }
 
 static void xicgen_tuple_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

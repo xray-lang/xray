@@ -1,0 +1,24 @@
+{
+  "xray": "build/xray",
+  "cc": "cc",
+  "cpu": null,
+  "samples": 7,
+  "gate": true,
+  "benchmarks": [
+    {
+      "name": "runtime/sort_i64_random",
+      "category": "runtime",
+      "status": "pass",
+      "c_median_ms": 69.126917,
+      "aot_median_ms": 54.164834,
+      "ratio": 1.276232,
+      "min_ratio": 0.5,
+      "rust_median_ms": null,
+      "rust_ratio": null,
+      "audit_pass": true,
+      "c_size_bytes": 33632,
+      "aot_size_bytes": 89520,
+      "checksum": "3222014075|"
+    }
+  ]
+}

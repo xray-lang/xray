@@ -1,0 +1,997 @@
+{
+  "cores": [
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_arith_core.h",
+      "id": "arithmetic",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xrt_core_freestanding.h",
+        "src/aot/xrt_mem.h",
+        "src/aot/xrt_method.h",
+        "src/runtime/symbol/xsymbol_table.c",
+        "src/runtime/symbol/xsymbol_table.h",
+        "src/runtime/value/xint_methods.h",
+        "stdlib/mem/mem.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_arith_core_add_overflows",
+        "xr_arith_core_mul_overflows",
+        "xr_arith_core_sub_overflows"
+      ],
+      "status": "production",
+      "test_callers": []
+    },
+    {
+      "contains_tagged_value": true,
+      "header": "src/shared/xr_array_core.h",
+      "id": "array",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xaot_prepare.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xrt_array_hof.h",
+        "src/aot/xrt_byte_array.inc.c",
+        "src/aot/xrt_coll.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/frontend/analyzer/xanalyzer_visitor_call.c",
+        "src/ir/xi_lower_expr.c",
+        "src/ir/xi_verify.c",
+        "src/runtime/object/xarray.c",
+        "src/runtime/object/xarray_methods.c",
+        "src/shared/xr_raw_scalar_core.h",
+        "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_collection.inc.c",
+        "src/vm/xvm_dispatch_misc.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "tagged",
+      "signatures": [
+        "xr_array_core_bswap16",
+        "xr_array_core_bswap32",
+        "xr_array_core_bswap64",
+        "xr_array_core_byte_from_value",
+        "xr_array_core_bytes_common_prefix",
+        "xr_array_core_bytes_common_prefix_raw",
+        "xr_array_core_bytes_copy_from",
+        "xr_array_core_bytes_copy_from_typed",
+        "xr_array_core_bytes_copy_within",
+        "xr_array_core_bytes_fill_value",
+        "xr_array_core_bytes_load_f32",
+        "xr_array_core_bytes_load_f64",
+        "xr_array_core_bytes_load_u16",
+        "xr_array_core_bytes_load_u16_le",
+        "xr_array_core_bytes_load_u32",
+        "xr_array_core_bytes_load_u32_le",
+        "xr_array_core_bytes_load_u64",
+        "xr_array_core_bytes_load_u64_le",
+        "xr_array_core_bytes_range_ok",
+        "xr_array_core_bytes_repeat_from",
+        "xr_array_core_bytes_store_f32",
+        "xr_array_core_bytes_store_f64",
+        "xr_array_core_bytes_store_u16",
+        "xr_array_core_bytes_store_u32",
+        "xr_array_core_bytes_store_u64",
+        "xr_array_core_common_prefix_diff_byte64",
+        "xr_array_core_copy_nonoverlap_bytes",
+        "xr_array_core_effective_little_endian",
+        "xr_array_core_endian_matches_host",
+        "xr_array_core_f32_from_bits",
+        "xr_array_core_f32_to_bits",
+        "xr_array_core_f64_from_bits",
+        "xr_array_core_f64_to_bits",
+        "xr_array_core_fill_range",
+        "xr_array_core_fill_typed_storage",
+        "xr_array_core_hof_every",
+        "xr_array_core_hof_filter",
+        "xr_array_core_hof_find",
+        "xr_array_core_hof_find_index",
+        "xr_array_core_hof_for_each",
+        "xr_array_core_hof_map",
+        "xr_array_core_hof_reduce",
+        "xr_array_core_hof_some",
+        "xr_array_core_host_is_little_endian",
+        "xr_array_core_index_set_plan",
+        "xr_array_core_join_total",
+        "xr_array_core_join_write",
+        "xr_array_core_memory_ranges_overlap",
+        "xr_array_core_needle_bool",
+        "xr_array_core_needle_float",
+        "xr_array_core_needle_int",
+        "xr_array_core_needle_other",
+        "xr_array_core_nonnegative_length",
+        "xr_array_core_required_int_arg",
+        "xr_array_core_reserve_plan",
+        "xr_array_core_resize_plan",
+        "xr_array_core_reverse",
+        "xr_array_core_shift_left_one",
+        "xr_array_core_shift_right_one",
+        "xr_array_core_slice_range",
+        "xr_array_core_typed_index_of"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/ir/test_xi_cgen.c",
+        "tests/unit/ir/test_xi_verify_ext.c",
+        "tests/unit/stdlib/test_array_core.c",
+        "tests/unit/vm/test_ffi_scalar.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_bits_core.h",
+      "id": "bits",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/ir/xi_opt.c",
+        "src/ir/xi_opt_sccp.c",
+        "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_bitwise.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_bits_aot_rotate_input_u32",
+        "xr_bits_aot_rotl16",
+        "xr_bits_aot_rotl32",
+        "xr_bits_aot_rotl64",
+        "xr_bits_aot_rotl8",
+        "xr_bits_aot_rotr16",
+        "xr_bits_aot_rotr32",
+        "xr_bits_aot_rotr64",
+        "xr_bits_aot_rotr8",
+        "xr_bits_exact_byteswap",
+        "xr_bits_exact_is_signed",
+        "xr_bits_exact_leading_zeros",
+        "xr_bits_exact_mask",
+        "xr_bits_exact_mul_high",
+        "xr_bits_exact_pattern",
+        "xr_bits_exact_popcount",
+        "xr_bits_exact_restore",
+        "xr_bits_exact_rotate_left",
+        "xr_bits_exact_rotate_right",
+        "xr_bits_exact_trailing_zeros",
+        "xr_bits_exact_width",
+        "xr_bits_smulh64",
+        "xr_bits_umulh64"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_compress_core.h",
+      "id": "compression",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_compress.h",
+        "src/module/xpkg_client.c",
+        "stdlib/compress/compress.c",
+        "stdlib/compress/compress.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_compress_core_adler32",
+        "xr_compress_core_adler32_update",
+        "xr_compress_core_checked_add",
+        "xr_compress_core_checked_mul",
+        "xr_compress_core_compress_alloc",
+        "xr_compress_core_compress_bound",
+        "xr_compress_core_crc32",
+        "xr_compress_core_crc32_update",
+        "xr_compress_core_decompress_alloc",
+        "xr_compress_core_deflate_alloc",
+        "xr_compress_core_gunzip_alloc",
+        "xr_compress_core_gunzip_initial_cap",
+        "xr_compress_core_gzip_alloc",
+        "xr_compress_core_inflate_alloc",
+        "xr_compress_core_inflate_initial_cap",
+        "xr_compress_core_input_view",
+        "xr_compress_core_level_or_default",
+        "xr_compress_core_next_cap",
+        "xr_compress_core_zlib_compress_alloc",
+        "xr_compress_core_zlib_decompress_alloc"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_compress.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_crypto_core.h",
+      "id": "crypto",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_crypto.h",
+        "src/app/toolchain/xtc_probe.c",
+        "src/app/toolchain/xtc_runtime_manifest.c",
+        "src/module/xlockfile.c",
+        "src/module/xnative_package.c",
+        "src/module/xpkg_client.c",
+        "stdlib/crypto/crypto.c",
+        "stdlib/crypto/crypto.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_crypto_core_aead_decrypt_hex",
+        "xr_crypto_core_aead_decrypt_plan",
+        "xr_crypto_core_aead_derive_keys",
+        "xr_crypto_core_aead_encrypt_hex",
+        "xr_crypto_core_aead_encrypt_plan",
+        "xr_crypto_core_aes_decrypt_hex",
+        "xr_crypto_core_aes_decrypt_plan",
+        "xr_crypto_core_aes_encrypt_hex",
+        "xr_crypto_core_aes_encrypt_plan",
+        "xr_crypto_core_alg_eq",
+        "xr_crypto_core_bytes_hex",
+        "xr_crypto_core_bytes_or_empty",
+        "xr_crypto_core_digest_hex",
+        "xr_crypto_core_hash",
+        "xr_crypto_core_hash_alg_from_name",
+        "xr_crypto_core_hash_digest_len",
+        "xr_crypto_core_hex_digit",
+        "xr_crypto_core_hex_to_bytes",
+        "xr_crypto_core_hmac",
+        "xr_crypto_core_timing_safe_equal",
+        "xr_crypto_core_uuid_v4_write"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_crypto.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_cstr_core.h",
+      "id": "c-string",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_io.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_cstr_core_copy_arg"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/base/test_cstr_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_error_core.h",
+      "id": "error",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_coll.h",
+        "src/aot/xrt_defer.h",
+        "src/aot/xrt_exception.h",
+        "src/runtime/object/builtins/xarray_builtins.c",
+        "src/runtime/object/xarray_methods.c",
+        "src/runtime/object/xrange.c",
+        "src/shared/xr_panic_report.h",
+        "src/vm/xvm.c",
+        "src/vm/xvm_api.c",
+        "src/vm/xvm_dispatch_compare.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_error_core_defer_throw_abort",
+        "xr_error_core_format_array_index_oob",
+        "xr_error_core_format_fixed_array_index_oob",
+        "xr_error_core_format_prefixed",
+        "xr_error_core_format_type_mismatch",
+        "xr_error_core_parse_prefixed"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/base/test_error_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_hash_core.h",
+      "id": "hash",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/analysis/xglobal_producer.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_program_entry.inc.c",
+        "src/aot/xrt_byte_array.inc.c",
+        "src/aot/xrt_coll.h",
+        "src/aot/xrt_map_typed.inc.c",
+        "src/aot/xrt_set_direct.inc.c",
+        "src/aot/xrt_value.h",
+        "src/frontend/analyzer/xa_effect_db.c",
+        "src/frontend/analyzer/xa_memory_effect_db.c",
+        "src/runtime/object/xmap.c",
+        "src/runtime/value/xenum_layout.c",
+        "src/runtime/value/xvalue_hash.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_hash_core_bytes",
+        "xr_hash_core_f64_key_bits",
+        "xr_hash_core_key_eq_f64",
+        "xr_hash_core_mix_u64",
+        "xr_hash_core_str_hash_bytes"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/base/test_hash_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_io_core.h",
+      "id": "io",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_io.h",
+        "stdlib/io/io.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_io_core_chmod_mode",
+        "xr_io_core_copy_stream",
+        "xr_io_core_cstr_len",
+        "xr_io_core_ensure_dir",
+        "xr_io_core_is_alpha_ascii",
+        "xr_io_core_is_dot_dir_entry",
+        "xr_io_core_is_sep",
+        "xr_io_core_join_child_len",
+        "xr_io_core_join_child_path",
+        "xr_io_core_mkdirp",
+        "xr_io_core_path_result_cstr_view",
+        "xr_io_core_path_result_view",
+        "xr_io_core_prepare_sized_read",
+        "xr_io_core_read_all_stream_alloc",
+        "xr_io_core_read_dir",
+        "xr_io_core_read_dir_recursive",
+        "xr_io_core_read_dir_recursive_impl",
+        "xr_io_core_read_dir_recursive_visit",
+        "xr_io_core_read_dir_visit",
+        "xr_io_core_read_into",
+        "xr_io_core_read_lines_each",
+        "xr_io_core_read_sized_stream_alloc",
+        "xr_io_core_relative_path_from_base",
+        "xr_io_core_remove_all",
+        "xr_io_core_remove_all_impl",
+        "xr_io_core_remove_all_visit",
+        "xr_io_core_root_len",
+        "xr_io_core_stat_fields",
+        "xr_io_core_stat_perm_mode",
+        "xr_io_core_temp_template",
+        "xr_io_core_touch",
+        "xr_io_core_trim_line_end",
+        "xr_io_core_write_all"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_io_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_math_core.h",
+      "id": "math",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_math.h",
+        "stdlib/math/math.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_math_core_int_arg_or",
+        "xr_math_core_random_f64",
+        "xr_math_core_random_i64",
+        "xr_math_core_random_u64"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_math_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": true,
+      "header": "src/shared/xr_native_type_core.h",
+      "id": "native-type",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xaot_class_layout.c",
+        "src/aot/xi_to_c_dispatch_gen.h",
+        "src/aot/xrt_value.h",
+        "src/coro/xdeep_copy.c",
+        "src/frontend/analyzer/xa_intrinsic_registry.h",
+        "src/frontend/analyzer/xanalyzer_visitor_decl.c",
+        "src/ir/xi_emit.c",
+        "src/ir/xi_emit_object.c",
+        "src/ir/xi_lower_expr.c",
+        "src/runtime/class/xinstance_core.c",
+        "src/runtime/value/xffi_sig.h",
+        "src/runtime/value/xstruct_layout.c",
+        "src/runtime/value/xstruct_layout.h",
+        "src/shared/xr_bits_core.h",
+        "src/shared/xr_numeric_conversion_core.h",
+        "src/shared/xr_scalar_type.h",
+        "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_collection.inc.c",
+        "src/vm/xvm_dispatch_struct.inc.c",
+        "src/vm/xvm_helpers.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "descriptor",
+      "signatures": [
+        "xr_native_type_align",
+        "xr_native_type_size"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/base/test_native_type_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_numeric_conversion_core.h",
+      "id": "numeric-conversion",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xrt_arith.h",
+        "src/aot/xrt_coll.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/aot/xrt_value.h",
+        "src/frontend/analyzer/xtype_ref_resolve.c",
+        "src/runtime/value/xvalue_typeid.c",
+        "src/shared/xr_hash_core.h",
+        "src/shared/xr_typed_ops.h",
+        "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_convert.inc.c",
+        "src/vm/xvm_template_width_gen.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_numeric_bit_copy",
+        "xr_numeric_double_from_bits",
+        "xr_numeric_double_to_bits",
+        "xr_numeric_f64_to_f32",
+        "xr_numeric_float_convert",
+        "xr_numeric_float_from_bits",
+        "xr_numeric_float_to_int",
+        "xr_numeric_i64_from_bits",
+        "xr_numeric_i64_to_bits",
+        "xr_numeric_int_convert_i64",
+        "xr_numeric_int_to_float",
+        "xr_numeric_mask_for_bits",
+        "xr_numeric_power_of_two",
+        "xr_numeric_round_shift_even_u64",
+        "xr_numeric_scalar_bit_width",
+        "xr_numeric_scalar_is_signed_int",
+        "xr_numeric_u64_high_bit",
+        "xr_numeric_unsigned_to_f32",
+        "xr_numeric_unsigned_to_f64",
+        "xr_scalar_rep_holds_f64",
+        "xr_scalar_rep_holds_i64"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/aot/provider/freestanding_numeric_core.c",
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_numeric_core.h",
+      "id": "numeric",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_method.h",
+        "src/aot/xrt_value.h",
+        "src/runtime/value/xfloat_methods.h",
+        "src/runtime/xstrbuf.c",
+        "stdlib/math/math.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_numeric_core_format_fixed",
+        "xr_numeric_core_format_i64",
+        "xr_numeric_core_format_i64_hex",
+        "xr_numeric_core_i64_abs_magnitude",
+        "xr_numeric_core_i64_abs_wrap",
+        "xr_numeric_core_i64_add_wrap",
+        "xr_numeric_core_i64_div_wrap",
+        "xr_numeric_core_i64_math_abs",
+        "xr_numeric_core_i64_mod_wrap",
+        "xr_numeric_core_i64_mul_wrap",
+        "xr_numeric_core_i64_neg_wrap",
+        "xr_numeric_core_i64_shl_wrap",
+        "xr_numeric_core_i64_shr_wrap",
+        "xr_numeric_core_i64_sub_wrap",
+        "xr_numeric_core_to_fixed_decimals"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_os_core.h",
+      "id": "os",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_io.h",
+        "src/aot/xrt_os.h",
+        "stdlib/io/io.c",
+        "stdlib/os/os.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_os_core_arch",
+        "xr_os_core_cpu_count",
+        "xr_os_core_environ_entry",
+        "xr_os_core_eol",
+        "xr_os_core_exec_buffer_append_raw",
+        "xr_os_core_exec_buffer_next_cap",
+        "xr_os_core_exec_windows_exit_code",
+        "xr_os_core_has_env_value",
+        "xr_os_core_homedir",
+        "xr_os_core_loadavg_from_fixed",
+        "xr_os_core_loadavg_set",
+        "xr_os_core_loadavg_zero",
+        "xr_os_core_memory_bytes",
+        "xr_os_core_platform",
+        "xr_os_core_seconds_from_nsec",
+        "xr_os_core_sep",
+        "xr_os_core_tmpdir",
+        "xr_os_core_uptime_from_boot_seconds",
+        "xr_os_core_username"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_os_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_range_core.h",
+      "id": "range",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_coll.h",
+        "src/aot/xrt_method.h",
+        "src/aot/xrt_range_methods.inc.c",
+        "src/runtime/object/xiterator.c",
+        "src/runtime/object/xrange.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_range_core_abs_step_u64",
+        "xr_range_core_contains",
+        "xr_range_core_count_from_distance",
+        "xr_range_core_format_buf",
+        "xr_range_core_index",
+        "xr_range_core_length",
+        "xr_range_core_make",
+        "xr_range_core_make_with_bound",
+        "xr_range_core_materialize_plan",
+        "xr_range_core_value_at"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_range_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_raw_scalar_core.h",
+      "id": "raw-scalar",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xrt.h",
+        "src/aot/xrt_byte_array.inc.c",
+        "src/aot/xrt_c90.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/vm/xvm_ffi.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_raw_bswap_u16",
+        "xr_raw_bswap_u32",
+        "xr_raw_bswap_u64",
+        "xr_raw_endian_matches_host",
+        "xr_raw_f32_from_bits",
+        "xr_raw_f32_to_bits",
+        "xr_raw_f64_from_bits",
+        "xr_raw_f64_to_bits",
+        "xr_raw_host_is_little_endian",
+        "xr_raw_load_ptr_unaligned",
+        "xr_raw_load_u16_unaligned",
+        "xr_raw_load_u32_unaligned",
+        "xr_raw_load_u64_unaligned",
+        "xr_raw_load_u8_unaligned",
+        "xr_raw_store_ptr_unaligned",
+        "xr_raw_store_u16_unaligned",
+        "xr_raw_store_u32_unaligned",
+        "xr_raw_store_u64_unaligned",
+        "xr_raw_store_u8_unaligned"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/aot/test_xrt_array.c",
+        "tests/unit/ir/test_xi_cgen.c",
+        "tests/unit/stdlib/test_numeric_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_regex_core.h",
+      "id": "regex",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_regex.h",
+        "src/aot/xrt_regex_core.c",
+        "stdlib/regex/xregex.c",
+        "stdlib/regex/xregex_binding.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_regex_core_escape",
+        "xr_regex_core_escape_len",
+        "xr_regex_core_int_arg",
+        "xr_regex_core_is_special",
+        "xr_regex_core_limit_arg",
+        "xr_regex_core_parse_flags",
+        "xr_regex_core_split_max_parts"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/regex/test_regex.c"
+      ]
+    },
+    {
+      "contains_tagged_value": true,
+      "header": "src/shared/xr_sort_core.h",
+      "id": "array-sort",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_sort.inc.c",
+        "src/runtime/object/xarray_vm.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native-and-tagged",
+      "signatures": [
+        "xr_sort_core_compare_default",
+        "xr_sort_core_compare_f64",
+        "xr_sort_core_compare_result",
+        "xr_sort_core_typed",
+        "xr_sort_core_values",
+        "xr_sort_core_vheap_sift",
+        "xr_sort_core_vheapsort",
+        "xr_sort_core_vintrosort",
+        "xr_sort_core_visort",
+        "xr_sort_core_vless",
+        "xr_sort_core_vmed3"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_array_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_strbuf_core.h",
+      "id": "string-buffer",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/runtime/object/builtins/xstringbuilder_builtins.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_strbuf_core_literal_slice"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_strbuf_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_string_core.h",
+      "id": "string",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_method.h",
+        "src/runtime/object/xstring.c",
+        "src/vm/xvm.c",
+        "src/vm/xvm_dispatch_convert.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_string_core_ascii_lower_byte",
+        "xr_string_core_ascii_lower_write",
+        "xr_string_core_ascii_upper_byte",
+        "xr_string_core_ascii_upper_write",
+        "xr_string_core_byte_slice_at",
+        "xr_string_core_codepoint_at",
+        "xr_string_core_contains",
+        "xr_string_core_ends_with",
+        "xr_string_core_index_of",
+        "xr_string_core_index_of_from",
+        "xr_string_core_is_ascii_whitespace",
+        "xr_string_core_last_index_of",
+        "xr_string_core_len_i64",
+        "xr_string_core_pad_fill",
+        "xr_string_core_pad_plan",
+        "xr_string_core_pad_write",
+        "xr_string_core_parse_float64",
+        "xr_string_core_parse_int64",
+        "xr_string_core_range_slice",
+        "xr_string_core_repeat_plan",
+        "xr_string_core_repeat_write",
+        "xr_string_core_replace_plan",
+        "xr_string_core_replace_write",
+        "xr_string_core_reverse_utf8_write",
+        "xr_string_core_skip_number_leading_ws",
+        "xr_string_core_slice_at",
+        "xr_string_core_split_each",
+        "xr_string_core_split_plan",
+        "xr_string_core_starts_with",
+        "xr_string_core_substring_slice",
+        "xr_string_core_trim_slice",
+        "xr_string_core_utf8_byte_boundary",
+        "xr_string_core_utf8_byte_range",
+        "xr_string_core_utf8_decode",
+        "xr_string_core_utf8_index_slice_at",
+        "xr_string_core_utf8_rune_at",
+        "xr_string_core_utf8_rune_count",
+        "xr_string_core_utf8_rune_size",
+        "xr_string_core_utf8_rune_slice_at"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_string_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_sync_core.h",
+      "id": "synchronization",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_core_freestanding.h",
+        "src/aot/xrt_mem.h",
+        "stdlib/mem/mem.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_sync_core_fence",
+        "xr_sync_core_memorder"
+      ],
+      "status": "production",
+      "test_callers": []
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_truthy_core.h",
+      "id": "truthiness",
+      "owner": "shared-kernel",
+      "production_callers": [],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_truthy_core_eval"
+      ],
+      "status": "test-only",
+      "test_callers": [
+        "tests/unit/stdlib/test_truthy_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_type_names_core.h",
+      "id": "type-names",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/runtime/value/xtype_names.h",
+        "src/shared/xr_elem_type.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "descriptor",
+      "signatures": [
+        "xr_type_name_from_tid"
+      ],
+      "status": "production",
+      "test_callers": []
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_utf8_core.h",
+      "id": "utf8",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_method.h",
+        "src/base/xutf8.c",
+        "src/base/xutf8.h",
+        "src/runtime/object/xstring_methods.c",
+        "src/shared/xr_string_core.h",
+        "src/shared/xr_unicode_grapheme.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_utf8_core_decode_step",
+        "xr_utf8_core_diagnostic_length",
+        "xr_utf8_core_is_continuation",
+        "xr_utf8_core_lossy_plan",
+        "xr_utf8_core_lossy_write",
+        "xr_utf8_core_scan_strict"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/base/test_utf8_diagnostic.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
+      "header": "src/shared/xr_value_format_core.h",
+      "id": "value-format",
+      "owner": "shared-kernel",
+      "production_callers": [],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted"
+      ],
+      "representation": "native",
+      "signatures": [
+        "xr_value_format_depth_exceeded",
+        "xr_value_format_limit_count",
+        "xr_value_format_more_suffix",
+        "xr_value_format_remaining_count"
+      ],
+      "status": "test-only",
+      "test_callers": [
+        "tests/unit/base/test_value_format_core.c"
+      ]
+    }
+  ],
+  "schema": 1
+}

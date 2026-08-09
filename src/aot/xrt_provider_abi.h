@@ -55,7 +55,14 @@ typedef enum {
     XR_AOT_CAP_COUNTDOWN_LATCH = 1u << 10,
     XR_AOT_CAP_SEMAPHORE = 1u << 11,
     XR_AOT_CAP_EVENT_COUNT = 1u << 12,
+    XR_AOT_CAP_PARALLEL = 1u << 13,
+    XR_AOT_CAP_NETPOLL = 1u << 14,
 } XrAotRuntimeCap;
+
+typedef enum {
+    XR_AOT_IO_READ = 1,
+    XR_AOT_IO_WRITE = 2,
+} XrAotIoEvent;
 
 typedef struct XrAotRuntimeConfig {
     uint32_t caps;
@@ -208,6 +215,8 @@ XR_FUNC XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_valu
 XR_FUNC XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef out_slot,
                                              bool discard_result, bool one_shot_await);
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
+XR_FUNC XrAotResult xr_aot_wait_fd(const XrAotContext *ctx, int64_t fd, int events,
+                                   int64_t timeout_ms);
 XR_FUNC XrValue xr_aot_time_after(const XrAotContext *ctx, int64_t milliseconds);
 XR_FUNC XrAotResult xr_aot_poll_yield(const XrAotContext *ctx);
 XR_FUNC void xr_aot_trace_frame_value(void *visitor, XrValue value);
@@ -220,6 +229,11 @@ XR_FUNC void xr_runtime_core_enable_task_destroy_ops(struct XrRuntimeCore *core)
 
 /* Provider values already use the freestanding XrValue representation. */
 static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value) {
+    return value;
+}
+
+static inline XrValue xr_aot_bridge_owned_value_to_xrt(const XrAotContext *ctx, XrValue value) {
+    (void) ctx;
     return value;
 }
 

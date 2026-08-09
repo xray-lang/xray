@@ -21,29 +21,23 @@
 
 #include "../base/xforward_decl.h"
 #include "../base/xdefs.h"
+#include "xmodule_resolver.h"
 
 // Bundled module entry
 typedef struct {
     char *path;
     uint8_t *bc;
     size_t bc_size;
+    XrModuleKind kind;
 } XrBundleEntry;
-
-// External dependencies (stdlib or third-party packages)
-typedef struct {
-    char **deps;
-    int count;
-    int capacity;
-} XrExternalDeps;
 
 // Bundle result
 typedef struct {
     XrBundleEntry *entries;
     int count;
     int capacity;
-    const char *entry_path;
-    XrExternalDeps stdlib;
-    XrExternalDeps packages;
+    int entry_index;
+    char *entry_path;
 } XrBundle;
 
 typedef enum {

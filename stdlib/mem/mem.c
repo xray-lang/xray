@@ -239,6 +239,41 @@ static XrValue mem_buffer_new(XrVMRuntime *isolate, int64_t length, bool zeroed,
     return XR_FROM_PTR(inst);
 }
 
+bool xr_mem_buffer_bytes(XrValue value, const uint8_t **data, size_t *length) {
+    if (!data || !length || !XR_IS_INSTANCE(value))
+        return false;
+    XrInstance *inst = (XrInstance *) XR_TO_PTR(value);
+    if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_BUFFER)
+        return false;
+    XrMemBufferBody *buf = (XrMemBufferBody *) xr_instance_native_body(inst);
+    if (!buf || buf->length < 0 || (buf->length > 0 && !buf->data))
+        return false;
+    *data = (const uint8_t *) buf->data;
+    *length = (size_t) buf->length;
+    return true;
+}
+
+XrValue xr_mem_buffer_copy_from_bytes(XrVMRuntime *isolate, const uint8_t *data, size_t length) {
+    if (!isolate || length > (size_t) INT64_MAX || (length > 0 && !data))
+        return XR_NULL_VAL;
+
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
+    XrAllocationContext transfer_alloc;
+    XrExecutionContext transfer_exec;
+    xr_alloc_context_init(&transfer_alloc, core, XR_STORAGE_TRANSFERABLE);
+    xr_exec_context_init(&transfer_exec, core, &transfer_alloc);
+    XrExecutionContext *previous = xr_exec_context_enter(&transfer_exec);
+    XrValue value = mem_buffer_new(isolate, (int64_t) length, false, 0);
+    xr_exec_context_restore(previous);
+
+    XrMemBufferBody *buf = mem_buffer_body(isolate, value);
+    if (!buf)
+        return XR_NULL_VAL;
+    if (length > 0)
+        memcpy(buf->data, data, length);
+    return value;
+}
+
 static XrValue mem_copy(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) isolate;
     if (argc >= 3 && XR_IS_INT(args[2]))

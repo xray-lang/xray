@@ -24,6 +24,7 @@
 #include "../module/xstdlib_embedded.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
+#include "../shared/xobject_shape.h"
 #include "../stdlib/xstdlib_metadata.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -1179,6 +1180,33 @@ static XgFuncNameRow *producer_lookup_func_row(const XgProducer *p, const char *
             return &p->funcs[i];
     }
     return NULL;
+}
+
+static XgFuncNameRow *producer_lookup_func_row_scoped(const XgProducer *p, XgModuleId module_id,
+                                                      const char *name) {
+    if (!p || module_id == XG_NO_ID || !name)
+        return NULL;
+    for (uint32_t i = 0; i < p->nfuncs; i++) {
+        if (p->funcs[i].module_id == module_id && p->funcs[i].name &&
+            strcmp(p->funcs[i].name, name) == 0)
+            return &p->funcs[i];
+    }
+    return NULL;
+}
+
+static XgModuleId producer_module_id_for_canonical(const XgProducer *p, const char *canonical) {
+    uint32_t name_id;
+    uint64_t canonical_hash;
+    if (!p || !p->evidence || !canonical || !canonical[0])
+        return XG_NO_ID;
+    name_id = hash_name32(canonical);
+    canonical_hash = hash_text64(canonical);
+    for (uint32_t i = 0; i < p->evidence->nmodules; i++) {
+        const XgModuleSummary *module = &p->evidence->modules[i];
+        if (module->name_id == name_id && module->canonical_hash == canonical_hash)
+            return module->module_id;
+    }
+    return XG_NO_ID;
 }
 
 static bool producer_reserve_stdlib_imports(XgProducer *p, uint32_t needed) {
@@ -3348,6 +3376,12 @@ static const XgPendingBody *body_find_call_body(XgBodyCollect *bc, const CallExp
     }
     if (callee->type == AST_MEMBER_ACCESS && callee->as.member_access.name) {
         const MemberAccessNode *member = &callee->as.member_access;
+        const char *module = body_stdlib_module_for_expr(bc, member->object);
+        XgModuleId module_id = producer_module_id_for_canonical(bc->producer, module);
+        XgFuncNameRow *module_target =
+            producer_lookup_func_row_scoped(bc->producer, module_id, member->name);
+        if (module_target)
+            return producer_find_function_body(bc->producer, module_target->func_id);
         XgClassId receiver_class = body_resolve_expr_class(bc, member->object);
         XgMethodSummary *method = producer_find_method_by_name_in_hierarchy(
             bc->producer, receiver_class, hash_name32(member->name), false);
@@ -6107,15 +6141,7 @@ static bool object_shape_collect_keys(XgBodyCollect *bc, const ObjectLiteralNode
 static int object_shape_key_compare(const void *left_ptr, const void *right_ptr) {
     const char *left = *(const char *const *) left_ptr;
     const char *right = *(const char *const *) right_ptr;
-    uint64_t left_key = xg_object_stable_name_key(left ? left : "");
-    uint64_t right_key = xg_object_stable_name_key(right ? right : "");
-    if (left_key < right_key)
-        return -1;
-    if (left_key > right_key)
-        return 1;
-    uint32_t left_name_id = hash_name32(left ? left : "");
-    uint32_t right_name_id = hash_name32(right ? right : "");
-    return left_name_id < right_name_id ? -1 : left_name_id > right_name_id ? 1 : 0;
+    return xr_object_shape_name_compare(left, right);
 }
 
 static void object_shape_canonicalize_keys(const char **keys, uint32_t count) {
@@ -9443,6 +9469,9 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
         const char *stdlib_module =
             body_stdlib_module_for_expr(bc, callee->as.member_access.object);
+        XgModuleId stdlib_module_id = producer_module_id_for_canonical(bc->producer, stdlib_module);
+        XgFuncNameRow *stdlib_target = producer_lookup_func_row_scoped(
+            bc->producer, stdlib_module_id, callee->as.member_access.name);
         const XaBuiltinReceiverMethodSpec *builtin_receiver_method =
             body_builtin_receiver_method_spec(bc, &callee->as.member_access,
                                               call->as.call_expr.arg_count);
@@ -9457,7 +9486,13 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
                                                          callee->as.member_access.name);
         bc->capability_bits |=
             body_capabilities_for_builtin_member_constructor(&callee->as.member_access);
-        if (receiver_interface != XG_NO_ID) {
+        if (stdlib_target && (stdlib_target->decl_flags & (XG_DECL_EXTERN | XG_DECL_NATIVE)) == 0) {
+            row.kind = XG_CALL_DIRECT_FUNC;
+            row.static_target_func_id = stdlib_target->func_id;
+            generic_origin_decl_id = stdlib_target->decl_id;
+            generic_origin_func_id = stdlib_target->func_id;
+            generic_kind = XG_GENERIC_INST_FUNCTION;
+        } else if (receiver_interface != XG_NO_ID) {
             const XgInterfaceMethodSummary *interface_method =
                 producer_find_interface_method_summary(bc->producer, receiver_interface,
                                                        method_name_id);
@@ -9842,10 +9877,15 @@ static bool body_builtin_method_call_may_suspend(XgBodyCollect *bc, const AstNod
     return false;
 }
 
-static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call) {
+static bool body_stdlib_call_identity(XgBodyCollect *bc, const AstNode *call,
+                                      const char **module_out, const char **name_out) {
     const AstNode *callee;
     const char *module;
     const char *name;
+    if (module_out)
+        *module_out = NULL;
+    if (name_out)
+        *name_out = NULL;
     if (!bc || !call || call->type != AST_CALL_EXPR || !(callee = call->as.call_expr.callee) ||
         (callee->type != AST_MEMBER_ACCESS && callee->type != AST_VARIABLE))
         return false;
@@ -9857,11 +9897,42 @@ static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call)
             producer_lookup_stdlib_import(bc->producer, bc->module_id, callee->as.variable.name);
         name = row ? row->member_name : NULL;
         module = row ? row->module_name : NULL;
+        /* A stdlib script module calls its private native primitives as local
+         * identifiers rather than imports.  Those bodyless builtin symbols
+         * still carry their defining module/member identity in analyzer links;
+         * consume that canonical identity so capability evidence is identical
+         * for imported public calls and private wrapper calls. */
+        if ((!module || !name) && callee->as.variable.symbol_id != 0 && bc->producer &&
+            bc->producer->analyzer) {
+            XaSymbol *symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope,
+                                                     callee->as.variable.symbol_id);
+            XaSymbolLinks *links = symbol && symbol->kind == XA_SYM_FUNCTION && symbol->is_builtin
+                                       ? xa_analyzer_get_links(bc->producer->analyzer, symbol)
+                                       : NULL;
+            if (links && links->function_decl_node == NULL) {
+                module = links->module_name;
+                name = links->import_member_name;
+            }
+        }
     }
     if (!name)
         return false;
     if (!module)
         return false;
+    if (module_out)
+        *module_out = module;
+    if (name_out)
+        *name_out = name;
+    return true;
+}
+
+static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call) {
+    const char *module;
+    const char *name;
+    if (!body_stdlib_call_identity(bc, call, &module, &name))
+        return false;
+    if (xr_stdlib_metadata_func_resumes_by_netpoll_retry(module, name))
+        return true;
     if (strcmp(module, "time") == 0)
         return strcmp(name, "sleep") == 0;
     if (strcmp(module, "test_yield") != 0)
@@ -9871,6 +9942,18 @@ static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call)
            strcmp(name, "error_test") == 0 || strcmp(name, "cancel_test") == 0 ||
            strcmp(name, "counter_inc") == 0 || strcmp(name, "nested") == 0 ||
            strcmp(name, "long_task") == 0;
+}
+
+static uint32_t body_stdlib_suspend_capabilities(XgBodyCollect *bc, const AstNode *call) {
+    const char *module;
+    const char *name;
+    if (!body_stdlib_call_identity(bc, call, &module, &name) ||
+        !body_stdlib_call_may_suspend(bc, call))
+        return 0;
+    uint32_t bits = XG_CAP_COROUTINE;
+    if (strcmp(module, "net") == 0)
+        bits |= XG_CAP_NETPOLL;
+    return bits;
 }
 
 static bool body_stdlib_call_observes_coro_heap(XgBodyCollect *bc, const AstNode *call) {
@@ -9992,10 +10075,11 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 bc->effect_bits |= XG_BODY_OBSERVES_TASK_ID;
                 bc->capability_bits |= XG_CAP_COROUTINE;
             }
-            if (body_builtin_method_call_may_suspend(bc, node) ||
-                body_stdlib_call_may_suspend(bc, node)) {
+            uint32_t stdlib_suspend_caps = body_stdlib_suspend_capabilities(bc, node);
+            if (body_builtin_method_call_may_suspend(bc, node) || stdlib_suspend_caps != 0) {
                 bc->effect_bits |= XG_BODY_MAY_SUSPEND;
-                bc->capability_bits |= XG_CAP_COROUTINE;
+                bc->capability_bits |=
+                    stdlib_suspend_caps != 0 ? stdlib_suspend_caps : XG_CAP_COROUTINE;
             }
             body_add_json_codec_call(bc, node);
             body_add_map_method_key_access(bc, node);

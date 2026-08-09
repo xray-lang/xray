@@ -20,6 +20,8 @@
 #include "../analyzer/xanalyzer.h"
 
 typedef struct XrClassDescriptor XrClassDescriptor;
+struct XiModule;
+struct XrModuleGraph;
 
 typedef void (*XrCompilerPostAnalyzeHook)(struct XrCompilerContext *ctx, AstNode *ast,
                                           void *user_data);
@@ -66,6 +68,9 @@ struct XrCompilerContext {
     bool repl_mode;  // REPL: emit OP_GETGLOBAL/OP_SETGLOBAL, skip shared slot allocation
     XrCompilerPostAnalyzeHook post_analyze_hook;
     void *post_analyze_user_data;
+    const struct XrModuleGraph *module_graph;
+    struct XiModule **graph_modules;
+    int graph_module_count;
     int max_globals;
 
     // Enum type names for type inference

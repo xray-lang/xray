@@ -230,6 +230,9 @@ XR_FUNC bool xi_lower_type_uses_read_place(XiLower *l, struct XrType *type);
 XR_FUNC bool xi_lower_boundary_transfer_arg(XiLower *l, struct AstNode *child, XiValue **out_value,
                                             uint8_t *out_mode);
 XR_FUNC void xi_lower_stmt(XiLower *l, struct AstNode *node);
+struct ImportMember;
+XR_FUNC bool xi_lower_import_member_is_type_only(const XiLower *l,
+                                                 const struct ImportMember *member);
 XR_FUNC struct XrType *xi_lower_node_type(XiLower *l, struct AstNode *node);
 
 /* ========== Cross-boundary helpers (xi_lower_expr.c, called from stmt) ========== */

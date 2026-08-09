@@ -53,6 +53,15 @@ typedef enum {
     OUTPUT_LIST
 } OutputFormat;
 
+static int bundle_count_kind(const XrBundle *bundle, XrModuleKind kind, bool exclude_entry) {
+    int count = 0;
+    for (int i = 0; i < bundle->count; i++) {
+        if (bundle->entries[i].kind == kind && (!exclude_entry || i != bundle->entry_index))
+            count++;
+    }
+    return count;
+}
+
 XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
     XR_DCHECK(inv != NULL, "inv is NULL");
     XR_DCHECK(inv->positional_count == 1, "deps expects exactly 1 positional");
@@ -97,23 +106,23 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
     /* Write output */
     switch (format) {
         case OUTPUT_LIST:
-            if (bundle->stdlib.count > 0) {
+            if (bundle_count_kind(bundle, XR_MOD_STDLIB, false) > 0) {
                 fprintf(out, "# Stdlib\n");
-                for (int i = 0; i < bundle->stdlib.count; i++) {
-                    fprintf(out, "%s\n", bundle->stdlib.deps[i]);
-                }
+                for (int i = 0; i < bundle->count; i++)
+                    if (bundle->entries[i].kind == XR_MOD_STDLIB)
+                        fprintf(out, "%s\n", bundle->entries[i].path);
             }
-            if (bundle->packages.count > 0) {
+            if (bundle_count_kind(bundle, XR_MOD_PACKAGE, false) > 0) {
                 fprintf(out, "# Third-party packages\n");
-                for (int i = 0; i < bundle->packages.count; i++) {
-                    fprintf(out, "%s\n", bundle->packages.deps[i]);
-                }
+                for (int i = 0; i < bundle->count; i++)
+                    if (bundle->entries[i].kind == XR_MOD_PACKAGE)
+                        fprintf(out, "%s\n", bundle->entries[i].path);
             }
-            if (bundle->count > 1) {
+            if (bundle_count_kind(bundle, XR_MOD_FILE, true) > 0) {
                 fprintf(out, "# Local modules\n");
-                for (int i = 0; i < bundle->count - 1; i++) {
-                    fprintf(out, "%s\n", bundle->entries[i].path);
-                }
+                for (int i = 0; i < bundle->count; i++)
+                    if (i != bundle->entry_index && bundle->entries[i].kind == XR_MOD_FILE)
+                        fprintf(out, "%s\n", bundle->entries[i].path);
             }
             break;
 
@@ -124,24 +133,33 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
             fprintf(out, ",\n");
 
             fprintf(out, "  \"stdlib\": [");
-            for (int i = 0; i < bundle->stdlib.count; i++) {
-                if (i > 0)
+            int written = 0;
+            for (int i = 0; i < bundle->count; i++) {
+                if (bundle->entries[i].kind != XR_MOD_STDLIB)
+                    continue;
+                if (written++ > 0)
                     fprintf(out, ", ");
-                fprint_json_string(out, bundle->stdlib.deps[i]);
+                fprint_json_string(out, bundle->entries[i].path);
             }
             fprintf(out, "],\n");
 
             fprintf(out, "  \"packages\": [");
-            for (int i = 0; i < bundle->packages.count; i++) {
-                if (i > 0)
+            written = 0;
+            for (int i = 0; i < bundle->count; i++) {
+                if (bundle->entries[i].kind != XR_MOD_PACKAGE)
+                    continue;
+                if (written++ > 0)
                     fprintf(out, ", ");
-                fprint_json_string(out, bundle->packages.deps[i]);
+                fprint_json_string(out, bundle->entries[i].path);
             }
             fprintf(out, "],\n");
 
             fprintf(out, "  \"local_modules\": [");
-            for (int i = 0; i < bundle->count - 1; i++) {
-                if (i > 0)
+            written = 0;
+            for (int i = 0; i < bundle->count; i++) {
+                if (i == bundle->entry_index || bundle->entries[i].kind != XR_MOD_FILE)
+                    continue;
+                if (written++ > 0)
                     fprintf(out, ", ");
                 fprint_json_string(out, bundle->entries[i].path);
             }
@@ -159,23 +177,23 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
             fprintf(out, "set -e\n");
             fprintf(out, "\n");
 
-            if (bundle->packages.count > 0) {
+            if (bundle_count_kind(bundle, XR_MOD_PACKAGE, false) > 0) {
                 fprintf(out, "echo \"Installing third-party package dependencies...\"\n");
-                for (int i = 0; i < bundle->packages.count; i++) {
-                    fprintf(out, "xray pkg add %s\n", bundle->packages.deps[i]);
-                }
+                for (int i = 0; i < bundle->count; i++)
+                    if (bundle->entries[i].kind == XR_MOD_PACKAGE)
+                        fprintf(out, "xray pkg add %s\n", bundle->entries[i].path);
                 fprintf(out, "\n");
                 fprintf(out, "echo \"All dependencies installed\"\n");
             } else {
                 fprintf(out, "echo \"No third-party package dependencies\"\n");
             }
 
-            if (bundle->stdlib.count > 0) {
+            if (bundle_count_kind(bundle, XR_MOD_STDLIB, false) > 0) {
                 fprintf(out, "\n");
                 fprintf(out, "# Stdlib dependencies (built-in, no install needed):\n");
-                for (int i = 0; i < bundle->stdlib.count; i++) {
-                    fprintf(out, "#   - %s\n", bundle->stdlib.deps[i]);
-                }
+                for (int i = 0; i < bundle->count; i++)
+                    if (bundle->entries[i].kind == XR_MOD_STDLIB)
+                        fprintf(out, "#   - %s\n", bundle->entries[i].path);
             }
             break;
     }

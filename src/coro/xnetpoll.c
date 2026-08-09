@@ -95,6 +95,7 @@ XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
         pd->fd = -1;
         atomic_store(&pd->fdseq, 0);
         pd->owner_worker_id = -1;
+        pd->shared_registered = false;
         atomic_store(&pd->rg, XR_PD_NIL);
         atomic_store(&pd->wg, XR_PD_NIL);
         atomic_store(&pd->closing, false);
@@ -794,8 +795,12 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
         atomic_fetch_add(&pd->rseq, 1);
         atomic_fetch_add(&pd->wseq, 1);
 
-        // Re-register with shared kqueue
-        np->ops->add_fd(np, fd, pd);
+        // A closing descriptor has already left its former local poller.
+        // Reopen it as unbound; the next coroutine wait will bind it again.
+        if (np->ops->add_fd(np, fd, pd) < 0)
+            return NULL;
+        pd->owner_worker_id = -1;
+        pd->shared_registered = true;
 
         atomic_store(&pd->closing, false);
         atomic_store(&pd->rg, XR_PD_NIL);
@@ -826,15 +831,18 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
     atomic_store(&pd->uring_wop.active, false);
 #endif
 
-    // Register with shared kqueue
+    // Register unbound descriptors with the runtime-wide poller. A successful
+    // worker bind moves the descriptor to that worker's private poller.
     if (np->ops->add_fd(np, fd, pd) < 0) {
         xr_poll_cache_free(&np->cache, pd);
         return NULL;
     }
+    pd->shared_registered = true;
 
     XrPollDesc *expected = NULL;
     if (!xr_fdmap_cas(np, fd, &expected, pd)) {
         np->ops->del_fd(np, fd, pd);
+        pd->shared_registered = false;
         xr_poll_cache_free(&np->cache, pd);
         return expected;
     }
@@ -890,23 +898,33 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
         xr_fdmap_cas(np, fd, &exp, NULL);
     }
 
-    // Unregister from owner worker's local poll (if bound)
-    if (fd >= 0 && pd->owner_worker_id >= 0) {
+    // Unregister from owner worker's local poll when the descriptor actually
+    // left the shared backend. A bound descriptor can still be shared when a
+    // platform has no worker-local poller or local registration failed.
+    if (fd >= 0 && pd->owner_worker_id >= 0 && !pd->shared_registered) {
         XrWorker *current = xr_current_worker();
         if (current && current->p.runtime) {
             XrRuntime *rt = current->p.runtime;
             if (pd->owner_worker_id < rt->worker_count) {
-                XrLocalPoll *lp = &rt->workers[pd->owner_worker_id].p.local_poll;
-                xr_local_poll_del_fd(lp, fd);
+                XrProc *owner = &rt->workers[pd->owner_worker_id].p;
+                xr_local_poll_del_fd(&owner->local_poll, fd);
+                int previous =
+                    atomic_fetch_sub_explicit(&owner->local_poll_fd_count, 1, memory_order_release);
+                XR_DCHECK(previous > 0, "netpoll_close: local fd count underflow");
+                (void) previous;
             }
         }
     }
 
-    // Unregister from shared backend (kqueue / epoll / iouring / iocp).
+    // Unregister from the runtime-wide backend when the descriptor never
+    // moved to a worker-local poller (Windows always takes this path).
     // pd is still valid here: xnetpoll has just CASed it out of fdmap,
     // and the deferred-free path below makes sure it survives any
     // outstanding async work the backend may need to cancel.
-    np->ops->del_fd(np, fd, pd);
+    if (pd->shared_registered) {
+        np->ops->del_fd(np, fd, pd);
+        pd->shared_registered = false;
+    }
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
     // io_uring completion mode: an in-flight completion op is woken solely by its
@@ -1167,10 +1185,37 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
     }
 }
 
+static bool netpoll_try_add_local(XrPollDesc *pd, XrWorker *worker) {
+    if (!pd || !worker || pd->fd < 0 || worker->p.local_poll.poll_fd < 0 ||
+        xr_local_poll_add_fd(&worker->p.local_poll, pd->fd, pd) != 0) {
+        return false;
+    }
+    atomic_fetch_add_explicit(&worker->p.local_poll_fd_count, 1, memory_order_release);
+    return true;
+}
+
+static bool netpoll_ensure_shared(XrPollDesc *pd) {
+    if (!pd || !pd->netpoll || !pd->netpoll->ops)
+        return false;
+    if (pd->shared_registered)
+        return true;
+    if (pd->netpoll->ops->add_fd(pd->netpoll, pd->fd, pd) < 0)
+        return false;
+    pd->shared_registered = true;
+    return true;
+}
+
+static void netpoll_leave_shared(XrPollDesc *pd) {
+    if (!pd || !pd->shared_registered || !pd->netpoll || !pd->netpoll->ops)
+        return;
+    pd->netpoll->ops->del_fd(pd->netpoll, pd->fd, pd);
+    pd->shared_registered = false;
+}
+
 // Rebind pd to current worker when coro has migrated.
-// Cancels any running timers on the old owner's wheel (via cross-worker cancel
-// queue), deregisters fd from old worker's local poll, and re-registers with
-// the current worker.  After this call pd->owner_worker_id == current->p.id.
+// The new local registration (or its shared fallback) is established before
+// the old local registration is removed, so a resource failure cannot leave
+// the descriptor without a poller.
 static void netpoll_rebind_worker(XrPollDesc *pd, XrWorker *current) {
     XR_DCHECK(pd != NULL, "netpoll_rebind_worker: NULL pd");
     XR_DCHECK(current != NULL, "netpoll_rebind_worker: NULL current");
@@ -1180,6 +1225,11 @@ static void netpoll_rebind_worker(XrPollDesc *pd, XrWorker *current) {
 
     XrRuntime *rt = current->p.runtime;
     XR_DCHECK(rt != NULL, "netpoll_rebind_worker: NULL runtime");
+
+    bool old_was_local = !pd->shared_registered;
+    bool new_is_local = netpoll_try_add_local(pd, current);
+    if (!new_is_local && !netpoll_ensure_shared(pd))
+        return;
 
     // Cancel running timers on old owner's wheel via cross-worker cancel queue.
     // Sequence bumps (done by caller) will invalidate stale callbacks.
@@ -1200,17 +1250,20 @@ static void netpoll_rebind_worker(XrPollDesc *pd, XrWorker *current) {
                 pd->wrun = false;
             }
         }
-        // Deregister fd from old worker's local poll
-        if (pd->fd >= 0 && old_w->p.local_poll.poll_fd >= 0) {
+        // Deregister fd from the old worker only after its replacement exists.
+        if (old_was_local && pd->fd >= 0 && old_w->p.local_poll.poll_fd >= 0) {
             xr_local_poll_del_fd(&old_w->p.local_poll, pd->fd);
+            int previous =
+                atomic_fetch_sub_explicit(&old_w->p.local_poll_fd_count, 1, memory_order_release);
+            XR_DCHECK(previous > 0, "netpoll_rebind_worker: local fd count underflow");
+            (void) previous;
         }
     }
 
     // Bind to current worker
     pd->owner_worker_id = new_id;
-    if (pd->fd >= 0 && current->p.local_poll.poll_fd >= 0) {
-        xr_local_poll_add_fd(&current->p.local_poll, pd->fd, pd);
-    }
+    if (new_is_local)
+        netpoll_leave_shared(pd);
 }
 
 // Set read/write timeout (fd bound to Worker)
@@ -1287,9 +1340,8 @@ void xr_netpoll_set_deadline(XrNetpoll *np, XrPollDesc *pd, int64_t deadline, in
 
 // ========== fd bound to Worker ==========
 
-// Bind fd to current Worker and register with worker's local poll.
-// Dual-registration (shared netpoll + local poll) is safe: the CAS state
-// machine in xr_netpoll_unblock ensures only one waker succeeds.
+// Bind fd to current Worker and register with worker's local poll. Unbound
+// descriptors use the shared poller only until this first successful bind.
 int xr_netpoll_bind_worker(XrPollDesc *pd) {
     if (!pd)
         return -1;
@@ -1303,6 +1355,8 @@ int xr_netpoll_bind_worker(XrPollDesc *pd) {
     if (pd->owner_worker_id >= 0) {
         if (worker && worker->p.id != pd->owner_worker_id) {
             netpoll_rebind_worker(pd, worker);
+        } else if (worker && pd->shared_registered && netpoll_try_add_local(pd, worker)) {
+            netpoll_leave_shared(pd);
         }
         return pd->owner_worker_id;
     }
@@ -1310,21 +1364,11 @@ int xr_netpoll_bind_worker(XrPollDesc *pd) {
     // Bind to current Worker
     if (worker) {
         pd->owner_worker_id = worker->p.id;
-        // Register fd with worker's local poll for zero-contention IO delivery.
-        // In io_uring mode the local epoll also serves as the readiness backstop
-        // for the rare SQE-submit-exhausted fallback (xr_yield_for_io).
-        if (pd->fd >= 0 && worker->p.local_poll.poll_fd >= 0) {
-            xr_local_poll_add_fd(&worker->p.local_poll, pd->fd, pd);
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-            // io_uring mode: completion ops carry the data, so drop the standing
-            // global-epoll registration (added by xr_netpoll_open) — a single
-            // owner-worker poller, no cross-worker readiness churn.
-            if (worker->p.local_poll.uring && pd->netpoll && pd->netpoll->ops &&
-                pd->netpoll->ops->del_fd) {
-                pd->netpoll->ops->del_fd(pd->netpoll, pd->fd, pd);
-            }
-#endif
-        }
+        // A descriptor belongs to one readiness poller at a time. The shared
+        // registration remains as the failure fallback and for platforms
+        // without worker-local polling.
+        if (netpoll_try_add_local(pd, worker))
+            netpoll_leave_shared(pd);
         return worker->p.id;
     }
 

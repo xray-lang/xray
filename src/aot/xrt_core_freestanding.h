@@ -740,6 +740,22 @@ static inline void xrt_release(XrValue v) {
     xr_hook_free(hdr);
 }
 
+static inline void xrt_enum_aggregate_retain(XrAotEnumAggregate value) {
+    uint32_t limit = value.payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP
+                         ? value.payload_count
+                         : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+    for (uint32_t i = 0; i < limit; i++)
+        xrt_retain(value.payloads[i]);
+}
+
+static inline void xrt_enum_aggregate_release(XrAotEnumAggregate value) {
+    uint32_t limit = value.payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP
+                         ? value.payload_count
+                         : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+    for (uint32_t i = 0; i < limit; i++)
+        xrt_release(value.payloads[i]);
+}
+
 static inline size_t xrt_freestanding_strlen(const char *s) {
     size_t len = 0;
     if (!s)

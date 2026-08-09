@@ -237,7 +237,17 @@ add_xray_unit_test(test_xrt_json_decode aot/test_xrt_json_decode.c)
 add_xray_unit_test(test_xrt_static_map_set aot/test_xrt_static_map_set.c)
 add_xray_unit_test(test_xrt_exception_tls aot/test_xrt_exception_tls.c)
 add_xray_unit_test(test_xrt_method_truthy aot/test_xrt_method_truthy.c)
-add_xray_unit_test(test_xrt_user_hash_eq aot/test_xrt_user_hash_eq.c)
+# This test deliberately compiles the header-only AOT runtime with XRT_IMPL and
+# custom allocators.  Linking xray_core would give it a second runtime-global
+# owner and fails deterministically under sanitizer linkers.
+add_executable(test_xrt_user_hash_eq aot/test_xrt_user_hash_eq.c)
+target_compile_definitions(test_xrt_user_hash_eq PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
+target_include_directories(test_xrt_user_hash_eq PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+add_test(NAME test_xrt_user_hash_eq COMMAND $<TARGET_FILE:test_xrt_user_hash_eq>)
 
 # Generated AOT cores are also compiled as C++ by governed compatibility
 # workflows.  Keep this target at the minimum supported C++ dialect and avoid
@@ -373,6 +383,8 @@ if(XR_STDLIB_COMPRESS)
     add_xray_unit_test(test_compress stdlib/test_compress.c)
 endif()
 add_xray_unit_test(test_xml_node stdlib/test_xml_node.c)
+add_xray_unit_test(test_cluster_proto stdlib/test_cluster_proto.c)
+set_tests_properties(test_cluster_proto PROPERTIES LABELS "cluster;protocol;stdlib")
 add_xray_unit_test(test_prelude_init stdlib/test_prelude_init.c)
 add_xray_unit_test(test_native_type_surface stdlib/test_native_type_surface.c)
 set_tests_properties(test_native_type_surface PROPERTIES LABELS "stdlib;metadata;native-types")

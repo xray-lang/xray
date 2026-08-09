@@ -1,0 +1,16 @@
+// A named value-struct literal is a fresh ownership root. Across a module
+// boundary the VM boxes the return while AOT keeps a native aggregate, but
+// both representations must die at the same source-level last use.
+import runtime
+import { makeReturnedValue } from "./_value_struct_return_release_lib"
+
+var beforeBytes = runtime.liveBytes()
+var beforeObjects = runtime.liveObjects()
+var checksum = 0
+for (var i = 0; i < 10000; i++) {
+    var value = makeReturnedValue(i)
+    checksum = checksum + value.value
+}
+print(checksum)
+print(runtime.liveBytes() - beforeBytes < 4096)
+print(runtime.liveObjects() - beforeObjects < 100)

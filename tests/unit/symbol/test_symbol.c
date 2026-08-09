@@ -10,6 +10,8 @@
 
 #include "../test_framework.h"
 #include "runtime/symbol/xsymbol_table.h"
+#include "os/os_thread.h"
+#include <stdatomic.h>
 #include <string.h>
 
 /* ========== Basic Operations ========== */
@@ -319,6 +321,47 @@ TEST(symbol_stress_with_builtins) {
     xr_symbol_table_destroy(table);
 }
 
+typedef struct SymbolConcurrentRegisterCtx {
+    XrSymbolTable *table;
+    const char *name;
+    SymbolId expected;
+    _Atomic int failures;
+} SymbolConcurrentRegisterCtx;
+
+static void *symbol_concurrent_register_worker(void *opaque) {
+    SymbolConcurrentRegisterCtx *ctx = (SymbolConcurrentRegisterCtx *) opaque;
+    for (int i = 0; i < 20000; i++) {
+        if (xr_symbol_register_in_table(ctx->table, ctx->name) != ctx->expected)
+            atomic_fetch_add_explicit(&ctx->failures, 1, memory_order_relaxed);
+    }
+    return NULL;
+}
+
+TEST(symbol_existing_registration_is_parallel_safe) {
+    XrSymbolTable *table = xr_symbol_table_create();
+    ASSERT_NOT_NULL(table);
+
+    SymbolId expected = xr_symbol_register_in_table(table, "get:accepted");
+    ASSERT_TRUE(expected != SYMBOL_INVALID);
+
+    SymbolConcurrentRegisterCtx ctx = {
+        .table = table,
+        .name = "get:accepted",
+        .expected = expected,
+    };
+    atomic_init(&ctx.failures, 0);
+
+    xr_thread_t threads[8] = {0};
+    for (int i = 0; i < 8; i++)
+        ASSERT_TRUE(xr_thread_create(&threads[i], symbol_concurrent_register_worker, &ctx));
+    for (int i = 0; i < 8; i++)
+        ASSERT_EQ_INT(xr_thread_join(threads[i], NULL), 0);
+
+    ASSERT_EQ_INT(atomic_load_explicit(&ctx.failures, memory_order_relaxed), 0);
+    ASSERT_EQ_INT(table->count, 1);
+    xr_symbol_table_destroy(table);
+}
+
 /* ========== Main ========== */
 
 static void run_all_tests(void) {
@@ -353,6 +396,7 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("Stress Tests");
     RUN_TEST(symbol_stress_many_symbols);
     RUN_TEST(symbol_stress_with_builtins);
+    RUN_TEST(symbol_existing_registration_is_parallel_safe);
 }
 
 TEST_MAIN_BEGIN()

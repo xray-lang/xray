@@ -310,6 +310,8 @@ static bool xaot_json_write_requirements(FILE *out, const XaotLinkManifest *mani
     ok = ok && xaot_json_write_raw(out, "\n  },\n  \"link\": {\n");
     ok = ok && xaot_json_write_bool(out, "shared", manifest->link.shared, true);
     ok = ok && xaot_json_write_bool(out, "relocatable", manifest->link.relocatable, true);
+    ok = ok &&
+         xaot_json_write_bool(out, "resolve_from_host", manifest->link.resolve_from_host, true);
     ok = ok && xaot_json_write_bool(out, "strip", manifest->link.strip, true);
     ok = ok && xaot_json_write_bool(out, "dead_strip", manifest->link.dead_strip, true);
     ok = ok && xaot_json_write_bool(out, "lto", manifest->link.lto, true);

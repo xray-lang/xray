@@ -25,36 +25,40 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 }
 
 // 管道阶段：从 in 读取，处理后写入 out
-fn stage(in_ch: Channel<int>, out_ch: Channel<int>, stage_id: int) {
+fn stage(in_ch: Channel<int>, out_ch: Channel<int>) -> int {
+    var processed = 0
     while (true) {
         var val = recv_int(in_ch, -1)
         if (val < 0) { break }
         // 每级加 1
         out_ch.send(val + 1)
+        processed++
     }
     out_ch.close()
+    return processed
 }
 
 var start = time.monotonic()
 
 // 构建管道：创建 STAGES+1 个 channel，STAGES 个协程
-const chs = [Channel(10)]
-var tasks: Array<Task> = []
+var chs = [Channel(10)]
+var tasks: Array<Task<int>> = []
 
 for (var i = 0; i < STAGES; i++) {
     chs.push(Channel(10))
-    tasks.push(go stage(chs[i], chs[i + 1], i))
+    tasks.push(go stage(chs[i], chs[i + 1]))
 }
 
 var first_ch = chs[0]
 var last_ch = chs[STAGES]
 
 // 生产者：向第一个 channel 发送数据
-fn produce(ch: Channel<int>, count: int) {
+fn produce(ch: Channel<int>, count: int) -> int {
     for (var i = 0; i < count; i++) {
         ch.send(i)
     }
     ch.close()
+    return count
 }
 var producer = go produce(first_ch, ITEMS)
 

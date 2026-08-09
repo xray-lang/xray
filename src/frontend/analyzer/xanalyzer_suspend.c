@@ -34,6 +34,7 @@
 #include "xa_native_effect.h"
 #include "xa_selection.h"
 #include "xanalyzer.h"
+#include "xanalyzer_builtins.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_symbol.h"
 #include "xanalyzer_visitor_internal.h"
@@ -42,6 +43,7 @@
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/xerror_codes.h"
+#include "../../stdlib/xstdlib_metadata.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -392,6 +394,23 @@ static bool sus_symbol_has_body(XaSymbol *symbol) {
            sus_function_body(symbol->links.function_decl_node) != NULL;
 }
 
+static bool sus_symbol_is_yieldable_stdlib(XaAnalyzer *analyzer, XaSymbol *symbol,
+                                           const char **detail_out) {
+    if (detail_out)
+        *detail_out = NULL;
+    if (!analyzer || !symbol)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, symbol);
+    const char *module = links ? links->module_name : NULL;
+    const char *member =
+        links && links->import_member_name ? links->import_member_name : symbol->name;
+    if (!module || !member || !xr_stdlib_metadata_func_resumes_by_netpoll_retry(module, member))
+        return false;
+    if (detail_out)
+        *detail_out = member;
+    return true;
+}
+
 static void sus_scan_symbol_call(XaSuspendScan *scan, XaSymbol *callee, AstNode *site,
                                  bool is_callback) {
     if (!scan || !scan->row || !site)
@@ -413,6 +432,11 @@ static void sus_scan_symbol_call(XaSuspendScan *scan, XaSymbol *callee, AstNode 
     }
     if (sus_row_for_symbol(scan->pass, callee) || sus_symbol_has_body(callee)) {
         sus_add_edge(scan->row, callee, site, is_callback);
+        return;
+    }
+    const char *yieldable_name = NULL;
+    if (sus_symbol_is_yieldable_stdlib(scan->pass->analyzer, callee, &yieldable_name)) {
+        sus_mark_direct(scan->row, XA_SUSPEND_MAY, site, "stdlib call", yieldable_name);
         return;
     }
     /* Resolved bodyless native/builtin: non-suspending unless it is in the
@@ -500,6 +524,8 @@ static void sus_scan_call(XaSuspendScan *scan, AstNode *node) {
             sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "handle method", member->name);
         } else if (target && sus_symbol_is_time_sleep(target, member->name)) {
             sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "call", "time.sleep");
+        } else if (target && sus_symbol_is_yieldable_stdlib(scan->pass->analyzer, target, NULL)) {
+            sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "stdlib call", member->name);
         } else if (target &&
                    (sus_row_for_symbol(scan->pass, target) || sus_symbol_has_body(target))) {
             /* Open virtual dispatch cannot close the concrete target. */

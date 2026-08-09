@@ -149,6 +149,7 @@ static inline void xrt_aot_class_type_set(XrObjHeader *hdr, uint16_t type_id) {
 #define XRT_ARC_KIND_STRBUF 14u
 #define XRT_ARC_KIND_ITERATOR 15u
 #define XRT_ARC_KIND_TUPLE 16u
+#define XRT_ARC_KIND_ENUM_BOX 17u
 
 typedef struct xrt_buffer_object {
     void *data;
@@ -463,6 +464,16 @@ static inline void xrt_stack_header_init(XrObjHeader *h, uint16_t type) {
 static inline int xrt_arc_value_has_header(XrValue v) {
     if (!v.ptr)
         return 0;
+    if (v.tag == XR_TAG_ENUM) {
+        const XrObjHeader *hdr = (const XrObjHeader *) v.ptr;
+        return hdr->type == XR_TINSTANCE && hdr->_rsv == XRT_ARC_KIND_ENUM_BOX &&
+               (hdr->extra & XR_OBJ_AOT_NATIVE) != 0;
+    }
+    if (v.tag == XR_TAG_TUPLE) {
+        const XrObjHeader *hdr = (const XrObjHeader *) v.ptr;
+        return hdr->type == XR_TINSTANCE && hdr->_rsv == XRT_ARC_KIND_TUPLE &&
+               (hdr->extra & XR_OBJ_AOT_NATIVE) != 0;
+    }
     if (v.tag == XR_TAG_PTR && (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0)
         return 1;
     if (XR_IS_ARRAY_REF(v))
@@ -479,6 +490,8 @@ static inline int xrt_arc_value_has_header(XrValue v) {
 }
 
 static inline XrObjHeader *xrt_arc_value_header(XrValue v) {
+    if (v.tag == XR_TAG_ENUM || v.tag == XR_TAG_TUPLE)
+        return (XrObjHeader *) v.ptr;
     if (v.tag == XR_TAG_PTR &&
         (v.heap_type == XR_TINSTANCE || (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0))
         return (XrObjHeader *) v.ptr;

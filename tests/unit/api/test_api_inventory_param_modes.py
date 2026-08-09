@@ -204,6 +204,35 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             signatures[("U32x4", "extract", "method")],
         )
 
+    def test_pure_stdlib_inventory_reads_exported_type_alias_fields(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-api-inventory-type-alias.") as tmp:
+            root = Path(tmp)
+            module_dir = root / "stdlib" / "cluster"
+            module_dir.mkdir(parents=True)
+            (module_dir / "cluster.xr").write_text(
+                "\n".join(
+                    [
+                        "export type Config = {",
+                        "    name: string,",
+                        "    capacity: int,",
+                        "}",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            items = api_inventory.collect_pure_stdlib(root)
+            signatures = {
+                (entry["namespace"], entry["name"], entry["kind"]): entry["signature"]
+                for entry in items
+            }
+
+        self.assertEqual("{ name: string, capacity: int, }",
+                         signatures[("cluster", "Config", "type")])
+        self.assertEqual("string", signatures[("cluster", "Config.name", "field")])
+        self.assertEqual("int", signatures[("cluster", "Config.capacity", "field")])
+
 
 if __name__ == "__main__":
     unittest.main()

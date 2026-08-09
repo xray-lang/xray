@@ -37,6 +37,7 @@
 #include "xi_analysis.h"
 #include "xi_cfg_edit.h"
 #include "xi_core_api.h"
+#include "xi_loop.h"
 #include "xi_module.h"
 #include "xi_coro_analyze.h"
 #include "xi_value_query.h"
@@ -451,6 +452,19 @@ static bool op_produces_borrow(uint16_t op) {
     return op_result_ownership(op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
 }
 
+/* XI_COPY is normally an identity alias, but lowering marks source-level
+ * value-struct copies as VALUE_CLONE.  That variant allocates independent
+ * storage on both backends and therefore produces a fresh owning reference;
+ * treating it as the table's ordinary borrowed COPY leaks every clone. */
+static bool arc_value_produces_borrow(const XiValue *value) {
+    return value && !xi_copy_is_value_clone(value) && op_produces_borrow(value->op);
+}
+
+static bool arc_value_produces_owned(const XiValue *value) {
+    return value && (xi_copy_is_value_clone(value) ||
+                     op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_OWNED);
+}
+
 /* Representation selection runs after ordinary ARC insertion and may wrap a
  * borrowed RC value in BOX/UNBOX/CONVERT adapters.  Those adapters change only
  * the backend representation; they do not acquire ownership.  Late error-edge
@@ -464,7 +478,7 @@ static bool arc_value_is_borrow_alias(const XiValue *value, uint8_t depth) {
     /* A weak field load promotes (W1): its result is a fresh strong reference,
      * not a borrow of something the object owns — the object owns only the
      * handle. Treating it as a borrow would leak the promotion. */
-    if (op_produces_borrow(value->op))
+    if (arc_value_produces_borrow(value))
         return true;
     switch (value->op) {
         case XI_BOX:
@@ -484,6 +498,7 @@ static bool op_is_call(uint16_t op) {
 }
 
 static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv);
+static XiFunc *arc_resolve_namespace_method_callee(const XiFunc *caller, const XiValue *user);
 
 static bool arc_type_is_raw_pointer(const XrType *type) {
     return type && XR_TYPE_IS_POINTER(type);
@@ -728,6 +743,13 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
 static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
     if (call_returns_intrinsic_fresh(f, v))
         return true;
+    XiFunc *callee = NULL;
+    if (v && v->op == XI_CALL && v->nargs >= 1)
+        callee = arc_resolve_callee(f, v->args[0]);
+    else if (v && (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT))
+        callee = arc_resolve_namespace_method_callee(f, v);
+    if (callee && callee->arc_return_ownership.complete)
+        return callee->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_OWNED;
     if (v && v->call_return_ownership.complete)
         return v->call_return_ownership.kind == XI_RETURN_OWNERSHIP_OWNED;
     return false;
@@ -905,8 +927,15 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
             return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
         if (xi_call_result_aliases_receiver(value) && value->nargs >= 1)
             return arc_return_value_ownership(f, value->args[0], (uint8_t) (depth + 1));
-        if (value->call_return_ownership.complete) {
-            XiReturnOwnership summary = value->call_return_ownership;
+        XiFunc *callee = NULL;
+        if (value->op == XI_CALL && value->nargs >= 1)
+            callee = arc_resolve_callee(f, value->args[0]);
+        else if (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT)
+            callee = arc_resolve_namespace_method_callee(f, value);
+        XiReturnOwnership summary = callee && callee->arc_return_ownership.complete
+                                        ? callee->arc_return_ownership
+                                        : value->call_return_ownership;
+        if (summary.complete) {
             if (summary.kind != XI_RETURN_OWNERSHIP_BORROWED_PARAM)
                 return summary;
             uint16_t actual = (uint16_t) (summary.param_index + 1);
@@ -917,9 +946,9 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
         return arc_return_unknown();
     }
 
-    if (op_produces_borrow(value->op))
+    if (arc_value_produces_borrow(value))
         return arc_return_unknown();
-    if (op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_OWNED)
+    if (arc_value_produces_owned(value))
         return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
     return arc_return_unknown();
 }
@@ -1240,7 +1269,7 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                 if (arc_raw_pointer_borrow_flows_to_user(member, u) ||
                     arc_span_view_borrow_flows_to_user(member, u)) {
                     is_member_borrow = true;
-                } else if (op_produces_borrow(u->op) && xi_own_type_may_be_ref(u->type)) {
+                } else if (arc_value_produces_borrow(u) && xi_own_type_may_be_ref(u->type)) {
                     /* A projection (GETFIELD / INDEX_GET / ...) borrows through
                      * any argument that is the tracked member. The result need
                      * only be a POSSIBLE reference: a Json field typed `null`
@@ -2527,11 +2556,29 @@ static bool arc_elim_can_remove_single_consumer_retain(const XiFunc *f, const Xi
             return false;
         return true;
     }
-    if (op_produces_borrow(target->op))
+    if (arc_value_produces_borrow(target))
         return false;
     if (op_is_call(target->op))
         return call_returns_fresh(f, target);
     return true;
+}
+
+/* A static single-consumer use inside a loop may execute more than once for
+ * one owner produced outside that loop.  Its retain replenishes ownership on
+ * every iteration and cannot be folded into a one-time move.  Values produced
+ * in the same innermost loop have a fresh ownership epoch for every dynamic
+ * use, so they remain eligible for the copy-to-move optimization. */
+static bool arc_retain_reuses_owner_across_iterations(const XiLoopInfo *loops,
+                                                      const XiBlock *retain_block,
+                                                      const XiValue *target) {
+    if (!loops || !retain_block || retain_block->id >= loops->nblocks)
+        return false;
+    const XiLoop *retain_loop = loops->block_to_loop[retain_block->id];
+    if (!retain_loop)
+        return false;
+    if (!target || !target->block || target->block->id >= loops->nblocks)
+        return true;
+    return loops->block_to_loop[target->block->id] != retain_loop;
 }
 
 /* Single-block dup/drop pair elimination.
@@ -2553,7 +2600,8 @@ static bool arc_elim_can_remove_single_consumer_retain(const XiFunc *f, const Xi
  *     receives ownership via the last-use move rule. Remove the retain.
  *
  * We apply Pattern 1 iteratively (removing a pair may expose new pairs). */
-static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live) {
+static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live,
+                      const XiLoopInfo *loops) {
     int eliminated = 0;
     bool changed = true;
 
@@ -2615,7 +2663,8 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live
             continue;
 
         int real_uses = count_real_uses(f, target);
-        if (real_uses <= 1 && value_has_consuming_use(f, target) &&
+        if (real_uses <= 1 && !arc_retain_reuses_owner_across_iterations(loops, blk, target) &&
+            value_has_consuming_use(f, target) &&
             arc_elim_can_remove_single_consumer_retain(f, target) &&
             !arc_value_is_coro_frame_pinned(f, coro_live, target)) {
             /* The value flows to at most one real consumer; the retain is
@@ -2623,6 +2672,14 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live
              * borrowing use can intentionally sit between RETAIN and RELEASE
              * to create an independent owned alias; removing that retain
              * turns the alias into a dangling reference.
+             *
+             * A retain of an owner produced outside its consuming loop is
+             * also excluded: one static consumer can execute repeatedly, so
+             * the retain replenishes ownership on every iteration. Removing
+             * it turns the first iteration into a move and leaves the next
+             * iteration with a dangling reference. A value produced inside
+             * the same innermost loop has a fresh owner each iteration and is
+             * still eligible for forwarding.
              *
              * A coroutine frame member is excluded for the same reason in a
              * different shape: its retain is not a forwarding copy but the
@@ -2654,6 +2711,7 @@ XR_FUNC int xi_arc_elim(XiFunc *f) {
      * frame members must survive elimination. Insertion may have split CFG
      * edges, so re-establish RPO before computing liveness. */
     xi_ensure_rpo(f);
+    const XiLoopInfo *loops = xi_ensure_loops(f);
     XiLiveness *coro_live = arc_coro_frame_pin_liveness(f);
 
     /* Eliminate within each block. */
@@ -2661,7 +2719,7 @@ XR_FUNC int xi_arc_elim(XiFunc *f) {
         XiBlock *blk = f->blocks[b];
         if (!blk || blk->nvalues == 0)
             continue;
-        total += elim_block(blk, f, coro_live);
+        total += elim_block(blk, f, coro_live, loops);
     }
 
     if (coro_live)

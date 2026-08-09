@@ -25,7 +25,7 @@ typedef struct XrStdlibDefEntry {
     const char *aot;
     const char *arg_spec;
     const char *ret;
-    const char *aot_error_enum;
+    const char *aot_enum;
     const char *link_object;
     const char *define;
     const char *layer;
@@ -369,17 +369,16 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"net", "__udpFromPort", "(conn: NetConn): int", "Sender port of the last successful datagram receive; 0 when none", "net_udp_from_port", "normal", "", "xrt_net_udp_from_port", "v", "value", "", "", "", "runtime", "method", 1, true},
     {"http2", "supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", "h2_supported", "normal", "", "xrt_http_h2_supported", "", "value", "", "", "", "runtime", "method", 0, true},
     {"http2", "request", "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?", "Execute one typed HTTP/2 request", "h2_request_typed", "normal", "", "xrt_http_h2_request_unavailable", "vvvvvv", "value", "", "", "", "runtime", "method", 6, true},
-    {"cluster", "start", "(config: ClusterConfig): bool", "Start cluster node", "cluster_start", "normal", "", "", "v", "value", "", "", "", "runtime", "", 1, false},
-    {"cluster", "join", "(addr: string): bool", "Join cluster by address", "cluster_join", "normal", "", "", "v", "value", "", "", "", "runtime", "", 1, false},
+    {"cluster", "__start", "(name: string, port: int, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool): bool", "Start the backend-neutral cluster runtime from normalized scalar configuration", "cluster_start_primitive", "normal", "", "xrt_cluster_start", "svsvsssv", "value", "", "cluster.__start", "", "runtime", "method", 8, true},
+    {"cluster", "__join", "(addr: string): bool", "Join cluster by address without blocking the scheduler worker", "cluster_join", "yieldable", "", "xrt_cluster_join", "s", "value", "", "cluster.__join", "", "runtime", "method", 1, true},
     {"cluster", "self", "(): string", "Get own node name", "cluster_self", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "nodes", "(): Array<string>", "List cluster node names", "cluster_nodes", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
-    {"cluster", "channel", "(name: string, size?: int): Channel", "Create or get named distributed channel", "cluster_channel_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
-    {"cluster", "stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
+    {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "xrt_cluster_stop", "", "value", "", "cluster.__stop", "", "runtime", "method", 0, true},
     {"cluster", "info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
-    {"cluster", "publish", "(topic: string, value: Json): bool", "Publish to topic", "cluster_publish_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", 2, false},
-    {"cluster", "subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", "cluster_subscribe_fn", "normal", "", "", "v", "value", "", "", "", "runtime", "", 1, false},
+    {"cluster", "send", "(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", "cluster_send_primitive", "normal", "", "xrt_cluster_send", "sv", "enum_i64", "ClusterDelivery", "cluster.send", "", "runtime", "method", 2, true},
+    {"cluster", "__listen", "(pattern: string, capacity: int): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", "cluster_listen_fn", "normal", "", "xrt_cluster_listen", "sv", "value", "", "cluster.__listen", "", "runtime", "method", 2, true},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
 
@@ -445,21 +444,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_net___CopyBidir
     {"net", "__CopyBidirectionalResult", "bToA", "int", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterTlsOptions[] = {
-    {"cluster", "ClusterTlsOptions", "enabled", "bool", true},
-    {"cluster", "ClusterTlsOptions", "caFile", "string?", true},
-    {"cluster", "ClusterTlsOptions", "certFile", "string?", true},
-    {"cluster", "ClusterTlsOptions", "keyFile", "string?", true},
-    {"cluster", "ClusterTlsOptions", "insecure", "bool", true},
-};
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterConfig[] = {
-    {"cluster", "ClusterConfig", "name", "string", true},
-    {"cluster", "ClusterConfig", "port", "int", true},
-    {"cluster", "ClusterConfig", "secret", "string?", true},
-    {"cluster", "ClusterConfig", "tls", "ClusterTlsOptions?", true},
-};
-
 static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_ClusterTlsStatus[] = {
     {"cluster", "ClusterTlsStatus", "enabled", "bool", true},
     {"cluster", "ClusterTlsStatus", "clientReady", "bool", true},
@@ -490,8 +474,7 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_Cluster
     {"cluster", "ClusterInfo", "port", "int", true},
     {"cluster", "ClusterInfo", "running", "bool", true},
     {"cluster", "ClusterInfo", "nodes", "Array<ClusterNodeInfo>", true},
-    {"cluster", "ClusterInfo", "channels", "int", true},
-    {"cluster", "ClusterInfo", "topicSubscriptions", "int", true},
+    {"cluster", "ClusterInfo", "listeners", "int", true},
     {"cluster", "ClusterInfo", "deadNodes", "int", true},
     {"cluster", "ClusterInfo", "heartbeatIntervalMs", "int", true},
     {"cluster", "ClusterInfo", "heartbeatTimeoutMs", "int", true},
@@ -505,11 +488,9 @@ static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = 
     {"Coro", "CoroInfo", "Typed diagnostic snapshot for one coroutine", xr_stdlib_object_fields_Coro_CoroInfo, 5, true},
     {"Coro", "CoroDeadlock", "Typed description of a detected coroutine wait cycle", xr_stdlib_object_fields_Coro_CoroDeadlock, 2, true},
     {"net", "__CopyBidirectionalResult", "Byte counts copied in each direction by copyBidirectional", xr_stdlib_object_fields_net___CopyBidirectionalResult, 2, true},
-    {"cluster", "ClusterTlsOptions", "Typed TLS configuration for a cluster node", xr_stdlib_object_fields_cluster_ClusterTlsOptions, 5, true},
-    {"cluster", "ClusterConfig", "Typed cluster node startup configuration", xr_stdlib_object_fields_cluster_ClusterConfig, 4, true},
     {"cluster", "ClusterTlsStatus", "Effective TLS posture of a running cluster node", xr_stdlib_object_fields_cluster_ClusterTlsStatus, 3, true},
     {"cluster", "ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", xr_stdlib_object_fields_cluster_ClusterNodeInfo, 16, true},
-    {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_object_fields_cluster_ClusterInfo, 11, true},
+    {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_object_fields_cluster_ClusterInfo, 10, true},
 };
 #define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_object_shape_def_entries) / sizeof(xr_stdlib_object_shape_def_entries[0])))
 
@@ -544,6 +525,15 @@ static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_net_NetError_variants[] 
     {"OutOfMemory", NULL, 0},
 };
 
+static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_cluster_ClusterDelivery_variants[] = {
+    {"Accepted", NULL, 0},
+    {"InvalidTopic", NULL, 0},
+    {"InvalidEnvelope", NULL, 0},
+    {"Unavailable", NULL, 0},
+    {"Overloaded", NULL, 0},
+    {"Disconnected", NULL, 0},
+};
+
 static const XrStdlibEnumVariantDefEntry xr_stdlib_enum_cluster_ClusterNodeState_variants[] = {
     {"Idle", NULL, 0},
     {"Connecting", NULL, 0},
@@ -557,6 +547,7 @@ static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {
     {"Coro", "CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroGroupKey_variants, 2, UINT32_C(2434143071)},
     {"Coro", "CoroMetric", "Metric used to rank coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroMetric_variants, 2, UINT32_C(4039818693)},
     {"net", "NetError", "Typed failure from network operations; classification from native codes lives in net.xr", xr_stdlib_enum_net_NetError_variants, 10, UINT32_C(2184710811)},
+    {"cluster", "ClusterDelivery", "Outcome of handing one opaque service envelope to the cluster transport", xr_stdlib_enum_cluster_ClusterDelivery_variants, 6, UINT32_C(4282747530)},
     {"cluster", "ClusterNodeState", "Lifecycle state of a remote cluster node", xr_stdlib_enum_cluster_ClusterNodeState_variants, 5, UINT32_C(2784952505)},
 };
 #define XR_STDLIB_ENUM_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_enum_def_entries) / sizeof(xr_stdlib_enum_def_entries[0])))

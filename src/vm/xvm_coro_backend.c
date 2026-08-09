@@ -160,28 +160,6 @@ static bool consume_select_channel_resume(XrCoroutine *coro) {
     return true;
 }
 
-static void finish_io_resume_tokens(XrCoroutine *coro, int resume_status) {
-    if (!coro || !coro->ext)
-        return;
-    if (resume_status != XR_RESUME_IO_READY && resume_status != XR_RESUME_TIMEOUT)
-        return;
-    int wait_reason = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
-    if (wait_reason != (XR_CORO_WAIT_IO >> XR_CORO_WAIT_SHIFT))
-        return;
-    xr_io_wait_token_finish(&coro->ext->wait.io_token);
-    if (resume_status == XR_RESUME_TIMEOUT)
-        xr_timer_wait_token_finish(&coro->ext->wait.timer_token);
-}
-
-static void finish_channel_resume_tokens(XrCoroutine *coro) {
-    if (!coro || !coro->ext)
-        return;
-    xr_channel_wait_token_finish(&coro->ext->chan_wait_token);
-    atomic_store_explicit((_Atomic(void *) *) &coro->ext->wait_channel, NULL, memory_order_relaxed);
-    coro->ext->chan_ok_slot_ref = xr_slot_none();
-    coro->ext->chan_resume_delivered = false;
-}
-
 static bool is_select_channel_resume(XrCoroutine *coro, int resume_status) {
     if (!xr_coro_select_wait(coro))
         return false;
@@ -1136,8 +1114,6 @@ static XrVMResult run_cfunc_resume(XrVMRuntime *isolate, XrCoroutine *coro, XrVM
     int resume_status = xr_coro_resume_load(coro);
     if (!resume_status)
         resume_status = XR_RESUME_IO_READY;
-    finish_io_resume_tokens(coro, resume_status);
-
     // Inline fast path: single C frame with continuation.
     if (coro_ctx->frame_count == 1) {
         XrBcCallFrame *frame = &coro_ctx->frames[0];
@@ -1853,7 +1829,6 @@ static XrVMResult run_resume_path(XrVMRuntime *isolate, XrWorker *worker, XrCoro
 
     // Default: unroll then run.
     int resume_status = xr_coro_resume_load(coro) ? xr_coro_resume_load(coro) : XR_RESUME_IO_READY;
-    finish_io_resume_tokens(coro, resume_status);
     XrVMResult unroll_result = xr_vm_coro_resume_with_unroll(isolate, coro, resume_status);
     XR_DBG_CORO("run_on_worker: coro id=%d, unroll result=%d, frame_count=%d", coro->id,
                 unroll_result, coro_ctx->frame_count);

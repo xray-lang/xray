@@ -146,6 +146,25 @@ TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     ASSERT_FALSE(command_capture_has(&capture, "-O2"));
 }
 
+TEST(hosted_fragment_link_resolves_runtime_from_darwin_host) {
+    XrToolchainSelection selection = {0};
+    XrNativeLinkSpec link = {0};
+    CommandCapture capture = {0};
+    XrToolchainArgSink sink = {&capture, command_capture_add, command_capture_joined};
+    char err[256];
+
+    selection.provider = XR_TOOLCHAIN_PROVIDER_APPLE_CLANG;
+    selection.program = selection.program_storage;
+    snprintf(selection.program_storage, sizeof(selection.program_storage), "%s", "/usr/bin/clang");
+    ASSERT_TRUE(xtc_target_parse("aarch64-apple-darwin", &selection.target, err, sizeof(err)));
+    link.shared = true;
+    link.resolve_from_host = true;
+    ASSERT_TRUE(
+        xtc_command_emit_link(&selection, &selection.target, &link, &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-dynamiclib"));
+    ASSERT_TRUE(command_capture_has(&capture, "-Wl,-undefined,dynamic_lookup"));
+}
+
 TEST(msvc_command_plan_fails_closed_for_gnu_only_intent) {
     XrToolchainSelection selection = {0};
     XrNativeCompileSpec compile = {0};
@@ -950,6 +969,7 @@ RUN_TEST(parse_freestanding_targets);
 RUN_TEST(reject_retired_target_aliases);
 RUN_TEST(selector_and_provider_names_are_stable);
 RUN_TEST(semantic_command_plan_maps_gnu_and_msvc_dialects);
+RUN_TEST(hosted_fragment_link_resolves_runtime_from_darwin_host);
 RUN_TEST(msvc_command_plan_fails_closed_for_gnu_only_intent);
 RUN_TEST(assembly_oracle_io_maps_provider_dialects);
 RUN_TEST(semantic_simd_intent_maps_provider_dialects);

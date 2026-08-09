@@ -2131,6 +2131,7 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     ref->member_name = "__fileClose";
     ref->resolved_mod_index = -1;
     ref->resolved_shared_slot = -1;
+    ref->resolved_export_slot = -1;
     XiValue *import = xi_value_new(ir, entry, XI_IMPORT_REF, &func_type, 0);
     TEST_REQUIRE(import != NULL, "direct stdlib import token allocated");
     import->aux = ref;
@@ -6334,6 +6335,10 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
                       "        this.values = next\n"
                       "        return len(this.values)\n"
                       "    }\n"
+                      "    selfAssign() -> int {\n"
+                      "        this.values = this.values\n"
+                      "        return len(this.values)\n"
+                      "    }\n"
                       "}\n"
                       "fn make(values: Array<int>) -> Bag {\n"
                       "    return Bag(values)\n"
@@ -6350,7 +6355,7 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
                       "    var a = [1]\n"
                       "    var b = [2, 3]\n"
                       "    var bag = make(a)\n"
-                      "    return bag.replace(b) + swap(ref bag, a) + local(a)\n"
+                      "    return bag.replace(b) + bag.selfAssign() + swap(ref bag, a) + local(a)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -6402,6 +6407,22 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
     assert(count_between(replace, replace_end, "xrt_retain(") == 0 &&
            "the callee does not retain the stored container; the call site owns that decision");
 
+    const char *self_assign = strstr(code, "static int64_t test_selfAssign_");
+    assert(self_assign != NULL && "selfAssign method should use typed ABI");
+    self_assign = strstr(self_assign + 1, "static int64_t test_selfAssign_");
+    assert(self_assign != NULL && "selfAssign method definition should follow its declaration");
+    const char *self_assign_end = next_static_after(self_assign);
+    const char *self_assign_retain = strstr(self_assign, "xrt_retain(");
+    const char *self_assign_store =
+        strstr(self_assign, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY)), "
+                            "(p0)->f0 = (xrt_array_t *)");
+    assert(self_assign_retain && self_assign_retain < self_assign_store &&
+           self_assign_store < self_assign_end &&
+           count_between(self_assign, self_assign_end, "xrt_retain(") == 1 &&
+           count_between(self_assign, self_assign_end,
+                         "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY))") == 1 &&
+           "ARC must retain a self-assigned field before the consuming store releases it");
+
     const char *swap = strstr(code, "static int64_t test_swap_");
     assert(swap != NULL && "swap function should use typed scalar return ABI");
     swap = strstr(swap + 1, "static int64_t test_swap_");
@@ -6420,6 +6441,8 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
     assert(swap_store && swap_store < swap_end &&
            count_between(swap, swap_end, "xrt_release(xr_mkptr((_portable_native_") == 1 &&
            "heap native instance collection ref stores release the old container once");
+    assert(count_between(swap, swap_end, "xrt_retain(") == 0 &&
+           "pointer field transfer must not add an unbalanced retain");
 
     const char *local = strstr(code, "static int64_t test_local_");
     assert(local != NULL && "local function should use typed scalar return ABI");
@@ -8297,6 +8320,7 @@ TEST(cgen_unresolved_import_fails_fast) {
     ref->member_name = "value";
     ref->resolved_mod_index = -1;
     ref->resolved_shared_slot = -1;
+    ref->resolved_export_slot = -1;
 
     XiValue *import = xi_value_new(ir, entry, XI_IMPORT_REF, &stub_string, 0);
     assert(import != NULL);
@@ -8499,12 +8523,87 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
            "reusable AOT frame init should reset entry state without clearing cached child frames");
     assert(contains(code, "    memset(f, 0, sizeof(*f));\n    if (!") &&
            "fresh AOT frame allocation should still clear owned frame storage once");
+    assert(contains(code, "runtime_cfg.scheduler_workers = 1;") &&
+           "single-scheduler entry plans must configure the same AOT default as VM");
     assert(!contains(code, "return (abort(), XR_NULL_VAL);") &&
            "direct suspend calls must not require a sync abort wrapper");
     assert(!contains(code, "unsupported AOT sync call") &&
            "diagnostics should go to stderr, not generated C comments");
 
     printf("  Generated direct suspend call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_direct_suspend_call_borrows_read_argument) {
+    const char *src = "fn worker(xs: Array<int>) -> int {\n"
+                      "    Coro.yield()\n"
+                      "    return len(xs)\n"
+                      "}\n"
+                      "var xs = [1, 2, 3]\n"
+                      "print(worker(xs))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "direct suspend call with READ argument should generate");
+    assert(contains(code, "((void)xrt_retain(") &&
+           "the child frame must retain its ordinary borrowed argument while suspended");
+    assert(!contains(code, "xrt_value_clone_for_coro(") &&
+           "ordinary suspend calls must not turn READ arguments into deep copies");
+
+    printf("  Generated borrowed direct suspend call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_direct_suspend_enum_result_consumes_owned_box) {
+    const char *src =
+        "import mem\n"
+        "export enum Failure { Closed, Failed }\n"
+        "export enum Outcome { Unit(id: int, generation: int), Echo(id: int, generation: int, "
+        "payload: Buffer?), State(id: int, generation: int, n: int), Failed(reason: Failure) }\n"
+        "fn pause() { Coro.yield() }\n"
+        "fn step() { pause() }\n"
+        "fn worker(n: int) -> Outcome {\n"
+        "    var owned = Outcome.Echo(1, 2, mem.allocZeroed(n))\n"
+        "    step()\n"
+        "    return owned\n"
+        "}\n"
+        "fn run() -> int {\n"
+        "    var result = worker(41)\n"
+        "    return match (result) { Outcome.Echo(_id, _generation, payload) -> "
+        "len(payload!.asBytes()), _ -> 0 }\n"
+        "}\n"
+        "print(run())\n";
+
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
+    TEST_REQUIRE(ir != NULL, "suspend enum result IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "suspend enum result C generation failed");
+    TEST_REQUIRE(!had_error, "suspend enum result should lower through the typed aggregate ABI");
+    TEST_REQUIRE(contains(code, "xrt_enum_aggregate_take_from_boxed(_call_value_"),
+                 "caller consumes the owned suspend-result box");
+    TEST_REQUIRE(contains(code, "xrt_enum_aggregate_box_from_borrowed("),
+                 "frame-root enum return acquires payload owners before frame release");
+    const char *take = strstr(code, "xrt_enum_aggregate_take_from_boxed(_call_value_");
+    unsigned call_id = 0;
+    TEST_REQUIRE(
+        take && sscanf(take, "xrt_enum_aggregate_take_from_boxed(_call_value_%u)", &call_id) == 1,
+        "owned suspend-result call id is recoverable from generated C");
+    char retain_needle[64];
+    snprintf(retain_needle, sizeof(retain_needle), "xrt_retain(_call_value_%u)", call_id);
+    TEST_REQUIRE(!contains(code, retain_needle),
+                 "inline enum result transfers payload ownership without retaining its wrapper");
+    TEST_REQUIRE(contains(code, "xrt_enum_aggregate_release("),
+                 "discarded local call result releases every owned inline enum payload lane");
+
     xr_free(code);
     xi_func_free(ir);
 }
@@ -9431,6 +9530,8 @@ TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
     const char *send_call = strstr(code, "xr_aot_chan_send_transfer(ctx,");
     assert(send_bridge != NULL && send_call != NULL && send_bridge < send_call &&
            "transfer bridge should be emitted before the send call");
+    assert(contains_between(send_bridge, send_call, "xr_aot_bridge_xrt_to_runtime(ctx,") &&
+           "every boxed send must enter the backend-neutral runtime envelope");
     assert(!contains_between(send_bridge, send_call, "xrt_value_clone_for_coro(") &&
            "copy send must not clone before the transfer-aware channel helper");
 
@@ -9523,8 +9624,44 @@ TEST(cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge) {
         "scalar channel trySend values must not call the deep-copy helper");
     assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
            "trySend returns a native no-payload SendResult enum and must not be bridged");
+    assert(!contains(code, "xr_aot_bridge_xrt_to_runtime(&xrt_global_ctx,") &&
+           "scalar channel trySend must stay on the typed fast path");
 
     printf("  Generated scalar channel trySend %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_descriptor_tagged_channel_try_send_normalizes_runtime_envelope) {
+    const char *src = "fn try_tuple(ch: Channel<(int, int)>) -> SendResult {\n"
+                      "    var frame = (1, 2)\n"
+                      "    return ch.trySend(move frame)\n"
+                      "}\n"
+                      "const ch = Channel<(int, int)>(1)\n"
+                      "print(try_tuple(ch))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT tagged channel trySend should generate");
+    const char *try_send_call = strstr(code, "xr_aot_chan_try_send_sync(");
+    assert(try_send_call != NULL &&
+           "tagged channel trySend must use the synchronous tagged bridge");
+    const char *try_send_end = strchr(try_send_call, ';');
+    assert(try_send_end != NULL &&
+           contains_between(try_send_call, try_send_end,
+                            "xr_aot_bridge_xrt_to_runtime(&xrt_global_ctx,") &&
+           "tagged channel trySend must normalize the AOT value into the runtime envelope");
+    assert(!contains_between(try_send_call, try_send_end, "xrt_value_clone_for_coro(") &&
+           "move trySend must not deep-copy the transferred value");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
+           "trySend returns a native no-payload SendResult enum and must not be bridged");
+
+    printf("  Generated tagged channel trySend runtime envelope %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -10005,6 +10142,14 @@ TEST(cgen_coro_native_class_await_uses_tagged_boundary_slot) {
            "native-class await result must retain its typed pointer local");
     assert(contains_between(await_call, trace, bridge) &&
            "native-class await result should bridge from the boundary temporary exactly once");
+    char physical_clear[64];
+    char tagged_clear[64];
+    snprintf(physical_clear, sizeof(physical_clear), "v%u = 0;", slot_id);
+    snprintf(tagged_clear, sizeof(tagged_clear), "v%u = XR_NULL_VAL;", slot_id);
+    assert(contains_between(await_call, trace, physical_clear) &&
+           "native-class coroutine frame slot must clear through its physical pointer rep");
+    assert(!contains_between(await_call, trace, tagged_clear) &&
+           "native-class coroutine frame slot must never receive a tagged null");
     /* Match the promotion by its shape, not by the instance local's name: the
      * portable lowering binds the instance to a `_portable_inst_N` pointer
      * where the older statement-expression form used `_inst`. */
@@ -10239,20 +10384,24 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
                       "print(value)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT channel recv should generate");
-    assert(contains(code, "xr_aot_chan_recv_slot(ctx,") &&
-           "initial channel recv must register a backend-neutral slot");
-    assert(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,") &&
-           "channel recv must publish the AOT resume state before runtime blocking");
-    assert(contains(code, "xr_aot_chan_recv_slot_resume(ctx, xr_slot_none(), true);") &&
-           "channel recv resume must recover the slot from coroutine wait state and store Recv");
-    assert(!contains(code, "xr_aot_chan_recv_slot_resume(ctx, _chan_recv_slot_") &&
-           "channel recv resume must not depend on a local slot variable");
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "AOT channel recv should generate");
+    TEST_REQUIRE(contains(code, "xr_aot_chan_recv_slot(ctx,"),
+                 "initial channel recv must register a backend-neutral slot");
+    TEST_REQUIRE(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,"),
+                 "channel recv must publish the AOT resume state before runtime blocking");
+    TEST_REQUIRE(
+        contains(code, "xr_aot_chan_recv_slot_resume(ctx, xr_slot_none(), true);"),
+        "channel recv resume must recover the slot from coroutine wait state and store Recv");
+    TEST_REQUIRE(!contains(code, "xr_aot_chan_recv_slot_resume(ctx, _chan_recv_slot_"),
+                 "channel recv resume must not depend on a local slot variable");
+    TEST_REQUIRE(
+        contains(code, "xr_aot_bridge_owned_value_to_xrt(ctx,"),
+        "channel recv must consume the provider-owned Recv after representation conversion");
 
     printf("  Generated channel recv wait-state slot %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -10613,6 +10762,9 @@ TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
            "sendTimeout must publish the AOT resume state before runtime blocking");
     assert(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,") &&
            "recvTimeout must publish the AOT resume state before runtime blocking");
+    TEST_REQUIRE(
+        contains(recv_timeout, "xr_aot_bridge_owned_value_to_xrt(ctx,"),
+        "recvTimeout must consume the provider-owned Recv after representation conversion");
 
     printf("  Generated channel timeout state publication %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -11696,6 +11848,8 @@ int main(void) {
     run_cgen_unknown_method_symbol_fails_fast();
     run_cgen_suspendable_function_has_no_sync_wrapper();
     run_cgen_direct_suspend_call_propagates_cps();
+    run_cgen_direct_suspend_call_borrows_read_argument();
+    run_cgen_direct_suspend_enum_result_consumes_owned_box();
     run_cgen_returned_suspendable_closure_uses_verified_child_frame();
     run_cgen_mixed_callable_targets_use_stable_descriptor_switch();
     run_cgen_direct_suspend_method_call_propagates_cps();
@@ -11722,6 +11876,7 @@ int main(void) {
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_unit_match_send_omits_void_phi();
     run_cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge();
+    run_cgen_descriptor_tagged_channel_try_send_normalizes_runtime_envelope();
     run_cgen_coro_builtin_no_payload_enum_fields_skip_bridge();
     run_cgen_coro_await_clones_tagged_result();
     run_cgen_coro_native_class_await_uses_tagged_boundary_slot();

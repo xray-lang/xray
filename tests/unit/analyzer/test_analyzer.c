@@ -1590,6 +1590,43 @@ TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
     setup_pool();
 }
 
+TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    const char *source = "import mem\n"
+                         "fn forwardLocal() -> Buffer { return makeLocal() }\n"
+                         "fn makeLocal() -> Buffer {\n"
+                         "  var result = mem.allocZeroed(64)\n"
+                         "  return result\n"
+                         "}\n"
+                         "struct LocalValue { value: int }\n"
+                         "fn makeLocalValue(value: int) -> LocalValue {\n"
+                         "  return LocalValue{value: value}\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "local_fresh_return_ownership.xr", program);
+    ASSERT(!analyzer_diag_contains(a, "analysis resource failure"));
+
+    XaSymbol *make = xa_analyzer_lookup_deep(a, "makeLocal");
+    XaSymbol *forward = xa_analyzer_lookup_deep(a, "forwardLocal");
+    XaSymbol *make_value = xa_analyzer_lookup_deep(a, "makeLocalValue");
+    ASSERT(make != NULL && forward != NULL && make_value != NULL);
+    ASSERT(make->links.return_ownership_scanned);
+    ASSERT(make->links.return_ownership.complete);
+    ASSERT(make->links.return_ownership.kind == XA_RETURN_OWNERSHIP_OWNED);
+    ASSERT(forward->links.return_ownership_scanned);
+    ASSERT(forward->links.return_ownership.complete);
+    ASSERT(forward->links.return_ownership.kind == XA_RETURN_OWNERSHIP_OWNED);
+    ASSERT(make_value->links.return_ownership_scanned);
+    ASSERT(make_value->links.return_ownership.complete);
+    ASSERT(make_value->links.return_ownership.kind == XA_RETURN_OWNERSHIP_OWNED);
+
+    xr_program_destroy(program);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -6799,6 +6836,7 @@ int main(void) {
     RUN_TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows);
     RUN_TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed);
     RUN_TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars);
+    RUN_TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference);
     RUN_TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result);
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
     RUN_TEST(analyzer_generator_suspend_is_separate_from_scheduler_suspend);

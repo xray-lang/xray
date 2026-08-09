@@ -13,6 +13,7 @@ tests/diff/cases/semantics/coro/poll_try_recv_safepoint.xr
 tests/diff/cases/semantics/coro/poll_try_send_safepoint.xr
 tests/diff/cases/semantics/coro/work_queue_native_methods.xr
 tests/diff/cases/semantics/modules/xmod_coro.xr
+tests/diff/cases/semantics/modules/value_struct_return_release.xr
 tests/diff/cases/semantics/ownership/in_go_copy_argument_allowed.xr
 tests/diff/cases/semantics/ownership/move_into_go.xr
 tests/diff/cases/semantics/ownership/shared_class_copy_go.xr

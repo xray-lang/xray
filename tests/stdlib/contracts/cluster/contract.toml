@@ -4,7 +4,7 @@ contract_revision = 1
 legacy_commit = "40b1e8608921ef21b92d287e59ef1e14564cce72"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/cluster/legacy_expected.jsonl"
-legacy_public_surface = ["parseAddress", "validNodeName", "validChannelName", "validTopicName", "validTopicPattern", "topicMatches"]
+legacy_public_surface = ["parseAddress", "validNodeName", "validTopicName", "validTopicPattern", "topicMatches"]
 intentional_semantic_changes = [
   "parseAddress returns NodeAddress instead of Json",
   "invalid addresses throw typed AddressError variants instead of returning null",

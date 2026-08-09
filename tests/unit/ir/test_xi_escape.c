@@ -70,6 +70,13 @@ static XrType t_custom_iterable = {
     .frozen = true,
     .instance = {.class_name = "CustomIterable"},
 };
+static XrType t_value_struct = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 15,
+    .frozen = true,
+    .is_value_type = true,
+    .instance = {.class_name = "OwnedValue"},
+};
 
 /* Helper: create function with sealed entry block */
 static XiFunc *make_func(const char *name, XrType *ret) {
@@ -522,6 +529,105 @@ static void test_arc_elim_keeps_borrowed_single_consumer_retain(void) {
     xi_func_free(f);
 }
 
+/* ========== Test: ARC elim keeps retain that creates an owned alias ====== */
+
+static void test_arc_elim_keeps_retain_before_sole_borrowing_alias(void) {
+    XiFunc *f = make_func("arc_owned_alias_from_borrow", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *source = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+
+    XiValue *retain = xi_value_new(f, b0, XI_RETAIN, &t_any, 1);
+    retain->args[0] = source;
+
+    XiValue *alias = xi_value_new(f, b0, XI_AS, &t_array, 1);
+    alias->args[0] = source;
+    alias->aux_int = ((int64_t) (uint32_t) -1 << 1);
+
+    XiValue *len = xi_value_new(f, b0, XI_LEN, &t_int, 1);
+    len->args[0] = alias;
+    xi_block_set_return(b0, len);
+
+    xi_arc_insert(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "owned alias requires an explicit retain before borrowing cast");
+    xi_arc_elim(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "ARC elim must not remove retain whose sole real use borrows");
+    xi_func_free(f);
+}
+
+/* ========== Test: ARC elim keeps a repeated loop transfer ============== */
+
+static void test_arc_elim_keeps_single_consumer_retain_inside_loop(void) {
+    XiFunc *f = make_func("arc_loop_single_consume", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *exit = xi_block_new(f);
+    header->sealed = true;
+    body->sealed = true;
+    exit->sealed = true;
+
+    XiValue *value = xi_param(f, entry, 0, &t_array);
+    set_single_param(f, value);
+    xi_block_set_jump(entry, header);
+
+    XiValue *condition = xi_const_bool(f, header, true, &t_bool);
+    xi_block_set_if(header, condition, body, exit);
+
+    XiValue *consume = xi_value_new(f, body, XI_SET_SHARED, &t_any, 1);
+    consume->args[0] = value;
+    consume->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_jump(body, header);
+
+    XiValue *zero = xi_const_int(f, exit, 0, &t_int);
+    xi_block_set_return(exit, zero);
+
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "loop consume needs one retain executed per iteration");
+    xi_arc_elim(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1,
+              "ARC elim must keep a single-consumer retain inside a loop");
+    xi_func_free(f);
+}
+
+static void test_arc_elim_removes_retain_for_loop_local_owner(void) {
+    XiFunc *f = make_func("arc_loop_local_single_consume", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *exit = xi_block_new(f);
+    header->sealed = true;
+    body->sealed = true;
+    exit->sealed = true;
+
+    xi_block_set_jump(entry, header);
+    XiValue *condition = xi_const_bool(f, header, true, &t_bool);
+    xi_block_set_if(header, condition, body, exit);
+
+    XiValue *fresh = xi_value_new(f, body, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *retain = xi_value_new(f, body, XI_RETAIN, &t_unit, 1);
+    retain->args[0] = fresh;
+    retain->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *consume = xi_value_new(f, body, XI_SET_SHARED, &t_any, 1);
+    consume->args[0] = fresh;
+    consume->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_jump(body, header);
+
+    XiValue *zero = xi_const_int(f, exit, 0, &t_int);
+    xi_block_set_return(exit, zero);
+
+    xi_escape_analyze(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "loop-local owner starts with one retain");
+    xi_arc_elim(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 0,
+              "loop-local owner forwards without repeated retain overhead");
+    xi_func_free(f);
+}
+
 /* ========== Test: ARC handles more than the old fixed site cap ========== */
 
 static void test_arc_many_consume_sites(void) {
@@ -788,6 +894,28 @@ static XiValue *find_release_for_value(const XiFunc *f, const XiValue *target) {
         }
     }
     return NULL;
+}
+
+static void test_arc_value_clone_is_fresh_owner(void) {
+    XiFunc *f = make_func("arc_value_clone_owner", &t_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *source = xi_value_new(f, entry, XI_AGG_NEW, &t_value_struct, 0);
+    XiValue *clone = xi_value_new(f, entry, XI_COPY, &t_value_struct, 1);
+    clone->args[0] = source;
+    clone->aux_int = XI_COPY_KIND_VALUE_CLONE;
+    xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(find_release_for_value(f, source) != NULL, true,
+              "discarded value-struct source must be released");
+    ASSERT_EQ(find_release_for_value(f, clone) != NULL, true,
+              "VALUE_CLONE must be released as an independent fresh owner");
+    XiArcVerifyReport report;
+    ASSERT_EQ(xi_arc_verify(f, &report), true,
+              "independent ARC verifier must accept VALUE_CLONE ownership");
+    xi_func_free(f);
 }
 
 static void assert_arc_iterator_method_result_is_fresh(XrType *receiver_type, uint16_t op,
@@ -1348,6 +1476,9 @@ int main(void) {
     test_arc_return_gets_retain();
     test_arc_heap_gets_retain_release();
     test_arc_elim_keeps_borrowed_single_consumer_retain();
+    test_arc_elim_keeps_retain_before_sole_borrowing_alias();
+    test_arc_elim_keeps_single_consumer_retain_inside_loop();
+    test_arc_elim_removes_retain_for_loop_local_owner();
     test_arc_many_consume_sites();
     test_arc_owner_forward_tracks_repeated_consumes();
     test_arc_tracks_owner_forward_through_phi();
@@ -1356,6 +1487,7 @@ int main(void) {
     test_arc_call_result_retain_before_same_block_phi_consume();
     test_arc_unknown_call_result_retains_before_single_consume();
     test_arc_stringbuilder_builtin_result_is_fresh();
+    test_arc_value_clone_is_fresh_owner();
     test_arc_builtin_iterator_results_are_fresh();
     test_arc_generator_iterator_result_is_fresh();
     test_arc_custom_iterator_method_stays_alias_uncertain();

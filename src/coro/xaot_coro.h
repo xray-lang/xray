@@ -59,7 +59,13 @@ typedef enum {
     XR_AOT_CAP_SEMAPHORE = 1u << 11,
     XR_AOT_CAP_EVENT_COUNT = 1u << 12,
     XR_AOT_CAP_PARALLEL = 1u << 13,
+    XR_AOT_CAP_NETPOLL = 1u << 14,
 } XrAotRuntimeCap;
+
+typedef enum {
+    XR_AOT_IO_READ = 1,
+    XR_AOT_IO_WRITE = 2,
+} XrAotIoEvent;
 
 typedef enum {
     XR_AOT_ORDERING_RELAXED = 0,
@@ -147,6 +153,8 @@ struct XrAotValueOps {
     void (*object_set)(XrValue object, int64_t field_index, XrValue value);
     XrValue (*enum_new)(const char *enum_name, const char *member_name, int64_t member_index);
     int64_t (*enum_ordinal)(XrValue value, int64_t fallback);
+    XrValue (*buffer_copy_transfer)(const uint8_t *data, size_t len);
+    bool (*buffer_bytes)(XrValue value, const uint8_t **data, size_t *len);
     void (*retain)(XrValue value);
     void (*release)(XrValue value);
     /* Standalone AOT execution-local ownership. Each physical coroutine owns
@@ -311,12 +319,27 @@ XR_FUNC XrAotRuntime *xr_aot_runtime_current(void);
 XR_FUNC uint32_t xr_aot_runtime_caps(const XrAotRuntime *runtime);
 XR_FUNC struct XrRuntimeCore *xr_aot_runtime_core(XrAotRuntime *runtime);
 XR_FUNC struct XrRuntime *xr_aot_runtime_scheduler(XrAotRuntime *runtime);
+XR_FUNC const XrAotValueOps *xr_aot_runtime_value_ops(XrAotRuntime *runtime);
+
+enum {
+    XR_AOT_SERVICE_SLOT_CLUSTER = 0,
+    XR_AOT_SERVICE_SLOT_COUNT = 1,
+};
+
+typedef void (*XrAotServiceDestroyFn)(void *service);
+
+XR_FUNC bool xr_aot_runtime_service_install(XrAotRuntime *runtime, uint32_t slot, void *service,
+                                            XrAotServiceDestroyFn destroy);
+XR_FUNC void *xr_aot_runtime_service_acquire(XrAotRuntime *runtime, uint32_t slot);
+XR_FUNC void xr_aot_runtime_service_release(XrAotRuntime *runtime, uint32_t slot);
+XR_FUNC bool xr_aot_runtime_service_remove(XrAotRuntime *runtime, uint32_t slot);
 XR_FUNC void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime);
 XR_FUNC XrValue xr_aot_runtime_builtin(const XrAotRuntime *runtime, int32_t index);
 XR_FUNC XrValue xr_aot_runtime_builtin_lazy(XrAotRuntime *runtime, int32_t index);
 XR_FUNC void xr_aot_runtime_set_builtin(XrAotRuntime *runtime, int32_t index, XrValue value);
 XR_FUNC void xr_aot_trace_frame_value(void *visitor, XrValue value);
 XR_FUNC void xr_aot_release_frame_value(struct XrCoroHeap *heap, XrValue value);
+XR_FUNC void xr_aot_release_provider_value(const XrAotContext *ctx, XrValue value);
 XR_FUNC XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index);
 XR_FUNC XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index,
                                           const char *field);
@@ -327,6 +350,8 @@ XR_FUNC bool xr_aot_runtime_adt_value_info(XrValue value, const char **enum_name
                                            const char **member_name, uint32_t *member_index,
                                            uint32_t *layout_id, int *payload_count);
 XR_FUNC XrValue xr_aot_runtime_adt_payload(XrValue value, int index);
+XR_FUNC bool xr_aot_runtime_tuple_info(XrValue value, int *item_count);
+XR_FUNC XrValue xr_aot_runtime_tuple_item(XrValue value, int index);
 XR_FUNC XrValue xr_aot_time_now(void);
 XR_FUNC XrValue xr_aot_time_monotonic(void);
 XR_FUNC XrValue xr_aot_time_nanos(void);
@@ -391,6 +416,9 @@ XR_FUNC XrValue xr_aot_gen_iterator_new(const XrAotContext *ctx, const XrAotCoro
                                         void *frame);
 
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
+XR_FUNC XrAotResult xr_aot_wait_fd(const XrAotContext *ctx, int64_t fd, int events,
+                                   int64_t timeout_ms);
+XR_FUNC void xr_aot_net_close_fd(int64_t fd);
 XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode);
 // A scope block is a statement: exiting one produces no value. The result the
 // scope settles on already rides in XrAotResult.value, so there is no second

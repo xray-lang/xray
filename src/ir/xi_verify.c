@@ -1550,7 +1550,8 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
 
             if (v->op == XI_PLACE_LOAD && v->nargs == 1 && v->args[0] &&
                 xi_own_type_may_be_ref(v->type) &&
-                xi_coro_value_live_across_suspend(f, live, v, NULL)) {
+                xi_coro_value_live_across_suspend(f, live, v, NULL) &&
+                !xi_coro_value_is_retry_suspend_operand(f, v)) {
                 verr(ctx, "func '%s': borrowed place load v%u is live across a suspension point",
                      f->name, v->id);
                 break;

@@ -628,10 +628,10 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         result = xr_coro_run_result(XR_CORO_RUN_CANCELLED);
         goto normal_result_path;
     }
-    if (result.kind == XR_CORO_RUN_BLOCKED && fast_dispatch_budget <= 1) {
+    if (result.kind == XR_CORO_RUN_BLOCKED && fast_dispatch_budget <= 0) {
         p->stats.fast_dispatch_budget_stop_count++;
     }
-    if (result.kind == XR_CORO_RUN_BLOCKED && fast_dispatch_budget > 1) {
+    if (result.kind == XR_CORO_RUN_BLOCKED && fast_dispatch_budget > 0) {
         XrCoroutine *next = xr_worker_try_pop_lifo(worker, false);
         if (!next) {
             p->stats.fast_dispatch_empty_count++;
@@ -647,11 +647,11 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         (void) worker_process_blocked(worker, coro);
 
         // Periodic lightweight housekeeping during fast dispatch
-        if ((fast_dispatch_budget & 7) == 0) {
+        if (fast_dispatch_budget > 0 && (fast_dispatch_budget & 7) == 0) {
             worker_drain_inbox(worker);  // O(1) if empty
             worker_pull_inject(worker, XR_FAST_DISPATCH_INJECT_BATCH);
         }
-        if ((fast_dispatch_budget & 15) == 0) {
+        if (fast_dispatch_budget > 0 && (fast_dispatch_budget & 15) == 0) {
             int64_t _now = xr_runtime_now_ticks(p->runtime);
             if (p->timer_wheel &&
                 (xr_timer_cancel_pending(p->timer_wheel) || _now > xr_proc_last_timer_tick(p))) {

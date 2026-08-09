@@ -239,6 +239,7 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     use_uring = runtime->netpoll.uring_avail;
 #endif
     xr_local_poll_init(&worker->p.local_poll, use_uring);
+    atomic_store_explicit(&worker->p.local_poll_fd_count, 0, memory_order_relaxed);
 
     // Initialize continuation stealing deque
     xr_steal_queue_init(&worker->p.cont_deque, 64);
@@ -314,12 +315,14 @@ XrSchedulerRuntime *xr_scheduler_runtime_new(XrRuntimeCore *core, int num_worker
     bool deterministic = env_flag_enabled("XRAY_CORO_DETERMINISTIC");
     if (deterministic) {
         num_workers = 1;
-    } else if (num_workers <= 0) {
-        // Allow override via environment variable (for benchmarking)
+    } else {
+        /* XRAY_WORKERS is an explicit process-level override, including for
+         * artifacts whose entry plan selects the single-worker default.  This
+         * keeps VM and AOT benchmark/resource controls identical. */
         const char *env = getenv("XRAY_WORKERS");
         if (env && atoi(env) > 0) {
             num_workers = atoi(env);
-        } else {
+        } else if (num_workers <= 0) {
             // Default to CPU core count.
             num_workers = (int) xr_os_cpu_count();
             if (num_workers <= 0)

@@ -167,18 +167,6 @@ struct XrVMRuntime {
     /* ========== Cluster (optional, enabled with XR_HAS_CLUSTER) ========== */
     void *cluster;  // XrCluster* (stdlib/cluster), NULL if not started
 
-    /*
-     * Distributed channel hook vtable. Populated by
-     * cluster_channel_install_hooks when the cluster module starts;
-     * reset to NULL by cluster_channel_uninstall_hooks. Kept as
-     * `void *` so that the core header avoids a dependency on the
-     * coroutine-subsystem struct XrChannelDistHooks — callers cast via
-     * the cluster/coro accessor sites that already pull in
-     * xchannel.h. NULL means "no cluster attached, route through
-     * in-process channels only".
-     */
-    void *channel_dist_hooks;  // XrChannelDistHooks*
-
     /* ========== stdlib per-isolate cache ========== */
     // Opaque pointer owned by stdlib/stdlib_cache.h. Holds memoised
     // values that reference per-isolate symbol IDs (e.g. the dynamic-
@@ -223,8 +211,17 @@ struct XrVMRuntime {
 //
 // ========== Compilation and Execution API ==========
 
+struct XiModule;
+struct XrModuleGraph;
+struct XaAnalyzer;
+
 XR_FUNC XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
                                             const char *source_file);
+XR_FUNC XrProto *xr_compile_ast_in_graph(XrCompilerSession *session,
+                                         struct XaAnalyzer *shared_analyzer, AstNode *ast,
+                                         const char *source_file, const struct XrModuleGraph *graph,
+                                         struct XiModule **graph_modules, int graph_module_count,
+                                         struct XiModule **out_module);
 XR_FUNC XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,
                                              const char *source_file);
 

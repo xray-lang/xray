@@ -776,6 +776,11 @@ struct XiCgenCtx {
     CgEnumMemberBox *enum_member_boxes; /* per-unit static member box registry */
     int nenum_member_boxes;
     int enum_member_box_cap;
+    /* Direct stdlib methods may return compact enum ordinals.  Mark only the
+     * methods whose result actually crosses into a tagged representation, then
+     * emit one immutable enum layout sidecar per marked method. */
+    uint8_t *stdlib_enum_scalar_sidecar_used;
+    uint32_t stdlib_enum_scalar_sidecar_cap;
     const XiFunc *sync_go_targets[CG_MAX_SYNC_GO_TARGETS];
     int nsync_go_targets;
     const XiFunc *sync_heartbeat_targets[CG_MAX_SYNC_HEARTBEAT_TARGETS];
@@ -1204,22 +1209,7 @@ static int cg_intern_object_shape_type_domain(XiCgenCtx *ctx, const XrType *type
     }
     for (int i = 0; i < field_count; i++)
         names[i] = type->object.field_names[i] ? type->object.field_names[i] : "?";
-    for (int i = 1; i < field_count; i++) {
-        const char *current = names[i];
-        uint64_t current_key = xg_object_stable_name_key(current);
-        uint32_t current_id = xg_name_id(current);
-        int j = i;
-        while (j > 0) {
-            uint64_t previous_key = xg_object_stable_name_key(names[j - 1]);
-            uint32_t previous_id = xg_name_id(names[j - 1]);
-            if (previous_key < current_key ||
-                (previous_key == current_key && previous_id <= current_id))
-                break;
-            names[j] = names[j - 1];
-            j--;
-        }
-        names[j] = current;
-    }
+    xr_object_shape_sort_names(names, field_count);
     int id = cg_intern_object_shape_parts(ctx, field_count, names, type, object_domain);
     if (id < 0) {
         xr_free(names);
@@ -8948,7 +8938,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                     } else {
                         XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
                         emit_adt_base_to_value_rep_prefix(out, ret_value_rep);
-                        fprintf(out, "xrt_enum_aggregate_from_boxed(");
+                        fprintf(out, "xrt_enum_aggregate_take_from_boxed(");
                         emit_value_as_rep_ctx(ctx, out, blk->control, XR_REP_TAGGED);
                         fprintf(out, ")");
                         emit_adt_base_to_value_rep_suffix(out, ret_value_rep);
@@ -11067,6 +11057,7 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
         if (ctx && ctx->artifact_kind == XAOT_ARTIFACT_HOSTED_FRAGMENT) {
             fprintf(out, "#include \"xray_hosted_fragment_abi.h\"\n");
             fprintf(out, "#define XR_HOSTED_FRAGMENT_SUSPENDABILITY_DECLARED 1\n\n");
+            fprintf(out, "uint32_t xr_hosted_fragment_abi_version(void);\n\n");
             fprintf(out, "bool xr_hosted_fragment_initialize(\n");
             fprintf(out, "    const XrHostedFragmentContext *context);\n\n");
         }

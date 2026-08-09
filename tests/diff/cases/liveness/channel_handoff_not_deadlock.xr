@@ -1,0 +1,32 @@
+// Liveness: a worker that has cleared current_coro but is still publishing
+// its run result is active, not quiescent. With four workers this ping-pong
+// used to trip the global deadlock detector nondeterministically even though
+// every request had a matching reply.
+fn echo(requests: Channel<int>, replies: Channel<int>) {
+    while (true) {
+        match (requests.recv()) {
+            Recv.Value(value) if (value < 0) -> { return }
+            Recv.Value(value) -> { replies.send(value) }
+            _ -> { return }
+        }
+    }
+}
+
+var requests = Channel<int>(64)
+var replies = Channel<int>(64)
+var service = go echo(requests, replies)
+var checksum = 0
+for (var round = 0; round < 4; round++) {
+    for (var value = 0; value < 96000; value++) {
+        requests.send(value)
+        match (replies.recv()) {
+            Recv.Value(reply) -> { checksum = checksum + reply }
+            _ -> {}
+        }
+    }
+}
+requests.send(-1)
+await service
+requests.close()
+replies.close()
+print(checksum)

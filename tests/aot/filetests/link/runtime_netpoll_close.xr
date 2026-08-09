@@ -1,0 +1,7 @@
+import net
+
+var listener = net.listen(0, 1)!
+var connection = net.accept(listener)!
+net.close(connection)
+net.close(listener)
+print(7)

@@ -192,6 +192,8 @@ static uint32_t cg_runtime_caps_from_entry_plan(XiCgenCtx *ctx) {
         caps |= XR_AOT_CAP_SEMAPHORE;
     if ((required & XG_CAP_EVENT_COUNT) != 0)
         caps |= XR_AOT_CAP_EVENT_COUNT;
+    if ((required & XG_CAP_NETPOLL) != 0)
+        caps |= XR_AOT_CAP_NETPOLL;
     /* Parallel was the one capability this projection dropped.  Without it the
      * translation unit is judged not to need the runtime bridge, so
      * xaot_coro.h is never included -- while the parallel lowering still emits
@@ -201,6 +203,15 @@ static uint32_t cg_runtime_caps_from_entry_plan(XiCgenCtx *ctx) {
     if ((required & XG_CAP_PARALLEL) != 0)
         caps |= XR_AOT_CAP_PARALLEL;
     return caps;
+}
+
+static int cg_scheduler_workers_from_entry_plan(XiCgenCtx *ctx) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    if (!bundle || !bundle->has_entry_plan) {
+        ctx->error = true;
+        return 0;
+    }
+    return bundle->entry_plan.scheduler_mode == XR_SCHED_SINGLE ? 1 : 0;
 }
 
 static bool cg_entry_uses_resumable_frame(XiCgenCtx *ctx) {
@@ -267,10 +278,28 @@ static void cg_emit_main_pending_error_return(FILE *out, bool entry_needs_runtim
  * on the profile while the use is not left a freestanding provider object
  * referencing an undeclared xrt_global_ctx.  A freestanding image with no hosted
  * capability still gets false here, because its capability set is empty. */
+static bool cg_func_tree_needs_runtime_bridge(XiCgenCtx *ctx, const XiFunc *func) {
+    if (!ctx || !func)
+        return false;
+    if (cg_func_needs_aot_coro_ctx(ctx, func))
+        return true;
+    for (uint16_t i = 0; i < func->nchildren; i++) {
+        if (cg_func_tree_needs_runtime_bridge(ctx, func->children[i]))
+            return true;
+    }
+    return false;
+}
+
 static bool cg_tu_needs_runtime_bridge(XiCgenCtx *ctx) {
     if (!ctx)
         return false;
     uint32_t caps = cg_runtime_caps_from_entry_plan(ctx);
+    /* A split dependency translation unit may own a resumable child even when
+     * the executable entry itself is synchronous.  The TU emits coroutine
+     * descriptors and provider calls in that case, so its own function tree is
+     * an independent include requirement rather than an entry-plan property. */
+    if (ctx->module && cg_func_tree_needs_runtime_bridge(ctx, ctx->module->init))
+        return true;
     return cg_entry_uses_resumable_frame(ctx) || cg_entry_uses_root_descriptor(ctx) ||
            (caps & ~XR_AOT_CAP_OBJECTS) != XR_AOT_CAP_NONE;
 }
@@ -534,6 +563,7 @@ static void emit_xrt_runtime_caps_expr(FILE *out, uint32_t caps) {
         {XR_AOT_CAP_SEMAPHORE, "XR_AOT_CAP_SEMAPHORE"},
         {XR_AOT_CAP_EVENT_COUNT, "XR_AOT_CAP_EVENT_COUNT"},
         {XR_AOT_CAP_PARALLEL, "XR_AOT_CAP_PARALLEL"},
+        {XR_AOT_CAP_NETPOLL, "XR_AOT_CAP_NETPOLL"},
     };
 
     if (caps == XR_AOT_CAP_NONE) {
@@ -634,6 +664,22 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "    return xrt_enum_key_parts(value, NULL, NULL, &ordinal, NULL) ? (int64_t)ordinal : "
         "fallback;\n"
         "}\n"
+        "static XrValue xrt_runtime_buffer_copy_transfer(const uint8_t *data, size_t len) {\n"
+        "    if (len > (size_t)INT64_MAX || (len > 0 && !data)) return XR_NULL_VAL;\n"
+        "    XrValue value = xrt_buffer_new((int64_t)len, 0, 0);\n"
+        "    xrt_buffer_object_t *buffer = xrt_buffer_obj_ptr(value);\n"
+        "    if (!buffer) return XR_NULL_VAL;\n"
+        "    if (len > 0) memcpy(buffer->data, data, len);\n"
+        "    return xrt_value_set_storage_graph(value, XR_OBJ_STORAGE_TRANSFER);\n"
+        "}\n"
+        "static bool xrt_runtime_buffer_bytes(XrValue value, const uint8_t **data, size_t *len) {\n"
+        "    xrt_buffer_object_t *buffer = xrt_buffer_obj_ptr(value);\n"
+        "    if (!buffer || !data || !len || buffer->length < 0 ||\n"
+        "        (buffer->length > 0 && !buffer->data)) return false;\n"
+        "    *data = (const uint8_t *)buffer->data;\n"
+        "    *len = (size_t)buffer->length;\n"
+        "    return true;\n"
+        "}\n"
         "static void xrt_runtime_value_retain(XrValue value) { xrt_retain(value); }\n"
         "static void xrt_runtime_value_release(XrValue value) { xrt_release(value); }\n"
         /* The scheduler runtime finalizes a coroutine whose error nothing is
@@ -655,6 +701,8 @@ static void emit_xrt_runtime_value_ops(FILE *out) {
         "    .object_set = xrt_runtime_object_set,\n"
         "    .enum_new = xrt_runtime_enum_new,\n"
         "    .enum_ordinal = xrt_runtime_enum_ordinal,\n"
+        "    .buffer_copy_transfer = xrt_runtime_buffer_copy_transfer,\n"
+        "    .buffer_bytes = xrt_runtime_buffer_bytes,\n"
         "    .retain = xrt_runtime_value_retain,\n"
         "    .release = xrt_runtime_value_release,\n"
         "    .execution_arena_new = xrt_execution_arena_new,\n"
@@ -679,9 +727,12 @@ static void emit_xrt_runtime_builtin_sync(FILE *out, const CgBuiltinInitPlan *pl
 }
 
 static void emit_xrt_runtime_init(FILE *out, const CgBuiltinInitPlan *plan, uint32_t runtime_caps,
-                                  const char *source_path, bool has_value_ops) {
+                                  int scheduler_workers, const char *source_path,
+                                  bool has_value_ops) {
     fprintf(out, "    XrAotRuntimeConfig runtime_cfg;\n");
     fprintf(out, "    xr_aot_runtime_config_init(&runtime_cfg);\n");
+    if (scheduler_workers > 0)
+        fprintf(out, "    runtime_cfg.scheduler_workers = %d;\n", scheduler_workers);
     if (has_value_ops)
         fprintf(out, "    runtime_cfg.value_ops = &xrt_runtime_value_ops;\n");
     if (cg_runtime_caps_need_destroy_config(runtime_caps))
@@ -716,6 +767,9 @@ static bool cg_runtime_caps_need_runtime(uint32_t caps) {
  * exactly once before publishing any fragment function. */
 static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out, XiModule **modules,
                                                 int n) {
+    fprintf(out, "uint32_t xr_hosted_fragment_abi_version(void) {\n"
+                 "    return XR_HOSTED_FRAGMENT_ABI_VERSION;\n"
+                 "}\n\n");
     for (int m = 0; m < n; m++) {
         if (!modules[m] || !modules[m]->init)
             continue;
@@ -761,7 +815,7 @@ static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out, XiMod
                  "}\n\n");
 }
 
-/* Shared-library init: --shared exports a C ABI library, so loading it executes
+/* Shared-library init: a shared-library artifact exports a C ABI library, so loading it executes
  * the complete module graph before any manifest export wrapper can run. This is the
  * library equivalent of main's ordered module-init sequence: both initialized
  * globals and explicit top-level side effects retain normal Xray semantics. */
@@ -773,7 +827,9 @@ static void xi_cgen_shared_lib_ctor(XiCgenCtx *ctx, FILE *out, XiModule **module
     if (entry_is_coro)
         runtime_caps |= XR_AOT_CAP_CORO;
     if (entry_is_coro || cg_runtime_caps_need_runtime(runtime_caps)) {
-        fprintf(out, "/* --shared: runtime-backed bundle; no load-time init emitted. */\n");
+        fprintf(
+            out,
+            "/* shared-library artifact: runtime-backed bundle; no load-time init emitted. */\n");
         return;
     }
     const char *entry_source_path = cg_entry_source_path(ctx, modules, n, entry_index);
@@ -836,11 +892,12 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     cg_emit_main_stdio_policy(ctx, out);
     fprintf(out, "    xrt_arc_init();\n");
     // main() has the real argv, so process.args drops argv[0] (the program
-    // name); the --shared load-constructor path has no argv and passes "0"/NULL.
+    // name); the shared-library load-constructor path has no argv and passes "0"/NULL.
     emit_xrt_builtin_init(out, &builtin_plan, entry_source_path, "argc > 1 ? argc - 1 : 0",
                           "argc > 1 ? argv + 1 : NULL");
     if (entry_needs_runtime) {
-        emit_xrt_runtime_init(out, &builtin_plan, runtime_caps, entry_source_path,
+        emit_xrt_runtime_init(out, &builtin_plan, runtime_caps,
+                              cg_scheduler_workers_from_entry_plan(ctx), entry_source_path,
                               has_runtime_value_ops);
     } else {
         fprintf(out, "    (void) argc;\n");
@@ -930,6 +987,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     cg_reset_enum_scalar_sidecars(ctx);
     cg_reset_prelude_enum_scalar_sidecars(ctx);
     cg_reset_enum_member_boxes(ctx);
+    cg_reset_aot_stdlib_enum_scalar_sidecars(ctx);
     cg_reset_object_shapes(ctx);
 
     /* Build every section off-output.  The final unit is assembled in fixed
@@ -1011,7 +1069,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         emit_xrt_builtin_init(body, &builtin_plan, entry_source_path, "argc > 1 ? argc - 1 : 0",
                               "argc > 1 ? argv + 1 : NULL");
         if (entry_needs_runtime) {
-            emit_xrt_runtime_init(body, &builtin_plan, runtime_caps, entry_source_path,
+            emit_xrt_runtime_init(body, &builtin_plan, runtime_caps,
+                                  cg_scheduler_workers_from_entry_plan(ctx), entry_source_path,
                                   has_runtime_value_ops);
         }
         if (entry_has_descriptor)
@@ -1057,6 +1116,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     emit_enum_scalar_sidecar_defs(ctx, statics);
     emit_prelude_enum_scalar_sidecar_defs(ctx, statics);
     emit_enum_member_box_defs(ctx, statics);
+    cg_emit_aot_stdlib_enum_scalar_sidecar_defs(ctx, statics);
     cg_emit_object_shape_defs(ctx, statics);
 
     bool close_failed = xr_close_memstream(types, &typebuf, &typesz) != 0;
@@ -1200,6 +1260,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     cg_reset_enum_scalar_sidecars(ctx);
     cg_reset_prelude_enum_scalar_sidecars(ctx);
     cg_reset_enum_member_boxes(ctx);
+    cg_reset_aot_stdlib_enum_scalar_sidecars(ctx);
     cg_reset_object_shapes(ctx);
 
     char *staticbuf = NULL;
@@ -1251,6 +1312,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     emit_enum_scalar_sidecar_defs(ctx, statics);
     emit_prelude_enum_scalar_sidecar_defs(ctx, statics);
     emit_enum_member_box_defs(ctx, statics);
+    cg_emit_aot_stdlib_enum_scalar_sidecar_defs(ctx, statics);
     cg_emit_object_shape_defs(ctx, statics);
 
     bool close_failed = xr_close_memstream(statics, &staticbuf, &staticsz) != 0;

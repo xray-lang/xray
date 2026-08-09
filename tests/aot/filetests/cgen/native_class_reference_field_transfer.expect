@@ -1,0 +1,2 @@
+c_regex=\(xrt_release\(xr_mkptr\(\(p0\)->f0, XR_TAG_ARRAY\)\), \(p0\)->f0 = \(xrt_array_t \*\)\([^)]*\)\.ptr\)
+c_not_regex=xrt_retain\([^;]*xrt_release\(xr_mkptr\(\(p0\)->f0, XR_TAG_ARRAY\)\)

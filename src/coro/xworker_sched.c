@@ -14,8 +14,8 @@
  *     - I/O poll sources (netpoll, async pool completions, timer wheel)
  *     - Cross-worker migration (try_immigrate / xr_try_emigrate bridge)
  *     - Per-worker sleep timers (sleep() / timeout())
- *     - worker_park / worker_unpark (futex-based sleep with last-spinner
- *       notify protocol)
+ *     - worker_park / worker_unpark (worker-local I/O wait with futex fallback
+ *       and last-spinner notify protocol)
  *     - worker_loop (main scheduling loop, work-stealing, spinning)
  *
  * RELATED:
@@ -113,6 +113,9 @@ void wake_idle_worker(XrRuntime *rt) {
     if (!m)
         return;
     atomic_store_explicit(&m->park_state, XR_PARK_WOKEN, memory_order_release);
+    XrProc *p = atomic_load_explicit(&m->current_p, memory_order_acquire);
+    if (p)
+        xr_local_poll_wakeup(&p->local_poll);
     xr_park_futex_wake(&m->park_state);
 }
 
@@ -138,12 +141,14 @@ void xr_runtime_wake_idle_worker(XrRuntime *runtime) {
         wake_idle_worker(runtime);
 }
 
-// Wake Worker (simple futex wake via park_state)
+// Wake Worker through both park mechanisms. Only one can be blocked at a
+// time; the other notification remains a harmless pending wake.
 void worker_unpark(XrWorker *worker) {
     XrMachine *m = atomic_load_explicit(&worker->p.current_m, memory_order_acquire);
     if (!m)
         return;  // M detached during handoff
     atomic_store_explicit(&m->park_state, XR_PARK_WOKEN, memory_order_release);
+    xr_local_poll_wakeup(&worker->p.local_poll);
     xr_park_futex_wake(&m->park_state);
 }
 
@@ -349,6 +354,50 @@ static XrCoroutine *worker_claim_io_ready_list(XrWorker *worker, XrCoroutine *he
     return claimed_first;
 }
 
+static XrCoroutine *worker_take_direct_io_ready(XrWorker *worker, XrReadyList *ready) {
+    if (!worker || !ready)
+        return NULL;
+
+    XrCoroutine *previous = NULL;
+    XrCoroutine *candidate = ready->head;
+    while (candidate) {
+        XrCoroutine *next = candidate->sched_link;
+        int target_id = xr_coro_wake_target_id(candidate);
+        if (!xr_coro_is_thread_locked(candidate) || target_id == worker->p.id) {
+            if (previous) {
+                previous->sched_link = next;
+            } else {
+                ready->head = next;
+            }
+            if (ready->tail == candidate)
+                ready->tail = previous;
+            candidate->sched_link = NULL;
+            ready->count--;
+
+            XrCoroutine *claimed = worker_claim_io_ready_coro(worker, candidate);
+            if (claimed)
+                return claimed;
+        } else {
+            previous = candidate;
+        }
+        candidate = next;
+    }
+    return NULL;
+}
+
+static void worker_publish_io_ready_batch(XrRuntime *runtime, XrCoroutine *claimed) {
+    XR_DCHECK(runtime != NULL, "publish_io_ready_batch: NULL runtime");
+    XR_DCHECK(claimed != NULL, "publish_io_ready_batch: NULL claimed list");
+
+    XrCoroutine *last = claimed;
+    int count = 1;
+    while (last->sched_link) {
+        last = last->sched_link;
+        count++;
+    }
+    xr_injectq_push_batch(runtime, claimed, last, count);
+}
+
 static bool worker_advance_deterministic_timer(XrWorker *worker, int64_t *now_out,
                                                bool require_idle) {
     if (!worker)
@@ -413,6 +462,27 @@ static bool worker_bump_due_timers(XrWorker *worker, int64_t now, bool force) {
     return true;
 }
 
+static XrCoroutine *worker_poll_local_io(XrWorker *worker, int *event_count) {
+    XrProc *p = &worker->p;
+    if (p->local_poll.poll_fd < 0)
+        return NULL;
+
+    XrReadyList local_ready = {0};
+    xr_local_poll_events(&p->local_poll, 0, &local_ready);
+    if (event_count)
+        *event_count += local_ready.count;
+
+    XrCoroutine *direct = worker_take_direct_io_ready(worker, &local_ready);
+    XrCoroutine *claimed = worker_claim_io_ready_list(worker, local_ready.head);
+    if (claimed) {
+        // These descriptors are registered with this worker's private poller.
+        // Keep the rest of the readiness burst on the owner: global injection
+        // would migrate connection coroutines and force descriptor rebinds.
+        (void) xr_worker_push_lifo_batch(worker, claimed);
+    }
+    return direct;
+}
+
 // Poll all I/O sources and drain MPSC inbox into P's local run queue.
 // Returns a fast-path IO coroutine (single wakeup with affinity to this
 // worker) that the caller should execute directly, bypassing the queue.
@@ -422,17 +492,10 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
     XrProc *p = &worker->p;
     XrCoroutine *fast_coro = NULL;
     int total_io_events = 0;
+    bool published_io_batch = false;
 
     // ===== Fast path: per-worker local poll (zero contention) =====
-    if (p->local_poll.poll_fd >= 0) {
-        XrReadyList local_ready = {0};
-        xr_local_poll_events(&p->local_poll, 0, &local_ready);
-        total_io_events += local_ready.count;
-        XrCoroutine *claimed = worker_claim_io_ready_list(worker, local_ready.head);
-        if (claimed) {
-            (void) xr_worker_push_lifo_batch(worker, claimed);
-        }
-    }
+    fast_coro = worker_poll_local_io(worker, &total_io_events);
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
     // ===== Per-worker io_uring completion ring (zero contention) =====
@@ -455,26 +518,25 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
         XrReadyList ready = xr_netpoll_poll(&runtime->netpoll, 0);
         total_io_events += ready.count;
 
-        // Zero-copy fast path: single IO wakeup targeting this worker
-        // — skip queue push/pop, return directly for execution.
-        // Thread-locked coros must match this worker to use the fast path.
-        if (ready.count == 1 && ready.head) {
-            XrCoroutine *io_coro = ready.head;
-            int aff = xr_coro_wake_target_id(io_coro);
-            if (aff == p->id) {
-                fast_coro = worker_claim_io_ready_coro(worker, io_coro);
-                goto after_netpoll;
-            }
-        }
+        // Run one migratable I/O coroutine immediately and publish the rest
+        // globally so idle workers can consume a readiness burst without a
+        // steal round-trip through this worker's private deque.
+        if (!fast_coro)
+            fast_coro = worker_take_direct_io_ready(worker, &ready);
 
-        // Normal path: enqueue all ready coroutines to LIFO slot.
+        // Enqueue any remaining locked or unclaimed wakeups locally unless a
+        // direct candidate lets us fan the burst out through the inject queue.
         XrCoroutine *claimed = worker_claim_io_ready_list(worker, ready.head);
         if (claimed) {
-            (void) xr_worker_push_lifo_batch(worker, claimed);
+            if (fast_coro) {
+                worker_publish_io_ready_batch(runtime, claimed);
+                published_io_batch = true;
+            } else {
+                (void) xr_worker_push_lifo_batch(worker, claimed);
+            }
         }
     }
 
-after_netpoll:
     // Adaptive poll_skip feedback: EWMA of I/O event frequency.
     // Decay 7/8: io_ewma = io_ewma * 7/8 + sample * 1/8
     // Sample: 256 if events, 0 if none. Range [0, 256].
@@ -499,7 +561,8 @@ after_netpoll:
 
     // Drain MPSC inbox
     worker_drain_inbox(worker);
-    worker_pull_inject(worker, XR_INJECT_POP_BATCH);
+    if (!published_io_batch)
+        worker_pull_inject(worker, XR_INJECT_POP_BATCH);
 
     // Drain channel wake command queue (ownership-safe routing).
     // Commands arrive from remote workers that need us to wake our local
@@ -845,7 +908,15 @@ static bool runtime_check_deadlock(XrRuntime *runtime, XrWorker *worker, bool se
     }
     if (detect_off)
         return false;
-    (void) self_still_active;
+    /* current_coro becomes NULL before worker_handle_run_result publishes a
+     * completion, continuation, or wake.  Queue scans alone can therefore see
+     * a transient empty system while another worker is still in that result
+     * handoff window.  active_workers closes the gap: worker_park decrements
+     * it only after result handling and the single-worker checkpoint explicitly
+     * identifies itself as the one still-active worker. */
+    int expected_active = self_still_active ? 1 : 0;
+    if (atomic_load_explicit(&runtime->active_workers, memory_order_acquire) != expected_active)
+        return false;
     /* Nobody may be mid-slice: a running coroutine can wake anything. The
      * dispatcher nulls current_coro on every normal result, so an all-NULL
      * scan plus empty queues (below, twice, fenced) is quiescence. */
@@ -898,6 +969,26 @@ static bool runtime_check_deadlock(XrRuntime *runtime, XrWorker *worker, bool se
                     "no sys.Thread - nothing can wake them.\n");
     fflush(stderr);
     exit(71);
+}
+
+static void worker_wait_park_sources(XrWorker *worker, uint32_t timeout_us) {
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    if (worker->p.local_poll.uring && xr_uring_ring_inflight(worker->p.local_poll.uring) > 0) {
+        xr_uring_ring_wait(worker->p.local_poll.uring, (int64_t) timeout_us);
+        return;
+    }
+#endif
+
+    if (worker->p.local_poll.poll_fd >= 0) {
+        XrReadyList ready = {0};
+        xr_local_poll_events(&worker->p.local_poll, (int64_t) timeout_us * 1000, &ready);
+        XrCoroutine *claimed = worker_claim_io_ready_list(worker, ready.head);
+        if (claimed)
+            (void) xr_worker_push_lifo_batch(worker, claimed);
+        return;
+    }
+
+    xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, timeout_us);
 }
 
 // Worker Park with last-spinner-notify protocol
@@ -1062,24 +1153,15 @@ park_recheck_work:
         if (timeout_ms < 1 && !virtual_timer_advanced)
             timeout_ms = 1;
 
-        // Sleep with timeout. A worker holding outstanding io_uring completion
-        // ops blocks on its own ring so an arriving CQE resumes it immediately
-        // (the futex park cannot be woken by a completion); otherwise it
-        // futex-parks and is woken promptly by cross-worker work.
+        // Sleep with timeout. Worker-local pollers carry bound descriptor
+        // readiness and their wakeup pipe carries scheduler notifications;
+        // platforms without a local poller use the futex fallback.
         uint32_t timeout_us = (uint32_t) (timeout_ms * 1000);
         atomic_store_explicit(&worker->m->park_state, XR_PARK_IDLE, memory_order_release);
         worker->p.stats.park_count++;
         if (virtual_timer_advanced)
             goto deterministic_timer_advanced;
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-        if (worker->p.local_poll.uring && xr_uring_ring_inflight(worker->p.local_poll.uring) > 0) {
-            xr_uring_ring_wait(worker->p.local_poll.uring, (int64_t) timeout_us);
-        } else {
-            xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, timeout_us);
-        }
-#else
-        xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, timeout_us);
-#endif
+        worker_wait_park_sources(worker, timeout_us);
     deterministic_timer_advanced:
         worker->p.stats.unpark_count++;
     }
@@ -1208,7 +1290,7 @@ static void worker_wait_steal_delay(XrWorker *worker, XrRuntime *runtime, int64_
         worker->p.stats.steal_throttle_wait_max_ms = (uint64_t) delay_ms;
     }
     atomic_store_explicit(&worker->m->park_state, XR_PARK_IDLE, memory_order_release);
-    xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, (uint32_t) delay_ms * 1000u);
+    worker_wait_park_sources(worker, (uint32_t) delay_ms * 1000u);
 }
 
 static void worker_record_direct_steal_dispatch(XrWorker *worker, XrCoroutine *coro, int64_t now) {
@@ -1444,6 +1526,14 @@ static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime, _Atomic bo
         }
         worker_drain_inbox(worker);
         worker_pull_inject(worker, XR_INJECT_POP_BATCH);
+        // Only descriptor owners benefit from a zero-time local poll here.
+        // Empty workers still poll the wake pipe while parked; skipping their
+        // spin-time syscall avoids multiplying idle CPU cost by worker count.
+        if (atomic_load_explicit(&worker->p.local_poll_fd_count, memory_order_acquire) > 0) {
+            coro = worker_poll_local_io(worker, NULL);
+            if (coro)
+                break;
+        }
         if ((spin & 0x3) == 0) {
             cached_now = xr_runtime_now_ticks(runtime);
         }
@@ -1546,12 +1636,16 @@ void *worker_loop(void *arg) {
     XrWorker *worker = (XrWorker *) arg;
     XrRuntime *runtime = worker->p.runtime;
     _Atomic bool *running_ptr = &runtime->running;
+    XrMachineState exit_state;
 
     tls_current_worker = worker;
     tls_current_machine = worker->m;
     worker_bind_cpu(worker);
 
-    // Two counters: started_workers for startup sync, active_workers for GC coord.
+    // Two counters: started_workers for startup sync, active_workers for
+    // quiescence/GC coordination. Publish active before startup completion so
+    // a peer cannot prove deadlock while this worker enters its run loop.
+    atomic_fetch_add_explicit(&runtime->active_workers, 1, memory_order_release);
     // Wake xr_runtime_ensure_workers that's futex-waiting on this counter.
     atomic_fetch_add_explicit(&runtime->started_workers, 1, memory_order_release);
     xr_park_futex_wake(&runtime->started_workers);
@@ -1681,6 +1775,10 @@ void *worker_loop(void *arg) {
     }
 
 exit_loop:
+    exit_state = atomic_load_explicit(&worker->m->state, memory_order_acquire);
+    if (exit_state != M_PARKING && exit_state != M_PARKED)
+        atomic_fetch_sub_explicit(&runtime->active_workers, 1, memory_order_release);
+    atomic_store_explicit(&worker->m->state, M_SHUTDOWN, memory_order_release);
     atomic_fetch_add(&runtime->exited_workers, 1);
     return NULL;
 }

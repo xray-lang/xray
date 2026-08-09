@@ -973,6 +973,28 @@ void xr_aot_release_frame_value(XrCoroHeap *heap, XrValue value) {
     xr_rc_release_value(heap, value);
 }
 
+void xr_aot_release_provider_value(const XrAotContext *ctx, XrValue value) {
+    xr_aot_release_frame_value(ctx && ctx->coro ? ctx->coro->heap : NULL, value);
+}
+
+bool xr_aot_runtime_tuple_info(XrValue value, int *item_count) {
+    if (!xr_value_is_tuple(value))
+        return false;
+    XrTuple *tuple = (XrTuple *) value.ptr;
+    if (item_count)
+        *item_count = (int) xr_tuple_arity(tuple);
+    return true;
+}
+
+XrValue xr_aot_runtime_tuple_item(XrValue value, int index) {
+    if (index < 0 || !xr_value_is_tuple(value))
+        return XR_NULL_VAL;
+    XrTuple *tuple = (XrTuple *) value.ptr;
+    if ((uint32_t) index >= (uint32_t) xr_tuple_arity(tuple))
+        return XR_NULL_VAL;
+    return xr_tuple_get(tuple, (uint16_t) index);
+}
+
 XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index) {
     if (!ctx || index < 0)
         return XR_NULL_VAL;

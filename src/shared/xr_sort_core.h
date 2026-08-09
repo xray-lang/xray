@@ -12,6 +12,7 @@
 #define XR_SORT_CORE_H
 
 #include "xr_elem_type.h"
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -25,19 +26,27 @@ static inline int xr_sort_core_compare_result(XrValue result) {
     return 0;
 }
 
+static inline int xr_sort_core_compare_f64(double a, double b) {
+    const int a_nan = isnan(a) ? 1 : 0;
+    const int b_nan = isnan(b) ? 1 : 0;
+    if (a_nan || b_nan)
+        return a_nan - b_nan;
+    return (a > b) - (a < b);
+}
+
 static inline int xr_sort_core_compare_default(XrValue a, XrValue b, const char *a_str,
                                                int64_t a_len, const char *b_str, int64_t b_len) {
     if (XR_IS_INT(a) && XR_IS_INT(b))
         return (XR_TO_INT(a) > XR_TO_INT(b)) - (XR_TO_INT(a) < XR_TO_INT(b));
     if (XR_IS_FLOAT(a) && XR_IS_FLOAT(b))
-        return (XR_TO_FLOAT(a) > XR_TO_FLOAT(b)) - (XR_TO_FLOAT(a) < XR_TO_FLOAT(b));
+        return xr_sort_core_compare_f64(XR_TO_FLOAT(a), XR_TO_FLOAT(b));
     if (XR_IS_INT(a) && XR_IS_FLOAT(b)) {
         double fa = (double) XR_TO_INT(a);
-        return (fa > XR_TO_FLOAT(b)) - (fa < XR_TO_FLOAT(b));
+        return xr_sort_core_compare_f64(fa, XR_TO_FLOAT(b));
     }
     if (XR_IS_FLOAT(a) && XR_IS_INT(b)) {
         double fb = (double) XR_TO_INT(b);
-        return (XR_TO_FLOAT(a) > fb) - (XR_TO_FLOAT(a) < fb);
+        return xr_sort_core_compare_f64(XR_TO_FLOAT(a), fb);
     }
     if (a_str && b_str) {
         int64_t minlen = a_len < b_len ? a_len : b_len;
@@ -46,6 +55,10 @@ static inline int xr_sort_core_compare_default(XrValue a, XrValue b, const char 
             return cmp;
         return (a_len > b_len) - (a_len < b_len);
     }
+    if (XR_IS_RUNE(a) && XR_IS_RUNE(b))
+        return (XR_TO_RUNE(a) > XR_TO_RUNE(b)) - (XR_TO_RUNE(a) < XR_TO_RUNE(b));
+    if (XR_IS_BOOL(a) && XR_IS_BOOL(b))
+        return (XR_TO_BOOL(a) > XR_TO_BOOL(b)) - (XR_TO_BOOL(a) < XR_TO_BOOL(b));
     return 0;
 }
 
@@ -154,6 +167,8 @@ static inline int xr_sort_core_compare_default(XrValue a, XrValue b, const char 
     }
 
 #define XR_SORT_CORE_LT(x, y) ((x) < (y))
+#define XR_SORT_CORE_F32_LT(x, y) (xr_sort_core_compare_f64((double) (x), (double) (y)) < 0)
+#define XR_SORT_CORE_F64_LT(x, y) (xr_sort_core_compare_f64((x), (y)) < 0)
 XR_SORT_CORE_DEF(i8, int8_t, XR_SORT_CORE_LT)
 XR_SORT_CORE_DEF(u8, uint8_t, XR_SORT_CORE_LT)
 XR_SORT_CORE_DEF(i16, int16_t, XR_SORT_CORE_LT)
@@ -162,8 +177,8 @@ XR_SORT_CORE_DEF(i32, int32_t, XR_SORT_CORE_LT)
 XR_SORT_CORE_DEF(u32, uint32_t, XR_SORT_CORE_LT)
 XR_SORT_CORE_DEF(i64, int64_t, XR_SORT_CORE_LT)
 XR_SORT_CORE_DEF(u64, uint64_t, XR_SORT_CORE_LT)
-XR_SORT_CORE_DEF(f32, float, XR_SORT_CORE_LT)
-XR_SORT_CORE_DEF(f64, double, XR_SORT_CORE_LT)
+XR_SORT_CORE_DEF(f32, float, XR_SORT_CORE_F32_LT)
+XR_SORT_CORE_DEF(f64, double, XR_SORT_CORE_F64_LT)
 
 static inline int xr_sort_core_typed(void *data, int64_t length, uint8_t elem_type) {
     if (!data || length < 2)
@@ -186,6 +201,7 @@ static inline int xr_sort_core_typed(void *data, int64_t length, uint8_t elem_ty
             xr_sort_core_i32((int32_t *) data, length);
             return 1;
         case XR_ELEM_U32:
+        case XR_ELEM_RUNE:
             xr_sort_core_u32((uint32_t *) data, length);
             return 1;
         case XR_ELEM_I64:
@@ -320,6 +336,8 @@ static inline void xr_sort_core_values(XrValue *a, int64_t n, XrSortCoreCmpFn cm
 }
 
 #undef XR_SORT_CORE_LT
+#undef XR_SORT_CORE_F32_LT
+#undef XR_SORT_CORE_F64_LT
 #undef XR_SORT_CORE_DEF
 #undef XR_SORT_CORE_SMALL
 

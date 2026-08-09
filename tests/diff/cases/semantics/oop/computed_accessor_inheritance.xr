@@ -1,0 +1,28 @@
+// anchor: computed-accessor-inheritance
+// A finalized subclass carries inherited getter/setter summaries. VM field
+// dispatch must enter the frozen accessor table only for such classes, while
+// AOT resolves the same source-level accessors directly.
+
+class Counter {
+    _value: int
+
+    constructor(initial: int) {
+        this._value = initial
+    }
+
+    value: int {
+        fn() { return this._value }
+        fn(next: int) { this._value = next }
+    }
+}
+
+class StepCounter extends Counter {
+    constructor(initial: int) {
+        super(initial)
+    }
+}
+
+var counter = StepCounter(7)
+print(counter.value)
+counter.value = 42
+print(counter.value)

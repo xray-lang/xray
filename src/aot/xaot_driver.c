@@ -911,8 +911,10 @@ static void features_apply_generated_stdlib_caps(XaotFeatureSet *fs, const char 
         fs->need_timer = true;
     if (caps & XAOT_STDLIB_CAP_CHANNEL)
         fs->need_channel = true;
-    if (caps & XAOT_STDLIB_CAP_NETPOLL)
+    if (caps & XAOT_STDLIB_CAP_NETPOLL) {
         fs->need_netpoll = true;
+        fs->need_coro = true;
+    }
     if (caps & XAOT_STDLIB_CAP_TASK)
         fs->need_task = true;
     if (caps & XAOT_STDLIB_CAP_WORK_QUEUE)
@@ -1021,6 +1023,7 @@ static void features_apply_capability_plan(XaotFeatureSet *fs, uint32_t capabili
             break;
         case XG_CAP_NETPOLL:
             fs->need_netpoll = true;
+            fs->need_coro = true;
             break;
         case XG_CAP_TASK:
             fs->need_task = true;
@@ -1335,7 +1338,9 @@ static bool add_runtime_cap_manifest_entries(const XaotFeatureSet *features,
         needs_aot_runtime = true;
     }
     if (features->need_netpoll) {
-        if (!add_runtime_cap(manifest, "coro") || !add_runtime_cap(manifest, "netpoll"))
+        if (!add_runtime_cap(manifest, "coro") || !add_runtime_cap(manifest, "netpoll") ||
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE,
+                                           "XRT_ENABLE_AOT_NETPOLL_CLOSE"))
             return false;
         needs_aot_runtime = true;
     }

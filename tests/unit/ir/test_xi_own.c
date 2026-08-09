@@ -105,6 +105,7 @@ static void test_use_policy(void) {
         .member_name = "write",
         .resolved_mod_index = -1,
         .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
     };
     XiValue net_write_callee = {
         .op = XI_IMPORT_REF,
@@ -144,6 +145,7 @@ static void test_use_policy(void) {
         .member_name = "__writeBytes",
         .resolved_mod_index = -1,
         .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
     };
     net_write_callee.aux = &net_native_write_ref;
     net_write.call_plan = NULL;
@@ -157,6 +159,7 @@ static void test_use_policy(void) {
         .member_name = NULL,
         .resolved_mod_index = -1,
         .resolved_shared_slot = 0,
+        .resolved_export_slot = -1,
     };
     XiFunc *method_func = make_func("native_module_method_borrow", &t_int);
     XiModule *module = xi_module_new("test.xr", "test", method_func);

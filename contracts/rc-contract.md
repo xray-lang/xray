@@ -11,7 +11,10 @@ For every RC-managed value, including registered identity aliases:
   it is an ordinary consume/retain path. Emitters and ARC may not synthesize a
   hidden cell, cell destination, or cell-specific release exception.
 - C2: reference-count changes are path-balanced for local death, return
-  transfer, and move-out; double release is invalid.
+  transfer, and move-out; double release is invalid. An `XI_COPY` tagged
+  `VALUE_CLONE` realizes source-level value semantics by allocating independent
+  storage, so its result is a fresh +1 owner rather than the borrowed alias
+  described by the ordinary `XI_COPY` opcode contract.
 - C2a: every reference-capable function return publishes a complete ownership
   summary. `OWNED` is a fresh +1 result and may be consumed or dropped by the
   caller; `BORROWED_PARAM(n)` aliases parameter `n`; `BORROWED_STATIC` has
@@ -20,6 +23,14 @@ For every RC-managed value, including registered identity aliases:
   explicitly. Missing, mixed, dynamic, or foreign evidence is `UNKNOWN`: ARC
   may preserve such a result conservatively, but must never release it as an
   owned result merely because its runtime representation is reference-counted.
+- C2b: a payload-enum constructor returns a fresh owned inline aggregate. The
+  aggregate has no object header, but every active payload lane is an ordinary
+  owner: aggregate retain/release visits those lanes, a consuming box transfers
+  them into the box, a borrowed box retains them, and consuming unbox clears the
+  wrapper lanes before releasing the wrapper. A statically resolved local call
+  reads the callee's fixed-point return summary before falling back to callsite
+  metadata; a backend may not discard aggregate ARC operations merely because
+  the aggregate itself is unboxed.
 - C3: a borrowed view's owner remains live through every view use, including
   uses flowing through PHI edges. BOX, UNBOX, and CONVERT representation
   adapters preserve borrow provenance; an implicit error edge must never
@@ -70,4 +81,8 @@ this one. A contract names what it proves; this line names what it does not.
 
 ## Digest anchors
 
-anchor-sha256: src/ir/xi_arc_verify.c d7468f7a17991d8fe650384a62ef6c86b0ba1c07c7b54e2b0d361f8c2ff9bcb5
+anchor-sha256: src/ir/xi_arc_verify.c 58d5224154e99dc36587c68c1a3250dbdb11b17e817ece51ce127bdcdd24af63
+anchor-sha256: src/ir/xi_arc.c c47b74044d28022484b28a6610c530b08ca07e60462aaff93d3815c159467786
+anchor-sha256: src/ir/xi_lower_expr.c ad8cc22c3bd510aef95159ec7659445a22d5b932656a21bdf3e38cc1e9beada2
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ebd369480abc12eec5ff54458649bb497698bf26d1d4e6194d2487a69686d145
+anchor-sha256: src/aot/xrt_coll.h dd3c06c5322f34243609164d98aeea8510e0ddb612e6c6d8b93e5750080aee3d

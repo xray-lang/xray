@@ -691,18 +691,6 @@ void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
     if (!sw)
         return;
 
-    // Notify dist channels about exiting select (unsubscribe from push model)
-    XrVMRuntime *vm_owner = xr_runtime_core_vm_owner(coro->core);
-    XrChannelDistHooks *dhooks = vm_owner ? vm_owner->channel_dist_hooks : NULL;
-    if (dhooks && dhooks->on_select_exit) {
-        for (int i = 0; i < sw->case_count; i++) {
-            XrChannel *ch = (XrChannel *) sw->cases[i].channel;
-            if (ch && ch->dist) {
-                dhooks->on_select_exit(ch);
-            }
-        }
-    }
-
     // Remove each case from its channel's bucket select queue
     for (int i = 0; i < sw->case_count; i++) {
         select_case_remove_from_bucket(worker, &sw->cases[i]);

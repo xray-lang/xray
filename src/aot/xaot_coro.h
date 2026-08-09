@@ -66,6 +66,7 @@ static inline XrAotRuntimeAtomicView *xr_aot_atomic_view(XrValue value) {
 }
 
 static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value);
+static inline XrValue xr_aot_bridge_borrowed_value_to_xrt(XrValue value);
 
 static inline XrValue xr_aot_bridge_enum_key_to_xrt(XrValue value, uint32_t member_index) {
     XrValue out = value;
@@ -107,11 +108,28 @@ static inline XrValue xr_aot_bridge_runtime_adt_to_xrt(XrValue value) {
         return XR_NULL_VAL;
     for (int i = 0; i < payload_count; i++) {
         XrValue payload = xr_aot_runtime_adt_payload(value, i);
-        payloads[i] = xr_aot_bridge_value_to_xrt(payload);
+        payloads[i] = xr_aot_bridge_borrowed_value_to_xrt(payload);
     }
     XrValue out = xrt_enum_box_new_payloads(layout_id, enum_name, member_name, member_index,
                                             (uint32_t) payload_count, payloads);
     XRT_FREE(payloads);
+    return out;
+}
+
+static inline XrValue xr_aot_bridge_runtime_tuple_to_xrt(XrValue value) {
+    int item_count = 0;
+    if (!xr_aot_runtime_tuple_info(value, &item_count))
+        return value;
+    if (item_count <= 0)
+        return xrt_tuple_new(0);
+
+    XrValue *items = (XrValue *) XRT_CALLOC((size_t) item_count, sizeof(XrValue));
+    if (!items)
+        return XR_NULL_VAL;
+    for (int i = 0; i < item_count; i++)
+        items[i] = xr_aot_bridge_borrowed_value_to_xrt(xr_aot_runtime_tuple_item(value, i));
+    XrValue out = xrt_tuple_make_consuming((int64_t) item_count, items);
+    XRT_FREE(items);
     return out;
 }
 
@@ -148,9 +166,46 @@ static inline XrValue xr_aot_bridge_xrt_string_to_runtime(const XrAotContext *ct
     return dst ? xr_mkheap(dst, XR_TSTRING) : XR_NULL_VAL;
 }
 
+/* Runtime-owned queues and aggregate fields deliberately recognize only the
+ * backend-neutral PTR tag.  Preserve the native object's canonical header at
+ * the boundary, then restore the richer AOT tag after ownership has moved
+ * back into generated code.  The pointer identity is unchanged: this is an
+ * envelope conversion, not a retain, copy, or allocation. */
+static inline XrValue xr_aot_bridge_native_value_to_runtime(XrValue value) {
+    if (value.tag != XR_TAG_TUPLE && value.tag != XR_TAG_ENUM)
+        return value;
+    if (!value.ptr || !xrt_arc_value_has_header(value))
+        return value;
+
+    XrObjHeader *hdr = xrt_arc_value_header(value);
+    if (!hdr || (hdr->extra & XR_OBJ_AOT_NATIVE) == 0)
+        return value;
+
+    XrValue out = xr_mkheap(hdr, hdr->type);
+    out.flags |= XR_VALUE_FLAG_HEADER_AT_PTR;
+    return out;
+}
+
 static inline XrValue xr_aot_bridge_xrt_to_runtime(const XrAotContext *ctx, XrValue value) {
     if (XR_IS_STR(value))
         return xr_aot_bridge_xrt_string_to_runtime(ctx, value);
+    return xr_aot_bridge_native_value_to_runtime(value);
+}
+
+static inline XrValue xr_aot_bridge_native_pointer_to_xrt(XrValue value) {
+    if (value.tag != XR_TAG_PTR || !value.ptr)
+        return value;
+    const XrObjHeader *hdr = (const XrObjHeader *) value.ptr;
+    if ((hdr->extra & XR_OBJ_AOT_NATIVE) == 0)
+        return value;
+
+    if (hdr->type == XR_TINSTANCE && hdr->_rsv == XRT_ARC_KIND_TUPLE)
+        return xr_mkptr(value.ptr, XR_TAG_TUPLE);
+    if (hdr->type == XR_TINSTANCE && hdr->_rsv == XRT_ARC_KIND_ENUM_BOX) {
+        XrValue out = xr_mkptr(value.ptr, XR_TAG_ENUM);
+        out.ext = ((const XrAotEnumBox *) value.ptr)->member_index;
+        return out;
+    }
     return value;
 }
 
@@ -171,7 +226,7 @@ static inline XrValue xr_aot_bridge_array_to_xrt(XrValue value) {
     if (elem_type == XR_ELEM_ANY) {
         for (int32_t i = 0; i < src->length; i++) {
             XrValue item = xr_typed_get(src->data, i, elem_type);
-            xr_typed_set(dst->data, i, xr_aot_bridge_value_to_xrt(item), elem_type);
+            xr_typed_set(dst->data, i, xr_aot_bridge_borrowed_value_to_xrt(item), elem_type);
         }
     } else {
         memcpy(dst->data, src->data, (size_t) src->length * (size_t) dst->elem_size);
@@ -195,8 +250,8 @@ static inline XrValue xr_aot_bridge_map_to_xrt(XrValue value) {
         XrMapEntry *entry = &src->entries[i];
         if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
             continue;
-        xrt_map_set(dst, xr_aot_bridge_value_to_xrt(entry->key),
-                    xr_aot_bridge_value_to_xrt(entry->value));
+        xrt_map_set(dst, xr_aot_bridge_borrowed_value_to_xrt(entry->key),
+                    xr_aot_bridge_borrowed_value_to_xrt(entry->value));
     }
     return dst_value;
 }
@@ -216,7 +271,7 @@ static inline XrValue xr_aot_bridge_set_to_xrt(XrValue value) {
         XrSetEntry *entry = &src->entries[i];
         if (entry->val_tt == XR_SET_ENTRY_NIL)
             continue;
-        xrt_set_add(dst, xr_aot_bridge_value_to_xrt(entry->value));
+        xrt_set_add(dst, xr_aot_bridge_borrowed_value_to_xrt(entry->value));
     }
     return dst_value;
 }
@@ -230,10 +285,13 @@ static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value) {
      * while a native class carries its generated fields immediately after the
      * shared XrObjHeader. */
     if (value.ptr && (((const XrObjHeader *) value.ptr)->extra & XR_OBJ_AOT_NATIVE) != 0)
-        return value;
+        return xr_aot_bridge_native_pointer_to_xrt(value);
     XrValue adt = xr_aot_bridge_runtime_adt_to_xrt(value);
     if (adt.tag != value.tag || adt.ptr != value.ptr)
         return adt;
+    XrValue tuple = xr_aot_bridge_runtime_tuple_to_xrt(value);
+    if (tuple.tag != value.tag || tuple.ptr != value.ptr)
+        return tuple;
     XrValue enum_value = xr_aot_bridge_runtime_enum_to_xrt(value);
     if (enum_value.tag != value.tag || enum_value.ptr != value.ptr)
         return enum_value;
@@ -253,6 +311,30 @@ static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value) {
             return xr_aot_bridge_set_to_xrt(value);
     }
     return value;
+}
+
+/* Obtain an independent owner while converting a value that remains owned by
+ * a VM-layout aggregate/container.  A converted value is already a fresh AOT
+ * object; an AOT-native pass-through needs one explicit retain for the new
+ * owner before the source aggregate is released. */
+static inline XrValue xr_aot_bridge_borrowed_value_to_xrt(XrValue value) {
+    XrValue out = xr_aot_bridge_value_to_xrt(value);
+    if (out.ptr && out.ptr == value.ptr && xrt_arc_value_has_header(out))
+        xrt_retain(out);
+    return out;
+}
+
+/* Consume an owned provider value after converting it to the AOT object
+ * domain. Channel/task result slots transfer their runtime value into the
+ * generated frame; once a distinct AOT value exists, keeping the provider
+ * wrapper alive would pin one short-lived object in the coroutine region per
+ * operation. */
+static inline XrValue xr_aot_bridge_owned_value_to_xrt(const XrAotContext *ctx, XrValue value) {
+    XrValue out = xr_aot_bridge_value_to_xrt(value);
+    if (out.ptr != value.ptr) {
+        xr_aot_release_provider_value(ctx, value);
+    }
+    return out;
 }
 
 #endif  // XAOT_CORO_BRIDGE_H

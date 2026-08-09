@@ -101,7 +101,7 @@ static const char EXPLAIN_ERROR_SYSTEM[] =
     "2. Common causes\n"
     "3. How to fix it with a corrected code example\n"
     "Important Xray rules:\n"
-    "- Named Channel handles use a stable const binding\n"
+    "- Channel handles use a stable const binding\n"
     "- go closures cannot capture ordinary local var/const reference values (pass as params)\n"
     "- Arrow function params MUST have type annotations\n"
     "- Quotes inside ${} interpolation are allowed; nested strings are scanned as expressions\n";

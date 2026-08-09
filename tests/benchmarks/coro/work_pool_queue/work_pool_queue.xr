@@ -67,16 +67,17 @@ fn worker(id: int) -> int {
     return processed
 }
 
-fn submit_tasks(count: int) {
+fn submit_tasks(count: int) -> int {
     for (var i = 0; i < count; i++) {
         assert_true(work_queue.push(i, i))
     }
     work_queue.close()
+    return count
 }
 
 var start = time.monotonic()
 
-var workers: Array<Task> = []
+var workers: Array<Task<int>> = []
 for (var i = 0; i < WORKERS; i++) {
     workers.push(go worker(i))
 }

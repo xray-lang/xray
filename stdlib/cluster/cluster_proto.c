@@ -63,6 +63,32 @@ int cluster_frame_write(uint8_t *buf, uint8_t frame_type, const uint8_t *payload
     return (int) (4 + total_payload);
 }
 
+int cluster_frame_write_transport(uint8_t *buf, size_t buf_size, uint8_t hop_limit,
+                                  const char *topic, uint8_t topic_len, const uint8_t *envelope,
+                                  uint32_t envelope_len) {
+    if (!buf || !topic || topic_len == 0 || !envelope ||
+        envelope_len < XR_CLUSTER_ENVELOPE_HEADER_SIZE)
+        return -1;
+
+    size_t payload_len_wide = 2u + (size_t) topic_len + envelope_len;
+    if (payload_len_wide > XR_FRAME_MAX_PAYLOAD - 1u)
+        return -1;
+
+    uint32_t payload_len = (uint32_t) payload_len_wide;
+    size_t frame_len = (size_t) XR_FRAME_HEADER_SIZE + 1u + payload_len;
+    if (frame_len > buf_size)
+        return -1;
+
+    put_u32(buf, 1u + payload_len);
+    buf[XR_FRAME_HEADER_SIZE] = XR_FRAME_TRANSPORT_ENVELOPE;
+    uint8_t *payload = buf + XR_FRAME_HEADER_SIZE + 1u;
+    payload[0] = hop_limit;
+    payload[1] = topic_len;
+    memcpy(payload + 2, topic, topic_len);
+    memcpy(payload + 2 + topic_len, envelope, envelope_len);
+    return (int) frame_len;
+}
+
 /* ========== Frame Header Read ========== */
 
 int cluster_frame_read_header(const uint8_t *data, size_t data_len, uint8_t *frame_type,
@@ -210,194 +236,6 @@ int cluster_frame_decode_heartbeat(const uint8_t *payload, uint32_t len, int64_t
     if (len < 8)
         return -1;
     *timestamp = get_i64(payload);
-    return 0;
-}
-
-/* ========== Channel Send Encode/Decode ========== */
-
-/*
- * CHANNEL_SEND payload:
- *   [name_len 1B] [name ...] [value_data ...]
- */
-int cluster_frame_encode_channel_send(uint8_t *buf, size_t buf_size, const char *channel_name,
-                                      const uint8_t *value_data, uint32_t value_len) {
-    uint8_t name_len = (uint8_t) strlen(channel_name);
-    if (name_len > XR_CHANNEL_NAME_MAX)
-        return -1;
-    uint32_t payload_len = 1 + name_len + value_len;
-    uint32_t frame_size = 4 + 1 + payload_len;
-    if (buf_size < frame_size)
-        return -1;
-
-    // Write frame header
-    put_u32(buf, 1 + payload_len);
-    buf[4] = XR_FRAME_CHANNEL_SEND;
-    buf[5] = name_len;
-    memcpy(buf + 6, channel_name, name_len);
-    memcpy(buf + 6 + name_len, value_data, value_len);
-    return (int) frame_size;
-}
-
-int cluster_frame_decode_channel_send(const uint8_t *payload, uint32_t len,
-                                      XrFrameChannelSend *out) {
-    if (len < 1)
-        return -1;
-    uint8_t name_len = payload[0];
-    if (name_len > XR_CHANNEL_NAME_MAX)
-        return -1;
-    if (len < (uint32_t) (1 + name_len))
-        return -1;
-    memcpy(out->channel_name, payload + 1, name_len);
-    out->channel_name[name_len] = '\0';
-    out->channel_name_len = name_len;
-    out->value_data = (uint8_t *) (payload + 1 + name_len);
-    out->value_len = len - 1 - name_len;
-    return 0;
-}
-
-/* ========== Channel Close Encode/Decode ========== */
-
-/*
- * CHANNEL_CLOSE payload: [name_len 1B] [name ...]
- */
-int cluster_frame_encode_channel_close(uint8_t *buf, size_t buf_size, const char *channel_name) {
-    uint8_t name_len = (uint8_t) strlen(channel_name);
-    if (name_len > XR_CHANNEL_NAME_MAX)
-        return -1;
-    uint32_t payload_len = 1 + name_len;
-    uint32_t frame_size = 4 + 1 + payload_len;
-    if (buf_size < frame_size)
-        return -1;
-
-    uint8_t payload[256];
-    payload[0] = name_len;
-    memcpy(payload + 1, channel_name, name_len);
-    return cluster_frame_write(buf, XR_FRAME_CHANNEL_CLOSE, payload, payload_len);
-}
-
-int cluster_frame_decode_channel_close(const uint8_t *payload, uint32_t len, char *channel_name,
-                                       size_t name_size) {
-    if (len < 1)
-        return -1;
-    uint8_t name_len = payload[0];
-    if (name_len > XR_CHANNEL_NAME_MAX || (size_t) (name_len + 1) > name_size)
-        return -1;
-    if (len < (uint32_t) (1 + name_len))
-        return -1;
-    memcpy(channel_name, payload + 1, name_len);
-    channel_name[name_len] = '\0';
-    return 0;
-}
-
-/* ========== Channel Subscribe Encode/Decode ========== */
-
-/*
- * CHANNEL_SUBSCRIBE payload: [name_len 1B] [name ...]
- */
-int cluster_frame_encode_channel_subscribe(uint8_t *buf, size_t buf_size,
-                                           const char *channel_name) {
-    uint8_t name_len = (uint8_t) strlen(channel_name);
-    if (name_len > XR_CHANNEL_NAME_MAX)
-        return -1;
-    uint32_t payload_len = 1 + name_len;
-    uint32_t frame_size = 4 + 1 + payload_len;
-    if (buf_size < frame_size)
-        return -1;
-
-    uint8_t payload[256];
-    payload[0] = name_len;
-    memcpy(payload + 1, channel_name, name_len);
-    return cluster_frame_write(buf, XR_FRAME_CHANNEL_SUBSCRIBE, payload, payload_len);
-}
-
-int cluster_frame_decode_channel_subscribe(const uint8_t *payload, uint32_t len,
-                                           XrFrameChannelSubscribe *out) {
-    if (len < 1)
-        return -1;
-    uint8_t name_len = payload[0];
-    if (name_len > XR_CHANNEL_NAME_MAX)
-        return -1;
-    if (len < (uint32_t) (1 + name_len))
-        return -1;
-    memcpy(out->channel_name, payload + 1, name_len);
-    out->channel_name[name_len] = '\0';
-    out->channel_name_len = name_len;
-    return 0;
-}
-
-/* ========== Channel Unsubscribe Encode/Decode ========== */
-
-/*
- * CHANNEL_UNSUBSCRIBE payload: [name_len 1B] [name ...]
- */
-int cluster_frame_encode_channel_unsubscribe(uint8_t *buf, size_t buf_size,
-                                             const char *channel_name) {
-    uint8_t name_len = (uint8_t) strlen(channel_name);
-    if (name_len > XR_CHANNEL_NAME_MAX)
-        return -1;
-    uint32_t payload_len = 1 + name_len;
-    uint32_t frame_size = 4 + 1 + payload_len;
-    if (buf_size < frame_size)
-        return -1;
-
-    uint8_t payload[256];
-    payload[0] = name_len;
-    memcpy(payload + 1, channel_name, name_len);
-    return cluster_frame_write(buf, XR_FRAME_CHANNEL_UNSUBSCRIBE, payload, payload_len);
-}
-
-int cluster_frame_decode_channel_unsubscribe(const uint8_t *payload, uint32_t len,
-                                             char *channel_name, size_t name_size) {
-    if (len < 1)
-        return -1;
-    uint8_t name_len = payload[0];
-    if (name_len > XR_CHANNEL_NAME_MAX || (size_t) (name_len + 1) > name_size)
-        return -1;
-    if (len < (uint32_t) (1 + name_len))
-        return -1;
-    memcpy(channel_name, payload + 1, name_len);
-    channel_name[name_len] = '\0';
-    return 0;
-}
-
-/* ========== Channel Push Encode/Decode ========== */
-
-/*
- * CHANNEL_PUSH payload: [name_len 1B] [name ...] [value_data ...]
- */
-int cluster_frame_encode_channel_push(uint8_t *buf, size_t buf_size, const char *channel_name,
-                                      const uint8_t *value_data, uint32_t value_len) {
-    uint8_t name_len = (uint8_t) strlen(channel_name);
-    if (name_len > XR_CHANNEL_NAME_MAX)
-        return -1;
-    uint32_t payload_len = 1 + name_len + value_len;
-    uint32_t frame_size = 4 + 1 + payload_len;
-    if (buf_size < frame_size)
-        return -1;
-
-    // Write frame header
-    put_u32(buf, 1 + payload_len);
-    buf[4] = XR_FRAME_CHANNEL_PUSH;
-    buf[5] = name_len;
-    memcpy(buf + 6, channel_name, name_len);
-    memcpy(buf + 6 + name_len, value_data, value_len);
-    return (int) frame_size;
-}
-
-int cluster_frame_decode_channel_push(const uint8_t *payload, uint32_t len,
-                                      XrFrameChannelPush *out) {
-    if (len < 1)
-        return -1;
-    uint8_t name_len = payload[0];
-    if (name_len > XR_CHANNEL_NAME_MAX)
-        return -1;
-    if (len < (uint32_t) (1 + name_len))
-        return -1;
-    memcpy(out->channel_name, payload + 1, name_len);
-    out->channel_name[name_len] = '\0';
-    out->channel_name_len = name_len;
-    out->value_data = (uint8_t *) (payload + 1 + name_len);
-    out->value_len = len - 1 - name_len;
     return 0;
 }
 

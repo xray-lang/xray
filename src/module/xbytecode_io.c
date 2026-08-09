@@ -2362,6 +2362,46 @@ int xr_eval_bytecode(XrVMRuntime *X, const uint8_t *data, size_t size) {
     return result;
 }
 
+XRAY_API int xray_vm_eval_bundle(XrVMRuntime *X, const XrBytecodeBundle *bundle) {
+    if (!X || !bundle || !bundle->modules || bundle->module_count == 0 ||
+        bundle->module_count > INT_MAX || bundle->entry_index >= bundle->module_count)
+        return -1;
+    for (size_t i = 0; i < bundle->module_count; i++) {
+        const XrBytecodeModule *module = &bundle->modules[i];
+        if (!module->path || ((module->bytecode == NULL) != (module->bytecode_size == 0)))
+            return -1;
+    }
+    const XrBytecodeModule *entry = &bundle->modules[bundle->entry_index];
+    if (!entry->bytecode || entry->bytecode_size == 0)
+        return -1;
+
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(X);
+    if (!registry)
+        return -1;
+
+    registry->embedded_modules = bundle->modules;
+    registry->embedded_module_count = bundle->module_count;
+    xr_free(registry->module_table);
+    registry->module_table = (XrModule **) xr_calloc(bundle->module_count, sizeof(XrModule *));
+    if (!registry->module_table)
+        return -1;
+    registry->module_table_count = (int) bundle->module_count;
+
+    for (size_t i = 0; i < bundle->module_count; i++) {
+        if (i == bundle->entry_index)
+            continue;
+        XrValue value = xr_module_import(X, bundle->modules[i].path);
+        if (XR_IS_NULL(value)) {
+            xr_log_warning("bytecode", "failed to initialize bundled module '%s'",
+                           bundle->modules[i].path ? bundle->modules[i].path : "<unknown>");
+            return -1;
+        }
+        registry->module_table[i] = xr_value_to_module(value);
+    }
+
+    return xr_eval_bytecode(X, entry->bytecode, entry->bytecode_size);
+}
+
 /* ========== AOT Bytecode Load (decomposed API) ========== */
 
 XrProto *xr_bytecode_load(XrVMRuntime *X, const uint8_t *data, size_t size) {

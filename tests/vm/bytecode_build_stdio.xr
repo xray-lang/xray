@@ -1,0 +1,4 @@
+import time
+
+print("BYTECODE_BUILD_READY")
+time.sleep(10000)

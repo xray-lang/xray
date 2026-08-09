@@ -1,0 +1,22 @@
+fn publish(results: Channel<(int, int, int)>, producer: int) {
+    var result = (producer + 1, producer + 2, producer + 3)
+    results.send(move result)
+}
+
+const results = Channel<(int, int, int)>(4)
+var total = 0
+scope {
+    for (var producer = 0; producer < 4; producer++) {
+        go publish(results, producer)
+    }
+    for (var producer = 0; producer < 4; producer++) {
+        match (results.recv()) {
+            Recv.Value((first, second, third)) -> {
+                total = total + first + second + third
+            }
+            _ -> {}
+        }
+    }
+}
+results.close()
+print(total)

@@ -65,7 +65,16 @@ CONTRACT_SPECS = (
             "src/app/cli/xcmd_verify.c",
         ),
     ),
-    ContractSpec("rc-contract.md", ("src/ir/xi_arc_verify.c",)),
+    ContractSpec(
+        "rc-contract.md",
+        (
+            "src/ir/xi_arc_verify.c",
+            "src/ir/xi_arc.c",
+            "src/ir/xi_lower_expr.c",
+            "src/aot/xi_cgen_dispatch_helpers.inc.c",
+            "src/aot/xrt_coll.h",
+        ),
+    ),
     ContractSpec(
         "cgen-wellformedness.md",
         (
@@ -103,7 +112,9 @@ CONTRACT_SPECS = (
             "src/aot/xaot_link.c",
             "src/aot/xaot_prepare.c",
             "src/aot/xaot_verify.c",
+            "src/aot/xaot_coro.h",
             "src/aot/xi_cgen_abi_helpers.inc.c",
+            "src/aot/xi_cgen_class_helpers.inc.c",
             "src/aot/xi_cgen_class_native_helpers.inc.c",
             "src/aot/xi_cgen_dispatch_helpers.inc.c",
             "src/aot/xi_cgen_program_entry.inc.c",
@@ -111,6 +122,7 @@ CONTRACT_SPECS = (
             "src/aot/xi_cgen.c",
             "src/aot/xrt_coll.h",
             "src/aot/xrt_core_freestanding.h",
+            "src/aot/xrt_provider_abi.h",
             "src/aot/xrt_time.h",
             "src/app/cli/xcmd_build.c",
             "src/app/toolchain/xtc_model.c",
@@ -159,12 +171,31 @@ CONTRACT_SPECS = (
             "src/aot/xaot_verify.c",
         ),
     ),
+    ContractSpec(
+        "sort-semantics.md",
+        (
+            "src/shared/xr_sort_core.h",
+            "src/runtime/object/xarray_vm.c",
+            "src/aot/xrt_sort.inc.c",
+            "tests/diff/cases/semantics/collections/array_sort_shared_core.xr",
+            "tests/unit/stdlib/test_array_core.c",
+        ),
+    ),
+    ContractSpec(
+        "semantic-ownership.md",
+        (
+            "contracts/semantic-owners.toml",
+            "contracts/hof-shape-matrix.toml",
+            "contracts/shared-core-inventory.json",
+            "scripts/check_semantic_owners.py",
+        ),
+    ),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")
 def digest(path: Path) -> str:
     # Contract anchors describe repository content, whose canonical Git form
-    # uses LF.  Normalize checkout-only CRLF so the gate has the same result on
+    # uses LF. Normalize checkout-only CRLF so the gate has the same result on
     # Windows and Unix hosts while preserving every other byte.
     content = path.read_bytes().replace(b"\r\n", b"\n")
     return hashlib.sha256(content).hexdigest()

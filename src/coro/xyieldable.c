@@ -83,6 +83,57 @@ static void yield_abort_io_wait(XrCoroutine *coro, XrCoroBlockSnapshot block_sna
         xr_coro_flags_clear(coro, XR_CORO_WAIT_MASK);
 }
 
+XrCoroBlockResult xr_coro_wait_io(XrCoroutine *coro, int fd, int events, int64_t timeout_ms) {
+    XrCoroBlockResult result = {XR_CORO_BLOCK_ERROR, xr_null(), false};
+    if (!coro || fd < 0 || (events & (XR_WAIT_READ | XR_WAIT_WRITE)) == 0)
+        return result;
+
+    XrRuntime *runtime = (XrRuntime *) xr_coro_scheduler(coro);
+    if (!runtime)
+        return result;
+    XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
+    if (!pd)
+        return result;
+    xr_netpoll_bind_worker(pd);
+    pd->user_data = coro;
+
+    int mode = (events & XR_WAIT_READ) ? XR_POLL_READ : XR_POLL_WRITE;
+    _Atomic uintptr_t *gpp = mode == XR_POLL_READ ? &pd->rg : &pd->wg;
+    for (;;) {
+        uintptr_t old = atomic_load(gpp);
+        if (old == XR_PD_READY) {
+            if (!atomic_compare_exchange_strong(gpp, &old, XR_PD_NIL))
+                continue;
+            result.kind = XR_CORO_BLOCK_READY;
+            result.ok = true;
+            return result;
+        }
+        if (old != XR_PD_NIL)
+            return result;
+        if (!yield_prepare_io_wait(coro, fd, events, timeout_ms))
+            return result;
+
+        XrCoroBlockSnapshot block_snapshot = xr_coro_begin_reversible_block(coro);
+        yield_commit_io_wait(coro);
+        if (!atomic_compare_exchange_strong(gpp, &old, (uintptr_t) coro)) {
+            yield_abort_io_wait(coro, block_snapshot);
+            continue;
+        }
+
+        atomic_fetch_add(&runtime->netpoll.waiters, 1);
+        xr_netpoll_arm_mode(pd, mode);
+        if (timeout_ms > 0) {
+            int64_t deadline_ns = get_time_us() * 1000 + timeout_ms * 1000000LL;
+            XrWorker *worker = xr_current_worker();
+            XrTimerWheel *tw = worker ? worker->p.timer_wheel : NULL;
+            xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline_ns, mode, tw);
+        }
+        result.kind = XR_CORO_BLOCK_BLOCKED;
+        result.ok = true;
+        return result;
+    }
+}
+
 // ========== Public API ==========
 
 // xr_yield_for_io - Wait for I/O event and yield (core function)

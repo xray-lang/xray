@@ -1,7 +1,6 @@
-// Task 259 §4 (R7 rc_traffic): reassigning a managed field emits the
-// retain-new / release-old write barrier as literal RC tokens in the
-// generated C, so a contract forbidding rc_traffic must reject this body
-// and name the reference-count category — not runtime dispatch.
+// Reassigning a managed field emits the retain-new / release-old write
+// barrier. The no_runtime_heap requirement itself rejects that live R7
+// residue; users do not need a second hand-written rc_traffic prohibition.
 class Holder {
     data: Array<int>
     n: int

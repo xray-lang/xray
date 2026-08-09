@@ -976,21 +976,6 @@ static XrSelectCase *coro_select_alloc_cases(XrRuntime *runtime, XrSelectStorage
     return storage->heap_cases;
 }
 
-static void coro_select_notify_enter(XrSelectWait *sw) {
-    if (!sw) {
-        return;
-    }
-
-    for (int ci = 0; ci < sw->case_count; ci++) {
-        XrChannel *ch = (XrChannel *) sw->cases[ci].channel;
-        XrVMRuntime *host = ch ? ch->vm_host_isolate : NULL;
-        XrChannelDistHooks *dhooks = host ? (XrChannelDistHooks *) host->channel_dist_hooks : NULL;
-        if (ch && ch->dist && dhooks && dhooks->on_select_enter) {
-            dhooks->on_select_enter(ch);
-        }
-    }
-}
-
 static void coro_select_arm_timer(XrWorker *worker, XrCoroutine *coro, XrChannel *timer_ch) {
     if (!worker || !coro || !timer_ch ||
         atomic_load_explicit(&timer_ch->timer_fired, memory_order_acquire)) {
@@ -1143,7 +1128,6 @@ XrCoroBlockResult xr_coro_select_block(XrCoroutine *coro, const XrValue *channel
 
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SELECT >> XR_CORO_WAIT_SHIFT);
     coro_select_arm_timer(worker, coro, timer_ch);
-    coro_select_notify_enter(sw);
 
     xr_worker_block_select(worker, coro, NULL, sw->case_count);
     if (coro_select_recheck_after_block(worker, coro, sw)) {

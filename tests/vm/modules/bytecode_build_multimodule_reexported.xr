@@ -1,0 +1,7 @@
+export fn reexportedBonus() -> int {
+    return 7
+}
+
+export fn starBonus() -> int {
+    return 9
+}

@@ -629,6 +629,9 @@ static void test_stack_closure_borrows_cell_upval(void) {
     reset_alloc_counts();
     XrValue arr = xrt_array_new_typed(0, XR_ELEM_I64, 0);
     XrValue cell = xrt_cell_new(XR_NULL_VAL);
+    /* CELL_SET consumes one stored-value owner.  Preserve the independent
+     * local owner that this fixture uses after the stack closure is dropped. */
+    xrt_retain(arr);
     xrt_cell_set(cell, arr);
 
     int nupvals = 1;

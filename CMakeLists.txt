@@ -1192,6 +1192,9 @@ set(XRAY_RT_CORO_SOURCES
     ${CORO_SRC}
     ${IO_SRC}
     src/aot/xrt_gen_iter.c
+    stdlib/cluster/cluster_aot.c
+    stdlib/cluster/cluster_auth.c
+    stdlib/cluster/cluster_proto.c
 )
 list(REMOVE_DUPLICATES XRAY_RT_CORO_SOURCES)
 list(FILTER XRAY_RT_CORO_SOURCES EXCLUDE REGEX ".*/src/runtime/xisolate_api\\.c$")
@@ -1941,6 +1944,59 @@ if(BUILD_TESTS)
         LABELS "vm;aot;bytecode;bigint;cli;regression"
         PROCESSORS 1
         TIMEOUT 180
+    )
+
+    add_test(
+        NAME bytecode_build_scheduler
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bytecode_build_scheduler_test.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    math(EXPR BYTECODE_BUILD_SCHEDULER_TIMEOUT "300 * ${XR_TEST_TIMEOUT_SCALE}")
+    set_tests_properties(bytecode_build_scheduler PROPERTIES
+        LABELS "vm;bytecode;build;scheduler;regression"
+        PROCESSORS 1
+        TIMEOUT ${BYTECODE_BUILD_SCHEDULER_TIMEOUT}
+    )
+
+    add_test(
+        NAME bytecode_build_entry_failure
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bytecode_build_entry_failure_test.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(bytecode_build_entry_failure PROPERTIES
+        LABELS "vm;bytecode;build;bundle;regression"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME bytecode_build_multimodule
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bytecode_build_multimodule_test.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(bytecode_build_multimodule PROPERTIES
+        LABELS "vm;bytecode;build;bundle;module;regression"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME bytecode_build_stdio
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bytecode_build_stdio_test.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(bytecode_build_stdio PROPERTIES
+        LABELS "vm;bytecode;build;bundle;stdio;regression"
+        PROCESSORS 1
+        TIMEOUT 60
     )
 
     add_test(
@@ -3600,6 +3656,19 @@ if(BUILD_TESTS)
         TIMEOUT 600
     )
 
+    add_test(
+        NAME aot_net_fd_reuse_close
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_net_fd_reuse.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_net_fd_reuse_close PROPERTIES
+        LABELS "aot;netpoll;regression"
+        PROCESSORS 1
+        TIMEOUT 150
+    )
+
     # P2: removed-surface-form drift scan. Fails closed on any live occurrence
     # of a deleted Xray surface form (`let` bindings, mem.free(), unchecked LE
     # load/store, direct Buffer indexing) across tests/, stdlib/, and knowledge
@@ -3699,6 +3768,42 @@ if(BUILD_TESTS)
     )
     set_tests_properties(contract_freeze_injection PROPERTIES
         LABELS "meta;contracts;freeze;task-220"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME semantic_owner_inventory
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_owners.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(semantic_owner_inventory PROPERTIES
+        LABELS "meta;semantic-owner;shared-core"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME semantic_owner_inventory_self_test
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_owners.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(semantic_owner_inventory_self_test PROPERTIES
+        LABELS "meta;semantic-owner;shared-core"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME semantic_performance_evidence
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_performance_evidence.py
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(semantic_performance_evidence PROPERTIES
+        LABELS "meta;semantic-owner;performance;task-262"
         PROCESSORS 1
         TIMEOUT 30
     )

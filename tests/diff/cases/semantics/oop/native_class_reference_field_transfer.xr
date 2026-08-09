@@ -1,0 +1,44 @@
+import runtime
+import time
+
+class Packet {
+    payload: Array<byte>
+
+    constructor(payload: Array<byte>) {
+        this.payload = payload
+    }
+
+    replace(first: Array<byte>, second: Array<byte>) {
+        this.payload = first
+        this.payload = second
+        this.payload = this.payload
+    }
+}
+
+fn packetSize(payload: Array<byte>) -> int {
+    var packet = Packet(payload)
+    return len(packet.payload)
+}
+
+fn churn(payload: Array<byte>, rounds: int) -> int {
+    time.sleep(1)
+    var total = 0
+    for (var i = 0; i < rounds; i++) {
+        total = total + packetSize(payload)
+    }
+    return total
+}
+
+var payload = Array<byte>(4096, 7)
+var beforeBytes = runtime.liveBytes()
+var beforeObjects = runtime.liveObjects()
+var total = churn(payload, 2000)
+time.sleep(1)
+
+var packet = Packet([1])
+packet.replace([2, 3], [4, 5, 6])
+
+print(total)
+print(len(packet.payload))
+print(runtime.liveBytes() - beforeBytes < 262144)
+print(runtime.liveObjects() - beforeObjects < 128)

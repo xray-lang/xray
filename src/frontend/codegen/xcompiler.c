@@ -120,6 +120,8 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
     /* Post-mono: re-analyze monomorphized declarations for struct layouts */
     if (ctx->analyzer) {
         xa_analyzer_analyze(ctx->analyzer, ctx->source_file, ast);
+        if (drain_analyzer_diagnostics(ctx) > 0)
+            return NULL;
     }
 
     /* Mark all diagnostics as reported before escape analysis */
@@ -173,6 +175,9 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
          * (name-keyed) instead of the slot-indexed shared array. */
         pipe_cfg.repl_mode = ctx->repl_mode;
         pipe_cfg.source_file = ctx->source_file;
+        pipe_cfg.module_graph = ctx->module_graph;
+        pipe_cfg.graph_modules = ctx->graph_modules;
+        pipe_cfg.graph_module_count = ctx->graph_module_count;
         XiPipelineResult pipe_res =
             xi_pipeline_compile_program(ast, ctx->analyzer, ctx->X, &pipe_cfg);
         if (pipe_res.status == XI_PIPE_OK && pipe_res.proto != NULL) {

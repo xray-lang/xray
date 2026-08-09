@@ -101,11 +101,19 @@ bool xr_coro_finalize_blocked_suspend(XrCoroutine *coro) {
 }
 
 void xr_coro_finish_backend_resume_tokens(XrCoroutine *coro, int resume_status) {
-    if (!coro || !coro->ext || resume_status != XR_RESUME_TIMEOUT)
+    if (!coro || !coro->ext)
         return;
 
     int wait_reason = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
-    if (wait_reason == (XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT)) {
+    if ((resume_status == XR_RESUME_IO_READY || resume_status == XR_RESUME_TIMEOUT) &&
+        wait_reason == (XR_CORO_WAIT_IO >> XR_CORO_WAIT_SHIFT)) {
+        xr_io_wait_token_finish(&coro->ext->wait.io_token);
+        if (resume_status == XR_RESUME_TIMEOUT)
+            xr_timer_wait_token_finish(&coro->ext->wait.timer_token);
+        return;
+    }
+    if (resume_status == XR_RESUME_TIMEOUT &&
+        wait_reason == (XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT)) {
         xr_timer_wait_token_finish(&coro->ext->wait.timer_token);
     }
 }

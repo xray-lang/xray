@@ -18,6 +18,7 @@
 #include "../analysis/xglobal_summary.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../shared/xobject_shape.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xvalue.h"
 #include "../frontend/parser/xast_nodes.h"

@@ -734,9 +734,16 @@ typedef struct XiImportRef {
     const char *member_name;          /* exported name (e.g. "square") */
     int resolved_mod_index;           /* index into the driver's module array, -1 = unresolved */
     int resolved_shared_slot;         /* shared slot in the target module, -1 = unresolved */
+    int resolved_export_slot;         /* dense VM runtime export slot, -1 = unresolved */
     struct XiFunc *resolved_func;     /* exported function this member ref binds to, or NULL */
     struct XiModule *resolved_module; /* target module (namespace refs included), or NULL */
 } XiImportRef;
+
+typedef struct XiResolvedReexport {
+    const char *export_name; /* public name owned by the containing XiFunc arena */
+    int mod_index;           /* owning module's topological index */
+    int export_slot;         /* owning module's dense VM export slot */
+} XiResolvedReexport;
 
 /* Re-export entry for "export { a } from './file'" and "export * from './file'".
  * Stored on XiFunc during lowering, emitted as OP_LOAD_MODULE_SLOT + OP_SET_EXPORT. */
@@ -744,6 +751,12 @@ typedef struct XiReexportEntry {
     const char *from_path; /* source module path (arena copy) */
     const char *name;      /* original export name (NULL = star re-export) */
     const char *alias;     /* export alias (NULL = same as name) */
+    int resolved_mod_index;
+    int resolved_export_slot;
+    XiResolvedReexport *resolved_members; /* sorted expansion for star re-export */
+    uint16_t resolved_member_count;
+    bool resolution_attempted;
+    bool resolution_complete;
 } XiReexportEntry;
 
 /* Arena-safe method descriptor for XI_CLASS_CREATE.
@@ -858,6 +871,10 @@ typedef enum {
  * deliberately not a fourth source parameter mode: callers still use an
  * ordinary argument, while lowering proves a nonescaping call-bound place. */
 #define XI_LOWERING_FLAG_PARAM_READ_PLACE (1u << 3)
+/* The suspension site is resumed by retrying the same lowered operation.
+ * Every non-callee operand is therefore a use on both sides of the suspend
+ * boundary and must be materialized in the coroutine frame. */
+#define XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS (1u << 4)
 /* Exact module-provenance fact for `time.sleep(duration)`.  The VM emitter
  * consumes this fact to select OP_SLEEP; spelling alone is not sufficient
  * because user-defined objects may also have a method named `sleep`. */

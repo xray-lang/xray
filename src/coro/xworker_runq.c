@@ -8,10 +8,11 @@
  * xworker_runq.c - Per-P run queue and worker push/pop operations
  *
  * KEY CONCEPT:
- *   One owner-local Chase-Lev work-stealing deque per P, plus a runtime-wide
+ *   One owner-pushed Chase-Lev ready deque per P, plus a runtime-wide
  *   injection queue for owner-side bursts that outgrow the local deque.
- *   Owner push/pop is lock-free on the common path; thieves CAS the top
- *   pointer from remote workers.
+ *   Ready work is consumed oldest-first from the steal end by both the owner
+ *   and thieves. A separate one-entry LIFO slot supplies bounded run-next
+ *   locality without turning the durable ready queue into a starvation path.
  *
  * RELATED:
  *   - xproc.h: XrRunQueue / XrProc.runq
@@ -77,8 +78,13 @@ static XrCoroutine *runq_pop_overflow(XrRunQueue *rq) {
 }
 
 static XrCoroutine *runq_pop_local(XrRunQueue *rq) {
-    XrCoroutine *coro = xr_steal_queue_pop(&rq->deque);
-    if (coro)
+    /* Take the oldest ready coroutine. Using the CAS-protected steal end is
+     * intentional: the owner races remote thieves here, but the queue primitive
+     * admits any number of consumers at this end. If the LIFO locality budget
+     * flushes a hot coroutine, older work therefore wins on the next poll. */
+    XrCoroutine *coro = NULL;
+    XrStealQueueStatus status = xr_steal_queue_steal_status(&rq->deque, &coro);
+    if (status == XR_STEAL_QUEUE_SUCCESS)
         return coro;
     return runq_pop_overflow(rq);
 }
@@ -407,7 +413,7 @@ void xr_runq_enqueue(XrRunQueue *rq, XrCoroutine *coro) {
     runq_enqueue_at(rq, coro, xr_monotonic_ticks());
 }
 
-// Dequeue: owner thread lock-free pop.
+// Dequeue: take the oldest local item from the CAS-protected steal end.
 XrCoroutine *xr_runq_dequeue(XrRunQueue *rq) {
     return runq_pop_local(rq);
 }
@@ -502,7 +508,8 @@ XrRunqStealStatus xr_runq_steal_direct_status(XrRunQueue *src, XrRunQueue *dst, 
 
 // ========== Worker Pop / Push ==========
 
-// Worker pop from local queue. LIFO slot wins only while locality gates allow it.
+// Worker pop from local queue. The bounded LIFO slot wins while locality gates
+// allow it; the durable queue is FIFO so a flush actually yields to older work.
 XrCoroutine *xr_worker_pop(XrWorker *worker) {
     XrCoroutine *coro = xr_worker_try_pop_lifo(worker, true);
     if (coro)

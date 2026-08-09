@@ -1,0 +1,77 @@
+{
+  "canonical_consumer_mentions": 12,
+  "cc": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+  "host": "macOS-26.5-arm64-arm-64bit",
+  "machine": "arm64",
+  "profiles": [
+    {
+      "binary_bytes": 168136,
+      "binary_sha256": "17856d32c54d23fcabb3a905483e88d304f363eceee41a6f7e57c06bfe466a87",
+      "codegen_ns": 9976250,
+      "generated_c_bytes": 10407,
+      "generated_c_sha256": "32d22372ef156b4d628774af5a4fd172bc76fe28de5af64333d00cd2ba96a270",
+      "native_build_ns": 954965250,
+      "object_bytes": 157544,
+      "object_compile_ns": 130413250,
+      "object_sha256": "0f848c2ecafa9ad8faef601f6cc73ebf8c579368081425c6fac59b2f620d2637",
+      "opt": 0,
+      "retired_private_sort_mentions": 0,
+      "runtime_median_ns": 90525209,
+      "runtime_p99_ns": 437028417,
+      "runtime_samples_ns": [
+        437028417,
+        90312250,
+        91177000,
+        90956041,
+        90525209,
+        90132583,
+        90224583
+      ],
+      "sort_dispatch_mentions": 1
+    },
+    {
+      "binary_bytes": 89512,
+      "binary_sha256": "c800c2d813d44bd192426665317edb5d2d507a846c4c5e565ae7daa98109bf4e",
+      "codegen_ns": 8700208,
+      "generated_c_bytes": 10407,
+      "generated_c_sha256": "32d22372ef156b4d628774af5a4fd172bc76fe28de5af64333d00cd2ba96a270",
+      "native_build_ns": 436066375,
+      "object_bytes": 60888,
+      "object_compile_ns": 362396458,
+      "object_sha256": "55da70e2efb6bac1d0322ea522a166dd623461bfeb4c7798f6227450f817bcad",
+      "opt": 2,
+      "retired_private_sort_mentions": 0,
+      "runtime_median_ns": 52497750,
+      "runtime_p99_ns": 335376125,
+      "runtime_samples_ns": [
+        335376125,
+        54691959,
+        52303708,
+        52100042,
+        52625250,
+        52497750,
+        52398792
+      ],
+      "sort_dispatch_mentions": 1
+    }
+  ],
+  "samples": 7,
+  "schema": 1,
+  "source": "tests/benchmarks/aot_c90/runtime/sort_i64_random.xr",
+  "source_sha256": "e4490134662c6468c9df5f0792f2364e1a42a29db3da4cc22b24273295c4182b",
+  "task": 262,
+  "xray": {
+    "buildProfile": "Release",
+    "commit": "c3c85b5589dd7bfa3c801ab98f8fc1bc429f47db",
+    "dirty": false,
+    "features": [
+      "vm",
+      "aot",
+      "tls"
+    ],
+    "product": "xray-lang",
+    "schema": 1,
+    "target": "macos-arm64",
+    "version": "0.9.2"
+  }
+}

@@ -52,7 +52,7 @@ HTTP 的 `Router<T>`、请求/响应结构，Coro 的诊断、本地存储与池
 未完成动态迁移债务为 0。保留的 14 个入口均在 allowlist 中，且不代表类型系统缺口：
 
 - `Logger.child/debug/error/fatal/info/warn` 与对应的 `log.*` 六个函数：显式 structured-log `Json` bridge，共 12 项。
-- `cluster.publish`：显式 JSON wire payload 输入。
+- `cluster.send`：显式 opaque `Buffer` envelope transport 输入；固定协议结构由上层 typed codec 拥有。
 - `HttpResponse.json`：显式把响应体解码为任意 JSON 的输出。
 
 固定结构的请求、响应、配置、诊断、节点元数据及错误结果不得借上述 allowlist 回退到 `unknown`。

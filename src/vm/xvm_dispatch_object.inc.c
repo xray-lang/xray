@@ -658,8 +658,9 @@ getprop_instance:;
         vmbreak;
     }
 
-    // Dispatch: getter method lookup
-    {
+    // Dispatch: getter method lookup. The class summary includes inherited
+    // accessors, so ordinary field-only classes avoid the helper call entirely.
+    if (inst->klass->flags & XR_CLASS_HAS_GETTERS) {
         XrDispatchAction _cr =
             vm_getprop_instance_getter(isolate, vm_ctx, inst, obj, prop_symbol, base, a, frame, pc);
         if (_cr == XR_DISP_NEXT) {
@@ -847,8 +848,8 @@ vmcase(OP_SETPROP) {
         vmbreak;
     }
 
-    // Dispatch: setter method lookup
-    {
+    // Dispatch: setter method lookup. See the getter-side class-summary gate.
+    if (inst_s->klass->flags & XR_CLASS_HAS_SETTERS) {
         XrDispatchAction _cr = vm_setprop_instance_setter(isolate, vm_ctx, inst_s, obj, prop_symbol,
                                                           value, base, c, frame, pc);
         if (_cr == XR_DISP_NEXT) {

@@ -55,16 +55,4 @@ XR_FUNC void xr_regex_register_class(struct XrVMRuntime *isolate);
 XR_FUNC XrValue xr_regex_compile_literal(struct XrVMRuntime *isolate, XrValue pattern,
                                          XrValue flags);
 
-/* ========== Cluster Bridge ========== */
-
-// Check if cluster mode is active for an isolate.
-bool cluster_bridge_is_running(struct XrVMRuntime *X);
-
-// Find a named channel in the local cluster registry
-struct XrChannel *cluster_bridge_find_channel_local(struct XrVMRuntime *X, const char *name);
-
-// Register a channel in the cluster registry
-void cluster_bridge_register_channel_local(struct XrVMRuntime *X, const char *name,
-                                           struct XrChannel *ch);
-
 #endif  // XSTDLIB_BRIDGE_H

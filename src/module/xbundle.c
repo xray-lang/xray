@@ -8,100 +8,65 @@
  * xbundle.c - Multi-file bundling implementation
  *
  * KEY CONCEPT:
- *   Recursively analyzes imports, compiles dependencies,
- *   and bundles them into a single bytecode package.
+ *   Builds one dependency graph, compiles it in topological order,
+ *   and bundles source-backed modules into a single bytecode package.
  */
 
 #include "xbundle.h"
 #include "xmodule.h"
 #include "xmodule_graph.h"
 #include "xmodule_resolver.h"
-#include "../base/xlog.h"
 #include "../base/xchecks.h"
-#include "../base/xfileio.h"
+#include "../base/xlog.h"
 #include "xbytecode_io.h"
 #include "../runtime/xisolate_api.h"
 #include "../base/xmalloc.h"
-#include "../frontend/parser/xast.h"
-#include "../frontend/parser/xparse.h"
+#include "../frontend/analyzer/xanalyzer.h"
+#include "../ir/xi_module.h"
 #include "../toolchain/xcompiler_session.h"
-#include "../base/xhashmap.h"
-#include <stdio.h>
 #include <stdarg.h>
-#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
-#include <limits.h>
-#include "../os/os_fs.h"
-
-// xr_parse_with_source declared in xparse.h (included above)
-// xr_compile_ast_with_source declared in xisolate_internal.h (included above).
-// xr_program_destroy declared in xast.h (included via xast.h)
-
-/* ========== Internal Structures ========== */
-
-typedef struct {
-    XrVMRuntime *X;
-    XrCompilerSession *session;
-    XrBundle *bundle;
-    XrHashMap *visited;
-    char *base_dir;
-    XrBundleFlags flags;
-    XrModuleResolver *resolver;
-} BundleContext;
 
 /* ========== Helper Functions ========== */
 
-static void bundle_add_entry(XrBundle *bundle, const char *path, const uint8_t *bc,
-                             size_t bc_size) {
+static bool bundle_add_entry(XrBundle *bundle, const char *path, const uint8_t *bc, size_t bc_size,
+                             XrModuleKind kind) {
+    if (!bundle || !path || ((bc == NULL) != (bc_size == 0)))
+        return false;
+
     if (bundle->count >= bundle->capacity) {
         int new_cap = bundle->capacity * 2;
         if (new_cap < 16)
             new_cap = 16;
-        XR_REALLOC_OR_ABORT(bundle->entries, (size_t) new_cap * sizeof(XrBundleEntry),
-                            "bundle entries grow");
+        if (!XR_REALLOC(bundle->entries, (size_t) new_cap * sizeof(XrBundleEntry)))
+            return false;
         bundle->capacity = new_cap;
     }
 
-    XrBundleEntry *entry = &bundle->entries[bundle->count++];
+    XrBundleEntry *entry = &bundle->entries[bundle->count];
     entry->path = xr_strdup(path);
-    entry->bc = xr_malloc(bc_size);
-    if (!entry->bc) {
-        bundle->count--;
+    entry->bc = bc_size > 0 ? (uint8_t *) xr_malloc(bc_size) : NULL;
+    if (!entry->path || (bc_size > 0 && !entry->bc)) {
         xr_free(entry->path);
-        return;
+        xr_free(entry->bc);
+        memset(entry, 0, sizeof(*entry));
+        return false;
     }
-    memcpy(entry->bc, bc, bc_size);
+    if (bc_size > 0)
+        memcpy(entry->bc, bc, bc_size);
     entry->bc_size = bc_size;
+    entry->kind = kind;
+    bundle->count++;
+    return true;
 }
 
-/* ========== AST Traversal for Import Collection ========== */
-
-static void collect_imports_from_ast(BundleContext *ctx, AstNode *node, const char *current_dir);
-
-static void add_external_dep(XrExternalDeps *deps, const char *name) {
-    // Check if already exists
-    for (int i = 0; i < deps->count; i++) {
-        if (strcmp(deps->deps[i], name) == 0)
-            return;
-    }
-
-    if (deps->count >= deps->capacity) {
-        int new_cap = deps->capacity * 2;
-        if (new_cap < 8)
-            new_cap = 8;
-        XR_REALLOC_OR_ABORT(deps->deps, (size_t) new_cap * sizeof(char *),
-                            "bundle external deps grow");
-        deps->capacity = new_cap;
-    }
-    deps->deps[deps->count++] = xr_strdup(name);
-}
-
-static bool bundle_validate_acyclic(XrCompilerSession *session, XrModuleResolver *resolver,
-                                    const char *entry_path) {
+static XrModuleGraph *bundle_build_graph(XrCompilerSession *session, XrModuleResolver *resolver,
+                                         const char *entry_path) {
     XrModuleGraph *graph = xr_module_graph_new(session, resolver);
     if (!graph) {
         xr_log_warning("bundle", "failed to create module graph");
-        return false;
+        return NULL;
     }
 
     char *err = NULL;
@@ -109,274 +74,140 @@ static bool bundle_validate_acyclic(XrCompilerSession *session, XrModuleResolver
         xr_log_warning("bundle", "module graph build failed: %s", err ? err : "?");
         xr_free(err);
         xr_module_graph_free(graph);
-        return false;
+        return NULL;
     }
     xr_free(err);
 
-    xr_module_graph_topological_sort(graph);
-    if (graph->has_cycle) {
+    if (xr_module_graph_topological_sort(graph) != 0 || graph->has_cycle) {
         xr_log_warning("bundle", "%s",
                        graph->cycle_desc ? graph->cycle_desc
                                          : "E0504: circular dependency detected");
         xr_module_graph_free(graph);
+        return NULL;
+    }
+
+    return graph;
+}
+
+static void bundle_report_diagnostics(XaAnalyzer *analyzer, const char *source_path,
+                                      int *error_count) {
+    int count = 0;
+    XaDiagnostic *diagnostics = xa_analyzer_get_diagnostics(analyzer, &count);
+    for (XaDiagnostic *diagnostic = diagnostics; diagnostic; diagnostic = diagnostic->next) {
+        if (diagnostic->severity != XR_DIAG_SEV_ERROR)
+            continue;
+        (*error_count)++;
+        fprintf(stderr, "%s:%d:%d: error: %s\n", source_path ? source_path : "<bundle>",
+                diagnostic->location.line, diagnostic->location.column, diagnostic->message);
+    }
+}
+
+static XaAnalyzer *bundle_analyze_dependency_exports(XrCompilerSession *session,
+                                                     XrModuleGraph *graph) {
+    XaAnalyzer *analyzer = xa_analyzer_new(session);
+    if (!analyzer)
+        return NULL;
+
+    xa_analyzer_set_graph(analyzer, graph);
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int index = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[index];
+        if (index == graph->entry_index || !spec->ast)
+            continue;
+
+        xa_analyzer_analyze(analyzer, spec->source_path, (XrAstNode *) spec->ast);
+        int errors = 0;
+        bundle_report_diagnostics(analyzer, spec->source_path, &errors);
+        if (errors == 0) {
+            XrHashMap *exports = NULL;
+            if (!xa_analyzer_collect_export_symbols_checked(analyzer, (XrAstNode *) spec->ast,
+                                                            &exports)) {
+                bundle_report_diagnostics(analyzer, spec->source_path, &errors);
+                if (errors == 0)
+                    errors = 1;
+            } else {
+                spec->export_symbols = exports;
+            }
+        }
+        xa_analyzer_clear_diagnostics(analyzer);
+        if (errors > 0)
+            goto fail;
+    }
+    return analyzer;
+
+fail:
+    xa_analyzer_set_graph(analyzer, NULL);
+    xa_analyzer_free(analyzer);
+    return NULL;
+}
+
+static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaAnalyzer *analyzer,
+                                 XrModuleGraph *graph, XrBundleFlags flags, XrBundle *bundle) {
+    XiModule **graph_modules =
+        (XiModule **) xr_calloc((size_t) graph->topo_count, sizeof(XiModule *));
+    XrProto **compiled = (XrProto **) xr_calloc((size_t) graph->topo_count, sizeof(XrProto *));
+    if (!graph_modules || !compiled) {
+        xr_free(graph_modules);
+        xr_free(compiled);
         return false;
     }
 
-    xr_module_graph_free(graph);
-    return true;
-}
+    bool complete = false;
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int index = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[index];
 
-static void visit_node(BundleContext *ctx, AstNode *node, const char *current_dir) {
-    if (!node)
-        return;
-
-    // Check if this is an import statement
-    if (node->type == AST_IMPORT_STMT) {
-        const char *module_name = node->as.import_stmt.module_name;
-        bool is_bare = !node->as.import_stmt.is_quoted;
-
-        /* Build an importer path for the resolver by joining current_dir
-         * with a dummy filename. The resolver only uses the dirname. */
-        char importer_buf[XR_PATH_MAX];
-        snprintf(importer_buf, sizeof(importer_buf), "%s/_importer_.xr", current_dir);
-
-        XrModuleId mid;
-        char *err = NULL;
-        int rc = xr_module_resolver_resolve(ctx->resolver, module_name, importer_buf, &mid, &err);
-        if (rc != 0) {
-            if (err) {
-                xr_log_warning("bundle", "%s", err);
-                xr_free(err);
-            }
-            /* Bare names that failed resolver lookup are still stdlib deps */
-            if (is_bare)
-                add_external_dep(&ctx->bundle->stdlib, module_name);
-            return;
+        if (spec->kind == XR_MOD_STDLIB) {
+            if (!bundle_add_entry(bundle, spec->canonical, NULL, 0, spec->kind))
+                goto cleanup;
+            continue;
+        }
+        if (spec->kind == XR_MOD_PACKAGE && !(flags & XR_BUNDLE_STATIC_PACKAGES)) {
+            if (!bundle_add_entry(bundle, spec->canonical, NULL, 0, spec->kind))
+                goto cleanup;
+            continue;
+        }
+        if (!spec->ast || !spec->source_path) {
+            xr_log_warning("bundle", "source-backed module is incomplete: %s",
+                           spec->canonical ? spec->canonical : "?");
+            goto cleanup;
         }
 
-        /* Route by module kind */
-        switch (mid.kind) {
-            case XR_MOD_STDLIB:
-                add_external_dep(&ctx->bundle->stdlib, mid.canonical);
-                xr_module_id_cleanup(&mid);
-                return;
-
-            case XR_MOD_PACKAGE:
-                if (mid.source_path && (ctx->flags & XR_BUNDLE_STATIC_PACKAGES)) {
-                    /* Static bundle: compile the package */
-                    if (!xr_hashmap_has(ctx->visited, mid.source_path)) {
-                        /* The graph preflight rejects cycles; visited is only
-                         * the per-bundle dedupe set for already compiled deps. */
-                        if (!xr_hashmap_set(ctx->visited, mid.source_path, (void *) 1)) {
-                            xr_log_warning("bundle", "out of memory tracking visited: %s",
-                                           mid.source_path);
-                            xr_module_id_cleanup(&mid);
-                            return;
-                        }
-                        char *source = xr_file_read_all(mid.source_path, "r", NULL);
-                        if (source) {
-                            AstNode *ast =
-                                xr_parse_with_source(ctx->session, source, mid.source_path);
-                            if (ast) {
-                                char *pkg_dir = xr_path_dirname(mid.source_path);
-                                collect_imports_from_ast(ctx, ast, pkg_dir);
-                                XrProto *proto =
-                                    xr_compile_ast_with_source(ctx->session, ast, mid.source_path);
-                                if (proto) {
-                                    size_t bc_size;
-                                    uint8_t *bc =
-                                        xr_bytecode_write(ctx->X, proto, 0, &bc_size, NULL);
-                                    if (bc) {
-                                        bundle_add_entry(ctx->bundle, mid.source_path, bc, bc_size);
-                                        xr_free(bc);
-                                    }
-                                }
-                                xr_program_destroy(ast);
-                                xr_free(pkg_dir);
-                            }
-                            xr_free(source);
-                        }
-                    }
-                    xr_module_id_cleanup(&mid);
-                    return;
-                }
-                add_external_dep(&ctx->bundle->packages, mid.canonical);
-                xr_module_id_cleanup(&mid);
-                return;
-
-            case XR_MOD_FILE: {
-                XR_DCHECK(mid.source_path != NULL, "visit_node: FILE module without source_path");
-                if (!xr_hashmap_has(ctx->visited, mid.source_path)) {
-                    /* See XR_MOD_PACKAGE above: this is dedupe, not cycle handling. */
-                    if (!xr_hashmap_set(ctx->visited, mid.source_path, (void *) 1)) {
-                        xr_log_warning("bundle", "out of memory tracking visited: %s",
-                                       mid.source_path);
-                        xr_module_id_cleanup(&mid);
-                        return;
-                    }
-                    char *source = xr_file_read_all(mid.source_path, "r", NULL);
-                    if (source) {
-                        AstNode *ast = xr_parse_with_source(ctx->session, source, mid.source_path);
-                        if (ast) {
-                            char *module_dir = xr_path_dirname(mid.source_path);
-                            collect_imports_from_ast(ctx, ast, module_dir);
-                            XrProto *proto =
-                                xr_compile_ast_with_source(ctx->session, ast, mid.source_path);
-                            if (proto) {
-                                size_t bc_size;
-                                uint8_t *bc = xr_bytecode_write(ctx->X, proto, 0, &bc_size, NULL);
-                                if (bc) {
-                                    bundle_add_entry(ctx->bundle, mid.source_path, bc, bc_size);
-                                    xr_free(bc);
-                                } else {
-                                    xr_log_warning("bundle", "bytecode serialization failed: %s",
-                                                   mid.source_path);
-                                }
-                            } else {
-                                xr_log_warning("bundle", "compilation failed: %s", mid.source_path);
-                            }
-                            xr_program_destroy(ast);
-                            xr_free(module_dir);
-                        } else {
-                            xr_log_warning("bundle", "parse failed: %s", mid.source_path);
-                        }
-                        xr_free(source);
-                    }
-                }
-                xr_module_id_cleanup(&mid);
-                return;
-            }
+        XrProto *proto =
+            xr_compile_ast_in_graph(session, analyzer, spec->ast, spec->source_path, graph,
+                                    graph_modules, graph->topo_count, &graph_modules[ti]);
+        if (!proto) {
+            xr_log_warning("bundle", "compilation failed: %s", spec->source_path);
+            goto cleanup;
+        }
+        compiled[ti] = proto;
+        size_t bc_size = 0;
+        uint8_t *bc = xr_bytecode_write(X, proto, 0, &bc_size, NULL);
+        if (!bc) {
+            xr_log_warning("bundle", "bytecode serialization failed: %s", spec->source_path);
+            goto cleanup;
         }
 
-        xr_module_id_cleanup(&mid);
-        return;
+        int bundle_index = bundle->count;
+        bool added = bundle_add_entry(bundle, spec->source_path, bc, bc_size, spec->kind);
+        xr_free(bc);
+        if (!added) {
+            xr_log_warning("bundle", "cannot add bytecode module: %s", spec->source_path);
+            goto cleanup;
+        }
+        if (index == graph->entry_index)
+            bundle->entry_index = bundle_index;
     }
 
-    // Recursively traverse child nodes that may contain import statements
-    switch (node->type) {
-        case AST_PROGRAM:
-            for (int i = 0; i < node->as.program.count; i++) {
-                visit_node(ctx, node->as.program.statements[i], current_dir);
-            }
-            break;
+    complete = bundle->entry_index >= 0;
 
-        case AST_BLOCK:
-            for (int i = 0; i < node->as.block.count; i++) {
-                visit_node(ctx, node->as.block.statements[i], current_dir);
-            }
-            break;
-
-        case AST_IF_STMT:
-            visit_node(ctx, node->as.if_stmt.condition, current_dir);
-            visit_node(ctx, node->as.if_stmt.then_branch, current_dir);
-            visit_node(ctx, node->as.if_stmt.else_branch, current_dir);
-            break;
-
-        case AST_WHILE_STMT:
-            visit_node(ctx, node->as.while_stmt.condition, current_dir);
-            visit_node(ctx, node->as.while_stmt.body, current_dir);
-            break;
-
-        case AST_FOR_STMT:
-            visit_node(ctx, node->as.for_stmt.initializer, current_dir);
-            visit_node(ctx, node->as.for_stmt.condition, current_dir);
-            visit_node(ctx, node->as.for_stmt.increment, current_dir);
-            visit_node(ctx, node->as.for_stmt.body, current_dir);
-            break;
-
-        case AST_FOR_IN_STMT:
-            visit_node(ctx, node->as.for_in_stmt.collection, current_dir);
-            visit_node(ctx, node->as.for_in_stmt.body, current_dir);
-            break;
-
-        case AST_FUNCTION_DECL:
-        case AST_FUNCTION_EXPR:
-            visit_node(ctx, node->as.function_decl.body, current_dir);
-            break;
-
-        case AST_METHOD_DECL:
-            visit_node(ctx, node->as.method_decl.body, current_dir);
-            break;
-
-        case AST_CLASS_DECL:
-            for (int i = 0; i < node->as.class_decl.method_count; i++) {
-                visit_node(ctx, node->as.class_decl.methods[i], current_dir);
-            }
-            break;
-
-        case AST_STRUCT_DECL:
-            for (int i = 0; i < node->as.struct_decl.method_count; i++) {
-                visit_node(ctx, node->as.struct_decl.methods[i], current_dir);
-            }
-            break;
-
-        case AST_INTERFACE_DECL:
-            for (int i = 0; i < node->as.interface_decl.method_count; i++) {
-                visit_node(ctx, node->as.interface_decl.methods[i], current_dir);
-            }
-            for (int i = 0; i < node->as.interface_decl.property_count; i++) {
-                visit_node(ctx, node->as.interface_decl.properties[i], current_dir);
-            }
-            break;
-
-        case AST_TRY_CATCH:
-            visit_node(ctx, node->as.try_catch.try_body, current_dir);
-            for (int ci = 0; ci < node->as.try_catch.catch_count; ci++) {
-                XrCatchClause *cc = node->as.try_catch.catch_clauses[ci];
-                if (cc)
-                    visit_node(ctx, cc->body, current_dir);
-            }
-            break;
-
-        case AST_EXPORT_STMT:
-            /* Re-exports have no local subtree to bundle. */
-            break;
-
-        case AST_EXPR_STMT:
-            visit_node(ctx, node->as.expr_stmt, current_dir);
-            break;
-
-        case AST_VAR_DECL:
-        case AST_CONST_DECL:
-            visit_node(ctx, node->as.var_decl.initializer, current_dir);
-            break;
-
-        case AST_MATCH_EXPR:
-            visit_node(ctx, node->as.match_expr.expr, current_dir);
-            for (int i = 0; i < node->as.match_expr.arm_count; i++) {
-                visit_node(ctx, node->as.match_expr.arms[i], current_dir);
-            }
-            break;
-
-        case AST_MATCH_ARM:
-            visit_node(ctx, node->as.match_arm.body, current_dir);
-            break;
-
-        case AST_SCOPE_BLOCK:
-            visit_node(ctx, node->as.scope_block.body, current_dir);
-            break;
-
-        case AST_SELECT_STMT:
-            for (int i = 0; i < node->as.select_stmt.case_count; i++) {
-                visit_node(ctx, node->as.select_stmt.cases[i], current_dir);
-            }
-            break;
-
-        case AST_SELECT_CASE:
-            visit_node(ctx, node->as.select_case.body, current_dir);
-            break;
-
-        case AST_DEFER_STMT:
-            visit_node(ctx, node->as.defer_stmt.body, current_dir);
-            break;
-
-        default:
-            break;
-    }
-}
-
-static void collect_imports_from_ast(BundleContext *ctx, AstNode *node, const char *current_dir) {
-    visit_node(ctx, node, current_dir);
+cleanup:
+    for (int ti = 0; ti < graph->topo_count; ti++)
+        if (compiled[ti])
+            xr_free_code(X, compiled[ti]);
+    xr_free(compiled);
+    xr_free(graph_modules);
+    return complete;
 }
 
 /* ========== Public API ========== */
@@ -397,24 +228,11 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFl
         return NULL;
     }
 
-    // Read entry file
-    char *source = xr_file_read_all(entry_file, "r", NULL);
-    if (!source) {
-        xr_log_warning("bundle", "cannot read entry file: %s", entry_file);
-        return NULL;
-    }
-
-    // Get absolute path
-    char *abs_path = xr_realpath(entry_file);
-    if (!abs_path) {
-        abs_path = xr_strdup(entry_file);
-    }
-
-    // Create bundle result
     XrBundle *bundle = xr_calloc(1, sizeof(XrBundle));
-    bundle->entry_path = xr_strdup(abs_path);
+    if (!bundle)
+        return NULL;
+    bundle->entry_index = -1;
 
-    // Create resolver for import resolution
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
     XrModuleResolverConfig rcfg = {
         .native_loaders = registry ? registry->native_loaders : NULL,
@@ -422,80 +240,39 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFl
         .lockfile = NULL,
     };
     XrModuleResolver *resolver = xr_module_resolver_new(&rcfg);
-    if (!resolver || !bundle_validate_acyclic(session, resolver, abs_path)) {
-        xr_free(source);
-        xr_module_resolver_free(resolver);
-        xr_free(abs_path);
-        xr_bundle_free(bundle);
-        return NULL;
-    }
-
-    // Create context
-    BundleContext ctx = {.X = X,
-                         .session = session,
-                         .bundle = bundle,
-                         .visited = xr_hashmap_new(),
-                         .base_dir = xr_path_dirname(abs_path),
-                         .flags = flags,
-                         .resolver = resolver};
-
-    // Mark entry file as visited for dependency de-duplication.
-    if (!ctx.visited || !xr_hashmap_set(ctx.visited, abs_path, (void *) 1)) {
-        xr_log_warning("bundle", "out of memory creating visited set");
-        xr_free(source);
-        xr_module_resolver_free(ctx.resolver);
-        xr_hashmap_free(ctx.visited);
-        xr_free(ctx.base_dir);
-        xr_free(abs_path);
-        xr_bundle_free(bundle);
-        return NULL;
-    }
-
-    // Parse entry file
-    AstNode *ast = xr_parse_with_source(session, source, abs_path);
-    xr_free(source);
-
-    if (!ast) {
-        xr_log_warning("bundle", "failed to parse entry file: %s", entry_file);
-        xr_module_resolver_free(ctx.resolver);
-        xr_hashmap_free(ctx.visited);
-        xr_free(ctx.base_dir);
-        xr_free(abs_path);
-        xr_bundle_free(bundle);
-        return NULL;
-    }
-
-    // Collect all dependencies
-    collect_imports_from_ast(&ctx, ast, ctx.base_dir);
-
-    // Compile entry file and add to bundle (placed last to ensure dependencies come first)
-    XrProto *proto = xr_compile_ast_with_source(session, ast, abs_path);
-    if (proto) {
-        size_t bc_size;
-        uint8_t *bc = xr_bytecode_write(X, proto, 0, &bc_size, NULL);
-        if (bc) {
-            bundle_add_entry(bundle, abs_path, bc, bc_size);
-            xr_free(bc);
+    XrModuleGraph *graph = resolver ? bundle_build_graph(session, resolver, entry_file) : NULL;
+    XaAnalyzer *graph_analyzer = graph ? bundle_analyze_dependency_exports(session, graph) : NULL;
+    XrModuleGraph *previous_graph = xr_compiler_session_module_graph(session);
+    if (!resolver || !graph || !graph_analyzer) {
+        if (graph_analyzer) {
+            xa_analyzer_set_graph(graph_analyzer, NULL);
+            xa_analyzer_free(graph_analyzer);
         }
+        xr_module_graph_free(graph);
+        xr_module_resolver_free(resolver);
+        xr_bundle_free(bundle);
+        return NULL;
     }
+    xr_compiler_session_set_module_graph(session, graph);
 
-    xr_program_destroy(ast);
-    xr_module_resolver_free(ctx.resolver);
-    xr_hashmap_free(ctx.visited);
-    xr_free(ctx.base_dir);
-    xr_free(abs_path);
+    XrModuleSpec *entry_spec = &graph->specs[graph->entry_index];
+    const char *entry_path =
+        entry_spec->source_path ? entry_spec->source_path : entry_spec->canonical;
+    bundle->entry_path = xr_strdup(entry_path);
+    bool complete = bundle->entry_path &&
+                    bundle_compile_graph(X, session, graph_analyzer, graph, flags, bundle);
+    xr_compiler_session_set_module_graph(session, previous_graph);
+    xa_analyzer_set_graph(graph_analyzer, NULL);
+    xa_analyzer_free(graph_analyzer);
+    xr_module_graph_free(graph);
+    xr_module_resolver_free(resolver);
+    if (!complete) {
+        xr_log_warning("bundle", "bundle compilation failed: %s", entry_file);
+        xr_bundle_free(bundle);
+        return NULL;
+    }
 
     return bundle;
-}
-
-static void free_external_deps(XrExternalDeps *deps) {
-    for (int i = 0; i < deps->count; i++) {
-        xr_free(deps->deps[i]);
-    }
-    xr_free(deps->deps);
-    deps->deps = NULL;
-    deps->count = 0;
-    deps->capacity = 0;
 }
 
 void xr_bundle_free(XrBundle *bundle) {
@@ -507,9 +284,7 @@ void xr_bundle_free(XrBundle *bundle) {
         xr_free(bundle->entries[i].bc);
     }
     xr_free(bundle->entries);
-    xr_free((void *) bundle->entry_path);
-    free_external_deps(&bundle->stdlib);
-    free_external_deps(&bundle->packages);
+    xr_free(bundle->entry_path);
     xr_free(bundle);
 }
 
@@ -620,6 +395,8 @@ char *xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
     // Bytecode for each module
     for (int i = 0; i < bundle->count; i++) {
         const XrBundleEntry *e = &bundle->entries[i];
+        if (!e->bc)
+            continue;
         EMIT("/* Module %d */\n", i);
         EMIT("static const uint8_t %s_mod%d_bc[%zu] = {\n", prefix, i, e->bc_size);
 
@@ -639,37 +416,28 @@ char *xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
 
     // Module table
     EMIT("/* Module table */\n");
-    EMIT("typedef struct {\n");
-    EMIT("    const char *path;\n");
-    EMIT("    const uint8_t *bc;\n");
-    EMIT("    size_t size;\n");
-    EMIT("} XrEmbeddedModule;\n\n");
-
     EMIT("const int %s_module_count = %d;\n\n", prefix, bundle->count);
 
-    EMIT("const XrEmbeddedModule %s_modules[%d] = {\n", prefix, bundle->count);
+    EMIT("const XrBytecodeModule %s_modules[%d] = {\n", prefix, bundle->count);
     for (int i = 0; i < bundle->count; i++) {
         const XrBundleEntry *e = &bundle->entries[i];
         EMIT("    {");
         EMIT_C_STRING(e->path);
-        EMIT(", %s_mod%d_bc, %zu},\n", prefix, i, e->bc_size);
+        if (e->bc)
+            EMIT(", %s_mod%d_bc, %zu},\n", prefix, i, e->bc_size);
+        else
+            EMIT(", NULL, 0},\n");
     }
     EMIT("};\n\n");
 
-    // Entry module index (last one)
-    EMIT("const int %s_entry_index = %d;\n\n", prefix, bundle->count - 1);
+    // Entry module index
+    EMIT("const int %s_entry_index = %d;\n\n", prefix, bundle->entry_index);
 
-    // Lookup function
-    EMIT("/* Find embedded module */\n");
-    EMIT("const uint8_t* %s_find_module(const char *path, size_t *out_size) {\n", prefix);
-    EMIT("    for (int i = 0; i < %s_module_count; i++) {\n", prefix);
-    EMIT("        if (strcmp(%s_modules[i].path, path) == 0) {\n", prefix);
-    EMIT("            if (out_size) *out_size = %s_modules[i].size;\n", prefix);
-    EMIT("            return %s_modules[i].bc;\n", prefix);
-    EMIT("        }\n");
-    EMIT("    }\n");
-    EMIT("    return NULL;\n");
-    EMIT("}\n");
+    EMIT("const XrBytecodeBundle %s_bundle = {\n", prefix);
+    EMIT("    %s_modules,\n", prefix);
+    EMIT("    (size_t)%s_module_count,\n", prefix);
+    EMIT("    (size_t)%s_entry_index,\n", prefix);
+    EMIT("};\n");
 
 #undef EMIT
 #undef EMIT_C_STRING

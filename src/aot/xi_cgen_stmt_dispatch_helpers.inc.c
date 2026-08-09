@@ -235,7 +235,7 @@ static bool xicgen_stmt_err_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         if (freestanding_aggregate) {
             fprintf(out, "xrt_pending_enum_error");
         } else {
-            fprintf(out, "xrt_enum_aggregate_from_boxed(xrt_pending_error)");
+            fprintf(out, "xrt_enum_aggregate_take_from_boxed(xrt_pending_error)");
         }
         if (plan && cg_value_rep_is_typed_adt_aggregate(plan->rep))
             fprintf(out, ")");

@@ -14,8 +14,10 @@
 
 #include "cluster_internal.h"
 #include "../../src/coro/xchannel.h"
+#include "../../src/coro/xblock.h"
 #include "../../src/coro/xcoro_registry.h"
 #include "../../src/coro/xcoroutine.h"
+#include "../../src/coro/xyieldable.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xstring.h"
 
@@ -136,18 +138,26 @@ XrChannel *cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const cha
 
     // Find the target node
     XrClusterNode *node = cluster_node_find(c, node_name);
-    if (!node || node->state != XR_NODE_CONNECTED)
+    if (!node)
         return NULL;
+    if (node->state != XR_NODE_CONNECTED) {
+        cluster_node_release(node);
+        return NULL;
+    }
 
     // Create notification channel
     XrChannel *ch = xr_channel_new_vm(X, 1);
-    if (!ch)
+    if (!ch) {
+        cluster_node_release(node);
         return NULL;
+    }
 
     // Register in remote_coro_monitors list
     XrRemoteCoroMonitor *mon = (XrRemoteCoroMonitor *) xr_calloc(1, sizeof(XrRemoteCoroMonitor));
-    if (!mon)
+    if (!mon) {
+        cluster_node_release(node);
         return NULL;
+    }
     strncpy(mon->node_name, node_name, XR_NODE_NAME_MAX);
     strncpy(mon->coro_name, coro_name, XR_CORO_NAME_MAX);
     mon->notify_ch = ch;
@@ -164,6 +174,7 @@ XrChannel *cluster_monitor_coro(XrVMRuntime *X, const char *node_name, const cha
         cluster_node_enqueue(node, buf, (uint32_t) len);
     }
 
+    cluster_node_release(node);
     return ch;
 }
 
@@ -175,32 +186,73 @@ typedef struct {
     XrChannel *mon_ch;    // local monitor channel
     XrClusterNode *node;  // remote node to notify
     char coro_name[128];  // coroutine name
+    XrValue reason;
 } XrCoroMonitorFwd;
 
-static void coro_monitor_fwd_loop(void *arg) {
-    XrCoroMonitorFwd *ctx = (XrCoroMonitorFwd *) arg;
+static void coro_monitor_fwd_destroy(void *context) {
+    XrCoroMonitorFwd *ctx = (XrCoroMonitorFwd *) context;
     if (!ctx)
         return;
+    cluster_node_release(ctx->node);
+    xr_free(ctx);
+}
 
-    // Block until the monitored coroutine exits
-    XrValue reason_val;
-    XrChanResult rr = xr_channel_recv(ctx->mon_ch, &reason_val, NULL, -1);
-
+static XrCFuncResult coro_monitor_fwd_complete(XrCoroMonitorFwd *ctx) {
     const char *reason = "normal";
-    if (rr == XR_CHAN_OK && XR_IS_STRING(reason_val)) {
-        reason = XR_TO_STRING(reason_val)->data;
-    }
+    if (XR_IS_STRING(ctx->reason))
+        reason = XR_TO_STRING(ctx->reason)->data;
 
-    // Send CORO_EXIT frame to the requesting remote node
     if (ctx->node && ctx->node->state == XR_NODE_CONNECTED) {
         uint8_t buf[256];
         int len = cluster_frame_encode_coro_exit(buf, sizeof(buf), ctx->coro_name, reason);
-        if (len > 0) {
+        if (len > 0)
             cluster_node_enqueue(ctx->node, buf, (uint32_t) len);
-        }
     }
+    return XR_CFUNC_DONE;
+}
 
-    xr_free(ctx);
+static XrCFuncResult coro_monitor_fwd_continue(XrVMRuntime *X, int status, XrValue resume_value,
+                                               void *context, XrValue *result) {
+    (void) resume_value;
+    (void) result;
+    XrCoroMonitorFwd *ctx = (XrCoroMonitorFwd *) context;
+    if (!ctx || status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR)
+        return XR_CFUNC_DONE;
+
+    XrCoroutine *coro = xr_current_coro(X);
+    XrCoroBlockResult resumed =
+        xr_coro_chan_recv_resume(coro, xr_slot_xvalue_ptr(&ctx->reason), xr_slot_none());
+    if (resumed.kind == XR_CORO_BLOCK_READY)
+        return coro_monitor_fwd_complete(ctx);
+    if (resumed.kind == XR_CORO_BLOCK_CLOSED)
+        return XR_CFUNC_DONE;
+    return XR_CFUNC_ERROR;
+}
+
+static XrCFuncResult coro_monitor_fwd_entry(XrVMRuntime *X, void *context, XrValue *result) {
+    (void) result;
+    XrCoroMonitorFwd *ctx = (XrCoroMonitorFwd *) context;
+    if (!ctx)
+        return XR_CFUNC_DONE;
+
+    bool ok = false;
+    ctx->reason = xr_channel_try_recv(ctx->mon_ch, &ok);
+    if (ok)
+        return coro_monitor_fwd_complete(ctx);
+    if (xr_channel_is_closed(ctx->mon_ch))
+        return XR_CFUNC_DONE;
+    if (!xr_yield_set_continuation(X, coro_monitor_fwd_continue, ctx))
+        return XR_CFUNC_ERROR;
+
+    XrCoroutine *coro = xr_current_coro(X);
+    XrChanResult recv =
+        xr_channel_recv_slot(ctx->mon_ch, &ctx->reason, coro, -1, xr_slot_xvalue_ptr(&ctx->reason),
+                             xr_slot_none(), false);
+    if (recv == XR_CHAN_BLOCK)
+        return XR_CFUNC_BLOCKED;
+    if (recv == XR_CHAN_OK)
+        return coro_monitor_fwd_complete(ctx);
+    return recv == XR_CHAN_CLOSED ? XR_CFUNC_DONE : XR_CFUNC_ERROR;
 }
 
 void cluster_monitor_handle_coro_request(XrCluster *c, XrClusterNode *node, const char *coro_name) {
@@ -232,15 +284,15 @@ void cluster_monitor_handle_coro_request(XrCluster *c, XrClusterNode *node, cons
         return;
     ctx->mon_ch = mon_ch;
     ctx->node = node;
+    ctx->reason = xr_null();
+    cluster_node_retain(node);
     strncpy(ctx->coro_name, coro_name, sizeof(ctx->coro_name) - 1);
     ctx->coro_name[sizeof(ctx->coro_name) - 1] = '\0';
 
-    XrCoroutine *fwd =
-        xr_coro_create_native(c->isolate, coro_monitor_fwd_loop, ctx, "cluster_coro_fwd");
+    XrCoroutine *fwd = xr_coro_create_native_yieldable(
+        c->isolate, coro_monitor_fwd_entry, ctx, coro_monitor_fwd_destroy, "cluster_coro_fwd");
     if (fwd) {
         xr_coro_spawn(c->isolate, fwd);
-    } else {
-        xr_free(ctx);
     }
 }
 

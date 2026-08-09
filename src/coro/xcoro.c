@@ -24,6 +24,7 @@
 #include "xworker.h"
 #include "xchannel.h"
 #include "xchannel_ops.h"
+#include "xblock.h"
 #include "xtimer_wheel.h"
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/object/xpanic_info.h"
@@ -113,9 +114,22 @@ static XrCoroutine *coro_alloc_lightweight_shell(void) {
     return coro;
 }
 
+typedef enum XrNativeCoroKind {
+    XR_NATIVE_CORO_CALLBACK,
+    XR_NATIVE_CORO_YIELDABLE,
+} XrNativeCoroKind;
+
 typedef struct XrNativeCoroState {
-    void (*func)(void *);
-    void *arg;
+    XrNativeCoroKind kind;
+    XrVMRuntime *isolate;
+    union {
+        void (*callback)(void *);
+        XrNativeCoroEntry entry;
+    } body;
+    void *context;
+    XrNativeCoroContextDestroy destroy_context;
+    XrContinuation continuation;
+    void *continuation_context;
 } XrNativeCoroState;
 
 static XrNativeCoroState *native_state_from_coro(XrCoroutine *coro) {
@@ -127,6 +141,9 @@ static XrNativeCoroState *native_state_from_coro(XrCoroutine *coro) {
 static void native_backend_release(XrCoroutine *coro) {
     if (!coro)
         return;
+    XrNativeCoroState *state = native_state_from_coro(coro);
+    if (state && state->destroy_context && state->context)
+        state->destroy_context(state->context);
     xr_free(coro->backend_state);
     coro->backend_state = NULL;
     coro->backend = NULL;
@@ -147,19 +164,83 @@ static XrCoroRunResult native_backend_resume(XrCoroutine *coro, const XrCoroEven
     (void) event;
     (void) run_ctx;
     XrNativeCoroState *state = native_state_from_coro(coro);
-    if (!coro || !state || !state->func)
+    if (!coro || !state)
         return xr_coro_run_error(XR_NULL_VAL, false);
     if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED))
         return xr_coro_run_result(XR_CORO_RUN_CANCELLED);
     if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
         return xr_coro_run_done(coro->result);
 
+    bool started = xr_coro_flags_has(coro, XR_CORO_FLG_STARTED);
     xr_coro_flags_swap(coro, XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED,
                        XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED);
 
-    state->func(state->arg);
-    coro->result = xr_null();
-    return xr_coro_run_done(coro->result);
+    if (state->kind == XR_NATIVE_CORO_CALLBACK) {
+        if (!state->body.callback)
+            return xr_coro_run_error(XR_NULL_VAL, false);
+        state->body.callback(state->context);
+        coro->result = xr_null();
+        return xr_coro_run_done(coro->result);
+    }
+
+    if (!state->body.entry || !state->isolate)
+        return xr_coro_run_error(XR_NULL_VAL, false);
+
+    int resume_status = xr_coro_resume_load(coro);
+    XrValue result = xr_null();
+    XrCFuncResult cfunc_result;
+    if (!started) {
+        xr_coro_resume_store(coro, XR_RESUME_OK);
+        cfunc_result = state->body.entry(state->isolate, state->context, &result);
+    } else {
+        XrContinuation continuation = state->continuation;
+        void *continuation_context = state->continuation_context;
+        if (!continuation)
+            return xr_coro_run_error(XR_NULL_VAL, false);
+        state->continuation = NULL;
+        state->continuation_context = NULL;
+        xr_coro_resume_store(coro, XR_RESUME_OK);
+        cfunc_result =
+            continuation(state->isolate, resume_status, xr_null(), continuation_context, &result);
+    }
+
+    switch (cfunc_result) {
+        case XR_CFUNC_DONE:
+            coro->result = result;
+            return xr_coro_run_done(result);
+        case XR_CFUNC_BLOCKED:
+            /* A published I/O/channel wait can already be claimed by a waker.
+             * Do not inspect backend state after the entry returns BLOCKED;
+             * finalize is deliberately hands-off for published waits. */
+            if (!xr_coro_finalize_blocked_suspend(coro))
+                return xr_coro_run_error(XR_NULL_VAL, false);
+            return xr_coro_run_result(XR_CORO_RUN_BLOCKED);
+        case XR_CFUNC_YIELD:
+            if (!state->continuation)
+                return xr_coro_run_error(XR_NULL_VAL, false);
+            return xr_coro_run_result(XR_CORO_RUN_YIELD);
+        case XR_CFUNC_ERROR:
+        case XR_CFUNC_CALL_CLOSURE:
+        case XR_CFUNC_WOULD_BLOCK:
+        default:
+            return xr_coro_run_error(XR_NULL_VAL, false);
+    }
+}
+
+static bool native_backend_setup_yield_continuation(XrVMRuntime *isolate, XrCoroutine *coro,
+                                                    void *continuation, void *user_data) {
+    XrNativeCoroState *state = native_state_from_coro(coro);
+    if (!state || state->kind != XR_NATIVE_CORO_YIELDABLE || !continuation ||
+        state->isolate != isolate)
+        return false;
+    state->continuation = (XrContinuation) continuation;
+    state->continuation_context = user_data;
+    return true;
+}
+
+static bool native_backend_has_continuation(const XrCoroutine *coro) {
+    XrNativeCoroState *state = native_state_from_coro((XrCoroutine *) coro);
+    return state && state->kind == XR_NATIVE_CORO_YIELDABLE && state->continuation != NULL;
 }
 
 static const char *native_backend_debug_name(const XrCoroutine *coro) {
@@ -184,8 +265,8 @@ static const XrCoroBackendVTable native_backend_vtable = {
     .trace_roots = NULL,
     .prepare_recycle = NULL,
     .reset_reusable = NULL,
-    .setup_yield_continuation = NULL,
-    .has_continuation = NULL,
+    .setup_yield_continuation = native_backend_setup_yield_continuation,
+    .has_continuation = native_backend_has_continuation,
     .call_closure = NULL,
     .ensure_state = NULL,
     .prepare_execution_state = NULL,
@@ -685,11 +766,43 @@ XrCoroutine *xr_coro_create_native(XrVMRuntime *X, void (*func)(void *), void *a
         xr_coro_destroy(coro);
         return NULL;
     }
-    state->func = func;
-    state->arg = arg;
+    state->kind = XR_NATIVE_CORO_CALLBACK;
+    state->isolate = X;
+    state->body.callback = func;
+    state->context = arg;
 
     xr_coro_attach_backend(coro, &native_backend_vtable, state);
 
+    return coro;
+}
+
+XrCoroutine *xr_coro_create_native_yieldable(XrVMRuntime *X, XrNativeCoroEntry entry, void *context,
+                                             XrNativeCoroContextDestroy destroy_context,
+                                             const char *name) {
+    if (!X || !entry)
+        return NULL;
+
+    XrCoroutine *coro = xr_coro_create_empty(X, name);
+    if (!coro) {
+        if (destroy_context && context)
+            destroy_context(context);
+        return NULL;
+    }
+
+    XrNativeCoroState *state = (XrNativeCoroState *) xr_calloc(1, sizeof(XrNativeCoroState));
+    if (!state) {
+        xr_coro_destroy(coro);
+        if (destroy_context && context)
+            destroy_context(context);
+        return NULL;
+    }
+    state->kind = XR_NATIVE_CORO_YIELDABLE;
+    state->isolate = X;
+    state->body.entry = entry;
+    state->context = context;
+    state->destroy_context = destroy_context;
+
+    xr_coro_attach_backend(coro, &native_backend_vtable, state);
     return coro;
 }
 

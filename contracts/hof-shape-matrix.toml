@@ -1,0 +1,71 @@
+schema = 1
+
+[policy]
+operation = "Array.map/filter/reduce"
+typed_uncaptured = "native-inline"
+captured_or_dynamic = "explicit-runtime-adapter"
+cgen_unknown_target = "fail-closed"
+
+[[cell]]
+shape = "uncaptured"
+capture = "none"
+storage = "typed"
+lowering = "native-inline"
+closure_allocation = 0
+per_element_box = 0
+evidence = "tests/unit/ir/test_xi_cgen.c:cgen_typed_array_map_uses_typed_result_storage_fast_path"
+
+[[cell]]
+shape = "captured-readonly"
+capture = "readonly-environment"
+storage = "typed"
+lowering = "runtime-adapter"
+closure_allocation = 1
+per_element_box = 1
+evidence = "tests/unit/ir/test_xi_cgen.c:cgen_typed_array_map_captured_callback_uses_runtime_helper"
+
+[[cell]]
+shape = "captured-mutable"
+capture = "explicit-cell"
+storage = "typed"
+lowering = "runtime-adapter"
+closure_allocation = 1
+per_element_box = 1
+evidence = "tests/unit/ir/test_xi_cgen.c:cgen_stack_alloc_closure_preserves_cell_capture"
+
+[[cell]]
+shape = "dynamic-function"
+capture = "runtime-callable"
+storage = "typed-or-tagged"
+lowering = "runtime-adapter"
+closure_allocation = 1
+per_element_box = 1
+evidence = "tests/unit/ir/test_xi_cgen.c:cgen_dynamic_uncaptured_callback_keeps_boxed_adapter"
+
+[[cell]]
+shape = "generic"
+capture = "plan-dependent"
+storage = "instantiated-plan"
+lowering = "target-evidence-or-runtime-adapter"
+closure_allocation = -1
+per_element_box = -1
+evidence = "src/aot/xi_cgen_array_helpers.inc.c:cg_array_inline_map_info"
+
+[[cell]]
+shape = "cross-module"
+capture = "target-evidence"
+storage = "callee-plan"
+lowering = "target-evidence-or-runtime-adapter"
+closure_allocation = -1
+per_element_box = -1
+evidence = "src/aot/xaot_callable.c"
+
+[[cell]]
+shape = "tagged"
+capture = "any"
+storage = "tagged"
+lowering = "runtime-adapter"
+closure_allocation = -1
+per_element_box = 1
+evidence = "src/aot/xrt_array_hof.h"
+

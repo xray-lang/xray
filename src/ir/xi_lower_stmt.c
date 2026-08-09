@@ -4110,6 +4110,12 @@ static void lower_reexport_stmt(XiLower *l, AstNode *node) {
         e->from_path = pc;
         e->name = NULL;
         e->alias = NULL;
+        e->resolved_mod_index = -1;
+        e->resolved_export_slot = -1;
+        e->resolved_members = NULL;
+        e->resolved_member_count = 0;
+        e->resolution_attempted = false;
+        e->resolution_complete = false;
 
         uint16_t idx = f->reexport_count;
         if (!ensure_reexport_capacity(f, 1))
@@ -4130,6 +4136,9 @@ static void lower_reexport_stmt(XiLower *l, AstNode *node) {
             return;
 
         XiReexportEntry *e = &f->reexports[idx];
+        memset(e, 0, sizeof(*e));
+        e->resolved_mod_index = -1;
+        e->resolved_export_slot = -1;
         /* Arena-copy strings */
         uint32_t pl = (uint32_t) strlen(exp->from_path);
         char *pc = (char *) xi_func_arena_alloc(f, pl + 1);
@@ -4156,6 +4165,14 @@ static void lower_reexport_stmt(XiLower *l, AstNode *node) {
     }
 }
 
+bool xi_lower_import_member_is_type_only(const XiLower *l, const ImportMember *member) {
+    XaSymbol *symbol;
+    if (!l || !l->analyzer || !l->analyzer->global_scope || !member || member->symbol_id == 0)
+        return false;
+    symbol = xa_scope_lookup_by_id(l->analyzer->global_scope, member->symbol_id);
+    return xa_symbol_is_type_alias(symbol);
+}
+
 /* Selective import: import { square, cube } from "./math_lib"
  * Creates XI_IMPORT_REF values for each member and binds them as local
  * variables.  The AOT driver resolves module_path + member_name to the
@@ -4179,6 +4196,7 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         memset(ref, 0, sizeof(*ref));
         ref->resolved_mod_index = -1;
         ref->resolved_shared_slot = -1;
+        ref->resolved_export_slot = -1;
         if (imp->module_name) {
             uint32_t ml = (uint32_t) strlen(imp->module_name);
             char *mc = (char *) xi_func_arena_alloc(l->func, ml + 1);
@@ -4214,6 +4232,9 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
     for (int i = 0; i < imp->member_count; i++) {
         ImportMember *m = &imp->members[i];
         const char *local_name = m->alias ? m->alias : m->name;
+
+        if (xi_lower_import_member_is_type_only(l, m))
+            continue;
 
         if (imp->module_name && strcmp(imp->module_name, "sync") == 0 &&
             xi_lower_sync_runtime_class_global_index(m->name) >= 0) {
@@ -4262,6 +4283,7 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         }
         ref->resolved_mod_index = -1;
         ref->resolved_shared_slot = -1;
+        ref->resolved_export_slot = -1;
 
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type, 0);
         if (!v)

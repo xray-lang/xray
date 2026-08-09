@@ -40,6 +40,19 @@ fn acceptBytesMaxLen(lst: NetListener) {
     go serveBytesMaxLen(conn)
 }
 
+fn serveExactEof(c: NetConn) -> int {
+    var buf = Array<byte>(8)
+    var n = net.readExactInto(c, ref buf, 5)
+    assert_eq(len(buf), n)
+    net.close(c)
+    return n
+}
+
+fn acceptExactEof(lst: NetListener) -> int {
+    var conn = net.accept(lst)!
+    return serveExactEof(conn)
+}
+
 @test
 fn test_byte_array_echo_roundtrip() {
     var maybeLst = tryListen(8)
@@ -86,6 +99,25 @@ fn test_read_into_maxlen_controls_length() {
     assert_eq(resp[0], 80)
     assert_eq(resp[1], 81)
     assert_eq(resp[2], 82)
+
+    net.close(c)
+    net.close(lst)
+}
+
+@test
+fn test_read_exact_into_returns_partial_bytes_at_eof() {
+    var maybeLst = net.listen(0, 8)
+    if (maybeLst == null) { return }
+    var lst = maybeLst!
+    var server = go acceptExactEof(lst)
+
+    var c = net.dial("127.0.0.1", lst.port())!
+    var first = Array<byte>([1, 2])
+    var second = Array<byte>([3])
+    assert_eq(net.writeBytes(c, first), 2)
+    assert_eq(net.writeBytes(c, second), 1)
+    assert_true(net.shutdownWrite(c))
+    assert_eq(await server, 3)
 
     net.close(c)
     net.close(lst)

@@ -84,7 +84,7 @@ class StdlibEntry:
     argc: str
     arg_spec: str
     ret: str
-    aot_error_enum: str
+    aot_enum: str
     aot_direct: bool
     aot_kind: str
     link_object: str
@@ -496,7 +496,12 @@ def parse_def_metadata(
             aot_direct = bool(props.get("aot_direct", False))
             aot_kind = str(props.get("aot_kind", "method" if aot_direct else ""))
             ret = str(props.get("ret", "value"))
-            aot_error_enum = str(props.get("aot_error_enum", ""))
+            aot_enum = str(props.get("aot_enum", ""))
+            if ret not in {"value", "i64", "enum_i64", "str_borrowed", "i64_pair_result"}:
+                raise SystemExit(
+                    f"{path}:{line_no}: unsupported ret kind for "
+                    f"{current_module}.{current_name}: {ret}"
+                )
             if aot_kind and aot_kind not in {"method", "builtin"}:
                 raise SystemExit(
                     f"{path}:{line_no}: unsupported aot_kind for {current_module}.{current_name}: {aot_kind}"
@@ -505,15 +510,15 @@ def parse_def_metadata(
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} aot_kind requires aot_direct: true"
                 )
-            if ret == "i64_pair_result" and (not aot_direct or not aot_error_enum):
+            if ret in {"enum_i64", "i64_pair_result"} and (not aot_direct or not aot_enum):
                 raise SystemExit(
-                    f"{path}:{line_no}: {current_module}.{current_name} i64_pair_result "
-                    "requires aot_direct: true and aot_error_enum"
+                    f"{path}:{line_no}: {current_module}.{current_name} {ret} "
+                    "requires aot_direct: true and aot_enum"
                 )
-            if aot_error_enum and ret != "i64_pair_result":
+            if aot_enum and ret not in {"enum_i64", "i64_pair_result"}:
                 raise SystemExit(
-                    f"{path}:{line_no}: {current_module}.{current_name} aot_error_enum "
-                    "requires ret: i64_pair_result"
+                    f"{path}:{line_no}: {current_module}.{current_name} aot_enum "
+                    "requires ret: enum_i64 or i64_pair_result"
                 )
             argc_raw = str(props["argc"])
             arg_spec = str(props.get("arg_spec", ""))
@@ -619,7 +624,7 @@ def parse_def_metadata(
                     argc=argc_raw,
                     arg_spec=arg_spec,
                     ret=ret,
-                    aot_error_enum=aot_error_enum,
+                    aot_enum=aot_enum,
                     aot_direct=aot_direct,
                     aot_kind=aot_kind,
                     link_object=link_object,
@@ -1101,6 +1106,10 @@ def argc_expr(entry: StdlibEntry) -> str:
 def ret_expr(entry: StdlibEntry) -> str:
     if entry.ret == "value":
         return "CG_AOT_RET_VALUE"
+    if entry.ret == "i64":
+        return "CG_AOT_RET_I64"
+    if entry.ret == "enum_i64":
+        return "CG_AOT_RET_ENUM_I64"
     if entry.ret == "str_borrowed":
         return "CG_AOT_RET_STR_BORROWED"
     if entry.ret == "i64_pair_result":
@@ -1129,14 +1138,12 @@ def emit_aot_methods(
     enum_by_symbol = {enum.symbol: enum for enum in enums}
     lines = generated_header("xstdlib_aot_methods_generated.inc.c - AOT stdlib direct-call table")
     for e in rows:
-        if not e.aot_error_enum:
+        if not e.aot_enum:
             continue
-        enum = enum_by_symbol.get(f"{e.module}.{e.aot_error_enum}")
+        enum = enum_by_symbol.get(f"{e.module}.{e.aot_enum}")
         if not enum:
-            raise SystemExit(
-                f"{e.symbol}: unknown aot_error_enum {e.module}.{e.aot_error_enum}"
-            )
-        variants_name = f"g_aot_stdlib_{c_module_ident(e.module)}_{e.name}_error_variants"
+            raise SystemExit(f"{e.symbol}: unknown aot_enum {e.module}.{e.aot_enum}")
+        variants_name = f"g_aot_stdlib_{c_module_ident(e.module)}_{e.name}_enum_variants"
         lines.append(f"static const char *const {variants_name}[] = {{")
         for variant in enum.variants:
             lines.append(f"    {c_string(variant.name)},")
@@ -1147,10 +1154,10 @@ def emit_aot_methods(
         if not e.aot:
             raise SystemExit(f"{e.symbol}: aot_direct requires aot symbol")
         enum = (
-            enum_by_symbol.get(f"{e.module}.{e.aot_error_enum}") if e.aot_error_enum else None
+            enum_by_symbol.get(f"{e.module}.{e.aot_enum}") if e.aot_enum else None
         )
         variants_ref = (
-            f"g_aot_stdlib_{c_module_ident(e.module)}_{e.name}_error_variants"
+            f"g_aot_stdlib_{c_module_ident(e.module)}_{e.name}_enum_variants"
             if enum
             else "NULL"
         )
@@ -1604,7 +1611,7 @@ def emit_defs_header(
             "    const char *aot;",
             "    const char *arg_spec;",
             "    const char *ret;",
-            "    const char *aot_error_enum;",
+            "    const char *aot_enum;",
             "    const char *link_object;",
             "    const char *define;",
             "    const char *layer;",
@@ -1726,7 +1733,7 @@ def emit_defs_header(
             f"{c_string(e.doc)}, {c_string(e.vm)}, {c_string(e.vm_binding)}, "
             f"{c_string(e.vm_ifdef)}, "
             f"{c_string(e.aot)}, {c_string(e.arg_spec)}, {c_string(e.ret)}, "
-            f"{c_string(e.aot_error_enum)}, "
+            f"{c_string(e.aot_enum)}, "
             f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
             f"{c_string(e.aot_kind)}, {argc}, "
             f"{'true' if e.aot_direct else 'false'}"

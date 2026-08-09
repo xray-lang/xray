@@ -28,6 +28,8 @@ typedef struct XrClosure XrClosure;
 
 typedef XrCFuncResult (*XrCoroCFuncEntry)(XrVMRuntime *isolate, XrValue *args, int nargs,
                                           XrValue *result);
+typedef XrCFuncResult (*XrNativeCoroEntry)(XrVMRuntime *isolate, void *context, XrValue *result);
+typedef void (*XrNativeCoroContextDestroy)(void *context);
 
 /* ========== Backend Identity ========== */
 

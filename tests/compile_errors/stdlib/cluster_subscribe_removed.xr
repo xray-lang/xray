@@ -1,0 +1,5 @@
+import cluster
+
+fn main() {
+    cluster.subscribe("service.>")
+}

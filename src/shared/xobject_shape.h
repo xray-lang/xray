@@ -12,6 +12,7 @@
 #define XOBJECT_SHAPE_H
 
 #include "../base/xhash.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -75,6 +76,61 @@ static inline uint64_t xr_object_shape_stable_name_key(const char *name) {
     const char *field_name = name ? name : "?";
     uint64_t key = xr_hash_bytes64(field_name, strlen(field_name));
     return key ? key : 1;
+}
+
+static inline uint32_t xr_object_shape_symbol_hash(const char *name) {
+    const char *field_name = name ? name : "?";
+    uint32_t hash = xr_hash_bytes(field_name, strlen(field_name));
+    return hash ? hash : 1;
+}
+
+static inline int xr_object_shape_name_compare(const char *left, const char *right) {
+    uint64_t left_key = xr_object_shape_stable_name_key(left);
+    uint64_t right_key = xr_object_shape_stable_name_key(right);
+    if (left_key < right_key)
+        return -1;
+    if (left_key > right_key)
+        return 1;
+
+    uint32_t left_hash = xr_object_shape_symbol_hash(left);
+    uint32_t right_hash = xr_object_shape_symbol_hash(right);
+    if (left_hash < right_hash)
+        return -1;
+    if (left_hash > right_hash)
+        return 1;
+    return 0;
+}
+
+/* Canonical field order is part of the VM/AOT object-shape contract. Keep the
+ * implementation here so every producer, including native stdlib objects,
+ * derives identical ordinals without depending on compiler-only analysis. */
+static inline void xr_object_shape_sort_names(const char **names, int64_t count) {
+    if (!names || count <= 1)
+        return;
+    for (int64_t i = 1; i < count; i++) {
+        const char *current = names[i];
+        int64_t j = i;
+        while (j > 0 && xr_object_shape_name_compare(names[j - 1], current) > 0) {
+            names[j] = names[j - 1];
+            j--;
+        }
+        names[j] = current;
+    }
+}
+
+static inline int64_t xr_object_shape_canonical_ordinal(const char *const *names, int64_t count,
+                                                        const char *name) {
+    if (!names || count < 0 || !name)
+        return -1;
+    int64_t ordinal = 0;
+    bool found = false;
+    for (int64_t i = 0; i < count; i++) {
+        if (names[i] && strcmp(names[i], name) == 0)
+            found = true;
+        if (xr_object_shape_name_compare(names[i], name) < 0)
+            ordinal++;
+    }
+    return found ? ordinal : -1;
 }
 
 static inline uint64_t xr_object_shape_key_add_field_key(uint64_t key, uint64_t stable_name_key,

@@ -183,7 +183,7 @@ def main(argv: list[str]) -> int:
         def windows_shared() -> Result:
             out = ws.path("shared_x86_64-windows-gnu.dll")
             r = proc.run(
-                [xray, "build", "--native", "--shared", "--target", "x86_64-windows-gnu",
+                [xray, "build", "--native", "--artifact", "shared-library", "--target", "x86_64-windows-gnu",
                  "--dump-link-command", "-o", out, shared_dir / "main.xr"],
                 env=env, timeout=timeout,
             )

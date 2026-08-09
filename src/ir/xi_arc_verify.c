@@ -281,6 +281,15 @@ static void build_defs(ArcVerify *av) {
     }
 }
 
+/* The ops table describes ordinary XI_COPY as a borrowed identity. A
+ * source-level value-struct copy is explicitly tagged VALUE_CLONE and creates
+ * a distinct owning allocation, so the independent verifier must not attach
+ * the source as its borrow owner. */
+static bool verify_value_result_is_borrowed(const XiValue *value) {
+    return value && !xi_copy_is_value_clone(value) &&
+           xi_generated_op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
+}
+
 /* Record, for each borrow view, the base RC value it borrows (its owner). A
  * view is any op whose result-ownership is BORROWED and whose base operand
  * (arg0) is RC — index.get / load.field / span.window / span.as.bytes /
@@ -297,7 +306,7 @@ static void build_owners(ArcVerify *av) {
             XiValue *v = blk->values[i];
             if (!v || v->id >= av->n || !av->is_rc[v->id])
                 continue;
-            if (xi_generated_op_result_ownership(v->op) != XI_GEN_RESULT_OWNERSHIP_BORROWED)
+            if (!verify_value_result_is_borrowed(v))
                 continue;
             XiValue *base = (v->nargs >= 1) ? v->args[0] : NULL;
             if (base && base->id < av->n && av->is_rc[base->id])
@@ -516,7 +525,7 @@ static bool check_release_dominance(ArcVerify *av) {
 static bool value_is_borrow_representation_alias(const XiValue *value, uint8_t depth) {
     if (!value || depth > 16)
         return false;
-    if (xi_generated_op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED)
+    if (verify_value_result_is_borrowed(value))
         return true;
     switch (value->op) {
         case XI_BOX:

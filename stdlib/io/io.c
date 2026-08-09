@@ -589,6 +589,26 @@ static XrValue io_exists(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 1)
         return xr_bool(false);
+    {
+        XrValue v = args[0];
+        fprintf(stderr, "[DBG io_exists] argc=%d tag=%d is_instance=%d is_string=%d\n", argc,
+                (int) v.tag, (int) XR_IS_INSTANCE(v), (int) XR_IS_STRING(v));
+        if (XR_IS_INSTANCE(v)) {
+            XrInstance *inst = XR_TO_INSTANCE(v);
+            const char *nm = (inst && inst->klass) ? xr_class_display_name(inst->klass) : "<null>";
+            int fc = (inst && inst->klass) ? (int) xr_class_instance_field_count(inst->klass) : -1;
+            const char *f0 = (inst && inst->klass && inst->klass->fields && fc >= 1)
+                                 ? inst->klass->fields[0].name
+                                 : "<none>";
+            fprintf(stderr, "[DBG io_exists] class=%s field_count=%d f0name=%s\n", nm ? nm : "<n>",
+                    fc, f0 ? f0 : "<n>");
+            if (inst && fc >= 1) {
+                XrValue raw = inst->fields[0];
+                fprintf(stderr, "[DBG io_exists] fields[0] tag=%d is_string=%d\n", (int) raw.tag,
+                        (int) XR_IS_STRING(raw));
+            }
+        }
+    }
     const char *path = xrs_path_arg(args[0], NULL);
     if (!path)
         return xr_bool(false);

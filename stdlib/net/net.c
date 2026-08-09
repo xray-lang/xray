@@ -687,7 +687,9 @@ typedef struct {
     int fd;
     XrNetConn *conn;
     XrArray *buf;  // Array<byte> buffer supplied by caller (not owned)
-    size_t max_len;
+    size_t target_len;
+    size_t received;
+    bool exact;
     bool is_tls;
     XrPollDesc *pd;  // set on the io_uring completion path
 } NetReadIntoState;
@@ -700,8 +702,12 @@ static XrCFuncResult net_read_into_continue(XrVMRuntime *X, int status, XrValue 
     NetReadIntoState *state = (NetReadIntoState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_conn_set_error(state->conn, net_code_from_resume(status), 0);
+        /* Partial progress survives a timeout or a cancellation: the caller
+         * reads what already arrived from buffer.length instead of losing it. */
+        state->buf->length = (int32_t) state->received;
+        int total = state->received > 0 ? (int) state->received : -1;
         xr_free(state);
-        *result = xr_int(-1);
+        *result = xr_int(total);
         return XR_CFUNC_DONE;
     }
     return net_read_into_step(X, state, result);
@@ -723,29 +729,48 @@ static XrCFuncResult net_read_into_done(NetReadIntoState *state, ssize_t n, XrVa
     return done;
 }
 
+static XrCFuncResult net_read_into_progress(XrVMRuntime *X, NetReadIntoState *state, ssize_t n,
+                                            XrValue *result) {
+    if (n > 0)
+        state->received += (size_t) n;
+    if (!state->exact)
+        return net_read_into_done(state, n, result);
+    if (n == 0 || state->received == state->target_len)
+        return net_read_into_done(state, (ssize_t) state->received, result);
+    return net_read_into_step(X, state, result);
+}
+
+static XrCFuncResult net_read_into_error(NetReadIntoState *state, XrValue *result) {
+    state->buf->length = (int32_t) state->received;
+    int total = state->received > 0 ? (int) state->received : -1;
+    xr_free(state);
+    *result = xr_int(total);
+    return XR_CFUNC_DONE;
+}
+
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
 // Completion continuation for readInto: the recv op's byte count is in the pd.
 static XrCFuncResult net_read_into_complete(XrVMRuntime *X, int status, XrValue resume_value,
                                             void *ctx, XrValue *result) {
-    (void) X;
     (void) status;
     (void) resume_value;
     NetReadIntoState *state = (NetReadIntoState *) ctx;
     XrUringXferKind kind;
     long n = xr_netpoll_uring_xfer_result(state->pd, XR_POLL_READ, &kind);
+    state->pd = NULL;
     if (kind == XR_URING_XFER_DATA)
-        return net_read_into_done(state, n, result);  // n >= 0 (0 == EOF) sets buf->length
+        return net_read_into_progress(X, state, n, result);
     uint8_t err = (kind == XR_URING_XFER_TIMEOUT)  ? XR_NETERR_TIMEOUT
                   : (kind == XR_URING_XFER_CLOSED) ? XR_NETERR_CLOSED
                                                    : net_error_from_errno((int) (-n));
     net_conn_set_error(state->conn, err, (kind == XR_URING_XFER_ERROR) ? (int) (-n) : 0);
-    return net_read_into_done(state, -1, result);
+    return net_read_into_error(state, result);
 }
 #endif
 
 static XrCFuncResult net_read_into_wait(XrVMRuntime *X, XrNetConn *conn, XrArray *buf,
-                                        size_t max_len, bool is_tls, int wait_mode,
-                                        int64_t deadline_ms, XrValue *result) {
+                                        size_t target_len, size_t received, bool exact, bool is_tls,
+                                        int wait_mode, int64_t deadline_ms, XrValue *result) {
     NetReadIntoState *state = (NetReadIntoState *) xr_malloc(sizeof(NetReadIntoState));
     if (!state) {
         *result = xr_int(-1);
@@ -754,7 +779,9 @@ static XrCFuncResult net_read_into_wait(XrVMRuntime *X, XrNetConn *conn, XrArray
     state->fd = conn->fd;
     state->conn = conn;
     state->buf = buf;
-    state->max_len = max_len;
+    state->target_len = target_len;
+    state->received = received;
+    state->exact = exact;
     state->is_tls = is_tls;
     state->pd = NULL;
     return xr_yield_for_io(X, state->fd, wait_mode, net_timeout_until(deadline_ms),
@@ -762,59 +789,84 @@ static XrCFuncResult net_read_into_wait(XrVMRuntime *X, XrNetConn *conn, XrArray
 }
 
 static XrCFuncResult net_read_into_step(XrVMRuntime *X, NetReadIntoState *state, XrValue *result) {
-    uint8_t *data = xr_array_raw_u8(state->buf);
+    uint8_t *data = xr_array_raw_u8(state->buf) + state->received;
+    size_t remaining = state->target_len - state->received;
 #ifdef XR_ENABLE_TLS
     if (state->is_tls) {
         XrTlsConn *tls = state->conn ? (XrTlsConn *) state->conn->tls_state : NULL;
         if (!tls) {
             net_conn_set_error(state->conn, XR_NETERR_TLS, 0);
-            return net_read_into_done(state, -1, result);
+            return net_read_into_error(state, result);
         }
-        int n = xr_tls_conn_read_try(tls, (char *) data, (int) state->max_len);
-        if (n >= 0)
-            return net_read_into_done(state, n, result);
-        if (n == -3) {
-            net_conn_set_error(state->conn, XR_NETERR_TLS, 0);
-            return net_read_into_done(state, -1, result);
+        for (;;) {
+            int n = xr_tls_conn_read_try(tls, (char *) data, (int) remaining);
+            if (n >= 0) {
+                if (n > 0 && state->exact) {
+                    state->received += (size_t) n;
+                    if (state->received == state->target_len)
+                        return net_read_into_done(state, (ssize_t) state->received, result);
+                    data += n;
+                    remaining -= (size_t) n;
+                    continue;
+                }
+                return net_read_into_progress(X, state, n, result);
+            }
+            if (n == -3) {
+                net_conn_set_error(state->conn, XR_NETERR_TLS, 0);
+                return net_read_into_error(state, result);
+            }
+            int wait_mode = (n == -1) ? XR_WAIT_READ : XR_WAIT_WRITE;
+            int64_t deadline = (wait_mode == XR_WAIT_READ && state->conn)
+                                   ? state->conn->read_deadline_ms
+                                   : (state->conn ? state->conn->write_deadline_ms : 0);
+            return xr_yield_for_io(X, state->fd, wait_mode, net_timeout_until(deadline),
+                                   net_read_into_continue, state, result);
         }
-        int wait_mode = (n == -1) ? XR_WAIT_READ : XR_WAIT_WRITE;
-        int64_t deadline = (wait_mode == XR_WAIT_READ && state->conn)
-                               ? state->conn->read_deadline_ms
-                               : (state->conn ? state->conn->write_deadline_ms : 0);
-        return xr_yield_for_io(X, state->fd, wait_mode, net_timeout_until(deadline),
-                               net_read_into_continue, state, result);
     }
 #endif
 
-    ssize_t n = xr_socket_recv((xr_socket_t) state->fd, data, state->max_len);
-    if (n >= 0)
-        return net_read_into_done(state, n, result);
-    int socket_error = xr_get_socket_error();
-    if (xr_socket_err_is_again(socket_error)) {
-        int64_t timeout_ms = net_timeout_until(state->conn ? state->conn->read_deadline_ms : 0);
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-        XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
-        if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
-            XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->fd);
-            if (pd) {
-                state->pd = pd;
-                XrCFuncResult cr;
-                XrUringReq req = {.kind = XR_URING_OP_RECV,
-                                  .buf = data,
-                                  .len = (unsigned) state->max_len,
-                                  .timeout_ms = timeout_ms};
-                if (xr_yield_for_uring_io(X, pd, XR_POLL_READ, &req, net_read_into_complete, state,
-                                          result, &cr))
-                    return cr;
-                state->pd = NULL;
+    for (;;) {
+        ssize_t n = xr_socket_recv((xr_socket_t) state->fd, data, remaining);
+        if (n >= 0) {
+            if (n > 0 && state->exact) {
+                state->received += (size_t) n;
+                if (state->received == state->target_len)
+                    return net_read_into_done(state, (ssize_t) state->received, result);
+                data += n;
+                remaining -= (size_t) n;
+                continue;
             }
+            return net_read_into_progress(X, state, n, result);
         }
+        int socket_error = xr_get_socket_error();
+        if (socket_error == XR_EINTR)
+            continue;
+        if (xr_socket_err_is_again(socket_error)) {
+            int64_t timeout_ms = net_timeout_until(state->conn ? state->conn->read_deadline_ms : 0);
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+            XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
+            if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
+                XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->fd);
+                if (pd) {
+                    state->pd = pd;
+                    XrCFuncResult cr;
+                    XrUringReq req = {.kind = XR_URING_OP_RECV,
+                                      .buf = data,
+                                      .len = (unsigned) remaining,
+                                      .timeout_ms = timeout_ms};
+                    if (xr_yield_for_uring_io(X, pd, XR_POLL_READ, &req, net_read_into_complete,
+                                              state, result, &cr))
+                        return cr;
+                    state->pd = NULL;
+                }
+            }
 #endif
-        return xr_yield_for_io(X, state->fd, XR_WAIT_READ, timeout_ms, net_read_into_continue,
-                               state, result);
+            return xr_yield_for_io(X, state->fd, XR_WAIT_READ, timeout_ms, net_read_into_continue,
+                                   state, result);
+        }
+        net_conn_set_error(state->conn, net_error_from_errno(socket_error), socket_error);
+        return net_read_into_error(state, result);
     }
-    net_conn_set_error(state->conn, net_error_from_errno(socket_error), socket_error);
-    return net_read_into_done(state, -1, result);
 }
 
 /*
@@ -870,7 +922,8 @@ static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int 
         int wait_mode = (n == -1) ? XR_WAIT_READ : XR_WAIT_WRITE;
         int64_t deadline =
             (wait_mode == XR_WAIT_READ) ? conn->read_deadline_ms : conn->write_deadline_ms;
-        return net_read_into_wait(X, conn, buf, read_len, true, wait_mode, deadline, result);
+        return net_read_into_wait(X, conn, buf, read_len, 0, false, true, wait_mode, deadline,
+                                  result);
     }
 #endif
 
@@ -879,15 +932,14 @@ static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int 
         return net_read_into_value(conn, buf, n, result);
     int socket_error = xr_get_socket_error();
     if (xr_socket_err_is_again(socket_error)) {
-        return net_read_into_wait(X, conn, buf, read_len, false, XR_WAIT_READ,
+        return net_read_into_wait(X, conn, buf, read_len, 0, false, false, XR_WAIT_READ,
                                   conn->read_deadline_ms, result);
     }
     net_conn_set_error(conn, net_error_from_errno(socket_error), socket_error);
     return net_read_into_value(conn, buf, -1, result);
 }
 
-// ========== Yieldable net.__writeBytes (TCP + TLS dispatch) ==========
-
+// ========== Yieldable net.__writeBytes (TCP + TLS dispatch) ===
 typedef struct {
     int fd;
     XrNetConn *conn;

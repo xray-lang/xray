@@ -1,0 +1,7 @@
+export struct ReturnedValue {
+    value: int
+}
+
+export fn makeReturnedValue(value: int) -> ReturnedValue {
+    return ReturnedValue{value: value}
+}

@@ -5,7 +5,6 @@ import {
     HANDSHAKE_VERSION,
     TOPIC_DEFAULT_HOP_LIMIT,
     validNodeName,
-    validChannelName,
     parseAddress,
     validTopicName,
     validTopicPattern,
@@ -18,8 +17,6 @@ print(TOPIC_DEFAULT_HOP_LIMIT)
 print(validNodeName("node-a"))
 print(validNodeName(""))
 print(validNodeName("bad\nname"))
-print(validChannelName("events.main"))
-
 var addr = parseAddress("127.0.0.1:9000")
 print(addr.host)
 print(addr.port)

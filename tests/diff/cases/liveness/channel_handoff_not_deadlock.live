@@ -1,0 +1,3 @@
+timeout=10
+env=XRAY_WORKERS=4
+contains=18431808000

@@ -132,6 +132,55 @@ TEST(interface_conformance_uses_declaration_list) {
     teardown();
 }
 
+TEST(computed_accessors_are_indexed_by_property_symbol) {
+    XrVMRuntime *runtime = xray_vm_new_runtime(NULL);
+    ASSERT_NOT_NULL(runtime);
+
+    XrClassBuilder *plain_builder = xr_class_builder_new(runtime, "PlainFields", NULL);
+    ASSERT_NOT_NULL(plain_builder);
+    ASSERT_EQ_INT(xr_class_builder_add_method(plain_builder, "run", base_run, 0, 0), 0);
+    XrClass *plain = xr_class_builder_finalize(plain_builder);
+    ASSERT_NOT_NULL(plain);
+    ASSERT_FALSE(plain->flags & XR_CLASS_HAS_GETTERS);
+    ASSERT_FALSE(plain->flags & XR_CLASS_HAS_SETTERS);
+
+    XrClassBuilder *base_builder = xr_class_builder_new(runtime, "AccessorsBase", NULL);
+    ASSERT_NOT_NULL(base_builder);
+    ASSERT_EQ_INT(xr_class_builder_add_method(base_builder, "get:value", base_run, 0, 0), 0);
+    ASSERT_EQ_INT(xr_class_builder_add_method(base_builder, "set:value", base_run, 1, 0), 0);
+    XrClass *base = xr_class_builder_finalize(base_builder);
+    ASSERT_NOT_NULL(base);
+
+    XrClassBuilder *child_builder = xr_class_builder_new(runtime, "AccessorsChild", base);
+    ASSERT_NOT_NULL(child_builder);
+    ASSERT_EQ_INT(xr_class_builder_add_method(child_builder, "get:value", child_run, 0, 0), 0);
+    XrClass *child = xr_class_builder_finalize(child_builder);
+    ASSERT_NOT_NULL(child);
+
+    XrSymbolTable *symbols = (XrSymbolTable *) xr_isolate_get_symbol_table(runtime);
+    SymbolId value = xr_symbol_lookup_in_table(symbols, "value");
+    ASSERT_TRUE(value != SYMBOL_INVALID);
+    ASSERT_EQ_INT(base->getter_count, 1);
+    ASSERT_EQ_INT(base->setter_count, 1);
+    ASSERT_EQ_INT(child->getter_count, 1);
+    ASSERT_EQ_INT(child->setter_count, 1);
+    ASSERT_TRUE(base->flags & XR_CLASS_HAS_GETTERS);
+    ASSERT_TRUE(base->flags & XR_CLASS_HAS_SETTERS);
+    ASSERT_TRUE(child->flags & XR_CLASS_HAS_GETTERS);
+    ASSERT_TRUE(child->flags & XR_CLASS_HAS_SETTERS);
+    ASSERT_TRUE(xr_class_lookup_getter(base, value)->as.primitive == base_run);
+    ASSERT_TRUE(xr_class_lookup_getter(child, value)->as.primitive == child_run);
+    ASSERT_TRUE(xr_class_lookup_setter(child, value)->as.primitive == base_run);
+    ASSERT_TRUE(xr_class_lookup_getter(child, value + 1) == NULL);
+
+    XrClass dynamic_shape = {0};
+    dynamic_shape.super = child;
+    ASSERT_TRUE(xr_class_lookup_getter(&dynamic_shape, value)->as.primitive == child_run);
+    ASSERT_TRUE(xr_class_lookup_setter(&dynamic_shape, value)->as.primitive == base_run);
+
+    xray_vm_delete(runtime);
+}
+
 /* ========== Transition Tests ========== */
 
 TEST(transition_create_first_field) {
@@ -260,6 +309,7 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("Static Class Dispatch");
     RUN_TEST(flattened_method_table_keeps_most_derived_override);
     RUN_TEST(interface_conformance_uses_declaration_list);
+    RUN_TEST(computed_accessors_are_indexed_by_property_symbol);
 
     RUN_TEST_SUITE("Dynamic Class Transition");
     RUN_TEST(transition_create_first_field);

@@ -1,0 +1,10 @@
+class Packet {
+    payload: Array<byte>
+
+    constructor(payload: Array<byte>) {
+        this.payload = payload
+    }
+}
+
+var packet = Packet([1, 2, 3])
+print(len(packet.payload))

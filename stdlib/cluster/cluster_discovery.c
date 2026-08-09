@@ -10,8 +10,8 @@
  * KEY CONCEPT:
  *   A native coroutine sends periodic announce datagrams to a multicast
  *   group and listens for announces from other nodes. On receiving a
- *   new node announce, it triggers cluster_runtime_join() to establish the
- *   TCP connection with full challenge-response authentication.
+ *   new node announce, it spawns the netpoll-driven outgoing join state
+ *   machine with full challenge-response authentication.
  *
  * WIRE FORMAT (announce datagram):
  *   [magic 4B BE] [version 1B] [name_len 1B] [name ...] [port 2B BE]
@@ -27,19 +27,16 @@
 
 #include "cluster_internal.h"
 #include "../../stdlib/net/io.h"
+#include "../../src/base/xchecks.h"
 #include "../../src/base/xhash.h"
 #include "../../src/coro/xcoroutine.h"
+#include "../../src/coro/xyieldable.h"
 #include "../../src/os/os_time.h"
 
 #include "../../src/os/os_net.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
-// Forward-declare the xsocket entry points used here rather
-// than pulling xsocket.h directly; link-time signature checking
-// against xsocket.c keeps them in sync.
-extern int xr_socket_wait_readable(struct XrVMRuntime *X, int fd, int timeout_ms);
 
 // Multicast defaults. These are discovery implementation details; the
 // authenticated cluster protocol continues over TCP after auto-join.
@@ -57,6 +54,9 @@ struct XrClusterDiscovery {
     uint64_t cluster_hash;
     bool coro_spawned;
     _Atomic(bool) coro_exited;
+    int64_t next_announce_ms;
+    uint8_t announce[128];
+    int announce_len;
 };
 
 /* ========== Announce Packet ========== */
@@ -244,110 +244,75 @@ static bool should_connect(XrCluster *c, const char *name) {
  * teardown before closing mcast_fd (whose PollDesc the coro still
  * holds via netpoll until exit).
  */
-static void discovery_coro(void *arg) {
-    XrClusterDiscovery *disc = (XrClusterDiscovery *) arg;
+static void discovery_context_destroy(void *context) {
+    XrClusterDiscovery *disc = (XrClusterDiscovery *) context;
     if (!disc)
         return;
-    XrCluster *c = disc->cluster;
-
-    struct sockaddr_in mcast_addr;
-    memset(&mcast_addr, 0, sizeof(mcast_addr));
-    mcast_addr.sin_family = AF_INET;
-    mcast_addr.sin_addr.s_addr = inet_addr(XR_DISCOVERY_MCAST_GROUP);
-    mcast_addr.sin_port = htons(disc->mcast_port);
-
-    uint8_t announce_buf[ANNOUNCE_MAX_SIZE];
-    int announce_len = build_announce(announce_buf, sizeof(announce_buf), c->self_name,
-                                      c->listen_port, disc->cluster_hash);
-    if (announce_len < 0) {
-        atomic_store(&disc->coro_exited, true);
-        return;
-    }
-
-    while (atomic_load(&c->running)) {
-        // Send announce (best-effort; kernel-enqueue failures ignored).
-        (void) sendto(disc->mcast_fd, announce_buf, (size_t) announce_len, 0,
-                      (struct sockaddr *) &mcast_addr, sizeof(mcast_addr));
-
-        /*
-         * Wait for announces up to interval_ms, yielding via netpoll.
-         * On POLLIN we drain every queued datagram with recvfrom
-         * (EAGAIN means the socket is dry; we go back to waiting for
-         * the remainder of the interval).
-         *
-         * Each individual wait is capped at SLICE_MS so the coro
-         * observes c->running=false (set by cluster_runtime_stop) within a
-         * bounded latency. Without this cap, a ~3 s interval would
-         * delay clean cluster shutdown by up to a full interval.
-         */
-        const int SLICE_MS = 500;
-        int remaining_ms = disc->interval_ms;
-        while (remaining_ms > 0 && atomic_load(&c->running)) {
-            int wait_ms = remaining_ms < SLICE_MS ? remaining_ms : SLICE_MS;
-
-            int64_t t0_ns = (int64_t) xr_time_monotonic_ns();
-
-            int r = xr_socket_wait_readable(c->isolate, disc->mcast_fd, wait_ms);
-
-            // Deduct the elapsed portion of the deadline so partial
-            // wakes (early POLLIN) do not inflate total wait time.
-            {
-                int64_t t1_ns = (int64_t) xr_time_monotonic_ns();
-                int elapsed_ms = (int) ((t1_ns - t0_ns) / 1000000LL);
-                if (elapsed_ms < 0)
-                    elapsed_ms = 0;
-                remaining_ms -= elapsed_ms;
-            }
-
-            if (r < 0) {
-                // Error — most likely fd closed during stop. Break the
-                // inner loop; the outer running check will bail out.
-                break;
-            }
-            if (r == 0) {
-                // Slice deadline fired with no data. Fall through to
-                // the top of the inner while to check running flag
-                // and remaining budget — do NOT break, we may still
-                // have interval_ms left to spend.
-                continue;
-            }
-
-            // POLLIN: drain every queued datagram non-blockingly.
-            for (;;) {
-                uint8_t recv_buf[ANNOUNCE_MAX_SIZE];
-                struct sockaddr_in sender;
-                socklen_t sender_len = sizeof(sender);
-                ssize_t n = recvfrom(disc->mcast_fd, recv_buf, sizeof(recv_buf), 0,
-                                     (struct sockaddr *) &sender, &sender_len);
-                if (n <= 0)
-                    break;
-
-                char peer_name[XR_NODE_NAME_MAX + 1];
-                uint16_t peer_port;
-                uint64_t peer_hash;
-                if (parse_announce(recv_buf, (size_t) n, peer_name, sizeof(peer_name), &peer_port,
-                                   &peer_hash) != 0) {
-                    continue;
-                }
-
-                // Filter: must be same cluster (same secret hash).
-                if (peer_hash != disc->cluster_hash)
-                    continue;
-
-                if (!should_connect(c, peer_name))
-                    continue;
-
-                // Resolve sender IP → dotted-quad for cluster_runtime_join.
-                char host[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &sender.sin_addr, host, sizeof(host));
-
-                // Auto-join (TCP connect + handshake).
-                cluster_runtime_join(c, host, peer_port);
-            }
-        }
-    }
-
     atomic_store(&disc->coro_exited, true);
+    cluster_runtime_release(disc->cluster);
+}
+
+static void discovery_drain(XrClusterDiscovery *disc) {
+    XrCluster *c = disc->cluster;
+    for (;;) {
+        uint8_t recv_buf[ANNOUNCE_MAX_SIZE];
+        struct sockaddr_in sender;
+        socklen_t sender_len = sizeof(sender);
+        ssize_t n = recvfrom(disc->mcast_fd, recv_buf, sizeof(recv_buf), 0,
+                             (struct sockaddr *) &sender, &sender_len);
+        if (n <= 0)
+            return;
+
+        char peer_name[XR_NODE_NAME_MAX + 1];
+        uint16_t peer_port;
+        uint64_t peer_hash;
+        if (parse_announce(recv_buf, (size_t) n, peer_name, sizeof(peer_name), &peer_port,
+                           &peer_hash) != 0 ||
+            peer_hash != disc->cluster_hash || !should_connect(c, peer_name))
+            continue;
+
+        char host[INET_ADDRSTRLEN];
+        if (inet_ntop(AF_INET, &sender.sin_addr, host, sizeof(host)))
+            (void) cluster_runtime_join_spawn(c, host, peer_port);
+    }
+}
+
+static XrCFuncResult discovery_drive(XrVMRuntime *X, XrClusterDiscovery *disc, XrValue *result);
+
+static XrCFuncResult discovery_continue(XrVMRuntime *X, int status, XrValue resume_value,
+                                        void *context, XrValue *result) {
+    (void) resume_value;
+    if (status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR)
+        return XR_CFUNC_DONE;
+    return discovery_drive(X, (XrClusterDiscovery *) context, result);
+}
+
+static XrCFuncResult discovery_drive(XrVMRuntime *X, XrClusterDiscovery *disc, XrValue *result) {
+    if (!disc || !atomic_load(&disc->cluster->running))
+        return XR_CFUNC_DONE;
+
+    discovery_drain(disc);
+    int64_t now = cluster_now_ms();
+    if (now >= disc->next_announce_ms) {
+        struct sockaddr_in mcast_addr;
+        memset(&mcast_addr, 0, sizeof(mcast_addr));
+        mcast_addr.sin_family = AF_INET;
+        mcast_addr.sin_addr.s_addr = inet_addr(XR_DISCOVERY_MCAST_GROUP);
+        mcast_addr.sin_port = htons(disc->mcast_port);
+        (void) sendto(disc->mcast_fd, disc->announce, (size_t) disc->announce_len, 0,
+                      (struct sockaddr *) &mcast_addr, sizeof(mcast_addr));
+        disc->next_announce_ms = now + disc->interval_ms;
+    }
+
+    int64_t timeout_ms = disc->next_announce_ms - cluster_now_ms();
+    if (timeout_ms < 1)
+        timeout_ms = 1;
+    return xr_yield_for_io(X, disc->mcast_fd, XR_WAIT_READ, timeout_ms, discovery_continue, disc,
+                           result);
+}
+
+static XrCFuncResult discovery_entry(XrVMRuntime *X, void *context, XrValue *result) {
+    return discovery_drive(X, (XrClusterDiscovery *) context, result);
 }
 
 /* ========== Internal Discovery Lifecycle ========== */
@@ -369,6 +334,13 @@ int cluster_discovery_start(XrCluster *c) {
     // Compute cluster hash from secret
     size_t slen = strlen(c->secret);
     disc->cluster_hash = (slen > 0) ? xr_hash_bytes64(c->secret, slen) : 0;
+    disc->announce_len = build_announce(disc->announce, sizeof(disc->announce), c->self_name,
+                                        c->listen_port, disc->cluster_hash);
+    if (disc->announce_len < 0) {
+        xr_free(disc);
+        return -1;
+    }
+    disc->next_announce_ms = 0;
 
     // Create multicast socket
     disc->mcast_fd = create_mcast_socket(disc->mcast_port);
@@ -383,10 +355,11 @@ int cluster_discovery_start(XrCluster *c) {
     /*
      * Spawn discovery as a native coroutine on the worker pool rather
      * than a dedicated pthread: no private scheduling, no thread-block
-     * on poll(), one isolate stop_pipe to wake every background task.
+     * on poll(); cancellation and fd readiness stay in the shared runtime.
      */
-    XrCoroutine *coro =
-        xr_coro_create_native(c->isolate, discovery_coro, disc, "cluster_discovery");
+    cluster_runtime_retain(c);
+    XrCoroutine *coro = xr_coro_create_native_yieldable(
+        c->isolate, discovery_entry, disc, discovery_context_destroy, "cluster_discovery");
     if (!coro) {
         xr_closesocket(disc->mcast_fd);
         c->discovery = NULL;
@@ -405,21 +378,12 @@ void cluster_discovery_stop(XrCluster *c) {
 
     XrClusterDiscovery *disc = c->discovery;
 
-    /*
-     * Spin-wait (bounded 1s) for the discovery coroutine to flip
-     * coro_exited before closing mcast_fd. Closing the fd while the
-     * coro is yielded inside xr_socket_wait_readable would dangle a
-     * PollDesc entry in netpoll — the coro's blocked state references
-     * mcast_fd's pd. 100 × 10ms = 1s is ample headroom for the
-     * interval tick (3s) to observe c->running=false via the
-     * per-inner-loop check.
-     */
-    if (disc->coro_spawned) {
-        for (int i = 0; i < 100 && !atomic_load(&disc->coro_exited); i++) {
-            xr_time_sleep_ns(10ULL * 1000ULL * 1000ULL);
-        }
-        disc->coro_spawned = false;
-    }
+    /* The discovery coroutine owns a cluster reference. This destructor is
+     * reached only after that reference is released, so the PollDesc can no
+     * longer be using mcast_fd and no stop-time spin wait is required. */
+    XR_DCHECK(!disc->coro_spawned || atomic_load(&disc->coro_exited),
+              "cluster discovery destroyed while its coroutine is live");
+    disc->coro_spawned = false;
 
     if (disc->mcast_fd >= 0) {
         // Leave multicast group

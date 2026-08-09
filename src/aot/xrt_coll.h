@@ -133,13 +133,33 @@ static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_siz
 static inline void xrt_coll_set_storage_header(XrObjHeader *h, uint8_t storage_mode) {
     if (!h)
         return;
+    uint8_t previous_mode = XR_OBJ_GET_STORAGE(h);
+    int32_t previous_rc = atomic_load_explicit(&h->refcount, memory_order_relaxed);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         xrt_execution_unbind(h);
     XR_OBJ_SET_STORAGE(h, storage_mode);
-    if (storage_mode == XR_OBJ_STORAGE_SHARED)
-        atomic_store_explicit(&h->refcount, -1, memory_order_relaxed);
-    else if (!(h->extra & XR_OBJ_IMMORTAL))
+    if (h->extra & XR_OBJ_IMMORTAL)
+        return;
+
+    /* Storage publication changes the synchronization domain, not the number
+     * of live owners.  A child can be temporarily owned by both its source
+     * aggregate and the newly constructed published aggregate until the
+     * source is released.  Resetting RC here discarded those compiler-tracked
+     * owners and let the source release reclaim a child still reachable from
+     * the published graph. */
+    if (storage_mode == XR_OBJ_STORAGE_SHARED && previous_mode != XR_OBJ_STORAGE_SHARED) {
+        if (XR_UNLIKELY(previous_rc < 0)) {
+            fprintf(stderr, "xrt: storage publication has an invalid local reference count\n");
+            abort();
+        }
+        atomic_store_explicit(&h->refcount, -(previous_rc + 1), memory_order_relaxed);
+    } else if (storage_mode != XR_OBJ_STORAGE_SHARED && previous_mode == XR_OBJ_STORAGE_SHARED) {
+        if (XR_UNLIKELY(previous_rc != -1)) {
+            fprintf(stderr, "xrt: shared graph must be uniquely owned before storage transfer\n");
+            abort();
+        }
         atomic_store_explicit(&h->refcount, 0, memory_order_relaxed);
+    }
 }
 
 static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t etype,
@@ -508,16 +528,16 @@ static inline XrValue xrt_enum_box_new_payloads(uint32_t layout_id, const char *
                                                 const char *member_name, uint32_t member_index,
                                                 uint32_t payload_count, const XrValue *payloads) {
     size_t alloc_size = sizeof(XrAotEnumBox) + (size_t) payload_count * sizeof(XrValue);
-    XrAotEnumBox *ev = (XrAotEnumBox *) XRT_CALLOC(1, alloc_size);
+    XrAotEnumBox *ev =
+        (XrAotEnumBox *) xrt_execution_alloc_embedded(alloc_size, xrt_execution_finalize_generic);
     if (XR_UNLIKELY(!ev)) {
         fprintf(stderr, "xrt_enum_box_new_payloads: out of memory\n");
         abort();
     }
-    /* Header-first refcounted object: rc 0 means this single caller-owned
-     * reference; the finalizer releases the payloads and the free path pairs
-     * with the raw allocation above. */
-    ev->hdr.type = XR_TENUM_BOX;
-    ev->hdr.objsize = (uint32_t) alloc_size;
+    XrObjHeader *hdr = (XrObjHeader *) ev;
+    xrt_heap_header_init(hdr, XR_TINSTANCE);
+    hdr->_rsv = XRT_ARC_KIND_ENUM_BOX;
+    hdr->extra |= XR_OBJ_HAS_DTOR;
     ev->enum_name = enum_name;
     ev->member_name = member_name;
     ev->member_index = member_index;
@@ -536,6 +556,37 @@ static inline XrValue xrt_enum_box_new_payloads(uint32_t layout_id, const char *
 static inline XrValue xrt_enum_aggregate_box(XrAotEnumAggregate value) {
     return xrt_enum_box_new_payloads(value.layout_id, value.enum_name, value.member_name,
                                      (uint32_t) value.tag, value.payload_count, value.payloads);
+}
+
+/* Inline enum aggregates carry ownership in their active payload lanes even
+ * though the aggregate itself has no heap header.  ARC emits these helpers for
+ * aggregate RETAIN/RELEASE ops; inactive and scalar lanes are ordinary tagged
+ * no-ops in xrt_retain/xrt_release. */
+static inline void xrt_enum_aggregate_retain(XrAotEnumAggregate value) {
+    uint32_t limit = value.payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP
+                         ? value.payload_count
+                         : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+    for (uint32_t i = 0; i < limit; i++)
+        xrt_retain(value.payloads[i]);
+}
+
+static inline void xrt_enum_aggregate_release(XrAotEnumAggregate value) {
+    uint32_t limit = value.payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP
+                         ? value.payload_count
+                         : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+    for (uint32_t i = 0; i < limit; i++)
+        xrt_release(value.payloads[i]);
+}
+
+/* Box a borrowed inline aggregate.  The box owns its payload lanes, while the
+ * source aggregate keeps its owners until its normal ARC cleanup. */
+static inline XrValue xrt_enum_aggregate_box_from_borrowed(XrAotEnumAggregate value) {
+    uint32_t limit = value.payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP
+                         ? value.payload_count
+                         : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+    for (uint32_t i = 0; i < limit; i++)
+        xrt_retain(value.payloads[i]);
+    return xrt_enum_aggregate_box(value);
 }
 
 static inline XrAotEnumAggregate xrt_enum_aggregate_from_boxed(XrValue boxed) {
@@ -561,6 +612,22 @@ static inline XrAotEnumAggregate xrt_enum_aggregate_from_boxed(XrValue boxed) {
                                                                      : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
     for (uint32_t i = 0; i < limit; i++)
         out.payloads[i] = ev->payloads[i];
+    return out;
+}
+
+/* Consume an owned dynamic box and transfer its payload owners into the
+ * returned inline aggregate. Static scalar sidecars and runtime enum metadata
+ * are borrowed immutable views and therefore remain untouched. */
+static inline XrAotEnumAggregate xrt_enum_aggregate_take_from_boxed(XrValue boxed) {
+    XrAotEnumAggregate out = xrt_enum_aggregate_from_boxed(boxed);
+    if (!xrt_arc_value_has_header(boxed))
+        return out;
+    XrAotEnumBox *ev = (XrAotEnumBox *) boxed.ptr;
+    uint32_t limit = ev->payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP ? ev->payload_count
+                                                                     : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+    for (uint32_t i = 0; i < limit; i++)
+        ev->payloads[i] = XR_NULL_VAL;
+    xrt_release(boxed);
     return out;
 }
 
@@ -1040,6 +1107,7 @@ static inline void xrt_array_stack_slice_view_release(XrValue view) {
 #include "xrt_byte_array.inc.c"
 
 typedef struct {
+    XrObjHeader hdr;
     int64_t len;
     XrValue items[];
 } xrt_tuple_t;
@@ -1047,25 +1115,34 @@ typedef struct {
 static inline XrValue xrt_tuple_new(int64_t len) {
     if (len < 0)
         len = 0;
-    xrt_tuple_t *t =
-        (xrt_tuple_t *) xrt_arc_alloc(sizeof(xrt_tuple_t) + (size_t) len * sizeof(XrValue));
+    xrt_tuple_t *t = (xrt_tuple_t *) xrt_execution_alloc_embedded(
+        sizeof(xrt_tuple_t) + (size_t) len * sizeof(XrValue), xrt_execution_finalize_generic);
     if (XR_UNLIKELY(!t)) {
         fprintf(stderr, "xrt_tuple_new: out of memory\n");
         abort();
     }
-    xrt_arc_mark_builtin(t, XRT_ARC_KIND_TUPLE);
+    xrt_heap_header_init(&t->hdr, XR_TINSTANCE);
+    t->hdr._rsv = XRT_ARC_KIND_TUPLE;
+    t->hdr.extra |= XR_OBJ_HAS_DTOR;
     t->len = len;
     for (int64_t i = 0; i < len; i++)
         t->items[i] = XR_NULL_VAL;
     return xr_mkptr(t, XR_TAG_TUPLE);
 }
 
-/* Element values transfer in, matching array construction and the ownership
- * plan the backend emits: the operands are consumed at the construction site
- * and are not released again by the caller, so retaining here would leave the
- * elements one owner above zero forever. An array-ref lane still materializes,
- * because a borrowed view cannot be stored as-is. */
-static inline XrValue xrt_tuple_make(int64_t len, const XrValue *items) {
+/* Construct a tuple by consuming one owner from every lane. */
+static inline XrValue xrt_tuple_make_consuming(int64_t len, const XrValue *items) {
+    XrValue tuple = xrt_tuple_new(len);
+    xrt_tuple_t *t = (xrt_tuple_t *) tuple.ptr;
+    for (int64_t i = 0; i < t->len; i++)
+        t->items[i] = items ? items[i] : XR_NULL_VAL;
+    return tuple;
+}
+
+/* Construct a tuple from lanes that transfer in: an ordinary value is stored
+ * as-is because the construction site already gave up its owner, while an
+ * array-ref lane materializes, since a borrowed view cannot be stored. */
+static inline XrValue xrt_tuple_make_from_borrowed(int64_t len, const XrValue *items) {
     XrValue tuple = xrt_tuple_new(len);
     xrt_tuple_t *t = (xrt_tuple_t *) tuple.ptr;
     for (int64_t i = 0; i < t->len; i++) {
@@ -1077,6 +1154,16 @@ static inline XrValue xrt_tuple_make(int64_t len, const XrValue *items) {
             t->items[i] = items[i];
     }
     return tuple;
+}
+
+/* XI_TUPLE_NEW consumes every item.  Build the complete tuple first, then
+ * publish the root and all reference lanes into the compiler-planned storage
+ * domain.  This matches the VM NEWTUPLE contract and keeps nested values out
+ * of the producer execution arena without a copy. */
+static inline XrValue xrt_tuple_make_storage(int64_t len, const XrValue *items,
+                                             uint8_t storage_mode) {
+    XrValue tuple = xrt_tuple_make_consuming(len, items);
+    return xrt_value_set_storage_graph(tuple, storage_mode);
 }
 
 XR_FUNC bool xr_aot_atomic_compare_exchange_i64(XrValue atomic_value, int64_t expected,
@@ -1094,7 +1181,7 @@ static inline XrValue xrt_atomic_compare_exchange_i64_tuple(XrValue atomic_value
     bool ok =
         xr_aot_atomic_compare_exchange_i64(atomic_value, expected, desired, ordering, &previous);
     XrValue items[2] = {XR_FROM_INT(previous), XR_FROM_BOOL(ok)};
-    return xrt_tuple_make(2, items);
+    return xrt_tuple_make_consuming(2, items);
 }
 
 static inline XrValue xrt_atomic_compare_exchange_f64_tuple(XrValue atomic_value, double expected,
@@ -1103,7 +1190,7 @@ static inline XrValue xrt_atomic_compare_exchange_f64_tuple(XrValue atomic_value
     bool ok =
         xr_aot_atomic_compare_exchange_f64(atomic_value, expected, desired, ordering, &previous);
     XrValue items[2] = {XR_FROM_FLOAT(previous), XR_FROM_BOOL(ok)};
-    return xrt_tuple_make(2, items);
+    return xrt_tuple_make_consuming(2, items);
 }
 
 static inline XrValue xrt_atomic_compare_exchange_bool_tuple(XrValue atomic_value, bool expected,
@@ -1112,7 +1199,7 @@ static inline XrValue xrt_atomic_compare_exchange_bool_tuple(XrValue atomic_valu
     bool ok =
         xr_aot_atomic_compare_exchange_bool(atomic_value, expected, desired, ordering, &previous);
     XrValue items[2] = {XR_FROM_BOOL(previous), XR_FROM_BOOL(ok)};
-    return xrt_tuple_make(2, items);
+    return xrt_tuple_make_consuming(2, items);
 }
 
 static inline XrValue xrt_tuple_get(XrValue tuple, int64_t index) {
@@ -3557,7 +3644,7 @@ static inline XrValue xrt_json_iterator_next(xrt_iterator_t *it) {
         XrValue value = j->fields[idx];
         if (it->kind == XRT_ITER_PAIRS) {
             XrValue kv[2] = {key, value};
-            return xrt_tuple_make(2, kv);
+            return xrt_tuple_make_from_borrowed(2, kv);
         }
         if (it->kind == XRT_ITER_VALUES)
             return value;
@@ -3574,7 +3661,7 @@ static inline XrValue xrt_json_iterator_next(xrt_iterator_t *it) {
     XrValue value = xrt_map_slot_value(j->dynamic_fields, slot);
     if (it->kind == XRT_ITER_PAIRS) {
         XrValue kv[2] = {key, value};
-        return xrt_tuple_make(2, kv);
+        return xrt_tuple_make_from_borrowed(2, kv);
     }
     if (it->kind == XRT_ITER_VALUES)
         return value;
@@ -3668,7 +3755,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
             if (it->kind == XRT_ITER_PAIRS) {
                 XrValue kv[2] = {xrt_boolmap_iter_key(b, cursor),
                                  xrt_boolmap_iter_value(b, cursor)};
-                return xrt_tuple_make(2, kv);
+                return xrt_tuple_make_from_borrowed(2, kv);
             }
             if (it->kind == XRT_ITER_VALUES)
                 return xrt_boolmap_iter_value(b, cursor);
@@ -3677,7 +3764,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
         int64_t slot = xrt_map_is_typed(m) ? m->order[it->cursor++] : it->cursor++;
         if (it->kind == XRT_ITER_PAIRS) {
             XrValue kv[2] = {xrt_map_slot_key(m, slot), xrt_map_slot_value(m, slot)};
-            return xrt_tuple_make(2, kv);
+            return xrt_tuple_make_from_borrowed(2, kv);
         }
         if (it->kind == XRT_ITER_VALUES)
             return xrt_map_slot_value(m, slot);
@@ -3698,7 +3785,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
             return XR_FROM_INT(idx);
         if (it->kind == XRT_ITER_PAIRS) {
             XrValue kv[2] = {XR_FROM_INT(idx), elem};
-            return xrt_tuple_make(2, kv);
+            return xrt_tuple_make_from_borrowed(2, kv);
         }
         return elem;
     }
@@ -3712,7 +3799,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
             return XR_FROM_INT(char_index);
         if (it->kind == XRT_ITER_PAIRS) {
             XrValue kv[2] = {XR_FROM_INT(char_index), ch};
-            return xrt_tuple_make(2, kv);
+            return xrt_tuple_make_from_borrowed(2, kv);
         }
         return ch;
     }
@@ -6665,6 +6752,16 @@ static inline void xrt_iterator_destroy_builtin(void *obj) {
     xrt_release(source);
 }
 
+static inline void xrt_enum_box_destroy_builtin(void *obj) {
+    XrAotEnumBox *box = (XrAotEnumBox *) obj;
+    if (!box)
+        return;
+    for (uint32_t i = 0; i < box->payload_count; i++) {
+        xrt_release(box->payloads[i]);
+        box->payloads[i] = XR_NULL_VAL;
+    }
+}
+
 static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
     if (!obj)
         return;
@@ -6693,6 +6790,9 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
                 xrt_release(tuple->items[i]);
             break;
         }
+        case XRT_ARC_KIND_ENUM_BOX:
+            xrt_enum_box_destroy_builtin(obj);
+            break;
 #ifdef XRT_ENABLE_REGEX
         case XRT_ARC_KIND_REGEX:
             xrt_regex_destroy_builtin(obj);
@@ -6828,6 +6928,12 @@ static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage
         case XR_TAG_ITERATOR:
             (void) xrt_value_set_storage_graph(((xrt_iterator_t *) value.ptr)->coll, storage_mode);
             break;
+        case XR_TAG_ENUM: {
+            XrAotEnumBox *box = (XrAotEnumBox *) value.ptr;
+            for (uint32_t i = 0; i < box->payload_count; i++)
+                (void) xrt_value_set_storage_graph(box->payloads[i], storage_mode);
+            break;
+        }
         case XR_TAG_PTR: {
             uint16_t class_type_id = xrt_aot_class_type_id(hdr);
             if (value.heap_type == XR_TINSTANCE && class_type_id != 0 &&
@@ -6967,6 +7073,17 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             memcpy(dst->buf, src->buf, (size_t) src->len + 1u);
             dst->len = src->len;
             return dstv;
+        }
+        case XR_TAG_ENUM: {
+            if (!xrt_arc_value_has_header(val))
+                return val;
+            XrAotEnumAggregate aggregate = xrt_enum_aggregate_from_boxed(val);
+            uint32_t limit = aggregate.payload_count < XR_AOT_ENUM_AGG_PAYLOAD_CAP
+                                 ? aggregate.payload_count
+                                 : XR_AOT_ENUM_AGG_PAYLOAD_CAP;
+            for (uint32_t i = 0; i < limit; i++)
+                aggregate.payloads[i] = xrt_value_clone_for_coro(aggregate.payloads[i]);
+            return xrt_enum_aggregate_box(aggregate);
         }
         case XR_TAG_AGG_REF: {
             if (!val.ptr)

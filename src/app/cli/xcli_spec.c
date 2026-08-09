@@ -102,8 +102,8 @@ static const XrCliOptionSpec build_options[] = {
      "Build profile: hosted or freestanding"},
     {"type-names", 0, XR_CLI_VALUE_STRING, false, false, "MODE",
      "AOT type-name profile: none, public, or all"},
-    {"shared", 0, XR_CLI_VALUE_NONE, false, false, NULL,
-     "Build a native shared library for manifest export symbols"},
+    {"artifact", 0, XR_CLI_VALUE_STRING, false, false, "KIND",
+     "AOT artifact: executable, shared-library, or hosted-fragment"},
     {"target", 0, XR_CLI_VALUE_STRING, false, false, "TRIPLE", "AOT target triple"},
     {"toolchain", 0, XR_CLI_VALUE_STRING, false, false, "KIND",
      "AOT provider: auto, host, clang, gcc, msvc, or zig"},
@@ -270,8 +270,8 @@ static const XrCliCommandSpec toolchain_subcommands[] = {
 static const XrCliCommandSpec language_subcommands[] = {
     {"attributes", "List the complete public attribute registry", NULL, language_options, 0, 0,
      false, false, NULL, NULL, 0},
-    {"conversions", "Inventory analyzer-classified source conversions", NULL, language_options,
-     1, 1, false, false, NULL, NULL, 0},
+    {"conversions", "Inventory analyzer-classified source conversions", NULL, language_options, 1,
+     1, false, false, NULL, NULL, 0},
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
 
 /* ========== Top-level Command Table ========== */

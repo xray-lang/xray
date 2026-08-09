@@ -638,6 +638,8 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
 
     if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);
+    if (ir && ir->module)
+        ir->module->path = cfg->source_file;
 
     return run_pipeline(ir, isolate, cfg);
 }
@@ -695,6 +697,8 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
 
     if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);
+    if (ir && ir->module)
+        ir->module->path = cfg->source_file;
 
     return run_pipeline(ir, isolate, cfg);
 }

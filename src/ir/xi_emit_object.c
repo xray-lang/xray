@@ -28,6 +28,7 @@
 #include "../module/xmodule.h"
 #include "../base/xfileio.h"
 #include "../base/xmalloc.h"
+#include "../shared/xobject_shape.h"
 #include "../shared/xr_elem_type.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
@@ -768,22 +769,7 @@ static XrClass *xi_json_struct_object_class_from_type_depth(EmitCtx *ctx, const 
     } else {
         for (int i = 0; i < field_count; i++)
             field_names[i] = type->object.field_names[i];
-        for (int i = 1; i < field_count; i++) {
-            const char *current = field_names[i];
-            uint64_t current_stable = xg_object_stable_name_key(current);
-            uint32_t current_id = xg_name_id(current);
-            int j = i;
-            while (j > 0) {
-                uint64_t previous_stable = xg_object_stable_name_key(field_names[j - 1]);
-                uint32_t previous_id = xg_name_id(field_names[j - 1]);
-                if (previous_stable < current_stable ||
-                    (previous_stable == current_stable && previous_id <= current_id))
-                    break;
-                field_names[j] = field_names[j - 1];
-                j--;
-            }
-            field_names[j] = current;
-        }
+        xr_object_shape_sort_names(field_names, field_count);
     }
     uint8_t *value_kinds = xi_json_struct_object_value_kinds(type, field_names, field_count);
     if (!value_kinds) {
@@ -1305,9 +1291,9 @@ XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 /* Try to resolve an import reference at emit time by looking up the
- * pre-loaded module_table on the registry.  For selective imports,
- * fills both resolved_mod_index and resolved_shared_slot.  For
- * whole-module imports, fills only resolved_mod_index. */
+ * pre-loaded module_table on the registry.  For selective imports, fills
+ * resolved_mod_index and resolved_export_slot.  For whole-module imports,
+ * fills only resolved_mod_index. */
 static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
     XR_DCHECK(ctx != NULL && ref != NULL, "try_emit_time_resolve: NULL arg");
     if (!ctx->isolate)
@@ -1360,14 +1346,14 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
     if (target->symbol_to_index && sym >= target->min_symbol && sym <= target->max_symbol) {
         int32_t slot = target->symbol_to_index[sym - target->min_symbol];
         if (slot >= 0 && (uint64_t) slot <= MAXARG_C) {
-            ref->resolved_shared_slot = slot;
+            ref->resolved_export_slot = slot;
             return true;
         }
     }
     /* Fallback: linear scan */
     for (uint16_t ei = 0; ei < target->export_count; ei++) {
         if (target->export_symbols[ei] == sym) {
-            ref->resolved_shared_slot = (int) ei;
+            ref->resolved_export_slot = (int) ei;
             return true;
         }
     }
@@ -1392,12 +1378,12 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         try_emit_time_resolve(ctx, ref);
 
     /* Selective import: OP_LOAD_MODULE_SLOT */
-    if (ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 && ref->member_name) {
+    if (ref->resolved_mod_index >= 0 && ref->resolved_export_slot >= 0 && ref->member_name) {
         uint16_t mod_arg = 0;
         uint16_t slot_arg = 0;
         if (!xi_emit_index_to_arg(ctx, ref->resolved_mod_index, XI_EMIT_ERR_TOO_MANY_CONSTS,
                                   &mod_arg) ||
-            !xi_emit_index_to_arg(ctx, ref->resolved_shared_slot, XI_EMIT_ERR_TOO_MANY_CONSTS,
+            !xi_emit_index_to_arg(ctx, ref->resolved_export_slot, XI_EMIT_ERR_TOO_MANY_CONSTS,
                                   &slot_arg))
             return;
         emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, dst, mod_arg, slot_arg));

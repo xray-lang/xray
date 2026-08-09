@@ -12,6 +12,7 @@
  */
 
 #include "xmodule.h"
+#include "xray_vm.h"
 #include "../stdlib/xstdlib_vm_fastpath.h"
 #include "xmodule_resolver.h"
 #include "xproject.h"
@@ -637,6 +638,57 @@ static const char *get_importer_path(XrVMRuntime *isolate) {
     return xr_isolate_get_script_file(isolate);
 }
 
+static const XrBytecodeModule *find_embedded_module(const XrModuleRegistry *registry,
+                                                    const char *path) {
+    if (!registry || !path)
+        return NULL;
+    for (size_t i = 0; i < registry->embedded_module_count; i++) {
+        const XrBytecodeModule *module = &registry->embedded_modules[i];
+        if (module->path && module->bytecode && module->bytecode_size > 0 &&
+            strcmp(module->path, path) == 0)
+            return module;
+    }
+    return NULL;
+}
+
+static char *resolve_embedded_relative(const XrModuleRegistry *registry, const char *specifier,
+                                       const char *importer) {
+    if (!registry || !specifier || !importer || specifier[0] != '.')
+        return NULL;
+
+    char *base_dir = xr_path_dirname(importer);
+    if (!base_dir)
+        return NULL;
+
+    char candidate[XR_PATH_MAX];
+    snprintf(candidate, sizeof(candidate), "%s/%s", base_dir, specifier);
+    xr_free(base_dir);
+    char *normalized = normalize_path(candidate);
+    if (!normalized)
+        return NULL;
+
+    if (find_embedded_module(registry, normalized))
+        return normalized;
+
+    size_t length = strlen(normalized);
+    if (length < 3 || strcmp(normalized + length - 3, ".xr") != 0) {
+        snprintf(candidate, sizeof(candidate), "%s.xr", normalized);
+        if (find_embedded_module(registry, candidate)) {
+            xr_free(normalized);
+            return xr_strdup(candidate);
+        }
+    }
+
+    snprintf(candidate, sizeof(candidate), "%s/index.xr", normalized);
+    if (find_embedded_module(registry, candidate)) {
+        xr_free(normalized);
+        return xr_strdup(candidate);
+    }
+
+    xr_free(normalized);
+    return NULL;
+}
+
 /*
 ** Resolve module path
 **
@@ -663,6 +715,11 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
     }
 #endif
 
+    const char *importer = get_importer_path(isolate);
+    char *embedded_path = resolve_embedded_relative(registry, module_name, importer);
+    if (embedded_path)
+        return embedded_path;
+
     XrModuleResolver *resolver = ensure_resolver(registry);
     if (!resolver)
         return NULL;
@@ -671,8 +728,6 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
      * At runtime the specifier has no quotes, so infer from content:
      * bare = no slash and no dot-prefix. */
     bool is_bare = (module_name[0] != '.' && strchr(module_name, '/') == NULL);
-
-    const char *importer = get_importer_path(isolate);
 
     XrModuleId mid;
     char *err = NULL;
@@ -1027,47 +1082,59 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
         return NULL;
     }
 
-    // 1. Read file contents
-    char *source = xr_file_read_all(path, "r", NULL);
-    if (!source) {
-        // File doesn't exist or unreadable
-        return NULL;
+    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
+    const XrBytecodeModule *embedded = find_embedded_module(registry, path);
+    char *source = NULL;
+    AstNode *ast = NULL;
+    XrProto *code = NULL;
+
+    if (embedded) {
+        XrBcError error = XR_BC_OK;
+        code = xr_bytecode_read(isolate, embedded->bytecode, embedded->bytecode_size, &error);
+        if (!code) {
+            xr_log_warning("module", "failed to load embedded bytecode '%s': %s", path,
+                           xr_bytecode_error_string(error));
+            return NULL;
+        }
+    } else {
+        source = xr_file_read_all(path, "r", NULL);
+        if (!source)
+            return NULL;
     }
 
-    // 3. Set current module context (for export collection)
+    // Set current module context for export collection and relative imports.
     XrModule *prev_module = xr_isolate_get_current_module(isolate);
     xr_isolate_set_current_module(isolate, module);
-
-    // 5. Parse and compile (API declared in xast.h and xisolate_internal.h)
 
     // Normalize path, remove redundant "./"
     char *clean_path = normalize_path(path);
 
-    XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
-    if (!registry || !registry->compiler_session || !registry->fn_parse ||
-        !registry->fn_compile_ast) {
-        xr_isolate_set_current_module(isolate, prev_module);
-        xr_free(source);
-        xr_free(clean_path);
-        xr_log_warning("module", "compiler not available (lite runtime)");
-        return NULL;
-    }
-    AstNode *ast = registry->fn_parse(registry->compiler_session, source, clean_path);
-    if (!ast) {
-        xr_isolate_set_current_module(isolate, prev_module);
-        xr_free(source);
-        xr_free(clean_path);
-        return NULL;
-    }
-
-    XrProto *code = registry->fn_compile_ast(registry->compiler_session, ast, clean_path);
     if (!code) {
-        if (registry->fn_ast_free)
-            registry->fn_ast_free(ast);
-        xr_isolate_set_current_module(isolate, prev_module);
-        xr_free(source);
-        xr_free(clean_path);
-        return NULL;
+        if (!registry || !registry->compiler_session || !registry->fn_parse ||
+            !registry->fn_compile_ast) {
+            xr_isolate_set_current_module(isolate, prev_module);
+            xr_free(source);
+            xr_free(clean_path);
+            xr_log_warning("module", "compiler not available (lite runtime)");
+            return NULL;
+        }
+        ast = registry->fn_parse(registry->compiler_session, source, clean_path);
+        if (!ast) {
+            xr_isolate_set_current_module(isolate, prev_module);
+            xr_free(source);
+            xr_free(clean_path);
+            return NULL;
+        }
+
+        code = registry->fn_compile_ast(registry->compiler_session, ast, clean_path);
+        if (!code) {
+            if (registry->fn_ast_free)
+                registry->fn_ast_free(ast);
+            xr_isolate_set_current_module(isolate, prev_module);
+            xr_free(source);
+            xr_free(clean_path);
+            return NULL;
+        }
     }
 
     /* The module owns its initializer proto from this point on, including the
@@ -1096,7 +1163,7 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
     }
 
     // 7. Cleanup - code stays module-owned because exported closures reference it.
-    if (registry->fn_ast_free)
+    if (ast && registry->fn_ast_free)
         registry->fn_ast_free(ast);
     xr_free(source);
     xr_free(clean_path);

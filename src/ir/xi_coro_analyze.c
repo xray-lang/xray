@@ -605,6 +605,40 @@ static bool xi_coro_value_uses_target(const XiValue *user, const XiValue *target
     return false;
 }
 
+/* A retry-on-resume operation reuses its evaluated operands after the
+ * scheduler returns to the suspension state.  Ordinary SSA liveness sees the
+ * call as one atomic use and would otherwise leave those values in ephemeral
+ * resume-stack locals.  The callee/receiver slot at args[0] is metadata for
+ * CALL forms; the retry lowering consumes only the actual operands. */
+static bool xi_coro_retry_suspend_uses_target(const XiValue *user, const XiValue *target) {
+    if (!user || !target || (user->lowering_flags & XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS) == 0)
+        return false;
+    uint16_t start =
+        (user->op == XI_CALL || user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT)
+            ? 1u
+            : 0u;
+    for (uint16_t a = start; a < user->nargs; a++) {
+        if (user->args[a] == target)
+            return true;
+    }
+    return false;
+}
+
+XR_FUNC bool xi_coro_value_is_retry_suspend_operand(const XiFunc *f, const XiValue *target) {
+    if (!f || !target)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            if (xi_coro_retry_suspend_uses_target(blk->values[vi], target))
+                return true;
+        }
+    }
+    return false;
+}
+
 static bool xi_coro_block_uses_target_after(const XiBlock *blk, uint32_t start,
                                             const XiValue *target) {
     for (uint32_t vi = start; vi < blk->nvalues; vi++) {
@@ -655,9 +689,34 @@ XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness
             }
             if (!available || !xi_coro_is_suspend_point(f, v, resolver))
                 continue;
-            if (xi_is_live_out(live, blk, target) ||
+            if (xi_coro_retry_suspend_uses_target(v, target) || xi_is_live_out(live, blk, target) ||
                 xi_coro_block_uses_target_after(blk, vi + 1, target) ||
                 xi_coro_block_successor_phi_uses_target(blk, target))
+                return true;
+        }
+    }
+    return false;
+}
+
+/* A call-bound place is itself a raw pointer, so ordinary SSA liveness keeps
+ * the pointer but cannot express that its pointee must also have a stable
+ * address.  When XI_LOCAL_ADDR crosses a suspension, lift its source into the
+ * logical frame as well; the emitted address then points into the heap frame
+ * instead of a vanished resume-stack local. */
+static bool xi_coro_value_address_live_across_suspend(const XiFunc *f, const XiLiveness *live,
+                                                      const XiValue *target,
+                                                      const XiCoroResolver *resolver) {
+    if (!f || !live || !target)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *place = blk->values[vi];
+            if (place && place->op == XI_LOCAL_ADDR && place->nargs >= 1 &&
+                place->args[0] == target &&
+                xi_coro_value_live_across_suspend(f, live, place, resolver))
                 return true;
         }
     }
@@ -685,7 +744,8 @@ XR_FUNC bool xi_coro_value_is_logical_member(const XiFunc *f, const XiValue *v,
         return true;
     if (v->op == XI_GO || v->op == XI_THREAD_SPAWN)
         return true;
-    return xi_coro_value_live_across_suspend(f, live, v, resolver);
+    return xi_coro_value_live_across_suspend(f, live, v, resolver) ||
+           xi_coro_value_address_live_across_suspend(f, live, v, resolver);
 }
 
 /* ========== Slot attributes ========== */
@@ -857,6 +917,17 @@ static bool xi_coro_slot_value_may_hold_root(const XiFunc *f, const XiValue *v, 
            xi_coro_value_needs_runtime_slot(v) || xi_coro_value_is_aggregate_await_tasks(f, v);
 }
 
+/* A borrowed result names storage owned by another Xi value.  Moving that SSA
+ * name into the coroutine frame does not manufacture a second ARC reference:
+ * the owner's borrow closure keeps the real owner live, rooted, and releasable.
+ * Treating the alias as an independent frame root/release both double-counts
+ * it and, on cancellation, can release the same object twice.  VALUE_CLONE is
+ * the one COPY form that allocates an independent owner. */
+static bool xi_coro_slot_is_borrowed_alias(const XiValue *v) {
+    return v && !xi_copy_is_value_clone(v) &&
+           xi_generated_op_result_ownership(v->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
+}
+
 static void xi_coro_fill_slot(XiCoroSlot *slot, const XiFunc *f, XiValue *v, XiCoroSlotKind kind,
                               const XiLiveness *live, const XiCoroResolver *resolver) {
     slot->value = v;
@@ -864,16 +935,18 @@ static void xi_coro_fill_slot(XiCoroSlot *slot, const XiFunc *f, XiValue *v, XiC
     slot->logical_rep = (uint8_t) xi_coro_rep(v);
     slot->kind = (uint8_t) kind;
     slot->is_root = xi_coro_value_rep_can_trace_root(v);
-    slot->needs_release = xi_coro_value_needs_arc_release(v);
+    bool borrowed_alias = xi_coro_slot_is_borrowed_alias(v);
+    slot->needs_release = xi_coro_value_needs_arc_release(v) && !borrowed_alias;
     slot->needs_runtime_slot = xi_coro_value_needs_runtime_slot(v);
     slot->needs_boundary_clone = xi_coro_value_needs_boundary_clone(v);
-    slot->live_across = xi_coro_value_live_across_suspend(f, live, v, resolver);
+    slot->live_across = xi_coro_value_live_across_suspend(f, live, v, resolver) ||
+                        xi_coro_value_address_live_across_suspend(f, live, v, resolver);
     /* Parameters and phis are frame roots only when live across a suspend; a
      * block value may also hold a root via its runtime/await origin. */
     bool root_reachable = kind == XI_CORO_SLOT_VALUE
                               ? xi_coro_slot_value_may_hold_root(f, v, slot->live_across)
                               : slot->live_across;
-    slot->frame_root = slot->is_root && root_reachable;
+    slot->frame_root = slot->is_root && root_reachable && !borrowed_alias;
     slot->frame_release = slot->needs_release && slot->live_across;
 }
 

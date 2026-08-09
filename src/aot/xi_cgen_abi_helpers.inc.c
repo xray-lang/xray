@@ -1029,10 +1029,11 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
             xaot_value_storage_rep(target_rep) == XR_REP_TAGGED &&
             cg_value_rep_is_adt_aggregate(call_plan->rep)) {
             if (cg_value_rep_is_typed_adt_aggregate(call_plan->rep)) {
-                fprintf(out, "%s_from_base(xrt_value_to_enum_aggregate(", call_plan->rep.c_type);
+                fprintf(out, "%s_from_base(xrt_enum_aggregate_take_from_boxed(",
+                        call_plan->rep.c_type);
                 return "))";
             }
-            fprintf(out, "xrt_value_to_enum_aggregate(");
+            fprintf(out, "xrt_enum_aggregate_take_from_boxed(");
             return ")";
         }
         if (target_rep.kind == XAOT_VALUE_AGGREGATE &&

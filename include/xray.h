@@ -14,5 +14,6 @@
 #include "xray_version.h"
 #include "xray_export.h"
 #include "xray_vm.h"
+#include "xray_hosted_fragment_runtime.h"
 
 #endif  // XRAY_H
