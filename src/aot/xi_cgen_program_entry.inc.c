@@ -442,8 +442,6 @@ static void cg_emit_tu_includes(FILE *out, bool define_impl, bool freestanding_p
     } else if (freestanding_profile) {
         fprintf(out, "#include \"xrt_core_freestanding.h\"\n\n");
     } else {
-        if (runtime_bridge)
-            fprintf(out, "#define XRAY_AOT_RUNTIME_BRIDGE 1\n");
         fprintf(out, "#define XRT_THREAD_USE_PENDING_ERROR 1\n");
         /* -Wunused-function is suppressed for the runtime headers only. They
          * are header-only libraries and no translation unit uses every static

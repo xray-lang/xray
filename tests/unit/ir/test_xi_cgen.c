@@ -10415,10 +10415,6 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT sleep should generate");
-    const char *runtime_bridge = strstr(code, "#define XRAY_AOT_RUNTIME_BRIDGE 1");
-    const char *runtime_header = strstr(code, "#include \"xrt.h\"");
-    TEST_REQUIRE(runtime_bridge && runtime_header && runtime_bridge < runtime_header,
-                 "runtime-managed generated C selects scheduler-aware hosted helpers");
     assert(contains(code, "XrAotRuntimeConfig runtime_cfg;") &&
            "runtime-needed generated main must create an AOT runtime config");
     assert(contains(code, "XrAotRuntime *rt = xr_aot_runtime_new(&runtime_cfg);") &&
