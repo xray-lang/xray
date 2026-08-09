@@ -978,13 +978,13 @@ static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
         XrString *s = XR_TO_STRING(val);
         return bc_put_string_data(w, s->data, s->length);
     } else if (XR_IS_BIGINT(val)) {
-        /* BigInt literals are module-lifetime constants stored as heap objects.
-         * Serialize the value as its canonical decimal string so it round-trips
-         * through the constant pool instead of degrading to null. */
+        /* BigInt literal constants serialize as their canonical decimal string.
+         * The reader rebuilds an identical fixed-heap XrBigInt, so embedded
+         * bytecode and .xrc artifacts preserve the value the emitter placed in
+         * the constant pool instead of degrading it to null. */
         if (!bc_put_u8(w, BC_VAL_BIGINT))
             return false;
-        XrBigInt *bi = (XrBigInt *) XR_TO_PTR(val);
-        char *digits = xr_bigint_to_string(bi);
+        char *digits = xr_bigint_to_string((XrBigInt *) XR_TO_PTR(val));
         if (!digits) {
             w->error = XR_BC_ERR_ALLOC;
             return false;
@@ -1524,8 +1524,17 @@ static XrValue bc_read_value(BcReader *r) {
             char *digits = bc_get_string(r);
             if (r->error != XR_BC_OK)
                 return xr_null();
-            /* Rebuild the BigInt on the module-lifetime fixed heap, mirroring
-             * how literal BigInt constants are created during compilation. */
+            /* Rebuild on the compiler fixed heap so the constant lives for the
+             * module lifetime, matching how the emitter materializes BigInt
+             * literals.  The class pointer is reattached below because the
+             * fixed-heap constructor intentionally leaves it null. */
+            if (!digits || !*digits) {
+                /* An empty payload cannot come from the writer, which always
+                 * emits at least one digit; the stream is corrupt. */
+                xr_free(digits);
+                r->error = XR_BC_ERR_CORRUPT;
+                return xr_null();
+            }
             XrBigInt *bi =
                 xr_bigint_from_string_on_fixed_heap(xr_isolate_get_fixed_heap(r->X), digits);
             xr_free(digits);
@@ -1533,8 +1542,6 @@ static XrValue bc_read_value(BcReader *r) {
                 r->error = XR_BC_ERR_ALLOC;
                 return xr_null();
             }
-            /* The fixed-heap constructor leaves klass unset; bind the runtime
-             * BigInt class so value predicates recognize the reloaded constant. */
             XrayCoreClasses *core = xr_isolate_get_core_classes(r->X);
             if (core)
                 bi->klass = core->bigintClass;
