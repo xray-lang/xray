@@ -152,7 +152,7 @@ static bool walk_children(const AstNode *n, ChildWalk *w) {
             emit(w, n->as.throw_stmt.expression);
             return true;
         case AST_DEFER_STMT:
-            emit(w, n->as.defer_stmt.expr);
+            emit(w, n->as.defer_stmt.body);
             return true;
         case AST_YIELD_STMT:
             emit(w, n->as.yield_stmt.value);
@@ -688,7 +688,6 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             sig_name(s, "name", n->as.variable.name);
             return true;
         case AST_BLOCK:
-            sig_add(s, " defercap=%d", n->as.block.is_synthetic_defer_capture ? 1 : 0);
             return true;
         case AST_PRINT_STMT:
             sig_add(s, " skipnull=%d n=%d", n->as.print_stmt.skip_null ? 1 : 0,

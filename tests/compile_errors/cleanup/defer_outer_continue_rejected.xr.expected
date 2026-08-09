@@ -1,0 +1,1 @@
+a defer body cannot continue a loop outside the cleanup

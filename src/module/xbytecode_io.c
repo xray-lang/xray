@@ -1754,6 +1754,10 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         return false;
     if (!bc_put_u8(w, proto->is_coro_safe ? 1 : 0))
         return false;
+    if (!bc_put_u8(w, proto->may_scheduler_suspend ? 1 : 0))
+        return false;
+    if (!bc_put_u8(w, proto->may_task_spawn ? 1 : 0))
+        return false;
 
     // 3a. Canonical reachable-runtime entry contract. Child protos carry an
     // empty plan; the module root carries the verified plan consumed by VM.
@@ -1934,6 +1938,8 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     proto->struct_area_size = struct_area_size;
     proto->is_vararg = bc_get_u8(r) != 0;
     proto->is_coro_safe = bc_get_u8(r) != 0;
+    proto->may_scheduler_suspend = bc_get_u8(r) != 0;
+    proto->may_task_spawn = bc_get_u8(r) != 0;
     if (r->error != XR_BC_OK)
         goto fail;
 

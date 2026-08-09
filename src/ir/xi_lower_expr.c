@@ -7865,10 +7865,10 @@ static XiFunc *parallel_call_lower_lambda_func(
         xi_lower_braun_write(&child_l, var_id, entry, child_l.func->params[binding->abi_index]);
     }
 
-    xi_lower_defer_scope_push(&child_l);
+    xi_lower_cleanup_scope_push(&child_l);
     if (fn->body)
         xi_lower_stmt(&child_l, fn->body);
-    xi_lower_defer_scope_pop_normal(&child_l, line);
+    xi_lower_cleanup_scope_pop_normal(&child_l, line);
 
     if (child_l.cur_block)
         xi_block_set_return(child_l.cur_block, NULL);
@@ -8377,8 +8377,8 @@ static struct XrType *lower_parallel_plan_state_type(XiLower *l, XrType *plan_ty
     return l ? l->type_any : NULL;
 }
 
-static XiValue *lower_parallel_plan_lifecycle_call(XiLower *l, AstNode *node, XiValue *plan,
-                                                   const char *method) {
+XR_FUNC XiValue *xi_lower_parallel_plan_lifecycle_call(XiLower *l, AstNode *node, XiValue *plan,
+                                                       const char *method) {
     if (!l || !plan || !method)
         return NULL;
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, l->type_unit, 1);
@@ -8394,97 +8394,8 @@ static XiValue *lower_parallel_plan_lifecycle_call(XiLower *l, AstNode *node, Xi
     return v;
 }
 
-static XiValue *lower_parallel_plan_end_defer_closure(XiLower *l, AstNode *node, XiValue *plan) {
-    if (!l || !l->func || !l->cur_block || !plan)
-        return NULL;
-
-    char name_buf[160];
-    snprintf(name_buf, sizeof(name_buf), "%s$parallel_plan_end_defer_%d",
-             l->func && l->func->name ? l->func->name : "<anon>", l->synthetic_id++);
-
-    XiLower child_l;
-    xi_lower_init(&child_l, l->analyzer, l->isolate);
-    child_l.parent = l;
-    child_l.repl_mode = l->repl_mode;
-    xi_lower_inherit_evidence(&child_l, l);
-
-    child_l.func = xi_func_new(name_buf, child_l.type_unit);
-    if (!child_l.func) {
-        xi_lower_cleanup(&child_l);
-        return NULL;
-    }
-    child_l.func->parent_func = l->func;
-    child_l.func->analyzer = l->analyzer;
-    child_l.func->is_generic_template = l->func && l->func->is_generic_template;
-    xi_lower_bind_function_body_id(&child_l, node ? xi_lower_source_node_id(&child_l, node) : 0,
-                                   node && node->line > 0 ? (uint32_t) node->line : 0);
-    child_l.func->nparams = 0;
-    child_l.func->min_params = 0;
-    child_l.func->entry_type = 0;
-
-    XiBlock *entry = xi_block_new(child_l.func);
-    if (!entry) {
-        xi_func_free(child_l.func);
-        xi_lower_cleanup(&child_l);
-        return NULL;
-    }
-    entry->sealed = true;
-    child_l.cur_block = entry;
-
-    XiCapture *cap = &child_l.func->captures[0];
-    if (xi_lower_reject_error_type(&child_l, plan->type, "capture metadata",
-                                   node ? node->line : 0)) {
-        xi_func_free(child_l.func);
-        xi_lower_cleanup(&child_l);
-        return NULL;
-    }
-    cap->source = XI_CAPTURE_SRC_REG;
-    cap->index = 0;
-    cap->name = arena_strdup(child_l.func, "__parallel_plan");
-    cap->type = plan->type ? plan->type : child_l.type_any;
-    cap->value = plan;
-    cap->cell_index = -1;
-    cap->env_offset = -1;
-    cap->is_reassigned = false;
-    cap->needs_cell = false;
-    child_l.func->ncaptures = 1;
-
-    XiValue *captured_plan =
-        xi_value_new(child_l.func, child_l.cur_block, XI_LOAD_UPVAL, cap->type, 0);
-    if (!captured_plan) {
-        xi_func_free(child_l.func);
-        xi_lower_cleanup(&child_l);
-        return NULL;
-    }
-    captured_plan->aux_int = 0;
-    captured_plan->line = (uint32_t) (node ? node->line : 0);
-
-    if (!lower_parallel_plan_lifecycle_call(&child_l, node, captured_plan, "_end")) {
-        xi_func_free(child_l.func);
-        xi_lower_cleanup(&child_l);
-        return NULL;
-    }
-    if (child_l.cur_block)
-        xi_block_set_return(child_l.cur_block, NULL);
-
-    XiFunc *result = NULL;
-    if (!child_l.had_error && xi_lower_capture_source_vars(&child_l)) {
-        result = child_l.func;
-    } else {
-        xi_func_free(child_l.func);
-    }
-    xi_lower_cleanup(&child_l);
-
-    if (!result)
-        return NULL;
-    return parallel_call_child_closure(l, result, node ? node->line : 0);
-}
-
 static bool lower_parallel_plan_register_end_defer(XiLower *l, AstNode *node, XiValue *plan) {
-    XiValue *end_closure = lower_parallel_plan_end_defer_closure(l, node, plan);
-    if (!end_closure)
-        return false;
-    return xi_lower_defer_register_closure(l, end_closure, node ? node->line : 0);
+    return xi_lower_cleanup_register_parallel_end(l, node, plan);
 }
 
 static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiValue *plan,
@@ -8495,13 +8406,13 @@ static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiVa
     if (!start || !end || !plan)
         return NULL;
 
-    if (!lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
+    if (!xi_lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
         l->had_error = true;
         return NULL;
     }
-    xi_lower_defer_scope_push(l);
+    xi_lower_cleanup_scope_push(l);
     if (!lower_parallel_plan_register_end_defer(l, node, plan)) {
-        xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
+        xi_lower_cleanup_scope_pop_normal(l, node ? node->line : 0);
         l->had_error = true;
         return NULL;
     }
@@ -8578,7 +8489,7 @@ static XiValue *parallel_plan_call_make_for_each(XiLower *l, AstNode *node, XiVa
     par->line = (uint32_t) node->line;
 
     xi_lower_insert_err_check(l, node, true);
-    xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
+    xi_lower_cleanup_scope_pop_normal(l, node ? node->line : 0);
     return par;
 }
 
@@ -8591,13 +8502,13 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
     if (!start || !end || !plan)
         return NULL;
 
-    if (!lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
+    if (!xi_lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
         l->had_error = true;
         return NULL;
     }
-    xi_lower_defer_scope_push(l);
+    xi_lower_cleanup_scope_push(l);
     if (!lower_parallel_plan_register_end_defer(l, node, plan)) {
-        xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
+        xi_lower_cleanup_scope_pop_normal(l, node ? node->line : 0);
         l->had_error = true;
         return NULL;
     }
@@ -8695,7 +8606,7 @@ static XiValue *parallel_plan_call_make_map(XiLower *l, AstNode *node, XiValue *
     par->line = (uint32_t) node->line;
 
     xi_lower_insert_err_check(l, node, true);
-    xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
+    xi_lower_cleanup_scope_pop_normal(l, node ? node->line : 0);
 
     if (!into_array)
         return par;
@@ -8712,13 +8623,13 @@ static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValu
     if (!start || !end || !plan || !initial)
         return NULL;
 
-    if (!lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
+    if (!xi_lower_parallel_plan_lifecycle_call(l, node, plan, "_begin")) {
         l->had_error = true;
         return NULL;
     }
-    xi_lower_defer_scope_push(l);
+    xi_lower_cleanup_scope_push(l);
     if (!lower_parallel_plan_register_end_defer(l, node, plan)) {
-        xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
+        xi_lower_cleanup_scope_pop_normal(l, node ? node->line : 0);
         l->had_error = true;
         return NULL;
     }
@@ -8844,7 +8755,7 @@ static XiValue *parallel_plan_call_make_reduce(XiLower *l, AstNode *node, XiValu
     par->line = (uint32_t) node->line;
 
     xi_lower_insert_err_check(l, node, true);
-    xi_lower_defer_scope_pop_normal(l, node ? node->line : 0);
+    xi_lower_cleanup_scope_pop_normal(l, node ? node->line : 0);
     return par;
 }
 
@@ -10357,7 +10268,7 @@ static XiValue *lower_null_guard_or_throw(XiLower *l, XiValue *val, struct XrTyp
             set->flags |= XI_FLAG_SIDE_EFFECT;
             set->line = (uint32_t) line;
         }
-        xi_lower_defer_run_to_depth(l, l->catch_defer_depths[l->try_depth - 1], line);
+        xi_lower_cleanup_run_to_depth(l, l->catch_cleanup_depths[l->try_depth - 1], line);
         XiBlock *catch_blk = l->catch_targets[l->try_depth - 1];
         xi_block_set_jump(l->cur_block, catch_blk);
         l->cur_block = NULL;
@@ -10475,9 +10386,9 @@ static XiValue *lower_this_expr(XiLower *l, AstNode *node) {
      * That is not a cosmetic loss: the AOT backend deliberately refuses to
      * resolve a named instance without class_ref to a module's native class
      * (a builtin `2..6` must never adopt a user `class Range` layout), so a
-     * `this` captured into a closure — every `defer { this.x = ... }` — fell
-     * back to name-keyed property access, which handles only maps and JSON and
-     * silently discards writes to a native-layout instance.
+     * `this` captured into a nested function fell back to name-keyed property
+     * access, which handles only maps and JSON and silently discards writes to
+     * a native-layout instance.
      *
      * The analyzer's type for this very `this` node carries the identity, so
      * prefer it whenever the captured type lacks one. */

@@ -1,0 +1,17 @@
+// A cleanup-local panic handler is stack-bound to one non-suspending cleanup
+// execution, even when the owning function itself has suspended.
+fn leaf() -> int { return 7 }
+
+fn worker() -> int {
+    defer {
+        try {
+            var zero = 0
+            print(1 / zero)
+        } catch panic (p) {
+            print("cleanup caught panic")
+        }
+    }
+    return await go leaf()
+}
+
+print(await go worker())

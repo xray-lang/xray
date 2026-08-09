@@ -14,6 +14,7 @@
  */
 
 #include "xmodule_graph.h"
+#include "xmodule.h"
 #include "xstdlib_embedded.h"
 #include "../base/xchecks.h"
 #include "../base/xfileio.h"
@@ -650,4 +651,39 @@ XR_FUNC int xr_module_graph_topological_sort(XrModuleGraph *g) {
     xr_free(tc.scc_sizes);
 
     return g->has_cycle ? -1 : 0;
+}
+
+bool xr_module_graph_preload(XrVMRuntime *X, const XrModuleGraph *g, XrModule ***out_table) {
+    if (out_table)
+        *out_table = NULL;
+    if (!X || !g || !out_table || g->topo_count <= 0 || !g->topo_order)
+        return false;
+
+    XrModule **table = xr_calloc((size_t) g->topo_count, sizeof(XrModule *));
+    if (!table)
+        return false;
+
+    for (int ti = 0; ti < g->topo_count; ti++) {
+        int idx = g->topo_order[ti];
+        if (idx == g->entry_index)
+            continue;
+        const XrModuleSpec *spec = &g->specs[idx];
+        if (!spec->source_path)
+            continue;
+        const char *import_name =
+            (spec->kind == XR_MOD_STDLIB && spec->canonical) ? spec->canonical : spec->source_path;
+        XrValue value = xr_module_import(X, import_name);
+        if (XR_IS_NULL(value)) {
+            xr_free(table);
+            return false;
+        }
+        table[ti] = xr_value_to_module(value);
+        if (!table[ti]) {
+            xr_free(table);
+            return false;
+        }
+    }
+
+    *out_table = table;
+    return true;
 }

@@ -1981,7 +1981,7 @@ static bool xa_method_body_mutates_receiver(AstNode *node, XrClassInfo *receiver
         case AST_SCOPE_BLOCK:
             return xa_method_body_mutates_receiver(node->as.scope_block.body, receiver_info);
         case AST_DEFER_STMT:
-            return xa_method_body_mutates_receiver(node->as.defer_stmt.expr, receiver_info);
+            return xa_method_body_mutates_receiver(node->as.defer_stmt.body, receiver_info);
         default:
             return false;
     }

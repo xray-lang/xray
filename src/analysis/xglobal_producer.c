@@ -2532,7 +2532,7 @@ static void capture_scan_node(XgCaptureScan *scan, const AstNode *node) {
             scan->nlocals = base_locals;
             break;
         case AST_DEFER_STMT:
-            capture_scan_node(scan, node->as.defer_stmt.expr);
+            capture_scan_node(scan, node->as.defer_stmt.body);
             break;
         case AST_SCOPE_BLOCK:
             capture_scan_node(scan, node->as.scope_block.body);
@@ -10640,7 +10640,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         }
         case AST_DEFER_STMT:
-            walk_body_for_calls(bc, node->as.defer_stmt.expr);
+            walk_body_for_calls(bc, node->as.defer_stmt.body);
             break;
         case AST_SCOPE_BLOCK:
             /* Scope exit joins linked children and is therefore a real

@@ -10,7 +10,7 @@
 
 #include "xrt_coll.h"
 #include "xrt_class.h"
-#include "xrt_defer.h"
+#include "xrt_exception.h"
 #include "../coro/xaot_coro.h"
 
 static void xrt_gen_iter_finish(xrt_iterator_t *it) {

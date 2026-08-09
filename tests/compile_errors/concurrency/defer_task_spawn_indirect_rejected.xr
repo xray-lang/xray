@@ -1,0 +1,12 @@
+fn child() -> int { return 1 }
+
+fn starts_task() {
+    var task = go child()
+    print(task)
+}
+
+fn owner() {
+    defer { starts_task() }
+}
+
+owner()

@@ -66,7 +66,12 @@ typedef struct XaErrorSet {
  *     cancellation point.  It does NOT compose across calls: driving a generator
  *     resumes the generator's frame and returns normally, so a caller's own
  *     frame is untouched.  A generator that also reaches the scheduler
- *     publishes SCHED_SUSPEND independently, and that bit does propagate. */
+ *     publishes SCHED_SUSPEND independently, and that bit does propagate.
+ *
+ *   TASK_SPAWN -- the body creates a new task or execution unit.  It is
+ *     independent of suspension: spawning can return without parking the
+ *     current frame.  It composes transitively across calls so cleanup and
+ *     other strong boundaries can reject task creation before side effects. */
 typedef enum XaSemanticEffect {
     XA_SEM_EFFECT_NONE = 0,
     XA_SEM_EFFECT_ALLOC = 1u << 0,
@@ -79,6 +84,7 @@ typedef enum XaSemanticEffect {
     XA_SEM_EFFECT_FOREIGN = 1u << 7,
     XA_SEM_EFFECT_SYNC = 1u << 8,
     XA_SEM_EFFECT_GEN_SUSPEND = 1u << 9,
+    XA_SEM_EFFECT_TASK_SPAWN = 1u << 10,
 } XaSemanticEffect;
 
 /* Either kind of suspension means the frame is not a plain function activation.

@@ -194,6 +194,10 @@ op_call_cfunc:
     if (xr_value_is_cfunction(func_val)) {
         XrCFunction *cfunc = xr_value_to_cfunction(func_val);
 
+        if (vm_ctx && vm_ctx->cleanup_depth > 0 && cfunc->is_yieldable) {
+            VM_RUNTIME_ERROR(XR_ERR_DEFER_ASYNC, "a deferred action cannot reach the scheduler");
+        }
+
         // Track current C function for sysmon auto-upgrade
         {
             XrWorker *_w = xr_current_worker();
@@ -279,6 +283,12 @@ op_call_closure:
     if (static_closure || XR_IS_FUNCTION(func_val)) {
         XrClosure *closure = xr_value_to_closure(func_val);
         XrProto *proto = closure->proto;
+
+        if (vm_ctx && vm_ctx->cleanup_depth > 0 &&
+            (proto->may_scheduler_suspend || proto->may_task_spawn)) {
+            VM_RUNTIME_ERROR(XR_ERR_DEFER_ASYNC,
+                             "a deferred action cannot suspend or create a task");
+        }
 
         // FFI: extern foreign function — marshal args and invoke the C symbol
         // through libffi instead of executing the synthesized stub body.
@@ -427,7 +437,7 @@ vmcase(OP_LOOP_BACK) {
 
         if (xr_coro_consume_reds(coro, 1) <= 0) {
             if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED) &&
-                vm_ctx->defer_body_depth == 0) {
+                vm_ctx->cleanup_depth == 0) {
                 return XR_VM_CANCELLED;
             }
             xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);
@@ -653,25 +663,8 @@ vmcase(OP_RETURN) {
     // Save return count for caller
     vm_ctx->last_nret = nret;
 
-return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
-    /* Re-read a and nret: OP_RETURN0/OP_RETURN1 goto here
-     * skipping the local variable initialization above */
-    a = GETARG_A(i);
-    nret = vm_ctx->last_nret;
-    // Get first return value (for defer/toString compatibility)
+    // Get first return value for toString compatibility.
     XrValue ret_result = (nret > 0) ? R(a) : xr_null();
-
-    if (vm_ctx->defer_count > 0 && vm_ctx->defer_frame_marks) {
-        int frame_defer_start = vm_ctx->defer_frame_marks[VM_FRAME_COUNT - 1];
-        if (vm_ctx->defer_count > frame_defer_start) {
-            ci->pc = pc;
-            xr_vm_run_defers_to_mark(isolate, vm_ctx, frame_defer_start);
-            // Deferred closures re-enter the VM and may grow (relocate) the
-            // coroutine stack and frames; re-derive ci/base/cl/k before the
-            // frame pop below reads ci->flags and the return values via R(a + j).
-            VM_REFRESH_FRAME_CACHE();
-        }
-    }
 
     // Save toString print flags (before popping frame)
     uint8_t tostring_flags = ci->flags;
@@ -754,26 +747,15 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
 
 vmcase(OP_RETURN0) {
     /* OP_RETURN0: fast return with no values
-    ** Optimized path: skip defer/upvalue checks when not needed
-    */
+     */
 
+return_no_values:
     // Clean up exception handlers belonging to current frame
     while (VM_HANDLER_COUNT > 0 &&
            VM_HANDLERS[VM_HANDLER_COUNT - 1].frame_count >= VM_FRAME_COUNT) {
         VM_DEC_HANDLER_COUNT;
     }
 
-    // Check if we have defer to execute
-    if (vm_ctx->defer_count > 0 && vm_ctx->defer_frame_marks) {
-        int frame_defer_start = vm_ctx->defer_frame_marks[VM_FRAME_COUNT - 1];
-        if (vm_ctx->defer_count > frame_defer_start) {
-            // Has defer, fall back to full RETURN
-            vm_ctx->last_nret = 0;
-            goto return_with_defer;
-        }
-    }
-
-    // Fast path: no defer
     vm_ctx->last_nret = 0;
 
     // Write null to return slot
@@ -831,17 +813,6 @@ vmcase(OP_RETURN1) {
         VM_DEC_HANDLER_COUNT;
     }
 
-    // Check if we have defer to execute
-    if (vm_ctx->defer_count > 0 && vm_ctx->defer_frame_marks) {
-        int frame_defer_start = vm_ctx->defer_frame_marks[VM_FRAME_COUNT - 1];
-        if (vm_ctx->defer_count > frame_defer_start) {
-            // Has defer, fall back to full RETURN
-            vm_ctx->last_nret = 1;
-            goto return_with_defer;
-        }
-    }
-
-    // Fast path: no defer
     vm_ctx->last_nret = 1;
 
     // Save toString print flags

@@ -298,6 +298,9 @@
     _(ERR_CHECK, FMT_A, KOP_A_LOAD, "check pending_error; if set, propagate (return)")             \
     _(ERR_HAS, FMT_A, KOP_A_LOAD, "R[A] = !IS_NULL(pending_error)")                                \
     _(ERR_CATCH, FMT_A, KOP_A_LOAD, "R[A] = pending_error; clear")                                 \
+    _(CLEANUP_ENTER, FMT_NONE, KOP_NONE, "enter static cleanup body")                              \
+    _(CLEANUP_LEAVE, FMT_NONE, KOP_NONE, "leave static cleanup body")                              \
+    _(CLEANUP_ERR_CHECK, FMT_NONE, KOP_NONE, "abort if a value error escapes cleanup")             \
     _(BOX_I64, FMT_AB, KOP_AB_UNARY, "R[A] = box(R[B] as i64)")                                    \
     _(BOX_F64, FMT_AB, KOP_AB_UNARY, "R[A] = box(R[B] as f64)")                                    \
     _(UNBOX_I64, FMT_AB, KOP_AB_UNARY, "R[A] = unbox(R[B]) as i64")                                \
@@ -360,9 +363,6 @@
     _(CHAN_RECV_TIMEOUT, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].recv(timeout: R[C])")                  \
     _(CHAN_CLOSE, FMT_A, KOP_A_USE, "R[A].close()")                                                \
     _(CHAN_IS_CLOSED, FMT_AB, KOP_AB_UNARY, "R[A] = R[B].isClosed()")                              \
-    _(DEFER, FMT_AB, KOP_AB_BASE_LIT, "defer R[A](args R[A+1..A+B-1])")                            \
-    _(DEFER_MARK, FMT_A, KOP_A_LOAD, "R[A] = defer mark")                                          \
-    _(DEFER_RUN_TO, FMT_A, KOP_A_USE, "run defers down to mark R[A]")                              \
     _(ARRAY_COPY_NEW, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = Array<T>(R[B]) copy/convert")              \
     _(SCOPE_ENTER, FMT_A, KOP_A_LIT, "enter scope, A=mode(0=wait,1=linked)")                       \
     _(SCOPE_EXIT, FMT_A, KOP_A_LIT, "exit scope, A=mode(0=wait,1=linked)")                         \

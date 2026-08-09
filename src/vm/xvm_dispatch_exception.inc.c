@@ -25,6 +25,7 @@ vmcase(OP_TRY) {
     /* Push a panic handler. Bx = absolute PC of the catch block. */
     TRACE_EXECUTION();
     int catch_offset = GETARG_Bx(i);
+    bool is_cleanup = GETARG_A(i) != 0;
 
     /* Grow handler array if needed (inline→heap on first overflow) */
     if (VM_HANDLER_COUNT >= vm_ctx->handler_capacity) {
@@ -58,9 +59,9 @@ vmcase(OP_TRY) {
     handler->catch_offset = (uint32_t) catch_offset;
     handler->stack_size = (int) (VM_STACK_TOP - VM_STACK);
     handler->frame_count = VM_FRAME_COUNT;
-    handler->defer_count_mark = vm_ctx->defer_count;
     handler->exception = xr_null();
     handler->caught = false;
+    handler->is_cleanup = is_cleanup;
 
     vmbreak;
 }
@@ -120,6 +121,20 @@ vmcase(OP_THROW) {
     TRACE_EXECUTION();
     int a = GETARG_A(i);
     XrValue exception = R(a);
+
+    if (vm_ctx->cancellation_cleanup_active) {
+        bool has_outer_cleanup = false;
+        for (int h = VM_HANDLER_COUNT - 1; h >= 0; h--) {
+            if (VM_HANDLERS[h].is_cleanup && !VM_HANDLERS[h].caught) {
+                has_outer_cleanup = true;
+                break;
+            }
+        }
+        if (!has_outer_cleanup) {
+            vm_ctx->cancellation_cleanup_active = false;
+            return XR_VM_CANCELLED;
+        }
+    }
 
     /* Strict throw is enforced by the analyzer so source-level
      * `throw <e>` always produces an Exception. Defensive wrap
@@ -188,7 +203,7 @@ vmcase(OP_ERR_RETURN) {
     }
     vm_ctx->pending_error = R(a);
     vm_ctx->last_nret = 0;
-    goto return_with_defer;
+    goto return_no_values;
 }
 
 vmcase(OP_ERR_CHECK) {
@@ -197,7 +212,7 @@ vmcase(OP_ERR_CHECK) {
     TRACE_EXECUTION();
     if (!XR_IS_NULL(vm_ctx->pending_error)) {
         vm_ctx->last_nret = 0;
-        goto return_with_defer;
+        goto return_no_values;
     }
     vmbreak;
 }
@@ -217,5 +232,23 @@ vmcase(OP_ERR_CATCH) {
     int a = GETARG_A(i);
     R(a) = vm_ctx->pending_error;
     vm_ctx->pending_error = xr_null();
+    vmbreak;
+}
+
+vmcase(OP_CLEANUP_ENTER) {
+    TRACE_EXECUTION();
+    xr_vm_cleanup_enter(isolate, vm_ctx);
+    vmbreak;
+}
+
+vmcase(OP_CLEANUP_LEAVE) {
+    TRACE_EXECUTION();
+    xr_vm_cleanup_leave(isolate, vm_ctx);
+    vmbreak;
+}
+
+vmcase(OP_CLEANUP_ERR_CHECK) {
+    TRACE_EXECUTION();
+    xr_vm_cleanup_err_check(isolate, vm_ctx);
     vmbreak;
 }

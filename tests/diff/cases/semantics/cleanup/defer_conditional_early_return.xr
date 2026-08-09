@@ -4,16 +4,16 @@
 // Regression: AOT previously emitted all defer sites at every exit (running
 // unregistered/wrong-branch defers); it now runs exactly those registered.
 fn pick(n: int) -> string {
-    defer print("always")
+    defer { print("always") }
     if (n < 0) {
-        defer print("neg-branch")
+        defer { print("neg-branch") }
         return "neg"
     }
     if (n == 0) {
-        defer print("zero-branch")
+        defer { print("zero-branch") }
         return "zero"
     }
-    defer print("pos-branch")
+    defer { print("pos-branch") }
     return "pos"
 }
 

@@ -1,15 +1,15 @@
-// anchor: defer-receiver-snapshot-task-255
+// Reassigning an outer binding changes the receiver observed by its cleanup.
 class Conn {
     id: int = 0
     constructor(id: int) { this.id = id }
     close() { print("closing conn", this.id) }
 }
 
-fn receiver_snapshot() {
+fn receiver_late_binding() {
     var conn = Conn(1)
-    defer conn.close()
+    defer { conn.close() }
     conn = Conn(2)
     print("body done")
 }
 
-receiver_snapshot()
+receiver_late_binding()

@@ -765,7 +765,17 @@ XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool pr
     if (!producer_may_throw)
         return;
 
-    if (l->try_depth > 0) {
+    if (l->cleanup_body_depth > 0 && l->try_depth <= l->cleanup_body_try_base_depth) {
+        /* Cleanup bodies are closed error regions. The analyzer proves that
+         * no value error escapes; retain a fail-closed runtime check for an
+         * opaque native/indirect call without recursively entering the same
+         * cleanup frontier. */
+        XiValue *check = xi_value_new(l->func, l->cur_block, XI_CLEANUP_ERR_CHECK, l->type_unit, 0);
+        if (!check)
+            return;
+        check->flags |= XI_FLAG_SIDE_EFFECT;
+        check->line = node ? (uint32_t) node->line : 0;
+    } else if (l->try_depth > 0) {
         /* Inside try body: check error channel and jump to the catch target
          * if an error is pending.  Conditional branch — the non-error path
          * continues normally. */
@@ -782,18 +792,53 @@ XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool pr
         xi_block_set_if(l->cur_block, check, err_blk, cont);
         xi_lower_braun_seal(l, err_blk);
         l->cur_block = err_blk;
-        xi_lower_defer_run_to_depth(l, l->catch_defer_depths[l->try_depth - 1],
-                                    node ? node->line : 0);
+        xi_lower_cleanup_run_to_depth(l, l->catch_cleanup_depths[l->try_depth - 1],
+                                      node ? node->line : 0);
         xi_block_set_jump(l->cur_block, catch_blk);
 
         xi_lower_braun_seal(l, cont);
         l->cur_block = cont;
-    } else {
-        /* Outside try: unconditional propagation via OP_ERR_CHECK. */
+    } else if (!xi_lower_cleanup_has_active_site(l)) {
+        /* Outside a cleanup owner, use the compact direct propagation form. */
         XiValue *check = xi_value_new(l->func, l->cur_block, XI_ERR_CHECK, l->type_unit, 0);
         if (!check)
             return;
         check->flags |= XI_FLAG_SIDE_EFFECT;
         check->line = node ? (uint32_t) node->line : 0;
+    } else {
+        /* An escaping value error is an ordinary CFG edge. Materialize it so
+         * the same static cleanup ladder used by return/break can run first. */
+        XiValue *check = xi_value_new(l->func, l->cur_block, XI_ERR_CHECK, l->type_bool, 0);
+        if (!check)
+            return;
+        check->flags |= XI_FLAG_SIDE_EFFECT;
+        check->line = node ? (uint32_t) node->line : 0;
+        XiBlock *err_block = xi_block_new(l->func);
+        XiBlock *cont = xi_block_new(l->func);
+        xi_block_set_if(l->cur_block, check, err_block, cont);
+
+        xi_lower_braun_seal(l, err_block);
+        l->cur_block = err_block;
+        XiValue *error = xi_value_new(
+            l->func, l->cur_block, XI_ERR_CATCH,
+            xi_lower_type_or_any(l, NULL, "cleanup value-error propagation", node ? node->line : 0),
+            0);
+        if (error) {
+            error->flags |= XI_FLAG_SIDE_EFFECT;
+            error->line = node ? (uint32_t) node->line : 0;
+        }
+        xi_lower_cleanup_run_to_depth(l, 0, node ? node->line : 0);
+        if (l->cur_block && error) {
+            XiValue *reprop = xi_value_new(l->func, l->cur_block, XI_ERR_RETURN, l->type_unit, 1);
+            if (reprop) {
+                reprop->args[0] = error;
+                reprop->flags |= XI_FLAG_SIDE_EFFECT;
+                reprop->line = node ? (uint32_t) node->line : 0;
+            }
+            l->cur_block->kind = XI_BLOCK_RETURN;
+            l->cur_block->control = reprop;
+        }
+        xi_lower_braun_seal(l, cont);
+        l->cur_block = cont;
     }
 }

@@ -140,7 +140,6 @@
     X(RANGE, "xi.range", xicgen_range) \
     X(GEN_CALL, "xi.gen.call", xicgen_gen_call) \
     X(CHAN_RECV_STATUS, "xi.chan.recv.status", xicgen_chan_recv_status) \
-    X(DEFER_MARK, "xi.defer.mark", xicgen_defer_mark) \
     X(JSON_NEW, "xi.json.new", xicgen_json_new) \
     X(OBJECT_INIT_F, "xi.object.init.f", xicgen_object_init_f) \
     X(OBJECT_GET_F, "xi.object.get.f", xicgen_object_get_f) \

@@ -1,6 +1,6 @@
 fn deferred_return() -> Array<int> {
     var buf = [1, 2, 3]
-    defer { print("captured", len(buf)) }
+    defer { print("cleanup", len(buf)) }
     return buf
 }
 

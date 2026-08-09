@@ -30,6 +30,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../frontend/analyzer/xa_effect_db.h"
 
 #include <math.h>
 
@@ -686,7 +687,7 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     if (v == ctx->fused_cmp)
         return;
 
-    bool fresh_dst = xi_emit_vm_requires_fresh_dst(v->op);
+    bool fresh_dst = xi_emit_vm_requires_fresh_dst(v->op) || xi_copy_is_cleanup_return(v);
     XiEmitReg dst = fresh_dst ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK)
         return;
@@ -709,7 +710,6 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, vr, fresh_reg, 0));
         }
     }
-
 }
 
 /* ========== Public API ========== */
@@ -928,6 +928,8 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     /* Compile-time escape analysis is the authority on coroutine safety.
      * If compilation succeeds, all functions are safe to call via go. */
     ctx.proto->is_coro_safe = true;
+    ctx.proto->may_scheduler_suspend = (f->semantic_effects & XA_SEM_EFFECT_SCHED_SUSPEND) != 0;
+    ctx.proto->may_task_spawn = (f->semantic_effects & XA_SEM_EFFECT_TASK_SPAWN) != 0;
 
 cleanup:;
     XiEmitStatus result = ctx.status;

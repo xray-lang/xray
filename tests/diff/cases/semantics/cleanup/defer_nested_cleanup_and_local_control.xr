@@ -1,0 +1,18 @@
+// A cleanup block may use local loops and may register a nested cleanup. Local
+// control flow stays inside the cleanup boundary; nested cleanup remains LIFO.
+fn owner() {
+    defer {
+        defer { print("nested") }
+        var i = 0
+        while (i < 3) {
+            i = i + 1
+            if (i == 1) { continue }
+            print("loop " + string(i))
+            break
+        }
+        print("outer")
+    }
+    print("body")
+}
+
+owner()

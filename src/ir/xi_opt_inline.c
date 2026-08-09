@@ -114,7 +114,7 @@ static bool inline_func_has_error_flow(const XiFunc *f, uint8_t depth) {
                 continue;
             if (v->op == XI_THROW || v->op == XI_ERR_SET || v->op == XI_ERR_RETURN ||
                 v->op == XI_ERR_CHECK || v->op == XI_ERR_CATCH || v->op == XI_TRY ||
-                v->op == XI_CATCH || v->op == XI_END_TRY || v->op == XI_DEFER)
+                v->op == XI_CATCH || v->op == XI_END_TRY)
                 return true;
             if (v->flags & XI_FLAG_MAY_SUSPEND)
                 return true;
@@ -152,7 +152,7 @@ static XiInlineCostModel analyze_callee(const XiFunc *callee) {
                 continue;
             if (v->op == XI_THROW || v->op == XI_ERR_SET || v->op == XI_ERR_RETURN ||
                 v->op == XI_ERR_CHECK || v->op == XI_ERR_CATCH || v->op == XI_TRY ||
-                v->op == XI_CATCH || v->op == XI_END_TRY || v->op == XI_DEFER)
+                v->op == XI_CATCH || v->op == XI_END_TRY)
                 m.has_throw = true;
         }
 

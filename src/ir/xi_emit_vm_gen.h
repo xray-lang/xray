@@ -97,6 +97,9 @@
     X(ERR_RETURN, xi_emit_err_return) \
     X(ERR_CHECK, xi_emit_err_check) \
     X(ERR_CATCH, xi_emit_err_catch) \
+    X(CLEANUP_ENTER, xi_emit_cleanup_enter) \
+    X(CLEANUP_LEAVE, xi_emit_cleanup_leave) \
+    X(CLEANUP_ERR_CHECK, xi_emit_cleanup_err_check) \
     X(RETAIN, xi_emit_retain) \
     X(RELEASE, xi_emit_release) \
     X(SHL, xi_emit_arith) \
@@ -167,9 +170,6 @@
     X(GEN_YIELD, xi_emit_gen_yield) \
     X(CORO_OP, xi_emit_coro_op) \
     X(CHAN_NEW, xi_emit_chan_new) \
-    X(DEFER, xi_emit_defer) \
-    X(DEFER_MARK, xi_emit_defer_mark) \
-    X(DEFER_RUN_TO, xi_emit_defer_run_to) \
     X(JSON_NEW, xi_emit_json_new) \
     X(OBJECT_INIT_F, xi_emit_object_init_f) \
     X(OBJECT_GET_F, xi_emit_object_get_f) \

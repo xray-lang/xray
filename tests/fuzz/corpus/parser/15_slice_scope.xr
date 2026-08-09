@@ -25,7 +25,7 @@ scope {
 // temp is not accessible here
 scope {
     let resource = openResource()
-    defer resource.close()
+    defer { resource.close() }
     // Use resource
     process(resource)
 }
@@ -42,7 +42,7 @@ scope {
 fn processWithScope() {
     scope {
         let file = openFile("data.txt")
-        defer file.close()
+        defer { file.close() }
         if (len(file) == 0) {
             return null
         }

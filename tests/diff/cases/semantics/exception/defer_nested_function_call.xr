@@ -1,0 +1,18 @@
+// anchor: defer-nested-function-call
+// A cleanup block may call a lexically visible nested function directly; the
+// defer statement itself remains static control flow and creates no closure.
+fn outer() {
+    fn cleanup(msg: string) {
+        print(msg)
+    }
+
+    fn worker() {
+        defer { cleanup("nested-cleanup") }
+        print("body")
+    }
+
+    worker()
+}
+
+outer()
+print("done")

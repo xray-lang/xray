@@ -87,9 +87,19 @@ definitions, scanner boundaries, allowance semantics, and the post-CGen
 measurement point are frozen. A change migrates shape filetests and all ports
 that cite the affected category.
 
+Static cleanup registration and execution add no residue category and consume
+no allowance. A non-suspending `defer { ... }` is lowered as ordinary
+control-flow regions and may leave only the residue of operations written in
+its body. Registration itself must contribute zero heap allocation (R2), zero
+closure/cell/upvalue construction, zero runtime-helper dispatch (R1), and zero
+dynamic cleanup-stack traffic. Suspendable frames may store a compile-time
+fixed array of cleanup-region identifiers and a depth; that fixed frame shape
+is not a heap allocation per registration. Any callback object, growable defer
+stack, or runtime push/pop helper is a contract violation.
+
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h 696ddc204e161c42bee708528a2eddc90eaaa8dfc1f8f2bb9590cc5b798371b0
-anchor-sha256: src/aot/xi_cgen.c 98e315b9dd17c07dc8eba5313caa9ba1f80c3fe9c29db92e94fb8d016b9eb0a5
+anchor-sha256: src/aot/xi_cgen.c 9ebac518a6cae8ddaedb10ce537912bca818ec20547621392114a79dada0aeb9
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 744327ffb824c99493221431771df2f6f3f325154cea193ebcec17627c6a88f7
 anchor-sha256: src/app/cli/xcmd_verify.c 621d117db22a9c3c101d183f3c5554616bdba614d6ebbaf942d50d6b3ccf6f29

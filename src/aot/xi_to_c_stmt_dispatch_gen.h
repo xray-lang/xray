@@ -13,8 +13,9 @@
     X(ERR_RETURN, "xi.err.return", xicgen_stmt_err_return) \
     X(ERR_CHECK, "xi.err.check", xicgen_stmt_err_check) \
     X(ERR_CATCH, "xi.err.catch", xicgen_stmt_err_catch) \
-    X(DEFER, "xi.defer", xicgen_stmt_defer) \
-    X(DEFER_RUN_TO, "xi.defer.run.to", xicgen_stmt_defer_run_to)
+    X(CLEANUP_ENTER, "xi.cleanup.enter", xicgen_stmt_cleanup_enter) \
+    X(CLEANUP_LEAVE, "xi.cleanup.leave", xicgen_stmt_cleanup_leave) \
+    X(CLEANUP_ERR_CHECK, "xi.cleanup.err.check", xicgen_stmt_cleanup_err_check)
 
 
 #endif  /* XI_TO_C_STMT_DISPATCH_GEN_H */

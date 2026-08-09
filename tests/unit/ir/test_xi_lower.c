@@ -2622,50 +2622,57 @@ TEST(channel_send_transfer_modes) {
 }
 
 TEST(defer_stmt) {
-    XiFunc *f = lower_source("fn cleanup() { print(0) }\n"
-                             "defer cleanup()\n"
+    XiFunc *f = lower_source("defer { print(0) }\n"
                              "print(1)\n");
     assert(f != NULL);
-    int found_defer = 0;
-    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
-        if (f->entry->values[i]->op == XI_DEFER)
-            found_defer = 1;
-    }
-    assert(found_defer && "should have DEFER op");
+    assert(func_tree_has_op(f, XI_TRY) && "cleanup registration should open a static panic region");
+    assert(func_tree_has_op(f, XI_END_TRY) && "cleanup exit should close its static panic region");
+    assert(func_tree_has_op(f, XI_CLEANUP_ENTER) &&
+           "cleanup body should be lowered directly into the exit frontier");
+    assert(func_tree_has_op(f, XI_CLEANUP_LEAVE) &&
+           "cleanup body should restore the pending error channel");
+    assert(!func_tree_has_op(f, XI_CLOSURE_NEW) &&
+           "cleanup lowering must not allocate a hidden closure");
     xi_func_free(f);
 }
 
-TEST(defer_args_lower_before_defer) {
-    XiFunc *f = lower_source("fn cleanup(msg: string, value: int) { print(msg); print(value) }\n"
-                             "defer cleanup(\"result\", 42)\n"
-                             "print(\"body\")\n");
+TEST(defer_block_uses_late_binding) {
+    XiFunc *f = lower_source("fn run() {\n"
+                             "    var value = 1\n"
+                             "    defer { print(\"result\"); print(value) }\n"
+                             "    value = 42\n"
+                             "}\n"
+                             "run()\n");
     assert(f != NULL);
-    XiBlock *blk = f->entry;
-    XiValue *defer = NULL;
-    uint32_t defer_index = 0;
-    for (uint32_t i = 0; i < blk->nvalues; i++) {
-        if (blk->values[i]->op == XI_DEFER) {
-            defer = blk->values[i];
-            defer_index = i;
-            break;
-        }
-    }
-    assert(defer && "should have DEFER op");
-    assert(defer->nargs == 1 && "defer should store the deferred closure only");
-    XiValue *closure = defer->args[0];
-    assert(closure && closure->op == XI_CLOSURE_NEW &&
-           "defer call args should be snapshotted into the deferred closure");
-    assert(closure->nargs == 2 && "deferred closure should capture both eager arguments");
-    for (uint16_t a = 0; a < closure->nargs; a++) {
-        int found_before_defer = 0;
-        for (uint32_t i = 0; i < defer_index; i++) {
-            if (blk->values[i] == closure->args[a]) {
-                found_before_defer = 1;
-                break;
-            }
-        }
-        assert(found_before_defer && "defer argument capture must be lowered before XI_DEFER");
-    }
+    XiFunc *run = func_tree_find_func_name(f, "run");
+    assert(run != NULL);
+    XiValue *place = func_tree_find_op(run, XI_LOCAL_ADDR);
+    assert(place && (place->aux_int & XI_LOCAL_ADDR_AUX_CLEANUP_LIVE) != 0 &&
+           "a cleanup-read binding should use stable same-frame storage");
+    assert(func_tree_has_op(run, XI_PLACE_LOAD) &&
+           "the cleanup frontier should load the binding at execution time");
+    assert(!func_tree_has_op(run, XI_CLOSURE_NEW) &&
+           "late binding must not be implemented with a hidden capture closure");
+    xi_func_free(f);
+}
+
+TEST(defer_loop_cleanup_place_dominates_zero_iteration_exit) {
+    XiFunc *f = lower_source("fn run(count: int) -> int {\n"
+                             "  var observed = 0\n"
+                             "  for (var i = 0; i < count; i = i + 1) {\n"
+                             "    defer { observed = observed + 1 }\n"
+                             "  }\n"
+                             "  return observed\n"
+                             "}\n"
+                             "print(run(0))\n");
+    assert(f != NULL);
+    XiFunc *run = func_tree_find_func_name(f, "run");
+    assert(run != NULL);
+    XiValue *place = func_tree_find_op(run, XI_LOCAL_ADDR);
+    assert(place != NULL);
+    assert(place->block == run->entry &&
+           "cleanup-read storage must dominate the loop's zero-iteration exit");
+    assert((place->aux_int & XI_LOCAL_ADDR_AUX_CLEANUP_LIVE) != 0);
     xi_func_free(f);
 }
 
@@ -3325,7 +3332,8 @@ int main(void) {
     run_hoisted_sync_handle_capture_is_shared();
     run_channel_send_transfer_modes();
     run_defer_stmt();
-    run_defer_args_lower_before_defer();
+    run_defer_block_uses_late_binding();
+    run_defer_loop_cleanup_place_dominates_zero_iteration_exit();
     run_set_literal();
     run_is_expr();
     run_slice_expr();

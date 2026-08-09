@@ -1,0 +1,16 @@
+var iterations = 1000000
+if (len(process.args) > 0) {
+    iterations = int(process.args[0]) ?? iterations
+}
+
+fn run_cleanup_loop(count: int) -> int {
+    var observed = 0
+    for (var i = 0; i < count; i = i + 1) {
+        defer {
+            observed = observed + 1
+        }
+    }
+    return observed
+}
+
+print(run_cleanup_loop(iterations))

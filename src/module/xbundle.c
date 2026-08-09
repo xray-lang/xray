@@ -367,7 +367,7 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
             break;
 
         case AST_DEFER_STMT:
-            visit_node(ctx, node->as.defer_stmt.expr, current_dir);
+            visit_node(ctx, node->as.defer_stmt.body, current_dir);
             break;
 
         default:

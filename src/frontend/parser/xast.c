@@ -2362,10 +2362,11 @@ AstNode *xr_ast_select_stmt(XrCompilerSession *session, AstNode **cases, int cas
 }
 
 // Create defer statement node
-// defer fn() or defer { block }
-AstNode *xr_ast_defer_stmt(XrCompilerSession *session, AstNode *expr, int line) {
+// defer { block }
+AstNode *xr_ast_defer_stmt(XrCompilerSession *session, AstNode *body, int line) {
+    XR_DCHECK(body != NULL && body->type == AST_BLOCK, "defer body must be a block");
     AstNode *node = alloc_node(session, AST_DEFER_STMT, line);
-    node->as.defer_stmt.expr = expr;
+    node->as.defer_stmt.body = body;
     return node;
 }
 

@@ -4,9 +4,11 @@ c_syntax=pass
 # `return this` keeps the receiver in its native pointer representation.
 c_regex=void \* v[0-9]+ = p0;
 c_regex=return v[0-9]+;
-# The defer closure boxes that receiver exactly once at the tagged capture boundary.
-c_regex=_c->upvals\[0\] = xrt_box_obj\(v[0-9]+\);
-c_count=1:xrt_box_obj(
+# Static cleanup reads the receiver place directly and constructs no capture.
+c_regex=\(p0\)->f0;
+c_not_contains=_c->upvals[
+c_not_contains=xrt_box_obj(
+c_not_contains=xrt_defer_
 # The constructor's implicit receiver return stays a direct `return p0`.
 c_contains=return p0;
 # Native dispatch must not fall back to the runtime method helper.

@@ -138,7 +138,7 @@ XR_FUNC void xi_emit_try(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     XiBlock *catch_blk = (XiBlock *) v->aux;
     int try_pc = current_pc(ctx);
-    emit_inst(ctx, CREATE_ABx(OP_TRY, 0, 0)); /* patched later */
+    emit_inst(ctx, CREATE_ABx(OP_TRY, v->aux_int == XI_TRY_AUX_STATIC_CLEANUP ? 1 : 0, 0));
 
     uint32_t catch_bid = catch_blk ? catch_blk->id : 0;
     add_try_patch(ctx, try_pc, catch_bid);
@@ -200,57 +200,22 @@ XR_FUNC void xi_emit_err_catch(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABC(OP_ERR_CATCH, dst, 0, 0));
 }
 
-/* Defer: args[0]=callee, args[1..n]=call arguments.
- * OP_DEFER A B — closure at R[A], arguments at R[A+1]..R[A+B]. */
-XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    if (v->nargs < 1) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
-    }
-    uint16_t nargs = (uint16_t) (v->nargs - 1);
-
-    /* Reserve consecutive register window: dst, dst+1, ..., dst+nargs */
-    {
-        uint32_t top = dst + nargs + 1;
-        if (top > ctx->max_reg)
-            ctx->max_reg = top;
-    }
-
-    /* Move callee into dst */
-    XiEmitReg callee = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    if (callee != dst)
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
-
-    /* Move arguments into consecutive slots after callee */
-    for (uint16_t a = 1; a < v->nargs; a++) {
-        XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
-        if (ctx->status != XI_EMIT_OK)
-            return;
-        XiEmitReg target = (XiEmitReg) (dst + a);
-        if (arg_reg != target)
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
-    }
-
-    emit_inst(ctx, CREATE_ABC(OP_DEFER, dst, nargs, 0));
-}
-
-XR_FUNC void xi_emit_defer_mark(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_cleanup_enter(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) v;
-    emit_inst(ctx, CREATE_ABC(OP_DEFER_MARK, dst, 0, 0));
+    (void) dst;
+    emit_inst(ctx, CREATE_ABC(OP_CLEANUP_ENTER, 0, 0, 0));
 }
 
-XR_FUNC void xi_emit_defer_run_to(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+XR_FUNC void xi_emit_cleanup_leave(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) v;
     (void) dst;
-    if (v->nargs < 1) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
-    }
-    XiEmitReg mark = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    emit_inst(ctx, CREATE_ABC(OP_DEFER_RUN_TO, mark, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_CLEANUP_LEAVE, 0, 0, 0));
+}
+
+XR_FUNC void xi_emit_cleanup_err_check(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) v;
+    (void) dst;
+    emit_inst(ctx, CREATE_ABC(OP_CLEANUP_ERR_CHECK, 0, 0, 0));
 }
 
 /* ========== Coroutine ========== */

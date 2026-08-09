@@ -1,5 +1,5 @@
 // Native class methods must be able to materialize the receiver `this` as a
-// value: return this, capture this in a defer, pass this as an argument, and
+// value: return this, read this from a cleanup block, pass this as an argument, and
 // method-chain through a `return this` result. Covers both heap-local receivers
 // and module-level shared-native receivers (which must not use the raw static
 // storage once a method leaks `this`).

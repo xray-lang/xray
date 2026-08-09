@@ -473,13 +473,9 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             break;
 
         case AST_DEFER_STMT:
-            /* `defer f()` parses to the same closure as `defer { f() }`; print
-             * the call form rather than re-emitting the wrapper. */
-            if (xfmt_emit_defer_closure(ctx, node))
-                break;
             xfmt_write_indent(ctx);
             xfmt_write_str(ctx, "defer ");
-            xfmt_emit_expression(ctx, node->as.defer_stmt.expr);
+            xfmt_emit_block(ctx, node->as.defer_stmt.body);
             xfmt_write_newline(ctx);
             break;
 
@@ -505,10 +501,6 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
             break;
 
         case AST_BLOCK:
-            /* A `defer f(a)` reaches here as the parser's eager-capture block;
-             * print the surface `defer` rather than its expansion. */
-            if (xfmt_emit_defer_capture(ctx, node))
-                break;
             /* A bare block in statement position owns its own indent; the
              * control-flow callers of xfmt_emit_block have already written
              * theirs along with the `if (...) ` / `while (...) ` prefix. */

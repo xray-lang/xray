@@ -14,16 +14,16 @@ fn fail() {
 fn plain_block() {
     print("plain-start")
     {
-        defer print("plain-defer")
+        defer { print("plain-defer") }
         print("plain-body")
     }
     print("plain-after")
 }
 
 fn return_case(n: int) -> string {
-    defer print("return-root")
+    defer { print("return-root") }
     {
-        defer print("return-inner")
+        defer { print("return-inner") }
         if (n > 0) {
             return "ret"
         }
@@ -35,7 +35,7 @@ fn return_case(n: int) -> string {
 
 fn break_continue_case() {
     for (i in 0..4) {
-        defer print("break-defer " + string(i))
+        defer { print("break-defer " + string(i)) }
         if (i == 1) {
             print("break-now")
             break
@@ -45,7 +45,7 @@ fn break_continue_case() {
     print("after-break")
 
     for (i in 0..3) {
-        defer print("continue-defer " + string(i))
+        defer { print("continue-defer " + string(i)) }
         if (i == 1) {
             print("continue-now")
             continue
@@ -56,9 +56,9 @@ fn break_continue_case() {
 }
 
 fn value_error_case() {
-    defer print("value-root")
+    defer { print("value-root") }
     try {
-        defer print("value-try")
+        defer { print("value-try") }
         fail()
         print("value-unreachable")
     } catch (e) {
@@ -68,9 +68,9 @@ fn value_error_case() {
 }
 
 fn panic_case() {
-    defer print("panic-root")
+    defer { print("panic-root") }
     try {
-        defer print("panic-try")
+        defer { print("panic-try") }
         var z = 0
         var q = 10 / z
         print(q)

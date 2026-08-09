@@ -36,6 +36,7 @@
 #include "xrt_value.h"
 #include "../runtime/xerror_codes.h"
 #include "../runtime/value/xtype_names.h" /* XrTypeId + xr_typeid_name (shared with VM) */
+#include "../base/xentry_plan.h"
 #include "../shared/xr_builtin_schema.h"
 #include "../shared/xr_error_core.h"
 #include "../shared/xr_panic_report.h" /* shared uncaught-panic wording with the VM */
@@ -60,11 +61,9 @@ int __cdecl _isatty(int fd);
  * ========================================================================= */
 
 typedef struct XrtExcFrame {
-    jmp_buf buf;               // setjmp/longjmp target
-    XrValue exception;         // exception value (set before longjmp)
-    struct XrtExcFrame *prev;  // previous frame in stack
-    void *defer_scope_mark;    // xrt_defer_top at try entry (XrtDeferScope*); see xrt_defer.h
-    int defer_count_mark;      // pending count inside defer_scope_mark at try entry
+    jmp_buf buf;                 // setjmp/longjmp target
+    volatile XrValue exception;  // exception value (set before longjmp)
+    struct XrtExcFrame *prev;    // previous frame in stack
 } XrtExcFrame;
 
 /* =========================================================================
@@ -78,29 +77,28 @@ typedef struct XrtExcFrame {
 #ifdef XRT_IMPL
 XR_THREAD_LOCAL XrtExcFrame *xrt_exc_top = NULL;
 XR_THREAD_LOCAL XrValue xrt_pending_error = {.tag = XR_TAG_NULL};
-/* Nesting depth of defer bodies currently running on this thread, and the
+/* Nesting depth of cleanup bodies currently running on this thread, and the
  * xrt_exc_top value captured when the innermost one started. Together they
- * answer "would a panic raised right now escape a defer body?": only when we
+ * answer "would a panic raised right now escape a cleanup body?": only when we
  * are inside one AND no handler has been pushed since it started. A panic the
  * body catches itself stays ordinary — that is the escape hatch spec 8.3.1
- * rule D2 prescribes. Both are maintained by xrt_defer_invoke_one. */
-XR_THREAD_LOCAL int xrt_defer_depth = 0;
-XR_THREAD_LOCAL XrtExcFrame *xrt_defer_exc_barrier = NULL;
+ * rule D2 prescribes. Static cleanup regions maintain both values. */
+XR_THREAD_LOCAL int xrt_cleanup_depth = 0;
+#define XRT_CLEANUP_NESTING_MAX 256
+XR_THREAD_LOCAL XrValue xrt_cleanup_saved_errors[XRT_CLEANUP_NESTING_MAX];
+XR_THREAD_LOCAL XrtExcFrame *xrt_cleanup_exc_barriers[XRT_CLEANUP_NESTING_MAX];
 #else
 extern XR_THREAD_LOCAL XrtExcFrame *xrt_exc_top;
 extern XR_THREAD_LOCAL XrValue xrt_pending_error;
-extern XR_THREAD_LOCAL int xrt_defer_depth;
-extern XR_THREAD_LOCAL XrtExcFrame *xrt_defer_exc_barrier;
+extern XR_THREAD_LOCAL int xrt_cleanup_depth;
+#define XRT_CLEANUP_NESTING_MAX 256
+extern XR_THREAD_LOCAL XrValue xrt_cleanup_saved_errors[XRT_CLEANUP_NESTING_MAX];
+extern XR_THREAD_LOCAL XrtExcFrame *xrt_cleanup_exc_barriers[XRT_CLEANUP_NESTING_MAX];
 #endif
 
 static inline int xrt_has_pending_error(void) {
     return !XR_IS_NULL(xrt_pending_error);
 }
-
-/* Run pending defers above `mark` before a panic transfers control. Defined in
- * xrt_defer.h (included after this header); forward-declared here because
- * xrt_throw_exc must drain skipped frames' defers before longjmp. */
-static inline void xrt_defer_unwind_to_mark(void *scope_mark, int count_mark);
 
 /* Uncaught value-return error diagnostic (spec §8.1.1): print the error value to
  * stderr. `in_go_coroutine` selects the wording for a dropped fire-and-forget
@@ -176,6 +174,38 @@ static inline const char *xrt_exception_message_cstr(XrValue exc) {
     return XR_IS_STR(msg) ? xr_str_data(msg) : NULL;
 }
 
+static inline _Noreturn void xrt_cleanup_abort(XrValue escaped, XrValue in_flight) {
+    xr_error_core_defer_throw_abort(XR_ERR_DEFER_THROW, xrt_exception_message_cstr(escaped),
+                                    XR_IS_NULL(in_flight) ? NULL
+                                                          : xrt_exception_message_cstr(in_flight));
+}
+
+static inline void xrt_cleanup_enter(void) {
+    if (xrt_cleanup_depth < 0 || xrt_cleanup_depth >= XRT_CLEANUP_NESTING_MAX)
+        xrt_cleanup_abort(XR_NULL_VAL, xrt_pending_error);
+    int depth = xrt_cleanup_depth;
+    xrt_cleanup_saved_errors[depth] = xrt_pending_error;
+    xrt_cleanup_exc_barriers[depth] = xrt_exc_top;
+    xrt_pending_error = XR_NULL_VAL;
+    xrt_cleanup_depth = depth + 1;
+}
+
+static inline void xrt_cleanup_err_check(void) {
+    if (xrt_cleanup_depth > 0 && xrt_has_pending_error())
+        xrt_cleanup_abort(xrt_pending_error, xrt_cleanup_saved_errors[xrt_cleanup_depth - 1]);
+}
+
+static inline void xrt_cleanup_leave(void) {
+    if (xrt_cleanup_depth <= 0)
+        xrt_cleanup_abort(XR_NULL_VAL, xrt_pending_error);
+    xrt_cleanup_err_check();
+    int depth = xrt_cleanup_depth - 1;
+    xrt_pending_error = xrt_cleanup_saved_errors[depth];
+    xrt_cleanup_saved_errors[depth] = XR_NULL_VAL;
+    xrt_cleanup_exc_barriers[depth] = NULL;
+    xrt_cleanup_depth = depth;
+}
+
 /* Fault code carried by a normalized exception object; 0 when absent. A bare
  * string exception still encodes it as an "E0420: " prefix, so parse that too
  * for the pre-normalize path. */
@@ -205,6 +235,19 @@ static inline bool xrt_stderr_is_tty(void) {
 }
 
 XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc);
+
+static inline void xrt_guard_task_spawn(void) {
+    static const char message[] = "a deferred action cannot create a task or reach the scheduler";
+    if (xrt_cleanup_depth > 0)
+        xrt_throw_exc(xrt_exception_new_value(XR_ERR_DEFER_ASYNC, message, sizeof(message) - 1u));
+}
+
+static inline void xrt_guard_callable_effects(const XrAotCallableDesc *callable) {
+    if (xrt_cleanup_depth == 0 || !callable)
+        return;
+    if ((callable->effect_bits & (XR_EFFECT_MAY_SUSPEND | XR_EFFECT_MAY_SPAWN)) != 0)
+        xrt_guard_task_spawn();
+}
 
 static inline int64_t xrt_expect_int_arg(XrValue value) {
     if (XR_UNLIKELY(!XR_IS_INT(value)))
@@ -337,9 +380,8 @@ static inline const char *xrt_type_name(int64_t tid) {
  * If inside a try block (xrt_exc_top != NULL), stores the exception
  * and longjmps to the nearest frame. Otherwise, prints and aborts.
  *
- * Before transferring control, runs the defers of every frame skipped by the
- * jump (down to the catching try's recorded mark, or all of them when
- * uncaught), so `defer` cleanup runs on the panic path exactly as in the VM.
+ * Cleanup is represented directly in generated control flow. Hidden cleanup
+ * handlers run the statically known LIFO frontier before rethrowing.
  * ========================================================================= */
 
 #ifdef XRT_IMPL
@@ -350,15 +392,13 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
      * would leave the resource state unknown, so not even an enclosing
      * `catch panic` may intercept it. A handler pushed inside the body moves
      * xrt_exc_top past the barrier and keeps the panic ordinary. */
-    if (xrt_defer_depth > 0 && xrt_exc_top == xrt_defer_exc_barrier)
+    if (xrt_cleanup_depth > 0 && xrt_exc_top == xrt_cleanup_exc_barriers[xrt_cleanup_depth - 1])
         xr_error_core_defer_throw_abort(
             XR_ERR_DEFER_THROW, xrt_exception_message_cstr(exc),
-            xrt_has_pending_error() ? xrt_exception_message_cstr(xrt_pending_error) : NULL);
+            XR_IS_NULL(xrt_cleanup_saved_errors[xrt_cleanup_depth - 1])
+                ? NULL
+                : xrt_exception_message_cstr(xrt_cleanup_saved_errors[xrt_cleanup_depth - 1]));
     if (xrt_exc_top) {
-        /* Caught panic: run the defers of every frame skipped on the way to the
-         * handler (down to its recorded mark), then jump. An uncaught panic
-         * aborts WITHOUT running defers, matching the VM. */
-        xrt_defer_unwind_to_mark(xrt_exc_top->defer_scope_mark, xrt_exc_top->defer_count_mark);
         xrt_exc_top->exception = exc;
         longjmp(xrt_exc_top->buf, 1);
     }

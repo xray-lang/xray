@@ -280,9 +280,11 @@ typedef struct XrProto {
      */
     uint32_t proto_id;
 
-    uint8_t test_attr;  // test attribute type
-    int test_timeout;   // test timeout (seconds)
-    bool is_coro_safe;  // safe to call in coroutine
+    uint8_t test_attr;           // test attribute type
+    int test_timeout;            // test timeout (seconds)
+    bool is_coro_safe;           // safe to call in coroutine
+    bool may_scheduler_suspend;  // canonical transitive scheduler effect
+    bool may_task_spawn;         // canonical transitive task-spawn effect
     // FFI: extern foreign function. The VM routes calls to the libffi invoker
     // (xr_ffi_call_proto) instead of executing the synthesized stub body. The C
     // symbol name and signature are read from `ffi_sig` (self-contained, survives

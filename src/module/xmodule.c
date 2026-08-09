@@ -1070,6 +1070,11 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
         return NULL;
     }
 
+    /* The module owns its initializer proto from this point on, including the
+     * FAILED state. Memoizing a failed initialization must not orphan the
+     * compiled code while preserving the one-shot execution guarantee. */
+    module->compiled_code = code;
+
     // 6. Execute module code (use dedicated module execution function, don't reset VM state)
     void *saved_module_registry = xr_isolate_get_module_registry(isolate);
 
@@ -1090,9 +1095,7 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
         return NULL;
     }
 
-    // 7. Cleanup - Note: code cannot be freed because exported closures still reference proto
-    // Save code to module, free when module is destroyed
-    module->compiled_code = code;
+    // 7. Cleanup - code stays module-owned because exported closures reference it.
     if (registry->fn_ast_free)
         registry->fn_ast_free(ast);
     xr_free(source);
@@ -1344,14 +1347,11 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
             xr_free(path);
             return xr_null();
         }
-        /*
-         * Use absolute path as cache key
-         * Note: hashmap doesn't copy key, so path ownership transfers to hashmap
-         * Don't free path, it will be freed with hashmap when module system is destroyed.
-         * The cache entry is an in-progress marker: recursive imports fail
-         * with E0504 instead of observing a partially initialized module.
-         */
-        if (!xr_hashmap_set(registry->loaded_modules, path, module)) {
+        /* The module-owned absolute path is the stable cache key. The entry is
+         * installed before execution so recursion observes INITIALIZING, and
+         * retained after execution so later imports observe the terminal
+         * PUBLISHED or FAILED state without re-running initialization. */
+        if (!xr_hashmap_set(registry->loaded_modules, module->path, module)) {
             xr_log_warning("module", "out of memory caching module '%s'", module_name);
             xr_module_fail(module);
             xr_free(path);
@@ -1362,18 +1362,16 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
 
         if (loaded) {
             if (!xr_module_publish(module)) {
-                xr_hashmap_delete(registry->loaded_modules, path);
                 xr_module_fail(module);
                 xr_free(path);
                 return xr_null();
             }
-            // path now owned by hashmap, do not free
+            xr_free(path);
             return xr_value_from_module(module);
         } else {
-            // Loading failed: remove the entry (delete clears the key
-            // pointer; a value-NULL overwrite would leave the soon-freed
-            // path dangling inside the map) and free the path.
-            xr_hashmap_delete(registry->loaded_modules, path);
+            /* FAILED is memoized just like PUBLISHED: module initialization
+             * is one-shot, so a later import observes the failed state rather
+             * than executing top-level code and cleanups a second time. */
             xr_module_fail(module);
             xr_free(path);
             return xr_null();

@@ -13,16 +13,20 @@
 
 static int g_passed;
 static int g_failed;
+static uint64_t g_heap_calls;
 
 static void *test_malloc(size_t size) {
+    g_heap_calls++;
     return malloc(size);
 }
 
 static void *test_calloc(size_t count, size_t size) {
+    g_heap_calls++;
     return calloc(count, size);
 }
 
 static void *test_realloc(void *ptr, size_t size) {
+    g_heap_calls++;
     return realloc(ptr, size);
 }
 
@@ -31,6 +35,7 @@ static void test_free(void *ptr) {
 }
 
 static void *test_alloc_aligned(size_t size) {
+    g_heap_calls++;
     return xr_test_alloc_aligned(size, XRT_DATA_ALIGN);
 }
 
@@ -51,7 +56,7 @@ static void test_free_aligned(void *ptr) {
 #pragma clang diagnostic ignored "-Wundefined-internal"
 #pragma clang diagnostic ignored "-Wunused-function"
 #endif
-#include "../../../src/aot/xrt_defer.h"
+#include "../../../src/aot/xrt_exception.h"
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
@@ -67,25 +72,26 @@ static void test_free_aligned(void *ptr) {
     } while (0)
 
 typedef struct ThreadTlsSnapshot {
-    int pending_error_i;
+    int saved_error_i;
     int has_exc_top;
-    int has_defer_top;
+    int cleanup_depth;
+    int has_cleanup_barrier;
 } ThreadTlsSnapshot;
 
 static void *worker_tls_probe(void *arg) {
     ThreadTlsSnapshot *snapshot = (ThreadTlsSnapshot *) arg;
     XrtExcFrame frame;
-    XrtDeferScope scope;
 
     xrt_pending_error = XR_FROM_INT(22);
     xrt_exc_top = &frame;
-    xrt_defer_enter(&scope);
+    xrt_cleanup_enter();
 
-    snapshot->pending_error_i = (int) XR_TO_INT(xrt_pending_error);
+    snapshot->saved_error_i = (int) XR_TO_INT(xrt_cleanup_saved_errors[0]);
     snapshot->has_exc_top = xrt_exc_top == &frame;
-    snapshot->has_defer_top = xrt_defer_top == &scope;
+    snapshot->cleanup_depth = xrt_cleanup_depth;
+    snapshot->has_cleanup_barrier = xrt_cleanup_exc_barriers[0] == &frame;
 
-    xrt_defer_leave(&scope);
+    xrt_cleanup_leave();
     xrt_exc_top = NULL;
     xrt_pending_error = XR_NULL_VAL;
     return NULL;
@@ -98,9 +104,8 @@ static unsigned __stdcall worker_tls_probe_win(void *arg) {
 }
 #endif
 
-static void test_aot_exception_defer_state_is_thread_local(void) {
+static void test_aot_exception_cleanup_state_is_thread_local(void) {
     XrtExcFrame main_frame;
-    XrtDeferScope main_scope;
     ThreadTlsSnapshot snapshot = {0};
 #ifdef _WIN32
     uintptr_t thread;
@@ -110,7 +115,7 @@ static void test_aot_exception_defer_state_is_thread_local(void) {
 
     xrt_pending_error = XR_FROM_INT(11);
     xrt_exc_top = &main_frame;
-    xrt_defer_enter(&main_scope);
+    xrt_cleanup_enter();
 
 #ifdef _WIN32
     thread = _beginthreadex(NULL, 0, worker_tls_probe_win, &snapshot, 0, NULL);
@@ -124,21 +129,39 @@ static void test_aot_exception_defer_state_is_thread_local(void) {
     ASSERT_TRUE(pthread_join(thread, NULL) == 0, "worker thread should join");
 #endif
 
-    ASSERT_TRUE(snapshot.pending_error_i == 22, "worker sees its own pending error");
+    ASSERT_TRUE(snapshot.saved_error_i == 22, "worker sees its own saved error");
     ASSERT_TRUE(snapshot.has_exc_top, "worker sees its own exception stack");
-    ASSERT_TRUE(snapshot.has_defer_top, "worker sees its own defer stack");
+    ASSERT_TRUE(snapshot.cleanup_depth == 1, "worker sees its own cleanup depth");
+    ASSERT_TRUE(snapshot.has_cleanup_barrier, "worker sees its own cleanup barrier");
 
-    ASSERT_TRUE(XR_TO_INT(xrt_pending_error) == 11, "main pending error survives worker write");
+    ASSERT_TRUE(XR_IS_NULL(xrt_pending_error), "main cleanup keeps its error channel isolated");
+    ASSERT_TRUE(XR_TO_INT(xrt_cleanup_saved_errors[0]) == 11,
+                "main saved error survives worker write");
     ASSERT_TRUE(xrt_exc_top == &main_frame, "main exception stack survives worker write");
-    ASSERT_TRUE(xrt_defer_top == &main_scope, "main defer stack survives worker write");
+    ASSERT_TRUE(xrt_cleanup_depth == 1, "main cleanup depth survives worker write");
+    ASSERT_TRUE(xrt_cleanup_exc_barriers[0] == &main_frame,
+                "main cleanup barrier survives worker write");
 
-    xrt_defer_leave(&main_scope);
+    xrt_cleanup_leave();
+    ASSERT_TRUE(XR_TO_INT(xrt_pending_error) == 11, "main cleanup restores its pending error");
     xrt_exc_top = NULL;
     xrt_pending_error = XR_NULL_VAL;
 }
 
+static void test_static_cleanup_barrier_has_zero_heap_calls(void) {
+    const uint32_t iterations = UINT32_C(1000000);
+    g_heap_calls = 0;
+    for (uint32_t i = 0; i < iterations; i++) {
+        xrt_cleanup_enter();
+        xrt_cleanup_leave();
+    }
+    ASSERT_TRUE(g_heap_calls == 0, "one million cleanup barriers must not allocate");
+    ASSERT_TRUE(xrt_cleanup_depth == 0, "cleanup barrier depth must return to zero");
+}
+
 int main(void) {
-    test_aot_exception_defer_state_is_thread_local();
+    test_aot_exception_cleanup_state_is_thread_local();
+    test_static_cleanup_barrier_has_zero_heap_calls();
     if (g_failed != 0) {
         fprintf(stderr, "test_xrt_exception_tls: %d passed, %d failed\n", g_passed, g_failed);
         return 1;

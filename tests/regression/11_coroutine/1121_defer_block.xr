@@ -38,7 +38,7 @@ fn test_multi() {
 
 test_multi()
 
-// 测试 defer 块与普通 defer 混合
+// 测试单行与多行 defer 块混合
 print("=== defer 混合测试 ===")
 
 fn cleanup() {
@@ -47,7 +47,7 @@ fn cleanup() {
 
 @test
 fn test_mixed() {
-    defer cleanup()
+    defer { cleanup() }
     
     defer {
         print("defer 块 A")

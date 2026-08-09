@@ -1,5 +1,5 @@
 // AOT test: defer statement support
-// Tests basic defer, multiple defers (LIFO), and defer with upvalue capture
+// Tests basic defer, multiple defers (LIFO), and late-bound local reads.
 
 fn test_basic() -> int {
     var result = 0
@@ -16,7 +16,7 @@ fn test_multi_defer() -> int {
     return order
 }
 
-fn test_defer_capture() -> int {
+fn test_defer_late_binding() -> int {
     var x = 0
     defer { x = 1 }
     return x
@@ -24,4 +24,4 @@ fn test_defer_capture() -> int {
 
 print(test_basic())
 print(test_multi_defer())
-print(test_defer_capture())
+print(test_defer_late_binding())

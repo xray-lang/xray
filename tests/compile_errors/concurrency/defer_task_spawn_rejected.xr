@@ -1,0 +1,10 @@
+fn child() -> int { return 1 }
+
+fn owner() {
+    defer {
+        var task = go child()
+        print(task)
+    }
+}
+
+owner()

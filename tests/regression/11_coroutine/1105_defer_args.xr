@@ -1,4 +1,4 @@
-// 测试 defer 带参数
+// 测试 cleanup 块调用带参数函数
 
 fn cleanup(msg: string) {
     print(msg)
@@ -13,12 +13,12 @@ fn log_value(name: string, value: int) {
 fn test_defer_args() {
     print("start")
     
-    // defer 带单参数
-    defer cleanup("cleanup 1")
-    defer cleanup("cleanup 2")
+    // cleanup 块内的单参数调用
+    defer { cleanup("cleanup 1") }
+    defer { cleanup("cleanup 2") }
     
-    // defer 带多参数
-    defer log_value("result", 42)
+    // cleanup 块内的多参数调用
+    defer { log_value("result", 42) }
     
     print("work done")
     

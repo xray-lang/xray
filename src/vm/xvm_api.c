@@ -461,7 +461,7 @@ void xr_vm_add_stacktrace(XrVMRuntime *isolate, XrValue exception) {
 ** say) yields NULL. Kept deliberately narrow so both backends print identical
 ** text for spec 8.3.1 rule D3, which requires them to agree verbatim.
 */
-static const char *defer_error_message_cstr(XrVMRuntime *isolate, XrValue error) {
+static const char *cleanup_error_message_cstr(XrVMRuntime *isolate, XrValue error) {
     if (XR_IS_NULL(error))
         return NULL;
     if (XR_IS_STRING(error)) {
@@ -480,147 +480,38 @@ static const char *defer_error_message_cstr(XrVMRuntime *isolate, XrValue error)
 ** through the shared reporter so the VM and AOT emit identical diagnostics and
 ** exit status.
 */
-XR_ERROR_CORE_NORETURN static void defer_throw_abort(XrVMRuntime *isolate, XrValue escaped,
-                                                     XrValue in_flight) {
-    xr_error_core_defer_throw_abort(XR_ERR_DEFER_THROW, defer_error_message_cstr(isolate, escaped),
-                                    defer_error_message_cstr(isolate, in_flight));
+XR_ERROR_CORE_NORETURN static void cleanup_throw_abort(XrVMRuntime *isolate, XrValue escaped,
+                                                       XrValue in_flight) {
+    xr_error_core_defer_throw_abort(XR_ERR_DEFER_THROW,
+                                    cleanup_error_message_cstr(isolate, escaped),
+                                    cleanup_error_message_cstr(isolate, in_flight));
 }
 
-/*
-** Invoke one deferred closure. Spec 8.3.1: a `defer` is a cleanup edge, not an
-** error-propagation edge, so no error may escape the body. Rule D1 rejects a
-** throwing defer at compile time (E0387); what reaches here is only what static
-** analysis cannot see through (an FFI boundary). Rule D3 makes that fail fast:
-** report both the escaping error and the in-flight one, then terminate. The
-** in-flight error is neither replaced (the Go model, invisible in a language
-** whose signatures and call sites carry no throws marker) nor suppressed.
-**
-** The in-flight error is parked across the call so the callee starts from a
-** clean slot and any pending error afterwards is unambiguously the defer's own.
-** defer_depth / defer_handler_barrier let xr_vm_throw_exception tell a panic
-** escaping this body from one the body catches itself; they mirror
-** xrt_defer_depth / xrt_defer_exc_barrier in the AOT runtime.
-*/
-static void run_one_defer(XrVMRuntime *isolate, XrVMContext *ctx, XrClosure *closure, XrValue *args,
-                          int nargs) {
-    XrValue saved_error = ctx->pending_error;
-    bool had_error = !XR_IS_NULL(saved_error);
-    if (had_error)
-        ctx->pending_error = xr_null();
-
-    int outer_barrier = ctx->defer_handler_barrier;
-    ctx->defer_handler_barrier = ctx->handler_count;
-    ctx->defer_depth++;
-    xr_vm_call_closure(isolate, closure, args, nargs);
-    ctx->defer_depth--;
-    ctx->defer_handler_barrier = outer_barrier;
-
-    if (!XR_IS_NULL(ctx->pending_error))
-        defer_throw_abort(isolate, ctx->pending_error, had_error ? saved_error : xr_null());
-
-    if (had_error)
-        ctx->pending_error = saved_error;
+XR_FUNC void xr_vm_cleanup_enter(XrVMRuntime *isolate, XrVMContext *ctx) {
+    if (!ctx || ctx->cleanup_depth < 0 || ctx->cleanup_depth >= XR_CLEANUP_NESTING_MAX)
+        cleanup_throw_abort(isolate, xr_null(), ctx ? ctx->pending_error : xr_null());
+    int depth = ctx->cleanup_depth;
+    ctx->cleanup_saved_errors[depth] = ctx->pending_error;
+    ctx->cleanup_handler_barriers[depth] = ctx->handler_count;
+    ctx->pending_error = xr_null();
+    ctx->cleanup_depth = depth + 1;
 }
 
-/*
-** Run VM defer entries in LIFO order down to an exact stack mark.
-**
-** Marks are value indexes in ctx->defer_stack.  The bytecode lowering emits
-** OP_DEFER_MARK at lexical block ownership points and OP_DEFER_RUN_TO on every
-** block exit edge; frame return/unwind uses the same helper with the frame's
-** entry mark.  Entries are variable-width [closure, nargs, args...], so the
-** helper scans forward to discover starts and executes the last batch in
-** reverse.  Repeating that batch keeps correctness even when a stress case has
-** more defer entries than the fixed scratch array.
-*/
-XR_FUNC void xr_vm_run_defers_to_mark(XrVMRuntime *isolate, XrVMContext *ctx, int mark) {
-    if (!ctx || !ctx->defer_stack)
+XR_FUNC void xr_vm_cleanup_err_check(XrVMRuntime *isolate, XrVMContext *ctx) {
+    if (!ctx || ctx->cleanup_depth <= 0 || XR_IS_NULL(ctx->pending_error))
         return;
-    if (mark < 0)
-        mark = 0;
-    if (mark > ctx->defer_count)
-        mark = ctx->defer_count;
-
-    ctx->defer_body_depth++;
-    while (ctx->defer_count > mark) {
-        int entries[XR_DEFER_ENTRIES_MAX];
-        int total_entries = 0;
-        int pos = mark;
-        int end = ctx->defer_count;
-
-        while (pos < end) {
-            if (pos + 1 >= end)
-                break;
-            int nargs = (int) XR_TO_INT(ctx->defer_stack[pos + 1]);
-            if (nargs < 0 || pos + 2 + nargs > end)
-                break;
-            entries[total_entries % XR_DEFER_ENTRIES_MAX] = pos;
-            total_entries++;
-            pos += 2 + nargs;
-        }
-
-        if (total_entries == 0 || pos != end) {
-            ctx->defer_count = mark;
-            ctx->defer_body_depth--;
-            return;
-        }
-
-        int batch_count =
-            total_entries < XR_DEFER_ENTRIES_MAX ? total_entries : XR_DEFER_ENTRIES_MAX;
-        int first_total_index = total_entries - batch_count;
-        int batch_starts[XR_DEFER_ENTRIES_MAX];
-        for (int i = 0; i < batch_count; i++) {
-            batch_starts[i] = entries[(first_total_index + i) % XR_DEFER_ENTRIES_MAX];
-        }
-
-        for (int e = batch_count - 1; e >= 0; e--) {
-            int start = batch_starts[e];
-            XrValue closure_val = ctx->defer_stack[start];
-            int nargs = (int) XR_TO_INT(ctx->defer_stack[start + 1]);
-            if (nargs > XR_DEFER_ARGS_MAX)
-                nargs = XR_DEFER_ARGS_MAX;
-            XrValue defer_args[XR_DEFER_ARGS_MAX];
-            for (int j = 0; j < nargs; j++) {
-                defer_args[j] = ctx->defer_stack[start + 2 + j];
-            }
-            if (xr_value_is_closure(closure_val)) {
-                XrClosure *closure = xr_value_to_closure(closure_val);
-                run_one_defer(isolate, ctx, closure, defer_args, nargs);
-            }
-        }
-
-        ctx->defer_count = batch_starts[0];
-    }
-    ctx->defer_body_depth--;
+    cleanup_throw_abort(isolate, ctx->pending_error,
+                        ctx->cleanup_saved_errors[ctx->cleanup_depth - 1]);
 }
 
-/*
-** Run defer entries belonging to one frame in LIFO order.
-*/
-static void run_defers_for_frame(XrVMRuntime *isolate, XrVMContext *ctx, int frame_index) {
-    if (!ctx->defer_frame_marks || frame_index < 0)
-        return;
-    xr_vm_run_defers_to_mark(isolate, ctx, ctx->defer_frame_marks[frame_index]);
-}
-
-/*
-** Run every defer entry a cancelled coroutine still owns, innermost first.
-**
-** Cancellation stops a coroutine between statements rather than at a return,
-** so nothing else walks its frames. Without this the coroutine is marked done
-** with its defer entries untouched, and `defer` -- the language's only
-** deterministic cleanup mechanism -- silently does not run on the one path
-** where cleanup matters most.
-*/
-XR_FUNC void xr_vm_run_cancellation_defers(XrVMRuntime *isolate, XrVMContext *ctx) {
-    if (!isolate || !ctx || !ctx->defer_stack || ctx->defer_count <= 0)
-        return;
-    int floor = ctx->module_base_frame > 0 ? ctx->module_base_frame : 0;
-    for (int fi = ctx->frame_count - 1; fi >= floor; fi--)
-        run_defers_for_frame(isolate, ctx, fi);
-    /* Block-scoped entries below the outermost frame mark have no frame of
-     * their own; drain them so nothing is left pending on the shell. */
-    xr_vm_run_defers_to_mark(isolate, ctx, 0);
+XR_FUNC void xr_vm_cleanup_leave(XrVMRuntime *isolate, XrVMContext *ctx) {
+    if (!ctx || ctx->cleanup_depth <= 0)
+        cleanup_throw_abort(isolate, xr_null(), ctx ? ctx->pending_error : xr_null());
+    xr_vm_cleanup_err_check(isolate, ctx);
+    int depth = ctx->cleanup_depth - 1;
+    ctx->pending_error = ctx->cleanup_saved_errors[depth];
+    ctx->cleanup_saved_errors[depth] = xr_null();
+    ctx->cleanup_depth = depth;
 }
 
 /*
@@ -633,13 +524,14 @@ void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_throw_exception: NULL isolate");
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
-    /* Spec 8.3.1 rule D3: a panic that would escape a defer body is a cleanup
+    /* Spec 8.3.1 rule D3: a panic that would escape a cleanup body is a cleanup
      * failure, not a recoverable condition — unwinding past a half-run cleanup
      * would leave the resource state unknown, so not even an enclosing
      * `catch panic` may intercept it. A handler pushed inside the body raises
      * handler_count past the barrier and keeps the panic ordinary. */
-    if (ctx && ctx->defer_depth > 0 && ctx->handler_count <= ctx->defer_handler_barrier)
-        defer_throw_abort(isolate, exception, ctx->pending_error);
+    if (ctx && ctx->cleanup_depth > 0 &&
+        ctx->handler_count <= ctx->cleanup_handler_barriers[ctx->cleanup_depth - 1])
+        cleanup_throw_abort(isolate, exception, ctx->cleanup_saved_errors[ctx->cleanup_depth - 1]);
 
     /* Iterative exception propagation.
      *
@@ -663,16 +555,7 @@ void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception) {
 
         ctx->stack_top = ctx->stack + handler->stack_size;
 
-        /* Run defers for frames above the handler (LIFO), then run the handler
-         * frame back to the defer count recorded at OP_TRY. That same-frame
-         * cleanup is what makes block-scoped defers inside try execute before
-         * control reaches catch. */
-        for (int fi = ctx->frame_count - 1; fi >= handler->frame_count; fi--) {
-            run_defers_for_frame(isolate, ctx, fi);
-        }
-
         ctx->frame_count = handler->frame_count;
-        xr_vm_run_defers_to_mark(isolate, ctx, handler->defer_count_mark);
 
         if (ctx->frame_count > 0 && handler->catch_offset > 0) {
             XrBcCallFrame *frame = &ctx->frames[ctx->frame_count - 1];

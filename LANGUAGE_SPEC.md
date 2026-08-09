@@ -1769,7 +1769,7 @@ This is a requirement rather than a conservative preference. Differential testin
 
 **E10 (slices and ranges)**: `a[lo:hi]` evaluates a → lo → hi; `lo..hi` and `lo..=hi` evaluate lo → hi.
 
-**E11 (statements)**: statements are evaluated in source order. A `defer` evaluates its captures where it is registered; for when the body runs see §4.9.
+**E11 (statements)**: statements are evaluated in source order. A `defer` establishes a static cleanup edge where it appears, while its outer bindings are read when cleanup executes; see §4.9 for timing.
 
 ```xray
 fn t(tag: string, v: int) -> int { print(tag); return v }
@@ -2688,43 +2688,45 @@ throw AppError.NotFound                      // value-return error channel
 ### 4.9 `defer`
 
 ```ebnf
-DeferStmt ::= 'defer' (CallExpr | Block)
+DeferStmt ::= 'defer' Block
 ```
 
 ```xray
 fn read_file(path: string) -> string {
     var f = open(path)
-    defer f.close()                  // always runs before the function returns
+    defer { f.close() }              // always runs before the function returns
     return f.readAll()
 }
 
 fn process() {
-    defer {                          // block form
+    defer {
         log.info("done")
         cleanup()
     }
     do_work()
 }
 
-fn snapshot_vs_reference() {
+fn late_binding_and_copy() {
     var n = 1
-    defer print("call", n)            // saves 1 at registration
-    defer { print("block", n) }       // reads 2 at exit
+    defer { print("late", n) }        // reads 2 at exit
+    const saved = copy(n)
+    defer { print("saved", saved) }   // explicit copy remains 1
     n = 2
-}                                      // prints block 2, then call 1
+}                                      // prints saved 1, then late 2
 ```
 
 **Semantics**:
-- A `defer` body has exactly two forms: a call expression or a block. Assignments, member assignments, bare values, and every other non-call expression are syntax errors; write arbitrary cleanup as `defer { ... }`.
-- The call form immediately evaluates and saves the callee receiver and every argument from left to right. Block exit only invokes that saved call. A dynamic callable that cannot be proven stable statically is rejected with `E0392`.
-- The block form does not snapshot values. Its body runs at block exit and observes captured local bindings by reference at that time. Thus `defer conn.close()` saves the current `conn`, while `defer { conn.close() }` reads `conn` at exit.
-- A movable owner referenced by a call snapshot or block capture is under a lexical loan until the owning block exits. Moving or returning it earlier reports `E0382`. Ordinary rebinding/mutation remains legal; the snapshot-versus-reference rule above determines which value the defer observes.
+- `defer` accepts only a block. A call expression, assignment, bare value, or any other non-block body is a syntax error.
+- The body runs at block exit and reads the local bindings that exist then (late binding). Code that needs a registration-time value must first create an explicit copy with `copy(...)` or an ordinary value binding and read that copy from the block.
+- A movable owner read by a cleanup block is under a lexical loan until the owning block exits. Moving or returning it earlier reports `E0382`; ordinary rebinding and mutation remain legal.
 - A `defer` belongs to the nearest enclosing real block `{ ... }`. A function body is a block, so a top-level function-body `defer` still runs before the function exits.
 - **LIFO**: multiple `defer` statements in the same block run in reverse declaration order.
 - **Always executes**: runs when the owning block falls through or exits by `break`, `continue`, `return`, value-error propagation, or panic unwinding.
 - A `defer` inside a loop body runs at the end of each iteration, not at the end of the function.
 - `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to lexical block exits, not to a single function tail.
-- **No error may escape a `defer` body**: `E0387` is reported when the deferred callable's inferred error set is non-empty; errors must be absorbed inside the `defer` body with `try` / `catch`. What static analysis cannot decide is backstopped at runtime by `E0443`. Full rules in §8.3.1.
+- **No error may escape a `defer` body**: `E0387` is reported when the cleanup block's inferred escaping error set is non-empty; errors must be absorbed inside the `defer` body with `try` / `catch`. What static analysis cannot decide is backstopped at runtime by `E0443`. Full rules in §8.3.1.
+- A cleanup block must not directly or transitively suspend, create a task, return from the owning function, or break/continue to a target outside the block. A dynamically unknown call fails closed before any scheduling or task-spawn side effect.
+- A cleanup block may contain local branches, loops, local `try` / `catch`, and nested `defer`; nested cleanup also runs LIFO.
 
 ### 4.10 Built-in Print Functions
 
@@ -4364,7 +4366,7 @@ throw AppErr.InvalidInput("bad format")     // ✅ ADT enum variant with payload
 After a throw:
 
 ```
-throw point → write to pending_error → return up the call stack → run defer on the way → catch handles → otherwise keep returning → top-level diagnostic
+throw point → write to pending_error → return up the call stack → run static cleanup regions on every crossed scope edge → catch handles → otherwise keep returning → top-level diagnostic
 ```
 
 - No stack frame unwinding (unlike traditional exception unwinding)
@@ -4622,12 +4624,12 @@ formatters). The contract covers exactly that surface.
 
 `defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
 
-The call form snapshots its receiver and arguments at registration; the block form reads captured bindings by reference at exit. A movable owner held by either form may not be moved or returned before the block exits (`E0382`). This owner-lifetime rule is independent of the error-channel rules below.
+A cleanup block reads its outer bindings at exit. A movable owner read by the block may not be moved or returned before the block exits (`E0382`); code that needs a registration-time value must create an explicit copy first. This owner-lifetime rule is independent of the error-channel rules below.
 
 ```xray
 fn fetch(url: string) -> string {
     var conn = open(url)
-    defer conn.close()                       // conn is guaranteed to close
+    defer { conn.close() }                   // conn is guaranteed to close
 
     var data = conn.read()
     if (len(data) == 0) {
@@ -4643,12 +4645,15 @@ fn fetch(url: string) -> string {
 - `defer` executes on block fallthrough, `break`, `continue`, `return`, `throw`, and panic unwinding
 - A `defer` in a loop body runs as each iteration exits
 - No error may escape a `defer` body (see §8.3.1)
+- A `defer` body must not directly or transitively suspend or create a task (`E0392`); an unresolved dynamic call fails closed with `E0444` before the side effect
+- `return` and any `break` / `continue` that crosses the cleanup boundary are illegal (`E0395`); a local jump within a cleanup-owned loop is legal
+- Each registration point lowers to a program-point-sensitive static cleanup frontier; no closure, callback object, or dynamic defer stack is generated
 
 #### 8.3.1 `defer` and errors
 
 `defer` is a **resource-cleanup edge**, not an error-propagation edge. A failure on the cleanup path means the resource state is no longer known, so the language neither lets a cleanup error overwrite an in-flight error (the Go model) nor silently swallows it.
 
-**Rule D1 (static, normative)**: if the inferred error set of the callable a `defer` defers is **non-empty**, the compiler reports `E0387`.
+**Rule D1 (static, normative)**: if the inferred escaping error set of a `defer` block is **non-empty**, the compiler reports `E0387`.
 
 Unlike the throw-effect bit in §8.0, D1 is **not** fail-closed: xray has no user-writable no-throw annotation, so rejecting everything that cannot be proven non-throwing would leave an author facing an indirect call, a higher-order builtin, or a native member whose contract is not yet written with no way to discharge the obligation. What cannot be proven is left to rule D3's runtime backstop — that is what the layering is for. Should a user-writable no-throw annotation ever be added, D1 can tighten to "must be proven" and D3 becomes unreachable by construction.
 
@@ -4656,7 +4661,7 @@ Unlike the throw-effect bit in §8.0, D1 is **not** fail-closed: xray has no use
 fn close(c: Conn) { throw IoErr.Closed }
 
 fn bad(c: Conn) {
-    defer close(c)                           // ❌ E0387: the deferred target throws
+    defer { close(c) }                       // ❌ E0387: error escapes cleanup
 }
 
 fn good(c: Conn) {
@@ -4739,7 +4744,7 @@ class Conn {
 
 fn fetchData(alive: bool) -> string {
     var conn = Conn(alive)
-    defer conn.close()                 // runs whether we succeed or throw
+    defer { conn.close() }             // runs whether we succeed or throw
     if (!conn.isAlive()) { throw ConnErr.Timeout }
     return "payload"
 }
@@ -4833,8 +4838,8 @@ main()
 enum E { Boom }
 
 fn work() {
-    defer print("defer 1")
-    defer print("defer 2")
+    defer { print("defer 1") }
+    defer { print("defer 2") }
     print("body")
     throw E.Boom                             // defers still run when throwing
 }
@@ -6620,7 +6625,7 @@ class PanicInfo {
 
 Recoverable user-level errors do not use `PanicInfo`: a `throw` statement accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
 
-Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers, releasing locals frame by frame and running `defer` along the way before jumping to the handler. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
+Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers. Every edge that crosses a cleanup's owning scope enters a statically generated cleanup region, runs it in LIFO order, then releases locals and continues unwinding; the runtime maintains no dynamic defer stack. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
 
 ### 16.7 Value-return Error Channel Runtime
 
@@ -6636,9 +6641,9 @@ Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the tr
 
 The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order, independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
 
-**`defer` runs on every exit edge**: a normal return, `throw` unwinding, panic unwinding, and **coroutine cancellation**. Cancellation is not an external kill: a cancelled coroutine that still owes a defer chain is handed back to the scheduler, resumed once on its own worker, and marked cancelled only after it has unwound. `task.cancel()` correspondingly does not let an `await` observe the cancellation before that cleanup has run.
+**`defer` runs on every exit edge that crosses its owning lexical scope**: normal fallthrough, `return`, `break`, `continue`, outward value-error propagation, panic unwinding, and **coroutine cancellation**. The frontend compiles each registration point into a program-point-sensitive static cleanup frontier; there is no closure, callback object, or dynamic runtime stack. Cancellation is not an external kill: a suspendable frame stores only fixed-layout cleanup-region identifiers and depth, and the scheduler invokes the generated static frontier on that coroutine's worker before marking it cancelled. `task.cancel()` correspondingly does not let an `await` observe cancellation before cleanup has run.
 
-For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point** (`E0392`, see §2.14.4). A defer body runs on a frame that is already leaving and has no place to park and resume; allowing it to suspend would allow cleanup to be dropped halfway, and `defer` would stop being deterministic. Cancellation is masked while a defer body runs, so the cleanup itself cannot be interrupted by a cancellation.
+For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point or create a task** (`E0392`, see §2.14.4). Suspension cannot guarantee completion of the static cleanup region before the frame leaves; task creation would let work escape the cleanup boundary. Static analysis rejects direct, transitive, and unresolved dynamic cases conservatively, and VM/AOT fail closed with `E0444` before a task-creation or scheduling side effect. Cancellation is masked while a defer body runs, so cleanup itself cannot be interrupted by cancellation.
 
 > Evolution note: once deterministic destruction (RAII / `Drop`) is formally added to the language, this section will be upgraded to a **deterministic reclamation contract** (specifying destruction points and order), gated byte-for-byte by cross-backend differential tests. Until then, "reclamation timing / finalizer behavior" is explicitly declared an implementation-defined, non-deterministic aspect.
 
@@ -6862,12 +6867,13 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | a generator body reaches a scheduler suspension point (`await` / `select` / `scope` / `Coro.yield()` / a blocking handle method / a suspending call), or the evidence is incomplete (a call through an unresolved function value); see §3.16.2 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | `defer` inside a generator body; an abandoned generator is never resumed, so the cleanup may never run; see §3.16.3 |
-| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | the `defer` target throws (see §8.3.1) |
+| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | an error can escape a `defer` cleanup block (see §8.3.1) |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | the program exceeds the monomorphization instance budget (breadth); each instance clones a whole declaration; see §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (two members of the same numeric family) |
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | the uniqueness evidence `move` requires does not hold (live alias, published root, unknown provenance, incomplete storage plan) |
-| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point; see §2.14.4 |
+| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point or creates a task; see §2.14.4 |
+| `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | a defer body exits its function with `return`, or crosses the cleanup boundary with `break` / `continue` |
 
 ### 18.3 Runtime
 
@@ -6904,6 +6910,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
 | `E0443` | `XR_ERR_DEFER_THROW` | an error escaped a `defer` body; uncatchable, terminates the process (see §8.3.1 rule D3) |
+| `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup attempted to create a task or reach the scheduler; fails closed before any such side effect |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
 | `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |
@@ -7185,7 +7192,7 @@ ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
 CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
 
-DeferStmt ::= 'defer' (CallExpr | Block)
+DeferStmt ::= 'defer' Block
 
 // print is a normal global function call, syntactically an ExprStmt.
 
@@ -7493,7 +7500,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **Channel** | Typed inter-coroutine communication pipe (see §10.5) |
 | **closure** | Function value that captures outer variables |
 | **coroutine** | User-space, suspendable/resumable execution flow |
-| **defer** | Deferred execution: runs before function exit (see §4.9) |
+| **defer** | Static deferred cleanup that runs in LIFO order on every exit edge crossing its owning lexical scope (see §4.9) |
 | **enum** | Enumeration type (see §5.6) |
 | **GC** | Generic term for garbage collection; Xray has no tracing GC or cycle collector. Object death is driven only by reference counting, which makes its point exact; a cycle is not collected but ruled out statically, broken with a `weak` field, or bounded by its execution-local reclamation domain and disposed with the residual graph when the physical coroutine ends (§16.8) |
 | **safepoint** | Safe location where the scheduler can observe preemption, cancellation, or suspension state |

@@ -511,6 +511,8 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
     entry->sealed = true;
     ml.cur_block = entry;
 
+    xi_lower_prepare_cleanup_places(&ml, m->body);
+
     bool has_rest = m->is_variadic;
     int base = is_inst ? 1 : 0;
     int np = m->param_count + base;
@@ -612,6 +614,11 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
             ml.vars[param_var].call_place = p;
             ml.vars[param_var].place_mode = mode;
         } else {
+            if (!xi_lower_cleanup_bind_place(&ml, param_var, p, param ? param->line : 0)) {
+                xi_func_free(ml.func);
+                xi_lower_cleanup(&ml);
+                return NULL;
+            }
             xi_lower_braun_write(&ml, param_var, entry, p);
         }
     }

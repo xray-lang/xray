@@ -149,6 +149,13 @@ typedef enum XiPlaceOrigin {
  * LOAD_FIELD; it must not be mistaken for `ref receiver.field`. */
 #define XI_LOCAL_ADDR_AUX_RAW_DEREF 1
 #define XI_LOCAL_ADDR_AUX_DIRECT_PROJECTION 2
+#define XI_LOCAL_ADDR_AUX_CLEANUP_LIVE 4
+
+/* XI_TRY.aux_int discriminator for compiler-generated cleanup panic regions.
+ * Source-level try/catch uses its ordinary metadata and must never be treated
+ * as a cancellation cleanup target. */
+#define XI_TRY_AUX_STATIC_CLEANUP 1
+#define XI_TRY_AUX_CLEANUP_LOCAL_HANDLER 2
 
 typedef enum XiPlaceLifetime {
     XI_PLACE_LIFETIME_NONE = 0,
@@ -517,21 +524,19 @@ typedef enum {
     XI_THROW, /* throw exception: args[0]=value */
 
     /* Value-return error channel */
-    XI_ERR_SET,    /* write args[0] to error channel (no return) */
-    XI_ERR_RETURN, /* write args[0] to error channel + return from function */
-    XI_ERR_CHECK,  /* after fallible call: check pending_error, propagate if set;
-                    * post-ARC args[]=error-edge drops */
-    XI_ERR_CATCH,  /* read pending_error into result, clear error channel */
+    XI_ERR_SET,           /* write args[0] to error channel (no return) */
+    XI_ERR_RETURN,        /* write args[0] to error channel + return from function */
+    XI_ERR_CHECK,         /* after fallible call: check pending_error, propagate if set;
+                           * post-ARC args[]=error-edge drops */
+    XI_ERR_CATCH,         /* read pending_error into result, clear error channel */
+    XI_CLEANUP_ENTER,     /* enter a statically lowered cleanup body */
+    XI_CLEANUP_LEAVE,     /* leave a statically lowered cleanup body */
+    XI_CLEANUP_ERR_CHECK, /* fail closed if an opaque value error escapes cleanup */
 
     /* Iteration (for-in protocol) */
     XI_ITER_NEW,   /* create iterator: args[0]=collection */
     XI_ITER_NEXT,  /* advance + get value: args[0]=iterator, returns next value */
     XI_ITER_VALID, /* test not-done: args[0]=iterator, returns bool */
-
-    /* Defer */
-    XI_DEFER,        /* defer expr: args[0]=callee (executed at scope exit) */
-    XI_DEFER_MARK,   /* returns current per-frame defer stack count */
-    XI_DEFER_RUN_TO, /* args[0]=mark; run defers registered after mark */
 
     /* Channel creation */
     XI_CHAN_NEW, /* create channel: args[0]=buffer_size (optional) */
@@ -1317,6 +1322,7 @@ static inline void xi_tuple_set_storage_mode(XiValue *v, uint8_t storage_mode) {
 #define XI_COPY_KIND_IDENTITY 0
 #define XI_COPY_KIND_VALUE_CLONE INT64_C(0x58434F5059434C4E)
 #define XI_COPY_KIND_CELL_READ INT64_C(0x5843454C4C524541)
+#define XI_COPY_KIND_CLEANUP_RETURN INT64_C(0x58434C4E52545552)
 #define XI_COPY_KIND_LIKELY INT64_C(0x584C494B454C5901)
 #define XI_COPY_KIND_UNLIKELY INT64_C(0x58554E4C494B5901)
 
@@ -1338,6 +1344,10 @@ static inline bool xi_copy_is_value_clone(const XiValue *v) {
 
 static inline bool xi_copy_is_cell_read(const XiValue *v) {
     return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_CELL_READ;
+}
+
+static inline bool xi_copy_is_cleanup_return(const XiValue *v) {
+    return v && v->op == XI_COPY && v->aux_int == XI_COPY_KIND_CLEANUP_RETURN;
 }
 
 static inline bool xi_copy_is_identity_alias(const XiValue *v) {

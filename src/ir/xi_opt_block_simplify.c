@@ -41,6 +41,22 @@ static bool pred_would_form_parallel_if_edge(const XiBlock *pred, const XiBlock 
     return reaches_skip && reaches_succ;
 }
 
+/* Rewrite every explicit or implicit incoming edge before retiring a block.
+ * Normal edges are mirrored by succs[], while exception lowering can represent
+ * an edge only in the target's preds[]. The phi slot stays in the same position;
+ * only the predecessor identity changes. */
+static void redirect_all_predecessor_references(XiFunc *f, XiBlock *from, XiBlock *to) {
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *target = f->blocks[bi];
+        if (!target)
+            continue;
+        for (uint16_t pi = 0; pi < target->npreds; pi++) {
+            if (target->preds[pi] == from)
+                target->preds[pi] = to;
+        }
+    }
+}
+
 /* ========== Empty Block Elimination ========== */
 
 /* Try to eliminate an empty PLAIN block by redirecting its preds to
@@ -128,8 +144,6 @@ static bool try_eliminate_empty(XiFunc *f, XiBlock *blk) {
  * Conditions: blk has exactly one predecessor, and that pred has
  * exactly one successor (blk). */
 static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
-    (void) f;
-
     /* Must have exactly one predecessor. */
     if (blk->npreds != 1)
         return false;
@@ -153,6 +167,9 @@ static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
     if (blk->phis != NULL)
         return false;
 
+    if (!xi_block_ensure_value_capacity(pred, pred->nvalues + blk->nvalues))
+        return false;
+
     /* Merge: append blk's values to pred and rebind their block pointer
      * so that xi_verify's "value->block == containing block" invariant
      * holds after the merge. */
@@ -160,8 +177,6 @@ static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
         XiValue *v = blk->values[i];
         if (!v)
             continue;
-        if (!xi_block_ensure_value_capacity(pred, pred->nvalues + 1))
-            return false;
         pred->values[pred->nvalues++] = v;
         v->block = pred;
     }
@@ -173,11 +188,8 @@ static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
     pred->succs[0] = blk->succs[0];
     pred->succs[1] = blk->succs[1];
 
-    /* Update successors' pred lists: replace blk with pred. */
-    if (pred->succs[0])
-        xi_cfg_replace_pred(pred->succs[0], blk, pred);
-    if (pred->succs[1])
-        xi_cfg_replace_pred(pred->succs[1], blk, pred);
+    /* Update all normal and implicit successors' predecessor lists. */
+    redirect_all_predecessor_references(f, blk, pred);
 
     /* Mark blk as dead. */
     blk->kind = XI_BLOCK_UNREACHABLE;

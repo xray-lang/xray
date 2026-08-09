@@ -6,6 +6,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_analysis.h"
 #include "../../../src/ir/xi_core_api.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_opt_block_simplify.h"
@@ -1827,6 +1828,52 @@ TEST(block_simplify_merges_past_arena_value_capacity) {
     xi_func_free(f);
 }
 
+TEST(block_simplify_redirects_try_handler_predecessor) {
+    /* XI_TRY has an implicit exceptional edge to handler. Merging its block
+     * into the predecessor must redirect handler->preds as well as the normal
+     * successor edge, or RPO retains a predecessor that compact_blocks removed. */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+    XiBlock *try_blk = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+    XiBlock *handler = xi_block_new(f);
+    XiBlock *implicit_handler = xi_block_new(f);
+    try_blk->sealed = exit_blk->sealed = handler->sealed = implicit_handler->sealed = true;
+
+    xi_block_set_jump(entry, try_blk);
+    XiValue *try_op = xi_value_new(f, try_blk, XI_TRY, &stub_void, 0);
+    try_op->aux = handler;
+    try_op->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_add_pred(handler, try_blk);
+    xi_block_set_jump(try_blk, exit_blk);
+    xi_block_set_return(exit_blk, xi_const_int(f, exit_blk, 7, &stub_int));
+
+    XiValue *caught = xi_value_new(f, handler, XI_CATCH, &stub_int, 0);
+    caught->aux = try_op;
+    caught->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(handler, caught);
+
+    /* Some exceptional paths are represented only by the target's pred side. */
+    xi_block_add_pred(implicit_handler, try_blk);
+    xi_block_set_return(implicit_handler, xi_const_int(f, implicit_handler, 9, &stub_int));
+
+    XiPassChange chg = xi_opt_block_simplify(f);
+
+    assert(chg.cfg_changed && "try block should merge into entry");
+    assert(try_op->block == entry && "XI_TRY should move to the surviving block");
+    assert(handler->npreds == 1 && handler->preds[0] == entry &&
+           "handler predecessor must follow the moved XI_TRY");
+    assert(implicit_handler->npreds == 1 && implicit_handler->preds[0] == entry &&
+           "pred-only exceptional edges must follow the merged block");
+    assert(xi_compute_rpo(f) == 3 && "normal and both exceptional blocks should be reachable");
+    xi_compute_dominators(f);
+    assert(handler->idom == entry && "exceptional handler should be dominated by try owner");
+    assert(implicit_handler->idom == entry &&
+           "pred-only exceptional handler should be dominated by try owner");
+
+    xi_func_free(f);
+}
+
 /* ========== Jump Thread Tests ========== */
 
 TEST(jump_thread_basic_redirect) {
@@ -2030,6 +2077,7 @@ int main(void) {
     run_block_simplify_keeps_ir_valid_for_multi_pred_empty();
     run_block_simplify_preserves_phi_when_merging();
     run_block_simplify_merges_past_arena_value_capacity();
+    run_block_simplify_redirects_try_handler_predecessor();
 
     /* Jump thread */
     run_jump_thread_basic_redirect();

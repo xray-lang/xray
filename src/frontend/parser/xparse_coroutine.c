@@ -99,8 +99,8 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
      * inline form: it exposes the function boundary and keeps `go`'s AST
      * contract honest that the operand is always a CallExpr. */
     if (xr_parser_check(parser, TK_LBRACE)) {
-        xr_parser_error_at_current(
-            parser, "go takes a call; wrap an inline block as `go fn() { ... }()`");
+        xr_parser_error_at_current(parser,
+                                   "go takes a call; wrap an inline block as `go fn() { ... }()`");
         goto fail;
     }
 
@@ -112,8 +112,7 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
     }
     if (expr->type != AST_CALL_EXPR) {
         xr_parser_error_at_previous(
-            parser,
-            "go takes a call; add `()` to call a function or use `go fn() { ... }()`");
+            parser, "go takes a call; add `()` to call a function or use `go fn() { ... }()`");
         goto fail;
     }
 
@@ -293,120 +292,21 @@ AstNode *xr_parse_cancelled_expr(Parser *parser) {
     return xr_ast_cancelled_expr(parser->compiler_session, line);
 }
 
-/* Wrap an expression in a zero-arg anonymous closure: `{ <expr>; }`.
- * The defer runtime invokes a first-class callable; wrapping makes method
- * calls (whose receiver is not a first-class callee value) and builtin calls
- * (print/dump/...) deferrable through the same closure path as `defer { ... }`. */
-static AstNode *defer_wrap_in_closure(Parser *parser, AstNode *call_expr, int line) {
-    AstNode *body = xr_ast_block(parser->compiler_session, line);
-    xr_ast_block_add(parser->compiler_session, body,
-                     xr_ast_expr_stmt(parser->compiler_session, call_expr, line));
-    AstNode *fn_expr = xr_ast_function_expr(parser->compiler_session, NULL, 0, body, line);
-    return xr_ast_defer_stmt(parser->compiler_session, fn_expr, line);
-}
-
-/* Desugar `defer callee(a0, a1, ...)` into eager receiver/argument capture plus a
- * deferred closure:
- *
- *   {
- *       var __xr_dtmp_0 = receiver // method receiver evaluated NOW
- *       var __xr_dtmp_1 = a0       // arguments evaluated NOW (eager, Go-style)
- *       defer { __xr_dtmp_0.callee(__xr_dtmp_1) }
- *   }
- *
- * A method receiver and every argument are snapshotted left-to-right. A static
- * free/builtin target stays inside the closure so it resolves through the
- * normal call path; dynamic callable values remain rejected by E0392.
- * Each desugared defer gets its own synthetic block for name isolation, but it
- * must not become a semantic defer scope: the deferred call belongs to the
- * nearest user-written block, not to this eager-capture wrapper. */
-static AstNode *defer_desugar_call(Parser *parser, AstNode *call_node, int line) {
-    XrCompilerSession *X = parser->compiler_session;
-    CallExprNode *call = &call_node->as.call_expr;
-    AstNode *receiver = NULL;
-    const char *member_name = NULL;
-    if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
-        receiver = call->callee->as.member_access.object;
-        member_name = call->callee->as.member_access.name;
-    }
-    int receiver_count = receiver ? 1 : 0;
-    int snapshot_count = receiver_count + call->arg_count;
-
-    if (snapshot_count == 0)
-        return defer_wrap_in_closure(parser, call_node, line);
-
-    /* Build temp references and the rewritten call that uses them. */
-    AstNode **temp_refs = call->arg_count > 0
-                              ? (AstNode **) ast_alloc_array(
-                                    X, sizeof(AstNode *), (size_t) call->arg_count)
-                              : NULL;
-    char name[24];
-    for (int k = 0; k < call->arg_count; k++) {
-        snprintf(name, sizeof(name), XR_DEFER_TEMP_PREFIX "%d", receiver_count + k);
-        temp_refs[k] = xr_ast_variable(X, name, line);
-    }
-    AstNode *new_callee = call->callee;
-    if (receiver) {
-        snprintf(name, sizeof(name), XR_DEFER_TEMP_PREFIX "0");
-        new_callee = xr_ast_member_access(X, xr_ast_variable(X, name, line), member_name, line);
-    }
-    AstNode *new_call = xr_ast_call_expr_generic(
-        X, new_callee, temp_refs, call->arg_accesses, call->arg_count, call->type_args,
-        call->type_arg_count, line);
-
-    /* Outer block: snapshot receiver/args into temps, then defer the rewritten call. */
-    AstNode *outer = xr_ast_block(X, line);
-    outer->as.block.is_synthetic_defer_capture = true;
-    if (receiver) {
-        snprintf(name, sizeof(name), XR_DEFER_TEMP_PREFIX "0");
-        xr_ast_block_add(X, outer, xr_ast_var_decl(X, name, receiver, false, line));
-    }
-    for (int k = 0; k < call->arg_count; k++) {
-        snprintf(name, sizeof(name), XR_DEFER_TEMP_PREFIX "%d", receiver_count + k);
-        xr_ast_block_add(X, outer, xr_ast_var_decl(X, name, call->arguments[k], false, line));
-    }
-    xr_ast_block_add(X, outer, defer_wrap_in_closure(parser, new_call, line));
-    return outer;
-}
-
 /*
  * Parse defer statement
- * defer fn() or defer obj.method() or defer { block }
- *
- * Call-expression forms are desugared into a deferred closure (see
- * defer_desugar_call) so method-call and builtin-call defers work and arguments
- * are captured eagerly. Non-call expressions are rejected: a block is the
- * sole spelling for deferred arbitrary statements.
+ * defer { block }
  */
 AstNode *xr_parse_defer_statement(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_defer_statement: NULL parser");
     int line = parser->previous.line;  // defer keyword already consumed
 
-    // Check if anonymous closure
-    if (xr_parser_check(parser, TK_LBRACE)) {
-        // defer { block } - anonymous closure
-        xr_parser_advance(parser);  // Consume '{'
-        AstNode *body = xr_parse_block(parser);
-
-        // Create anonymous function expression to wrap block
-        AstNode *fn_expr = xr_ast_function_expr(parser->compiler_session, NULL, 0, body, line);
-        return xr_ast_defer_stmt(parser->compiler_session, fn_expr, line);
-    }
-
-    // defer expr - only a function call expression is valid
-    AstNode *expr = xr_parse_expression(parser);
-    if (!expr) {
-        xr_parser_error(parser, "defer takes a call or a block");
+    if (!xr_parser_match(parser, TK_LBRACE)) {
+        xr_parser_error_at_current(
+            parser, "expected '{' after defer; deferred cleanup must use `defer { ... }`");
         return NULL;
     }
-
-    if (expr->type == AST_CALL_EXPR)
-        return defer_desugar_call(parser, expr, line);
-
-    xr_parser_error_at_previous(
-        parser,
-        "defer takes a call or a block; wrap arbitrary cleanup in `defer { ... }`");
-    return NULL;
+    AstNode *body = xr_parse_block(parser);
+    return body ? xr_ast_defer_stmt(parser->compiler_session, body, line) : NULL;
 }
 
 /*

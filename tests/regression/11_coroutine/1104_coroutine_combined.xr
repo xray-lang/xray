@@ -35,7 +35,7 @@ fn test_combined() {
     const ch = Channel(5)
 
     // 2. defer 清理
-    defer cleanup()
+    defer { cleanup() }
 
     // 3. go/await + Channel 参数传递
     var prod_task = go producer(ch)

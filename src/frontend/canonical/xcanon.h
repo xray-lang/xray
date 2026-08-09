@@ -20,7 +20,7 @@
  *   Constructs handled directly by the lowerer (not canonicalized):
  *     - for-in (multiple iteration strategies selected at IR level)
  *     - match (pattern matching + binding + phi merges)
- *     - defer (maps to XI_DEFER IR opcode)
+ *     - defer (maps to static cleanup control flow)
  *
  *   The canonicalizer operates on AST nodes in-place (mutating),
  *   allocating new nodes through the active compiler session arena.

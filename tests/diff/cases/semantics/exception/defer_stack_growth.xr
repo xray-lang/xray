@@ -1,9 +1,8 @@
-// anchor: defer-stack-growth-refresh
-// A deferred closure recurses deep enough to grow (relocate) the coroutine
-// stack while the returning frame's cached ci/base pointers are still live.
-// The frame pop must re-derive ci/base after running defers, otherwise it reads
-// freed memory (heap-use-after-free, caught under ASan). Output must match
-// across VM / JIT / AOT.
+// anchor: cleanup-stack-growth-refresh
+// Static cleanup recurses deeply enough to grow (relocate) the coroutine stack
+// while the returning frame's cached ci/base pointers are still live. Frame
+// exit must re-derive ci/base after cleanup, otherwise it reads freed memory
+// (heap-use-after-free, caught under ASan). Output must match across backends.
 fn deep(n: int) -> int {
     if (n <= 0) { return 0 }
     return 1 + deep(n - 1)

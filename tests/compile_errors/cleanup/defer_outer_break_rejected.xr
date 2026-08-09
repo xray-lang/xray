@@ -1,0 +1,8 @@
+fn owner() {
+    while (true) {
+        defer { break }
+        break
+    }
+}
+
+owner()

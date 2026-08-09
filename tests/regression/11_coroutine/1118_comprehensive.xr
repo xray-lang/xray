@@ -56,7 +56,7 @@ fn test_main() {
     print("=== defer ===")
     fn cleanup() { print("cleanup!") }
     fn with_defer() -> int {
-        defer cleanup()
+        defer { cleanup() }
         print("working...")
         return 42
     }

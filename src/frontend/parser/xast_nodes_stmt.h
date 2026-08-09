@@ -270,7 +270,7 @@ typedef struct YieldStmtNode {
 } YieldStmtNode;
 
 typedef struct DeferStmtNode {
-    AstNode *expr;
+    AstNode *body;
 } DeferStmtNode;
 
 typedef struct ScopeBlockNode {

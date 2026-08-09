@@ -412,7 +412,7 @@ XR_FUNC AstNode *xr_ast_select_stmt(XrCompilerSession *session, AstNode **cases,
                                     int line);
 
 // Create defer statement node
-XR_FUNC AstNode *xr_ast_defer_stmt(XrCompilerSession *session, AstNode *expr, int line);
+XR_FUNC AstNode *xr_ast_defer_stmt(XrCompilerSession *session, AstNode *body, int line);
 
 // Create scope block node (supports scope mode)
 XR_FUNC AstNode *xr_ast_scope_block(XrCompilerSession *session, AstNode *body, uint8_t scope_mode,

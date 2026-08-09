@@ -316,7 +316,7 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             break;
 
         case AST_DEFER_STMT:
-            visit_node(node->as.defer_stmt.expr, v);
+            visit_node(node->as.defer_stmt.body, v);
             break;
 
         case AST_SCOPE_BLOCK:

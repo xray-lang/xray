@@ -282,9 +282,7 @@ XR_FUNC void xa_register_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym
 XR_FUNC void xa_record_pending_capture(XaInferContext *ctx, XaSymbol *captured);
 XR_FUNC void xa_register_pending_capture_loans(XaInferContext *ctx, XaSymbol *borrower_sym,
                                                AstNode *site);
-XR_FUNC void xa_register_pending_defer_loans(XaInferContext *ctx, AstNode *site, bool is_snapshot);
-XR_FUNC void xa_register_defer_snapshot_expr_loans(XaInferContext *ctx, AstNode *expr,
-                                                   AstNode *site);
+XR_FUNC void xa_register_cleanup_loans(XaInferContext *ctx, AstNode *site);
 XR_FUNC void xa_discard_pending_captures(XaInferContext *ctx);
 /* The closure outlives the call after all: its captured roots escape with it. */
 XR_FUNC void xa_escape_pending_captures(XaInferContext *ctx);

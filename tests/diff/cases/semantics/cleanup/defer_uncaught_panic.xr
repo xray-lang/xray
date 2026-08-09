@@ -1,17 +1,15 @@
-// anchor: defer-uncaught-panic-no-run
-// On an UNCAUGHT panic the program aborts WITHOUT running defers (only a caught
-// panic unwinds through them). Both backends must agree: no deferred output on
-// stdout and a clean non-zero exit. (Caught-panic defer ordering is also
-// correct in the runtime but cannot be diffed yet — AOT `catch panic` codegen
-// is a separate known limitation; see docs/known_bugs.md.)
+// anchor: defer-uncaught-panic-runs-active-frontiers
+// An uncaught panic executes every active cleanup frontier before the process
+// reports the panic. Both backends must print inner-defer, then outer-defer,
+// and exit with the same non-zero status; unreachable code must stay silent.
 fn inner() {
-    defer print("inner-defer")
+    defer { print("inner-defer") }
     var z = 0
     var q = 10 / z
     print(q)
 }
 fn outer() {
-    defer print("outer-defer")
+    defer { print("outer-defer") }
     inner()
     print("unreachable-outer")
 }

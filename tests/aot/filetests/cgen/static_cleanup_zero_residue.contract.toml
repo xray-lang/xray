@@ -1,0 +1,13 @@
+version = 1
+
+[[function]]
+symbol = "cleanupZeroCost"
+scope = "backend"
+backend = "aot"
+target = "native"
+profile = "hosted"
+requires = ["no_runtime_heap"]
+
+[function.shape]
+forbid = ["runtime_dispatch", "runtime_heap", "rc_traffic", "box"]
+allow = []

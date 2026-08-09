@@ -1,6 +1,6 @@
 // `defer` runs on every exit edge, cancellation included. A cancelled
-// coroutine that still owes a defer chain is resumed once on its own worker
-// to unwind, and only then reported cancelled.
+// coroutine dispatches its fixed-layout active cleanup frontier on its own
+// worker and is reported cancelled only after cleanup completes.
 const started = Channel<int>(1)
 
 fn body() -> int {

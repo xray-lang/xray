@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Task 255: close the go/defer grammar and defer-owner lifetime contract."""
+"""Verify the go grammar and cleanup-block ownership contract."""
 
 from __future__ import annotations
 
@@ -57,33 +57,29 @@ def main() -> int:
     root = args.root.resolve()
     negative_cases = (
         ("tests/compile_errors/syntax/036_defer_assignment_removed.xr",
-         "defer takes a call or a block"),
+         "expected '{' after defer"),
         ("tests/compile_errors/syntax/037_defer_member_assignment_removed.xr",
-         "defer takes a call or a block"),
+         "expected '{' after defer"),
         ("tests/compile_errors/syntax/038_defer_bare_value_removed.xr",
-         "defer takes a call or a block"),
+         "expected '{' after defer"),
         ("tests/compile_errors/syntax/039_defer_noncall_expression_removed.xr",
-         "defer takes a call or a block"),
+         "expected '{' after defer"),
         ("tests/compile_errors/concurrency/go_block_form_removed.xr",
          "go takes a call"),
         ("tests/compile_errors/concurrency/go_noncall_removed.xr",
          "go takes a call"),
         ("tests/compile_errors/concurrency/linked_go_block_form_removed.xr",
          "go takes a call"),
-        ("tests/compile_errors/ownership/180_defer_snapshot_blocks_move.xr",
-         "cannot move 'buf': a defer in this block holds it (snapshotted"),
-        ("tests/compile_errors/ownership/181_defer_capture_blocks_move.xr",
-         "cannot move 'buf': a defer in this block holds it (captured"),
-        ("tests/compile_errors/ownership/182_defer_snapshot_blocks_return.xr",
-         "cannot return 'buf': a defer in this block holds it (snapshotted"),
-        ("tests/compile_errors/ownership/183_defer_capture_blocks_return.xr",
-         "cannot return 'buf': a defer in this block holds it (captured"),
+        ("tests/compile_errors/ownership/180_defer_cleanup_blocks_move.xr",
+         "cannot move 'buf': a cleanup in this block reads it"),
+        ("tests/compile_errors/ownership/181_defer_cleanup_blocks_return.xr",
+         "cannot return 'buf': a cleanup in this block reads it"),
     )
     for relative, expected in negative_cases:
         require_rejected(xray, root, relative, expected)
 
     require_output(
-        xray, root, "tests/diff/cases/semantics/cleanup/defer_receiver_snapshot.xr"
+        xray, root, "tests/diff/cases/semantics/cleanup/defer_receiver_late_binding.xr"
     )
     require_output(xray, root, "tests/diff/cases/semantics/cleanup/defer_block_assignment.xr")
     require_output(

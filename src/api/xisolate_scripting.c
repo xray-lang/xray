@@ -119,16 +119,16 @@ static bool analyze_graph_exports_for_dostring(XrCompilerSession *session, XrMod
     return true;
 }
 
-static void preload_graph_modules_for_dostring(XrVMRuntime *isolate, XrModuleGraph *graph,
+static bool preload_graph_modules_for_dostring(XrVMRuntime *isolate, XrModuleGraph *graph,
                                                DostringGraphState *state) {
     XrModuleRegistry *registry = state->registry;
     int nmod = graph->topo_count;
     if (!registry || nmod <= 1)
-        return;
+        return true;
 
-    XrModule **mod_table = (XrModule **) xr_calloc((size_t) nmod, sizeof(XrModule *));
-    if (!mod_table)
-        return;
+    XrModule **mod_table = NULL;
+    if (!xr_module_graph_preload(isolate, graph, &mod_table))
+        return false;
 
     state->previous_module_table = registry->module_table;
     state->previous_module_table_count = registry->module_table_count;
@@ -136,19 +136,7 @@ static void preload_graph_modules_for_dostring(XrVMRuntime *isolate, XrModuleGra
     registry->module_table = mod_table;
     registry->module_table_count = nmod;
 
-    for (int ti = 0; ti < nmod; ti++) {
-        int idx = graph->topo_order[ti];
-        if (idx == graph->entry_index)
-            continue;
-        XrModuleSpec *spec = &graph->specs[idx];
-        if (!spec->source_path)
-            continue;
-        const char *import_name =
-            (spec->kind == XR_MOD_STDLIB && spec->canonical) ? spec->canonical : spec->source_path;
-        XrValue val = xr_module_import(isolate, import_name);
-        if (!XR_IS_NULL(val))
-            mod_table[ti] = xr_value_to_module(val);
-    }
+    return true;
 }
 
 static bool prepare_graph_for_dostring(XrVMRuntime *isolate, XrCompilerSession *session,
@@ -193,7 +181,10 @@ static bool prepare_graph_for_dostring(XrVMRuntime *isolate, XrCompilerSession *
     }
 
     xr_compiler_session_set_module_graph(session, graph);
-    preload_graph_modules_for_dostring(isolate, graph, state);
+    if (!preload_graph_modules_for_dostring(isolate, graph, state)) {
+        dostring_graph_cleanup(session, state);
+        return false;
+    }
     return true;
 }
 

@@ -1,0 +1,3 @@
+import { dependency_value } from "./_cleanup_init"
+
+export fn right() -> int { return dependency_value() + 2 }

@@ -563,6 +563,20 @@ static bool cg_coro_value_terminates_c_path(const XiValue *v) {
     return v && (v->op == XI_ERR_RETURN || v->op == XI_THROW);
 }
 
+static const XiValue *cg_coro_hidden_cleanup_try(const XiValue *v) {
+    if (!v || !v->aux)
+        return NULL;
+    const XiValue *try_op = (const XiValue *) v->aux;
+    return try_op->op == XI_TRY && try_op->aux_int == XI_TRY_AUX_STATIC_CLEANUP ? try_op : NULL;
+}
+
+static bool cg_coro_is_hidden_cleanup_rethrow(const XiValue *v) {
+    if (!v || v->op != XI_THROW || v->nargs < 1)
+        return false;
+    const XiValue *caught = cg_unwrap_identity_value(v->args[0]);
+    return caught && caught->op == XI_CATCH && cg_coro_hidden_cleanup_try(caught);
+}
+
 static void emit_assign_coro_param_from_xrvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                 uint16_t index) {
     XrRep rep = cg_coro_param_rep(ctx, f, index);
@@ -969,10 +983,36 @@ static void cg_coro_layout_add_rep(size_t *size, size_t *max_align, XrRep rep) {
 
 static bool cg_func_frame_needs_cl(const XiFunc *f);
 
+static uint32_t cg_coro_static_cleanup_capacity(const XiFunc *f) {
+    uint32_t count = 0;
+    if (!f)
+        return 0;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (v && v->op == XI_TRY && v->aux_int == XI_TRY_AUX_STATIC_CLEANUP)
+                count++;
+        }
+    }
+    return count;
+}
+
 static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
     size_t size = 0;
     size_t max_align = 1;
     cg_coro_layout_add(&size, &max_align, sizeof(uint32_t), _Alignof(uint32_t));
+    uint32_t cleanup_capacity = cg_coro_static_cleanup_capacity(f);
+    if (cleanup_capacity > 0) {
+        cg_coro_layout_add(&size, &max_align, sizeof(uint32_t), _Alignof(uint32_t));
+        cg_coro_layout_add(&size, &max_align, sizeof(uint32_t), _Alignof(uint32_t));
+        cg_coro_layout_add(&size, &max_align, sizeof(XrValue), _Alignof(XrValue));
+        cg_coro_layout_add(&size, &max_align, sizeof(bool), _Alignof(bool));
+        cg_coro_layout_add(&size, &max_align, sizeof(uint32_t) * cleanup_capacity,
+                           _Alignof(uint32_t));
+    }
     if (cg_func_frame_needs_cl(f))
         cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++)
@@ -1276,7 +1316,8 @@ static void cg_prepare_sync_go_targets_for_modules(XiCgenCtx *ctx, XiModule **mo
     }
 }
 
-static void emit_aot_frame_new_params(FILE *out, const XiFunc *f, bool typed_params) {
+static void emit_aot_frame_new_params(FILE *out, const XiFunc *f, bool typed_params,
+                                      bool empty_as_void) {
     bool need_comma = false;
     uint16_t total_params = (uint16_t) (f->nparams + (f->is_vararg ? 1 : 0));
     if (cg_func_frame_needs_cl(f)) {
@@ -1289,6 +1330,8 @@ static void emit_aot_frame_new_params(FILE *out, const XiFunc *f, bool typed_par
         fprintf(out, "%s p%u", typed_params ? ctype_str(cg_rep(f->params[i])) : "XrValue", i);
         need_comma = true;
     }
+    if (!need_comma && empty_as_void)
+        fprintf(out, "void");
 }
 
 static void emit_aot_frame_raw_cl_arg(FILE *out, const XiFunc *current, const XiValue *callee,
@@ -1493,7 +1536,7 @@ static void emit_sync_go_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *
     fprintf(out, "%svoid *", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
     fprintf(out, "(");
-    emit_aot_frame_new_params(out, f, true);
+    emit_aot_frame_new_params(out, f, true, true);
     fprintf(out, ") {\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
@@ -1559,6 +1602,8 @@ static bool emit_thread_spawn_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc
     }
 
     emit_value_source_line(ctx, out, v);
+    if (!ctx->freestanding_profile)
+        fprintf(out, "    xrt_guard_task_spawn();\n");
     const uint32_t *affinity_cpus = xi_thread_spawn_affinity_cpus(v);
     uint16_t affinity_count = xi_thread_spawn_affinity_count(v);
     if (affinity_count > 0 && affinity_cpus) {
@@ -1871,6 +1916,14 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, " {\n");
     fprintf(out, "    uint32_t state;\n");
+    uint32_t cleanup_capacity = cg_coro_static_cleanup_capacity(f);
+    if (cleanup_capacity > 0) {
+        fprintf(out, "    uint32_t cleanup_depth;\n");
+        fprintf(out, "    uint32_t cleanup_dispatch;\n");
+        fprintf(out, "    XrValue cleanup_exception;\n");
+        fprintf(out, "    bool cleanup_cancel;\n");
+        fprintf(out, "    uint32_t cleanup_entries[%u];\n", cleanup_capacity);
+    }
     if (cg_func_frame_needs_cl(f))
         fprintf(out, "    xrt_closure_t *_cl;\n");
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++)
@@ -1911,10 +1964,6 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, ";\n");
         }
     }
-    /* Function-scoped defers live in the frame so they survive suspensions; the
-     * scope is run at the coroutine's exit (xr_aot_done) and on release. */
-    if (cg_func_has_defer_stmt(f))
-        fprintf(out, "    XrtDeferScope _xrt_ds;\n");
     fprintf(out, "} ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, ";\n\n");
@@ -1940,7 +1989,7 @@ static void emit_coro_frame_init(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, "(void *raw_frame");
     if (cg_func_frame_needs_cl(f) || cg_coro_param_count(f) > 0)
         fprintf(out, ", ");
-    emit_aot_frame_new_params(out, f, false);
+    emit_aot_frame_new_params(out, f, false, false);
     fprintf(out, ") {\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
@@ -1949,8 +1998,12 @@ static void emit_coro_frame_init(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, " *)raw_frame;\n");
     fprintf(out, "    if (!f)\n        return false;\n");
     fprintf(out, "    f->state = 0;\n");
-    if (cg_func_has_defer_stmt(f))
-        fprintf(out, "    xrt_defer_init(&f->_xrt_ds);\n");
+    if (cg_coro_static_cleanup_capacity(f) > 0) {
+        fprintf(out, "    f->cleanup_depth = 0;\n");
+        fprintf(out, "    f->cleanup_dispatch = 0;\n");
+        fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
+        fprintf(out, "    f->cleanup_cancel = false;\n");
+    }
     if (cg_func_frame_needs_cl(f)) {
         fprintf(out, "    f->_cl = _cl;\n");
         fprintf(out,
@@ -2101,7 +2154,7 @@ static void emit_coro_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     fprintf(out, "%svoid *", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
     fprintf(out, "(");
-    emit_aot_frame_new_params(out, f, false);
+    emit_aot_frame_new_params(out, f, false, true);
     fprintf(out, ") {\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
@@ -2629,56 +2682,43 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
-    if (v->op == XI_DEFER) {
-        /* Register the deferred closure onto the frame-stored defer scope; it
-         * runs LIFO at the coroutine's exit (see emit_coro_block RETURN) and on
-         * release. The scope lives in the frame so it survives suspensions. */
-        if (v->nargs >= 1) {
-            fprintf(out, "    xrt_defer_push(&f->_xrt_ds, ");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-            fprintf(out, ");\n");
-        }
-        return;
-    }
-
-    if (v->op == XI_DEFER_MARK) {
-        fprintf(out, "    ");
-        emit_vref(out, v);
-        XrRep rep = cg_value_plan_storage_rep(ctx, v);
-        if (rep == XR_REP_TAGGED)
-            fprintf(out, " = XR_FROM_INT(xrt_defer_mark(&f->_xrt_ds));\n");
-        else
-            fprintf(out, " = (int64_t)xrt_defer_mark(&f->_xrt_ds);\n");
-        return;
-    }
-
-    if (v->op == XI_DEFER_RUN_TO) {
-        if (v->nargs >= 1) {
-            fprintf(out, "    xrt_defer_run_to(&f->_xrt_ds, (int)");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-            fprintf(out, ");\n");
-        }
-        return;
-    }
-
-    if (v->op == XI_ERR_RETURN || v->op == XI_THROW) {
+    if (v->op == XI_ERR_RETURN) {
         if (v->nargs < 1) {
-            fprintf(out, "    return xr_aot_error(XR_NULL_VAL, %s);\n",
-                    v->op == XI_ERR_RETURN ? "true" : "false");
+            fprintf(out, "    return xr_aot_error(XR_NULL_VAL, true);\n");
             return;
         }
-        if (cg_func_has_defer_stmt(f)) {
-            fprintf(out, "    XrValue _xrt_err_%u = ", v->id);
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-            fprintf(out, ";\n");
-            fprintf(out, "    xrt_defer_run(&f->_xrt_ds);\n");
-            fprintf(out, "    return xr_aot_error(_xrt_err_%u, %s);\n", v->id,
-                    v->op == XI_ERR_RETURN ? "true" : "false");
-        } else {
+        fprintf(out, "    return xr_aot_error(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", true);\n");
+        return;
+    }
+
+    if (v->op == XI_THROW) {
+        if (v->nargs < 1) {
+            fprintf(out, "    return xr_aot_error(XR_NULL_VAL, false);\n");
+            return;
+        }
+        if (cg_coro_static_cleanup_capacity(f) == 0) {
             fprintf(out, "    return xr_aot_error(");
             emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-            fprintf(out, ", %s);\n", v->op == XI_ERR_RETURN ? "true" : "false");
+            fprintf(out, ", false);\n");
+            return;
         }
+        if (cg_coro_is_hidden_cleanup_rethrow(v)) {
+            fprintf(out, "    if (f->cleanup_cancel) {\n");
+            fprintf(out, "        if (f->cleanup_depth > 0) {\n");
+            fprintf(out, "            f->cleanup_dispatch = "
+                         "f->cleanup_entries[--f->cleanup_depth];\n");
+            fprintf(out, "            return xr_aot_yielded();\n");
+            fprintf(out, "        }\n");
+            fprintf(out, "        f->cleanup_cancel = false;\n");
+            fprintf(out, "        f->state = 0;\n");
+            fprintf(out, "        return xr_aot_result(XR_AOT_RUN_CANCELLED);\n");
+            fprintf(out, "    }\n");
+        }
+        fprintf(out, "    xrt_throw_exc(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ");\n");
         return;
     }
 
@@ -2744,6 +2784,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         bool fire_and_forget = (v->flags & XI_FLAG_FIRE_AND_FORGET) != 0;
         int sid = ++(*state_id);
         emit_value_source_line(ctx, out, v);
+        if (!ctx->freestanding_profile)
+            fprintf(out, "    xrt_guard_task_spawn();\n");
         fprintf(out, "    void *_child_frame_%u = ", v->id);
         emit_fname_suffix(ctx, out, go_prefix, target, "_aot_frame_new");
         fprintf(out, "(");
@@ -4908,7 +4950,73 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
-    if (v->op == XI_TRY || v->op == XI_END_TRY) {
+    if (v->op == XI_TRY && v->aux_int == XI_TRY_AUX_STATIC_CLEANUP) {
+        const XiBlock *catch_blk = (const XiBlock *) v->aux;
+        if (!catch_blk) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: static cleanup region missing catch block\n");
+            emit_codegen_abort_aot_result(out);
+            return;
+        }
+        fprintf(out, "    f->cleanup_entries[f->cleanup_depth++] = %uu;\n", catch_blk->id);
+        return;
+    }
+
+    if (v->op == XI_END_TRY && cg_coro_hidden_cleanup_try(v)) {
+        fprintf(out, "    if (f->cleanup_depth > 0)\n        --f->cleanup_depth;\n");
+        return;
+    }
+
+    if (v->op == XI_CATCH && cg_coro_hidden_cleanup_try(v)) {
+        fprintf(out, "    XrValue _cleanup_catch_%u = f->cleanup_exception;\n", v->id);
+        fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[40];
+            snprintf(tmp, sizeof(tmp), "_cleanup_catch_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
+    if (v->op == XI_TRY && v->aux_int == XI_TRY_AUX_CLEANUP_LOCAL_HANDLER) {
+        (void) xicgen_stmt_try(ctx, out, f, v, prefix);
+        return;
+    }
+
+    if (v->op == XI_END_TRY && v->aux) {
+        const XiValue *try_op = (const XiValue *) v->aux;
+        if (try_op->op == XI_TRY && try_op->aux_int == XI_TRY_AUX_CLEANUP_LOCAL_HANDLER) {
+            (void) xicgen_stmt_end_try(ctx, out, f, v, prefix);
+            return;
+        }
+    }
+
+    if (v->op == XI_CATCH && v->aux) {
+        const XiValue *try_op = (const XiValue *) v->aux;
+        if (try_op->op == XI_TRY && try_op->aux_int == XI_TRY_AUX_CLEANUP_LOCAL_HANDLER) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = _ef%u.exception;\n", try_op->id);
+            return;
+        }
+    }
+
+    if (v->op == XI_CLEANUP_ENTER) {
+        fprintf(out, "    xrt_cleanup_enter();\n");
+        return;
+    }
+
+    if (v->op == XI_CLEANUP_LEAVE) {
+        fprintf(out, "    xrt_cleanup_leave();\n");
+        return;
+    }
+
+    if (v->op == XI_CLEANUP_ERR_CHECK) {
+        fprintf(out, "    xrt_cleanup_err_check();\n");
+        return;
+    }
+
+    if (v->op == XI_TRY || v->op == XI_END_TRY || v->op == XI_CATCH) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: exceptions inside AOT coroutine are unsupported\n");
         emit_codegen_abort_aot_result(out);
@@ -4959,7 +5067,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ";\n");
         fprintf(out, "    ");
         emit_vref(out, v->args[0]);
-        fprintf(out, " = %s;\n", cg_rep(v->args[0]) == XR_REP_PTR ? "NULL" : "XR_NULL_VAL");
+        XrRep storage_rep = cg_coro_decl_rep(ctx, f, v->args[0]);
+        fprintf(out, " = %s;\n",
+                storage_rep == XR_REP_PTR || storage_rep == XR_REP_RAWPTR ? "NULL" : "XR_NULL_VAL");
         return;
     }
 
@@ -4997,16 +5107,7 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     switch (blk->kind) {
         case XI_BLOCK_RETURN:
             emit_block_terminator_source_line(ctx, out, blk);
-            if (cg_func_has_defer_stmt(f)) {
-                /* Function-scope exit: capture the result, run pending defers
-                 * LIFO, then complete. Defers run before the awaiting caller
-                 * observes the result, matching the VM. */
-                fprintf(out, "    { XrValue _xrt_dret = ");
-                emit_coro_aot_done_value(ctx, out, f, blk->control);
-                fprintf(out, ";\n");
-                fprintf(out, "      xrt_defer_run(&f->_xrt_ds);\n");
-                fprintf(out, "      return xr_aot_done(_xrt_dret); }\n");
-            } else if (blk->control) {
+            if (blk->control) {
                 fprintf(out, "    return xr_aot_done(");
                 emit_coro_aot_done_value(ctx, out, f, blk->control);
                 fprintf(out, ");\n");
@@ -5330,6 +5431,29 @@ static bool cg_coro_direct_call_frame_reusable(XiCgenCtx *ctx, const XiFunc *tar
            cg_coro_plan_frame_releases(ctx, target, plan) == 0;
 }
 
+static void emit_coro_static_cleanup_dispatch(FILE *out, const XiFunc *f) {
+    if (cg_coro_static_cleanup_capacity(f) == 0)
+        return;
+    fprintf(out, "    if (f->cleanup_dispatch != 0) {\n");
+    fprintf(out, "        uint32_t _cleanup_target = f->cleanup_dispatch;\n");
+    fprintf(out, "        f->cleanup_dispatch = 0;\n");
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_TRY || v->aux_int != XI_TRY_AUX_STATIC_CLEANUP || !v->aux)
+                continue;
+            const XiBlock *catch_blk = (const XiBlock *) v->aux;
+            fprintf(out, "        if (_cleanup_target == %uu) goto L%u;\n", catch_blk->id,
+                    catch_blk->id);
+        }
+    }
+    fprintf(out, "        return xr_aot_error(XR_NULL_VAL, false);\n");
+    fprintf(out, "    }\n");
+}
+
 static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     xi_ensure_rpo(f);
     const XiCoroResolver resolver = cg_coro_resolver_ctx(ctx);
@@ -5350,8 +5474,10 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_coro_frame_init(ctx, out, f, prefix);
     emit_coro_frame_factory(ctx, out, f, prefix);
 
-    fprintf(out, "%sXrAotResult ", cg_linkage(ctx));
-    emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
+    uint32_t cleanup_capacity = cg_coro_static_cleanup_capacity(f);
+    fprintf(out, "%sXrAotResult ", cleanup_capacity > 0 ? "static " : cg_linkage(ctx));
+    emit_fname_suffix(ctx, out, prefix, f,
+                      cleanup_capacity > 0 ? "_aot_resume_raw" : "_aot_resume");
     fprintf(out, "(void *raw_frame, const XrAotContext *ctx) {\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
@@ -5370,6 +5496,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_debug_source_var_declarations(ctx, out, f);
     emit_coro_macros(ctx, out, f, prefix);
     emit_coro_debug_frame_source_var_syncs(ctx, out, f);
+    emit_coro_static_cleanup_dispatch(out, f);
 
     int state_count = (int) plan->nstates;
     if (state_count > 0) {
@@ -5393,6 +5520,59 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_coro_undefs(ctx, out, f);
     fprintf(out, "\n");
 
+    if (cleanup_capacity > 0) {
+        fprintf(out, "%sXrAotResult ", cg_linkage(ctx));
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
+        fprintf(out, "(void *raw_frame, const XrAotContext *ctx) {\n");
+        fprintf(out, "    ");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+        fprintf(out, " *f = (");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+        fprintf(out, " *)raw_frame;\n");
+        fprintf(out, "    if (!f)\n        return xr_aot_error(XR_NULL_VAL, false);\n");
+        fprintf(out, "    for (;;) {\n");
+        fprintf(out, "        XrtExcFrame _cleanup_guard;\n");
+        fprintf(out, "        _cleanup_guard.exception = XR_NULL_VAL;\n");
+        fprintf(out, "        _cleanup_guard.prev = xrt_exc_top;\n");
+        fprintf(out, "        xrt_exc_top = &_cleanup_guard;\n");
+        fprintf(out, "        if (setjmp(_cleanup_guard.buf) != 0) {\n");
+        fprintf(out, "            xrt_exc_top = _cleanup_guard.prev;\n");
+        fprintf(out, "            XrValue _panic = _cleanup_guard.exception;\n");
+        fprintf(out, "            if (f->cleanup_depth == 0)\n");
+        fprintf(out, "                return xr_aot_error(_panic, false);\n");
+        fprintf(out, "            f->cleanup_exception = _panic;\n");
+        fprintf(out, "            f->cleanup_dispatch = "
+                     "f->cleanup_entries[--f->cleanup_depth];\n");
+        fprintf(out, "            continue;\n");
+        fprintf(out, "        }\n");
+        fprintf(out, "        XrAotResult _result = ");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_resume_raw");
+        fprintf(out, "(raw_frame, ctx);\n");
+        fprintf(out, "        xrt_exc_top = _cleanup_guard.prev;\n");
+        fprintf(out, "        if (f->cleanup_dispatch != 0)\n");
+        fprintf(out, "            continue;\n");
+        fprintf(out, "        return _result;\n");
+        fprintf(out, "    }\n");
+        fprintf(out, "}\n\n");
+
+        fprintf(out, "%svoid ", cg_linkage(ctx));
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_run_cleanup");
+        fprintf(out, "(void *raw_frame, const XrAotContext *ctx) {\n");
+        fprintf(out, "    ");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+        fprintf(out, " *f = (");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+        fprintf(out, " *)raw_frame;\n");
+        fprintf(out, "    if (!f || f->cleanup_depth == 0)\n        return;\n");
+        fprintf(out, "    f->cleanup_cancel = true;\n");
+        fprintf(out, "    f->cleanup_exception = XR_NULL_VAL;\n");
+        fprintf(out, "    f->cleanup_dispatch = f->cleanup_entries[--f->cleanup_depth];\n");
+        fprintf(out, "    (void)");
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
+        fprintf(out, "(raw_frame, ctx);\n");
+        fprintf(out, "}\n\n");
+    }
+
     fprintf(out, "%svoid ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_trace");
     fprintf(out, "(void *frame, void *visitor) {\n");
@@ -5406,23 +5586,6 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     emit_coro_direct_call_frame_trace(ctx, out, f, prefix);
     fprintf(out, "}\n\n");
 
-    if (cg_func_has_defer_stmt(f)) {
-        /* Cancellation stops the coroutine between statements, so no return
-         * edge drains the defer scope. This entry runs it in place, before the
-         * task completes, without touching the frame's other resources. */
-        fprintf(out, "%svoid ", cg_linkage(ctx));
-        emit_fname_suffix(ctx, out, prefix, f, "_aot_run_defers");
-        fprintf(out, "(void *frame) {\n");
-        fprintf(out, "    ");
-        emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
-        fprintf(out, " *f = (");
-        emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
-        fprintf(out, " *)frame;\n");
-        fprintf(out, "    if (!f)\n        return;\n");
-        fprintf(out, "    xrt_defer_run(&f->_xrt_ds);\n");
-        fprintf(out, "}\n\n");
-    }
-
     fprintf(out, "%svoid ", cg_linkage(ctx));
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, "(void *frame, struct XrCoroHeap *heap) {\n");
@@ -5433,11 +5596,6 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, " *)frame;\n");
     fprintf(out, "    (void)heap;\n");
     fprintf(out, "    if (!f)\n        return;\n");
-    /* Run any defers still pending when the frame is released (e.g. a coroutine
-     * cancelled mid-flight before reaching its return). Idempotent: a normal
-     * completion already drained the scope (count==0), so this is a no-op then. */
-    if (cg_func_has_defer_stmt(f))
-        fprintf(out, "    xrt_defer_run(&f->_xrt_ds);\n");
     emit_coro_direct_call_frame_release(ctx, out, f, prefix);
     emit_coro_frame_arc_release(ctx, out, f);
     if (cg_func_frame_needs_cl(f))
@@ -5463,11 +5621,12 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, "    .release_frame = ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, ",\n");
-    if (cg_func_has_defer_stmt(f)) {
-        fprintf(out, "    .run_pending_defers = ");
-        emit_fname_suffix(ctx, out, prefix, f, "_aot_run_defers");
-        fprintf(out, ",\n");
-    }
+    fprintf(out, "    .run_pending_cleanup = ");
+    if (cleanup_capacity > 0)
+        emit_fname_suffix(ctx, out, prefix, f, "_aot_run_cleanup");
+    else
+        fprintf(out, "NULL");
+    fprintf(out, ",\n");
     fprintf(out, "};\n\n");
 }
 

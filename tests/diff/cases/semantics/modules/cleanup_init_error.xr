@@ -1,0 +1,4 @@
+// anchor: module-init-error-runs-cleanup-before-importer
+import { unreachable_value } from "./_cleanup_init_error"
+
+print(unreachable_value())

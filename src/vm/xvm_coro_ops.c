@@ -602,6 +602,11 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
     int c = c_raw & 0x7F;  // actual argument count
     XrInstruction *pc = frame->pc;
 
+    if (vm_ctx && vm_ctx->cleanup_depth > 0) {
+        VM_THROW(frame, pc, XR_ERR_DEFER_ASYNC,
+                 "a deferred action cannot create a task or reach the scheduler");
+    }
+
     XrValue fn_val = base[b];
     if (!xr_value_is_closure(fn_val)) {
         VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH, "go: expected closure");
@@ -776,11 +781,15 @@ XR_FUNC XrDispatchAction vm_go(XrVMRuntime *isolate, XrVMContext *vm_ctx, XrInst
 
 XR_FUNC XrDispatchAction vm_thread_spawn(XrVMRuntime *isolate, XrVMContext *vm_ctx,
                                          XrInstruction instr, XrValue *base, XrBcCallFrame *frame) {
-    (void) vm_ctx;
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
     int c = GETARG_C(instr);
     XrInstruction *pc = frame->pc;
+
+    if (vm_ctx && vm_ctx->cleanup_depth > 0) {
+        VM_THROW(frame, pc, XR_ERR_DEFER_ASYNC,
+                 "a deferred action cannot create a task or reach the scheduler");
+    }
 
     XrValue fn_val = base[b];
     if (!xr_value_is_closure(fn_val)) {

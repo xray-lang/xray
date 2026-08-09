@@ -246,12 +246,8 @@ static void init_vm_context(XrVMRuntime *isolate) {
     ctx->current_coro = isolate->vm.current_coro;
     ctx->trace_execution = isolate->vm.trace_execution;
     ctx->isolate = isolate;
-
-    // Defer stack is per-context (lazy-allocated on first OP_DEFER)
-    ctx->defer_stack = NULL;
-    ctx->defer_count = 0;
-    ctx->defer_capacity = 0;
-    ctx->defer_frame_marks = NULL;
+    ctx->cleanup_depth = 0;
+    ctx->cancellation_cleanup_active = false;
 }
 
 // Initialize VM execution engine
@@ -313,16 +309,6 @@ void xr_vm_cleanup(XrVMRuntime *isolate) {
         xr_coro_state_destroy((XrCoroState *) isolate->vm.coro_state);
         xr_free(isolate->vm.coro_state);
         isolate->vm.coro_state = NULL;
-    }
-
-    // Cleanup main-thread defer stack (per vm_ctx)
-    if (isolate->vm_ctx.defer_stack != NULL) {
-        xr_free(isolate->vm_ctx.defer_stack);
-        isolate->vm_ctx.defer_stack = NULL;
-    }
-    if (isolate->vm_ctx.defer_frame_marks != NULL) {
-        xr_free(isolate->vm_ctx.defer_frame_marks);
-        isolate->vm_ctx.defer_frame_marks = NULL;
     }
 
     // Static-fallback VM context (used by xr_vm_current_ctx when no coro

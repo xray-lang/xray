@@ -52,11 +52,14 @@ It runs after ARC insertion in every build and reports violations as ICEs with
 the contract identifier and counterexample path. Per-pass deep verification may
 be enabled explicitly; it does not replace the mandatory post-ARC run.
 
-The verifier trusts frontend source-root loan evidence at desugaring boundaries,
-including `defer` call snapshots and block captures. After lowering has split one
-source root into independently balanced SSA values, the IR cannot reconstruct
-their former alias identity. The frontend must therefore reject any `move` or
-return of an owner held by a live `defer` loan (`E0382`) before IR generation.
+The verifier trusts frontend source-root loan evidence at lowering boundaries,
+including every outer owner read by a live static cleanup block. A cleanup read
+is late-bound: it loans the original source root from the `defer` registration
+point until the owning lexical scope exits; it creates no argument snapshot,
+capture, upvalue, or cell. After lowering has split one source root into
+independently balanced SSA values, the IR cannot reconstruct their former alias
+identity. The frontend must therefore reject any `move` or return of an owner
+held by a live cleanup-read loan (`E0382`) before IR generation.
 
 Trust premise. C1-C5 verify the path balance of the ARC INSERTION RESULT: the
 verifier consumes the same owned/borrow classification the inserter consumed,

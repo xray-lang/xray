@@ -180,7 +180,7 @@ class PanicInfo {
 
 用户级可恢复错误不使用 `PanicInfo`：`throw` 语句只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
 
-栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler，逐帧释放局部、执行 defer，到达 handler 后跳转。可恢复错误走值返回通道，不展开栈。详见 §8。
+栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler。每条跨越 cleanup 所属作用域的边都进入编译期生成的静态 cleanup 区域，按 LIFO 顺序执行后再释放局部并继续展开；运行时不维护动态 defer 栈。可恢复错误走值返回通道，不展开栈。详见 §8。
 
 ### 16.7 值返回错误通道运行时
 
@@ -196,9 +196,9 @@ class PanicInfo {
 
 唯一保证确定性、且跨后端（VM / AOT）一致的资源清理机制是 **`defer`**：它在所属作用域退出时按 LIFO 顺序执行，与对象回收时机无关。需要确定性释放外部资源（文件 / 句柄 / 锁）的代码必须使用 `defer`，而非依赖对象析构。
 
-**`defer` 在每一条退出边上都执行**，包括：正常返回、`throw` 展开、panic 展开，以及**协程被取消**。取消不是一次外部击杀：被取消的协程若仍欠着 defer 链，会被交回调度器、在自己的 worker 上恢复一次、展开完成后才被标记为已取消；`task.cancel()` 也因此不会在清理完成前让 `await` 观察到取消结果。
+**`defer` 在每一条跨越其所属词法作用域的退出边上都执行**，包括：正常落出、`return`、`break`、`continue`、值错误向外传播、panic 展开，以及**协程被取消**。前端把每个注册点编译为程序点相关的静态 cleanup frontier；没有闭包、回调对象或动态运行时栈。取消不是一次外部击杀：可挂起帧仅保存定长 cleanup 区域标识与深度，调度器在该协程的 worker 上调用生成的静态 frontier，清理完成后才标记为已取消；`task.cancel()` 也因此不会在清理完成前让 `await` 观察到取消结果。
 
-为了让这条保证是**全称**的，defer 体**不得抵达调度器挂起点**（`E0392`，见 §2.14.4）。defer 体运行在一个正在离开的帧上，没有可供挂起后恢复的位置；允许它挂起就意味着允许清理执行到一半被丢弃，那样 `defer` 就不再是确定性机制。清理期间取消被屏蔽，因此清理本身不会被取消打断。
+为了让这条保证是**全称**的，defer 体**不得抵达调度器挂起点，也不得创建任务**（`E0392`，见 §2.14.4）。挂起无法保证静态 cleanup 区域在帧离开前完成；创建任务则会让工作逃逸清理边界。静态分析对直接、传递与动态调用保守拒绝，VM/AOT 还在任务创建或调度侧效之前以 `E0444` 失败关闭。清理期间取消被屏蔽，因此清理本身不会被取消打断。
 
 > 演进说明：当确定性析构（RAII / `Drop`）被正式纳入语言时，本节将升级为**确定性回收契约**（明确析构点与顺序），并由跨后端差分测试逐字节守门。在此之前，"回收时机 / finalizer 行为"被显式声明为实现定义的非确定项。
 
@@ -467,7 +467,7 @@ class PanicInfo {
 
 Recoverable user-level errors do not use `PanicInfo`: a `throw` statement accepts enum variant values only (see §8.1.1); non-enum error values are rejected at compile time (error code `E0370`).
 
-Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers, releasing locals frame by frame and running `defer` along the way before jumping to the handler. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
+Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers. Every edge that crosses a cleanup's owning scope enters a statically generated cleanup region, runs it in LIFO order, then releases locals and continues unwinding; the runtime maintains no dynamic defer stack. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
 
 ### 16.7 Value-return Error Channel Runtime
 
@@ -483,9 +483,9 @@ Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the tr
 
 The only deterministic, cross-backend (VM / AOT) consistent cleanup mechanism is **`defer`**, which runs at owning-scope exit in LIFO order, independent of object reclamation timing. Code that must deterministically release external resources (files / handles / locks) must use `defer` rather than relying on object finalization.
 
-**`defer` runs on every exit edge**: a normal return, `throw` unwinding, panic unwinding, and **coroutine cancellation**. Cancellation is not an external kill: a cancelled coroutine that still owes a defer chain is handed back to the scheduler, resumed once on its own worker, and marked cancelled only after it has unwound. `task.cancel()` correspondingly does not let an `await` observe the cancellation before that cleanup has run.
+**`defer` runs on every exit edge that crosses its owning lexical scope**: normal fallthrough, `return`, `break`, `continue`, outward value-error propagation, panic unwinding, and **coroutine cancellation**. The frontend compiles each registration point into a program-point-sensitive static cleanup frontier; there is no closure, callback object, or dynamic runtime stack. Cancellation is not an external kill: a suspendable frame stores only fixed-layout cleanup-region identifiers and depth, and the scheduler invokes the generated static frontier on that coroutine's worker before marking it cancelled. `task.cancel()` correspondingly does not let an `await` observe cancellation before cleanup has run.
 
-For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point** (`E0392`, see §2.14.4). A defer body runs on a frame that is already leaving and has no place to park and resume; allowing it to suspend would allow cleanup to be dropped halfway, and `defer` would stop being deterministic. Cancellation is masked while a defer body runs, so the cleanup itself cannot be interrupted by a cancellation.
+For this guarantee to be **total**, a defer body must **not reach a scheduler suspension point or create a task** (`E0392`, see §2.14.4). Suspension cannot guarantee completion of the static cleanup region before the frame leaves; task creation would let work escape the cleanup boundary. Static analysis rejects direct, transitive, and unresolved dynamic cases conservatively, and VM/AOT fail closed with `E0444` before a task-creation or scheduling side effect. Cancellation is masked while a defer body runs, so cleanup itself cannot be interrupted by cancellation.
 
 > Evolution note: once deterministic destruction (RAII / `Drop`) is formally added to the language, this section will be upgraded to a **deterministic reclamation contract** (specifying destruction points and order), gated byte-for-byte by cross-backend differential tests. Until then, "reclamation timing / finalizer behavior" is explicitly declared an implementation-defined, non-deterministic aspect.
 

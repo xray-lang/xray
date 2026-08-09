@@ -208,7 +208,7 @@ typedef enum {
     AST_CHAN_RECV,       // ch.recv()
     AST_SELECT_STMT,     // select { case ... }
     AST_SELECT_CASE,     // msg from ch -> ...
-    AST_DEFER_STMT,      // defer fn()
+    AST_DEFER_STMT,      // defer { ... }
     AST_SCOPE_BLOCK,     // scope { ... }
     AST_YIELD_STMT,      // yield - give up execution
     AST_CANCELLED_EXPR,  // cancelled() check

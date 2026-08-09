@@ -20,7 +20,7 @@ order: 025
 | **Channel** | 类型化的协程通信管道（见 §10.5） |
 | **closure** | 闭包：捕获外层变量的函数 |
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |
-| **defer** | 延迟执行：函数退出前执行（见 §4.9） |
+| **defer** | 静态延迟清理：在跨越所属词法作用域的每条退出边上按 LIFO 执行（见 §4.9） |
 | **enum** | 枚举类型（见 §5.6） |
 | **GC** | Garbage Collection 的泛称；Xray 没有 tracing GC 或环收集器。对象死亡只由引用计数决定，因此回收点精确；引用环不被收集，而是在类型图上被静态排除、用 `weak` 字段断开，或以所属 execution-local 回收域为上界随 physical coroutine 结束批量处置残余图（§16.8） |
 | **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置 |
@@ -66,7 +66,7 @@ order: 025
 | **Channel** | Typed inter-coroutine communication pipe (see §10.5) |
 | **closure** | Function value that captures outer variables |
 | **coroutine** | User-space, suspendable/resumable execution flow |
-| **defer** | Deferred execution: runs before function exit (see §4.9) |
+| **defer** | Static deferred cleanup that runs in LIFO order on every exit edge crossing its owning lexical scope (see §4.9) |
 | **enum** | Enumeration type (see §5.6) |
 | **GC** | Generic term for garbage collection; Xray has no tracing GC or cycle collector. Object death is driven only by reference counting, which makes its point exact; a cycle is not collected but ruled out statically, broken with a `weak` field, or bounded by its execution-local reclamation domain and disposed with the residual graph when the physical coroutine ends (§16.8) |
 | **safepoint** | Safe location where the scheduler can observe preemption, cancellation, or suspension state |

@@ -33,7 +33,7 @@ export final class FileStat {
 }
 
 // File is a synchronous read-only byte stream. It deliberately requires an
-// explicit close (normally `defer file.close()`): native resources must not
+// explicit close (normally `defer { file.close() }`): native resources must not
 // depend on a nondeterministic finalizer contract.
 export final class File {
     private _handle: int

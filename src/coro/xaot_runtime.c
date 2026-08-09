@@ -172,22 +172,28 @@ static void aot_release_frame(const XrAotCoroDesc *desc, void *frame, XrCoroHeap
     xr_aot_frame_free(frame);
 }
 
-/* A cancelled coroutine stops between statements, so no return edge drains its
- * defer scope. Run it here, on the owner worker, before the task completes --
- * the frame stays intact and its release path re-runs the (now empty) scope
- * idempotently. */
+/* A cancelled coroutine stops between statements, so no ordinary exit edge
+ * drains its cleanup frontier. Run the generated static frontier on the owner
+ * worker before the task completion becomes observable. */
 static bool aot_has_cancellation_cleanup(const XrCoroutine *coro) {
     const XrAotCoroState *state = aot_state_from_coro((XrCoroutine *) coro);
-    return state && state->frame && state->desc && state->desc->run_pending_defers;
+    return state && state->frame && state->desc && state->desc->run_pending_cleanup;
 }
 
 static void aot_run_cancellation_cleanup(XrCoroutine *coro) {
     XrAotCoroState *state = aot_state_from_coro(coro);
-    if (!state || !state->frame || !state->desc || !state->desc->run_pending_defers)
+    if (!state || !state->frame || !state->desc || !state->desc->run_pending_cleanup)
         return;
     void *previous_arena = aot_state_arena_enter(state);
     XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
-    state->desc->run_pending_defers(state->frame);
+    XrAotContext ctx = {
+        .runtime = state->runtime,
+        .coro = coro,
+        .vm_host_ops = NULL,
+        .vm_host = NULL,
+        .worker = xr_current_worker(),
+    };
+    state->desc->run_pending_cleanup(state->frame, &ctx);
     xr_exec_context_restore(previous);
     aot_state_arena_restore(state, previous_arena);
 }

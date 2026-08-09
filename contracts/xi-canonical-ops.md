@@ -48,8 +48,15 @@ language-level happens-before edge (`:sync`).
     field promotion/storage likewise uses `xi.weak.load.field` and
     `xi.weak.store.field`. No backend target attribute, lowering flag, hidden
     register table, or ARC exception may reconstruct either meaning.
+13. Source `defer { ... }` lowers to explicit static cleanup regions delimited
+    by `xi.cleanup.enter`, `xi.cleanup.leave`, and `xi.cleanup.err_check`.
+    Registration is a program-point-sensitive control-flow frontier, and every
+    edge crossing the owning lexical scope runs the active bodies in LIFO order.
+    There is no Xi defer-push/pop/invoke operation, closure or callback
+    representation, dynamic cleanup stack, or backend reconstruction. Panic and
+    coroutine-cancellation paths dispatch to the same static regions.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 9091256d150269d3b16cd9b7f60371292a5d8d357d48f513e0608cb32d663ce5
-anchor-sha256: xisa/xi/lowering.def a829c7c3b22c3f6ee2cd59a97e7cb8639e3acdbcd856a3fec292ea8b7a281f31
+anchor-sha256: xisa/xi/ops.def 64109091ac59eb9c359238505d25e2d191e821e478e30ed5d1b2733a24cae7ed
+anchor-sha256: xisa/xi/lowering.def 979d0803b7cb397a7ed543d9c227f9bf6c20d99108941df80c215bbc9c1b43c7

@@ -56,7 +56,6 @@
 #include "xrt_io.h"         // L2: freestanding sync filesystem helpers
 #include "xrt_method.h"     // L3: method_0/1/2/3, getprop, tostring, symbol IDs
 #include "xrt_exception.h"  // L4: setjmp/longjmp exception handling
-#include "xrt_defer.h"      // L4: function-scoped deferred cleanup (uses L1/L2/L4)
 #include "xrt_class.h"      // L5: ObjHeader, TypeInfo, type table, obj_alloc
 
 #endif  // XRT_H
