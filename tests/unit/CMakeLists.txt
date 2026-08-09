@@ -138,6 +138,7 @@ add_xray_unit_test(test_bytecode_io vm/test_bytecode_io.c)
 add_xray_unit_test(test_ffi_callback vm/test_ffi_callback.c)
 add_xray_unit_test(test_ffi_scalar vm/test_ffi_scalar.c)
 add_xray_unit_test(test_vm_api vm/test_vm_api.c)
+add_xray_unit_test(test_run_closure_blocking vm/test_run_closure_blocking.c)
 add_xray_unit_test(test_ic vm/test_ic.c)
 # xray_core already PUBLIC-links pthread (coroutines need it), so the
 # concurrent IC test inherits the dependency through xray_core.
@@ -349,10 +350,9 @@ set_tests_properties(test_unicode_grapheme_generator PROPERTIES
 )
 
 # ============================================================================
-# http/ — HTTP parser and HTTP/2 helpers
+# http/ — HTTP/2 helpers
 # ============================================================================
 
-add_xray_unit_test(test_http_parser http/test_http_parser.c)
 add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
 
 # ============================================================================
@@ -373,7 +373,6 @@ if(XR_STDLIB_COMPRESS)
     add_xray_unit_test(test_compress stdlib/test_compress.c)
 endif()
 add_xray_unit_test(test_xml_node stdlib/test_xml_node.c)
-add_xray_unit_test(test_http_buffer stdlib/test_http_buffer.c)
 add_xray_unit_test(test_prelude_init stdlib/test_prelude_init.c)
 add_xray_unit_test(test_native_type_surface stdlib/test_native_type_surface.c)
 set_tests_properties(test_native_type_surface PROPERTIES LABELS "stdlib;metadata;native-types")

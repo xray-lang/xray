@@ -131,6 +131,60 @@ int xr_execute(XrVMRuntime *isolate, XrProto *proto) {
     return xr_main_thread_run(isolate, main_coro);
 }
 
+// Run a closure to completion on the scheduler and return its value. This is the
+// synchronous bridge for C callers (the package-manager CLI) that must invoke a
+// suspending stdlib coroutine — http.request and the net transports beneath it —
+// and collect its result. See xr_vm_run_closure_blocking's contract in
+// xvm_coro_api.h. Reuses one main coroutine so a command may drive several
+// requests in sequence, exactly as the test runner reuses its physical root.
+XrValue xr_vm_run_closure_blocking(XrVMRuntime *isolate, XrClosure *closure, XrValue *args,
+                                   int nargs, XrValue *out_error) {
+    if (out_error)
+        *out_error = xr_null();
+    if (isolate == NULL || closure == NULL || closure->proto == NULL)
+        return xr_null();
+
+    // A scheduler-backed runtime is required to service I/O suspensions. The
+    // package-manager CLI creates one before driving requests; bootstrap a
+    // single-worker runtime defensively for any other caller.
+    XrRuntime *runtime = (XrRuntime *) isolate->vm.scheduler;
+    if (!runtime) {
+        xray_vm_multicore_init(isolate, 1);
+        runtime = (XrRuntime *) isolate->vm.scheduler;
+        if (!runtime) {
+            xr_log_warning("vm", "run_closure_blocking: scheduler unavailable");
+            return xr_null();
+        }
+    }
+
+    XrCoroutine *main_coro = xr_isolate_get_main_coro(isolate);
+    if (!main_coro) {
+        main_coro = xr_coro_create_bootstrap(isolate);
+        if (!main_coro) {
+            xr_log_warning("vm", "run_closure_blocking: main coroutine allocation failed");
+            return xr_null();
+        }
+        xr_isolate_set_main_coro(isolate, main_coro);
+    }
+
+    // A thrown error is a value this entry hands back through out_error for the
+    // caller to report; suppress the runtime's own uncaught-error print so the
+    // package client owns the diagnostic instead of emitting it twice.
+    bool saved_suppress = isolate->suppress_exception_print;
+    isolate->suppress_exception_print = true;
+    xr_coro_reset_for_call_args(main_coro, isolate, closure, args, nargs);
+    xr_main_thread_run(isolate, main_coro);
+    isolate->suppress_exception_print = saved_suppress;
+
+    if (xr_coro_flags_has(main_coro, XR_CORO_FLG_DONE) &&
+        !xr_coro_flags_has(main_coro, XR_CORO_FLG_CANCELLED) && XR_IS_NULL(main_coro->error)) {
+        return main_coro->result;
+    }
+    if (out_error && !XR_IS_NULL(main_coro->error))
+        *out_error = main_coro->error;
+    return xr_null();
+}
+
 // Free bytecode
 void xr_free_code(XrVMRuntime *isolate, XrProto *proto) {
     if (proto != NULL) {

@@ -23,7 +23,16 @@
 
 #if defined(XR_HAS_NETWORK) || !defined(XR_STDLIB_MODULAR)
 
-#include "../../stdlib/http/http_client_internal.h"
+#include "xmodule.h"
+#include "../vm/xvm_coro_api.h"
+#include "../runtime/xisolate_api.h"
+#include "../runtime/core/xr_runtime_core.h"
+#include "../runtime/core/xr_exec_context.h"
+#include "../runtime/value/xvalue.h"
+#include "../runtime/value/xvalue_format.h"
+#include "../runtime/class/xinstance.h"
+#include "../runtime/object/xarray.h"
+#include "../runtime/object/xstring.h"
 #if defined(XR_HAS_CRYPTO) || !defined(XR_STDLIB_MODULAR)
 #include "../shared/xr_crypto_core.h"
 #endif
@@ -349,12 +358,130 @@ void xr_pkg_client_set_isolate(XrVMRuntime *isolate) {
 
 /* ========== HTTP API Implementation ========== */
 
-static XrHttpResult pkg_http_request_get(const char *url) {
-    XrHttpRequestConfig config;
-    http_client_request_config_init(&config);
-    config.url = url;
-    config.method = XR_HTTP_METHOD_GET;
-    return http_client_request(tls_isolate, &config);
+// One HTTP exchange driven through the pure-Xray http module. A completed
+// exchange (any status, including 4xx/5xx) carries its status and body with
+// error == NULL; a transport failure carries a message and a zero status.
+typedef struct {
+    int status;
+    char *body;
+    size_t body_len;
+    char *error;
+} PkgHttpExchange;
+
+static void pkg_http_exchange_free(PkgHttpExchange *ex) {
+    if (!ex)
+        return;
+    xr_free(ex->body);
+    xr_free(ex->error);
+    ex->body = NULL;
+    ex->error = NULL;
+}
+
+// Fold the closure result — an HttpResponse instance on success, a thrown
+// HttpError captured in `err` on transport failure — into a flat exchange the
+// rest of the package client reads without touching Xray value internals.
+static void pkg_http_read_response(XrVMRuntime *iso, XrValue result, XrValue err,
+                                   PkgHttpExchange *out) {
+    if (!XR_IS_NULL(err)) {
+        XrString *msg = xr_value_to_string(iso, err);
+        out->error = xr_strdup(msg ? (const char *) msg->data : "request failed");
+        return;
+    }
+    if (!xr_value_is_instance(result)) {
+        out->error = xr_strdup("http request produced no response");
+        return;
+    }
+    XrInstance *response = xr_value_to_instance(result);
+    XrValue status_v = xr_instance_get_field(iso, response, "status");
+    out->status = XR_IS_INT(status_v) ? (int) XR_TO_INT(status_v) : 0;
+
+    XrValue body_v = xr_instance_get_field(iso, response, "body");
+    if (XR_IS_ARRAY(body_v)) {
+        XrArray *body = xr_value_to_array(body_v);
+        if (body && body->length > 0 && body->data) {
+            size_t n = (size_t) body->length;
+            out->body = (char *) xr_malloc(n + 1);
+            if (out->body) {
+                memcpy(out->body, body->data, n);
+                out->body[n] = '\0';
+                out->body_len = n;
+            }
+        }
+    }
+}
+
+// Import http.<member> and drive it to completion on the scheduler, pumping the
+// suspending request path. Arguments are borrowed: the driver deep-copies them
+// into the coroutine, so the isolate-owned values built by the callers below
+// stay valid and are reclaimed with the isolate.
+static void pkg_http_exchange(XrVMRuntime *iso, const char *member, XrValue *args, int nargs,
+                              PkgHttpExchange *out) {
+    memset(out, 0, sizeof(*out));
+    if (!iso) {
+        out->error = xr_strdup("package client has no isolate");
+        return;
+    }
+    XrValue fn = xr_module_import_member(iso, "http", member);
+    if (!xr_value_is_closure(fn)) {
+        out->error = xr_strdup("http module is unavailable");
+        return;
+    }
+    XrValue err = xr_null();
+    XrValue result = xr_vm_run_closure_blocking(iso, xr_value_to_closure(fn), args, nargs, &err);
+    pkg_http_read_response(iso, result, err, out);
+}
+
+// Build an isolate-owned string in the root allocation context. Values created
+// here outlive the request (reclaimed when the isolate tears down), so the
+// exchange never has to reason about per-request ownership.
+static XrValue pkg_http_string_value(XrVMRuntime *iso, const char *s) {
+    XrString *str = xr_string_new(iso, s ? s : "", s ? strlen(s) : 0);
+    return str ? xr_string_value(str) : xr_null();
+}
+
+static void pkg_http_get_exchange(XrVMRuntime *iso, const char *url, PkgHttpExchange *out) {
+    memset(out, 0, sizeof(*out));
+    if (!iso || !url) {
+        out->error = xr_strdup("package client has no isolate");
+        return;
+    }
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
+    XrExecutionContext *prev = xr_exec_context_enter(xr_runtime_core_root_exec(core));
+    XrValue args[1] = {pkg_http_string_value(iso, url)};
+    xr_exec_context_restore(prev);
+    if (XR_IS_NULL(args[0])) {
+        out->error = xr_strdup("invalid request url");
+        return;
+    }
+    pkg_http_exchange(iso, "get", args, 1, out);
+}
+
+static void pkg_http_post_exchange(XrVMRuntime *iso, const char *url, const char *content_type,
+                                   const char *authorization, const void *body, size_t body_len,
+                                   PkgHttpExchange *out) {
+    memset(out, 0, sizeof(*out));
+    if (!iso || !url) {
+        out->error = xr_strdup("package client has no isolate");
+        return;
+    }
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
+    XrExecutionContext *prev = xr_exec_context_enter(xr_runtime_core_root_exec(core));
+    XrValue url_v = pkg_http_string_value(iso, url);
+    XrValue type_v = pkg_http_string_value(iso, content_type);
+    XrValue auth_v = pkg_http_string_value(iso, authorization);
+    XrArray *body_arr = xr_array_with_capacity_in(&core->root_alloc, (int) body_len, XR_ELEM_U8);
+    if (body_arr && body && body_len > 0) {
+        xr_byte_array_append_from_span(body_arr, body, (int64_t) body_len,
+                                       (const char *) body + body_len);
+    }
+    xr_exec_context_restore(prev);
+    if (XR_IS_NULL(url_v) || XR_IS_NULL(type_v) || XR_IS_NULL(auth_v) || !body_arr) {
+        out->error = xr_strdup("failed to build request");
+        return;
+    }
+    // Argument order matches http.post(url, contentType, body, authorization).
+    XrValue args[4] = {url_v, type_v, xr_value_from_array(body_arr), auth_v};
+    pkg_http_exchange(iso, "post", args, 4, out);
 }
 
 static XrPkgResponse *pkg_http_get(const char *url) {
@@ -367,22 +494,20 @@ static XrPkgResponse *pkg_http_get(const char *url) {
         printf("GET: %s\n", url);
     }
 
-    XrHttpResult result = pkg_http_request_get(url);
+    PkgHttpExchange ex;
+    pkg_http_get_exchange(tls_isolate, url, &ex);
 
-    resp->status_code = result.status_code;
-    resp->success =
-        (result.error == XR_HTTP_OK && result.status_code >= 200 && result.status_code < 300);
+    resp->status_code = ex.status;
+    resp->success = (ex.error == NULL && ex.status >= 200 && ex.status < 300);
 
-    if (result.body && result.body_len > 0) {
-        resp->body = xr_strdup(result.body);
-        resp->body_len = result.body_len;
+    if (ex.body && ex.body_len > 0) {
+        resp->body = xr_strdup(ex.body);
+        resp->body_len = ex.body_len;
     }
 
     if (!resp->success) {
-        if (result.error_msg) {
-            resp->error = xr_strdup(result.error_msg);
-        } else if (result.error != XR_HTTP_OK) {
-            resp->error = xr_strdup(http_client_error_string(result.error));
+        if (ex.error) {
+            resp->error = xr_strdup(ex.error);
         } else if (resp->body) {
             // Try to extract error message from response
             char *msg = json_get_string(resp->body, "error");
@@ -396,7 +521,7 @@ static XrPkgResponse *pkg_http_get(const char *url) {
         }
     }
 
-    http_client_result_free(&result);
+    pkg_http_exchange_free(&ex);
     return resp;
 }
 
@@ -407,30 +532,31 @@ static bool pkg_http_download_file(const char *url, const char *dest_path) {
         printf("Download: %s -> %s\n", url, dest_path);
     }
 
-    XrHttpResult result = pkg_http_request_get(url);
+    PkgHttpExchange ex;
+    pkg_http_get_exchange(tls_isolate, url, &ex);
 
-    if (result.error != XR_HTTP_OK || result.status_code < 200 || result.status_code >= 300) {
+    if (ex.error || ex.status < 200 || ex.status >= 300) {
         if (tls_config.verbose) {
             fprintf(stderr, "Download failed: %s\n",
-                    result.error_msg ? result.error_msg : http_client_error_string(result.error));
+                    ex.error ? ex.error : "unexpected HTTP status");
         }
-        http_client_result_free(&result);
+        pkg_http_exchange_free(&ex);
         return false;
     }
 
     // Write to file
     FILE *f = fopen(dest_path, "wb");
     if (!f) {
-        http_client_result_free(&result);
+        pkg_http_exchange_free(&ex);
         return false;
     }
 
-    if (result.body && result.body_len > 0) {
-        fwrite(result.body, 1, result.body_len, f);
+    if (ex.body && ex.body_len > 0) {
+        fwrite(ex.body, 1, ex.body_len, f);
     }
     fclose(f);
 
-    http_client_result_free(&result);
+    pkg_http_exchange_free(&ex);
     return true;
 }
 
@@ -818,51 +944,38 @@ bool xr_pkg_client_publish(const char *tarball_path, const char *auth_token,
     char auth_header_value[512];
     snprintf(auth_header_value, sizeof(auth_header_value), "Bearer %s", auth_token);
 
-    XrHttpHeader headers[2] = {{.name = "Content-Type", .value = content_type},
-                               {.name = "Authorization", .value = auth_header_value}};
-
     if (tls_config.verbose) {
         printf("Publish: POST %s (%zu bytes)\n", url, body_size);
     }
 
-    XrHttpRequestConfig config;
-    http_client_request_config_init(&config);
-    config.url = url;
-    config.method = XR_HTTP_METHOD_POST;
-    config.body = body;
-    config.body_len = body_size;
-    config.headers = headers;
-    config.header_count = 2;
-    config.timeout_ms = tls_config.timeout_ms;
-
-    XrHttpResult result = http_client_request(tls_isolate, &config);
+    PkgHttpExchange ex;
+    pkg_http_post_exchange(tls_isolate, url, content_type, auth_header_value, body, body_size, &ex);
     xr_free(body);
 
-    bool success =
-        (result.error == XR_HTTP_OK && result.status_code >= 200 && result.status_code < 300);
+    bool success = (ex.error == NULL && ex.status >= 200 && ex.status < 300);
 
     if (success) {
         printf("Published successfully\n");
     } else {
         fprintf(stderr, "Publish failed");
-        if (result.body && result.body_len > 0) {
+        if (ex.body && ex.body_len > 0) {
             // Try to extract error message from JSON response
-            char *msg = json_get_string(result.body, "error");
+            char *msg = json_get_string(ex.body, "error");
             if (msg) {
                 fprintf(stderr, ": %s", msg);
                 xr_free(msg);
-            } else if (result.status_code > 0) {
-                fprintf(stderr, " (HTTP %d)", result.status_code);
+            } else if (ex.status > 0) {
+                fprintf(stderr, " (HTTP %d)", ex.status);
             }
-        } else if (result.error_msg) {
-            fprintf(stderr, ": %s", result.error_msg);
-        } else if (result.status_code > 0) {
-            fprintf(stderr, " (HTTP %d)", result.status_code);
+        } else if (ex.error) {
+            fprintf(stderr, ": %s", ex.error);
+        } else if (ex.status > 0) {
+            fprintf(stderr, " (HTTP %d)", ex.status);
         }
         fprintf(stderr, "\n");
     }
 
-    http_client_result_free(&result);
+    pkg_http_exchange_free(&ex);
     return success;
 }
 

@@ -8,9 +8,8 @@
  * http.h - HTTP module public interface
  *
  * KEY CONCEPT:
- *   Public C entrypoint for registering the HTTP module. Native HTTP
- *   client/server internals live in http_internal.h and the narrower
- *   subsystem headers.
+ *   Public C entrypoint for registering the HTTP module. All protocol
+ *   semantics live in the pure-Xray stdlib/http/http.xr script layer.
  */
 
 #ifndef XR_STDLIB_HTTP_H

@@ -445,8 +445,8 @@ policy = "xray_semantic"
 semantic_source = "stdlib/http/http.xr"
 loader = "stdlib/http/http.c"
 public_native = []
-private_native_sources = ["stdlib/http/*.c"]
-private_native_reason = "Private HTTP/1.x parser-buffer and package-manager client pool"
+private_native_sources = ["stdlib/http/http.c"]
+private_native_reason = "Pure-Xray module loader only; HTTP semantics are source-owned"
 perf_suite = "stdlib/http"
 
 [[module]]
@@ -578,7 +578,7 @@ reason = "Pure scalar protocol predicate; first generated-native ABI batch"
 abi_gate = "test_stdlib_vm_fastpath_abi"
 workload_benchmark = "http.head.contract"
 diff_case = "tests/diff/cases/semantics/stdlib/http_redirect_status_direct.xr"
-oracle = "stdlib/http/http_client.c::is_redirect_status"
+oracle = "src/shared/xr_http_url.c::is_redirect_status"
 review_date = "2026-08-02"
 disable_build_option = "XRAY_STDLIB_VM_FASTPATHS"
 

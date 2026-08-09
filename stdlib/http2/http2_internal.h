@@ -11,7 +11,6 @@
 #ifndef XR_STDLIB_HTTP2_INTERNAL_H
 #define XR_STDLIB_HTTP2_INTERNAL_H
 
-#include "../../stdlib/http/http_parser_internal.h"
 #include "../../src/shared/xr_http_url.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include <stdbool.h>
