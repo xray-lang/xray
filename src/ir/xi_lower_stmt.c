@@ -1161,8 +1161,11 @@ static bool lower_match_is_exhaustive_adt(XiLower *l, struct XrType *subject_typ
 }
 
 /* Read object/Json field `fname` from `subject` (static Json index when known,
- * else a dynamic string-keyed index get; both null-safe on a missing field). */
-static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *fname) {
+ * else a dynamic string-keyed index get; both null-safe on a missing field).
+ * `source_span_id` keys the verified object-access row the pattern's producer
+ * evidence recorded for this field, mirroring destructure statements. */
+static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *fname,
+                                      uint32_t source_span_id) {
     int fidx = subject->type ? stmt_json_field_index(subject->type, fname) : -1;
     if (fidx >= 0) {
         struct XrType *ft =
@@ -1171,6 +1174,9 @@ static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *
         if (v) {
             v->args[0] = subject;
             v->aux_int = fidx;
+            v->line = source_span_id;
+            xi_lower_bind_object_access_id(l, v, fname, source_span_id, (uint16_t) fidx,
+                                           XG_OBJECT_ACCESS_DESTRUCTURE);
         }
         return v;
     }
@@ -1364,7 +1370,8 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
                 AstNode *sub = op->patterns[i];
                 if (pattern_is_irrefutable_binding(sub))
                     continue;
-                XiValue *fv = lower_match_field_get(l, subject, op->field_names[i]);
+                XiValue *fv =
+                    lower_match_field_get(l, subject, op->field_names[i], (uint32_t) pattern->line);
                 if (!fv)
                     continue;
                 XiValue *t = xi_lower_pattern_test(l, fv, sub);
@@ -1468,7 +1475,8 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
             AstNode *sub = op->patterns[i];
             if (!sub || sub->type == AST_PATTERN_WILDCARD)
                 continue;
-            XiValue *fv = lower_match_field_get(l, subject, op->field_names[i]);
+            XiValue *fv =
+                lower_match_field_get(l, subject, op->field_names[i], (uint32_t) pattern->line);
             if (!fv)
                 continue;
             lower_pattern_bindings(l, fv, sub);

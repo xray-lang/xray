@@ -7113,6 +7113,74 @@ static void body_add_object_destructure_accesses(XgBodyCollect *bc,
     }
 }
 
+/* Match object patterns read subject fields exactly like a destructure
+ * statement, so they need the same verified access rows. Rows are keyed by
+ * the pattern's span; sibling arms that test the same field of the same
+ * receiver shape share one row instead of tripping the binder's ambiguity
+ * guard. Nested sub-patterns have no receiver expression of their own and
+ * keep the dynamic path. */
+static void body_add_match_object_pattern_accesses(XgBodyCollect *bc, const AstNode *pattern,
+                                                   const AstNode *subject) {
+    if (!bc || !pattern || !subject || pattern->type != AST_PATTERN_OBJECT)
+        return;
+    const PatternObjectNode *op = &pattern->as.pattern_object;
+    const ObjectLiteralNode *literal = NULL;
+    XgObjectShapeId shape_id = body_lookup_object_shape(bc, subject, &literal);
+    if (shape_id == XG_NO_ID) {
+        literal = body_static_object_literal(subject);
+        if (literal)
+            shape_id = body_add_object_shape_for_literal(bc, literal, (uint32_t) pattern->line,
+                                                         body_expr_type_key(bc, subject));
+    }
+    if (shape_id == XG_NO_ID)
+        return;
+    for (int i = 0; i < op->count; i++) {
+        const char *name = op->field_names ? op->field_names[i] : NULL;
+        int field_index = body_object_shape_static_field_index(bc, shape_id, literal, name);
+        if (!name || field_index < 0 || field_index > UINT16_MAX)
+            continue;
+        uint32_t field_name_id = hash_name32(name);
+        bool already_recorded = false;
+        for (uint32_t r = 0; r < bc->evidence->nobject_accesses; r++) {
+            const XgObjectAccessSummary *existing = &bc->evidence->object_accesses[r];
+            if (existing->owner_func_id == bc->owner_func_id &&
+                existing->module_id == bc->module_id &&
+                existing->source_span_id == (uint32_t) pattern->line &&
+                existing->field_name_id == field_name_id &&
+                existing->access_kind == XG_OBJECT_ACCESS_DESTRUCTURE &&
+                existing->receiver_shape_id == shape_id) {
+                already_recorded = true;
+                break;
+            }
+        }
+        if (already_recorded)
+            continue;
+        uint32_t result_type_key = 0;
+        const XgObjectFieldSummary *field =
+            body_find_object_shape_field(bc, shape_id, (uint16_t) field_index);
+        if (field)
+            result_type_key = field->type_key;
+        XgObjectAccessSummary row;
+        memset(&row, 0, sizeof(row));
+        row.object_access_id = (XgObjectAccessId) (bc->evidence->nobject_accesses + 1);
+        row.module_id = bc->module_id;
+        row.owner_func_id = bc->owner_func_id;
+        row.receiver_shape_id = shape_id;
+        row.source_span_id = (uint32_t) pattern->line;
+        row.field_name_id = field_name_id;
+        row.result_type_key = result_type_key;
+        row.field_ordinal = (uint16_t) field_index;
+        row.access_kind = XG_OBJECT_ACCESS_DESTRUCTURE;
+        const XgObjectShapeSummary *receiver_shape =
+            xg_global_evidence_find_object_shape(bc->evidence, shape_id);
+        row.domain = receiver_shape ? receiver_shape->domain : 0;
+        row.syntax = XG_OBJECT_ACCESS_SYNTAX_DESTRUCTURE;
+        row.flags = XG_OBJECT_ACCESS_STATIC_FIELD | XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN;
+        if (receiver_shape)
+            (void) body_add_object_access_with_case(bc, &row, receiver_shape);
+    }
+}
+
 static uint32_t body_const_expr_id(XgBodyCollect *bc, const AstNode *expr) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
     if (!expr)
@@ -10580,6 +10648,20 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 bc->nname_locals = base_name_locals;
             }
             break;
+        case AST_MATCH_EXPR: {
+            walk_body_for_calls(bc, node->as.match_expr.expr);
+            for (int i = 0; i < node->as.match_expr.arm_count; i++) {
+                const AstNode *arm_node =
+                    node->as.match_expr.arms ? node->as.match_expr.arms[i] : NULL;
+                if (!arm_node || arm_node->type != AST_MATCH_ARM)
+                    continue;
+                const MatchArmNode *arm = &arm_node->as.match_arm;
+                body_add_match_object_pattern_accesses(bc, arm->pattern, node->as.match_expr.expr);
+                walk_body_for_calls(bc, arm->guard);
+                walk_body_for_calls(bc, arm->body);
+            }
+            break;
+        }
         default:
             break;
     }
