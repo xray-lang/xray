@@ -627,5 +627,5 @@ XR_FUNC void xi_emit_len(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_LEN, dst, src, (uint8_t) (v->aux_int != 0)));
+    emit_inst(ctx, CREATE_ABC(OP_LEN, dst, src, 0));
 }

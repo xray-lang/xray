@@ -173,7 +173,7 @@ static void format_set(XrVMRuntime *isolate, XrStrBuf *sb, XrSet *set, int depth
     xr_strbuf_append_cstr(sb, "]", 1);
 }
 
-static void format_json(XrVMRuntime *isolate, XrStrBuf *sb, XrJson *json, int depth) {
+static void format_json(XrVMRuntime *isolate, XrStrBuf *sb, XrObjectInstance *json, int depth) {
     xr_strbuf_append_cstr(sb, "{", 1);
     XrClass *cls = json->klass;
     if (!cls) {
@@ -329,10 +329,9 @@ void xr_value_to_strbuf(XrVMRuntime *isolate, XrStrBuf *sb, XrValue val, int dep
                 }
                 break;
             }
-            /* Json/structural object: recursive key-value format. */
-            if (cls &&
-                (cls->builtin_kind == XR_BK_JSON || cls->builtin_kind == XR_BK_STRUCT_OBJECT)) {
-                format_json(isolate, sb, (XrJson *) gc, depth);
+            /* Structural object: recursive key-value format. */
+            if (cls && cls->builtin_kind == XR_BK_STRUCT_OBJECT) {
+                format_json(isolate, sb, (XrObjectInstance *) gc, depth);
                 break;
             }
             /* Tuple: parenthesised form, matches the literal syntax. */

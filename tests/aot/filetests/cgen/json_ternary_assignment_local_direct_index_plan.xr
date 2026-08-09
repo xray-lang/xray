@@ -1,7 +1,0 @@
-fn jsonTernaryAssignmentLocalDirectIndexPlan(flag: bool) -> int {
-    var user: Json = { name: "seed", age: 0 }
-    user = flag ? { name: "ada", age: 1 } : { name: "bob", age: 2 }
-    return user.age!
-}
-
-print(jsonTernaryAssignmentLocalDirectIndexPlan(true))

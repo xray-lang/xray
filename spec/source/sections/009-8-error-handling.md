@@ -242,7 +242,7 @@ class PanicInfo {
     stack: Array<string>        // 自动捕获的调用栈
     cause: PanicInfo?           // 链式 cause
     code: int                   // 错误码
-    data: Json                  // 附加数据；无数据时为 JSON null
+    data: JSON.Value            // 附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -432,15 +432,15 @@ main()
 ```xray
 enum ConfigErr { Missing(string) }
 
-fn requirePort(cfg: Json) {
-    if (!Json.containsKey(cfg, "port")) { throw ConfigErr.Missing("port") }
-    print("port:", Json.get(cfg, "port"))
+fn requirePort(cfg: JSON.Object) {
+    if (!cfg.containsKey("port")) { throw ConfigErr.Missing("port") }
+    print("port:", cfg["port"])
 }
 
 fn main() {
     try {
-        requirePort(Json.parse("{\"port\": 8080}"))   // => port: 8080
-        requirePort(Json.parse("{}"))                  // 抛出 ConfigErr.Missing
+        requirePort(JSON.parseObject("{\"port\": 8080}"))   // => port: 8080
+        requirePort(JSON.parseObject("{}"))                  // 抛出 ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
             ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port
@@ -783,7 +783,7 @@ class PanicInfo {
     stack: Array<string>        // automatically captured call stack
     cause: PanicInfo?           // chained cause
     code: int                   // error code
-    data: Json                  // additional data; JSON null when absent
+    data: JSON.Value            // additional data; JSON null when absent
 
     constructor(message: string = "", cause: PanicInfo? = null)
     fn toString() -> string
@@ -985,15 +985,15 @@ main()
 ```xray
 enum ConfigErr { Missing(string) }
 
-fn requirePort(cfg: Json) {
-    if (!Json.containsKey(cfg, "port")) { throw ConfigErr.Missing("port") }
-    print("port:", Json.get(cfg, "port"))
+fn requirePort(cfg: JSON.Object) {
+    if (!cfg.containsKey("port")) { throw ConfigErr.Missing("port") }
+    print("port:", cfg["port"])
 }
 
 fn main() {
     try {
-        requirePort(Json.parse("{\"port\": 8080}"))   // => port: 8080
-        requirePort(Json.parse("{}"))                  // throws ConfigErr.Missing
+        requirePort(JSON.parseObject("{\"port\": 8080}"))   // => port: 8080
+        requirePort(JSON.parseObject("{}"))                  // throws ConfigErr.Missing
     } catch (e: ConfigErr) {
         match (e) {
             ConfigErr.Missing(f) -> print("missing field:", f),   // => missing field: port

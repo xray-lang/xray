@@ -1011,7 +1011,7 @@ TEST(resources_read_stdlib_list_omits_json_module) {
     const char *text = xjson_get_string(item, "text");
     ASSERT_NOT_NULL(text);
     ASSERT(strstr(text, "| `json` |") == NULL);
-    ASSERT_NOT_NULL(strstr(text, "Json.parse()"));
+    ASSERT_NOT_NULL(strstr(text, "JSON.parse<T>()"));
 
     xjson_free(params);
     xjson_free(result);
@@ -1230,8 +1230,8 @@ TEST(tools_call_stdlib_search_json_reports_builtin_usage) {
     ASSERT_NOT_NULL(structured);
     const char *content = xjson_get_string(structured, "content");
     ASSERT_NOT_NULL(content);
-    ASSERT_NOT_NULL(strstr(content, "## Built-in: Json"));
-    ASSERT_NOT_NULL(strstr(content, "Json.parse()"));
+    ASSERT_NOT_NULL(strstr(content, "## Built-in: JSON"));
+    ASSERT_NOT_NULL(strstr(content, "JSON.parse()"));
     ASSERT(strstr(content, "import json") == NULL);
 
     xjson_free(params);
@@ -1514,8 +1514,8 @@ TEST(resources_read_json_builtin_template) {
     XrJsonValue *item = xjson_array_get(contents, 0);
     const char *text = xjson_get_string(item, "text");
     ASSERT_NOT_NULL(text);
-    ASSERT_NOT_NULL(strstr(text, "Json.parse(text)"));
-    ASSERT_NOT_NULL(strstr(text, "Use it directly without `import`."));
+    ASSERT_NOT_NULL(strstr(text, "JSON.parse<T>(text)"));
+    ASSERT_NOT_NULL(strstr(text, "Use `JSON.*` directly without `import`"));
     ASSERT(strstr(text, "import json") == NULL);
 
     xmcp_knowledge_free(server.knowledge);
@@ -1828,7 +1828,7 @@ TEST(knowledge_get_stdlib_list) {
     ASSERT_NOT_NULL(sl);
     ASSERT(strstr(sl, "http") != NULL);
     ASSERT(strstr(sl, "| `json` |") == NULL);
-    ASSERT(strstr(sl, "Json.parse()") != NULL);
+    ASSERT(strstr(sl, "JSON.parse<T>()") != NULL);
 }
 
 /* =========================================================================

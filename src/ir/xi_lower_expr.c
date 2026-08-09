@@ -65,7 +65,9 @@
 static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode *call);
 static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result_type,
                                 const char *module_name, const char *cname, AstNode **arguments,
-                                XrCallArgAccess *arg_accesses, int arg_count);
+                                XrCallArgAccess *arg_accesses, int arg_count,
+                                XaSymbol *resolved_class_sym);
+static bool lower_value_known_allocation_storage_mode(const XiValue *value, uint8_t *out_mode);
 static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
                                                      XaParallelCallKind kind);
 static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
@@ -94,7 +96,7 @@ static int xi_lower_builtin_class_global_index(const char *name) {
         {"Set", XR_GLOBAL_VAR_SET},
         {"Map", XR_GLOBAL_VAR_MAP},
         {"String", XR_GLOBAL_VAR_STRING},
-        {"Json", XR_GLOBAL_VAR_JSON},
+        {"JSON", XR_GLOBAL_VAR_JSON},
         {"Process", XR_GLOBAL_VAR_PROCESS},
         {"PanicInfo", XR_GLOBAL_VAR_PANIC_INFO},
         {"Range", XR_GLOBAL_VAR_RANGE},
@@ -1283,7 +1285,7 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
     }
 
     /* Builtin class names (PascalCase) resolve to runtime class globals.
-     * Used as namespaces for static method dispatch like Json.parse(s). */
+     * Used as namespaces for static method dispatch like JSON.parse(s). */
     if (name) {
         XiValue *module_func = xi_lower_builtin_module_function_ref(l, sid, name, (int) node->line);
         if (module_func)
@@ -2405,9 +2407,6 @@ static XiValue *lower_member_slot_load(XiLower *l, AstNode *node, XiValue *obj,
     }
     xi_lower_apply_sequence_evidence_ids(v, sequence_ids);
     xi_lower_bind_class_field_id(l, v, obj->type, ma->name);
-    if (obj->type && XR_TYPE_IS_JSON(obj->type))
-        xi_lower_bind_json_dynamic_access_id(l, v, ma->name, (uint32_t) node->line, UINT16_MAX,
-                                             XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
     return v;
 }
 
@@ -2497,32 +2496,23 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         }
     }
 
-    /* Json with a complete compile-time field table → direct indexed access.
-     * Non-sealed object literals may still grow dynamically, but their
-     * declared field indices remain stable. Computed-key object literals
-     * have NULL holes in the analyzer field table and use name lookup
-     * because codegen compacts only the static named fields. */
+    /* Exact structural objects use their canonical field ordinal. */
     int fidx = object_field_runtime_ordinal(obj->type, ma->name);
-    if (fidx < 0 && obj->type && XR_TYPE_IS_JSON(obj->type)) {
-        uint16_t evidence_fidx = UINT16_MAX;
-        if (xi_lower_find_json_direct_field_ordinal(l, ma->name, (uint32_t) node->line,
-                                                    XG_JSON_DYNAMIC_ACCESS_FIELD_GET,
-                                                    &evidence_fidx))
-            fidx = (int) evidence_fidx;
-    }
-    if (fidx >= 0 && !xi_lower_json_dynamic_access_requires_dynamic_lookup(
-                         l, ma->name, (uint32_t) node->line, (uint16_t) fidx,
-                         XG_JSON_DYNAMIC_ACCESS_FIELD_GET)) {
+    if (fidx >= 0) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_OBJECT_GET_F, result_type, 1);
         if (!v)
             return NULL;
         v->args[0] = obj;
         v->aux_int = fidx;
         v->line = (uint32_t) node->line;
-        xi_lower_bind_json_dynamic_access_id(l, v, ma->name, (uint32_t) node->line, (uint16_t) fidx,
-                                             XG_JSON_DYNAMIC_ACCESS_FIELD_GET);
-        xi_lower_bind_object_access_id(l, v, ma->name, (uint32_t) node->line, (uint16_t) fidx,
+        if ((obj->op == XI_JSON_DECODE &&
+             (obj->lowering_flags & XI_LOWERING_FLAG_JSON_WITH_REST) != 0) ||
+            (obj->lowering_flags & XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS) != 0)
+            v->lowering_flags |= XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS;
+        xi_lower_bind_object_access_id(l, v, ma->name, (uint32_t) node->line,
                                        XG_OBJECT_ACCESS_FIELD_GET);
+        if (v->xg_object_access_id == 0 && xr_type_is_exact_struct_object(obj->type))
+            v->lowering_flags |= XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS;
         return v;
     }
 
@@ -2648,18 +2638,9 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
         }
     }
 
-    /* Sealed Json with known field → direct indexed store */
+    /* Exact structural objects use their canonical field ordinal. */
     int fidx = object_field_runtime_ordinal(obj->type, ms->member);
-    if (fidx < 0 && obj->type && XR_TYPE_IS_JSON(obj->type)) {
-        uint16_t evidence_fidx = UINT16_MAX;
-        if (xi_lower_find_json_direct_field_ordinal(l, ms->member, (uint32_t) node->line,
-                                                    XG_JSON_DYNAMIC_ACCESS_FIELD_SET,
-                                                    &evidence_fidx))
-            fidx = (int) evidence_fidx;
-    }
-    if (fidx >= 0 && !xi_lower_json_dynamic_access_requires_dynamic_lookup(
-                         l, ms->member, (uint32_t) node->line, (uint16_t) fidx,
-                         XG_JSON_DYNAMIC_ACCESS_FIELD_SET)) {
+    if (fidx >= 0) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_OBJECT_SET_F, result_type, 2);
         if (!v)
             return NULL;
@@ -2668,9 +2649,7 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
         v->aux_int = fidx;
         v->flags |= XI_FLAG_SIDE_EFFECT;
         v->line = (uint32_t) node->line;
-        xi_lower_bind_json_dynamic_access_id(l, v, ms->member, (uint32_t) node->line,
-                                             (uint16_t) fidx, XG_JSON_DYNAMIC_ACCESS_FIELD_SET);
-        xi_lower_bind_object_access_id(l, v, ms->member, (uint32_t) node->line, (uint16_t) fidx,
+        xi_lower_bind_object_access_id(l, v, ms->member, (uint32_t) node->line,
                                        XG_OBJECT_ACCESS_FIELD_SET);
         return v;
     }
@@ -2690,21 +2669,19 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
         v->op = XI_WEAK_STORE_FIELD;
         v->flags = xi_op_default_effects(v->op);
     }
-    /* A value allocated for this store leaves the execution-local domain the
-     * moment the field takes it: the owning object outlives the statement and
-     * its destructor runs where this execution's heap is already gone, so the
-     * child can never be released. Declaration lowering marks a `var` for the
-     * same reason, which is why `var tmp = Node(); h.n = tmp` was balanced
-     * while `h.n = Node()` leaked one object per store -- the second had no
-     * declaration to carry the mark. The helper only marks fresh allocations,
-     * so a borrowed value or a plain register read is left alone, and a weak
-     * store never reaches here because it has changed op above. */
-    if (v->op == XI_STORE_FIELD)
-        (void) xi_lower_mark_storage_allocation(val, XR_OBJ_STORAGE_TRANSFER);
+    /* A fresh child must inhabit the receiver's storage domain. In particular,
+     * storing one execution-local instance into another must not promote both
+     * to the transfer heap: local cycles are reclaimed with the coroutine,
+     * whereas a promoted RC cycle has no physical execution boundary. When the
+     * receiver is not a traceable fresh allocation, keep the fail-closed
+     * transfer choice because its lifetime may exceed this execution. */
+    if (v->op == XI_STORE_FIELD && !(l->func && l->func->is_constructor)) {
+        uint8_t receiver_mode = XR_OBJ_STORAGE_TRANSFER;
+        (void) lower_value_known_allocation_storage_mode(obj, &receiver_mode);
+        if (receiver_mode != XR_OBJ_STORAGE_NORMAL)
+            (void) xi_lower_mark_storage_allocation(val, receiver_mode);
+    }
     xi_lower_bind_class_field_id(l, v, obj->type, ms->member);
-    if (obj->type && XR_TYPE_IS_JSON(obj->type))
-        xi_lower_bind_json_dynamic_access_id(l, v, ms->member, (uint32_t) node->line, UINT16_MAX,
-                                             XG_JSON_DYNAMIC_ACCESS_FIELD_SET);
     return v;
 }
 
@@ -3038,28 +3015,17 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     struct XrType *result_type = xi_lower_node_type(l, node);
     const char *static_key = lower_static_string_key(ig->index);
     int field_index = lower_resolved_object_field_ordinal(l, node, obj->type, static_key);
-    if (field_index < 0 && !l->had_error && obj->type && XR_TYPE_IS_JSON(obj->type)) {
-        uint16_t evidence_field_index = UINT16_MAX;
-        if (static_key && xi_lower_find_json_direct_field_ordinal(
-                              l, static_key, (uint32_t) node->line,
-                              XG_JSON_DYNAMIC_ACCESS_INDEX_GET, &evidence_field_index))
-            field_index = (int) evidence_field_index;
-    }
-    if (field_index >= 0 && (!obj->type || !XR_TYPE_IS_JSON(obj->type) ||
-                             !xi_lower_json_dynamic_access_requires_dynamic_lookup(
-                                 l, static_key, (uint32_t) node->line, (uint16_t) field_index,
-                                 XG_JSON_DYNAMIC_ACCESS_INDEX_GET))) {
+    if (field_index >= 0) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_OBJECT_GET_F, result_type, 1);
         if (!v)
             return NULL;
         v->args[0] = obj;
         v->aux_int = field_index;
         v->line = (uint32_t) node->line;
-        xi_lower_bind_json_dynamic_access_id(l, v, static_key, (uint32_t) node->line,
-                                             (uint16_t) field_index,
-                                             XG_JSON_DYNAMIC_ACCESS_INDEX_GET);
         xi_lower_bind_object_access_id(l, v, static_key, (uint32_t) node->line,
-                                       (uint16_t) field_index, XG_OBJECT_ACCESS_FIELD_GET);
+                                       XG_OBJECT_ACCESS_FIELD_GET);
+        if (v->xg_object_access_id == 0 && xr_type_is_exact_struct_object(obj->type))
+            v->lowering_flags |= XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS;
         return v;
     }
     if (l->had_error)
@@ -3132,10 +3098,6 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     v->args[1] = idx;
     v->line = (uint32_t) node->line;
     xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-    if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
-        xi_lower_bind_json_dynamic_access_id(l, v, static_key, (uint32_t) node->line, UINT16_MAX,
-                                             XG_JSON_DYNAMIC_ACCESS_INDEX_GET);
-    }
     xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, key_access_ordinal,
                                 XG_KEY_ACCESS_INDEX_GET);
 
@@ -3162,17 +3124,7 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
         return NULL;
     const char *static_key = lower_static_string_key(is_node->index);
     int field_index = lower_resolved_object_field_ordinal(l, node, obj->type, static_key);
-    if (field_index < 0 && !l->had_error && obj->type && XR_TYPE_IS_JSON(obj->type)) {
-        uint16_t evidence_field_index = UINT16_MAX;
-        if (static_key && xi_lower_find_json_direct_field_ordinal(
-                              l, static_key, (uint32_t) node->line,
-                              XG_JSON_DYNAMIC_ACCESS_INDEX_SET, &evidence_field_index))
-            field_index = (int) evidence_field_index;
-    }
-    if (field_index >= 0 && (!obj->type || !XR_TYPE_IS_JSON(obj->type) ||
-                             !xi_lower_json_dynamic_access_requires_dynamic_lookup(
-                                 l, static_key, (uint32_t) node->line, (uint16_t) field_index,
-                                 XG_JSON_DYNAMIC_ACCESS_INDEX_SET))) {
+    if (field_index >= 0) {
         XiValue *val = xi_lower_expr(l, is_node->value);
         if (!val)
             return NULL;
@@ -3189,11 +3141,8 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
         v->aux_int = field_index;
         v->flags |= XI_FLAG_SIDE_EFFECT;
         v->line = (uint32_t) node->line;
-        xi_lower_bind_json_dynamic_access_id(l, v, static_key, (uint32_t) node->line,
-                                             (uint16_t) field_index,
-                                             XG_JSON_DYNAMIC_ACCESS_INDEX_SET);
         xi_lower_bind_object_access_id(l, v, static_key, (uint32_t) node->line,
-                                       (uint16_t) field_index, XG_OBJECT_ACCESS_FIELD_SET);
+                                       XG_OBJECT_ACCESS_FIELD_SET);
         return v;
     }
     if (l->had_error)
@@ -3262,10 +3211,6 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
-    if (obj->type && XR_TYPE_IS_JSON(obj->type)) {
-        xi_lower_bind_json_dynamic_access_id(l, v, static_key, (uint32_t) node->line, UINT16_MAX,
-                                             XG_JSON_DYNAMIC_ACCESS_INDEX_SET);
-    }
     xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, key_access_ordinal, XG_KEY_ACCESS_SET);
     return v;
 }
@@ -3855,7 +3800,7 @@ static XiValue *lower_ct_struct_value(XiLower *l, AstNode *node, const XrCtValue
             return NULL;
     }
 
-    XiValue *inst = lower_construct(l, node, result_type, NULL, struct_name, NULL, NULL, 0);
+    XiValue *inst = lower_construct(l, node, result_type, NULL, struct_name, NULL, NULL, 0, NULL);
     if (!inst)
         return NULL;
 
@@ -4086,11 +4031,7 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         if (!v)
             return xi_const_null(l->func, l->cur_block, l->type_null);
         v->args[0] = arg;
-        v->aux_int = arg && arg->type &&
-                             (arg->type->kind == XR_KIND_JSON || arg->type->kind == XR_KIND_UNKNOWN)
-                         ? 1
-                         : 0;
-        if (v->aux_int)
+        if (arg && arg->type && arg->type->kind == XR_KIND_UNKNOWN)
             v->flags |= XI_FLAG_MAY_THROW;
         v->line = (uint32_t) line;
         return v;
@@ -4387,6 +4328,42 @@ static bool lower_expr_is_copy_call(AstNode *node, AstNode **inner_out) {
     return true;
 }
 
+/* Immutable pointer-backed values still need a storage-domain handoff when
+ * they cross an execution boundary.  Source `copy(...)` remains mandatory for
+ * mutable graphs; strings, tuples and enum values have value semantics, so
+ * their boundary copy is implicit just like passing an immediate scalar.
+ *
+ * Keep this decision on the concrete lowered type.  In particular an erased
+ * union of EnumVariant<E> descriptors is pointer-backed even though each
+ * descriptor was an ordinal before erasure. */
+static bool lower_boundary_type_uses_value_copy(const XrType *type, unsigned depth) {
+    if (!type || depth > 32)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_STRING:
+        case XR_KIND_ENUM:
+            return true;
+        case XR_KIND_TUPLE:
+            /* A tuple containing only immediates makes COPY a runtime no-op;
+             * using one uniform mode avoids representation-dependent rules. */
+            return true;
+        case XR_KIND_INSTANCE:
+            return xr_type_is_enum_metadata(type);
+        case XR_KIND_UNION:
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                if (lower_boundary_type_uses_value_copy(type->union_type.members[i], depth + 1))
+                    return true;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+static uint8_t lower_boundary_default_transfer_mode(const XrType *type) {
+    return lower_boundary_type_uses_value_copy(type, 0) ? XR_TRANSFER_COPY : XR_TRANSFER_SHARE;
+}
+
 static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList *args, int max_args,
                                int line) {
     for (int i = 0; i < call->arg_count; i++) {
@@ -4407,7 +4384,8 @@ static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList 
                     return false;
                 get->args[0] = src;
                 get->aux_int = j;
-                if (!xi_lower_go_arg_list_push(l, args, get, XR_TRANSFER_SHARE, max_args, line))
+                uint8_t mode = lower_boundary_default_transfer_mode(et);
+                if (!xi_lower_go_arg_list_push(l, args, get, mode, max_args, line))
                     return false;
             }
             continue;
@@ -4428,6 +4406,8 @@ static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList 
         XiValue *a = xi_lower_expr(l, value_node);
         if (!a)
             return false;
+        if (mode == XR_TRANSFER_SHARE)
+            mode = lower_boundary_default_transfer_mode(a->type);
         if (!xi_lower_go_arg_list_push(l, args, a, mode, max_args, line))
             return false;
     }
@@ -4458,6 +4438,8 @@ XR_FUNC bool xi_lower_boundary_transfer_arg(XiLower *l, AstNode *child, XiValue 
     XiValue *value = xi_lower_expr(l, value_node);
     if (!value)
         return false;
+    if (mode == XR_TRANSFER_SHARE)
+        mode = lower_boundary_default_transfer_mode(value->type);
     *out_value = value;
     *out_mode = mode;
     return true;
@@ -4834,7 +4816,6 @@ static bool lower_call_store_projection(XiLower *l, XiValue *source, XiValue *up
                 store->args[0] = base->args[0];
                 store->args[1] = updated;
                 store->aux_int = base->aux_int;
-                store->xg_json_dynamic_access_id = base->xg_json_dynamic_access_id;
             }
             break;
         case XI_PTR_LOAD:
@@ -4862,8 +4843,11 @@ static bool lower_call_slot_uses_read_place(XiLower *l, XrParamMode mode, int in
     if (mode != XR_PARAM_READ || index < 0)
         return false;
     bool requested = read_places && index < read_place_count && read_places[index];
-    if (!requested && function_type && function_type->kind == XR_KIND_FUNCTION &&
-        index < function_type->function.param_count) {
+    /* A supplied slot decision is authoritative.  In particular, mutators
+     * such as Array.push store their argument and therefore require an owned
+     * value copy instead of the ordinary nonescaping read-place ABI. */
+    if (!requested && (!read_places || index >= read_place_count) && function_type &&
+        function_type->kind == XR_KIND_FUNCTION && index < function_type->function.param_count) {
         XrType *formal = xr_type_function_param_type(function_type, index);
         requested = xi_lower_type_uses_read_place(l, formal);
     }
@@ -6043,32 +6027,70 @@ static bool lower_map_set_method_key_access_op(struct XrType *receiver_type, con
 
 static uint8_t lower_json_static_codec_kind(const MemberAccessNode *member) {
     if (!member || !member->name || !member->object || member->object->type != AST_VARIABLE ||
-        !member->object->as.variable.name || strcmp(member->object->as.variable.name, "Json") != 0)
+        !member->object->as.variable.name || strcmp(member->object->as.variable.name, "JSON") != 0)
         return 0;
-    if (strcmp(member->name, "parse") == 0)
+    if (strcmp(member->name, "parse") == 0 || strcmp(member->name, "parseObject") == 0 ||
+        strcmp(member->name, "parseValue") == 0)
         return XG_JSON_CODEC_PARSE;
-    if (strcmp(member->name, "decode") == 0)
+    if (strcmp(member->name, "parseWithRest") == 0)
+        return XG_JSON_CODEC_PARSE;
+    if (strcmp(member->name, "decode") == 0 || strcmp(member->name, "decodeObject") == 0 ||
+        strcmp(member->name, "get") == 0 || strcmp(member->name, "require") == 0)
         return XG_JSON_CODEC_DECODE;
-    if (strcmp(member->name, "encode") == 0)
+    if (strcmp(member->name, "value") == 0)
         return XG_JSON_CODEC_ENCODE;
     if (strcmp(member->name, "stringify") == 0)
         return XG_JSON_CODEC_STRINGIFY;
     return 0;
 }
 
+static bool lower_json_unknown_policy_ignore(const AstNode *node, bool *recognized) {
+    if (recognized)
+        *recognized = false;
+    if (!node || node->type != AST_MEMBER_ACCESS)
+        return false;
+    const MemberAccessNode *policy = &node->as.member_access;
+    if (!policy->name || !policy->object || policy->object->type != AST_MEMBER_ACCESS)
+        return false;
+    const MemberAccessNode *owner = &policy->object->as.member_access;
+    if (!owner->name || strcmp(owner->name, "UnknownFields") != 0 || !owner->object ||
+        owner->object->type != AST_VARIABLE || !owner->object->as.variable.name ||
+        strcmp(owner->object->as.variable.name, "JSON") != 0)
+        return false;
+    if (strcmp(policy->name, "Reject") == 0) {
+        if (recognized)
+            *recognized = true;
+        return false;
+    }
+    if (strcmp(policy->name, "Ignore") == 0) {
+        if (recognized)
+            *recognized = true;
+        return true;
+    }
+    return false;
+}
+
 static XiValue *lower_json_object_codec(XiLower *l, AstNode *node, const CallExprNode *call,
-                                        uint8_t codec_kind, bool typed_parse) {
-    if (!l || !node || !call || call->arg_count != 1)
+                                        uint8_t codec_kind, bool typed_parse, bool with_rest) {
+    if (!l || !node || !call || call->arg_count < 1 || call->arg_count > 2)
         return NULL;
     XrType *result_type = xi_lower_node_type(l, node);
-    bool derived_class = result_type && XR_TYPE_IS_INSTANCE(result_type) &&
-                         result_type->instance.class_ref &&
-                         (result_type->instance.class_ref->derive_flags & XR_DERIVE_JSON) != 0;
-    if (!result_type || (!xr_type_is_json_decode_field_supported(result_type) && !derived_class))
+    XrType *target_type = result_type;
+    if (with_rest) {
+        if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0])
+            return NULL;
+        target_type = l->analyzer ? xr_tref_resolve_in_analyzer(l->analyzer, call->type_args[0])
+                                  : xr_tref_resolve(l->isolate, call->type_args[0]);
+    }
+    bool derived_class = target_type && XR_TYPE_IS_INSTANCE(target_type) &&
+                         target_type->instance.class_ref &&
+                         (target_type->instance.class_ref->derive_flags & XR_DERIVE_JSON) != 0;
+    if (!result_type || !target_type ||
+        (!xr_type_is_json_decode_field_supported(target_type) && !derived_class))
         return NULL;
 
-    bool object_target = XR_TYPE_IS_STRUCT_OBJECT(result_type);
-    int field_count = object_target ? result_type->object.field_count : 0;
+    bool object_target = XR_TYPE_IS_STRUCT_OBJECT(target_type);
+    int field_count = object_target ? target_type->object.field_count : 0;
     XiValue *input = xi_lower_expr(l, call->arguments[0]);
     if (!input)
         return NULL;
@@ -6077,7 +6099,7 @@ static XiValue *lower_json_object_codec(XiLower *l, AstNode *node, const CallExp
         names = (const char **) xi_func_arena_alloc(
             l->func, (uint32_t) ((size_t) field_count * sizeof(const char *)));
         if (!names || !xi_lower_fill_canonical_object_field_names(
-                          l, result_type, names, field_count, (uint32_t) node->line)) {
+                          l, target_type, names, field_count, (uint32_t) node->line)) {
             l->had_error = true;
             return NULL;
         }
@@ -6089,14 +6111,58 @@ static XiValue *lower_json_object_codec(XiLower *l, AstNode *node, const CallExp
     value->args[0] = input;
     value->aux = (void *) names;
     value->aux_int = field_count;
+    value->json_decode_target_type = target_type;
     value->flags |= XI_FLAG_SIDE_EFFECT;
     if (typed_parse) {
         value->lowering_flags |= XI_LOWERING_FLAG_JSON_TYPED_PARSE;
         value->flags |= XI_FLAG_MAY_THROW;
     }
+    if (with_rest)
+        value->lowering_flags |= XI_LOWERING_FLAG_JSON_WITH_REST;
+    if (call->arg_count == 2) {
+        bool recognized = false;
+        bool ignore = lower_json_unknown_policy_ignore(call->arguments[1], &recognized);
+        if (!recognized)
+            return NULL;
+        if (ignore)
+            value->lowering_flags |= XI_LOWERING_FLAG_JSON_UNKNOWN_IGNORE;
+    }
     value->line = (uint32_t) node->line;
     xi_lower_bind_json_codec_id(l, value, xi_lower_source_node_id(l, node), codec_kind);
     return value;
+}
+
+static XiValue *lower_json_path_decode(XiLower *l, AstNode *node, XiValue *input,
+                                       XrType *target_type, XrType *result_type, bool require) {
+    if (!l || !node || !input || !target_type || !result_type ||
+        !xr_type_is_json_decode_field_supported(target_type))
+        return NULL;
+    int field_count = XR_TYPE_IS_STRUCT_OBJECT(target_type) ? target_type->object.field_count : 0;
+    const char **names = NULL;
+    if (field_count > 0) {
+        names = (const char **) xi_func_arena_alloc(
+            l->func, (uint32_t) ((size_t) field_count * sizeof(const char *)));
+        if (!names || !xi_lower_fill_canonical_object_field_names(
+                          l, target_type, names, field_count, (uint32_t) node->line)) {
+            l->had_error = true;
+            return NULL;
+        }
+    }
+    XiValue *decoded = xi_value_new(l->func, l->cur_block, XI_JSON_DECODE, result_type, 1);
+    if (!decoded)
+        return NULL;
+    decoded->args[0] = input;
+    decoded->aux = (void *) names;
+    decoded->aux_int = field_count;
+    decoded->json_decode_target_type = target_type;
+    decoded->flags = xi_op_default_effects(XI_JSON_DECODE);
+    if (require) {
+        decoded->lowering_flags |= XI_LOWERING_FLAG_JSON_REQUIRE;
+        decoded->flags |= XI_FLAG_MAY_THROW;
+    }
+    decoded->line = (uint32_t) node->line;
+    xi_lower_bind_json_codec_id(l, decoded, xi_lower_source_node_id(l, node), XG_JSON_CODEC_DECODE);
+    return decoded;
 }
 
 static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
@@ -6463,28 +6529,53 @@ static XrType *lower_known_expr_type(XiLower *l, AstNode *node) {
     return xi_top_binding_valid(top) ? top.type : NULL;
 }
 
-static uint8_t lower_value_allocation_storage_mode(const XiValue *value) {
-    if (!value)
-        return XR_OBJ_STORAGE_NORMAL;
-    switch (value->op) {
-        case XI_ARRAY_NEW:
-        case XI_MAP_NEW:
-        case XI_SET_NEW:
-        case XI_CALL_METHOD:
-        case XI_CALL_BUILTIN:
-            return xi_value_allocation_storage_mode(value);
-        case XI_JSON_NEW:
-            return xi_json_storage_mode(value);
-        case XI_TUPLE_NEW:
-            return xi_tuple_storage_mode(value);
-        case XI_COPY:
-        case XI_SOURCE_MOVE:
-        case XI_OWNER_FORWARD:
-            return value->nargs > 0 ? lower_value_allocation_storage_mode(value->args[0])
-                                    : XR_OBJ_STORAGE_NORMAL;
-        default:
-            return XR_OBJ_STORAGE_NORMAL;
+static bool lower_value_known_allocation_storage_mode(const XiValue *value, uint8_t *out_mode) {
+    if (out_mode)
+        *out_mode = XR_OBJ_STORAGE_NORMAL;
+    const XiValue *current = value;
+    for (uint8_t depth = 0; current && depth < 16; depth++) {
+        switch (current->op) {
+            case XI_ARRAY_NEW:
+            case XI_MAP_NEW:
+            case XI_SET_NEW:
+                if (out_mode)
+                    *out_mode = xi_value_allocation_storage_mode(current);
+                return true;
+            case XI_OBJECT_NEW:
+                if (out_mode)
+                    *out_mode = xi_object_storage_mode(current);
+                return true;
+            case XI_TUPLE_NEW:
+                if (out_mode)
+                    *out_mode = xi_tuple_storage_mode(current);
+                return true;
+            case XI_CALL:
+            case XI_CALL_METHOD:
+                if (!xi_value_is_constructor_call(current))
+                    return false;
+                if (out_mode)
+                    *out_mode = xi_value_allocation_storage_mode(current);
+                return true;
+            case XI_COPY:
+            case XI_SOURCE_MOVE:
+            case XI_OWNER_FORWARD:
+            case XI_BOX:
+            case XI_UNBOX:
+                if (current->nargs < 1)
+                    return false;
+                current = current->args[0];
+                continue;
+            default:
+                return false;
+        }
     }
+    return false;
+}
+
+static uint8_t lower_value_allocation_storage_mode(const XiValue *value) {
+    uint8_t mode = XR_OBJ_STORAGE_NORMAL;
+    (void) lower_value_known_allocation_storage_mode(value, &mode);
+    return mode;
 }
 
 static bool lower_method_stores_argument(const XrType *receiver_type, const char *method_name,
@@ -6683,24 +6774,36 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return v;
         }
 
-        /* Json.decode<T>(data) → XI_JSON_DECODE with compile-time field info.
+        /* JSON.decode<T>(data) → XI_JSON_DECODE with compile-time field info.
          * The analyzer already validated T is a sealed structural object type with fields
          * and stored the result type as T? in the node table. */
         if (ma->name && strcmp(ma->name, "parse") == 0 && ma->object &&
-            ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "Json") == 0 &&
-            call->type_arg_count == 1 && call->arg_count == 1) {
+            ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "JSON") == 0 &&
+            call->type_arg_count == 1 && call->arg_count >= 1 && call->arg_count <= 2) {
             XiValue *typed_parse =
-                lower_json_object_codec(l, node, call, XG_JSON_CODEC_PARSE, true);
+                lower_json_object_codec(l, node, call, XG_JSON_CODEC_PARSE, true, false);
             if (typed_parse || l->had_error)
                 return typed_parse;
         }
 
-        if (ma->name && strcmp(ma->name, "decode") == 0 && ma->object &&
-            ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "Json") == 0 &&
-            call->type_arg_count == 1 && call->arg_count == 1) {
-            XiValue *decode = lower_json_object_codec(l, node, call, XG_JSON_CODEC_DECODE, false);
+        if (ma->name &&
+            (strcmp(ma->name, "decode") == 0 || strcmp(ma->name, "decodeObject") == 0) &&
+            ma->object && ma->object->type == AST_VARIABLE &&
+            strcmp(ma->object->as.variable.name, "JSON") == 0 && call->type_arg_count == 1 &&
+            call->arg_count >= 1 && call->arg_count <= 2) {
+            XiValue *decode =
+                lower_json_object_codec(l, node, call, XG_JSON_CODEC_DECODE, false, false);
             if (decode || l->had_error)
                 return decode;
+        }
+
+        if (ma->name && strcmp(ma->name, "parseWithRest") == 0 && ma->object &&
+            ma->object->type == AST_VARIABLE && strcmp(ma->object->as.variable.name, "JSON") == 0 &&
+            call->type_arg_count == 1 && call->arg_count >= 1 && call->arg_count <= 2) {
+            XiValue *parsed =
+                lower_json_object_codec(l, node, call, XG_JSON_CODEC_PARSE, true, true);
+            if (parsed || l->had_error)
+                return parsed;
         }
 
         /* Coro.method() → XI_CORO_OP with sub-type encoding.
@@ -6787,7 +6890,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (lower_value_is_whole_module_import(l, recv, "sync") &&
             xi_lower_builtin_class_global_index(ma->name) >= 0) {
             return lower_construct(l, node, xi_lower_node_type(l, node), "sync", ma->name,
-                                   call->arguments, call->arg_accesses, call->arg_count);
+                                   call->arguments, call->arg_accesses, call->arg_count, NULL);
         }
 
         if (lower_value_is_whole_module_import(l, recv, "mem") && ma->name) {
@@ -6819,6 +6922,16 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return chan_send;
 
         struct XrType *result_type = xi_lower_node_type(l, node);
+        bool json_path_decode =
+            ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
+            strcmp(ma->object->as.variable.name, "JSON") == 0 && ma->name &&
+            (strcmp(ma->name, "get") == 0 || strcmp(ma->name, "require") == 0) &&
+            call->type_arg_count == 1 && call->type_args && call->type_args[0];
+        XrType *json_path_target =
+            json_path_decode
+                ? (l->analyzer ? xr_tref_resolve_in_analyzer(l->analyzer, call->type_args[0])
+                               : xr_tref_resolve(l->isolate, call->type_args[0]))
+                : NULL;
 
         /* Resolve the method's source-argument contract before lowering its
          * arguments.  Value aggregates use ordinary read-copy semantics only
@@ -6854,6 +6967,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 return NULL;
             lower_collect_read_place_params(l, NULL, method_type, method_modes, method_pcount,
                                             method_read_places, method_read_place_count);
+            for (int i = 0; i < method_read_place_count; i++) {
+                if (lower_method_stores_argument(recv->type, ma->name, i))
+                    method_read_places[i] = false;
+            }
         }
 
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
@@ -7206,7 +7323,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         uint16_t nargs = (uint16_t) (n + 1); /* receiver + args */
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
+        XiValue *v =
+            xi_value_new(l->func, l->cur_block, XI_CALL_METHOD,
+                         json_path_decode ? xr_type_new_json(l->isolate) : result_type, nargs);
         if (!v)
             return NULL;
         v->args[0] = recv;
@@ -7235,7 +7354,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         v->line = (uint32_t) node->line;
         xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
         xi_lower_bind_callsite_id(l, v, xi_lower_source_node_id(l, node));
-        if (json_codec_kind != 0)
+        if (json_codec_kind != 0 && !json_path_decode)
             xi_lower_bind_json_codec_id(l, v, xi_lower_source_node_id(l, node), json_codec_kind);
         xi_lower_bind_key_access_id(l, v, (uint32_t) node->line, method_key_access_ordinal,
                                     method_key_access_op);
@@ -7245,6 +7364,13 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return NULL;
         if (!lower_apply_one_call_writeback(l, &receiver_writeback, (int) node->line))
             return NULL;
+        if (json_path_decode) {
+            XiValue *decoded = lower_json_path_decode(l, node, v, json_path_target, result_type,
+                                                      strcmp(ma->name, "require") == 0);
+            if (!decoded)
+                l->had_error = true;
+            return decoded;
+        }
         return v;
     }
 
@@ -8901,7 +9027,8 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
  * from the node table. */
 static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result_type,
                                 const char *module_name, const char *cname, AstNode **arguments,
-                                XrCallArgAccess *arg_accesses, int arg_count) {
+                                XrCallArgAccess *arg_accesses, int arg_count,
+                                XaSymbol *resolved_class_sym) {
     XR_DCHECK(cname != NULL, "construct must have class name");
 
     /* The parser rewrites `Map(..)`, `Array(..)`, `StringBuilder(..)` and the
@@ -9057,7 +9184,8 @@ generic_constructor:;
     int n = args.count;
 
     XiValue *cls = NULL;
-    XaSymbol *class_sym = xi_lower_lookup_class_symbol(l, cname);
+    XaSymbol *class_sym =
+        resolved_class_sym ? resolved_class_sym : xi_lower_lookup_class_symbol(l, cname);
     XaSymbolLinks *class_links =
         (class_sym && l->analyzer) ? xa_analyzer_get_links(l->analyzer, class_sym) : NULL;
     struct XrType *constructor_type = xi_lower_class_constructor_type(l, class_sym);
@@ -9135,7 +9263,13 @@ generic_constructor:;
     /* Zero-arg struct with compile-time layout → XI_AGG_NEW.
      * The emitter decides stack vs heap via struct_can_stack_alloc. */
     if (arg_count == 0 && module_name == NULL && l->analyzer) {
-        XrAggregateLayout *slayout = xi_lower_lookup_struct_layout(l, cname);
+        XrAggregateLayout *slayout = (class_links && class_links->class_info)
+                                         ? class_links->class_info->struct_layout
+                                         : NULL;
+        if (!slayout)
+            slayout = xi_lower_type_struct_layout(l, result_type);
+        if (!slayout)
+            slayout = xi_lower_lookup_struct_layout(l, cname);
         if (slayout) {
             XiValue *inst = xi_value_new(l->func, l->cur_block, XI_AGG_NEW, result_type, 1);
             if (!inst)
@@ -9187,8 +9321,11 @@ generic_constructor:;
 
 static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     NewExprNode *ne = &node->as.new_expr;
+    XaSymbol *class_sym = NULL;
+    if (ne->class_symbol_id && l->analyzer)
+        class_sym = xa_scope_lookup_by_id(l->analyzer->global_scope, ne->class_symbol_id);
     return lower_construct(l, node, xi_lower_node_type(l, node), ne->module_name, ne->class_name,
-                           ne->arguments, ne->arg_accesses, ne->arg_count);
+                           ne->arguments, ne->arg_accesses, ne->arg_count, class_sym);
 }
 
 /* True if the named class is `Exception` or derives from it. Exception is a
@@ -9227,10 +9364,12 @@ static bool lower_class_is_generic(XiLower *l, const char *name) {
 }
 
 /* A bare `T(args)` call constructs through the new-expr construction path when
- * the normal class-binding call path cannot handle it: Exception (built-in
- * primitive class) and its subclasses, and generic classes (monomorphization).
- * Plain non-generic user classes (top-level and nested) construct correctly via
- * the normal call lowering and are left alone (preserves cross-module dispatch).
+ * the normal class-binding call path cannot handle it: PanicInfo (built-in
+ * primitive class) and its subclasses, generic classes (monomorphization), and
+ * fixed-layout value aggregates.  A zero-arg struct must become XI_AGG_NEW;
+ * invoking its class binding as if it were a reference-class constructor
+ * returns null and violates the language's default-value contract.
+ * Plain non-generic reference classes keep the normal call lowering.
  * Returns NULL when the normal call path should be used. */
 static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode *call) {
     if (!call->callee || call->callee->type != AST_VARIABLE)
@@ -9245,10 +9384,23 @@ static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode
         generic_class_call = true;
     if (!generic_class_call && strchr(name, '$') && xi_lower_lookup_class_symbol(l, name))
         generic_class_call = true;
-    if (!lower_class_is_exception_kind(l, name) && !generic_class_call)
+    XaSymbol *resolved_class_sym = NULL;
+    if (call->callee->as.variable.symbol_id)
+        resolved_class_sym =
+            xa_scope_lookup_by_id(l->analyzer->global_scope, call->callee->as.variable.symbol_id);
+    if (!resolved_class_sym || resolved_class_sym->kind != XA_SYM_CLASS)
+        resolved_class_sym = xi_lower_lookup_class_symbol(l, name);
+    XaSymbolLinks *resolved_links =
+        resolved_class_sym ? xa_analyzer_get_links(l->analyzer, resolved_class_sym) : NULL;
+    struct XrType *call_type = xi_lower_node_type(l, node);
+    bool value_aggregate_call = (call_type && call_type->is_value_type) ||
+                                (resolved_links && resolved_links->class_info &&
+                                 resolved_links->class_info->struct_layout != NULL) ||
+                                xi_lower_lookup_struct_layout(l, name) != NULL;
+    if (!lower_class_is_exception_kind(l, name) && !generic_class_call && !value_aggregate_call)
         return NULL;
     return lower_construct(l, node, xi_lower_node_type(l, node), NULL, name, call->arguments,
-                           call->arg_accesses, call->arg_count);
+                           call->arg_accesses, call->arg_count, resolved_class_sym);
 }
 
 static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
@@ -9635,7 +9787,7 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
                 tid = 16;
             else if (strcmp(tref->name, "Set") == 0)
                 tid = 15;
-            else if (strcmp(tref->name, "Json") == 0)
+            else if (strcmp(tref->name, "JSON.Value") == 0)
                 tid = XR_TID_JSON;
             else if (strcmp(tref->name, "PanicInfo") == 0)
                 tid = 24; /* XR_TID_PANIC_INFO */
@@ -9713,6 +9865,27 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
                         type_val->aux_int = native_tid;
                 }
             }
+        }
+    }
+
+    /* XI_IS has one backend-neutral contract: the checked value and a reified
+     * runtime target token are both operands.  Fixed-width scalar refs and
+     * union-pattern refs can arrive here without one of the syntactic tref
+     * cases above, but their resolved type is still authoritative.  Reify
+     * those builtin targets from the resolved type instead of emitting the
+     * historical one-operand AOT-only shape that the Xi verifier and VM must
+     * reject.  Nominal instances deliberately stay on the class-value path;
+     * XR_TID_INSTANCE would erase the class identity. */
+    if (!type_val && target_type) {
+        int tid = -1;
+        XrTypeKind kind = target_type->kind;
+        if (kind == XR_KIND_INT || kind == XR_KIND_FLOAT || kind == XR_KIND_STRING ||
+            kind == XR_KIND_BOOL || kind == XR_KIND_NULL || kind == XR_KIND_RUNE)
+            tid = (int) xr_type_to_tid(target_type);
+        if (tid >= 0) {
+            type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
+            if (type_val)
+                type_val->aux_int = tid;
         }
     }
 
@@ -9813,7 +9986,7 @@ static void lower_dynamic_as_target(XrTypeRef *tref, int *out_tid, const char **
             tid = 16;
         else if (strcmp(inner->name, "Set") == 0)
             tid = 15;
-        else if (strcmp(inner->name, "Json") == 0)
+        else if (strcmp(inner->name, "JSON.Value") == 0)
             tid = 18;
         else
             tid = xi_lower_prelude_native_class_typeid(inner->name);
@@ -10388,7 +10561,7 @@ static XiValue *lower_object_shape_narrow(XiLower *l, XiValue *val, struct XrTyp
 /* True when `type` is a structural object whose full field set is known at compile time,
  * i.e. the only form a runtime shape check can be built from. */
 static bool xi_type_is_checkable_object(struct XrType *type) {
-    return xr_type_object_row_is_exact(type) && type->object.field_count > 0 &&
+    return xr_type_is_exact_struct_object(type) && type->object.field_count > 0 &&
            type->object.field_names != NULL;
 }
 

@@ -1,2 +1,1 @@
-Type 'Map<string, int>' is not assignable to type 'Json'
-
+Type 'Json' has been removed. Use 'JSON.Value' or 'JSON.Object'.

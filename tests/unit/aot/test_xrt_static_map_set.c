@@ -142,10 +142,70 @@ static void test_tagged_set_clear_releases_owned_values(void) {
     xrt_set_destroy(set);
 }
 
+static void test_tagged_map_nan_key_has_canonical_identity(void) {
+    XrValue map_value = xrt_map_new(0);
+    xrt_map_t *map = (xrt_map_t *) map_value.ptr;
+    XrValue first_nan = XR_FROM_FLOAT(NAN);
+    XrValue second_nan = XR_FROM_FLOAT(nan("xray"));
+
+    xrt_map_set(map, first_nan, XR_FROM_INT(7));
+    xrt_map_set(map, second_nan, XR_FROM_INT(9));
+
+    ASSERT_EQ_INT(xrt_map_len(map), 1, "all NaN payloads identify one Map key");
+    ASSERT_TRUE(xrt_map_has(map, first_nan), "a NaN key is reflexively findable");
+    ASSERT_EQ_INT(xrt_map_get(map, first_nan).i, 9, "a later NaN write overwrites the key");
+    xrt_map_destroy(map);
+}
+
+static void test_tagged_map_preserves_declared_scalar_key_lane(void) {
+    XrValue map_value = xrt_map_new_declared(0, XR_ELEM_F64, XR_ELEM_ANY);
+    xrt_map_t *map = (xrt_map_t *) map_value.ptr;
+
+    xrt_map_set(map, XR_FROM_FLOAT(1.0), xr_box_str("one"));
+    XrValue keys = xrt_map_keys(map);
+    xrt_array_t *key_array = (xrt_array_t *) keys.ptr;
+
+    ASSERT_EQ_INT(key_array->elem_type, XR_ELEM_F64,
+                  "Map<float, tagged>.keys keeps packed float lanes");
+    ASSERT_EQ_INT(key_array->length, 1, "keys returns the declared scalar key");
+    ASSERT_TRUE(((double *) key_array->data)[0] == 1.0,
+                "the packed float key is not misread as tagged storage");
+    xrt_release(keys);
+    xrt_map_destroy(map);
+}
+
+static void test_shared_promotion_preserves_all_existing_owners(void) {
+    XrValue value = xrt_str_from_cstr("abc");
+    XrObjHeader *header = xrt_arc_value_header(value);
+
+    xrt_retain(value);
+    xrt_retain(value);
+    ASSERT_EQ_INT(atomic_load_explicit(&header->refcount, memory_order_relaxed), 2,
+                  "local RC encodes three owners as two");
+
+    (void) xrt_value_set_storage(value, XR_OBJ_STORAGE_SHARED);
+    ASSERT_EQ_INT(atomic_load_explicit(&header->refcount, memory_order_relaxed), -3,
+                  "shared promotion preserves all three owners");
+
+    xrt_release(value);
+    ASSERT_EQ_INT(xr_str_len(value), 3, "first shared release keeps the string alive");
+    xrt_release(value);
+    ASSERT_TRUE(strcmp(xr_str_data(value), "abc") == 0,
+                "second shared release keeps the final owner valid");
+
+    int before_final_release = g_free_count;
+    xrt_release(value);
+    ASSERT_TRUE(g_free_count > before_final_release,
+                "final shared release destroys the promoted string");
+}
+
 int main(void) {
     test_static_map_storage_uses_prehashed_lookup();
     test_static_set_storage_uses_prehashed_lookup();
     test_tagged_set_clear_releases_owned_values();
+    test_tagged_map_nan_key_has_canonical_identity();
+    test_tagged_map_preserves_declared_scalar_key_lane();
+    test_shared_promotion_preserves_all_existing_owners();
     printf("test_xrt_static_map_set: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;
 }

@@ -19,3 +19,5 @@ try {
     print(error.name)
     print(error == NetError.Closed)
 }
+
+run()

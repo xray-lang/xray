@@ -34,9 +34,9 @@ var fromLeft = Array<byte>(8)
 print(net.readInto(right, ref fromLeft, 8))
 print(fromLeft[0])
 
-var result = await bridge
-print(result.aToB)
-print(result.bToA)
+    var result = await bridge
+    print(result.aToB)
+    print(result.bToA)
 
 net.close(left)
 net.close(right)

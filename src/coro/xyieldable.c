@@ -50,6 +50,15 @@ static inline bool yield_setup_continuation(XrVMRuntime *X, XrCoroutine *coro, X
     return backend->setup_yield_continuation(X, coro, (void *) cont, user_data);
 }
 
+static XrCFuncResult yield_handoff_to_worker(XrVMRuntime *X, XrCoroutine *coro, int target_id,
+                                             XrContinuation cont, void *user_data) {
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext || !yield_setup_continuation(X, coro, cont, user_data))
+        return XR_CFUNC_ERROR;
+    ext->resume_target_worker = target_id;
+    return XR_CFUNC_YIELD;
+}
+
 bool xr_yield_set_continuation(XrVMRuntime *X, XrContinuation cont, void *user_data) {
     XrCoroutine *coro = get_current_coro(X);
     return coro && cont && yield_setup_continuation(X, coro, cont, user_data);
@@ -166,6 +175,17 @@ XrCFuncResult xr_yield_for_io(XrVMRuntime *X, int fd, int events, int64_t timeou
         if (runtime) {
             XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
             if (pd) {
+                /* PollDesc timer nodes belong to one worker's private timer
+                 * wheel. A coroutine can migrate between two operations on
+                 * the same fd, but the embedded deadline node cannot be
+                 * removed from one wheel and reused on another before the
+                 * old owner processes its cancellation queue. Resume on the
+                 * descriptor owner first, then arm the wait there. */
+                XrWorker *current = xr_current_worker();
+                int owner_id = pd->owner_worker_id;
+                if (current && owner_id >= 0 && owner_id != current->p.id) {
+                    return yield_handoff_to_worker(X, coro, owner_id, cont, user_data);
+                }
                 xr_netpoll_bind_worker(pd);
                 pd->user_data = coro;
                 _Atomic uintptr_t *gpp = (events & XR_WAIT_READ) ? &pd->rg : &pd->wg;
@@ -271,6 +291,12 @@ bool xr_yield_for_uring_io(XrVMRuntime *X, struct XrPollDesc *pd, int mode,
     _Atomic uintptr_t *gpp = (mode == XR_POLL_WRITE) ? &pd->wg : &pd->rg;
     XrUringOp *op = (mode == XR_POLL_WRITE) ? &pd->uring_wop : &pd->uring_rop;
 
+    XrWorker *current = xr_current_worker();
+    int owner_id = pd->owner_worker_id;
+    if (current && owner_id >= 0 && owner_id != current->p.id) {
+        *out = yield_handoff_to_worker(X, coro, owner_id, cont, user_data);
+        return true;
+    }
     xr_netpoll_bind_worker(pd);
     pd->user_data = coro;
 

@@ -7,26 +7,45 @@
 
 import runtime
 
+type InnerRecord = { key: string, idx: int }
+type NestedContainer = {
+    map: InnerRecord,
+    arr: Array<int>,
+    name: string,
+}
+type PhaseRecord = { id: int, data: string }
+type CycleRecord = { cycle: int, idx: int }
+
+class ChainNode {
+    value: int
+    next: ChainNode?
+
+    constructor(value: int) {
+        this.value = value
+        this.next = null
+    }
+}
+
 // --- Test 1: Nested objects survive collection and block reclaim ---
 // Parent objects keep their children live throughout the reclaim pass.
 @test
 fn test_nested_object_survival() {
-    var containers: Array<Json> = []
+    var containers: Array<NestedContainer> = []
     for (var i = 0; i < 200; i++) {
-        var inner_map: Json = {"key": "value_" + string(i), "idx": i}
-        var inner_arr: Json = [i, i * 2, i * 3]
-        containers.push({"map": inner_map,
-            "arr": inner_arr,
-            "name": "container_" + string(i)})
+        var inner_map: InnerRecord = { key: "value_" + string(i), idx: i }
+        var inner_arr = [i, i * 2, i * 3]
+        containers.push({ map: inner_map,
+            arr: inner_arr,
+            name: "container_" + string(i) })
     }
 
 
     // Verify all nested data is intact
     for (var i = 0; i < 200; i++) {
         var c = containers[i]
-        assert_eq(c["map"]["idx"], i)
-        assert_eq(c["arr"][1], i * 2)
-        assert_eq(c["name"], "container_" + string(i))
+        assert_eq(c.map.idx, i)
+        assert_eq(c.arr[1], i * 2)
+        assert_eq(c.name, "container_" + string(i))
     }
 }
 
@@ -35,22 +54,22 @@ fn test_nested_object_survival() {
 // old live ones.
 @test
 fn test_alloc_interleaved_phases() {
-    var phase1: Array<Json> = []
+    var phase1: Array<PhaseRecord> = []
     for (var i = 0; i < 100; i++) {
-        phase1.push({"id": i, "data": "phase1_" + string(i)})
+        phase1.push({ id: i, data: "phase1_" + string(i) })
     }
 
 
-    var phase2: Array<Json> = []
+    var phase2: Array<PhaseRecord> = []
     for (var i = 0; i < 100; i++) {
-        phase2.push({"id": i + 100, "data": "phase2_" + string(i)})
+        phase2.push({ id: i + 100, data: "phase2_" + string(i) })
     }
 
 
     // Verify both phases intact
     for (var i = 0; i < 100; i++) {
-        assert_eq(phase1[i]["id"], i)
-        assert_eq(phase2[i]["id"], i + 100)
+        assert_eq(phase1[i].id, i)
+        assert_eq(phase2[i].id, i + 100)
     }
 }
 
@@ -58,24 +77,23 @@ fn test_alloc_interleaved_phases() {
 // Build a linked-list-like structure. The entire live chain must survive.
 @test
 fn test_deep_reference_chain() {
-    var head: Json = {"value": 0, "next": null}
-    var current: Json = head
+    var head = ChainNode(0)
+    var current = head
     for (var i = 1; i < 50; i++) {
-        var node: Json = {"value": i, "next": null}
-        current["next"] = node
+        var node = ChainNode(i)
+        current!.next = node
         current = node
     }
 
 
     // Walk the chain and verify
     current = head
-    var count = 0
-    while (current != null) {
-        assert_eq(current["value"], count)
-        current = current["next"]
-        count++
+    for (var count = 0; count < 50; count++) {
+        assert_eq(current.value, count)
+        if (count < 49) {
+            current = current.next!
+        }
     }
-    assert_eq(count, 50)
 }
 
 // --- Test 4: High churn with live roots ---
@@ -107,13 +125,13 @@ fn test_high_churn_with_live_roots() {
 @test
 fn test_repeated_alloc_rounds() {
     for (var cycle = 0; cycle < 10; cycle++) {
-        var data: Array<Json> = []
+        var data: Array<CycleRecord> = []
         for (var i = 0; i < 100; i++) {
-            data.push({"cycle": cycle, "idx": i})
+            data.push({ cycle: cycle, idx: i })
         }
         // Verify last batch
-        assert_eq(data[99]["cycle"], cycle)
-        assert_eq(data[99]["idx"], 99)
+        assert_eq(data[99].cycle, cycle)
+        assert_eq(data[99].idx, 99)
     }
 }
 

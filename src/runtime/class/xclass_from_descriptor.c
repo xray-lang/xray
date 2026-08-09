@@ -289,7 +289,22 @@ XrClass *xr_class_from_descriptor(XrVMRuntime *isolate, const XrClassDescriptor 
     // Set struct_layout and VALUE_TYPE / FLAT_COPYABLE flags
     if (desc->struct_layout) {
         cls->struct_layout = desc->struct_layout;
-        xr_vm_struct_layout_register(xr_isolate_get_vm_state(isolate), cls->struct_layout);
+        XrVMState *vm = xr_isolate_get_vm_state(isolate);
+        if (xr_vm_struct_layout_register(vm, cls->struct_layout) == 0) {
+            xr_log_warning("class", "from_descriptor: failed to register aggregate layout for '%s'",
+                           desc->class_name);
+            return NULL;
+        }
+        /* Binding is runtime state, not a debug assertion. Calling it only
+         * through XR_DCHECK compiled the side effect out of release builds,
+         * leaving heap-backed and nested value structs without a method/type
+         * identity until an unrelated OP_AGG_NEW happened to bind them. */
+        if (cls->struct_layout->nominal_name &&
+            !xr_vm_struct_layout_bind_class(vm, cls->struct_layout, cls)) {
+            xr_log_warning("class", "from_descriptor: aggregate identity collision for '%s'",
+                           desc->class_name);
+            return NULL;
+        }
         cls->flags |= XR_CLASS_VALUE_TYPE;
 
         /* A struct is flat-copyable when every field can preserve value

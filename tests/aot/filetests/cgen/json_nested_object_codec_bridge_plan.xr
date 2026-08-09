@@ -1,11 +1,11 @@
 type Address = { city: string, zip: int }
 type User = { name: string, address: Address }
 
-fn jsonNestedObjectCodecBridgePlan() -> Json {
+fn jsonNestedObjectCodecBridgePlan() -> JSON.Value {
     var user: User = { name: "Ada", address: { city: "Hangzhou", zip: 310000 } }
-    var encoded = Json.encode(user)
-    var decoded = Json.decode<User>(encoded)
-    return Json.encode(decoded!)
+    var encoded = JSON.value(user)
+    var decoded = JSON.decode<User>(encoded)
+    return JSON.value(decoded!)
 }
 
 print(jsonNestedObjectCodecBridgePlan())

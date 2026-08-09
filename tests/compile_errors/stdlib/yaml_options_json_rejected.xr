@@ -1,6 +1,6 @@
-// Guard: parse options are a typed `YamlOptions`, not an untyped `Json` bag.
+// Guard: parse options are a typed `YamlOptions`, not a schema-less JSON object.
 import yaml
 
-var opts: Json = { strict: true }
+var opts: JSON.Object = JSON.parseObject("{\"strict\":true}")
 var doc = yaml.parse("a: 1", opts)
 print(doc)

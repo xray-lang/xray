@@ -87,11 +87,11 @@ def main(argv: list[str]) -> int:
                 file=sys.stderr,
             )
             return 1
-        if object_body.count("xrt_json_get_field") != 4:
+        if object_body.count("xrt_object_get_field") != 4:
             print(
                 f"object static access equivalence: FAIL\n"
                 f"{name} expected four fixed-field reads, got "
-                f"{object_body.count('xrt_json_get_field')}",
+                f"{object_body.count('xrt_object_get_field')}",
                 file=sys.stderr,
             )
             return 1
@@ -141,17 +141,20 @@ def main(argv: list[str]) -> int:
         )
         return 1
 
-    if codec.count("static const XrtObjectShape _xobj_shape_") != 2:
+    if codec.count("static const XrtObjectShape _xobj_shape_") != 1:
         print(
             "object static access equivalence: FAIL\n"
-            "static object encoding did not emit structural and Json-domain descriptors",
+            "static object encoding did not reuse its canonical shape descriptor",
             file=sys.stderr,
         )
         return 1
-    if "xrt_json_encode_static_object(" not in codec:
+    if (
+        "xrt_json_stringify_consume(" not in codec
+        or "xrt_json_encode_static_object" in codec
+    ):
         print(
             "object static access equivalence: FAIL\n"
-            "static object encoding rebuilt its Json-domain shape at run time",
+            "direct static-object stringify materialized an intermediate JSON object",
             file=sys.stderr,
         )
         return 1
@@ -163,7 +166,7 @@ def main(argv: list[str]) -> int:
     if not codec_run or codec_run.group(0).startswith("static XR_AINLINE int64_t "):
         print(
             "object static access equivalence: FAIL\n"
-            "Json codec loop crossed the narrow static-field force-inline boundary",
+            "JSON codec loop crossed the narrow static-field force-inline boundary",
             file=sys.stderr,
         )
         return 1

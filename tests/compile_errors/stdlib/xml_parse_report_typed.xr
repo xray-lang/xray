@@ -1,6 +1,5 @@
-// Guard: parseReport returns a typed `XmlParseReport`, not a `Json` bag (this
-// is the typed replacement for the removed `parseDetailed(): Json`).
+// Guard: parseReport returns a typed `XmlParseReport`, not a JSON.Value bag.
 import xml
 
-var legacy: Json = xml.parseReport("<ok/>")
+var legacy: JSON.Value = xml.parseReport("<ok/>")
 print(legacy)

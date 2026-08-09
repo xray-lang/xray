@@ -1,128 +1,29 @@
-// 0661_jit_cross_boundary.xr
-// Test: interpreter/JIT boundary consistency
-// Verifies that objects created by interpreter are correctly read by JIT,
-// and that OSR with mixed-type accumulation works correctly.
+// Static object fields and explicit JSON paths agree across hot VM/JIT code.
 
-// ===== Interpreter creates object, JIT reads fields =====
-fn make_tree(depth: int) -> Json {
-    if (depth <= 0) {
-        return { "left": null, "right": null, "val": 1 }
-    }
-    return {
-        "left": make_tree(depth - 1),
-        "right": make_tree(depth - 1),
-        "val": depth
-    }
-}
+type State = { count: int, last: int?, flag: bool }
 
-fn checksum(node: Json) -> float {
-    if (node == null) { return 0 }
-    return float(node.val) + checksum(node.left) + checksum(node.right)
+fn update(state: ref State, value: int) {
+    state.count += 1
+    state.last = value
+    state.flag = value % 2 == 0
 }
 
 @test
-fn test_tree_checksum_depth3() {
-    var tree = make_tree(3)
-    var sum = checksum(tree)
-    // depth=3: 3 + 2*(2 + 2*(1 + 2*1)) = 3 + 2*(2+2*3) = 3+2*8 = 3+16 = 19
-    // Actually: depth=3 node has val=3, left=depth2, right=depth2
-    // depth=2 has val=2, left=depth1, right=depth1
-    // depth=1 has val=1, left=depth0, right=depth0
-    // depth=0 has val=1, left=null, right=null
-    // checksum(depth0) = 1
-    // checksum(depth1) = 1 + 1 + 1 = 3
-    // checksum(depth2) = 2 + 3 + 3 = 8
-    // checksum(depth3) = 3 + 8 + 8 = 19
-    assert_eq(sum, 19)
+fn test_static_object_hot_updates() {
+    var state: State = { count: 0, last: null, flag: false }
+    for (i in 0..100) { update(ref state, i) }
+    assert_eq(state.count, 100)
+    assert_eq(state.last, 99)
+    assert_eq(state.flag, false)
 }
 
 @test
-fn test_tree_checksum_depth5() {
-    var tree = make_tree(5)
-    var sum = checksum(tree)
-    // checksum(depth3) = 19
-    // checksum(depth4) = 4 + 19 + 19 = 42
-    // checksum(depth5) = 5 + 42 + 42 = 89
-    assert_eq(sum, 89)
-}
-
-// ===== Mixed-type field store/read in hot loop =====
-@test
-fn test_mixed_type_accumulation() {
-    var obj: Json = { "count": 0, "last": null, "flag": false }
-    for (var i = 0; i < 50; i++) {
-        obj.count = int(obj.count) + 1
-        if (i % 3 == 0) {
-            obj.last = null
-        } else if (i % 3 == 1) {
-            obj.last = i
-        } else {
-            obj.last = "str_" + string(i)
-        }
-        obj.flag = (i % 2 == 0)
+fn test_dynamic_json_path_chain() {
+    var root = JSON.parseValue("{}")
+    for (i in 0..10) {
+        JSON.set(root, ["nodes", string(i), "value"], i * i, true)
     }
-    assert_eq(obj.count, 50)
-    // i=49: 49%3==1, so last=49
-    assert_eq(obj.last, 49)
-    // i=49: 49%2==1, so flag=false
-    assert_eq(obj.flag, false)
-}
-
-// ===== Null field read after int store =====
-@test
-fn test_null_overwrites_int() {
-    var data: Json = { "x": 100 }
-    for (var i = 0; i < 20; i++) {
-        if (i % 2 == 0) {
-            data.x = i
-        } else {
-            data.x = null
-        }
-    }
-    // i=19: odd, so data.x = null
-    assert_eq(data.x, null)
-}
-
-// ===== Boolean field toggle in hot loop =====
-@test
-fn test_bool_toggle_loop() {
-    var state = { "on": false }
-    for (var i = 0; i < 100; i++) {
-        state.on = !(state.on == true)
-    }
-    // 100 toggles, even number, back to false
-    assert_eq(state.on, false)
-}
-
-// ===== Object field chain =====
-@test
-fn test_object_field_chain() {
-    var root: Json = { "child": null }
-    var current: Json = root
-    for (var i = 0; i < 10; i++) {
-        current.child = { "child": null, "depth": i }
-        current = current.child!
-    }
-    // Walk the chain
-    var node: Json = root
-    var depth_sum = 0
-    while (node.child != null) {
-        node = node.child!
-        depth_sum = depth_sum + int(node.depth)
-    }
-    // depths: 0+1+2+3+4+5+6+7+8+9 = 45
-    assert_eq(depth_sum, 45)
-}
-
-// ===== Store float precision in loop =====
-@test
-fn test_float_accumulation() {
-    var obj = { "total": 0.0 }
-    for (var i = 0; i < 100; i++) {
-        obj.total = float(obj.total) + 0.1
-    }
-    // Approximate check due to float precision
-    var diff = float(obj.total) - 10.0
-    if (diff < 0) { diff = -diff }
-    assert(diff < 0.001)
+    var sum = 0
+    for (i in 0..10) { sum += JSON.require<int>(root, ["nodes", string(i), "value"]) }
+    assert_eq(sum, 285)
 }

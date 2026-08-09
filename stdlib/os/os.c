@@ -26,6 +26,7 @@
 #include <limits.h>
 #include "../../src/os/os_fs.h"
 #include "../../src/shared/xr_os_core.h"
+#include "../stdlib_cache.h"
 
 #include <signal.h>
 #include <time.h>
@@ -57,6 +58,11 @@
 #ifndef XR_OS_WINDOWS
 extern char **environ;
 #endif
+
+static XrObjectInstance *os_exec_result_new(XrVMRuntime *X) {
+    XrClass *cls = xr_stdlib_record_class_get(X, "os", "__ExecResult");
+    return cls ? xr_object_instance_new_with_class(xr_current_coro(X), cls) : NULL;
+}
 
 /* ========== External Declarations ========== */
 
@@ -738,13 +744,13 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
         exit_code = raw_status & 0xFF;
     }
 
-    XrJson *json = xr_json_new(xr_current_coro(X));
+    XrObjectInstance *json = os_exec_result_new(X);
     XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_json_set_by_key(X, json, "stdout", xrs_string_value_c(X, output));
-    xr_json_set_by_key(X, json, "stderr", xrs_string_value_c(X, ""));
-    xr_json_set_by_key(X, json, "exitCode", xr_int(exit_code));
+    xr_object_instance_set_by_key(X, json, "stdout", xrs_string_value_c(X, output));
+    xr_object_instance_set_by_key(X, json, "stderr", xrs_string_value_c(X, ""));
+    xr_object_instance_set_by_key(X, json, "exitCode", xr_int(exit_code));
     xr_free(output);
-    return xr_json_value(json);
+    return xr_object_instance_value(json);
 #else
     // Unix: fork + exec + pipe for both stdout and stderr
     int stdout_pipe[2], stderr_pipe[2];
@@ -800,15 +806,17 @@ static XrValue os_exec(XrVMRuntime *X, XrValue *args, int argc) {
     }
     int exit_code = (waited >= 0 && WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
 
-    XrJson *json = xr_json_new(xr_current_coro(X));
+    XrObjectInstance *json = os_exec_result_new(X);
     XR_CHECK(json != NULL, "os_exec: json alloc failed");
-    xr_json_set_by_key(X, json, "stdout", xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_json_set_by_key(X, json, "stderr", xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_json_set_by_key(X, json, "exitCode", xr_int(exit_code));
+    xr_object_instance_set_by_key(X, json, "stdout",
+                                  xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
+    xr_object_instance_set_by_key(X, json, "stderr",
+                                  xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
+    xr_object_instance_set_by_key(X, json, "exitCode", xr_int(exit_code));
 
     xr_free(stdout_buf);
     xr_free(stderr_buf);
-    return xr_json_value(json);
+    return xr_object_instance_value(json);
 #endif
 }
 
@@ -1007,14 +1015,14 @@ static XrValue os_spawn(XrVMRuntime *X, XrValue *args, int argc) {
     CloseHandle(out_rd);
     CloseHandle(err_rd);
 
-    XrJson *json = xr_json_new(xr_current_coro(X));
+    XrObjectInstance *json = os_exec_result_new(X);
     XR_CHECK(json != NULL, "os_spawn: json alloc failed");
-    xr_json_set_by_key(X, json, "stdout", xrs_string_value_c(X, out_buf ? out_buf : ""));
-    xr_json_set_by_key(X, json, "stderr", xrs_string_value_c(X, err_buf ? err_buf : ""));
-    xr_json_set_by_key(X, json, "exitCode", xr_int((int) code));
+    xr_object_instance_set_by_key(X, json, "stdout", xrs_string_value_c(X, out_buf ? out_buf : ""));
+    xr_object_instance_set_by_key(X, json, "stderr", xrs_string_value_c(X, err_buf ? err_buf : ""));
+    xr_object_instance_set_by_key(X, json, "exitCode", xr_int((int) code));
     xr_free(out_buf);
     xr_free(err_buf);
-    return xr_json_value(json);
+    return xr_object_instance_value(json);
 #else
     int stdout_pipe[2], stderr_pipe[2];
     if (pipe(stdout_pipe) != 0) {
@@ -1073,14 +1081,16 @@ static XrValue os_spawn(XrVMRuntime *X, XrValue *args, int argc) {
     }
     int exit_code = (waited >= 0 && WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
 
-    XrJson *json = xr_json_new(xr_current_coro(X));
+    XrObjectInstance *json = os_exec_result_new(X);
     XR_CHECK(json != NULL, "os_spawn: json alloc failed");
-    xr_json_set_by_key(X, json, "stdout", xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_json_set_by_key(X, json, "stderr", xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_json_set_by_key(X, json, "exitCode", xr_int(exit_code));
+    xr_object_instance_set_by_key(X, json, "stdout",
+                                  xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
+    xr_object_instance_set_by_key(X, json, "stderr",
+                                  xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
+    xr_object_instance_set_by_key(X, json, "exitCode", xr_int(exit_code));
     xr_free(stdout_buf);
     xr_free(stderr_buf);
-    return xr_json_value(json);
+    return xr_object_instance_value(json);
 #endif
 }
 

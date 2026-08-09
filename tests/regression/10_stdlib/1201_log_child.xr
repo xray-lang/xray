@@ -13,7 +13,7 @@ fn test_child_logger_creation() {
 @test
 fn test_child_logger_methods() {
     log.setLevel(LogLevel.Debug)
-    log.setFormat(LogFormat.Json)
+    log.setFormat(LogFormat.JSON)
     var httpLog = log.child("module", "http")
     httpLog.debug("debug from child")
     httpLog.info("request received", "path", "/api")

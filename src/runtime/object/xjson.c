@@ -5,11 +5,10 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xjson.c - Json object backed by dynamic-layout XrInstance
+ * xjson.c - Exact structural object backed by sealed XrInstance layouts
  *
- * Json values are XrInstance with classes in the dynamic-layout chain
- * rooted at core->jsonRootClass. The actual field storage, transitions,
- * overflow, and GC traversal all live in xinstance.c / xclass.c.
+ * Shape classes are interned through the structural-object root. JSON object
+ * values are stored separately as XrMap.
  */
 
 #include "xjson.h"
@@ -30,27 +29,18 @@ static inline XrSymbolTable *get_symbol_table(XrVMRuntime *isolate) {
     return (XrSymbolTable *) xr_isolate_get_symbol_table(isolate);
 }
 
-static inline XrClass *json_root_class(XrVMRuntime *X) {
-    XR_DCHECK(X && X->core && X->core->jsonRootClass, "json: root class not initialized");
-    return X->core->jsonRootClass;
-}
-
 /* ========== Creation API ========== */
 
-XrJson *xr_json_new(struct XrCoroutine *coro) {
-    XrVMRuntime *X = coro ? xr_coro_vm_owner(coro) : xr_exec_context_vm_owner();
-    XrClass *cls = json_root_class(X);
-    return xr_json_new_with_class(coro, cls);
-}
-
-XrJson *xr_json_new_with_class(struct XrCoroutine *coro, XrClass *cls) {
-    XR_DCHECK(cls != NULL, "json_new_with_class: NULL class");
-    XR_DCHECK(cls->flags & XR_CLASS_DYNAMIC_LAYOUT, "json_new_with_class: not dynamic-layout");
-
-    // Json objects are XR_TINSTANCE with a dynamic-layout class carrying
-    // builtin_kind == XR_BK_JSON; xr_value_is_json checks this field.
+XrObjectInstance *xr_object_instance_new_with_class(struct XrCoroutine *coro, XrClass *cls) {
+    XR_DCHECK(cls != NULL, "object_instance_new_with_class: NULL class");
+    XR_DCHECK((cls->flags & XR_CLASS_DYNAMIC_LAYOUT) != 0,
+              "object_instance_new_with_class: not shape-backed");
+    XR_DCHECK((cls->flags & XR_CLASS_DYNAMIC_SEALED) != 0,
+              "object_instance_new_with_class: shape is not sealed");
+    XR_DCHECK(cls->builtin_kind == XR_BK_STRUCT_OBJECT,
+              "object_instance_new_with_class: not a structural object class");
     size_t size = xr_instance_size(cls);
-    XrJson *json = (XrJson *) xr_alloc(coro, size, XR_TINSTANCE);
+    XrObjectInstance *json = (XrObjectInstance *) xr_alloc(coro, size, XR_TINSTANCE);
     if (!json)
         return NULL;
     xr_obj_header_init_type(&json->hdr, XR_TINSTANCE);
@@ -61,23 +51,26 @@ XrJson *xr_json_new_with_class(struct XrCoroutine *coro, XrClass *cls) {
     return json;
 }
 
-void xr_json_init_inplace(XrJson *json, XrClass *cls) {
+void xr_object_instance_init_inplace(XrObjectInstance *json, XrClass *cls) {
     if (!json || !cls)
         return;
-    XR_DCHECK(cls->flags & XR_CLASS_DYNAMIC_LAYOUT, "json_init_inplace: not dynamic-layout");
+    XR_DCHECK((cls->flags & XR_CLASS_DYNAMIC_LAYOUT) != 0 &&
+                  (cls->flags & XR_CLASS_DYNAMIC_SEALED) != 0 &&
+                  cls->builtin_kind == XR_BK_STRUCT_OBJECT,
+              "object_instance_init_inplace: invalid structural shape");
     json->klass = cls;
     uint16_t cap = cls->in_object_capacity;
     for (uint16_t i = 0; i < cap; i++)
         json->fields[i] = xr_null();
 }
 
-size_t xr_json_size(XrClass *cls) {
+size_t xr_object_instance_size(XrClass *cls) {
     return xr_instance_size(cls);
 }
 
 /* ========== Field Access API ========== */
 
-XrValue xr_json_get(XrVMRuntime *X, XrJson *json, SymbolId symbol) {
+XrValue xr_object_instance_get(XrVMRuntime *X, XrObjectInstance *json, SymbolId symbol) {
     (void) X;
     if (!json || !json->klass)
         return xr_null();
@@ -87,47 +80,39 @@ XrValue xr_json_get(XrVMRuntime *X, XrJson *json, SymbolId symbol) {
     return xr_instance_get_dynamic_field(json, (uint16_t) idx);
 }
 
-bool xr_json_set(XrVMRuntime *X, XrJson *json, SymbolId symbol, XrValue value) {
-    XR_DCHECK(X != NULL, "json_set: NULL isolate");
+bool xr_object_instance_set(XrVMRuntime *X, XrObjectInstance *json, SymbolId symbol,
+                            XrValue value) {
+    XR_DCHECK(X != NULL, "object_instance_set: NULL isolate");
     if (!json || !json->klass)
         return false;
     int idx = xr_class_lookup_field(json->klass, (int) symbol);
-    if (idx < 0) {
-        // Field doesn't exist: try transition (returns NULL for sealed/OOM)
-        XrSymbolTable *st = get_symbol_table(X);
-        const char *fname = xr_symbol_get_name_in_table(st, symbol);
-        XrClass *next =
-            xr_class_transition_get_or_create(X, json->klass, (int) symbol, fname ? fname : "?");
-        if (!next)
-            return false;
-        json->klass = next;
-        idx = xr_class_lookup_field(next, (int) symbol);
-        XR_DCHECK(idx >= 0, "json_set: transition produced no field");
-    }
+    if (idx < 0)
+        return false;
     if (!xr_instance_set_dynamic_field(X, json, (uint16_t) idx, value))
         return false;
     return true;
 }
 
-XrValue xr_json_get_by_key(XrVMRuntime *X, XrJson *json, const char *key) {
+XrValue xr_object_instance_get_by_key(XrVMRuntime *X, XrObjectInstance *json, const char *key) {
     XR_DCHECK(X != NULL, "json_get_by_key: NULL isolate");
     if (!json || !key)
         return xr_null();
     XrSymbolTable *table = get_symbol_table(X);
     SymbolId symbol = xr_symbol_register_in_table(table, key);
-    return xr_json_get(X, json, symbol);
+    return xr_object_instance_get(X, json, symbol);
 }
 
-bool xr_json_set_by_key(XrVMRuntime *X, XrJson *json, const char *key, XrValue value) {
+bool xr_object_instance_set_by_key(XrVMRuntime *X, XrObjectInstance *json, const char *key,
+                                   XrValue value) {
     XR_DCHECK(X != NULL, "json_set_by_key: NULL isolate");
     if (!json || !key)
         return false;
     XrSymbolTable *table = get_symbol_table(X);
     SymbolId symbol = xr_symbol_register_in_table(table, key);
-    return xr_json_set(X, json, symbol, value);
+    return xr_object_instance_set(X, json, symbol, value);
 }
 
-bool xr_json_merge(XrVMRuntime *X, XrJson *dst, XrJson *src) {
+bool xr_object_instance_merge(XrVMRuntime *X, XrObjectInstance *dst, XrObjectInstance *src) {
     XR_DCHECK(X != NULL, "json_merge: NULL isolate");
     if (!dst || !src || !src->klass)
         return true;
@@ -138,11 +123,11 @@ bool xr_json_merge(XrVMRuntime *X, XrJson *dst, XrJson *src) {
         if (!name)
             continue;
         // Source field is borrowed: dst gains a new owning reference, src keeps
-        // its own. xr_json_set releases any prior value at this key, so later
+        // its own. xr_object_instance_set releases any prior value at this key, so later
         // spread parts / literal fields override earlier ones correctly.
         XrValue v = xr_instance_get_dynamic_field(src, i);
         xr_rc_retain_value(v);
-        if (!xr_json_set_by_key(X, dst, name, v)) {
+        if (!xr_object_instance_set_by_key(X, dst, name, v)) {
             xr_rc_release_value(xr_current_coro_heap(), v);
             return false;
         }

@@ -31,7 +31,7 @@ let obj = { "name": "Alice", "age": 30 }
 assert_eq(obj.name, "Alice")
 // Empty object
 let empty_obj = {}
-assert_eq(typeName(empty_obj), "Json")
+assert_eq(typeName(empty_obj), "object")
 // Nested object
 let nested = { "a": { "b": { "c": 1 } } }
 assert_eq(nested.a.b.c, 1)

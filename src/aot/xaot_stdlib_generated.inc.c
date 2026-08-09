@@ -148,6 +148,24 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return 0;
     if (strcmp(symbol, "time.sleep") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_TIMER;
+    if (strcmp(symbol, "net.__resolveAll") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__connectFd") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__accept") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__readInto") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__writeBytes") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__copyBidirectional") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__close") == 0)
+        return XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__udpSendTo") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__udpFromHost") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     if (strcmp(symbol, "cluster.__start") == 0)
         return XAOT_STDLIB_CAP_CHANNEL;
     if (strcmp(symbol, "cluster.__join") == 0)

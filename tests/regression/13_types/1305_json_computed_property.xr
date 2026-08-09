@@ -1,97 +1,19 @@
-// 1305_json_computed_property.xr
-// Test: computed property syntax { [expr]: value }
+// Computed keys belong to JSON.Object/Map operations, not object literals.
 
-// ===== Basic computed property =====
 @test
-fn test_basic_computed_property() {
+fn test_computed_key_set() {
     var key = "name"
-    var obj: Json = { [key]: "Alice" }
-    assert_eq(obj["name"], "Alice")
+    var obj: JSON.Object = JSON.parseObject("{}")
+    obj.set(key, "Alice")
+    assert_eq(JSON.require<string>(obj, ["name"]), "Alice")
 }
 
 @test
-fn test_computed_with_value_expr() {
-    var key = "sum"
-    var obj: Json = { [key]: 1 + 2 + 3 }
-    assert_eq(obj["sum"], 6)
-}
-
-// ===== Mixed static and computed =====
-@test
-fn test_mixed_static_computed() {
-    var k = "dynamic"
-    var obj: Json = { "static_field": 1, [k]: 2 }
-    assert_eq(obj.static_field, 1)
-    assert_eq(obj["dynamic"], 2)
-}
-
-@test
-fn test_multiple_computed() {
-    var k1 = "first"
-    var k2 = "second"
-    var obj: Json = { [k1]: 1, [k2]: 2, "third": 3 }
-    assert_eq(obj["first"], 1)
-    assert_eq(obj["second"], 2)
-    assert_eq(obj.third, 3)
-}
-
-@test
-fn test_computed_at_different_positions() {
-    var k = "middle"
-    var obj: Json = { "start": 0, [k]: 1, "end": 2 }
-    assert_eq(obj.start, 0)
-    assert_eq(obj["middle"], 1)
-    assert_eq(obj.end, 2)
-}
-
-// ===== Expression as key =====
-@test
-fn test_concat_expression_key() {
+fn test_expression_keys() {
+    var obj: JSON.Object = JSON.parseObject("{}")
     var prefix = "user_"
-    var obj: Json = { [prefix + "id"]: 123 }
-    assert_eq(obj["user_id"], 123)
-}
-
-@test
-fn test_complex_expression_key() {
-    var base = "field"
-    var idx = 1
-    var obj: Json = { [base + "_" + string(idx)]: "value1" }
-    assert_eq(obj["field_1"], "value1")
-}
-
-// ===== Computed property in function =====
-@test
-fn test_computed_in_function() {
-    fn makeObj(key: string, value: int) -> Json {
-        return { [key]: value }
-    }
-    var obj1 = makeObj("a", 1)
-    var obj2 = makeObj("b", 2)
-    assert_eq(obj1["a"], 1)
-    assert_eq(obj2["b"], 2)
-}
-
-@test
-fn test_computed_with_index_keys() {
-    var keys = ["x", "y", "z"]
-    var values = [10, 20, 30]
-    var obj0: Json = { [keys[0]]: values[0] }
-    var obj1: Json = { [keys[1]]: values[1] }
-    var obj2: Json = { [keys[2]]: values[2] }
-    assert_eq(obj0["x"], 10)
-    assert_eq(obj1["y"], 20)
-    assert_eq(obj2["z"], 30)
-}
-
-// ===== Computed + dynamic add =====
-@test
-fn test_computed_then_dynamic_add() {
-    var k = "initial"
-    var obj: Json = { [k]: 1 }
-    obj.added = 2
-    obj["another"] = 3
-    assert_eq(obj["initial"], 1)
-    assert_eq(obj.added, 2)
-    assert_eq(obj["another"], 3)
+    obj.set(prefix + "id", 123)
+    for (i in 0..3) { obj.set("field_" + string(i), i * 10) }
+    assert_eq(JSON.require<int>(obj, ["user_id"]), 123)
+    assert_eq(JSON.require<int>(obj, ["field_2"]), 20)
 }

@@ -4654,6 +4654,9 @@ static bool emit_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out, const
                               : cg_array_index_access_bounds_proven(ctx, f, v);
         bool borrowed =
             info.rep == XR_REP_TAGGED && cg_tagged_array_index_get_can_borrow(ctx, f, v);
+        const XiValue *cached_origin = NULL;
+        bool use_cache = !span && cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
+        bool direct_cached = use_cache && unchecked;
         if (ctx->pre_decl_all) {
             /* The result slot is declared in the function prelude. */
         } else {
@@ -4666,7 +4669,7 @@ static bool emit_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out, const
             fprintf(out, "        xr_span_t _s = ");
             emit_span_ref_expr(out, v->args[0]);
             fprintf(out, ";\n");
-        } else {
+        } else if (!direct_cached) {
             fprintf(out, "        xrt_array_t *_a = ");
             emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
             fprintf(out, ";\n");
@@ -4681,22 +4684,26 @@ static bool emit_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out, const
                     "xrt_index_oob(_idx, %s);\n",
                     length_expr, length_expr);
         }
-        if (!span)
+        if (!span && !direct_cached)
             fprintf(out, "        XR_ASSUME(_a->data != NULL);\n");
         fprintf(out, "        ");
         emit_vref(out, v);
         fprintf(out, " = ");
         const char *suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
         emit_typed_array_load_value(out, &info, borrowed);
-        const XiValue *cached_origin = NULL;
-        bool use_cache = !span && cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
         if (span)
             fprintf(out, "((%s*)_s.data)[_idx]", info.ctype);
-        else if (use_cache) {
+        else if (direct_cached) {
+            emit_aot_hot_region_begin(out, "typed_array_raw_access");
             emit_typed_array_data_cache_ref(out, cached_origin);
             fprintf(out, "[_idx]");
-        } else
+            emit_aot_hot_region_end(out, "typed_array_raw_access");
+        } else if (use_cache) {
+            emit_typed_array_data_cache_ref(out, cached_origin);
+            fprintf(out, "[_idx]");
+        } else {
             fprintf(out, "((%s*)_a->data)[_idx]", info.ctype);
+        }
         emit_typed_array_load_value_end(out, &info, borrowed);
         emit_conversion_suffix(out, suffix);
         fprintf(out, ";\n    }\n");
@@ -4713,14 +4720,29 @@ static bool emit_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out, const
                                                           CG_ARRAY_STORAGE_MUTABLE);
         if (!span && !array)
             return false;
+        /* This statement-oriented path is selected for portable aggregate
+         * locals before emit_span_index_set_expr. It must consume the same
+         * positive readonly provenance as the expression path; otherwise a
+         * Buffer.asBytes() view assigned to a local silently becomes writable
+         * in AOT even though the release Slice ABI intentionally carries only
+         * data + length. */
+        if (span && cg_span_plan_readonly_proven(ctx, v, XAOT_SLICE_ACCESS_INDEX_SET)) {
+            fprintf(out, "    xrt_throw_error(XR_ERR_CMP_CONST_ASSIGN, "
+                         "XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);\n");
+            emit_value_generated_line_reset(ctx, out, v);
+            return true;
+        }
         bool unchecked = span ? cg_span_index_bounds_proven(ctx, f, v, XAOT_SLICE_ACCESS_INDEX_SET)
                               : cg_array_index_access_bounds_proven(ctx, f, v);
+        const XiValue *cached_origin = NULL;
+        bool use_cache = !span && cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
+        bool direct_cached = use_cache && unchecked;
         fprintf(out, "    {\n");
         if (span) {
             fprintf(out, "        xr_span_t _s = ");
             emit_span_ref_expr(out, v->args[0]);
             fprintf(out, ";\n");
-        } else {
+        } else if (!direct_cached) {
             fprintf(out, "        xrt_array_t *_a = ");
             emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
             fprintf(out, ";\n");
@@ -4735,12 +4757,24 @@ static bool emit_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out, const
                     "xrt_index_oob(_idx, %s);\n",
                     length_expr, length_expr);
         }
-        if (!span)
+        if (!span && !direct_cached)
             fprintf(out, "        XR_ASSUME(_a->data != NULL);\n");
         if (span)
             fprintf(out, "        ((%s*)_s.data)[_idx] = ", info.ctype);
-        else
+        else if (direct_cached) {
+            fprintf(out, "        ");
+            emit_aot_hot_region_begin(out, "typed_array_raw_access");
+            emit_typed_array_data_cache_ref(out, cached_origin);
+            fprintf(out, "[_idx]");
+            emit_aot_hot_region_end(out, "typed_array_raw_access");
+            fprintf(out, " = ");
+        } else if (use_cache) {
+            fprintf(out, "        ");
+            emit_typed_array_data_cache_ref(out, cached_origin);
+            fprintf(out, "[_idx] = ");
+        } else {
             fprintf(out, "        ((%s*)_a->data)[_idx] = ", info.ctype);
+        }
         emit_typed_array_store_value(ctx, out, &info, v->args[2]);
         fprintf(out, ";\n    }\n");
         emit_value_generated_line_reset(ctx, out, v);

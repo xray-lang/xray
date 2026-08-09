@@ -1144,7 +1144,7 @@ type Pair<T> = { first: T, second: T }                // 泛型别名
 - 泛型别名在使用处做类型实参代入；代入发生在编译期，不引入运行时表示或 AOT 分支。
 - 泛型别名形参只允许名字列表；不支持约束。约束应写在使用该别名的泛型声明上。
 - `type Point = {...}` 的对象类型在使用此别名标注时**密封**：未声明的字段访问/赋值是编译错误。
-- `type T = Json` 等于 `Json`（不密封）。
+- `type T = JSON.Value` 等于 `JSON.Value`；`type O = JSON.Object` 等于 `Map<string, JSON.Value>`。
 - 别名可前向引用，但**禁止循环别名**。
 
 详见 [§2.4.7](#247-json) 与 [§2.8](#28-类型别名)。
@@ -2312,7 +2312,7 @@ type Pair<T> = { first: T, second: T }                // generic alias
 - A generic alias substitutes type arguments at the use site; substitution happens at compile time and introduces no runtime representation or AOT branch.
 - Generic alias parameters are only a name list; constraints are not supported. Put constraints on the generic declaration that uses the alias.
 - A `type Point = {...}` object alias is **sealed** when used as an annotation: accessing or assigning an undeclared field is a compile error.
-- `type T = Json` equals `Json` (not sealed).
+- `type T = JSON.Value` equals `JSON.Value`; `type O = JSON.Object` equals `Map<string, JSON.Value>`.
 - Aliases may be referenced before their declaration but **must not be cyclic**.
 
 See [§2.4.7](#247-json) and [§2.8](#28-type-aliases).

@@ -381,7 +381,7 @@ static XaAllocationContractKind alloc_intrinsic_contract(const char *name) {
         {"Array", XA_ALLOCATION_CONTRACT_MAY_HEAP},
         {"Map", XA_ALLOCATION_CONTRACT_MAY_HEAP},
         {"Set", XA_ALLOCATION_CONTRACT_MAY_HEAP},
-        {"Json", XA_ALLOCATION_CONTRACT_MAY_HEAP},
+        {"JSON", XA_ALLOCATION_CONTRACT_MAY_HEAP},
         {"StringBuilder", XA_ALLOCATION_CONTRACT_MAY_HEAP},
         {"Atomic", XA_ALLOCATION_CONTRACT_MAY_HEAP},
         {"copy", XA_ALLOCATION_CONTRACT_MAY_HEAP},
@@ -718,7 +718,7 @@ static void alloc_scan_node_pre(AstNode *node, void *userdata) {
             alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_CONTAINER, "literal", "Set");
             break;
         case AST_OBJECT_LITERAL:
-            alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_CONTAINER, "literal", "Json");
+            alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_CONTAINER, "literal", "JSON");
             break;
         case AST_NEW_EXPR:
             alloc_mark_direct(scan->row, node, XA_ALLOC_REASON_HEAP_CONSTRUCT, "constructor",

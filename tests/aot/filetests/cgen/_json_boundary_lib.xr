@@ -1,3 +1,0 @@
-export fn readExported(j: Json) -> Json {
-    return j.name
-}

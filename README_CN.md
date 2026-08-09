@@ -164,7 +164,7 @@ Xray 不使用任何形式的垃圾回收——既没有并发 tracing GC，也�
 
 Prelude 提供以下无需显式导入的类型：
 
-`Array`、`Atomic`、`BigInt`、`Channel`、`Json`、`Map`、`NetConn`、`NetListener`、`OsBarrier`、`OsCondvar`、`OsMutex`、`OsOnce`、`OsRwLock`、`PanicInfo`、`Path`、`Range`、`Regex`、`Set`、`StringBuilder`、`Thread`。
+`Array`、`Atomic`、`BigInt`、`Channel`、`Map`、`NetConn`、`NetListener`、`OsBarrier`、`OsCondvar`、`OsMutex`、`OsOnce`、`OsRwLock`、`PanicInfo`、`Path`、`Range`、`Regex`、`Set`、`StringBuilder`、`Thread`，以及 JSON 边界类型 `JSON.Value` / `JSON.Object`。`JSON` 是 prelude 命名空间，不是值类型，也不需要导入。
 
 由模块导出的类型需要显式导入。例如，`DateTime` 来自 `datetime`，`Mutex` 等协程同步原语来自 `sync`，用于 CPU 并行的 `Plan` 来自 `parallel`。
 

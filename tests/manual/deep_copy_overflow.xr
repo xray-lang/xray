@@ -4,11 +4,11 @@
 //
 // 运行：build/xray tests/manual/deep_copy_overflow.xr; echo "exit=$?"
 // 期望输出：built / [Uncaught Panic] E0440: ... / exit=1
-var a: Json = {}
+var a: JSON.Object = JSON.parseObject("{}")
 var i = 0
 while (i < 200000) {
-    var b: Json = {}
-    b["child"] = a
+    var b: JSON.Object = JSON.parseObject("{}")
+    b.set("child", JSON.value(a))
     a = b
     i += 1
 }

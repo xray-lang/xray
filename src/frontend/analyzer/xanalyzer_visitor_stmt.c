@@ -5636,6 +5636,17 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
     if (!XR_TYPE_IS_FUNCTION(target_type) && xr_is_json_coercion(target_type, value_type))
         return;
 
+    if (XR_TYPE_IS_JSON(target_type)) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "composite type '%s' cannot widen implicitly to JSON.Value; wrap the value "
+                 "with JSON.value(...) explicitly",
+                 xr_type_to_string(value_type));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+        return;
+    }
+
     char msg[256];
     char reason[192];
     const char *tail = "";
@@ -5771,11 +5782,6 @@ XR_FUNC XaSymbol *xa_borrowed_param_root_symbol(XaInferContext *ctx, AstNode *ex
             case AST_OBJECT_LITERAL: {
                 ObjectLiteralNode *obj = &expr->as.object_literal;
                 for (int i = 0; i < obj->count; i++) {
-                    if (obj->computed && obj->computed[i]) {
-                        XaSymbol *root = xa_borrowed_param_root_symbol(ctx, obj->keys[i]);
-                        if (root)
-                            return root;
-                    }
                     XaSymbol *root = xa_borrowed_param_root_symbol(ctx, obj->values[i]);
                     if (root)
                         return root;
@@ -7057,6 +7063,8 @@ static void xa_update_ownership_from_value(XaInferContext *ctx, XaSymbol *target
         target_links->allocation_plan.key.source_site = target_links->allocation_plan.id;
         target_links->allocation_plan.ownership_domain = target_links->root_id;
         target_links->allocation_plan.capability = target_links->value_capability;
+        target_links->allocation_plan.source_local_materializable = true;
+        target_links->allocation_plan.exec_local_only = false;
         target_links->allocation_plan.complete = target_links->root_id != 0;
         return;
     }
@@ -7070,6 +7078,8 @@ static void xa_update_ownership_from_value(XaInferContext *ctx, XaSymbol *target
     target_links->storage_domain = XR_STORAGE_TRANSFERABLE;
     target_links->allocation_plan.domain = XR_STORAGE_TRANSFERABLE;
     target_links->allocation_plan.capability = XA_CAP_UNKNOWN;
+    target_links->allocation_plan.source_local_materializable = false;
+    target_links->allocation_plan.exec_local_only = false;
     target_links->allocation_plan.unknown_reasons |= XA_UNKNOWN_DYNAMIC_CALL_TARGET;
     target_links->allocation_plan.complete = false;
 }
@@ -8018,6 +8028,20 @@ static bool xa_return_storage_prepass_expr_summary(XaReturnStoragePrepass *scan,
     AstNode *source = xa_shared_boundary_source(expr, &is_move);
     if (source && source->type == AST_VARIABLE && source->as.variable.name) {
         uint8_t owner = xa_return_storage_prepass_lookup(scan, source->as.variable.name);
+        if (owner == XR_STORAGE_EXEC_LOCAL && scan && scan->ctx) {
+            XaSymbol *symbol = source->as.variable.symbol_id
+                                   ? xa_scope_lookup_by_id(scan->ctx->analyzer->global_scope,
+                                                           source->as.variable.symbol_id)
+                                   : xa_lookup_visible_symbol(scan->ctx, source->as.variable.name);
+            XaSymbolLinks *links =
+                symbol ? xa_analyzer_get_links(scan->ctx->analyzer, symbol) : NULL;
+            /* A fresh local is materialized into the caller-visible transfer
+             * domain by the return edge itself. Keep it local until then, but
+             * summarize the return as transferable so branch joins remain
+             * independent of where the fresh value was first bound. */
+            if (links && links->allocation_plan.source_local_materializable)
+                owner = XR_STORAGE_TRANSFERABLE;
+        }
         if (owner == XR_STORAGE_TRANSFERABLE) {
             if (owner_out)
                 *owner_out = owner;
@@ -8636,6 +8660,12 @@ static void xa_check_decl_return_storage_boundary(XaInferContext *ctx, AstNode *
         return;
 
     AstNode *init = xa_storage_boundary_identity_source(var->initializer);
+    /* Constructors and literals materialize a new root at this declaration
+     * site. Their storage domain is chosen by the receiving binding; a
+     * callee return summary describes ordinary returned objects and must not
+     * promote a caller-side fresh allocation to the transfer heap. */
+    if (xa_expr_creates_fresh_root(ctx, init))
+        return;
     uint8_t owner = XR_STORAGE_DOMAIN_UNKNOWN;
     const char *fn_name = NULL;
     bool owner_known = xa_call_return_storage_owner(ctx, init, &owner, &fn_name);
@@ -8802,8 +8832,13 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                     !xr_is_json_coercion(links->declared_type, init_type)) {
                     char msg[256];
                     char reason[192];
-                    if (xr_type_object_mismatch_reason(links->declared_type, init_type, reason,
-                                                       sizeof(reason))) {
+                    if (XR_TYPE_IS_JSON(links->declared_type)) {
+                        snprintf(msg, sizeof(msg),
+                                 "composite type '%s' cannot widen implicitly to JSON.Value; "
+                                 "wrap the value with JSON.value(...) explicitly",
+                                 xr_type_to_string(init_type));
+                    } else if (xr_type_object_mismatch_reason(links->declared_type, init_type,
+                                                              reason, sizeof(reason))) {
                         snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'; %s",
                                  xr_type_to_string(init_type),
                                  xr_type_to_string(links->declared_type), reason);
@@ -8898,9 +8933,16 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     links->allocation_plan.capability = links->value_capability;
     links->allocation_plan.evidence =
         XA_OWNERSHIP_EV_BINDING_LIVE | XA_OWNERSHIP_EV_CAPABILITY | XA_OWNERSHIP_EV_STORAGE;
+    links->allocation_plan.source_local_materializable = false;
+    links->allocation_plan.exec_local_only = false;
     links->allocation_plan.complete = true;
     xa_update_ownership_from_value(ctx, sym, var->initializer, var_type, node, false);
     xa_check_decl_return_storage_boundary(ctx, node);
+    /* A class carrying weak slots owns handles in this execution's weak table.
+     * Constructor return summaries are normally transferable, but that domain
+     * is invalid for this particular allocation instance. */
+    if (xa_type_declares_weak_field(var_type) && links->root_id != 0)
+        xa_mark_root_exec_local_only(ctx, links->root_id);
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
     xa_register_active_loan(ctx, sym, var->initializer, var_type);
     xa_register_pending_capture_loans(ctx, sym, var->initializer);

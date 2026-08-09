@@ -77,7 +77,7 @@ int main(void) {
     CHECK(xrt_execution_arena_live_objects(arena) == 0,
           "normal RC release unlinks and reclaims an acyclic object");
 
-    XrValue json = xrt_json_new(0);
+    XrValue json = xrt_struct_object_new(0);
     CHECK(((XrObjHeader *) json.ptr)->type == XR_TINSTANCE,
           "JSON uses the canonical instance object kind");
     CHECK(xrt_aot_class_type_id((XrObjHeader *) json.ptr) == 0,

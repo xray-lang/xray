@@ -459,6 +459,30 @@ XR_FUNC void xa_note_owner_escapes_into_heap(XaInferContext *ctx, AstNode *value
     xa_mark_root_alias_state(ctx, links->root_id, XA_ROOT_ESCAPED);
 }
 
+static void xa_mark_scope_root_exec_local_only(XaScope *scope, XaRootId root) {
+    if (!scope || root == 0)
+        return;
+    for (XaSymbol *symbol = scope->owned_symbols; symbol; symbol = symbol->scope_owned_next) {
+        XaSymbolLinks *links = &symbol->links;
+        if (links->root_id != root)
+            continue;
+        links->storage_domain = XR_STORAGE_EXEC_LOCAL;
+        links->allocation_plan.domain = XR_STORAGE_EXEC_LOCAL;
+        links->allocation_plan.materialization = XR_MATERIALIZE_EXEC_HEAP;
+        links->allocation_plan.exec_local_only = true;
+        links->allocation_plan.evidence |= XA_OWNERSHIP_EV_STORAGE;
+        links->allocation_plan.evidence &= ~XA_OWNERSHIP_EV_TRANSFER;
+    }
+    for (int i = 0; i < scope->child_count; i++)
+        xa_mark_scope_root_exec_local_only(scope->children[i], root);
+}
+
+XR_FUNC void xa_mark_root_exec_local_only(XaInferContext *ctx, XaRootId root) {
+    if (!ctx || !ctx->analyzer || !ctx->analyzer->global_scope || root == 0)
+        return;
+    xa_mark_scope_root_exec_local_only(ctx->analyzer->global_scope, root);
+}
+
 /* The uniqueness evidence `move` requires (LANGUAGE_SPEC 2.13.5). Every axis
  * reports separately: which one failed is what tells the author whether to end
  * an alias, end a loan, or copy instead. */

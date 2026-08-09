@@ -3337,6 +3337,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    caps: "coro,netpoll"
     return_ownership: "fresh"
   }
 
@@ -3351,6 +3352,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    caps: "coro,netpoll"
     return_ownership: "fresh"
   }
 
@@ -3402,6 +3404,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    caps: "coro,netpoll"
     return_ownership: "fresh"
   }
 
@@ -3416,6 +3419,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    caps: "coro,netpoll"
   }
 
   fn __writeBytes {
@@ -3429,6 +3433,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    caps: "coro,netpoll"
   }
 
   fn __copyBidirectional {
@@ -3444,6 +3449,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    caps: "coro,netpoll"
     effect: "NetError.Timeout, NetError.Closed, NetError.Reset, NetError.Refused, NetError.Dns, NetError.Tls, NetError.Io, NetError.Invalid, NetError.Cancelled, NetError.OutOfMemory"
     return_ownership: "unknown"
   }
@@ -3494,6 +3500,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    caps: "netpoll"
   }
 
   fn __fd {
@@ -3630,6 +3637,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    caps: "coro,netpoll"
   }
 
   fn __udpRecvInto {
@@ -3655,6 +3663,7 @@ module net {
     aot_direct: true
     link_object: false
     layer: "runtime"
+    caps: "coro,netpoll"
     return_ownership: "fresh"
   }
 

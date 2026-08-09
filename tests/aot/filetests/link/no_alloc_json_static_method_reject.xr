@@ -1,5 +1,5 @@
 fn xray_no_alloc_json_stringify_reject(value: int) -> string {
-    return Json.stringify(value)
+    return JSON.stringify(value)
 }
 
 print(xray_no_alloc_json_stringify_reject(7))

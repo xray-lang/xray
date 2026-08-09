@@ -1,57 +1,51 @@
-// Demo: JSON Data Processing
-// Json type, dynamic access, nested structures
+// Demo: typed objects and schema-less JSON processing.
 //
 // Run: xray demos/02-collections/json_processing.xr
 
+type Address = { city: string, zip: string }
+type User = {
+    name: string,
+    age: int,
+    email: string,
+    tags: Array<string>,
+    address: Address,
+}
 
-// === Json literal ===
-var user: Json = {
+// Known application data uses an exact structural-object type.
+var user: User = {
     name: "Alice",
     age: 30,
     email: "alice@example.com",
     tags: ["admin", "user"],
-    address: {
-        city: "Beijing",
-        zip: "100000"
-    }
+    address: { city: "Beijing", zip: "100000" },
 }
-print("user: ${user}")
-
-// === Dynamic field access ===
 print("name: ${user.name}")
 print("city: ${user.address.city}")
 print("first tag: ${user.tags[0]}")
 
-// === Modify fields ===
 user.age = 31
-user.phone = "123-456-7890"
-print("updated age: ${user.age}")
-print("added phone: ${user.phone}")
+var contact = { ...user, phone: "123-456-7890" }
+print("updated age: ${contact.age}")
+print("added phone: ${contact.phone}")
+print("typed JSON: ${JSON.stringify(contact)}")
 
-// === Null safety (missing fields return null) ===
-var missing = user.salary
-print("missing field: ${missing}")
-print("missing == null: ${missing == null}")
+// Unknown inbound JSON stays in JSON.Value and uses explicit paths.
+var text = "{\"point\":{\"x\":1,\"y\":2},\"label\":\"origin\"}"
+var parsed = JSON.parseValue(text)
+print("x: ${JSON.require<int>(parsed, ["point", "x"])}")
+print("missing salary: ${JSON.get<int>(parsed, ["salary"])}")
+JSON.set(parsed, ["point", "x"], 10)
+print("updated: ${JSON.stringify(parsed)}")
 
-// === JSON parse and stringify ===
-var text = "{\"x\": 1, \"y\": 2, \"label\": \"origin\"}"
-var parsed = Json.parse(text)
-print("parsed: x=${parsed.x}, y=${parsed.y}")
+// Unknown-key mutation uses JSON.Object, the Map<string, JSON.Value> alias.
+var config: JSON.Object = JSON.parseObject("{}")
+config.set("host", "localhost")
+config.set("port", 8080)
+config.set("debug", true)
+config.set("allowed", JSON.value(["GET", "POST"]))
+print("config: ${JSON.stringify(config)}")
+print("config keys: ${config.keys()}")
 
-var back = Json.stringify(parsed)
-print("stringified: ${back}")
-
-// === Build JSON dynamically ===
-var config: Json = {}
-config.host = "localhost"
-config.port = 8080
-config.debug = true
-config.allowed = ["GET", "POST"]
-print("config: ${Json.stringify(config)}")
-
-// === Iterate JSON keys (via instance methods) ===
-var keys = Json.keys(user)
-print("user keys: ${keys}")
-
-var values = Json.values(config)
-print("config values: ${values}")
+for (key, value in config) {
+    print("${key}: ${value}")
+}

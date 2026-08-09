@@ -41,6 +41,10 @@ typedef struct XaotFuncPlan {
     XiFunc *func;
     uint32_t module_index;
     uint16_t depth;
+    /* Exact executable reachability after final Xi direct-call and callable
+     * target convergence. Source summaries cannot name every cross-module
+     * import edge, so entry capability derivation consumes this prepared bit. */
+    uint8_t reachable;
     /* Closed-world execution shape after direct-call and function-value
      * target-set convergence.  Backends consume this prepared fact instead of
      * recursively rediscovering suspendability with translation-unit-local
@@ -1102,14 +1106,6 @@ typedef struct XaotDerivedClonePlan {
     uint8_t unproven_reason;
 } XaotDerivedClonePlan;
 
-typedef enum XaotJsonDynamicAccessAction {
-    XAOT_JSON_DYNAMIC_ACCESS_DIRECT_INDEX = 1,
-    XAOT_JSON_DYNAMIC_ACCESS_SHAPE_GUARD_INDEX,
-    XAOT_JSON_DYNAMIC_ACCESS_COMPUTED_KEY_GUARD,
-    XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP,
-    XAOT_JSON_DYNAMIC_ACCESS_REJECT,
-} XaotJsonDynamicAccessAction;
-
 typedef enum XaotJsonCodecAction {
     XAOT_JSON_CODEC_PARSE_DOM_BRIDGE = 1,
     XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT,
@@ -1144,20 +1140,6 @@ enum {
     XAOT_JSON_UNPROVEN_UNSUPPORTED_CODEC = 7,
 };
 
-typedef struct XaotJsonDynamicAccessPlan {
-    XgJsonDynamicAccessId json_dynamic_access_id;
-    XgModuleId module_id;
-    XgFuncId owner_func_id;
-    XgObjectShapeId receiver_shape_id;
-    uint32_t key_name_id;
-    uint32_t result_type_key;
-    uint16_t field_ordinal;
-    uint8_t access_kind;
-    uint8_t action;
-    uint32_t evidence;
-    uint8_t unproven_reason;
-} XaotJsonDynamicAccessPlan;
-
 typedef struct XaotJsonCodecPlan {
     XgJsonCodecId codec_id;
     XgModuleId module_id;
@@ -1181,22 +1163,17 @@ typedef enum XaotObjectShapeAction {
     XAOT_OBJECT_SHAPE_SPREAD_RESULT,
     XAOT_OBJECT_SHAPE_STATIC,
     XAOT_OBJECT_SHAPE_PATCH,
-    XAOT_OBJECT_SHAPE_CONSTRAINT,
     XAOT_OBJECT_SHAPE_REJECT,
 } XaotObjectShapeAction;
 
 typedef enum XaotObjectAccessAction {
     XAOT_OBJECT_ACCESS_DIRECT_ORDINAL = 1,
-    XAOT_OBJECT_ACCESS_SHAPE_GUARD_ORDINAL,
-    XAOT_OBJECT_ACCESS_SHAPE_DISPATCH_ORDINAL,
-    XAOT_OBJECT_ACCESS_DYNAMIC_JSON_LOOKUP,
     XAOT_OBJECT_ACCESS_REJECT,
 } XaotObjectAccessAction;
 
 typedef enum XaotObjectMergeAction {
     XAOT_OBJECT_MERGE_COPY_WITH_OVERWRITE = 1,
     XAOT_OBJECT_MERGE_COPY_APPEND,
-    XAOT_OBJECT_MERGE_JSON_BRIDGE,
     XAOT_OBJECT_MERGE_REJECT,
 } XaotObjectMergeAction;
 
@@ -1206,7 +1183,7 @@ enum {
     XAOT_OBJECT_EV_STATIC_FIELD = 1u << 2,
     XAOT_OBJECT_EV_RECEIVER_SHAPE = 1u << 3,
     XAOT_OBJECT_EV_FIELD_INDEX = 1u << 4,
-    XAOT_OBJECT_EV_JSON_BRIDGE = 1u << 5,
+    XAOT_OBJECT_EV_JSON_ENCODE = 1u << 5,
     XAOT_OBJECT_EV_BASE_SHAPE = 1u << 6,
     XAOT_OBJECT_EV_PATCH_SHAPE = 1u << 7,
     XAOT_OBJECT_EV_RESULT_SHAPE = 1u << 8,
@@ -1692,6 +1669,7 @@ enum {
 
 typedef struct XaotLinkDependencyPlan {
     XgLinkId link_id;
+    XgFuncId owner_func_id;
     uint8_t kind;
     uint32_t name_id;
     uint32_t evidence;
@@ -1738,6 +1716,7 @@ typedef struct XaotBundle {
     XaotTargetCapabilityProvider target_provider;
     XrEntryPlan entry_plan;
     bool has_entry_plan;
+    bool has_callable_reachability;
     XaotStoragePlan *storage_plans;
     uint32_t nstorage_plans;
     uint32_t storage_plan_cap;
@@ -1856,9 +1835,6 @@ typedef struct XaotBundle {
     XaotDerivedClonePlan *derived_clone_plans;
     uint32_t nderived_clone_plans;
     uint32_t derived_clone_plan_cap;
-    XaotJsonDynamicAccessPlan *json_dynamic_access_plans;
-    uint32_t njson_dynamic_access_plans;
-    uint32_t json_dynamic_access_plan_cap;
     XaotJsonCodecPlan *json_codec_plans;
     uint32_t njson_codec_plans;
     uint32_t json_codec_plan_cap;
@@ -1978,9 +1954,6 @@ XR_FUNC const XaotDerivedEqHashPlan *xaot_bundle_find_derived_eq_hash_plan(const
                                                                            uint32_t type_key);
 XR_FUNC const XaotDerivedClonePlan *xaot_bundle_find_derived_clone_plan(const XaotBundle *bundle,
                                                                         uint32_t type_key);
-XR_FUNC const XaotJsonDynamicAccessPlan *
-xaot_bundle_find_json_dynamic_access_plan(const XaotBundle *bundle,
-                                          XgJsonDynamicAccessId json_dynamic_access_id);
 XR_FUNC const XaotJsonCodecPlan *xaot_bundle_find_json_codec_plan(const XaotBundle *bundle,
                                                                   XgJsonCodecId codec_id);
 XR_FUNC const XaotObjectShapePlan *

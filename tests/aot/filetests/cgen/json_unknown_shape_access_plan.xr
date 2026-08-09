@@ -1,6 +1,0 @@
-fn readName(j: Json) -> Json {
-    return j.name
-}
-
-var arg: Json = { name: "ada" }
-print(readName(arg))

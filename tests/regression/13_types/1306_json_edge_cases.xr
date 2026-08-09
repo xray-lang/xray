@@ -1,127 +1,29 @@
-// 0514_json_edge_cases.xr
-// 作者：xingleixu@gmail.com
-// 测试：Json 边界情况和特殊场景
-// ===== 字段名边界情况 =====
+// JSON.Object mutation preserves key identity while values may change JSON kind.
+
 @test
-fn test_long_field_name() {
-    var obj = { "veryLongFieldNameThatExceedsNormalLength": "value" }
-    assert_eq(obj.veryLongFieldNameThatExceedsNormalLength, "value")
+fn test_missing_key_and_type_change() {
+    var obj: JSON.Object = JSON.parseObject("{\"value\":1}")
+    assert_eq(obj.get("missing"), null)
+    obj.set("value", "one")
+    assert_eq(JSON.require<string>(obj, ["value"]), "one")
+    obj.set("value", null)
+    assert(JSON.isNull(JSON.require<JSON.Value>(obj, ["value"])))
+}
+
+fn add_field(obj: ref JSON.Object, key: string, value: int) {
+    obj.set(key, value)
 }
 
 @test
-fn test_unicode_values() {
-    var obj = { "greeting": "你好", "emoji": "🎉" }
-    assert_eq(obj.greeting, "你好")
-    assert_eq(obj.emoji, "🎉")
+fn test_object_mutation_in_function() {
+    var obj: JSON.Object = JSON.parseObject("{}")
+    add_field(ref obj, "added", 123)
+    assert_eq(JSON.require<int>(obj, ["added"]), 123)
 }
 
 @test
-fn test_special_string_values() {
-    var obj = { "empty": "", "spaces": "  ", "newline": "line1\nline2", "tab": "col1	col2" }
-    assert_eq(obj.empty, "")
-    assert_eq(obj.spaces, "  ")
+fn test_nested_mutation() {
+    var root = JSON.parseValue("{\"child\":{\"value\":1}}")
+    JSON.set(root, ["child", "value"], 99)
+    assert_eq(JSON.require<int>(root, ["child", "value"]), 99)
 }
-
-// ===== 大量字段 =====
-@test
-fn test_many_fields() {
-    var obj = { "f1": 1, "f2": 2, "f3": 3, "f4": 4, "f5": 5, "f6": 6, "f7": 7, "f8": 8, "f9": 9, "f10": 10 }
-    assert_eq(obj.f1, 1)
-    assert_eq(obj.f5, 5)
-    assert_eq(obj.f10, 10)
-}
-
-@test
-fn test_dynamic_add_many() {
-    var obj: Json = {}
-    for (i in 0..20) {
-        obj["field_" + string(i)] = i
-    }
-    assert_eq(obj["field_0"], 0)
-    assert_eq(obj["field_10"], 10)
-    assert_eq(obj["field_19"], 19)
-}
-
-// ===== 字段覆盖 =====
-@test
-fn test_field_overwrite() {
-    var obj: Json = { "value": 1 }
-    assert_eq(obj.value, 1)
-    obj.value = 2
-    assert_eq(obj.value, 2)
-    obj["value"] = 3
-    assert_eq(obj.value, 3)
-}
-
-@test
-fn test_dynamic_overwrite() {
-    var obj: Json = { "x": 1 }
-    var key = "x"
-    obj[key] = 100
-    assert_eq(obj.x, 100)
-}
-
-// ===== null 和 undefined 行为 =====
-@test
-fn test_null_field_value() {
-    var obj = { "data": null }
-    assert_eq(obj.data, null)
-}
-
-@test
-fn test_missing_field_returns_null() {
-    var obj: Json = { "existing": 1 }
-    assert_eq(obj["nonexistent"], null)
-}
-
-// ===== 类型转换 =====
-@test
-fn test_field_type_change() {
-    var obj: Json = { "value": 1 }
-    assert_eq(obj.value, 1)
-    obj.value = "string now"
-    assert_eq(obj.value, "string now")
-    obj.value = true
-    assert_eq(obj.value, true)
-}
-
-// ===== 对象作为参数 =====
-@test
-fn test_object_as_parameter() {
-    fn getField(obj: Json, key: string) -> Json {
-        return obj[key]
-    }
-    var data: Json = { "name": "test", "value": 42 }
-    assert_eq(getField(data, "name"), "test")
-    assert_eq(getField(data, "value"), 42)
-}
-
-@test
-fn test_object_modification_in_function() {
-    fn addField(obj: ref Json, key: string, val: int) {
-        obj[key] = val
-    }
-    var obj: Json = {}
-    addField(ref obj, "added", 123)
-    assert_eq(obj.added, 123)
-}
-
-// ===== 对象比较 =====
-@test
-fn test_object_identity() {
-    var obj1: Json = { "x": 1 }
-    var obj2 = obj1
-    // 引用同一对象
-    obj2.x = 2
-    assert_eq(obj1.x, 2)
-}
-
-@test
-fn test_nested_modification() {
-    var parent: Json = { "child": { "value": 1 } }
-    var child_ref = parent.child
-    child_ref.value = 100
-    assert_eq(parent.child.value, 100)
-}
-
-print("json_edge_cases: all tests passed")

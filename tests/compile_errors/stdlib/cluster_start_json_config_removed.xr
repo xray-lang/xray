@@ -1,4 +1,4 @@
 import cluster
 
-var legacy: Json = { name: "node", port: 0, secret: null, tls: null }
+var legacy: JSON.Object = JSON.parseObject("{\"name\":\"node\",\"port\":0}")
 cluster.start(legacy)

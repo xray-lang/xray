@@ -1,1 +1,1 @@
-type 'Json' is not assignable to parameter type
+type 'JSON.Object' is not assignable to parameter type 'HttpRequestOptions'

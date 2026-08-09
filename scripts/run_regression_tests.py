@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Run the tests/regression corpus, plus the cross-backend differential net.
 
-Every case is a `.xr` with @test functions, run through `xray test` under a
-per-case timeout. Output is captured through a real file rather than a pipe
-buffer: a crashing case writes its report between the last flush and the abort,
-which is exactly when the output matters most.
+Cases with top-level ``@test`` declarations run through ``xray test``;
+standalone executable cases run through ``xray run``. Output is captured
+through a real file rather than a pipe buffer: a crashing case writes its
+report between the last flush and the abort, which is exactly when the output
+matters most.
 
 The VM/AOT differential net is folded into the same summary, so a backend
 divergence fails the run rather than being reported somewhere else. Opt out
@@ -58,6 +59,7 @@ EXCLUDED_PARTS = ("fixtures", "modules", "reexport_test")
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 COUNT_PASSED = re.compile(r"(\d+) passed")
 COUNT_FAILED = re.compile(r"(\d+) failed")
+TEST_ANNOTATION = re.compile(rb"(?m)^[ \t]*@test(?:[ \t\r\n(]|$)")
 
 USE_COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
 GREEN = "\033[0;32m" if USE_COLOR else ""
@@ -104,10 +106,18 @@ def executed_count(text: str) -> int:
            (int(failed.group(1)) if failed else 0)
 
 
+def is_test_module(case: Path) -> bool:
+    """Return whether the source declares a top-level test annotation."""
+    return TEST_ANNOTATION.search(case.read_bytes()) is not None
+
+
 def run_one(xray: Path, case: Path, timeout: float) -> CaseResult:
-    result = proc.run([xray, "test", case], timeout=timeout)
+    test_module = is_test_module(case)
+    verb = "test" if test_module else "run"
+    result = proc.run([xray, verb, case], timeout=timeout)
     output = result.stdout + result.stderr
-    count = executed_count(output.decode("utf-8", "replace"))
+    count = (executed_count(output.decode("utf-8", "replace"))
+             if test_module else int(result.ok))
     if result.timed_out:
         return CaseResult(case.name, TIMEOUT, 0, output)
     if result.ok:
@@ -225,7 +235,7 @@ def main(argv: list[str]) -> int:
             "failed": failed,
             "elapsed_seconds": elapsed,
             "failed_tests": failed_list,
-        }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+        }, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     if not failed:
         print(f"{GREEN}所有测试通过！{NC}")

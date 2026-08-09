@@ -188,7 +188,7 @@ match (p) {
 }
 ```
 
-- 对象模式匹配任意带这些字段的对象/Json；字段读取对缺失字段安全（为 `null`）。字段子模式可为可反驳模式（如 `{ mode: 2 }`）。
+- 对象模式匹配静态类型已知包含这些字段的 exact structural object；schema-less JSON 请先用 `JSON.get/require` 或 `JSON.decodeObject<T>` 提交结构。字段子模式可为可反驳模式（如 `{ mode: 2 }`）。
 - 数组模式按**长度**匹配：无 `..rest` 时要求长度恰等于元素数，有 `..rest` 时要求长度 ≥ 元素数。元素子模式只能是绑定或通配（`..rest` 之外的元素不做按值测试——元素越界读取会陷入 panic）；需要按元素值判断时改用 `if` 守卫。
 - or-pattern `|` 暂不支持（逗号多值已覆盖等价能力）。
 
@@ -384,7 +384,7 @@ match (p) {
 }
 ```
 
-- An object pattern matches any object/Json carrying those fields; field reads are null-safe for a missing field. Field sub-patterns may be refutable (e.g. `{ mode: 2 }`).
+- An object pattern matches an exact structural object whose static type contains the named fields. For schema-less JSON, first commit the structure with `JSON.get/require` or `JSON.decodeObject<T>`. Field sub-patterns may be refutable (e.g. `{ mode: 2 }`).
 - An array pattern matches by **length**: without `..rest`, the length must equal the element count; with `..rest`, the length must be ≥ the element count. Element sub-patterns may only be bindings or wildcards (non-rest elements are not value-tested — an out-of-bounds element read traps); use an `if` guard to test element values.
 - The or-pattern `|` is not supported (comma-separated multi-values cover the equivalent need).
 

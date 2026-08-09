@@ -530,7 +530,7 @@ class StaticChecker:
             'TYPE_NAME_ARRAY': 'Array',
             'TYPE_NAME_MAP': 'Map',
             'TYPE_NAME_SET': 'Set',
-            'TYPE_NAME_JSON': 'Json',
+            'TYPE_NAME_JSON': 'JSON.Value',
             'TYPE_NAME_BIGINT': 'BigInt',
             'TYPE_NAME_REGEX': 'Regex',
             'TYPE_NAME_DATETIME': 'DateTime',

@@ -48,16 +48,13 @@ XR_FUNC bool xg_object_shape_stable_key(uint8_t domain, const XgObjectFieldSumma
                                         uint16_t field_count, uint64_t *out_key) {
     uint64_t hash;
 
-    if (!out_key || (field_count != 0 && !fields) ||
-        (domain != XG_OBJECT_DOMAIN_STRUCT && domain != XG_OBJECT_DOMAIN_JSON))
+    if (!out_key || (field_count != 0 && !fields) || domain != XG_OBJECT_DOMAIN_STRUCT)
         return false;
     hash = xr_object_shape_key_begin(domain, field_count);
     for (uint16_t i = 0; i < field_count; i++) {
         uint8_t runtime_flags = 0;
         if ((fields[i].flags & XG_OBJECT_FIELD_READONLY) != 0)
             runtime_flags |= XR_OBJECT_SHAPE_FIELD_READONLY;
-        if ((fields[i].flags & XG_OBJECT_FIELD_OPTIONAL) != 0)
-            runtime_flags |= XR_OBJECT_SHAPE_FIELD_OPTIONAL;
         hash = xr_object_shape_key_add_field_key(hash, fields[i].stable_name_key,
                                                  fields[i].stable_type_key, runtime_flags);
     }
@@ -376,6 +373,7 @@ static uint64_t hash_link_dependency_summary(uint64_t hash, const XgLinkDependen
     hash = hash_u32(hash, row->link_id);
     hash = hash_u32(hash, row->module_id);
     hash = hash_u32(hash, row->decl_id);
+    hash = hash_u32(hash, row->owner_func_id);
     hash = hash_u32(hash, row->source_span_id);
     hash = hash_u32(hash, row->name_id);
     hash = hash_u8(hash, row->kind);
@@ -556,22 +554,6 @@ static uint64_t hash_derived_method_summary(uint64_t hash, const XgDerivedMethod
     return hash_u32(hash, row->flags);
 }
 
-static uint64_t hash_json_dynamic_access_summary(uint64_t hash,
-                                                 const XgJsonDynamicAccessSummary *row) {
-    if (!row)
-        return hash_u32(hash, 0);
-    hash = hash_u32(hash, row->json_dynamic_access_id);
-    hash = hash_u32(hash, row->module_id);
-    hash = hash_u32(hash, row->owner_func_id);
-    hash = hash_u32(hash, row->receiver_shape_id);
-    hash = hash_u32(hash, row->source_span_id);
-    hash = hash_u32(hash, row->key_name_id);
-    hash = hash_u32(hash, row->result_type_key);
-    hash = hash_u32(hash, row->field_ordinal);
-    hash = hash_u8(hash, row->access_kind);
-    return hash_u32(hash, row->flags);
-}
-
 static uint64_t hash_json_codec_summary(uint64_t hash, const XgJsonCodecSummary *row) {
     if (!row)
         return hash_u32(hash, 0);
@@ -660,19 +642,6 @@ static uint64_t hash_object_access_case_summary(uint64_t hash,
     hash = hash_u32(hash, row->mutation_epoch);
     hash = hash_u32(hash, row->field_ordinal);
     return hash_u8(hash, row->domain);
-}
-
-static uint64_t hash_object_shape_flow_summary(uint64_t hash, const XgObjectShapeFlowSummary *row) {
-    if (!row)
-        return hash_u32(hash, 0);
-    hash = hash_u32(hash, row->flow_id);
-    hash = hash_u32(hash, row->callsite_id);
-    hash = hash_u32(hash, row->source_func_id);
-    hash = hash_u32(hash, row->target_func_id);
-    hash = hash_u32(hash, row->concrete_shape_id);
-    hash = hash_u32(hash, row->source_param_ordinal);
-    hash = hash_u32(hash, row->target_param_ordinal);
-    return hash_u32(hash, row->flags);
 }
 
 static uint64_t hash_object_merge_summary(uint64_t hash, const XgObjectMergeSummary *row) {
@@ -1044,23 +1013,6 @@ XR_FUNC const char *xg_derived_method_kind_name(uint8_t kind) {
             return "hash";
         case XG_DERIVED_METHOD_CLONE:
             return "clone";
-        default:
-            return "unknown";
-    }
-}
-
-XR_FUNC const char *xg_json_dynamic_access_kind_name(uint8_t kind) {
-    switch ((XgJsonDynamicAccessKind) kind) {
-        case XG_JSON_DYNAMIC_ACCESS_FIELD_GET:
-            return "field_get";
-        case XG_JSON_DYNAMIC_ACCESS_FIELD_SET:
-            return "field_set";
-        case XG_JSON_DYNAMIC_ACCESS_INDEX_GET:
-            return "index_get";
-        case XG_JSON_DYNAMIC_ACCESS_INDEX_SET:
-            return "index_set";
-        case XG_JSON_DYNAMIC_ACCESS_GET_DEFAULT:
-            return "get_default";
         default:
             return "unknown";
     }
@@ -1487,13 +1439,11 @@ XR_FUNC void xg_global_evidence_free(XgGlobalEvidence *evidence) {
     xr_free(evidence->derives);
     xr_free(evidence->derived_fields);
     xr_free(evidence->derived_methods);
-    xr_free(evidence->json_dynamic_accesses);
     xr_free(evidence->json_codecs);
     xr_free(evidence->object_shapes);
     xr_free(evidence->object_fields);
     xr_free(evidence->object_accesses);
     xr_free(evidence->object_access_cases);
-    xr_free(evidence->object_shape_flows);
     xr_free(evidence->object_merges);
     xr_free(evidence->options_bags);
     xr_free(evidence->map_shapes);
@@ -1547,13 +1497,11 @@ static bool xg_global_evidence_clone(XgGlobalEvidence *out, const XgGlobalEviden
     XG_CLONE_ARRAY(derives, nderives, derive_cap);
     XG_CLONE_ARRAY(derived_fields, nderived_fields, derived_field_cap);
     XG_CLONE_ARRAY(derived_methods, nderived_methods, derived_method_cap);
-    XG_CLONE_ARRAY(json_dynamic_accesses, njson_dynamic_accesses, json_dynamic_access_cap);
     XG_CLONE_ARRAY(json_codecs, njson_codecs, json_codec_cap);
     XG_CLONE_ARRAY(object_shapes, nobject_shapes, object_shape_cap);
     XG_CLONE_ARRAY(object_fields, nobject_fields, object_field_cap);
     XG_CLONE_ARRAY(object_accesses, nobject_accesses, object_access_cap);
     XG_CLONE_ARRAY(object_access_cases, nobject_access_cases, object_access_case_cap);
-    XG_CLONE_ARRAY(object_shape_flows, nobject_shape_flows, object_shape_flow_cap);
     XG_CLONE_ARRAY(object_merges, nobject_merges, object_merge_cap);
     XG_CLONE_ARRAY(options_bags, noptions_bags, options_bag_cap);
     XG_CLONE_ARRAY(map_shapes, nmap_shapes, map_shape_cap);
@@ -1717,13 +1665,6 @@ XR_FUNC bool xg_global_evidence_reserve_derived_methods(XgGlobalEvidence *eviden
                          capacity, sizeof(XgDerivedMethodSummary));
 }
 
-XR_FUNC bool xg_global_evidence_reserve_json_dynamic_accesses(XgGlobalEvidence *evidence,
-                                                              uint32_t capacity) {
-    return evidence && reserve_array((void **) &evidence->json_dynamic_accesses,
-                                     &evidence->json_dynamic_access_cap, capacity,
-                                     sizeof(XgJsonDynamicAccessSummary));
-}
-
 XR_FUNC bool xg_global_evidence_reserve_json_codecs(XgGlobalEvidence *evidence, uint32_t capacity) {
     return evidence && reserve_array((void **) &evidence->json_codecs, &evidence->json_codec_cap,
                                      capacity, sizeof(XgJsonCodecSummary));
@@ -1755,13 +1696,6 @@ XR_FUNC bool xg_global_evidence_reserve_object_access_cases(XgGlobalEvidence *ev
     return evidence && reserve_array((void **) &evidence->object_access_cases,
                                      &evidence->object_access_case_cap, capacity,
                                      sizeof(XgObjectAccessCaseSummary));
-}
-
-XR_FUNC bool xg_global_evidence_reserve_object_shape_flows(XgGlobalEvidence *evidence,
-                                                           uint32_t capacity) {
-    return evidence &&
-           reserve_array((void **) &evidence->object_shape_flows, &evidence->object_shape_flow_cap,
-                         capacity, sizeof(XgObjectShapeFlowSummary));
 }
 
 XR_FUNC bool xg_global_evidence_reserve_object_merges(XgGlobalEvidence *evidence,
@@ -2082,19 +2016,6 @@ xg_global_evidence_add_derived_method(XgGlobalEvidence *evidence,
     return row;
 }
 
-XR_FUNC XgJsonDynamicAccessSummary *
-xg_global_evidence_add_json_dynamic_access(XgGlobalEvidence *evidence,
-                                           const XgJsonDynamicAccessSummary *summary) {
-    XgJsonDynamicAccessSummary *row;
-    if (!evidence || !summary ||
-        !xg_global_evidence_reserve_json_dynamic_accesses(evidence,
-                                                          evidence->njson_dynamic_accesses + 1))
-        return NULL;
-    row = &evidence->json_dynamic_accesses[evidence->njson_dynamic_accesses++];
-    *row = *summary;
-    return row;
-}
-
 XR_FUNC XgJsonCodecSummary *xg_global_evidence_add_json_codec(XgGlobalEvidence *evidence,
                                                               const XgJsonCodecSummary *summary) {
     XgJsonCodecSummary *row;
@@ -2151,18 +2072,6 @@ xg_global_evidence_add_object_access_case(XgGlobalEvidence *evidence,
                                                         evidence->nobject_access_cases + 1))
         return NULL;
     row = &evidence->object_access_cases[evidence->nobject_access_cases++];
-    *row = *summary;
-    return row;
-}
-
-XR_FUNC XgObjectShapeFlowSummary *
-xg_global_evidence_add_object_shape_flow(XgGlobalEvidence *evidence,
-                                         const XgObjectShapeFlowSummary *summary) {
-    XgObjectShapeFlowSummary *row;
-    if (!evidence || !summary ||
-        !xg_global_evidence_reserve_object_shape_flows(evidence, evidence->nobject_shape_flows + 1))
-        return NULL;
-    row = &evidence->object_shape_flows[evidence->nobject_shape_flows++];
     *row = *summary;
     return row;
 }
@@ -3095,14 +3004,11 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
     hash = hash_mix(hash, &evidence->nderives, sizeof(evidence->nderives));
     hash = hash_mix(hash, &evidence->nderived_fields, sizeof(evidence->nderived_fields));
     hash = hash_mix(hash, &evidence->nderived_methods, sizeof(evidence->nderived_methods));
-    hash =
-        hash_mix(hash, &evidence->njson_dynamic_accesses, sizeof(evidence->njson_dynamic_accesses));
     hash = hash_mix(hash, &evidence->njson_codecs, sizeof(evidence->njson_codecs));
     hash = hash_mix(hash, &evidence->nobject_shapes, sizeof(evidence->nobject_shapes));
     hash = hash_mix(hash, &evidence->nobject_fields, sizeof(evidence->nobject_fields));
     hash = hash_mix(hash, &evidence->nobject_accesses, sizeof(evidence->nobject_accesses));
     hash = hash_mix(hash, &evidence->nobject_access_cases, sizeof(evidence->nobject_access_cases));
-    hash = hash_mix(hash, &evidence->nobject_shape_flows, sizeof(evidence->nobject_shape_flows));
     hash = hash_mix(hash, &evidence->nobject_merges, sizeof(evidence->nobject_merges));
     hash = hash_mix(hash, &evidence->noptions_bags, sizeof(evidence->noptions_bags));
     hash = hash_mix(hash, &evidence->nmap_shapes, sizeof(evidence->nmap_shapes));
@@ -3157,8 +3063,6 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_derived_field_summary(hash, &evidence->derived_fields[i]);
     for (uint32_t i = 0; i < evidence->nderived_methods; i++)
         hash = hash_derived_method_summary(hash, &evidence->derived_methods[i]);
-    for (uint32_t i = 0; i < evidence->njson_dynamic_accesses; i++)
-        hash = hash_json_dynamic_access_summary(hash, &evidence->json_dynamic_accesses[i]);
     for (uint32_t i = 0; i < evidence->njson_codecs; i++)
         hash = hash_json_codec_summary(hash, &evidence->json_codecs[i]);
     for (uint32_t i = 0; i < evidence->nobject_shapes; i++)
@@ -3169,8 +3073,6 @@ XR_FUNC uint64_t xg_global_evidence_hash(const XgGlobalEvidence *evidence) {
         hash = hash_object_access_summary(hash, &evidence->object_accesses[i]);
     for (uint32_t i = 0; i < evidence->nobject_access_cases; i++)
         hash = hash_object_access_case_summary(hash, &evidence->object_access_cases[i]);
-    for (uint32_t i = 0; i < evidence->nobject_shape_flows; i++)
-        hash = hash_object_shape_flow_summary(hash, &evidence->object_shape_flows[i]);
     for (uint32_t i = 0; i < evidence->nobject_merges; i++)
         hash = hash_object_merge_summary(hash, &evidence->object_merges[i]);
     for (uint32_t i = 0; i < evidence->noptions_bags; i++)
@@ -3780,9 +3682,10 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
     for (uint32_t i = 0; i < evidence->nlink_deps; i++) {
         const XgLinkDependencySummary *l = &evidence->link_deps[i];
         fprintf(out,
-                "link-dep id=%u module=%u decl=%u span=%u name_id=%u kind=%u flags=0x%x name=%s\n",
-                l->link_id, l->module_id, l->decl_id, l->source_span_id, l->name_id,
-                (unsigned) l->kind, l->flags, l->name);
+                "link-dep id=%u module=%u decl=%u owner=%u span=%u name_id=%u kind=%u "
+                "flags=0x%x name=%s\n",
+                l->link_id, l->module_id, l->decl_id, l->owner_func_id, l->source_span_id,
+                l->name_id, (unsigned) l->kind, l->flags, l->name);
     }
     for (uint32_t i = 0; i < evidence->ngeneric_insts; i++) {
         const XgGenericInstSummary *g = &evidence->generic_insts[i];
@@ -3799,24 +3702,23 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
 }
 
 static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *evidence) {
-    fprintf(
-        out,
-        "payload-extra v7 generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
-        "seq=%u capacity=%u bulk=%u encoding=%u "
-        "json_dynamic_accesses=%u json_codecs=%u object_shapes=%u object_fields=%u "
-        "object_accesses=%u object_access_cases=%u object_shape_flows=%u object_merges=%u "
-        "options=%u map_shapes=%u map_entries=%u "
-        "key_accesses=%u hash_eqs=%u\n",
-        evidence ? evidence->ngeneric_body_uses : 0, evidence ? evidence->ngeneric_storages : 0,
-        evidence ? evidence->ngeneric_code_sizes : 0, evidence ? evidence->nsequence_accesses : 0,
-        evidence ? evidence->ncapacity_ops : 0, evidence ? evidence->nbulk_ops : 0,
-        evidence ? evidence->nencoding_ops : 0, evidence ? evidence->njson_dynamic_accesses : 0,
-        evidence ? evidence->njson_codecs : 0, evidence ? evidence->nobject_shapes : 0,
-        evidence ? evidence->nobject_fields : 0, evidence ? evidence->nobject_accesses : 0,
-        evidence ? evidence->nobject_access_cases : 0, evidence ? evidence->nobject_shape_flows : 0,
-        evidence ? evidence->nobject_merges : 0, evidence ? evidence->noptions_bags : 0,
-        evidence ? evidence->nmap_shapes : 0, evidence ? evidence->nmap_entries : 0,
-        evidence ? evidence->nkey_accesses : 0, evidence ? evidence->nhash_eqs : 0);
+    fprintf(out,
+            "payload-extra v9 generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
+            "seq=%u capacity=%u bulk=%u encoding=%u "
+            "json_codecs=%u object_shapes=%u object_fields=%u "
+            "object_accesses=%u object_access_cases=%u object_merges=%u "
+            "options=%u map_shapes=%u map_entries=%u "
+            "key_accesses=%u hash_eqs=%u\n",
+            evidence ? evidence->ngeneric_body_uses : 0, evidence ? evidence->ngeneric_storages : 0,
+            evidence ? evidence->ngeneric_code_sizes : 0,
+            evidence ? evidence->nsequence_accesses : 0, evidence ? evidence->ncapacity_ops : 0,
+            evidence ? evidence->nbulk_ops : 0, evidence ? evidence->nencoding_ops : 0,
+            evidence ? evidence->njson_codecs : 0, evidence ? evidence->nobject_shapes : 0,
+            evidence ? evidence->nobject_fields : 0, evidence ? evidence->nobject_accesses : 0,
+            evidence ? evidence->nobject_access_cases : 0, evidence ? evidence->nobject_merges : 0,
+            evidence ? evidence->noptions_bags : 0, evidence ? evidence->nmap_shapes : 0,
+            evidence ? evidence->nmap_entries : 0, evidence ? evidence->nkey_accesses : 0,
+            evidence ? evidence->nhash_eqs : 0);
     if (!evidence)
         return;
     for (uint32_t i = 0; i < evidence->ngeneric_body_uses; i++) {
@@ -3884,15 +3786,6 @@ static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *e
                 e->op_id, e->owner_func_id, e->source_span_id, e->body_ordinal,
                 (unsigned) e->op_kind, e->input_type_key, e->output_type_key, e->flags);
     }
-    for (uint32_t i = 0; i < evidence->njson_dynamic_accesses; i++) {
-        const XgJsonDynamicAccessSummary *a = &evidence->json_dynamic_accesses[i];
-        fprintf(out,
-                "json-dynamic-access id=%u module=%u func=%u shape=%u kind=%u span=%u key=%u "
-                "result_type=%u field=%u flags=0x%x\n",
-                a->json_dynamic_access_id, a->module_id, a->owner_func_id, a->receiver_shape_id,
-                (unsigned) a->access_kind, a->source_span_id, a->key_name_id, a->result_type_key,
-                (unsigned) a->field_ordinal, a->flags);
-    }
     for (uint32_t i = 0; i < evidence->njson_codecs; i++) {
         const XgJsonCodecSummary *c = &evidence->json_codecs[i];
         fprintf(out,
@@ -3944,15 +3837,6 @@ static void dump_cache_payload_global_extra(FILE *out, const XgGlobalEvidence *e
                 c->case_id, c->object_access_id, c->receiver_shape_set_id, c->receiver_shape_id,
                 c->stable_shape_key, c->mutation_epoch, (unsigned) c->field_ordinal,
                 (unsigned) c->domain);
-    }
-    for (uint32_t i = 0; i < evidence->nobject_shape_flows; i++) {
-        const XgObjectShapeFlowSummary *f = &evidence->object_shape_flows[i];
-        fprintf(out,
-                "object-shape-flow id=%u callsite=%u source_func=%u target_func=%u "
-                "concrete_shape=%u source_param=%u target_param=%u flags=0x%x\n",
-                f->flow_id, f->callsite_id, f->source_func_id, f->target_func_id,
-                f->concrete_shape_id, (unsigned) f->source_param_ordinal,
-                (unsigned) f->target_param_ordinal, f->flags);
     }
     for (uint32_t i = 0; i < evidence->nobject_merges; i++) {
         const XgObjectMergeSummary *m = &evidence->object_merges[i];
@@ -4585,10 +4469,11 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
         memset(&row, 0, sizeof(row));
         memset(name, 0, sizeof(name));
         if (sscanf(line,
-                   "link-dep id=%" SCNu32 " module=%" SCNu32 " decl=%" SCNu32 " span=%" SCNu32
-                   " name_id=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32 " name=%511[^\n]%c",
-                   &row.link_id, &row.module_id, &row.decl_id, &row.source_span_id, &row.name_id,
-                   &kind, &row.flags, name, &trailing) < 8)
+                   "link-dep id=%" SCNu32 " module=%" SCNu32 " decl=%" SCNu32 " owner=%" SCNu32
+                   " span=%" SCNu32 " name_id=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32
+                   " name=%511[^\n]%c",
+                   &row.link_id, &row.module_id, &row.decl_id, &row.owner_func_id,
+                   &row.source_span_id, &row.name_id, &kind, &row.flags, name, &trailing) < 9)
             return false;
         row.kind = (uint8_t) kind;
         snprintf(row.name, sizeof(row.name), "%s", name);
@@ -4637,13 +4522,11 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
     uint32_t capacity_op_count = 0;
     uint32_t bulk_op_count = 0;
     uint32_t encoding_op_count = 0;
-    uint32_t json_dynamic_access_count = 0;
     uint32_t json_codec_count = 0;
     uint32_t object_shape_count = 0;
     uint32_t object_field_count = 0;
     uint32_t object_access_count = 0;
     uint32_t object_access_case_count = 0;
-    uint32_t object_shape_flow_count = 0;
     uint32_t object_merge_count = 0;
     uint32_t options_bag_count = 0;
     uint32_t map_shape_count = 0;
@@ -4655,19 +4538,17 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
     if (!cursor || !*cursor || !evidence || !evidence_cache_next_line(cursor, line, sizeof(line)))
         return false;
     if (sscanf(line,
-               "payload-extra v7 generic_body_uses=%" SCNu32 " generic_storages=%" SCNu32
+               "payload-extra v9 generic_body_uses=%" SCNu32 " generic_storages=%" SCNu32
                " generic_code_sizes=%" SCNu32 " seq=%" SCNu32 " capacity=%" SCNu32 " bulk=%" SCNu32
-               " encoding=%" SCNu32 " json_dynamic_accesses=%" SCNu32 " json_codecs=%" SCNu32
-               " object_shapes=%" SCNu32 " object_fields=%" SCNu32 " object_accesses=%" SCNu32
-               " object_access_cases=%" SCNu32 " object_shape_flows=%" SCNu32
+               " encoding=%" SCNu32 " json_codecs=%" SCNu32 " object_shapes=%" SCNu32
+               " object_fields=%" SCNu32 " object_accesses=%" SCNu32 " object_access_cases=%" SCNu32
                " object_merges=%" SCNu32 " options=%" SCNu32 " map_shapes=%" SCNu32
                " map_entries=%" SCNu32 " key_accesses=%" SCNu32 " hash_eqs=%" SCNu32 " %c",
                &generic_body_use_count, &generic_storage_count, &generic_code_size_count,
                &sequence_access_count, &capacity_op_count, &bulk_op_count, &encoding_op_count,
-               &json_dynamic_access_count, &json_codec_count, &object_shape_count,
-               &object_field_count, &object_access_count, &object_access_case_count,
-               &object_shape_flow_count, &object_merge_count, &options_bag_count, &map_shape_count,
-               &map_entry_count, &key_access_count, &hash_eq_count, &trailing) != 20)
+               &json_codec_count, &object_shape_count, &object_field_count, &object_access_count,
+               &object_access_case_count, &object_merge_count, &options_bag_count, &map_shape_count,
+               &map_entry_count, &key_access_count, &hash_eq_count, &trailing) != 18)
         return false;
 
     if (!xg_global_evidence_reserve_generic_body_uses(evidence, generic_body_use_count) ||
@@ -4677,13 +4558,11 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
         !xg_global_evidence_reserve_capacity_ops(evidence, capacity_op_count) ||
         !xg_global_evidence_reserve_bulk_ops(evidence, bulk_op_count) ||
         !xg_global_evidence_reserve_encoding_ops(evidence, encoding_op_count) ||
-        !xg_global_evidence_reserve_json_dynamic_accesses(evidence, json_dynamic_access_count) ||
         !xg_global_evidence_reserve_json_codecs(evidence, json_codec_count) ||
         !xg_global_evidence_reserve_object_shapes(evidence, object_shape_count) ||
         !xg_global_evidence_reserve_object_fields(evidence, object_field_count) ||
         !xg_global_evidence_reserve_object_accesses(evidence, object_access_count) ||
         !xg_global_evidence_reserve_object_access_cases(evidence, object_access_case_count) ||
-        !xg_global_evidence_reserve_object_shape_flows(evidence, object_shape_flow_count) ||
         !xg_global_evidence_reserve_object_merges(evidence, object_merge_count) ||
         !xg_global_evidence_reserve_options_bags(evidence, options_bag_count) ||
         !xg_global_evidence_reserve_map_shapes(evidence, map_shape_count) ||
@@ -4831,27 +4710,6 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
         if (!xg_global_evidence_add_encoding_op(evidence, &row))
             return false;
     }
-    for (uint32_t i = 0; i < json_dynamic_access_count; i++) {
-        XgJsonDynamicAccessSummary row;
-        uint32_t access_kind = 0;
-        uint32_t field_ordinal = 0;
-        trailing = '\0';
-        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
-            return false;
-        memset(&row, 0, sizeof(row));
-        if (sscanf(line,
-                   "json-dynamic-access id=%" SCNu32 " module=%" SCNu32 " func=%" SCNu32
-                   " shape=%" SCNu32 " kind=%" SCNu32 " span=%" SCNu32 " key=%" SCNu32
-                   " result_type=%" SCNu32 " field=%" SCNu32 " flags=0x%" SCNx32 " %c",
-                   &row.json_dynamic_access_id, &row.module_id, &row.owner_func_id,
-                   &row.receiver_shape_id, &access_kind, &row.source_span_id, &row.key_name_id,
-                   &row.result_type_key, &field_ordinal, &row.flags, &trailing) != 10)
-            return false;
-        row.access_kind = (uint8_t) access_kind;
-        row.field_ordinal = (uint16_t) field_ordinal;
-        if (!xg_global_evidence_add_json_dynamic_access(evidence, &row))
-            return false;
-    }
     for (uint32_t i = 0; i < json_codec_count; i++) {
         XgJsonCodecSummary row;
         uint32_t codec_kind = 0;
@@ -4981,27 +4839,6 @@ static bool materialize_payload_global_extra(const char **cursor, XgGlobalEviden
         row.field_ordinal = (uint16_t) field_ordinal;
         row.domain = (uint8_t) domain;
         if (!xg_global_evidence_add_object_access_case(evidence, &row))
-            return false;
-    }
-    for (uint32_t i = 0; i < object_shape_flow_count; i++) {
-        XgObjectShapeFlowSummary row;
-        uint32_t source_param_ordinal = 0;
-        uint32_t target_param_ordinal = 0;
-        trailing = '\0';
-        if (!evidence_cache_next_line(cursor, line, sizeof(line)))
-            return false;
-        memset(&row, 0, sizeof(row));
-        if (sscanf(line,
-                   "object-shape-flow id=%" SCNu32 " callsite=%" SCNu32 " source_func=%" SCNu32
-                   " target_func=%" SCNu32 " concrete_shape=%" SCNu32 " source_param=%" SCNu32
-                   " target_param=%" SCNu32 " flags=0x%" SCNx32 " %c",
-                   &row.flow_id, &row.callsite_id, &row.source_func_id, &row.target_func_id,
-                   &row.concrete_shape_id, &source_param_ordinal, &target_param_ordinal, &row.flags,
-                   &trailing) != 8)
-            return false;
-        row.source_param_ordinal = (uint16_t) source_param_ordinal;
-        row.target_param_ordinal = (uint16_t) target_param_ordinal;
-        if (!xg_global_evidence_add_object_shape_flow(evidence, &row))
             return false;
     }
     for (uint32_t i = 0; i < object_merge_count; i++) {
@@ -5245,13 +5082,11 @@ typedef struct XgPackageImportOffsets {
     XgDeriveId derive_id;
     XgDerivedFieldId derived_field_id;
     XgDerivedMethodId derived_method_id;
-    XgJsonDynamicAccessId json_dynamic_access_id;
     XgJsonCodecId json_codec_id;
     XgObjectShapeId object_shape_id;
     XgObjectFieldId object_field_id;
     XgObjectAccessId object_access_id;
     XgObjectAccessCaseId object_access_case_id;
-    XgObjectShapeFlowId object_shape_flow_id;
     XgObjectMergeId object_merge_id;
     XgOptionsId options_id;
     XgMapShapeId map_shape_id;
@@ -5492,15 +5327,6 @@ static void collect_import_offsets(const XgGlobalEvidence *target,
         offsets->func_id =
             max_u32(offsets->func_id, target->derived_methods[i].generated_body_func_id);
     }
-    for (uint32_t i = 0; i < target->njson_dynamic_accesses; i++) {
-        offsets->json_dynamic_access_id =
-            max_u32(offsets->json_dynamic_access_id,
-                    target->json_dynamic_accesses[i].json_dynamic_access_id);
-        offsets->func_id =
-            max_u32(offsets->func_id, target->json_dynamic_accesses[i].owner_func_id);
-        offsets->object_shape_id =
-            max_u32(offsets->object_shape_id, target->json_dynamic_accesses[i].receiver_shape_id);
-    }
     for (uint32_t i = 0; i < target->njson_codecs; i++) {
         offsets->json_codec_id = max_u32(offsets->json_codec_id, target->json_codecs[i].codec_id);
         offsets->func_id = max_u32(offsets->func_id, target->json_codecs[i].owner_func_id);
@@ -5532,14 +5358,6 @@ static void collect_import_offsets(const XgGlobalEvidence *target,
         offsets->object_access_case_id = max_u32(offsets->object_access_case_id, row->case_id);
         offsets->object_access_id = max_u32(offsets->object_access_id, row->object_access_id);
         offsets->object_shape_id = max_u32(offsets->object_shape_id, row->receiver_shape_id);
-    }
-    for (uint32_t i = 0; i < target->nobject_shape_flows; i++) {
-        const XgObjectShapeFlowSummary *row = &target->object_shape_flows[i];
-        offsets->object_shape_flow_id = max_u32(offsets->object_shape_flow_id, row->flow_id);
-        offsets->callsite_id = max_u32(offsets->callsite_id, row->callsite_id);
-        offsets->func_id = max_u32(offsets->func_id, row->source_func_id);
-        offsets->func_id = max_u32(offsets->func_id, row->target_func_id);
-        offsets->object_shape_id = max_u32(offsets->object_shape_id, row->concrete_shape_id);
     }
     for (uint32_t i = 0; i < target->nobject_merges; i++) {
         const XgObjectMergeSummary *row = &target->object_merges[i];
@@ -5611,13 +5429,11 @@ static bool reserve_import_capacity(XgGlobalEvidence *target, const XgGlobalEvid
     RESERVE_IMPORTED(nderives, xg_global_evidence_reserve_derives);
     RESERVE_IMPORTED(nderived_fields, xg_global_evidence_reserve_derived_fields);
     RESERVE_IMPORTED(nderived_methods, xg_global_evidence_reserve_derived_methods);
-    RESERVE_IMPORTED(njson_dynamic_accesses, xg_global_evidence_reserve_json_dynamic_accesses);
     RESERVE_IMPORTED(njson_codecs, xg_global_evidence_reserve_json_codecs);
     RESERVE_IMPORTED(nobject_shapes, xg_global_evidence_reserve_object_shapes);
     RESERVE_IMPORTED(nobject_fields, xg_global_evidence_reserve_object_fields);
     RESERVE_IMPORTED(nobject_accesses, xg_global_evidence_reserve_object_accesses);
     RESERVE_IMPORTED(nobject_access_cases, xg_global_evidence_reserve_object_access_cases);
-    RESERVE_IMPORTED(nobject_shape_flows, xg_global_evidence_reserve_object_shape_flows);
     RESERVE_IMPORTED(nobject_merges, xg_global_evidence_reserve_object_merges);
     RESERVE_IMPORTED(noptions_bags, xg_global_evidence_reserve_options_bags);
     RESERVE_IMPORTED(nmap_shapes, xg_global_evidence_reserve_map_shapes);
@@ -5674,11 +5490,10 @@ static uint32_t package_non_module_row_count(const XgGlobalEvidence *package) {
            package->ngeneric_body_uses + package->ngeneric_storages + package->ngeneric_code_sizes +
            package->nsequence_accesses + package->ncapacity_ops + package->nbulk_ops +
            package->nencoding_ops + package->nderives + package->nderived_fields +
-           package->nderived_methods + package->njson_dynamic_accesses + package->njson_codecs +
-           package->nobject_shapes + package->nobject_fields + package->nobject_accesses +
-           package->nobject_access_cases + package->nobject_shape_flows + package->nobject_merges +
-           package->noptions_bags + package->nmap_shapes + package->nmap_entries +
-           package->nkey_accesses + package->nhash_eqs;
+           package->nderived_methods + package->njson_codecs + package->nobject_shapes +
+           package->nobject_fields + package->nobject_accesses + package->nobject_access_cases +
+           package->nobject_merges + package->noptions_bags + package->nmap_shapes +
+           package->nmap_entries + package->nkey_accesses + package->nhash_eqs;
 }
 
 static bool target_has_module_owned_rows(const XgGlobalEvidence *target, XgModuleId module_id) {
@@ -5701,7 +5516,6 @@ static bool target_has_module_owned_rows(const XgGlobalEvidence *target, XgModul
     HAS_MODULE_ROWS(generic_storages, ngeneric_storages);
     HAS_MODULE_ROWS(generic_code_sizes, ngeneric_code_sizes);
     HAS_MODULE_ROWS(derives, nderives);
-    HAS_MODULE_ROWS(json_dynamic_accesses, njson_dynamic_accesses);
     HAS_MODULE_ROWS(json_codecs, njson_codecs);
     HAS_MODULE_ROWS(object_shapes, nobject_shapes);
     HAS_MODULE_ROWS(object_accesses, nobject_accesses);
@@ -5728,12 +5542,13 @@ static bool package_import_would_duplicate_existing_rows(const XgGlobalEvidence 
 }
 
 static bool target_has_link_dependency_identity(const XgGlobalEvidence *target, uint8_t kind,
-                                                const char *name) {
+                                                XgFuncId owner_func_id, const char *name) {
     if (!target || !name || !name[0])
         return false;
     for (uint32_t i = 0; i < target->nlink_deps; i++) {
         const XgLinkDependencySummary *dep = &target->link_deps[i];
-        if (dep->kind == kind && strcmp(dep->name, name) == 0)
+        if (dep->kind == kind && dep->owner_func_id == owner_func_id &&
+            strcmp(dep->name, name) == 0)
             return true;
     }
     return false;
@@ -6027,13 +5842,14 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
     }
     for (uint32_t i = 0; i < package.nlink_deps; i++) {
         XgLinkDependencySummary row = package.link_deps[i];
-        if (target_has_link_dependency_identity(target, row.kind, row.name)) {
-            skipped_link_deps++;
-            continue;
-        }
         REMAP_ID(row.link_id, offsets.link_id);
         REMAP_MODULE(row.module_id);
         REMAP_ID(row.decl_id, offsets.decl_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (target_has_link_dependency_identity(target, row.kind, row.owner_func_id, row.name)) {
+            skipped_link_deps++;
+            continue;
+        }
         if (!xg_global_evidence_add_link_dependency(target, &row))
             goto done;
     }
@@ -6135,15 +5951,6 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
         if (!xg_global_evidence_add_derived_method(target, &row))
             goto done;
     }
-    for (uint32_t i = 0; i < package.njson_dynamic_accesses; i++) {
-        XgJsonDynamicAccessSummary row = package.json_dynamic_accesses[i];
-        REMAP_ID(row.json_dynamic_access_id, offsets.json_dynamic_access_id);
-        REMAP_MODULE(row.module_id);
-        REMAP_ID(row.owner_func_id, offsets.func_id);
-        REMAP_ID(row.receiver_shape_id, offsets.object_shape_id);
-        if (!xg_global_evidence_add_json_dynamic_access(target, &row))
-            goto done;
-    }
     for (uint32_t i = 0; i < package.njson_codecs; i++) {
         XgJsonCodecSummary row = package.json_codecs[i];
         REMAP_ID(row.codec_id, offsets.json_codec_id);
@@ -6187,16 +5994,6 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
         REMAP_ID(row.receiver_shape_set_id, offsets.object_access_id);
         REMAP_ID(row.receiver_shape_id, offsets.object_shape_id);
         if (!xg_global_evidence_add_object_access_case(target, &row))
-            goto done;
-    }
-    for (uint32_t i = 0; i < package.nobject_shape_flows; i++) {
-        XgObjectShapeFlowSummary row = package.object_shape_flows[i];
-        REMAP_ID(row.flow_id, offsets.object_shape_flow_id);
-        REMAP_ID(row.callsite_id, offsets.callsite_id);
-        REMAP_ID(row.source_func_id, offsets.func_id);
-        REMAP_ID(row.target_func_id, offsets.func_id);
-        REMAP_ID(row.concrete_shape_id, offsets.object_shape_id);
-        if (!xg_global_evidence_add_object_shape_flow(target, &row))
             goto done;
     }
     for (uint32_t i = 0; i < package.nobject_merges; i++) {
@@ -6409,8 +6206,7 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             "callsites=%u link_deps=%u generic_insts=%u "
             "generic_body_uses=%u generic_storages=%u generic_code_sizes=%u "
             "sequence_accesses=%u capacity_ops=%u bulk_ops=%u encoding_ops=%u derives=%u "
-            "derived_fields=%u derived_methods=%u json_dynamic_accesses=%u "
-            "json_codecs=%u object_shapes=%u "
+            "derived_fields=%u derived_methods=%u json_codecs=%u object_shapes=%u "
             "object_fields=%u object_accesses=%u object_merges=%u options=%u map_shapes=%u "
             "map_entries=%u key_accesses=%u "
             "hash_eqs=%u\n",
@@ -6421,11 +6217,10 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
             evidence->ngeneric_insts, evidence->ngeneric_body_uses, evidence->ngeneric_storages,
             evidence->ngeneric_code_sizes, evidence->nsequence_accesses, evidence->ncapacity_ops,
             evidence->nbulk_ops, evidence->nencoding_ops, evidence->nderives,
-            evidence->nderived_fields, evidence->nderived_methods, evidence->njson_dynamic_accesses,
-            evidence->njson_codecs, evidence->nobject_shapes, evidence->nobject_fields,
-            evidence->nobject_accesses, evidence->nobject_merges, evidence->noptions_bags,
-            evidence->nmap_shapes, evidence->nmap_entries, evidence->nkey_accesses,
-            evidence->nhash_eqs);
+            evidence->nderived_fields, evidence->nderived_methods, evidence->njson_codecs,
+            evidence->nobject_shapes, evidence->nobject_fields, evidence->nobject_accesses,
+            evidence->nobject_merges, evidence->noptions_bags, evidence->nmap_shapes,
+            evidence->nmap_entries, evidence->nkey_accesses, evidence->nhash_eqs);
 
     for (uint32_t i = 0; i < evidence->nmodules; i++) {
         const XgModuleSummary *m = &evidence->modules[i];
@@ -6561,10 +6356,11 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->nlink_deps; i++) {
         const XgLinkDependencySummary *dep = &evidence->link_deps[i];
         fprintf(out,
-                "link-dep %u id=%u module=%u decl=%u span=%u kind=%s name_id=%u name=%s "
+                "link-dep %u id=%u module=%u decl=%u owner=%u span=%u kind=%s name_id=%u name=%s "
                 "flags=0x%x\n",
-                i, dep->link_id, dep->module_id, dep->decl_id, dep->source_span_id,
-                xg_link_dependency_kind_name(dep->kind), dep->name_id, dep->name, dep->flags);
+                i, dep->link_id, dep->module_id, dep->decl_id, dep->owner_func_id,
+                dep->source_span_id, xg_link_dependency_kind_name(dep->kind), dep->name_id,
+                dep->name, dep->flags);
     }
     for (uint32_t i = 0; i < evidence->ngeneric_insts; i++) {
         const XgGenericInstSummary *inst = &evidence->generic_insts[i];
@@ -6674,15 +6470,6 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 m->method_id, m->derive_id, xg_derived_method_kind_name(m->method_kind),
                 m->generated_body_func_id, m->signature_key, m->flags);
     }
-    for (uint32_t i = 0; i < evidence->njson_dynamic_accesses; i++) {
-        const XgJsonDynamicAccessSummary *a = &evidence->json_dynamic_accesses[i];
-        fprintf(out,
-                "json-dynamic-access %u id=%u module=%u func=%u shape=%u kind=%s span=%u key=%u "
-                "result_type=%u field=%u flags=0x%x\n",
-                i, a->json_dynamic_access_id, a->module_id, a->owner_func_id, a->receiver_shape_id,
-                xg_json_dynamic_access_kind_name(a->access_kind), a->source_span_id, a->key_name_id,
-                a->result_type_key, (unsigned) a->field_ordinal, a->flags);
-    }
     for (uint32_t i = 0; i < evidence->njson_codecs; i++) {
         const XgJsonCodecSummary *c = &evidence->json_codecs[i];
         fprintf(out,
@@ -6727,15 +6514,6 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
                 (unsigned) a->receiver_param_ordinal, a->receiver_shape_set_id,
                 a->constraint_shape_id, a->mutation_epoch, a->source_span_id, a->field_name_id,
                 a->result_type_key, (unsigned) a->field_ordinal, a->flags);
-    }
-    for (uint32_t i = 0; i < evidence->nobject_shape_flows; i++) {
-        const XgObjectShapeFlowSummary *f = &evidence->object_shape_flows[i];
-        fprintf(out,
-                "object-shape-flow %u id=%u callsite=%u source_func=%u target_func=%u "
-                "concrete_shape=%u source_param=%u target_param=%u flags=0x%x\n",
-                i, f->flow_id, f->callsite_id, f->source_func_id, f->target_func_id,
-                f->concrete_shape_id, (unsigned) f->source_param_ordinal,
-                (unsigned) f->target_param_ordinal, f->flags);
     }
     for (uint32_t i = 0; i < evidence->nobject_merges; i++) {
         const XgObjectMergeSummary *m = &evidence->object_merges[i];

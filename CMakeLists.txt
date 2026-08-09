@@ -2428,15 +2428,15 @@ if(BUILD_TESTS)
     )
 
     add_test(
-        NAME object_json_domain_inventory
-        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_object_json_domain.py
+        NAME structural_object_json_map_boundary
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_structural_object_json_map_boundary.py
                 --root ${CMAKE_CURRENT_SOURCE_DIR}
                 --json
                 --fail-on-legacy
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
-    set_tests_properties(object_json_domain_inventory PROPERTIES
-        LABELS "frontend;syntax;metadata;task-260"
+    set_tests_properties(structural_object_json_map_boundary PROPERTIES
+        LABELS "frontend;syntax;metadata"
         PROCESSORS 1
         TIMEOUT 30
     )

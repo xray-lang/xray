@@ -1,2 +1,2 @@
-var j: Json = Json.parse("{\"a\":1}")
-print(j.a)
+var j = JSON.parseValue("{\"a\":1}")
+print(JSON.require<int>(j, ["a"]))

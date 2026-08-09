@@ -12,8 +12,10 @@
 
 #include <stdatomic.h>
 
+#include "../os/os_time.h"
 #include "../runtime/value/xvalue.h"
 #include "xcoroutine.h"
+#include "xnetpoll.h"
 #include "xworker.h"
 #include "xyieldable.h"
 
@@ -115,6 +117,100 @@ void xr_coro_finish_backend_resume_tokens(XrCoroutine *coro, int resume_status) 
     if (resume_status == XR_RESUME_TIMEOUT &&
         wait_reason == (XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT)) {
         xr_timer_wait_token_finish(&coro->ext->wait.timer_token);
+    }
+}
+
+static void coro_io_wait_finish(XrCoroutine *coro) {
+    if (!coro)
+        return;
+    if (coro->ext)
+        xr_io_wait_token_finish(&coro->ext->wait.io_token);
+    xr_coro_flags_clear(coro, XR_CORO_WAIT_MASK);
+}
+
+XrCoroIoWaitKind xr_coro_io_wait_resume(XrCoroutine *coro) {
+    if (!coro || !coro->ext)
+        return XR_CORO_IO_WAIT_READY;
+    int state = atomic_load_explicit(&coro->ext->wait.io_token.state, memory_order_acquire);
+    XrCoroIoWaitKind result;
+    switch (state) {
+        case XR_IO_WAIT_IDLE:
+        case XR_IO_WAIT_READY:
+            result = XR_CORO_IO_WAIT_READY;
+            break;
+        case XR_IO_WAIT_TIMED_OUT:
+            result = XR_CORO_IO_WAIT_TIMEOUT;
+            break;
+        case XR_IO_WAIT_CANCELLED:
+            result = XR_CORO_IO_WAIT_CANCELLED;
+            break;
+        default:
+            return XR_CORO_IO_WAIT_ERROR;
+    }
+    coro_io_wait_finish(coro);
+    return result;
+}
+
+XrCoroIoWaitKind xr_coro_io_wait(XrCoroutine *coro, int fd, int poll_mode, int64_t timeout_ms) {
+    if (!coro || fd < 0 || (poll_mode & (XR_POLL_READ | XR_POLL_WRITE)) == 0)
+        return XR_CORO_IO_WAIT_ERROR;
+    if (timeout_ms == 0)
+        return XR_CORO_IO_WAIT_TIMEOUT;
+
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    XrWorker *worker = xr_current_worker();
+    XrRuntime *runtime = (XrRuntime *) xr_coro_scheduler(coro);
+    if (!ext || !worker || !runtime)
+        return XR_CORO_IO_WAIT_ERROR;
+
+    int token_state = atomic_load_explicit(&ext->wait.io_token.state, memory_order_acquire);
+    if (token_state != XR_IO_WAIT_IDLE)
+        return XR_CORO_IO_WAIT_ERROR;
+
+    XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
+    if (!pd)
+        return XR_CORO_IO_WAIT_ERROR;
+
+    int owner_id = pd->owner_worker_id;
+    if (owner_id >= 0 && owner_id != worker->p.id) {
+        ext->resume_target_worker = owner_id;
+        return XR_CORO_IO_WAIT_YIELD;
+    }
+
+    xr_netpoll_bind_worker(pd);
+    pd->user_data = coro;
+    _Atomic uintptr_t *gpp = (poll_mode & XR_POLL_READ) ? &pd->rg : &pd->wg;
+    for (;;) {
+        uintptr_t old = atomic_load_explicit(gpp, memory_order_acquire);
+        if (old == XR_PD_READY) {
+            if (atomic_compare_exchange_strong_explicit(gpp, &old, XR_PD_NIL, memory_order_acq_rel,
+                                                        memory_order_acquire))
+                return XR_CORO_IO_WAIT_READY;
+            continue;
+        }
+        if (old != XR_PD_NIL)
+            return XR_CORO_IO_WAIT_ERROR;
+
+        xr_coro_set_wait_reason(coro, XR_CORO_WAIT_IO >> XR_CORO_WAIT_SHIFT);
+        xr_io_wait_token_prepare(&ext->wait.io_token, fd, poll_mode, worker->p.id, timeout_ms);
+        XrCoroBlockSnapshot snapshot = xr_coro_begin_reversible_block(coro);
+        xr_io_wait_token_commit(&ext->wait.io_token);
+        if (atomic_compare_exchange_strong_explicit(gpp, &old, (uintptr_t) coro,
+                                                    memory_order_acq_rel, memory_order_acquire)) {
+            atomic_fetch_add_explicit(&runtime->netpoll.waiters, 1, memory_order_relaxed);
+            int mode = (poll_mode & XR_POLL_READ) ? XR_POLL_READ : XR_POLL_WRITE;
+            xr_netpoll_arm_mode(pd, mode);
+            if (timeout_ms > 0) {
+                int64_t deadline_ns =
+                    (int64_t) xr_time_monotonic_ns() + timeout_ms * INT64_C(1000000);
+                xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline_ns, mode,
+                                        worker->p.timer_wheel);
+            }
+            return XR_CORO_IO_WAIT_BLOCKED;
+        }
+
+        coro_io_wait_finish(coro);
+        xr_coro_rollback_reversible_block(coro, snapshot);
     }
 }
 

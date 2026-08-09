@@ -309,6 +309,27 @@ struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready) 
     }
 }
 
+/* Schedule a waiter that was removed outside the normal poll-ready batching
+ * path (descriptor close or deadline expiry). Claiming the wake before storing
+ * the resume reason prevents a losing close/deadline race from overwriting the
+ * winner's reason. */
+static void netpoll_schedule_unblocked(XrCoroutine *coro, int resume_status) {
+    if (!coro)
+        return;
+    /* The waiter owns the routing identity. Close may run on a worker from a
+     * different isolate, so the current worker's runtime is not authoritative. */
+    XrRuntime *runtime = (XrRuntime *) xr_coro_scheduler(coro);
+    if (!runtime || !runtime->workers || runtime->worker_count <= 0)
+        return;
+    if (!xr_coro_claim_wake(coro))
+        return;
+    xr_coro_resume_store(coro, resume_status);
+    int target_id = xr_coro_wake_target_id(coro);
+    if (target_id < 0 || target_id >= runtime->worker_count)
+        target_id = 0;
+    xr_worker_inbox_enqueue(runtime, target_id, coro);
+}
+
 // Mark I/O ready, add waiting coroutine to ready list
 void xr_netpoll_ready(XrReadyList *list, XrPollDesc *pd, int mode) {
     XR_DCHECK(list != NULL, "netpoll_ready: NULL list");
@@ -961,12 +982,13 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
     // readiness waiters. The pd is reference counted (uring_refs): dropping the
     // owner ref frees it iff nothing else holds a ref.
     if (!rop_active)
-        xr_netpoll_unblock(pd, XR_POLL_READ, false);
+        netpoll_schedule_unblocked(xr_netpoll_unblock(pd, XR_POLL_READ, false), XR_RESUME_IO_READY);
     if (!wop_active)
-        xr_netpoll_unblock(pd, XR_POLL_WRITE, false);
+        netpoll_schedule_unblocked(xr_netpoll_unblock(pd, XR_POLL_WRITE, false),
+                                   XR_RESUME_IO_READY);
 #else
-    xr_netpoll_unblock(pd, XR_POLL_READ, false);
-    xr_netpoll_unblock(pd, XR_POLL_WRITE, false);
+    netpoll_schedule_unblocked(xr_netpoll_unblock(pd, XR_POLL_READ, false), XR_RESUME_IO_READY);
+    netpoll_schedule_unblocked(xr_netpoll_unblock(pd, XR_POLL_WRITE, false), XR_RESUME_IO_READY);
 #endif
 
 #ifdef XR_OS_WINDOWS
@@ -1156,30 +1178,12 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
         // old is coroutine pointer, wake it
         if (atomic_compare_exchange_weak(gpp, &old, XR_PD_NIL)) {
             XrCoroutine *coro = (XrCoroutine *) old;
-            XrWorker *current_worker = xr_current_worker();
-            XrRuntime *rt = current_worker ? current_worker->p.runtime : NULL;
-            if (!rt)
-                rt = (XrRuntime *) xr_coro_scheduler(coro);
-            if (!rt || !rt->workers || rt->worker_count <= 0)
-                return;
-
             XrCoroWaitState *wait = xr_coro_wait_state(coro);
             if (wait)
                 xr_io_wait_token_timeout(&wait->io_token);
             if (pd->netpoll)
                 atomic_fetch_sub(&pd->netpoll->waiters, 1);
-            if (!xr_coro_claim_wake(coro))
-                return;
-            xr_coro_resume_store(coro, XR_RESUME_TIMEOUT);
-
-            // Add coroutine to target Worker inbox for scheduling.
-            // Respects Coro.lockThread(): locked coros return to their locked worker.
-            int target_id = xr_coro_wake_target_id(coro);
-            if (target_id < 0 || target_id >= rt->worker_count) {
-                target_id = 0;
-            }
-            xr_worker_inbox_enqueue(rt, target_id, coro);
-
+            netpoll_schedule_unblocked(coro, XR_RESUME_TIMEOUT);
             return;
         }
     }

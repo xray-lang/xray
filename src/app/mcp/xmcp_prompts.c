@@ -78,7 +78,7 @@ static const char SYSTEM_PREAMBLE[] =
     "Xray is a statically-typed scripting language with native concurrency. "
     "Key features:\n"
     "- Types: int, float, string, bool, Array<T>, Map<K,V>, Set<T>, "
-    "Channel<T>, Json\n"
+    "Channel<T>, JSON.Value\n"
     "- Concurrency: go/await, const Channel, scope, select, explicit move/copy\n"
     "- Safety: if it compiles, it's concurrency-safe\n"
     "- OOP: class (extends), struct (value type), interface (implements), "

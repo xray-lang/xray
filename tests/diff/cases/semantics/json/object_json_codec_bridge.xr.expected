@@ -7,4 +7,4 @@ Ada
 37
 Hangzhou
 310000
-{"name":"Ada","age":37,"address":{"city":"Hangzhou","zip":310000}}
+{"address":{"zip":310000,"city":"Hangzhou"},"name":"Ada","age":37}

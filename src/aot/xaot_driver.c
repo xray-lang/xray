@@ -1064,8 +1064,15 @@ static void features_apply_capability_plan(XaotFeatureSet *fs, uint32_t capabili
 static void features_apply_capability_plans(XaotFeatureSet *fs, const XaotBundle *bundle) {
     if (!fs || !bundle)
         return;
-    for (uint32_t i = 0; i < bundle->ncapability_plans; i++)
-        features_apply_capability_plan(fs, bundle->capability_plans[i].capability);
+    /* Capability plans retain whole-package audit evidence, including dead
+     * library bodies.  The refreshed entry plan is the verified executable
+     * closure after final Xi/callable convergence, so only its requirements
+     * may select runtime archives for an executable artifact. */
+    uint32_t required = bundle->entry_plan.required_capability_bits;
+    for (uint32_t bit = 1; bit != 0; bit <<= 1) {
+        if ((required & bit) != 0)
+            features_apply_capability_plan(fs, bit);
+    }
 }
 
 /* The parallel requirement is read from the prepared IR, which is also where
@@ -1078,11 +1085,25 @@ static void features_apply_ir_intrinsics(XaotFeatureSet *fs, const XaotBundle *b
         fs->need_parallel = true;
 }
 
+static bool features_link_dependency_owner_reachable(const XaotBundle *bundle,
+                                                     XgFuncId owner_func_id) {
+    if (!bundle || owner_func_id == XG_NO_ID)
+        return true;
+    for (uint32_t i = 0; i < bundle->nfunc_plans; i++) {
+        const XaotFuncPlan *plan = &bundle->func_plans[i];
+        if (plan->func && plan->func->xg_body_func_id == owner_func_id)
+            return plan->reachable != 0;
+    }
+    return false;
+}
+
 static void features_apply_link_dependency_plans(XaotFeatureSet *fs, const XaotBundle *bundle) {
     if (!fs || !bundle)
         return;
     for (uint32_t i = 0; i < bundle->nlink_dependency_plans; i++) {
         const XaotLinkDependencyPlan *plan = &bundle->link_dependency_plans[i];
+        if (!features_link_dependency_owner_reachable(bundle, plan->owner_func_id))
+            continue;
         if (plan->kind == XG_LINK_DEP_STDLIB_MODULE)
             features_add_stdlib_module(fs, plan->name);
         else if (plan->kind == XG_LINK_DEP_STDLIB_SYMBOL)
@@ -1444,6 +1465,14 @@ static bool build_link_manifest(const XaotFeatureSet *features, const XaotTarget
         manifest->compile.data_sections = true;
         manifest->link.dead_strip = true;
     }
+
+    /* xrt_net.h always owns synchronous socket destruction, but only a
+     * netpoll-capable program may call into the coroutine runtime before close.
+     * Publish that distinction for both the built-in runtime and an external
+     * target provider. */
+    if (features->need_netpoll &&
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_ENABLE_NETPOLL"))
+        goto done;
 
     if (provider && provider->abi_version != 0) {
         char provider_abi[64];
@@ -2044,6 +2073,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     if (!xaot_prepare_bundle(&aot_bundle, &prepare_stats)) {
+        if (emit_global_evidence_dump && global_evidence_dump)
+            fputs(global_evidence_dump, stdout);
         fprintf(stderr, "Error: AOT prepare failed: %s\n",
                 aot_bundle.error_msg ? aot_bundle.error_msg : "?");
         goto fail_free_ir;

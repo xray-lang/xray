@@ -224,6 +224,22 @@ static void init_blocked_io_coro(XrCoroutine *coro, XrCoroExt *ext, int id, XrVM
     xr_io_wait_token_commit(&ext->wait.io_token);
 }
 
+static void close_test_netpoll_cleanup(XrNetpoll *np) {
+    (void) np;
+}
+
+static void close_test_netpoll_del_fd(XrNetpoll *np, int fd, XrPollDesc *pd) {
+    (void) np;
+    (void) fd;
+    (void) pd;
+}
+
+static const XrNetpollOps close_test_netpoll_ops = {
+    .name = "close-test",
+    .cleanup = close_test_netpoll_cleanup,
+    .del_fd = close_test_netpoll_del_fd,
+};
+
 static void init_select_recv_coro(XrCoroutine *coro, XrCoroExt *ext, int id, XrVMRuntime *isolate,
                                   XrChannel *ch) {
     memset(coro, 0, sizeof(*coro));
@@ -2262,6 +2278,43 @@ TEST(io_wait_token_tracks_netpoll_ready_and_cancel) {
     close_fixture_cleanup(&f);
 }
 
+TEST(netpoll_close_schedules_cancelled_io_waiter) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrCoroutine waiter;
+    XrCoroExt waiter_ext;
+    init_blocked_io_coro(&waiter, &waiter_ext, 703, &f.isolate_storage, 46, XR_POLL_READ, -1);
+
+    XrNetpoll np;
+    memset(&np, 0, sizeof(np));
+    np.ops = &close_test_netpoll_ops;
+    np.wakeup_pipe[0] = -1;
+    np.wakeup_pipe[1] = -1;
+    atomic_store(&np.inited, true);
+    atomic_store(&np.waiters, 1);
+    XrPollDesc *pd = xr_poll_cache_alloc(&np.cache);
+    ASSERT_NOT_NULL(pd);
+    pd->netpoll = &np;
+    atomic_store(&pd->rg, (uintptr_t) &waiter);
+#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
+    atomic_store(&pd->uring_refs, 1);
+#endif
+
+    xr_netpoll_close(&np, pd);
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.io_token.state), XR_IO_WAIT_CANCELLED);
+    ASSERT_EQ_INT(atomic_load(&np.waiters), 0);
+    ASSERT_EQ_INT(xr_coro_resume_load(&waiter), XR_RESUME_IO_READY);
+    ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_READY));
+    ASSERT_FALSE(xr_coro_flags_has(&waiter, XR_CORO_FLG_BLOCKED));
+    ASSERT_FALSE(xr_mpsc_empty(&f.worker.p.inbox));
+    worker_drain_inbox(&f.worker);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &waiter);
+
+    xr_netpoll_cleanup(&np);
+    close_fixture_cleanup(&f);
+}
+
 TEST(io_wait_token_tracks_netpoll_deadline_timeout) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
@@ -2340,6 +2393,7 @@ RUN_TEST(multi_await_token_cancels_registered_task_waiters);
 RUN_TEST(await_all_resume_only_uses_resolved_multi_token);
 RUN_TEST(multi_await_node_list_wakes_overlapping_any_waiters);
 RUN_TEST(io_wait_token_tracks_netpoll_ready_and_cancel);
+RUN_TEST(netpoll_close_schedules_cancelled_io_waiter);
 RUN_TEST(io_wait_token_tracks_netpoll_deadline_timeout);
 
 TEST_MAIN_END()

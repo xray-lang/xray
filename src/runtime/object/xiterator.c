@@ -167,7 +167,7 @@ static XrRangeCore range_iter_core(XrIterator *iter) {
 }
 
 // Create iterator from Json (lazy, converts SymbolId keys to strings)
-XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, XrJson *json,
+XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, XrObjectInstance *json,
                                       struct XrVMRuntime *isolate) {
     XR_DCHECK(json != NULL, "iterator_new_from_json: NULL json");
     XrIterator *iter = iterator_alloc(coro);
@@ -190,7 +190,7 @@ XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, XrJson *json,
 // Same source as xr_iterator_new_from_json, but next() yields each key
 // (a string) instead of a (key, value) tuple. Used by single-variable
 // `for (k in jsonObj)`.
-XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, XrJson *json,
+XrIterator *xr_iterator_keys_from_json(struct XrCoroutine *coro, XrObjectInstance *json,
                                        struct XrVMRuntime *isolate) {
     XrIterator *iter = xr_iterator_new_from_json(coro, json, isolate);
     if (iter)
@@ -257,7 +257,7 @@ bool xr_iterator_has_next(XrIterator *iter) {
         }
         return false;
     } else if (iter->type == XR_ITERATOR_JSON) {
-        XrJson *json = iter->source.json;
+        XrObjectInstance *json = iter->source.json;
         if (!json)
             return false;
 
@@ -363,7 +363,7 @@ XrValue xr_iterator_next(XrIterator *iter) {
         return xr_null();
     } else if (iter->type == XR_ITERATOR_JSON) {
         // Json iterator: returns [string_key, value] array
-        XrJson *json = iter->source.json;
+        XrObjectInstance *json = iter->source.json;
         if (!json || !json->klass)
             return xr_null();
         XrVMRuntime *X = (XrVMRuntime *) iter->context;

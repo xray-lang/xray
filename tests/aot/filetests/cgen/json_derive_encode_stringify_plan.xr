@@ -1,4 +1,4 @@
-@derive(Json)
+@derive(JSON)
 class Point {
     x: int
     y: int
@@ -14,6 +14,6 @@ fn make_point() -> Point {
 }
 
 var point = make_point()
-var encoded = Json.encode(point)
-print(encoded.x)
-print(Json.stringify(point))
+var encoded = JSON.value(point)
+print(JSON.require<int>(encoded, ["x"]))
+print(JSON.stringify(point))

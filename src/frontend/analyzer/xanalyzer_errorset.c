@@ -2539,9 +2539,7 @@ static void record_catch_aggregate_entries_from_initializer(ErrorSetCtx *ctx, ui
         case AST_OBJECT_LITERAL:
             for (int i = 0; i < initializer->as.object_literal.count; i++) {
                 AstNode *key = initializer->as.object_literal.keys[i];
-                if ((initializer->as.object_literal.computed &&
-                     initializer->as.object_literal.computed[i]) ||
-                    !key || key->type != AST_LITERAL_STRING)
+                if (!key || key->type != AST_LITERAL_STRING)
                     continue;
                 const char *field = key->as.literal.raw_value.string_val;
                 if (field && is_current_caught_ref(ctx, initializer->as.object_literal.values[i]))
@@ -3814,11 +3812,8 @@ static void es_walk_expr(ErrorSetCtx *ctx, AstNode *node) {
             break;
 
         case AST_OBJECT_LITERAL:
-            for (int i = 0; i < node->as.object_literal.count; i++) {
-                if (node->as.object_literal.computed && node->as.object_literal.computed[i])
-                    es_walk_expr(ctx, node->as.object_literal.keys[i]);
+            for (int i = 0; i < node->as.object_literal.count; i++)
                 es_walk_expr(ctx, node->as.object_literal.values[i]);
-            }
             break;
 
         case AST_MAP_LITERAL:

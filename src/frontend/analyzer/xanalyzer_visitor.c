@@ -42,6 +42,7 @@
 void xa_visit_collect(XaInferContext *ctx, AstNode *node);
 static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
                                           XaSymbolLinks **out_links);
+static int object_shape_field_index_local(XrType *type, const char *name);
 
 static void xa_publish_deprecated_attrs(XaSymbolLinks *links, XrAttribute **attrs, int count) {
     for (int i = 0; links && attrs && i < count; i++) {
@@ -589,8 +590,16 @@ static XaScope *xa_parallel_find_function_scope_for_symbol(XaScope *scope, XaSym
 static AstNode *xa_parallel_symbol_function_body(XaInferContext *ctx, XaSymbol *sym) {
     if (!ctx || !ctx->analyzer || !sym || sym->kind != XA_SYM_FUNCTION)
         return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    AstNode *fn_node = links ? links->function_decl_node : NULL;
+    if (fn_node) {
+        if (fn_node->type == AST_FUNCTION_DECL)
+            return fn_node->as.function_decl.body;
+        if (fn_node->type == AST_FUNCTION_EXPR)
+            return fn_node->as.function_expr.body;
+    }
     XaScope *scope = xa_parallel_find_function_scope_for_symbol(ctx->analyzer->global_scope, sym);
-    AstNode *fn_node = scope ? (AstNode *) scope->ast_node : NULL;
+    fn_node = scope ? (AstNode *) scope->ast_node : NULL;
     if (!fn_node)
         return NULL;
     if (fn_node->type == AST_FUNCTION_DECL)
@@ -617,6 +626,10 @@ static XaSymbol *xa_parallel_import_target_symbol(XaInferContext *ctx, XaSymbol 
 static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *callee) {
     if (!ctx || !ctx->analyzer || !callee || callee->type != AST_MEMBER_ACCESS)
         return NULL;
+    const XaSelection *selection =
+        xa_selection_table_get((XaSelectionTable *) ctx->analyzer->selection_table, callee);
+    if (selection && selection->target_symbol)
+        return xa_parallel_import_target_symbol(ctx, selection->target_symbol);
     MemberAccessNode *ma = &callee->as.member_access;
     if (!ma->name || !ma->object || ma->object->type != AST_VARIABLE ||
         !ma->object->as.variable.name)
@@ -757,7 +770,7 @@ static const char *xa_parallel_unknown_module_func_feature(const char *module_na
 static const char *xa_parallel_imported_yieldable_feature(XaInferContext *ctx, XaSymbol *sym,
                                                           char *feature_buf,
                                                           size_t feature_buf_size) {
-    if (!ctx || !ctx->analyzer || !sym || !sym->is_imported)
+    if (!ctx || !ctx->analyzer || !sym)
         return NULL;
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     if (!links || !links->module_name)
@@ -1005,6 +1018,15 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
     if (status == XA_PARALLEL_FN_VALUE_EFFECT) {
         if (is_suspend)
             *is_suspend = callee_suspend;
+        const char *module_name =
+            target_sym && target_sym->links.module_name   ? target_sym->links.module_name
+            : callee_sym && callee_sym->links.module_name ? callee_sym->links.module_name
+                                                          : NULL;
+        if (callee_suspend && module_name && xa_freestanding_stdlib_module_known(module_name)) {
+            snprintf(scan->feature_buf, sizeof(scan->feature_buf), "%s.%s()", module_name,
+                     callee_name ? callee_name : "?");
+            return scan->feature_buf;
+        }
         const char *kind =
             callee_sym && callee_sym->kind == XA_SYM_FUNCTION ? "function" : "function value";
         snprintf(scan->feature_buf, sizeof(scan->feature_buf), "call to %s %s '%s'",
@@ -1833,6 +1855,44 @@ static XrType **xa_lookup_type_param_constraints(XaInferContext *ctx, XaSymbolLi
     if (out_found)
         *out_found = false;
     return NULL;
+}
+
+XrType *xa_type_param_object_constraint(XaInferContext *ctx, XrType *type_param,
+                                        const char *field_name, int *out_field_index) {
+    if (out_field_index)
+        *out_field_index = -1;
+    if (!ctx || !ctx->analyzer || !type_param || type_param->kind != XR_KIND_TYPE_PARAM)
+        return NULL;
+
+    XrType *first_object = NULL;
+    XrType *inline_constraint = type_param->type_param.constraint;
+    if (inline_constraint && XR_TYPE_IS_STRUCT_OBJECT(inline_constraint)) {
+        first_object = inline_constraint;
+        int index = field_name ? object_shape_field_index_local(inline_constraint, field_name) : 0;
+        if (!field_name || index >= 0) {
+            if (out_field_index)
+                *out_field_index = index;
+            return inline_constraint;
+        }
+    }
+
+    int count = 0;
+    XrType **constraints =
+        xa_lookup_type_param_constraints(ctx, NULL, type_param->type_param.name, &count, NULL);
+    for (int i = 0; i < count; i++) {
+        XrType *constraint = constraints ? constraints[i] : NULL;
+        if (!constraint || !XR_TYPE_IS_STRUCT_OBJECT(constraint))
+            continue;
+        if (!first_object)
+            first_object = constraint;
+        int index = field_name ? object_shape_field_index_local(constraint, field_name) : 0;
+        if (!field_name || index >= 0) {
+            if (out_field_index)
+                *out_field_index = index;
+            return constraint;
+        }
+    }
+    return first_object;
 }
 
 static bool xa_type_param_has_hashable_constraint(XaInferContext *ctx, XaSymbolLinks *generic_links,
@@ -5496,6 +5556,44 @@ static void xa_for_in_reject_range_keyvalue(XaInferContext *ctx, AstNode *node,
                                "Range iteration yields values only; use `for (i in range)`", &loc);
 }
 
+/* A weak handle is owned by the current execution's weak table, so its target
+ * must be an allocation that the caller can keep in that execution heap.  A
+ * fresh local expression satisfies that contract.  An object returned from a
+ * function, imported from foreign/shared storage, or received as a parameter
+ * does not: changing the receiving binding's annotation cannot relocate an
+ * object that was already allocated elsewhere. */
+static void xa_constrain_weak_target_exec_local(XaInferContext *ctx, AstNode *store,
+                                                AstNode *value) {
+    if (!ctx || !ctx->analyzer || !value)
+        return;
+    AstNode *identity = xa_whole_binding_value(value);
+    if (!identity || identity->type == AST_LITERAL_NULL)
+        return;
+    if (xa_boundary_arg_is_explicit_copy(identity) || xa_expr_creates_fresh_root(ctx, identity))
+        return;
+
+    XaSymbol *source = xa_whole_binding_symbol(ctx, identity);
+    XaSymbolLinks *links = source ? xa_analyzer_get_links(ctx->analyzer, source) : NULL;
+    if (source && source->kind == XA_SYM_VARIABLE && links && links->root_id != 0 &&
+        (links->allocation_plan.source_local_materializable ||
+         links->allocation_plan.exec_local_only)) {
+        xa_mark_root_exec_local_only(ctx, links->root_id);
+        return;
+    }
+
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = value->line ? value->line : (store ? store->line : 0),
+                      .column = value->column ? value->column : (store ? store->column : 0)};
+    const char *name = source && source->name ? source->name : "value";
+    char msg[320];
+    snprintf(msg, sizeof(msg),
+             "weak target '%s' is not proven execution-local; assign a fresh local value or "
+             "store copy(%s)",
+             name, name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WEAK_FIELD, msg,
+                               &loc);
+}
+
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -5618,6 +5716,14 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Infer types for member set expression
             MemberSetNode *ms = &node->as.member_set;
             XrType *obj_type = xa_visit_infer_expr(ctx, ms->object);
+            int constrained_field_index = -1;
+            XrType *object_shape_type = obj_type;
+            if (obj_type && obj_type->kind == XR_KIND_TYPE_PARAM) {
+                XrType *constraint = xa_type_param_object_constraint(ctx, obj_type, ms->member,
+                                                                     &constrained_field_index);
+                if (constraint)
+                    object_shape_type = constraint;
+            }
             XaSymbol *readonly_root = xa_root_variable_symbol_for_expr(ctx, ms->object);
             if (readonly_root)
                 readonly_root->links.value_mutated = true;
@@ -5655,6 +5761,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Bidirectional inference: propagate field declared type to value
             XrType *saved_expected = ctx->expected_type;
             XrType *member_type = NULL;
+            bool member_is_weak = false;
             if (ms->member) {
                 XaSymbolLinks *class_links = NULL;
                 XrClassInfo *class_info = member_set_class_info(ctx, obj_type, &class_links);
@@ -5710,6 +5817,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         }
                     }
                     if (field) {
+                        member_is_weak = field->is_weak;
                         // Enforce private/protected visibility on the write target.
                         xa_check_member_visibility(ctx, node, field, field_owner);
 
@@ -5752,10 +5860,12 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             }
             XrType *value_type = xa_visit_infer_expr(ctx, ms->value);
             ctx->expected_type = saved_expected;
-            if (!member_type && XR_TYPE_HAS_OBJECT_SHAPE(obj_type) && ms->member) {
-                int field_idx = object_shape_field_index_local(obj_type, ms->member);
-                if (field_idx >= 0 && obj_type->object.field_types)
-                    member_type = obj_type->object.field_types[field_idx];
+            if (!member_type && XR_TYPE_HAS_OBJECT_SHAPE(object_shape_type) && ms->member) {
+                int field_idx = constrained_field_index >= 0
+                                    ? constrained_field_index
+                                    : object_shape_field_index_local(object_shape_type, ms->member);
+                if (field_idx >= 0 && object_shape_type->object.field_types)
+                    member_type = object_shape_type->object.field_types[field_idx];
             }
             /* Preserve the declared write-boundary type for lowering and
              * allocation-effect analysis.  The value expression keeps its
@@ -5765,7 +5875,10 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             xa_check_span_value_escape(ctx, node, value_type, "store Slice view into a member");
             xa_check_pointer_borrow_escape(ctx, node, ms->value, value_type,
                                            "store raw pointer borrow into a member");
-            xa_note_owner_escapes_into_heap(ctx, ms->value);
+            if (member_is_weak)
+                xa_constrain_weak_target_exec_local(ctx, node, ms->value);
+            else
+                xa_note_owner_escapes_into_heap(ctx, ms->value);
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, ms->value);
                 if (borrowed_root && borrowed_root->passing_mode == XR_PARAM_REF) {
@@ -5781,27 +5894,29 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
             }
-            if (XR_TYPE_HAS_OBJECT_SHAPE(obj_type) && obj_type->object.field_count > 0 &&
-                ms->member) {
-                int field_idx = object_shape_field_index_local(obj_type, ms->member);
+            if (XR_TYPE_HAS_OBJECT_SHAPE(object_shape_type) &&
+                object_shape_type->object.field_count > 0 && ms->member) {
+                int field_idx = constrained_field_index >= 0
+                                    ? constrained_field_index
+                                    : object_shape_field_index_local(object_shape_type, ms->member);
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 if (field_idx >= 0) {
-                    bool readonly = obj_type->object.field_readonly
-                                        ? obj_type->object.field_readonly[field_idx]
+                    bool readonly = object_shape_type->object.field_readonly
+                                        ? object_shape_type->object.field_readonly[field_idx]
                                         : false;
                     if (readonly) {
                         char msg[256];
                         snprintf(msg, sizeof(msg),
                                  "cannot assign to read-only field '%s.%s' (declared const)",
-                                 object_shape_type_label_local(obj_type), ms->member);
+                                 object_shape_type_label_local(object_shape_type), ms->member);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
-                } else if (xr_type_object_fields_are_closed(obj_type)) {
+                } else if (xr_type_object_fields_are_closed(object_shape_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "type '%s' does not allow adding field '%s'",
-                             object_shape_type_label_local(obj_type), ms->member);
+                             object_shape_type_label_local(object_shape_type), ms->member);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
@@ -6399,13 +6514,6 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         value_type = xr_type_new_rune(NULL);
                         item_type = xr_type_new_int(NULL);  // key is index
                     }
-                } else if (XR_TYPE_IS_JSON(coll_type)) {
-                    // Json object iteration: keys are string, values are Json
-                    item_type = xr_type_new_json(ctx->analyzer->isolate);
-                    if (fi->is_keyvalue) {
-                        value_type = xr_type_new_json(ctx->analyzer->isolate);
-                        item_type = xr_type_new_string(NULL);
-                    }
                 } else if (XR_TYPE_IS_TUPLE(coll_type)) {
                     /* Tuples are heterogeneous by design — there is no
                      * single element type. Iteration would either widen
@@ -6453,8 +6561,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                     }
                 } else {
-                    /* Anything else (instance of a class / struct, json
-                     * literal type, etc.) iterates only via the
+                    /* Anything else (instance of a class / struct, etc.) iterates only via the
                      * iterator() / hasNext() / next() protocol. If the
                      * type doesn't satisfy that contract we emit a
                      * compile-time diagnostic — the alternative is a
@@ -6469,7 +6576,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         char msg[256];
                         snprintf(msg, sizeof(msg),
                                  "type '%s' is not iterable; expected an Array, Map, Set, string, "
-                                 "Json, Range or a class with an 'iterator()' method",
+                                 "Range or a class with an 'iterator()' method",
                                  xr_type_to_string(coll_type));
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -6718,6 +6825,17 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     !xa_typecheck_assignable(key_expected, index_type))
                     xa_add_index_type_error(ctx, node, index_type, key_expected);
             }
+            int constrained_field_index = -1;
+            XrType *object_shape_type = array_type;
+            if (array_type && array_type->kind == XR_KIND_TYPE_PARAM) {
+                const char *key = is->index && is->index->type == AST_LITERAL_STRING
+                                      ? is->index->as.literal.raw_value.string_val
+                                      : NULL;
+                XrType *constraint =
+                    xa_type_param_object_constraint(ctx, array_type, key, &constrained_field_index);
+                if (constraint)
+                    object_shape_type = constraint;
+            }
             XrType *value_expected = NULL;
             int object_field_index = -1;
             const char *object_field_name = NULL;
@@ -6731,18 +6849,21 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     value_expected = array_type->fixed_array.element_type;
                 } else if (XR_TYPE_IS_MAP(array_type) && array_type->map.value_type) {
                     value_expected = array_type->map.value_type;
-                } else if (XR_TYPE_HAS_OBJECT_SHAPE(array_type)) {
-                    if (array_type->object.field_count > 0 && is->index &&
+                } else if (XR_TYPE_HAS_OBJECT_SHAPE(object_shape_type)) {
+                    if (object_shape_type->object.field_count > 0 && is->index &&
                         is->index->type == AST_LITERAL_STRING) {
                         const char *key = is->index->as.literal.raw_value.string_val;
-                        int field_idx = object_shape_field_index_local(array_type, key);
-                        if (field_idx >= 0 && array_type->object.field_types) {
+                        int field_idx =
+                            constrained_field_index >= 0
+                                ? constrained_field_index
+                                : object_shape_field_index_local(object_shape_type, key);
+                        if (field_idx >= 0 && object_shape_type->object.field_types) {
                             object_field_index = field_idx;
                             object_field_name = key;
-                            value_expected = array_type->object.field_types[field_idx];
+                            value_expected = object_shape_type->object.field_types[field_idx];
                         }
                     }
-                    if (!value_expected && XR_TYPE_IS_JSON(array_type))
+                    if (!value_expected && XR_TYPE_IS_JSON(object_shape_type))
                         value_expected = xr_type_new_json(ctx->analyzer->isolate);
                 }
             }
@@ -6870,33 +6991,35 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 }
                 break;
             }
-            if (array_type && XR_TYPE_HAS_OBJECT_SHAPE(array_type) &&
-                array_type->object.field_count > 0 && is->index &&
+            if (array_type && XR_TYPE_HAS_OBJECT_SHAPE(object_shape_type) &&
+                object_shape_type->object.field_count > 0 && is->index &&
                 is->index->type == AST_LITERAL_STRING) {
                 const char *key = is->index->as.literal.raw_value.string_val;
-                int field_idx = object_shape_field_index_local(array_type, key);
+                int field_idx = constrained_field_index >= 0
+                                    ? constrained_field_index
+                                    : object_shape_field_index_local(object_shape_type, key);
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 if (field_idx >= 0) {
-                    bool readonly = array_type->object.field_readonly
-                                        ? array_type->object.field_readonly[field_idx]
+                    bool readonly = object_shape_type->object.field_readonly
+                                        ? object_shape_type->object.field_readonly[field_idx]
                                         : false;
                     if (readonly) {
                         char msg[256];
                         snprintf(msg, sizeof(msg),
                                  "cannot assign to read-only field '%s.%s' (declared const)",
-                                 object_shape_type_label_local(array_type), key);
+                                 object_shape_type_label_local(object_shape_type), key);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
-                } else if (xr_type_object_fields_are_closed(array_type)) {
+                } else if (xr_type_object_fields_are_closed(object_shape_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "type '%s' does not allow adding field '%s'",
-                             object_shape_type_label_local(array_type), key);
+                             object_shape_type_label_local(object_shape_type), key);
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
-            } else if (array_type && XR_TYPE_IS_STRUCT_OBJECT(array_type)) {
+            } else if (array_type && XR_TYPE_IS_STRUCT_OBJECT(object_shape_type)) {
                 XrLocation loc = {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,

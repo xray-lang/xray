@@ -1,7 +1,7 @@
-fn read(cfg: Json) -> int {
-    return int(cfg.value)
+fn read(cfg: JSON.Object) -> int {
+    return JSON.require<int>(cfg, ["value"])
 }
 
-var cfg: Json = { value: 42 }
+var cfg: JSON.Object = JSON.parseObject("{\"value\":42}")
 var task = go read(cfg)
 print(await task)

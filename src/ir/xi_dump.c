@@ -181,8 +181,6 @@ static void dump_value(FILE *out, const XiValue *v) {
         fprintf(out, " [size=%u fields=%u]", sl->total_size, sl->field_count);
     } else if (v->op == XI_OBJECT_GET_F || v->op == XI_OBJECT_SET_F || v->op == XI_OBJECT_INIT_F) {
         fprintf(out, " [field=%" PRId64 "]", v->aux_int);
-        if (v->xg_json_dynamic_access_id != 0)
-            fprintf(out, " [json_dynamic_access=%u]", v->xg_json_dynamic_access_id);
         if (v->xg_object_access_id != 0)
             fprintf(out, " [object_access=%u]", v->xg_object_access_id);
     } else if (v->op == XI_INDEX_GET || v->op == XI_INDEX_SET) {

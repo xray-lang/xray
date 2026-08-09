@@ -63,7 +63,7 @@ static void xfmt_emit_attribute(XrFmtContext *ctx, const XrAttribute *attr) {
             if (attr->derive_flags & XR_DERIVE_JSON) {
                 if (!first)
                     xfmt_write_str(ctx, ", ");
-                xfmt_write_str(ctx, "Json");
+                xfmt_write_str(ctx, "JSON");
                 first = false;
             }
             if (attr->derive_flags & XR_DERIVE_EQ) {
@@ -700,9 +700,6 @@ void xfmt_emit_type_alias(XrFmtContext *ctx, AstNode *node) {
         if (i > 0)
             xfmt_write_str(ctx, ", ");
         xfmt_write_str(ctx, ta->field_names[i]);
-        if (ta->field_optional && ta->field_optional[i]) {
-            xfmt_write_char(ctx, '?');
-        }
         xfmt_write_str(ctx, ": ");
         xfmt_emit_type(ctx, ta->field_types[i]);
     }

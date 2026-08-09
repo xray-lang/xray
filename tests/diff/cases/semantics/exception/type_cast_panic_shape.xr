@@ -2,24 +2,24 @@
 // Non-primitive unsafe `as` casts must raise the same structured type-mismatch
 // panic on VM and AOT; safe casts still return null.
 
-var dyn: Json = { "bad": 3.5, "items": [1, 2, 3] }
+var dyn: JSON.Object = JSON.parseObject("{\"bad\":3.5,\"items\":[1,2,3]}")
 
 try {
-    var value = dyn.bad as Array<Json>
+    var value = JSON.require<Array<JSON.Value>>(dyn, ["bad"])
     print(len(value))
 } catch panic (p) {
     print(p.message)
     print(p.code)
 }
 
-var maybeItems = dyn.items as Array<Json>?
+var maybeItems = JSON.get<Array<JSON.Value>>(dyn, ["items"])
 if (maybeItems == null) {
     print("missing")
 } else {
     print(len(maybeItems))
 }
 
-var maybeBad = dyn.bad as Array<Json>?
+var maybeBad = JSON.get<Array<JSON.Value>>(dyn, ["bad"])
 if (maybeBad == null) {
     print("safe-null")
 } else {

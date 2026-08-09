@@ -916,8 +916,7 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
     if (v && v->op == XI_CONST) {
         XrRep from_rep = plan ? xaot_value_storage_rep(plan->rep)
                               : (ctx ? cg_value_plan_storage_rep(ctx, v) : cg_rep(v));
-        if (v->type && (v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE ||
-                        (v->type->kind == XR_KIND_UNKNOWN && v->aux))) {
+        if (v->type && v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE) {
             const char *conv_suffix =
                 emit_conversion_prefix_ctx(ctx, out, v->type, from_rep, target_rep);
             emit_vref(out, v);

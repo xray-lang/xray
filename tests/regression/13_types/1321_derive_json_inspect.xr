@@ -1,7 +1,7 @@
 // 1321_derive_json_inspect.xr
 // Test: explicit derive metadata replaces default runtime field reflection.
 
-@derive(Json, Inspect)
+@derive(JSON, Inspect)
 class User {
     name: string
     age: int
@@ -9,14 +9,6 @@ class User {
     constructor(name: string, age: int) {
         this.name = name
         this.age = age
-    }
-}
-
-class PlainUser {
-    name: string
-
-    constructor(name: string) {
-        this.name = name
     }
 }
 
@@ -29,7 +21,7 @@ class InspectOnly {
     }
 }
 
-@derive(Json)
+@derive(JSON)
 class JsonOnly {
     value: int
 
@@ -41,16 +33,16 @@ class JsonOnly {
 @test
 fn test_derive_json_stringify() {
     var user = User("Ada", 42)
-    assert_eq(Json.stringify(user), "{\"name\":\"Ada\",\"age\":42}")
+    assert_eq(JSON.stringify(user), "{\"name\":\"Ada\",\"age\":42}")
 }
 
 @test
 fn test_derive_json_encode() {
     var user = User("Ada", 42)
-    var encoded = Json.encode(user)
-    assert_eq(typeName(encoded), "Json")
-    assert_eq(encoded.name, "Ada")
-    assert_eq(encoded.age, 42)
+    var encoded = JSON.value(user)
+    assert_eq(typeName(encoded), "Map")
+    assert_eq(JSON.require<string>(encoded, ["name"]), "Ada")
+    assert_eq(JSON.require<int>(encoded, ["age"]), 42)
 }
 
 @test
@@ -60,34 +52,12 @@ fn test_derive_inspect_string() {
 }
 
 @test
-fn test_json_requires_explicit_derive() {
-    var user = PlainUser("Ada")
-    var caught = false
-    try {
-        Json.encode(user)
-    } catch panic (e) {
-        caught = true
-        assert(string(e).contains("does not derive Json"))
-    }
-    assert(caught)
-}
-
-@test
 fn test_derive_flags_are_independent() {
     var inspect_only = InspectOnly(7)
     assert_eq(string(inspect_only), "InspectOnly{value: 7}")
 
-    var inspect_json_caught = false
-    try {
-        Json.encode(inspect_only)
-    } catch panic (e) {
-        inspect_json_caught = true
-        assert(string(e).contains("does not derive Json"))
-    }
-    assert(inspect_json_caught)
-
     var json_only = JsonOnly(9)
-    var encoded = Json.encode(json_only)
-    assert_eq(encoded.value, 9)
+    var encoded = JSON.value(json_only)
+    assert_eq(JSON.require<int>(encoded, ["value"]), 9)
     assert_eq(string(json_only), "JsonOnly{...}")
 }

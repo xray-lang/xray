@@ -90,7 +90,7 @@ const XaBuiltinType *xa_builtin_get_type_info(XrType *type) {
     if (!type)
         return NULL;
     if (XR_TYPE_IS_JSON(type))
-        return xa_native_get_compiler_builtin_type("Json");
+        return xa_native_get_compiler_builtin_type("JSON");
     if (xr_type_is_builtin_named_class(type, "CoroLocal"))
         return xa_native_get_compiler_builtin_type("CoroLocal");
     XrTypeId id = xr_type_to_builtin_id(type);
@@ -688,7 +688,7 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
             case SYMBOL_VALUES:
                 return xr_type_new_array(X, xr_type_new_json(NULL));
             case SYMBOL_ENTRIES: {
-                /* Json.entries(): Array<(string, Json)> — every key
+                /* JSON.entries(): Array<(string, Json)> — every key
                  * in a Json object is a string at runtime; the value
                  * is the existential Json type. */
                 XrType *pair_elems[2] = {xr_type_new_string(NULL), xr_type_new_json(NULL)};
@@ -1024,8 +1024,7 @@ XrType *xa_builtin_object_shape_decl_type(XrVMRuntime *X,
         names[i] = object_shape->fields[i].name;
         types[i] = xa_builtin_parse_type_string(X, object_shape->fields[i].type_str);
     }
-    XrType *type = xr_type_new_struct_object_with_fields(
-        X, names, types, count, object_shape->is_exact ? XR_OBJECT_ROW_EXACT : XR_OBJECT_ROW_OPEN);
+    XrType *type = xr_type_new_struct_object_with_fields(X, names, types, count);
     xr_free(names);
     xr_free(types);
     return type ? type : xr_type_new_error(X);
@@ -1142,7 +1141,7 @@ XaAllocationContractKind xa_builtin_get_handle_method_allocation_contract(const 
  * not take one of these: the name would resolve to the user's type in some
  * positions and to the builtin in others, which is not a shadowing rule anyone
  * can reason about. Statics were the clearest case -- a user class declaring
- * `static withCapacity` still ran Array's, and `Json.parse` on a user Json
+ * `static withCapacity` still ran Array's, and `JSON.parse` on a user Json
  * reached the runtime before failing -- but the type-annotation path was no
  * better, rendering both types as `Array<int>` in a "not assignable to itself"
  * diagnostic. The list is the same registry the resolver and the LSP read, so
@@ -1356,8 +1355,23 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_rune(NULL);
     } else if (base_len == 4 && strncmp(s, TYPE_NAME_VOID, 4) == 0) {
         type = xr_type_new_unit(NULL);
-    } else if (base_len == 4 && strncmp(s, TYPE_NAME_JSON, 4) == 0) {
+    } else if (base_len == strlen(TYPE_NAME_JSON) &&
+               strncmp(s, TYPE_NAME_JSON, strlen(TYPE_NAME_JSON)) == 0) {
         type = xr_type_new_json(NULL);
+    } else if (base_len == strlen("JSON.Object") &&
+               strncmp(s, "JSON.Object", strlen("JSON.Object")) == 0) {
+        type = xr_type_new_map(X, xr_type_new_string(NULL), xr_type_new_json(X));
+    } else if (base_len == strlen("JSON.PathSegment") &&
+               strncmp(s, "JSON.PathSegment", strlen("JSON.PathSegment")) == 0) {
+        XrType *members[2] = {xr_type_new_string(NULL), xr_type_new_int(NULL)};
+        type = xr_type_new_union(X, members, 2);
+    } else if (base_len == strlen("JSON.Path") &&
+               strncmp(s, "JSON.Path", strlen("JSON.Path")) == 0) {
+        XrType *members[2] = {xr_type_new_string(NULL), xr_type_new_int(NULL)};
+        type = xr_type_new_array(X, xr_type_new_union(X, members, 2));
+    } else if (base_len == strlen("JSON.UnknownFields") &&
+               strncmp(s, "JSON.UnknownFields", strlen("JSON.UnknownFields")) == 0) {
+        type = xr_type_new_enum(X, "JSON.UnknownFields");
     } else if (base_len == 7 && strncmp(s, TYPE_NAME_UNKNOWN, 7) == 0) {
         type = xr_type_new_error(X);
     } else if (base_len == 8 && strncmp(s, "Ordering", 8) == 0) {
@@ -1487,6 +1501,13 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
 
             if (strcmp(name_buf, "Task") == 0 && argc >= 1) {
                 type = xr_type_new_task(X, args[0]);
+            } else if (strcmp(name_buf, "JSON.WithRest") == 0 && argc == 1) {
+                const char *field_names[2] = {"rest", "value"};
+                XrType *field_types[2] = {
+                    xr_type_new_map(X, xr_type_new_string(NULL), xr_type_new_json(X)), args[0]};
+                type = xr_type_new_struct_object_with_fields(X, field_names, field_types, 2);
+                if (type)
+                    type->object.type_name = "JSON.WithRest";
             } else if (strcmp(name_buf, "Ptr") == 0 && argc >= 1) {
                 // Raw pointers must round-trip as XR_KIND_POINTER (not a generic
                 // named instance) so stdlib-function pointer params compare equal

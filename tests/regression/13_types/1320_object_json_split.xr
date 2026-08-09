@@ -1,5 +1,5 @@
 // 1320_object_json_split.xr
-// Test: default object literals are exact object shapes; Json is explicit opt-in.
+// Test: object literals are exact shapes; schema-less JSON objects use Map storage.
 
 type User = { id: int, name: string }
 
@@ -22,26 +22,25 @@ fn test_object_alias_assignment() {
 }
 
 @test
-fn test_json_opt_in_object() {
-    var payload: Json = { id: 1, name: "Ada" }
-    payload.extra = true
-    assert_eq(typeName(payload), "object")
-    assert_eq(payload.extra, true)
+fn test_json_object_is_map() {
+    var payload: JSON.Object = JSON.parseObject("{\"id\":1,\"name\":\"Ada\"}")
+    payload.set("extra", true)
+    assert_eq(typeName(payload), "Map")
+    assert_eq(payload.get("extra"), true)
 }
 
 @test
 fn test_json_array_literal_context() {
-    var payload: Json = [1, "two", true]
+    var payload: JSON.Value = JSON.parseValue("[1,\"two\",true]")
     assert_eq(typeName(payload), "Array")
 }
 
 @test
 fn test_json_decode_object() {
-    var data = Json.parse("{\"id\": 9, \"name\": \"Ray\"}")
-    var user = Json.decode<User>(data)
+    var data = JSON.parseValue("{\"id\": 9, \"name\": \"Ray\"}")
+    var user = JSON.decode<User>(data)
     assert(user != null)
     assert_eq(typeName(user), "object")
     assert_eq(user!.id, 9)
     assert_eq(user!.name, "Ray")
 }
-

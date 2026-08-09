@@ -11,6 +11,8 @@
 #include "../test_framework.h"
 #include "base/xconstants.h"
 #include "coro/xcoro_tuning.h"
+#include "coro/xblock.h"
+#include "coro/xnetpoll.h"
 #include "coro/xscheduler_policy.h"
 #include "coro/xcoro_abi.h"
 #include "coro/xaot_coro.h"
@@ -526,6 +528,7 @@ TEST(coro_ext_init_sets_timer_and_owner_sentinels) {
     XrCoroExt *ext = xr_coro_ensure_ext(&coro);
     ASSERT_TRUE(ext != NULL);
     ASSERT_EQ_INT(ext->locked_worker, -1);
+    ASSERT_EQ_INT(ext->resume_target_worker, -1);
     ASSERT_EQ_INT(ext->wait_bucket_owner, -1);
     ASSERT_EQ_INT(ext->timer.slot, XR_TW_SLOT_INACTIVE);
     ASSERT_EQ_INT(ext->timer.owner_worker_id, -1);
@@ -535,6 +538,40 @@ TEST(coro_ext_init_sets_timer_and_owner_sentinels) {
                   XR_TIMER_STATE_ACTIVE);
 
     xr_free(ext);
+}
+
+TEST(io_wait_resume_consumes_terminal_token) {
+    XrCoroutine coro;
+    init_ready_coro(&coro, 351, NULL);
+    XrCoroExt *ext = xr_coro_ensure_ext(&coro);
+    ASSERT_NOT_NULL(ext);
+
+    xr_coro_set_wait_reason(&coro, XR_CORO_WAIT_IO >> XR_CORO_WAIT_SHIFT);
+    xr_io_wait_token_prepare(&ext->wait.io_token, 17, XR_POLL_READ, 0, 25);
+    xr_io_wait_token_commit(&ext->wait.io_token);
+    xr_io_wait_token_ready(&ext->wait.io_token);
+    ASSERT_EQ_INT((int) xr_coro_io_wait_resume(&coro), (int) XR_CORO_IO_WAIT_READY);
+    ASSERT_EQ_INT(atomic_load_explicit(&ext->wait.io_token.state, memory_order_relaxed),
+                  XR_IO_WAIT_IDLE);
+    ASSERT_EQ_INT(ext->wait.io_token.fd, -1);
+    ASSERT_EQ_INT(xr_coro_get_wait_reason(xr_coro_flags_load(&coro)), 0);
+
+    xr_io_wait_token_prepare(&ext->wait.io_token, 18, XR_POLL_WRITE, 0, 30);
+    xr_io_wait_token_commit(&ext->wait.io_token);
+    xr_io_wait_token_timeout(&ext->wait.io_token);
+    ASSERT_EQ_INT((int) xr_coro_io_wait_resume(&coro), (int) XR_CORO_IO_WAIT_TIMEOUT);
+    ASSERT_EQ_INT(atomic_load_explicit(&ext->wait.io_token.state, memory_order_relaxed),
+                  XR_IO_WAIT_IDLE);
+
+    xr_io_wait_token_prepare(&ext->wait.io_token, 19, XR_POLL_READ, 0, -1);
+    xr_io_wait_token_commit(&ext->wait.io_token);
+    xr_io_wait_token_cancel(&ext->wait.io_token);
+    ASSERT_EQ_INT((int) xr_coro_io_wait_resume(&coro), (int) XR_CORO_IO_WAIT_CANCELLED);
+    ASSERT_EQ_INT(atomic_load_explicit(&ext->wait.io_token.state, memory_order_relaxed),
+                  XR_IO_WAIT_IDLE);
+
+    xr_free(ext);
+    coro.ext = NULL;
 }
 
 TEST(single_worker_ensure_skips_sysmon_thread) {
@@ -796,6 +833,45 @@ TEST(work_stealing_moves_batch_and_returns_direct_item) {
     steal_fixture_cleanup(&f);
 }
 
+TEST(targeted_runtime_yield_hands_off_to_descriptor_owner) {
+    StealFixture f;
+    ASSERT_TRUE(steal_fixture_init(&f));
+    steal_fixture_enter_manual_threads(&f);
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = f.workers[0].m;
+
+    XrCoroutine coro;
+    SpawnProbeState state = {
+        .children = NULL,
+        .child_count = 0,
+        .next_child = 0,
+        .after_spawns = SPAWN_PROBE_YIELD_ONCE,
+    };
+    init_spawn_probe_parent(&coro, 490, &f.isolate_storage, &state);
+    XrCoroExt *ext = xr_coro_ensure_ext(&coro);
+    ASSERT_NOT_NULL(ext);
+    ext->resume_target_worker = 1;
+
+    worker_exec_with_cont_stealing(&f.workers[0], &coro);
+
+    ASSERT_FALSE(xr_coro_flags_has(&coro, XR_CORO_FLG_DONE));
+    ASSERT_EQ_INT(ext->resume_target_worker, -1);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.workers[0]), NULL);
+    ASSERT_FALSE(xr_mpsc_empty(&f.workers[1].p.inbox));
+
+    tls_current_worker = &f.workers[1];
+    tls_current_machine = f.workers[1].m;
+    worker_drain_inbox(&f.workers[1]);
+    XrCoroutine *resumed = xr_worker_pop(&f.workers[1]);
+    ASSERT_EQ_PTR(resumed, &coro);
+    worker_exec_with_cont_stealing(&f.workers[1], resumed);
+    ASSERT_TRUE(xr_coro_flags_has(&coro, XR_CORO_FLG_DONE));
+
+    xr_free(ext);
+    coro.ext = NULL;
+    steal_fixture_cleanup(&f);
+}
+
 TEST(spawn_burst_shares_same_parent_fanout) {
     StealFixture f;
     ASSERT_TRUE(steal_fixture_init(&f));
@@ -943,6 +1019,7 @@ RUN_TEST(local_io_ready_burst_runs_one_direct_and_keeps_the_rest_local);
 RUN_TEST(worker_unpark_interrupts_local_poll);
 RUN_TEST(global_coro_pool_get_pops_bounded_batches);
 RUN_TEST(coro_ext_init_sets_timer_and_owner_sentinels);
+RUN_TEST(io_wait_resume_consumes_terminal_token);
 RUN_TEST(single_worker_ensure_skips_sysmon_thread);
 RUN_TEST(sysmon_forced_cancel_defaults_to_warn_only);
 RUN_TEST(sysmon_forced_cancel_env_opt_in);
@@ -955,6 +1032,7 @@ RUN_TEST(deterministic_runtime_forces_single_worker_and_virtual_clock);
 RUN_TEST(worker_env_overrides_single_worker_entry_default);
 RUN_TEST(current_monotonic_uses_virtual_time_in_deterministic_runtime);
 RUN_TEST(work_stealing_moves_batch_and_returns_direct_item);
+RUN_TEST(targeted_runtime_yield_hands_off_to_descriptor_owner);
 RUN_TEST(spawn_burst_shares_same_parent_fanout);
 RUN_TEST(spawn_burst_resets_after_yield);
 RUN_TEST(spawn_burst_resets_after_block);

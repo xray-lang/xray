@@ -124,7 +124,7 @@ _Static_assert(NUM_OPCODES <= 65536, "Opcode count exceeds 16-bit encoding limit
 #define CORO_CTRL_SELF 11
 #define CORO_CTRL_KILL 12
 
-// OP_JSON_INIT mode flags (encoded in high bits of C)
+// OP_OBJECT_INIT mode flags (encoded in high bits of C)
 #define JSON_INIT_REG 0   // C = register index
 #define JSON_INIT_IMM 1   // C = signed immediate int (use GETARG_sC)
 #define JSON_INIT_NULL 2  // C ignored, value = null
@@ -304,6 +304,12 @@ typedef struct XrProto {
      */
     struct XrType **param_types;  // [numparams] parameter types
     uint8_t param_types_count;    // = numparams when allocated
+
+    /* bit[i]=1: parameter i uses the verified call-bound-place ABI.  Dynamic
+     * dispatch (notably operator overloads) cannot see the Xi call plan at its
+     * source call site, so it consumes this detached proto contract when
+     * constructing the callee frame. */
+    uint64_t call_place_param_bitmap;
 
     /*
      * Per-instruction type annotations (flow-sensitive, authoritative for non-params).

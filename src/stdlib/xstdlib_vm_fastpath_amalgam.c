@@ -19,3 +19,7 @@ XR_THREAD_LOCAL const XrAotContext *xrt_hosted_aot_context = NULL;
 XRT_INTERNAL void xr_stdlib_vm_fastpath_release_native(XrValue value) {
     xrt_release(value);
 }
+
+XRT_INTERNAL void xr_stdlib_vm_fastpath_retain_native(XrValue value) {
+    (void) xrt_retain(value);
+}

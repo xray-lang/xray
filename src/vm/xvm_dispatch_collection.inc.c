@@ -89,7 +89,7 @@ vmcase(OP_NEWARRAY) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c_field = GETARG_C(i);
-    int storage_mode = c_field & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (c_field & 0x03));
     uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
@@ -152,7 +152,7 @@ vmcase(OP_ARRAY_NEW_CAP) {
     if (cap < 0)
         cap = 0;
 
-    int storage_mode = c_field & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (c_field & 0x03));
     uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
@@ -190,7 +190,7 @@ vmcase(OP_ARRAY_NEW_LEN) {
     if (length < 0)
         length = 0;
 
-    int storage_mode = c_field & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (c_field & 0x03));
     uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
@@ -233,7 +233,7 @@ vmcase(OP_NEWTUPLE) {
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    int storage_mode = GETARG_C(i) & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (GETARG_C(i) & 0x03));
     XrTuple *tup = xr_tuple_new_storage(VM_CURRENT_CORO, (uint16_t) b, (uint8_t) storage_mode);
     if (tup) {
         for (int j = 0; j < b; j++)
@@ -280,7 +280,7 @@ vmcase(OP_NEWMAP) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    int storage_mode = c & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (c & 0x03));
     uint8_t value_tid = (uint8_t) ((c >> 3) & 0x1F);
     int key_kind = (c >> 8) & 0x03;
     uint8_t key_tid = (key_kind == 1) ? XR_TID_STRING : (key_kind == 2) ? XR_TID_INT : 0;
@@ -326,7 +326,7 @@ vmcase(OP_NEWSET) {
     int a = GETARG_A(i);
     int b_arg = GETARG_B(i);
     int init_mode = GETARG_C(i);
-    int storage_mode = b_arg & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (b_arg & 0x03));
     uint8_t elem_tid = (uint8_t) ((b_arg >> 3) & 0x1F);
 
     XrSet *set;
@@ -438,7 +438,7 @@ vmcase(OP_NEWSTRINGBUILDER) {
     ** B = storage mode (0=normal, 1=shared, 2=owned)
     */
     int a = GETARG_A(i);
-    int storage_mode = GETARG_B(i);
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) GETARG_B(i));
 
     XrStringBuilder *sb;
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
@@ -978,7 +978,6 @@ vmcase(OP_ARRAY_LEN) {
 vmcase(OP_LEN) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    bool json_dynamic = GETARG_C(i) != 0;
     XrValue value = R(b);
     if (XR_IS_ARRAY(value)) {
         R(a) = xr_int((xr_Integer) XR_TO_ARRAY(value)->length);
@@ -1002,11 +1001,6 @@ vmcase(OP_LEN) {
         R(a) = xr_int((xr_Integer) (string ? string->rune_length : 0));
         vmbreak;
     }
-    if (xr_value_is_json(value)) {
-        XrJson *json = xr_value_to_json(value);
-        R(a) = xr_int((xr_Integer) xr_json_field_count(isolate, json));
-        vmbreak;
-    }
     if (xr_value_is_channel(value)) {
         R(a) = xr_int((xr_Integer) xr_value_to_channel(value)->buf_count);
         vmbreak;
@@ -1028,10 +1022,6 @@ vmcase(OP_LEN) {
     if (buffer_length >= 0) {
         R(a) = xr_int((xr_Integer) buffer_length);
         vmbreak;
-    }
-    if (json_dynamic) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "len(Json) requires an object, array, or string variant");
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "value does not implement Lengthable");
 }
@@ -1942,7 +1932,7 @@ vmcase(OP_MAP_GET) {
 }
 
 vmcase(OP_MAP_GETK) {
-    // OP_MAP_GETK: Map/Json constant key access
+    // OP_MAP_GETK: Map constant key access
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
@@ -1958,15 +1948,7 @@ vmcase(OP_MAP_GETK) {
             VM_RUNTIME_ERROR(XR_ERR_KEY_NOT_FOUND, "Map key not found");
         vmbreak;
     }
-    // Json object support
-    if (xr_value_is_json(map_val)) {
-        XrJson *json = xr_value_to_json(map_val);
-        XrValue key_val = k[c];
-        XrString *key_str = XR_TO_STRING(key_val);
-        R(a) = xr_json_get_by_key(isolate, json, key_str->data);
-        vmbreak;
-    }
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "index access requires Map or Json type");
+    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "index access requires Map type");
 }
 
 vmcase(OP_MAP_SET) {
@@ -1985,7 +1967,7 @@ vmcase(OP_MAP_SET) {
 }
 
 vmcase(OP_MAP_SETK) {
-    // OP_MAP_SETK: Map/Json constant key set
+    // OP_MAP_SETK: Map constant key set
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
@@ -1998,17 +1980,7 @@ vmcase(OP_MAP_SETK) {
         XR_MAP_SET_STRING_FAST(map, key_str, key_val, R(c));
         vmbreak;
     }
-    // Json object support
-    if (xr_value_is_json(map_val)) {
-        XrJson *json = xr_value_to_json(map_val);
-        XrValue key_val = k[b];
-        XrString *key_str = XR_TO_STRING(key_val);
-        if (!xr_json_set_by_key(isolate, json, key_str->data, R(c))) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add property to sealed Json object");
-        }
-        vmbreak;
-    }
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "index assignment requires Map or Json type");
+    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "index assignment requires Map type");
 }
 
 vmcase(OP_MAP_INCREMENT) {
@@ -2214,16 +2186,6 @@ vmcase(OP_INDEX_GET) {
             VM_RUNTIME_ERROR(XR_ERR_KEY_NOT_FOUND, "Map key not found");
         vmbreak;
     }
-    // Fast path: Json object (string keys only)
-    if (xr_value_is_json(obj_val)) {
-        if (XR_IS_STRING(key_val)) {
-            XrJson *json = xr_value_to_json(obj_val);
-            XrString *key_str = XR_TO_STRING(key_val);
-            R(a) = xr_json_get_by_key(isolate, json, key_str->data);
-            vmbreak;
-        }
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "Json object only supports string keys");
-    }
     // Set indexing: materialize values array, then index by position.
     // Enables for-in iteration over sets via INDEX_GET.
     if (XR_IS_SET(obj_val) && XR_IS_INT(key_val)) {
@@ -2261,9 +2223,8 @@ vmcase(OP_INDEX_GET) {
             }
         }
     }
-    VM_RUNTIME_ERROR(
-        XR_ERR_TYPE_NO_INDEX,
-        "only Array, Map, Json, Set, Range, typed array, and operator[] support indexing");
+    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX,
+                     "only Array, Map, Set, Range, typed array, and operator[] support indexing");
 }
 
 vmcase(OP_INDEX_SET) {
@@ -2377,19 +2338,6 @@ vmcase(OP_INDEX_SET) {
         xr_map_set(map, key_val, val);
         vmbreak;
     }
-    // Fast path: Json object (string keys only)
-    if (xr_value_is_json(obj_val)) {
-        if (XR_IS_STRING(key_val)) {
-            XrJson *json = xr_value_to_json(obj_val);
-            XrString *key_str = XR_TO_STRING(key_val);
-            if (!xr_json_set_by_key(isolate, json, key_str->data, val)) {
-                VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
-                                 "cannot add property to sealed Json object");
-            }
-            vmbreak;
-        }
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX, "Json object only supports string keys");
-    }
     // Operator overload
     if (xr_value_is_instance(obj_val)) {
         XrInstance *_inst = xr_value_to_instance(obj_val);
@@ -2415,7 +2363,7 @@ vmcase(OP_INDEX_SET) {
         }
     }
     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_INDEX,
-                     "only Array, Map, Json, typed array support index assignment");
+                     "only Array, Map, and typed array support index assignment");
 }
 
 vmcase(OP_SLICE) {

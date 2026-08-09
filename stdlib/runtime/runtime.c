@@ -115,27 +115,30 @@ static XrValue runtime_info(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) args;
 
     XrCoroHeap *heap = get_heap(isolate);
-    XrClass *cls = xr_stdlib_object_shape_class_get(isolate, "runtime", "RuntimeInfo");
+    XrClass *cls = xr_stdlib_record_class_get(isolate, "runtime", "RuntimeInfo");
     XR_CHECK(cls != NULL, "runtime.info: RuntimeInfo class unavailable");
-    XrJson *object = xr_json_new_with_class(xr_current_coro(isolate), cls);
+    XrObjectInstance *object = xr_object_instance_new_with_class(xr_current_coro(isolate), cls);
     XR_CHECK(object != NULL, "runtime.info: RuntimeInfo allocation failed");
 
     XrRegionStats stats = {0};
     if (heap)
         xr_region_get_stats(&heap->region, &stats);
 
-    xr_json_set_by_key(isolate, object, "liveBytes", xr_int(heap ? heap->totalbytes : 0));
-    xr_json_set_by_key(isolate, object, "liveKB",
-                       xr_float(heap ? (double) heap->totalbytes / 1024.0 : 0.0));
-    xr_json_set_by_key(isolate, object, "liveObjects",
-                       xr_int(heap ? (int64_t) heap->object_count : 0));
-    xr_json_set_by_key(isolate, object, "finalizerCount",
-                       xr_int(heap ? (int64_t) heap->finalizer_count : 0));
-    xr_json_set_by_key(isolate, object, "blocks", xr_int((int64_t) stats.total_blocks));
-    xr_json_set_by_key(isolate, object, "freeBlocks", xr_int((int64_t) stats.free_blocks));
-    xr_json_set_by_key(isolate, object, "fullBlocks", xr_int((int64_t) stats.full_blocks));
+    xr_object_instance_set_by_key(isolate, object, "liveBytes",
+                                  xr_int(heap ? heap->totalbytes : 0));
+    xr_object_instance_set_by_key(isolate, object, "liveKB",
+                                  xr_float(heap ? (double) heap->totalbytes / 1024.0 : 0.0));
+    xr_object_instance_set_by_key(isolate, object, "liveObjects",
+                                  xr_int(heap ? (int64_t) heap->object_count : 0));
+    xr_object_instance_set_by_key(isolate, object, "finalizerCount",
+                                  xr_int(heap ? (int64_t) heap->finalizer_count : 0));
+    xr_object_instance_set_by_key(isolate, object, "blocks", xr_int((int64_t) stats.total_blocks));
+    xr_object_instance_set_by_key(isolate, object, "freeBlocks",
+                                  xr_int((int64_t) stats.free_blocks));
+    xr_object_instance_set_by_key(isolate, object, "fullBlocks",
+                                  xr_int((int64_t) stats.full_blocks));
 
-    return xr_json_value(object);
+    return xr_object_instance_value(object);
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_RUNTIME 1

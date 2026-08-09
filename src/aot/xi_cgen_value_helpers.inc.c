@@ -281,8 +281,6 @@ static bool emit_enum_namespace_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFu
     const XiEnumData *ed = NULL;
     if (v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE && v->aux)
         ed = (const XiEnumData *) v->aux;
-    else if (v->type->kind == XR_KIND_UNKNOWN && v->aux)
-        ed = cg_enum_for_runtime_type(ctx, v->aux);
     else
         return false;
 
@@ -1229,13 +1227,13 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
 }
 
 static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                       bool in_coro) {
+                                       bool storage_predeclared) {
     if (!ctx || !out || !f || !v || v->op != XI_STR_CONCAT || v->nargs <= 1)
         return false;
 
-    /* Coroutine bodies declare every value in the frame prologue, so an
+    /* A coroutine body declares every value in the frame prologue, so an
      * inline declaration here would redefine the C local. */
-    if (!in_coro && !ctx->pre_decl_all) {
+    if (!storage_predeclared && !ctx->pre_decl_all) {
         fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
         emit_vref(out, v);
         fprintf(out, ";\n");

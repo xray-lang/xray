@@ -1,19 +1,15 @@
 // anchor: type-check-panic-shape
-// Dynamic Json values crossing concrete type boundaries must raise the same
-// structured type-mismatch panic on VM and AOT.
+// Typed JSON path reads must raise the same structured type-mismatch panic on
+// VM and AOT when the selected value does not match the requested type.
 
 fn takes_bool(x: bool) {
     print("bool=" + x.toString())
 }
 
-fn return_int(x: Json) -> int {
-    return copy(x)
-}
-
-var dyn: Json = { "badInt": 3.5, "badBool": 1 }
+var dyn: JSON.Object = JSON.parseObject("{\"badInt\":3.5,\"badBool\":1}")
 
 try {
-    var value: int = dyn.badInt
+    var value: int = JSON.require<int>(dyn, ["badInt"])
     print(value)
 } catch panic (p) {
     print(p.message)
@@ -21,7 +17,7 @@ try {
 }
 
 try {
-    takes_bool(dyn.badBool)
+    takes_bool(JSON.require<bool>(dyn, ["badBool"]))
     print("bad-arg")
 } catch panic (p) {
     print(p.message)
@@ -29,7 +25,7 @@ try {
 }
 
 try {
-    print(return_int(dyn.badInt))
+    print(JSON.require<int>(dyn, ["badInt"]))
     print("bad-return")
 } catch panic (p) {
     print(p.message)

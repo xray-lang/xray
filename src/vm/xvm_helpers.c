@@ -42,19 +42,25 @@ static bool xr_vm_struct_layout_reserve(XrVMState *vm, uint16_t capacity) {
     if (!vm || capacity == 0)
         return false;
     XrAggregateLayout **layouts = (XrAggregateLayout **) xr_calloc(capacity, sizeof(*layouts));
+    XrClass **classes = (XrClass **) xr_calloc(capacity, sizeof(*classes));
     bool *owned = (bool *) xr_calloc(capacity, sizeof(*owned));
-    if (!layouts || !owned) {
+    if (!layouts || !classes || !owned) {
         xr_free(layouts);
+        xr_free(classes);
         xr_free(owned);
         return false;
     }
     if (vm->struct_layout_count > 0) {
         memcpy(layouts, vm->struct_layouts, (size_t) vm->struct_layout_count * sizeof(*layouts));
+        memcpy(classes, vm->struct_layout_classes,
+               (size_t) vm->struct_layout_count * sizeof(*classes));
         memcpy(owned, vm->struct_layout_owned, (size_t) vm->struct_layout_count * sizeof(*owned));
     }
     xr_free(vm->struct_layouts);
+    xr_free(vm->struct_layout_classes);
     xr_free(vm->struct_layout_owned);
     vm->struct_layouts = layouts;
+    vm->struct_layout_classes = classes;
     vm->struct_layout_owned = owned;
     vm->struct_layout_capacity = capacity;
     return true;
@@ -124,6 +130,48 @@ XrAggregateLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id)
     if (!vm || layout_id == 0 || layout_id >= vm->struct_layout_count || !vm->struct_layouts)
         return NULL;
     return vm->struct_layouts[layout_id];
+}
+
+bool xr_vm_struct_layout_bind_class(XrVMState *vm, XrAggregateLayout *layout, XrClass *cls) {
+    if (!vm || !layout || !cls || !layout->nominal_name)
+        return false;
+    uint16_t layout_id = xr_vm_struct_layout_register(vm, layout);
+    if (layout_id == 0 || !vm->struct_layout_classes)
+        return false;
+    XrClass *existing = vm->struct_layout_classes[layout_id];
+    if (existing && existing != cls)
+        return false;
+    vm->struct_layout_classes[layout_id] = cls;
+    return true;
+}
+
+XrClass *xr_vm_struct_layout_class(XrVMState *vm, uint16_t layout_id) {
+    if (!vm || layout_id == 0 || layout_id >= vm->struct_layout_count || !vm->struct_layout_classes)
+        return NULL;
+    XrClass *direct = vm->struct_layout_classes[layout_id];
+    if (direct)
+        return direct;
+
+    /* Class descriptors own arena-local layout copies.  A containing value
+     * struct therefore need not point at the exact same descriptor address as
+     * the nested struct's class, even though both carry one nominal layout.
+     * Resolve that copied descriptor by semantic identity.  Ambiguous nominal
+     * identities fail closed instead of choosing a method table by load order. */
+    XrAggregateLayout *layout = vm->struct_layouts ? vm->struct_layouts[layout_id] : NULL;
+    if (!layout || !layout->nominal_name)
+        return NULL;
+    XrClass *match = NULL;
+    for (uint16_t i = 1; i < vm->struct_layout_count; i++) {
+        XrClass *candidate = vm->struct_layout_classes[i];
+        XrAggregateLayout *candidate_layout = vm->struct_layouts ? vm->struct_layouts[i] : NULL;
+        if (!candidate || !candidate_layout ||
+            !xr_aggregate_layout_semantically_equal(layout, candidate_layout))
+            continue;
+        if (match && match != candidate)
+            return NULL;
+        match = candidate;
+    }
+    return match;
 }
 
 XrAggregateLayout *xr_vm_struct_layout_lookup_stable_key(XrVMState *vm, uint64_t stable_key) {
@@ -483,6 +531,56 @@ XR_FUNC bool xr_vm_instance_struct_set_field(XrVMRuntime *isolate, XrInstance *i
     return xr_vm_struct_write_field_value(isolate, fp, field, value);
 }
 
+static XrValue xr_vm_struct_materialize_instance_depth(XrVMRuntime *isolate, XrValue ref,
+                                                       uint32_t depth) {
+    if (!isolate || !XR_IS_AGG_REF(ref) || XR_IS_ARRAY_REF(ref) || XR_IS_SLICE_REF(ref) ||
+        !ref.ptr || depth > 16)
+        return xr_null();
+
+    XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, ref);
+    XrClass *cls =
+        layout ? xr_vm_struct_layout_class(&isolate->vm, xr_aggregate_layout_id(ref)) : NULL;
+    if (!layout || !cls || !xr_aggregate_layout_semantically_equal(cls->struct_layout, layout) ||
+        !cls->native_body)
+        return xr_null();
+
+    XrInstance *inst = xr_instance_new(isolate, cls);
+    if (!inst)
+        return xr_null();
+    uint8_t *src = xr_vm_struct_ref_payload(isolate, ref, NULL);
+    uint8_t *dst = (uint8_t *) xr_instance_native_body(inst);
+    if (!src || !dst)
+        return xr_null();
+    memcpy(dst, src, layout->total_size);
+
+    uint32_t field_count = xr_class_instance_field_count(cls);
+    if (field_count < layout->field_count)
+        return xr_null();
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        XrAggregateFieldLayout *field = &layout->fields[i];
+        XrValue value = xr_null();
+        if (!xr_vm_struct_read_field_value(isolate, dst + field->offset, field, &value))
+            return xr_null();
+        if (field->native_type == XR_NATIVE_NESTED_AGGREGATE) {
+            value = xr_vm_struct_materialize_instance_depth(isolate, value, depth + 1);
+            if (XR_IS_NULL(value))
+                return xr_null();
+        } else if (field->native_type == XR_NATIVE_ARRAY) {
+            /* Fixed arrays live inline in the native body. The tagged field
+             * slot is only an ownership anchor, so it stays null. */
+            value = xr_null();
+        }
+        xr_rc_release_value(xr_current_coro_heap(), inst->fields[i]);
+        inst->fields[i] = value;
+        xr_rc_retain_value(value);
+    }
+    return XR_FROM_PTR(inst);
+}
+
+XrValue xr_vm_struct_materialize_instance(XrVMRuntime *isolate, XrValue ref) {
+    return xr_vm_struct_materialize_instance_depth(isolate, ref, 0);
+}
+
 /* ========== Runtime Error Handling ========== */
 
 /*
@@ -792,6 +890,8 @@ void xr_vm_vm_free(XrVMRuntime *isolate) {
     }
     xr_free(isolate->vm.struct_layout_owned);
     isolate->vm.struct_layout_owned = NULL;
+    xr_free(isolate->vm.struct_layout_classes);
+    isolate->vm.struct_layout_classes = NULL;
     xr_free(isolate->vm.struct_layouts);
     isolate->vm.struct_layouts = NULL;
     isolate->vm.struct_layout_count = 0;

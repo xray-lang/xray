@@ -546,6 +546,32 @@ def enforce_atomic_class_coverage(
         if row["class_name"]
     }
 
+    # A source function that is not hosted still executes against the original
+    # bytecode class captured when its module was compiled.  If it can return a
+    # class value, replacing that class export with an opaque hosted proxy
+    # creates two runtime representations of the same nominal type.  Mark the
+    # class incomplete so both its proxy and every hosted consumer are removed
+    # atomically until a structural object bridge exists.
+    class_owner_by_name: dict[str, str] = {}
+    for row in source_exports:
+        class_name = str(row.get("class_name", ""))
+        module = str(row.get("module", ""))
+        if not class_name:
+            continue
+        previous = class_owner_by_name.get(class_name)
+        if previous and previous != module:
+            fail(f"hosted class name is ambiguous across modules: {class_name}")
+        class_owner_by_name[class_name] = module
+    for row in missing:
+        if row.get("class_name"):
+            continue
+        signature = str(row.get("signature", ""))
+        result_match = re.search(r"\)\s*:\s*(.+)$", signature)
+        result = result_match.group(1) if result_match else ""
+        for class_name, owner in class_owner_by_name.items():
+            if re.search(rf"\b{re.escape(class_name)}\b", result):
+                incomplete_classes.add((owner, class_name))
+
     def object_dependencies(entry: dict[str, Any]) -> set[tuple[str, str]]:
         return {
             (match.group(1), match.group(2))

@@ -1590,10 +1590,10 @@ static XrCFuncResult net_bidi_wait_continue(XrVMRuntime *X, int status, XrValue 
 }
 
 static XrValue net_bidi_result_object(XrVMRuntime *X, NetBidiWaitState *state) {
-    XrClass *cls = xr_stdlib_object_shape_class_get(X, "net", "__CopyBidirectionalResult");
+    XrClass *cls = xr_stdlib_record_class_get(X, "net", "__CopyBidirectionalResult");
     if (!cls)
         return XR_NULL_VAL;
-    XrJson *object = xr_json_new_with_class(xr_current_coro(X), cls);
+    XrObjectInstance *object = xr_object_instance_new_with_class(xr_current_coro(X), cls);
     if (!object)
         return XR_NULL_VAL;
     /* Set by field name, not by a hardcoded slot: a structural object's physical

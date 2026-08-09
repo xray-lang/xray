@@ -1,194 +1,30 @@
-// 0515_json_comprehensive.xr
-// 作者：xingleixu@gmail.com
-// 测试：Json 功能综合测试
+// A realistic inbound-payload workflow: inspect, transform, and emit.
 
-// ===== 实际应用场景：配置管理 =====
+type Request = { action: string, userId: int }
 
 @test
-fn test_config_management() {
-    // 可扩展配置类型
-    type AppConfig = { name: string, version: string, ... }
-    
-    var config: AppConfig = {
-        name: "MyApp",
-        version: "1.0.0"
+fn test_typed_boundary_rejects_unknown_by_default() {
+    var raw = "{\"action\":\"activate\",\"userId\":7,\"trace\":\"t1\"}"
+    var rejected = false
+    try {
+        JSON.parse<Request>(raw)
+    } catch panic (e) {
+        rejected = true
     }
-    
-    // 动态添加配置项
-    config.debug = true
-    config.logLevel = "info"
-    config.database = {
-        host: "localhost",
-        port: 3306
-    }
-    
-    assert_eq(config.name, "MyApp")
-    assert_eq(config.debug, true)
-    assert_eq(config.database.host, "localhost")
+    assert(rejected)
+    var request = JSON.parse<Request>(raw, JSON.UnknownFields.Ignore)
+    assert_eq(request.action, "activate")
+    assert_eq(request.userId, 7)
 }
-
-// ===== 实际应用场景：数据转换 =====
 
 @test
-fn test_data_transformation() {
-    // 原始数据
-    var rawData: Json = {
-        user_name: "alice",
-        user_age: 25,
-        user_email: "alice@test.com"
-    }
-    
-    // 转换为新格式
-    var fields = ["name", "age", "email"]
-    var result: Json = {}
-    
-    for (field in fields) {
-        var srcKey = "user_" + field
-        result[field] = rawData[srcKey]
-    }
-    
-    assert_eq(result.name, "alice")
-    assert_eq(result.age, 25)
-    assert_eq(result.email, "alice@test.com")
+fn test_parse_with_rest_transform_and_merge() {
+    var parts = JSON.parseWithRest<Request>(
+        "{\"action\":\"activate\",\"userId\":7,\"trace\":\"t1\"}"
+    )
+    parts.rest.set("processed", true)
+    var merged = JSON.merge(parts)
+    assert_eq(JSON.require<string>(merged, ["action"]), "activate")
+    assert_eq(JSON.require<string>(merged, ["trace"]), "t1")
+    assert_eq(JSON.require<bool>(merged, ["processed"]), true)
 }
-
-// ===== 实际应用场景：动态表单 =====
-
-@test
-fn test_dynamic_form() {
-    fn createFormData<T>(fields: Array<string>, values: Array<T>) -> Json {
-        var form: Json = {}
-        for (i in 0..len(fields)) {
-            form[fields[i]] = values[i]
-        }
-        return form
-    }
-    
-    var fieldNames = ["username", "password", "remember"]
-    var fieldValues = ["admin", "secret", true]
-    
-    var formData = createFormData(fieldNames, fieldValues)
-    
-    assert_eq(formData.username, "admin")
-    assert_eq(formData.password, "secret")
-    assert_eq(formData.remember, true)
-}
-
-// ===== 实际应用场景：API 响应处理 =====
-
-@test
-fn test_api_response() {
-    // 模拟 API 响应
-    var response: Json = {
-        status: 200,
-        data: {
-            users: [
-                { id: 1, name: "Alice" },
-                { id: 2, name: "Bob" }
-            ],
-            total: 2
-        },
-        meta: {
-            requestId: "abc123"
-        }
-    }
-    
-    assert_eq(response.status, 200)
-    assert_eq(response.data.total, 2)
-    assert_eq(response.data.users[0].name, "Alice")
-    assert_eq(response.meta.requestId, "abc123")
-    
-    // 动态添加处理信息
-    response.processedAt = "2024-01-01"
-    assert_eq(response.processedAt, "2024-01-01")
-}
-
-// ===== 实际应用场景：对象工厂 =====
-
-@test
-fn test_object_factory() {
-    fn createEntity(type_name: string, id: int) -> Json {
-        var prefix = type_name + "_"
-        return {
-            [prefix + "id"]: id,
-            [prefix + "type"]: type_name,
-            created: true
-        }
-    }
-    
-    var user = createEntity("user", 1)
-    var order = createEntity("order", 100)
-    
-    assert_eq(user["user_id"], 1)
-    assert_eq(user["user_type"], "user")
-    assert_eq(user.created, true)
-    
-    assert_eq(order["order_id"], 100)
-    assert_eq(order["order_type"], "order")
-}
-
-// ===== 实际应用场景：计数器/聚合 =====
-
-@test
-fn test_word_count() {
-    var words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
-    var counts: Json = {}
-    
-    for (word in words) {
-        if (counts[word] == null) {
-            counts[word] = 1
-        } else {
-            counts[word] = int(counts[word]) + 1
-        }
-    }
-    
-    assert_eq(counts.apple, 3)
-    assert_eq(counts.banana, 2)
-    assert_eq(counts.cherry, 1)
-}
-
-// ===== 实际应用场景：深层嵌套访问 =====
-
-@test
-fn test_deep_nesting() {
-    var data: Json = {
-        level1: {
-            level2: {
-                level3: {
-                    value: "deep"
-                }
-            }
-        }
-    }
-    
-    // 静态访问
-    assert_eq(data.level1.level2.level3.value, "deep")
-    
-    // 动态访问
-    var k1 = "level1"
-    var k2 = "level2"
-    var k3 = "level3"
-    assert_eq(data[k1][k2][k3].value, "deep")
-}
-
-// ===== 严格类型与扩展类型对比 =====
-
-@test
-fn test_strict_vs_extensible() {
-    // 严格类型：只能有定义的字段
-    type StrictPoint = { x: int, y: int }
-    var sp: StrictPoint = { x: 1, y: 2 }
-    
-    // 可扩展类型：可以添加额外字段
-    type ExtensiblePoint = { x: int, y: int, ... }
-    var ep: ExtensiblePoint = { x: 1, y: 2 }
-    ep.z = 3
-    ep.label = "origin"
-    
-    assert_eq(sp.x, 1)
-    assert_eq(ep.x, 1)
-    assert_eq(ep.z, 3)
-    assert_eq(ep.label, "origin")
-}
-
-print("json_comprehensive: all tests passed")

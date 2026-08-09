@@ -16,16 +16,16 @@
 //      xr_type_satisfies_constraint tested a bare XrTypeKind, and Range is an
 //      XR_KIND_INSTANCE of the prelude class, so it never matched — the same
 //      shape also kept it out of Lengthable even though len(range) works.
-//      Json was missing from both for the same reason.
+//      JSON.Object follows Map's Iterable/Lengthable behavior.
 //
 // PASS_AT:    constraint checking accepts every for-in / len() domain the
-//             spec lists (Array, Map, Set, string, Json, Range, and classes
+//             spec lists (Array, Map, Set, string, Range, and classes
 //             with iterator()), and the for-in analyzer types a type
 //             parameter's item from its constraint.
 //
-// A user class may reuse the prelude name; `class Range { ... }` earns these
-// interfaces only by declaring them, never by name. Covered in
-// tests/compile_errors/type/024_generic_user_range_not_iterable.xr.
+// Builtin/prelude type names are reserved, so a source declaration cannot
+// shadow Range and create two incompatible meanings for the same type name.
+// The reservation contract is covered by the builtin_name_* compile errors.
 //
 // The constraint admits every for-in domain that runs through the iterator
 // protocol, including the Iterator<T> a generator returns. Channel<T> is the
@@ -100,7 +100,7 @@ fn test_iterate_map_keys_through_type_param() {
 
 @test
 fn test_iterate_json_fields_through_type_param() {
-    var j: Json = { "a": 1, "bb": 2, "ccc": 3 }
+    var j: JSON.Object = JSON.parseObject("{\"a\":1,\"bb\":2,\"ccc\":3}")
     assert_eq(keyLengths(j), 6)
 }
 
@@ -137,7 +137,7 @@ fn test_constraint_element_type_flows_into_body() {
 fn test_lengthable_builtin_domains() {
     var m: Map<string, int> = #{"x": 1, "y": 2}
     var s: Set<int> = #[1, 2, 3]
-    var j: Json = { "a": 1 }
+    var j: JSON.Object = JSON.parseObject("{\"a\":1}")
     assert_eq(sizeOf([1, 2, 3]), 3)
     assert_eq(sizeOf("hey"), 3)
     assert_eq(sizeOf(m), 2)

@@ -64,6 +64,20 @@ static void xa_publish_deprecated_attrs(XaSymbolLinks *links, XrAttribute **attr
     xa_symbol_links_set_deprecated(links, false, NULL);
 }
 
+static XrType *xa_normalize_structural_constraint(XaInferContext *ctx, XrType *constraint) {
+    if (!ctx || !ctx->analyzer || !constraint || !XR_TYPE_IS_STRUCT_OBJECT(constraint))
+        return constraint;
+    XrType *normalized = xr_type_new_struct_object_with_fields(
+        ctx->analyzer->isolate, constraint->object.field_names, constraint->object.field_types,
+        constraint->object.field_count);
+    if (!normalized)
+        return constraint;
+    if (constraint->object.type_name)
+        xr_type_set_object_type_name(ctx->analyzer->isolate, normalized,
+                                     constraint->object.type_name);
+    return normalized;
+}
+
 // Store `<T, U: A & B>` generic params, with every intersection-style
 // constraint resolved to a runtime XrType, on the declaration's symbol links.
 // Shared by functions, classes and methods so a method's own constraints are
@@ -93,6 +107,23 @@ static void xa_store_type_params_with_constraints(XaInferContext *ctx, XaSymbolL
                         gp->constraints[j]
                             ? xr_tref_resolve_in_analyzer(ctx->analyzer, gp->constraints[j])
                             : NULL;
+                    if (gp->constraints[j] && gp->constraints[j]->kind == XR_TREF_OBJECT &&
+                        !gp->constraints[j]->name && gp->constraints[j]->field_readonly) {
+                        for (uint8_t k = 0; k < gp->constraints[j]->nchildren; k++) {
+                            if (!gp->constraints[j]->field_readonly[k])
+                                continue;
+                            XrLocation loc = {.file = ctx->file_path,
+                                              .line = gp->constraints[j]->line,
+                                              .column = gp->constraints[j]->column};
+                            xa_analyzer_add_diagnostic(
+                                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                "structural generic constraints cannot declare const fields; "
+                                "field writability is inferred from the generic body",
+                                &loc);
+                            break;
+                        }
+                    }
+                    resolved[j] = xa_normalize_structural_constraint(ctx, resolved[j]);
                     xa_reject_error_type_success_type(ctx->analyzer, resolved[j],
                                                       "generic constraint", gp->name, node->line,
                                                       node->column);
@@ -331,7 +362,7 @@ static bool xa_type_can_be_weak(const XrType *type) {
 }
 
 /* Does an instance of this type carry a `weak` field, its bases included? */
-static bool xa_type_declares_weak_field(const XrType *type) {
+bool xa_type_declares_weak_field(const XrType *type) {
     if (!type)
         return false;
     if (type->kind != XR_KIND_INSTANCE && type->kind != XR_KIND_CLASS)
@@ -355,18 +386,19 @@ static bool xa_type_declares_weak_field(const XrType *type) {
  * that some other execution context already released. Rejecting it at the
  * declaration is the only place the user can still choose a different design.
  *
- * TRANSFERABLE is deliberately absent: a transferred object moves between
- * coroutines one owner at a time, so a death point still exists. */
+ * TRANSFERABLE is forbidden as well.  The weak table belongs to one execution
+ * heap; moving the holder would leave its handle in the old heap. */
 static void xa_check_weak_storage_domain(XaInferContext *ctx, const XrType *type, uint8_t domain,
                                          const XrLocation *loc) {
-    if (domain != XR_STORAGE_CONST_SHARED && domain != XR_STORAGE_SYNC_SHARED &&
-        domain != XR_STORAGE_MODULE_STATIC)
+    if (domain == XR_STORAGE_EXEC_LOCAL || domain == XR_STORAGE_DOMAIN_UNKNOWN)
         return;
     if (!xa_type_declares_weak_field(type))
         return;
     const char *domain_label = domain == XR_STORAGE_MODULE_STATIC  ? "module-static"
                                : domain == XR_STORAGE_CONST_SHARED ? "const-shared"
-                                                                   : "sync-shared";
+                               : domain == XR_STORAGE_SYNC_SHARED  ? "sync-shared"
+                               : domain == XR_STORAGE_TRANSFERABLE ? "transferable"
+                                                                   : "non-local";
     char msg[256];
     snprintf(msg, sizeof(msg),
              "a type with a weak field cannot live in %s storage: nothing there would clear the "
@@ -2593,7 +2625,7 @@ static XrType *xa_infer_return_object_type(XrVMRuntime *X, FunctionDeclNode *fn)
     ObjectLiteralNode *first = &rets[0]->as.object_literal;
     int fc = 0;
     for (int i = 0; i < first->count; i++) {
-        if ((!first->computed || !first->computed[i]) && first->keys[i]->type == AST_LITERAL_STRING)
+        if (first->keys[i]->type == AST_LITERAL_STRING)
             fc++;
     }
     if (fc == 0 || fc > MAX_FIELDS)
@@ -2604,20 +2636,16 @@ static XrType *xa_infer_return_object_type(XrVMRuntime *X, FunctionDeclNode *fn)
         ObjectLiteralNode *o = &rets[r]->as.object_literal;
         int ofc = 0;
         for (int i = 0; i < o->count; i++)
-            if ((!o->computed || !o->computed[i]) && o->keys[i]->type == AST_LITERAL_STRING)
+            if (o->keys[i]->type == AST_LITERAL_STRING)
                 ofc++;
         if (ofc != fc)
             return NULL;
         for (int i = 0; i < first->count; i++) {
-            if (first->computed && first->computed[i])
-                continue;
             if (first->keys[i]->type != AST_LITERAL_STRING)
                 continue;
             const char *fname = first->keys[i]->as.literal.raw_value.string_val;
             bool found = false;
             for (int j = 0; j < o->count; j++) {
-                if (o->computed && o->computed[j])
-                    continue;
                 if (o->keys[j]->type != AST_LITERAL_STRING)
                     continue;
                 if (strcmp(o->keys[j]->as.literal.raw_value.string_val, fname) == 0) {
@@ -2635,8 +2663,6 @@ static XrType *xa_infer_return_object_type(XrVMRuntime *X, FunctionDeclNode *fn)
     XrType *types[32];
     int idx = 0;
     for (int i = 0; i < first->count && idx < 32; i++) {
-        if (first->computed && first->computed[i])
-            continue;
         if (first->keys[i]->type != AST_LITERAL_STRING)
             continue;
         names[idx] = first->keys[i]->as.literal.raw_value.string_val;
@@ -2674,7 +2700,7 @@ static XrType *xa_infer_return_object_type(XrVMRuntime *X, FunctionDeclNode *fn)
         }
         idx++;
     }
-    return xr_type_new_struct_object_with_fields(X, names, types, fc, XR_OBJECT_ROW_EXACT);
+    return xr_type_new_struct_object_with_fields(X, names, types, fc);
 }
 
 // Phase 2: Collect function body (parameters and body declarations).
@@ -3872,6 +3898,11 @@ skip_interfaces:
         XrAggregateLayout *layout = xr_calloc(1, sizeof(XrAggregateLayout));
         if (!layout)
             goto skip_layout;
+        layout->nominal_name = cls->name ? xr_strdup(cls->name) : NULL;
+        if (cls->name && !layout->nominal_name) {
+            xr_free(layout);
+            goto skip_layout;
+        }
         layout->field_count = (uint16_t) info->field_count;
         ClassDeclNode *st = is_union_decl ? &node->as.union_decl : &node->as.struct_decl;
         if (is_union_decl) {
@@ -3898,7 +3929,7 @@ skip_interfaces:
          * analyzer teardown), so field names are layout-owned copies. */
         layout->field_names = xr_calloc((size_t) info->field_count, sizeof(const char *));
         if (!layout->field_names) {
-            xr_free(layout);
+            xr_aggregate_layout_free_owned(layout);
             goto skip_layout;
         }
         for (int i = 0; i < info->field_count; i++) {

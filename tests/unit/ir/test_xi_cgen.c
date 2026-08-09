@@ -2712,14 +2712,14 @@ TEST(cgen_standalone_prelude_enum_globals_generate_static_members) {
      * whether ANY of its variants carries a payload -- see
      * cg_mark_prelude_enum_scalar_sidecar. SendResult is payload-free
      * throughout and lowers to the scalar layout; Recv.Value carries one, so
-     * Recv keeps the boxed form and its payload-free members still need stable
-     * enum keys. Asserting both halves is what keeps a future change from
-     * silently moving an enum between them. */
+     * Recv keeps the boxed form and its payload-free members retain nominal
+     * enum identity in the lightweight enum map. */
     assert(contains(code, "xrt_enum_scalar_box(&_xprelude_enum_scalar_layout_") &&
            "a payload-free prelude enum lowers to the scalar layout");
     assert(!contains(code, "_ev_SendResult_") &&
            "a scalar-lowered enum must not also emit boxed member globals");
-    assert(contains(code, "_ev_Recv_Empty") && "no-payload Recv members must be stable enum keys");
+    assert(contains(code, "xrt_enum_box_new(0, \"Recv\", \"Empty\", 1)") &&
+           "no-payload Recv members must retain boxed nominal identity");
     assert(!contains(code, "xr_aot_load_builtin_field(ctx,") &&
            "standalone AOT must not require a coroutine isolate for prelude enum fields");
 
@@ -4414,7 +4414,7 @@ TEST(cgen_checked_typed_array_store_proves_nonnull_data) {
     xi_func_free(ir);
 }
 
-TEST(cgen_stringbuilder_and_builtin_iterator_methods_are_direct_nothrow) {
+TEST(cgen_builtin_iterator_pull_methods_preserve_error_polls) {
     const char *src = "fn copyRunes(text: string) -> string {\n"
                       "    var out = StringBuilder()\n"
                       "    var iter = text.runes()\n"
@@ -4439,8 +4439,9 @@ TEST(cgen_stringbuilder_and_builtin_iterator_methods_are_direct_nothrow) {
     assert(fn != NULL && "copyRunes definition should exist");
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "copyRunes function body should be bounded");
-    assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "exact built-in StringBuilder/Iterator helpers must not retain impossible error polls");
+    assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 2 &&
+           "Iterator.hasNext/next must poll the error channel because the static handle may be "
+           "generator-backed");
     assert(count_between(fn, fn_end, "xrt_release(") >= 2 &&
            "fresh StringBuilder and Iterator owners must both be released");
 
@@ -5996,6 +5997,44 @@ TEST(cgen_static_method_call_elides_class_descriptor_receiver) {
     xi_func_free(app_ir);
 }
 
+TEST(cgen_map_class_static_factory_is_not_constructor) {
+    const char *src = "class Box {\n"
+                      "    kind: string\n"
+                      "    value: int\n"
+                      "    constructor(kind: string) {\n"
+                      "        this.kind = kind\n"
+                      "        this.value = 0\n"
+                      "    }\n"
+                      "    static Int(value: int) -> Box {\n"
+                      "        var out = Box(\"int\")\n"
+                      "        out.value = value\n"
+                      "        return out\n"
+                      "    }\n"
+                      "}\n"
+                      "fn make() -> Box { return Box.Int(42) }\n"
+                      "print(make().value)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "map-backed class static factory should generate");
+    const char *make = find_static_function_definition(code, "make_");
+    TEST_REQUIRE(make != NULL, "make definition should exist");
+    const char *make_end = next_static_after(make);
+    TEST_REQUIRE(make_end != NULL, "make function body should be bounded");
+    TEST_REQUIRE(!contains_between(make, make_end, "Box_constructor_m"),
+                 "static factory call must not be rewritten as a constructor");
+    TEST_REQUIRE(!contains_between(make, make_end, "_portable_map_inst_"),
+                 "caller must not allocate a second map-backed instance");
+
+    printf("  Generated map-backed static factory call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     const char *src = "struct Cell {\n"
                       "    a: int\n"
@@ -6161,6 +6200,50 @@ TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
     xi_func_free(ir);
 }
 
+TEST(cgen_native_receiver_closure_capture_preserves_arc) {
+    const char *src = "class Box {\n"
+                      "    n: int\n"
+                      "    constructor(n: int) { this.n = n }\n"
+                      "    bump() -> int {\n"
+                      "        defer { this.n = this.n + 100 }\n"
+                      "        return this.n\n"
+                      "    }\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    var b = Box(5)\n"
+                      "    return b.bump()\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "native receiver closure capture should generate");
+
+    const char *bump = find_static_function_definition(code, "test_bump_");
+    assert(bump != NULL && "bump method definition should be present");
+    const char *bump_end = next_static_after(bump);
+    const char *retain = strstr(bump, "xrt_retain(xrt_box_obj(");
+    const char *capture = strstr(bump, "_c->upvals[0] = xrt_box_obj(");
+    assert(retain != NULL && retain < bump_end && capture != NULL && capture < bump_end &&
+           retain < capture &&
+           "borrowed native receiver must be retained before an owning closure capture");
+
+    const char *run = find_static_function_definition(code, "test_run_");
+    assert(run != NULL && "run function definition should be present");
+    const char *run_end = next_static_after(run);
+    assert(count_between(run, run_end, "xrt_obj_alloc(") == 1 &&
+           count_between(run, run_end, "xrt_native_test_Box _ci") == 0 &&
+           "a receiver retained by its method must have a heap object header");
+
+    printf("  Generated native receiver capture ARC path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_class_constructor_returns_heap_native_instance) {
     const char *src = "class Counter {\n"
                       "    value: int\n"
@@ -6203,14 +6286,12 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
      * the text outright also outlawed that storage tag, which a constructor
      * inlined into its caller legitimately emits, so the rule is spelled as
      * "every boxing is a storage tag" instead. */
-    assert(
-        count_between(code, code + strlen(code), "xrt_box_obj(_inst)") ==
-            count_between(code, code + strlen(code), "xrt_value_set_storage(xrt_box_obj(_inst)") &&
-        "the only boxing of a native instance is the storage-class tag");
-    assert((contains(code, "_inst; })") || contains(code, "*_portable_inst_")) &&
-           "native class constructor values should stay as pointers inside typed AOT code; the "
-           "portable lowering binds the instance to a typed pointer local instead of a "
-           "statement expression");
+    assert(count_between(code, code + strlen(code), "xrt_box_obj(_portable_inst_") ==
+               count_between(code, code + strlen(code),
+                             "xrt_value_set_storage(xrt_box_obj(_portable_inst_") &&
+           "the only boxing of a native instance is the storage-class tag");
+    assert(contains(code, "= _portable_inst_") &&
+           "native class constructor values should stay as pointers inside typed AOT code");
     assert(!contains(code, "heap_type == XR_TINSTANCE") &&
            "closed-world typed class flow should not retain boxed instance discrimination");
     assert(!contains(code, "xrt_instanceof(") &&
@@ -6227,8 +6308,8 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
     /* Same rule as above, scoped to the producer: it returns a native pointer
      * (the signature matched on says so) and boxes only to stamp the storage
      * class on the header. */
-    assert(count_between(make, make_end, "xrt_box_obj(_inst)") ==
-               count_between(make, make_end, "xrt_value_set_storage(xrt_box_obj(_inst)") &&
+    assert(count_between(make, make_end, "xrt_box_obj(_portable_inst_") ==
+               count_between(make, make_end, "xrt_value_set_storage(xrt_box_obj(_portable_inst_") &&
            "the producer boxes only to stamp the storage class");
     assert(count_between(make, make_end, "xrt_map_new(") == 0 &&
            "escaping native class constructor must not allocate a map instance");
@@ -6380,6 +6461,12 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
                           "xrt_native_test_Bag_promote_storage, "
                           "(uint32_t)sizeof(xrt_native_test_Bag))") &&
            "class hot type registration should wire destructor and storage promoter");
+    assert(contains(code, "static void *xrt_native_test_Bag_runtime_clone(void *obj)") &&
+           contains(code, "xrt_value_clone_for_coro(xr_mkptr((src)->f0, XR_TAG_ARRAY))") &&
+           "language-level copy should recursively clone owned native class fields");
+    assert(contains(code, "xrt_type_set_runtime_clone(_tid, "
+                          "xrt_native_test_Bag_runtime_clone)") &&
+           "native classes should register their language-level copy callback");
     assert(contains(code, "xrt_type_set_name(_tid, \"Bag\", NULL)") &&
            "default hosted AOT should install class name metadata");
 
@@ -7043,6 +7130,28 @@ TEST(cgen_closure_values_and_indirect_calls_use_portable_c) {
                  "closure construction and indirect calls emit standard C11");
     TEST_REQUIRE(contains(code, ".sync_entry=(void (*)(void))"),
                  "callable descriptors use a standard generic function pointer");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_cell_backed_function_upvalue_uses_boxed_indirect_call) {
+    const char *src = "fn outer() {\n"
+                      "    fn cleanup(msg: string) { print(msg) }\n"
+                      "    fn worker() { defer cleanup(\"upval-cleanup\") }\n"
+                      "    worker()\n"
+                      "}\n"
+                      "outer()\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "cell-backed function-upvalue fixture compiled");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "CELL_GET call target generated through the boxed closure entry");
+    TEST_REQUIRE(contains(code, "->callable->sync_entry"),
+                 "cell-backed function upvalue invokes its closure descriptor");
 
     xr_free(code);
     xi_func_free(ir);
@@ -9209,6 +9318,117 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_owner_forward_clears_moved_frame_root) {
+    const char *src = "fn worker() -> string {\n"
+                      "    var value = \"hello\" + \"_owner\"\n"
+                      "    Coro.yield()\n"
+                      "    var result = value\n"
+                      "    return result\n"
+                      "}\n"
+                      "var task = go worker()\n"
+                      "var result = await task\n"
+                      "print(result)\n";
+
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
+    TEST_REQUIRE(ir != NULL, "owner-forward coroutine IR compilation failed");
+
+    const XiFunc *worker = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "worker") == 0) {
+            worker = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(worker != NULL, "owner-forward coroutine worker function missing");
+
+    const XiValue *retained_source = NULL;
+    const XiValue *moved_source = NULL;
+    const XiValue *forward_source = NULL;
+    const XiValue *forward = NULL;
+    XiBlock *forward_block = NULL;
+    uint32_t retain_index = UINT32_MAX;
+    uint32_t source_release_index = UINT32_MAX;
+    for (uint32_t bi = 0; bi < worker->nblocks && !forward; bi++) {
+        XiBlock *block = worker->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_OWNER_FORWARD || value->nargs < 1 || !value->args[0])
+                continue;
+            const XiValue *owner = value->args[0];
+            while (owner &&
+                   (owner->op == XI_BOX || owner->op == XI_UNBOX ||
+                    xi_copy_is_identity_alias(owner)) &&
+                   owner->nargs >= 1)
+                owner = owner->args[0];
+            if (!owner || !owner->type || owner->type->kind != XR_KIND_STRING)
+                continue;
+            const XiValue *prev = vi > 0 ? block->values[vi - 1] : NULL;
+            if (!prev || prev->op != XI_RETAIN || prev->nargs < 1 ||
+                (prev->args[0] != owner && prev->args[0] != value->args[0]))
+                continue;
+            retained_source = prev->args[0];
+            moved_source = value->args[0];
+            forward_source = value->args[0];
+            forward = value;
+            forward_block = block;
+            retain_index = vi - 1;
+            for (uint32_t ri = vi + 1; ri < block->nvalues; ri++) {
+                const XiValue *release = block->values[ri];
+                if (release && release->op == XI_RELEASE && release->nargs >= 1 &&
+                    release->args[0] == retained_source) {
+                    source_release_index = ri;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+    TEST_REQUIRE(retained_source && moved_source && forward_source && forward && forward_block &&
+                     retain_index != UINT32_MAX && source_release_index != UINT32_MAX,
+                 "fixture should contain a retained frame-owner forward");
+
+    /* Model the legal last-owner shape produced on the HTTP close edge:
+     * OWNER_FORWARD(source) without a balancing retain/release of source. The
+     * backend plan and suspension liveness are unchanged; only ownership of the
+     * already-planned frame slot transfers to the forward. */
+    memmove(&forward_block->values[source_release_index],
+            &forward_block->values[source_release_index + 1],
+            (forward_block->nvalues - source_release_index - 1) * sizeof(XiValue *));
+    forward_block->nvalues--;
+    memmove(&forward_block->values[retain_index], &forward_block->values[retain_index + 1],
+            (forward_block->nvalues - retain_index - 1) * sizeof(XiValue *));
+    forward_block->nvalues--;
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "AOT owner-forward coroutine should generate");
+    const char *resume = find_static_function_definition(code, "static XrAotResult test_worker_");
+    TEST_REQUIRE(resume != NULL, "owner-forward coroutine resume definition missing");
+    const char *resume_end = next_static_after(resume);
+
+    char move_line[64];
+    char clear_tagged_line[64];
+    char clear_ptr_line[64];
+    snprintf(move_line, sizeof(move_line), "v%u = v%u;", forward->id, forward_source->id);
+    snprintf(clear_tagged_line, sizeof(clear_tagged_line), "v%u = XR_NULL_VAL;", moved_source->id);
+    snprintf(clear_ptr_line, sizeof(clear_ptr_line), "v%u = NULL;", moved_source->id);
+    const char *move_pos = strstr(resume, move_line);
+    const char *clear_tagged_pos = move_pos ? strstr(move_pos, clear_tagged_line) : NULL;
+    const char *clear_ptr_pos = move_pos ? strstr(move_pos, clear_ptr_line) : NULL;
+    const char *clear_pos = clear_tagged_pos ? clear_tagged_pos : clear_ptr_pos;
+    const char *return_pos = clear_pos ? strstr(clear_pos, "return xr_aot_done(") : NULL;
+    TEST_REQUIRE(move_pos && move_pos < resume_end, "frame owner forward assignment missing");
+    TEST_REQUIRE(clear_pos && clear_pos < resume_end,
+                 "moved frame owner must be cleared before frame teardown");
+    TEST_REQUIRE(return_pos && return_pos < resume_end,
+                 "forwarded owner must remain available after the source frame slot is cleared");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_go_clones_tagged_args) {
     const char *src = "fn worker(xs: move Array<int>) -> int {\n"
                       "    xs.push(99)\n"
@@ -9793,6 +10013,46 @@ TEST(cgen_hosted_string_array_boundary_uses_deep_value_bridge) {
         hosted_init_context ? strstr(hosted_init_context, "xrt_has_pending_error()") : NULL;
     TEST_REQUIRE(hosted_init_call && hosted_init_check && hosted_init_call < hosted_init_check,
                  "hosted initialization executes the module graph before exports");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_hosted_byte_slice_boundary_uses_layout_neutral_view) {
+    const char *src = "fn bridge(data: Slice<byte>) -> int { return len(data) }\n"
+                      "var text = \"abc\"\n"
+                      "bridge(text.bytes())\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "hosted byte-slice fixture compiled");
+
+    XiFunc *bridge = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "bridge") == 0) {
+            bridge = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(bridge != NULL, "hosted byte-slice bridge function lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "bridge",
+        .symbol = "xr_hosted_byte_slice_bridge",
+        .visibility = "hidden",
+        .abi = "hosted-vm-v1",
+        .header = true,
+    };
+    bridge->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status_and_stats_for_artifact(ir, "test", &had_error, NULL,
+                                                               XAOT_ARTIFACT_HOSTED_FRAGMENT);
+    TEST_REQUIRE(code != NULL && !had_error, "hosted byte-slice C bridge generated");
+    TEST_REQUIRE(contains(code, "XrHostedFragmentByteSpanView _hosted_byte_span_0"),
+                 "byte slice is borrowed through the hosted byte-span ABI");
+    TEST_REQUIRE(contains(code, "context->ops->byte_span_view"),
+                 "byte slice uses the host operation");
+    TEST_REQUIRE(!contains(code, "(xrt_array_t *)arguments[0].ptr"),
+                 "host container headers are never reinterpreted");
 
     xr_free(code);
     xi_func_free(ir);
@@ -11630,11 +11890,12 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
     xi_func_free(ir);
 }
 
-TEST(cgen_json_field_named_like_builtin_property_uses_json_lookup) {
-    const char *src = "fn read_count(data: Json) -> int {\n"
-                      "    return int(data.count)\n"
+TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
+    const char *src = "type Counted = {count: int}\n"
+                      "fn read_count(data: Counted) -> int {\n"
+                      "    return data.count\n"
                       "}\n"
-                      "var data: Json = {count: 10}\n"
+                      "var data: Counted = {count: 10}\n"
                       "print(read_count(data))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -11643,14 +11904,60 @@ TEST(cgen_json_field_named_like_builtin_property_uses_json_lookup) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Json field access should generate");
-    assert((contains(code, "xrt_json_get_shape_guard_owned(") ||
-            contains(code, "xrt_json_get_name_owned(")) &&
-           "Json fields must use Json lookup even when their name is a builtin symbol");
+    assert(!had_error && "structural field access should generate");
+    assert(contains(code, "xrt_object_get_field(") &&
+           "structural fields must use their verified ordinal");
+    assert(!contains(code, "xrt_object_get_name_owned(") &&
+           "structural fields must not fall back to name lookup");
     assert(!contains(code, "xrt_getprop(v0, 234)") &&
-           "Json.count must not lower as the builtin count property");
+           "a structural count field must not lower as the builtin count property");
 
     xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_json_decode_loop_keeps_per_iteration_retain) {
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 940, .frozen = true};
+    XrType bool_type = {.kind = XR_KIND_BOOL, .id = 941, .frozen = true};
+    XrType map_type = {.kind = XR_KIND_MAP, .id = 942, .frozen = true};
+    XrType object_type = {.kind = XR_KIND_STRUCT_OBJECT, .id = 943, .frozen = true};
+    XiFunc *ir = xi_func_new("json_decode_loop_arc", &unit_type);
+    TEST_REQUIRE(ir != NULL, "manual JSON decode ARC function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    XiBlock *header = xi_block_new(ir);
+    XiBlock *body = xi_block_new(ir);
+    XiBlock *exit = xi_block_new(ir);
+    TEST_REQUIRE(entry && header && body && exit, "manual JSON decode ARC blocks allocated");
+
+    XiValue *object = xi_value_new(ir, entry, XI_MAP_NEW, &map_type, 0);
+    XiValue *cond = xi_const_bool(ir, header, true, &bool_type);
+    XiValue *retain = xi_value_new(ir, body, XI_RETAIN, &map_type, 1);
+    XiValue *decode = xi_value_new(ir, body, XI_JSON_DECODE, &object_type, 1);
+    XiValue *release = xi_value_new(ir, exit, XI_RELEASE, &map_type, 1);
+    TEST_REQUIRE(object && cond && retain && decode && release,
+                 "manual JSON decode ARC values allocated");
+    retain->args[0] = object;
+    decode->args[0] = object;
+    release->args[0] = object;
+    xi_block_set_jump(entry, header);
+    xi_block_set_if(header, cond, body, exit);
+    xi_block_set_jump(body, header);
+    xi_block_set_return(exit, NULL);
+    entry->sealed = header->sealed = body->sealed = exit->sealed = true;
+
+    int eliminated = xi_arc_elim(ir);
+    TEST_REQUIRE(eliminated == 0,
+                 "single-consumer elimination must not remove a retain in a CFG cycle");
+    bool retained = false;
+    for (uint32_t i = 0; i < body->nvalues; i++) {
+        if (body->values[i] == retain) {
+            retained = true;
+            break;
+        }
+    }
+    TEST_REQUIRE(retained,
+                 "loop-carried JSON object must retain once before every consuming decode");
+
     xi_func_free(ir);
 }
 
@@ -11726,6 +12033,7 @@ int main(void) {
     run_cgen_inline_attribute_forces_native_expansion();
     run_cgen_c_export_wrapper_keeps_default_visibility();
     run_cgen_hosted_string_array_boundary_uses_deep_value_bridge();
+    run_cgen_hosted_byte_slice_boundary_uses_layout_neutral_view();
     run_cgen_hosted_runtime_capability_installs_scoped_vm_context();
     run_cgen_hosted_coroutine_export_publishes_resumable_continuation();
     run_cgen_hosted_class_boundary_uses_nominal_opaque_proxy();
@@ -11763,7 +12071,7 @@ int main(void) {
     run_cgen_parallel_for_body_closure_stack_allocates();
     run_cgen_typed_array_uses_raw_storage_fast_path();
     run_cgen_checked_typed_array_store_proves_nonnull_data();
-    run_cgen_stringbuilder_and_builtin_iterator_methods_are_direct_nothrow();
+    run_cgen_builtin_iterator_pull_methods_preserve_error_polls();
     run_cgen_err_check_releases_live_arc_owners_on_cold_edge();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
     run_cgen_string_copy_bytes_preserves_byte_storage_fast_path();
@@ -11801,9 +12109,11 @@ int main(void) {
     run_cgen_fixed_array_local_return_clones_borrowed_stack_storage();
     run_cgen_fixed_array_index_ops_elide_boxed_operands();
     run_cgen_static_method_call_elides_class_descriptor_receiver();
+    run_cgen_map_class_static_factory_is_not_constructor();
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
+    run_cgen_native_receiver_closure_capture_preserves_arc();
     run_cgen_class_constructor_returns_heap_native_instance();
     run_cgen_native_class_ref_field_constructor_result_uses_ptr_storage();
     run_cgen_native_class_collection_ref_fields_use_arc();
@@ -11818,6 +12128,7 @@ int main(void) {
     run_cgen_typename_as_and_slice_use_direct_drivers();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();
+    run_cgen_cell_backed_function_upvalue_uses_boxed_indirect_call();
     run_cgen_range_uses_direct_aot_driver();
     run_cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load();
     run_cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store();
@@ -11865,6 +12176,7 @@ int main(void) {
     run_cgen_sync_blocking_direct_methods_mark_aot_coroutines();
     run_cgen_runtime_managed_types_skip_arc();
     run_cgen_coro_frame_release_uses_aot_arc();
+    run_cgen_coro_owner_forward_clears_moved_frame_root();
     run_cgen_coro_go_clones_tagged_args();
     run_cgen_coro_go_sync_function_uses_wrapper_desc();
     run_cgen_coro_go_sync_scalar_wrapper_skips_param_roots();
@@ -11915,7 +12227,8 @@ int main(void) {
     run_cgen_coro_result_group_recv_i64_optional_uses_typed_abi();
     run_cgen_work_queue_native_methods_use_aot_helpers();
     run_cgen_coro_task_status_uses_native_enum_status();
-    run_cgen_json_field_named_like_builtin_property_uses_json_lookup();
+    run_cgen_structural_field_named_like_builtin_property_uses_ordinal();
+    run_cgen_json_decode_loop_keeps_per_iteration_retain();
 
     teardown();
 

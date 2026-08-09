@@ -162,14 +162,11 @@ static XrValue eval_member_access(XrEvalContext *ctx, XrValue obj, const char *n
         return xr_null();
     }
 
-    // Instance (including Json dynamic-layout objects)
+    // Instance
     if (XR_IS_PTR(obj)) {
         XrObjHeader *hdr = XR_TO_PTR(obj);
         if (hdr->type == XR_TINSTANCE) {
             XrInstance *inst = (XrInstance *) hdr;
-            if (inst->klass && inst->klass->builtin_kind == XR_BK_JSON) {
-                return xr_json_get_by_key(ctx->isolate, (XrJson *) hdr, name);
-            }
             return xr_instance_get_field(ctx->isolate, inst, name);
         }
 

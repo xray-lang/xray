@@ -5,6 +5,7 @@
 */
 
 enum ForceErr { Msg(string) }
+type User = { id: int, name: string }
 
 fn maybeFailInt(should_throw: bool) -> int {
     if (should_throw) {
@@ -13,7 +14,7 @@ fn maybeFailInt(should_throw: bool) -> int {
     return 42
 }
 
-fn maybeFailJson(should_throw: bool) -> Json {
+fn maybeFailJson(should_throw: bool) -> User {
     if (should_throw) {
         throw ForceErr.Msg("deeper failure")
     }
@@ -55,7 +56,7 @@ fn test_propagation_throw_caught() {
 @test
 fn test_propagation_nested_throw() {
     print("4. nested call propagates the inner exception")
-    fn helper() -> Json {
+    fn helper() -> User {
         return maybeFailJson(true)
     }
     var saw_catch = false

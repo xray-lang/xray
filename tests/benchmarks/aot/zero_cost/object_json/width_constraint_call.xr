@@ -1,0 +1,21 @@
+fn nameWidth<T: { name: string }>(value: T) -> int {
+    return len(value.name)
+}
+
+fn run(n: int) -> int {
+    var ada = { name: "Ada", age: 37 }
+    var bob = { name: "Bob", active: true }
+    var i = 0
+    var total = 0
+    while (i < n) {
+        total = total + nameWidth(ada) + nameWidth(bob)
+        i = i + 1
+    }
+    return total
+}
+
+var iterations = 2000000
+if (len(process.args) > 0) {
+    iterations = int(process.args[0]) ?? iterations
+}
+print(run(iterations))

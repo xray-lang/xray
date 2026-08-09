@@ -503,8 +503,6 @@ static void sig_type_ref(SigBuf *s, const XrTypeRef *ref) {
         sig_add(s, "/s%u", (unsigned) ref->scalar_rep);
     if (ref->builtin_spelling)
         sig_add(s, "/b%u", (unsigned) ref->builtin_spelling);
-    if (ref->object_row_mode == XR_OBJECT_ROW_OPEN)
-        sig_add(s, "/ext");
     if (ref->requires_nothrow)
         sig_add(s, "/nothrow");
     if (ref->fixed_length)
@@ -792,9 +790,6 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             return true;
         case AST_OBJECT_LITERAL:
             sig_add(s, " n=%d", n->as.object_literal.count);
-            for (int i = 0; i < n->as.object_literal.count; i++)
-                sig_add(s, " c%d",
-                        n->as.object_literal.computed && n->as.object_literal.computed[i] ? 1 : 0);
             return true;
         case AST_MAP_LITERAL:
             sig_add(s, " n=%d", n->as.map_literal.count);
@@ -946,9 +941,6 @@ static bool write_payload(const AstNode *n, SigBuf *s) {
             for (int i = 0; i < n->as.type_alias.field_count; i++) {
                 sig_name(s, "f",
                          n->as.type_alias.field_names ? n->as.type_alias.field_names[i] : NULL);
-                sig_add(s, " opt=%d",
-                        n->as.type_alias.field_optional && n->as.type_alias.field_optional[i] ? 1
-                                                                                              : 0);
             }
             sig_generic_params(s, n->as.type_alias.type_params, n->as.type_alias.type_param_count);
             return true;

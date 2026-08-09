@@ -34,34 +34,38 @@ static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
 
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
+    {"start", XLSP_SYM_FUNCTION, "fn(config: ClusterConfig): bool", "Start cluster node", NULL, 0},
+    {"join", XLSP_SYM_FUNCTION, "fn(addr: string): bool", "Join cluster by address", NULL, 0},
     {"self", XLSP_SYM_FUNCTION, "fn(): string", "Get own node name", NULL, 0},
     {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>", "List cluster node names", NULL, 0},
+    {"channel", XLSP_SYM_FUNCTION, "fn(name: string, size?: int): Channel", "Create or get named distributed channel", NULL, 0},
     {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", NULL, 0},
     {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "Start LAN auto-discovery", NULL, 0},
+    {"stop", XLSP_SYM_FUNCTION, "fn(): ()", "Stop cluster node", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): ClusterInfo?", "Get cluster status info", NULL, 0},
-    {"send", XLSP_SYM_FUNCTION, "fn(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", NULL, 0},
+    {"publish", XLSP_SYM_FUNCTION, "fn(topic: string, value: JSON.Value): bool", "Publish to topic", NULL, 0},
+    {"subscribe", XLSP_SYM_FUNCTION, "fn(pattern: string): Channel", "Subscribe to topic pattern", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
+    {"validChannelName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): NodeAddress", "", NULL, 0},
     {"validTopicName", XLSP_SYM_FUNCTION, "fn(topic: string): bool", "", NULL, 0},
     {"validTopicPattern", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
     {"topicMatches", XLSP_SYM_FUNCTION, "fn(pattern: string, topic: string): bool", "", NULL, 0},
-    {"start", XLSP_SYM_FUNCTION, "fn(config: ClusterConfig): bool", "", NULL, 0},
-    {"join", XLSP_SYM_FUNCTION, "fn(addr: string): bool", "", NULL, 0},
-    {"stop", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
-    {"listen", XLSP_SYM_FUNCTION, "fn(pattern: string, capacity?: int): Channel<Buffer>?", "", NULL, 0},
     {"HANDSHAKE_VERSION", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"TOPIC_DEFAULT_HOP_LIMIT", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"NODE_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
+    {"CHANNEL_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"TOPIC_PATTERN_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
     {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
+    {"ClusterTlsOptions", XLSP_SYM_CLASS, "type ClusterTlsOptions = { enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }", "Typed TLS configuration for a cluster node", NULL, 0},
+    {"ClusterConfig", XLSP_SYM_CLASS, "type ClusterConfig = { name: string, port: int, secret: string?, tls: ClusterTlsOptions? }", "Typed cluster node startup configuration", NULL, 0},
     {"ClusterTlsStatus", XLSP_SYM_CLASS, "type ClusterTlsStatus = { enabled: bool, clientReady: bool, serverReady: bool }", "Effective TLS posture of a running cluster node", NULL, 0},
     {"ClusterNodeInfo", XLSP_SYM_CLASS, "type ClusterNodeInfo = { name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }", "Typed diagnostic snapshot for one remote cluster node", NULL, 0},
-    {"ClusterInfo", XLSP_SYM_CLASS, "type ClusterInfo = { self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, listeners: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }", "Typed diagnostic snapshot for the local cluster runtime", NULL, 0},
-    {"ClusterDelivery", XLSP_SYM_CLASS, "enum ClusterDelivery", "Outcome of handing one opaque service envelope to the cluster transport", NULL, 0},
+    {"ClusterInfo", XLSP_SYM_CLASS, "type ClusterInfo = { self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }", "Typed diagnostic snapshot for the local cluster runtime", NULL, 0},
     {"ClusterNodeState", XLSP_SYM_CLASS, "enum ClusterNodeState", "Lifecycle state of a remote cluster node", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 26
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 30
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {
@@ -155,6 +159,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"parseMethod", XLSP_SYM_FUNCTION, "fn(token: string): HttpMethod?", "", NULL, 0},
     {"textResponse", XLSP_SYM_FUNCTION, "fn(body: string, status?: int, headers?: Headers?): HttpResponse", "", NULL, 0},
     {"jsonResponse", XLSP_SYM_FUNCTION, "fn(value: T, status?: int, headers?: Headers?): HttpResponse", "", NULL, 0},
+    {"json", XLSP_SYM_FUNCTION, "fn(value: T, status?: int): HttpResponse", "", NULL, 0},
     {"request", XLSP_SYM_FUNCTION, "fn(options: HttpRequestOptions): HttpResponse", "", NULL, 0},
     {"parseChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int, maxTrailerHeaders?: int): ChunkedBody?", "Decode a complete Transfer-Encoding: chunked body.", NULL, 0},
     {"decodeChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int): string?", "Decode a chunked body and discard trailers.", NULL, 0},
@@ -189,7 +194,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"RequestMessage", XLSP_SYM_CLASS, "type RequestMessage", "Parsed HTTP/1.x request head and decoded body.", NULL, 0},
     {"ResponseMessage", XLSP_SYM_CLASS, "type ResponseMessage", "Parsed HTTP/1.x response head and decoded body.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 40
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 41
 
 // http2 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http2_symbols[] = {
@@ -245,11 +250,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_io_symbols[] = {
 
 // log module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {
-    {"debug", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
-    {"info", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
-    {"warn", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
-    {"error", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
-    {"fatal", XLSP_SYM_FUNCTION, "fn(...args: Json): ()", "", NULL, 0},
+    {"debug", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
+    {"info", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
+    {"warn", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
+    {"error", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
+    {"fatal", XLSP_SYM_FUNCTION, "fn(...args: JSON.Value): ()", "", NULL, 0},
     {"setLevel", XLSP_SYM_FUNCTION, "fn(level: LogLevel): ()", "", NULL, 0},
     {"setFormat", XLSP_SYM_FUNCTION, "fn(format: LogFormat): ()", "", NULL, 0},
     {"setOutput", XLSP_SYM_FUNCTION, "fn(path: Path): ()", "", NULL, 0},
@@ -257,7 +262,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_log_symbols[] = {
     {"enableSource", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
     {"enableAsync", XLSP_SYM_FUNCTION, "fn(enabled?: bool): ()", "", NULL, 0},
     {"flush", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
-    {"child", XLSP_SYM_FUNCTION, "fn(...fields: Json): Logger", "", NULL, 0},
+    {"child", XLSP_SYM_FUNCTION, "fn(...fields: JSON.Value): Logger", "", NULL, 0},
     {"LogLevel", XLSP_SYM_CLASS, "type LogLevel", "Enum type", NULL, 0},
     {"LogFormat", XLSP_SYM_CLASS, "type LogFormat", "Enum type", NULL, 0},
     {"Logger", XLSP_SYM_CLASS, "type Logger", "Class type", NULL, 0},
@@ -366,7 +371,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"accept", XLSP_SYM_FUNCTION, "fn(listener: NetListener): NetConn?", "", NULL, 0},
     {"read", XLSP_SYM_FUNCTION, "fn(conn: NetConn, maxlen?: int): string?", "", NULL, 0},
     {"readInto", XLSP_SYM_FUNCTION, "fn(conn: NetConn, buffer: ref Array<byte>, maxlen?: int): int", "", NULL, 0},
-    {"readExactInto", XLSP_SYM_FUNCTION, "fn(conn: NetConn, buffer: ref Array<byte>, length: int): int", "", NULL, 0},
     {"write", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: string): int", "", NULL, 0},
     {"writeBytes", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: Array<byte>): int", "", NULL, 0},
     {"copy", XLSP_SYM_FUNCTION, "fn(src: NetConn, dst: NetConn, bufferSize?: int): int", "", NULL, 0},
@@ -398,7 +402,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"__CopyBidirectionalResult", XLSP_SYM_CLASS, "type __CopyBidirectionalResult = { aToB: int, bToA: int }", "Byte counts copied in each direction by copyBidirectional", NULL, 0},
     {"NetError", XLSP_SYM_CLASS, "enum NetError", "Typed failure from native network operations", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 37
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 36
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
@@ -491,7 +495,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_runtime_symbols[] = {
     {"liveBytes", XLSP_SYM_FUNCTION, "fn(): int", "Get live memory usage in bytes", NULL, 0},
     {"liveObjects", XLSP_SYM_FUNCTION, "fn(): int", "Get live object count", NULL, 0},
     {"sharedBytes", XLSP_SYM_FUNCTION, "fn(): int", "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak", NULL, 0},
-    {"staticBytes", XLSP_SYM_FUNCTION, "fn(): int", "Bytes allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", NULL, 0},
+    {"staticBytes", XLSP_SYM_FUNCTION, "fn(): int", "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): RuntimeInfo", "Get a typed snapshot of the current execution-local reclamation domain", NULL, 0},
     {"RuntimeInfo", XLSP_SYM_CLASS, "type RuntimeInfo = { liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }", "Typed snapshot of the current execution-local reclamation domain", NULL, 0},
 };

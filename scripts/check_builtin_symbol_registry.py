@@ -102,7 +102,9 @@ def render_registry(registry: builtin_symbols.Registry, lang: str) -> str:
     lines.append(f'| {t["col_symbol"]} | {t["col_kind"]} |')
     lines.append("|--|--|")
     for symbol in sorted(
-        registry.by_category("prelude_type") + registry.by_category("type"),
+        registry.by_category("prelude_type")
+        + registry.by_category("type")
+        + registry.by_category("namespace_type"),
         key=lambda s: s.name,
     ):
         kind = t["prelude"] if symbol.category == "prelude_type" else t["resolver"]
@@ -189,7 +191,7 @@ def stdlib_exported_names(root: Path) -> set[str]:
 
 CODE_FENCE_RE = re.compile(r"^```.*?^```", re.S | re.M)
 INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
-GENERIC_USE_RE = re.compile(r"\b([A-Z]\w*)<")
+GENERIC_USE_RE = re.compile(r"\b(?:(?P<qualifier>[A-Z]\w*)\.)?(?P<name>[A-Z]\w*)<")
 DECLARES_RE = re.compile(r"\b(?:export\s+)?(?:class|struct|enum|interface|type)\s+([A-Z]\w*)")
 
 # Appendix E exists to name other languages' constructs (Rust `Result<T, E>`,
@@ -217,11 +219,14 @@ def check_r2(root: Path, registry: builtin_symbols.Registry) -> list[str]:
         prose = _blank_code_fences(text)
         for lineno, line in enumerate(prose.splitlines(), start=1):
             for snippet in INLINE_CODE_RE.findall(line):
-                for name in GENERIC_USE_RE.findall(snippet):
-                    if name in known or name in declared:
+                for match in GENERIC_USE_RE.finditer(snippet):
+                    qualifier = match.group("qualifier")
+                    name = match.group("name")
+                    spelling = f"{qualifier}.{name}" if qualifier else name
+                    if spelling in known or (not qualifier and name in declared):
                         continue
                     errors.append(
-                        f"[R2] {path.relative_to(root)}:{lineno}: `{name}<...>` is not a built-in "
+                        f"[R2] {path.relative_to(root)}:{lineno}: `{spelling}<...>` is not a built-in "
                         f"symbol, a stdlib export, or declared in this section"
                     )
     return errors
@@ -233,7 +238,7 @@ def check_r3(root: Path, registry: builtin_symbols.Registry, xray: Path) -> list
     probes = sorted(probe_dir.glob("*.xr"))
     covered = {p.stem for p in probes}
     for symbol in registry.surface:
-        stem = symbol.name.lower()
+        stem = symbol.name.split(".", 1)[0].lower()
         if stem not in covered:
             errors.append(f"[R3] {PROBE_DIR}/{stem}.xr missing: no probe covers `{symbol.name}`")
     for probe in probes:

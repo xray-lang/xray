@@ -150,7 +150,7 @@ print(arr)                  // [1, 2, 3] 未变
 
 // 方法 2：const 零拷贝只读（可被捕获）
 const config = { rate: 100 }
-var t2 = go fn(c: Json) -> int {
+var t2 = go fn(c: JSON.Object) -> int {
     return c.rate
 }(config)
 
@@ -342,7 +342,7 @@ print(arr)                  // [1, 2, 3] unchanged
 
 // Pattern 2: const, zero-copy read-only (capturable)
 const config = { rate: 100 }
-var t2 = go fn(c: Json) -> int {
+var t2 = go fn(c: JSON.Object) -> int {
     return c.rate
 }(config)
 

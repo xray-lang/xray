@@ -69,7 +69,6 @@ XrTypeId xr_value_typeid(XrValue v) {
                 XrInstance *inst = (XrInstance *) v.ptr;
                 if (inst->klass) {
                     switch (inst->klass->builtin_kind) {
-                        case XR_BK_JSON:
                         case XR_BK_STRUCT_OBJECT:
                             return XR_TID_OBJECT;
                         case XR_BK_STRINGBUILDER:
@@ -103,12 +102,8 @@ XrTypeId xr_value_typeid(XrValue v) {
     return XR_TID_NULL;
 }
 
-/* Membership in the Json value domain: null, bool, int, float, string, a Json
- * array, or a Json object. Every answer is a constant-time read. The two
- * composite forms need one because their tags are shared with values outside
- * the domain -- a struct object is an object, and Array<int> is an array --
- * so each carries its own provenance: the object in its shape's domain, the
- * array in the element type id it was built with. */
+/* Membership in JSON.Value is a constant-time tag/provenance read. Objects use
+ * the JSON.Object Map representation; arrays carry JSON element provenance. */
 bool xr_value_in_json_domain(XrValue v) {
     XrTypeId tid = xr_value_typeid(v);
     switch (tid) {
@@ -116,10 +111,8 @@ bool xr_value_in_json_domain(XrValue v) {
         case XR_TID_BOOL:
         case XR_TID_STRING:
             return true;
-        case XR_TID_OBJECT: {
-            const XrInstance *inst = (v.tag == XR_TAG_PTR) ? (const XrInstance *) v.ptr : NULL;
-            return inst && inst->klass && inst->klass->builtin_kind == XR_BK_JSON;
-        }
+        case XR_TID_MAP:
+            return true;
         case XR_TID_ARRAY: {
             const XrArray *arr = (v.tag == XR_TAG_PTR) ? (const XrArray *) v.ptr : NULL;
             return arr && arr->elem_tid == XR_TID_JSON;

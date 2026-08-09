@@ -18,7 +18,7 @@
  *   Macro:    XJSON_*
  *
  *   The xjson_ prefix avoids collision with runtime/object/xjson.h
- *   (xr_json_*) which operates on GC-managed XrJson objects.
+ *   (xr_json_*) which operates on GC-managed XrObjectInstance objects.
  */
 
 #ifndef XJSON_DOM_H

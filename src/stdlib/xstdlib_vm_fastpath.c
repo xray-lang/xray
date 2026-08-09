@@ -68,6 +68,10 @@ typedef struct XrStdlibVmFastpathMethodEntry {
 } XrStdlibVmFastpathMethodEntry;
 
 extern void xr_stdlib_vm_fastpath_release_native(XrValue value);
+extern void xr_stdlib_vm_fastpath_retain_native(XrValue value);
+extern const XrHostedFragmentHostOps xr_stdlib_vm_fastpath_host_ops;
+extern const void *xr_stdlib_vm_fastpath_runtime_ops(void);
+extern void *xr_stdlib_vm_fastpath_current_coroutine(XrVMRuntime *isolate);
 
 static xr_once_t g_stdlib_vm_fastpath_init_once = XR_ONCE_INITIALIZER;
 static XR_THREAD_LOCAL const XrHostedFragmentContext *g_stdlib_vm_fastpath_init_context;
@@ -113,13 +117,28 @@ static void stdlib_hosted_proxy_body_destroy(void *raw_body) {
     }
 }
 
+static bool stdlib_hosted_proxy_body_deep_copy(XrCopyContext *ctx, XrInstance *src,
+                                               XrInstance *dst) {
+    (void) ctx;
+    XrStdlibHostedProxyBody *src_body = (XrStdlibHostedProxyBody *) xr_instance_native_body(src);
+    XrStdlibHostedProxyBody *dst_body = (XrStdlibHostedProxyBody *) xr_instance_native_body(dst);
+    if (!src_body || !dst_body || XR_IS_NULL(src_body->native_value) || !src_body->nominal_owner ||
+        !src_body->type_name)
+        return false;
+    xr_stdlib_vm_fastpath_retain_native(src_body->native_value);
+    dst_body->native_value = src_body->native_value;
+    dst_body->nominal_owner = src_body->nominal_owner;
+    dst_body->type_name = src_body->type_name;
+    return true;
+}
+
 static XrNativeBodyDesc g_stdlib_hosted_proxy_body_desc = {
     .body_size = sizeof(XrStdlibHostedProxyBody),
     .body_align = (uint16_t) _Alignof(XrStdlibHostedProxyBody),
-    .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
+    .copy_policy = XR_NATIVE_BODY_COPY_DEEP,
     .init = stdlib_hosted_proxy_body_init,
     .destroy = stdlib_hosted_proxy_body_destroy,
-    .deep_copy = NULL,
+    .deep_copy = stdlib_hosted_proxy_body_deep_copy,
 };
 
 static XrClassBuilder *stdlib_hosted_proxy_class_builder_new(XrVMRuntime *isolate,
@@ -360,6 +379,34 @@ static bool stdlib_host_array_set(void *host, XrValue value, uint64_t index, XrV
     return true;
 }
 
+static bool stdlib_host_byte_span_view(void *host, XrValue value,
+                                       XrHostedFragmentByteSpanView *out) {
+    (void) host;
+    if (!out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    if (XR_IS_SLICE_REF(value)) {
+        const XrSliceView *slice = XR_TO_SLICE_REF(value);
+        if (!slice || slice->length < 0 || XR_SLICE_REF_ELEM_TYPE(value) != XR_ELEM_U8 ||
+            XR_SLICE_REF_ELEM_SIZE(value) != 1 || (!slice->data && slice->length != 0))
+            return false;
+        out->data = (uint8_t *) slice->data;
+        out->length = (uint64_t) slice->length;
+        out->readonly = XR_SLICE_REF_IS_READONLY(value) ? 1u : 0u;
+        return true;
+    }
+    if (XR_IS_ARRAY(value) && value.ptr) {
+        const XrArray *array = (const XrArray *) value.ptr;
+        if (array->length < 0 || array->elem_type != XR_ELEM_U8 || array->elem_size != 1 ||
+            (!array->data && array->length != 0))
+            return false;
+        out->data = (uint8_t *) array->data;
+        out->length = (uint64_t) array->length;
+        return true;
+    }
+    return false;
+}
+
 static void stdlib_host_retain(void *host, XrValue value) {
     (void) host;
     xr_rc_retain_value(value);
@@ -382,6 +429,7 @@ const XrHostedFragmentHostOps xr_hosted_fragment_host_ops = {
     .array_get = stdlib_host_array_get,
     .array_new = stdlib_host_array_new,
     .array_set = stdlib_host_array_set,
+    .byte_span_view = stdlib_host_byte_span_view,
     .object_view = stdlib_host_object_view,
     .object_new = stdlib_host_object_new,
     .retain = stdlib_host_retain,

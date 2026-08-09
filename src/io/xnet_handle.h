@@ -8,7 +8,7 @@
  * xnet_handle.h - Typed network handle objects for scripts
  *
  * KEY CONCEPT:
- *   Replaces the old XrJson-based "{fd, type, tls}" handles that scripts
+ *   Replaces the old XrObjectInstance-based "{fd, type, tls}" handles that scripts
  *   could read by name. XrNetConn / XrNetListener are opaque heap objects
  *   carrying the underlying fd plus type-specific state. Scripts operate
  *   on them only through the net module's byte primitives (readInto,

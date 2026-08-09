@@ -1,24 +1,23 @@
 import datetime
 
-var dyn: Json = {
-    "floatYear": 2024.9,
-    "boolMonth": true,
-    "nullDay": null,
-    "amount": true
-}
+var dyn: JSON.Object = JSON.parseObject("{\"floatYear\":2024.9,\"boolMonth\":true,\"nullDay\":null,\"amount\":true}")
 
-var created = datetime.createUTC(dyn.floatYear, dyn.boolMonth, dyn.nullDay)
+var created = datetime.createUTC(
+    JSON.require(dyn, ["floatYear"]),
+    JSON.require(dyn, ["boolMonth"]),
+    JSON.require(dyn, ["nullDay"])
+)
 print(created.year)
 print(created.month)
 print(created.day)
 print(created.hour)
 
 var base = datetime.createUTC(2024, 1, 2)
-var shifted = base.add(dyn.amount, "days")
+var shifted = base.add(JSON.require(dyn, ["amount"]), "days")
 print(shifted.year)
 print(shifted.month)
 print(shifted.day)
 
-print(datetime.fromTimestamp(dyn.floatYear))
-print(datetime.fromTimestamp(dyn.boolMonth))
-print(datetime.fromTimestampMs(dyn.nullDay))
+print(datetime.fromTimestamp(JSON.require(dyn, ["floatYear"])))
+print(datetime.fromTimestamp(JSON.require(dyn, ["boolMonth"])))
+print(datetime.fromTimestampMs(JSON.require(dyn, ["nullDay"])))

@@ -1780,19 +1780,6 @@ static bool verify_derive_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
     return true;
 }
 
-static bool verify_json_dynamic_access_kind_valid(uint8_t kind) {
-    switch ((XgJsonDynamicAccessKind) kind) {
-        case XG_JSON_DYNAMIC_ACCESS_FIELD_GET:
-        case XG_JSON_DYNAMIC_ACCESS_FIELD_SET:
-        case XG_JSON_DYNAMIC_ACCESS_INDEX_GET:
-        case XG_JSON_DYNAMIC_ACCESS_INDEX_SET:
-        case XG_JSON_DYNAMIC_ACCESS_GET_DEFAULT:
-            return true;
-        default:
-            return false;
-    }
-}
-
 static bool verify_json_codec_row_kind_valid(uint8_t kind) {
     switch ((XgJsonCodecKind) kind) {
         case XG_JSON_CODEC_PARSE:
@@ -1841,13 +1828,13 @@ static bool verify_json_codec_shape_contract(const XgGlobalEvidence *ev,
                     (target_object_shape &&
                      (!output_shape || output_shape->domain != XG_OBJECT_DOMAIN_STRUCT ||
                       output_shape->type_key != codec->target_type_key ||
-                      (output_shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) == 0)) ||
+                      (output_shape->flags & XG_OBJECT_SHAPE_JSON_ENCODABLE) == 0)) ||
                     (!target_object_shape && output_shape))
                     return set_error(errbuf, errbuf_len,
                                      "AOT typed Json parse output Object shape is stale");
-            } else if (output_shape && output_shape->domain != XG_OBJECT_DOMAIN_JSON) {
+            } else if (output_shape) {
                 return set_error(errbuf, errbuf_len,
-                                 "AOT Json parse output uses a non-Json Object shape");
+                                 "AOT schema-less JSON parse must produce Map storage");
             }
             break;
         case XG_JSON_CODEC_DECODE:
@@ -1857,14 +1844,14 @@ static bool verify_json_codec_shape_contract(const XgGlobalEvidence *ev,
             if ((target_object_shape &&
                  (!output_shape || output_shape->domain != XG_OBJECT_DOMAIN_STRUCT ||
                   output_shape->type_key != codec->target_type_key ||
-                  (output_shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) == 0)) ||
+                  (output_shape->flags & XG_OBJECT_SHAPE_JSON_ENCODABLE) == 0)) ||
                 (!target_object_shape && output_shape))
                 return set_error(errbuf, errbuf_len,
                                  "AOT Json decode output Object shape is stale");
             break;
         case XG_JSON_CODEC_ENCODE:
             if (input_shape && input_shape->domain == XG_OBJECT_DOMAIN_STRUCT &&
-                (input_shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) == 0)
+                (input_shape->flags & XG_OBJECT_SHAPE_JSON_ENCODABLE) == 0)
                 return set_error(errbuf, errbuf_len,
                                  "AOT Json encode input Object shape is not encodable");
             break;
@@ -1886,35 +1873,6 @@ static bool verify_json_codec_shape_contract(const XgGlobalEvidence *ev,
 static bool verify_json_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
     if (!ev)
         return set_error(errbuf, errbuf_len, "AOT global evidence Json verifier has no evidence");
-    for (uint32_t i = 0; i < ev->njson_dynamic_accesses; i++) {
-        const XgJsonDynamicAccessSummary *access = &ev->json_dynamic_accesses[i];
-        const XgObjectShapeSummary *shape = NULL;
-        if (access->json_dynamic_access_id == XG_NO_ID)
-            return set_error(errbuf, errbuf_len, "AOT Json dynamic access evidence has no id");
-        if (!verify_json_dynamic_access_kind_valid(access->access_kind))
-            return set_error(errbuf, errbuf_len,
-                             "AOT Json dynamic access evidence has invalid kind");
-        for (uint32_t j = i + 1; j < ev->njson_dynamic_accesses; j++) {
-            if (ev->json_dynamic_accesses[j].json_dynamic_access_id ==
-                access->json_dynamic_access_id)
-                return set_error(errbuf, errbuf_len,
-                                 "AOT Json dynamic access evidence id is duplicated");
-        }
-        if (access->receiver_shape_id != XG_NO_ID) {
-            shape = xg_global_evidence_find_object_shape(ev, access->receiver_shape_id);
-            if (!shape || shape->domain != XG_OBJECT_DOMAIN_JSON)
-                return set_error(errbuf, errbuf_len,
-                                 "AOT Json dynamic access references stale Object shape");
-        }
-        if ((access->flags & XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY) != 0) {
-            if (access->field_ordinal != UINT16_MAX)
-                return set_error(errbuf, errbuf_len,
-                                 "AOT computed Json key claims a fixed field ordinal");
-        } else if (shape && access->key_name_id != 0 &&
-                   access->field_ordinal >= shape->field_count) {
-            return set_error(errbuf, errbuf_len, "AOT Json dynamic access field ordinal is stale");
-        }
-    }
     for (uint32_t i = 0; i < ev->njson_codecs; i++) {
         const XgJsonCodecSummary *codec = &ev->json_codecs[i];
         if (codec->codec_id == XG_NO_ID)
@@ -2029,213 +1987,19 @@ done:
     return ok;
 }
 
-typedef struct XaotObjectFlowVisit {
-    XgFuncId func_id;
-    uint16_t param_ordinal;
-} XaotObjectFlowVisit;
-
-static const XgCallsiteSummary *verify_find_object_flow_callsite(const XgGlobalEvidence *ev,
-                                                                 XgCallsiteId callsite_id) {
-    if (!ev || callsite_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < ev->ncallsites; i++) {
-        if (ev->callsites[i].callsite_id == callsite_id)
-            return &ev->callsites[i];
-    }
-    return NULL;
-}
-
-static XgFuncId verify_object_flow_callsite_target(const XgGlobalEvidence *ev,
-                                                   const XgCallsiteSummary *callsite) {
-    if (!ev || !callsite)
-        return XG_NO_ID;
-    if ((callsite->kind == XG_CALL_DIRECT_FUNC || callsite->kind == XG_CALL_CLOSURE) &&
-        callsite->static_target_func_id != XG_NO_ID)
-        return callsite->static_target_func_id;
-    if (callsite->kind == XG_CALL_METHOD)
-        return verify_find_method_body_func_id(ev, callsite->method_id);
-    return XG_NO_ID;
-}
-
-static bool verify_object_shape_flows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
-    if (!ev)
-        return false;
-    for (uint32_t i = 0; i < ev->nobject_shape_flows; i++) {
-        const XgObjectShapeFlowSummary *flow = &ev->object_shape_flows[i];
-        const XgCallsiteSummary *callsite = verify_find_object_flow_callsite(ev, flow->callsite_id);
-        const uint32_t kind =
-            flow->flags & (XG_OBJECT_SHAPE_FLOW_CONCRETE | XG_OBJECT_SHAPE_FLOW_FORWARDED);
-        if (flow->flow_id == XG_NO_ID)
-            return set_error(errbuf, errbuf_len, "AOT Object shape flow has no id");
-        if (!callsite || callsite->owner_func_id != flow->source_func_id ||
-            verify_object_flow_callsite_target(ev, callsite) != flow->target_func_id ||
-            flow->target_param_ordinal >= callsite->arg_count)
-            return set_error(errbuf, errbuf_len,
-                             "AOT Object shape flow callsite identity is stale");
-        if (kind == 0 || kind == (XG_OBJECT_SHAPE_FLOW_CONCRETE | XG_OBJECT_SHAPE_FLOW_FORWARDED) ||
-            (flow->flags & ~(XG_OBJECT_SHAPE_FLOW_CONCRETE | XG_OBJECT_SHAPE_FLOW_FORWARDED)) != 0)
-            return set_error(errbuf, errbuf_len, "AOT Object shape flow kind is invalid");
-        if (kind == XG_OBJECT_SHAPE_FLOW_CONCRETE) {
-            const XgObjectShapeSummary *shape =
-                xg_global_evidence_find_object_shape(ev, flow->concrete_shape_id);
-            if (!shape || !shape->concrete_exact || shape->domain != XG_OBJECT_DOMAIN_STRUCT ||
-                (shape->flags & XG_OBJECT_SHAPE_OPEN_ROW) != 0 ||
-                flow->source_param_ordinal != UINT16_MAX)
-                return set_error(errbuf, errbuf_len, "AOT Object concrete shape flow is stale");
-        } else if (flow->concrete_shape_id != XG_NO_ID ||
-                   flow->source_param_ordinal == UINT16_MAX) {
-            return set_error(errbuf, errbuf_len, "AOT Object forwarded shape flow is stale");
-        }
-        for (uint32_t j = i + 1; j < ev->nobject_shape_flows; j++) {
-            const XgObjectShapeFlowSummary *other = &ev->object_shape_flows[j];
-            if (other->flow_id == flow->flow_id)
-                return set_error(errbuf, errbuf_len, "AOT Object shape flow id is duplicated");
-            if (other->callsite_id == flow->callsite_id &&
-                other->target_param_ordinal == flow->target_param_ordinal)
-                return set_error(errbuf, errbuf_len,
-                                 "AOT Object shape flow callsite argument is duplicated");
-        }
-    }
-    return true;
-}
-
-static bool verify_collect_object_flow_shapes(const XgGlobalEvidence *ev, XgFuncId target_func_id,
-                                              uint16_t target_param_ordinal,
-                                              XgObjectShapeId *shape_ids, uint32_t shape_capacity,
-                                              uint32_t *shape_count, XaotObjectFlowVisit *visits,
-                                              uint32_t visit_capacity, uint32_t *visit_count) {
-    if (!ev || !shape_count || !visit_count || target_func_id == XG_NO_ID)
-        return false;
-    for (uint32_t i = 0; i < *visit_count; i++) {
-        if (visits[i].func_id == target_func_id && visits[i].param_ordinal == target_param_ordinal)
-            return true;
-    }
-    if (!visits || *visit_count >= visit_capacity)
-        return false;
-    visits[*visit_count].func_id = target_func_id;
-    visits[*visit_count].param_ordinal = target_param_ordinal;
-    (*visit_count)++;
-    for (uint32_t i = 0; i < ev->nobject_shape_flows; i++) {
-        const XgObjectShapeFlowSummary *flow = &ev->object_shape_flows[i];
-        if (flow->target_func_id != target_func_id ||
-            flow->target_param_ordinal != target_param_ordinal)
-            continue;
-        if ((flow->flags & XG_OBJECT_SHAPE_FLOW_CONCRETE) != 0) {
-            bool duplicate = false;
-            for (uint32_t j = 0; j < *shape_count; j++)
-                duplicate = duplicate || shape_ids[j] == flow->concrete_shape_id;
-            if (!duplicate) {
-                if (!shape_ids || *shape_count >= shape_capacity)
-                    return false;
-                shape_ids[(*shape_count)++] = flow->concrete_shape_id;
-            }
-        } else if (!verify_collect_object_flow_shapes(
-                       ev, flow->source_func_id, flow->source_param_ordinal, shape_ids,
-                       shape_capacity, shape_count, visits, visit_capacity, visit_count)) {
-            return false;
-        }
-    }
-    return true;
-}
-
-static bool verify_open_object_access_shape_set(const XgGlobalEvidence *ev,
-                                                const XgObjectAccessSummary *access, char *errbuf,
-                                                size_t errbuf_len) {
-    XgObjectShapeId *shape_ids;
-    XaotObjectFlowVisit *visits;
-    const XgObjectShapeSummary *constraint;
-    const XgObjectFieldSummary *constraint_field = NULL;
-    uint32_t shape_count = 0;
-    uint32_t visit_count = 0;
-    bool ok = false;
-    if (!ev || !access || access->receiver_param_ordinal == UINT16_MAX)
-        return set_error(errbuf, errbuf_len,
-                         "AOT open Object access parameter identity is missing");
-    constraint = xg_global_evidence_find_object_shape(ev, access->constraint_shape_id);
-    if (!constraint || (constraint->flags & XG_OBJECT_SHAPE_OPEN_ROW) == 0 ||
-        constraint->domain != XG_OBJECT_DOMAIN_STRUCT || constraint->concrete_exact)
-        return set_error(errbuf, errbuf_len, "AOT open Object access constraint shape is stale");
-    for (uint32_t i = 0; i < ev->nobject_fields; i++) {
-        if (ev->object_fields[i].shape_id == constraint->object_shape_id &&
-            ev->object_fields[i].name_id == access->field_name_id) {
-            constraint_field = &ev->object_fields[i];
-            break;
-        }
-    }
-    if (!constraint_field)
-        return set_error(errbuf, errbuf_len,
-                         "AOT open Object access field is absent from its constraint");
-    shape_ids = ev->nobject_shape_flows > 0
-                    ? (XgObjectShapeId *) xr_calloc(ev->nobject_shape_flows, sizeof(*shape_ids))
-                    : NULL;
-    visits = (XaotObjectFlowVisit *) xr_calloc(ev->nobject_shape_flows + 1, sizeof(*visits));
-    if ((ev->nobject_shape_flows > 0 && !shape_ids) || !visits) {
-        set_error(errbuf, errbuf_len, "AOT Object shape-flow verifier ran out of memory");
-        goto done;
-    }
-    if (!verify_collect_object_flow_shapes(ev, access->owner_func_id,
-                                           access->receiver_param_ordinal, shape_ids,
-                                           ev->nobject_shape_flows, &shape_count, visits,
-                                           ev->nobject_shape_flows + 1, &visit_count) ||
-        shape_count == 0 || shape_count != access->receiver_shape_count) {
-        set_error(errbuf, errbuf_len, "AOT Object access receiver shape set is incomplete");
-        goto done;
-    }
-    for (uint32_t i = 0; i < shape_count; i++) {
-        bool found_case = false;
-        const XgObjectFieldSummary *field = NULL;
-        for (uint32_t j = 0; j < ev->nobject_fields; j++) {
-            if (ev->object_fields[j].shape_id == shape_ids[i] &&
-                ev->object_fields[j].name_id == access->field_name_id) {
-                field = &ev->object_fields[j];
-                break;
-            }
-        }
-        for (uint32_t j = 0; j < ev->nobject_access_cases; j++) {
-            const XgObjectAccessCaseSummary *access_case = &ev->object_access_cases[j];
-            if (access_case->object_access_id == access->object_access_id &&
-                access_case->receiver_shape_id == shape_ids[i]) {
-                found_case = true;
-                break;
-            }
-        }
-        if (!field || field->type_key != constraint_field->type_key || !found_case) {
-            set_error(errbuf, errbuf_len, "AOT Object access receiver shape set is incomplete");
-            goto done;
-        }
-    }
-    ok = true;
-
-done:
-    xr_free(shape_ids);
-    xr_free(visits);
-    return ok;
-}
-
 static bool verify_object_rows(const XgGlobalEvidence *ev, char *errbuf, size_t errbuf_len) {
     if (!ev)
         return set_error(errbuf, errbuf_len, "AOT global evidence Object verifier has no evidence");
-    if (!verify_object_shape_flows(ev, errbuf, errbuf_len))
-        return false;
     for (uint32_t i = 0; i < ev->nobject_shapes; i++) {
         const XgObjectShapeSummary *shape = &ev->object_shapes[i];
         if (shape->object_shape_id == XG_NO_ID)
             return set_error(errbuf, errbuf_len, "AOT Object shape evidence has no id");
         if (!verify_object_shape_kind_valid(shape->shape_kind))
             return set_error(errbuf, errbuf_len, "AOT Object shape evidence has invalid kind");
-        if (shape->domain != XG_OBJECT_DOMAIN_STRUCT && shape->domain != XG_OBJECT_DOMAIN_JSON)
+        if (shape->domain != XG_OBJECT_DOMAIN_STRUCT)
             return set_error(errbuf, errbuf_len, "AOT Object shape evidence has invalid domain");
         if (shape->stable_type_key == 0 || shape->stable_shape_key == 0)
             return set_error(errbuf, errbuf_len, "AOT Object shape stable identity is missing");
-        if (((shape->flags & XG_OBJECT_SHAPE_JSON_DOMAIN) != 0) !=
-            (shape->domain == XG_OBJECT_DOMAIN_JSON))
-            return set_error(errbuf, errbuf_len, "AOT Object shape domain flag drifted");
-        if ((shape->flags & XG_OBJECT_SHAPE_OPEN_ROW) != 0 &&
-            (shape->domain != XG_OBJECT_DOMAIN_STRUCT ||
-             shape->shape_kind != XG_OBJECT_SHAPE_STATIC || shape->concrete_exact ||
-             (shape->flags & XG_OBJECT_SHAPE_SEALED) != 0))
-            return set_error(errbuf, errbuf_len,
-                             "AOT open Object constraint shape claims allocation identity");
         if (!verify_object_shape_identity(ev, shape, errbuf, errbuf_len))
             return false;
         for (uint32_t j = i + 1; j < ev->nobject_shapes; j++) {
@@ -2335,11 +2099,8 @@ static bool verify_object_rows(const XgGlobalEvidence *ev, char *errbuf, size_t 
         if (access_case_count != access->receiver_shape_count || !found_representative)
             return set_error(errbuf, errbuf_len,
                              "AOT Object access receiver shape set is incomplete");
-        if ((access->flags & XG_OBJECT_ACCESS_OPEN_ROW) != 0) {
-            if (!verify_open_object_access_shape_set(ev, access, errbuf, errbuf_len))
-                return false;
-        } else if (access->receiver_param_ordinal != UINT16_MAX ||
-                   access->constraint_shape_id != access->receiver_shape_id) {
+        if (access->receiver_param_ordinal != UINT16_MAX ||
+            access->constraint_shape_id != access->receiver_shape_id) {
             return set_error(errbuf, errbuf_len,
                              "AOT exact Object access constraint identity is stale");
         }
@@ -4955,83 +4716,6 @@ static bool verify_derived_clone_plan_rederives(const XgGlobalEvidence *ev,
     return true;
 }
 
-static uint8_t verify_json_dynamic_access_action_for(const XgGlobalEvidence *ev,
-                                                     const XgJsonDynamicAccessSummary *access) {
-    const XgObjectShapeSummary *shape;
-    if (!access || !verify_json_dynamic_access_kind_valid(access->access_kind))
-        return XAOT_JSON_DYNAMIC_ACCESS_REJECT;
-    if ((access->flags & XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY) != 0)
-        return access->receiver_shape_id != XG_NO_ID ? XAOT_JSON_DYNAMIC_ACCESS_COMPUTED_KEY_GUARD
-                                                     : XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP;
-    if (access->key_name_id == 0)
-        return XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP;
-    if (access->receiver_shape_id == XG_NO_ID)
-        return XAOT_JSON_DYNAMIC_ACCESS_DYNAMIC_LOOKUP;
-    shape = xg_global_evidence_find_object_shape(ev, access->receiver_shape_id);
-    if (!shape || access->field_ordinal >= shape->field_count)
-        return XAOT_JSON_DYNAMIC_ACCESS_REJECT;
-    if ((shape->flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) != 0)
-        return XAOT_JSON_DYNAMIC_ACCESS_SHAPE_GUARD_INDEX;
-    return (access->flags & XG_JSON_DYNAMIC_ACCESS_RECEIVER_SHAPE_PROVEN) != 0
-               ? XAOT_JSON_DYNAMIC_ACCESS_DIRECT_INDEX
-               : XAOT_JSON_DYNAMIC_ACCESS_SHAPE_GUARD_INDEX;
-}
-
-static uint8_t verify_json_dynamic_access_reason_for(const XgGlobalEvidence *ev,
-                                                     const XgJsonDynamicAccessSummary *access) {
-    const XgObjectShapeSummary *shape;
-    if (!access || !verify_json_dynamic_access_kind_valid(access->access_kind))
-        return XAOT_JSON_UNPROVEN_INVALID_KIND;
-    if ((access->flags & XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY) != 0)
-        return access->receiver_shape_id != XG_NO_ID ? XAOT_JSON_UNPROVEN_NONE
-                                                     : XAOT_JSON_UNPROVEN_COMPUTED_KEY;
-    if (access->key_name_id == 0)
-        return XAOT_JSON_UNPROVEN_COMPUTED_KEY;
-    if (access->receiver_shape_id == XG_NO_ID)
-        return XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN;
-    shape = xg_global_evidence_find_object_shape(ev, access->receiver_shape_id);
-    if (!shape || access->field_ordinal >= shape->field_count)
-        return XAOT_JSON_UNPROVEN_STALE_SHAPE;
-    return XAOT_JSON_UNPROVEN_NONE;
-}
-
-static uint32_t verify_json_dynamic_access_evidence_for(const XgGlobalEvidence *ev,
-                                                        const XgJsonDynamicAccessSummary *access) {
-    const XgObjectShapeSummary *shape;
-    uint32_t evidence = XAOT_JSON_EV_GLOBAL_ROW;
-    if (!access)
-        return evidence;
-    if ((access->flags & XG_JSON_DYNAMIC_ACCESS_STATIC_KEY) != 0 && access->key_name_id != 0)
-        evidence |= XAOT_JSON_EV_STATIC_KEY;
-    if (access->receiver_shape_id != XG_NO_ID)
-        evidence |= XAOT_JSON_EV_RECEIVER_SHAPE;
-    shape = xg_global_evidence_find_object_shape(ev, access->receiver_shape_id);
-    if (shape && access->field_ordinal < shape->field_count)
-        evidence |= XAOT_JSON_EV_FIELD_INDEX;
-    return evidence;
-}
-
-static bool verify_json_dynamic_access_plan_rederives(const XgGlobalEvidence *ev,
-                                                      const XaotJsonDynamicAccessPlan *plan,
-                                                      const XgJsonDynamicAccessSummary *access,
-                                                      char *errbuf, size_t errbuf_len) {
-    if (!ev || !plan || !access)
-        return set_error(errbuf, errbuf_len, "AOT Json access verifier has incomplete input");
-    if (plan->json_dynamic_access_id != access->json_dynamic_access_id ||
-        plan->module_id != access->module_id || plan->owner_func_id != access->owner_func_id ||
-        plan->receiver_shape_id != access->receiver_shape_id ||
-        plan->key_name_id != access->key_name_id ||
-        plan->result_type_key != access->result_type_key ||
-        plan->field_ordinal != access->field_ordinal || plan->access_kind != access->access_kind)
-        return set_error(errbuf, errbuf_len, "AOT Json access plan identity does not re-derive");
-    if (plan->action != verify_json_dynamic_access_action_for(ev, access) ||
-        plan->unproven_reason != verify_json_dynamic_access_reason_for(ev, access))
-        return set_error(errbuf, errbuf_len, "AOT Json access plan action does not re-derive");
-    if (plan->evidence != verify_json_dynamic_access_evidence_for(ev, access))
-        return set_error(errbuf, errbuf_len, "AOT Json access plan evidence does not re-derive");
-    return true;
-}
-
 static bool verify_json_codec_kind_valid(uint8_t kind) {
     switch ((XgJsonCodecKind) kind) {
         case XG_JSON_CODEC_PARSE:
@@ -5132,8 +4816,6 @@ static bool verify_json_codec_plan_rederives(const XaotJsonCodecPlan *plan,
 static uint8_t verify_object_shape_action_for(const XgObjectShapeSummary *shape) {
     if (!shape)
         return XAOT_OBJECT_SHAPE_REJECT;
-    if ((shape->flags & XG_OBJECT_SHAPE_OPEN_ROW) != 0)
-        return XAOT_OBJECT_SHAPE_CONSTRAINT;
     switch ((XgObjectShapeKind) shape->shape_kind) {
         case XG_OBJECT_SHAPE_LITERAL:
             return XAOT_OBJECT_SHAPE_EXACT;
@@ -5152,8 +4834,7 @@ static uint8_t verify_object_shape_action_for(const XgObjectShapeSummary *shape)
 
 static uint8_t verify_object_shape_reason_for(const XgObjectShapeSummary *shape) {
     return shape && verify_object_shape_kind_valid(shape->shape_kind) &&
-                   (shape->domain == XG_OBJECT_DOMAIN_STRUCT ||
-                    shape->domain == XG_OBJECT_DOMAIN_JSON)
+                   shape->domain == XG_OBJECT_DOMAIN_STRUCT
                ? XAOT_OBJECT_UNPROVEN_NONE
                : XAOT_OBJECT_UNPROVEN_INVALID_KIND;
 }
@@ -5166,8 +4847,8 @@ static uint32_t verify_object_shape_evidence_for(const XgObjectShapeSummary *sha
         evidence |= XAOT_OBJECT_EV_SEALED;
     if ((shape->flags & XG_OBJECT_SHAPE_STATIC_KEYS) != 0)
         evidence |= XAOT_OBJECT_EV_STATIC_FIELD;
-    if ((shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) != 0)
-        evidence |= XAOT_OBJECT_EV_JSON_BRIDGE;
+    if ((shape->flags & XG_OBJECT_SHAPE_JSON_ENCODABLE) != 0)
+        evidence |= XAOT_OBJECT_EV_JSON_ENCODE;
     return evidence;
 }
 
@@ -5199,12 +4880,9 @@ static bool verify_object_shape_plan_rederives(const XaotObjectShapePlan *plan,
 }
 
 static bool verify_object_access_case_set(const XgGlobalEvidence *ev,
-                                          const XgObjectAccessSummary *access,
-                                          bool *out_same_ordinal) {
+                                          const XgObjectAccessSummary *access) {
     uint32_t matched = 0;
-    uint16_t common_ordinal = UINT16_MAX;
-    bool same_ordinal = true;
-    if (!ev || !access || access->receiver_shape_count == 0 || access->receiver_shape_set_id == 0)
+    if (!ev || !access || access->receiver_shape_count != 1 || access->receiver_shape_set_id == 0)
         return false;
     for (uint32_t i = 0; i < ev->nobject_access_cases; i++) {
         const XgObjectAccessCaseSummary *access_case = &ev->object_access_cases[i];
@@ -5231,41 +4909,27 @@ static bool verify_object_access_case_set(const XgGlobalEvidence *ev,
         }
         if (!ordinal_matches_name)
             return false;
-        if (matched == 0)
-            common_ordinal = access_case->field_ordinal;
-        else if (common_ordinal != access_case->field_ordinal)
-            same_ordinal = false;
         matched++;
     }
-    if (out_same_ordinal)
-        *out_same_ordinal = same_ordinal;
     return matched == access->receiver_shape_count;
 }
 
 static uint8_t verify_object_access_action_for(const XgGlobalEvidence *ev,
                                                const XgObjectAccessSummary *access) {
     const XgObjectShapeSummary *shape;
-    bool same_ordinal = false;
     if (!access || !verify_object_access_kind_valid(access->access_kind))
         return XAOT_OBJECT_ACCESS_REJECT;
     if ((access->flags & XG_OBJECT_ACCESS_STATIC_FIELD) == 0 || access->field_name_id == 0)
         return XAOT_OBJECT_ACCESS_REJECT;
-    if (!verify_object_access_case_set(ev, access, &same_ordinal))
+    if (!verify_object_access_case_set(ev, access))
         return XAOT_OBJECT_ACCESS_REJECT;
-    if (access->receiver_shape_count > 1)
-        return same_ordinal ? XAOT_OBJECT_ACCESS_DIRECT_ORDINAL
-                            : XAOT_OBJECT_ACCESS_SHAPE_DISPATCH_ORDINAL;
     if (access->receiver_shape_id == XG_NO_ID)
         return XAOT_OBJECT_ACCESS_REJECT;
     shape = xg_global_evidence_find_object_shape(ev, access->receiver_shape_id);
     if (!shape || access->field_ordinal >= shape->field_count || access->domain != shape->domain ||
         access->mutation_epoch != shape->mutation_epoch)
         return XAOT_OBJECT_ACCESS_REJECT;
-    if (access->access_kind == XG_OBJECT_ACCESS_DESTRUCTURE)
-        return XAOT_OBJECT_ACCESS_DIRECT_ORDINAL;
-    return (access->flags & XG_OBJECT_ACCESS_RECEIVER_SHAPE_PROVEN) != 0
-               ? XAOT_OBJECT_ACCESS_DIRECT_ORDINAL
-               : XAOT_OBJECT_ACCESS_SHAPE_GUARD_ORDINAL;
+    return XAOT_OBJECT_ACCESS_DIRECT_ORDINAL;
 }
 
 static uint8_t verify_object_access_reason_for(const XgGlobalEvidence *ev,
@@ -5275,7 +4939,7 @@ static uint8_t verify_object_access_reason_for(const XgGlobalEvidence *ev,
         return XAOT_OBJECT_UNPROVEN_INVALID_KIND;
     if ((access->flags & XG_OBJECT_ACCESS_STATIC_FIELD) == 0 || access->field_name_id == 0)
         return XAOT_OBJECT_UNPROVEN_DYNAMIC_FIELD;
-    if (!verify_object_access_case_set(ev, access, NULL))
+    if (!verify_object_access_case_set(ev, access))
         return XAOT_OBJECT_UNPROVEN_STALE_SHAPE;
     if (access->receiver_shape_id == XG_NO_ID)
         return XAOT_OBJECT_UNPROVEN_RECEIVER_SHAPE_UNKNOWN;
@@ -5381,8 +5045,6 @@ static uint8_t verify_object_merge_action_for(const XgGlobalEvidence *ev,
                                               const XgObjectMergeSummary *merge) {
     if (verify_object_merge_reason_for(ev, merge) != XAOT_OBJECT_UNPROVEN_NONE)
         return XAOT_OBJECT_MERGE_REJECT;
-    if ((merge->flags & XG_OBJECT_MERGE_JSON_BRIDGE) != 0)
-        return XAOT_OBJECT_MERGE_JSON_BRIDGE;
     return merge->overwrite_count != 0 ? XAOT_OBJECT_MERGE_COPY_WITH_OVERWRITE
                                        : XAOT_OBJECT_MERGE_COPY_APPEND;
 }
@@ -5400,8 +5062,6 @@ static uint32_t verify_object_merge_evidence_for(const XgGlobalEvidence *ev,
         evidence |= XAOT_OBJECT_EV_RESULT_SHAPE;
     if (merge->copy_table_id != 0)
         evidence |= XAOT_OBJECT_EV_COPY_TABLE;
-    if ((merge->flags & XG_OBJECT_MERGE_JSON_BRIDGE) != 0)
-        evidence |= XAOT_OBJECT_EV_JSON_BRIDGE;
     return evidence;
 }
 
@@ -6595,7 +6255,6 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     uint32_t expected_derive_plans = 0;
     uint32_t expected_derived_eq_hash_plans = 0;
     uint32_t expected_derived_clone_plans = 0;
-    uint32_t expected_json_dynamic_access_plans = 0;
     uint32_t expected_json_codec_plans = 0;
     uint32_t expected_object_shape_plans = 0;
     uint32_t expected_object_access_plans = 0;
@@ -7010,19 +6669,6 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
     if (bundle->nderived_clone_plans != expected_derived_clone_plans)
         return set_error(errbuf, errbuf_len, "AOT derived Clone plan count mismatches evidence");
 
-    for (uint32_t i = 0; i < ev->njson_dynamic_accesses; i++) {
-        const XgJsonDynamicAccessSummary *access = &ev->json_dynamic_accesses[i];
-        const XaotJsonDynamicAccessPlan *plan;
-        expected_json_dynamic_access_plans++;
-        plan = xaot_bundle_find_json_dynamic_access_plan(bundle, access->json_dynamic_access_id);
-        if (!plan)
-            return set_error(errbuf, errbuf_len, "AOT Json access evidence has no access plan");
-        if (!verify_json_dynamic_access_plan_rederives(ev, plan, access, errbuf, errbuf_len))
-            return false;
-    }
-    if (bundle->njson_dynamic_access_plans != expected_json_dynamic_access_plans)
-        return set_error(errbuf, errbuf_len, "AOT Json access plan count mismatches evidence");
-
     for (uint32_t i = 0; i < ev->njson_codecs; i++) {
         const XgJsonCodecSummary *codec = &ev->json_codecs[i];
         const XaotJsonCodecPlan *plan;
@@ -7375,7 +7021,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
             const XgLinkDependencySummary *prev = &ev->link_deps[prev_i];
             if (prev->link_id == dep->link_id)
                 return set_error(errbuf, errbuf_len, "AOT link dependency id is duplicated");
-            if (prev->kind == dep->kind && strcmp(prev->name, dep->name) == 0)
+            if (prev->kind == dep->kind && prev->owner_func_id == dep->owner_func_id &&
+                strcmp(prev->name, dep->name) == 0)
                 return set_error(errbuf, errbuf_len, "AOT link dependency evidence is duplicated");
         }
         if (!verify_link_dependency_name_shape(dep, errbuf, errbuf_len))
@@ -7384,8 +7031,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         plan = xaot_bundle_find_link_dependency_plan(bundle, dep->link_id);
         if (!plan)
             return set_error(errbuf, errbuf_len, "AOT link dependency has no plan");
-        if (plan->kind != dep->kind || plan->name_id != dep->name_id ||
-            strcmp(plan->name, dep->name) != 0)
+        if (plan->owner_func_id != dep->owner_func_id || plan->kind != dep->kind ||
+            plan->name_id != dep->name_id || strcmp(plan->name, dep->name) != 0)
             return set_error(errbuf, errbuf_len, "AOT link dependency plan mismatches evidence");
         if (plan->evidence != XAOT_LINK_DEP_EV_GLOBAL_SUMMARY ||
             plan->unproven_reason != XAOT_LINK_DEP_UNPROVEN_NONE)

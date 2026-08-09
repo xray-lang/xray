@@ -21,7 +21,7 @@
  *   GLOBAL_ESCAPE  – stored to global, sent to another goroutine,
  *                    or address taken in unknown context. Full GC.
  *
- * Only heap-allocating ops matter (ARRAY_NEW, MAP_NEW, JSON_NEW,
+ * Only heap-allocating ops matter (ARRAY_NEW, MAP_NEW, OBJECT_NEW,
  * CLOSURE_NEW, STR_CONCAT, etc.). Scalar values (int, float, bool)
  * are always stack-allocated by the tagged value representation and
  * do not participate in escape analysis.

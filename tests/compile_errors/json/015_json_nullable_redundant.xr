@@ -1,1 +1,1 @@
-var data: Json? = null
+var data: JSON.Value? = null

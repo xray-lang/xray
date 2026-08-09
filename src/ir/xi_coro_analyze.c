@@ -232,6 +232,21 @@ static bool xi_coro_is_test_yield_call(const XiFunc *f, const XiValue *v,
     return false;
 }
 
+/* Hosted AOT lowers the hot TCP operations to a non-blocking step followed by
+ * backend-neutral netpoll suspension. Keep this classification in shared IR
+ * analysis so frame liveness, state numbering, and codegen agree exactly. */
+static bool xi_coro_is_net_io_call(const XiFunc *f, const XiValue *v,
+                                   const XiCoroResolver *resolver) {
+    if (!resolver || !resolver->call_is_module_member)
+        return false;
+    static const char *const members[] = {"accept", "read", "write", "writeBytes"};
+    for (size_t i = 0; i < sizeof(members) / sizeof(members[0]); i++) {
+        if (resolver->call_is_module_member(resolver->ud, f, v, "net", members[i]))
+            return true;
+    }
+    return false;
+}
+
 /* ========== Suspendability (function-level, optionally interprocedural) ========== */
 
 static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolver *resolver) {
@@ -269,6 +284,8 @@ static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolve
             if (xi_coro_is_time_sleep_call(f, v, resolver))
                 return true;
             if (xi_coro_is_test_yield_call(f, v, resolver))
+                return true;
+            if (xi_coro_is_net_io_call(f, v, resolver))
                 return true;
         }
     }
@@ -346,6 +363,11 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
                                       const XiCoroResolver *resolver) {
     if (!v)
         return false;
+    /* A resolved pure-Xray wrapper is not itself suspendable, but these calls
+     * are deliberately replaced by the hosted AOT netpoll operation. Test the
+     * intrinsic boundary before the direct-target override below. */
+    if (xi_coro_is_net_io_call(f, v, resolver))
+        return true;
     if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0) {
         /* A global summary may conservatively project MAY_SUSPEND onto a
          * direct call before the final whole-program target is known.  When a

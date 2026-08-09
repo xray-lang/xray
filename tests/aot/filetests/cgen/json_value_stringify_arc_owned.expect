@@ -1,0 +1,8 @@
+args=--dump-global-evidence
+regex=json-codec [0-9]+ .*kind=encode
+regex=json-codec [0-9]+ .*kind=stringify
+c_contains=xrt_json_encode_static_object_consume(
+c_contains=xrt_json_stringify_consume(
+c_contains=(void)(xrt_retain(v6));
+c_contains=(void)(xrt_release(v35));
+c_not_contains=(void)(xrt_release(v21));

@@ -32,6 +32,7 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xmalloc.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -151,10 +152,52 @@ static bool mono_tag_needs_children(uint8_t kind) {
         case XR_TREF_GENERIC:
         case XR_TREF_OPTIONAL:
         case XR_TREF_TUPLE:
+        case XR_TREF_OBJECT:
             return true;
         default:
             return false;
     }
+}
+
+static uint64_t mono_hash_bytes(uint64_t hash, const void *data, size_t length) {
+    const unsigned char *bytes = (const unsigned char *) data;
+    for (size_t i = 0; i < length; i++) {
+        hash ^= bytes[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static uint64_t mono_hash_cstr(uint64_t hash, const char *value) {
+    uint64_t length = value ? (uint64_t) strlen(value) : 0;
+    hash = mono_hash_bytes(hash, &length, sizeof(length));
+    return value ? mono_hash_bytes(hash, value, (size_t) length) : hash;
+}
+
+/* Structural-object layout is part of specialization identity: field order
+ * determines the direct ordinal selected in a clone. Keep its mangled tag
+ * compact while hashing the complete, recursively qualified type reference;
+ * unlike a fixed rendering buffer, this cannot collapse merely because a
+ * structural type has many fields. */
+static uint64_t mono_type_ref_hash64(const XrTypeRef *type) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    if (!type)
+        return mono_hash_cstr(hash, "<null>");
+    hash = mono_hash_bytes(hash, &type->kind, sizeof(type->kind));
+    hash = mono_hash_bytes(hash, &type->nchildren, sizeof(type->nchildren));
+    hash = mono_hash_bytes(hash, &type->scalar_rep, sizeof(type->scalar_rep));
+    hash = mono_hash_bytes(hash, &type->fixed_length, sizeof(type->fixed_length));
+    hash = mono_hash_cstr(hash, type->name);
+    for (uint8_t i = 0; i < type->nchildren; i++) {
+        if (type->kind == XR_TREF_OBJECT) {
+            hash = mono_hash_cstr(hash, type->field_names ? type->field_names[i] : NULL);
+            bool readonly = type->field_readonly && type->field_readonly[i];
+            hash = mono_hash_bytes(hash, &readonly, sizeof(readonly));
+        }
+        uint64_t child_hash = mono_type_ref_hash64(type->children ? type->children[i] : NULL);
+        hash = mono_hash_bytes(hash, &child_hash, sizeof(child_hash));
+    }
+    return hash;
 }
 
 static void mono_qualified_type_tag(XrTypeRef *t, char *buf, size_t cap) {
@@ -177,6 +220,10 @@ static void mono_qualified_type_tag(XrTypeRef *t, char *buf, size_t cap) {
         mono_qualified_type_tag(t->children && t->nchildren > 0 ? t->children[0] : NULL, inner,
                                 sizeof(inner));
         snprintf(buf, cap, "opt_%s", inner);
+        return;
+    }
+    if (t->kind == XR_TREF_OBJECT) {
+        snprintf(buf, cap, "obj%u_%016" PRIx64, (unsigned) t->nchildren, mono_type_ref_hash64(t));
         return;
     }
     /* GENERIC carries its head name; TUPLE has none, so it needs an explicit
@@ -735,12 +782,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 node->as.object_literal.keys, node->as.object_literal.count, map, mc, clone_ctx);
             n->as.object_literal.values = clone_node_array(
                 node->as.object_literal.values, node->as.object_literal.count, map, mc, clone_ctx);
-            if (node->as.object_literal.computed) {
-                n->as.object_literal.computed =
-                    (bool *) xr_calloc(node->as.object_literal.count, sizeof(bool));
-                memcpy(n->as.object_literal.computed, node->as.object_literal.computed,
-                       node->as.object_literal.count * sizeof(bool));
-            }
             break;
         case AST_MAP_LITERAL:
             n->as.map_literal.count = node->as.map_literal.count;
@@ -820,6 +861,9 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_NEW_EXPR:
             n->as.new_expr.module_name = clone_str(node->as.new_expr.module_name);
             n->as.new_expr.class_name = clone_str(node->as.new_expr.class_name);
+            /* The clone is analyzed in its destination scope and receives a
+             * destination-owned symbol identity there. */
+            n->as.new_expr.class_symbol_id = 0;
             n->as.new_expr.arg_count = node->as.new_expr.arg_count;
             n->as.new_expr.arguments = clone_node_array(
                 node->as.new_expr.arguments, node->as.new_expr.arg_count, map, mc, clone_ctx);

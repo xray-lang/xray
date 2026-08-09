@@ -57,7 +57,13 @@ LANE = "asan_focused"
 # build/ cache layout) or run the compiler as a subprocess under tight
 # hardcoded timeouts, so under ASan they fail for environmental reasons
 # (slowdown, cache mismatch) rather than any memory bug.
-DEFAULT_CTEST_EXCLUDE = "native_error_abi|param_mode_diagnostics|param_contract|test_cli_toolchain"
+# test_xi_cgen is a Release code-shape contract: many assertions intentionally
+# pin cache/elision decisions that a Debug sanitizer build is allowed to change.
+# This lane still exercises the sanitized compiler and C generator below via
+# real AOT workloads and the backend-diff subset.
+DEFAULT_CTEST_EXCLUDE = (
+    "native_error_abi|param_mode_diagnostics|param_contract|test_cli_toolchain|test_xi_cgen"
+)
 # The toolchain unit test starts short-lived provider processes under the
 # public 5s version-probe bound; run it serially so a saturated ASan lane
 # cannot consume that budget through scheduler starvation.

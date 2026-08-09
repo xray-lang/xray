@@ -29,6 +29,14 @@
  * resolver cap so both backends hand net.xr the same candidate set. */
 #define XRT_NET_RESOLVE_MAX_ADDRS 8
 
+#if defined(XRT_ENABLE_NETPOLL)
+/* Hosted executor hook: remove an fd from the runtime netpoll before the
+ * platform handle is closed. The declaration and call are capability-gated so
+ * synchronous network values do not pull the coroutine runtime into otherwise
+ * runtime-free AOT artifacts. */
+XR_FUNC void xr_aot_netpoll_close_fd(int fd);
+#endif
+
 typedef enum xrt_net_handle_kind {
     XRT_NET_HANDLE_CONN = 1,
     XRT_NET_HANDLE_LISTENER = 2,
@@ -60,15 +68,23 @@ typedef enum xrt_net_error_kind {
 } xrt_net_error_kind_t;
 
 /* A yieldable net primitive called from an AOT coroutine runs as a sequence of
- * non-blocking steps.  DONE and ERROR both carry the public result in the
- * caller-provided slot; WAIT_READ/WAIT_WRITE ask the runtime provider to park
- * the current coroutine on netpoll before replaying the step. */
-typedef enum xrt_net_step_kind {
-    XRT_NET_STEP_ERROR = -1,
-    XRT_NET_STEP_DONE = 0,
-    XRT_NET_STEP_WAIT_READ = 1,
-    XRT_NET_STEP_WAIT_WRITE = 2,
-} xrt_net_step_kind_t;
+ * non-blocking attempts. DONE carries the public result; WAIT_READ/WAIT_WRITE
+ * carry the descriptor and remaining timeout the scheduler needs to park the
+ * coroutine on netpoll before the attempt is replayed. `progress` lets a
+ * partially completed write resume where it stopped. */
+typedef enum xrt_net_try_state {
+    XRT_NET_TRY_DONE = 0,
+    XRT_NET_TRY_WAIT_READ = 1,
+    XRT_NET_TRY_WAIT_WRITE = 2,
+} xrt_net_try_state_t;
+
+typedef struct xrt_net_try_result {
+    XrValue value;
+    int state;
+    int fd;
+    int64_t timeout_ms;
+    int64_t progress;
+} xrt_net_try_result_t;
 
 typedef struct xrt_net_handle_base {
     uint8_t handle_kind;
@@ -103,6 +119,20 @@ typedef struct xrt_net_array_view {
     uint8_t data_on_region_heap;
     uint8_t _vm_abi_pad[2];
 } xrt_net_array_view_t;
+
+typedef enum xrt_net_try_state {
+    XRT_NET_TRY_DONE = 0,
+    XRT_NET_TRY_WAIT_READ = 1,
+    XRT_NET_TRY_WAIT_WRITE = 2,
+} xrt_net_try_state_t;
+
+typedef struct xrt_net_try_result {
+    XrValue value;
+    int state;
+    int fd;
+    int64_t timeout_ms;
+    int64_t progress;
+} xrt_net_try_result_t;
 
 static inline void xrt_net_init_once(void) {
 #if defined(XR_OS_WINDOWS)
@@ -229,6 +259,29 @@ static inline XrValue xrt_net_listener_box(xrt_net_listener_object_t *listener) 
     return listener ? xr_mkptr(listener, XR_TAG_NET_LISTENER) : XR_NULL_VAL;
 }
 
+static inline xrt_net_try_result_t xrt_net_try_done(XrValue value, int64_t progress) {
+    xrt_net_try_result_t result = {value, XRT_NET_TRY_DONE, -1, -1, progress};
+    return result;
+}
+
+static inline int64_t xrt_net_timeout_until(int64_t deadline_ms) {
+    if (deadline_ms <= 0)
+        return -1;
+    int64_t remaining = deadline_ms - xrt_net_now_ms();
+    return remaining > 0 ? remaining : 0;
+}
+
+static inline xrt_net_try_result_t xrt_net_try_wait(int state, xr_socket_t fd, int64_t deadline_ms,
+                                                    int64_t progress) {
+    xrt_net_try_result_t result = {XR_NULL_VAL, state, (int) fd, xrt_net_timeout_until(deadline_ms),
+                                   progress};
+    return result;
+}
+
+static inline void xrt_net_mark_timeout(XrValue handle_value) {
+    xrt_net_set_error_base(xrt_net_handle_base_ptr(handle_value), XRT_NETERR_TIMEOUT, XR_ETIMEDOUT);
+}
+
 static inline xrt_net_conn_object_t *xrt_net_conn_new(xr_socket_t fd, uint8_t conn_kind) {
     xrt_net_conn_object_t *conn = (xrt_net_conn_object_t *) xrt_arc_alloc(sizeof(*conn));
     memset(conn, 0, sizeof(*conn));
@@ -253,6 +306,9 @@ static inline xrt_net_listener_object_t *xrt_net_listener_new(xr_socket_t fd, in
 static inline void xrt_net_close_fd(xr_socket_t fd) {
     if (fd == XR_INVALID_SOCKET)
         return;
+#if defined(XRT_ENABLE_NETPOLL)
+    xr_aot_netpoll_close_fd((int) fd);
+#endif
     shutdown(fd, XR_SHUT_RDWR);
     xr_closesocket(fd);
 }
@@ -1316,89 +1372,39 @@ static inline XrValue xrt_net_shutdown(XrValue conn_value) {
 }
 
 /* ==========================================================================
- * Non-blocking step layer for the yieldable primitives an AOT coroutine can
- * call.  Each step either completes, fails, or reports which readiness the
- * caller must wait for; the coroutine replays the step after netpoll wakes it,
- * so a partially written buffer resumes from written_io rather than restarting.
- * Only the primitives the net module still exposes are covered: accept,
- * readInto, and writeBytes.
+ * Non-blocking attempt layer for the yieldable primitives an AOT coroutine can
+ * call. Each attempt either completes or reports which readiness to wait for,
+ * together with the descriptor and remaining timeout; the coroutine replays it
+ * after netpoll wakes up. Only the primitives the net module still exposes are
+ * covered: accept, readInto, and writeBytes.
  * ========================================================================== */
 
-static inline int64_t xrt_net_poll_fd(XrValue handle_value) {
-    xrt_net_handle_base_t *base = xrt_net_handle_base_ptr(handle_value);
-    return base && !base->closed ? (int64_t) base->fd : -1;
+static inline xrt_net_try_result_t xrt_net_try_done(XrValue value, int64_t progress) {
+    xrt_net_try_result_t result = {value, XRT_NET_TRY_DONE, -1, -1, progress};
+    return result;
 }
 
-static inline int xrt_net_write_step(XrValue conn_value, const char *data, int64_t len,
-                                     int64_t *written_io, XrValue *out) {
-    if (out)
-        *out = XR_FROM_INT(-1);
-    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
-    if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET) {
-        if (conn)
-            xrt_net_set_error_base(&conn->base, XRT_NETERR_CLOSED, 0);
-        return XRT_NET_STEP_ERROR;
-    }
-    if (conn->conn_kind == XRT_NETCONN_TLS) {
-        xrt_net_set_error_base(&conn->base, XRT_NETERR_TLS, 0);
-        return XRT_NET_STEP_ERROR;
-    }
-    if (!data && len > 0) {
-        xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
-        return XRT_NET_STEP_ERROR;
-    }
-    if (!written_io || *written_io < 0 || *written_io > len) {
-        xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
-        return XRT_NET_STEP_ERROR;
-    }
-    if (len <= 0) {
-        xrt_net_clear_error_base(&conn->base);
-        if (out)
-            *out = XR_FROM_INT(0);
-        return XRT_NET_STEP_DONE;
-    }
-
-    int64_t written = *written_io;
-    while (written < len) {
-        ssize_t n = xr_socket_send(conn->base.fd, data + written, (size_t) (len - written));
-        if (n > 0) {
-            written += n;
-            *written_io = written;
-            continue;
-        }
-        if (n == 0)
-            break;
-        int err = xr_get_socket_error();
-        if (err == XR_EINTR)
-            continue;
-        if (xr_socket_err_is_again(err)) {
-            if (!xrt_net_deadline_expired(conn->write_deadline_ms))
-                return XRT_NET_STEP_WAIT_WRITE;
-            err = XR_ETIMEDOUT;
-        }
-        xrt_net_set_error_base(&conn->base, xrt_net_error_from_errno(err), err);
-        if (out)
-            *out = XR_FROM_INT(written > 0 ? written : -1);
-        return XRT_NET_STEP_ERROR;
-    }
-
-    if (written == len)
-        xrt_net_clear_error_base(&conn->base);
-    if (out)
-        *out = XR_FROM_INT(written > 0 ? written : -1);
-    return XRT_NET_STEP_DONE;
+static inline int64_t xrt_net_timeout_until(int64_t deadline_ms) {
+    if (deadline_ms <= 0)
+        return -1;
+    int64_t remaining = deadline_ms - xrt_net_now_ms();
+    return remaining > 0 ? remaining : 0;
 }
 
-static inline int xrt_net_accept_step(XrValue listener_value, XrValue *out) {
-    if (out)
-        *out = XR_NULL_VAL;
+static inline xrt_net_try_result_t xrt_net_try_wait(int state, xr_socket_t fd, int64_t deadline_ms,
+                                                    int64_t progress) {
+    xrt_net_try_result_t result = {XR_NULL_VAL, state, (int) fd, xrt_net_timeout_until(deadline_ms),
+                                   progress};
+    return result;
+}
+
+static inline xrt_net_try_result_t xrt_net_accept_try(XrValue listener_value) {
     xrt_net_listener_object_t *listener = xrt_net_listener_ptr(listener_value);
     if (!listener || listener->base.closed || listener->base.fd == XR_INVALID_SOCKET) {
         if (listener)
             xrt_net_set_error_base(&listener->base, XRT_NETERR_CLOSED, 0);
-        return XRT_NET_STEP_ERROR;
+        return xrt_net_try_done(XR_NULL_VAL, 0);
     }
-
     for (;;) {
         struct sockaddr_storage addr;
         socklen_t addrlen = sizeof(addr);
@@ -1407,48 +1413,99 @@ static inline int xrt_net_accept_step(XrValue listener_value, XrValue *out) {
             xr_socket_set_nonblocking(fd);
             xr_socket_set_nodelay(fd, true);
             xrt_net_clear_error_base(&listener->base);
-            if (out)
-                *out = xrt_net_conn_box(xrt_net_conn_new(fd, XRT_NETCONN_TCP));
-            return XRT_NET_STEP_DONE;
+            return xrt_net_try_done(xrt_net_conn_box(xrt_net_conn_new(fd, XRT_NETCONN_TCP)), 0);
         }
-
         int err = xr_get_socket_error();
-        if (xr_socket_err_is_again(err)) {
-            if (!xrt_net_deadline_expired(listener->accept_deadline_ms))
-                return XRT_NET_STEP_WAIT_READ;
-            err = XR_ETIMEDOUT;
-        }
+        if (xr_socket_err_is_again(err))
+            return xrt_net_try_wait(XRT_NET_TRY_WAIT_READ, listener->base.fd,
+                                    listener->accept_deadline_ms, 0);
         if (err == XR_EINTR)
             continue;
         xrt_net_set_error_base(&listener->base, xrt_net_error_from_errno(err), err);
-        return XRT_NET_STEP_ERROR;
+        return xrt_net_try_done(XR_NULL_VAL, 0);
     }
 }
 
-static inline int xrt_net_read_into_step(XrValue conn_value, XrValue buffer_value,
-                                         XrValue maxlen_value, XrValue *out) {
-    if (out)
-        *out = XR_FROM_INT(-1);
+static inline xrt_net_try_result_t xrt_net_write_try(XrValue conn_value, const char *data,
+                                                     int64_t len, int64_t progress) {
     xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
     if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET) {
         if (conn)
             xrt_net_set_error_base(&conn->base, XRT_NETERR_CLOSED, 0);
-        return XRT_NET_STEP_ERROR;
+        return xrt_net_try_done(XR_FROM_INT(progress > 0 ? progress : -1), progress);
     }
     if (conn->conn_kind == XRT_NETCONN_TLS) {
         xrt_net_set_error_base(&conn->base, XRT_NETERR_TLS, 0);
-        return XRT_NET_STEP_ERROR;
+        return xrt_net_try_done(XR_FROM_INT(progress > 0 ? progress : -1), progress);
+    }
+    if ((!data && len > 0) || progress < 0 || progress > len) {
+        xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+        return xrt_net_try_done(XR_FROM_INT(progress > 0 ? progress : -1), progress);
+    }
+    while (progress < len) {
+        ssize_t n = xr_socket_send(conn->base.fd, data + progress, (size_t) (len - progress));
+        if (n > 0) {
+            progress += n;
+            continue;
+        }
+        if (n == 0)
+            break;
+        int err = xr_get_socket_error();
+        if (err == XR_EINTR)
+            continue;
+        if (xr_socket_err_is_again(err))
+            return xrt_net_try_wait(XRT_NET_TRY_WAIT_WRITE, conn->base.fd, conn->write_deadline_ms,
+                                    progress);
+        xrt_net_set_error_base(&conn->base, xrt_net_error_from_errno(err), err);
+        return xrt_net_try_done(XR_FROM_INT(progress > 0 ? progress : -1), progress);
+    }
+    if (progress == len)
+        xrt_net_clear_error_base(&conn->base);
+    return xrt_net_try_done(XR_FROM_INT(progress > 0 || len == 0 ? progress : -1), progress);
+}
+
+static inline xrt_net_try_result_t xrt_net_write_bytes_try(XrValue conn_value, XrValue data_value,
+                                                           int64_t progress) {
+    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
+    if (!XR_IS_ARRAY(data_value) || !data_value.ptr) {
+        if (conn)
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+        return xrt_net_try_done(XR_FROM_INT(-1), progress);
+    }
+    xrt_net_array_view_t *data = (xrt_net_array_view_t *) data_value.ptr;
+    if (data->elem_type != XR_ELEM_U8 || data->elem_size != 1 || data->length < 0 ||
+        (data->length > 0 && !data->data)) {
+        if (conn)
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+        return xrt_net_try_done(XR_FROM_INT(-1), progress);
+    }
+    return xrt_net_write_try(conn_value, (const char *) data->data, data->length, progress);
+}
+
+/* readInto fills a caller-supplied Array<byte>; it never allocates, so the
+ * attempt reports the byte count and leaves the data in the caller's buffer. */
+static inline xrt_net_try_result_t xrt_net_read_into_try(XrValue conn_value, XrValue buffer_value,
+                                                         XrValue maxlen_value) {
+    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
+    if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET) {
+        if (conn)
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_CLOSED, 0);
+        return xrt_net_try_done(XR_FROM_INT(-1), 0);
+    }
+    if (conn->conn_kind == XRT_NETCONN_TLS) {
+        xrt_net_set_error_base(&conn->base, XRT_NETERR_TLS, 0);
+        return xrt_net_try_done(XR_FROM_INT(-1), 0);
     }
     if (!XR_IS_ARRAY(buffer_value) || !buffer_value.ptr) {
         xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
-        return XRT_NET_STEP_ERROR;
+        return xrt_net_try_done(XR_FROM_INT(-1), 0);
     }
 
     xrt_net_array_view_t *buffer = (xrt_net_array_view_t *) buffer_value.ptr;
     if (buffer->elem_type != XR_ELEM_U8 || buffer->elem_size != 1 || buffer->capacity <= 0 ||
         !buffer->data) {
         xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
-        return XRT_NET_STEP_ERROR;
+        return xrt_net_try_done(XR_FROM_INT(-1), 0);
     }
 
     int64_t requested = xrt_net_int_arg(maxlen_value);
@@ -1460,42 +1517,17 @@ static inline int xrt_net_read_into_step(XrValue conn_value, XrValue buffer_valu
         if (n >= 0) {
             buffer->length = (int64_t) n;
             xrt_net_clear_error_base(&conn->base);
-            if (out)
-                *out = XR_FROM_INT((int64_t) n);
-            return XRT_NET_STEP_DONE;
+            return xrt_net_try_done(XR_FROM_INT((int64_t) n), 0);
         }
         int err = xr_get_socket_error();
         if (err == XR_EINTR)
             continue;
-        if (xr_socket_err_is_again(err)) {
-            if (!xrt_net_deadline_expired(conn->read_deadline_ms))
-                return XRT_NET_STEP_WAIT_READ;
-            err = XR_ETIMEDOUT;
-        }
+        if (xr_socket_err_is_again(err))
+            return xrt_net_try_wait(XRT_NET_TRY_WAIT_READ, conn->base.fd, conn->read_deadline_ms,
+                                    0);
         xrt_net_set_error_base(&conn->base, xrt_net_error_from_errno(err), err);
-        return XRT_NET_STEP_ERROR;
+        return xrt_net_try_done(XR_FROM_INT(-1), 0);
     }
-}
-
-static inline int xrt_net_write_bytes_step(XrValue conn_value, XrValue data_value,
-                                           int64_t *written_io, XrValue *out) {
-    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
-    if (out)
-        *out = XR_FROM_INT(-1);
-    if (!XR_IS_ARRAY(data_value) || !data_value.ptr) {
-        if (conn)
-            xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
-        return XRT_NET_STEP_ERROR;
-    }
-
-    xrt_net_array_view_t *data = (xrt_net_array_view_t *) data_value.ptr;
-    if (data->elem_type != XR_ELEM_U8 || data->elem_size != 1 || data->length < 0 ||
-        (data->length > 0 && !data->data)) {
-        if (conn)
-            xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
-        return XRT_NET_STEP_ERROR;
-    }
-    return xrt_net_write_step(conn_value, (const char *) data->data, data->length, written_io, out);
 }
 
 #endif  // XRT_NET_H

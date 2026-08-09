@@ -12,15 +12,17 @@
 // `fn(req: HttpRequest) -> HttpResponse`.
 
 import http
-import { Headers, HttpRequest, HttpResponse } from http
+import { Headers, HttpRequest, HttpResponse, Server } from http
+
+var server = Server()
 
 // Simple text response
-http.routeHandler("GET", "/", fn(req: HttpRequest) -> HttpResponse {
+server.routeHandler("GET", "/", fn(req: HttpRequest) -> HttpResponse {
     return http.textResponse("Welcome to Xray HTTP Server!")
 })
 
 // JSON response
-http.routeHandler("GET", "/api/hello", fn(req: HttpRequest) -> HttpResponse {
+server.routeHandler("GET", "/api/hello", fn(req: HttpRequest) -> HttpResponse {
     return http.jsonResponse({
         message: "Hello from Xray!",
         method: string(req.method),
@@ -29,19 +31,19 @@ http.routeHandler("GET", "/api/hello", fn(req: HttpRequest) -> HttpResponse {
 })
 
 // Echo back request body
-http.routeHandler("POST", "/api/echo", fn(req: HttpRequest) -> HttpResponse {
+server.routeHandler("POST", "/api/echo", fn(req: HttpRequest) -> HttpResponse {
     var body = req.text()
     return http.jsonResponse({ echo: body, length: len(body) })
 })
 
 // Dynamic path (query params)
-http.routeHandler("GET", "/api/greet", fn(req: HttpRequest) -> HttpResponse {
+server.routeHandler("GET", "/api/greet", fn(req: HttpRequest) -> HttpResponse {
     var name = req.query.get("name") ?? "World"
     return http.jsonResponse({ greeting: "Hello, ${name}!" })
 })
 
 // 302 redirect with Location header
-http.routeHandler("GET", "/api/redirect", fn(req: HttpRequest) -> HttpResponse {
+server.routeHandler("GET", "/api/redirect", fn(req: HttpRequest) -> HttpResponse {
     var headers = Headers()
     headers.add("Location", "/api/hello")
     return http.textResponse("Redirecting...", 302, headers)
@@ -49,4 +51,4 @@ http.routeHandler("GET", "/api/redirect", fn(req: HttpRequest) -> HttpResponse {
 
 print("Server starting on http://localhost:3000")
 const serverRunning = Atomic(true)
-http.listen(3000, serverRunning)
+server.listen(3000, serverRunning)

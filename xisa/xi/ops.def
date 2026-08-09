@@ -1197,7 +1197,7 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.json.new
+(define-xi-op xi.object.new
   :class allocation
   :arity 0
   :escape-alloc heap
@@ -1249,7 +1249,7 @@
 ; Object spread `{...base, x: 1}`: copy every field of the source object into
 ; the destination (later fields override earlier ones). Source is borrowed; the
 ; destination escapes to the heap.
-(define-xi-op xi.json.merge
+(define-xi-op xi.object.merge
   :class memory-write
   :arity 2
   :result-kind void

@@ -44,13 +44,19 @@ complete effect product.
    ForeignHandle roots. Writes, descriptor rebinding, relocation, shortening,
    and invalidation compose transitively after call-site root substitution.
    Missing or dynamic evidence invalidates live-view permission fail-closed.
-6. Analyzer database IDs are analyzer-local. Cross-analyzer publication must
-   re-intern semantic summaries into the destination databases; copying a
-   numeric ID is invalid. Stable effect and memory-effect fingerprints are the
-   cache and verifier identity. TypedProgram exposes immutable effect and
-   memory-effect sidecars and owns a node-id-keyed immutable numeric conversion
-   snapshot; Xi consumes the published data rather than borrowing mutable
-   analyzer node tables or re-inferring semantics from Xi op names.
+6. Analyzer database, node, and symbol IDs are analyzer-local. Cross-analyzer
+   publication must re-intern semantic summaries into the destination
+   databases; copying any numeric identity is invalid. When a declaration-owned
+   expression is analyzed in another analyzer -- including an imported default
+   argument -- its referenced declaration is represented by one cached,
+   destination-owned semantic symbol view with a fresh ID and re-interned export
+   metadata. The view is not inserted into lexical lookup, and borrows only
+   immutable source semantic payloads whose owner outlives the destination.
+   Stable effect and memory-effect fingerprints are the cache and verifier
+   identity. TypedProgram exposes immutable effect and memory-effect sidecars
+   and owns a node-id-keyed immutable numeric conversion snapshot; Xi consumes
+   the published data rather than borrowing mutable analyzer node tables or
+   re-inferring semantics from Xi op names.
 7. `contains_unsafe_op` is an audit fact and normally does not propagate as a
    caller requirement. `requires_unsafe_at_call` is a capability boundary that
    must be discharged at each call site; a safe wrapper may contain unsafe work
@@ -141,8 +147,8 @@ anchor-sha256: src/frontend/analyzer/xa_effect_db.h 251acc9d21570dff99192330e665
 anchor-sha256: src/frontend/analyzer/xa_effect_db.c 433236c34b67ef15d492e53ad9a0471502675fb266e56a3f9f950afbe8753b3a
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.h 4a2527c4da62c7238c5df9f13b4fbcf9e210bb3555745425ace07b3704e674c3
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.c 1c3b0121cb1d9814189b615c7a5314a4dc873d1ef7ab87d86ed6deb7ba51a5e0
-anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 8c57bbc803567ab5951f6c7cc988ce76665b60f492c5471d836a2c02c5cb0147
-anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c d4cd4b47a2e498d1602dd1e0d01751be3e88acbcc197edcc49ad99557f57d93f
+anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 489b564ae97c97ddedcce655692b7011ab234f50984df35ad1941657a600af98
+anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c 9ee98106c86e153d1aee935862a2065fb24bd79036283bc26750018f120c3290
 anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b71501e112a6aee3caa413c03e883fbd3f05e9d458dfdbeb8240025cd431ff92
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 19585145d88b00d1c1e4fad9fe23ac841e75c941eeaf7c18be3779befc872367
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c dc666a71819aa81f3573754e55626d8bec56766e16eed6191cbcfa293914b723

@@ -324,7 +324,7 @@ static char *bc_read_optional_string(BcReader *r);
 
 /* ========== Canonical Aggregate Layout Table ========== */
 
-#define BC_LAYOUT_FORMAT_VERSION 2u
+#define BC_LAYOUT_FORMAT_VERSION 3u
 #define BC_MAX_LAYOUTS 4096u
 #define BC_MAX_LAYOUT_DEPTH 16u
 
@@ -421,7 +421,8 @@ static bool bc_write_layout_table(BcWriter *w) {
         if (!bc_put_u32(w, BC_LAYOUT_FORMAT_VERSION) || !bc_put_u64(w, entry->key) ||
             !bc_put_u64(w, layout->target_abi_hash) || !bc_put_u8(w, layout->kind) ||
             !bc_put_u32(w, layout->total_size) || !bc_put_u32(w, layout->alignment) ||
-            !bc_put_u32(w, layout->explicit_align) || !bc_put_u16(w, layout->field_count))
+            !bc_put_u32(w, layout->explicit_align) ||
+            !bc_put_optional_string(w, layout->nominal_name) || !bc_put_u16(w, layout->field_count))
             return false;
         for (uint16_t fi = 0; fi < layout->field_count; fi++) {
             const XrAggregateFieldLayout *field = &layout->fields[fi];
@@ -592,23 +593,29 @@ static bool bc_read_layout_table(BcReader *r) {
         uint32_t total_size = bc_get_u32(r);
         uint32_t alignment = bc_get_u32(r);
         uint32_t explicit_align = bc_get_u32(r);
+        char *nominal_name = bc_read_optional_string(r);
         uint16_t field_count = bc_get_u16(r);
-        if (r->error != XR_BC_OK)
+        if (r->error != XR_BC_OK) {
+            xr_free(nominal_name);
             return false;
+        }
         if (format != BC_LAYOUT_FORMAT_VERSION || entry->key == 0 ||
             (li > 0 && entry->key <= previous_key) || kind > XR_AGG_LAYOUT_UNION ||
             total_size > UINT16_MAX || alignment == 0 || alignment > UINT16_MAX ||
             field_count > XR_MAX_AGG_FIELDS) {
+            xr_free(nominal_name);
             r->error = XR_BC_ERR_CORRUPT;
             return false;
         }
         if (target_hash != target->stable_hash) {
+            xr_free(nominal_name);
             r->error = XR_BC_ERR_TARGET_ABI;
             return false;
         }
         previous_key = entry->key;
         XrAggregateLayout *layout = (XrAggregateLayout *) xr_calloc(1, sizeof(*layout));
         if (!layout) {
+            xr_free(nominal_name);
             r->error = XR_BC_ERR_ALLOC;
             return false;
         }
@@ -618,6 +625,7 @@ static bool bc_read_layout_table(BcReader *r) {
         layout->total_size = (uint16_t) total_size;
         layout->alignment = alignment;
         layout->explicit_align = explicit_align;
+        layout->nominal_name = nominal_name;
         layout->field_count = field_count;
         if (field_count > 0) {
             layout->field_names = (const char **) xr_calloc(field_count, sizeof(char *));
@@ -686,7 +694,6 @@ static bool bc_read_layout_table(BcReader *r) {
 #define BC_VAL_RUNE 8
 #define BC_VAL_BIGINT 9
 
-#define BC_SHAPE_JSON 1
 #define BC_SHAPE_STRUCT_OBJECT 2
 #define BC_SHAPE_JSON_DECODE_ROOT 3
 
@@ -732,8 +739,6 @@ static bool bc_write_dynamic_shape(BcWriter *w, XrValue val) {
     uint8_t kind = 0;
     if ((cls->flags & XR_CLASS_JSON_DECODE_ROOT) != 0) {
         kind = BC_SHAPE_JSON_DECODE_ROOT;
-    } else if (cls->builtin_kind == XR_BK_JSON) {
-        kind = BC_SHAPE_JSON;
     } else if (cls->builtin_kind == XR_BK_STRUCT_OBJECT) {
         kind = BC_SHAPE_STRUCT_OBJECT;
     } else {
@@ -1377,8 +1382,8 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
     uint32_t count = bc_get_u32(r);
     if (r->error != XR_BC_OK)
         return xr_null();
-    if (count > UINT16_MAX || (kind != BC_SHAPE_JSON && kind != BC_SHAPE_STRUCT_OBJECT &&
-                               kind != BC_SHAPE_JSON_DECODE_ROOT)) {
+    if (count > UINT16_MAX ||
+        (kind != BC_SHAPE_STRUCT_OBJECT && kind != BC_SHAPE_JSON_DECODE_ROOT)) {
         r->error = XR_BC_ERR_CORRUPT;
         return xr_null();
     }
@@ -1418,9 +1423,7 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
         }
         stable_type_keys[i] = bc_get_u64(r);
         shape_field_flags[i] = bc_get_u8(r);
-        if (r->error != XR_BC_OK ||
-            (shape_field_flags[i] &
-             ~(XR_OBJECT_SHAPE_FIELD_READONLY | XR_OBJECT_SHAPE_FIELD_OPTIONAL)) != 0) {
+        if (r->error != XR_BC_OK || (shape_field_flags[i] & ~XR_OBJECT_SHAPE_FIELD_READONLY) != 0) {
             if (r->error == XR_BC_OK)
                 r->error = XR_BC_ERR_CORRUPT;
             goto fail;
@@ -1434,25 +1437,19 @@ static XrValue bc_read_dynamic_shape(BcReader *r) {
 
     XrClass *cls = NULL;
     bool sealed = sealed_raw != 0;
-    if (kind == BC_SHAPE_JSON) {
-        cls = xr_class_build_json_chain(r->X, (const char *const *) names, (int) count,
-                                        stable_type_keys, shape_field_flags, sealed);
+    if (!sealed) {
+        r->error = XR_BC_ERR_CORRUPT;
+        cls = NULL;
     } else {
-        if (!sealed) {
-            r->error = XR_BC_ERR_CORRUPT;
-            cls = NULL;
-        } else {
-            cls = xr_class_build_struct_object_chain(
-                r->X, (const char *const *) names, json_value_kinds, (int) count,
-                json_struct_object_classes, json_decode_schemas, stable_type_keys,
-                shape_field_flags);
-            if (cls && kind == BC_SHAPE_JSON_DECODE_ROOT) {
-                if (count != 1) {
-                    r->error = XR_BC_ERR_CORRUPT;
-                    cls = NULL;
-                } else {
-                    cls->flags |= XR_CLASS_JSON_DECODE_ROOT;
-                }
+        cls = xr_class_build_struct_object_chain(
+            r->X, (const char *const *) names, json_value_kinds, (int) count,
+            json_struct_object_classes, json_decode_schemas, stable_type_keys, shape_field_flags);
+        if (cls && kind == BC_SHAPE_JSON_DECODE_ROOT) {
+            if (count != 1) {
+                r->error = XR_BC_ERR_CORRUPT;
+                cls = NULL;
+            } else {
+                cls->flags |= XR_CLASS_JSON_DECODE_ROOT;
             }
         }
     }
@@ -1656,9 +1653,11 @@ static bool *bc_collect_dynamic_shape_constants(XrProto *proto, uint32_t const_c
         XrInstruction inst = PROTO_CODE(proto, i);
         OpCode op = GET_OPCODE(inst);
         int kidx = -1;
-        if (op == OP_NEWJSON) {
+        if (op == OP_NEWOBJECT) {
             kidx = GETARG_B(inst);
-        } else if (op == OP_JSON_DECODE || op == OP_JSON_PARSE_TYPED) {
+        } else if (op == OP_JSON_DECODE || op == OP_JSON_DECODE_IGNORE ||
+                   op == OP_JSON_PARSE_TYPED || op == OP_JSON_PARSE_TYPED_IGNORE ||
+                   op == OP_JSON_PARSE_WITH_REST || op == OP_JSON_PARSE_WITH_REST_IGNORE) {
             kidx = GETARG_C(inst);
         }
         if (kidx >= 0 && (uint32_t) kidx < const_count) {
@@ -1749,6 +1748,8 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
     if (!bc_put_u32(w, proto->num_globals))
         return false;
     if (!bc_put_u32(w, proto->struct_area_size))
+        return false;
+    if (!bc_put_u64(w, proto->call_place_param_bitmap))
         return false;
     if (!bc_put_u8(w, proto->is_vararg ? 1 : 0))
         return false;
@@ -1936,6 +1937,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     proto->num_globals = bc_get_u32(r);
     uint32_t struct_area_size = bc_get_u32(r);
     proto->struct_area_size = struct_area_size;
+    proto->call_place_param_bitmap = bc_get_u64(r);
     proto->is_vararg = bc_get_u8(r) != 0;
     proto->is_coro_safe = bc_get_u8(r) != 0;
     proto->may_scheduler_suspend = bc_get_u8(r) != 0;

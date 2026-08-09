@@ -1,0 +1,19 @@
+type Profile = { id: int, active: bool }
+
+fn run(n: int) -> int {
+    var object = JSON.parseObject("{\"id\":7,\"active\":true}")
+    var i = 0
+    var total = 0
+    while (i < n) {
+        var profile = JSON.decode<Profile>(JSON.value(object))!
+        total = total + profile.id
+        i = i + 1
+    }
+    return total
+}
+
+var iterations = 20000
+if (len(process.args) > 0) {
+    iterations = int(process.args[0]) ?? iterations
+}
+print(run(iterations))

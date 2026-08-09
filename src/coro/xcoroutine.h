@@ -100,6 +100,10 @@ typedef struct XrCoroExt {
     _Atomic int lock_count;  // lock nesting depth (0 = unlocked)
     int locked_worker;       // Worker ID that owns the lock (-1 = none)
 
+    /* One-shot scheduler handoff requested by a yieldable runtime operation.
+     * Unlike affinity_p this is an explicit dispatch command, not a hint. */
+    int resume_target_worker;
+
     /* === Await/scope wait state (cold; only blocking await/scope paths use it) === */
     XrCoroWaitState wait;
 
@@ -273,6 +277,7 @@ static inline void xr_coro_ext_init(XrCoroExt *ext) {
     if (!ext)
         return;
     ext->locked_worker = -1;
+    ext->resume_target_worker = -1;
     ext->work_queue_hint = -1;
     ext->wait_bucket_owner = -1;
     ext->timer.slot = XR_TW_SLOT_INACTIVE;

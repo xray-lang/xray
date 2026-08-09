@@ -80,7 +80,7 @@ typedef enum XrJsonNominalDecodeTargetKind {
     XR_JSON_NOMINAL_TARGET_VALUE_STRUCT = 2,
 } XrJsonNominalDecodeTargetKind;
 
-/* AOT-side construction contract for a @derive(Json) nominal target. type_id
+/* AOT-side construction contract for a @derive(JSON) nominal target. type_id
  * is the registered destructor/storage-promotion identity for both reference
  * classes and heap-materialized value structs. target_kind selects whether a
  * parsed value boxes as XR_TINSTANCE or XR_TAG_AGG_REF; value structs may also

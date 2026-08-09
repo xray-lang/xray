@@ -1,0 +1,5 @@
+fn encode<T>(value: T) -> JSON.Value {
+    return JSON.value(value)
+}
+
+print(encode(1))

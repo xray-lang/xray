@@ -9,9 +9,9 @@
  *
  * KEY CONCEPT:
  *   Core JSON serialize/deserialize between XrValue and JSON strings.
- *   Used by the Json builtin class (xjson_builtins.c) and the embedding
- *   API. RFC 8259 compliant. Handles Enum (member name), DateTime (ISO
- *   8601), and throws on non-serializable types (function, class, etc.).
+ *   Used by the JSON namespace (xjson_builtins.c) and the embedding API.
+ *   RFC 8259 compliant. Enum values use their member name; values outside
+ *   the JSON.Encodable domain are rejected.
  */
 
 #ifndef XJSON_SERDE_H
@@ -35,6 +35,11 @@ typedef struct {
     char error_msg[128];  // human-readable description of the offending type
 } XrJsonEncodeResult;
 
+typedef struct {
+    XrValue result;  // parsed value; valid JSON null is represented by xr_null()
+    bool has_error;  // distinguishes valid JSON null from malformed input
+} XrJsonParseResult;
+
 typedef struct XrJsonTypedParseError {
     char path[160];
     char expected[48];
@@ -46,8 +51,8 @@ struct XrCoroutine;
 
 /* ========== Script-callable Functions ========== */
 
-// parse(str) → XrValue
-XR_FUNC XrValue xr_json_fn_parse(XrVMRuntime *X, XrValue self, XrValue *args, int argc);
+// Parse without throwing. Script-facing wrappers turn has_error into a panic.
+XR_FUNC XrJsonParseResult xr_json_parse_core(XrVMRuntime *X, XrValue text);
 
 // Core stringify: returns result + error info without throwing.
 // Callers that need exception semantics should inspect has_error and throw.
@@ -60,9 +65,6 @@ XR_FUNC XrJsonEncodeResult xr_json_encode_core(XrVMRuntime *X, XrValue val);
 // isValid(str, strict?) → bool (zero-allocation validator)
 XR_FUNC XrValue xr_json_fn_is_valid(XrVMRuntime *X, XrValue self, XrValue *args, int argc);
 
-// tryParse(str) → Json {value, error}
-XR_FUNC XrValue xr_json_fn_try_parse(XrVMRuntime *X, XrValue self, XrValue *args, int argc);
-
 /* ========== C API ========== */
 
 // Serialize XrValue to a malloc'd C-string (caller frees with xr_free)
@@ -72,11 +74,17 @@ XR_FUNC char *xr_json_stringify_to_cstr(XrVMRuntime *X, XrValue val, size_t *out
 XR_FUNC XrValue xr_json_parse_from_cstr(XrVMRuntime *X, const char *json_str, size_t len);
 XR_FUNC bool xr_json_parse_typed_object_from_cstr(XrVMRuntime *X, struct XrCoroutine *coro,
                                                   const char *json_str, size_t len,
-                                                  struct XrClass *target_class, XrValue *out,
+                                                  struct XrClass *target_class,
+                                                  bool ignore_unknown_fields, XrValue *out,
                                                   XrJsonTypedParseError *error);
 XR_FUNC bool xr_json_parse_typed_value_from_cstr(XrVMRuntime *X, struct XrCoroutine *coro,
                                                  const char *json_str, size_t len,
-                                                 const XrJsonDecodeSchema *schema, XrValue *out,
+                                                 const XrJsonDecodeSchema *schema,
+                                                 bool ignore_unknown_fields, XrValue *out,
                                                  XrJsonTypedParseError *error);
+XR_FUNC bool xr_json_parse_typed_object_with_rest_from_cstr(
+    XrVMRuntime *X, struct XrCoroutine *coro, const char *json_str, size_t len,
+    struct XrClass *target_class, struct XrClass *wrapper_class, bool ignore_nested_unknown_fields,
+    XrValue *out, XrJsonTypedParseError *error);
 
 #endif  // XJSON_SERDE_H

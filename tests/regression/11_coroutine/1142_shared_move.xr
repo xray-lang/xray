@@ -16,10 +16,18 @@ fn recvArray(ch: Channel<Array<int>>) -> Array<int> {
     }
 }
 
-fn recvJson(ch: Channel<Json>) -> Json {
+type Config = { name: string, value: int }
+type StepMessage = { step: int }
+type CountRecord = { count: int }
+
+fn emptyStep() -> StepMessage {
+    return { step: 0 }
+}
+
+fn recvStep(ch: Channel<StepMessage>) -> StepMessage {
     return match (ch.recv()) {
         Recv.Value(v) -> v
-        _ -> {}
+        _ -> emptyStep()
     }
 }
 
@@ -28,19 +36,19 @@ fn recvJson(ch: Channel<Json>) -> Json {
 fn test_shared_const() {
     print("=== Test shared ===")
 
-    const config: Json = {
+    const config: Config = {
         name: "test",
         value: 42
     }
     print(config)
 
     // Multiple coroutines read the same shared (zero-copy)
-    var t1 = go fn(c: Json) -> int {
-        return int(c.value)
+    var t1 = go fn(c: Config) -> int {
+        return c.value
     }(config)
 
-    var t2 = go fn(c: Json) -> int {
-        return int(c.value) * 2
+    var t2 = go fn(c: Config) -> int {
+        return c.value * 2
     }(config)
 
     var r1 = await t1
@@ -55,12 +63,12 @@ fn test_shared_const() {
 fn test_move_go() {
     print("=== Test move go ===")
 
-    var data: Json = { count: 10 }
+    var data: CountRecord = { count: 10 }
 
     // 'move data' transfers the owned root to child coroutine
-    var task = go fn(d: move Json) -> int {
+    var task = go fn(d: move CountRecord) -> int {
         print("child got:", d.count)
-        return int(d.count) + 1
+        return d.count + 1
     }(move data)
 
     var result = await task
@@ -111,13 +119,13 @@ fn test_normal_copy() {
 fn test_move_pipeline() {
     print("=== Test move pipeline ===")
 
-    const ch: Channel<Json> = Channel(1)
-    var msg: Json = { step: 0 }
+    const ch: Channel<StepMessage> = Channel(1)
+    var msg: StepMessage = { step: 0 }
 
     // Stage 1: modify and move-send
-    var t1 = go fn(c: Channel<Json>, d: move Json) {
-        var next: Json = copy(d)
-        next.step = int(next.step) + 1
+    var t1 = go fn(c: Channel<StepMessage>, d: move StepMessage) {
+        var next: StepMessage = copy(d)
+        next.step = next.step + 1
         print("stage1:", next.step)
         c.send(move next)
     }(ch, move msg)
@@ -126,11 +134,11 @@ fn test_move_pipeline() {
     // msg is no longer usable here (moved in go call above)
 
     // Stage 2: receive and process
-    var t2 = go fn(c: Channel<Json>) -> int {
-        var d = recvJson(c)
-        d.step = int(d.step) + 1
+    var t2 = go fn(c: Channel<StepMessage>) -> int {
+        var d = recvStep(c)
+        d.step = d.step + 1
         print("stage2:", d.step)
-        return int(d.step)
+        return d.step
     }(ch)
 
     var final_step = await t2

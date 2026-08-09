@@ -477,17 +477,18 @@ static inline XrValue xrt_io_stat(const char *path_data, int64_t path_len) {
         (int64_t) st.st_ctime, (int64_t) st.st_uid, (int64_t) st.st_gid, S_ISREG(st.st_mode),
         S_ISDIR(st.st_mode), is_symlink);
 #endif
-    XrValue obj = xrt_json_new_named(XR_IO_CORE_STAT_FIELD_COUNT, XR_IO_CORE_STAT_FIELD_NAMES);
-    xrt_json_set_field(obj, XR_IO_CORE_STAT_SIZE, XR_FROM_INT(fields.size));
-    xrt_json_set_field(obj, XR_IO_CORE_STAT_MODE, XR_FROM_INT(fields.mode));
-    xrt_json_set_field(obj, XR_IO_CORE_STAT_MTIME, XR_FROM_INT(fields.mtime));
-    xrt_json_set_field(obj, XR_IO_CORE_STAT_ATIME, XR_FROM_INT(fields.atime));
-    xrt_json_set_field(obj, XR_IO_CORE_STAT_CTIME, XR_FROM_INT(fields.ctime));
-    xrt_json_set_field(obj, XR_IO_CORE_STAT_UID, XR_FROM_INT(fields.uid));
-    xrt_json_set_field(obj, XR_IO_CORE_STAT_GID, XR_FROM_INT(fields.gid));
-    xrt_json_set_field(obj, XR_IO_CORE_STAT_IS_FILE, XR_FROM_BOOL(fields.is_file));
-    xrt_json_set_field(obj, XR_IO_CORE_STAT_IS_DIR, XR_FROM_BOOL(fields.is_dir));
-    xrt_json_set_field(obj, XR_IO_CORE_STAT_IS_SYMLINK, XR_FROM_BOOL(fields.is_symlink));
+    XrValue obj =
+        xrt_struct_object_new_named(XR_IO_CORE_STAT_FIELD_COUNT, XR_IO_CORE_STAT_FIELD_NAMES);
+    xrt_object_set_field(obj, XR_IO_CORE_STAT_SIZE, XR_FROM_INT(fields.size));
+    xrt_object_set_field(obj, XR_IO_CORE_STAT_MODE, XR_FROM_INT(fields.mode));
+    xrt_object_set_field(obj, XR_IO_CORE_STAT_MTIME, XR_FROM_INT(fields.mtime));
+    xrt_object_set_field(obj, XR_IO_CORE_STAT_ATIME, XR_FROM_INT(fields.atime));
+    xrt_object_set_field(obj, XR_IO_CORE_STAT_CTIME, XR_FROM_INT(fields.ctime));
+    xrt_object_set_field(obj, XR_IO_CORE_STAT_UID, XR_FROM_INT(fields.uid));
+    xrt_object_set_field(obj, XR_IO_CORE_STAT_GID, XR_FROM_INT(fields.gid));
+    xrt_object_set_field(obj, XR_IO_CORE_STAT_IS_FILE, XR_FROM_BOOL(fields.is_file));
+    xrt_object_set_field(obj, XR_IO_CORE_STAT_IS_DIR, XR_FROM_BOOL(fields.is_dir));
+    xrt_object_set_field(obj, XR_IO_CORE_STAT_IS_SYMLINK, XR_FROM_BOOL(fields.is_symlink));
     XRT_FREE(owned);
     return obj;
 }
@@ -896,7 +897,7 @@ static inline XrValue xrt_io_read_stdin_bytes(void) {
 }
 
 static inline intptr_t XR_IO_CORE_ACQUIRE_HANDLE("xray_file_stream")
-xrt_io_file_open_handle(const char *path) {
+    xrt_io_file_open_handle(const char *path) {
     FILE *file = path && path[0] != '\0' ? fopen(path, "rb") : NULL;
     return file ? (intptr_t) file : -1;
 }

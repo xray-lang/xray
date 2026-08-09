@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   JSON / YAML / TOML / XML / CSV parsers all produce error Maps with the
  *   same schema { type, line?, row?, column?, message } and all extract
- *   config bool/int/char/fixed-string fields from an XrJson object. This
+ *   config bool/int/char/fixed-string fields from an XrObjectInstance object. This
  *   header centralises both:
  *
  *   1. XR_STDLIB_MAX_DEPTH — the recommended default nesting cap shared
@@ -24,7 +24,7 @@
  *      isolate lifetime.
  *
  *   3. xrs_cfg_get_bool / _int / _char / _fixed_str — convenience
- *      readers for the XrJson -> struct config path.
+ *      readers for the XrObjectInstance -> struct config path.
  *
  * WHY THIS DESIGN:
  *   The error-map and config-extract boilerplate was previously
@@ -122,30 +122,33 @@ static inline void xrs_error_push(XrVMRuntime *X, XrArray *errors, const char *t
 // Read a boolean-typed config field by key. If absent or wrong type, the
 // caller-supplied `*dst` is left untouched (preserving the default that
 // config_init() already stored).
-static inline void xrs_cfg_get_bool(XrVMRuntime *X, XrJson *json, const char *key, bool *dst) {
+static inline void xrs_cfg_get_bool(XrVMRuntime *X, XrObjectInstance *json, const char *key,
+                                    bool *dst) {
     if (!json || !dst)
         return;
-    XrValue v = xr_json_get_by_key(X, json, key);
+    XrValue v = xr_object_instance_get_by_key(X, json, key);
     if (XR_IS_BOOL(v))
         *dst = XR_TO_BOOL(v);
 }
 
 // Read an int32-typed config field by key; silently ignores non-int
 // values. Truncates negative sentinel values (e.g. -1) unchanged.
-static inline void xrs_cfg_get_int(XrVMRuntime *X, XrJson *json, const char *key, int *dst) {
+static inline void xrs_cfg_get_int(XrVMRuntime *X, XrObjectInstance *json, const char *key,
+                                   int *dst) {
     if (!json || !dst)
         return;
-    XrValue v = xr_json_get_by_key(X, json, key);
+    XrValue v = xr_object_instance_get_by_key(X, json, key);
     if (XR_IS_INT(v))
         *dst = (int) XR_TO_INT(v);
 }
 
 // Read a single-char-typed config field (the first byte of the string
 // argument is taken). Empty strings leave *dst unchanged.
-static inline void xrs_cfg_get_char(XrVMRuntime *X, XrJson *json, const char *key, char *dst) {
+static inline void xrs_cfg_get_char(XrVMRuntime *X, XrObjectInstance *json, const char *key,
+                                    char *dst) {
     if (!json || !dst)
         return;
-    XrValue v = xr_json_get_by_key(X, json, key);
+    XrValue v = xr_object_instance_get_by_key(X, json, key);
     if (XR_IS_STRING(v)) {
         XrString *s = XR_TO_STRING(v);
         if (s->length > 0)
@@ -158,11 +161,11 @@ static inline void xrs_cfg_get_char(XrVMRuntime *X, XrJson *json, const char *ke
 // source is longer than `dst_cap - 1`, it is truncated. Returns the
 // number of bytes copied (not counting the trailing NUL); 0 means the
 // key was absent or not a string, in which case `dst` is untouched.
-static inline size_t xrs_cfg_get_fixed_str(XrVMRuntime *X, XrJson *json, const char *key, char *dst,
-                                           size_t dst_cap) {
+static inline size_t xrs_cfg_get_fixed_str(XrVMRuntime *X, XrObjectInstance *json, const char *key,
+                                           char *dst, size_t dst_cap) {
     if (!json || !dst || dst_cap == 0)
         return 0;
-    XrValue v = xr_json_get_by_key(X, json, key);
+    XrValue v = xr_object_instance_get_by_key(X, json, key);
     if (!XR_IS_STRING(v))
         return 0;
     XrString *s = XR_TO_STRING(v);

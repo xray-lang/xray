@@ -1,6 +1,0 @@
-fn jsonArrayLiteralContainerReceiverPlan() -> int {
-    var users: Array<Json> = [{ name: "ada", age: 7 }, { name: "bob", age: 8 }]
-    return users[0].age
-}
-
-print(jsonArrayLiteralContainerReceiverPlan())

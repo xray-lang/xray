@@ -1,2 +1,1 @@
-empty object literal '{}' requires an explicit object-shape or Json context
-
+object field `?` suffix was removed; write the nullable type after `:`

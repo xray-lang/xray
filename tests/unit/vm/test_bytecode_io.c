@@ -13,6 +13,7 @@
 #include "base/xmalloc.h"
 #include "module/xbytecode_io.h"
 #include "runtime/xisolate_api.h"
+#include "runtime/xexec_state.h"
 #include "runtime/class/xclass.h"
 #include "runtime/class/xclass_descriptor.h"
 #include "runtime/class/xenum.h"
@@ -95,7 +96,7 @@ static void free_minimal_roundtrip_descriptor(XrClassDescriptor *desc) {
     xr_free(desc);
 }
 
-/* Locate the first nested-layout key in the stable v21 layout table.  Keeping
+/* Locate the first nested-layout key in the canonical layout table.  Keeping
  * this parser in the test makes corruption checks independent of qsort order. */
 static bool find_nested_key_offset(const uint8_t *bytes, size_t size, size_t *out_offset,
                                    uint64_t *out_owner_key) {
@@ -104,11 +105,30 @@ static bool find_nested_key_offset(const uint8_t *bytes, size_t size, size_t *ou
     uint32_t count = read_le32(bytes + 20);
     size_t pos = 24;
     for (uint32_t li = 0; li < count; li++) {
-        if (pos > size || size - pos < 35)
+        if (pos > size || size - pos < 33)
             return false;
         uint64_t owner_key = read_le64(bytes + pos + 4);
-        uint16_t field_count = read_le16(bytes + pos + 33);
-        pos += 35;
+        pos += 33;
+        /* v3 layout metadata carries an optional nominal struct name before
+         * the field count. */
+        if (pos >= size)
+            return false;
+        uint8_t has_nominal_name = bytes[pos++];
+        if (has_nominal_name == 1) {
+            if (pos > size || size - pos < 4)
+                return false;
+            uint32_t length = read_le32(bytes + pos);
+            pos += 4;
+            if (pos > size || length > size - pos)
+                return false;
+            pos += length;
+        } else if (has_nominal_name != 0) {
+            return false;
+        }
+        if (pos > size || size - pos < 2)
+            return false;
+        uint16_t field_count = read_le16(bytes + pos);
+        pos += 2;
         for (uint16_t fi = 0; fi < field_count; fi++) {
             if (pos >= size)
                 return false;
@@ -155,6 +175,7 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
 
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
+    proto->call_place_param_bitmap = UINT64_C(0x8000000000000003);
 
     size_t size = 0;
     uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size, NULL);
@@ -169,6 +190,7 @@ TEST(bytecode_write_emits_current_header_and_roundtrips_u64_instruction) {
     ASSERT_EQ_INT(PROTO_CODE_COUNT(roundtrip), 1);
     ASSERT_EQ_INT(GET_OPCODE(PROTO_CODE(roundtrip, 0)), OP_RETURN);
     ASSERT_EQ_INT(roundtrip->maxstacksize, 1);
+    ASSERT_EQ_UINT(roundtrip->call_place_param_bitmap, UINT64_C(0x8000000000000003));
     ASSERT_EQ_UINT(roundtrip->entry_plan.entry_func_id, 1);
     ASSERT_EQ_UINT(roundtrip->entry_plan.root_representation, XR_ROOT_ELIDED);
     ASSERT_EQ_UINT(roundtrip->entry_plan.scheduler_mode, XR_SCHED_NONE);
@@ -431,7 +453,7 @@ TEST(bytecode_reader_rejects_previous_layout_version) {
     xray_vm_delete(iso);
 }
 
-TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
+TEST(bytecode_roundtrips_exact_structural_shape_across_isolates) {
     XrVMRuntime *writer = new_test_isolate();
     ASSERT_NOT_NULL(writer);
     XrVMRuntime *reader = new_test_isolate();
@@ -443,22 +465,22 @@ TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
     const char *names[] = {"host", "port"};
     const uint64_t stable_type_keys[] = {UINT64_C(0x1111), UINT64_C(0x2222)};
     const uint8_t shape_flags[] = {XR_OBJECT_SHAPE_FIELD_READONLY, 0};
-    XrClass *shape =
-        xr_class_build_json_chain(writer, names, 2, stable_type_keys, shape_flags, false);
+    XrClass *shape = xr_class_build_struct_object_chain(writer, names, NULL, 2, NULL, NULL,
+                                                        stable_type_keys, shape_flags);
     ASSERT_NOT_NULL(shape);
     const XrtObjectShapeField manifest[] = {
         {"host", stable_type_keys[0], 0, 0, shape_flags[0], 0},
         {"port", stable_type_keys[1], 0, 1, shape_flags[1], 0},
     };
     ASSERT_EQ_UINT(xr_class_stable_shape_key(shape),
-                   xr_object_shape_stable_key(XR_OBJECT_DOMAIN_JSON, manifest, 2));
+                   xr_object_shape_stable_key(XR_OBJECT_DOMAIN_STRUCT, manifest, 2));
 
     int kidx = xr_valuearray_add(&proto->constants, xr_int((int64_t) (intptr_t) shape));
     ASSERT_EQ_INT(kidx, 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     proto->maxstacksize = 1;
-    xr_vm_proto_write(proto, CREATE_ABC(OP_NEWJSON, 0, kidx, 0), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_NEWOBJECT, 0, kidx, 0), 1);
     xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size = 0;
@@ -475,10 +497,11 @@ TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates) {
     ASSERT_TRUE(XR_IS_INT(cls_val));
     XrClass *roundtrip_shape = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
     ASSERT_NOT_NULL(roundtrip_shape);
-    ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_JSON);
+    ASSERT_EQ_UINT(roundtrip_shape->builtin_kind, XR_BK_STRUCT_OBJECT);
     ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_DYNAMIC_LAYOUT) != 0);
+    ASSERT_TRUE((roundtrip_shape->flags & XR_CLASS_DYNAMIC_SEALED) != 0);
     ASSERT_EQ_UINT(roundtrip_shape->field_count, 2);
-    ASSERT_EQ_UINT(xr_class_object_domain(roundtrip_shape), XR_OBJECT_DOMAIN_JSON);
+    ASSERT_EQ_UINT(xr_class_object_domain(roundtrip_shape), XR_OBJECT_DOMAIN_STRUCT);
     ASSERT_EQ_UINT(xr_class_stable_shape_key(roundtrip_shape), xr_class_stable_shape_key(shape));
     ASSERT_EQ_UINT(roundtrip_shape->fields[0].stable_type_key, stable_type_keys[0]);
     ASSERT_EQ_UINT(roundtrip_shape->fields[0].shape_flags, shape_flags[0]);
@@ -524,8 +547,7 @@ TEST(bytecode_roundtrips_typed_object_decode_shape) {
          .child = &array_item_schema},
     };
     const uint64_t stable_type_keys[] = {UINT64_C(0x4101), UINT64_C(0x4102), UINT64_C(0x4103)};
-    const uint8_t shape_flags[] = {XR_OBJECT_SHAPE_FIELD_READONLY, 0,
-                                   XR_OBJECT_SHAPE_FIELD_OPTIONAL};
+    const uint8_t shape_flags[] = {XR_OBJECT_SHAPE_FIELD_READONLY, 0, 0};
     XrClass *shape = xr_class_build_struct_object_chain(writer, names, kinds, 3, nested_shapes,
                                                         schemas, stable_type_keys, shape_flags);
     ASSERT_NOT_NULL(shape);
@@ -751,6 +773,7 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
 
     const char *outer_names[] = {"header", "words", "count", "tail"};
     XrAggregateLayout outer = test_layout(XR_AGG_LAYOUT_STRUCT, 4);
+    outer.nominal_name = "OuterValue";
     outer.field_names = outer_names;
     outer.fields[0].native_type = XR_NATIVE_NESTED_AGGREGATE;
     outer.fields[0].sub_layout = &child;
@@ -771,6 +794,7 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
     child_copy.fields[1].native_type = XR_NATIVE_POINTER;
     ASSERT_TRUE(xr_aggregate_layout_compute(&child_copy, target));
     XrAggregateLayout outer_copy = test_layout(XR_AGG_LAYOUT_STRUCT, 4);
+    outer_copy.nominal_name = "OuterValue";
     outer_copy.field_names = outer_names;
     outer_copy.fields[0].native_type = XR_NATIVE_NESTED_AGGREGATE;
     outer_copy.fields[0].sub_layout = &child_copy;
@@ -784,6 +808,13 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
     ASSERT_TRUE(xr_aggregate_layout_compute(&outer_copy, target));
     ASSERT_TRUE(xr_aggregate_layout_semantically_equal(&outer, &outer_copy));
 
+    /* Equal bytes do not imply equal language types.  A different nominal
+     * name must survive bytecode roundtrip as a distinct layout identity. */
+    XrAggregateLayout outer_distinct = outer;
+    outer_distinct.layout_id = 0;
+    outer_distinct.nominal_name = "OtherValue";
+    ASSERT_FALSE(xr_aggregate_layout_semantically_equal(&outer, &outer_distinct));
+
     const char *union_names[] = {"bits", "number"};
     XrAggregateLayout variant = test_layout(XR_AGG_LAYOUT_UNION, 2);
     variant.field_names = union_names;
@@ -795,16 +826,19 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
     XrClassDescriptor desc_outer = test_layout_descriptor("Outer", &outer);
     XrClassDescriptor desc_copy = test_layout_descriptor("OuterAlias", &outer_copy);
     XrClassDescriptor desc_union = test_layout_descriptor("Variant", &variant);
+    XrClassDescriptor desc_distinct = test_layout_descriptor("Other", &outer_distinct);
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_outer)), 0);
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_copy)), 1);
     ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_union)), 2);
+    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_distinct)), 3);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
     xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 1), 1);
     xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 2), 1);
+    xr_vm_proto_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 3), 1);
     xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 0, 1, 0), 1);
 
     size_t size_a = 0;
@@ -817,7 +851,7 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
     ASSERT_NOT_NULL(bytes_b);
     ASSERT_EQ_UINT(size_a, size_b);
     ASSERT_MEM_EQ(bytes_a, bytes_b, size_a);
-    ASSERT_EQ_UINT(read_le32(bytes_a + 20), 3);
+    ASSERT_EQ_UINT(read_le32(bytes_a + 20), 4);
 
     XrBcError read_error = XR_BC_OK;
     XrProto *roundtrip = xr_bytecode_read(reader, bytes_a, size_a, &read_error);
@@ -826,10 +860,15 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
     XrClassDescriptor *read_outer = XR_TO_PTR(PROTO_CONSTANT(roundtrip, 0));
     XrClassDescriptor *read_copy = XR_TO_PTR(PROTO_CONSTANT(roundtrip, 1));
     XrClassDescriptor *read_union = XR_TO_PTR(PROTO_CONSTANT(roundtrip, 2));
+    XrClassDescriptor *read_distinct = XR_TO_PTR(PROTO_CONSTANT(roundtrip, 3));
     ASSERT_NOT_NULL(read_outer);
     ASSERT_NOT_NULL(read_copy);
     ASSERT_NOT_NULL(read_union);
+    ASSERT_NOT_NULL(read_distinct);
     ASSERT_EQ_PTR(read_outer->struct_layout, read_copy->struct_layout);
+    ASSERT_TRUE(read_outer->struct_layout != read_distinct->struct_layout);
+    ASSERT_STR_EQ(read_outer->struct_layout->nominal_name, "OuterValue");
+    ASSERT_STR_EQ(read_distinct->struct_layout->nominal_name, "OtherValue");
     ASSERT_EQ_UINT(read_outer->struct_layout->target_abi_hash, target->stable_hash);
     ASSERT_EQ_UINT(read_outer->struct_layout->kind, XR_AGG_LAYOUT_STRUCT);
     ASSERT_EQ_UINT(read_outer->struct_layout->field_count, 4);
@@ -850,6 +889,7 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
     free_minimal_roundtrip_descriptor(read_outer);
     free_minimal_roundtrip_descriptor(read_copy);
     free_minimal_roundtrip_descriptor(read_union);
+    free_minimal_roundtrip_descriptor(read_distinct);
     xr_vm_proto_free(roundtrip);
     xr_free(bytes_b);
     xr_free(bytes_a);
@@ -888,15 +928,15 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     ASSERT_EQ_INT(error, XR_BC_ERR_TARGET_ABI);
     bytes[36] ^= 1u;
 
-    write_le16(bytes + 57, XR_MAX_AGG_FIELDS + 1);
+    write_le16(bytes + 58, XR_MAX_AGG_FIELDS + 1);
     ASSERT_NULL(xr_bytecode_read(iso, bytes, size, &error));
     ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
-    write_le16(bytes + 57, 1);
+    write_le16(bytes + 58, 1);
 
-    write_le32(bytes + 60, 1);
+    write_le32(bytes + 61, 1);
     ASSERT_NULL(xr_bytecode_read(iso, bytes, size, &error));
     ASSERT_EQ_INT(error, XR_BC_ERR_CORRUPT);
-    write_le32(bytes + 60, 0);
+    write_le32(bytes + 61, 0);
 
     ASSERT_NULL(xr_bytecode_read(iso, bytes, 60, &error));
     ASSERT_EQ_INT(error, XR_BC_ERR_TRUNCATED);
@@ -991,6 +1031,41 @@ TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth) {
     ASSERT_EQ_INT(error, XR_BC_ERR_METADATA);
 
     xr_vm_proto_free(proto);
+    xray_vm_delete(iso);
+}
+
+TEST(vm_struct_layout_class_resolves_semantically_equal_descriptor_copy) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+    XrVMState *vm = xr_isolate_get_vm_state(iso);
+    const XrTargetDataLayout *target = xr_target_data_layout_host();
+    ASSERT_NOT_NULL(vm);
+    ASSERT_NOT_NULL(target);
+
+    const char *field_names[] = {"value"};
+    XrAggregateLayout declared = test_layout(XR_AGG_LAYOUT_STRUCT, 1);
+    declared.nominal_name = "NestedValue";
+    declared.field_names = field_names;
+    declared.fields[0].native_type = XR_NATIVE_I32;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&declared, target));
+
+    XrAggregateLayout embedded_copy = test_layout(XR_AGG_LAYOUT_STRUCT, 1);
+    embedded_copy.nominal_name = "NestedValue";
+    embedded_copy.field_names = field_names;
+    embedded_copy.fields[0].native_type = XR_NATIVE_I32;
+    ASSERT_TRUE(xr_aggregate_layout_compute(&embedded_copy, target));
+    ASSERT_TRUE(xr_aggregate_layout_semantically_equal(&declared, &embedded_copy));
+
+    XrClass identity;
+    memset(&identity, 0, sizeof(identity));
+    uint16_t declared_id = xr_vm_struct_layout_register(vm, &declared);
+    uint16_t copy_id = xr_vm_struct_layout_register(vm, &embedded_copy);
+    ASSERT_TRUE(declared_id != 0);
+    ASSERT_TRUE(copy_id != 0);
+    ASSERT_TRUE(declared_id != copy_id);
+    ASSERT_TRUE(xr_vm_struct_layout_bind_class(vm, &declared, &identity));
+    ASSERT_EQ_PTR(xr_vm_struct_layout_class(vm, copy_id), &identity);
+
     xray_vm_delete(iso);
 }
 
@@ -1368,13 +1443,14 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_roundtrips_bigint_constants);
     RUN_TEST(bytecode_reader_assigns_unique_proto_ids);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
-    RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);
+    RUN_TEST(bytecode_roundtrips_exact_structural_shape_across_isolates);
     RUN_TEST(bytecode_roundtrips_typed_object_decode_shape);
     RUN_TEST(bytecode_roundtrips_typed_json_root_schema);
     RUN_TEST(bytecode_roundtrips_class_descriptor_constants);
     RUN_TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically);
     RUN_TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corruption);
     RUN_TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth);
+    RUN_TEST(vm_struct_layout_class_resolves_semantically_equal_descriptor_copy);
     RUN_TEST(bytecode_roundtrips_enum_type_constants);
     RUN_TEST(bytecode_preserves_native_stdlib_enum_nominal_identity_across_modules);
     RUN_TEST(bytecode_rejects_mismatched_native_stdlib_enum_shape);

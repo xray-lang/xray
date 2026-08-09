@@ -32,4 +32,6 @@ if (values.containsKey(token)) {
 var seen: Set<Token> = #[]
 seen.add(token)
 print(seen.contains(token))
-print(passHashable(move token).value)
+// Map/Set now hold aliases to token, so moving that escaped root is correctly
+// rejected. Exercise the move-constrained generic with an explicit copy.
+print(passHashable(copy(token)).value)

@@ -180,6 +180,9 @@ typedef struct MethodDeclNode {
 typedef struct NewExprNode {
     char *module_name;
     char *class_name;
+    /* Analyzer-resolved nominal declaration identity.  Lowering must not
+     * rediscover a class/struct by spelling after leaving the source scope. */
+    uint32_t class_symbol_id;
     AstNode **arguments;
     XrCallArgAccess *arg_accesses;
     int arg_count;
@@ -210,7 +213,6 @@ typedef struct TypeAliasNode {
     int type_param_count;
     char **field_names;
     XrTypeRef **field_types;
-    bool *field_optional;
     int field_count;
     // Parser stores the fully-resolved RHS type here so the analyzer
     // can pick it up without re-resolving. May be NULL when the alias

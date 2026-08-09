@@ -162,16 +162,6 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         return XR_DISP_NEXT;
     }
 
-    // Json property set
-    if (xr_value_is_json(obj)) {
-        XrJson *json = xr_value_to_json(obj);
-        if (!xr_json_set(isolate, json, prop_symbol, value)) {
-            VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
-                     "cannot add property to sealed Json object");
-        }
-        return XR_DISP_NEXT;
-    }
-
     // Null type error
     if (XR_IS_NULL(obj)) {
         VM_THROW(frame, pc, XR_ERR_NULL_PROPERTY, "null type does not support property access");
@@ -179,11 +169,10 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
 
     // Struct ref: stored field write or setter method
     if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SLICE_REF(obj)) {
-        uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
         XrAggregateLayout *slayout = NULL;
         uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
         XrClass *scls =
-            (slayout && !xr_aggregate_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
+            slayout ? xr_vm_struct_layout_class(&isolate->vm, xr_aggregate_layout_id(obj)) : NULL;
 
         // Try stored field first
         int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);
@@ -264,6 +253,21 @@ XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMCo
      * to push, so fall through to the ordinary field/native store path. */
     if (!setter || setter->type != XMETHOD_CLOSURE || !setter->as.closure)
         return XR_DISP_FALLTHROUGH;
+
+    if (setter->type == XMETHOD_PRIMITIVE && setter->as.primitive) {
+        if (setter->param_count != 1) {
+            VM_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT, "setter should have one parameter");
+        }
+        (void) setter->as.primitive(isolate, obj, &value, 1);
+        if (!XR_IS_NULL(vm_ctx->current_exception))
+            return xr_vm_is_catch_reachable(isolate) ? XR_DISP_RAISE : XR_DISP_FATAL;
+        return XR_DISP_NEXT;
+    }
+
+    if (setter->type != XMETHOD_CLOSURE || !setter->as.closure) {
+        VM_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
+                 "property setter is not a synchronous closure or primitive");
+    }
 
     XrClosure *closure = setter->as.closure;
     XrProto *proto = closure->proto;
@@ -802,13 +806,6 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         return XR_DISP_NEXT;
     }
 
-    // Json property access
-    if (xr_value_is_json(obj)) {
-        XrJson *json = xr_value_to_json(obj);
-        base[a] = xr_json_get(isolate, json, prop_symbol);
-        return XR_DISP_NEXT;
-    }
-
     // Channel property access error
     if (xr_value_is_channel(obj)) {
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
@@ -822,7 +819,6 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
 
     // Struct ref: getter/method lookup when field not found in layout
     if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SLICE_REF(obj)) {
-        uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
         XrAggregateLayout *slayout = xr_vm_struct_ref_layout(isolate, obj);
         XrClass *scls =
             (slayout && !xr_aggregate_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;

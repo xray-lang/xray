@@ -169,7 +169,7 @@ XR_FUNC AstNode *xr_ast_spread_expr(XrCompilerSession *session, AstNode *expr, i
 
 // Create object literal node
 XR_FUNC AstNode *xr_ast_object_literal(XrCompilerSession *session, AstNode **keys, AstNode **values,
-                                       bool *computed, int count, int line);
+                                       int count, int line);
 
 // Create Map literal node
 XR_FUNC AstNode *xr_ast_map_literal(XrCompilerSession *session, AstNode **keys, AstNode **values,
@@ -384,8 +384,7 @@ XR_FUNC AstNode *xr_ast_pattern_type(XrCompilerSession *session, XrTypeRef *type
 
 // Create type alias node
 XR_FUNC AstNode *xr_ast_type_alias(XrCompilerSession *session, const char *name, char **field_names,
-                                   XrTypeRef **field_types, bool *field_optional, int field_count,
-                                   int line);
+                                   XrTypeRef **field_types, int field_count, int line);
 
 // Create go expression node (supports name and link mode)
 XR_FUNC AstNode *xr_ast_go_expr(XrCompilerSession *session, AstNode *expr, const char *name,

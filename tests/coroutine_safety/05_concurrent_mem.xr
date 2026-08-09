@@ -35,7 +35,7 @@ fn test_many_short_lived_coros() {
 fn test_nested_allocations() {
     fn worker() -> int {
         // 创建嵌套数据结构
-        var data: Array<Json> = []
+        var data: Array<JSON.Value> = []
         for (var i = 0; i < 50; i++) {
             var item = #{"id": i, "values": [i * 1, i * 2, i * 3], "name": "item_" + string(i)}
             data.push(item)

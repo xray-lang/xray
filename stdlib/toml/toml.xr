@@ -43,7 +43,7 @@ export class TomlFloat {
         if (len(text) > 0) {
             this.text = text
         } else {
-            var s = Json.stringify(value)
+            var s = JSON.stringify(value)
             if (!s.contains(".") && !s.contains("e") && !s.contains("E")) { s = s + ".0" }
             this.text = s
         }

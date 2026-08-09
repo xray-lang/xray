@@ -40,11 +40,11 @@ fn deep_eq_nested_maps() {
 
 @test
 fn deep_eq_self_referential_json() {
-    var a: Json = {}
-    var b: Json = {}
-    a["self"] = a
-    b["self"] = b
-    assert(a == b, "isomorphic Json self cycles must compare equal")
+    var a: JSON.Object = JSON.parseObject("{}")
+    var b: JSON.Object = JSON.parseObject("{}")
+    a.set("self", JSON.value(a))
+    b.set("self", JSON.value(b))
+    assert(a == b, "isomorphic JSON.Object self cycles must compare equal")
 
     a["value"] = 1
     b["value"] = 2
@@ -53,13 +53,13 @@ fn deep_eq_self_referential_json() {
 
 @test
 fn deep_eq_mutually_referential_json() {
-    var a1: Json = {}
-    var a2: Json = {}
-    var b1: Json = {}
-    var b2: Json = {}
-    a1["next"] = a2
-    a2["next"] = a1
-    b1["next"] = b2
-    b2["next"] = b1
-    assert(a1 == b1, "isomorphic mutual Json cycles must compare equal")
+    var a1: JSON.Object = JSON.parseObject("{}")
+    var a2: JSON.Object = JSON.parseObject("{}")
+    var b1: JSON.Object = JSON.parseObject("{}")
+    var b2: JSON.Object = JSON.parseObject("{}")
+    a1.set("next", JSON.value(a2))
+    a2.set("next", JSON.value(a1))
+    b1.set("next", JSON.value(b2))
+    b2.set("next", JSON.value(b1))
+    assert(a1 == b1, "isomorphic mutual JSON.Object cycles must compare equal")
 }

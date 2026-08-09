@@ -1354,7 +1354,7 @@ static XiValue *lower_match_field_get(XiLower *l, XiValue *subject, const char *
             v->args[0] = subject;
             v->aux_int = fidx;
             v->line = source_span_id;
-            xi_lower_bind_object_access_id(l, v, fname, source_span_id, (uint16_t) fidx,
+            xi_lower_bind_object_access_id(l, v, fname, source_span_id,
                                            XG_OBJECT_ACCESS_DESTRUCTURE);
         }
         return v;
@@ -2530,10 +2530,9 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
 /* Whether the collection's static type is iterable via the fast
  * length + INDEX_GET path. Only Array, Slice and Set qualify: those
  * have integer indexable layouts that produce the loop variable's
- * canonical type directly. Map / Json instead route through the
+ * canonical type directly. Map instead routes through the
  * iterator() / hasNext() / next() protocol, which lets `for (k in m)`
- * yield real keys and `for (k in obj)` yield string keys, matching
- * the analyzer's item-type inference and Python / Go conventions.
+ * yield real keys, matching the analyzer's item-type inference.
  *
  * A `Range` value qualifies too: it carries no iterator() method, but both
  * backends answer len()/[i] on it lazily (VM: OP_LEN / OP_GETINDEX fast
@@ -2679,7 +2678,7 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         return;
     }
 
-    /* Anything that isn't a fast index-iterable collection (Map, Json,
+    /* Anything that isn't a fast index-iterable collection (Map,
      * tuple, struct, custom class) goes through the iterator() protocol.
      * The analyzer is responsible for rejecting collection types that
      * have no iterator() method (tuple / struct without one). */
@@ -3367,7 +3366,6 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
                         val->aux_int = fidx;
                         val->line = source_span_id;
                         xi_lower_bind_object_access_id(l, val, fname, source_span_id,
-                                                       (uint16_t) fidx,
                                                        XG_OBJECT_ACCESS_DESTRUCTURE);
                     }
                 } else {
@@ -4174,9 +4172,11 @@ bool xi_lower_import_member_is_type_only(const XiLower *l, const ImportMember *m
 }
 
 /* Selective import: import { square, cube } from "./math_lib"
- * Creates XI_IMPORT_REF values for each member and binds them as local
- * variables.  The AOT driver resolves module_path + member_name to the
- * target module's shared slot after all modules are lowered. */
+ * Creates XI_IMPORT_REF values for runtime members and binds them as local
+ * variables. Type-only members are already available to semantic type
+ * resolution and intentionally have no runtime slot. The AOT driver resolves
+ * module_path + member_name to the target module's shared slot after all
+ * modules are lowered. */
 static void lower_import_stmt(XiLower *l, AstNode *node) {
     XR_DCHECK(l != NULL, "lower_import_stmt: NULL lowerer");
     XR_DCHECK(node != NULL, "lower_import_stmt: NULL node");
@@ -4231,6 +4231,8 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
 
     for (int i = 0; i < imp->member_count; i++) {
         ImportMember *m = &imp->members[i];
+        if (xi_lower_import_member_is_type_only(l, m))
+            continue;
         const char *local_name = m->alias ? m->alias : m->name;
 
         if (xi_lower_import_member_is_type_only(l, m))

@@ -127,6 +127,23 @@ static const XaBuiltinEnum g_gen_Coro_enums[] = {
 };
 #define GEN_CORO_ENUM_COUNT 3
 
+// cluster.ClusterTlsOptions object fields
+static const XaBuiltinObjectField g_gen_cluster_clustertlsoptions_object_fields[] = {
+    {"enabled", "bool"},
+    {"caFile", "string?"},
+    {"certFile", "string?"},
+    {"keyFile", "string?"},
+    {"insecure", "bool"},
+};
+
+// cluster.ClusterConfig object fields
+static const XaBuiltinObjectField g_gen_cluster_clusterconfig_object_fields[] = {
+    {"name", "string"},
+    {"port", "int"},
+    {"secret", "string?"},
+    {"tls", "ClusterTlsOptions?"},
+};
+
 // cluster.ClusterTlsStatus object fields
 static const XaBuiltinObjectField g_gen_cluster_clustertlsstatus_object_fields[] = {
     {"enabled", "bool"},
@@ -160,7 +177,8 @@ static const XaBuiltinObjectField g_gen_cluster_clusterinfo_object_fields[] = {
     {"port", "int"},
     {"running", "bool"},
     {"nodes", "Array<ClusterNodeInfo>"},
-    {"listeners", "int"},
+    {"channels", "int"},
+    {"topicSubscriptions", "int"},
     {"deadNodes", "int"},
     {"heartbeatIntervalMs", "int"},
     {"heartbeatTimeoutMs", "int"},
@@ -169,20 +187,13 @@ static const XaBuiltinObjectField g_gen_cluster_clusterinfo_object_fields[] = {
 };
 
 static const XaBuiltinObjectShape g_gen_cluster_object_shapes[] = {
+    {"ClusterTlsOptions", "Typed TLS configuration for a cluster node", g_gen_cluster_clustertlsoptions_object_fields, 5, true},
+    {"ClusterConfig", "Typed cluster node startup configuration", g_gen_cluster_clusterconfig_object_fields, 4, true},
     {"ClusterTlsStatus", "Effective TLS posture of a running cluster node", g_gen_cluster_clustertlsstatus_object_fields, 3, true},
     {"ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", g_gen_cluster_clusternodeinfo_object_fields, 16, true},
-    {"ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", g_gen_cluster_clusterinfo_object_fields, 10, true},
+    {"ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", g_gen_cluster_clusterinfo_object_fields, 11, true},
 };
-#define GEN_CLUSTER_OBJECT_SHAPE_COUNT 3
-
-static const XaBuiltinEnumVariant g_gen_cluster_clusterdelivery_variants[] = {
-    {"Accepted", NULL, 0},
-    {"InvalidTopic", NULL, 0},
-    {"InvalidEnvelope", NULL, 0},
-    {"Unavailable", NULL, 0},
-    {"Overloaded", NULL, 0},
-    {"Disconnected", NULL, 0},
-};
+#define GEN_CLUSTER_OBJECT_SHAPE_COUNT 5
 
 static const XaBuiltinEnumVariant g_gen_cluster_clusternodestate_variants[] = {
     {"Idle", NULL, 0},
@@ -193,25 +204,25 @@ static const XaBuiltinEnumVariant g_gen_cluster_clusternodestate_variants[] = {
 };
 
 static const XaBuiltinEnum g_gen_cluster_enums[] = {
-    {"ClusterDelivery", "Outcome of handing one opaque service envelope to the cluster transport", g_gen_cluster_clusterdelivery_variants, 6, UINT32_C(4282747530)},
     {"ClusterNodeState", "Lifecycle state of a remote cluster node", g_gen_cluster_clusternodestate_variants, 5, UINT32_C(2784952505)},
 };
-#define GEN_CLUSTER_ENUM_COUNT 2
+#define GEN_CLUSTER_ENUM_COUNT 1
 
 // cluster module functions
 static const XaBuiltinMember g_gen_cluster_functions[] = {
-    {"__start", "(name: string, port: int, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool): bool", "Start the backend-neutral cluster runtime from normalized scalar configuration", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__join", "(addr: string): bool", "Join cluster by address without blocking the scheduler worker", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"start", "(config: ClusterConfig): bool", "Start cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"join", "(addr: string): bool", "Join cluster by address", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"self", "(): string", "Get own node name", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"nodes", "(): Array<string>", "List cluster node names", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"channel", "(name: string, size?: int): Channel", "Create or get named distributed channel", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"discover", "(): ()", "Start LAN auto-discovery", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"stop", "(): ()", "Stop cluster node", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"info", "(): ClusterInfo?", "Get cluster status info", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"send", "(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", true, false, false, false, false, {XA_EFFECT_CONTRACT_NOTHROW, NULL, 0}, XA_ALLOCATION_CONTRACT_MAY_HEAP, false, XA_BUILTIN_RETURN_BORROWED_STATIC},
-    {"__listen", "(pattern: string, capacity: int): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"publish", "(topic: string, value: JSON.Value): bool", "Publish to topic", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_CLUSTER_FUNCTION_COUNT 10
+#define GEN_CLUSTER_FUNCTION_COUNT 11
 
 static const char *g_gen_compress_gunzip_3_errors[] = {
     "CompressionError.InvalidData",
@@ -467,7 +478,7 @@ static const XaBuiltinEnum g_gen_net_enums[] = {
 };
 #define GEN_NET_ENUM_COUNT 1
 
-static const char *g_gen_net___copybidirectional_9_errors[] = {
+static const char *g_gen_net___copybidirectional_8_errors[] = {
     "NetError.Timeout",
     "NetError.Closed",
     "NetError.Reset",
@@ -487,11 +498,10 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readInto", "(conn: NetConn, buffer: Array<byte>, maxlen?: int): int", "Read data into a reusable Array<byte> buffer", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__readExactInto", "(conn: NetConn, buffer: Array<byte>, length: int): int", "Fill a reusable Array<byte> buffer up to an exact length", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__write", "(conn: NetConn, data: string): int", "Write data to connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__copy", "(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, true, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net___copybidirectional_9_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, true, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net___copybidirectional_8_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__shutdownRead", "(conn: NetConn): bool", "Shut down the read side of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__shutdown", "(conn: NetConn): bool", "Shut down both sides of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -511,7 +521,7 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"__sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__recvFrom", "(handle: NetConn, maxlen?: int): __UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_NET_FUNCTION_COUNT 28
+#define GEN_NET_FUNCTION_COUNT 27
 
 // os.__ExecResult handle fields
 static const XaBuiltinHandleField g_gen_os___execresult_fields[] = {
@@ -598,7 +608,7 @@ static const XaBuiltinMember g_gen_runtime_functions[] = {
     {"liveBytes", "(): int", "Get live memory usage in bytes", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"liveObjects", "(): int", "Get live object count", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"sharedBytes", "(): int", "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"staticBytes", "(): int", "Bytes allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"staticBytes", "(): int", "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"info", "(): RuntimeInfo", "Get a typed snapshot of the current execution-local reclamation domain", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
 #define GEN_RUNTIME_FUNCTION_COUNT 5

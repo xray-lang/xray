@@ -75,20 +75,20 @@ static const char *const k_repl_dot_commands[] = {
  * avoid cross-app coupling with src/app/lsp.  Order is not significant
  * — readline displays matches alphabetically. */
 static const char *const k_repl_keywords[] = {
-    "var",       "const",    "fn",          "class",        "interface",
-    "enum",      "type",     "if",          "else",         "while",
-    "for",       "in",       "is",          "break",        "continue",
-    "return",    "match",    "true",        "false",        "null",
-    "import",    "export",   "from",        "as",           "go",
-    "await",     "select",   "defer",       "scope",        "after",
-    "try",       "catch",    "throw",       "new",          "this",
-    "super",     "extends",  "implements",  "static",       "private",
-    "final",     "operator", "void",        "int",          "float",
-    "string",    "bool",     "Array",       "Map",          "Set",
-    "Json",      "Channel",  "Array<byte>", "BigInt",       "StringBuilder",
-    "PanicInfo", "Regex",    "print",       "dump",         "typeOf",
-    "typeName",  "assert",   "assert_true", "assert_false", "assert_eq",
-    "assert_ne", "copy",     "chr",         "Coro",         "CoroPool",
+    "var",        "const",    "fn",          "class",        "interface",
+    "enum",       "type",     "if",          "else",         "while",
+    "for",        "in",       "is",          "break",        "continue",
+    "return",     "match",    "true",        "false",        "null",
+    "import",     "export",   "from",        "as",           "go",
+    "await",      "select",   "defer",       "scope",        "after",
+    "try",        "catch",    "throw",       "new",          "this",
+    "super",      "extends",  "implements",  "static",       "private",
+    "final",      "operator", "void",        "int",          "float",
+    "string",     "bool",     "Array",       "Map",          "Set",
+    "JSON.Value", "Channel",  "Array<byte>", "BigInt",       "StringBuilder",
+    "PanicInfo",  "Regex",    "print",       "dump",         "typeOf",
+    "typeName",   "assert",   "assert_true", "assert_false", "assert_eq",
+    "assert_ne",  "copy",     "chr",         "Coro",         "CoroPool",
     NULL,
 };
 
@@ -301,7 +301,7 @@ static void print_help_types(ReplState *state) {
     printf("  Array       [1, 2, 3]\n");
     printf("  Map         #{\"a\": 1, \"b\": 2}\n");
     printf("  Set         #[1, 2, 3]\n");
-    printf("  Json        {name: \"xray\", version: 1}\n");
+    printf("  JSON.Value  JSON.value({name: \"xray\", version: 1})\n");
     printf("  Array<byte> Array<byte>(1024, 0)\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Type Annotations:\n");

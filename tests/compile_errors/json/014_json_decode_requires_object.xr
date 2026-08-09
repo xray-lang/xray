@@ -2,5 +2,5 @@ class User {
     name: string = ""
 }
 
-var data = Json.parse("{\"name\":\"Ada\"}")
-var user = Json.decode<User>(data)
+var data = JSON.parseValue("{\"name\":\"Ada\"}")
+var user = JSON.decode<User>(data)

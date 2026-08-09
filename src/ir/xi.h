@@ -245,7 +245,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *                                         args[1] carries Endian
  *  XI_PTR_STORE     —                    XrFFIType width of pointee | unaligned flag;
  *                                         args[2] carries Endian
- *  XI_JSON_NEW      char** field_names   field count
+ *  XI_OBJECT_NEW      char** field_names   field count
  *  XI_OBJECT_INIT_F   —                    field index
  *  XI_OBJECT_GET_F    —                    field index
  *  XI_OBJECT_SET_F    —                    field index
@@ -432,15 +432,15 @@ typedef enum {
     XI_FIXED_ARRAY_NEW, /* allocate fixed array in frame storage: type=[T; N], aux_int=native */
     XI_FIXED_BYTES_CONST, /* compact byte payload copied into fixed-array frame storage */
 
-    /* Json / Allocation */
-    XI_JSON_NEW,      /* Create Json object: aux=field_count, aux_ptr=field_names[] */
-    XI_OBJECT_INIT_F, /* Init field by index: args[0]=json, args[1]=val, aux_int=field_idx */
-    XI_OBJECT_GET_F,  /* Read field by index: args[0]=json, aux_int=field_idx */
-    XI_OBJECT_SET_F,  /* Write field by index: args[0]=json, args[1]=val, aux_int=field_idx */
-    XI_JSON_MERGE,    /* Merge all fields of src into dst: args[0]=dst, args[1]=src
+    /* Structural object allocation and access. */
+    XI_OBJECT_NEW,    /* Create exact object: aux=field_count, aux_ptr=field_names[] */
+    XI_OBJECT_INIT_F, /* Init field by index: args[0]=object, args[1]=val, aux_int=field_idx */
+    XI_OBJECT_GET_F,  /* Read field by index: args[0]=object, aux_int=field_idx */
+    XI_OBJECT_SET_F,  /* Write field by index: args[0]=object, args[1]=val, aux_int=field_idx */
+    XI_OBJECT_MERGE,  /* Merge all fields of src into dst: args[0]=dst, args[1]=src
                        * (object spread `{...base}`; later fields override earlier) */
-    XI_JSON_DECODE,   /* Typed decode: args[0]=string, aux=field_names[], aux_int=field_count
-                       * result: T? (sealed Json or null on validation failure) */
+    XI_JSON_DECODE,   /* Typed decode: args[0]=source, aux=field_names[], aux_int=field_count
+                       * result: T? (exact object or null on validation failure) */
     XI_ARRAY_NEW,     /* new array: args[0]=capacity */
     XI_ARRAY_PUSH,    /* append one element: args[0]=array, args[1]=value (in-place, void) */
     XI_ARRAY_EXTEND,  /* splice all elements of src array into dst: args[0]=dst, args[1]=src
@@ -593,7 +593,7 @@ typedef enum {
     XI_ASSERT_THROWS, /* args[0]=fn; aux=loc_string; emits try-catch sequence */
     XI_TYPEID,        /* args[0]=value; result=int XrTypeId */
     XI_TYPENAME,      /* args[0]=value; result=string typename */
-    XI_LEN,           /* args[0]=value; aux_int: dynamic lookup may throw */
+    XI_LEN,           /* args[0]=Lengthable value */
     XI_GET_BUILTIN,   /* aux=name_string; aux_int=global_index; loads runtime global */
 
     /* Cross-module import reference (resolved at cgen time).
@@ -893,7 +893,6 @@ typedef enum {
  * share one raw ordinal. The VM consumes the verified field symbol through
  * the runtime class descriptor's O(1) symbol-to-ordinal table; AOT consumes
  * the full XaotObjectAccessPlan and emits its guarded shape dispatch. */
-#define XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH (1u << 6)
 /* XI_JSON_DECODE consumes UTF-8 text directly into its exact target shape.
  * The flag changes the codec evidence kind and selects the VM/AOT typed parser;
  * an unflagged op validates and copies an already materialized Json value. */
@@ -909,6 +908,10 @@ typedef enum {
  * an access row for it. Set only by object-literal lowering; every other
  * OBJECT_SET_F still fails closed without a verified plan. */
 #define XI_LOWERING_FLAG_OBJECT_LITERAL_INIT (1u << 8)
+#define XI_LOWERING_FLAG_JSON_UNKNOWN_IGNORE (1u << 9)
+#define XI_LOWERING_FLAG_JSON_WITH_REST (1u << 10)
+#define XI_LOWERING_FLAG_OBJECT_SYNTHETIC_ACCESS (1u << 11)
+#define XI_LOWERING_FLAG_JSON_REQUIRE (1u << 12)
 /* Weak field ownership is represented by XI_WEAK_LOAD_FIELD and
  * XI_WEAK_STORE_FIELD. No lowering flag or ARC-side exception is permitted. */
 
@@ -1084,8 +1087,6 @@ typedef struct XiValue {
     uint32_t xa_intrinsic_id; /* stable XaIntrinsicId for canonical semantic operations */
     uint32_t xg_method_id;    /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
     uint32_t xg_interface_dispatch_slot; /* interface slot; UINT32_MAX means none */
-    uint32_t xg_json_dynamic_access_id;  /* stable XgJsonDynamicAccessId for evidence-backed Json
-                                            slot access */
     uint32_t xg_json_codec_id;    /* stable XgJsonCodecId for evidence-backed Json codec calls */
     uint32_t xg_object_access_id; /* stable XgObjectAccessId for evidence-backed structural object
                                      slot access */
@@ -1116,6 +1117,9 @@ typedef struct XiValue {
      * XA_ENUM_META_* id (0 for domain iteration).  This survives lowering so
      * global/AOT evidence never has to recover enum semantics from names. */
     struct XrType *enum_metadata_owner;
+    /* XI_JSON_DECODE target. Usually identical to `type`; parseWithRest keeps
+     * its wrapper in `type` and the decoded T here. */
+    struct XrType *json_decode_target_type;
     uint8_t enum_metadata_field;
     uint8_t enum_metadata_kind; /* XrEnumMetadataKind for descriptor/view values. */
     struct XiBlock *block;      /* containing block */
@@ -1189,7 +1193,6 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->move_source_domain = src->move_source_domain;
     dst->move_target_domain = src->move_target_domain;
     dst->xg_interface_dispatch_slot = src->xg_interface_dispatch_slot;
-    dst->xg_json_dynamic_access_id = src->xg_json_dynamic_access_id;
     dst->xg_json_codec_id = src->xg_json_codec_id;
     dst->xg_object_access_id = src->xg_object_access_id;
     dst->xg_object_merge_id = src->xg_object_merge_id;
@@ -1201,6 +1204,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->xg_bulk_op_id = src->xg_bulk_op_id;
     dst->xg_encoding_op_id = src->xg_encoding_op_id;
     dst->enum_metadata_owner = src->enum_metadata_owner;
+    dst->json_decode_target_type = src->json_decode_target_type;
     dst->enum_metadata_field = src->enum_metadata_field;
     dst->enum_metadata_kind = src->enum_metadata_kind;
 }
@@ -1298,25 +1302,25 @@ static inline void xi_chan_send_set_transfer_mode(XiValue *v, uint8_t mode) {
         v->transfer_mode = mode;
 }
 
-#define XI_JSON_AUX_STORAGE_SHIFT 32
-#define XI_JSON_AUX_FIELD_MASK INT64_C(0xffffffff)
+#define XI_OBJECT_AUX_STORAGE_SHIFT 32
+#define XI_OBJECT_AUX_FIELD_MASK INT64_C(0xffffffff)
 
-static inline int32_t xi_json_field_count(const XiValue *v) {
-    return v ? (int32_t) (v->aux_int & XI_JSON_AUX_FIELD_MASK) : 0;
+static inline int32_t xi_object_field_count(const XiValue *v) {
+    return v ? (int32_t) (v->aux_int & XI_OBJECT_AUX_FIELD_MASK) : 0;
 }
 
-static inline uint8_t xi_json_storage_mode(const XiValue *v) {
-    return v ? (uint8_t) ((uint64_t) v->aux_int >> XI_JSON_AUX_STORAGE_SHIFT) : 0;
+static inline uint8_t xi_object_storage_mode(const XiValue *v) {
+    return v ? (uint8_t) ((uint64_t) v->aux_int >> XI_OBJECT_AUX_STORAGE_SHIFT) : 0;
 }
 
-static inline int64_t xi_json_pack_aux(int32_t field_count, uint8_t storage_mode) {
-    return ((int64_t) storage_mode << XI_JSON_AUX_STORAGE_SHIFT) |
-           ((int64_t) field_count & XI_JSON_AUX_FIELD_MASK);
+static inline int64_t xi_object_pack_aux(int32_t field_count, uint8_t storage_mode) {
+    return ((int64_t) storage_mode << XI_OBJECT_AUX_STORAGE_SHIFT) |
+           ((int64_t) field_count & XI_OBJECT_AUX_FIELD_MASK);
 }
 
-static inline void xi_json_set_storage_mode(XiValue *v, uint8_t storage_mode) {
-    if (v && v->op == XI_JSON_NEW)
-        v->aux_int = xi_json_pack_aux(xi_json_field_count(v), storage_mode);
+static inline void xi_object_set_storage_mode(XiValue *v, uint8_t storage_mode) {
+    if (v && v->op == XI_OBJECT_NEW)
+        v->aux_int = xi_object_pack_aux(xi_object_field_count(v), storage_mode);
 }
 
 #define XI_TUPLE_AUX_STORAGE_SHIFT 32
@@ -1689,6 +1693,7 @@ typedef struct XiFunc {
     uint32_t loop_recomputes;
 
     /* VM entry metadata (propagated to XrProto during emission) */
+    bool is_constructor; /* instance constructor body; VM allocations inherit `this` storage */
     bool is_vararg;      /* has rest parameter (...args) */
     uint8_t entry_type;  /* 0=normal, 1=has_defaults, 2=generator */
     uint16_t min_params; /* required parameter count (no defaults) */

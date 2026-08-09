@@ -1,2 +1,2 @@
 type OpenUser = { name: string, ... }
-var user = Json.parse<OpenUser>("{\"name\":\"Ada\"}")
+var user = JSON.parse<OpenUser>("{\"name\":\"Ada\"}")

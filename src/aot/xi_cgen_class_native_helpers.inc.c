@@ -638,6 +638,12 @@ static void emit_class_native_storage_promoter_name(FILE *out, const char *prefi
     fprintf(out, "_promote_storage");
 }
 
+static void emit_class_native_runtime_clone_name(FILE *out, const char *prefix,
+                                                 const XiClassData *cd) {
+    emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
+    fprintf(out, "_runtime_clone");
+}
+
 static void emit_class_native_clone_name(FILE *out, const char *prefix, const XiClassData *cd) {
     emit_class_native_type_name(out, prefix, cd ? cd->class_name : "Class");
     fprintf(out, "_derived_clone");
@@ -817,6 +823,43 @@ static void emit_class_native_cloned_ref_field(XiCgenCtx *ctx, FILE *out, const 
                 cg_struct_field_c_type(cd->instance_layout, slot), (unsigned) slot);
     else
         fprintf(out, " = _field_clone_%u; }\n", (unsigned) slot);
+}
+
+static void emit_class_native_runtime_clone_helper(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
+                                                   const char *prefix) {
+    if (!cd || !cd->instance_layout)
+        return;
+    fprintf(out, "static void *");
+    emit_class_native_runtime_clone_name(out, prefix, cd);
+    fprintf(out, "(void *obj) {\n");
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *src = (");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, "*)obj;\n");
+    fprintf(out, "    if (!src) return NULL;\n");
+    fprintf(out, "    uint16_t type_id = xrt_aot_class_type_id((const XrObjHeader *)src);\n");
+    fprintf(out, "    if (type_id == 0) return NULL;\n");
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, " *dst = (");
+    emit_class_native_type_name(out, prefix, cd->class_name);
+    fprintf(out, "*)xrt_obj_alloc(type_id, (uint32_t)sizeof(*dst));\n");
+    for (uint16_t slot = 0; slot < cd->instance_layout->field_count; slot++) {
+        const XrAggregateFieldLayout *field = cg_struct_field(cd->instance_layout, slot);
+        if (cg_class_native_field_is_ref(field) &&
+            cg_class_native_field_plan_has_release_drop(ctx, cd, slot, field)) {
+            emit_class_native_cloned_ref_field(ctx, out, cd, slot);
+            continue;
+        }
+        fprintf(out, "    ");
+        emit_class_native_field_ref(ctx, out, cd, "dst", slot);
+        fprintf(out, " = ");
+        emit_class_native_field_ref(ctx, out, cd, "src", slot);
+        fprintf(out, ";\n");
+    }
+    fprintf(out, "    return dst;\n");
+    fprintf(out, "}\n");
 }
 
 static void emit_class_native_clone_helper(XiCgenCtx *ctx, FILE *out, const XiClassData *cd,
@@ -1063,7 +1106,7 @@ static bool emit_class_native_ensure_type_id_expr_depth(XiCgenCtx *ctx, FILE *ou
     return true;
 }
 
-/* Json.parse<T>/Json.decode<T> can be the only reference that keeps a class
+/* JSON.parse<T>/JSON.decode<T> can be the only reference that keeps a class
  * alive in generated C.  In that case the ordinary class-declaration init op
  * is absent, so materializing the decode schema must also initialize the
  * shared type-id slot.  The conditional preserves the one-registration
@@ -3740,6 +3783,33 @@ static bool cg_class_native_receiver_escapes_as_value(const XiCgenCtx *ctx, cons
     return false;
 }
 
+/* True when ARC gave a first-class use of the borrowed native receiver its own
+ * reference.  Unlike a structural field access or a synchronous `return this`
+ * alias, such a use requires a real object header: a closure owns the retained
+ * receiver until its destructor releases that reference.
+ *
+ * This query deliberately consumes the final post-ARC IR.  Re-deriving
+ * ownership from source-level use shapes here would create a second, weaker
+ * ownership system in CGen and is exactly how receiver captures were once
+ * emitted without the retain ARC had already proved necessary. */
+static bool cg_class_native_receiver_requires_owned_storage(const XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f || !cg_class_func_uses_native_receiver(ctx, f))
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks ? f->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
+                continue;
+            if (cg_class_native_receiver_value(ctx, f, v->args[0]))
+                return true;
+        }
+    }
+    return false;
+}
+
 static bool cg_class_native_value_stmt_is_elided(XiCgenCtx *ctx, const XiFunc *f,
                                                  const XiValue *v) {
     if (!v || !cg_class_func_uses_native_receiver(ctx, f))
@@ -3757,9 +3827,15 @@ static bool cg_class_native_value_stmt_is_elided(XiCgenCtx *ctx, const XiFunc *f
     if (cg_class_native_is_identity_alias(v) && v->nargs >= 1 &&
         cg_class_native_receiver_value(ctx, f, v->args[0]))
         return true;
+    /* ARC operations are semantic, not representation noise.  A native
+     * receiver is borrowed by the method ABI, so ARC emits RETAIN precisely
+     * when an owning consumer (for example a closure capture) needs an
+     * independent reference.  The receiver is materialized above whenever it
+     * flows as a value; let the ordinary ARC emitter box that pointer and
+     * preserve the proven retain/release instead of silently erasing it. */
     if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1 &&
         cg_class_native_receiver_value(ctx, f, v->args[0]))
-        return true;
+        return false;
     return false;
 }
 
@@ -4175,8 +4251,12 @@ static bool emit_class_native_receiver_field_store_expr(XiCgenCtx *ctx, FILE *ou
 
 static bool emit_class_native_instance_field_load_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                        const XiValue *v, const char *prefix) {
-    (void) f;
     if (!ctx || !v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->aux)
+        return false;
+    /* The implicit receiver has a declaration-local pointer ABI and may have
+     * its SSA alias elided. Let the receiver-specific path spell it through
+     * p0; treating it as an arbitrary typed instance can emit the absent v0. */
+    if (cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
     const XiClassData *cd = cg_class_native_value_type_data(ctx, v->args[0]);
     if (!cd)
@@ -4216,8 +4296,9 @@ static bool emit_class_native_instance_field_load_expr(XiCgenCtx *ctx, FILE *out
 
 static bool emit_class_native_instance_field_store_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                         const XiValue *v, const char *prefix) {
-    (void) f;
     if (!ctx || !v || v->op != XI_STORE_FIELD || v->nargs < 2 || !v->aux)
+        return false;
+    if (cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
     const XiClassData *cd = cg_class_native_value_type_data(ctx, v->args[0]);
     if (!cd)
@@ -4268,8 +4349,9 @@ static bool emit_class_native_instance_field_store_expr(XiCgenCtx *ctx, FILE *ou
 static bool emit_portable_class_native_instance_field_store_stmt(XiCgenCtx *ctx, FILE *out,
                                                                  const XiFunc *f, const XiValue *v,
                                                                  const char *prefix) {
-    (void) f;
     if (!ctx || !out || !v || v->op != XI_STORE_FIELD || v->nargs < 2 || !v->aux)
+        return false;
+    if (cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
     const XiClassData *cd = cg_class_native_value_type_data(ctx, v->args[0]);
     if (!cd || !cd->instance_layout)
@@ -4670,6 +4752,13 @@ static bool cg_class_native_ctor_uses_safe(XiCgenCtx *ctx, const XiFunc *f, cons
                     else
                         mfunc = cg_lookup_method(ctx, method, recv_class, recv_class_id, &prefix);
                     if (!cg_class_func_uses_native_receiver(ctx, mfunc))
+                        return false;
+                    /* A stack-inlined native class has no XrObjHeader.  If the
+                     * method's final ARC owns its receiver, retain/release must
+                     * operate on a heap instance instead.  Pure borrowed
+                     * receiver methods, including synchronous `return this`
+                     * chains, remain eligible for the stack fast path. */
+                    if (cg_class_native_receiver_requires_owned_storage(ctx, mfunc))
                         return false;
                     continue;
                 }
@@ -6442,6 +6531,7 @@ static void emit_one_class_native_typedef(XiCgenCtx *ctx, FILE *out, const XiCla
         fprintf(out, "};\n");
     }
     emit_class_native_derived_eq_hash_callbacks(ctx, out, cd, prefix);
+    emit_class_native_runtime_clone_helper(ctx, out, cd, prefix);
     if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
         fprintf(out, "#endif /* XRT_DEFINED_%s */\n", native_type);
         return;

@@ -1,1 +1,1 @@
-Json.decode<T>() target is not decodable: MISSING_DERIVE_SIDECAR
+JSON.decode<T>() target is not decodable: MISSING_DERIVE_SIDECAR

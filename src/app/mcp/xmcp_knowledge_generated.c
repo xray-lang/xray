@@ -295,69 +295,44 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
-        .name = "ClusterConfig",
-        .signature = "{ name: string, port: int, secret: string?, tls: ClusterTlsOptions?, }",
+        .name = "CHANNEL_NAME_MAX",
+        .signature = ": int",
         .summary = "",
     },
     {
+        .name = "ClusterConfig",
+        .signature = "{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }",
+        .summary = "Typed cluster node startup configuration",
+    },
+    {
         .name = "ClusterConfig.name",
-        .signature = "string",
-        .summary = "Type alias field",
+        .signature = "const string",
+        .summary = "Object field",
     },
     {
         .name = "ClusterConfig.port",
-        .signature = "int",
-        .summary = "Type alias field",
+        .signature = "const int",
+        .summary = "Object field",
     },
     {
         .name = "ClusterConfig.secret",
-        .signature = "string?",
-        .summary = "Type alias field",
+        .signature = "const string?",
+        .summary = "Object field",
     },
     {
         .name = "ClusterConfig.tls",
-        .signature = "ClusterTlsOptions?",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "ClusterDelivery",
-        .signature = "enum ClusterDelivery",
-        .summary = "Outcome of handing one opaque service envelope to the cluster transport",
-    },
-    {
-        .name = "ClusterDelivery.Accepted",
-        .signature = "ClusterDelivery.Accepted",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "ClusterDelivery.Disconnected",
-        .signature = "ClusterDelivery.Disconnected",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "ClusterDelivery.InvalidEnvelope",
-        .signature = "ClusterDelivery.InvalidEnvelope",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "ClusterDelivery.InvalidTopic",
-        .signature = "ClusterDelivery.InvalidTopic",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "ClusterDelivery.Overloaded",
-        .signature = "ClusterDelivery.Overloaded",
-        .summary = "Enum variant",
-    },
-    {
-        .name = "ClusterDelivery.Unavailable",
-        .signature = "ClusterDelivery.Unavailable",
-        .summary = "Enum variant",
+        .signature = "const ClusterTlsOptions?",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo",
-        .signature = "{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, listeners: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }",
+        .signature = "{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }",
         .summary = "Typed diagnostic snapshot for the local cluster runtime",
+    },
+    {
+        .name = "ClusterInfo.channels",
+        .signature = "const int",
+        .summary = "Object field",
     },
     {
         .name = "ClusterInfo.deadNodes",
@@ -371,11 +346,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterInfo.heartbeatTimeoutMs",
-        .signature = "const int",
-        .summary = "Object field",
-    },
-    {
-        .name = "ClusterInfo.listeners",
         .signature = "const int",
         .summary = "Object field",
     },
@@ -407,6 +377,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "ClusterInfo.tls",
         .signature = "const ClusterTlsStatus",
+        .summary = "Object field",
+    },
+    {
+        .name = "ClusterInfo.topicSubscriptions",
+        .signature = "const int",
         .summary = "Object field",
     },
     {
@@ -526,33 +501,33 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterTlsOptions",
-        .signature = "{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool, }",
-        .summary = "",
+        .signature = "{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }",
+        .summary = "Typed TLS configuration for a cluster node",
     },
     {
         .name = "ClusterTlsOptions.caFile",
-        .signature = "string?",
-        .summary = "Type alias field",
+        .signature = "const string?",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsOptions.certFile",
-        .signature = "string?",
-        .summary = "Type alias field",
+        .signature = "const string?",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsOptions.enabled",
-        .signature = "bool",
-        .summary = "Type alias field",
+        .signature = "const bool",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsOptions.insecure",
-        .signature = "bool",
-        .summary = "Type alias field",
+        .signature = "const bool",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsOptions.keyFile",
-        .signature = "string?",
-        .summary = "Type alias field",
+        .signature = "const string?",
+        .summary = "Object field",
     },
     {
         .name = "ClusterTlsStatus",
@@ -615,6 +590,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "channel",
+        .signature = "(name: string, size?: int): Channel",
+        .summary = "Create or get named distributed channel",
+    },
+    {
         .name = "discover",
         .signature = "(): ()",
         .summary = "Start LAN auto-discovery",
@@ -627,12 +607,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "join",
         .signature = "(addr: string): bool",
-        .summary = "",
-    },
-    {
-        .name = "listen",
-        .signature = "(pattern: string, capacity: int = 1024): Channel<Buffer>?",
-        .summary = "",
+        .summary = "Join cluster by address",
     },
     {
         .name = "monitor",
@@ -650,28 +625,38 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .summary = "",
     },
     {
+        .name = "publish",
+        .signature = "(topic: string, value: JSON.Value): bool",
+        .summary = "Publish to topic",
+    },
+    {
         .name = "self",
         .signature = "(): string",
         .summary = "Get own node name",
     },
     {
-        .name = "send",
-        .signature = "(topic: string, envelope: move Buffer): ClusterDelivery",
-        .summary = "",
-    },
-    {
         .name = "start",
         .signature = "(config: ClusterConfig): bool",
-        .summary = "",
+        .summary = "Start cluster node",
     },
     {
         .name = "stop",
         .signature = "(): ()",
-        .summary = "",
+        .summary = "Stop cluster node",
+    },
+    {
+        .name = "subscribe",
+        .signature = "(pattern: string): Channel",
+        .summary = "Subscribe to topic pattern",
     },
     {
         .name = "topicMatches",
         .signature = "(pattern: string, topic: string): bool",
+        .summary = "",
+    },
+    {
+        .name = "validChannelName",
+        .signature = "(name: string): bool",
         .summary = "",
     },
     {
@@ -872,71 +857,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
         .summary = "",
     },
     {
-        .name = "CsvParseOptions",
-        .signature = "{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: int, maxRecords: int, maxInputBytes: int, maxFieldBytes: int, maxColumns: int }",
-        .summary = "",
-    },
-    {
-        .name = "CsvParseOptions.commentPrefix",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.delimiter",
-        .signature = "CsvDelimiter",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.escapeChar",
-        .signature = "rune",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.header",
-        .signature = "CsvHeader",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.maxColumns",
-        .signature = "int",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.maxFieldBytes",
-        .signature = "int",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.maxInputBytes",
-        .signature = "int",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.maxRecords",
-        .signature = "int",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.quoteChar",
-        .signature = "rune",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.skipEmptyLines",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.skipRecords",
-        .signature = "int",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvParseOptions.trimFields",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
         .name = "CsvParseReport",
         .signature = "CsvParseReport",
         .summary = "",
@@ -970,31 +890,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
         .name = "CsvParseReport.truncated",
         .signature = ": bool",
         .summary = "",
-    },
-    {
-        .name = "CsvWriteOptions",
-        .signature = "{ delimiter: rune, quoteChar: rune, escapeChar: rune, linebreak: string }",
-        .summary = "",
-    },
-    {
-        .name = "CsvWriteOptions.delimiter",
-        .signature = "rune",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvWriteOptions.escapeChar",
-        .signature = "rune",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvWriteOptions.linebreak",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "CsvWriteOptions.quoteChar",
-        .signature = "rune",
-        .summary = "Type alias field",
     },
     {
         .name = "defaultParseOptions",
@@ -1601,6 +1496,26 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "",
     },
     {
+        .name = "HttpRequest.json",
+        .signature = "(): T",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.jsonObject",
+        .signature = "(): JSON.Object",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.jsonValue",
+        .signature = "(): JSON.Value",
+        .summary = "",
+    },
+    {
+        .name = "HttpRequest.jsonWithRest",
+        .signature = "(): JSON.WithRest<T>",
+        .summary = "",
+    },
+    {
         .name = "HttpRequest.method",
         .signature = ": HttpMethod",
         .summary = "",
@@ -1624,16 +1539,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .name = "HttpRequest.text",
         .signature = "(): string",
         .summary = "",
-    },
-    {
-        .name = "HttpRequestOptions",
-        .signature = "{ url: string, method?: HttpMethod, headers?: Headers, body?: Array<byte>, followRedirects?: bool, maxRedirects?: int, timeoutMs?: int, version?: HttpVersion }",
-        .summary = "",
-    },
-    {
-        .name = "HttpRequestOptions.url",
-        .signature = "string",
-        .summary = "Type alias field",
     },
     {
         .name = "HttpResponse",
@@ -1662,7 +1567,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpResponse.json",
-        .signature = "(): Json",
+        .signature = "(): T",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.jsonObject",
+        .signature = "(): JSON.Object",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.jsonValue",
+        .signature = "(): JSON.Value",
+        .summary = "",
+    },
+    {
+        .name = "HttpResponse.jsonWithRest",
+        .signature = "(): JSON.WithRest<T>",
         .summary = "",
     },
     {
@@ -2007,7 +1927,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "Server.routeHandler",
-        .signature = "(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse): bool",
+        .signature = "(method: string, path: string, handler: (HttpRequest) -> HttpResponse): bool",
         .summary = "",
     },
     {
@@ -2028,6 +1948,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "isRedirectStatus",
         .signature = "(status: int): bool",
+        .summary = "",
+    },
+    {
+        .name = "json",
+        .signature = "(value: T, status: int = 200): HttpResponse",
         .summary = "",
     },
     {
@@ -2470,133 +2395,133 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     {
-        .name = "Json",
-        .signature = "Json",
+        .name = "JSON",
+        .signature = "JSON",
         .summary = "",
     },
     {
-        .name = "Json.containsKey",
-        .signature = "(obj: Json, key: string): bool",
+        .name = "JSON.asArray",
+        .signature = "(value: JSON.Value): Array<JSON.Value>?",
         .summary = "",
     },
     {
-        .name = "Json.decode",
-        .signature = "(value: Json): T?",
+        .name = "JSON.asObject",
+        .signature = "(value: JSON.Value): JSON.Object?",
         .summary = "",
     },
     {
-        .name = "Json.encode",
-        .signature = "(value: T): Json",
+        .name = "JSON.containsPath",
+        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): bool",
         .summary = "",
     },
     {
-        .name = "Json.entries",
-        .signature = "(): Array<(string, Json)>",
+        .name = "JSON.decode",
+        .signature = "(value: JSON.Value, unknown?: JSON.UnknownFields): T?",
         .summary = "",
     },
     {
-        .name = "Json.entries",
-        .signature = "(obj: Json): Array<(string, Json)>",
+        .name = "JSON.decodeObject",
+        .signature = "(value: JSON.Object, unknown?: JSON.UnknownFields): T?",
         .summary = "",
     },
     {
-        .name = "Json.entriesIterator",
-        .signature = "(): Iterator<(string, Json)>",
+        .name = "JSON.get",
+        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): T?",
         .summary = "",
     },
     {
-        .name = "Json.get",
-        .signature = "(obj: Json, key: string, default?: T): Json",
+        .name = "JSON.isArray",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isArray",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isBool",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isBool",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isFloat",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isFloat",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isInt",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isInt",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isNull",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isNull",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isObject",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isObject",
-        .signature = "(value: Json): bool",
+        .name = "JSON.isString",
+        .signature = "(value: JSON.Value): bool",
         .summary = "",
     },
     {
-        .name = "Json.isString",
-        .signature = "(value: Json): bool",
-        .summary = "",
-    },
-    {
-        .name = "Json.isValid",
+        .name = "JSON.isValid",
         .signature = "(text: string, strict?: bool): bool",
         .summary = "",
     },
     {
-        .name = "Json.iterator",
-        .signature = "(): Iterator<string>",
+        .name = "JSON.kindOf",
+        .signature = "(value: JSON.Value): string",
         .summary = "",
     },
     {
-        .name = "Json.keys",
-        .signature = "(): Array<string>",
+        .name = "JSON.merge",
+        .signature = "(parts: JSON.WithRest<T>): JSON.Object",
         .summary = "",
     },
     {
-        .name = "Json.keys",
-        .signature = "(obj: Json): Array<string>",
+        .name = "JSON.parse",
+        .signature = "(text: string, unknown?: JSON.UnknownFields): T",
         .summary = "",
     },
     {
-        .name = "Json.kindOf",
-        .signature = "(value: Json): string",
+        .name = "JSON.parseObject",
+        .signature = "(text: string): JSON.Object",
         .summary = "",
     },
     {
-        .name = "Json.parse",
-        .signature = "(text: string): Json",
+        .name = "JSON.parseValue",
+        .signature = "(text: string): JSON.Value",
         .summary = "",
     },
     {
-        .name = "Json.stringify",
+        .name = "JSON.parseWithRest",
+        .signature = "(text: string, nestedUnknownFields?: JSON.UnknownFields): JSON.WithRest<T>",
+        .summary = "",
+    },
+    {
+        .name = "JSON.remove",
+        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): bool",
+        .summary = "",
+    },
+    {
+        .name = "JSON.require",
+        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path): T",
+        .summary = "",
+    },
+    {
+        .name = "JSON.set",
+        .signature = "(root: JSON.Value | JSON.Object, path: JSON.Path, value: JSON.Value, createParents?: bool): ()",
+        .summary = "",
+    },
+    {
+        .name = "JSON.stringify",
         .signature = "(value: T, indent?: int): string",
         .summary = "",
     },
     {
-        .name = "Json.toString",
-        .signature = "(): string",
-        .summary = "",
-    },
-    {
-        .name = "Json.tryParse",
-        .signature = "(text: string): Json",
-        .summary = "",
-    },
-    {
-        .name = "Json.values",
-        .signature = "(): Array<Json>",
-        .summary = "",
-    },
-    {
-        .name = "Json.values",
-        .signature = "(obj: Json): Array<Json>",
+        .name = "JSON.value",
+        .signature = "(value: T): JSON.Value",
         .summary = "",
     },
 };
@@ -2614,7 +2539,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.child",
-        .signature = "(...fields: Json): Logger",
+        .signature = "(...fields: JSON.Value): Logger",
         .summary = "",
     },
     {
@@ -2624,17 +2549,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.debug",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
         .name = "Logger.error",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
         .name = "Logger.fatal",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
@@ -2644,7 +2569,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.info",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
@@ -2674,17 +2599,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "Logger.warn",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
         .name = "child",
-        .signature = "(...fields: Json): Logger",
+        .signature = "(...fields: JSON.Value): Logger",
         .summary = "",
     },
     {
         .name = "debug",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
@@ -2699,12 +2624,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "error",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
         .name = "fatal",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
@@ -2714,7 +2639,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "info",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
     {
@@ -2739,7 +2664,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
     },
     {
         .name = "warn",
-        .signature = "(...args: Json): ()",
+        .signature = "(...args: JSON.Value): ()",
         .summary = "",
     },
 };
@@ -3198,7 +3123,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "DialOptions.constructor",
-        .signature = "(timeoutMs: int = _DEFAULT_TIMEOUT_MS, tls: bool = false): ()",
+        .signature = "(timeoutMs: int = 30000, tls: bool = false): ()",
         .summary = "",
     },
     {
@@ -3254,7 +3179,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     {
         .name = "NetError",
         .signature = "enum NetError",
-        .summary = "Typed failure from network operations; classification from native codes lives in net.xr",
+        .summary = "Typed failure from native network operations",
     },
     {
         .name = "NetError.Cancelled",
@@ -3307,27 +3232,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "Enum variant",
     },
     {
-        .name = "UdpFrom",
-        .signature = "UdpFrom",
+        .name = "UdpPacket",
+        .signature = "UdpPacket",
         .summary = "",
     },
     {
-        .name = "UdpFrom.constructor",
-        .signature = "(n: int, host: string, port: int): ()",
+        .name = "UdpPacket.constructor",
+        .signature = "(data: string, host: string, port: int): ()",
         .summary = "",
     },
     {
-        .name = "UdpFrom.host",
+        .name = "UdpPacket.data",
         .signature = ": string",
         .summary = "",
     },
     {
-        .name = "UdpFrom.n",
-        .signature = ": int",
+        .name = "UdpPacket.host",
+        .signature = ": string",
         .summary = "",
     },
     {
-        .name = "UdpFrom.port",
+        .name = "UdpPacket.port",
         .signature = ": int",
         .summary = "",
     },
@@ -3343,7 +3268,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "copy",
-        .signature = "(src: NetConn, dst: NetConn, bufferSize: int = _DEFAULT_COPY_BUFFER): int",
+        .signature = "(src: NetConn, dst: NetConn, bufferSize: int = 65536): int",
         .summary = "",
     },
     {
@@ -3353,12 +3278,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "dial",
-        .signature = "(host: string, port: int, options: DialOptions? = null): NetConn",
+        .signature = "(host: string, port: int, timeout: int = 30000): NetConn?",
         .summary = "",
     },
     {
         .name = "dialEndpoint",
-        .signature = "(endpoint: Endpoint, options: DialOptions? = null): NetConn",
+        .signature = "(endpoint: Endpoint, options: DialOptions = DialOptions()): NetConn?",
+        .summary = "",
+    },
+    {
+        .name = "dialTLS",
+        .signature = "(host: string, port: int, timeout: int = 30000): NetConn?",
         .summary = "",
     },
     {
@@ -3383,17 +3313,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "listen",
-        .signature = "(port: int, backlog: int = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener",
+        .signature = "(port: int, backlog: int = 1024): NetListener?",
         .summary = "",
     },
     {
         .name = "lookup",
-        .signature = "(hostname: string): Array<IpAddress>",
+        .signature = "(hostname: string): string?",
         .summary = "",
     },
     {
-        .name = "readBytes",
-        .signature = "(conn: NetConn, maxBytes: int = 4096): Array<byte>?",
+        .name = "read",
+        .signature = "(conn: NetConn, maxlen: int = 4096): string?",
         .summary = "",
     },
     {
@@ -3403,7 +3333,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "recvFrom",
-        .signature = "(handle: NetConn, buffer: ref Array<byte>, timeoutMs: int = -1): UdpFrom?",
+        .signature = "(handle: NetConn, maxlen: int = 4096): UdpPacket?",
         .summary = "",
     },
     {
@@ -3413,7 +3343,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "sendTo",
-        .signature = "(handle: NetConn, data: Array<byte>, host: string, port: int, timeoutMs: int = _DEFAULT_TIMEOUT_MS): int",
+        .signature = "(handle: NetConn, data: string, host: string, port: int): int",
         .summary = "",
     },
     {
@@ -3453,12 +3383,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "udpBind",
-        .signature = "(port: int, address: string = \"\"): NetConn",
+        .signature = "(port: int, address: string = \"\"): NetConn?",
         .summary = "",
     },
     {
         .name = "upgradeTLS",
-        .signature = "(conn: NetConn, hostname: string, timeoutMs: int = _DEFAULT_TIMEOUT_MS): ()",
+        .signature = "(conn: NetConn, hostname: string, timeout: int = 30000): NetConn?",
+        .summary = "",
+    },
+    {
+        .name = "write",
+        .signature = "(conn: NetConn, data: string): int",
         .summary = "",
     },
     {
@@ -3664,22 +3599,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "Plan.constructor",
-        .signature = "(options: Options, init: fn(int) -> S): ()",
+        .signature = "(options: Options, init: (int) -> S): ()",
         .summary = "",
     },
     {
         .name = "Plan.forEach",
-        .signature = "(range: Range, body: fn(S, int)): ()",
+        .signature = "(range: Range, body: (S, int) -> ()): ()",
         .summary = "",
     },
     {
         .name = "Plan.map",
-        .signature = "(range: Range, body: fn(S, int) -> T): Array<T>",
+        .signature = "(range: Range, body: (S, int) -> T): Array<T>",
         .summary = "",
     },
     {
         .name = "Plan.mapInto",
-        .signature = "(range: Range, output: ref Array<T>, body: fn(S, int) -> T): ()",
+        .signature = "(range: Range, output: ref Array<T>, body: (S, int) -> T): ()",
         .summary = "",
     },
     {
@@ -3689,27 +3624,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "Plan.reduce",
-        .signature = "(range: Range, initial: A, body: fn(S, int) -> A, combine: fn(A, A) -> A): A",
+        .signature = "(range: Range, initial: A, body: (S, int) -> A, combine: (A, A) -> A): A",
         .summary = "",
     },
     {
         .name = "forEach",
-        .signature = "(range: Range, body: fn(int), options: Options = Options()): ()",
+        .signature = "(range: Range, body: (int) -> (), options: Options = Options()): ()",
         .summary = "",
     },
     {
         .name = "map",
-        .signature = "(range: Range, body: fn(int) -> T, options: Options = Options()): Array<T>",
+        .signature = "(range: Range, body: (int) -> T, options: Options = Options()): Array<T>",
         .summary = "",
     },
     {
         .name = "mapInto",
-        .signature = "(range: Range, output: ref Array<T>, body: fn(int) -> T, options: Options = Options()): ()",
+        .signature = "(range: Range, output: ref Array<T>, body: (int) -> T, options: Options = Options()): ()",
         .summary = "",
     },
     {
         .name = "reduce",
-        .signature = "(range: Range, initial: A, body: fn(int) -> A, combine: fn(A, A) -> A, options: Options = Options()): A",
+        .signature = "(range: Range, initial: A, body: (int) -> A, combine: (A, A) -> A, options: Options = Options()): A",
         .summary = "",
     },
 };
@@ -4757,17 +4692,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "Mutex.lock",
-        .signature = "(body: fn(T) -> U): U",
+        .signature = "(body: (T) -> U): U",
         .summary = "",
     },
     {
         .name = "Mutex.replace",
-        .signature = "(body: fn(T) -> T): T",
+        .signature = "(body: (T) -> T): T",
         .summary = "",
     },
     {
         .name = "Mutex.tryLock",
-        .signature = "(body: fn(T) -> U): U?",
+        .signature = "(body: (T) -> U): U?",
         .summary = "",
     },
     {
@@ -4782,7 +4717,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "Once.call",
-        .signature = "(body: fn()): ()",
+        .signature = "(body: () -> ()): ()",
         .summary = "",
     },
     {
@@ -4802,12 +4737,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "RwLock.read",
-        .signature = "(body: fn(T) -> U): U",
+        .signature = "(body: (T) -> U): U",
         .summary = "",
     },
     {
         .name = "RwLock.replace",
-        .signature = "(body: fn(T) -> T): T",
+        .signature = "(body: (T) -> T): T",
         .summary = "",
     },
     {
@@ -4817,7 +4752,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "RwLock.write",
-        .signature = "(body: fn(T) -> U): U",
+        .signature = "(body: (T) -> U): U",
         .summary = "",
     },
     {
@@ -5015,7 +4950,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "ThreadLocal.constructor",
-        .signature = "(init: fn() -> T): ()",
+        .signature = "(init: () -> T): ()",
         .summary = "",
     },
     {
@@ -5035,7 +4970,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "onSignal",
-        .signature = "(signal: Signal, handler: fn()): bool",
+        .signature = "(signal: Signal, handler: () -> ()): bool",
         .summary = "",
     },
     {
@@ -5866,112 +5801,67 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "WsConn",
         .signature = "WsConn",
-        .summary = "",
+        .summary = "Native handle type",
     },
     {
-        .name = "WsConn.close",
-        .signature = "(code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.constructor",
-        .signature = "(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: int): ()",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.error",
-        .signature = ": string?",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.isOpen",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.ping",
-        .signature = "(): bool",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.recv",
-        .signature = "(timeout: int = -1): WsMessage?",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.sendBytes",
-        .signature = "(data: Array<byte>, binary: bool = false): bool",
-        .summary = "",
-    },
-    {
-        .name = "WsConn.sendText",
-        .signature = "(data: string): bool",
-        .summary = "",
+        .name = "WsConn.state",
+        .signature = "string",
+        .summary = "Handle field",
     },
     {
         .name = "WsConn.url",
-        .signature = ": string",
-        .summary = "",
+        .signature = "string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "WsConn.wsid",
+        .signature = "const int",
+        .summary = "Handle field",
     },
     {
         .name = "WsConnectOptions",
-        .signature = "WsConnectOptions",
-        .summary = "",
-    },
-    {
-        .name = "WsConnectOptions.constructor",
-        .signature = "(timeoutMs: int = 30000, pingIntervalMs: int = 0, pongTimeoutMs: int = 0, maxMessageSize: int = _WS_MAX_MESSAGE_BYTES): ()",
-        .summary = "",
+        .signature = "{ timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }",
+        .summary = "Typed WebSocket client connection options",
     },
     {
         .name = "WsConnectOptions.maxMessageSize",
-        .signature = ": int",
-        .summary = "",
+        .signature = "const int?",
+        .summary = "Object field",
     },
     {
-        .name = "WsConnectOptions.pingIntervalMs",
-        .signature = ": int",
-        .summary = "",
+        .name = "WsConnectOptions.pingInterval",
+        .signature = "const int?",
+        .summary = "Object field",
     },
     {
-        .name = "WsConnectOptions.pongTimeoutMs",
-        .signature = ": int",
-        .summary = "",
+        .name = "WsConnectOptions.pongTimeout",
+        .signature = "const int?",
+        .summary = "Object field",
     },
     {
-        .name = "WsConnectOptions.timeoutMs",
-        .signature = ": int",
-        .summary = "",
+        .name = "WsConnectOptions.timeout",
+        .signature = "const int?",
+        .summary = "Object field",
     },
     {
         .name = "WsMessage",
         .signature = "WsMessage",
-        .summary = "",
+        .summary = "Native handle type",
     },
     {
         .name = "WsMessage.binary",
-        .signature = ": bool",
-        .summary = "",
-    },
-    {
-        .name = "WsMessage.constructor",
-        .signature = "(data: Array<byte>? = null, binary: bool = false, error: string? = null): ()",
-        .summary = "",
+        .signature = "const bool",
+        .summary = "Handle field",
     },
     {
         .name = "WsMessage.data",
-        .signature = ": Array<byte>?",
-        .summary = "",
+        .signature = "const string | Array<byte> | null",
+        .summary = "Handle field",
     },
     {
         .name = "WsMessage.error",
-        .signature = ": string?",
-        .summary = "",
-    },
-    {
-        .name = "WsMessage.text",
-        .signature = "(): string?",
-        .summary = "",
+        .signature = "const string?",
+        .summary = "Handle field",
     },
     {
         .name = "WsUrl",
@@ -6020,8 +5910,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "close",
-        .signature = "(conn: ref WsConn, code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool",
-        .summary = "",
+        .signature = "(conn: WsConn, code?: int?, reason?: string?): bool",
+        .summary = "Close a WebSocket connection",
     },
     {
         .name = "closeFrame",
@@ -6030,8 +5920,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "connect",
-        .signature = "(url: string, options: WsConnectOptions? = null): WsConn",
-        .summary = "",
+        .signature = "(url: string, options?: WsConnectOptions?): WsConn?",
+        .summary = "Connect to a WebSocket server",
     },
     {
         .name = "frame",
@@ -6075,8 +5965,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "ping",
-        .signature = "(conn: ref WsConn): bool",
-        .summary = "",
+        .signature = "(conn: WsConn): bool",
+        .summary = "Send a ping frame",
     },
     {
         .name = "pingFrame",
@@ -6095,23 +5985,23 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "recv",
-        .signature = "(conn: ref WsConn, timeout: int = -1): WsMessage?",
-        .summary = "",
+        .signature = "(conn: WsConn, timeout?: int?): WsMessage?",
+        .summary = "Receive data from WebSocket connection",
     },
     {
-        .name = "sendBytes",
-        .signature = "(conn: ref WsConn, data: Array<byte>, binary: bool = false): bool",
-        .summary = "",
-    },
-    {
-        .name = "sendText",
-        .signature = "(conn: ref WsConn, data: string): bool",
-        .summary = "",
+        .name = "send",
+        .signature = "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool",
+        .summary = "Send data over WebSocket connection",
     },
     {
         .name = "serve",
-        .signature = "(port: int, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: int = _WS_MAX_MESSAGE_BYTES): bool",
-        .summary = "",
+        .signature = "(port: int, handler: fn(conn: WsConn): ()): bool",
+        .summary = "Start WebSocket server",
+    },
+    {
+        .name = "stopServer",
+        .signature = "(): ()",
+        .summary = "Stop the WebSocket server",
     },
     {
         .name = "textFrame",
@@ -6202,31 +6092,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
         .summary = "",
     },
     {
-        .name = "XmlOptions",
-        .signature = "{ preserveWhitespace: bool, preserveComments: bool, preserveCData: bool, validateEntities: bool }",
-        .summary = "",
-    },
-    {
-        .name = "XmlOptions.preserveCData",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlOptions.preserveComments",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlOptions.preserveWhitespace",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlOptions.validateEntities",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
         .name = "XmlParseReport",
         .signature = "XmlParseReport",
         .summary = "",
@@ -6245,26 +6110,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
         .name = "XmlParseReport.doc",
         .signature = ": XmlNode?",
         .summary = "",
-    },
-    {
-        .name = "XmlWriteOptions",
-        .signature = "{ indent: int, declaration: bool, encoding: string }",
-        .summary = "",
-    },
-    {
-        .name = "XmlWriteOptions.declaration",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlWriteOptions.encoding",
-        .signature = "string",
-        .summary = "Type alias field",
-    },
-    {
-        .name = "XmlWriteOptions.indent",
-        .signature = "int",
-        .summary = "Type alias field",
     },
     {
         .name = "attr",
@@ -6445,16 +6290,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
         .summary = "",
     },
     {
-        .name = "YamlOptions",
-        .signature = "{ strict: bool }",
-        .summary = "",
-    },
-    {
-        .name = "YamlOptions.strict",
-        .signature = "bool",
-        .summary = "Type alias field",
-    },
-    {
         .name = "YamlParseReport",
         .signature = "YamlParseReport",
         .summary = "",
@@ -6518,16 +6353,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
         .name = "YamlTagged.value",
         .signature = ": YamlValue",
         .summary = "",
-    },
-    {
-        .name = "YamlWriteOptions",
-        .signature = "{ indent: int }",
-        .summary = "",
-    },
-    {
-        .name = "YamlWriteOptions.indent",
-        .signature = "int",
-        .summary = "Type alias field",
     },
     {
         .name = "aliasValue",
@@ -6902,14 +6727,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var view: Slice<int> = arr[1:4]\n"
             "```\n"
             "\n"
-            "### Structural object / Json object\n"
+            "### Exact structural object / dynamic JSON object\n"
+            "Structural objects have compile-time-known fields and exact shapes. Dynamic JSON objects use `JSON.Object`, a pure alias for `Map<string, JSON.Value>`.\n"
             "```xray\n"
-            "// Object-shape/Json object literal: identifier or string key + colon ':'\n"
-            "var data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
-            "var user = { name: \"Bob\", age: 25 }       // default type is an exact object shape\n"
+            "// Structural-object literal: identifier or static string key + colon ':'\n"
+            "var user = { name: \"Bob\", age: 25 }       // exact object shape\n"
             "typeName(user)                            // \"object\"\n"
-            "data.name              // type: Json (field access returns Json)\n"
-            "data[\"name\"]           // equivalent\n"
             "user.name              // type: string; direct ordinal\n"
             "user[\"name\"]           // exactly equivalent to user.name; same direct ordinal\n"
             "\n"
@@ -6920,6 +6743,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "// Map literal: `#{}` prefix + `:`\n"
             "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, int>\n"
+            "var data: JSON.Object = #{\"name\": \"Alice\", \"age\": 30}\n"
+            "data[\"traceId\"] = \"req-1\"               // only Map has dynamic keys\n"
             "```\n"
             "```xray\n"
             "var p = { name: \"Alice\", age: 30 }\n"
@@ -6963,7 +6788,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Move into coroutine\n"
             "```xray\n"
             "var data = { value: 10 }\n"
-            "var task = go fn(d: Json) -> int {\n"
+            "var task = go fn(d: JSON.Object) -> int {\n"
             "    return d.value + 1\n"
             "}(move data)        // transfer data ownership to the coroutine; data is unusable afterwards\n"
             "```\n"
@@ -7063,7 +6888,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "for (i in 0..n) { print(i) }                  // range iteration (half-open)\n"
             "for (ch in \"hello\") { print(ch) }             // string characters (by Unicode scalar)\n"
             "for (key in someMap) { print(key) }           // single variable over Map \xe2\x86\x92 key\n"
-            "for (key in someJson) { print(key) }          // single variable over Json \xe2\x86\x92 key\n"
+            "for (key in jsonObject) { print(key) }        // JSON.Object is a Map; single variable \xe2\x86\x92 key\n"
             "for (color in Color) { print(color.name) }    // unit-only enum; yields Color values\n"
             "for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>\n"
             "    print(variant.name)\n"
@@ -7133,25 +6958,24 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```xray\n"
             "fn read_file(path: string) -> string {\n"
             "    var f = open(path)\n"
-            "    defer { f.close() }              // always runs before the function returns\n"
+            "    defer f.close()                  // always runs before the function returns\n"
             "    return f.readAll()\n"
             "}\n"
             "\n"
             "fn process() {\n"
-            "    defer {\n"
+            "    defer {                          // block form\n"
             "        log.info(\"done\")\n"
             "        cleanup()\n"
             "    }\n"
             "    do_work()\n"
             "}\n"
             "\n"
-            "fn late_binding_and_copy() {\n"
+            "fn snapshot_vs_reference() {\n"
             "    var n = 1\n"
-            "    defer { print(\"late\", n) }        // reads 2 at exit\n"
-            "    const saved = copy(n)\n"
-            "    defer { print(\"saved\", saved) }   // explicit copy remains 1\n"
+            "    defer print(\"call\", n)            // saves 1 at registration\n"
+            "    defer { print(\"block\", n) }       // reads 2 at exit\n"
             "    n = 2\n"
-            "}                                      // prints saved 1, then late 2\n"
+            "}                                      // prints block 2, then call 1\n"
             "```\n"
             "\n"
             "### break / continue / return\n"
@@ -7198,7 +7022,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var t1 = go worker(0, channel)\n"
             "\n"
             "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-            "var t2 = go fn(d: Json) -> int {\n"
+            "var t2 = go fn(d: JSON.Object) -> int {\n"
             "    return d.value * 2\n"
             "}(payload)\n"
             "\n"
@@ -7326,25 +7150,24 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```xray\n"
             "fn read_file(path: string) -> string {\n"
             "    var f = open(path)\n"
-            "    defer { f.close() }              // always runs before the function returns\n"
+            "    defer f.close()                  // always runs before the function returns\n"
             "    return f.readAll()\n"
             "}\n"
             "\n"
             "fn process() {\n"
-            "    defer {\n"
+            "    defer {                          // block form\n"
             "        log.info(\"done\")\n"
             "        cleanup()\n"
             "    }\n"
             "    do_work()\n"
             "}\n"
             "\n"
-            "fn late_binding_and_copy() {\n"
+            "fn snapshot_vs_reference() {\n"
             "    var n = 1\n"
-            "    defer { print(\"late\", n) }        // reads 2 at exit\n"
-            "    const saved = copy(n)\n"
-            "    defer { print(\"saved\", saved) }   // explicit copy remains 1\n"
+            "    defer print(\"call\", n)            // saves 1 at registration\n"
+            "    defer { print(\"block\", n) }       // reads 2 at exit\n"
             "    n = 2\n"
-            "}                                      // prints saved 1, then late 2\n"
+            "}                                      // prints block 2, then call 1\n"
             "```\n"
             "",
     },
@@ -8093,7 +7916,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "- `string` \xe2\x80\x94 UTF-8 string\n"
             "- `bool` \xe2\x80\x94 `true` / `false`\n"
             "- `()` \xe2\x80\x94 Unit, no return value\n"
-            "- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Json`, `Array<byte>`, `BigInt`\n"
+            "- exact structural objects `{ field: T }`\n"
+            "- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<byte>`, `BigInt`\n"
             "\n"
             "### Explicit conditions\n"
             "```xray\n"
@@ -8393,29 +8217,24 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `cluster.ClusterConfig` | `{ name: string, port: int, secret: string?, tls: ClusterTlsOptions?, }` |  |\n"
-            "| `cluster.ClusterConfig.name` | `string` | Type alias field |\n"
-            "| `cluster.ClusterConfig.port` | `int` | Type alias field |\n"
-            "| `cluster.ClusterConfig.secret` | `string?` | Type alias field |\n"
-            "| `cluster.ClusterConfig.tls` | `ClusterTlsOptions?` | Type alias field |\n"
-            "| `cluster.ClusterDelivery` | `enum ClusterDelivery` | Outcome of handing one opaque service envelope to the cluster transport |\n"
-            "| `cluster.ClusterDelivery.Accepted` | `ClusterDelivery.Accepted` | Enum variant |\n"
-            "| `cluster.ClusterDelivery.Disconnected` | `ClusterDelivery.Disconnected` | Enum variant |\n"
-            "| `cluster.ClusterDelivery.InvalidEnvelope` | `ClusterDelivery.InvalidEnvelope` | Enum variant |\n"
-            "| `cluster.ClusterDelivery.InvalidTopic` | `ClusterDelivery.InvalidTopic` | Enum variant |\n"
-            "| `cluster.ClusterDelivery.Overloaded` | `ClusterDelivery.Overloaded` | Enum variant |\n"
-            "| `cluster.ClusterDelivery.Unavailable` | `ClusterDelivery.Unavailable` | Enum variant |\n"
-            "| `cluster.ClusterInfo` | `{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, listeners: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }` | Typed diagnostic snapshot for the local cluster runtime |\n"
+            "| `cluster.CHANNEL_NAME_MAX` | `: int` |  |\n"
+            "| `cluster.ClusterConfig` | `{ name: string, port: int, secret: string?, tls: ClusterTlsOptions? }` | Typed cluster node startup configuration |\n"
+            "| `cluster.ClusterConfig.name` | `const string` | Object field |\n"
+            "| `cluster.ClusterConfig.port` | `const int` | Object field |\n"
+            "| `cluster.ClusterConfig.secret` | `const string?` | Object field |\n"
+            "| `cluster.ClusterConfig.tls` | `const ClusterTlsOptions?` | Object field |\n"
+            "| `cluster.ClusterInfo` | `{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }` | Typed diagnostic snapshot for the local cluster runtime |\n"
+            "| `cluster.ClusterInfo.channels` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.deadNodes` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.heartbeatIntervalMs` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `const int` | Object field |\n"
-            "| `cluster.ClusterInfo.listeners` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.maxMissedHeartbeats` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.nodes` | `const Array<ClusterNodeInfo>` | Object field |\n"
             "| `cluster.ClusterInfo.port` | `const int` | Object field |\n"
             "| `cluster.ClusterInfo.running` | `const bool` | Object field |\n"
             "| `cluster.ClusterInfo.self` | `const string` | Object field |\n"
             "| `cluster.ClusterInfo.tls` | `const ClusterTlsStatus` | Object field |\n"
+            "| `cluster.ClusterInfo.topicSubscriptions` | `const int` | Object field |\n"
             "| `cluster.ClusterNodeInfo` | `{ name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }` | Typed diagnostic snapshot for one remote cluster node |\n"
             "| `cluster.ClusterNodeInfo.bytesReceived` | `const int` | Object field |\n"
             "| `cluster.ClusterNodeInfo.bytesSent` | `const int` | Object field |\n"
@@ -8439,12 +8258,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.ClusterNodeState.Connecting` | `ClusterNodeState.Connecting` | Enum variant |\n"
             "| `cluster.ClusterNodeState.Handshaking` | `ClusterNodeState.Handshaking` | Enum variant |\n"
             "| `cluster.ClusterNodeState.Idle` | `ClusterNodeState.Idle` | Enum variant |\n"
-            "| `cluster.ClusterTlsOptions` | `{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool, }` |  |\n"
-            "| `cluster.ClusterTlsOptions.caFile` | `string?` | Type alias field |\n"
-            "| `cluster.ClusterTlsOptions.certFile` | `string?` | Type alias field |\n"
-            "| `cluster.ClusterTlsOptions.enabled` | `bool` | Type alias field |\n"
-            "| `cluster.ClusterTlsOptions.insecure` | `bool` | Type alias field |\n"
-            "| `cluster.ClusterTlsOptions.keyFile` | `string?` | Type alias field |\n"
+            "| `cluster.ClusterTlsOptions` | `{ enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }` | Typed TLS configuration for a cluster node |\n"
+            "| `cluster.ClusterTlsOptions.caFile` | `const string?` | Object field |\n"
+            "| `cluster.ClusterTlsOptions.certFile` | `const string?` | Object field |\n"
+            "| `cluster.ClusterTlsOptions.enabled` | `const bool` | Object field |\n"
+            "| `cluster.ClusterTlsOptions.insecure` | `const bool` | Object field |\n"
+            "| `cluster.ClusterTlsOptions.keyFile` | `const string?` | Object field |\n"
             "| `cluster.ClusterTlsStatus` | `{ enabled: bool, clientReady: bool, serverReady: bool }` | Effective TLS posture of a running cluster node |\n"
             "| `cluster.ClusterTlsStatus.clientReady` | `const bool` | Object field |\n"
             "| `cluster.ClusterTlsStatus.enabled` | `const bool` | Object field |\n"
@@ -8457,18 +8276,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `NodeAddress.port` | `: int` |  |\n"
             "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: int` |  |\n"
             "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
+            "| `cluster.channel` | `(name: string, size?: int): Channel` | Create or get named distributed channel |\n"
             "| `cluster.discover` | `(): ()` | Start LAN auto-discovery |\n"
             "| `cluster.info` | `(): ClusterInfo?` | Get cluster status info |\n"
-            "| `cluster.join` | `(addr: string): bool` |  |\n"
-            "| `cluster.listen` | `(pattern: string, capacity: int = 1024): Channel<Buffer>?` |  |\n"
+            "| `cluster.join` | `(addr: string): bool` | Join cluster by address |\n"
             "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
             "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
+            "| `cluster.publish` | `(topic: string, value: JSON.Value): bool` | Publish to topic |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
-            "| `cluster.send` | `(topic: string, envelope: move Buffer): ClusterDelivery` |  |\n"
-            "| `cluster.start` | `(config: ClusterConfig): bool` |  |\n"
-            "| `cluster.stop` | `(): ()` |  |\n"
+            "| `cluster.start` | `(config: ClusterConfig): bool` | Start cluster node |\n"
+            "| `cluster.stop` | `(): ()` | Stop cluster node |\n"
+            "| `cluster.subscribe` | `(pattern: string): Channel` | Subscribe to topic pattern |\n"
             "| `cluster.topicMatches` | `(pattern: string, topic: string): bool` |  |\n"
+            "| `cluster.validChannelName` | `(name: string): bool` |  |\n"
             "| `cluster.validNodeName` | `(name: string): bool` |  |\n"
             "| `cluster.validTopicName` | `(topic: string): bool` |  |\n"
             "| `cluster.validTopicPattern` | `(pattern: string): bool` |  |\n"
@@ -8583,19 +8404,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CsvDocument.constructor` | `(): ()` |  |\n"
             "| `CsvDocument.headers` | `: Array<string>` |  |\n"
             "| `CsvDocument.rows` | `: Array<Array<string>>` |  |\n"
-            "| `csv.CsvParseOptions` | `{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: int, maxRecords: int, maxInputBytes: int, maxFieldBytes: int, maxColumns: int }` |  |\n"
-            "| `csv.CsvParseOptions.commentPrefix` | `string` | Type alias field |\n"
-            "| `csv.CsvParseOptions.delimiter` | `CsvDelimiter` | Type alias field |\n"
-            "| `csv.CsvParseOptions.escapeChar` | `rune` | Type alias field |\n"
-            "| `csv.CsvParseOptions.header` | `CsvHeader` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxColumns` | `int` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxFieldBytes` | `int` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxInputBytes` | `int` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxRecords` | `int` | Type alias field |\n"
-            "| `csv.CsvParseOptions.quoteChar` | `rune` | Type alias field |\n"
-            "| `csv.CsvParseOptions.skipEmptyLines` | `bool` | Type alias field |\n"
-            "| `csv.CsvParseOptions.skipRecords` | `int` | Type alias field |\n"
-            "| `csv.CsvParseOptions.trimFields` | `bool` | Type alias field |\n"
             "| `CsvParseReport` | `CsvParseReport` |  |\n"
             "| `CsvParseReport.constructor` | `(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()` |  |\n"
             "| `CsvParseReport.delimiter` | `: rune` |  |\n"
@@ -8603,11 +8411,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CsvParseReport.document` | `: CsvDocument` |  |\n"
             "| `CsvParseReport.linebreak` | `: string` |  |\n"
             "| `CsvParseReport.truncated` | `: bool` |  |\n"
-            "| `csv.CsvWriteOptions` | `{ delimiter: rune, quoteChar: rune, escapeChar: rune, linebreak: string }` |  |\n"
-            "| `csv.CsvWriteOptions.delimiter` | `rune` | Type alias field |\n"
-            "| `csv.CsvWriteOptions.escapeChar` | `rune` | Type alias field |\n"
-            "| `csv.CsvWriteOptions.linebreak` | `string` | Type alias field |\n"
-            "| `csv.CsvWriteOptions.quoteChar` | `rune` | Type alias field |\n"
             "| `csv.defaultParseOptions` | `(): CsvParseOptions` |  |\n"
             "| `csv.defaultWriteOptions` | `(): CsvWriteOptions` |  |\n"
             "| `csv.parse` | `(data: string, options: CsvParseOptions? = null): CsvDocument` |  |\n"
@@ -8781,19 +8584,24 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpRequest.constructor` | `(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<byte>, contentLength: int, params: Map<string, string>): ()` |  |\n"
             "| `HttpRequest.contentLength` | `: int` |  |\n"
             "| `HttpRequest.headers` | `: Headers` |  |\n"
+            "| `HttpRequest.json` | `(): T` |  |\n"
+            "| `HttpRequest.jsonObject` | `(): JSON.Object` |  |\n"
+            "| `HttpRequest.jsonValue` | `(): JSON.Value` |  |\n"
+            "| `HttpRequest.jsonWithRest` | `(): JSON.WithRest<T>` |  |\n"
             "| `HttpRequest.method` | `: HttpMethod` |  |\n"
             "| `HttpRequest.params` | `: Map<string, string>` |  |\n"
             "| `HttpRequest.path` | `: string` |  |\n"
             "| `HttpRequest.query` | `: QueryParams` |  |\n"
             "| `HttpRequest.text` | `(): string` |  |\n"
-            "| `http.HttpRequestOptions` | `{ url: string, method?: HttpMethod, headers?: Headers, body?: Array<byte>, followRedirects?: bool, maxRedirects?: int, timeoutMs?: int, version?: HttpVersion }` |  |\n"
-            "| `http.HttpRequestOptions.url` | `string` | Type alias field |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
             "| `HttpResponse.body` | `: Array<byte>` |  |\n"
             "| `HttpResponse.constructor` | `(version: HttpVersion, status: int, reason: string, headers: Headers, body: Array<byte>): ()` |  |\n"
             "| `HttpResponse.headers` | `: Headers` |  |\n"
             "| `HttpResponse.isSuccess` | `(): bool` |  |\n"
-            "| `HttpResponse.json` | `(): Json` |  |\n"
+            "| `HttpResponse.json` | `(): T` |  |\n"
+            "| `HttpResponse.jsonObject` | `(): JSON.Object` |  |\n"
+            "| `HttpResponse.jsonValue` | `(): JSON.Value` |  |\n"
+            "| `HttpResponse.jsonWithRest` | `(): JSON.WithRest<T>` |  |\n"
             "| `HttpResponse.reason` | `: string` |  |\n"
             "| `HttpResponse.status` | `: int` |  |\n"
             "| `HttpResponse.text` | `(): string` |  |\n"
@@ -8862,11 +8670,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Server.constructor` | `(): ()` |  |\n"
             "| `Server.listen` | `(port: int, running: Atomic<bool>): bool` |  |\n"
             "| `Server.route` | `(method: string, path: string, value: T): bool` |  |\n"
-            "| `Server.routeHandler` | `(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse): bool` |  |\n"
+            "| `Server.routeHandler` | `(method: string, path: string, handler: (HttpRequest) -> HttpResponse): bool` |  |\n"
             "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
             "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
             "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
             "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
+            "| `http.json` | `(value: T, status: int = 200): HttpResponse` |  |\n"
             "| `http.jsonResponse` | `(value: T, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
             "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
             "| `http.parseMethod` | `(token: string): HttpMethod?` |  |\n"
@@ -8995,53 +8804,57 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "json",
-        .summary = "Built-in Json utility class for parse/encode/stringify and object helpers",
+        .summary = "Typed and schema-less JSON boundaries, path operations, and serialization",
         .body =
-            "# Json built-in utility\n"
+            "# JSON prelude namespace\n"
             "\n"
-            "Json is a built-in utility class; use Json.parse(), Json.encode(), and Json.stringify() directly without import.\n"
+            "JSON is a prelude namespace, not a value type or importable module. Use JSON.Value for any JSON root and JSON.Object, an alias for Map<string, JSON.Value>, for dynamic object keys.\n"
             "\n"
-            "Use it directly without `import`.\n"
+            "Use `JSON.*` directly without `import`; choose typed parsing whenever the schema is known.\n"
             "\n"
-            "### Common helpers\n"
-            "- `Json.parse(text)`\n"
-            "- `Json.encode(value)`\n"
-            "- `Json.stringify(value, indent?)`\n"
-            "- `Json.isValid(text)` / `Json.tryParse(text)`\n"
-            "- `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)`\n"
-            "- `Json.containsKey(obj, key)` / `Json.get(obj, key, default?)`\n"
-            "- `len(obj)` for object, array, or string variants\n"
+            "### Parse and encode\n"
+            "- `JSON.parse<T>(text)` rejects unknown fields by default; pass `JSON.UnknownFields.Ignore` explicitly when required\n"
+            "- `JSON.parseObject(text)` returns `JSON.Object`; `JSON.parseValue(text)` accepts any JSON root\n"
+            "- `JSON.value(value)` explicitly encodes a composite value; JSON scalars widen implicitly\n"
+            "- `JSON.stringify(value, indent?)` serializes any value satisfying `JSON.Encodable`\n"
+            "- `JSON.parseWithRest<T>(text)` keeps unknown top-level fields in `rest: JSON.Object`\n"
+            "\n"
+            "### Dynamic access\n"
+            "- Use `JSON.Object` Map methods and subscripts for one-level dynamic keys\n"
+            "- Use `JSON.get<T>()`, `JSON.require<T>()`, `JSON.containsPath()`, `JSON.set()`, and `JSON.remove()` with `JSON.Path` for deep access\n"
+            "- Use `JSON.asObject()` / `JSON.asArray()` to unwrap a `JSON.Value` without copying\n"
+            "- `JSON.Value` itself has no dot access, subscript, iteration, or `len`\n"
             "\n"
             "## API\n"
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `Json` | `Json` |  |\n"
-            "| `Json.containsKey` | `(obj: Json, key: string): bool` |  |\n"
-            "| `Json.decode` | `(value: Json): T?` |  |\n"
-            "| `Json.encode` | `(value: T): Json` |  |\n"
-            "| `Json.entries` | `(): Array<(string, Json)>` |  |\n"
-            "| `Json.entries` | `(obj: Json): Array<(string, Json)>` |  |\n"
-            "| `Json.entriesIterator` | `(): Iterator<(string, Json)>` |  |\n"
-            "| `Json.get` | `(obj: Json, key: string, default?: T): Json` |  |\n"
-            "| `Json.isArray` | `(value: Json): bool` |  |\n"
-            "| `Json.isBool` | `(value: Json): bool` |  |\n"
-            "| `Json.isFloat` | `(value: Json): bool` |  |\n"
-            "| `Json.isInt` | `(value: Json): bool` |  |\n"
-            "| `Json.isNull` | `(value: Json): bool` |  |\n"
-            "| `Json.isObject` | `(value: Json): bool` |  |\n"
-            "| `Json.isString` | `(value: Json): bool` |  |\n"
-            "| `Json.isValid` | `(text: string, strict?: bool): bool` |  |\n"
-            "| `Json.iterator` | `(): Iterator<string>` |  |\n"
-            "| `Json.keys` | `(): Array<string>` |  |\n"
-            "| `Json.keys` | `(obj: Json): Array<string>` |  |\n"
-            "| `Json.kindOf` | `(value: Json): string` |  |\n"
-            "| `Json.parse` | `(text: string): Json` |  |\n"
-            "| `Json.stringify` | `(value: T, indent?: int): string` |  |\n"
-            "| `Json.toString` | `(): string` |  |\n"
-            "| `Json.tryParse` | `(text: string): Json` |  |\n"
-            "| `Json.values` | `(): Array<Json>` |  |\n"
-            "| `Json.values` | `(obj: Json): Array<Json>` |  |\n"
+            "| `JSON` | `JSON` |  |\n"
+            "| `JSON.asArray` | `(value: JSON.Value): Array<JSON.Value>?` |  |\n"
+            "| `JSON.asObject` | `(value: JSON.Value): JSON.Object?` |  |\n"
+            "| `JSON.containsPath` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): bool` |  |\n"
+            "| `JSON.decode` | `(value: JSON.Value, unknown?: JSON.UnknownFields): T?` |  |\n"
+            "| `JSON.decodeObject` | `(value: JSON.Object, unknown?: JSON.UnknownFields): T?` |  |\n"
+            "| `JSON.get` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): T?` |  |\n"
+            "| `JSON.isArray` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isBool` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isFloat` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isInt` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isNull` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isObject` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isString` | `(value: JSON.Value): bool` |  |\n"
+            "| `JSON.isValid` | `(text: string, strict?: bool): bool` |  |\n"
+            "| `JSON.kindOf` | `(value: JSON.Value): string` |  |\n"
+            "| `JSON.merge` | `(parts: JSON.WithRest<T>): JSON.Object` |  |\n"
+            "| `JSON.parse` | `(text: string, unknown?: JSON.UnknownFields): T` |  |\n"
+            "| `JSON.parseObject` | `(text: string): JSON.Object` |  |\n"
+            "| `JSON.parseValue` | `(text: string): JSON.Value` |  |\n"
+            "| `JSON.parseWithRest` | `(text: string, nestedUnknownFields?: JSON.UnknownFields): JSON.WithRest<T>` |  |\n"
+            "| `JSON.remove` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): bool` |  |\n"
+            "| `JSON.require` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): T` |  |\n"
+            "| `JSON.set` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path, value: JSON.Value, createParents?: bool): ()` |  |\n"
+            "| `JSON.stringify` | `(value: T, indent?: int): string` |  |\n"
+            "| `JSON.value` | `(value: T): JSON.Value` |  |\n"
             "",
         .symbols = _symbols_json,
         .symbol_count = (int)(sizeof(_symbols_json) / sizeof(_symbols_json[0])),
@@ -9062,32 +8875,32 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `Logger` | `Logger` |  |\n"
             "| `Logger.asyncMode` | `: bool` |  |\n"
-            "| `Logger.child` | `(...fields: Json): Logger` |  |\n"
+            "| `Logger.child` | `(...fields: JSON.Value): Logger` |  |\n"
             "| `Logger.constructor` | `(level: LogLevel = LogLevel.Info, format: LogFormat = LogFormat.Text, output: Path? = null, source: bool = false, asyncMode: bool = false, jsonContext: string = \"\", textContext: string = \"\"): ()` |  |\n"
-            "| `Logger.debug` | `(...args: Json): ()` |  |\n"
-            "| `Logger.error` | `(...args: Json): ()` |  |\n"
-            "| `Logger.fatal` | `(...args: Json): ()` |  |\n"
+            "| `Logger.debug` | `(...args: JSON.Value): ()` |  |\n"
+            "| `Logger.error` | `(...args: JSON.Value): ()` |  |\n"
+            "| `Logger.fatal` | `(...args: JSON.Value): ()` |  |\n"
             "| `Logger.format` | `: LogFormat` |  |\n"
-            "| `Logger.info` | `(...args: Json): ()` |  |\n"
+            "| `Logger.info` | `(...args: JSON.Value): ()` |  |\n"
             "| `Logger.jsonContext` | `: string` |  |\n"
             "| `Logger.level` | `: LogLevel` |  |\n"
             "| `Logger.output` | `: Path?` |  |\n"
             "| `Logger.source` | `: bool` |  |\n"
             "| `Logger.textContext` | `: string` |  |\n"
-            "| `Logger.warn` | `(...args: Json): ()` |  |\n"
-            "| `log.child` | `(...fields: Json): Logger` |  |\n"
-            "| `log.debug` | `(...args: Json): ()` |  |\n"
+            "| `Logger.warn` | `(...args: JSON.Value): ()` |  |\n"
+            "| `log.child` | `(...fields: JSON.Value): Logger` |  |\n"
+            "| `log.debug` | `(...args: JSON.Value): ()` |  |\n"
             "| `log.enableAsync` | `(enabled: bool = true): ()` |  |\n"
             "| `log.enableSource` | `(enabled: bool = true): ()` |  |\n"
-            "| `log.error` | `(...args: Json): ()` |  |\n"
-            "| `log.fatal` | `(...args: Json): ()` |  |\n"
+            "| `log.error` | `(...args: JSON.Value): ()` |  |\n"
+            "| `log.fatal` | `(...args: JSON.Value): ()` |  |\n"
             "| `log.flush` | `(): ()` |  |\n"
-            "| `log.info` | `(...args: Json): ()` |  |\n"
+            "| `log.info` | `(...args: JSON.Value): ()` |  |\n"
             "| `log.isEnabled` | `(level: LogLevel): bool` |  |\n"
             "| `log.setFormat` | `(format: LogFormat): ()` |  |\n"
             "| `log.setLevel` | `(level: LogLevel): ()` |  |\n"
             "| `log.setOutput` | `(path: Path): ()` |  |\n"
-            "| `log.warn` | `(...args: Json): ()` |  |\n"
+            "| `log.warn` | `(...args: JSON.Value): ()` |  |\n"
             "",
         .symbols = _symbols_log,
         .symbol_count = (int)(sizeof(_symbols_log) / sizeof(_symbols_log[0])),
@@ -9264,7 +9077,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CopyBidirectionalResult.bToA` | `: int` |  |\n"
             "| `CopyBidirectionalResult.constructor` | `(aToB: int, bToA: int): ()` |  |\n"
             "| `DialOptions` | `DialOptions` |  |\n"
-            "| `DialOptions.constructor` | `(timeoutMs: int = _DEFAULT_TIMEOUT_MS, tls: bool = false): ()` |  |\n"
+            "| `DialOptions.constructor` | `(timeoutMs: int = 30000, tls: bool = false): ()` |  |\n"
             "| `DialOptions.timeoutMs` | `: int` |  |\n"
             "| `DialOptions.tls` | `: bool` |  |\n"
             "| `Endpoint` | `Endpoint` |  |\n"
@@ -9275,7 +9088,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `IpAddress.constructor` | `(value: string): ()` |  |\n"
             "| `IpAddress.toString` | `(): string` |  |\n"
             "| `IpAddress.value` | `: string` |  |\n"
-            "| `net.NetError` | `enum NetError` | Typed failure from network operations; classification from native codes lives in net.xr |\n"
+            "| `net.NetError` | `enum NetError` | Typed failure from native network operations |\n"
             "| `net.NetError.Cancelled` | `NetError.Cancelled` | Enum variant |\n"
             "| `net.NetError.Closed` | `NetError.Closed` | Enum variant |\n"
             "| `net.NetError.Dns` | `NetError.Dns` | Enum variant |\n"
@@ -9286,28 +9099,29 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.NetError.Reset` | `NetError.Reset` | Enum variant |\n"
             "| `net.NetError.Timeout` | `NetError.Timeout` | Enum variant |\n"
             "| `net.NetError.Tls` | `NetError.Tls` | Enum variant |\n"
-            "| `UdpFrom` | `UdpFrom` |  |\n"
-            "| `UdpFrom.constructor` | `(n: int, host: string, port: int): ()` |  |\n"
-            "| `UdpFrom.host` | `: string` |  |\n"
-            "| `UdpFrom.n` | `: int` |  |\n"
-            "| `UdpFrom.port` | `: int` |  |\n"
+            "| `UdpPacket` | `UdpPacket` |  |\n"
+            "| `UdpPacket.constructor` | `(data: string, host: string, port: int): ()` |  |\n"
+            "| `UdpPacket.data` | `: string` |  |\n"
+            "| `UdpPacket.host` | `: string` |  |\n"
+            "| `UdpPacket.port` | `: int` |  |\n"
             "| `net.accept` | `(listener: NetListener): NetConn?` |  |\n"
             "| `net.close` | `(handle: NetConn \\| NetListener): ()` |  |\n"
-            "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize: int = _DEFAULT_COPY_BUFFER): int` |  |\n"
+            "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize: int = 65536): int` |  |\n"
             "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): CopyBidirectionalResult` |  |\n"
-            "| `net.dial` | `(host: string, port: int, options: DialOptions? = null): NetConn` |  |\n"
-            "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions? = null): NetConn` |  |\n"
+            "| `net.dial` | `(host: string, port: int, timeout: int = 30000): NetConn?` |  |\n"
+            "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions = DialOptions()): NetConn?` |  |\n"
+            "| `net.dialTLS` | `(host: string, port: int, timeout: int = 30000): NetConn?` |  |\n"
             "| `net.fd` | `(handle: NetConn \\| NetListener): int` |  |\n"
             "| `net.hasTLS` | `(): bool` |  |\n"
             "| `net.lastErrno` | `(handle: NetConn \\| NetListener): int` |  |\n"
             "| `net.lastError` | `(handle: NetConn \\| NetListener): NetError?` |  |\n"
-            "| `net.listen` | `(port: int, backlog: int = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener` |  |\n"
-            "| `net.lookup` | `(hostname: string): Array<IpAddress>` |  |\n"
-            "| `net.readBytes` | `(conn: NetConn, maxBytes: int = 4096): Array<byte>?` |  |\n"
+            "| `net.listen` | `(port: int, backlog: int = 1024): NetListener?` |  |\n"
+            "| `net.lookup` | `(hostname: string): string?` |  |\n"
+            "| `net.read` | `(conn: NetConn, maxlen: int = 4096): string?` |  |\n"
             "| `net.readInto` | `(conn: NetConn, buffer: ref Array<byte>, maxlen: int = 1048576): int` |  |\n"
-            "| `net.recvFrom` | `(handle: NetConn, buffer: ref Array<byte>, timeoutMs: int = -1): UdpFrom?` |  |\n"
+            "| `net.recvFrom` | `(handle: NetConn, maxlen: int = 4096): UdpPacket?` |  |\n"
             "| `net.resolve` | `(hostname: string): IpAddress?` |  |\n"
-            "| `net.sendTo` | `(handle: NetConn, data: Array<byte>, host: string, port: int, timeoutMs: int = _DEFAULT_TIMEOUT_MS): int` |  |\n"
+            "| `net.sendTo` | `(handle: NetConn, data: string, host: string, port: int): int` |  |\n"
             "| `net.setAcceptDeadline` | `(listener: NetListener, deadline: int): bool` |  |\n"
             "| `net.setDeadline` | `(conn: NetConn, deadline: int): bool` |  |\n"
             "| `net.setReadDeadline` | `(conn: NetConn, deadline: int): bool` |  |\n"
@@ -9315,8 +9129,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.shutdown` | `(conn: NetConn): bool` |  |\n"
             "| `net.shutdownRead` | `(conn: NetConn): bool` |  |\n"
             "| `net.shutdownWrite` | `(conn: NetConn): bool` |  |\n"
-            "| `net.udpBind` | `(port: int, address: string = \"\"): NetConn` |  |\n"
-            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeoutMs: int = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
+            "| `net.udpBind` | `(port: int, address: string = \"\"): NetConn?` |  |\n"
+            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeout: int = 30000): NetConn?` |  |\n"
+            "| `net.write` | `(conn: NetConn, data: string): int` |  |\n"
             "| `net.writeBytes` | `(conn: NetConn, data: Array<byte>): int` |  |\n"
             "",
         .symbols = _symbols_net,
@@ -9414,16 +9229,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Options.workers` | `: int` |  |\n"
             "| `Plan` | `Plan` |  |\n"
             "| `Plan.close` | `(): ()` |  |\n"
-            "| `Plan.constructor` | `(options: Options, init: fn(int) -> S): ()` |  |\n"
-            "| `Plan.forEach` | `(range: Range, body: fn(S, int)): ()` |  |\n"
-            "| `Plan.map` | `(range: Range, body: fn(S, int) -> T): Array<T>` |  |\n"
-            "| `Plan.mapInto` | `(range: Range, output: ref Array<T>, body: fn(S, int) -> T): ()` |  |\n"
+            "| `Plan.constructor` | `(options: Options, init: (int) -> S): ()` |  |\n"
+            "| `Plan.forEach` | `(range: Range, body: (S, int) -> ()): ()` |  |\n"
+            "| `Plan.map` | `(range: Range, body: (S, int) -> T): Array<T>` |  |\n"
+            "| `Plan.mapInto` | `(range: Range, output: ref Array<T>, body: (S, int) -> T): ()` |  |\n"
             "| `Plan.options` | `: Options` |  |\n"
-            "| `Plan.reduce` | `(range: Range, initial: A, body: fn(S, int) -> A, combine: fn(A, A) -> A): A` |  |\n"
-            "| `parallel.forEach` | `(range: Range, body: fn(int), options: Options = Options()): ()` |  |\n"
-            "| `parallel.map` | `(range: Range, body: fn(int) -> T, options: Options = Options()): Array<T>` |  |\n"
-            "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: fn(int) -> T, options: Options = Options()): ()` |  |\n"
-            "| `parallel.reduce` | `(range: Range, initial: A, body: fn(int) -> A, combine: fn(A, A) -> A, options: Options = Options()): A` |  |\n"
+            "| `Plan.reduce` | `(range: Range, initial: A, body: (S, int) -> A, combine: (A, A) -> A): A` |  |\n"
+            "| `parallel.forEach` | `(range: Range, body: (int) -> (), options: Options = Options()): ()` |  |\n"
+            "| `parallel.map` | `(range: Range, body: (int) -> T, options: Options = Options()): Array<T>` |  |\n"
+            "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: (int) -> T, options: Options = Options()): ()` |  |\n"
+            "| `parallel.reduce` | `(range: Range, initial: A, body: (int) -> A, combine: (A, A) -> A, options: Options = Options()): A` |  |\n"
             "",
         .symbols = _symbols_parallel,
         .symbol_count = (int)(sizeof(_symbols_parallel) / sizeof(_symbols_parallel[0])),
@@ -9773,19 +9588,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Condvar.wait` | `(): ()` |  |\n"
             "| `Mutex` | `Mutex` |  |\n"
             "| `Mutex.constructor` | `(v: T): ()` |  |\n"
-            "| `Mutex.lock` | `(body: fn(T) -> U): U` |  |\n"
-            "| `Mutex.replace` | `(body: fn(T) -> T): T` |  |\n"
-            "| `Mutex.tryLock` | `(body: fn(T) -> U): U?` |  |\n"
+            "| `Mutex.lock` | `(body: (T) -> U): U` |  |\n"
+            "| `Mutex.replace` | `(body: (T) -> T): T` |  |\n"
+            "| `Mutex.tryLock` | `(body: (T) -> U): U?` |  |\n"
             "| `Mutex.value` | `: T` |  |\n"
             "| `Once` | `Once` |  |\n"
-            "| `Once.call` | `(body: fn()): ()` |  |\n"
+            "| `Once.call` | `(body: () -> ()): ()` |  |\n"
             "| `Once.constructor` | `(): ()` |  |\n"
             "| `RwLock` | `RwLock` |  |\n"
             "| `RwLock.constructor` | `(v: T): ()` |  |\n"
-            "| `RwLock.read` | `(body: fn(T) -> U): U` |  |\n"
-            "| `RwLock.replace` | `(body: fn(T) -> T): T` |  |\n"
+            "| `RwLock.read` | `(body: (T) -> U): U` |  |\n"
+            "| `RwLock.replace` | `(body: (T) -> T): T` |  |\n"
             "| `RwLock.value` | `: T` |  |\n"
-            "| `RwLock.write` | `(body: fn(T) -> U): U` |  |\n"
+            "| `RwLock.write` | `(body: (T) -> U): U` |  |\n"
             "| `sync.fence` | `(order: Ordering): ()` |  |\n"
             "",
         .symbols = _symbols_sync,
@@ -9842,11 +9657,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ProcessOptions.stdin` | `: int?` |  |\n"
             "| `ProcessOptions.stdout` | `: int?` |  |\n"
             "| `ThreadLocal` | `ThreadLocal` |  |\n"
-            "| `ThreadLocal.constructor` | `(init: fn() -> T): ()` |  |\n"
+            "| `ThreadLocal.constructor` | `(init: () -> T): ()` |  |\n"
             "| `ThreadLocal.get` | `(): T` |  |\n"
             "| `ThreadLocal.set` | `(value: T): ()` |  |\n"
             "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"
-            "| `sys.onSignal` | `(signal: Signal, handler: fn()): bool` |  |\n"
+            "| `sys.onSignal` | `(signal: Signal, handler: () -> ()): bool` |  |\n"
             "| `sys.pinToCpu` | `(cpu: int): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
             "| `sys.sleepMs` | `(ms: int): ()` | Block the current OS thread for at least ms milliseconds |\n"
             "| `sys.threadYield` | `(): ()` | Yield the current OS thread to another runnable OS thread |\n"
@@ -10106,28 +9921,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ParsedUpgradeResponse.deflate` | `: bool` |  |\n"
             "| `ParsedUpgradeResponse.protocol` | `: string?` |  |\n"
             "| `ParsedUpgradeResponse.statusCode` | `: int` |  |\n"
-            "| `WsConn` | `WsConn` |  |\n"
-            "| `WsConn.close` | `(code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n"
-            "| `WsConn.constructor` | `(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: int): ()` |  |\n"
-            "| `WsConn.error` | `: string?` |  |\n"
-            "| `WsConn.isOpen` | `(): bool` |  |\n"
-            "| `WsConn.ping` | `(): bool` |  |\n"
-            "| `WsConn.recv` | `(timeout: int = -1): WsMessage?` |  |\n"
-            "| `WsConn.sendBytes` | `(data: Array<byte>, binary: bool = false): bool` |  |\n"
-            "| `WsConn.sendText` | `(data: string): bool` |  |\n"
-            "| `WsConn.url` | `: string` |  |\n"
-            "| `WsConnectOptions` | `WsConnectOptions` |  |\n"
-            "| `WsConnectOptions.constructor` | `(timeoutMs: int = 30000, pingIntervalMs: int = 0, pongTimeoutMs: int = 0, maxMessageSize: int = _WS_MAX_MESSAGE_BYTES): ()` |  |\n"
-            "| `WsConnectOptions.maxMessageSize` | `: int` |  |\n"
-            "| `WsConnectOptions.pingIntervalMs` | `: int` |  |\n"
-            "| `WsConnectOptions.pongTimeoutMs` | `: int` |  |\n"
-            "| `WsConnectOptions.timeoutMs` | `: int` |  |\n"
-            "| `WsMessage` | `WsMessage` |  |\n"
-            "| `WsMessage.binary` | `: bool` |  |\n"
-            "| `WsMessage.constructor` | `(data: Array<byte>? = null, binary: bool = false, error: string? = null): ()` |  |\n"
-            "| `WsMessage.data` | `: Array<byte>?` |  |\n"
-            "| `WsMessage.error` | `: string?` |  |\n"
-            "| `WsMessage.text` | `(): string?` |  |\n"
+            "| `ws.WsConn` | `WsConn` | Native handle type |\n"
+            "| `ws.WsConn.state` | `string` | Handle field |\n"
+            "| `ws.WsConn.url` | `string` | Handle field |\n"
+            "| `ws.WsConn.wsid` | `const int` | Handle field |\n"
+            "| `ws.WsConnectOptions` | `{ timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }` | Typed WebSocket client connection options |\n"
+            "| `ws.WsConnectOptions.maxMessageSize` | `const int?` | Object field |\n"
+            "| `ws.WsConnectOptions.pingInterval` | `const int?` | Object field |\n"
+            "| `ws.WsConnectOptions.pongTimeout` | `const int?` | Object field |\n"
+            "| `ws.WsConnectOptions.timeout` | `const int?` | Object field |\n"
+            "| `ws.WsMessage` | `WsMessage` | Native handle type |\n"
+            "| `ws.WsMessage.binary` | `const bool` | Handle field |\n"
+            "| `ws.WsMessage.data` | `const string \\| Array<byte> \\| null` | Handle field |\n"
+            "| `ws.WsMessage.error` | `const string?` | Handle field |\n"
             "| `WsUrl` | `WsUrl` |  |\n"
             "| `WsUrl.constructor` | `(secure: bool, host: string, port: int, path: string): ()` |  |\n"
             "| `WsUrl.host` | `: string` |  |\n"
@@ -10137,9 +9943,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.acceptKey` | `(secKey: string): string` |  |\n"
             "| `ws.binaryFrame` | `(data: Array<byte>, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.clientHandshakeRequest` | `(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?` |  |\n"
-            "| `ws.close` | `(conn: ref WsConn, code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n"
+            "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
             "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Array<byte>` |  |\n"
-            "| `ws.connect` | `(url: string, options: WsConnectOptions? = null): WsConn` |  |\n"
+            "| `ws.connect` | `(url: string, options?: WsConnectOptions?): WsConn?` | Connect to a WebSocket server |\n"
             "| `ws.frame` | `(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.isValidCloseCode` | `(code: int): bool` |  |\n"
             "| `ws.maskPayload` | `(payload: Array<byte>, key: Array<byte>): Array<byte>` |  |\n"
@@ -10148,14 +9954,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.parseUpgradeRequest` | `(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?` |  |\n"
             "| `ws.parseUpgradeResponse` | `(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?` |  |\n"
             "| `ws.parseUrl` | `(url: string): WsUrl?` |  |\n"
-            "| `ws.ping` | `(conn: ref WsConn): bool` |  |\n"
+            "| `ws.ping` | `(conn: WsConn): bool` | Send a ping frame |\n"
             "| `ws.pingFrame` | `(data: Array<byte>? = null, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.pongFrame` | `(data: Array<byte>? = null, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.randomKey` | `(): string` |  |\n"
-            "| `ws.recv` | `(conn: ref WsConn, timeout: int = -1): WsMessage?` |  |\n"
-            "| `ws.sendBytes` | `(conn: ref WsConn, data: Array<byte>, binary: bool = false): bool` |  |\n"
-            "| `ws.sendText` | `(conn: ref WsConn, data: string): bool` |  |\n"
-            "| `ws.serve` | `(port: int, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: int = _WS_MAX_MESSAGE_BYTES): bool` |  |\n"
+            "| `ws.recv` | `(conn: WsConn, timeout?: int?): WsMessage?` | Receive data from WebSocket connection |\n"
+            "| `ws.send` | `(conn: WsConn, data: string \\| Array<byte>, binary?: bool?): bool` | Send data over WebSocket connection |\n"
+            "| `ws.serve` | `(port: int, handler: fn(conn: WsConn): ()): bool` | Start WebSocket server |\n"
+            "| `ws.stopServer` | `(): ()` | Stop the WebSocket server |\n"
             "| `ws.textFrame` | `(data: string, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.upgradeResponse` | `(secKey: string, protocol: string? = null, deflate: bool = false): string` |  |\n"
             "",
@@ -10191,19 +9997,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `XmlName.local` | `: string` |  |\n"
             "| `XmlName.prefix` | `: string` |  |\n"
             "| `XmlName.qualified` | `(): string` |  |\n"
-            "| `xml.XmlOptions` | `{ preserveWhitespace: bool, preserveComments: bool, preserveCData: bool, validateEntities: bool }` |  |\n"
-            "| `xml.XmlOptions.preserveCData` | `bool` | Type alias field |\n"
-            "| `xml.XmlOptions.preserveComments` | `bool` | Type alias field |\n"
-            "| `xml.XmlOptions.preserveWhitespace` | `bool` | Type alias field |\n"
-            "| `xml.XmlOptions.validateEntities` | `bool` | Type alias field |\n"
             "| `XmlParseReport` | `XmlParseReport` |  |\n"
             "| `XmlParseReport.constructor` | `(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()` |  |\n"
             "| `XmlParseReport.diagnostics` | `: Array<XmlDiagnostic>` |  |\n"
             "| `XmlParseReport.doc` | `: XmlNode?` |  |\n"
-            "| `xml.XmlWriteOptions` | `{ indent: int, declaration: bool, encoding: string }` |  |\n"
-            "| `xml.XmlWriteOptions.declaration` | `bool` | Type alias field |\n"
-            "| `xml.XmlWriteOptions.encoding` | `string` | Type alias field |\n"
-            "| `xml.XmlWriteOptions.indent` | `int` | Type alias field |\n"
             "| `xml.attr` | `(node: XmlNode, key: string): string?` |  |\n"
             "| `xml.attributes` | `(node: XmlNode): Array<XmlAttribute>` |  |\n"
             "| `xml.cdata` | `(content: string): XmlNode` |  |\n"
@@ -10257,8 +10054,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `YamlMapping.set` | `(key: string, value: YamlValue): ()` |  |\n"
             "| `YamlMapping.size` | `(): int` |  |\n"
             "| `YamlMapping.values` | `: Array<YamlValue>` |  |\n"
-            "| `yaml.YamlOptions` | `{ strict: bool }` |  |\n"
-            "| `yaml.YamlOptions.strict` | `bool` | Type alias field |\n"
             "| `YamlParseReport` | `YamlParseReport` |  |\n"
             "| `YamlParseReport.anchors` | `: int` |  |\n"
             "| `YamlParseReport.constructor` | `(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: int): ()` |  |\n"
@@ -10272,8 +10067,6 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `YamlTagged.constructor` | `(tag: YamlTag, value: YamlValue): ()` |  |\n"
             "| `YamlTagged.tag` | `: YamlTag` |  |\n"
             "| `YamlTagged.value` | `: YamlValue` |  |\n"
-            "| `yaml.YamlWriteOptions` | `{ indent: int }` |  |\n"
-            "| `yaml.YamlWriteOptions.indent` | `int` | Type alias field |\n"
             "| `yaml.aliasValue` | `(name: string): YamlValue` |  |\n"
             "| `yaml.asBool` | `(value: YamlValue): bool?` |  |\n"
             "| `yaml.asFloat` | `(value: YamlValue): float?` |  |\n"
@@ -10359,7 +10152,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "## Types\n"
     "`int`, `float`, `string`, `bool`, `()` | `Array<T>`, `Map<K,V>`, `Set<T>`\n"
     "\n"
-    "`T?` for nullable values | `A | B` for unions | `Json`, `Array<byte>`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
+    "`T?` for nullable values | `A | B` for unions | exact `{ field: T }` objects | `JSON.Value`, `JSON.Object`, `Array<byte>`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
     "\n"
     "## Quoted literals\n"
     "`\"...\"` / `r\"...\"`: escaped / raw strings (both interpolate `${...}`)\n"
@@ -10385,7 +10178,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "for (i in 0..n) { print(i) }                  // range iteration (half-open)\n"
     "for (ch in \"hello\") { print(ch) }             // string characters (by Unicode scalar)\n"
     "for (key in someMap) { print(key) }           // single variable over Map \xe2\x86\x92 key\n"
-    "for (key in someJson) { print(key) }          // single variable over Json \xe2\x86\x92 key\n"
+    "for (key in jsonObject) { print(key) }        // JSON.Object is a Map; single variable \xe2\x86\x92 key\n"
     "for (color in Color) { print(color.name) }    // unit-only enum; yields Color values\n"
     "for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>\n"
     "    print(variant.name)\n"
@@ -10515,12 +10308,9 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var s: Set<int> = #[1, 2, 3]\n"
     "```\n"
     "```xray\n"
-    "// Object-shape/Json object literal: identifier or string key + colon ':'\n"
-    "var data: Json = { name: \"Alice\", tags: [\"a\", \"b\"], age: 30 }\n"
-    "var user = { name: \"Bob\", age: 25 }       // default type is an exact object shape\n"
+    "// Structural-object literal: identifier or static string key + colon ':'\n"
+    "var user = { name: \"Bob\", age: 25 }       // exact object shape\n"
     "typeName(user)                            // \"object\"\n"
-    "data.name              // type: Json (field access returns Json)\n"
-    "data[\"name\"]           // equivalent\n"
     "user.name              // type: string; direct ordinal\n"
     "user[\"name\"]           // exactly equivalent to user.name; same direct ordinal\n"
     "\n"
@@ -10531,6 +10321,8 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "\n"
     "// Map literal: `#{}` prefix + `:`\n"
     "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, int>\n"
+    "var data: JSON.Object = #{\"name\": \"Alice\", \"age\": 30}\n"
+    "data[\"traceId\"] = \"req-1\"               // only Map has dynamic keys\n"
     "```\n"
     "\n"
     "## Concurrency\n"
@@ -10539,7 +10331,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var t1 = go worker(0, channel)\n"
     "\n"
     "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-    "var t2 = go fn(d: Json) -> int {\n"
+    "var t2 = go fn(d: JSON.Object) -> int {\n"
     "    return d.value * 2\n"
     "}(payload)\n"
     "\n"
@@ -10728,7 +10520,7 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "var t1 = go worker(0, channel)\n"
     "\n"
     "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-    "var t2 = go fn(d: Json) -> int {\n"
+    "var t2 = go fn(d: JSON.Object) -> int {\n"
     "    return d.value * 2\n"
     "}(payload)\n"
     "\n"
@@ -10742,7 +10534,7 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "```\n"
     "```xray\n"
     "var data = { value: 10 }\n"
-    "var task = go fn(d: Json) -> int {\n"
+    "var task = go fn(d: JSON.Object) -> int {\n"
     "    return d.value + 1\n"
     "}(move data)        // transfer data ownership to the coroutine; data is unusable afterwards\n"
     "```\n"
@@ -10878,7 +10670,7 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "\n"
     "Usage: `import <module>` then call `module.function()`. All listed modules ship in the Xray standard-library installation unit.\n"
     "\n"
-    "Built-in JSON helpers are exposed as `Json.parse()` / `Json.encode()` / `Json.stringify()` without `import`.\n"
+    "The prelude `JSON` namespace exposes `JSON.parse<T>()`, `JSON.parseObject()`, `JSON.value()`, and `JSON.stringify()` without an import; it is not an importable module or a value type.\n"
     "";
 
 // clang-format on

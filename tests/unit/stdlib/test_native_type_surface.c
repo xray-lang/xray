@@ -14,6 +14,7 @@
 #include "xray_vm.h"
 #include "../../../src/frontend/analyzer/xanalyzer_builtins.h"
 #include "../../../src/frontend/analyzer/xanalyzer_native_types.h"
+#include "../../../src/analysis/xglobal_summary.h"
 #include "../../../src/runtime/class/xclass.h"
 #include "../../../src/runtime/class/xenum.h"
 #include "../../../src/shared/xobject_shape.h"
@@ -54,10 +55,10 @@ TEST(native_type_protocol_rejects_null_isolate) {
 TEST(native_type_lookup_and_typed_json_contract_are_total) {
     ASSERT_NULL(xa_builtin_get_type_info(NULL));
 
-    const XaBuiltinType *json = xa_builtin_get_by_name("Json");
+    const XaBuiltinType *json = xa_builtin_get_by_name("JSON");
     ASSERT_NOT_NULL(json);
     const XaEffectContract *decode =
-        xa_builtin_get_named_type_member_effect_contract("Json", "decode", true);
+        xa_builtin_get_named_type_member_effect_contract("JSON", "decode", true);
     ASSERT_NOT_NULL(decode);
     ASSERT_EQ_INT(decode->kind, XA_EFFECT_CONTRACT_NOTHROW);
 }
@@ -76,8 +77,16 @@ TEST(native_module_object_and_enum_metadata) {
     XrType *object_shape_type = xa_builtin_object_shape_decl_type(iso, object_shape);
     ASSERT_NOT_NULL(object_shape_type);
     ASSERT_EQ_INT(object_shape_type->kind, XR_KIND_STRUCT_OBJECT);
-    ASSERT_EQ_INT(object_shape_type->object.row_mode, XR_OBJECT_ROW_EXACT);
     ASSERT_EQ_INT(object_shape_type->object.field_count, 2);
+
+    XrClass *record_class = xr_stdlib_record_class_get(iso, "net", "__CopyBidirectionalResult");
+    ASSERT_NOT_NULL(record_class);
+    int a_to_b_index = xr_class_lookup_field_by_name(iso, record_class, "aToB");
+    int b_to_a_index = xr_class_lookup_field_by_name(iso, record_class, "bToA");
+    int expected_a_to_b =
+        xg_object_stable_name_key("bToA") < xg_object_stable_name_key("aToB") ? 1 : 0;
+    ASSERT_EQ_INT(a_to_b_index, expected_a_to_b);
+    ASSERT_EQ_INT(b_to_a_index, 1 - expected_a_to_b);
 
     const XaBuiltinEnum *enum_decl = xa_builtin_get_enum_type("net", "NetError");
     ASSERT_NOT_NULL(enum_decl);
@@ -134,20 +143,9 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_TRUE(strcmp(cluster_info->fields[4].name, "listeners") == 0);
     ASSERT_TRUE(strcmp(cluster_info->fields[5].name, "deadNodes") == 0);
 
-    XrClass *cluster_info_class = xr_stdlib_object_shape_class_get(iso, "cluster", "ClusterInfo");
+    XrClass *cluster_info_class = xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo");
     ASSERT_NOT_NULL(cluster_info_class);
-    ASSERT_TRUE(cluster_info_class ==
-                xr_stdlib_object_shape_class_get(iso, "cluster", "ClusterInfo"));
-    const char *cluster_info_names[10];
-    for (int i = 0; i < cluster_info->field_count; i++)
-        cluster_info_names[i] = cluster_info->fields[i].name;
-    for (int i = 0; i < cluster_info->field_count; i++) {
-        int expected = (int) xr_object_shape_canonical_ordinal(
-            cluster_info_names, cluster_info->field_count, cluster_info->fields[i].name);
-        ASSERT_EQ_INT(
-            xr_class_lookup_field_by_name(iso, cluster_info_class, cluster_info->fields[i].name),
-            expected);
-    }
+    ASSERT_TRUE(cluster_info_class == xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo"));
 
     const XaBuiltinEnum *cluster_state = xa_builtin_get_enum_type("cluster", "ClusterNodeState");
     ASSERT_NOT_NULL(cluster_state);

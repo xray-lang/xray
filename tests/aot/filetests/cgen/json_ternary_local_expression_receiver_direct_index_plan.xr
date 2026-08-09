@@ -1,7 +1,0 @@
-fn jsonTernaryLocalExpressionReceiverDirectIndexPlan(flag: bool) -> int {
-    var left: Json = { name: "ada", age: 1 }
-    var right: Json = { name: "bob", age: 2 }
-    return (flag ? left : right).age
-}
-
-print(jsonTernaryLocalExpressionReceiverDirectIndexPlan(true))

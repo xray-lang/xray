@@ -84,6 +84,7 @@ static void copy_context_init_common(XrCopyContext *ctx, XrRuntimeCore *core,
     ctx->to_transit = false;
     ctx->dst_storage_mode = XR_OBJ_STORAGE_NORMAL;
     ctx->share_existing_shared = true;
+    ctx->explicit_copy = false;
     ctx->buckets = NULL;
     ctx->bucket_count = 0;
     ctx->objects_copied = 0;
@@ -596,7 +597,8 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
         return XR_NULL_VAL;
     for (uint16_t i = 0; i < closure->upval_count; i++) {
         uint8_t action = PROTO_UPVALUE(closure->proto, i).capture_action;
-        if (action == XR_TRANSFER_REJECT || action == XR_TRANSFER_MOVE_UNIQUE ||
+        if ((action == XR_TRANSFER_REJECT && !ctx->explicit_copy) ||
+            action == XR_TRANSFER_MOVE_UNIQUE ||
             (action == XR_TRANSFER_INLINE_COPY && XR_IS_PTR(closure->upvals[i])))
             return XR_NULL_VAL;
     }
@@ -623,8 +625,27 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
     for (int i = 0; i < closure->upval_count; i++) {
         XrValue upval = closure->upvals[i];
         uint8_t action = PROTO_UPVALUE(closure->proto, i).capture_action;
-        if (action == XR_TRANSFER_EXPLICIT_COPY) {
-            new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, upval);
+        if (action == XR_TRANSFER_EXPLICIT_COPY || action == XR_TRANSFER_REJECT) {
+            if (XR_IS_ARRAY_REF(upval)) {
+                new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, upval);
+            } else if (!XR_IS_PTR(upval)) {
+                new_closure->upvals[i] = upval;
+            } else {
+                XrObjHeader *upval_obj = XR_VALUE_GCPTR(upval);
+                uint8_t type = upval_obj ? XR_OBJ_GET_TYPE(upval_obj) : XR_OBJ_TYPE_MAX;
+                XrCopyKind kind = xr_value_copy_kind(upval);
+                if (kind == XR_COPY_SHARED || kind == XR_COPY_SHARED_REF) {
+                    new_closure->upvals[i] = upval;
+                    if (upval_obj)
+                        xr_rc_retain(upval_obj);
+                } else if (type < XR_OBJ_TYPE_MAX && xr_obj_deep_copy_ops[type]) {
+                    new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, upval);
+                    if (XR_IS_NULL(new_closure->upvals[i]))
+                        return XR_NULL_VAL;
+                } else {
+                    return XR_NULL_VAL;
+                }
+            }
         } else {
             new_closure->upvals[i] = upval;
             if (XR_IS_PTR(upval))
@@ -1008,6 +1029,7 @@ XrValue xr_deep_copy_explicit_to_coro_core(XrRuntimeCore *core, XrValue value,
         XrCopyContext ctx;
         xr_copy_context_init_core(&ctx, core, &core->fixed_heap);
         ctx.share_existing_shared = false;
+        ctx.explicit_copy = true;
         if (dst_coro)
             ctx.dst_heap = xr_coro_ensure_heap(dst_coro);
         XrValue result = xr_deep_copy_with_ctx(&ctx, value);
@@ -1028,6 +1050,7 @@ XrValue xr_deep_copy_explicit_to_coro_core(XrRuntimeCore *core, XrValue value,
     XrCopyContext ctx;
     xr_copy_context_init_core(&ctx, core, &core->fixed_heap);
     ctx.share_existing_shared = false;
+    ctx.explicit_copy = true;
     if (dst_coro)
         ctx.dst_heap = xr_coro_ensure_heap(dst_coro);
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
@@ -1064,6 +1087,7 @@ XrValue xr_deep_copy_explicit_to_storage_core(XrRuntimeCore *core, XrValue value
     XrCopyContext ctx;
     xr_copy_context_init_core(&ctx, core, &core->fixed_heap);
     ctx.share_existing_shared = false;
+    ctx.explicit_copy = true;
     ctx.dst_storage_mode = storage_mode;
     XrValue result = xr_deep_copy_with_ctx(&ctx, value);
     xr_copy_context_cleanup(&ctx);

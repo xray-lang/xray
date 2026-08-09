@@ -64,7 +64,7 @@ conn.error                      // 连接失败时的错误字段
 
 ### HTTP 服务端
 - `http.route(method, path, value)` - 添加静态响应
-- `http.routeHandler(method, path, handler)` - 添加 `(Json) -> Json` 动态路由
+- `server.routeHandler(method, path, handler)` - 添加 `(http.HttpRequest) -> http.HttpResponse` typed 路由；请求体可按 schema 使用 `req.json<T>()`，或用 `req.jsonObject()` 获取动态 `JSON.Object`
 - `http.listen(port, running)` - 使用调用者持有的 `Atomic<bool>` 生命周期能力监听端口
 - `running.store(false)` - 从其他协程请求停止；`http` 不保存隐藏的跨协程可变全局状态
 
@@ -81,7 +81,7 @@ var resp = http.request({url: "https://example.com", method: "GET"})
 resp.status    // int: HTTP 状态码 (200, 404, 500...)
 resp.ok        // bool: 是否成功 (status 在 200-299)
 resp.body      // string: 响应体
-resp.headers   // Json: 响应头（如果支持）
+resp.headers   // http.Headers: typed 响应头集合
 resp.error     // string: 错误信息（如果有）
 ```
 

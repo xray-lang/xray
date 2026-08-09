@@ -1,5 +1,0 @@
-fn xray_no_alloc_json_tostring_reject(value: Json) -> string {
-    return value.toString()
-}
-
-print(xray_no_alloc_json_tostring_reject(42))

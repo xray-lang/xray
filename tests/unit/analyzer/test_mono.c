@@ -437,6 +437,43 @@ TEST(mono_mangle_keeps_every_argument_when_wide) {
     free(other);
 }
 
+TEST(mono_mangle_structural_object_identity_is_complete) {
+    XrTypeRef int_t = {.kind = XR_TREF_INT, .scalar_rep = XR_NATIVE_I64};
+    XrTypeRef str_t = {.kind = XR_TREF_STRING};
+    XrTypeRef *field_types[] = {&str_t, &int_t};
+    const char *user_names[] = {"name", "age"};
+    const char *tagged_names[] = {"name", "tag"};
+    bool mutable_fields[] = {false, false};
+    bool readonly_name[] = {true, false};
+    XrTypeRef user = {.kind = XR_TREF_OBJECT,
+                      .nchildren = 2,
+                      .children = field_types,
+                      .field_names = user_names,
+                      .field_readonly = mutable_fields};
+    XrTypeRef tagged = {.kind = XR_TREF_OBJECT,
+                        .nchildren = 2,
+                        .children = field_types,
+                        .field_names = tagged_names,
+                        .field_readonly = mutable_fields};
+    XrTypeRef readonly_user = {.kind = XR_TREF_OBJECT,
+                               .nchildren = 2,
+                               .children = field_types,
+                               .field_names = user_names,
+                               .field_readonly = readonly_name};
+    XrTypeRef *user_args[] = {&user};
+    XrTypeRef *tagged_args[] = {&tagged};
+    XrTypeRef *readonly_args[] = {&readonly_user};
+    char *user_name = xr_mono_mangle("read", user_args, 1);
+    char *tagged_name = xr_mono_mangle("read", tagged_args, 1);
+    char *readonly_user_name = xr_mono_mangle("read", readonly_args, 1);
+    ASSERT(user_name != NULL && strstr(user_name, "read$obj2_") == user_name);
+    ASSERT(tagged_name != NULL && strcmp(user_name, tagged_name) != 0);
+    ASSERT(readonly_user_name != NULL && strcmp(user_name, readonly_user_name) != 0);
+    free(user_name);
+    free(tagged_name);
+    free(readonly_user_name);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -453,6 +490,7 @@ int main(void) {
     RUN_TEST(mono_mangle_null_name);
     RUN_TEST(mono_mangle_zero_args);
     RUN_TEST(mono_mangle_keeps_every_argument_when_wide);
+    RUN_TEST(mono_mangle_structural_object_identity_is_complete);
 
     RUN_TEST_SUITE("Type Substitution");
     RUN_TEST(type_substitute_type_param);

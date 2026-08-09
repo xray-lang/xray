@@ -111,7 +111,7 @@ for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // 范围迭代（半开区间）
 for (ch in "hello") { print(ch) }             // 字符串字符（按 Unicode scalar）
 for (key in someMap) { print(key) }           // Map 单变量 → key
-for (key in someJson) { print(key) }          // Json 单变量 → key
+for (key in jsonObject) { print(key) }        // JSON.Object 即 Map，单变量 → key
 for (color in Color) { print(color.name) }    // 仅无 payload enum；产出 Color 值
 for (variant in Event.variants) {             // 任意具体 enum；产出 EnumVariant<Event>
     print(variant.name)
@@ -145,7 +145,7 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 |---|---|---|
 | `Array<T>` / `T[]` | element | (index, element) |
 | `Map<K, V>` | key | (key, value) |
-| `Json` | key (string) | (key, value) |
+| `JSON.Object` / Map | key | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range`（`a..b`） | int | — |
 | 仅含无 payload 变体的具体 enum 类型 `E` | `E` 的实际值（声明顺序） | — |
@@ -478,7 +478,7 @@ for (item in [1, 2, 3]) { print(item) }
 for (i in 0..n) { print(i) }                  // range iteration (half-open)
 for (ch in "hello") { print(ch) }             // string characters (by Unicode scalar)
 for (key in someMap) { print(key) }           // single variable over Map → key
-for (key in someJson) { print(key) }          // single variable over Json → key
+for (key in jsonObject) { print(key) }        // JSON.Object is a Map; single variable → key
 for (color in Color) { print(color.name) }    // unit-only enum; yields Color values
 for (variant in Event.variants) {             // any concrete enum; yields EnumVariant<Event>
     print(variant.name)
@@ -512,7 +512,7 @@ Iteration source / yield mapping:
 |---|---|---|
 | `Array<T>` / `T[]` | element | (index, element) |
 | `Map<K, V>` | key | (key, value) |
-| `Json` | key (string) | (key, value) |
+| `JSON.Object` / Map | key | (key, value) |
 | `string` | `rune` | (index, rune) |
 | `Range` (`a..b`) | int | — |
 | Concrete enum type `E` with unit-only variants | actual `E` values (declaration order) | — |

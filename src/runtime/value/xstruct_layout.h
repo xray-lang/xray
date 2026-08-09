@@ -75,6 +75,11 @@ typedef struct XrAggregateLayout {
     uint8_t kind;              // XrAggregateLayoutKind
     uint32_t explicit_align;   // align(N), 0 = natural
     uint64_t target_abi_hash;  // XrTargetDataLayout identity used to compute this descriptor
+    /* Nominal identity for a language-level value struct.  NULL denotes a
+     * purely physical/anonymous aggregate (for example an FFI buffer view).
+     * It is deliberately part of layout identity: two structs with identical
+     * fields still have distinct method tables and runtime type identities. */
+    const char *nominal_name;
     const char **field_names;  // [field_count] parallel to fields[], NULL-able
     XrAggregateFieldLayout fields[XR_MAX_AGG_FIELDS];
 } XrAggregateLayout;

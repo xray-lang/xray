@@ -152,9 +152,15 @@ static XaJsonCapabilityResult json_capability_visit(const XrType *type, XaJsonCa
                        : json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
         case XR_KIND_FUNCTION:
             return json_capability_result(false, XA_JSON_CAPABILITY_FUNCTION_FIELD, type);
-        case XR_KIND_TYPE_PARAM:
+        case XR_KIND_TYPE_PARAM: {
+            const char *required =
+                mode == XA_JSON_CAPABILITY_ENCODE ? "JSON.Encodable" : "JSON.Decodable";
+            if (type->type_param.constraint &&
+                xr_type_is_builtin_named_type(type->type_param.constraint, required))
+                return json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL);
             return json_capability_result(false, XA_JSON_CAPABILITY_UNINSTANTIATED_TYPE_PARAMETER,
                                           type);
+        }
         case XR_KIND_ENUM:
             if (mode == XA_JSON_CAPABILITY_ENCODE ||
                 (type->enum_type.layout && type->enum_type.layout->is_zero_payload &&
@@ -181,13 +187,18 @@ static XaJsonCapabilityResult json_capability_visit(const XrType *type, XaJsonCa
             }
             break;
         case XR_KIND_STRUCT_OBJECT:
-            if (type->object.row_mode == XR_OBJECT_ROW_OPEN) {
-                return json_capability_result(false, XA_JSON_CAPABILITY_OPEN_ROW_TARGET, type);
-            }
             break;
         case XR_KIND_ARRAY:
         case XR_KIND_MAP:
             break;
+        case XR_KIND_SET:
+            if (mode == XA_JSON_CAPABILITY_ENCODE)
+                break;
+            return json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
+        case XR_KIND_UNION:
+            if (mode == XA_JSON_CAPABILITY_ENCODE)
+                break;
+            return json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
         default:
             return json_capability_result(false, XA_JSON_CAPABILITY_UNSUPPORTED_TYPE, type);
     }
@@ -200,7 +211,15 @@ static XaJsonCapabilityResult json_capability_visit(const XrType *type, XaJsonCa
     XaJsonCapabilityResult result = json_capability_result(true, XA_JSON_CAPABILITY_OK, NULL);
     switch (type->kind) {
         case XR_KIND_ARRAY:
+        case XR_KIND_SET:
             result = json_capability_visit(type->container.element_type, mode, walk);
+            break;
+        case XR_KIND_UNION:
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                result = json_capability_visit(type->union_type.members[i], mode, walk);
+                if (!result.supported)
+                    break;
+            }
             break;
         case XR_KIND_MAP:
             if (!type->map.key_type || !XR_TYPE_IS_STRING(type->map.key_type) ||
@@ -267,8 +286,6 @@ const char *xa_json_capability_reason_name(XaJsonCapabilityReason reason) {
             return "FUNCTION_FIELD";
         case XA_JSON_CAPABILITY_NON_STRING_MAP_KEY:
             return "NON_STRING_MAP_KEY";
-        case XA_JSON_CAPABILITY_OPEN_ROW_TARGET:
-            return "OPEN_ROW_TARGET";
         case XA_JSON_CAPABILITY_UNSUPPORTED_RECURSIVE_ALIAS:
             return "UNSUPPORTED_RECURSIVE_ALIAS";
         case XA_JSON_CAPABILITY_MISSING_DERIVE_SIDECAR:

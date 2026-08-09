@@ -5,7 +5,7 @@ import text as textutil
 // yaml - typed pure-Xray YAML parser and writer.
 //
 // YAML is an L4 format module: the public parse/stringify/value-builder
-// semantics live here. The value model is a typed `YamlValue` ADT (no Json
+// semantics live here. The value model is a typed `YamlValue` ADT (no JSON.Value
 // discriminator tree), per task-196 §6.8 / task-221 §A8. It targets the common
 // configuration subset used by the existing stdlib tests: block
 // mappings/sequences, nested flow collections, anchors/aliases, block scalars,

@@ -57,6 +57,10 @@ _Static_assert(sizeof(XrObjHeader) == 16, "XrObjHeader must be 16 bytes");
 #define XR_OBJ_STORAGE_NORMAL 0
 #define XR_OBJ_STORAGE_SHARED 1
 #define XR_OBJ_STORAGE_TRANSFER 2
+/* Bytecode allocation request only: resolve to the current constructor
+ * receiver's storage domain before allocating.  This value must never be
+ * written into XrObjHeader::extra. */
+#define XR_OBJ_STORAGE_INHERIT 3
 
 #define XR_OBJ_STORAGE_SHARED_BIT 0x0001u
 #define XR_OBJ_STORAGE_TRANSFER_BIT 0x8000u

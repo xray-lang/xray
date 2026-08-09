@@ -1,6 +1,0 @@
-fn readName(k: string) -> Json {
-    var j: Json = { name: "ada", [k]: 1 }
-    return j["name"]
-}
-
-print(readName("age"))

@@ -104,6 +104,7 @@ int main(int argc, char **argv) {
     const char *cache_dir;
     const char *canonical;
     const char *source_path;
+    const char *compiler_path;
     char real_source[PATH_MAX];
     char payload_path[PATH_MAX];
     XrModuleSpec spec = {0};
@@ -113,14 +114,16 @@ int main(int argc, char **argv) {
     char *payload = NULL;
     int rc = 1;
 
-    if (argc != 4) {
-        fprintf(stderr, "usage: %s CACHE_DIR PACKAGE_CANONICAL SOURCE_PATH\n", argv[0]);
+    if (argc != 5) {
+        fprintf(stderr, "usage: %s CACHE_DIR PACKAGE_CANONICAL SOURCE_PATH COMPILER_PATH\n",
+                argv[0]);
         return 2;
     }
 
     cache_dir = argv[1];
     canonical = argv[2];
     source_path = argv[3];
+    compiler_path = argv[4];
     if (!fixture_realpath(source_path, real_source)) {
         fprintf(stderr, "package_payload_fixture: cannot resolve source path: %s\n", source_path);
         return 1;
@@ -135,6 +138,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "package_payload_fixture: failed to derive package evidence identity\n");
         return 1;
     }
+    key.compiler_semver_hash = xg_compiler_image_hash_for_path(compiler_path);
 
     memset(&package, 0, sizeof(package));
     xg_global_evidence_init(&package, key);

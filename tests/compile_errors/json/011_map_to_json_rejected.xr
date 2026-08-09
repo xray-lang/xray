@@ -1,3 +1,1 @@
-var m = #{"id": 1}
-var j: Json = m
-
+var value: Json = 1

@@ -5,13 +5,13 @@
 
 @test
 fn test_array_push_json_objects() {
-    var arr: Array<Json> = []
+    var arr: Array<JSON.Value> = []
     for (i in 0..100) {
-        arr.push({ id: i, name: "item" + string(i) })
+        arr.push(JSON.value({ id: i, name: "item" + string(i) }))
     }
     assert_eq(len(arr), 100)
-    assert_eq(arr[0]["id"], 0)
-    assert_eq(arr[99]["id"], 99)
+    assert_eq(JSON.require<int>(arr[0], ["id"]), 0)
+    assert_eq(JSON.require<int>(arr[99], ["id"]), 99)
 }
 
 @test
@@ -27,28 +27,30 @@ fn test_array_push_strings() {
 
 @test
 fn test_array_push_mixed_types() {
-    var arr: Array<Json> = []
+    var arr: Array<JSON.Value> = []
     for (i in 0..50) {
         arr.push(i)
         arr.push("s" + string(i))
-        arr.push({ v: i })
+        arr.push(JSON.value({ v: i }))
         arr.push(true)
     }
     assert_eq(len(arr), 200)
     assert_eq(arr[0], 0)
     assert_eq(arr[1], "s0")
-    assert_eq(arr[2]["v"], 0)
+    assert_eq(JSON.require<int>(arr[2], ["v"]), 0)
     assert_eq(arr[3], true)
 }
 
 @test
 fn test_array_set_overwrites() {
-    var arr: Array<Json> = [{}, {}, {}, {}, {}]
+    var arr: Array<JSON.Value> = [
+        JSON.value({}), JSON.value({}), JSON.value({}), JSON.value({}), JSON.value({})
+    ]
     for (i in 0..5) {
-        arr[i] = { index: i, data: "value_" + string(i) }
+        arr[i] = JSON.value({ index: i, data: "value_" + string(i) })
     }
     for (i in 0..5) {
-        assert_eq(arr[i]["index"], i)
+        assert_eq(JSON.require<int>(arr[i], ["index"]), i)
     }
 }
 
@@ -68,22 +70,22 @@ fn test_nested_array_push() {
     assert_eq(outer[19][9], 199)
 }
 
-fn first_json(xs: Array<Json>) -> Json {
+fn first_json(xs: Array<JSON.Value>) -> JSON.Value {
     return xs[0]
 }
 
 @test
 fn test_array_self_assignment_keeps_element_alive() {
-    var arr: Array<Json> = [{ id: 1 }]
+    var arr: Array<JSON.Value> = [JSON.value({ id: 1 })]
     arr[0] = arr[0]
-    assert_eq(arr[0]["id"], 1)
+    assert_eq(JSON.require<int>(arr[0], ["id"]), 1)
 }
 
 @test
 fn test_returned_array_element_survives_replacement() {
-    var arr: Array<Json> = [{ id: 7 }]
+    var arr: Array<JSON.Value> = [JSON.value({ id: 7 })]
     var saved = first_json(arr)
-    arr[0] = { id: 9 }
-    assert_eq(saved["id"], 7)
-    assert_eq(arr[0]["id"], 9)
+    arr[0] = JSON.value({ id: 9 })
+    assert_eq(JSON.require<int>(saved, ["id"]), 7)
+    assert_eq(JSON.require<int>(arr[0], ["id"]), 9)
 }

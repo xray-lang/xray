@@ -1,1 +1,1 @@
-exact object literal requires static field names
+structural object keys must be static; use `#{ [key]: value }` for Map

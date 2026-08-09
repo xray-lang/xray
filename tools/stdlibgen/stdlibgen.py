@@ -37,6 +37,22 @@ CAP_BITS = {
     "scope": "XAOT_STDLIB_CAP_SCOPE",
 }
 
+RUNTIME_CAP_BITS = {
+    "coro": "XR_CAP_COROUTINE",
+    "timer": "XR_CAP_TIMER",
+    "channel": "XR_CAP_CHANNEL",
+    "netpoll": "XR_CAP_NETPOLL",
+    "task": "XR_CAP_TASK",
+    "work_queue": "XR_CAP_WORK_QUEUE",
+    "result_group": "XR_CAP_RESULT_GROUP",
+    "objects": "XR_CAP_OBJECTS",
+    "deep_copy": "XR_CAP_DEEP_COPY",
+    "exception": "XR_CAP_EXCEPTION",
+    "stacktrace": "XR_CAP_STACKTRACE",
+    "instanceof": "XR_CAP_INSTANCEOF",
+    "scope": "XR_CAP_SCOPE",
+}
+
 
 FREESTANDING_DIRECT_BUILTINS = {
     "math.min",
@@ -1599,6 +1615,7 @@ def emit_defs_header(
             "#include <stdbool.h>",
             "#include <math.h>",
             "#include <stdint.h>",
+            '#include "../base/xentry_plan.h"',
             "",
             "typedef struct XrStdlibDefEntry {",
             "    const char *module;",
@@ -1616,6 +1633,7 @@ def emit_defs_header(
             "    const char *define;",
             "    const char *layer;",
             "    const char *aot_kind;",
+            "    uint32_t runtime_capabilities;",
             "    uint16_t argc;",
             "    bool aot_direct;",
             "} XrStdlibDefEntry;",
@@ -1632,6 +1650,7 @@ def emit_defs_header(
             "    const char *link_object;",
             "    const char *define;",
             "    const char *layer;",
+            "    uint32_t runtime_capabilities;",
             "    int64_t value;",
             "    double f64_value;",
             "} XrStdlibConstDefEntry;",
@@ -1727,6 +1746,12 @@ def emit_defs_header(
             argc = "UINT16_MAX"
         else:
             argc = e.argc
+        unknown_caps = [cap for cap in e.caps if cap not in RUNTIME_CAP_BITS]
+        if unknown_caps:
+            raise SystemExit(f"{e.symbol}: unknown runtime caps: {', '.join(unknown_caps)}")
+        runtime_caps = (
+            " | ".join(RUNTIME_CAP_BITS[cap] for cap in e.caps) if e.caps else "0"
+        )
         lines.append(
             "    {"
             f"{c_string(e.module)}, {c_string(e.name)}, {c_string(e.signature)}, "
@@ -1735,7 +1760,7 @@ def emit_defs_header(
             f"{c_string(e.aot)}, {c_string(e.arg_spec)}, {c_string(e.ret)}, "
             f"{c_string(e.aot_enum)}, "
             f"{c_string(e.link_object)}, {c_string(e.define)}, {c_string(e.layer)}, "
-            f"{c_string(e.aot_kind)}, {argc}, "
+            f"{c_string(e.aot_kind)}, {runtime_caps}, {argc}, "
             f"{'true' if e.aot_direct else 'false'}"
             "},"
         )
@@ -1749,12 +1774,19 @@ def emit_defs_header(
         ]
     )
     for c in constants:
+        unknown_caps = [cap for cap in c.caps if cap not in RUNTIME_CAP_BITS]
+        if unknown_caps:
+            raise SystemExit(f"{c.symbol}: unknown runtime caps: {', '.join(unknown_caps)}")
+        runtime_caps = (
+            " | ".join(RUNTIME_CAP_BITS[cap] for cap in c.caps) if c.caps else "0"
+        )
         lines.append(
             "    {"
             f"{c_string(c.module)}, {c_string(c.name)}, {c_string(c.signature)}, "
             f"{c_string(c.doc)}, {c_string(c.vm)}, {c_string(c.vm_value)}, {c_string(c.aot)}, "
             f"{c_string(c.aot_const_kind)}, {c_string(c.link_object)}, "
-            f"{c_string(c.define)}, {c_string(c.layer)}, {c_i64_literal(c.value)}, {c.f64_value}"
+            f"{c_string(c.define)}, {c_string(c.layer)}, {runtime_caps}, "
+            f"{c_i64_literal(c.value)}, {c.f64_value}"
             "},"
         )
     lines.extend(

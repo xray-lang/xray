@@ -375,6 +375,15 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             xr_coro_transition_to_ready(coro);
             worker->p.stats.yielded_count++;
             worker->p.yield_streak++;
+            if (coro->ext && coro->ext->resume_target_worker >= 0) {
+                int target_id = coro->ext->resume_target_worker;
+                coro->ext->resume_target_worker = -1;
+                if (runtime && target_id < runtime->worker_count && target_id != worker->p.id) {
+                    xr_worker_inbox_enqueue(runtime, target_id, coro);
+                    worker->p.yield_streak = 0;
+                    break;
+                }
+            }
             /* Yielding while peers are READY sends the yielder to the back of
              * the global line. The owner side of the deque pops what it
              * pushed last, so a coroutine that yields on reductions and is

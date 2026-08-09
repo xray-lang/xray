@@ -1,30 +1,31 @@
 type User = { name: string, age: int, active: bool, score: float }
 
-var valid = Json.decode<User>(
-    Json.parse("{\"name\":\"Ada\",\"age\":37,\"active\":true,\"score\":9.5,\"extra\":1}"))
+var valid = JSON.decode<User>(
+    JSON.parseValue("{\"name\":\"Ada\",\"age\":37,\"active\":true,\"score\":9.5,\"extra\":1}"),
+    JSON.UnknownFields.Ignore)
 print(valid == null)
 print(valid!.name)
 print(valid!.age)
 print(valid!.active)
 print(valid!.score)
 
-print(Json.decode<User>(
-          Json.parse("{\"name\":1,\"age\":37,\"active\":true,\"score\":9.5}")) == null)
-print(Json.decode<User>(
-          Json.parse("{\"name\":\"Ada\",\"age\":37.0,\"active\":true,\"score\":9.5}")) ==
+print(JSON.decode<User>(
+          JSON.parseValue("{\"name\":1,\"age\":37,\"active\":true,\"score\":9.5}")) == null)
+print(JSON.decode<User>(
+          JSON.parseValue("{\"name\":\"Ada\",\"age\":37.0,\"active\":true,\"score\":9.5}")) ==
       null)
-print(Json.decode<User>(
-          Json.parse("{\"name\":\"Ada\",\"age\":37,\"active\":1,\"score\":9.5}")) == null)
-print(Json.decode<User>(
-          Json.parse("{\"name\":\"Ada\",\"age\":37,\"active\":true,\"score\":9}")) == null)
+print(JSON.decode<User>(
+          JSON.parseValue("{\"name\":\"Ada\",\"age\":37,\"active\":1,\"score\":9.5}")) == null)
+print(JSON.decode<User>(
+          JSON.parseValue("{\"name\":\"Ada\",\"age\":37,\"active\":true,\"score\":9}")) == null)
 
-type Payload = { payload: Json }
-var payload = Json.decode<Payload>(Json.parse("{\"payload\":null}"))
+type Payload = { payload: JSON.Value }
+var payload = JSON.decode<Payload>(JSON.parseValue("{\"payload\":null}"))
 print(payload == null)
 print(payload!.payload == null)
 
-type Items = { items: Array<Json> }
-var items = Json.decode<Items>(Json.parse("{\"items\":[1,true,null,{\"x\":2}]}"))
+type Items = { items: Array<JSON.Value> }
+var items = JSON.decode<Items>(JSON.parseValue("{\"items\":[1,true,null,{\"x\":2}]}"))
 print(items == null)
 print(len(items!.items))
-print(Json.decode<Items>(Json.parse("{\"items\":1}")) == null)
+print(JSON.decode<Items>(JSON.parseValue("{\"items\":1}")) == null)

@@ -176,6 +176,15 @@ typedef struct XaAllocationInstancePlan {
     XaDropPlanId drop_plan;
     uint32_t evidence;
     XaUnknownReasonSet unknown_reasons;
+    /* This allocation can be materialized in the current execution heap
+     * because its source is a fresh expression lowered at this site.  A
+     * returned/foreign object is not locally rematerializable even when the
+     * receiving binding itself is local. */
+    bool source_local_materializable;
+    /* The root participates in coroutine-local weak-reference state.  It may
+     * be consumed within the same execution, but must never be promoted to a
+     * transferable/shared storage domain. */
+    bool exec_local_only;
     bool complete;
 } XaAllocationInstancePlan;
 

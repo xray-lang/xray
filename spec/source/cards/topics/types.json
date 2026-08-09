@@ -17,7 +17,7 @@
   "sections": [
     {
       "heading": "Primitive and built-in categories",
-      "markdown": "- `int` — default signed integer\n- `float` — default floating-point number\n- `string` — UTF-8 string\n- `bool` — `true` / `false`\n- `()` — Unit, no return value\n- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Json`, `Array<byte>`, `BigInt`"
+      "markdown": "- `int` — default signed integer\n- `float` — default floating-point number\n- `string` — UTF-8 string\n- `bool` — `true` / `false`\n- `()` — Unit, no return value\n- exact structural objects `{ field: T }`\n- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<byte>`, `BigInt`"
     },
     {
       "heading": "Explicit conditions",

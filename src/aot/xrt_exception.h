@@ -131,12 +131,12 @@ static inline XrValue xrt_exception_message_value(const char *message, size_t le
 }
 
 static inline XrValue xrt_exception_new_value(int code, const char *message, size_t len) {
-    XrValue exc = xrt_json_new_named(EXCEPTION_FIELD_COUNT, xr_exception_field_names());
-    xrt_json_set_field(exc, EXCEPTION_FIELD_MESSAGE, xrt_exception_message_value(message, len));
-    xrt_json_set_field(exc, EXCEPTION_FIELD_STACK, xrt_array_new(0));
-    xrt_json_set_field(exc, EXCEPTION_FIELD_CAUSE, XR_NULL_VAL);
-    xrt_json_set_field(exc, EXCEPTION_FIELD_CODE, XR_FROM_INT(code));
-    xrt_json_set_field(exc, EXCEPTION_FIELD_DATA, XR_NULL_VAL);
+    XrValue exc = xrt_struct_object_new_named(EXCEPTION_FIELD_COUNT, xr_exception_field_names());
+    xrt_object_set_field(exc, EXCEPTION_FIELD_MESSAGE, xrt_exception_message_value(message, len));
+    xrt_object_set_field(exc, EXCEPTION_FIELD_STACK, xrt_array_new(0));
+    xrt_object_set_field(exc, EXCEPTION_FIELD_CAUSE, XR_NULL_VAL);
+    xrt_object_set_field(exc, EXCEPTION_FIELD_CODE, XR_FROM_INT(code));
+    xrt_object_set_field(exc, EXCEPTION_FIELD_DATA, XR_NULL_VAL);
     return exc;
 }
 
@@ -165,7 +165,7 @@ static inline XrValue xrt_exception_get_message_value(XrValue exc) {
     if (XR_IS_STR(exc))
         return exc;
     if (exc.tag == XR_TAG_PTR && exc.ptr && exc.heap_type == 0)
-        return xrt_json_get_name(exc, "message");
+        return xrt_object_get_name(exc, "message");
     return XR_NULL_VAL;
 }
 
@@ -211,7 +211,7 @@ static inline void xrt_cleanup_leave(void) {
  * for the pre-normalize path. */
 static inline int xrt_exception_get_code(XrValue exc) {
     if (exc.tag == XR_TAG_PTR && exc.ptr && exc.heap_type == 0) {
-        XrValue code = xrt_json_get_name(exc, "code");
+        XrValue code = xrt_object_get_name(exc, "code");
         if (XR_IS_INT(code))
             return (int) XR_TO_INT(code);
     }

@@ -5,7 +5,7 @@ type Profile = { name: string, age: int, address: Address }
 
 fn parseCase(label: string, text: string) {
     try {
-        var value = Json.parse<Profile>(text)
+        var value = JSON.parse<Profile>(text)
         print(label + ":unexpected:" + value.name)
     } catch panic (p) {
         print(label + ":" + p.message)

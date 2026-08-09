@@ -1,1 +1,1 @@
-Json already includes null; use 'Json' instead of 'Json | null'
+JSON.Value already includes null; use 'JSON.Value' instead of 'JSON.Value | null'

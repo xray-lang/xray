@@ -1,0 +1,3 @@
+var callback = fn() -> int { return 1 }
+var value = JSON.value(callback)
+print(value)

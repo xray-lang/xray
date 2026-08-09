@@ -1,0 +1,19 @@
+type Named = { name: string }
+
+fn readDirect<T: Named>(value: T) -> string {
+    return value.name
+}
+
+fn readBracket<T: Named>(value: T) -> string {
+    return value["name"]
+}
+
+fn main() -> string {
+    var a = readDirect({ name: "ada", age: 1 })
+    var b = readDirect({ name: "bob", zzz: 2 })
+    var c = readBracket({ age: 3, name: "cat" })
+    var d = readBracket({ id: 4, name: "dot" })
+    return a + b + c + d
+}
+
+print(main())

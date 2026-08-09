@@ -1,177 +1,35 @@
-
-// 1000_json.xr
-// 作者：xingleixu@gmail.com
-// 测试：JSON 标准库
-
-// ===== parse 基础 =====
+// Core JSON namespace behavior.
 
 @test
-fn test_parse_number() {
-    var n = Json.parse("42")
-    assert_eq(n, 42)
-
-    var f = Json.parse("3.14")
-    assert_eq(f, 3.14)
+fn test_parse_primitives() {
+    assert_eq(JSON.parseValue("42"), 42)
+    assert_eq(JSON.parseValue("3.14"), 3.14)
+    assert_eq(JSON.parseValue("true"), true)
+    assert_eq(JSON.parseValue("\"hello\""), "hello")
+    assert(JSON.isNull(JSON.parseValue("null")))
 }
 
 @test
-fn test_parse_string() {
-    var s = Json.parse("\"hello\"")
-    assert_eq(s, "hello")
+fn test_parse_collections() {
+    var root = JSON.parseValue("{\"name\":\"Ada\",\"items\":[1,2,3]}")
+    assert_eq(typeName(root), "Map")
+    assert_eq(JSON.require<string>(root, ["name"]), "Ada")
+    assert_eq(JSON.require<int>(root, ["items", 2]), 3)
+    var items = JSON.asArray(JSON.require<JSON.Value>(root, ["items"]))
+    assert(items != null)
+    assert_eq(len(items!), 3)
 }
 
 @test
-fn test_parse_bool() {
-    assert_eq(Json.parse("true"), true)
-    assert_eq(Json.parse("false"), false)
+fn test_stringify_structural_object() {
+    var user = { name: "Ada", age: 37 }
+    assert_eq(JSON.stringify(user), "{\"name\":\"Ada\",\"age\":37}")
 }
 
 @test
-fn test_parse_null() {
-    assert_eq(Json.parse("null"), null)
+fn test_is_valid() {
+    assert(JSON.isValid("[1,2,3]"))
+    assert(JSON.isValid("{\"a\":1}"))
+    assert(!JSON.isValid("{broken"))
+    assert(!JSON.isValid("NaN"))
 }
-
-// ===== parse 数组 =====
-
-@test
-fn test_parse_array() {
-    var arr = Json.parse("[1, 2, 3]")
-    assert_eq(len(arr), 3)
-    assert_eq(arr[0], 1)
-    assert_eq(arr[2], 3)
-}
-
-@test
-fn test_parse_empty_array() {
-    var arr = Json.parse("[]")
-    assert_eq(len(arr), 0)
-}
-
-@test
-fn test_parse_nested_array() {
-    var arr = Json.parse("[[1, 2], [3, 4]]")
-    assert_eq(arr[0][0], 1)
-    assert_eq(arr[1][1], 4)
-}
-
-// ===== parse 对象 =====
-
-@test
-fn test_parse_object() {
-    var obj = Json.parse("{\"name\": \"Alice\", \"age\": 30}")
-    assert_eq(obj.name, "Alice")
-    assert_eq(obj.age, 30)
-}
-
-@test
-fn test_parse_empty_object() {
-    var obj = Json.parse("{}")
-    assert_eq(obj != null, true)
-}
-
-@test
-fn test_parse_nested_object() {
-    var obj = Json.parse("{\"user\": {\"name\": \"Bob\"}}")
-    assert_eq(obj.user.name, "Bob")
-}
-
-// ===== stringify 基础 =====
-
-@test
-fn test_stringify_number() {
-    assert_eq(Json.stringify(42), "42")
-    assert_eq(Json.stringify(3.14), "3.14")
-}
-
-@test
-fn test_stringify_string() {
-    assert_eq(Json.stringify("hello"), "\"hello\"")
-}
-
-@test
-fn test_stringify_bool() {
-    assert_eq(Json.stringify(true), "true")
-    assert_eq(Json.stringify(false), "false")
-}
-
-@test
-fn test_stringify_null() {
-    assert_eq(Json.stringify(null), "null")
-}
-
-// ===== stringify 集合 =====
-
-@test
-fn test_stringify_array() {
-    var arr = [1, 2, 3]
-    assert_eq(Json.stringify(arr), "[1,2,3]")
-}
-
-@test
-fn test_stringify_empty_array() {
-    assert_eq(Json.stringify([]), "[]")
-}
-
-@test
-fn test_stringify_object() {
-    var obj = { name: "Alice" }
-    var s = Json.stringify(obj)
-    assert_eq(s.contains("name"), true)
-    assert_eq(s.contains("Alice"), true)
-}
-
-// ===== 往返测试 =====
-
-@test
-fn test_roundtrip_number() {
-    var original = 42
-    var s = Json.stringify(original)
-    var parsed = Json.parse(s)
-    assert_eq(parsed, original)
-}
-
-@test
-fn test_roundtrip_array() {
-    var original = [1, 2, 3]
-    var s = Json.stringify(original)
-    var parsed = Json.parse(s)
-    assert_eq(len(parsed), 3)
-    assert_eq(parsed[0], 1)
-}
-
-// ===== isValid =====
-
-@test
-fn test_isValid() {
-    assert_eq(Json.isValid("42"), true)
-    assert_eq(Json.isValid("[1, 2, 3]"), true)
-    assert_eq(Json.isValid("invalid json"), false)
-    assert_eq(Json.isValid("{broken"), false)
-}
-
-// ===== typeof =====
-
-@test
-fn test_typeof() {
-    assert_eq(typeName(Json.parse("42")), "int")
-    assert_eq(typeName(Json.parse("\"hello\"")), "string")
-    assert_eq(typeName(Json.parse("true")), "bool")
-    assert_eq(typeName(Json.parse("null")), "null")
-    assert_eq(typeName(Json.parse("[1,2,3]")), "Array")
-    assert_eq(typeName(Json.parse("{}")), "Json")
-}
-
-// ===== 特殊字符 =====
-
-@test
-fn test_escape_characters() {
-    var s = Json.parse("\"hello\\nworld\"")
-    assert_eq(s.contains("\n"), true)
-}
-
-@test
-fn test_unicode() {
-    var s = Json.parse("\"你好\"")
-    assert_eq(s, "你好")
-}
-

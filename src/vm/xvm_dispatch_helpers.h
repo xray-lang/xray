@@ -55,6 +55,19 @@ typedef enum {
     XR_DISP_FATAL,       /* Unrecoverable error; abort VM loop */
 } XrDispatchAction;
 
+/* XR_OBJ_STORAGE_INHERIT is an allocation request, never an object-header
+ * state. Constructor register 0 is `this`; its already-selected domain is the
+ * authoritative domain for every nested allocation in the constructor body. */
+static inline uint8_t vm_resolve_allocation_storage_mode(XrValue *base, uint8_t storage_mode) {
+    if (storage_mode != XR_OBJ_STORAGE_INHERIT)
+        return storage_mode;
+    if (base && XR_IS_INSTANCE(base[0])) {
+        XrObjHeader *receiver = (XrObjHeader *) XR_TO_PTR(base[0]);
+        return XR_OBJ_GET_STORAGE(receiver);
+    }
+    return XR_OBJ_STORAGE_NORMAL;
+}
+
 /* Persist a frame-backed fixed-array value before storing it in a slot that
  * can outlive the current frame. Existing persistent storage is reused when
  * its element type and length match, preserving fixed-array value semantics
@@ -360,7 +373,7 @@ static inline XrClass *invoke_resolve_class(XrVMRuntime *isolate, XrValue receiv
     if (XR_IS_AGG_REF(receiver)) {
         XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, receiver);
         if (layout && xr_aggregate_layout_is_headerless(layout))
-            return NULL;
+            return xr_vm_struct_layout_class(&isolate->vm, xr_aggregate_layout_id(receiver));
         uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(receiver);
         return *(XrClass **) sptr;
     }
@@ -382,6 +395,33 @@ static inline XrClass *invoke_resolve_class(XrVMRuntime *isolate, XrValue receiv
         return isolate->core_rt->native_type_classes[type];
 
     return NULL;
+}
+
+/* Native method ABIs accept values, never the VM's internal call-bound place
+ * descriptor.  Closure methods keep places because their bytecode explicitly
+ * consumes them with OP_PLACE_LOAD/STORE; primitives must receive the current
+ * referent directly so a collection cannot accidentally persist a stack-slot
+ * token as user data. */
+static inline bool invoke_unwrap_primitive_args(XrVMContext *vm_ctx, XrValue *args, int nargs) {
+    if (!vm_ctx || nargs < 0 || (nargs > 0 && !args))
+        return false;
+    for (int i = 0; i < nargs; i++) {
+        if (!XR_IS_PLACE(args[i]))
+            goto materialize_aggregate;
+        {
+            int64_t slot = args[i].i;
+            if (slot < 0 || slot >= vm_ctx->stack_capacity)
+                return false;
+            args[i] = vm_ctx->stack[slot];
+        }
+    materialize_aggregate:
+        if (XR_IS_AGG_REF(args[i]) && !XR_IS_ARRAY_REF(args[i]) && !XR_IS_SLICE_REF(args[i])) {
+            args[i] = xr_vm_struct_materialize_instance(vm_ctx->isolate, args[i]);
+            if (XR_IS_NULL(args[i]))
+                return false;
+        }
+    }
+    return true;
 }
 
 /* ========== Dispatch Helper Declarations ========== */

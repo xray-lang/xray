@@ -30,7 +30,7 @@ fn test_response_text() {
 
 @test
 fn test_response_json() {
-    var resp = responseText(404, Json.stringify({error: "no"}), "application/json; charset=utf-8")!
+    var resp = responseText(404, JSON.stringify({error: "no"}), "application/json; charset=utf-8")!
     assert(resp.contains("HTTP/1.1 404 Not Found\r\n"))
     assert(resp.contains("Content-Type: application/json; charset=utf-8\r\n"))
     assert(resp.contains("Content-Length: 14\r\n"))

@@ -3,7 +3,8 @@
 // constraints.
 //
 // Every instantiation monomorphizes, and the clones do not lower alike:
-// Range and the containers iterate through len()/index, Map and Json through
+// Range and the containers iterate through len()/index, while Map and
+// JSON.Object use the iterator protocol.
 // the iterator protocol, and an Iterator<int> from a generator drives that
 // protocol on the generator itself. `total` deliberately mixes all of them,
 // since a clone plan per type argument has to leave no call site pointing at
@@ -47,7 +48,7 @@ fn upTo(limit: int) -> Iterator<int> {
 
 var s: Set<int> = #[1, 2, 3]
 var m: Map<string, int> = #{"aa": 1, "bbb": 2}
-var j: Json = { "a": 1, "bb": 2 }
+var j: JSON.Object = JSON.parseObject("{\"a\":1,\"bb\":2}")
 var r = 2..6
 
 print(total([1, 2, 3]))

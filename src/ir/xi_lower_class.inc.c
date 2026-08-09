@@ -401,6 +401,9 @@ static XrAggregateLayout *class_clone_value_layout(XiLower *l, const XrAggregate
         return NULL;
     *copy = *source;
     copy->layout_id = 0;
+    copy->nominal_name = source->nominal_name ? arena_strdup(l->func, source->nominal_name) : NULL;
+    if (source->nominal_name && !copy->nominal_name)
+        return NULL;
     copy->field_names = NULL;
 
     if (source->field_count > 0) {
@@ -493,6 +496,7 @@ XR_FUNC XiFunc *xi_lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_i
         return NULL;
     }
     ml.func->analyzer = l->analyzer;
+    ml.func->is_constructor = is_ctor && is_inst;
     /* A method's own type parameters use the canonical erased method ABI.
      * Methods on an open generic class skeleton are different: their receiver
      * layout is not concrete, so the skeleton body is not executable. */

@@ -24,7 +24,10 @@ bool xaot_bundle_uses_parallel_intrinsic(const XaotBundle *bundle) {
     if (!bundle)
         return false;
     for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
-        const XiFunc *func = bundle->func_plans[fi].func;
+        const XaotFuncPlan *plan = &bundle->func_plans[fi];
+        const XiFunc *func = plan->func;
+        if (bundle->has_callable_reachability && !plan->reachable)
+            continue;
         if (!func)
             continue;
         for (uint32_t bi = 0; bi < func->nblocks; bi++) {
@@ -101,6 +104,7 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
                             uint32_t profile, XrEntryPlan *out) {
     uint8_t *reachable;
     bool has_root = false;
+    bool prepared_reachability;
     uint32_t provided;
     XgFuncId root;
     if (!bundle || !evidence || !out)
@@ -129,76 +133,92 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
     if (!reachable) {
         return false;
     }
-    if (root != XG_NO_ID && !xg_body_reachability_mark_closed_world_calls(evidence, root, reachable,
-                                                                          evidence->nbodies)) {
-        out->unproven_reason = XR_ENTRY_OPEN_REACHABILITY;
-        xr_free(reachable);
-        return true;
-    }
-    /* Every imported module initializer executes before the entry module.
-     * Treating only the final entry initializer as a root can omit runtime
-     * capabilities used by imported global initializers (for example an
-     * Atomic<T> constructed by stdlib/http), leaving generated calls without
-     * their runtime archive at link time. */
-    for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
-        const XgBodySummary *body = &evidence->bodies[bi];
-        if (body->kind != XG_BODY_MODULE_INIT || body->func_id == root)
-            continue;
-        if (!xg_body_reachability_mark_closed_world_calls(evidence, body->func_id, reachable,
-                                                          evidence->nbodies)) {
+    prepared_reachability = bundle->has_callable_reachability;
+    if (!prepared_reachability) {
+        if (root != XG_NO_ID && !xg_body_reachability_mark_closed_world_calls(
+                                    evidence, root, reachable, evidence->nbodies)) {
             out->unproven_reason = XR_ENTRY_OPEN_REACHABILITY;
             xr_free(reachable);
             return true;
         }
-    }
-    for (uint32_t di = 0; di < evidence->ndecls; di++) {
-        const XgDeclSummary *decl = &evidence->decls[di];
-        if ((decl->flags & XG_DECL_C_EXPORT) == 0)
-            continue;
+        /* Every imported module initializer executes before the entry module.
+         * Treating only the final entry initializer as a root can omit runtime
+         * capabilities used by imported global initializers. */
         for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
-            if (evidence->bodies[bi].owner_decl_id != decl->decl_id)
+            const XgBodySummary *body = &evidence->bodies[bi];
+            if (body->kind != XG_BODY_MODULE_INIT || body->func_id == root)
                 continue;
-            if (!xg_body_reachability_mark_closed_world_calls(
-                    evidence, evidence->bodies[bi].func_id, reachable, evidence->nbodies)) {
+            if (!xg_body_reachability_mark_closed_world_calls(evidence, body->func_id, reachable,
+                                                              evidence->nbodies)) {
                 out->unproven_reason = XR_ENTRY_OPEN_REACHABILITY;
                 xr_free(reachable);
                 return true;
             }
         }
-    }
-    /* Closure-call reachability is published after the ordinary Xg graph has
-     * been lowered to Xi.  Fold those verified closed target sets into the
-     * same root closure before deriving effects/capabilities. */
-    {
-        bool changed = true;
-        while (changed) {
-            changed = false;
-            for (uint32_t pi = 0; pi < bundle->ncallable_invoke_plans; pi++) {
-                const XaotCallableInvokePlan *plan = &bundle->callable_invoke_plans[pi];
-                XgFuncId owner_id = plan->owner ? plan->owner->xg_body_func_id : XG_NO_ID;
-                bool owner_reachable = false;
-                for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
-                    if (evidence->bodies[bi].func_id == owner_id && reachable[bi]) {
-                        owner_reachable = true;
-                        break;
-                    }
-                }
-                if (!owner_reachable)
+        for (uint32_t di = 0; di < evidence->ndecls; di++) {
+            const XgDeclSummary *decl = &evidence->decls[di];
+            if ((decl->flags & XG_DECL_C_EXPORT) == 0)
+                continue;
+            for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+                if (evidence->bodies[bi].owner_decl_id != decl->decl_id)
                     continue;
-                for (uint16_t ti = 0; ti < plan->target_count; ti++) {
-                    const XaotCallableTargetCase *target =
-                        xaot_bundle_callable_target_case(bundle, plan, ti);
-                    XgFuncId target_id = target && target->target_func
-                                             ? target->target_func->xg_body_func_id
-                                             : XG_NO_ID;
+                if (!xg_body_reachability_mark_closed_world_calls(
+                        evidence, evidence->bodies[bi].func_id, reachable, evidence->nbodies)) {
+                    out->unproven_reason = XR_ENTRY_OPEN_REACHABILITY;
+                    xr_free(reachable);
+                    return true;
+                }
+            }
+        }
+        /* Pre-prepare callers can still attach verified callable target rows.
+         * Close those over the source graph. Once function plans exist, their
+         * final Xi reachability below replaces this conservative source view. */
+        {
+            bool changed = true;
+            while (changed) {
+                changed = false;
+                for (uint32_t pi = 0; pi < bundle->ncallable_invoke_plans; pi++) {
+                    const XaotCallableInvokePlan *plan = &bundle->callable_invoke_plans[pi];
+                    XgFuncId owner_id = plan->owner ? plan->owner->xg_body_func_id : XG_NO_ID;
+                    bool owner_reachable = false;
                     for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
-                        if (target_id != XG_NO_ID && evidence->bodies[bi].func_id == target_id &&
-                            !reachable[bi]) {
-                            reachable[bi] = 1;
-                            changed = true;
+                        if (evidence->bodies[bi].func_id == owner_id && reachable[bi]) {
+                            owner_reachable = true;
+                            break;
+                        }
+                    }
+                    if (!owner_reachable)
+                        continue;
+                    for (uint16_t ti = 0; ti < plan->target_count; ti++) {
+                        const XaotCallableTargetCase *target =
+                            xaot_bundle_callable_target_case(bundle, plan, ti);
+                        XgFuncId target_id = target && target->target_func
+                                                 ? target->target_func->xg_body_func_id
+                                                 : XG_NO_ID;
+                        for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+                            if (target_id != XG_NO_ID &&
+                                evidence->bodies[bi].func_id == target_id && !reachable[bi]) {
+                                reachable[bi] = 1;
+                                changed = true;
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+    /* Final Xi function reachability is authoritative after prepare. Source
+     * method target sets deliberately over-approximate open class hierarchies
+     * and must not reintroduce dead coroutine bodies into an executable. */
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+        const XaotFuncPlan *func_plan = &bundle->func_plans[fi];
+        XgFuncId func_id = func_plan->func ? func_plan->func->xg_body_func_id : XG_NO_ID;
+        if (!func_plan->reachable || func_id == XG_NO_ID)
+            continue;
+        for (uint32_t bi = 0; bi < evidence->nbodies; bi++) {
+            if (evidence->bodies[bi].func_id == func_id) {
+                reachable[bi] = 1;
+                break;
             }
         }
     }
@@ -209,7 +229,8 @@ bool xaot_entry_plan_derive(const XaotBundle *bundle, const XgGlobalEvidence *ev
             continue;
         body = &evidence->bodies[i];
         effect_bits = body->effect_bits;
-        if (!xg_body_effects_compose_closed_world_calls(evidence, body, &effect_bits)) {
+        if (!prepared_reachability &&
+            !xg_body_effects_compose_closed_world_calls(evidence, body, &effect_bits)) {
             out->unproven_reason = XR_ENTRY_OPEN_REACHABILITY;
             xr_free(reachable);
             return true;

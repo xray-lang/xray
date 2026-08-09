@@ -55,7 +55,7 @@ typedef enum {
     XDAP_REF_SCOPE_UPVALUES,  // Closure upvalues scope
     XDAP_REF_ARRAY,           // Array elements
     XDAP_REF_MAP,             // Map key-value pairs
-    XDAP_REF_OBJECT,          // Object/Json properties
+    XDAP_REF_OBJECT,          // Static object properties
     XDAP_REF_INSTANCE,        // Class instance fields
 } XdapVarRefType;
 

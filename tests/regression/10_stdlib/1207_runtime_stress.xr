@@ -5,6 +5,12 @@
 
 import runtime
 
+type NamedValue = { val: int, name: string }
+type BatchRecord = { c: int, i: int, s: string }
+type NestedValue = { nested: int }
+type MixedRecord = { arr: Array<int | string>, map_key: string }
+type ParentRecord = { id: int, children: Array<string> }
+
 // --- Test 1: String pool survival under memory pressure ---
 // Bug #4 pattern: interned strings must survive heavy allocation churn
 // Exercises: global string pool ACCESSED flag + markobject path
@@ -34,9 +40,9 @@ fn test_string_pool_survival() {
 // Exercises: traverse_map marking string keys + ACCESSED flag
 @test
 fn test_nested_string_key_survival() {
-    var data: Array<Json> = []
+    var data: Array<NamedValue> = []
     for (var i = 0; i < 200; i++) {
-        var m: Json = {"val": i * 3, "name": "field_" + string(i)}
+        var m: NamedValue = { val: i * 3, name: "field_" + string(i) }
         data.push(m)
     }
 
@@ -48,8 +54,8 @@ fn test_nested_string_key_survival() {
 
 
     for (var i = 0; i < 200; i++) {
-        assert_eq(data[i]["val"], i * 3)
-        assert_eq(data[i]["name"], "field_" + string(i))
+        assert_eq(data[i].val, i * 3)
+        assert_eq(data[i].name, "field_" + string(i))
     }
 }
 
@@ -69,7 +75,7 @@ fn test_closure_upvalue_gc() {
 
     // Create garbage to push GC
     for (var j = 0; j < 300; j++) {
-        var tmp: Json = {"garbage": j}
+        var tmp = { garbage: j }
     }
 
 
@@ -83,11 +89,11 @@ fn test_closure_upvalue_gc() {
 // Exercises: live-object preservation across cycle collection and block reclaim
 @test
 fn test_rapid_alloc_collect() {
-    var survivors: Array<Array<Json>> = []
+    var survivors: Array<Array<BatchRecord>> = []
     for (var cycle = 0; cycle < 20; cycle++) {
-        var batch: Array<Json> = []
+        var batch: Array<BatchRecord> = []
         for (var i = 0; i < 50; i++) {
-            batch.push({"c": cycle, "i": i, "s": "v" + string(cycle) + "_" + string(i)})
+            batch.push({ c: cycle, i: i, s: "v" + string(cycle) + "_" + string(i) })
         }
         // Keep last batch alive
         if (cycle >= 15) {
@@ -100,25 +106,25 @@ fn test_rapid_alloc_collect() {
         var batch = survivors[si]
         var expected_cycle = 15 + si
         for (var i = 0; i < 50; i++) {
-            assert_eq(batch[i]["c"], expected_cycle)
-            assert_eq(batch[i]["i"], i)
+            assert_eq(batch[i].c, expected_cycle)
+            assert_eq(batch[i].i, i)
         }
     }
 }
 
 // --- Test 5: Mixed container types under GC ---
-// Exercises: traverse completeness for Array, Map, Set, Json-like objects
+// Exercises: traverse completeness for Array, Map, Set, and structural objects
 @test
 fn test_mixed_container_gc() {
     var arr: Array<Array<int | string>> = []
-    var map: Json = {}
-    var data: Array<Json> = []
+    var map: Map<string, NestedValue> = Map()
+    var data: Array<MixedRecord> = []
 
     for (var i = 0; i < 100; i++) {
         arr.push([i, "a" + string(i)])
-        map["k" + string(i)] = {"nested": i}
-        var item_arr: Json = [arr[i][0], arr[i][1]]
-        data.push({"arr": item_arr, "map_key": "k" + string(i)})
+        map["k" + string(i)] = { nested: i }
+        var item_arr = [arr[i][0], arr[i][1]]
+        data.push({ arr: item_arr, map_key: "k" + string(i) })
     }
 
 
@@ -132,8 +138,8 @@ fn test_mixed_container_gc() {
     for (var i = 0; i < 100; i++) {
         assert_eq(arr[i][0], i)
         assert_eq(arr[i][1], "a" + string(i))
-        assert_eq(map["k" + string(i)]["nested"], i)
-        assert_eq(data[i]["arr"][0], i)
+        assert_eq(map["k" + string(i)].nested, i)
+        assert_eq(data[i].arr[0], i)
     }
 }
 
@@ -143,30 +149,30 @@ fn test_mixed_container_gc() {
 @test
 fn test_generational_cross_reference() {
     // Create long-lived container
-    var long_lived: Array<Json> = []
+    var long_lived: Array<ParentRecord> = []
     for (var i = 0; i < 50; i++) {
-        long_lived.push({"id": i, "children": []})
+        long_lived.push({ id: i, children: [] })
     }
 
 
     // Now add young objects as children of old objects
     for (var round = 0; round < 10; round++) {
         for (var i = 0; i < 50; i++) {
-            long_lived[i]["children"].push("round_" + string(round))
+            long_lived[i].children.push("round_" + string(round))
         }
 
         // Create garbage between rounds
         for (var j = 0; j < 100; j++) {
-            var tmp: Json = {"temp": j}
+            var tmp = { temp: j }
         }
 
     }
 
     // Verify all children survived
     for (var i = 0; i < 50; i++) {
-        assert_eq(len(long_lived[i]["children"]), 10)
-        assert_eq(long_lived[i]["children"][0], "round_0")
-        assert_eq(long_lived[i]["children"][9], "round_9")
+        assert_eq(len(long_lived[i].children), 10)
+        assert_eq(long_lived[i].children[0], "round_0")
+        assert_eq(long_lived[i].children[9], "round_9")
     }
 }
 

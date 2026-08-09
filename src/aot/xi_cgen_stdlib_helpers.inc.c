@@ -347,13 +347,13 @@ static void cg_emit_runtime_info_value(XiCgenCtx *ctx, FILE *out, const XiFunc *
     fprintf(out,
             "({ XrAotRuntimeInfo _ri = xr_aot_runtime_info(%s); "
             "XrValue _riv = xrt_object_new_shape(&_xobj_shape_%d); "
-            "xrt_json_set_field(_riv, 0, XR_FROM_INT(_ri.live_bytes)); "
-            "xrt_json_set_field(_riv, 1, XR_FROM_FLOAT(_ri.live_kb)); "
-            "xrt_json_set_field(_riv, 2, XR_FROM_INT(_ri.live_objects)); "
-            "xrt_json_set_field(_riv, 3, XR_FROM_INT(_ri.finalizer_count)); "
-            "xrt_json_set_field(_riv, 4, XR_FROM_INT(_ri.blocks)); "
-            "xrt_json_set_field(_riv, 5, XR_FROM_INT(_ri.free_blocks)); "
-            "xrt_json_set_field(_riv, 6, XR_FROM_INT(_ri.full_blocks)); "
+            "xrt_object_set_field(_riv, 0, XR_FROM_INT(_ri.live_bytes)); "
+            "xrt_object_set_field(_riv, 1, XR_FROM_FLOAT(_ri.live_kb)); "
+            "xrt_object_set_field(_riv, 2, XR_FROM_INT(_ri.live_objects)); "
+            "xrt_object_set_field(_riv, 3, XR_FROM_INT(_ri.finalizer_count)); "
+            "xrt_object_set_field(_riv, 4, XR_FROM_INT(_ri.blocks)); "
+            "xrt_object_set_field(_riv, 5, XR_FROM_INT(_ri.free_blocks)); "
+            "xrt_object_set_field(_riv, 6, XR_FROM_INT(_ri.full_blocks)); "
             "_riv; })",
             aot_ctx, shape_id);
 }
@@ -565,11 +565,31 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
     }
 
     unsigned id = v->id;
+    int first_layout_ordinal = 0;
+    int second_layout_ordinal = 1;
+    const char *first_name = object_ok ? object_type->object.field_names[0] : NULL;
+    const char *second_name = object_ok ? object_type->object.field_names[1] : NULL;
+    if (layout && layout->field_names && first_name && second_name) {
+        first_layout_ordinal = -1;
+        second_layout_ordinal = -1;
+        for (uint16_t i = 0; i < layout->field_count; i++) {
+            if (layout->field_names[i] && strcmp(layout->field_names[i], first_name) == 0)
+                first_layout_ordinal = (int) i;
+            if (layout->field_names[i] && strcmp(layout->field_names[i], second_name) == 0)
+                second_layout_ordinal = (int) i;
+        }
+        if (first_layout_ordinal < 0 || second_layout_ordinal < 0) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: i64-pair layout lost semantic field names\n");
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+    }
     char field0[128];
     char field1[128];
     if (layout) {
-        cg_struct_field_c_name(layout, 0, field0, sizeof(field0));
-        cg_struct_field_c_name(layout, 1, field1, sizeof(field1));
+        cg_struct_field_c_name(layout, first_layout_ordinal, field0, sizeof(field0));
+        cg_struct_field_c_name(layout, second_layout_ordinal, field1, sizeof(field1));
     }
 
     fprintf(out, "XrtI64PairResult _arp%u = %s(", id, m->shim);
@@ -634,11 +654,30 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
         emit_codegen_abort_expr(out);
         return true;
     }
+    int first_shape_ordinal = 0;
+    int second_shape_ordinal = 1;
+    if (object_ok) {
+        const CgObjectShape *shape = &ctx->object_shapes[shape_id];
+        first_shape_ordinal = -1;
+        second_shape_ordinal = -1;
+        for (int64_t i = 0; i < shape->field_count; i++) {
+            if (strcmp(shape->field_names[i], first_name) == 0)
+                first_shape_ordinal = (int) i;
+            if (strcmp(shape->field_names[i], second_name) == 0)
+                second_shape_ordinal = (int) i;
+        }
+        if (first_shape_ordinal < 0 || second_shape_ordinal < 0) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: i64-pair shape lost semantic field names\n");
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+    }
     fprintf(out,
             "xrt_object_new_shape(&_xobj_shape_%d); "
-            "xrt_json_set_field(_arr%u, 0, XR_FROM_INT(_arp%u.first)); "
-            "xrt_json_set_field(_arr%u, 1, XR_FROM_INT(_arp%u.second)); _arr%u; })",
-            shape_id, id, id, id, id, id);
+            "xrt_object_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.first)); "
+            "xrt_object_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.second)); _arr%u; })",
+            shape_id, id, first_shape_ordinal, id, id, second_shape_ordinal, id, id);
     return true;
 }
 

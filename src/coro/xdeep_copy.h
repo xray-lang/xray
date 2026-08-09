@@ -106,6 +106,7 @@ typedef struct XrCopyContext {
     bool to_transit;                     // runtime temporary copy: sysheap + XR_OBJ_TRANSIT
     uint8_t dst_storage_mode;            // 0=normal, 1=shared system, 2=transfer system
     bool share_existing_shared;          // boundary transfer may retain non-TRANSIT shared objs
+    bool explicit_copy;                  // source copy(...): validate/copy rejected captures
     XrSeenEntry **buckets;
     int bucket_count;
     int objects_copied;

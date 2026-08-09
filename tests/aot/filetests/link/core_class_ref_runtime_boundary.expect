@@ -20,20 +20,22 @@ c_contains=static void xrt_native_core_class_ref_runtime_boundary_Bag_dtor(void 
 c_contains=xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));
 c_contains=static void xrt_native_core_class_ref_runtime_boundary_Bag_promote_storage(void *obj, uint8_t storage_mode)
 c_contains=xrt_value_set_storage(xr_mkptr((self)->f0, XR_TAG_ARRAY), storage_mode)
+c_contains=static void *xrt_native_core_class_ref_runtime_boundary_Bag_runtime_clone(void *obj)
+c_contains=xrt_value_clone_for_coro(xr_mkptr((src)->f0, XR_TAG_ARRAY))
 c_contains=xrt_type_register_hot(0, NULL, 0, xrt_native_core_class_ref_runtime_boundary_Bag_dtor, xrt_native_core_class_ref_runtime_boundary_Bag_promote_storage
+c_contains=xrt_type_set_runtime_clone(_tid, xrt_native_core_class_ref_runtime_boundary_Bag_runtime_clone)
 c_contains=xrt_type_set_name(_tid, "Bag", NULL)
 c_contains=xrt_array_new_typed
 c_contains=xrt_obj_alloc((uint16_t)xrt_shared
 c_contains=xrt_box_obj(
 c_contains=XR_TINSTANCE
 c_contains=xrt_instanceof(
-c_regex=xrt_retain\(v[0-9]+\), xrt_release\(xr_mkptr\(\(p0\)->f0, XR_TAG_ARRAY\)\)
-c_regex=xrt_retain\(v[0-9]+\), xrt_release\(xr_mkptr\(\(_native\)->f0, XR_TAG_ARRAY\)\)
+c_contains=xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY)), (p0)->f0 =
+c_regex=xrt_release\(xr_mkptr\(\(_portable_native_[0-9]+\)->f0, XR_TAG_ARRAY\)\), \(_portable_native_[0-9]+\)->f0 =
 c_contains=core_class_ref_runtime_boundary_replace
 c_contains=core_class_ref_runtime_boundary_swap
 c_not_contains=xrt_release((p0)->f0
 c_not_contains=xrt_release((_native)->f0
-c_not_contains=xrt_value_clone_for_coro(
 c_not_contains=xrt_map_
 c_not_contains=xr_aot_runtime_init
 c_not_contains=xr_aot_spawn(

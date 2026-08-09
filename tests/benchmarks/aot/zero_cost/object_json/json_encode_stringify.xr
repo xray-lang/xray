@@ -3,7 +3,7 @@ fn run(n: int) -> int {
     var i = 0
     var total = 0
     while (i < n) {
-        var text = Json.stringify(Json.encode(user))
+        var text = JSON.stringify(user)
         total = total + len(text)
         i = i + 1
     }

@@ -5,15 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xjson.h - Structured data object backed by dynamic-layout XrInstance
+ * xjson.h - Exact structural object storage and JSON codec helpers
  *
  * KEY CONCEPT:
- *   - XrJson is the runtime handle name for Json-shaped XrInstance objects.
- *   - All Json objects use a dynamic-layout XrClass (V8-style hidden class).
- *   - Adding a property triggers a class transition; identical structures
- *     converge on the same descendant class.
- *   - In-object slots [0..capacity-2] hold inline values; slot [capacity-1]
- *     holds a heap pointer for overflow fields (auto-grown).
+ *   - XrObjectInstance stores a compiler-known, sealed structural shape.
+ *   - The hidden-class chain is used only to intern fixed layouts.
+ *   - JSON objects use XrMap and never this representation.
  */
 
 #ifndef XJSON_H
@@ -37,55 +34,52 @@
 #include "../../base/xmalloc.h"
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 struct XrCoroutine;
 
 /* ========== Runtime Handle ========== */
 
-// Json objects are dynamic-layout XrInstance with class chains rooted at
-// core->jsonRootClass. XrJson names that runtime contract while sharing
-// the same storage as XrInstance.
-typedef XrInstance XrJson;
+// Exact structural objects share the XrInstance storage layout.
+typedef XrInstance XrObjectInstance;
 
 /* ========== Creation API ========== */
 
-// Create an empty open-Json object on the running coroutine's heap.
-XR_FUNC XrJson *xr_json_new(struct XrCoroutine *coro);
+// Create an exact structural object attached to a pre-built sealed shape class.
+XR_FUNC XrObjectInstance *xr_object_instance_new_with_class(struct XrCoroutine *coro, XrClass *cls);
 
-// Create a Json instance attached to a pre-built sealed/transition class.
-// The class must be a dynamic-layout class (XR_CLASS_DYNAMIC_LAYOUT).
-XR_FUNC XrJson *xr_json_new_with_class(struct XrCoroutine *coro, XrClass *cls);
+// Initialize an exact object in-place on pre-allocated memory.
+XR_FUNC void xr_object_instance_init_inplace(XrObjectInstance *json, XrClass *cls);
 
-// Initialize a Json in-place on pre-allocated memory (used by shared Json
-// allocations on the system heap).
-XR_FUNC void xr_json_init_inplace(XrJson *json, XrClass *cls);
-
-// Byte size of a Json instance given its class.
-XR_FUNC size_t xr_json_size(XrClass *cls);
+// Byte size of an exact object instance given its class.
+XR_FUNC size_t xr_object_instance_size(XrClass *cls);
 
 /* ========== Field Access API ========== */
 
-XR_FUNC XrValue xr_json_get(XrVMRuntime *X, XrJson *json, SymbolId symbol);
-XR_FUNC bool xr_json_set(XrVMRuntime *X, XrJson *json, SymbolId symbol, XrValue value);
-XR_FUNC XrValue xr_json_get_by_key(XrVMRuntime *X, XrJson *json, const char *key);
-XR_FUNC bool xr_json_set_by_key(XrVMRuntime *X, XrJson *json, const char *key, XrValue value);
+XR_FUNC XrValue xr_object_instance_get(XrVMRuntime *X, XrObjectInstance *json, SymbolId symbol);
+XR_FUNC bool xr_object_instance_set(XrVMRuntime *X, XrObjectInstance *json, SymbolId symbol,
+                                    XrValue value);
+XR_FUNC XrValue xr_object_instance_get_by_key(XrVMRuntime *X, XrObjectInstance *json,
+                                              const char *key);
+XR_FUNC bool xr_object_instance_set_by_key(XrVMRuntime *X, XrObjectInstance *json, const char *key,
+                                           XrValue value);
 
 // Copy every field of `src` into `dst` (object spread `{...src}`). Each value
 // is retained (src keeps its own reference); existing fields are overwritten so
-// later spread parts override earlier ones. Returns false only if `dst` is
-// sealed and a new field cannot be added.
-XR_FUNC bool xr_json_merge(XrVMRuntime *X, XrJson *dst, XrJson *src);
+// later spread parts override earlier ones. Returns false for shape mismatch.
+XR_FUNC bool xr_object_instance_merge(XrVMRuntime *X, XrObjectInstance *dst, XrObjectInstance *src);
 
 /* ========== Query API ========== */
 
-static inline uint16_t xr_json_field_count(XrVMRuntime *X, XrJson *json) {
+static inline uint16_t xr_object_instance_field_count(XrVMRuntime *X, XrObjectInstance *json) {
     (void) X;
     if (!json || !json->klass)
         return 0;
     return json->klass->field_count;
 }
 
-static inline bool xr_json_has_field(XrVMRuntime *X, XrJson *json, SymbolId symbol) {
+static inline bool xr_object_instance_has_field(XrVMRuntime *X, XrObjectInstance *json,
+                                                SymbolId symbol) {
     (void) X;
     if (!json || !json->klass)
         return false;
@@ -94,17 +88,14 @@ static inline bool xr_json_has_field(XrVMRuntime *X, XrJson *json, SymbolId symb
 
 /* ========== XrValue Conversion ========== */
 
-static inline XrValue xr_json_value(XrJson *json) {
+static inline XrValue xr_object_instance_value(XrObjectInstance *json) {
     return XR_FROM_PTR(json);
 }
 
-// A Json is any instance whose class has builtin_kind == XR_BK_JSON — this
-// covers the root class and all hidden-class transitions derived from it.
+// JSON.Object is exactly Map<string, JSON.Value>. Runtime membership therefore
+// follows the Map tag and never a hidden-class instance provenance bit.
 static inline bool xr_value_is_json(XrValue v) {
-    if (!XR_IS_INSTANCE(v))
-        return false;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass && inst->klass->builtin_kind == XR_BK_JSON;
+    return XR_IS_MAP(v);
 }
 
 static inline bool xr_value_is_struct_object(XrValue v) {
@@ -115,11 +106,7 @@ static inline bool xr_value_is_struct_object(XrValue v) {
 }
 
 static inline bool xr_value_has_object_shape(XrValue v) {
-    if (!XR_IS_INSTANCE(v))
-        return false;
-    XrInstance *inst = (XrInstance *) XR_TO_PTR(v);
-    return inst->klass && (inst->klass->builtin_kind == XR_BK_JSON ||
-                           inst->klass->builtin_kind == XR_BK_STRUCT_OBJECT);
+    return xr_value_is_struct_object(v);
 }
 
 static inline bool xr_json_value_matches_kind(XrValue value, uint8_t encoded_kind) {
@@ -138,13 +125,13 @@ static inline bool xr_json_value_matches_kind(XrValue value, uint8_t encoded_kin
             return XR_IS_STRING(value);
         case XR_JSON_VALUE_JSON:
             return XR_IS_BOOL(value) || XR_IS_INT(value) || XR_IS_FLOAT(value) ||
-                   XR_IS_STRING(value) || XR_IS_ARRAY(value) || xr_value_is_json(value);
+                   XR_IS_STRING(value) || XR_IS_ARRAY(value) || XR_IS_MAP(value);
         case XR_JSON_VALUE_STRUCT_OBJECT:
             return xr_value_has_object_shape(value);
         case XR_JSON_VALUE_ARRAY:
             return XR_IS_ARRAY(value);
         case XR_JSON_VALUE_MAP:
-            return xr_value_has_object_shape(value);
+            return XR_IS_MAP(value);
         case XR_JSON_VALUE_ENUM:
             return xr_value_is_enum_aggregate(value);
         case XR_JSON_VALUE_CLASS_INSTANCE:
@@ -156,8 +143,8 @@ static inline bool xr_json_value_matches_kind(XrValue value, uint8_t encoded_kin
     }
 }
 
-static inline XrJson *xr_value_to_json(XrValue v) {
-    return (XrJson *) XR_TO_PTR(v);
+static inline XrObjectInstance *xr_value_to_object_instance(XrValue v) {
+    return (XrObjectInstance *) XR_TO_PTR(v);
 }
 
 static inline void xr_json_decode_release_partial(XrValue *values, uint16_t count) {
@@ -166,8 +153,13 @@ static inline void xr_json_decode_release_partial(XrValue *values, uint16_t coun
 }
 
 static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X,
-                                                              struct XrCoroutine *coro, XrJson *src,
-                                                              XrClass *cls);
+                                                              struct XrCoroutine *coro, XrMap *src,
+                                                              XrClass *cls,
+                                                              bool ignore_unknown_fields);
+static inline XrValue xr_json_decode_struct_instance_with_class(XrVMRuntime *X,
+                                                                struct XrCoroutine *coro,
+                                                                XrObjectInstance *src, XrClass *cls,
+                                                                bool ignore_unknown_fields);
 
 static inline uint8_t xr_json_decode_schema_tid(const XrJsonDecodeSchema *schema) {
     if (!schema)
@@ -196,7 +188,7 @@ static inline uint8_t xr_json_decode_schema_tid(const XrJsonDecodeSchema *schema
 static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCoroutine *coro,
                                                     XrValue source,
                                                     const XrJsonDecodeSchema *schema,
-                                                    XrValue *out) {
+                                                    bool ignore_unknown_fields, XrValue *out) {
     if (!X || !schema || !out)
         return false;
     if (XR_IS_NULL(source)) {
@@ -210,10 +202,20 @@ static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCor
 
     switch ((XrJsonValueKind) xr_json_value_kind_base(schema->value_kind)) {
         case XR_JSON_VALUE_STRUCT_OBJECT: {
-            if (!xr_value_has_object_shape(source) || !schema->target_descriptor)
+            if (xr_value_has_object_shape(source) && schema->target_descriptor) {
+                XrValue decoded = xr_json_decode_struct_instance_with_class(
+                    X, coro, xr_value_to_object_instance(source),
+                    (XrClass *) schema->target_descriptor, ignore_unknown_fields);
+                if (XR_IS_NULL(decoded))
+                    return false;
+                *out = decoded;
+                return true;
+            }
+            if (!XR_IS_MAP(source) || !schema->target_descriptor)
                 return false;
             XrValue decoded = xr_json_decode_struct_object_with_class(
-                X, coro, xr_value_to_json(source), (XrClass *) schema->target_descriptor);
+                X, coro, XR_TO_MAP(source), (XrClass *) schema->target_descriptor,
+                ignore_unknown_fields);
             if (XR_IS_NULL(decoded))
                 return false;
             *out = decoded;
@@ -222,11 +224,10 @@ static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCor
         case XR_JSON_VALUE_CLASS_INSTANCE: {
             XrString *class_name = (XrString *) schema->target_descriptor;
             XrClass *target = class_name ? xr_class_lookup_by_name(X, class_name->data) : NULL;
-            if (!target || (target->flags & XR_CLASS_DERIVE_JSON) == 0 ||
-                !xr_value_has_object_shape(source))
+            if (!target || (target->flags & XR_CLASS_DERIVE_JSON) == 0 || !XR_IS_MAP(source))
                 return false;
-            XrValue decoded =
-                xr_json_decode_struct_object_with_class(X, coro, xr_value_to_json(source), target);
+            XrValue decoded = xr_json_decode_struct_object_with_class(
+                X, coro, XR_TO_MAP(source), target, ignore_unknown_fields);
             if (XR_IS_NULL(decoded))
                 return false;
             *out = decoded;
@@ -245,7 +246,7 @@ static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCor
             for (int32_t i = 0; i < src->length; i++) {
                 XrValue item = xr_null();
                 if (!xr_json_decode_value_with_schema(X, coro, xr_array_get(src, i), schema->child,
-                                                      &item)) {
+                                                      ignore_unknown_fields, &item)) {
                     xr_rc_release_value(xr_current_coro_heap(), XR_FROM_PTR(dst));
                     return false;
                 }
@@ -255,28 +256,28 @@ static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCor
             return true;
         }
         case XR_JSON_VALUE_MAP: {
-            if (!xr_value_has_object_shape(source) || !schema->child)
+            if (!XR_IS_MAP(source) || !schema->child)
                 return false;
-            XrJson *src = xr_value_to_json(source);
-            uint16_t count = src->klass ? src->klass->field_count : 0;
+            XrMap *src = XR_TO_MAP(source);
+            uint32_t count = src ? src->count : 0;
             XrMap *dst = xr_map_with_capacity(coro, count);
             if (!dst)
                 return false;
             dst->key_tid = XR_TID_STRING;
             dst->value_tid = xr_json_decode_schema_tid(schema->child);
-            for (uint16_t i = 0; i < count; i++) {
-                const char *name = src->klass->fields[i].name;
-                XrString *key = name ? xr_string_new(X, name, strlen(name)) : NULL;
+            for (uint32_t i = 0; src && i < src->nentries; i++) {
+                XrMapEntry *entry = &src->entries[i];
+                if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                    continue;
                 XrValue value = xr_null();
-                if (!key || !xr_json_decode_value_with_schema(X, coro,
-                                                              xr_instance_get_dynamic_field(src, i),
-                                                              schema->child, &value)) {
-                    if (key)
-                        xr_rc_release_value(xr_current_coro_heap(), XR_FROM_PTR(key));
+                if (!XR_IS_STRING(entry->key) ||
+                    !xr_json_decode_value_with_schema(X, coro, entry->value, schema->child,
+                                                      ignore_unknown_fields, &value)) {
                     xr_rc_release_value(xr_current_coro_heap(), XR_FROM_PTR(dst));
                     return false;
                 }
-                xr_map_set(dst, XR_FROM_PTR(key), value);
+                xr_rc_retain_value(entry->key);
+                xr_map_set(dst, entry->key, value);
             }
             *out = XR_FROM_PTR(dst);
             return true;
@@ -308,13 +309,79 @@ static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCor
     }
 }
 
+static inline XrValue xr_json_decode_struct_instance_with_class(XrVMRuntime *X,
+                                                                struct XrCoroutine *coro,
+                                                                XrObjectInstance *src, XrClass *cls,
+                                                                bool ignore_unknown_fields) {
+    XrClass *source_class = src ? xr_instance_get_class(src) : NULL;
+    int target_fields = cls ? xr_class_instance_field_count(cls) : 0;
+    int source_fields = source_class ? xr_class_instance_field_count(source_class) : 0;
+    if (!X || !src || !source_class || !cls || target_fields <= 0 || !cls->fields)
+        return xr_null();
+    if (!ignore_unknown_fields && source_fields > target_fields)
+        return xr_null();
+    XrValue *decoded_values = (XrValue *) xr_malloc(sizeof(XrValue) * (size_t) target_fields);
+    if (!decoded_values)
+        return xr_null();
+    for (int fi = 0; fi < target_fields; fi++) {
+        XrFieldDescriptor *field = &cls->fields[fi];
+        int source_index = -1;
+        for (int si = 0; field->name && si < source_fields; si++) {
+            const char *source_name = source_class->fields[si].name;
+            if (source_name && strcmp(source_name, field->name) == 0) {
+                source_index = si;
+                break;
+            }
+        }
+        if (source_index < 0) {
+            if (xr_json_value_kind_is_nullable(field->json_decode_schema.value_kind)) {
+                decoded_values[fi] = xr_null();
+                continue;
+            }
+            xr_json_decode_release_partial(decoded_values, (uint16_t) fi);
+            xr_free(decoded_values);
+            return xr_null();
+        }
+        XrValue decoded = xr_null();
+        if (!xr_json_decode_value_with_schema(
+                X, coro, xr_instance_get_dynamic_field(src, (uint16_t) source_index),
+                &field->json_decode_schema, ignore_unknown_fields, &decoded)) {
+            xr_json_decode_release_partial(decoded_values, (uint16_t) fi);
+            xr_free(decoded_values);
+            return xr_null();
+        }
+        decoded_values[fi] = decoded;
+    }
+
+    XrObjectInstance *result = xr_object_instance_new_with_class(coro, cls);
+    if (!result) {
+        xr_json_decode_release_partial(decoded_values, (uint16_t) target_fields);
+        xr_free(decoded_values);
+        return xr_null();
+    }
+    for (int fi = 0; fi < target_fields; fi++) {
+        if (xr_instance_set_dynamic_field(X, result, (uint16_t) fi, decoded_values[fi]))
+            continue;
+        for (int remaining = fi; remaining < target_fields; remaining++)
+            xr_rc_release_value(xr_current_coro_heap(), decoded_values[remaining]);
+        xr_rc_release_value(xr_current_coro_heap(), XR_FROM_PTR(result));
+        xr_free(decoded_values);
+        return xr_null();
+    }
+    xr_free(decoded_values);
+    return XR_FROM_PTR(result);
+}
+
 static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X,
-                                                              struct XrCoroutine *coro, XrJson *src,
-                                                              XrClass *cls) {
+                                                              struct XrCoroutine *coro, XrMap *src,
+                                                              XrClass *cls,
+                                                              bool ignore_unknown_fields) {
     int instance_fields = cls ? xr_class_instance_field_count(cls) : 0;
     if (!X || !src || !cls || instance_fields <= 0 || !cls->fields)
         return xr_null();
     uint16_t field_count = (uint16_t) instance_fields;
+    if (!ignore_unknown_fields && src->count > field_count)
+        return xr_null();
     XrValue *decoded_values = (XrValue *) xr_malloc(sizeof(XrValue) * field_count);
     if (!decoded_values)
         return xr_null();
@@ -326,15 +393,21 @@ static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X,
             xr_free(decoded_values);
             return xr_null();
         }
-        XrValue field_val = xr_json_get_by_key(X, src, fname);
-        if (XR_IS_NULL(field_val) && !xr_json_has_field(X, src, field->symbol)) {
+        XrString *key = xr_string_intern(X, fname, strlen(fname), 0);
+        bool found = false;
+        XrValue field_val = key ? xr_map_get(src, xr_string_value(key), &found) : xr_null();
+        if (!found) {
+            if (xr_json_value_kind_is_nullable(field->json_decode_schema.value_kind)) {
+                decoded_values[fi] = xr_null();
+                continue;
+            }
             xr_json_decode_release_partial(decoded_values, fi);
             xr_free(decoded_values);
             return xr_null();
         }
         XrValue decoded = xr_null();
         if (!xr_json_decode_value_with_schema(X, coro, field_val, &field->json_decode_schema,
-                                              &decoded)) {
+                                              ignore_unknown_fields, &decoded)) {
             xr_json_decode_release_partial(decoded_values, fi);
             xr_free(decoded_values);
             return xr_null();
@@ -343,7 +416,7 @@ static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X,
     }
 
     XrInstance *result = (cls->flags & XR_CLASS_DYNAMIC_LAYOUT)
-                             ? (XrInstance *) xr_json_new_with_class(coro, cls)
+                             ? (XrInstance *) xr_object_instance_new_with_class(coro, cls)
                              : xr_instance_new(X, cls);
     if (!result) {
         xr_json_decode_release_partial(decoded_values, field_count);
@@ -351,10 +424,10 @@ static inline XrValue xr_json_decode_struct_object_with_class(XrVMRuntime *X,
         return xr_null();
     }
     for (uint16_t fi = 0; fi < field_count; fi++) {
-        bool stored =
-            (cls->flags & XR_CLASS_DYNAMIC_LAYOUT)
-                ? xr_instance_set_dynamic_field(X, (XrJson *) result, fi, decoded_values[fi])
-                : xr_instance_set_decoded_field(result, fi, decoded_values[fi]);
+        bool stored = (cls->flags & XR_CLASS_DYNAMIC_LAYOUT)
+                          ? xr_instance_set_dynamic_field(X, (XrObjectInstance *) result, fi,
+                                                          decoded_values[fi])
+                          : xr_instance_set_decoded_field(result, fi, decoded_values[fi]);
         if (stored)
             continue;
         for (uint16_t remaining = fi; remaining < field_count; remaining++)

@@ -1,6 +1,6 @@
 import http
 
-fn legacy(req: Json) -> Json {
+fn legacy(req: JSON.Value) -> JSON.Value {
     return req
 }
 

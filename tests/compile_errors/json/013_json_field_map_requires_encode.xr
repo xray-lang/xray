@@ -1,5 +1,4 @@
 var headers = #{"Accept": "application/json"}
-var payload: Json = {
+var payload: JSON.Value = {
     headers: headers
 }
-

@@ -1071,34 +1071,53 @@ XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds) {
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
-XrAotResult xr_aot_wait_fd(const XrAotContext *ctx, int64_t fd, int events, int64_t timeout_ms) {
-    if (!ctx || !ctx->coro || fd < 0 || (events != XR_AOT_IO_READ && events != XR_AOT_IO_WRITE))
+static XrAotResult aot_io_wait_result(XrCoroIoWaitKind wait) {
+    switch (wait) {
+        case XR_CORO_IO_WAIT_READY:
+            return xr_aot_done(XR_FROM_INT(XR_AOT_IO_WAIT_READY));
+        case XR_CORO_IO_WAIT_BLOCKED:
+            return xr_aot_blocked();
+        case XR_CORO_IO_WAIT_YIELD:
+            return xr_aot_yielded();
+        case XR_CORO_IO_WAIT_TIMEOUT:
+            return xr_aot_done(XR_FROM_INT(XR_AOT_IO_WAIT_TIMEOUT));
+        case XR_CORO_IO_WAIT_CANCELLED:
+            return xr_aot_result(XR_AOT_RUN_CANCELLED);
+        case XR_CORO_IO_WAIT_ERROR:
+        default:
+            return xr_aot_error(XR_NULL_VAL, false);
+    }
+}
+
+XrAotResult xr_aot_io_wait(const XrAotContext *ctx, int fd, int events, int64_t timeout_ms) {
+    if (!ctx || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
     if (aot_coro_cancelled(ctx->coro))
         return xr_aot_result(XR_AOT_RUN_CANCELLED);
-
-    int wait_events = events == XR_AOT_IO_READ ? XR_WAIT_READ : XR_WAIT_WRITE;
-    XrCoroBlockResult block = xr_coro_wait_io(ctx->coro, (int) fd, wait_events, timeout_ms);
-    if (aot_coro_cancelled(ctx->coro))
-        return xr_aot_result(XR_AOT_RUN_CANCELLED);
-    if (block.kind == XR_CORO_BLOCK_BLOCKED)
-        return xr_aot_blocked();
-    if (block.kind == XR_CORO_BLOCK_READY)
-        return xr_aot_result(XR_AOT_RUN_DONE);
-    return xr_aot_error(XR_NULL_VAL, false);
+    int runtime_events = 0;
+    if (events & XR_AOT_IO_EVENT_READ)
+        runtime_events |= XR_POLL_READ;
+    if (events & XR_AOT_IO_EVENT_WRITE)
+        runtime_events |= XR_POLL_WRITE;
+    return aot_io_wait_result(xr_coro_io_wait(ctx->coro, fd, runtime_events, timeout_ms));
 }
 
-void xr_aot_net_close_fd(int64_t fd_value) {
-    if (fd_value < 0 || fd_value > INT_MAX)
+XrAotResult xr_aot_io_wait_resume(const XrAotContext *ctx) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+    if (aot_coro_cancelled(ctx->coro))
+        return xr_aot_result(XR_AOT_RUN_CANCELLED);
+    return aot_io_wait_result(xr_coro_io_wait_resume(ctx->coro));
+}
+
+void xr_aot_netpoll_close_fd(int fd) {
+    if (fd < 0)
         return;
-    int fd = (int) fd_value;
-    XrAotRuntime *runtime = xr_aot_runtime_current();
-    XrRuntime *scheduler = xr_aot_runtime_scheduler(runtime);
-    if (scheduler) {
-        XrPollDesc *pd = xr_fdmap_get(&scheduler->netpoll, fd);
-        if (pd && !atomic_load_explicit(&pd->closing, memory_order_acquire))
-            xr_netpoll_close(&scheduler->netpoll, pd);
-    }
-    shutdown((xr_socket_t) fd, XR_SHUT_RDWR);
-    xr_closesocket((xr_socket_t) fd);
+    XrWorker *worker = xr_current_worker();
+    XrRuntime *runtime = worker ? worker->p.runtime : NULL;
+    if (!runtime)
+        return;
+    XrPollDesc *pd = xr_fdmap_get(&runtime->netpoll, fd);
+    if (pd)
+        xr_netpoll_close(&runtime->netpoll, pd);
 }

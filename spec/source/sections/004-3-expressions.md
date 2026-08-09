@@ -315,7 +315,7 @@ if (v is User) {
 
 - 结果类型 `bool`。
 - **类型守卫**：`v` 是简单绑定时，分析器按 §2.13 N-4 / N-6 在 true 分支把 `v` 收窄为与 `T` 的交，在 false 分支移除该交集。
-- 适用于 union、可空、class 层级、`Json` 结构匹配。
+- 适用于 union、可空、class 层级与 `JSON.Value` 运行期类别检查。
 - **定宽数值类型**：动态擦除后的值只保留 i64 / f64 两个族，不保留位宽，因此 `v is i32` 问的是"该值能否被 `i32` 精确表示"——这是擦除后唯一可回答的形式。`is int` / `is float` 对整个族恒为真；`v as T?` 用同一个判定，不通过时返回 `null`。
 
 #### `as` 类型转换
@@ -337,7 +337,7 @@ var n = v as int?          // 失败返回 null（"as nullable" 安全形式）
 
 **支持的转换**：
 - 数值之间：整数到整数按目标位宽取模后按目标有符号性解释；整数到浮点和 `f64 → f32` 使用 IEEE-754 round-to-nearest, ties-to-even；浮点到整数向零截断，NaN、无穷大或越界抛 `XR_ERR_OVERFLOW` (E0422)。数值转换只使用 `expr as T`，不用 nullable 形式。
-- `Json → T`（运行时按 T 结构检查）。
+- `JSON.Value →` 标量类型（运行期类别检查）；复合解码使用 `JSON.decode<T>`。
 - 父类 → 子类（运行时 instanceof）。
 - Union 成员 → 具体成员。
 
@@ -413,7 +413,7 @@ var m = #{"a": 1, "b": 2}
 var empty = #{}                           // 空 Map
 ```
 
-**关键区别**：`{}` 始终是**Json / Object**；`#{}` 始终是 **Map**。两者都用 `:` 作键值分隔，靠 `#` 前缀区分。
+**关键区别**：`{}` 始终是 exact **structural object**；`#{}` 始终是 **Map**，也是 `JSON.Object` 的字面量形式。两者都用 `:` 作键值分隔，靠 `#` 前缀区分。
 
 #### Set `#[...]`
 
@@ -442,7 +442,7 @@ var obj = { users }              // shorthand
 ```
 
 - 默认推断为 exact 对象形状（见 §2.4.7），字段集和字段 offset 在编译期固定，适合 AOT 快路径。
-- 只有显式 `Json` 期望类型时才按动态 Json object literal 解释；typed value 进入 JSON 边界使用 `Json.encode(value)`。
+- 对象字面量不因期望类型变成动态对象；typed 复合值进入 JSON 边界使用 `JSON.value(value)`，动态 object 使用 `JSON.Object` / Map。
 - 用 `type` 别名命名 structural object：`var u: User = {...}`（编译期检查字段集，密封）。
 
 #### Array<byte> `Array<byte>(...)`
@@ -992,7 +992,7 @@ if (v is User) {
 
 - Result type: `bool`.
 - **Type guard**: when `v` is a simple binding, the analyzer narrows it to its intersection with `T` in the true branch and removes that intersection in the false branch, per §2.13 N-4 / N-6.
-- Applies to union, nullable, class hierarchies, and `Json` structural matching.
+- Applies to unions, nullable values, class hierarchies, and runtime category checks on `JSON.Value`.
 - **Fixed-width numeric types**: a dynamically erased value keeps only its i64 or f64 family, not its width, so `v is i32` asks whether the value is exactly representable in `i32` — the only form the erased value can answer. `is int` / `is float` hold for the whole family. `v as T?` uses the same predicate and yields `null` when it does not hold.
 
 #### `as` type cast
@@ -1014,7 +1014,7 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 
 **Supported conversions**:
 - Between numeric types: integer-to-integer reduces modulo the target width and is interpreted with the target signedness; integer-to-float and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even; float-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422) for NaN, infinity, or an out-of-range value. Numeric conversion uses only `expr as T`, never the nullable form.
-- `Json → T` (runtime structural check against `T`).
+- `JSON.Value →` scalar type (runtime category check); use `JSON.decode<T>` for composites.
 - Parent → child (runtime `instanceof`).
 - Union member → concrete member.
 
@@ -1090,7 +1090,7 @@ var m = #{"a": 1, "b": 2}
 var empty = #{}                           // empty Map
 ```
 
-**Key distinction**: `{}` is always a **Json / Object**; `#{}` is always a **Map**. Both use `:` between key and value; the `#` prefix is the disambiguator.
+**Key distinction**: `{}` is always an exact **structural object**; `#{}` is always a **Map**, and is also the literal form of `JSON.Object`. Both use `:` between key and value; the `#` prefix is the disambiguator.
 
 #### Set `#[...]`
 
@@ -1119,7 +1119,7 @@ var obj = { users }              // shorthand
 ```
 
 - Defaults to an exact object shape (see §2.4.7); the field set and offsets are fixed at compile time for AOT fast paths.
-- It is interpreted as a dynamic Json object literal only under an explicit `Json` expected type; use `Json.encode(value)` when a typed value crosses a JSON boundary.
+- An object literal never becomes dynamic because of its expected type. Use `JSON.value(value)` for a typed composite crossing the JSON boundary, and use `JSON.Object` / Map for a dynamic object.
 - Name the structural object with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
 #### Array<byte> `Array<byte>(...)`

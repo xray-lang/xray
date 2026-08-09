@@ -165,6 +165,36 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             "(name: string, run: (int) -> string): string", items[0]["signature"]
         )
 
+    def test_pure_stdlib_inventory_keeps_structural_generic_constraints(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-api-inventory-structural-generic.") as tmp:
+            root = Path(tmp)
+            module_dir = root / "stdlib" / "http"
+            module_dir.mkdir(parents=True)
+            (module_dir / "http.xr").write_text(
+                "\n".join(
+                    [
+                        "export class Request {",
+                        "    jsonWithRest<T: JSON.Decodable & {}>() -> JSON.WithRest<T> {",
+                        "        return JSON.parseWithRest<T>(this.text())",
+                        "    }",
+                        "}",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            items = api_inventory.collect_pure_stdlib(root)
+            signatures = {
+                (item["namespace"], item["name"], item["kind"]): item["signature"]
+                for item in items
+            }
+
+        self.assertEqual(
+            "(): JSON.WithRest<T>",
+            signatures[("Request", "jsonWithRest", "method")],
+        )
+
     def test_pure_stdlib_inventory_reads_aligned_structs(self) -> None:
         with tempfile.TemporaryDirectory(prefix="xray-api-inventory-aligned-struct.") as tmp:
             root = Path(tmp)

@@ -1,5 +1,10 @@
 // shared_class_lib.xr - helper module for 1035_cross_module_shared_method test
 
+export type CounterStats = {
+    count: int,
+    label: string,
+}
+
 export class Counter {
     count: Atomic<int>
 
@@ -11,7 +16,7 @@ export class Counter {
         this.count.fetchAdd(1)
     }
 
-    stats() -> Json {
+    stats() -> CounterStats {
         return {
             count: this.count.load(),
             label: "counter",

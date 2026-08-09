@@ -954,11 +954,11 @@
   :required-targets (vm-bytecode)
   :vm-bytecode (driver xi_emit_chan_new))
 
-(lower xi.json.new
+(lower xi.object.new
   :match ()
   :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_json_new)
-  :aot-c (driver xicgen_json_new))
+  :vm-bytecode (driver xi_emit_object_new)
+  :aot-c (driver xicgen_object_new))
 
 (lower xi.object.init.f
   :match ()
@@ -978,11 +978,11 @@
   :vm-bytecode (driver xi_emit_object_set_f)
   :aot-c (driver xicgen_object_set_f))
 
-(lower xi.json.merge
+(lower xi.object.merge
   :match ()
   :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_json_merge)
-  :aot-c (driver xicgen_json_merge))
+  :vm-bytecode (driver xi_emit_object_merge)
+  :aot-c (driver xicgen_object_merge))
 
 (lower xi.json.decode
   :match ()

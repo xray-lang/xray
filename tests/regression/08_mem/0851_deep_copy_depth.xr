@@ -6,60 +6,74 @@
 // 运行时错误（E0440，不可恢复 panic），而不是崩溃——超限用例见
 // tests/manual/deep_copy_overflow.xr（panic 不可 catch，无法进 @test 断言）。
 
+class CopyNode {
+    next: CopyNode?
+    value: int
+    tag: string
+
+    constructor(next: CopyNode?, value: int, tag: string = "") {
+        this.next = next
+        this.value = value
+        this.tag = tag
+    }
+}
+
 // ===== 界内深链拷贝必须成功且值语义正确 =====
 
 @test
 fn test_deep_chain_within_limit() {
-    var a: Json = {}
-    a["tag"] = "leaf"
+    var a = CopyNode(null, 0, "leaf")
     var i = 0
     while (i < 900) {
-        var b: Json = {}
-        b["child"] = a
-        a = b
+        a = CopyNode(a, i + 1)
         i += 1
     }
     var c = copy(a)
     // 拷贝是独立的：改原件不影响副本
-    a["extra"] = 1
+    a.tag = "changed"
     var probe = c
     var depth = 0
-    while (probe["child"] != null) {
-        probe = probe["child"]
+    while (probe.next != null) {
+        probe = probe.next!
         depth += 1
     }
     assert_eq(depth, 900)
-    assert_eq(probe["tag"], "leaf")
+    assert_eq(probe.tag, "leaf")
 }
 
 // ===== 环结构依旧安全（seen 表路径不受深度改动影响）=====
 
 @test
 fn test_cycle_still_safe() {
-    var a: Json = {}
-    var b: Json = {}
-    a["next"] = b
-    b["next"] = a
+    var a = CopyNode(null, 1)
+    var b = CopyNode(a, 2)
+    a.next = b
     var c = copy(a)
-    // 环被保留：c.next.next 指回 c
-    assert_true(c["next"] != null)
+    // 环被保留：c.next.next 指回 c。
+    c.next!.next!.tag = "cycle-copy"
+    assert_eq(c.tag, "cycle-copy")
+
+    // 纯 RC 不回收强环；测试在验证后显式断开原图和副本图。
+    b.next = null
+    a.next = null
+    var copiedNext = c.next!
+    copiedNext.next = null
+    c.next = null
 }
 
 // ===== 宽而浅的结构不受影响 =====
 
 @test
 fn test_wide_shallow() {
-    var arr: Array<Json> = []
+    var arr: Array<CopyNode> = []
     var i = 0
     while (i < 5000) {
-        var o: Json = {}
-        o["v"] = i
-        arr.push(o)
+        arr.push(CopyNode(null, i))
         i += 1
     }
     var c = copy(arr)
     assert_eq(len(c), 5000)
-    assert_eq(c[4999]["v"], 4999)
+    assert_eq(c[4999].value, 4999)
 }
 
 print("=== deep_copy depth tests completed ===")

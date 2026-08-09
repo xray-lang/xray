@@ -208,13 +208,8 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         // Positional access into the set's insertion order (used by for-in).
         xrt_set_t *s = (xrt_set_t *) obj.ptr;
         return xrt_set_value_at_owned(s, key.i);
-    } else if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0) {
-        if (XR_IS_STR(key))
-            return xrt_json_get_name_owned(obj, xr_str_data(key));
-        xrt_type_no_index("Json object only supports string keys");
     }
-    xrt_type_no_index(
-        "only Array, Map, Json, Set, Range, typed array, and operator[] support indexing");
+    xrt_type_no_index("only Array, Map, Set, Range, typed array, and operator[] support indexing");
 }
 
 static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
@@ -241,13 +236,7 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
         }
     } else if (XR_IS_MAP(obj)) {
         xrt_map_set((xrt_map_t *) obj.ptr, key, val);
-    } else if (obj.tag == XR_TAG_PTR && obj.ptr && obj.heap_type == 0) {
-        if (!XR_IS_STR(key))
-            xrt_type_no_index("Json object only supports string keys");
-        /* Json object indexed by a string key (e.g. computed object-literal
-         * keys `{ [k]: v }` and object spread). */
-        xrt_json_set_name(obj, xr_str_data(key), val);
     } else {
-        xrt_type_no_index("only Array, Map, Json, typed array support index assignment");
+        xrt_type_no_index("only Array, Map, and typed array support index assignment");
     }
 }

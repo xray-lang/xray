@@ -421,8 +421,7 @@ static void init_builtin_interface_methods(void) {
  * |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     -     | bool             | -
  * |     -      |    ✓     |     ✓      |     -     |     ✓     |     -      |    -     |     - |
  * BigInt           |    -     |     ✓      |    ✓     |     ✓      |     -     |     ✓     |     -
- * |    -     |     -     | Json             |    -     |     -      |    -     |     ✓      |     ✓
- * |     ✓     |     ✓      |    -     |     -     | Array<T>         |    ✓     |     -      |    -
+ * |    -     |     -     | Array<T>         |    ✓     |     -      |    -
  * |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     -     | Map<K,V>         | ✓
  * |     -      |    -     |     ✓      |     ✓     |     ✓     |     ✓      |    -     |     - |
  * Set<T>           |    ✓     |     -      |    -     |     ✓      |     -     |     ✓     |     ✓
@@ -477,10 +476,6 @@ static bool is_bigint_type(XrType *type) {
     return type && (xr_type_is_builtin_named_class(type, "BigInt"));
 }
 
-static bool is_json_type(XrType *type) {
-    return type && type->kind == XR_KIND_JSON;
-}
-
 // ============================================================================
 // Public API Implementation
 // ============================================================================
@@ -520,19 +515,18 @@ bool xa_builtin_type_implements(XrType *type, XaBuiltinInterface iface) {
             return true;
 
         case XA_IFACE_INDEXABLE:
-            // Indexable: Array, View, Slice, string, Map, Json
+            // Indexable: Array, View, Slice, string, Map
             return is_array_type(type) || is_view_type(type) || is_span_type(type) ||
-                   is_string_type(type) || is_map_type(type) || is_json_type(type);
+                   is_string_type(type) || is_map_type(type);
 
         case XA_IFACE_EQUATABLE:
             // Equatable: all types support == and !=
             return true;
 
         case XA_IFACE_LENGTHABLE:
-            // Lengthable: Array, View, Slice, string, Map, Set, Json
+            // Lengthable: Array, View, Slice, string, Map, Set
             return is_array_type(type) || is_view_type(type) || is_span_type(type) ||
-                   is_string_type(type) || is_map_type(type) || is_set_type(type) ||
-                   is_json_type(type);
+                   is_string_type(type) || is_map_type(type) || is_set_type(type);
 
         case XA_IFACE_CALLABLE:
             // Callable: Function, Class

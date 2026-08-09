@@ -140,6 +140,13 @@ struct XaAnalyzer {
     // Symbol registry (id -> XaSymbol*) for O(1) ID lookup
     void *symbols_by_id;  // XrIntMap internally
 
+    /* Analyzer-owned semantic views of declarations exported by another
+     * analyzer.  AST symbol ids are local to one analyzer and must never be
+     * copied across that boundary; declaration-context expressions (notably
+     * caller-filled default arguments) bind through these views instead. */
+    XaScope *foreign_symbol_scope;
+    void *foreign_symbol_views;  // internal XaForeignSymbolView* list
+
     // Multi-file support
     XaFileEntry *files;  // Linked list for ordered traversal
     void *files_map;     // XrHashMap*: path -> XaFileEntry* for O(1) lookup
@@ -334,6 +341,11 @@ XR_FUNC XaSymbol *xa_analyzer_lookup_in_scope(XaAnalyzer *analyzer, const char *
 XR_FUNC XaSymbol *xa_analyzer_lookup_at(XaAnalyzer *analyzer, const char *file, uint32_t line,
                                         uint32_t column);
 XR_FUNC XaSymbol *xa_analyzer_lookup_deep(XaAnalyzer *analyzer, const char *name);
+
+/* Return `source` when it already belongs to `analyzer`; otherwise return a
+ * cached analyzer-owned symbol with a fresh local id and re-interned export
+ * metadata.  The source analyzer must outlive the returned semantic view. */
+XR_FUNC XaSymbol *xa_analyzer_import_export_symbol(XaAnalyzer *analyzer, const XaSymbol *source);
 
 /* Single answer to "does this symbol denote module `module_name`?", and its
  * built-in-only variant for VM intrinsics (`Coro.yield()`, `Coro.Local<T>()`,

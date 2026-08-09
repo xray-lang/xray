@@ -1061,10 +1061,10 @@ TEST(object_literal) {
     assert(f != NULL);
     int found_alloc = 0;
     for (uint32_t i = 0; i < f->entry->nvalues; i++) {
-        if (f->entry->values[i]->op == XI_JSON_NEW)
+        if (f->entry->values[i]->op == XI_OBJECT_NEW)
             found_alloc = 1;
     }
-    assert(found_alloc && "should have JSON_NEW for object literal");
+    assert(found_alloc && "should have OBJECT_NEW for object literal");
     xi_func_free(f);
 }
 
@@ -1204,83 +1204,6 @@ TEST(class_field_default_initializer_store_lowers_with_global_evidence_id) {
 #undef REQUIRE_CLASS_FIELD_INIT_EVIDENCE
 }
 
-TEST(json_dynamic_access_lowers_with_global_evidence_id) {
-#define REQUIRE_JSON_EVIDENCE(cond, msg)                                                           \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "json_dynamic_access_lowers_with_global_evidence_id: %s\n", msg);      \
-            abort();                                                                               \
-        }                                                                                          \
-    } while (0)
-
-    XgGlobalEvidence ev;
-    memset(&ev, 0, sizeof(ev));
-    XiFunc *main_func =
-        lower_source_with_global_evidence("fn updateAge() -> int {\n"
-                                          "    var j: Json = { name: \"ada\", age: 1 }\n"
-                                          "    j.age = 2\n"
-                                          "    return j.age\n"
-                                          "}\n"
-                                          "print(updateAge())\n",
-                                          &ev);
-    REQUIRE_JSON_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_EVIDENCE(ev.nobject_accesses == 2,
-                          "producer should record static Object get and set");
-    XiFunc *update = func_tree_find_func_name(main_func, "updateAge");
-    REQUIRE_JSON_EVIDENCE(update != NULL, "target function should be present");
-
-    uint32_t get_id = 0;
-    uint32_t set_id = 0;
-    for (uint32_t b = 0; b < update->nblocks; b++) {
-        XiBlock *blk = update->blocks[b];
-        if (!blk)
-            continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            XiValue *v = blk->values[i];
-            if (!v)
-                continue;
-            if (v->op == XI_OBJECT_GET_F) {
-                REQUIRE_JSON_EVIDENCE(v->xg_object_access_id != 0,
-                                      "Json field get should bind Object access evidence");
-                get_id = v->xg_object_access_id;
-            } else if (v->op == XI_OBJECT_SET_F) {
-                REQUIRE_JSON_EVIDENCE(v->xg_object_access_id != 0,
-                                      "Json field set should bind Object access evidence");
-                set_id = v->xg_object_access_id;
-            }
-        }
-    }
-    REQUIRE_JSON_EVIDENCE(get_id != 0, "Json field get should be found");
-    REQUIRE_JSON_EVIDENCE(set_id != 0, "Json field set should be found");
-    REQUIRE_JSON_EVIDENCE(get_id != set_id, "Json get/set should use distinct access rows");
-
-    int matched_get = 0;
-    int matched_set = 0;
-    for (uint32_t i = 0; i < ev.nobject_accesses; i++) {
-        const XgObjectAccessSummary *row = &ev.object_accesses[i];
-        if (row->object_access_id == get_id) {
-            REQUIRE_JSON_EVIDENCE(row->access_kind == XG_OBJECT_ACCESS_FIELD_GET,
-                                  "bound get id should point at field_get row");
-            REQUIRE_JSON_EVIDENCE(row->field_ordinal == 1,
-                                  "bound get id should preserve field ordinal");
-            matched_get = 1;
-        }
-        if (row->object_access_id == set_id) {
-            REQUIRE_JSON_EVIDENCE(row->access_kind == XG_OBJECT_ACCESS_FIELD_SET,
-                                  "bound set id should point at field_set row");
-            REQUIRE_JSON_EVIDENCE(row->field_ordinal == 1,
-                                  "bound set id should preserve field ordinal");
-            matched_set = 1;
-        }
-    }
-    REQUIRE_JSON_EVIDENCE(matched_get && matched_set, "bound ids should re-derive from evidence");
-
-    xi_func_free(main_func);
-    xg_global_evidence_free(&ev);
-
-#undef REQUIRE_JSON_EVIDENCE
-}
-
 TEST(json_alias_shape_access_lowers_with_global_evidence_id) {
 #define REQUIRE_JSON_ALIAS_EVIDENCE(cond, msg)                                                     \
     do {                                                                                           \
@@ -1292,14 +1215,13 @@ TEST(json_alias_shape_access_lowers_with_global_evidence_id) {
 
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
-    XiFunc *main_func =
-        lower_source_with_global_evidence("fn readAlias() -> Json {\n"
-                                          "    var a: Json = { name: \"ada\", age: 1 }\n"
-                                          "    var b: Json = a\n"
-                                          "    return b.age\n"
-                                          "}\n"
-                                          "print(readAlias())\n",
-                                          &ev);
+    XiFunc *main_func = lower_source_with_global_evidence("fn readAlias() -> int {\n"
+                                                          "    var a = { name: \"ada\", age: 1 }\n"
+                                                          "    var b = a\n"
+                                                          "    return b.age\n"
+                                                          "}\n"
+                                                          "print(readAlias())\n",
+                                                          &ev);
     REQUIRE_JSON_ALIAS_EVIDENCE(main_func != NULL, "source should lower");
     REQUIRE_JSON_ALIAS_EVIDENCE(ev.nobject_accesses == 1,
                                 "producer should record one Object alias field get");
@@ -1337,59 +1259,6 @@ TEST(json_alias_shape_access_lowers_with_global_evidence_id) {
 #undef REQUIRE_JSON_ALIAS_EVIDENCE
 }
 
-TEST(json_computed_key_access_lowers_with_global_evidence_id) {
-#define REQUIRE_JSON_INDEX_EVIDENCE(cond, msg)                                                     \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "json_computed_key_access_lowers_with_global_evidence_id: %s\n", msg); \
-            abort();                                                                               \
-        }                                                                                          \
-    } while (0)
-
-    XgGlobalEvidence ev;
-    memset(&ev, 0, sizeof(ev));
-    XiFunc *main_func =
-        lower_source_with_global_evidence("fn readKey(k: string) -> Json {\n"
-                                          "    var j: Json = { name: \"ada\", age: 1 }\n"
-                                          "    return j[k]\n"
-                                          "}\n"
-                                          "print(readKey(\"name\"))\n",
-                                          &ev);
-    REQUIRE_JSON_INDEX_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_INDEX_EVIDENCE(ev.njson_dynamic_accesses == 1,
-                                "producer should record computed Json index get");
-    XiFunc *read_key = func_tree_find_func_name(main_func, "readKey");
-    REQUIRE_JSON_INDEX_EVIDENCE(read_key != NULL, "target function should be present");
-
-    uint32_t access_id = 0;
-    for (uint32_t b = 0; b < read_key->nblocks; b++) {
-        XiBlock *blk = read_key->blocks[b];
-        if (!blk)
-            continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            XiValue *v = blk->values[i];
-            if (!v || v->op != XI_INDEX_GET)
-                continue;
-            REQUIRE_JSON_INDEX_EVIDENCE(v->xg_json_dynamic_access_id != 0,
-                                        "Json computed index should bind global access evidence");
-            access_id = v->xg_json_dynamic_access_id;
-        }
-    }
-    REQUIRE_JSON_INDEX_EVIDENCE(access_id == ev.json_dynamic_accesses[0].json_dynamic_access_id,
-                                "bound id should point at computed-key access row");
-    REQUIRE_JSON_INDEX_EVIDENCE(ev.json_dynamic_accesses[0].access_kind ==
-                                    XG_JSON_DYNAMIC_ACCESS_INDEX_GET,
-                                "row should describe index_get");
-    REQUIRE_JSON_INDEX_EVIDENCE(
-        (ev.json_dynamic_accesses[0].flags & XG_JSON_DYNAMIC_ACCESS_COMPUTED_KEY) != 0,
-        "row should keep computed-key evidence");
-
-    xi_func_free(main_func);
-    xg_global_evidence_free(&ev);
-
-#undef REQUIRE_JSON_INDEX_EVIDENCE
-}
-
 TEST(json_static_key_index_lowers_to_direct_field_with_global_evidence_id) {
 #define REQUIRE_JSON_STATIC_INDEX_EVIDENCE(cond, msg)                                              \
     do {                                                                                           \
@@ -1403,14 +1272,13 @@ TEST(json_static_key_index_lowers_to_direct_field_with_global_evidence_id) {
 
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
-    XiFunc *main_func =
-        lower_source_with_global_evidence("fn updateKey() -> Json {\n"
-                                          "    var j: Json = { name: \"ada\", age: 1 }\n"
-                                          "    j[\"age\"] = 2\n"
-                                          "    return j[\"age\"]\n"
-                                          "}\n"
-                                          "print(updateKey())\n",
-                                          &ev);
+    XiFunc *main_func = lower_source_with_global_evidence("fn updateKey() -> int {\n"
+                                                          "    var j = { name: \"ada\", age: 1 }\n"
+                                                          "    j[\"age\"] = 2\n"
+                                                          "    return j[\"age\"]\n"
+                                                          "}\n"
+                                                          "print(updateKey())\n",
+                                                          &ev);
     REQUIRE_JSON_STATIC_INDEX_EVIDENCE(main_func != NULL, "source should lower");
     REQUIRE_JSON_STATIC_INDEX_EVIDENCE(ev.nobject_accesses == 2,
                                        "producer should record static-key Object get and set");
@@ -1481,138 +1349,6 @@ TEST(json_static_key_index_lowers_to_direct_field_with_global_evidence_id) {
 #undef REQUIRE_JSON_STATIC_INDEX_EVIDENCE
 }
 
-TEST(json_open_shape_member_access_lowers_to_dynamic_lookup) {
-#define REQUIRE_JSON_OPEN_EVIDENCE(cond, msg)                                                      \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "json_open_shape_member_access_lowers_to_dynamic_lookup: %s\n", msg);  \
-            abort();                                                                               \
-        }                                                                                          \
-    } while (0)
-
-    XgGlobalEvidence ev;
-    memset(&ev, 0, sizeof(ev));
-    XiFunc *main_func =
-        lower_source_with_global_evidence("fn readName(k: string) -> Json {\n"
-                                          "    var j: Json = { name: \"ada\", [k]: 1 }\n"
-                                          "    return j.name\n"
-                                          "}\n"
-                                          "print(readName(\"age\"))\n",
-                                          &ev);
-    REQUIRE_JSON_OPEN_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_OPEN_EVIDENCE(ev.nobject_shapes == 1,
-                               "computed-key Json literal should describe its static half");
-    REQUIRE_JSON_OPEN_EVIDENCE(
-        ev.object_shapes[0].concrete_exact == 0 &&
-            (ev.object_shapes[0].flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) != 0 &&
-            (ev.object_shapes[0].flags & XG_OBJECT_SHAPE_SEALED) == 0,
-        "that shape must stay open instead of claiming exactness");
-    REQUIRE_JSON_OPEN_EVIDENCE(ev.njson_dynamic_accesses == 1,
-                               "producer should record Json field get");
-    REQUIRE_JSON_OPEN_EVIDENCE(ev.json_dynamic_accesses[0].receiver_shape_id != XG_NO_ID,
-                               "an open shape still gives the run-time guard a candidate");
-
-    XiFunc *read_name = func_tree_find_func_name(main_func, "readName");
-    REQUIRE_JSON_OPEN_EVIDENCE(read_name != NULL, "target function should be present");
-
-    uint32_t direct_count = 0;
-    uint32_t dynamic_count = 0;
-    for (uint32_t b = 0; b < read_name->nblocks; b++) {
-        XiBlock *blk = read_name->blocks[b];
-        if (!blk)
-            continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            XiValue *v = blk->values[i];
-            if (!v)
-                continue;
-            if (v->op == XI_OBJECT_GET_F)
-                direct_count++;
-            if (v->op == XI_LOAD_FIELD && v->aux && strcmp((const char *) v->aux, "name") == 0)
-                dynamic_count++;
-        }
-    }
-    REQUIRE_JSON_OPEN_EVIDENCE(direct_count == 0,
-                               "open Json shape must not lower to direct indexed get");
-    REQUIRE_JSON_OPEN_EVIDENCE(dynamic_count == 1,
-                               "open Json shape should keep dynamic field lookup");
-
-    xi_func_free(main_func);
-    xg_global_evidence_free(&ev);
-
-#undef REQUIRE_JSON_OPEN_EVIDENCE
-}
-
-TEST(json_open_shape_static_key_index_lowers_to_dynamic_lookup) {
-#define REQUIRE_JSON_OPEN_INDEX_EVIDENCE(cond, msg)                                                \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "json_open_shape_static_key_index_lowers_to_dynamic_lookup: %s\n",     \
-                    msg);                                                                          \
-            abort();                                                                               \
-        }                                                                                          \
-    } while (0)
-
-    XgGlobalEvidence ev;
-    memset(&ev, 0, sizeof(ev));
-    XiFunc *main_func =
-        lower_source_with_global_evidence("fn readName(k: string) -> Json {\n"
-                                          "    var j: Json = { name: \"ada\", [k]: 1 }\n"
-                                          "    return j[\"name\"]\n"
-                                          "}\n"
-                                          "print(readName(\"age\"))\n",
-                                          &ev);
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.nobject_shapes == 1,
-                                     "computed-key Json literal should describe its static half");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(
-        ev.object_shapes[0].concrete_exact == 0 &&
-            (ev.object_shapes[0].flags & XG_OBJECT_SHAPE_HAS_COMPUTED_KEYS) != 0 &&
-            (ev.object_shapes[0].flags & XG_OBJECT_SHAPE_SEALED) == 0,
-        "that shape must stay open instead of claiming exactness");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.njson_dynamic_accesses == 1,
-                                     "producer should record Json static-key index get");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_dynamic_accesses[0].receiver_shape_id != XG_NO_ID,
-                                     "an open shape still gives the run-time guard a candidate");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(ev.json_dynamic_accesses[0].access_kind ==
-                                         XG_JSON_DYNAMIC_ACCESS_INDEX_GET,
-                                     "access should be an index_get row");
-
-    XiFunc *read_name = func_tree_find_func_name(main_func, "readName");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(read_name != NULL, "target function should be present");
-
-    uint32_t direct_count = 0;
-    uint32_t dynamic_count = 0;
-    uint32_t access_id = 0;
-    for (uint32_t b = 0; b < read_name->nblocks; b++) {
-        XiBlock *blk = read_name->blocks[b];
-        if (!blk)
-            continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            XiValue *v = blk->values[i];
-            if (!v)
-                continue;
-            if (v->op == XI_OBJECT_GET_F)
-                direct_count++;
-            if (v->op == XI_INDEX_GET && v->xg_json_dynamic_access_id != 0) {
-                dynamic_count++;
-                access_id = v->xg_json_dynamic_access_id;
-            }
-        }
-    }
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(direct_count == 0,
-                                     "open Json shape must not lower to direct indexed get");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(dynamic_count == 1,
-                                     "open Json shape should keep dynamic index lookup");
-    REQUIRE_JSON_OPEN_INDEX_EVIDENCE(access_id ==
-                                         ev.json_dynamic_accesses[0].json_dynamic_access_id,
-                                     "dynamic index lookup should retain Json evidence id");
-
-    xi_func_free(main_func);
-    xg_global_evidence_free(&ev);
-
-#undef REQUIRE_JSON_OPEN_INDEX_EVIDENCE
-}
-
 TEST(object_access_lowers_with_global_evidence_id) {
 #define REQUIRE_OBJECT_EVIDENCE(cond, msg)                                                         \
     do {                                                                                           \
@@ -1632,15 +1368,12 @@ TEST(object_access_lowers_with_global_evidence_id) {
                                           "print(readAge())\n",
                                           &ev);
     REQUIRE_OBJECT_EVIDENCE(main_func != NULL, "source should lower");
-    REQUIRE_OBJECT_EVIDENCE(ev.njson_dynamic_accesses == 0,
-                            "bare object literal should not produce Json access evidence");
     REQUIRE_OBJECT_EVIDENCE(ev.nobject_accesses == 1,
                             "producer should record structural object field get");
     XiFunc *read = func_tree_find_func_name(main_func, "readAge");
     REQUIRE_OBJECT_EVIDENCE(read != NULL, "target function should be present");
 
     uint32_t get_id = 0;
-    uint32_t json_bound_count = 0;
     for (uint32_t b = 0; b < read->nblocks; b++) {
         XiBlock *blk = read->blocks[b];
         if (!blk)
@@ -1649,14 +1382,10 @@ TEST(object_access_lowers_with_global_evidence_id) {
             XiValue *v = blk->values[i];
             if (!v || v->op != XI_OBJECT_GET_F)
                 continue;
-            if (v->xg_json_dynamic_access_id != 0)
-                json_bound_count++;
             if (v->xg_object_access_id != 0)
                 get_id = v->xg_object_access_id;
         }
     }
-    REQUIRE_OBJECT_EVIDENCE(json_bound_count == 0,
-                            "structural object access should not bind Json id");
     REQUIRE_OBJECT_EVIDENCE(get_id != 0,
                             "structural object field get should bind global access evidence");
     REQUIRE_OBJECT_EVIDENCE(ev.object_accesses[0].object_access_id == get_id,
@@ -1760,85 +1489,14 @@ TEST(structural_object_dot_and_static_index_share_fixed_field_lowering) {
 #undef REQUIRE_OBJECT_FIELD_EQUIVALENCE
 }
 
-TEST(open_row_object_access_selects_vm_descriptor_dispatch_only_when_required) {
-#define REQUIRE_OPEN_ROW_DISPATCH(cond, msg)                                                       \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr,                                                                        \
-                    "open_row_object_access_selects_vm_descriptor_dispatch_only_when_required: "   \
-                    "%s\n",                                                                        \
-                    msg);                                                                          \
-            abort();                                                                               \
-        }                                                                                          \
-    } while (0)
-
-    XgGlobalEvidence ev;
-    memset(&ev, 0, sizeof(ev));
-    XiFunc *root = lower_source_with_global_evidence(
-        "type Named = { name: string, ... }\n"
-        "fn readDirect(value: Named) -> string { return value.name }\n"
-        "fn readGuard(value: Named) -> string { return value.name }\n"
-        "fn readDispatch(value: Named) -> string { return value[\"name\"] }\n"
-        "fn forwardDirect(value: Named) -> string { return readDirect(value) }\n"
-        "fn exercise() -> string {\n"
-        "    var a = forwardDirect({ name: \"ada\", age: 1 })\n"
-        "    var b = forwardDirect({ name: \"bob\", zzz: 2 })\n"
-        "    var c = readGuard({ name: \"cat\", tag: 3 })\n"
-        "    var d = readDispatch({ age: 4, name: \"dot\" })\n"
-        "    var e = readDispatch({ id: 5, name: \"eve\" })\n"
-        "    return a + b + c + d + e\n"
-        "}\n",
-        &ev);
-    REQUIRE_OPEN_ROW_DISPATCH(root != NULL, "source should lower");
-
-    const char *func_names[] = {"readDirect", "readGuard", "readDispatch"};
-    const bool expect_descriptor_dispatch[] = {false, true, true};
-    for (uint32_t f = 0; f < 3; f++) {
-        XiFunc *func = func_tree_find_func_name(root, func_names[f]);
-        REQUIRE_OPEN_ROW_DISPATCH(func != NULL, "target function should be present");
-        XiValue *field_get = NULL;
-        for (uint32_t b = 0; b < func->nblocks; b++) {
-            XiBlock *block = func->blocks[b];
-            if (!block)
-                continue;
-            for (uint32_t i = 0; i < block->nvalues; i++) {
-                XiValue *value = block->values[i];
-                if (!value || value->op != XI_OBJECT_GET_F)
-                    continue;
-                REQUIRE_OPEN_ROW_DISPATCH(field_get == NULL,
-                                          "fixture should emit one fixed-field get per reader");
-                field_get = value;
-            }
-        }
-        REQUIRE_OPEN_ROW_DISPATCH(field_get != NULL, "reader should emit a fixed-field get");
-        REQUIRE_OPEN_ROW_DISPATCH(field_get->xg_object_access_id != 0,
-                                  "open-row get should bind structural access evidence");
-        bool has_descriptor_dispatch =
-            (field_get->lowering_flags & XI_LOWERING_FLAG_OBJECT_DESCRIPTOR_DISPATCH) != 0;
-        REQUIRE_OPEN_ROW_DISPATCH(has_descriptor_dispatch == expect_descriptor_dispatch[f],
-                                  "VM dispatch selection should match closed-world shape evidence");
-        if (has_descriptor_dispatch) {
-            REQUIRE_OPEN_ROW_DISPATCH(
-                field_get->aux != NULL && strcmp((const char *) field_get->aux, "name") == 0,
-                "descriptor dispatch should retain the verified field symbol");
-        } else {
-            REQUIRE_OPEN_ROW_DISPATCH(field_get->aux == NULL,
-                                      "raw-ordinal access should not carry a field-name fallback");
-        }
-    }
-
-    xi_func_free(root);
-    xg_global_evidence_free(&ev);
-
-#undef REQUIRE_OPEN_ROW_DISPATCH
-}
-
 static const char *json_codec_same_line_source(void) {
     return "type User = { name: string, age: int }\n"
            "fn codecs() -> string {\n"
-           "    var parsed: Json = Json.parse(\"{\\\"name\\\":\\\"A\\\",\\\"age\\\":1}\"); var "
-           "decoded: User = Json.decode<User>(parsed)!; var encoded: Json = Json.encode(decoded); "
-           "return Json.stringify(encoded)\n"
+           "    var parsed: JSON.Value = "
+           "JSON.parseValue(\"{\\\"name\\\":\\\"A\\\",\\\"age\\\":1}\"); var "
+           "decoded: User = JSON.decode<User>(parsed)!; var encoded: JSON.Value = "
+           "JSON.value(decoded); "
+           "return JSON.stringify(encoded)\n"
            "}\n"
            "print(codecs())\n";
 }
@@ -1851,9 +1509,9 @@ static uint8_t xi_json_codec_kind_for_test(const XiValue *value) {
     if (value->op != XI_CALL_METHOD || !value->aux)
         return 0;
     const char *method = (const char *) value->aux;
-    if (strcmp(method, "parse") == 0)
+    if (strcmp(method, "parseValue") == 0)
         return XG_JSON_CODEC_PARSE;
-    if (strcmp(method, "encode") == 0)
+    if (strcmp(method, "value") == 0)
         return XG_JSON_CODEC_ENCODE;
     if (strcmp(method, "stringify") == 0)
         return XG_JSON_CODEC_STRINGIFY;
@@ -2409,6 +2067,72 @@ TEST(go_await) {
     xi_func_free(f);
 }
 
+#define STORAGE_DOMAIN_REQUIRE(cond, msg)                                                          \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "local_class_cycle_storage_domain: %s\n", (msg));                      \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+TEST(local_class_cycle_storage_domain) {
+    XiFunc *f = lower_source("class Node {\n"
+                             "  peer: Node?\n"
+                             "  value: int\n"
+                             "  constructor(value: int) { this.peer = null; this.value = value }\n"
+                             "}\n"
+                             "fn localPair() {\n"
+                             "  var left = Node(1)\n"
+                             "  var right = Node(2)\n"
+                             "  left.peer = right\n"
+                             "  right.peer = left\n"
+                             "}\n"
+                             "fn returned() -> Node {\n"
+                             "  var result = Node(3)\n"
+                             "  return result\n"
+                             "}\n");
+    STORAGE_DOMAIN_REQUIRE(f != NULL, "storage-domain fixture should lower");
+    XiFunc *local_pair = func_tree_find_func_name(f, "localPair");
+    XiFunc *returned = func_tree_find_func_name(f, "returned");
+    STORAGE_DOMAIN_REQUIRE(local_pair != NULL && returned != NULL,
+                           "fixture functions should be present");
+
+    int local_constructors = 0;
+    for (uint32_t bi = 0; bi < local_pair->nblocks; bi++) {
+        XiBlock *block = local_pair->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!xi_value_is_constructor_call(value))
+                continue;
+            STORAGE_DOMAIN_REQUIRE(xi_value_allocation_storage_mode(value) == XR_OBJ_STORAGE_NORMAL,
+                                   "local class graph must remain in the execution heap");
+            local_constructors++;
+        }
+    }
+    STORAGE_DOMAIN_REQUIRE(local_constructors == 2,
+                           "local graph should contain two constructor allocations");
+
+    XiValue *returned_constructor = NULL;
+    for (uint32_t bi = 0; bi < returned->nblocks && !returned_constructor; bi++) {
+        XiBlock *block = returned->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            if (xi_value_is_constructor_call(block->values[vi])) {
+                returned_constructor = block->values[vi];
+                break;
+            }
+        }
+    }
+    STORAGE_DOMAIN_REQUIRE(returned_constructor != NULL,
+                           "returned graph should contain its constructor allocation");
+    STORAGE_DOMAIN_REQUIRE(xi_value_allocation_storage_mode(returned_constructor) ==
+                               XR_OBJ_STORAGE_TRANSFER,
+                           "a returned fresh class root must materialize in the transfer domain");
+
+    xi_func_free(f);
+}
+
+#undef STORAGE_DOMAIN_REQUIRE
+
 TEST(direct_await_go_one_shot) {
     XiFunc *f = lower_source("fn work() -> int { return 42 }\n"
                              "var r = await go work()\n"
@@ -2548,6 +2272,15 @@ TEST(go_arg_transfer_modes) {
     assert(xi_go_arg_transfer_mode(share_go, 0) == XR_TRANSFER_SHARE &&
            "sync-handle go arguments should be encoded as zero-copy SHARE transfer");
     xi_func_free(share_ir);
+
+    XiFunc *string_ir = lower_source("fn consume(value: string) -> int { return len(value) }\n"
+                                     "var task = go consume(\"hello\")\n"
+                                     "print(await task)\n");
+    assert(string_ir != NULL);
+    XiValue *string_go = func_tree_find_op(string_ir, XI_GO);
+    assert(string_go != NULL && xi_go_arg_transfer_mode(string_go, 0) == XR_TRANSFER_COPY &&
+           "immutable strings must receive an implicit boundary value copy");
+    xi_func_free(string_ir);
 }
 
 TEST(hoisted_sync_handle_capture_is_shared) {
@@ -2619,6 +2352,14 @@ TEST(channel_send_transfer_modes) {
     assert(xi_chan_send_transfer_mode(timeout_send) == XR_TRANSFER_COPY &&
            "copy(...) at sendTimeout boundary must be encoded as COPY transfer");
     xi_func_free(timeout_ir);
+
+    XiFunc *tuple_ir = lower_source("const ch: Channel<(int, string)> = Channel(1)\n"
+                                    "ch.send((1, \"value\"))\n");
+    assert(tuple_ir != NULL);
+    XiValue *tuple_send = func_tree_find_op(tuple_ir, XI_CHAN_SEND);
+    assert(tuple_send != NULL && xi_chan_send_transfer_mode(tuple_send) == XR_TRANSFER_COPY &&
+           "tuple values must receive an implicit boundary value copy");
+    xi_func_free(tuple_ir);
 }
 
 TEST(defer_stmt) {
@@ -2694,12 +2435,40 @@ TEST(is_expr) {
                              "var ok = x is int\n"
                              "print(ok)\n");
     assert(f != NULL);
-    int found_is = 0;
+    XiValue *found_is = NULL;
     for (uint32_t i = 0; i < f->entry->nvalues; i++) {
         if (f->entry->values[i]->op == XI_IS)
-            found_is = 1;
+            found_is = f->entry->values[i];
     }
     assert(found_is && "should have IS op");
+    assert(found_is->nargs == 2 && found_is->args[1] &&
+           "XI_IS must carry a reified runtime target operand");
+    xi_func_free(f);
+}
+
+TEST(is_fixed_width_and_union_patterns_reify_runtime_targets) {
+    XiFunc *f = lower_source("var erased: JSON.Value = 7\n"
+                             "print(erased is i32)\n"
+                             "var value: int | float = 1\n"
+                             "print(value is int)\n"
+                             "match (value) {\n"
+                             "  is float -> print(0),\n"
+                             "  is int -> print(1),\n"
+                             "}\n");
+    assert(f != NULL);
+    int found = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *value = blk->values[i];
+            if (!value || value->op != XI_IS)
+                continue;
+            found++;
+            assert(value->nargs == 2 && value->args[1] &&
+                   "every XI_IS form must reify its runtime target");
+        }
+    }
+    assert(found >= 4 && "fixed-width, union expression, and pattern tests should lower");
     xi_func_free(f);
 }
 
@@ -2808,10 +2577,28 @@ TEST(struct_literal_inside_function) {
     xi_func_free(f);
 }
 
+TEST(zero_arg_struct_with_methods_lowers_to_value_aggregate) {
+    XiFunc *f =
+        lower_source("struct Vec2 {\n"
+                     "    x: float\n"
+                     "    y: float\n"
+                     "    magnitudeSq() -> float { return this.x * this.x + this.y * this.y }\n"
+                     "}\n"
+                     "fn make() -> Vec2 { return Vec2() }\n"
+                     "print(make().magnitudeSq())\n");
+    assert(f != NULL);
+    XiFunc *make = func_tree_find_func_name(f, "make");
+    assert(make && func_tree_has_op(make, XI_AGG_NEW) &&
+           "a zero-arg value struct remains AGG_NEW even when it declares methods");
+    assert(!func_tree_has_op(make, XI_OBJECT_NEW) &&
+           "a value struct constructor must not fall back to reference-object allocation");
+    xi_func_free(f);
+}
+
 TEST(unresolved_struct_literal_does_not_lower_to_json) {
     XiFunc *f = lower_source("var p = Missing{x: 1}\n"
                              "print(p)\n");
-    assert(f == NULL && "unresolved struct literal must not fall back to Json object");
+    assert(f == NULL && "unresolved struct literal must not fall back to a dynamic object");
 }
 
 TEST(struct_field_store_narrows_scalar_rep) {
@@ -3004,6 +2791,46 @@ TEST(struct_method_fixed_array_args_preserve_caller_places) {
            "method read fixed-array arguments must use the internal read-place ABI directly");
     assert(!func_tree_has_op(exercise, XI_COPY) &&
            "method fixed-array call setup must not introduce deep value clones");
+
+    xi_func_free(f);
+}
+
+TEST(collection_storage_mutators_take_owned_value_struct_copies) {
+    XiFunc *f = lower_source("struct Point { x: int }\n"
+                             "fn exercise(point: Point) -> int {\n"
+                             "    var points: Array<Point> = [Point{x: 0}]\n"
+                             "    points.push(point)\n"
+                             "    points.unshift(point)\n"
+                             "    points.fill(point)\n"
+                             "    var byId: Map<int, Point> = #{}\n"
+                             "    byId.set(1, point)\n"
+                             "    return points[0].x + byId[1].x\n"
+                             "}\n"
+                             "print(exercise(Point{x: 7}))\n");
+    assert(f != NULL);
+
+    XiFunc *exercise = func_tree_find_func_name(f, "exercise");
+    XiValue *calls[8] = {0};
+    int call_count = func_collect_method_calls(exercise, calls, 8);
+    int checked = 0;
+    for (int i = 0; i < call_count; i++) {
+        XiValue *call = calls[i];
+        const char *method = call && call->aux ? (const char *) call->aux : NULL;
+        int value_slot = -1;
+        if (method && (strcmp(method, "push") == 0 || strcmp(method, "unshift") == 0 ||
+                       strcmp(method, "fill") == 0))
+            value_slot = 1;
+        else if (method && strcmp(method, "set") == 0)
+            value_slot = 2;
+        if (value_slot < 0)
+            continue;
+        assert(call->nargs > (uint16_t) value_slot && call->args[value_slot] &&
+               call->args[value_slot]->op == XI_COPY &&
+               call->args[value_slot]->aux_int == XI_COPY_KIND_VALUE_CLONE &&
+               "collection storage mutators must receive an owned value clone, not a read place");
+        checked++;
+    }
+    assert(checked == 4 && "push, unshift, fill, and Map.set ownership must all be covered");
 
     xi_func_free(f);
 }
@@ -3304,14 +3131,9 @@ int main(void) {
     run_object_literal();
     run_class_field_access_lowers_with_global_evidence_id();
     run_class_field_default_initializer_store_lowers_with_global_evidence_id();
-    run_json_dynamic_access_lowers_with_global_evidence_id();
     run_json_alias_shape_access_lowers_with_global_evidence_id();
-    run_json_computed_key_access_lowers_with_global_evidence_id();
     run_json_static_key_index_lowers_to_direct_field_with_global_evidence_id();
-    run_json_open_shape_member_access_lowers_to_dynamic_lookup();
-    run_json_open_shape_static_key_index_lowers_to_dynamic_lookup();
     run_object_access_lowers_with_global_evidence_id();
-    run_open_row_object_access_selects_vm_descriptor_dispatch_only_when_required();
     run_structural_object_dot_and_static_index_share_fixed_field_lowering();
     run_json_codec_calls_bind_exact_source_node_evidence_ids();
     run_json_codec_binding_does_not_fallback_to_source_span();
@@ -3324,6 +3146,7 @@ int main(void) {
     run_multiple_functions();
     run_template_string();
     run_go_await();
+    run_local_class_cycle_storage_domain();
     run_direct_await_go_one_shot();
     run_unique_result_task_await_consumes_handle();
     run_tuple_result_task_await_consumes_handle();
@@ -3336,6 +3159,7 @@ int main(void) {
     run_defer_loop_cleanup_place_dominates_zero_iteration_exit();
     run_set_literal();
     run_is_expr();
+    run_is_fixed_width_and_union_patterns_reify_runtime_targets();
     run_slice_expr();
     run_range_expr();
     run_range_inclusive_expr();
@@ -3343,6 +3167,7 @@ int main(void) {
     run_optional_call();
     run_struct_literal();
     run_struct_literal_inside_function();
+    run_zero_arg_struct_with_methods_lowers_to_value_aggregate();
     run_unresolved_struct_literal_does_not_lower_to_json();
     run_struct_field_store_narrows_scalar_rep();
     run_struct_method_receivers_use_call_bound_places();
@@ -3350,6 +3175,7 @@ int main(void) {
     run_large_readonly_struct_local_stays_in_ssa();
     run_rawptr_struct_method_receivers_mark_native_borrow_shape();
     run_struct_method_fixed_array_args_preserve_caller_places();
+    run_collection_storage_mutators_take_owned_value_struct_copies();
     run_read_value_struct_param_uses_internal_call_place();
     run_as_to_scalar_rep_int_lowers_to_narrow();
     run_numeric_as_carries_typed_conversion_evidence();

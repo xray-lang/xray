@@ -164,16 +164,16 @@ fn test_chain_with_type_change() {
 
 @test
 fn test_reduce_to_map() {
-    var pairs = [["a", 1], ["b", 2], ["c", 3]]
-    var seed: Json = {}
+    var pairs = [("a", 1), ("b", 2), ("c", 3)]
+    var seed: Map<string, int> = #{}
     var obj = pairs.reduce(fn(acc, pair) {
         var next = copy(acc)
-        next[pair[0]] = pair[1]
+        next.set(pair.0, pair.1)
         return next
     }, seed)
-    assert_eq(obj.a, 1)
-    assert_eq(obj.b, 2)
-    assert_eq(obj.c, 3)
+    assert_eq(obj.get("a"), 1)
+    assert_eq(obj.get("b"), 2)
+    assert_eq(obj.get("c"), 3)
 }
 
 // ===== Higher-Order Functions with Closures =====
@@ -381,7 +381,7 @@ fn test_nested_foreach() {
 @test
 fn test_foreach_with_index_simulation() {
     var arr = ["a", "b", "c"]
-    var indexed: Array<Json> = []
+    var indexed: Array<{ index: int, value: string }> = []
     var idx = 0
     arr.forEach(fn(item) {
         indexed.push({ "index": idx, "value": item })
@@ -426,18 +426,15 @@ fn test_unique_via_reduce() {
 @test
 fn test_count_by_reduce() {
     var words = ["apple", "banana", "apple", "cherry", "banana", "apple"]
-    var seed: Json = {}
+    var seed: Map<string, int> = #{}
     var counts = words.reduce(fn(acc, word) {
         var next = copy(acc)
-        if (next[word] == null) {
-            next[word] = 0
-        }
-        next[word] = int(next[word]) + 1
+        next.set(word, (next.get(word) ?? 0) + 1)
         return next
     }, seed)
-    assert_eq(counts.apple, 3)
-    assert_eq(counts.banana, 2)
-    assert_eq(counts.cherry, 1)
+    assert_eq(counts.get("apple"), 3)
+    assert_eq(counts.get("banana"), 2)
+    assert_eq(counts.get("cherry"), 1)
 }
 
 // ===== Return Type Inference Through Chains =====

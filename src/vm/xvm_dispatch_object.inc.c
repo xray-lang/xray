@@ -27,10 +27,10 @@
  *     - OP_GETFIELD / OP_SETFIELD / OP_GETFIELD_IC
  *
  *   Json:
- *     - OP_NEWJSON
- *     - OP_JSON_GET / SET / GETK / SETK
+ *     - OP_NEWOBJECT
+ *     - OP_OBJECT_GET / SET / GETK / SETK
  *     - OP_OBJECT_GETK / SETK (verified structural descriptor dispatch)
- *     - OP_JSON_INIT / OP_JSON_INIT_I / OP_JSON_INIT_N
+ *     - OP_OBJECT_INIT / OP_OBJECT_INIT_I / OP_OBJECT_INIT_N
  *
  *   Property R/W:
  *     - OP_GETPROP / OP_SETPROP / OP_GETSUPER (placeholder)
@@ -125,7 +125,7 @@ vmcase(OP_SET_STORAGE_CTX) {
     ** For class instance shared support
     ** Set before constructor call, OP_INVOKE reads this context
     */
-    int storage_mode = GETARG_A(i);
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) GETARG_A(i));
     atomic_store_explicit(&isolate->current_storage_mode, (uint8_t) storage_mode,
                           memory_order_relaxed);
     vmbreak;
@@ -295,85 +295,62 @@ vmcase(OP_GETFIELD_IC) {
     vmbreak;
 }
 
-// Json dynamic object instructions (V2 zero-copy design)
+// Exact structural object instructions.
 
-vmcase(OP_NEWJSON) {
-    /* OP_NEWJSON: create Json object
+vmcase(OP_NEWOBJECT) {
+    /* OP_NEWOBJECT: create a structural object
     ** A = destination register
     ** B = Shape constant index
     ** C = storage mode (0=normal, 1=shared, 2=owned)
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    int storage_mode = GETARG_C(i);
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) GETARG_C(i));
     XrValue cls_val = k[b];
     // Class stored as integer pointer (not GC managed; lives with isolate)
     XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
-    XrJson *json;
+    XrObjectInstance *object;
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
         // System storage: allocate on system heap
-        size_t size = xr_json_size(cls);
-        json = (XrJson *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate), size,
-                                                   XR_TINSTANCE, storage_mode);
-        if (json) {
-            xr_json_init_inplace(json, cls);
-            XR_OBJ_SET_STORAGE(&json->hdr, storage_mode);
+        size_t size = xr_object_instance_size(cls);
+        object = (XrObjectInstance *) xr_sysheap_alloc_storage(xr_isolate_get_sys_heap(isolate),
+                                                               size, XR_TINSTANCE, storage_mode);
+        if (object) {
+            xr_object_instance_init_inplace(object, cls);
+            XR_OBJ_SET_STORAGE(&object->hdr, storage_mode);
             if (storage_mode == XR_OBJ_STORAGE_SHARED) {
-                xr_shared_set_refc(&json->hdr, 1);
+                xr_shared_set_refc(&object->hdr, 1);
             }
         }
     } else {
         // normal: allocate on coroutine heap
-        json = xr_json_new_with_class(VM_CURRENT_CORO, cls);
+        object = xr_object_instance_new_with_class(VM_CURRENT_CORO, cls);
     }
 
-    R(a) = xr_json_value(json);
+    R(a) = xr_object_instance_value(object);
     if (storage_mode == 0)
         checkGC(base + a + 1);
     vmbreak;
 }
 
-vmcase(OP_JSON_GET) {
-    // OP_JSON_GET: read field by index
+vmcase(OP_OBJECT_GET) {
+    // OP_OBJECT_GET: read field by index
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    XrJson *json = xr_value_to_json(R(b));
+    XrObjectInstance *json = xr_value_to_object_instance(R(b));
     R(a) = xr_instance_get_dynamic_field(json, (uint16_t) c);
     vmbreak;
 }
 
-vmcase(OP_JSON_SET) {
-    // OP_JSON_SET: write field by index
+vmcase(OP_OBJECT_SET) {
+    // OP_OBJECT_SET: write field by index
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    XrJson *json = xr_value_to_json(R(a));
+    XrObjectInstance *json = xr_value_to_object_instance(R(a));
     XrValue val = R(c);
     xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, val);
-    vmbreak;
-}
-
-vmcase(OP_JSON_GETK) {
-    // OP_JSON_GETK: read field by Symbol
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);  // Local symbol index
-    XrJson *json = xr_value_to_json(R(b));
-    R(a) = xr_json_get(isolate, json, (SymbolId) PROTO_SYMBOL(cl->proto, c));
-    vmbreak;
-}
-
-vmcase(OP_JSON_SETK) {
-    // OP_JSON_SETK: write field by Symbol (supports zero-copy conversion)
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);  // Local symbol index
-    int c = GETARG_C(i);
-    XrJson *json = xr_value_to_json(R(a));
-    XrValue val = R(c);
-    if (!xr_json_set(isolate, json, (SymbolId) PROTO_SYMBOL(cl->proto, b), val)) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add property to sealed Json object");
-    }
     vmbreak;
 }
 
@@ -381,7 +358,7 @@ vmcase(OP_OBJECT_GETK) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    XrJson *object = xr_value_to_json(R(b));
+    XrObjectInstance *object = xr_value_to_object_instance(R(b));
     SymbolId symbol = (SymbolId) PROTO_SYMBOL(cl->proto, c);
     int ordinal = object && object->klass ? xr_class_lookup_field(object->klass, (int) symbol) : -1;
     if (ordinal < 0) {
@@ -396,7 +373,7 @@ vmcase(OP_OBJECT_SETK) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    XrJson *object = xr_value_to_json(R(a));
+    XrObjectInstance *object = xr_value_to_object_instance(R(a));
     SymbolId symbol = (SymbolId) PROTO_SYMBOL(cl->proto, b);
     int ordinal = object && object->klass ? xr_class_lookup_field(object->klass, (int) symbol) : -1;
     if (ordinal < 0 || !xr_instance_set_dynamic_field(isolate, object, (uint16_t) ordinal, R(c))) {
@@ -406,55 +383,55 @@ vmcase(OP_OBJECT_SETK) {
     vmbreak;
 }
 
-vmcase(OP_JSON_MERGE) {
-    // OP_JSON_MERGE: copy every field of R[B]:Json into R[A]:Json (object
-    // spread). Source fields are borrowed, so each value is retained as it is
-    // copied; later writes override earlier ones (xr_json_set releases the old
-    // value). Source must be a Json object.
+vmcase(OP_OBJECT_MERGE) {
+    // OP_OBJECT_MERGE copies every field of the source structural object into
+    // the destination structural object during object spread.
+    // Copied values are retained; later writes override earlier ones.
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     if (!xr_value_has_object_shape(R(b))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "object spread source must be an object");
     }
-    XrJson *dst = xr_value_to_json(R(a));
-    XrJson *src = xr_value_to_json(R(b));
-    if (!xr_json_merge(isolate, dst, src)) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY, "cannot add property to sealed Json object");
+    XrObjectInstance *dst = xr_value_to_object_instance(R(a));
+    XrObjectInstance *src = xr_value_to_object_instance(R(b));
+    if (!xr_object_instance_merge(isolate, dst, src)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_PROPERTY,
+                         "object spread fields do not match the exact destination shape");
     }
     vmbreak;
 }
 
-vmcase(OP_JSON_INIT) {
-    // OP_JSON_INIT: direct index write during initialization
+vmcase(OP_OBJECT_INIT) {
+    // OP_OBJECT_INIT: direct index write during initialization
     int a = GETARG_A(i);
     int b = GETARG_B(i);  // Field index
     int c = GETARG_C(i);
-    XrJson *json = xr_value_to_json(R(a));
+    XrObjectInstance *object = xr_value_to_object_instance(R(a));
     XrValue val = R(c);
-    xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, val);
+    xr_instance_set_dynamic_field(isolate, object, (uint16_t) b, val);
     vmbreak;
 }
 
-vmcase(OP_JSON_INIT_I) {
-    // OP_JSON_INIT_I: init field with immediate integer
+vmcase(OP_OBJECT_INIT_I) {
+    // OP_OBJECT_INIT_I: init field with immediate integer
     int a = GETARG_A(i);
     int b = GETARG_B(i);   // Field index
     int c = GETARG_sC(i);  // Signed immediate value
-    XrJson *json = xr_value_to_json(R(a));
-    xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, xr_int(c));
+    XrObjectInstance *object = xr_value_to_object_instance(R(a));
+    xr_instance_set_dynamic_field(isolate, object, (uint16_t) b, xr_int(c));
     vmbreak;
 }
 
-vmcase(OP_JSON_INIT_N) {
-    // OP_JSON_INIT_N: init field with null
+vmcase(OP_OBJECT_INIT_N) {
+    // OP_OBJECT_INIT_N: init field with null
     int a = GETARG_A(i);
     int b = GETARG_B(i);  // Field index
-    XrJson *json = xr_value_to_json(R(a));
-    xr_instance_set_dynamic_field(isolate, json, (uint16_t) b, xr_null());
+    XrObjectInstance *object = xr_value_to_object_instance(R(a));
+    xr_instance_set_dynamic_field(isolate, object, (uint16_t) b, xr_null());
     vmbreak;
 }
 
-vmcase(OP_JSON_DECODE) {
+vmcase(OP_JSON_DECODE) vmcase(OP_JSON_DECODE_IGNORE) vmcase(OP_JSON_DECODE_REQUIRE) {
     /* OP_JSON_DECODE: typed JSON deserialization
     ** A = destination register (result: sealed Json or null)
     ** B = data register (string to parse)
@@ -467,24 +444,35 @@ vmcase(OP_JSON_DECODE) {
     XrValue data = R(b);
     XrValue cls_val = k[c];
     XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(cls_val);
+    bool ignore_unknown_fields = GET_OPCODE(i) == OP_JSON_DECODE_IGNORE;
+    bool require = GET_OPCODE(i) == OP_JSON_DECODE_REQUIRE;
     XR_DCHECK(cls != NULL, "OP_JSON_DECODE: null class");
     bool root_schema = (cls->flags & XR_CLASS_JSON_DECODE_ROOT) != 0;
     const XrJsonDecodeSchema *schema = root_schema && cls->field_count == 1 && cls->fields
                                            ? &cls->fields[0].json_decode_schema
                                            : NULL;
 
-    /* Json.decode consumes an already parsed Json value. In particular, a
-     * Json string is data, not a second JSON source text. Json.parse<T> owns
+    /* JSON.decode consumes an already parsed JSON.Value. In particular, a
+     * Json string is data, not a second JSON source text. JSON.parse<T> owns
      * the direct token-stream path in OP_JSON_PARSE_TYPED. */
-    XrJson *src = NULL;
-    if (!root_schema && xr_value_has_object_shape(data)) {
-        /* Structural objects share Json's field storage representation, so an object
-         * source is validated against the target field set the same way. This lets
-         * `object is T` and `object as T` reach the check at all. */
-        src = xr_value_to_json(data);
+    XrMap *src = NULL;
+    if (!root_schema && XR_IS_MAP(data)) {
+        src = XR_TO_MAP(data);
+    } else if (!root_schema && xr_value_has_object_shape(data)) {
+        R(a) = xr_json_decode_struct_instance_with_class(isolate, VM_CURRENT_CORO,
+                                                         xr_value_to_object_instance(data), cls,
+                                                         ignore_unknown_fields);
+        checkGC(base + a + 1);
+        vmbreak;
     } else if (root_schema && schema) {
         XrValue decoded = xr_null();
-        if (!xr_json_decode_value_with_schema(isolate, VM_CURRENT_CORO, data, schema, &decoded)) {
+        if (!xr_json_decode_value_with_schema(isolate, VM_CURRENT_CORO, data, schema,
+                                              ignore_unknown_fields, &decoded)) {
+            if (require) {
+                savepc();
+                VM_RUNTIME_ERROR(XR_ERR_JSON_INVALID,
+                                 "JSON.require: value does not match the requested type");
+            }
             R(a) = xr_null();
             vmbreak;
         }
@@ -495,17 +483,19 @@ vmcase(OP_JSON_DECODE) {
         R(a) = xr_null();
         vmbreak;
     }
-    R(a) = xr_json_decode_struct_object_with_class(isolate, VM_CURRENT_CORO, src, cls);
+    R(a) = xr_json_decode_struct_object_with_class(isolate, VM_CURRENT_CORO, src, cls,
+                                                   ignore_unknown_fields);
     checkGC(base + a + 1);
     vmbreak;
 }
 
-vmcase(OP_JSON_PARSE_TYPED) {
+vmcase(OP_JSON_PARSE_TYPED) vmcase(OP_JSON_PARSE_TYPED_IGNORE) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     XrValue text = R(b);
     XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(k[c]);
+    bool ignore_unknown_fields = GET_OPCODE(i) == OP_JSON_PARSE_TYPED_IGNORE;
     XR_DCHECK(cls != NULL, "OP_JSON_PARSE_TYPED: null target class");
     bool root_schema = (cls->flags & XR_CLASS_JSON_DECODE_ROOT) != 0;
     const XrJsonDecodeSchema *schema = root_schema && cls->field_count == 1 && cls->fields
@@ -517,11 +507,13 @@ vmcase(OP_JSON_PARSE_TYPED) {
     bool ok = false;
     if (XR_IS_STRING(text)) {
         XrString *str = XR_TO_STRING(text);
-        ok = root_schema ? schema && xr_json_parse_typed_value_from_cstr(isolate, VM_CURRENT_CORO,
-                                                                         str->data, str->length,
-                                                                         schema, &parsed, &error)
-                         : xr_json_parse_typed_object_from_cstr(isolate, VM_CURRENT_CORO, str->data,
-                                                                str->length, cls, &parsed, &error);
+        ok = root_schema
+                 ? schema && xr_json_parse_typed_value_from_cstr(
+                                 isolate, VM_CURRENT_CORO, str->data, str->length, schema,
+                                 ignore_unknown_fields, &parsed, &error)
+                 : xr_json_parse_typed_object_from_cstr(isolate, VM_CURRENT_CORO, str->data,
+                                                        str->length, cls, ignore_unknown_fields,
+                                                        &parsed, &error);
     } else {
         memset(&error, 0, sizeof(error));
         snprintf(error.path, sizeof(error.path), "$");
@@ -531,7 +523,61 @@ vmcase(OP_JSON_PARSE_TYPED) {
     if (!ok) {
         savepc();
         XrValue exc = xr_panic_info_newf(
-            isolate, XR_ERR_JSON_INVALID, "Json.parse<T>: path %s expected %s, got %s",
+            isolate, XR_ERR_JSON_INVALID, "JSON.parse<T>: path %s expected %s, got %s",
+            error.path[0] ? error.path : "$", error.expected[0] ? error.expected : "valid JSON",
+            error.actual[0] ? error.actual : "invalid");
+        xr_vm_unwind_with_trace(isolate, exc);
+        if (!xr_vm_is_catch_reachable(isolate))
+            return XR_VM_RUNTIME_ERROR;
+        goto startfunc;
+    }
+    R(a) = parsed;
+    checkGC(base + a + 1);
+    vmbreak;
+}
+
+vmcase(OP_JSON_PARSE_WITH_REST) vmcase(OP_JSON_PARSE_WITH_REST_IGNORE) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    XrValue text = R(b);
+    XrClass *wrapper_class = (XrClass *) (intptr_t) XR_TO_INT(k[c]);
+    bool ignore_nested_unknown_fields = GET_OPCODE(i) == OP_JSON_PARSE_WITH_REST_IGNORE;
+    XR_DCHECK(wrapper_class != NULL, "OP_JSON_PARSE_WITH_REST: null wrapper class");
+    int value_index = xr_class_lookup_field_by_name(isolate, wrapper_class, "value");
+    const XrJsonDecodeSchema *value_schema =
+        value_index >= 0 && value_index < wrapper_class->field_count
+            ? &wrapper_class->fields[value_index].json_decode_schema
+            : NULL;
+    XrClass *target_class = NULL;
+    if (value_schema &&
+        xr_json_value_kind_base(value_schema->value_kind) == XR_JSON_VALUE_STRUCT_OBJECT) {
+        target_class = (XrClass *) value_schema->target_descriptor;
+    } else if (value_schema &&
+               xr_json_value_kind_base(value_schema->value_kind) == XR_JSON_VALUE_CLASS_INSTANCE) {
+        XrString *class_name = (XrString *) value_schema->target_descriptor;
+        target_class = class_name ? xr_class_lookup_by_name(isolate, class_name->data) : NULL;
+    }
+
+    XrJsonTypedParseError error;
+    XrValue parsed = xr_null();
+    bool ok = false;
+    if (XR_IS_STRING(text) && target_class) {
+        XrString *str = XR_TO_STRING(text);
+        ok = xr_json_parse_typed_object_with_rest_from_cstr(
+            isolate, VM_CURRENT_CORO, str->data, str->length, target_class, wrapper_class,
+            ignore_nested_unknown_fields, &parsed, &error);
+    } else {
+        memset(&error, 0, sizeof(error));
+        snprintf(error.path, sizeof(error.path), "$");
+        snprintf(error.expected, sizeof(error.expected), target_class ? "string" : "object target");
+        snprintf(error.actual, sizeof(error.actual),
+                 target_class ? "non_string" : "invalid_target");
+    }
+    if (!ok) {
+        savepc();
+        XrValue exc = xr_panic_info_newf(
+            isolate, XR_ERR_JSON_INVALID, "JSON.parseWithRest<T>: path %s expected %s, got %s",
             error.path[0] ? error.path : "$", error.expected[0] ? error.expected : "valid JSON",
             error.actual[0] ? error.actual : "invalid");
         xr_vm_unwind_with_trace(isolate, exc);
@@ -597,12 +643,7 @@ vmcase(OP_GETPROP) {
         !xr_value_is_enum_aggregate(obj))
         goto getprop_instance;
 
-    // Json values are dynamic-layout instances (builtin_kind == XR_BK_JSON);
-    // route them through the unified instance path below.
-    if (xr_value_is_json(obj))
-        goto getprop_instance;
-
-    // Dispatch: all non-instance, non-json type dispatch
+    // Dispatch: all non-instance types
     {
         savepc();
         XrDispatchAction _cr =
@@ -624,7 +665,7 @@ vmcase(OP_GETPROP) {
     }
 
 getprop_instance:;
-    // XrJson shares XrInstance layout; direct cast works.
+    // XrObjectInstance shares XrInstance layout; direct cast works.
     XrInstance *inst = (XrInstance *) XR_TO_PTR(obj);
 
     /* Every path below resolves the property through the instance class: the
@@ -778,7 +819,7 @@ vmcase(OP_SETPROP) {
     int prop_symbol = PROTO_SYMBOL(cl->proto, b);  // Dereference local index → global symbol
     XrValue value = R(c);
 
-    // Json values are dynamic-layout instances; the per-type
+    // JSON.Values are dynamic-layout instances; the per-type
     // dispatch returns XR_DISP_FALLTHROUGH for them and the regular
     // instance path below (with its DYNAMIC_LAYOUT branch) handles all
     // semantics — including transitions on field add and sealed errors.
@@ -804,7 +845,7 @@ vmcase(OP_SETPROP) {
         // XR_DISP_FALLTHROUGH: fall through to instance path
     }
 
-    // XrJson shares XrInstance layout — direct cast works
+    // XrObjectInstance shares XrInstance layout — direct cast works
     XrInstance *inst_s = (XrInstance *) XR_TO_PTR(obj);
 
     /* Same reasoning as OP_GETPROP: a weak slot holds a handle. */

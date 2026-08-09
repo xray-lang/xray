@@ -288,9 +288,9 @@ static void test_backend_lower_preserves_json_field_ops(void) {
     XiBlock *entry = xi_block_new(f);
     assert(entry != NULL);
 
-    XiValue *json = xi_value_new(f, entry, XI_JSON_NEW, &stub_int, 0);
+    XiValue *json = xi_value_new(f, entry, XI_OBJECT_NEW, &stub_int, 0);
     assert(json != NULL);
-    json->flags = xi_op_default_effects(XI_JSON_NEW);
+    json->flags = xi_op_default_effects(XI_OBJECT_NEW);
 
     XiValue *value = xi_const_int(f, entry, 7, &stub_int);
     assert(value != NULL);

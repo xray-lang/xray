@@ -390,7 +390,6 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->xa_intrinsic_id = 0;
     v->xg_method_id = 0;
     v->xg_interface_dispatch_slot = UINT32_MAX;
-    v->xg_json_dynamic_access_id = 0;
     v->xg_json_codec_id = 0;
     v->xg_object_access_id = 0;
     v->xg_object_merge_id = 0;

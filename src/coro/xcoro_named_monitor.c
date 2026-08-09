@@ -16,6 +16,8 @@
 #include "../base/xmalloc.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/value/xvalue.h"
+#include "../runtime/xisolate_api.h"
+#include "../runtime/xshared.h"
 #include <string.h>
 
 static uint32_t monitor_hash_name(const char *name) {
@@ -34,9 +36,34 @@ static uint32_t monitor_find_slot(XrCoroRegistry *reg, const char *name, uint32_
     return idx;
 }
 
+static XrValue monitor_shared_reason(XrVMRuntime *X, const char *reason) {
+    XrRuntimeCore *core = X ? xr_isolate_get_runtime_core(X) : NULL;
+    if (!core || !reason)
+        return xr_null();
+    XrString *s = xr_string_intern_core(core, reason, strlen(reason), 0);
+    return s ? xr_string_value(s) : xr_null();
+}
+
+static void monitor_release_unsent(XrVMRuntime *X, XrValue value) {
+    if (!X || !XR_IS_PTR(value))
+        return;
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    if (obj && XR_OBJ_IS_SHARED(obj) && xr_obj_drop_is_last(obj))
+        xr_shared_destroy_core(xr_isolate_get_runtime_core(X), obj);
+}
+
+static void monitor_send_reason(XrVMRuntime *X, XrChannel *ch, const char *reason) {
+    XrValue value = monitor_shared_reason(X, reason);
+    if (!xr_channel_notify_send(ch, value))
+        monitor_release_unsent(X, value);
+    /* Coro.monitor is a single-shot stream, just like Task.monitor. Closing
+     * after publication also balances channel lifecycle accounting when the
+     * caller consumes the notification normally. */
+    xr_channel_close(ch);
+}
+
 static void monitor_send_noproc(XrVMRuntime *X, XrChannel *ch) {
-    XrString *s = xr_string_new(X, "noproc", 6);
-    xr_channel_try_send(ch, s ? xr_string_value(s) : xr_null());
+    monitor_send_reason(X, ch, "noproc");
 }
 
 XrChannel *xr_coro_monitor(XrVMRuntime *X, XrCoroRegistry *reg, const char *name) {
@@ -119,13 +146,11 @@ void xr_coro_notify_monitors(XrVMRuntime *X, XrCoroRegistry *reg, XrCoroutine *c
         coro->ext->watched_by = NULL;
     }
 
-    const char *r = reason ? reason : "unknown";
-    XrString *reason_str = xr_string_new(X, r, strlen(r));
-    XrValue reason_val = reason_str ? xr_string_value(reason_str) : xr_null();
-
     while (mon) {
         XrCoroMonitor *next = mon->next;
-        xr_channel_notify_send(mon->channel, reason_val);
+        /* Each channel receives its own ownership token. Interned short
+         * reasons are immortal; a long reason is a fresh shared allocation. */
+        monitor_send_reason(X, mon->channel, reason ? reason : "unknown");
         xr_free(mon);
         mon = next;
     }

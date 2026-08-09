@@ -59,9 +59,3 @@ print(chain.x, chain.y)
 
 // source object is not consumed
 print(base.x, base.y)
-
-// computed key alongside spread
-var key = "dyn"
-var jsonBase: Json = { x: 1, y: 2 }
-var computed: Json = { ...jsonBase, [key]: 55 }
-print(computed.x, computed["dyn"])

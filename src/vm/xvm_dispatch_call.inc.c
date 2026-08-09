@@ -683,6 +683,16 @@ vmcase(OP_RETURN) {
         }
         for (int j = 0; j < nret; j++) {
             return_slot[j] = R(a + j);
+            if (XR_IS_AGG_REF(return_slot[j]) && !XR_IS_ARRAY_REF(return_slot[j]) &&
+                !XR_IS_SLICE_REF(return_slot[j])) {
+                return_slot[j] = xr_vm_struct_materialize_instance(isolate, return_slot[j]);
+                if (XR_IS_NULL(return_slot[j])) {
+                    VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
+                                     "failed to materialize returned value struct");
+                }
+                if (j == 0)
+                    ret_result = return_slot[j];
+            }
         }
         // Write null when no return value
         if (nret == 0) {
@@ -836,43 +846,12 @@ vmcase(OP_RETURN1) {
             VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to rescue fixed array return value");
         }
     } else if (return_slot && XR_IS_AGG_REF(ret_val) && !XR_IS_SLICE_REF(ret_val)) {
-        int sa_idx = VM_FRAME_COUNT - 1;
-        if (vm_ctx->struct_areas && sa_idx < vm_ctx->struct_areas_cap) {
-            uint8_t *sa = vm_ctx->struct_areas[sa_idx];
-            uint8_t *sptr = (uint8_t *) ret_val.ptr;
-            uint32_t sa_cap = vm_ctx->struct_area_caps[sa_idx];
-            if (sa && sptr >= sa && sptr < sa + sa_cap) {
-                XrAggregateLayout *layout = xr_vm_struct_ref_layout(isolate, ret_val);
-                if (layout) {
-                    uint32_t total = xr_aggregate_layout_storage_size(layout);
-                    // Align to 16 bytes
-                    total = (total + 15) & ~15u;
-                    uint32_t need = vm_ctx->struct_ret_arena_used + total;
-                    if (need > vm_ctx->struct_ret_arena_cap) {
-                        uint32_t new_cap = vm_ctx->struct_ret_arena_cap;
-                        if (new_cap < 512)
-                            new_cap = 512;
-                        while (new_cap < need)
-                            new_cap *= 2;
-                        // Temp pointer + null check (project memory rule):
-                        // never overwrite the live pointer on realloc failure.
-                        uint8_t *new_arena =
-                            (uint8_t *) xr_realloc(vm_ctx->struct_ret_arena, new_cap);
-                        if (!new_arena) {
-                            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY,
-                                             "failed to grow struct_ret_arena to %u bytes",
-                                             new_cap);
-                        }
-                        vm_ctx->struct_ret_arena = new_arena;
-                        vm_ctx->struct_ret_arena_cap = new_cap;
-                    }
-                    uint8_t *dst = vm_ctx->struct_ret_arena + vm_ctx->struct_ret_arena_used;
-                    memcpy(dst, sptr, xr_aggregate_layout_storage_size(layout));
-                    vm_ctx->struct_ret_arena_used = need;
-                    return_slot->ptr = dst;
-                }
-            }
+        XrValue materialized = xr_vm_struct_materialize_instance(isolate, ret_val);
+        if (XR_IS_NULL(materialized)) {
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to materialize returned value struct");
         }
+        *return_slot = materialized;
+        ret_val = materialized;
     }
 
     // Pop call frame

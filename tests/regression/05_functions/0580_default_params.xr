@@ -19,7 +19,8 @@ fn greet(name: string = "World") {
 fn add(a: int, b: int = 10, c: int = 100) -> int {
     return a + b + c
 }
-fn createPoint(x: int = 0, y: int = 0) -> Json {
+type Point = { x: int, y: int }
+fn createPoint(x: int = 0, y: int = 0) -> Point {
     return { x: x, y: y }
 }
 fn formatName(first: string, last: string = "Unknown") -> string {
@@ -52,4 +53,3 @@ fn test_default_params() {
     print(formatName("John"))           // John Unknown
     print(formatName("John", "Doe"))    // John Doe
 }
-

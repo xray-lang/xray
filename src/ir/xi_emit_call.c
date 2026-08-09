@@ -166,7 +166,8 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             (v->flags & XI_FLAG_TAIL)
                 ? OP_TAILCALL
                 : (emit_callee_is_plain_closure(ctx, v->args[0]) ? OP_CALL_STATIC : OP_CALL);
-        uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+        uint8_t storage_mode =
+            xi_emit_allocation_storage_mode(ctx, xi_value_allocation_storage_mode(v));
         if (storage_mode != XR_OBJ_STORAGE_NORMAL)
             emit_inst(ctx, CREATE_ABC(OP_SET_STORAGE_CTX, storage_mode, 0, 0));
         emit_inst(ctx, CREATE_ABC(call_op, base, nargs, (uint8_t) nresults));
@@ -286,7 +287,8 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             return;
         OpCode invoke_op = (v->flags & XI_FLAG_TAIL) ? OP_INVOKE_TAIL : OP_INVOKE;
         emit_channel_method_transfer_annotation(ctx, v);
-        uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+        uint8_t storage_mode =
+            xi_emit_allocation_storage_mode(ctx, xi_value_allocation_storage_mode(v));
         if (storage_mode != XR_OBJ_STORAGE_NORMAL)
             emit_inst(ctx, CREATE_ABC(OP_SET_STORAGE_CTX, storage_mode, 0, 0));
         emit_inst(ctx, CREATE_ABC(invoke_op, base, sym_arg, nargs));
@@ -495,11 +497,11 @@ static void emit_builtin_contiguous_window_op(EmitCtx *ctx, XiValue *v, XiEmitRe
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
 
-static uint8_t emit_array_allocation_cfield(const XiValue *v) {
+static uint8_t emit_array_allocation_cfield(const EmitCtx *ctx, const XiValue *v) {
     if (!v)
         return 0;
     return (uint8_t) (((uint64_t) v->aux_int & ~(uint64_t) 0x03u) |
-                      xi_value_allocation_storage_mode(v));
+                      xi_emit_allocation_storage_mode(ctx, xi_value_allocation_storage_mode(v)));
 }
 
 static void emit_builtin_array_copy_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
@@ -510,7 +512,7 @@ static void emit_builtin_array_copy_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst)
     XiEmitReg src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_ARRAY_COPY_NEW, dst, src, emit_array_allocation_cfield(v)));
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_COPY_NEW, dst, src, emit_array_allocation_cfield(ctx, v)));
 }
 
 XR_FUNC void xi_emit_byte_slice_load_u16(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
@@ -947,7 +949,8 @@ static void emit_builtin_array_filled_new(EmitCtx *ctx, XiValue *v, XiEmitReg ds
         ctx->max_reg = ctx->next_reg;
     emit_inst(ctx, CREATE_ABC(OP_MOVE, len_tmp, len, 0));
     emit_inst(ctx, CREATE_ABC(OP_MOVE, fill_tmp, fill, 0));
-    emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, dst, len_tmp, emit_array_allocation_cfield(v)));
+    emit_inst(ctx,
+              CREATE_ABC(OP_ARRAY_NEW_CAP, dst, len_tmp, emit_array_allocation_cfield(ctx, v)));
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, dst, len_tmp, fill_tmp));
 }
 
@@ -975,7 +978,8 @@ static bool emit_builtin_array_shape_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst,
         XiEmitReg cap = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return true;
-        emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, dst, cap, emit_array_allocation_cfield(v)));
+        emit_inst(ctx,
+                  CREATE_ABC(OP_ARRAY_NEW_CAP, dst, cap, emit_array_allocation_cfield(ctx, v)));
         return true;
     }
     if (strcmp(bname, "array_filled_new") == 0) {
@@ -1050,7 +1054,8 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         return;
     }
     if (bname && strcmp(bname, "copy") == 0) {
-        uint8_t storage_mode = xi_value_allocation_storage_mode(v);
+        uint8_t storage_mode =
+            xi_emit_allocation_storage_mode(ctx, xi_value_allocation_storage_mode(v));
         if (v->nargs < 1) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
@@ -1067,8 +1072,10 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
     if (bname && strcmp(bname, "StringBuilder") == 0) {
         /* OP_NEWSTRINGBUILDER: A=dst, B=storage_mode (0=normal) */
-        emit_inst(ctx,
-                  CREATE_ABC(OP_NEWSTRINGBUILDER, dst, xi_value_allocation_storage_mode(v), 0));
+        emit_inst(
+            ctx, CREATE_ABC(
+                     OP_NEWSTRINGBUILDER, dst,
+                     xi_emit_allocation_storage_mode(ctx, xi_value_allocation_storage_mode(v)), 0));
         return;
     }
     if (bname && strcmp(bname, "array_copy_new") == 0) {

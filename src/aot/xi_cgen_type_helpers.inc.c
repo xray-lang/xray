@@ -66,33 +66,6 @@ static bool cg_value_type_is_bool(const XiValue *v) {
     return v && v->type && v->type->kind == XR_KIND_BOOL;
 }
 
-static bool cg_type_is_json(const XrType *type) {
-    if (!type)
-        return false;
-    if (XR_TYPE_HAS_OBJECT_SHAPE(type))
-        return true;
-    /* __ExecResult is the private core.def Json-backed handle used by os.exec;
-     * its VM representation is a Json object. PathInfo was such a handle too,
-     * but the path module migrated
-     * to a pure-Xray class, so it must go through normal class field access. */
-    if (xr_type_is_builtin_named_class(type, "__ExecResult"))
-        return true;
-    if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
-            if (cg_type_is_json(type->union_type.members[i]))
-                return true;
-        }
-    }
-    return false;
-}
-
-static bool cg_value_type_is_json(const XiValue *v) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || xi_copy_is_identity_alias(v)) &&
-           v->nargs >= 1)
-        v = v->args[0];
-    return v && cg_type_is_json(v->type);
-}
-
 static const char *cg_task_field_helper(const char *field) {
     if (!field)
         return NULL;

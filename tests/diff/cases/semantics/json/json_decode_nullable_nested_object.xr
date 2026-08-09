@@ -1,19 +1,19 @@
 type Address = { city: string, zip: int }
 type Profile = { name: string, address: Address? }
 
-var present = Json.decode<Profile>(
-    Json.parse("{\"name\":\"Dana\",\"address\":{\"city\":\"Hangzhou\",\"zip\":310000}}"))
+var present = JSON.decode<Profile>(
+    JSON.parseValue("{\"name\":\"Dana\",\"address\":{\"city\":\"Hangzhou\",\"zip\":310000}}"))
 print(present == null)
 print(present!.address == null)
 print(present!.address!.city)
 print(present!.address!.zip)
 
-var nullable = Json.decode<Profile>(Json.parse("{\"name\":\"Dana\",\"address\":null}"))
+var nullable = JSON.decode<Profile>(JSON.parseValue("{\"name\":\"Dana\",\"address\":null}"))
 print(nullable == null)
 print(nullable!.address == null)
 
-print(Json.decode<Profile>(Json.parse("{\"name\":\"Dana\"}")) == null)
-print(Json.decode<Profile>(Json.parse("{\"name\":\"Dana\",\"address\":42}")) == null)
-print(Json.decode<Profile>(
-          Json.parse("{\"name\":\"Dana\",\"address\":{\"city\":\"Hangzhou\",\"zip\":\"bad\"}}")) ==
+print(JSON.decode<Profile>(JSON.parseValue("{\"name\":\"Dana\"}")) == null)
+print(JSON.decode<Profile>(JSON.parseValue("{\"name\":\"Dana\",\"address\":42}")) == null)
+print(JSON.decode<Profile>(
+          JSON.parseValue("{\"name\":\"Dana\",\"address\":{\"city\":\"Hangzhou\",\"zip\":\"bad\"}}")) ==
       null)

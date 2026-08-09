@@ -1,33 +1,34 @@
-// Built-in Json type — implementation in src/runtime/object/xjson_methods.c
-class Json {
-    static parse(text: string) -> Json
+// Prelude JSON namespace — implemented by compiler/runtime builtins. JSON is
+// never a value type; source annotations use JSON.Value or JSON.Object.
+class JSON {
     // @lowered
-    static decode<T>(value: Json) -> T?
+    static parse<T>(text: string, unknown?: JSON.UnknownFields) -> T
+    static parseObject(text: string) -> JSON.Object
+    static parseValue(text: string) -> JSON.Value
+    // @lowered
+    static parseWithRest<T>(text: string,
+                            nestedUnknownFields?: JSON.UnknownFields) -> JSON.WithRest<T>
+    // @lowered
+    static decode<T>(value: JSON.Value, unknown?: JSON.UnknownFields) -> T?
+    // @lowered
+    static decodeObject<T>(value: JSON.Object, unknown?: JSON.UnknownFields) -> T?
     static stringify<T>(value: T, indent?: int) -> string
-    static encode<T>(value: T) -> Json
+    static value<T>(value: T) -> JSON.Value
     static isValid(text: string, strict?: bool) -> bool
-    static tryParse(text: string) -> Json
-    static kindOf(value: Json) -> string
-    static isNull(value: Json) -> bool
-    static isBool(value: Json) -> bool
-    static isInt(value: Json) -> bool
-    static isFloat(value: Json) -> bool
-    static isString(value: Json) -> bool
-    static isArray(value: Json) -> bool
-    static isObject(value: Json) -> bool
-    static keys(obj: Json) -> Array<string>
-    static values(obj: Json) -> Array<Json>
-    static entries(obj: Json) -> Array<(string, Json)>
-    static containsKey(obj: Json, key: string) -> bool
-    static get<T>(obj: Json, key: string, default?: T) -> Json
-
-    keys() -> Array<string>
-    values() -> Array<Json>
-    entries() -> Array<(string, Json)>
-    // Iteration protocol — iterator() yields each field name (used by
-    // single-variable `for (k in jsonObj)`); entriesIterator() yields
-    // (fieldName, value) tuples (used by `for (k, v in jsonObj)`).
-    iterator() -> Iterator<string>
-    entriesIterator() -> Iterator<(string, Json)>
-    toString() -> string
+    static kindOf(value: JSON.Value) -> string
+    static isNull(value: JSON.Value) -> bool
+    static isBool(value: JSON.Value) -> bool
+    static isInt(value: JSON.Value) -> bool
+    static isFloat(value: JSON.Value) -> bool
+    static isString(value: JSON.Value) -> bool
+    static isArray(value: JSON.Value) -> bool
+    static isObject(value: JSON.Value) -> bool
+    static asObject(value: JSON.Value) -> JSON.Object?
+    static asArray(value: JSON.Value) -> Array<JSON.Value>?
+    static get<T>(root: JSON.Value | JSON.Object, path: JSON.Path) -> T?
+    static require<T>(root: JSON.Value | JSON.Object, path: JSON.Path) -> T
+    static containsPath(root: JSON.Value | JSON.Object, path: JSON.Path) -> bool
+    static set(root: JSON.Value | JSON.Object, path: JSON.Path, value: JSON.Value, createParents?: bool) -> ()
+    static remove(root: JSON.Value | JSON.Object, path: JSON.Path) -> bool
+    static merge<T>(parts: JSON.WithRest<T>) -> JSON.Object
 }

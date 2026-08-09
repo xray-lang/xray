@@ -4,6 +4,10 @@
 */
 
 enum OptErr { Msg(string) }
+type User = { id: int, name: string }
+type Database = { host: string, port: int }
+type Config = { database: Database }
+type ServerConfig = { port: int, host: string }
 
 fn maybeFailInt(should_throw: bool) -> int {
     if (should_throw) {
@@ -12,18 +16,18 @@ fn maybeFailInt(should_throw: bool) -> int {
     return 42
 }
 
-fn maybeFailJson(should_throw: bool) -> Json {
+fn maybeFailJson(should_throw: bool) -> User {
     if (should_throw) {
         throw OptErr.Msg("intentional json failure")
     }
     return { id: 1, name: "Alice" }
 }
 
-fn parseConfig() -> Json {
+fn parseConfig() -> Config {
     throw OptErr.Msg("config missing")
 }
 
-fn parseConfigOK() -> Json {
+fn parseConfigOK() -> Config {
     return { database: { host: "prod.example.com", port: 5432 } }
 }
 
@@ -71,7 +75,7 @@ fn test_catch_chain() {
     var host = "localhost"
     try {
         var cfg = parseConfig()
-        host = cfg["database"]["host"] ?? "localhost"
+        host = cfg.database.host
     } catch (e) {
         host = "localhost"
     }
@@ -82,7 +86,7 @@ fn test_catch_chain() {
     var host2 = "localhost"
     try {
         var cfg2 = parseConfigOK()
-        host2 = cfg2["database"]["host"] ?? "localhost"
+        host2 = cfg2.database.host
     } catch (e) {
         host2 = "localhost"
     }
@@ -93,9 +97,9 @@ fn test_catch_chain() {
 @test
 fn test_catch_object_default() {
     print("7. catch with object literal as fallback")
-    var cfg: Json = { port: 8080, host: "localhost" }
+    var cfg: ServerConfig = { port: 8080, host: "localhost" }
     try {
-        cfg = parseConfig()
+        throw OptErr.Msg("server config missing")
     } catch (e) {
         cfg = { port: 8080, host: "localhost" }
     }
@@ -104,7 +108,7 @@ fn test_catch_object_default() {
     print("   PASS")
 }
 
-fn findUser(id: int) -> Json {
+fn findUser(id: int) -> User? {
     try {
         return maybeFailJson(id < 0)
     } catch (e) {
@@ -114,10 +118,10 @@ fn findUser(id: int) -> Json {
 
 @test
 fn test_catch_function_return() {
-    print("8. function with Json return type using try-catch in body")
+    print("8. function with optional object return type using try-catch in body")
     var u = findUser(1)
     assert_ne(u, null)
-    assert_eq(u.name, "Alice")
+    assert_eq(u!.name, "Alice")
     print("   PASS")
 
     var v = findUser(-1)

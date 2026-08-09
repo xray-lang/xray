@@ -20,10 +20,12 @@ var child = log.child("module", "http")
 print(typeName(child))
 child.warn("slow response", "ms", 42)
 
-log.setFormat(LogFormat.Json)
+log.setFormat(LogFormat.JSON)
+child = log.child("module", "http")
 child = child.child("route", "/api")
 child.error("request failed", "code", 500)
 
+log.setFormat(LogFormat.Text)
 log.enableAsync(true)
 log.debug("queued", "ok", true)
 log.flush()

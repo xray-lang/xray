@@ -62,7 +62,7 @@ BASELINES = (
         category="JSON_ENCODE_AOT_BASELINE",
         xr_path="tests/aot/filetests/cgen/json_decode_object_plan_consumption.xr",
         expect_path="tests/aot/filetests/cgen/json_decode_object_plan_consumption.expect",
-        source_contains=("Json.decode<User>", "Json.encode(user!)"),
+        source_contains=("JSON.decode<User>", "JSON.value(user!)"),
         expect_contains=(
             "kind=encode action=encode_field_table",
             "xrt_json_decode_struct_object",
@@ -82,7 +82,7 @@ BASELINES = (
             "name=routeHandler",
             "c_not_contains=xrt_typename(",
             'c_not_contains=xrt_map_set_class_name(_inst, "_RouteHandler")',
-            "c_not_contains=xrt_json_get_name_owned",
+            "c_not_contains=xrt_object_get_name_owned",
             r"c_regex=XRT_INTERNAL uint8_t http_[0-9a-f]+_Server_routeHandler_m",
         ),
     ),

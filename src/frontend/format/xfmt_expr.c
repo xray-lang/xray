@@ -590,13 +590,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             for (int i = 0; i < obj->count; i++) {
                 if (i > 0)
                     xfmt_write_str(ctx, ", ");
-                if (obj->computed && obj->computed[i]) {
-                    xfmt_write_char(ctx, '[');
-                    xfmt_emit_expression(ctx, obj->keys[i]);
-                    xfmt_write_char(ctx, ']');
-                } else {
-                    xfmt_emit_expression(ctx, obj->keys[i]);
-                }
+                xfmt_emit_expression(ctx, obj->keys[i]);
                 xfmt_write_str(ctx, ": ");
                 xfmt_emit_expression(ctx, obj->values[i]);
             }
@@ -608,13 +602,7 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
                 ctx->indent_level++;
                 for (int i = 0; i < obj->count; i++) {
                     xfmt_write_indent(ctx);
-                    if (obj->computed && obj->computed[i]) {
-                        xfmt_write_char(ctx, '[');
-                        xfmt_emit_expression(ctx, obj->keys[i]);
-                        xfmt_write_char(ctx, ']');
-                    } else {
-                        xfmt_emit_expression(ctx, obj->keys[i]);
-                    }
+                    xfmt_emit_expression(ctx, obj->keys[i]);
                     xfmt_write_str(ctx, ": ");
                     xfmt_emit_expression(ctx, obj->values[i]);
                     if (ctx->config->multiline_trailing_comma || i < obj->count - 1)

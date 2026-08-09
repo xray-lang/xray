@@ -45,7 +45,8 @@
       ]
     },
     {
-      "heading": "Structural object / Json object",
+      "heading": "Exact structural object / dynamic JSON object",
+      "markdown": "Structural objects have compile-time-known fields and exact shapes. Dynamic JSON objects use `JSON.Object`, a pure alias for `Map<string, JSON.Value>`.",
       "fences": [
         "types-json-object",
         "expr-object-lit"

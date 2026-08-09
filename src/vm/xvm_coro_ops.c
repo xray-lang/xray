@@ -93,20 +93,21 @@ static XrValue vm_coro_state_value(XrVMRuntime *isolate, const char *state) {
     return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
 }
 
-static XrJson *vm_coro_object_new(XrVMRuntime *isolate, XrCoroutine *owner, const char *name) {
-    XrClass *cls = xr_stdlib_object_shape_class_get(isolate, "Coro", name);
-    return cls ? xr_json_new_with_class(owner, cls) : NULL;
+static XrObjectInstance *vm_coro_object_new(XrVMRuntime *isolate, XrCoroutine *owner,
+                                            const char *name) {
+    XrClass *cls = xr_stdlib_record_class_get(isolate, "Coro", name);
+    return cls ? xr_object_instance_new_with_class(owner, cls) : NULL;
 }
 
 static XrValue vm_coro_info_object(XrVMRuntime *isolate, XrCoroutine *owner,
                                    const XrCoroutine *coro, const char *state) {
-    XrJson *info = vm_coro_object_new(isolate, owner, "CoroInfo");
+    XrObjectInstance *info = vm_coro_object_new(isolate, owner, "CoroInfo");
     if (!info)
         return XR_NULL_VAL;
-    xr_json_set_by_key(isolate, info, "id", xr_int(coro->id));
-    xr_json_set_by_key(isolate, info, "name", vm_coro_name_value(isolate, coro));
-    xr_json_set_by_key(isolate, info, "state", vm_coro_state_value(isolate, state));
-    xr_json_set_by_key(isolate, info, "reductions", xr_int(xr_coro_reds(coro)));
+    xr_object_instance_set_by_key(isolate, info, "id", xr_int(coro->id));
+    xr_object_instance_set_by_key(isolate, info, "name", vm_coro_name_value(isolate, coro));
+    xr_object_instance_set_by_key(isolate, info, "state", vm_coro_state_value(isolate, state));
+    xr_object_instance_set_by_key(isolate, info, "reductions", xr_int(xr_coro_reds(coro)));
 
     XrValue source_value = XR_NULL_VAL;
     const char *source_file = xr_coro_source_file(coro);
@@ -117,8 +118,8 @@ static XrValue vm_coro_info_object(XrVMRuntime *isolate, XrCoroutine *owner,
         if (source)
             source_value = xr_string_value(source);
     }
-    xr_json_set_by_key(isolate, info, "source", source_value);
-    return xr_json_value(info);
+    xr_object_instance_set_by_key(isolate, info, "source", source_value);
+    return xr_object_instance_value(info);
 }
 
 // Collect coroutines from runtime queues into a flat array for diagnostic sub-ops.
@@ -176,17 +177,18 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrVMRuntime *isolate, XrVMContext *vm_ctx,
             }
 
             int total_alive = ready_count + blocked_count + active_count;
-            XrJson *result = vm_coro_object_new(isolate, vm_get_coro(vm_ctx), "CoroStats");
+            XrObjectInstance *result =
+                vm_coro_object_new(isolate, vm_get_coro(vm_ctx), "CoroStats");
             if (!result) {
                 base[a] = XR_NULL_VAL;
                 return XR_DISP_NEXT;
             }
-            xr_json_set_by_key(isolate, result, "active", xr_int(active_count));
-            xr_json_set_by_key(isolate, result, "blocked", xr_int(blocked_count));
-            xr_json_set_by_key(isolate, result, "ready", xr_int(ready_count));
-            xr_json_set_by_key(isolate, result, "total", xr_int(total_alive));
-            xr_json_set_by_key(isolate, result, "created", xr_int((int) total_created));
-            base[a] = xr_json_value(result);
+            xr_object_instance_set_by_key(isolate, result, "active", xr_int(active_count));
+            xr_object_instance_set_by_key(isolate, result, "blocked", xr_int(blocked_count));
+            xr_object_instance_set_by_key(isolate, result, "ready", xr_int(ready_count));
+            xr_object_instance_set_by_key(isolate, result, "total", xr_int(total_alive));
+            xr_object_instance_set_by_key(isolate, result, "created", xr_int((int) total_created));
+            base[a] = xr_object_instance_value(result);
             return XR_DISP_NEXT;
         }
 

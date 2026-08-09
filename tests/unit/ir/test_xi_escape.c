@@ -334,7 +334,7 @@ static void test_heap_alloc_check(void) {
     ASSERT_EQ(xi_op_is_heap_alloc(XI_ARRAY_NEW), 1, "ARRAY_NEW is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_MAP_NEW), 1, "MAP_NEW is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_SET_NEW), 1, "SET_NEW is heap alloc");
-    ASSERT_EQ(xi_op_is_heap_alloc(XI_JSON_NEW), 1, "JSON_NEW is heap alloc");
+    ASSERT_EQ(xi_op_is_heap_alloc(XI_OBJECT_NEW), 1, "OBJECT_NEW is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_CLOSURE_NEW), 1, "CLOSURE_NEW is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_STR_CONCAT), 1, "STR_CONCAT is heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_REGEX_COMPILE), 1, "REGEX_COMPILE is heap alloc");
@@ -829,6 +829,40 @@ static void test_arc_call_result_retain_before_same_block_phi_consume(void) {
     XiArcVerifyReport rep;
     ASSERT_EQ(xi_arc_verify(f, &rep), true,
               "same-block consume followed by phi-edge consume must verify");
+    xi_func_free(f);
+}
+
+static void test_arc_orders_adjacent_retain_before_release(void) {
+    XiFunc *f = make_func("arc_adjacent_rc_order", &t_int);
+    XiBlock *entry = f->entry;
+
+    /* Model two SSA names that may coalesce to one VM register and hold the
+     * same runtime object.  RC insertion walks are independent, so this is the
+     * minimal post-insertion ordering shape that must be normalized. */
+    XiValue *old_owner = xi_value_new(f, entry, XI_GET_SHARED, &t_array, 0);
+    old_owner->escape = XI_ESC_GLOBAL;
+    XiValue *incoming = xi_value_new(f, entry, XI_GET_SHARED, &t_array, 0);
+    incoming->escape = XI_ESC_GLOBAL;
+    XiValue *release = xi_value_new(f, entry, XI_RELEASE, &t_array, 1);
+    release->args[0] = old_owner;
+    release->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *retain = xi_value_new(f, entry, XI_RETAIN, &t_array, 1);
+    retain->args[0] = incoming;
+    retain->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    uint32_t retain_index = UINT32_MAX;
+    uint32_t release_index = UINT32_MAX;
+    for (uint32_t i = 0; i < entry->nvalues; i++) {
+        if (entry->values[i] == retain)
+            retain_index = i;
+        if (entry->values[i] == release)
+            release_index = i;
+    }
+    ASSERT_EQ(retain_index < release_index, true,
+              "adjacent RC run must acquire replacement ownership before releasing old owner");
     xi_func_free(f);
 }
 
@@ -1485,6 +1519,7 @@ int main(void) {
     test_arc_phi_move_drops_owner_on_sibling_edge();
     test_arc_call_result_forward_retains_across_sibling_borrow();
     test_arc_call_result_retain_before_same_block_phi_consume();
+    test_arc_orders_adjacent_retain_before_release();
     test_arc_unknown_call_result_retains_before_single_consume();
     test_arc_stringbuilder_builtin_result_is_fresh();
     test_arc_value_clone_is_fresh_owner();

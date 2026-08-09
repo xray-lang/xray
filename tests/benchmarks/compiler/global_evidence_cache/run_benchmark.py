@@ -216,9 +216,7 @@ TEMPLATES: dict[str, tuple] = {
     "package": (PACKAGE_TEMPLATE, None),
 }
 
-PACKAGE_SOURCE = """// Synthetic package represented entirely by package_payload_fixture.
-0
-"""
+PACKAGE_SOURCE = "// Synthetic package represented entirely by package_payload_fixture.\n"
 
 
 class Bench:
@@ -333,7 +331,7 @@ def prepare_package_payload(bench: Bench, directory: Path, cache: Path) -> bool:
         return False
 
     proc.run([bench.fixture, cache / "aot" / target, "codex/pkg",
-              str(pkg_src.resolve())])
+              str(pkg_src.resolve()), bench.xray.resolve()])
     return True
 
 

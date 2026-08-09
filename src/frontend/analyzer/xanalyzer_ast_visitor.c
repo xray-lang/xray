@@ -202,8 +202,6 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
 
         case AST_OBJECT_LITERAL:
             for (int i = 0; i < node->as.object_literal.count; i++) {
-                if (node->as.object_literal.computed && node->as.object_literal.computed[i])
-                    visit_node(node->as.object_literal.keys[i], v);
                 visit_node(node->as.object_literal.values[i], v);
             }
             break;

@@ -1,5 +1,5 @@
-// Guard: parseAll yields `Array<YamlValue>`, not the legacy `Array<Json>`.
+// Guard: parseAll yields `Array<YamlValue>`, not the legacy `Array<JSON.Value>`.
 import yaml
 
-var docs: Array<Json> = yaml.parseAll("---\na: 1\n...\nb: 2")
+var docs: Array<JSON.Value> = yaml.parseAll("---\na: 1\n...\nb: 2")
 print(len(docs))

@@ -1,11 +1,12 @@
 // anchor: object-width-json-bridge
-// `json as T` is the explicit open-domain bridge: extra JSON keys are ignored
-// on narrowing, unlike the sealed Object assignment path.
+// Unknown JSON keys are ignored only when the boundary policy says so.
 type Point = { x: int, y: int }
 
 fn main() {
-    var j: Json = Json.parse("{\"x\":1,\"y\":2,\"z\":3}")
-    var p = j as Point
+    var p = JSON.parse<Point>(
+        "{\"x\":1,\"y\":2,\"z\":3}",
+        JSON.UnknownFields.Ignore
+    )
     print(p.x)
     print(p.y)
 }

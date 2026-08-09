@@ -1,65 +1,20 @@
-// 0518_json_type_coercion.xr
-// Test: Json→concrete type coercion rules
-// - var x = json["k"] -> x is Json (no check)
-// - var x: int = json["k"] -> allowed, runtime CHECKTYPE
-// - Runtime CHECKTYPE throws TypeError on mismatch
+// Concrete extraction is explicit at the JSON boundary.
 
-// ===== Rule 1: json["key"] returns Json, no error =====
 @test
-fn test_json_subscript_returns_json() {
-    var data: Json = { "name": "xray", "version": 1 }
-    var val = data["name"]
-    // val is Json, can be used directly
-    assert_eq(val, "xray")
-}
-
-// ===== Rule 2: var x: int = json["key"] - allowed with runtime check =====
-@test
-fn test_json_to_int_coercion() {
-    var data: Json = { "port": 8080 }
-    var port: int = data["port"]
-    assert_eq(port, 8080)
+fn test_typed_get_and_require() {
+    var data = JSON.parseValue("{\"port\":8080,\"host\":\"localhost\",\"debug\":true}")
+    assert_eq(JSON.get<int>(data, ["port"]), 8080)
+    assert_eq(JSON.require<string>(data, ["host"]), "localhost")
+    assert_eq(JSON.require<bool>(data, ["debug"]), true)
+    assert_eq(JSON.get<int>(data, ["missing"]), null)
 }
 
 @test
-fn test_json_to_string_coercion() {
-    var data: Json = { "host": "localhost" }
-    var host: string = data["host"]
-    assert_eq(host, "localhost")
-}
-
-@test
-fn test_json_to_float_coercion() {
-    var data: Json = { "pi": 3.14 }
-    var pi: float = data["pi"]
-    assert_eq(pi, 3.14)
-}
-
-@test
-fn test_json_to_bool_coercion() {
-    var data: Json = { "debug": true }
-    var debug: bool = data["debug"]
-    assert_eq(debug, true)
-}
-
-// ===== Rule 2b: assignment coercion =====
-@test
-fn test_json_assignment_coercion() {
-    var data: Json = { "count": 42 }
-    var count: int = 0
-    count = data["count"]
-    assert_eq(count, 42)
-}
-
-// ===== Rule 3: Runtime CHECKTYPE throws on mismatch =====
-@test
-fn test_json_type_mismatch_throws() {
-    var data: Json = { "name": "xray" }
+fn test_typed_require_mismatch_throws() {
+    var data = JSON.parseValue("{\"name\":\"xray\"}")
     var caught = false
     try {
-        var port: int = data["name"]
-        // Should not reach here — "xray" is string, not int
-        assert(false)
+        JSON.require<int>(data, ["name"])
     } catch panic (e) {
         caught = true
     }
@@ -67,51 +22,9 @@ fn test_json_type_mismatch_throws() {
 }
 
 @test
-fn test_json_type_mismatch_float_to_int() {
-    var data: Json = { "val": 3.14 }
-    var caught = false
-    try {
-        var x: int = data["val"]
-        assert(false)
-    } catch panic (e) {
-        caught = true
-    }
-    assert(caught)
+fn test_array_narrowing() {
+    var data = JSON.parseValue("{\"items\":[1,2,3]}")
+    var items = JSON.asArray(JSON.require<JSON.Value>(data, ["items"]))
+    assert(items != null)
+    assert_eq(int(items![2]), 3)
 }
-
-// ===== Rule 4: Untyped var - no CHECKTYPE, just Json =====
-@test
-fn test_json_untyped_let() {
-    var data: Json = { "mixed": [1, "two", true] }
-    var val = data["mixed"]
-    // val is Json, no runtime check needed
-    assert_eq(val[0], 1)
-    assert_eq(val[1], "two")
-    assert_eq(val[2], true)
-}
-
-// ===== Rule 5: Dot access also works =====
-@test
-fn test_json_dot_access_coercion() {
-    var data: Json = { "port": 9090 }
-    // Dot access returns the actual value
-    assert_eq(data.port, 9090)
-}
-
-// ===== Rule 6: Array is a valid Json field type =====
-@test
-fn test_json_array_value_access() {
-    var data: Json = { "items": [1, 2, 3] }
-    var items = data["items"]
-    assert_eq(items[0], 1)
-    assert_eq(items[2], 3)
-}
-
-@test
-fn test_json_non_array_value_stays_json() {
-    var data: Json = { "name": "xray" }
-    var value = data["name"]
-    assert_eq(value, "xray")
-}
-
-print("json_type_coercion: all tests passed")

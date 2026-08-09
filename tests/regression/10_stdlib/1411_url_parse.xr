@@ -6,7 +6,7 @@ import url
 import { UrlError } from url
 
 // ============================================================
-// Part 1: URL Parsing (Json fields)
+// Part 1: URL Parsing (structural object fields)
 // ============================================================
 
 @test

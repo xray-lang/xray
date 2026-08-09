@@ -7,6 +7,7 @@
 #include "../../../src/runtime/class/xenum.h"
 #include "../../../src/runtime/mem/xcoro_heap.h"
 #include "../../../src/runtime/xisolate_api.h"
+#include "../../../src/runtime/xexec_frame.h"
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/stdlib/xstdlib_vm_fastpath.h"
 #include "../test_helper.h"
@@ -17,12 +18,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define ASSERT_TRUE(expr)                                                                         \
-    do {                                                                                          \
-        if (!(expr)) {                                                                            \
-            fprintf(stderr, "assertion failed at %s:%d: %s\n", __FILE__, __LINE__, #expr);       \
-            return 1;                                                                             \
-        }                                                                                         \
+#define ASSERT_TRUE(expr)                                                                          \
+    do {                                                                                           \
+        if (!(expr)) {                                                                             \
+            fprintf(stderr, "assertion failed at %s:%d: %s\n", __FILE__, __LINE__, #expr);         \
+            return 1;                                                                              \
+        }                                                                                          \
     } while (0)
 
 #if defined(_MSC_VER)
@@ -78,8 +79,8 @@ static uint64_t measure(XrStdlibVmFastpathFn entry, int64_t seed, uint64_t *sink
     return elapsed;
 }
 
-static int verify_function(const char *module, const char *member,
-                           XrStdlibVmFastpathFn legacy, int64_t begin, int64_t end) {
+static int verify_function(const char *module, const char *member, XrStdlibVmFastpathFn legacy,
+                           int64_t begin, int64_t end) {
     XrStdlibVmFastpathFn generated = xr_stdlib_vm_fastpath_lookup(module, member);
     ASSERT_TRUE(generated != NULL);
     for (int64_t value = begin; value <= end; value++) {
@@ -98,11 +99,9 @@ static int verify_runtime_overlay(void) {
     XrVMRuntime *isolate = xray_vm_new_full(&config);
     ASSERT_TRUE(isolate != NULL);
 
-    const char *modules[] = {"cluster", "codegen", "datetime", "http", "log",
-                             "net",     "os",      "text",     "ws"};
-    const char *members[] = {"validNodeName", "compilerFence", "offset",
-                             "isRedirectStatus", "flush", "hasTLS", "getpid", "trim",
-                             "isValidCloseCode"};
+    const char *modules[] = {"cluster", "codegen", "datetime", "http", "net", "os", "text", "ws"};
+    const char *members[] = {"validNodeName", "compilerFence", "offset", "isRedirectStatus",
+                             "hasTLS",        "getpid",        "trim",   "isValidCloseCode"};
     for (size_t i = 0; i < sizeof(modules) / sizeof(modules[0]); i++) {
         XrValue module_value = xr_module_import(isolate, modules[i]);
         ASSERT_TRUE(xr_value_is_module(module_value));
@@ -110,6 +109,20 @@ static int verify_runtime_overlay(void) {
         XrValue exported = xr_module_get_export(isolate, module, members[i]);
         ASSERT_TRUE(xr_value_is_cfunction(exported));
     }
+    xray_vm_delete(isolate);
+    return 0;
+}
+
+static int verify_yieldable_runtime_overlay(void) {
+    XrVMConfig config;
+    xray_vm_config_init(&config);
+    XrVMRuntime *isolate = xray_vm_new_full(&config);
+    ASSERT_TRUE(isolate != NULL);
+    XrValue module_value = xr_module_import(isolate, "os");
+    ASSERT_TRUE(xr_value_is_module(module_value));
+    XrValue exported = xr_module_get_export(isolate, xr_value_to_module(module_value), "sleep");
+    ASSERT_TRUE(xr_value_is_cfunction(exported));
+    ASSERT_TRUE(xr_value_to_cfunction(exported)->is_yieldable);
     xray_vm_delete(isolate);
     return 0;
 }
@@ -137,8 +150,7 @@ static int verify_string_boundary(void) {
     ASSERT_TRUE(output->rune_length == 5);
     ASSERT_TRUE(memcmp(output->data, expected, sizeof(expected) - 1) == 0);
 
-    XrStdlibVmFastpathFn valid_name =
-        xr_stdlib_vm_fastpath_lookup("cluster", "validNodeName");
+    XrStdlibVmFastpathFn valid_name = xr_stdlib_vm_fastpath_lookup("cluster", "validNodeName");
     ASSERT_TRUE(valid_name != NULL);
     XrString *node = xr_string_new(isolate, "node-01", 7);
     ASSERT_TRUE(node != NULL);
@@ -147,8 +159,7 @@ static int verify_string_boundary(void) {
     ASSERT_TRUE(XR_IS_BOOL(valid));
     ASSERT_TRUE(XR_TO_BOOL(valid));
 
-    XrStdlibVmFastpathFn parse_int =
-        xr_stdlib_vm_fastpath_lookup("strconv", "parseInt");
+    XrStdlibVmFastpathFn parse_int = xr_stdlib_vm_fastpath_lookup("strconv", "parseInt");
     ASSERT_TRUE(parse_int != NULL);
     XrString *decimal = xr_string_new(isolate, "12345", 5);
     ASSERT_TRUE(decimal != NULL);
@@ -181,8 +192,7 @@ static int verify_byte_array_boundary(void) {
     ((uint8_t *) bytes->data)[2] = 0xff;
     XrValue bytes_argument = xr_make_ptr_val(bytes);
 
-    XrStdlibVmFastpathFn encode =
-        xr_stdlib_vm_fastpath_lookup("encoding", "hexEncode");
+    XrStdlibVmFastpathFn encode = xr_stdlib_vm_fastpath_lookup("encoding", "hexEncode");
     ASSERT_TRUE(encode != NULL);
     XrValue encoded = encode(isolate, &bytes_argument, 1);
     ASSERT_TRUE(XR_IS_STRING(encoded));
@@ -190,8 +200,16 @@ static int verify_byte_array_boundary(void) {
     ASSERT_TRUE(encoded_string->length == 6);
     ASSERT_TRUE(memcmp(encoded_string->data, "00abff", 6) == 0);
 
-    XrStdlibVmFastpathFn decode =
-        xr_stdlib_vm_fastpath_lookup("encoding", "hexDecode");
+    XrSliceView readonly_view = {bytes->data, bytes->length};
+    XrValue readonly_argument =
+        xr_span_ref_typed(&readonly_view, XR_ELEM_U8, 1, 0, 0, XR_SLICE_VIEW_READONLY);
+    XrValue encoded_view = encode(isolate, &readonly_argument, 1);
+    ASSERT_TRUE(XR_IS_STRING(encoded_view));
+    XrString *encoded_view_string = XR_TO_STRING(encoded_view);
+    ASSERT_TRUE(encoded_view_string->length == 6);
+    ASSERT_TRUE(memcmp(encoded_view_string->data, "00abff", 6) == 0);
+
+    XrStdlibVmFastpathFn decode = xr_stdlib_vm_fastpath_lookup("encoding", "hexDecode");
     ASSERT_TRUE(decode != NULL);
     XrValue encoded_argument = encoded;
     XrValue decoded = decode(isolate, &encoded_argument, 1);
@@ -254,7 +272,7 @@ static int verify_scalar_array_boundary(void) {
     return 0;
 }
 
-static int verify_nominal_enum_boundary(void) {
+static int verify_deferred_log_state_boundary(void) {
     XrVMConfig config;
     xray_vm_config_init(&config);
     XrVMRuntime *isolate = xray_vm_new_full(&config);
@@ -266,37 +284,32 @@ static int verify_nominal_enum_boundary(void) {
     XrValue level_type_value = xr_module_get_export(isolate, module, "LogLevel");
     ASSERT_TRUE(XR_IS_ENUM_TYPE(level_type_value));
     XrEnumType *level_type = XR_TO_ENUM_TYPE(level_type_value);
-    XrEnumAggregateValue *debug = xr_enum_zero_payload_value(isolate, level_type, 0);
-    ASSERT_TRUE(debug != NULL);
-    XrValue debug_value = XR_FROM_PTR(debug);
-
-    XrStdlibVmFastpathFn set_level =
-        xr_stdlib_vm_fastpath_lookup("log", "setLevel");
-    XrStdlibVmFastpathFn is_enabled =
-        xr_stdlib_vm_fastpath_lookup("log", "isEnabled");
-    ASSERT_TRUE(set_level != NULL && is_enabled != NULL);
-    ASSERT_TRUE(XR_IS_NULL(set_level(isolate, &debug_value, 1)));
-    XrValue enabled = is_enabled(isolate, &debug_value, 1);
-    ASSERT_TRUE(XR_IS_BOOL(enabled) && XR_TO_BOOL(enabled));
+    ASSERT_TRUE(level_type != NULL);
+    ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("log", "setLevel") == NULL);
+    ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("log", "isEnabled") == NULL);
     xray_vm_delete(isolate);
     return 0;
 }
 
 int main(void) {
     ASSERT_TRUE(XR_HOSTED_OBJECT_ABI_VERSION == 1);
-    ASSERT_TRUE(XR_HOSTED_FRAGMENT_ABI_VERSION == 6);
+    ASSERT_TRUE(XR_HOSTED_FRAGMENT_ABI_VERSION == 7);
     ASSERT_TRUE(sizeof(XrValue) == 16);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_count() >= 71);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("codegen", "compilerFence") != NULL);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("net", "hasTLS") != NULL);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("os", "getpid") != NULL);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("os", "clock") != NULL);
-    ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("os", "sleep") != NULL);
+    /* The synchronous lookup is intentionally type-safe: suspendable entries
+     * are installed through the yieldable VM C-function ABI instead. */
+    ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("os", "sleep") == NULL);
     if (verify_function("http", "isRedirectStatus", legacy_http_adapter, 0, 5999) != 0)
         return 1;
     if (verify_function("ws", "isValidCloseCode", legacy_ws_adapter, 0, 5999) != 0)
         return 1;
     if (verify_runtime_overlay() != 0)
+        return 1;
+    if (verify_yieldable_runtime_overlay() != 0)
         return 1;
     if (verify_string_boundary() != 0)
         return 1;
@@ -304,9 +317,12 @@ int main(void) {
         return 1;
     if (verify_scalar_array_boundary() != 0)
         return 1;
-    if (verify_nominal_enum_boundary() != 0)
+    if (verify_deferred_log_state_boundary() != 0)
         return 1;
 
+#if defined(XR_BUILD_ASAN) || defined(XR_BUILD_TSAN)
+    return 0;
+#else
     XrStdlibVmFastpathFn generated[] = {
         xr_stdlib_vm_fastpath_lookup("http", "isRedirectStatus"),
         xr_stdlib_vm_fastpath_lookup("ws", "isValidCloseCode"),
@@ -344,4 +360,5 @@ int main(void) {
     }
     ASSERT_TRUE(sink != UINT64_C(0));
     return 0;
+#endif
 }
