@@ -2790,7 +2790,13 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     if (ig->index) {
         XrType *key_expected = xa_index_key_expected_type(ctx, container);
         XrType *saved_expected = ctx->expected_type;
-        if (key_expected && !XR_TYPE_IS_UNKNOWN(key_expected))
+        /* Only a numeric literal adapts to the key type; a typed expression
+         * keeps its own type and is checked below, and threading the key
+         * context under arbitrary index expressions would re-shape unrelated
+         * inference (calls, conversions) on the read path. */
+        bool literal_key =
+            ig->index->type == AST_LITERAL_INT || ig->index->type == AST_LITERAL_FLOAT;
+        if (literal_key && key_expected && !XR_TYPE_IS_UNKNOWN(key_expected))
             ctx->expected_type = key_expected;
         index_type = xa_visit_infer_expr(ctx, ig->index);
         ctx->expected_type = saved_expected;
