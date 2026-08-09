@@ -2600,9 +2600,13 @@ if(BUILD_TESTS)
                 # they replaced: the AOT one goes from 77 to 4, so a single new
                 # erasure consumer there now trips the gate instead of being lost
                 # among seventy-odd container-representation lines.
-                --max-category TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK=114
-                --max-category IR_UNKNOWN_ERASURE_CONSUMER=128
-                --max-category AOT_UNKNOWN_ERASURE_CONSUMER=4
+                # The function-value defect batch (member dispatch, unit
+                # representation, closed-world callee diagnostics) added two
+                # measured consumers to each band; re-pin to the current truth
+                # so the gate trips on the next single addition.
+                --max-category TYPE_ANY_OR_DYNAMIC_SLOT_FALLBACK=116
+                --max-category IR_UNKNOWN_ERASURE_CONSUMER=130
+                --max-category AOT_UNKNOWN_ERASURE_CONSUMER=6
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(source_unknown_task_erased_result_readiness PROPERTIES
