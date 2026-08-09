@@ -35,6 +35,8 @@
 #include "../../base/xhash.h"
 #include "../mem/xobj_header.h"
 #include "../mem/xsystem_heap.h"
+#include "../symbol/xsymbol_table.h"
+#include "../../shared/xr_accessor_name.h"
 #include <string.h>
 
 /* ========== Finalize Helpers (forward decls) ========== */
@@ -53,6 +55,7 @@ static void finalize_static_methods(const XrClassBuilder *b, XrClass *cls, int f
                                     int total_method_count);
 static bool finalize_interfaces(const XrClassBuilder *b, XrClass *cls);
 static bool finalize_method_symbol_map(XrClass *cls);
+static bool finalize_accessor_entries(const XrClassBuilder *b, XrClass *cls);
 static void finalize_type_identity(XrClassBuilder *b, XrClass *cls);
 static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is_static);
 
@@ -139,7 +142,8 @@ XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
         return NULL;
     }
     finalize_static_methods(builder, cls, flat_instance_count, total_method_count);
-    if (!finalize_interfaces(builder, cls) || !finalize_method_symbol_map(cls)) {
+    if (!finalize_interfaces(builder, cls) || !finalize_method_symbol_map(cls) ||
+        !finalize_accessor_entries(builder, cls)) {
         xr_class_free(cls);
         return NULL;
     }
@@ -518,6 +522,68 @@ static bool finalize_method_symbol_map(XrClass *cls) {
             cls->method_symbol_to_index[symbol] = i;
         }
     }
+    return true;
+}
+
+/* Freeze source-property symbols beside the flattened method table. This is a
+ * class-construction operation: parsing accessor names and interning the base
+ * property happens once, before the class becomes visible to parallel VM
+ * workers. Classes without accessors retain NULL/zero entries, making the
+ * ordinary-field hot path one predictable branch with no symbol-table access. */
+static bool finalize_accessor_entries(const XrClassBuilder *b, XrClass *cls) {
+    uint16_t getter_count = 0;
+    uint16_t setter_count = 0;
+    for (uint16_t i = 0; i < cls->method_count; i++) {
+        XrMethod *method = &cls->methods[i];
+        if (xr_method_is_static(method))
+            continue;
+        getter_count += xr_accessor_is_getter(method->name) ? 1 : 0;
+        setter_count += xr_accessor_is_setter(method->name) ? 1 : 0;
+    }
+    if (getter_count == 0 && setter_count == 0)
+        return true;
+
+    XrSymbolTable *symbols =
+        b->isolate ? (XrSymbolTable *) xr_isolate_get_symbol_table(b->isolate) : NULL;
+    if (!symbols)
+        return true;
+
+    if (getter_count > 0) {
+        cls->getter_entries = (XrAccessorEntry *) xr_malloc(sizeof(XrAccessorEntry) * getter_count);
+        if (!cls->getter_entries)
+            return false;
+    }
+    if (setter_count > 0) {
+        cls->setter_entries = (XrAccessorEntry *) xr_malloc(sizeof(XrAccessorEntry) * setter_count);
+        if (!cls->setter_entries)
+            return false;
+    }
+
+    uint16_t getter_index = 0;
+    uint16_t setter_index = 0;
+    for (uint16_t i = 0; i < cls->method_count; i++) {
+        XrMethod *method = &cls->methods[i];
+        if (xr_method_is_static(method) || !xr_accessor_is_accessor(method->name))
+            continue;
+        const char *property_name = xr_accessor_property_name(method->name);
+        SymbolId property_symbol = xr_symbol_register_in_table(symbols, property_name);
+        if (property_symbol == SYMBOL_INVALID)
+            return false;
+        XrAccessorEntry entry = {
+            .property_symbol = property_symbol,
+            .method_index = i,
+        };
+        if (xr_accessor_is_getter(method->name))
+            cls->getter_entries[getter_index++] = entry;
+        else
+            cls->setter_entries[setter_index++] = entry;
+    }
+    cls->getter_count = getter_index;
+    cls->setter_count = setter_index;
+    if (getter_index > 0)
+        cls->flags |= XR_CLASS_HAS_GETTERS;
+    if (setter_index > 0)
+        cls->flags |= XR_CLASS_HAS_SETTERS;
     return true;
 }
 

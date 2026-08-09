@@ -253,6 +253,38 @@ XrMethod *xr_class_lookup_method(XrClass *cls, int symbol) {
     return NULL;
 }
 
+static XrMethod *xr_class_lookup_accessor(XrClass *cls, int property_symbol, bool getter) {
+    if (!cls || property_symbol < 0)
+        return NULL;
+
+    XrAccessorEntry *entries = getter ? cls->getter_entries : cls->setter_entries;
+    uint16_t count = getter ? cls->getter_count : cls->setter_count;
+    for (uint16_t i = 0; i < count; i++) {
+        if (entries[i].property_symbol != property_symbol)
+            continue;
+        uint16_t method_index = entries[i].method_index;
+        if (method_index < cls->method_count) {
+            XrMethod *method = &cls->methods[method_index];
+            if (method->type != XMETHOD_NONE && !xr_method_is_static(method))
+                return method;
+        }
+        return NULL;
+    }
+
+    /* Dynamic-layout shapes carry only their fields and point directly at the
+     * immutable method-bearing superclass. Builder-finalized subclasses have
+     * flattened entries, so this fallback is normally one miss at the root. */
+    return cls->super ? xr_class_lookup_accessor(cls->super, property_symbol, getter) : NULL;
+}
+
+XrMethod *xr_class_lookup_getter(XrClass *cls, int property_symbol) {
+    return xr_class_lookup_accessor(cls, property_symbol, true);
+}
+
+XrMethod *xr_class_lookup_setter(XrClass *cls, int property_symbol) {
+    return xr_class_lookup_accessor(cls, property_symbol, false);
+}
+
 /* ========== Value Type Access ========== */
 
 // Get class for any value (unified object model)
@@ -430,6 +462,15 @@ void xr_class_free(XrClass *cls) {
     if (cls->method_symbol_to_index) {
         xr_free(cls->method_symbol_to_index);
         cls->method_symbol_to_index = NULL;
+    }
+
+    if (cls->getter_entries) {
+        xr_free(cls->getter_entries);
+        cls->getter_entries = NULL;
+    }
+    if (cls->setter_entries) {
+        xr_free(cls->setter_entries);
+        cls->setter_entries = NULL;
     }
 
     // Free instance fields table

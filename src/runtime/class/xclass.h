@@ -39,6 +39,15 @@ typedef struct XrArena XrArena;
 typedef struct XrCoroHeap XrCoroHeap;
 typedef struct XrCopyContext XrCopyContext;
 
+/* Computed-property accessors keep their source spelling as ordinary methods
+ * ("get:x" / "set:x"), but runtime property dispatch must not rebuild those
+ * names on every access. Finalized classes therefore retain a compact mapping
+ * from the property symbol to the already-flattened method slot. */
+typedef struct XrAccessorEntry {
+    int32_t property_symbol;
+    uint16_t method_index;
+} XrAccessorEntry;
+
 /* ========== Native Body Descriptor ========== */
 
 /*
@@ -210,6 +219,11 @@ struct XrClass {
     int *method_symbol_to_index;
     int method_map_capacity;
 
+    XrAccessorEntry *getter_entries;
+    XrAccessorEntry *setter_entries;
+    uint16_t getter_count;
+    uint16_t setter_count;
+
     /* === Static Fields === */
     XrValue *static_field_values;
     uint16_t static_field_count;
@@ -287,6 +301,11 @@ struct XrClass {
  * inline-cache fast paths untouched. */
 #define XR_CLASS_HAS_WEAK_FIELDS (1 << 18)
 #define XR_CLASS_JSON_DECODE_ROOT (1 << 19)  // Internal wrapper carrying a non-object root schema.
+/* Inherited, builder-frozen computed-accessor summaries. VM field opcodes test
+ * these bits before entering accessor lookup, so ordinary classes pay one
+ * predictable flag branch and never call into the accessor table. */
+#define XR_CLASS_HAS_GETTERS (1 << 20)
+#define XR_CLASS_HAS_SETTERS (1 << 21)
 
 static inline uint64_t xr_class_stable_shape_key(const XrClass *cls) {
     return cls && (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) ? cls->stable_shape_key : 0;
@@ -404,6 +423,10 @@ static inline const char *xr_class_display_name(const XrClass *cls) {
 
 // Lookup method by symbol, returns NULL if not found
 XR_FUNC XrMethod *xr_class_lookup_method(XrClass *cls, int symbol);
+
+// Lookup a computed-property accessor by the source property symbol.
+XR_FUNC XrMethod *xr_class_lookup_getter(XrClass *cls, int property_symbol);
+XR_FUNC XrMethod *xr_class_lookup_setter(XrClass *cls, int property_symbol);
 
 // NOTE: No add/set/modify API! All modifications via XrClassBuilder.
 

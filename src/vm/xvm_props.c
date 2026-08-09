@@ -196,15 +196,9 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
             return XR_DISP_NEXT;
         }
 
-        // Try setter method: set:<prop_name>
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
-        const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-        if (prop_name && scls) {
-            char setter_name[256];
-            snprintf(setter_name, sizeof(setter_name), "set:%s", prop_name);
-            int setter_symbol = xr_symbol_register_in_table(sym_table, setter_name);
-            XrMethod *setter =
-                (setter_symbol >= 0) ? xr_class_lookup_method(scls, setter_symbol) : NULL;
+        // Computed setter lookup is frozen into the class at construction.
+        if (scls && (scls->flags & XR_CLASS_HAS_SETTERS)) {
+            XrMethod *setter = xr_class_lookup_setter(scls, prop_symbol);
             if (setter && setter->as.closure) {
                 XrClosure *closure = setter->as.closure;
                 XrProto *proto = closure->proto;
@@ -261,24 +255,7 @@ XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMCo
                                                     XrValue value, XrValue *base, int c,
                                                     XrBcCallFrame *frame, XrInstruction *pc) {
     (void) c;
-    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
-    const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-    if (!prop_name)
-        return XR_DISP_FALLTHROUGH;
-
-    size_t prop_name_len = strlen(prop_name);
-    if (prop_name_len + 5 > XR_MAX_METHOD_NAME_LEN) {
-        VM_THROW(frame, pc, XR_ERR_OVERFLOW, "property name too long");
-    }
-
-    char setter_name[XR_MAX_METHOD_NAME_LEN];
-    snprintf(setter_name, sizeof(setter_name), "set:%s", prop_name);
-
-    int setter_symbol = xr_symbol_register_in_table(sym_table, setter_name);
-    XrMethod *setter = NULL;
-    if (setter_symbol >= 0) {
-        setter = xr_class_lookup_method(inst->klass, setter_symbol);
-    }
+    XrMethod *setter = xr_class_lookup_setter(inst->klass, prop_symbol);
 
     if (!setter)
         return XR_DISP_FALLTHROUGH;
@@ -844,15 +821,8 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         XrAggregateLayout *slayout = xr_vm_struct_ref_layout(isolate, obj);
         XrClass *scls =
             (slayout && !xr_aggregate_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
-        const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-        if (prop_name && scls) {
-            // Try getter method: get:<prop_name>
-            char getter_name[256];
-            snprintf(getter_name, sizeof(getter_name), "get:%s", prop_name);
-            int getter_symbol = xr_symbol_register_in_table(sym_table, getter_name);
-            XrMethod *getter =
-                (getter_symbol >= 0) ? xr_class_lookup_method(scls, getter_symbol) : NULL;
+        if (scls && (scls->flags & XR_CLASS_HAS_GETTERS)) {
+            XrMethod *getter = xr_class_lookup_getter(scls, prop_symbol);
             if (getter) {
                 if (getter->type == XMETHOD_PRIMITIVE) {
                     int base_offset = (int) (base - vm_ctx->stack);
@@ -938,24 +908,7 @@ XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrVMRuntime *isolate, XrVMCo
                                                     XrInstance *inst, XrValue obj, int prop_symbol,
                                                     XrValue *base, int a, XrBcCallFrame *frame,
                                                     XrInstruction *pc) {
-    XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
-    const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
-    if (!prop_name)
-        return XR_DISP_FALLTHROUGH;
-
-    size_t prop_name_len = strlen(prop_name);
-    if (prop_name_len + 5 > 256) {
-        VM_THROW(frame, pc, XR_ERR_OVERFLOW, "property name too long");
-    }
-
-    char getter_name[256];
-    snprintf(getter_name, sizeof(getter_name), "get:%s", prop_name);
-
-    int getter_symbol = xr_symbol_register_in_table(sym_table, getter_name);
-    XrMethod *getter = NULL;
-    if (getter_symbol >= 0) {
-        getter = xr_class_lookup_method(inst->klass, getter_symbol);
-    }
+    XrMethod *getter = xr_class_lookup_getter(inst->klass, prop_symbol);
 
     if (!getter)
         return XR_DISP_FALLTHROUGH;
@@ -1138,10 +1091,8 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_
         if (constructor && constructor->type == XMETHOD_PRIMITIVE) {
             int base_offset = (int) (base - vm_ctx->stack);
             int frame_index = (int) (frame - vm_ctx->frames);
-            XrValue result = constructor->as.primitive(
-                isolate, fn_val, &base[a + 2], nargs);
-            if (!vm_rebind_after_native_call(
-                    vm_ctx, base_offset, frame_index, &base, &frame))
+            XrValue result = constructor->as.primitive(isolate, fn_val, &base[a + 2], nargs);
+            if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
                 return XR_DISP_FATAL;
             base[a] = result;
             return XR_DISP_NEXT;
