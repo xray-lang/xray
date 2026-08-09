@@ -75,9 +75,7 @@ static void *async_thread_main(void *arg) {
 
             // Wake Worker (if sleeping)
             if (pool->runtime && job->worker_id < pool->runtime->worker_count) {
-                XrWorker *worker = &pool->runtime->workers[job->worker_id];
-                atomic_store_explicit(&worker->m->park_state, XR_PARK_WOKEN, memory_order_release);
-                xr_park_futex_wake(&worker->m->park_state);
+                xr_runtime_wake_worker(pool->runtime, job->worker_id);
             }
         } else {
             // Invalid worker_id, free directly

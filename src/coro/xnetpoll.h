@@ -126,7 +126,8 @@ typedef struct XrPollDesc {
     _Atomic uint32_t fdseq;  // fd sequence (prevent stale notifications from fd reuse)
 
     // fd bound to fixed Worker (Port model)
-    int owner_worker_id;  // Bound Worker ID (-1 = unbound)
+    int owner_worker_id;     // Bound Worker ID (-1 = unbound)
+    bool shared_registered;  // fd is registered with the runtime-wide poller
 
     // Read/write waiting coroutine (atomic ops, state machine)
     // State: XR_PD_NIL -> XR_PD_WAIT -> coro ptr -> XR_PD_READY -> XR_PD_NIL

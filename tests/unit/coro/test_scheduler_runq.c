@@ -376,7 +376,7 @@ TEST(global_inject_spill_preserves_all_work) {
     scheduler_fixture_cleanup(&f);
 }
 
-TEST(io_ready_burst_runs_one_direct_and_publishes_the_rest) {
+TEST(local_io_ready_burst_runs_one_direct_and_keeps_the_rest_local) {
 #if defined(XR_OS_WINDOWS)
     ASSERT_TRUE(true);
 #else
@@ -402,7 +402,9 @@ TEST(io_ready_burst_runs_one_direct_and_publishes_the_rest) {
         ASSERT_EQ_INT(xr_socket_set_nonblocking((xr_socket_t) sockets[i][1]), 0);
         poll_descs[i] = xr_netpoll_open(&f.runtime.netpoll, sockets[i][0]);
         ASSERT_NOT_NULL(poll_descs[i]);
+        ASSERT_TRUE(poll_descs[i]->shared_registered);
         ASSERT_EQ_INT(xr_netpoll_bind_worker(poll_descs[i]), 0);
+        ASSERT_FALSE(poll_descs[i]->shared_registered);
         init_blocked_io_probe(&coros[i], &extensions[i], 400 + i, &f.isolate_storage,
                               sockets[i][0]);
         poll_descs[i]->user_data = &coros[i];
@@ -423,10 +425,7 @@ TEST(io_ready_burst_runs_one_direct_and_publishes_the_rest) {
     ASSERT_FALSE(xr_coro_is_thread_locked(direct));
     ASSERT_EQ_INT(atomic_load(&direct->resume_status), XR_RESUME_IO_READY);
     ASSERT_EQ_INT(atomic_load(&f.runtime.netpoll.waiters), 0);
-    ASSERT_EQ_INT(atomic_load(&f.runtime.injectq.len), TOTAL - 1);
-    ASSERT_EQ_INT(xr_proc_local_runq_len(&f.workers[0].p), 0);
-
-    ASSERT_EQ_INT(worker_pull_inject(&f.workers[0], XR_INJECT_POP_BATCH), TOTAL - 1);
+    ASSERT_EQ_INT(atomic_load(&f.runtime.injectq.len), 0);
     ASSERT_EQ_INT(xr_proc_local_runq_len(&f.workers[0].p), TOTAL - 1);
 
     for (int i = 0; i < TOTAL; i++) {
@@ -436,6 +435,22 @@ TEST(io_ready_burst_runs_one_direct_and_publishes_the_rest) {
     }
     xr_netpoll_cleanup(&f.runtime.netpoll);
     steal_fixture_cleanup(&f);
+#endif
+}
+
+TEST(worker_unpark_interrupts_local_poll) {
+#if defined(XR_OS_WINDOWS)
+    ASSERT_TRUE(true);
+#else
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    worker_unpark(&f.worker);
+    XrReadyList ready = {0};
+    ASSERT_TRUE(xr_local_poll_events(&f.worker.p.local_poll, 0, &ready) > 0);
+    ASSERT_EQ_INT(ready.count, 0);
+
+    scheduler_fixture_cleanup(&f);
 #endif
 }
 
@@ -908,7 +923,8 @@ RUN_TEST_SUITE("Scheduler Run Queue");
 RUN_TEST(local_runq_pops_oldest_owner_items_first);
 RUN_TEST(lifo_budget_flush_yields_to_older_local_work);
 RUN_TEST(global_inject_spill_preserves_all_work);
-RUN_TEST(io_ready_burst_runs_one_direct_and_publishes_the_rest);
+RUN_TEST(local_io_ready_burst_runs_one_direct_and_keeps_the_rest_local);
+RUN_TEST(worker_unpark_interrupts_local_poll);
 RUN_TEST(global_coro_pool_get_pops_bounded_batches);
 RUN_TEST(coro_ext_init_sets_timer_and_owner_sentinels);
 RUN_TEST(single_worker_ensure_skips_sysmon_thread);
