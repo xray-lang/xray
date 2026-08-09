@@ -786,8 +786,16 @@ static XiFunc *compile_to_ir_with_config(const char *source, XiPipelineConfig cf
         return NULL;
     }
 
+    /* These cases exercise the concurrency primitives whose types are declared
+     * for the runtime rather than exported from a resolvable module. This
+     * analyzer runs without a module graph, so `import ... from sync` cannot
+     * resolve here even though it does in a real compilation; analyzing them
+     * as the sync module itself puts those declarations in scope. */
     const char *analyzer_file =
-        strstr(source, "WorkQueue<int>") ? "stdlib/sync/sync.xr" : "test.xr";
+        (strstr(source, "WorkQueue<int>") || strstr(source, "CountdownLatch") ||
+         strstr(source, "ResultGroup") || strstr(source, "Semaphore"))
+            ? "stdlib/sync/sync.xr"
+            : "test.xr";
     xa_analyzer_analyze(analyzer, analyzer_file, program);
 
     cfg.run_emit = false; /* cgen tests need the IR tree, not bytecode */
@@ -8836,22 +8844,27 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
     xi_func_free(ir);
 }
 
+/* The contract is general: a loop whose backedge runs into a blocking wait
+ * needs no poll safepoint, because the wait is already a suspension point.
+ * Written against a channel receive -- EventCount is a worker-pool internal
+ * with no user-reachable type surface, so a source-level guard cannot spell
+ * it. */
 TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
-    const char *src = "import { EventCount } from sync\n"
-                      "const signal: EventCount = EventCount(0)\n"
+    const char *src = "const ch: Channel<int> = Channel<int>(1)\n"
                       "fn worker(workerId: int) -> int {\n"
                       "    var seen = 0\n"
                       "    while (true) {\n"
-                      "        seen = signal.wait(seen, workerId)\n"
-                      "        if (seen < 0) {\n"
-                      "            return 0\n"
+                      "        match (ch.recv()) {\n"
+                      "            Recv.Value(v) -> { seen = seen + v }\n"
+                      "            _ -> { return seen }\n"
                       "        }\n"
                       "    }\n"
-                      "    return 0\n"
+                      "    return seen\n"
                       "}\n"
                       "fn main() {\n"
                       "    var task = go worker(0)\n"
-                      "    signal.close()\n"
+                      "    ch.send(5)\n"
+                      "    ch.close()\n"
                       "    print(await task)\n"
                       "}\n"
                       "main()\n";
@@ -8863,8 +8876,8 @@ TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT wait-driven loop should generate");
-    assert(contains(code, "xr_aot_event_count_wait(ctx,") &&
-           "test must exercise EventCount.wait in a coroutine loop");
+    assert(contains(code, "xr_aot_chan_recv_pair_i64(ctx,") &&
+           "test must exercise a blocking channel receive in a coroutine loop");
     assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
            "loop backedge into a blocking wait should not emit a redundant poll safepoint");
 
@@ -8874,61 +8887,8 @@ TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
     xi_func_free(ir);
 }
 
-TEST(cgen_event_count_advance_uses_i64_helper) {
-    const char *src = "import { EventCount } from sync\n"
-                      "const signal: EventCount = EventCount(1)\n"
-                      "fn tick() -> int {\n"
-                      "    var next = signal.advance(1)\n"
-                      "    signal.close()\n"
-                      "    return next\n"
-                      "}\n"
-                      "fn worker() -> int {\n"
-                      "    var seen = signal.wait(0, 0)\n"
-                      "    var next = signal.advance(1)\n"
-                      "    return next + seen\n"
-                      "}\n"
-                      "fn main() {\n"
-                      "    print(tick())\n"
-                      "    var task = go worker()\n"
-                      "    signal.close()\n"
-                      "    print(await task)\n"
-                      "}\n"
-                      "main()\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT EventCount advance should generate");
-    assert(contains(code, "xr_aot_event_count_advance_i64_sync(") &&
-           "sync EventCount.advance should use the native int helper");
-    assert(contains(code, "xr_aot_event_count_close_void_sync(") &&
-           "sync EventCount.close should use the native void helper");
-    assert(contains(code, "xr_aot_event_count_advance_i64(ctx,") &&
-           "coroutine EventCount.advance should use the native int helper");
-    assert(contains(code, "xr_aot_event_count_close_void(ctx,") &&
-           "coroutine EventCount.close should use the native void helper");
-    assert(!contains(code, "XrValue _event_count_advance_") &&
-           "coroutine EventCount.advance should not materialize an XrValue temp");
-    assert(!contains(code, "XrValue _event_count_close_") &&
-           "EventCount.close should not materialize a tagged Unit result");
-    assert(!contains(code, "xr_aot_event_count_advance_sync(") &&
-           "sync EventCount.advance should not return tagged XrValue");
-    assert(!contains(code, "xr_aot_event_count_close_sync(") &&
-           "sync EventCount.close should not return tagged XrValue");
-    assert(!contains(code, "XR_TO_INT(xr_aot_event_count_advance") &&
-           "EventCount.advance should not immediately unbox a tagged helper result");
-
-    printf("  Generated EventCount native advance bridge %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
 TEST(cgen_countdown_latch_methods_use_native_helpers) {
-    const char *src = "import { CountdownLatch } from sync\n"
-                      "const latch: CountdownLatch = CountdownLatch(0)\n"
+    const char *src = "const latch: CountdownLatch = CountdownLatch(0)\n"
                       "fn syncUse() -> int {\n"
                       "    var ok = latch.reset(2)\n"
                       "    var left = latch.done()\n"
@@ -8995,8 +8955,7 @@ TEST(cgen_countdown_latch_methods_use_native_helpers) {
 }
 
 TEST(cgen_semaphore_methods_use_native_helpers) {
-    const char *src = "import { Semaphore } from sync\n"
-                      "const sem: Semaphore = Semaphore(0)\n"
+    const char *src = "const sem: Semaphore = Semaphore(0)\n"
                       "fn syncUse() -> int {\n"
                       "    var released = sem.release(2)\n"
                       "    var ok = sem.tryAcquire()\n"
@@ -9055,8 +9014,7 @@ TEST(cgen_semaphore_methods_use_native_helpers) {
 }
 
 TEST(cgen_sync_blocking_direct_methods_mark_aot_coroutines) {
-    const char *src = "import { CountdownLatch, Semaphore } from sync\n"
-                      "const sem: Semaphore = Semaphore(0)\n"
+    const char *src = "const sem: Semaphore = Semaphore(0)\n"
                       "const latch: CountdownLatch = CountdownLatch(1)\n"
                       "fn worker() -> int {\n"
                       "    if (!sem.acquire()) {\n"
@@ -10043,10 +10001,14 @@ TEST(cgen_coro_native_class_await_uses_tagged_boundary_slot) {
            "native-class await result must retain its typed pointer local");
     assert(contains_between(await_call, trace, bridge) &&
            "native-class await result should bridge from the boundary temporary exactly once");
-    char transfer_promotion[96];
-    snprintf(transfer_promotion, sizeof(transfer_promotion),
-             "xrt_value_set_storage(xrt_box_obj(_inst), %u)", (unsigned) XR_OBJ_STORAGE_TRANSFER);
-    assert(contains(code, transfer_promotion) &&
+    /* Match the promotion by its shape, not by the instance local's name: the
+     * portable lowering binds the instance to a `_portable_inst_N` pointer
+     * where the older statement-expression form used `_inst`. */
+    const char *promotion = strstr(code, "xrt_value_set_storage(xrt_box_obj(");
+    char transfer_storage[32];
+    snprintf(transfer_storage, sizeof(transfer_storage), ", %u)",
+             (unsigned) XR_OBJ_STORAGE_TRANSFER);
+    assert(promotion && contains_between(promotion, promotion + 96, transfer_storage) &&
            "fresh native-class Task results must be allocated into TRANSFER storage by plan");
     assert(contains(code, "{ XrObjHeader hdr; int64_t f0; }") &&
            "native-class values must use the canonical header-at-value-pointer object ABI");
@@ -11740,7 +11702,6 @@ int main(void) {
     run_cgen_coro_frame_skips_dead_ssa_slots();
     run_cgen_coro_loop_tail_phi_survives_poll_suspend();
     run_cgen_coro_wait_driven_loop_omits_redundant_poll();
-    run_cgen_event_count_advance_uses_i64_helper();
     run_cgen_countdown_latch_methods_use_native_helpers();
     run_cgen_semaphore_methods_use_native_helpers();
     run_cgen_sync_blocking_direct_methods_mark_aot_coroutines();
