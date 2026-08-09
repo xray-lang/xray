@@ -17,7 +17,9 @@
 #include "runtime/class/xclass_descriptor.h"
 #include "runtime/class/xenum.h"
 #include "runtime/class/xinstance.h"
+#include "runtime/class/xclass_system.h"
 #include "runtime/object/xstring.h"
+#include "runtime/object/xbigint.h"
 #include "runtime/symbol/xsymbol_table.h"
 #include "runtime/value/xchunk.h"
 #include "runtime/value/xffi_sig.h"
@@ -308,6 +310,67 @@ TEST(bytecode_roundtrips_rune_constants) {
     xr_vm_proto_free(proto);
     xray_vm_delete(reader);
     xray_vm_delete(writer);
+}
+
+/* Regression: BigInt literal constants must survive bytecode serialization.
+ * Before the writer/reader learned the BigInt case, every BigInt constant was
+ * emitted as null, so embedded-bytecode builds and .xrc artifacts silently lost
+ * the value (var b = 123n printed null). Round-trip small, large-magnitude and
+ * negative values and require an exact decimal match. */
+TEST(bytecode_roundtrips_bigint_constants) {
+    static const char *const cases[] = {
+        "0",
+        "123",
+        "-456",
+        "12345678901234567890",              /* exceeds int64 range */
+        "-99999999999999999999999999999999", /* large negative magnitude */
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        XrVMRuntime *writer = new_test_isolate();
+        ASSERT_NOT_NULL(writer);
+        XrVMRuntime *reader = new_test_isolate();
+        ASSERT_NOT_NULL(reader);
+
+        XrProto *proto = make_minimal_proto();
+        ASSERT_NOT_NULL(proto);
+
+        /* Build the constant exactly as the emitter does: a fixed-heap BigInt
+         * whose class pointer is the isolate's registered BigInt class, so
+         * XR_IS_BIGINT recognizes it on the writer side. */
+        XrBigInt *bi =
+            xr_bigint_from_string_on_fixed_heap(xr_isolate_get_fixed_heap(writer), cases[i]);
+        ASSERT_NOT_NULL(bi);
+        XrayCoreClasses *writer_core = xr_isolate_get_core_classes(writer);
+        ASSERT_NOT_NULL(writer_core);
+        bi->klass = writer_core->bigintClass;
+        XrValue original = XR_FROM_PTR(bi);
+        ASSERT_TRUE(XR_IS_BIGINT(original));
+        ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, original), 0);
+
+        size_t size = 0;
+        uint8_t *bytes = xr_bytecode_write(writer, proto, 0, &size, NULL);
+        ASSERT_NOT_NULL(bytes);
+
+        XrBcError error = XR_BC_OK;
+        XrProto *roundtrip = xr_bytecode_read(reader, bytes, size, &error);
+        ASSERT_NOT_NULL(roundtrip);
+        ASSERT_EQ_INT(error, XR_BC_OK);
+        ASSERT_EQ_INT(PROTO_CONST_COUNT(roundtrip), 1);
+
+        XrValue value = PROTO_CONSTANT(roundtrip, 0);
+        ASSERT_TRUE(XR_IS_BIGINT(value));
+        char *decoded = xr_bigint_to_string((XrBigInt *) XR_TO_PTR(value));
+        ASSERT_NOT_NULL(decoded);
+        ASSERT_STR_EQ(decoded, cases[i]);
+        xr_free(decoded);
+
+        xr_vm_proto_free(roundtrip);
+        xr_free(bytes);
+        xr_vm_proto_free(proto);
+        xray_vm_delete(reader);
+        xray_vm_delete(writer);
+    }
 }
 
 TEST(bytecode_reader_assigns_unique_proto_ids) {
@@ -1302,6 +1365,7 @@ static void run_all_tests(void) {
     RUN_TEST(bytecode_roundtrips_struct_area_size);
     RUN_TEST(bytecode_roundtrips_exact_string_constant_lengths);
     RUN_TEST(bytecode_roundtrips_rune_constants);
+    RUN_TEST(bytecode_roundtrips_bigint_constants);
     RUN_TEST(bytecode_reader_assigns_unique_proto_ids);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_dynamic_json_shape_across_isolates);

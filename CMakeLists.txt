@@ -1924,6 +1924,24 @@ if(BUILD_TESTS)
         )
     endif()
 
+    # BigInt literals must survive every execution form. The source run is the
+    # oracle; the compiled .xrc, the embedded-bytecode build and the native
+    # build must reproduce its stdout exactly. Guards the constant serializer
+    # that once degraded BigInt constants to null in built artifacts.
+    add_test(
+        NAME bigint_bytecode_cli_roundtrip
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bigint_bytecode_roundtrip.py
+                $<TARGET_FILE:xray>
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/bigint_bytecode_roundtrip.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(bigint_bytecode_cli_roundtrip PROPERTIES
+        LABELS "vm;aot;bytecode;bigint;cli;regression"
+        PROCESSORS 1
+        TIMEOUT 180
+    )
+
     add_test(
         NAME sys_thread_vm
         COMMAND ${XRAY_PYTHON}
