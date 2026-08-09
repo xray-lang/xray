@@ -13,9 +13,17 @@ fn serveStaticRoutes(port: int, running: Atomic<bool>) -> bool {
     return server.listen(port, running)
 }
 
+fn tryDial(port: int) -> NetConn? {
+    try {
+        return net.dial("127.0.0.1", port)
+    } catch (e) {
+        return null
+    }
+}
+
 fn waitForServer(port: int) -> bool {
     for (var i = 0; i < 50; i = i + 1) {
-        var conn = net.dial("127.0.0.1", port)
+        var conn = tryDial(port)
         if (conn != null) {
             net.close(conn!)
             return true
@@ -26,34 +34,31 @@ fn waitForServer(port: int) -> bool {
 }
 
 fn sendRaw(port: int, request: string) -> string {
-    var conn = net.dial("127.0.0.1", port)
+    var conn = tryDial(port)
     if (conn == null) {
         return ""
     }
-    var written = 0
-    while (written < len(request)) {
-        var n = net.write(conn!, request.slice(written, len(request)))
-        if (n <= 0) {
-            net.close(conn!)
-            return ""
-        }
-        written = written + n
+    var payload = request.copyBytes()
+    var n = net.writeBytes(conn!, payload)
+    if (n < len(payload)) {
+        net.close(conn!)
+        return ""
     }
-    var response = ""
+    var response = Array<byte>()
+    var chunk = Array<byte>(4096)
     while (true) {
-        var chunk = net.read(conn!, 4096)
-        if (chunk == null) { break }
-        response = response + chunk!
+        var got = net.readInto(conn!, ref chunk, 4096)
+        if (got <= 0) { break }
+        for (var i = 0; i < got; i++) { response.push(chunk[i]) }
     }
     net.close(conn!)
-    return response
+    return string.fromUtf8(response[:]) ?? ""
 }
 
 export fn runHttpStaticRouteFullParse() {
     var probe = net.listen(0, 1)
-    assert(probe != null)
-    const port = probe!.port()
-    net.close(probe!)
+    const port = probe.port()
+    net.close(probe)
 
     const running = Atomic(true)
     var server = go serveStaticRoutes(port, running)

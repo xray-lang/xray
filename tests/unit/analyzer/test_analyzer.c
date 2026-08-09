@@ -3741,24 +3741,18 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
         xa_builtin_get_module_func_effect_contract("compress", "gunzip");
     const XaEffectContract *decrypt_contract =
         xa_builtin_get_module_func_effect_contract("crypto", "decrypt");
-    const XaEffectContract *private_copy_contract =
-        xa_builtin_get_module_func_abi_effect_contract("net", "__copyBidirectional");
     ASSERT(from_utf8_contract != NULL);
     ASSERT(slice_bytes_contract != NULL);
     ASSERT(gunzip_contract != NULL);
     ASSERT(decrypt_contract != NULL);
-    ASSERT(private_copy_contract != NULL);
-    ASSERT(xa_builtin_get_module_func_effect_contract("net", "__copyBidirectional") == NULL);
     ASSERT(from_utf8_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(slice_bytes_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(gunzip_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(decrypt_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
-    ASSERT(private_copy_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(from_utf8_contract->error_count == 1);
     ASSERT(slice_bytes_contract->error_count == 1);
     ASSERT(gunzip_contract->error_count == 1);
     ASSERT(decrypt_contract->error_count == 1);
-    ASSERT(private_copy_contract->error_count == 10);
     ASSERT(strcmp(from_utf8_contract->errors[0], "Utf8Error.InvalidUtf8") == 0);
     ASSERT(strcmp(slice_bytes_contract->errors[0], "StringSliceError.InvalidByteRange") == 0);
     ASSERT(strcmp(gunzip_contract->errors[0], "CompressionError.InvalidData") == 0);

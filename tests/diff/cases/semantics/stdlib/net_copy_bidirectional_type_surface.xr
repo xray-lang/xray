@@ -12,3 +12,4 @@ fn accepts(
 
 print(accepts(copyBidirectional))
 print(typeName(NetError.Timeout))
+print(typeName(NetError.Cancelled))

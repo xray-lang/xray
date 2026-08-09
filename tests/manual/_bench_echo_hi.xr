@@ -6,10 +6,11 @@ import net
 import time
 
 fn echoConn(c: NetConn) {
+    var buf = Array<byte>(4096)
     while (true) {
-        var s = net.read(c)
-        if (s == null) { break }
-        net.write(c, s!)
+        var n = net.readInto(c, ref buf, 4096)
+        if (n <= 0) { break }
+        net.writeBytes(c, buf)
     }
     net.close(c)
 }
@@ -24,12 +25,14 @@ fn server(lst: NetListener, ready: Channel<int>) {
 }
 
 fn client(port: int, rounds: int, done: Channel<int>) {
-    var c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)
+    var ping = "ping".copyBytes()
+    var buf = Array<byte>(4096)
     var i = 0
     while (i < rounds) {
-        net.write(c, "ping")
-        var r = net.read(c)
-        if (r == null) { break }
+        net.writeBytes(c, ping)
+        var n = net.readInto(c, ref buf, 4096)
+        if (n <= 0) { break }
         i = i + 1
     }
     net.close(c)

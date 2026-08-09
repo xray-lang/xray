@@ -6,18 +6,20 @@ fn emit(name: string, ok: bool) {
 
 fn highServer(listener: NetListener) -> bool {
     var conn = net.accept(listener)!
-    var data = net.read(conn)!
-    var written = net.write(conn, data)
+    var buffer = Array<byte>(16)
+    var n = net.readInto(conn, ref buffer, 16)
+    var written = net.writeBytes(conn, buffer)
     net.close(conn)
-    return written == len(data.bytes())
+    return n == 5 && written == 5
 }
 
 fn highClient(port: int) -> bool {
-    var conn = net.dial("127.0.0.1", port)!
-    net.write(conn, "é€")
-    var data = net.read(conn)!
+    var conn = net.dial("127.0.0.1", port)
+    net.writeBytes(conn, Array<byte>([195, 169, 226, 130, 172]))
+    var buffer = Array<byte>(16)
+    var n = net.readInto(conn, ref buffer, 16)
     net.close(conn)
-    return len(data.bytes()) == 5 && data.bytes()[0] == 195 && data.bytes()[4] == 172
+    return n == 5 && buffer[0] == 195 && buffer[4] == 172
 }
 
 fn copyServer(listener: NetListener) -> bool {
@@ -28,16 +30,18 @@ fn copyServer(listener: NetListener) -> bool {
 }
 
 fn copyClient(port: int) -> bool {
-    var conn = net.dial("127.0.0.1", port)!
-    net.write(conn, "native")
+    var conn = net.dial("127.0.0.1", port)
+    net.writeBytes(conn, Array<byte>([110, 97, 116, 105, 118, 101]))
     net.shutdownWrite(conn)
-    var data = net.read(conn)!
+    var buffer = Array<byte>(16)
+    var n = net.readInto(conn, ref buffer, 16)
+    var ok = n == 6 && buffer[0] == 110 && buffer[5] == 101
     net.close(conn)
-    return data == "native"
+    return ok
 }
 
 fn run() {
-    var highListener = net.listen(0, 8)!
+    var highListener = net.listen(0, 8)
     var highServerTask = go highServer(highListener)
     var highClientTask = go highClient(highListener.port())
     var highOk = await highClientTask
@@ -45,7 +49,7 @@ fn run() {
     net.close(highListener)
     emit("high-byte-loopback", highOk)
 
-    var copyListener = net.listen(0, 8)!
+    var copyListener = net.listen(0, 8)
     var copyServerTask = go copyServer(copyListener)
     var copyClientTask = go copyClient(copyListener.port())
     var copyOk = await copyClientTask

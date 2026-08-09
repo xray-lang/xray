@@ -1,21 +1,32 @@
 // 1436_net_halfclose_bidi.xr
-// 测试：TCP 半关闭与 copyBidirectional
+// TCP half-close and copyBidirectional.
 
 import net
+import { NetError } from net
+
+fn tryListen(backlog: int) -> NetListener? {
+    try {
+        return net.listen(0, backlog)
+    } catch (e: NetError) {
+        return null
+    }
+}
 
 fn serveReadUntilEof(c: NetConn) {
     var total = 0
     while (true) {
-        var data = net.read(c)
+        var data = net.readBytes(c)
         if (data == null) {
             break
         }
-        total = total + len(data!.bytes())
+        total = total + len(data!)
     }
     if (total == 4) {
-        net.write(c, "done")
+        // "done"
+        net.writeBytes(c, Array<byte>([100, 111, 110, 101]))
     } else {
-        net.write(c, "bad")
+        // "bad"
+        net.writeBytes(c, Array<byte>([98, 97, 100]))
     }
     net.close(c)
 }
@@ -33,7 +44,7 @@ fn serveUpstreamEcho(lst: NetListener) {
 
 fn serveProxyOnce(lst: NetListener, upstreamPort: int) {
     var client = net.accept(lst)!
-    var upstream = net.dial("127.0.0.1", upstreamPort)!
+    var upstream = net.dial("127.0.0.1", upstreamPort)
     var stats = net.copyBidirectional(client, upstream)
     assert_true(stats.aToB >= 4)
     assert_true(stats.bToA >= 4)
@@ -43,18 +54,25 @@ fn serveProxyOnce(lst: NetListener, upstreamPort: int) {
 
 @test
 fn test_shutdown_write_allows_response() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
     go acceptReadUntilEof(lst)
 
-    var c = net.dial("127.0.0.1", port)!
-    assert_eq(net.write(c, "body"), 4)
+    var c = net.dial("127.0.0.1", port)
+    // "body"
+    assert_eq(net.writeBytes(c, Array<byte>([98, 111, 100, 121])), 4)
     assert_true(net.shutdownWrite(c))
 
-    var resp = net.read(c)!
-    assert_eq(resp, "done")
+    var resp = Array<byte>(8)
+    var n = net.readInto(c, ref resp)
+    assert_eq(n, 4)
+    // "done"
+    assert_eq(resp[0], 100)
+    assert_eq(resp[1], 111)
+    assert_eq(resp[2], 110)
+    assert_eq(resp[3], 101)
 
     net.close(c)
     net.close(lst)
@@ -62,13 +80,13 @@ fn test_shutdown_write_allows_response() {
 
 @test
 fn test_copy_bidirectional_proxy_echo() {
-    var maybeUpstreamLst = net.listen(0, 8)
+    var maybeUpstreamLst = tryListen(8)
     if (maybeUpstreamLst == null) { return }
     var upstreamLst = maybeUpstreamLst!
     var upstreamPort = upstreamLst.port()
     go serveUpstreamEcho(upstreamLst)
 
-    var maybeProxyLst = net.listen(0, 8)
+    var maybeProxyLst = tryListen(8)
     if (maybeProxyLst == null) {
         net.close(upstreamLst)
         return
@@ -77,13 +95,23 @@ fn test_copy_bidirectional_proxy_echo() {
     var proxyPort = proxyLst.port()
     go serveProxyOnce(proxyLst, upstreamPort)
 
-    var c = net.dial("127.0.0.1", proxyPort)!
-    assert_eq(net.write(c, "ping"), 4)
-    var resp = net.read(c)!
-    assert_eq(resp, "ping")
+    var c = net.dial("127.0.0.1", proxyPort)
+    // "ping"
+    assert_eq(net.writeBytes(c, Array<byte>([112, 105, 110, 103])), 4)
+    var resp = Array<byte>(8)
+    var n = net.readInto(c, ref resp)
+    assert_eq(n, 4)
+    assert_eq(resp[0], 112)
+    assert_eq(resp[1], 105)
+    assert_eq(resp[2], 110)
+    assert_eq(resp[3], 103)
     assert_true(net.shutdownWrite(c))
-    var eof = net.read(c)
+
+    // Clean EOF after the proxy drains: readBytes returns null and
+    // lastError stays null, so EOF is distinguishable from an error.
+    var eof = net.readBytes(c)
     assert_true(eof == null)
+    assert_true(net.lastError(c) == null)
 
     net.close(c)
     net.close(proxyLst)

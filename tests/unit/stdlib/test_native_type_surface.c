@@ -64,13 +64,12 @@ TEST(native_module_object_and_enum_metadata) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);
 
-    const XaBuiltinObjectShape *object_shape =
-        xa_builtin_get_object_shape("net", "__CopyBidirectionalResult");
+    const XaBuiltinObjectShape *object_shape = xa_builtin_get_object_shape("Coro", "CoroDeadlock");
     ASSERT_NOT_NULL(object_shape);
     ASSERT_TRUE(object_shape->is_exact);
     ASSERT_EQ_INT(object_shape->field_count, 2);
-    ASSERT_TRUE(strcmp(object_shape->fields[0].name, "aToB") == 0);
-    ASSERT_TRUE(strcmp(object_shape->fields[1].name, "bToA") == 0);
+    ASSERT_TRUE(strcmp(object_shape->fields[0].name, "members") == 0);
+    ASSERT_TRUE(strcmp(object_shape->fields[1].name, "reason") == 0);
 
     XrType *object_shape_type = xa_builtin_object_shape_decl_type(iso, object_shape);
     ASSERT_NOT_NULL(object_shape_type);
@@ -101,17 +100,18 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_EQ_INT(runtime_enum->members[0].ctor->layout_id, enum_decl->layout_id);
     xa_enum_info_free(enum_info);
 
-    const XaBuiltinMember *copy_bidi = find_module_member("net", "__copyBidirectional");
-    ASSERT_NOT_NULL(copy_bidi);
-    ASSERT_TRUE(copy_bidi->is_internal);
-    XrType *fn = xa_builtin_parse_full_signature(iso, copy_bidi->signature);
+    const XaBuiltinMember *connect_fd = find_module_member("net", "__connectFd");
+    ASSERT_NOT_NULL(connect_fd);
+    ASSERT_TRUE(connect_fd->is_internal);
+    XrType *fn = xa_builtin_parse_full_signature(iso, connect_fd->signature);
     ASSERT_NOT_NULL(fn);
     ASSERT_EQ_INT(fn->kind, XR_KIND_FUNCTION);
     ASSERT_NOT_NULL(fn->function.return_type);
-    ASSERT_EQ_INT(fn->function.return_type->kind, XR_KIND_STRUCT_OBJECT);
-
-    ASSERT_EQ_INT(copy_bidi->effect_contract.kind, XA_EFFECT_CONTRACT_ERRORS);
-    ASSERT_EQ_INT(copy_bidi->effect_contract.error_count, 10);
+    /* __connectFd returns NetConn? (a nullable builtin handle), never a
+     * `NetConn | int` union: unioning a native handle with a scalar poisons
+     * handle typing module-wide (see xray-docs/known_bugs.md 2026-08-09). */
+    ASSERT_EQ_INT(fn->function.return_type->kind, XR_KIND_INSTANCE);
+    ASSERT_TRUE(fn->function.return_type->is_nullable);
 
     const XaBuiltinObjectShape *ws_options = xa_builtin_get_object_shape("ws", "WsConnectOptions");
     ASSERT_NOT_NULL(ws_options);

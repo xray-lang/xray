@@ -1,29 +1,61 @@
 schema = 1
 module = "net"
-contract_revision = 1
-legacy_commit = "e1eed9fc7f5e44aaebb2e06fb9df877cbdfbcf7e"
+contract_revision = 2
+legacy_commit = "b6955520e9bc142e23e3a7486c00dbcaf4a55127"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/net/legacy_expected.jsonl"
 legacy_public_surface = [
+  "dial",
+  "dialTLS",
+  "dialEndpoint",
+  "listen",
+  "accept",
   "read",
   "readInto",
   "write",
   "writeBytes",
+  "copy",
+  "copyBidirectional",
+  "shutdownRead",
+  "shutdownWrite",
+  "shutdown",
+  "close",
+  "fd",
+  "setReadDeadline",
+  "setWriteDeadline",
+  "setDeadline",
+  "setAcceptDeadline",
+  "lastError",
+  "lastErrno",
+  "lookup",
+  "resolve",
+  "hasTLS",
+  "upgradeTLS",
+  "udpBind",
   "sendTo",
   "recvFrom",
-  "copy",
-  "copyBidirectional"
+  "IpAddress",
+  "Endpoint",
+  "DialOptions",
+  "CopyBidirectionalResult",
+  "UdpPacket"
 ]
 intentional_semantic_changes = [
-  "future converged net.read returns Array<byte> instead of string storage for arbitrary bytes",
-  "future converged net.write and sendTo accept Slice<byte> rather than string or Array owner-only inputs",
-  "future readInto requires mutable byte storage provenance and must not accept readonly string bytes",
-  "native copy paths keep payloads in native byte buffers and must not route arbitrary bytes through string creators"
+  "net.read and net.write are removed; stream I/O is byte-only through readInto, readBytes and writeBytes",
+  "dial takes DialOptions and throws typed NetError values; dialTLS is folded into DialOptions.tls and upgradeTLS covers STARTTLS flows",
+  "listen, udpBind and upgradeTLS throw NetError instead of returning null handles",
+  "lookup returns Array<IpAddress>, empty on failure, instead of string?",
+  "UdpPacket is removed; recvFrom fills a caller buffer and returns UdpFrom sender identity under an explicit timeoutMs",
+  "sendTo takes Array<byte> payloads and an explicit timeoutMs",
+  "copyBidirectional throws NetError only for argument validation (Closed, Invalid); a per-direction I/O error ends that direction and the byte counts are still returned",
+  "NetError gains Cancelled so cooperative cancellation is distinct from Closed"
 ]
 known_legacy_bugs = [
   "legacy net.read exposes arbitrary socket bytes as string?",
-  "legacy net.writeBytes accepts Array<byte> owner input instead of Slice<byte>",
-  "legacy read/accept/dial/recv failure paths still use null or status sentinels instead of typed native errors"
+  "legacy dial/listen/udpBind/upgradeTLS report setup failure as null without a typed reason",
+  "legacy TLS handshake timeouts re-arm at full value on every yield instead of enforcing one absolute deadline",
+  "legacy cooperative cancellation surfaces as NetError.Closed",
+  "legacy recvFrom has no timeout parameter and can wait forever"
 ]
 equivalence = ["value", "error", "effect", "complexity"]
 diff_cases_manifest = "tests/stdlib/contracts/net/diff_cases.txt"
@@ -32,14 +64,29 @@ benchmark_suite = "stdlib/net"
 [[legacy_behavior]]
 id = "loopback-string-status-sentinels"
 classification = "removed"
-new_behavior = "future converged read/write APIs use typed byte values and typed native errors instead of string? and status sentinels"
+new_behavior = "stream I/O is byte-only (readInto/readBytes/writeBytes); connection setup throws typed NetError values and per-operation failures keep in-band results with lastError carrying the reason"
 
 [[legacy_behavior]]
 id = "high-byte-loopback"
 classification = "required"
-new_behavior = "socket loopback preserves high-byte octets exactly before and after the public byte API switch"
+new_behavior = "socket loopback preserves high-byte octets exactly through the Array<byte> surface (writeBytes/readInto)"
 
 [[legacy_behavior]]
 id = "native-copy-byte-boundary"
 classification = "required"
-new_behavior = "net.copy and copyBidirectional preserve payload bytes without exposing string-binary public API shortcuts"
+new_behavior = "net.copy and copyBidirectional keep payloads in native byte buffers; a mid-stream error ends the pump and reports the byte count, with the reason queryable via lastError"
+
+[[legacy_behavior]]
+id = "timeout-rearm-per-yield"
+classification = "bug"
+new_behavior = "TLS handshake timeouts (dial with DialOptions.tls, upgradeTLS) are one absolute deadline for the whole handshake instead of a full re-arm on every yield"
+
+[[legacy_behavior]]
+id = "cancelled-reported-as-closed"
+classification = "bug"
+new_behavior = "cooperative cancellation classifies as NetError.Cancelled, distinct from NetError.Closed"
+
+[[legacy_behavior]]
+id = "udp-recv-unbounded-wait"
+classification = "bug"
+new_behavior = "recvFrom takes an explicit timeoutMs (negative waits without limit) instead of an implicit unbounded wait"

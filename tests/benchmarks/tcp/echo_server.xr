@@ -11,13 +11,14 @@ fn serveStream(conn: NetConn) {
 
 fn serveMessage(conn: NetConn) {
     defer net.close(conn)
+    var buf = Array<byte>(65536)
     while (true) {
-        var data = net.read(conn, 65536)
-        if (data == null) {
+        var n = net.readInto(conn, ref buf, 65536)
+        if (n <= 0) {
             break
         }
-        var n = net.write(conn, data!)
-        if (n <= 0) {
+        var written = net.writeBytes(conn, buf)
+        if (written <= 0) {
             break
         }
     }
@@ -40,39 +41,41 @@ fn serveBytes(conn: NetConn) {
 
 fn serveDiscard(conn: NetConn) {
     defer net.close(conn)
+    var buf = Array<byte>(65536)
     while (true) {
-        var data = net.read(conn, 65536)
-        if (data == null) {
+        var n = net.readInto(conn, ref buf, 65536)
+        if (n <= 0) {
             break
         }
     }
-    net.write(conn, "OK")
+    net.writeBytes(conn, "OK".copyBytes())
 }
 
 fn serveSlowDiscard(conn: NetConn, delayMs: int) {
     defer net.close(conn)
+    var buf = Array<byte>(4096)
     while (true) {
-        var data = net.read(conn, 4096)
-        if (data == null) {
+        var n = net.readInto(conn, ref buf, 4096)
+        if (n <= 0) {
             break
         }
         if (delayMs > 0) {
             time.sleep(delayMs)
         }
     }
-    net.write(conn, "OK")
+    net.writeBytes(conn, "OK".copyBytes())
 }
 
 fn serveSource(conn: NetConn, totalBytes: int) {
     defer net.close(conn)
-    var chunk = "S".repeat(65536)
+    var chunk = "S".repeat(65536).copyBytes()
     var remaining = totalBytes
     while (remaining > 0) {
         var data = chunk
         if (remaining < 65536) {
-            data = "S".repeat(remaining)
+            data = "S".repeat(remaining).copyBytes()
         }
-        var n = net.write(conn, data)
+        var n = net.writeBytes(conn, data)
         if (n <= 0) {
             break
         }
@@ -80,17 +83,24 @@ fn serveSource(conn: NetConn, totalBytes: int) {
     }
 }
 
+fn tryDial(port: int) -> NetConn? {
+    try {
+        return net.dial("127.0.0.1", port)
+    } catch (e) {
+        return null
+    }
+}
+
 fn serveProxy(client: NetConn, upstreamPort: int) {
-    var upstreamMaybe = net.dial("127.0.0.1", upstreamPort)
-    if (upstreamMaybe == null) {
+    var upstream = tryDial(upstreamPort)
+    if (upstream == null) {
         net.close(client)
         return
     }
 
-    var upstream = upstreamMaybe!
-    net.copyBidirectional(client, upstream)
+    net.copyBidirectional(client, upstream!)
     net.close(client)
-    net.close(upstream)
+    net.close(upstream!)
 }
 
 fn handleConn(conn: NetConn, mode: string, extra: int) {
@@ -129,16 +139,12 @@ if (len(process.args) > 2) {
 }
 
 var listener = net.listen(port, 1024)
-if (listener == null) {
-    print("ERROR: Failed to listen on port " + string(port))
-} else {
-    print("xray TCP benchmark server listening on port " + string(port) + " mode=" + mode)
+print("xray TCP benchmark server listening on port " + string(port) + " mode=" + mode)
 
-    while (true) {
-        var conn = net.accept(listener)
-        if (conn == null) {
-            continue
-        }
-        go handleConn(conn, mode, extra)
+while (true) {
+    var conn = net.accept(listener)
+    if (conn == null) {
+        continue
     }
+    go handleConn(conn, mode, extra)
 }
