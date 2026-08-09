@@ -896,7 +896,15 @@ static bool runtime_check_deadlock(XrRuntime *runtime, XrWorker *worker, bool se
     }
     if (detect_off)
         return false;
-    (void) self_still_active;
+    /* current_coro becomes NULL before worker_handle_run_result publishes a
+     * completion, continuation, or wake.  Queue scans alone can therefore see
+     * a transient empty system while another worker is still in that result
+     * handoff window.  active_workers closes the gap: worker_park decrements
+     * it only after result handling and the single-worker checkpoint explicitly
+     * identifies itself as the one still-active worker. */
+    int expected_active = self_still_active ? 1 : 0;
+    if (atomic_load_explicit(&runtime->active_workers, memory_order_acquire) != expected_active)
+        return false;
     /* Nobody may be mid-slice: a running coroutine can wake anything. The
      * dispatcher nulls current_coro on every normal result, so an all-NULL
      * scan plus empty queues (below, twice, fenced) is quiescence. */
@@ -1596,12 +1604,16 @@ void *worker_loop(void *arg) {
     XrWorker *worker = (XrWorker *) arg;
     XrRuntime *runtime = worker->p.runtime;
     _Atomic bool *running_ptr = &runtime->running;
+    XrMachineState exit_state;
 
     tls_current_worker = worker;
     tls_current_machine = worker->m;
     worker_bind_cpu(worker);
 
-    // Two counters: started_workers for startup sync, active_workers for GC coord.
+    // Two counters: started_workers for startup sync, active_workers for
+    // quiescence/GC coordination. Publish active before startup completion so
+    // a peer cannot prove deadlock while this worker enters its run loop.
+    atomic_fetch_add_explicit(&runtime->active_workers, 1, memory_order_release);
     // Wake xr_runtime_ensure_workers that's futex-waiting on this counter.
     atomic_fetch_add_explicit(&runtime->started_workers, 1, memory_order_release);
     xr_park_futex_wake(&runtime->started_workers);
@@ -1731,6 +1743,10 @@ void *worker_loop(void *arg) {
     }
 
 exit_loop:
+    exit_state = atomic_load_explicit(&worker->m->state, memory_order_acquire);
+    if (exit_state != M_PARKING && exit_state != M_PARKED)
+        atomic_fetch_sub_explicit(&runtime->active_workers, 1, memory_order_release);
+    atomic_store_explicit(&worker->m->state, M_SHUTDOWN, memory_order_release);
     atomic_fetch_add(&runtime->exited_workers, 1);
     return NULL;
 }
