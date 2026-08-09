@@ -8868,11 +8868,13 @@ static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call)
         return false;
     if (xr_stdlib_metadata_func_resumes_by_netpoll_retry(module, name))
         return true;
-    if (strcmp(module, "time") == 0)
-        return strcmp(name, "sleep") == 0;
-    if (strcmp(module, "net") == 0)
-        return strcmp(name, "accept") == 0 || strcmp(name, "read") == 0 ||
-               strcmp(name, "write") == 0 || strcmp(name, "writeBytes") == 0;
+    /* The declarative metadata is the single source of suspendability: a
+     * function is yieldable exactly when its module definition binds it that
+     * way. Enumerating the yieldable names here instead would silently drop a
+     * newly declared one, and a hosted fragment would then be installed on the
+     * synchronous fastpath. */
+    if (xr_stdlib_metadata_func_is_yieldable(module, name))
+        return true;
     if (strcmp(module, "test_yield") != 0)
         return false;
     return strcmp(name, "simple") == 0 || strcmp(name, "add") == 0 ||

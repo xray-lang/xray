@@ -27,6 +27,36 @@ error_channel = "vm_pending_error"
 ownership = "borrow_args_owned_result"
 unsupported_policy = "fail_closed"
 
+# `log` owns mutable module state shared by its variadic source implementation.
+# A hosted fragment has a separate generated-C module image, so exporting only
+# the fixed-arity control functions would split one logical logger into two
+# state stores. Keep the complete stateful surface on the canonical VM module
+# until hosted fragments can bind directly to VM-owned module slots.
+[[hosted_fragment_deferred]]
+symbol = "log.enableAsync"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.enableSource"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.flush"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.isEnabled"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.setFormat"
+reason = "stateful-module-slot-identity"
+
+[[hosted_fragment_deferred]]
+symbol = "log.setLevel"
+reason = "stateful-module-slot-identity"
+
+
 # cluster is excluded from hosted fragments as a whole module: its Xray source
 # calls private `__`-prefixed native primitives, which a freestanding fragment
 # cannot reach. That subsumes the earlier per-symbol deferrals of the join and

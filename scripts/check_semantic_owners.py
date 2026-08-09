@@ -44,7 +44,7 @@ def callers_for(root: Path, header: Path, symbols: list[str], files: list[Path])
     for path in files:
         if path == header:
             continue
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = path.read_text(encoding="utf-8", errors="strict")
         if not any(needle in text for needle in needles):
             continue
         relative = path.relative_to(root).as_posix()

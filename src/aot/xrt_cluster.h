@@ -11,7 +11,9 @@
 #ifndef XRT_CLUSTER_H
 #define XRT_CLUSTER_H
 
-#include "../../include/xray_value_abi.h"
+/* Resolved through the include path, not by source-tree layout: the installed
+ * SDK flattens these headers and a relative climb would not exist there. */
+#include "xray_value_abi.h"
 
 #include <stdint.h>
 

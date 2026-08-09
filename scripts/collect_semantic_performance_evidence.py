@@ -60,7 +60,7 @@ def main() -> int:
                 "-o", str(binary), str(SOURCE),
             ])
             runtime_ns = [timed([str(binary)], timeout=60) for _ in range(args.samples)]
-            generated_text = generated.read_text(encoding="utf-8", errors="replace")
+            generated_text = generated.read_text(encoding="utf-8", errors="strict")
             rows.append({
                 "opt": opt,
                 "codegen_ns": codegen_ns,
@@ -82,9 +82,11 @@ def main() -> int:
                 ),
             })
 
-    version = subprocess.run([xray, "--version", "--json"], cwd=ROOT, check=True,
-                             text=True, stdout=subprocess.PIPE).stdout.strip()
+    version = subprocess.run([xray, "--version", "--json"], cwd=ROOT, check=True, text=True,
+                             encoding="utf-8", errors="strict",
+                             stdout=subprocess.PIPE).stdout.strip()
     cc_version = subprocess.run([args.cc, "--version"], cwd=ROOT, check=True, text=True,
+                                encoding="utf-8", errors="strict",
                                 stdout=subprocess.PIPE).stdout.splitlines()[0]
     payload = {
         "schema": 1,
