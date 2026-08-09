@@ -11575,6 +11575,32 @@ static void emit_one_class_native_type_register_helper(XiCgenCtx *ctx, FILE *out
     fprintf(out, "\n    return XR_FROM_INT(_tid);\n}\n");
 }
 
+/* Json.parse<T>/decode<T> materialize a decode spec whose ensure-type-id
+ * expression calls the register helper for the target class and, through the
+ * derive recursion, for every JSON-derived class reachable from its fields.
+ * Those classes may never see a CLASS_CREATE op, so the definition gate must
+ * follow the same reachability or the generated unit calls an undeclared
+ * helper. */
+static bool cg_json_decode_target_reaches_class(XiCgenCtx *ctx, const XrType *type,
+                                                const XiClassData *cd, int depth) {
+    const XiClassData *target = cg_class_native_data_for_type(ctx, type);
+    if (!target || depth > 16 || (target->derive_flags & XR_DERIVE_JSON) == 0)
+        return false;
+    if (cg_class_native_data_matches(target, cd))
+        return true;
+    for (const XiClassData *current = target; current;
+         current = current->super_name ? cg_class_native_data_by_name(ctx, current->super_name)
+                                       : NULL) {
+        for (uint16_t i = 0; i < current->instance_field_count; i++) {
+            const XrType *field_type =
+                current->instance_field_types ? current->instance_field_types[i] : NULL;
+            if (field_type && cg_json_decode_target_reaches_class(ctx, field_type, cd, depth + 1))
+                return true;
+        }
+    }
+    return false;
+}
+
 static bool cg_func_needs_class_native_type_register_helper(XiCgenCtx *ctx, const XiFunc *func,
                                                             const XiClassData *cd) {
     if (!ctx || !func || !cd)
@@ -11589,10 +11615,38 @@ static bool cg_func_needs_class_native_type_register_helper(XiCgenCtx *ctx, cons
             continue;
         for (uint32_t vi = 0; vi < block->nvalues; vi++) {
             const XiValue *value = block->values[vi];
-            if (!value || value->op != XI_CLASS_CREATE || !value->aux ||
+            if (!value)
+                continue;
+            if (value->op != XI_CLASS_CREATE || !value->aux ||
                 !cg_class_native_data_matches((const XiClassData *) value->aux, cd))
                 continue;
             if (!cg_class_descriptor_create_is_elided(ctx, func, value))
+                return true;
+        }
+    }
+    return false;
+}
+
+/* Typed JSON decode reaches the register helper of its target class and of
+ * every JSON-derived class in the target's field graph, so those classes need
+ * a definition even when no CLASS_CREATE ever runs and even when the class is
+ * a value aggregate (the decode spec registers its lazy type id). */
+static bool cg_func_json_decode_needs_register_helper(XiCgenCtx *ctx, const XiFunc *func,
+                                                      const XiClassData *cd) {
+    if (!ctx || !func || !cd)
+        return false;
+    for (uint16_t ci = 0; ci < func->nchildren; ci++) {
+        if (cg_func_json_decode_needs_register_helper(ctx, func->children[ci], cd))
+            return true;
+    }
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (value && value->op == XI_JSON_DECODE && value->type &&
+                cg_json_decode_target_reaches_class(ctx, value->type, cd, 0))
                 return true;
         }
     }
@@ -11604,14 +11658,19 @@ static void emit_class_native_type_register_helpers(XiCgenCtx *ctx, FILE *out, X
     if (!module || !module->classes)
         return;
     for (uint16_t ci = 0; ci < module->nclasses; ci++) {
+        XiClassData *cd = module->classes[ci];
+        if (!cd)
+            continue;
         /* A value aggregate has no runtime type identity, so the helper that
          * registers one is dead output -- one per struct, and invisible while
-         * the generated unit suppressed -Wunused-function wholesale. */
-        if (module->classes[ci] && (!module->classes[ci]->needs_runtime_type ||
-                                    !cg_func_needs_class_native_type_register_helper(
-                                        ctx, module->init, module->classes[ci])))
+         * the generated unit suppressed -Wunused-function wholesale -- unless
+         * a typed JSON decode registers its lazy type id through it. */
+        bool by_decode = cg_func_json_decode_needs_register_helper(ctx, module->init, cd);
+        bool by_create = cd->needs_runtime_type &&
+                         cg_func_needs_class_native_type_register_helper(ctx, module->init, cd);
+        if (!by_decode && !by_create)
             continue;
-        emit_one_class_native_type_register_helper(ctx, out, module->classes[ci], prefix);
+        emit_one_class_native_type_register_helper(ctx, out, cd, prefix);
     }
 }
 
