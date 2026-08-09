@@ -24,26 +24,27 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 }
 
 // 创建 N 个 channel（存入数组自动共享）
-const channels: Array<Channel<int>> = []
+var channels: Array<Channel<int>> = []
 for (var i = 0; i < N; i++) {
     channels.push(Channel(1))
 }
 
 // 创建 N 个协程，每个协程从自己的 channel 接收，发送到下一个
-fn ring_node(id: int, in_ch: Channel<int>, out_ch: Channel<int>, rounds: int) {
+fn ring_node(in_ch: Channel<int>, out_ch: Channel<int>, rounds: int) -> int {
     for (var r = 0; r < rounds; r++) {
         var msg = recv_int(in_ch, 0)
         out_ch.send(msg + 1)
     }
+    return rounds
 }
 
 var start = time.monotonic()
 // 启动所有协程
-var tasks: Array<Task> = []
+var tasks: Array<Task<int>> = []
 for (var i = 0; i < N; i++) {
     var in_ch = channels[i]
     var out_ch = channels[(i + 1) % N]
-    tasks.push(go ring_node(i, in_ch, out_ch, M))
+    tasks.push(go ring_node(in_ch, out_ch, M))
 }
 // 向第一个 channel 注入初始消息
 channels[0].send(0)
