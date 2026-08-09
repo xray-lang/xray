@@ -100,6 +100,6 @@ stack, or runtime push/pop helper is a contract violation.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h 696ddc204e161c42bee708528a2eddc90eaaa8dfc1f8f2bb9590cc5b798371b0
-anchor-sha256: src/aot/xi_cgen.c 9ebac518a6cae8ddaedb10ce537912bca818ec20547621392114a79dada0aeb9
-anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 744327ffb824c99493221431771df2f6f3f325154cea193ebcec17627c6a88f7
-anchor-sha256: src/app/cli/xcmd_verify.c 621d117db22a9c3c101d183f3c5554616bdba614d6ebbaf942d50d6b3ccf6f29
+anchor-sha256: src/aot/xi_cgen.c f446822b6fba5f95088dd716cf08c07013493a4479396e4f5360452eed48b61e
+anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 94d85a40ae5a6b8d3b237984a7457ce15d76f6b1fd5e6095719969a7515ad582
+anchor-sha256: src/app/cli/xcmd_verify.c ca122153d89cbc4fa2b2fcffe08604c109729941a5a9b34ff0d72b1d0226e8a8

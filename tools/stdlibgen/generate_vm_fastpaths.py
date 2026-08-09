@@ -372,12 +372,63 @@ def hosted_bridge_params(entry: dict[str, Any]) -> list[tuple[str, str, str | No
     return bridge
 
 
+def private_native_modules(root: Path) -> set[str]:
+    """Modules whose Xray source calls private `__`-prefixed native builtins.
+
+    A hosted fragment is compiled as freestanding AOT that cannot reach a
+    module's private native syscall primitives: such a call resolves to an
+    unlinked stub, so the fragment reads uninitialized state (for example a
+    bogus file handle) and crashes. These functions must stay on the
+    interpreted VM path, where the private native bindings are available. The
+    `__`-prefixed calls only appear in the system modules (filesystem, sockets,
+    process/platform, threads), so excluding those whole source files
+    fail-closes the boundary without a per-callsite dependency walk.
+    `__file__`/`__dir__`/`__line__` are compile-time source intrinsics, not
+    syscalls, and do not disqualify a module.
+    """
+    impure: set[str] = set()
+    intrinsics = {"__file__", "__dir__", "__line__"}
+    for path in sorted((root / "stdlib").glob("*/*.xr")):
+        module = path.parent.name
+        if module == "types" or module.startswith("_") or path.stem != module:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for match in re.finditer(r"\b__[A-Za-z][A-Za-z0-9]*", text):
+            if match.group(0) not in intrinsics:
+                impure.add(module)
+                break
+
+    # Some stdlib classes are read by native C bindings that reach straight into
+    # the VM field layout (for example `xrs_path_arg` requires the Path instance
+    # to carry a first VM field named "raw"). Fastpath-installing such a class
+    # replaces it with a proxy that holds only an opaque native value and no VM
+    # fields, so the binding reads NULL and every caller silently fails; the
+    # interpreted path likewise hands that proxy to callers that still expect a
+    # plain instance. The module that DEFINES such a class must stay off the
+    # fastpath so the class keeps its plain VM representation. Each
+    # `xrs_<name>_arg` helper is named after the owning stdlib module (Path lives
+    # in path/), so a matching stdlib directory identifies that module.
+    binding_sources = list((root / "stdlib").rglob("*.c")) + [root / "stdlib" / "common.h"]
+    for source in binding_sources:
+        if not source.exists():
+            continue
+        for match in re.finditer(r"\bxrs_([a-z][a-z0-9]*)_arg\b",
+                                 source.read_text(encoding="utf-8")):
+            token = match.group(1)
+            if token != "string" and (root / "stdlib" / token).is_dir():
+                impure.add(token)
+    return impure
+
+
 def derive_hosted_entries(root: Path) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     inventory = load_source_inventory(root)
     value_types, type_owners, class_infos = hosted_value_types(root, inventory)
+    impure_modules = private_native_modules(root)
     for item in inventory:
         if item.get("category") != "stdlib-module" or item.get("kind") != "function":
+            continue
+        if str(item["namespace"]) in impure_modules:
             continue
         parsed = hosted_signature(str(item.get("signature", "")), value_types)
         if not parsed:
@@ -395,6 +446,8 @@ def derive_hosted_entries(root: Path) -> list[dict[str, Any]]:
         if info["generic_arity"]:
             continue
         module = str(info["module"])
+        if module in impure_modules:
+            continue
         source = str(info["source"])
         emitted_constructor = False
         for item in info["members"]:

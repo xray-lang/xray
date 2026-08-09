@@ -395,6 +395,20 @@ static bool stdlib_host_byte_span_view(void *host, XrValue value,
         out->readonly = XR_SLICE_REF_IS_READONLY(value) ? 1u : 0u;
         return true;
     }
+    /* A byte sequence also reaches the boundary as a bare array-ref: an
+     * aggregate ref whose payload is the element storage itself, with the
+     * element lane and count in the descriptor. The slice flag is tested
+     * first because both subkinds share XR_TAG_AGG_REF. */
+    if (XR_IS_ARRAY_REF(value)) {
+        if (XR_ARRAY_REF_ELEM_TYPE(value) != XR_ELEM_U8)
+            return false;
+        uint32_t count = XR_ARRAY_REF_ELEM_COUNT(value);
+        if (!value.ptr && count != 0u)
+            return false;
+        out->data = (uint8_t *) value.ptr;
+        out->length = (uint64_t) count;
+        return true;
+    }
     if (XR_IS_ARRAY(value) && value.ptr) {
         const XrArray *array = (const XrArray *) value.ptr;
         if (array->length < 0 || array->elem_type != XR_ELEM_U8 || array->elem_size != 1 ||

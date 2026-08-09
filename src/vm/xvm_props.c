@@ -188,7 +188,22 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
         // Computed setter lookup is frozen into the class at construction.
         if (scls && (scls->flags & XR_CLASS_HAS_SETTERS)) {
             XrMethod *setter = xr_class_lookup_setter(scls, prop_symbol);
-            if (setter && setter->as.closure) {
+            if (setter && setter->type == XMETHOD_PRIMITIVE && setter->as.primitive) {
+                /* A stdlib fast-path adapter installs its `set:x` as a native
+                 * primitive, not a bytecode closure. Invoke it with the
+                 * assigned value as the sole argument, mirroring the primitive
+                 * struct getter path above; reading the closure arm of the
+                 * method union here would dereference a code address. */
+                int base_offset = (int) (base - vm_ctx->stack);
+                int frame_index = (int) (frame - vm_ctx->frames);
+                setter->as.primitive(isolate, obj, &value, 1);
+                if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
+                    return XR_DISP_FATAL;
+                if (!XR_IS_NULL(vm_ctx->current_exception))
+                    return xr_vm_is_catch_reachable(isolate) ? XR_DISP_RAISE : XR_DISP_FATAL;
+                return XR_DISP_NEXT;
+            }
+            if (setter && setter->type == XMETHOD_CLOSURE && setter->as.closure) {
                 XrClosure *closure = setter->as.closure;
                 XrProto *proto = closure->proto;
                 if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
@@ -248,10 +263,9 @@ XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMCo
 
     /* `as` is a tagged union: only a closure-backed method stores an XrClosure
      * there, and a native primitive stores a function pointer in the same
-     * bytes. Reading the wrong arm dereferenced a function pointer as an
-     * object. A native class's own `set:x` primitive is not a bytecode frame
-     * to push, so fall through to the ordinary field/native store path. */
-    if (!setter || setter->type != XMETHOD_CLOSURE || !setter->as.closure)
+     * bytes. The method tag has to select the arm before it is read, or a
+     * function pointer gets dereferenced as an object. */
+    if (!setter)
         return XR_DISP_FALLTHROUGH;
 
     if (setter->type == XMETHOD_PRIMITIVE && setter->as.primitive) {
