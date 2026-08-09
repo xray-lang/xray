@@ -1,0 +1,21 @@
+// A library function's default-argument expression resolves in the library's
+// own module scope, not the caller's import set.  Regression for the caller
+// whose only import is the namespace (or a named import of the function
+// alone): the library's `opts: Options = Options()` used to fail to resolve
+// at such call sites, because the cloned default was stamped with a symbol id
+// from the exporting module's analysis and re-read in the caller's id space.
+// Also pins module-qualified non-generic class construction (`lib.Options()`)
+// and a computed default that calls an exported function.  VM and AOT must
+// agree byte-for-byte.
+import "./_default_arg_class_lib" as lib
+import { connect } from "./_default_arg_class_lib"
+
+print(lib.connect(7000))                     // 7002: namespace call, default filled
+print(connect(7100))                         // 7102: named import of the fn only
+print(lib.connect(7200, lib.Options()))      // 7202: module-qualified construction
+print(connect(7300, lib.Options.withRetries(9)))  // 7309: explicit options
+print(lib.bind())                            // 8025: default calls exported fn
+print(lib.bind(1))                           // 1: explicit argument wins
+print(lib.Gateway.open())                    // 9002: static-method class default
+print(lib.Gateway.open(lib.Options.withRetries(5)))  // 9005: explicit options
+print(lib.wrap())                            // 8026: nested default expansion

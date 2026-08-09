@@ -1,0 +1,51 @@
+// Library module imported by xmod_default_arg_class.xr (skipped as a
+// standalone diff case because its basename starts with '_').  Its exported
+// functions carry default-argument expressions that name the library's own
+// exports: a class construction and a computed value built from an exported
+// function and constant.  Callers must be able to omit these arguments
+// without importing any of the referenced names themselves.
+export const BASE_RETRIES: int = 2
+
+export class Options {
+    retries: int = BASE_RETRIES
+
+    constructor() {
+        this.retries = BASE_RETRIES
+    }
+
+    static withRetries(n: int) -> Options {
+        var opts = Options()
+        opts.retries = n
+        return opts
+    }
+}
+
+export fn defaultPort() -> int {
+    return 8000
+}
+
+export fn connect(port: int, opts: Options = Options()) -> int {
+    return port + opts.retries
+}
+
+export fn bind(port: int = defaultPort() + 25) -> int {
+    return port
+}
+
+// A default that calls a function which itself fills a default: omitting the
+// argument expands `bind()`, whose own `port` default expands in turn. The
+// expansion guard must unwind both frames and still resolve each layer in its
+// declaring module.
+export fn wrap(base: int = bind()) -> int {
+    return base + 1
+}
+
+// A static method's default argument names the library's own class too.
+// Static-method links carry no module name of their own, so the cross-module
+// import ref for `Options()` must fall back to the declaring module's canonical
+// identity for the callee's unit to resolve it in AOT separate compilation.
+export class Gateway {
+    static open(opts: Options = Options()) -> int {
+        return 9000 + opts.retries
+    }
+}

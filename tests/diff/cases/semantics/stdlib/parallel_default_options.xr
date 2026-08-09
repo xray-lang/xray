@@ -4,13 +4,10 @@
 // fastpath sees an Options argument that no caller wrote. It used to reject
 // exactly those and refuse to build -- forEach stayed green only because it is
 // not generic and so never had the default filled in.
+// A single namespace import is the point of this case: the library's own
+// `options: Options = Options()` must resolve in the parallel module's scope,
+// so no caller-side import of Options is needed.
 import parallel
-// The second import is load-bearing, not decoration: a library default
-// argument is currently resolved in the CALLER's scope, so the stdlib's own
-// `options: Options = Options()` fails to type-check at any call site that has
-// not itself imported Options. Removing this line does not tidy the case, it
-// makes every call below stop compiling. See xray-docs/known_bugs.md.
-import { Options } from parallel
 
 const seen = Atomic<int>(0)
 parallel.forEach(0..5, (i) -> {

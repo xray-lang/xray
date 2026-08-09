@@ -1277,6 +1277,29 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
         }
     }
 
+    /* A symbol with cross-module identity but no storage in this unit — such
+     * as an import materialized while binding a cloned default-argument
+     * expression — resolves through the exporting module's binding table, the
+     * same way a namespace member reference does.  VM and AOT both resolve
+     * XI_IMPORT_REF values through the module export tables, including class
+     * objects in callee position. */
+    if (sid != 0 && l->analyzer) {
+        XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, sid);
+        XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
+        const char *member_name =
+            links && links->import_member_name ? links->import_member_name : name;
+        if (links && links->module_name && member_name) {
+            /* The symbol's own type is the class/enum/function identity the
+             * import ref stands for; xi_lower_emit_import_ref supplies its own
+             * fallback when a symbol carries none, same as the namespace-member
+             * and enum-namespace emitters. */
+            XiValue *import_ref = xi_lower_emit_import_ref(l, links->module_name, member_name,
+                                                           links->type, (int) node->line);
+            if (import_ref)
+                return import_ref;
+        }
+    }
+
     /* Unresolved variable is a compiler bug: the analyzer must resolve
      * all variable references before lowering.  Hard-fail so the bug
      * surfaces immediately instead of hiding behind a runtime null. */
