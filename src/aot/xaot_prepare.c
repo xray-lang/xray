@@ -3260,6 +3260,17 @@ static bool prepare_transfer_type_is_sync_handle(const XrType *type) {
            xi_type_is_named_instance(type, "EventCount");
 }
 
+/* Builtin native handles whose only constructor allocates on the shared system
+ * heap with an atomic refcount (xr_sysheap_alloc_shared), exactly like Channel
+ * and Atomic: NetConn and NetListener. There is no user-constructible or
+ * execution-local path to a value of these types, so the static type alone
+ * proves the value is always cross-execution share-safe. Requiring the builtin
+ * class (class_ref == NULL) rejects a user class that reuses the name. */
+static bool prepare_transfer_type_is_shared_native_handle(const XrType *type) {
+    return xr_type_is_builtin_named_class(type, "NetConn") ||
+           xr_type_is_builtin_named_class(type, "NetListener");
+}
+
 static bool prepare_transfer_type_is_inline(const XrType *type) {
     if (!type)
         return false;
@@ -3288,6 +3299,8 @@ static uint8_t prepare_transfer_action(const XiValue *value, uint8_t mode) {
     switch ((XrTransferMode) mode) {
         case XR_TRANSFER_SHARE:
             if (type && prepare_transfer_type_is_sync_handle(type))
+                return XR_TRANSFER_SYNC_SHARE;
+            if (type && prepare_transfer_type_is_shared_native_handle(type))
                 return XR_TRANSFER_SYNC_SHARE;
             if (type && prepare_transfer_type_is_inline(type))
                 return XR_TRANSFER_INLINE_COPY;
