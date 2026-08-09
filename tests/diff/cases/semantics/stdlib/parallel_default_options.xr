@@ -4,6 +4,9 @@
 // fastpath sees an Options argument that no caller wrote. It used to reject
 // exactly those and refuse to build -- forEach stayed green only because it is
 // not generic and so never had the default filled in.
+// A single namespace import is the point of this case: the library's own
+// `options: Options = Options()` must resolve in the parallel module's scope,
+// so no caller-side import of Options is needed.
 import parallel
 
 const seen = Atomic<int>(0)

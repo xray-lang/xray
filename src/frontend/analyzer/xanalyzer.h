@@ -121,12 +121,17 @@ struct XaAnalyzer {
     // Current analysis scope
     XaScope *current_scope;
 
-    // Detached holder for caller-local import symbols materialized when a
-    // cross-module default-argument expression names a symbol exported by the
-    // declaring module. A child of global_scope so it is freed with it, but off
-    // the lexical lookup chain (a bare identifier never resolves into a child
-    // scope), while its symbols still register in symbols_by_id so lowering can
-    // recover their module identity by id. Created lazily on first use.
+    /* Owner scope for hidden import symbols materialized while binding cloned
+     * default-argument expressions to their declaration module's exports.
+     * A module's export map carries symbols owned by the exporting module's
+     * analyzer, whose ids belong to a different id space; each such export
+     * referenced from a default expression is re-imported here as a symbol of
+     * this analyzer so the id stamped on the clone resolves correctly, and
+     * registering it in symbols_by_id lets lowering recover the module
+     * identity from that id. The scope is a child of global_scope purely for
+     * teardown ownership — no lexical lookup chain passes through it (a bare
+     * identifier never resolves into a child scope), so its names never
+     * become visible to user code. Created on first use. */
     XaScope *default_arg_import_scope;
 
     // Current file being analyzed

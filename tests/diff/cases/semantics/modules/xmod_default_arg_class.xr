@@ -1,15 +1,24 @@
 // anchor: cross-module-default-arg-class
-// A default argument that names a class constructor or an exported helper of the
-// declaring module must resolve at any importer, whether the callee is reached
-// through a selective function-only import (the referenced class is NOT imported
-// into the caller scope) or a namespace import. VM and AOT must agree byte for
-// byte.
-import { withOpt, withLabel, withCall } from "./_default_arg_class_lib"
+// A library function's default-argument expression resolves in the library's
+// own module scope, not the caller's import set.  Regression for the caller
+// whose only import is the namespace (or a named import of the function
+// alone): the library's `opts: Options = Options()` used to fail to resolve
+// at such call sites, because the cloned default was stamped with a symbol id
+// from the exporting module's analysis and re-read in the caller's id space.
+// Also pins module-qualified non-generic class construction (`lib.Options()`)
+// and a computed default that calls an exported function.  VM and AOT must
+// agree byte-for-byte.
 import "./_default_arg_class_lib" as lib
+import { connect, describe } from "./_default_arg_class_lib"
 
-print(withOpt())               // selective import; default Opt() is cross-module
-print(withLabel())             // default Opt(), field read
-print(withCall())              // default calls exported secret()
-print(lib.withOpt())           // namespace call; default Opt()
-print(lib.withCall())          // namespace call; default secret()
-print(lib.withOpt(lib.Opt()))  // explicit lib.Opt() module-qualified construction
+print(lib.connect(7000))                     // 7002: namespace call, default filled
+print(connect(7100))                         // 7102: named import of the fn only
+print(lib.connect(7200, lib.Options()))      // 7202: module-qualified construction
+print(connect(7300, lib.Options.withRetries(9)))  // 7309: explicit options
+print(describe())                            // def: default instance, string field
+print(lib.describe(lib.Options.withRetries(4)))   // def: explicit options
+print(lib.bind())                            // 8025: default calls exported fn
+print(lib.bind(1))                           // 1: explicit argument wins
+print(lib.Gateway.open())                    // 9002: static-method class default
+print(lib.Gateway.open(lib.Options.withRetries(5)))  // 9005: explicit options
+print(lib.wrap())                            // 8026: nested default expansion

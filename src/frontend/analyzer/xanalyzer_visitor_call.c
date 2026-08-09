@@ -4844,10 +4844,20 @@ static bool xa_default_arg_stdlib_module_from_path(const char *path, char *out, 
     return true;
 }
 
-static XrHashMap *xa_default_arg_decl_exports(XaInferContext *ctx, XaSymbolLinks *links) {
+/* Locate the declaring module's export map for a callee's links. On success
+ * *decl_module_canonical receives the graph's canonical module identity when
+ * the match came from the graph itself (NULL when the callee's own
+ * links->module_name already resolved) — method links carry no module name of
+ * their own, and a symbol materialized from these exports needs SOME module
+ * identity for the lowering import-ref fallback to work with. */
+static XrHashMap *xa_default_arg_decl_exports(XaInferContext *ctx, XaSymbolLinks *links,
+                                              const char **decl_module_canonical) {
+    if (decl_module_canonical)
+        *decl_module_canonical = NULL;
     if (!ctx || !ctx->analyzer || !links || !ctx->analyzer->graph)
         return NULL;
 
+    XrModuleGraph *graph = (XrModuleGraph *) ctx->analyzer->graph;
     if (links->module_name) {
         XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, links->module_name);
         if (exports)
@@ -4857,21 +4867,34 @@ static XrHashMap *xa_default_arg_decl_exports(XaInferContext *ctx, XaSymbolLinks
     if (!links->file_path)
         return NULL;
 
-    XrModuleGraph *graph = (XrModuleGraph *) ctx->analyzer->graph;
     for (int i = 0; i < graph->spec_count; i++) {
         XrModuleSpec *spec = &graph->specs[i];
         if (!spec->export_symbols)
             continue;
         if ((spec->source_path &&
              xa_default_arg_path_matches(spec->source_path, links->file_path)) ||
-            (spec->canonical && xa_default_arg_path_matches(spec->canonical, links->file_path)))
+            (spec->canonical && xa_default_arg_path_matches(spec->canonical, links->file_path))) {
+            if (decl_module_canonical)
+                *decl_module_canonical = spec->canonical;
             return spec->export_symbols;
+        }
     }
 
     char module_name[64];
     if (xa_default_arg_stdlib_module_from_path(links->file_path, module_name,
                                                sizeof(module_name))) {
-        return resolve_graph_export_symbols(ctx->analyzer, module_name);
+        XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name);
+        if (exports && decl_module_canonical) {
+            /* The name buffer is stack-local; hand back the graph-owned
+             * canonical spelling of the spec that owns these exports. */
+            for (int i = 0; i < graph->spec_count; i++) {
+                if (graph->specs[i].export_symbols == exports) {
+                    *decl_module_canonical = graph->specs[i].canonical;
+                    break;
+                }
+            }
+        }
+        return exports;
     }
     return NULL;
 }
@@ -4906,19 +4929,97 @@ typedef struct XaDefaultArgBindCtx {
     XaInferContext *ctx;
     XrHashMap *exports;
     const char *decl_file;
+    /* Identity of the declaring module for the symbols named in the default
+     * expression. Prefers the callee links' own module spelling; falls back to
+     * the graph-canonical identity of the module that owns `exports` when the
+     * callee carries none (static-method links never record a module name).
+     * A cross-module reference in a default is lowered to an import ref keyed
+     * on this, so it must be non-NULL whenever the referenced symbol lives in
+     * another unit. */
     const char *module_name;
 } XaDefaultArgBindCtx;
+
+/* Owner scope for imports materialized by xa_default_arg_import_export_symbol.
+ * Hangs off global_scope so analyzer teardown reclaims it, but is never made
+ * anyone's parent: lexical resolution walks upward only, so the names living
+ * here stay invisible to user code. */
+static XaScope *xa_default_arg_import_scope(XaAnalyzer *analyzer) {
+    if (!analyzer || !analyzer->global_scope)
+        return NULL;
+    if (!analyzer->default_arg_import_scope)
+        analyzer->default_arg_import_scope = xa_scope_new(XA_SCOPE_GLOBAL, analyzer->global_scope);
+    return analyzer->default_arg_import_scope;
+}
+
+/* Re-import a foreign export symbol into the current analysis so a cloned
+ * default expression can be stamped with an id that resolves here. Mirrors
+ * what a selective `import { name } from module` materializes: a caller-local
+ * symbol of the exported kind whose links copy the export metadata and record
+ * the module/member identity for lowering and lazy re-resolution. Reuses a
+ * previously materialized symbol for the same name and declaring file. */
+static XaSymbol *xa_default_arg_import_export_symbol(XaDefaultArgBindCtx *bind,
+                                                     XaSymbol *export_sym, const char *name) {
+    XR_DCHECK(bind && bind->ctx && bind->ctx->analyzer, "defarg import: bind context required");
+    XR_DCHECK(export_sym && name, "defarg import: export symbol and name required");
+    XaAnalyzer *analyzer = bind->ctx->analyzer;
+    XaScope *scope = xa_default_arg_import_scope(analyzer);
+    if (!scope)
+        return NULL;
+
+    XaSymbol *reused = xa_default_arg_find_decl_file_symbol(analyzer, scope, bind->decl_file, name);
+    if (reused)
+        return reused;
+
+    XaSymbol *sym = xa_symbol_new(name, export_sym->kind);
+    if (!sym)
+        return NULL;
+    sym->is_imported = true;
+    sym->is_const = true;
+    sym->is_static = export_sym->is_static;
+    sym->is_private = export_sym->is_private;
+    sym->is_protected = export_sym->is_protected;
+    sym->is_override = export_sym->is_override;
+    sym->is_builtin = export_sym->is_builtin;
+    sym->mutates_receiver = export_sym->mutates_receiver;
+    sym->passing_mode = export_sym->passing_mode;
+    sym->alias_type = export_sym->alias_type;
+    xa_scope_add_symbol(scope, sym);
+
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+    if (links) {
+        xa_symbol_links_copy_export_metadata(analyzer, links, &export_sym->links);
+        /* The exporting module records neither how the caller spells the
+         * module nor, for some stdlib modules, its own file path; both are
+         * needed for caller-side re-resolution and for reuse keying. */
+        if (bind->module_name)
+            links->module_name = bind->module_name;
+        links->import_member_name = sym->name;
+        if (!links->file_path)
+            links->file_path = bind->decl_file;
+    }
+    return sym;
+}
 
 static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, const char *name) {
     if (!bind || !bind->ctx || !bind->ctx->analyzer || !name)
         return NULL;
+    XaAnalyzer *analyzer = bind->ctx->analyzer;
     if (bind->exports) {
         XaSymbol *sym = (XaSymbol *) xr_hashmap_get(bind->exports, name);
-        if (sym)
-            return sym;
+        if (sym) {
+            /* Export maps are built by the exporting module's analyzer. Only
+             * a symbol the current registry resolves back to itself carries
+             * an id that is meaningful in this analysis; anything else must
+             * be re-imported, never id-stamped across id spaces. */
+            if (xa_scope_lookup_by_id(analyzer->global_scope, sym->id) == sym)
+                return sym;
+            XaSymbol *imported = xa_default_arg_import_export_symbol(bind, sym, name);
+            if (imported)
+                return imported;
+        }
     }
-    return xa_default_arg_find_decl_file_symbol(
-        bind->ctx->analyzer, bind->ctx->analyzer->global_scope, bind->decl_file, name);
+    return xa_default_arg_find_decl_file_symbol(analyzer, analyzer->global_scope, bind->decl_file,
+                                                name);
 }
 
 static XaScope *xa_default_arg_import_scope(XaAnalyzer *analyzer) {
@@ -5147,12 +5248,16 @@ static bool xa_complete_call_default_args(XaInferContext *ctx, CallExprNode *cal
         new_args[i] = call->arguments[i];
         new_accesses[i] = call->arg_accesses ? call->arg_accesses[i] : XR_CALL_ARG_PLAIN;
     }
-    XrHashMap *decl_exports = xa_default_arg_decl_exports(ctx, links);
+    const char *decl_module_canonical = NULL;
+    XrHashMap *decl_exports = xa_default_arg_decl_exports(ctx, links, &decl_module_canonical);
     XaDefaultArgBindCtx bind = {
         .ctx = ctx,
         .exports = decl_exports,
         .decl_file = links->file_path,
-        .module_name = links->module_name,
+        /* Static-method links carry no module name; fall back to the graph's
+         * canonical identity of the declaring module so a cross-module symbol
+         * named in the default still lowers to a resolvable import ref. */
+        .module_name = links->module_name ? links->module_name : decl_module_canonical,
     };
     for (int i = call->arg_count; i < param_count; i++) {
         new_args[i] = xr_ast_clone_session(links->param_defaults[i], sess);
@@ -5189,6 +5294,56 @@ static void xa_mark_call_default_arg_contract(CallExprNode *call, XaSymbolLinks 
     call->required_arg_count = required_arg_count;
     call->default_arg_count =
         param_count > call->supplied_arg_count ? param_count - call->supplied_arg_count : 0;
+}
+
+/* Rewrite every diagnostic appended after `tail` so it names the call site the
+ * default expression was expanded from. The diagnostics themselves already
+ * carry the declaring file and the default expression's own line/column; what
+ * the user cannot see from those is WHICH call triggered the expansion, so the
+ * expansion site is appended to the message. */
+static void xa_append_default_arg_expansion_notes(XaInferContext *ctx, XaDiagnostic *tail,
+                                                  AstNode *call_node, CallExprNode *call,
+                                                  XaSymbolLinks *fn_links, int param_index,
+                                                  const char *call_file) {
+    XR_DCHECK(ctx && ctx->analyzer && call_node && call, "expansion notes: call context required");
+    const char *callee_name = NULL;
+    if (call->callee && call->callee->type == AST_VARIABLE)
+        callee_name = call->callee->as.variable.name;
+    else if (call->callee && call->callee->type == AST_MEMBER_ACCESS)
+        callee_name = call->callee->as.member_access.name;
+    const char *param_name =
+        fn_links && fn_links->param_names && param_index < fn_links->param_count
+            ? fn_links->param_names[param_index]
+            : NULL;
+
+    /* The callee expression pins the call more precisely than the call node,
+     * whose column is unset for some call shapes; fall back to the call node
+     * when the callee carries no position of its own. */
+    AstNode *anchor = call->callee ? call->callee : call_node;
+    char suffix[512];
+    if (param_name && callee_name) {
+        snprintf(suffix, sizeof(suffix),
+                 " (in the default argument for parameter '%s' of '%s', expanded from the call "
+                 "at %s:%d:%d)",
+                 param_name, callee_name, call_file ? call_file : "<unknown>", (int) anchor->line,
+                 (int) anchor->column);
+    } else {
+        snprintf(suffix, sizeof(suffix),
+                 " (in a default argument expanded from the call at %s:%d:%d)",
+                 call_file ? call_file : "<unknown>", (int) anchor->line, (int) anchor->column);
+    }
+
+    XaDiagnostic *first = tail ? tail->next : ctx->analyzer->diagnostics;
+    for (XaDiagnostic *diag = first; diag; diag = diag->next) {
+        const char *old_message = diag->message ? diag->message : "";
+        size_t need = strlen(old_message) + strlen(suffix) + 1;
+        char *decorated = (char *) xr_malloc(need);
+        if (!decorated)
+            return;
+        snprintf(decorated, need, "%s%s", old_message, suffix);
+        xr_free((void *) diag->message);
+        diag->message = decorated;
+    }
 }
 
 static void xa_check_channel_send_transfer_arg(XaInferContext *ctx, AstNode *call_node,
@@ -7026,17 +7181,36 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         XrCallArgAccess access = xa_call_arg_access(call, i);
         /* While a filled default expression is being inferred, its declaration
          * stays on the expansion stack so a default whose resolution reaches
-         * the same declaration again cannot re-clone itself without bound. */
+         * the same declaration again cannot re-clone itself without bound.
+         * The current file also switches to the declaring file for the span
+         * of the visit: the cloned nodes carry the declaration's line and
+         * column, so locations reported against the caller's path would point
+         * into unrelated caller text. Any diagnostic the visit produces then
+         * gets the expansion site appended, because a location inside the
+         * declaration alone cannot lead the user to the offending call. */
         bool guard_default_expansion = fn_links && call->default_arg_count > 0 &&
                                        call->supplied_arg_count >= 0 &&
                                        i >= call->supplied_arg_count &&
                                        ctx->default_expansion_depth < XA_DEFAULT_EXPANSION_MAX;
-        if (guard_default_expansion)
+        const char *saved_expansion_file = ctx->file_path;
+        XaDiagnostic *pre_expansion_tail = NULL;
+        int pre_expansion_count = 0;
+        if (guard_default_expansion) {
             ctx->default_expansion_links[ctx->default_expansion_depth++] = fn_links;
+            if (fn_links->file_path)
+                ctx->file_path = fn_links->file_path;
+            pre_expansion_tail = ctx->analyzer->diagnostics_tail;
+            pre_expansion_count = ctx->analyzer->diagnostic_count;
+        }
         XrType *arg_type = xa_visit_call_arg_for_param_mode(ctx, arg_node, parallel_callback_label,
                                                             access, param_mode);
-        if (guard_default_expansion)
+        if (guard_default_expansion) {
             ctx->default_expansion_depth--;
+            ctx->file_path = saved_expansion_file;
+            if (ctx->analyzer->diagnostic_count > pre_expansion_count)
+                xa_append_default_arg_expansion_notes(ctx, pre_expansion_tail, node, call, fn_links,
+                                                      i, saved_expansion_file);
+        }
         ctx->allow_view_expr_for_copy = saved_copy_view;
         ctx->expected_type = saved_expected;
         ctx->expected_from_signature = saved_from_signature;
