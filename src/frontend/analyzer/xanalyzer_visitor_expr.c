@@ -2782,10 +2782,18 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     // Reject `[...]` indexing of a possibly-null container (strict null checks).
     xa_check_nullable_access(ctx, node, ig->array, container, "index access", true);
 
-    /* Visit the index expression so variable references get their symbol_id resolved */
+    /* Visit the index expression so variable references get their symbol_id
+     * resolved. The key position is typed by the container exactly as on the
+     * write side; without the context an int literal keying a Map<float, V>
+     * keeps its default type and can never match a stored float key. */
     XrType *index_type = NULL;
     if (ig->index) {
+        XrType *key_expected = xa_index_key_expected_type(ctx, container);
+        XrType *saved_expected = ctx->expected_type;
+        if (key_expected && !XR_TYPE_IS_UNKNOWN(key_expected))
+            ctx->expected_type = key_expected;
         index_type = xa_visit_infer_expr(ctx, ig->index);
+        ctx->expected_type = saved_expected;
     }
 
     if (container && XR_TYPE_IS_ERROR(container))
