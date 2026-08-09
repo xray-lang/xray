@@ -280,7 +280,12 @@ XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMCo
         setter = xr_class_lookup_method(inst->klass, setter_symbol);
     }
 
-    if (!setter)
+    /* `as` is a tagged union: only a closure-backed method stores an XrClosure
+     * there, and a native primitive stores a function pointer in the same
+     * bytes. Reading the wrong arm dereferenced a function pointer as an
+     * object. A native class's own `set:x` primitive is not a bytecode frame
+     * to push, so fall through to the ordinary field/native store path. */
+    if (!setter || setter->type != XMETHOD_CLOSURE || !setter->as.closure)
         return XR_DISP_FALLTHROUGH;
 
     XrClosure *closure = setter->as.closure;
@@ -1138,10 +1143,8 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrVMRuntime *isolate, XrVMContext *vm_
         if (constructor && constructor->type == XMETHOD_PRIMITIVE) {
             int base_offset = (int) (base - vm_ctx->stack);
             int frame_index = (int) (frame - vm_ctx->frames);
-            XrValue result = constructor->as.primitive(
-                isolate, fn_val, &base[a + 2], nargs);
-            if (!vm_rebind_after_native_call(
-                    vm_ctx, base_offset, frame_index, &base, &frame))
+            XrValue result = constructor->as.primitive(isolate, fn_val, &base[a + 2], nargs);
+            if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
                 return XR_DISP_FATAL;
             base[a] = result;
             return XR_DISP_NEXT;
