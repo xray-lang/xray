@@ -201,12 +201,15 @@ static const char *cg_intern_enum_member_box(XiCgenCtx *ctx, const char *symbol,
     }
     CgEnumMemberBox *e = &ctx->enum_member_boxes[ctx->nenum_member_boxes];
     e->symbol = xr_strdup(symbol);
-    if (!e->symbol) {
+    e->enum_name = xr_strdup(enum_name ? enum_name : "");
+    e->member_name = xr_strdup(member_name ? member_name : "");
+    if (!e->symbol || !e->enum_name || !e->member_name) {
+        xr_free(e->symbol);
+        xr_free(e->enum_name);
+        xr_free(e->member_name);
         ctx->error = true;
         return NULL;
     }
-    e->enum_name = enum_name ? enum_name : "";
-    e->member_name = member_name ? member_name : "";
     e->member_index = member_index;
     e->layout_id = layout_id;
     ctx->nenum_member_boxes++;
@@ -243,8 +246,11 @@ static void emit_enum_member_box_defs(XiCgenCtx *ctx, FILE *out) {
 static void cg_reset_enum_member_boxes(XiCgenCtx *ctx) {
     if (!ctx)
         return;
-    for (int i = 0; i < ctx->nenum_member_boxes; i++)
+    for (int i = 0; i < ctx->nenum_member_boxes; i++) {
         xr_free(ctx->enum_member_boxes[i].symbol);
+        xr_free(ctx->enum_member_boxes[i].enum_name);
+        xr_free(ctx->enum_member_boxes[i].member_name);
+    }
     xr_free(ctx->enum_member_boxes);
     ctx->enum_member_boxes = NULL;
     ctx->nenum_member_boxes = 0;

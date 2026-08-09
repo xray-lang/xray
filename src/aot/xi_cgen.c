@@ -681,9 +681,9 @@ typedef struct CgWriter {
  * Body emission interns these; static-data emission writes exactly one
  * immortal file-scope XrAotEnumBox per symbol. */
 typedef struct CgEnumMemberBox {
-    char *symbol; /* owned: file-scope C identifier */
-    const char *enum_name;
-    const char *member_name;
+    char *symbol;      /* owned: file-scope C identifier */
+    char *enum_name;   /* owned copy: outlives the producing enum data */
+    char *member_name; /* owned copy: outlives the producing enum data */
     uint32_t member_index;
     uint32_t layout_id;
 } CgEnumMemberBox;
