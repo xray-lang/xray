@@ -10,10 +10,9 @@
  * KEY CONCEPT:
  *   Replaces the old XrJson-based "{fd, type, tls}" handles that scripts
  *   could read by name. XrNetConn / XrNetListener are opaque heap objects
- *   carrying the underlying fd plus type-specific state. Scripts can
- *   only operate on them via the net.read / net.write / net.close
- *   entry points (eventually via instance methods on the registered
- *   native types).
+ *   carrying the underlying fd plus type-specific state. Scripts operate
+ *   on them only through the net module's byte primitives (readInto,
+ *   writeBytes, accept, close, ...) and the registered handle methods.
  *
  * WHY THIS DESIGN:
  *   - Type safety: a TLS conn is never confused with a UDP socket; net
