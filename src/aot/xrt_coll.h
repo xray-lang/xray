@@ -1060,11 +1060,22 @@ static inline XrValue xrt_tuple_new(int64_t len) {
     return xr_mkptr(t, XR_TAG_TUPLE);
 }
 
+/* Element values transfer in, matching array construction and the ownership
+ * plan the backend emits: the operands are consumed at the construction site
+ * and are not released again by the caller, so retaining here would leave the
+ * elements one owner above zero forever. An array-ref lane still materializes,
+ * because a borrowed view cannot be stored as-is. */
 static inline XrValue xrt_tuple_make(int64_t len, const XrValue *items) {
     XrValue tuple = xrt_tuple_new(len);
     xrt_tuple_t *t = (xrt_tuple_t *) tuple.ptr;
-    for (int64_t i = 0; i < t->len; i++)
-        t->items[i] = items ? xrt_value_to_owned(items[i]) : XR_NULL_VAL;
+    for (int64_t i = 0; i < t->len; i++) {
+        if (!items)
+            t->items[i] = XR_NULL_VAL;
+        else if (XR_IS_ARRAY_REF(items[i]))
+            t->items[i] = xrt_array_ref_to_owned(items[i]);
+        else
+            t->items[i] = items[i];
+    }
     return tuple;
 }
 
