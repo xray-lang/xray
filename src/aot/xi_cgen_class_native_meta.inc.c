@@ -67,6 +67,27 @@ static const XiClassData *cg_class_native_data_by_name(const XiCgenCtx *ctx, con
     return NULL;
 }
 
+/* Same traversal as by_name, keyed on the exact evidence class id instead of
+ * the bare name so that same-named classes from different modules stay
+ * distinct. */
+static const XiClassData *cg_class_native_data_by_xg_class_id(const XiCgenCtx *ctx, XgClassId id) {
+    if (!ctx || id == XG_NO_ID)
+        return NULL;
+    if (ctx->module) {
+        for (uint16_t i = 0; i < ctx->module->nclasses; i++) {
+            const XiClassData *cd = ctx->module->classes[i];
+            if (cd && cd->xg_class_id == id)
+                return cd;
+        }
+    }
+    for (int i = 0; i < ctx->nimports; i++) {
+        const XiClassData *cd = ctx->imports[i].target_class;
+        if (cd && cd->xg_class_id == id)
+            return cd;
+    }
+    return NULL;
+}
+
 static void class_native_type_name(char *buf, size_t bufsz, const char *prefix,
                                    const char *class_name) {
     char prefix_buf[128];
@@ -87,6 +108,11 @@ static bool cg_class_native_data_matches(const XiClassData *a, const XiClassData
         return false;
     if (a == b)
         return true;
+    /* Exact evidence identity when both carry one: two modules exporting a
+     * class with the same bare name are distinct (id 1 != id 2).  Names remain
+     * the fallback for monomorphized generics that share no stamped id. */
+    if (a->xg_class_id != XG_NO_ID && b->xg_class_id != XG_NO_ID)
+        return a->xg_class_id == b->xg_class_id;
     return a->class_name && b->class_name && strcmp(a->class_name, b->class_name) == 0;
 }
 
@@ -170,6 +196,16 @@ static const XiClassData *cg_class_native_data_for_type(const XiCgenCtx *ctx, co
         return NULL;
     if (type->kind == XR_KIND_INSTANCE && !type->instance.class_ref)
         return NULL;
+    /* The class reference carries the exact evidence class id, which resolves
+     * same-named classes from different modules that a bare-name lookup would
+     * collapse onto the first match.  Fall back to the name for monomorphized
+     * generics (found via display/origin name) and builtins with no id. */
+    if (type->instance.class_ref && type->instance.class_ref->xg_class_id != XG_NO_ID) {
+        const XiClassData *by_id =
+            cg_class_native_data_by_xg_class_id(ctx, type->instance.class_ref->xg_class_id);
+        if (by_id)
+            return by_id;
+    }
     return cg_class_native_data_by_name(ctx, xr_type_get_class_name((XrType *) (uintptr_t) type));
 }
 

@@ -1114,6 +1114,17 @@ xi_lower_find_unique_class_by_receiver_type(const XgGlobalEvidence *ev,
     const XgClassSummary *match;
     if (!ev || !receiver_type)
         return NULL;
+    /* The analyzer's class reference names the exact declaring class, so when
+     * the evidence producer has stamped it with a global class id, resolve
+     * through that id first.  This is the only path that stays correct when two
+     * modules export classes sharing a name: a name-only lookup finds both and
+     * gives up as "not unique", leaving the field access without an id. */
+    if (receiver_type->instance.class_ref &&
+        receiver_type->instance.class_ref->xg_class_id != XG_NO_ID) {
+        match = xi_lower_find_class_by_id(ev, receiver_type->instance.class_ref->xg_class_id);
+        if (match)
+            return match;
+    }
     match = xi_lower_find_unique_class_by_name(ev, receiver_type->instance.class_name);
     if (match)
         return match;
@@ -1127,6 +1138,37 @@ xi_lower_find_unique_class_by_receiver_type(const XgGlobalEvidence *ev,
     if (tail && tail[1] != '\0')
         return xi_lower_find_unique_class_by_name(ev, tail + 1);
     return NULL;
+}
+
+/* Fallback for a receiver type that carries no class reference the producer
+ * could stamp with a global id -- most notably a method or constructor `this`,
+ * whose type is built from a bare class name.  The declaring class lives in the
+ * unit currently being lowered, so its evidence module is l->xg_module_id, and
+ * a (module, name) pair stays unique even when a sibling module exports a class
+ * with the same bare name. */
+static const XgClassSummary *
+xi_lower_find_class_in_unit_by_receiver_name(const XiLower *l, const XgGlobalEvidence *ev,
+                                             const struct XrType *receiver_type) {
+    const char *name;
+    uint32_t name_id;
+    const XgClassSummary *match = NULL;
+    if (!l || l->xg_module_id == 0 || !ev || !receiver_type)
+        return NULL;
+    name = receiver_type->instance.class_name;
+    if (!name && receiver_type->instance.class_ref)
+        name = receiver_type->instance.class_ref->name;
+    name_id = name ? xg_name_id(name) : 0;
+    if (name_id == 0)
+        return NULL;
+    for (uint32_t i = 0; i < ev->nclasses; i++) {
+        const XgClassSummary *cls = &ev->classes[i];
+        if (cls->module_id != l->xg_module_id || cls->name_id != name_id)
+            continue;
+        if (match)
+            return NULL;
+        match = cls;
+    }
+    return match;
 }
 
 static const XgClassFieldSummary *xi_lower_find_unique_own_class_field(const XgGlobalEvidence *ev,
@@ -1171,6 +1213,8 @@ XR_FUNC void xi_lower_bind_class_field_id(XiLower *l, XiValue *access,
         return;
     ev = l->global_evidence;
     cls = xi_lower_find_unique_class_by_receiver_type(ev, receiver_type);
+    if (!cls)
+        cls = xi_lower_find_class_in_unit_by_receiver_name(l, ev, receiver_type);
     for (uint32_t depth = 0; cls && depth < 64; depth++) {
         const XgClassFieldSummary *field =
             xi_lower_find_unique_own_class_field(ev, cls, field_name_id);

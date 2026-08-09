@@ -158,6 +158,16 @@ static XgClassId cg_class_native_class_id_for_data(XiCgenCtx *ctx, const XiClass
     XgClassId class_id;
     if (!ev || !cd)
         return XG_NO_ID;
+    /* The IR carries the analyzer's class identity, which the producer stamped
+     * with the evidence class id.  That id is unambiguous even when a sibling
+     * module exports a class with the same bare name, whereas the name lookups
+     * below return the first same-named class and would misroute the receiver. */
+    /* class_info is analyzer-only and the semantic snapshot nulls it before the
+     * backend runs, so rely on the evidence class id stamped onto the IR during
+     * lowering.  A bare-name lookup would collide with a same-named class from
+     * another module and misroute the receiver. */
+    if (cd->xg_class_id != XG_NO_ID)
+        return cd->xg_class_id;
     class_id = cg_class_native_class_id_for_name(ev, cd->class_name);
     if (class_id != XG_NO_ID)
         return class_id;
@@ -1544,6 +1554,8 @@ static const XiValue *cg_class_native_receiver_value(const XiCgenCtx *ctx, const
                                                      const XiValue *v);
 static const char *cg_class_native_receiver_class_name(XiCgenCtx *ctx, const XiFunc *f,
                                                        const XiValue *recv);
+static uint32_t cg_class_native_receiver_class_id(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *recv);
 static const XiValue *cg_class_native_instance_origin(XiCgenCtx *ctx, const XiFunc *f,
                                                       const XiValue *v);
 static const XiClassData *cg_class_native_instance_data(XiCgenCtx *ctx, const XiFunc *f,
@@ -3871,11 +3883,13 @@ static const XiClassData *cg_class_native_method_result_data(XiCgenCtx *ctx, con
     const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
     if (!recv_class)
         return NULL;
+    uint32_t recv_class_id = cg_class_native_receiver_class_id(ctx, f, v->args[0]);
     const char *method_prefix = NULL;
-    const XiFunc *mfunc =
-        v->op == XI_CALL_METHOD_DIRECT
-            ? cg_lookup_method_by_index(ctx, recv_class, (int) v->aux_int, &method_prefix)
-            : cg_lookup_method(ctx, (const char *) v->aux, recv_class, &method_prefix);
+    const XiFunc *mfunc = v->op == XI_CALL_METHOD_DIRECT
+                              ? cg_lookup_method_by_index(ctx, recv_class, recv_class_id,
+                                                          (int) v->aux_int, &method_prefix)
+                              : cg_lookup_method(ctx, (const char *) v->aux, recv_class,
+                                                 recv_class_id, &method_prefix);
     (void) method_prefix;
     if (!mfunc)
         return NULL;
@@ -4649,11 +4663,12 @@ static bool cg_class_native_ctor_uses_safe(XiCgenCtx *ctx, const XiFunc *f, cons
                             cg_class_native_ctor_call_data(ctx, f, target, NULL, NULL);
                         recv_class = cd ? cd->class_name : NULL;
                     }
+                    uint32_t recv_class_id = cg_class_native_receiver_class_id(ctx, f, target);
                     if (v->op == XI_CALL_METHOD_DIRECT)
-                        mfunc =
-                            cg_lookup_method_by_index(ctx, recv_class, (int) v->aux_int, &prefix);
+                        mfunc = cg_lookup_method_by_index(ctx, recv_class, recv_class_id,
+                                                          (int) v->aux_int, &prefix);
                     else
-                        mfunc = cg_lookup_method(ctx, method, recv_class, &prefix);
+                        mfunc = cg_lookup_method(ctx, method, recv_class, recv_class_id, &prefix);
                     if (!cg_class_func_uses_native_receiver(ctx, mfunc))
                         return false;
                     continue;
@@ -5234,6 +5249,24 @@ static const char *cg_class_native_receiver_class_name(XiCgenCtx *ctx, const XiF
     return data ? data->class_name : NULL;
 }
 
+/* The evidence class id of a method receiver, mirroring
+ * cg_class_native_receiver_class_name.  The class reference carries the exact id
+ * that keeps two modules' same-named classes distinct; the resolved XiClassData
+ * is the fallback for receivers whose type lost its class_ref.  A method-by-index
+ * lookup keyed on this id dispatches to the twin the receiver was actually built
+ * from instead of the first same-named class in the import table. */
+static uint32_t cg_class_native_receiver_class_id(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *recv) {
+    const XrType *type = recv ? recv->type : NULL;
+    /* Gate on kind before touching the instance union so a non-class receiver
+     * never has an unrelated union member read as a class_ref pointer. */
+    if (type && (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_ref && type->instance.class_ref->xg_class_id != XG_NO_ID)
+        return type->instance.class_ref->xg_class_id;
+    const XiClassData *data = cg_class_native_instance_data(ctx, f, recv);
+    return data ? data->xg_class_id : XG_NO_ID;
+}
+
 static void emit_class_native_instance_base_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                 const XiValue *v) {
     if (cg_class_native_receiver_value(ctx, f, v)) {
@@ -5418,9 +5451,11 @@ static const XiFunc *cg_class_native_resolve_getter_field_method(XiCgenCtx *ctx,
         return NULL;
 
     const char *method_prefix = NULL;
-    const XiFunc *mfunc = cg_lookup_method(ctx, getter_name, source->class_name, &method_prefix);
+    const XiFunc *mfunc =
+        cg_lookup_method(ctx, getter_name, source->class_name, source->xg_class_id, &method_prefix);
     if (!mfunc) {
-        mfunc = cg_lookup_method(ctx, (const char *) v->aux, source->class_name, &method_prefix);
+        mfunc = cg_lookup_method(ctx, (const char *) v->aux, source->class_name,
+                                 source->xg_class_id, &method_prefix);
         if (!mfunc || !mfunc->name || strcmp(mfunc->name, getter_name) != 0)
             return NULL;
     }
@@ -5503,14 +5538,16 @@ static const XiFunc *cg_class_native_resolve_method_call(XiCgenCtx *ctx, const X
             return NULL;
         return method && strcmp(method, "constructor") == 0
                    ? cg_lookup_class_ctor(ctx, parent_class)
-                   : cg_lookup_method(ctx, method, parent_class, out_prefix);
+                   : cg_lookup_method(ctx, method, parent_class, XG_NO_ID, out_prefix);
     }
     if (is_super)
         return NULL;
     const char *recv_class = cg_class_native_receiver_class_name(ctx, current, call->args[0]);
+    uint32_t recv_class_id = cg_class_native_receiver_class_id(ctx, current, call->args[0]);
     if (call->op == XI_CALL_METHOD_DIRECT)
-        return cg_lookup_method_by_index(ctx, recv_class, (int) call->aux_int, out_prefix);
-    return cg_lookup_method(ctx, method, recv_class, out_prefix);
+        return cg_lookup_method_by_index(ctx, recv_class, recv_class_id, (int) call->aux_int,
+                                         out_prefix);
+    return cg_lookup_method(ctx, method, recv_class, recv_class_id, out_prefix);
 }
 
 static bool cg_class_shared_native_value_traces_to_slot_depth(const XiValue *v, int slot,
@@ -5556,10 +5593,12 @@ static bool cg_class_shared_native_method_call_accepts_class(XiCgenCtx *ctx, con
     (void) current;
     const char *method_prefix = NULL;
     const char *method = (const char *) call->aux;
-    const XiFunc *mfunc = call->op == XI_CALL_METHOD_DIRECT
-                              ? cg_lookup_method_by_index(ctx, source->class_name,
-                                                          (int) call->aux_int, &method_prefix)
-                              : cg_lookup_method(ctx, method, source->class_name, &method_prefix);
+    const XiFunc *mfunc =
+        call->op == XI_CALL_METHOD_DIRECT
+            ? cg_lookup_method_by_index(ctx, source->class_name, source->xg_class_id,
+                                        (int) call->aux_int, &method_prefix)
+            : cg_lookup_method(ctx, method, source->class_name, source->xg_class_id,
+                               &method_prefix);
     (void) method_prefix;
     if (!mfunc || cg_func_needs_aot_coro_ctx(ctx, mfunc) ||
         !cg_class_func_uses_native_receiver(ctx, mfunc))
@@ -5596,9 +5635,11 @@ static bool cg_class_shared_native_getter_field_accepts_class(XiCgenCtx *ctx, co
         return false;
 
     const char *method_prefix = NULL;
-    const XiFunc *mfunc = cg_lookup_method(ctx, getter_name, source->class_name, &method_prefix);
+    const XiFunc *mfunc =
+        cg_lookup_method(ctx, getter_name, source->class_name, source->xg_class_id, &method_prefix);
     if (!mfunc) {
-        mfunc = cg_lookup_method(ctx, (const char *) load->aux, source->class_name, &method_prefix);
+        mfunc = cg_lookup_method(ctx, (const char *) load->aux, source->class_name,
+                                 source->xg_class_id, &method_prefix);
         if (!mfunc || !mfunc->name || strcmp(mfunc->name, getter_name) != 0)
             return false;
     }

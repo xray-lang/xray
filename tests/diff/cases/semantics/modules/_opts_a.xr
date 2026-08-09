@@ -1,0 +1,13 @@
+// Twin module A for xmod_same_name_classes.xr. Its bare class name `Options`
+// deliberately collides with the one module B exports. Skipped as a standalone
+// diff case because its basename starts with '_'.
+export class Options {
+    weight: int
+    constructor(weight: int = 10) {
+        this.weight = weight
+    }
+}
+
+export fn pick(o: Options) -> int {
+    return o.weight
+}

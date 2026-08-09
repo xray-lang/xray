@@ -1601,14 +1601,25 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
             xa_check_logical_operand_type(ctx, node->as.binary.left, left);
             xa_check_logical_operand_type(ctx, node->as.binary.right, right);
             return xr_type_new_bool(NULL);
-        // Bitwise → always int
+        // Bitwise → int for integer operands, BigInt for BigInt operands
         case AST_BINARY_BAND:
         case AST_BINARY_BOR:
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
         case AST_BINARY_RSHIFT: {
-            XrType *r = binary_int_result_pair(
-                left, right, node->type == AST_BINARY_LSHIFT || node->type == AST_BINARY_RSHIFT);
+            bool is_shift = node->type == AST_BINARY_LSHIFT || node->type == AST_BINARY_RSHIFT;
+            /* BigInt bitwise/shift mirror the VM: `& | ^` combine two BigInts,
+             * `<< >>` shift a BigInt by an int count, and the result is a
+             * BigInt. Without this the operands fall through to the int-only
+             * rule and type as <error>, which makes the AOT backend lower them
+             * through the int64 path and read the BigInt pointer as an int. */
+            if (xr_type_is_builtin_named_class(left, "BigInt")) {
+                bool ok = is_shift ? XR_TYPE_IS_INT(right)
+                                   : xr_type_is_builtin_named_class(right, "BigInt");
+                if (ok)
+                    return xr_type_new_bigint(ctx->analyzer->isolate);
+            }
+            XrType *r = binary_int_result_pair(left, right, is_shift);
             if (r)
                 return r;
             if (xa_binary_operator_should_report_static_error(left, right)) {

@@ -1852,12 +1852,19 @@ static XrValue net_bidi_result_object(XrVMRuntime *X, NetBidiWaitState *state) {
     XrJson *object = xr_json_new_with_class(xr_current_coro(X), cls);
     if (!object)
         return XR_NULL_VAL;
-    xr_instance_set_dynamic_field(
-        X, object, 0,
-        xr_int((xr_Integer) atomic_load_explicit(&state->shared->ab, memory_order_acquire)));
-    xr_instance_set_dynamic_field(
-        X, object, 1,
-        xr_int((xr_Integer) atomic_load_explicit(&state->shared->ba, memory_order_acquire)));
+    /* Set by field name, not by a hardcoded slot: a structural object's physical
+     * field order is the canonical (sorted-by-name) order the bytecode reader
+     * uses, which need not match the declaration order aToB, bToA. Writing raw
+     * slot 0/1 would land each count under the wrong name whenever the canonical
+     * order differs, so route both through the same name lookup the reader does.
+     * ab is the a-to-b byte count, ba is b-to-a. */
+    if (!xr_json_set_by_key(
+            X, object, "aToB",
+            xr_int((xr_Integer) atomic_load_explicit(&state->shared->ab, memory_order_acquire))) ||
+        !xr_json_set_by_key(
+            X, object, "bToA",
+            xr_int((xr_Integer) atomic_load_explicit(&state->shared->ba, memory_order_acquire))))
+        return XR_NULL_VAL;
     return xr_json_value(object);
 }
 

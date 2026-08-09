@@ -1,0 +1,16 @@
+// Twin module B for xmod_same_name_methods.xr: same bare class name as A but
+// different method bodies (kind() returns 200, val() scales by 10) so the twins
+// are observably distinct.  Skipped as a standalone diff case because its
+// basename starts with '_'.
+export class Widget {
+    v: int
+    constructor(x: int) {
+        this.v = x
+    }
+    kind() -> int {
+        return 200
+    }
+    val() -> int {
+        return this.v * 10
+    }
+}

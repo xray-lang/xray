@@ -21,16 +21,13 @@ static const XlspSymbolInfo g_xlsp_stdlib_coro_symbols[] = {
 
 // base64 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
-    {"encode", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>, options?: Base64EncodeOptions?): string", "", NULL, 0},
-    {"decode", XLSP_SYM_FUNCTION, "fn(text: string, options?: Base64DecodeOptions?): Array<byte>", "", NULL, 0},
-    {"isValid", XLSP_SYM_FUNCTION, "fn(text: string, options?: Base64DecodeOptions?): bool", "", NULL, 0},
     {"Base64Alphabet", XLSP_SYM_CLASS, "type Base64Alphabet", "Enum type", NULL, 0},
     {"Base64PaddingPolicy", XLSP_SYM_CLASS, "type Base64PaddingPolicy", "Enum type", NULL, 0},
     {"Base64Error", XLSP_SYM_CLASS, "type Base64Error", "Enum type", NULL, 0},
     {"Base64EncodeOptions", XLSP_SYM_CLASS, "type Base64EncodeOptions", "Class type", NULL, 0},
     {"Base64DecodeOptions", XLSP_SYM_CLASS, "type Base64DecodeOptions", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 8
+#define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 5
 
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
@@ -141,14 +138,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
     {"hexDecode", XLSP_SYM_FUNCTION, "fn(hex: string): Array<byte>", "", NULL, 0},
     {"hexValid", XLSP_SYM_FUNCTION, "fn(hex: string): bool", "", NULL, 0},
     {"utf8Valid", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>): bool", "", NULL, 0},
-    {"utf16Encode", XLSP_SYM_FUNCTION, "fn(data: string, options?: Utf16EncodeOptions?): Array<byte>", "", NULL, 0},
-    {"utf16Decode", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>, options?: Utf16DecodeOptions?): string", "", NULL, 0},
     {"HexError", XLSP_SYM_CLASS, "type HexError", "Enum type", NULL, 0},
     {"Utf16Error", XLSP_SYM_CLASS, "type Utf16Error", "Enum type", NULL, 0},
     {"Utf16DecodeOptions", XLSP_SYM_CLASS, "type Utf16DecodeOptions", "Class type", NULL, 0},
     {"Utf16EncodeOptions", XLSP_SYM_CLASS, "type Utf16EncodeOptions", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 10
+#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 8
 
 // http module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
@@ -685,11 +680,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
     {"children", XLSP_SYM_FUNCTION, "fn(node: XmlNode): Array<XmlNode>", "", NULL, 0},
     {"nodeText", XLSP_SYM_FUNCTION, "fn(node: XmlNode): string?", "", NULL, 0},
     {"textContent", XLSP_SYM_FUNCTION, "fn(node: XmlNode): string", "", NULL, 0},
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions?): XmlNode", "", NULL, 0},
-    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions?): XmlParseReport", "", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: Path, options?: XmlOptions?): XmlNode", "", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(node: XmlNode, options?: XmlWriteOptions?): string", "", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, node: XmlNode, options?: XmlWriteOptions?): bool", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions): XmlNode", "", NULL, 0},
+    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions): XmlParseReport", "", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: Path, options?: XmlOptions): XmlNode", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(node: XmlNode, options?: XmlWriteOptions): string", "", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, node: XmlNode, options?: XmlWriteOptions): bool", "", NULL, 0},
     {"document", XLSP_SYM_FUNCTION, "fn(children?: Array<XmlNode>?): XmlNode", "", NULL, 0},
     {"element", XLSP_SYM_FUNCTION, "fn(tag: string, attrs?: Array<XmlAttribute>?, children?: Array<XmlNode>?): XmlNode", "", NULL, 0},
     {"text", XLSP_SYM_FUNCTION, "fn(content: string): XmlNode", "", NULL, 0},

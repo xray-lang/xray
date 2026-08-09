@@ -17,10 +17,12 @@
 
 #include <string.h>
 
+#include "../src/base/xhash.h"
 #include "../src/base/xmalloc.h"
 #include "../src/runtime/class/xinstance.h"
 #include "../src/runtime/class/xenum.h"
 #include "../src/runtime/xisolate_internal.h"
+#include "../src/shared/xobject_shape.h"
 #include "../src/stdlib/xstdlib_defs_generated.h"
 
 typedef struct XrStdlibNativeEnumCacheEntry {
@@ -55,6 +57,26 @@ static XrClass *stdlib_object_shape_class_build(XrVMRuntime *isolate,
         return NULL;
     for (uint32_t i = 0; i < count; i++)
         names[i] = decl->fields[i].name;
+    /* Build the class in canonical field order (stable name key, then name id),
+     * the same order the bytecode reader and AOT backend assign to a structural
+     * object's field ordinals. Declaration order would leave the physical slots
+     * out of step with those ordinals, so a field read by ordinal would land on
+     * the wrong slot whenever the two orders differ. */
+    for (uint32_t i = 1; i < count; i++) {
+        const char *current = names[i];
+        uint64_t current_key = xr_object_shape_stable_name_key(current);
+        uint32_t current_id = xr_hash_bytes(current, strlen(current));
+        uint32_t j = i;
+        while (j > 0) {
+            uint64_t prev_key = xr_object_shape_stable_name_key(names[j - 1]);
+            uint32_t prev_id = xr_hash_bytes(names[j - 1], strlen(names[j - 1]));
+            if (prev_key < current_key || (prev_key == current_key && prev_id <= current_id))
+                break;
+            names[j] = names[j - 1];
+            j--;
+        }
+        names[j] = current;
+    }
     XrClass *cls = xr_class_build_struct_object_chain(isolate, names, NULL, (int) count, NULL, NULL,
                                                       NULL, NULL);
     xr_free(names);

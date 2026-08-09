@@ -1612,6 +1612,7 @@ static const XiFunc *cg_lookup_class_ctor(XiCgenCtx *ctx, const char *class_name
 }
 
 static const XiClassData *cg_class_native_data_by_name(const XiCgenCtx *ctx, const char *name);
+static const XiClassData *cg_class_native_data_by_xg_class_id(const XiCgenCtx *ctx, XgClassId id);
 
 static bool cg_class_data_name_matches(const XiClassData *cd, const char *name) {
     if (!cd || !name)
@@ -1621,6 +1622,20 @@ static bool cg_class_data_name_matches(const XiClassData *cd, const char *name) 
     if (cd->display_name && strcmp(cd->display_name, name) == 0)
         return true;
     return cd->generic_origin_name && strcmp(cd->generic_origin_name, name) == 0;
+}
+
+/* Match a class by its exact evidence id when both sides carry one, so two
+ * modules exporting a same-named class stay distinct; fall back to the bare name
+ * for monomorphized generics and builtins that share no stamped id.  This
+ * mirrors cg_class_native_data_matches() but takes a name+id pair because the
+ * method-by-index callers hold the receiver's evidence id, not an XiClassData. */
+static bool cg_class_data_matches_id_or_name(const XiClassData *cd, uint32_t class_id,
+                                             const char *name) {
+    if (!cd)
+        return false;
+    if (class_id != XG_NO_ID && cd->xg_class_id != XG_NO_ID)
+        return cd->xg_class_id == class_id;
+    return cg_class_data_name_matches(cd, name);
 }
 
 static const XiFunc *cg_lookup_method_in_class_data(const XiClassData *cd, const XiFunc *owner,
@@ -1643,22 +1658,39 @@ static const XiFunc *cg_lookup_method_in_class_data(const XiClassData *cd, const
  * If out_prefix is non-NULL, stores the method's module prefix (for
  * cross-module class methods; NULL means current module). */
 static const XiFunc *cg_lookup_method(XiCgenCtx *ctx, const char *name, const char *class_name,
-                                      const char **out_prefix) {
-    if (!name || !class_name)
+                                      uint32_t class_id, const char **out_prefix) {
+    if (!name || (!class_name && class_id == XG_NO_ID))
         return NULL;
     const char *cur = class_name;
-    for (int depth = 0; cur && depth < 16; depth++) {
+    uint32_t cur_id = class_id;
+    for (int depth = 0; (cur || cur_id != XG_NO_ID) && depth < 16; depth++) {
         for (int i = 0; i < ctx->nmethod; i++) {
+            const XiClassData *mcd = ctx->methods[i].class_data;
             if (!ctx->methods[i].name || strcmp(ctx->methods[i].name, name) != 0)
                 continue;
-            if (ctx->methods[i].class_name && strcmp(ctx->methods[i].class_name, cur) == 0) {
-                if (out_prefix)
-                    *out_prefix = ctx->methods[i].module_prefix;
-                return ctx->methods[i].func;
-            }
+            /* Prefer the exact evidence id so a call on one twin never binds to a
+             * same-named class exported by another module; fall back to the bare
+             * class name for receivers and methods that carry no stamped id, which
+             * keeps non-twin resolution byte-identical. */
+            bool match = (cur_id != XG_NO_ID && mcd && mcd->xg_class_id != XG_NO_ID)
+                             ? mcd->xg_class_id == cur_id
+                             : (ctx->methods[i].class_name && cur &&
+                                strcmp(ctx->methods[i].class_name, cur) == 0);
+            if (!match)
+                continue;
+            if (out_prefix)
+                *out_prefix = ctx->methods[i].module_prefix;
+            return ctx->methods[i].func;
         }
-        const XiClassData *cd = cg_class_native_data_by_name(ctx, cur);
+        /* Ascend the inheritance chain.  Resolve the current class by its exact
+         * id when we have one so the parent link is read from the right twin;
+         * the parent name itself is unstamped, so deeper levels fall back to the
+         * name (the residual super-chain twin ambiguity is tracked separately). */
+        const XiClassData *cd = cur_id != XG_NO_ID
+                                    ? cg_class_native_data_by_xg_class_id(ctx, cur_id)
+                                    : cg_class_native_data_by_name(ctx, cur);
         cur = cd ? cd->super_name : NULL;
+        cur_id = XG_NO_ID;
     }
     if (out_prefix)
         *out_prefix = NULL;
@@ -1666,12 +1698,13 @@ static const XiFunc *cg_lookup_method(XiCgenCtx *ctx, const char *name, const ch
 }
 
 static const XiFunc *cg_lookup_method_by_index(XiCgenCtx *ctx, const char *class_name,
-                                               int method_idx, const char **out_prefix) {
-    if (!class_name || method_idx < 0)
+                                               uint32_t class_id, int method_idx,
+                                               const char **out_prefix) {
+    if ((!class_name && class_id == XG_NO_ID) || method_idx < 0)
         return NULL;
     for (uint16_t s = 0; ctx->module && s < ctx->module->nslots; s++) {
         const XiClassData *cd = ctx->module->slot_classes ? ctx->module->slot_classes[s] : NULL;
-        if (!cg_class_data_name_matches(cd, class_name))
+        if (!cg_class_data_matches_id_or_name(cd, class_id, class_name))
             continue;
         const XiFunc *method = cg_lookup_method_in_class_data(cd, ctx->module->init, method_idx);
         if (!method)
@@ -1682,7 +1715,8 @@ static const XiFunc *cg_lookup_method_by_index(XiCgenCtx *ctx, const char *class
     }
     for (int i = 0; i < ctx->nimports; i++) {
         const CgImportEntry *imp = &ctx->imports[i];
-        if (!cg_class_data_name_matches(imp->target_class, class_name) || !imp->exporter_func)
+        if (!cg_class_data_matches_id_or_name(imp->target_class, class_id, class_name) ||
+            !imp->exporter_func)
             continue;
         const XiFunc *method =
             cg_lookup_method_in_class_data(imp->target_class, imp->exporter_func, method_idx);
@@ -4020,6 +4054,20 @@ static bool cg_lowbits_binop_elided_into_unsigned_narrow(const XiFunc *f, const 
 }
 
 static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *op) {
+    /* BigInt bitwise: the operands are tagged BigInts, so unboxing them as
+     * int64 would read the pointer as an integer. Emit the tagged runtime that
+     * mirrors the VM (two's-complement AND/OR/XOR over the limbs). */
+    if (v->nargs >= 2 && v->args[0] && xr_type_is_builtin_named_class(v->args[0]->type, "BigInt")) {
+        const char *fn = (v->op == XI_BAND)  ? "xrt_bigint_and_val"
+                         : (v->op == XI_BOR) ? "xrt_bigint_or_val"
+                                             : "xrt_bigint_xor_val";
+        fprintf(out, "%s(", fn);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        return;
+    }
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "XR_FROM_INT(");
@@ -4203,6 +4251,17 @@ static bool emit_native_wrapping_const_shl_expr(XiCgenCtx *ctx, FILE *out, const
  * same unsigned-cast wrapping expression as the runtime helper. */
 static void emit_shift_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                  const char *fn) {
+    /* BigInt shift: a tagged BigInt shifted by an int count. Emit the tagged
+     * runtime rather than unboxing the BigInt pointer as an int64. The count
+     * stays an int64 (the language shifts a BigInt only by an int). */
+    if (v->nargs >= 2 && v->args[0] && xr_type_is_builtin_named_class(v->args[0]->type, "BigInt")) {
+        fprintf(out, "%s(", v->op == XI_SHL ? "xrt_bigint_shl_val" : "xrt_bigint_shr_val");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+        return;
+    }
     if (emit_native_unsigned_const_shift_expr(ctx, out, v, v->op == XI_SHL ? "<<" : ">>"))
         return;
     if (emit_native_nonnegative_const_shr_expr(ctx, out, f, v))

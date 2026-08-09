@@ -7731,16 +7731,18 @@ static const XiFunc *xicgen_lookup_super_method(XiCgenCtx *ctx, const XiFunc *f,
      * imported base), so resolve through the cross-module lookups. */
     if (method && strcmp(method, "constructor") == 0)
         return cg_lookup_class_ctor_global(ctx, parent_class, method_prefix);
-    return cg_lookup_method(ctx, method, parent_class, method_prefix);
+    return cg_lookup_method(ctx, method, parent_class, XG_NO_ID, method_prefix);
 }
 
 static const XiFunc *xicgen_lookup_receiver_method(XiCgenCtx *ctx, const XiFunc *f,
                                                    const XiValue *v, const char *method,
                                                    const char **method_prefix) {
     const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
+    uint32_t recv_class_id = cg_class_native_receiver_class_id(ctx, f, v->args[0]);
     if (v->op == XI_CALL_METHOD_DIRECT)
-        return cg_lookup_method_by_index(ctx, recv_class, (int) v->aux_int, method_prefix);
-    return cg_lookup_method(ctx, method, recv_class, method_prefix);
+        return cg_lookup_method_by_index(ctx, recv_class, recv_class_id, (int) v->aux_int,
+                                         method_prefix);
+    return cg_lookup_method(ctx, method, recv_class, recv_class_id, method_prefix);
 }
 
 static bool xicgen_emit_time_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {

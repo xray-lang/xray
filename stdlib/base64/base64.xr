@@ -197,17 +197,14 @@ fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<byte> {
     return _decodeValidated(src, scan.3, scan.4, scan.5, options)
 }
 
-export fn encode(data: Slice<byte>, options: Base64EncodeOptions? = null) -> string {
-    var resolved = options == null ? Base64EncodeOptions() : options!
-    return _encodeAlpha(data, resolved.alphabet, resolved.padding)
+export fn encode(data: Slice<byte>, options: Base64EncodeOptions = Base64EncodeOptions()) -> string {
+    return _encodeAlpha(data, options.alphabet, options.padding)
 }
 
-export fn decode(text: string, options: Base64DecodeOptions? = null) -> Array<byte> {
-    var resolved = options == null ? Base64DecodeOptions() : options!
-    return _decodeImpl(text, resolved)
+export fn decode(text: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> Array<byte> {
+    return _decodeImpl(text, options)
 }
 
-export fn isValid(text: string, options: Base64DecodeOptions? = null) -> bool {
-    var resolved = options == null ? Base64DecodeOptions() : options!
-    return _scan(text, resolved).0 == 0
+export fn isValid(text: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> bool {
+    return _scan(text, options).0 == 0
 }

@@ -499,6 +499,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         }
         if (rk == XR_TAG_MAP || rk == XR_TAG_SET || rk == XR_TAG_TUPLE)
             return xrt_value_to_string(recv);
+        if (rk == XR_TAG_BIGINT)
+            return xrt_value_to_string(recv);
     }
     if (XR_IS_STR(recv)) {
         return xrt_str_method_0(xr_str_data(recv), xr_str_len(recv), recv, sym);

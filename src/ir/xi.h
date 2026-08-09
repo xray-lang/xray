@@ -781,6 +781,9 @@ typedef struct XiFieldDefault {
 typedef struct XiClassData {
     struct AstNode *ast; /* AST_CLASS_DECL node (temporary, may be NULL after lowering) */
     struct XrClassInfo *class_info; /* analyzer class identity; names are diagnostic only */
+    uint32_t xg_class_id;           /* evidence class id stamped at lowering; survives the
+                                       semantic snapshot that nulls class_info, so the backend
+                                       resolves same-named classes from different modules */
     const char *class_name;         /* arena copy of class name */
     const char *super_name;         /* arena copy of parent class name (NULL if none) */
     const char

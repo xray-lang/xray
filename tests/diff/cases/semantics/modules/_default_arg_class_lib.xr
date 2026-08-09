@@ -1,0 +1,21 @@
+// Shared fixture for xmod_default_arg_class.xr. The leading underscore keeps the
+// diff runner from executing it as a standalone program.
+export class Opt {
+    n: int
+    label: string
+
+    constructor() {
+        this.n = 42
+        this.label = "def"
+    }
+}
+
+export fn secret() -> int { return 7 }
+
+// Default value is a constructor of an exported class in this module.
+export fn withOpt(o: Opt = Opt()) -> int { return o.n }
+
+export fn withLabel(o: Opt = Opt()) -> string { return o.label }
+
+// Default value calls an exported function of this module.
+export fn withCall(x: int = secret()) -> int { return x }

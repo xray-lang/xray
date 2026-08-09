@@ -40,9 +40,567 @@ static inline int64_t xrt_i64_mul(int64_t a, int64_t b) {
     return xr_i64_mul_wrap(a, b);
 }
 
+/* =========================================================================
+ * BigInt arithmetic — self-contained multi-precision on the AOT value model.
+ * Operands are the normalized limb views shared with static literals, never
+ * mutated. Results are freshly allocated owned BigInts: header-first so the
+ * view and RC read from v.ptr, arena-managed with a zero refcount so ordinary
+ * xrt_retain/xrt_release track them and arena teardown reclaims stragglers, and
+ * no destructor flag since limbs are inline. The magnitude kernels mirror the
+ * VM's xr_bigint.c so both backends compute byte-identical results.
+ * ========================================================================= */
+
+/* Allocate an owned, mutable BigInt with room for cap limbs, value zero. */
+static inline xrt_bigint_view_t *xrt_bigint_new(uint32_t cap, XrValue *out) {
+    if (cap == 0)
+        cap = 1;
+    size_t total = sizeof(xrt_bigint_view_t) + (size_t) cap * sizeof(uint32_t);
+    XrObjHeader *hdr = (XrObjHeader *) xrt_execution_alloc(total, xrt_execution_finalize_generic);
+    xrt_bigint_view_t *b = (xrt_bigint_view_t *) hdr;
+    b->klass = NULL;
+    b->sign = 1;
+    b->len = 1;
+    b->cap = cap;
+    memset(b->limbs, 0, (size_t) cap * sizeof(uint32_t));
+    *out = xr_mkptr(hdr, XR_TAG_BIGINT);
+    return b;
+}
+
+/* Drop leading zero limbs and pin zero to a single positive limb. */
+static inline void xrt_bigint_norm(xrt_bigint_view_t *a) {
+    while (a->len > 1 && a->limbs[a->len - 1] == 0)
+        a->len--;
+    if (a->len <= 1 && a->limbs[0] == 0) {
+        a->len = 1;
+        a->sign = 1;
+    }
+}
+
+static inline int xrt_bigint_is_zero_v(const xrt_bigint_view_t *a) {
+    return a->len == 0 || (a->len == 1 && a->limbs[0] == 0);
+}
+
+static inline int xrt_bigint_cmp_abs_v(const xrt_bigint_view_t *a, const xrt_bigint_view_t *b) {
+    if (a->len != b->len)
+        return a->len > b->len ? 1 : -1;
+    for (int i = (int) a->len - 1; i >= 0; i--)
+        if (a->limbs[i] != b->limbs[i])
+            return a->limbs[i] > b->limbs[i] ? 1 : -1;
+    return 0;
+}
+
+/* a +/- b as signed magnitudes. subtract flips b's effective sign; equal signs
+ * add magnitudes, opposite signs subtract the smaller magnitude from the
+ * larger and keep the larger's sign. */
+static inline XrValue xrt_bigint_addsub(XrValue av, XrValue bv, int subtract) {
+    const xrt_bigint_view_t *a = xrt_bigint_view(av);
+    const xrt_bigint_view_t *b = xrt_bigint_view(bv);
+    XrValue rv;
+    if (!a || !b) {
+        xrt_bigint_new(1, &rv);
+        return rv;
+    }
+    int as = xrt_bigint_is_zero_v(a) ? 1 : (a->sign < 0 ? -1 : 1);
+    int bs = xrt_bigint_is_zero_v(b) ? 1 : (b->sign < 0 ? -1 : 1);
+    if (subtract)
+        bs = -bs;
+    xrt_bigint_view_t *r;
+    if (as == bs) {
+        const xrt_bigint_view_t *x = a, *y = b;
+        if (x->len < y->len) {
+            const xrt_bigint_view_t *t = x;
+            x = y;
+            y = t;
+        }
+        r = xrt_bigint_new(x->len + 1, &rv);
+        uint64_t carry = 0;
+        uint32_t i = 0;
+        for (; i < y->len; i++) {
+            uint64_t s = (uint64_t) x->limbs[i] + y->limbs[i] + carry;
+            r->limbs[i] = (uint32_t) s;
+            carry = s >> 32;
+        }
+        for (; i < x->len; i++) {
+            uint64_t s = (uint64_t) x->limbs[i] + carry;
+            r->limbs[i] = (uint32_t) s;
+            carry = s >> 32;
+        }
+        if (carry)
+            r->limbs[i++] = (uint32_t) carry;
+        r->len = i;
+        r->sign = (int8_t) as;
+    } else {
+        int c = xrt_bigint_cmp_abs_v(a, b);
+        if (c == 0) {
+            xrt_bigint_new(1, &rv);
+            return rv;
+        }
+        const xrt_bigint_view_t *hi = c > 0 ? a : b;
+        const xrt_bigint_view_t *lo = c > 0 ? b : a;
+        int sign = c > 0 ? as : bs;
+        r = xrt_bigint_new(hi->len, &rv);
+        int64_t borrow = 0;
+        for (uint32_t i = 0; i < hi->len; i++) {
+            int64_t d =
+                (int64_t) hi->limbs[i] - (i < lo->len ? (int64_t) lo->limbs[i] : 0) - borrow;
+            if (d < 0) {
+                d += (int64_t) 0x100000000LL;
+                borrow = 1;
+            } else {
+                borrow = 0;
+            }
+            r->limbs[i] = (uint32_t) d;
+        }
+        r->len = hi->len;
+        r->sign = (int8_t) sign;
+    }
+    xrt_bigint_norm(r);
+    return rv;
+}
+
+static inline XrValue xrt_bigint_neg_val(XrValue av) {
+    const xrt_bigint_view_t *a = xrt_bigint_view(av);
+    XrValue rv;
+    uint32_t n = (a && a->len) ? a->len : 1;
+    xrt_bigint_view_t *r = xrt_bigint_new(n, &rv);
+    if (a) {
+        memcpy(r->limbs, a->limbs, (size_t) a->len * sizeof(uint32_t));
+        r->len = a->len ? a->len : 1;
+        r->sign = xrt_bigint_is_zero_v(a) ? 1 : (int8_t) -(a->sign < 0 ? -1 : 1);
+    }
+    xrt_bigint_norm(r);
+    return rv;
+}
+
+static inline XrValue xrt_bigint_mul_val(XrValue av, XrValue bv) {
+    const xrt_bigint_view_t *a = xrt_bigint_view(av);
+    const xrt_bigint_view_t *b = xrt_bigint_view(bv);
+    XrValue rv;
+    if (!a || !b) {
+        xrt_bigint_new(1, &rv);
+        return rv;
+    }
+    xrt_bigint_view_t *r = xrt_bigint_new(a->len + b->len, &rv);
+    for (uint32_t i = 0; i < a->len; i++) {
+        uint64_t carry = 0;
+        for (uint32_t j = 0; j < b->len; j++) {
+            uint64_t p = (uint64_t) a->limbs[i] * b->limbs[j] + r->limbs[i + j] + carry;
+            r->limbs[i + j] = (uint32_t) p;
+            carry = p >> 32;
+        }
+        if (carry)
+            r->limbs[i + b->len] += (uint32_t) carry;
+    }
+    r->len = a->len + b->len;
+    int za = xrt_bigint_is_zero_v(a), zb = xrt_bigint_is_zero_v(b);
+    int sa = a->sign < 0 ? -1 : 1, sb = b->sign < 0 ? -1 : 1;
+    r->sign = (za || zb) ? 1 : (int8_t) (sa * sb);
+    xrt_bigint_norm(r);
+    return rv;
+}
+
+/* Copy a limb view into a fresh owned BigInt, preserving sign. */
+static inline XrValue xrt_bigint_copy_val(const xrt_bigint_view_t *a) {
+    XrValue rv;
+    uint32_t n = (a && a->len) ? a->len : 1;
+    xrt_bigint_view_t *r = xrt_bigint_new(n, &rv);
+    if (a) {
+        memcpy(r->limbs, a->limbs, (size_t) a->len * sizeof(uint32_t));
+        r->len = a->len ? a->len : 1;
+        r->sign = a->sign;
+    }
+    xrt_bigint_norm(r);
+    return rv;
+}
+
+/* Small-magnitude BigInt from an int (used for quotient +/-1 and zero). */
+static inline XrValue xrt_bigint_from_small(int64_t v) {
+    XrValue rv;
+    xrt_bigint_view_t *r = xrt_bigint_new(2, &rv);
+    uint64_t mag = (v < 0) ? (~(uint64_t) v + 1u) : (uint64_t) v;
+    r->limbs[0] = (uint32_t) (mag & 0xFFFFFFFFu);
+    r->limbs[1] = (uint32_t) (mag >> 32);
+    r->len = r->limbs[1] ? 2 : 1;
+    r->sign = (v < 0) ? -1 : 1;
+    xrt_bigint_norm(r);
+    return rv;
+}
+
+/* Limb-array primitives for the division kernel (Knuth Algorithm D). */
+static inline uint32_t xrt_bi_clz32(uint32_t x) {
+    if (x == 0)
+        return 32;
+#if defined(__GNUC__) || defined(__clang__)
+    return (uint32_t) __builtin_clz(x);
+#else
+    uint32_t n = 0;
+    if ((x & 0xFFFF0000U) == 0) {
+        n += 16;
+        x <<= 16;
+    }
+    if ((x & 0xFF000000U) == 0) {
+        n += 8;
+        x <<= 8;
+    }
+    if ((x & 0xF0000000U) == 0) {
+        n += 4;
+        x <<= 4;
+    }
+    if ((x & 0xC0000000U) == 0) {
+        n += 2;
+        x <<= 2;
+    }
+    if ((x & 0x80000000U) == 0) {
+        n += 1;
+    }
+    return n;
+#endif
+}
+
+static inline uint32_t xrt_bi_lshift(uint32_t *rp, const uint32_t *ap, uint32_t n, unsigned shift) {
+    if (shift == 0) {
+        if (rp != ap)
+            memcpy(rp, ap, n * sizeof(uint32_t));
+        return 0;
+    }
+    uint32_t carry = 0;
+    unsigned rshift = 32 - shift;
+    for (uint32_t i = 0; i < n; i++) {
+        uint32_t tmp = ap[i];
+        rp[i] = (tmp << shift) | carry;
+        carry = tmp >> rshift;
+    }
+    return carry;
+}
+
+static inline void xrt_bi_rshift(uint32_t *rp, const uint32_t *ap, uint32_t n, unsigned shift) {
+    if (shift == 0) {
+        if (rp != ap)
+            memcpy(rp, ap, n * sizeof(uint32_t));
+        return;
+    }
+    uint32_t carry = 0;
+    unsigned lshift = 32 - shift;
+    for (int i = (int) n - 1; i >= 0; i--) {
+        uint32_t tmp = ap[i];
+        rp[i] = (tmp >> shift) | carry;
+        carry = tmp << lshift;
+    }
+}
+
+static inline uint32_t xrt_bi_submul_1(uint32_t *np, const uint32_t *dp, uint32_t dn, uint32_t q) {
+    uint64_t borrow = 0;
+    for (uint32_t i = 0; i < dn; i++) {
+        uint64_t prod = (uint64_t) dp[i] * q + borrow;
+        uint32_t lo = (uint32_t) (prod & 0xFFFFFFFFULL);
+        borrow = prod >> 32;
+        if (np[i] < lo)
+            borrow++;
+        np[i] = np[i] - lo;
+    }
+    return (uint32_t) borrow;
+}
+
+static inline uint32_t xrt_bi_add_n(uint32_t *np, const uint32_t *dp, uint32_t n) {
+    uint64_t carry = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        uint64_t sum = (uint64_t) np[i] + dp[i] + carry;
+        np[i] = (uint32_t) (sum & 0xFFFFFFFFULL);
+        carry = sum >> 32;
+    }
+    return (uint32_t) carry;
+}
+
+/* q = a / b, r = a % b (truncating toward zero; remainder takes a's sign).
+ * *ok is 0 on divide-by-zero. Mirrors the VM's xr_bigint_divmod so quotient and
+ * remainder are byte-identical across backends. */
+static inline void xrt_bigint_divmod(XrValue av, XrValue bv, XrValue *q_out, XrValue *r_out,
+                                     int *ok) {
+    const xrt_bigint_view_t *a = xrt_bigint_view(av);
+    const xrt_bigint_view_t *b = xrt_bigint_view(bv);
+    *ok = 1;
+    if (!a || !b || xrt_bigint_is_zero_v(b)) {
+        *ok = 0;
+        return;
+    }
+    if (xrt_bigint_is_zero_v(a)) {
+        if (q_out)
+            xrt_bigint_new(1, q_out);
+        if (r_out)
+            xrt_bigint_new(1, r_out);
+        return;
+    }
+    int cmp = xrt_bigint_cmp_abs_v(a, b);
+    if (cmp < 0) {
+        if (q_out)
+            xrt_bigint_new(1, q_out);
+        if (r_out)
+            *r_out = xrt_bigint_copy_val(a);
+        return;
+    }
+    if (cmp == 0) {
+        if (q_out)
+            *q_out = xrt_bigint_from_small((a->sign < 0 ? -1 : 1) * (b->sign < 0 ? -1 : 1));
+        if (r_out)
+            xrt_bigint_new(1, r_out);
+        return;
+    }
+
+    int8_t q_sign = (int8_t) ((a->sign < 0 ? -1 : 1) * (b->sign < 0 ? -1 : 1));
+    int8_t r_sign = (int8_t) (a->sign < 0 ? -1 : 1);
+    uint32_t n = a->len;
+    uint32_t t = b->len;
+
+    uint32_t *x = (uint32_t *) XRT_MALLOC((size_t) (n + 2) * sizeof(uint32_t));
+    uint32_t *y = (uint32_t *) XRT_MALLOC((size_t) (t + 1) * sizeof(uint32_t));
+    if (!x || !y) {
+        XRT_FREE(x);
+        XRT_FREE(y);
+        *ok = 0;
+        return;
+    }
+    memcpy(x, a->limbs, (size_t) n * sizeof(uint32_t));
+    x[n] = 0;
+    x[n + 1] = 0;
+    memcpy(y, b->limbs, (size_t) t * sizeof(uint32_t));
+    y[t] = 0;
+
+    unsigned norm = xrt_bi_clz32(y[t - 1]);
+    if (norm > 0) {
+        x[n] = xrt_bi_lshift(x, x, n, norm);
+        xrt_bi_lshift(y, y, t, norm);
+    }
+
+    XrValue qval;
+    xrt_bigint_view_t *quotient = xrt_bigint_new(n - t + 1, &qval);
+    quotient->len = n - t + 1;
+
+    uint32_t yt = y[t - 1];
+    uint32_t yt1 = (t >= 2) ? y[t - 2] : 0;
+
+    for (int i = (int) n; i >= (int) t; i--) {
+        uint32_t xi = x[i];
+        uint32_t xi1 = (i >= 1) ? x[i - 1] : 0;
+        uint32_t xi2 = (i >= 2) ? x[i - 2] : 0;
+
+        uint32_t qhat;
+        if (xi == yt) {
+            qhat = 0xFFFFFFFFU;
+        } else {
+            uint64_t tmp = ((uint64_t) xi << 32) | xi1;
+            qhat = (uint32_t) (tmp / yt);
+        }
+        while (1) {
+            uint64_t p1 = (uint64_t) qhat * yt;
+            uint64_t p2 = (uint64_t) qhat * yt1;
+            uint64_t left_hi = p1 + (p2 >> 32);
+            uint64_t left_lo = (p2 & 0xFFFFFFFFULL);
+            uint64_t right_hi = ((uint64_t) xi << 32) | xi1;
+            uint64_t right_lo = xi2;
+            if (left_hi > right_hi || (left_hi == right_hi && left_lo > right_lo))
+                qhat--;
+            else
+                break;
+        }
+        if (qhat > 0) {
+            uint32_t borrow = xrt_bi_submul_1(x + (i - (int) t), y, t, qhat);
+            if (x[i] < borrow) {
+                x[i] -= borrow;
+                xrt_bi_add_n(x + (i - (int) t), y, t);
+                x[i]++;
+                qhat--;
+            } else {
+                x[i] -= borrow;
+            }
+        }
+        quotient->limbs[i - (int) t] = qhat;
+    }
+
+    xrt_bigint_norm(quotient);
+    quotient->sign = q_sign;
+    if (quotient->len == 1 && quotient->limbs[0] == 0)
+        quotient->sign = 1;
+    if (q_out)
+        *q_out = qval;
+
+    if (r_out) {
+        XrValue rval;
+        xrt_bigint_view_t *remainder = xrt_bigint_new(t, &rval);
+        if (norm > 0)
+            xrt_bi_rshift(remainder->limbs, x, t, norm);
+        else
+            memcpy(remainder->limbs, x, (size_t) t * sizeof(uint32_t));
+        remainder->len = t;
+        xrt_bigint_norm(remainder);
+        remainder->sign = r_sign;
+        if (remainder->len == 1 && remainder->limbs[0] == 0)
+            remainder->sign = 1;
+        *r_out = rval;
+    }
+
+    XRT_FREE(x);
+    XRT_FREE(y);
+}
+
+static inline XrValue xrt_bigint_div_val(XrValue a, XrValue b) {
+    XrValue q;
+    int ok;
+    xrt_bigint_divmod(a, b, &q, NULL, &ok);
+    if (!ok)
+        xrt_throw_exc(xr_box_str("E0420: division by zero"));
+    return q;
+}
+
+static inline XrValue xrt_bigint_mod_val(XrValue a, XrValue b) {
+    XrValue r;
+    int ok;
+    xrt_bigint_divmod(a, b, NULL, &r, &ok);
+    if (!ok)
+        xrt_throw_exc(xr_box_str("E0421: modulo by zero"));
+    return r;
+}
+
+/* Two's-complement view of a magnitude+sign BigInt over `len` limbs (negative
+ * values become ~(|a|-1)); the inverse rebuilds sign-magnitude. Mirrors the
+ * VM's bigint_to/from_twos_comp so bitwise results match across backends. */
+static inline void xrt_bi_to_twos(const xrt_bigint_view_t *a, uint32_t *tc, uint32_t len) {
+    if (a->sign >= 0) {
+        for (uint32_t i = 0; i < len; i++)
+            tc[i] = (i < a->len) ? a->limbs[i] : 0;
+        return;
+    }
+    uint32_t borrow = 1;
+    for (uint32_t i = 0; i < len; i++) {
+        uint64_t limb = (i < a->len) ? (uint64_t) a->limbs[i] : 0;
+        uint64_t sub = limb - borrow;
+        tc[i] = ~(uint32_t) sub;
+        borrow = (limb < borrow) ? 1 : 0;
+    }
+}
+
+static inline XrValue xrt_bi_from_twos(const uint32_t *tc, uint32_t len, int negative) {
+    XrValue rv;
+    xrt_bigint_view_t *r = xrt_bigint_new(len ? len : 1, &rv);
+    if (!negative) {
+        for (uint32_t i = 0; i < len; i++)
+            r->limbs[i] = tc[i];
+        r->len = len ? len : 1;
+        r->sign = 1;
+    } else {
+        uint32_t carry = 1;
+        for (uint32_t i = 0; i < len; i++) {
+            uint64_t val = (uint64_t) (~tc[i]) + carry;
+            r->limbs[i] = (uint32_t) val;
+            carry = (uint32_t) (val >> 32);
+        }
+        r->len = len ? len : 1;
+        r->sign = -1;
+    }
+    xrt_bigint_norm(r);
+    return rv;
+}
+
+/* which: 0 = and, 1 = or, 2 = xor. Result sign follows the operator's rule on
+ * the operand signs, matching the VM. */
+static inline XrValue xrt_bigint_bitwise(XrValue av, XrValue bv, int which) {
+    const xrt_bigint_view_t *a = xrt_bigint_view(av);
+    const xrt_bigint_view_t *b = xrt_bigint_view(bv);
+    XrValue rv;
+    if (!a || !b) {
+        xrt_bigint_new(1, &rv);
+        return rv;
+    }
+    uint32_t len = ((a->len > b->len) ? a->len : b->len) + 1;
+    uint32_t *ta = (uint32_t *) XRT_MALLOC((size_t) len * sizeof(uint32_t));
+    uint32_t *tb = (uint32_t *) XRT_MALLOC((size_t) len * sizeof(uint32_t));
+    if (!ta || !tb) {
+        XRT_FREE(ta);
+        XRT_FREE(tb);
+        xrt_bigint_new(1, &rv);
+        return rv;
+    }
+    xrt_bi_to_twos(a, ta, len);
+    xrt_bi_to_twos(b, tb, len);
+    for (uint32_t i = 0; i < len; i++)
+        ta[i] = (which == 0) ? (ta[i] & tb[i]) : (which == 1) ? (ta[i] | tb[i]) : (ta[i] ^ tb[i]);
+    int an = a->sign < 0, bn = b->sign < 0;
+    int result_neg = (which == 0) ? (an && bn) : (which == 1) ? (an || bn) : (an != bn);
+    rv = xrt_bi_from_twos(ta, len, result_neg);
+    XRT_FREE(ta);
+    XRT_FREE(tb);
+    return rv;
+}
+
+static inline XrValue xrt_bigint_and_val(XrValue a, XrValue b) {
+    return xrt_bigint_bitwise(a, b, 0);
+}
+static inline XrValue xrt_bigint_or_val(XrValue a, XrValue b) {
+    return xrt_bigint_bitwise(a, b, 1);
+}
+static inline XrValue xrt_bigint_xor_val(XrValue a, XrValue b) {
+    return xrt_bigint_bitwise(a, b, 2);
+}
+
+/* Shift a BigInt left/right by an int bit count (mirrors the VM: the shift
+ * amount is an int, the shifted value and result are BigInts; a negative or
+ * zero count returns a copy, and shifting right past the value yields zero). */
+static inline XrValue xrt_bigint_shl_val(XrValue av, int64_t count) {
+    const xrt_bigint_view_t *a = xrt_bigint_view(av);
+    XrValue rv;
+    if (!a || xrt_bigint_is_zero_v(a) || count <= 0)
+        return xrt_bigint_copy_val(a);
+    uint32_t n = (uint32_t) count;
+    uint32_t limb_shift = n / 32, bit_shift = n % 32;
+    xrt_bigint_view_t *r = xrt_bigint_new(a->len + limb_shift + 1, &rv);
+    for (uint32_t i = 0; i < limb_shift; i++)
+        r->limbs[i] = 0;
+    uint32_t carry = 0;
+    for (uint32_t i = 0; i < a->len; i++) {
+        uint64_t val = ((uint64_t) a->limbs[i] << bit_shift) | carry;
+        r->limbs[i + limb_shift] = (uint32_t) val;
+        carry = (uint32_t) (val >> 32);
+    }
+    if (carry) {
+        r->limbs[a->len + limb_shift] = carry;
+        r->len = a->len + limb_shift + 1;
+    } else {
+        r->len = a->len + limb_shift;
+    }
+    r->sign = a->sign;
+    xrt_bigint_norm(r);
+    return rv;
+}
+
+static inline XrValue xrt_bigint_shr_val(XrValue av, int64_t count) {
+    const xrt_bigint_view_t *a = xrt_bigint_view(av);
+    XrValue rv;
+    if (!a || xrt_bigint_is_zero_v(a) || count <= 0)
+        return xrt_bigint_copy_val(a);
+    uint32_t n = (uint32_t) count;
+    uint32_t limb_shift = n / 32, bit_shift = n % 32;
+    if (limb_shift >= a->len) {
+        xrt_bigint_new(1, &rv);
+        return rv;
+    }
+    uint32_t new_len = a->len - limb_shift;
+    xrt_bigint_view_t *r = xrt_bigint_new(new_len, &rv);
+    uint32_t carry = 0;
+    for (int i = (int) new_len - 1; i >= 0; i--) {
+        uint64_t val = ((uint64_t) carry << 32) | a->limbs[i + limb_shift];
+        r->limbs[i] = (uint32_t) (val >> bit_shift);
+        carry = a->limbs[i + limb_shift] & ((1U << bit_shift) - 1u);
+    }
+    r->len = new_len;
+    r->sign = a->sign;
+    xrt_bigint_norm(r);
+    return rv;
+}
+
 static inline XrValue xrt_add(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_i64_add(a.i, b.i));
+    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
+        return xrt_bigint_addsub(a, b, 0);
     if (XR_IS_STR(a) && XR_IS_STR(b))
         return xrt_str_concat_value(a, b); /* header lengths, no strlen */
     if (XR_IS_STR(a) || XR_IS_STR(b)) {
@@ -57,6 +615,8 @@ static inline XrValue xrt_add(XrValue a, XrValue b) {
 static inline XrValue xrt_sub(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_i64_sub(a.i, b.i));
+    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
+        return xrt_bigint_addsub(a, b, 1);
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return XR_FROM_FLOAT(fa - fb);
@@ -65,6 +625,8 @@ static inline XrValue xrt_sub(XrValue a, XrValue b) {
 static inline XrValue xrt_mul(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_i64_mul(a.i, b.i));
+    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
+        return xrt_bigint_mul_val(a, b);
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return XR_FROM_FLOAT(fa * fb);
@@ -120,6 +682,8 @@ static inline int64_t xrt_i64_shr_u(int64_t a, int64_t b) {
 static inline XrValue xrt_div(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_int_div(a.i, b.i));
+    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
+        return xrt_bigint_div_val(a, b);
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return XR_FROM_FLOAT(fa / fb);
@@ -128,12 +692,16 @@ static inline XrValue xrt_div(XrValue a, XrValue b) {
 static inline XrValue xrt_mod(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_int_mod(a.i, b.i));
+    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
+        return xrt_bigint_mod_val(a, b);
     xrt_throw_exc(xr_box_str("E0404: modulo requires integer types"));
 }
 
 static inline XrValue xrt_neg(XrValue a) {
     if (a.tag == XR_TAG_I64)
         return XR_FROM_INT(xr_i64_neg_wrap(a.i));
+    if (a.tag == XR_TAG_BIGINT)
+        return xrt_bigint_neg_val(a);
     if (a.tag == XR_TAG_F64)
         return XR_FROM_FLOAT(-a.f);
     return XR_FROM_INT(0);
@@ -146,6 +714,8 @@ static inline XrValue xrt_neg(XrValue a) {
 static inline int64_t xrt_lt(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return a.i < b.i;
+    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
+        return xrt_bigint_cmp_value(a, b) < 0;
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return fa < fb;
@@ -154,6 +724,8 @@ static inline int64_t xrt_lt(XrValue a, XrValue b) {
 static inline int64_t xrt_le(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return a.i <= b.i;
+    if (a.tag == XR_TAG_BIGINT && b.tag == XR_TAG_BIGINT)
+        return xrt_bigint_cmp_value(a, b) <= 0;
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return fa <= fb;
@@ -187,6 +759,60 @@ static inline void xrt_fmt_cstr(xrt_strbuf_t *sb, const char *s) {
 }
 static inline void xrt_fmt_char(xrt_strbuf_t *sb, char c) {
     xrt_fmt_puts(sb, &c, 1);
+}
+
+/* Append the full decimal rendering of BigInt |a| to sb. Mirrors the VM's
+ * xr_bigint_to_string (repeatedly divide the magnitude by 10^9, emitting nine
+ * digits per step) so both backends print byte-identical decimals. A growable
+ * strbuf lets arbitrarily large values render without the fixed-buffer cap that
+ * forced xr_to_cstr to fall back to a marker. */
+static inline void xrt_bigint_format(const xrt_bigint_view_t *a, xrt_strbuf_t *sb) {
+    if (!a || a->len == 0 || (a->len == 1 && a->limbs[0] == 0)) {
+        xrt_fmt_char(sb, '0');
+        return;
+    }
+    uint32_t tmp_len = a->len;
+    uint32_t *tmp = (uint32_t *) XRT_MALLOC((size_t) tmp_len * sizeof(uint32_t));
+    size_t cap = (size_t) a->len * 10 + 2;
+    char *out = (char *) XRT_MALLOC(cap);
+    if (!tmp || !out) {
+        XRT_FREE(tmp);
+        XRT_FREE(out);
+        xrt_fmt_cstr(sb, "<BigInt>");
+        return;
+    }
+    memcpy(tmp, a->limbs, (size_t) tmp_len * sizeof(uint32_t));
+
+    char *p = out + cap - 1;
+    *p-- = '\0';
+    while (tmp_len > 0 && !(tmp_len == 1 && tmp[0] == 0)) {
+        uint64_t carry = 0;
+        for (int i = (int) tmp_len - 1; i >= 0; i--) {
+            uint64_t val = (carry << 32) | tmp[i];
+            tmp[i] = (uint32_t) (val / 1000000000U);
+            carry = val % 1000000000U;
+        }
+        while (tmp_len > 1 && tmp[tmp_len - 1] == 0)
+            tmp_len--;
+        int more = !(tmp_len == 1 && tmp[0] == 0);
+        uint32_t rem = (uint32_t) carry;
+        if (more) {
+            for (int d = 0; d < 9; d++) {
+                *p-- = (char) ('0' + (rem % 10));
+                rem /= 10;
+            }
+        } else {
+            do {
+                *p-- = (char) ('0' + (rem % 10));
+                rem /= 10;
+            } while (rem > 0);
+        }
+    }
+    if (a->sign < 0)
+        *p-- = '-';
+    xrt_fmt_cstr(sb, p + 1);
+    XRT_FREE(out);
+    XRT_FREE(tmp);
 }
 
 static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
@@ -225,11 +851,9 @@ static void xrt_format_value(XrValue v, xrt_strbuf_t *sb, int depth) {
         case XR_TAG_NULL:
             xrt_fmt_cstr(sb, "null");
             return;
-        case XR_TAG_BIGINT: {
-            char buf[64];
-            xrt_fmt_cstr(sb, xr_to_cstr(v, buf, sizeof(buf)));
+        case XR_TAG_BIGINT:
+            xrt_bigint_format(xrt_bigint_view(v), sb);
             return;
-        }
         case XR_TAG_ENUM: {
             const char *enum_name = NULL;
             const char *member_name = NULL;

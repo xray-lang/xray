@@ -343,6 +343,25 @@ static XiValue *xi_lower_builtin_module_function_ref(XiLower *l, uint32_t sid,
     return xi_lower_emit_import_ref(l, module_name, member_name, links->type, line);
 }
 
+/* A caller-local symbol materialized by the analyzer for a cross-module
+ * default-argument reference has no storage in this unit; its module identity
+ * was recorded on the symbol links. Resolve it through the module export table
+ * like a namespace member so the exported class/function/value is produced at
+ * the call. Named imports never reach here: lower_import_stmt binds them to a
+ * local SSA value, so lower_variable finds storage first. */
+static XiValue *xi_lower_imported_symbol_ref(XiLower *l, uint32_t sid, int line) {
+    if (!l || !l->analyzer || sid == 0)
+        return NULL;
+    XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, sid);
+    if (!sym || !sym->is_imported)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    if (!links || !links->module_name || !links->import_member_name)
+        return NULL;
+    return xi_lower_emit_import_ref(l, links->module_name, links->import_member_name, links->type,
+                                    line);
+}
+
 static const char *xi_lower_export_module_for_symbol(XiLower *l, XaSymbol *target,
                                                      const char *export_name) {
     if (!l || !l->analyzer || !target || !export_name)
@@ -1247,6 +1266,10 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
         XiValue *module_func = xi_lower_builtin_module_function_ref(l, sid, name, (int) node->line);
         if (module_func)
             return module_func;
+
+        XiValue *imported = xi_lower_imported_symbol_ref(l, sid, (int) node->line);
+        if (imported)
+            return imported;
 
         XiValue *builtin_class = xi_lower_emit_builtin_class(l, name, node->line);
         if (builtin_class)
@@ -9924,6 +9947,24 @@ static XiValue *lower_slice_expr(XiLower *l, AstNode *node) {
         return NULL;
 
     struct XrType *result_type = xi_lower_node_type(l, node);
+    /* A safe contiguous view is always a Slice<T>, but the analyzer only
+     * resolves that type when a Slice target is in scope -- a `Slice<T>`
+     * annotation, or a parameter whose declared type is Slice<T>. An inline
+     * range slice handed straight to a native builtin method argument
+     * (`string.fromUtf8Lossy(raw[0:end])`) never receives that target, so the
+     * node type is left unknown. Recover the Slice type from the source's
+     * element type here, matching the type a named `Slice<T>` binding would
+     * carry, so the value flows through the same emit path (xi_emit_slice
+     * requires an XR_KIND_SLICE result and otherwise reports an internal
+     * emitter error). */
+    if (xi_lower_type_is_unknown(result_type)) {
+        struct XrType *elem = src->type ? xi_get_container_elem_type(src->type) : NULL;
+        if (elem) {
+            result_type = xr_type_new_slice(l->isolate, elem);
+            if (src->type && xr_type_is_const(src->type))
+                result_type = xr_type_make_const(l->isolate, result_type);
+        }
+    }
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_SLICE, result_type, 3);
     if (!v)
         return NULL;

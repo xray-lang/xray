@@ -27,8 +27,10 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/object/xstring.h"
+#include "../runtime/object/xbigint.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/class/xclass.h"
+#include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xinstance.h"
@@ -682,6 +684,7 @@ static bool bc_read_layout_table(BcReader *r) {
 #define BC_VAL_CLASS_DESCRIPTOR 6
 #define BC_VAL_ENUM_TYPE 7
 #define BC_VAL_RUNE 8
+#define BC_VAL_BIGINT 9
 
 #define BC_SHAPE_JSON 1
 #define BC_SHAPE_STRUCT_OBJECT 2
@@ -974,6 +977,21 @@ static bool bc_write_value(BcWriter *w, XrValue val, bool as_dynamic_shape,
             return false;
         XrString *s = XR_TO_STRING(val);
         return bc_put_string_data(w, s->data, s->length);
+    } else if (XR_IS_BIGINT(val)) {
+        /* BigInt literals are module-lifetime constants stored as heap objects.
+         * Serialize the value as its canonical decimal string so it round-trips
+         * through the constant pool instead of degrading to null. */
+        if (!bc_put_u8(w, BC_VAL_BIGINT))
+            return false;
+        XrBigInt *bi = (XrBigInt *) XR_TO_PTR(val);
+        char *digits = xr_bigint_to_string(bi);
+        if (!digits) {
+            w->error = XR_BC_ERR_ALLOC;
+            return false;
+        }
+        bool ok = bc_put_string(w, digits);
+        xr_free(digits);
+        return ok;
     }
     // Other types not supported yet
     return bc_put_u8(w, BC_VAL_NULL);
@@ -1501,6 +1519,26 @@ static XrValue bc_read_value(BcReader *r) {
             XrString *s = xr_string_intern_permanent(r->X, str, len);
             xr_free(str);
             return s ? xr_string_value(s) : xr_null();
+        }
+        case BC_VAL_BIGINT: {
+            char *digits = bc_get_string(r);
+            if (r->error != XR_BC_OK)
+                return xr_null();
+            /* Rebuild the BigInt on the module-lifetime fixed heap, mirroring
+             * how literal BigInt constants are created during compilation. */
+            XrBigInt *bi =
+                xr_bigint_from_string_on_fixed_heap(xr_isolate_get_fixed_heap(r->X), digits);
+            xr_free(digits);
+            if (!bi) {
+                r->error = XR_BC_ERR_ALLOC;
+                return xr_null();
+            }
+            /* The fixed-heap constructor leaves klass unset; bind the runtime
+             * BigInt class so value predicates recognize the reloaded constant. */
+            XrayCoreClasses *core = xr_isolate_get_core_classes(r->X);
+            if (core)
+                bi->klass = core->bigintClass;
+            return XR_FROM_PTR(bi);
         }
         case BC_VAL_DYNAMIC_SHAPE:
             return bc_read_dynamic_shape(r);

@@ -942,6 +942,21 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->instance_layout = NULL;
     data->inherited_field_count = 0;
     data->is_cycle_candidate = false;
+    /* Stamp the evidence class id now.  The semantic snapshot nulls class_info
+     * before the backend runs, and a bare-name lookup there would collide with
+     * a same-named class from another module.  The class being lowered lives in
+     * this unit, so (module, name) resolves it uniquely. */
+    data->xg_class_id = XG_NO_ID;
+    if (l->global_evidence && l->xg_module_id != 0 && cd->name) {
+        uint32_t cls_name_id = xg_name_id(cd->name);
+        for (uint32_t ci = 0; cls_name_id && ci < l->global_evidence->nclasses; ci++) {
+            const XgClassSummary *cs = &l->global_evidence->classes[ci];
+            if (cs->module_id == l->xg_module_id && cs->name_id == cls_name_id) {
+                data->xg_class_id = cs->class_id;
+                break;
+            }
+        }
+    }
     if (cd->name && l->analyzer) {
         XaSymbol *cls_sym = xa_analyzer_lookup(l->analyzer, cd->name);
         if (!cls_sym)

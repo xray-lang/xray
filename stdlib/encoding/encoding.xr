@@ -148,16 +148,6 @@ export class Utf16EncodeOptions {
     }
 }
 
-fn _utf16EncodeOptions(options: Utf16EncodeOptions?) -> Utf16EncodeOptions {
-    if (options == null) { return Utf16EncodeOptions() }
-    return copy(options!)
-}
-
-fn _utf16DecodeOptions(options: Utf16DecodeOptions?) -> Utf16DecodeOptions {
-    if (options == null) { return Utf16DecodeOptions() }
-    return copy(options!)
-}
-
 // Write a 16-bit code unit into Array<byte> in the requested endianness.
 fn putU16(out: ref Array<byte>, oi: int, unit: int, order: Endian) {
     if (order == Endian.BE) {
@@ -181,8 +171,8 @@ fn getU16(src: Slice<byte>, i: int, order: Endian) -> int {
     return (hi << 8) | lo
 }
 
-export fn utf16Encode(data: string, options: Utf16EncodeOptions? = null) -> Array<byte> {
-    var opts = _utf16EncodeOptions(options)
+export fn utf16Encode(data: string, options: Utf16EncodeOptions = Utf16EncodeOptions()) -> Array<byte> {
+    var opts = options
     var order = opts.order
     var cpCount = len(data)
     // First pass: count 16-bit units (BMP = 1, supplementary = 2).
@@ -240,11 +230,11 @@ fn putUtf8(out: ref Array<byte>, oi: int, cp: int) -> int {
 
 // Decode UTF-16 bytes to a string. Auto-detects a leading BOM (FE FF = BE,
 // FF FE = LE); without a BOM the options byte order selects byte order.
-export fn utf16Decode(data: Slice<byte>, options: Utf16DecodeOptions? = null) -> string {
+export fn utf16Decode(data: Slice<byte>, options: Utf16DecodeOptions = Utf16DecodeOptions()) -> string {
     var n = len(data)
     if (n % 2 != 0) { throw Utf16Error.OddByteLength(n) }
 
-    var opts = _utf16DecodeOptions(options)
+    var opts = options
     var order = opts.order
     var start = 0
     if (n >= 2) {

@@ -6658,6 +6658,115 @@ body_unique_pending_object_return_literal(const XgPendingBody *body) {
     return seen ? literal : NULL;
 }
 
+/* A native primitive can hand back an exact structural object even though it
+ * has no .xr body to scan: net.__copyBidirectional yields the two-field
+ * __CopyBidirectionalResult through the i64_pair_result adapter. Such a shape
+ * never reaches the evidence table through the object-literal or type-alias
+ * routes, so a field read on the call result would have no proven receiver
+ * shape and the AOT backend would reject the whole module. Register the shape
+ * here from the analyzed return type, in the canonical field order the
+ * structural field-table verifier and the backend shape interner require. The
+ * i64_pair_result materializer stores each pair half into the matching
+ * canonical slot, so a field read resolves to the slot its value was written
+ * to, and this row's stable shape key matches the one the backend interns for
+ * the materialized object. The row is keyed by the type's stable identity so
+ * repeated calls share one shape. */
+static XgObjectShapeId body_add_native_return_object_shape(XgBodyCollect *bc, const XrType *type,
+                                                           uint32_t source_span_id) {
+    XgObjectShapeSummary row;
+    const XgObjectShapeSummary *existing;
+    uint32_t type_key;
+    int field_count;
+    if (!bc || !bc->evidence || !type || type->kind != XR_KIND_STRUCT_OBJECT ||
+        type->object.row_mode != XR_OBJECT_ROW_EXACT || type->object.field_count <= 0 ||
+        type->object.field_count > UINT16_MAX || !type->object.field_names ||
+        !type->object.field_types)
+        return XG_NO_ID;
+    field_count = type->object.field_count;
+    type_key = hash_folded32(xr_type_stable_key(type));
+    if (type_key == 0)
+        return XG_NO_ID;
+    existing = body_find_object_shape_for_type_key(bc, type_key, XG_OBJECT_SHAPE_STATIC);
+    if (existing)
+        return existing->object_shape_id;
+    {
+        /* Canonical field order (stable name key, then name id) is what the AOT
+         * structural field-table verifier and the backend shape interner both
+         * demand, and it is the order the i64_pair_result materializer writes
+         * each value into, so a later field read resolves to the slot its value
+         * was stored in. */
+        typedef struct {
+            const XrType *field_type;
+            uint64_t stable_name_key;
+            uint32_t name_id;
+            bool readonly;
+        } NativeObjectFieldInput;
+        NativeObjectFieldInput *inputs =
+            (NativeObjectFieldInput *) xr_calloc((size_t) field_count, sizeof(*inputs));
+        if (!inputs)
+            return XG_NO_ID;
+        for (int i = 0; i < field_count; i++) {
+            const char *name = type->object.field_names[i];
+            if (!name) {
+                xr_free(inputs);
+                return XG_NO_ID;
+            }
+            inputs[i].field_type = type->object.field_types[i];
+            inputs[i].stable_name_key = xg_object_stable_name_key(name);
+            inputs[i].name_id = hash_name32(name);
+            inputs[i].readonly = type->object.field_readonly && type->object.field_readonly[i];
+        }
+        for (int i = 1; i < field_count; i++) {
+            NativeObjectFieldInput current = inputs[i];
+            int j = i;
+            while (j > 0 && (inputs[j - 1].stable_name_key > current.stable_name_key ||
+                             (inputs[j - 1].stable_name_key == current.stable_name_key &&
+                              inputs[j - 1].name_id > current.name_id))) {
+                inputs[j] = inputs[j - 1];
+                j--;
+            }
+            inputs[j] = current;
+        }
+        memset(&row, 0, sizeof(row));
+        row.object_shape_id = (XgObjectShapeId) (bc->evidence->nobject_shapes + 1);
+        row.module_id = bc->module_id;
+        row.owner_func_id = XG_NO_ID;
+        row.source_span_id = source_span_id;
+        row.type_key = type_key;
+        row.field_count = (uint16_t) field_count;
+        row.shape_kind = XG_OBJECT_SHAPE_STATIC;
+        row.domain = XG_OBJECT_DOMAIN_STRUCT;
+        row.provenance = XG_OBJECT_SHAPE_STATIC;
+        row.concrete_exact = 1;
+        row.flags =
+            XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_JSON_BRIDGEABLE;
+        row.stable_type_key = type_key;
+        if (!xg_global_evidence_add_object_shape(bc->evidence, &row)) {
+            xr_free(inputs);
+            return XG_NO_ID;
+        }
+        for (int i = 0; i < field_count; i++) {
+            XgObjectFieldSummary field;
+            memset(&field, 0, sizeof(field));
+            field.field_id = (XgObjectFieldId) (bc->evidence->nobject_fields + 1);
+            field.shape_id = row.object_shape_id;
+            field.field_ordinal = (uint16_t) i;
+            field.name_id = inputs[i].name_id;
+            field.stable_type_key =
+                inputs[i].field_type ? xr_type_stable_key(inputs[i].field_type) : 0;
+            field.stable_name_key = inputs[i].stable_name_key;
+            field.flags = XG_OBJECT_FIELD_STATIC_KEY | XG_OBJECT_FIELD_REQUIRED;
+            if (inputs[i].readonly)
+                field.flags |= XG_OBJECT_FIELD_READONLY;
+            (void) xg_global_evidence_add_object_field(bc->evidence, &field);
+        }
+        xr_free(inputs);
+    }
+    if (!body_finalize_object_shape_identity(bc->evidence, row.object_shape_id))
+        return XG_NO_ID;
+    return row.object_shape_id;
+}
+
 static XgObjectShapeId body_lookup_call_object_return_shape(XgBodyCollect *bc, const AstNode *expr,
                                                             const ObjectLiteralNode **out_literal) {
     const XgPendingBody *body;
@@ -6689,8 +6798,15 @@ static XgObjectShapeId body_lookup_call_object_return_shape(XgBodyCollect *bc, c
     if (expr->type != AST_CALL_EXPR)
         return XG_NO_ID;
     body = body_find_call_body(bc, &expr->as.call_expr);
-    if (!body)
-        return XG_NO_ID;
+    if (!body) {
+        /* No .xr body means a native primitive; take the result shape from the
+         * analyzed return type so an exact structural result stays accessible. */
+        const XrType *native_type = bc->producer && bc->producer->analyzer
+                                        ? xa_analyzer_get_node_type(bc->producer->analyzer, expr)
+                                        : NULL;
+        return body_add_native_return_object_shape(bc, native_type,
+                                                   expr->line > 0 ? (uint32_t) expr->line : 0);
+    }
     return_type = body_pending_return_type_ref(body);
     literal = body_unique_pending_object_return_literal(body);
     if (out_literal && literal && !body_object_literal_has_spread(literal))
@@ -11290,6 +11406,11 @@ static bool add_class_like_decl(XgProducer *p, XgModuleId module_id, const AstNo
     }
     if (!xg_global_evidence_add_class(p->evidence, &csum))
         return false;
+    // Backfill the evidence class id onto the analyzer's class info so IR
+    // lowering can resolve field accesses through the exact declaring class,
+    // disambiguating same-named classes exported by different modules.
+    if (class_info)
+        class_info->xg_class_id = class_id;
     if (!producer_add_decl_derives(p, module_id, decl_id, (uint32_t) node->line, cls->name,
                                    derive_flags, cls, class_id))
         return false;

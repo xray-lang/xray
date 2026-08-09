@@ -1,0 +1,20 @@
+// Two sibling modules each export a class with the same bare name `Options`.
+// The VM keeps them distinct; AOT separate compilation must resolve every field
+// access to its own declaring class instead of giving up when a name-only
+// lookup finds both twins (which used to leave the field without a plan id and
+// fail closed during C generation of the library unit). VM and AOT must agree.
+import "./_opts_a" as a
+import "./_opts_b" as b
+
+// Explicit construction: each twin's field access is lowered in its own unit.
+var a1 = a.Options(3)
+var b1 = b.Options(7)
+print(a.pick(a1))   // 3
+print(b.pick(b1))   // 7
+
+// Default-argument construction exercises the default-arg machinery across the
+// twins, which the VM already handles correctly; AOT must match it.
+var a2 = a.Options()
+var b2 = b.Options()
+print(a.pick(a2))   // 10
+print(b.pick(b2))   // 20

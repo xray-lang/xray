@@ -475,7 +475,7 @@ static inline int xrt_arc_value_has_header(XrValue v) {
            v.tag == XR_TAG_SYS_CONDVAR || v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE ||
            v.tag == XR_TAG_THREAD || v.tag == XR_TAG_BUFFER || v.tag == XR_TAG_NET_CONN ||
            v.tag == XR_TAG_NET_LISTENER || v.tag == XR_TAG_RANGE || v.tag == XR_TAG_TUPLE ||
-           v.tag == XR_TAG_ENUM;
+           v.tag == XR_TAG_ENUM || v.tag == XR_TAG_BIGINT;
 }
 
 static inline XrObjHeader *xrt_arc_value_header(XrValue v) {
@@ -485,6 +485,11 @@ static inline XrObjHeader *xrt_arc_value_header(XrValue v) {
     /* Enum values point at header-first objects: XrAotEnumBox and the static
      * scalar-layout / ctor metadata all start with their XrObjHeader. */
     if (v.tag == XR_TAG_ENUM)
+        return (XrObjHeader *) v.ptr;
+    /* BigInt values are header-first too: a static literal's struct begins with
+     * its XrObjHeader, and a computed result is allocated so the arena header is
+     * the object's first bytes. Both let the view and RC read from v.ptr. */
+    if (v.tag == XR_TAG_BIGINT)
         return (XrObjHeader *) v.ptr;
     return XRT_ARC_HDR(v.ptr);
 }

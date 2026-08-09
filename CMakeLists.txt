@@ -1966,6 +1966,20 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME bigint_literal_build_form_parity
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_bigint_literal_build_form_parity.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    math(EXPR BIGINT_BUILD_FORM_TIMEOUT "300 * ${XR_TEST_TIMEOUT_SCALE}")
+    set_tests_properties(bigint_literal_build_form_parity PROPERTIES
+        LABELS "vm;aot;bytecode;embed;regression"
+        PROCESSORS 1
+        TIMEOUT ${BIGINT_BUILD_FORM_TIMEOUT}
+    )
+
+    add_test(
         NAME parallel_plan_vm_scaling_gate
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/vm/run_parallel_plan_scaling_gate.py
@@ -3350,6 +3364,20 @@ if(BUILD_TESTS)
     )
     set_tests_properties(regression_rc_closure_self_capture PROPERTIES
         LABELS "regression;rc;vm;task-254"
+        TIMEOUT 30
+    )
+
+    # A bounded inline range slice used directly as a call argument
+    # (string.fromUtf8Lossy(raw[0:end])) must lower to the same Slice value a
+    # named `Slice<byte>` binding produces, rather than crashing the emitter.
+    add_test(
+        NAME regression_inline_range_slice_arg
+        COMMAND $<TARGET_FILE:xray> test
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/regression/14_typed_array/1419_inline_range_slice_arg.xr
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(regression_inline_range_slice_arg PROPERTIES
+        LABELS "regression;vm;slice;typed-array"
         TIMEOUT 30
     )
 

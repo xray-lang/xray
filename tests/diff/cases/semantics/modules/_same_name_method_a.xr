@@ -1,0 +1,16 @@
+// Twin module A for xmod_same_name_methods.xr: a class `Widget` whose bare name
+// collides with module B's.  Its methods return values distinct from B's so a
+// method-by-index lookup that confuses the twins is observable.  Skipped as a
+// standalone diff case because its basename starts with '_'.
+export class Widget {
+    v: int
+    constructor(x: int) {
+        this.v = x
+    }
+    kind() -> int {
+        return 100
+    }
+    val() -> int {
+        return this.v
+    }
+}

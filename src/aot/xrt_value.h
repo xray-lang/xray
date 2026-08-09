@@ -765,6 +765,38 @@ static inline int64_t xrt_bigint_eq_value(XrValue a, XrValue b) {
     return memcmp(ba->limbs, bb->limbs, (size_t) ba->len * sizeof(uint32_t)) == 0;
 }
 
+/* Signed compare of two BigInt values: -1, 0, or 1, mirroring the VM's
+ * xr_bigint_cmp so ordered comparisons agree across backends. A zero operand is
+ * treated as sign 0 (independent of its stored sign byte), then equal signs
+ * compare magnitudes high limb to low. Inputs are the normalized limb views
+ * produced for literals and computed results. */
+static inline int xrt_bigint_cmp_value(XrValue av, XrValue bv) {
+    const xrt_bigint_view_t *a = xrt_bigint_view(av);
+    const xrt_bigint_view_t *b = xrt_bigint_view(bv);
+    if (!a || !b)
+        return 0;
+    int za = a->len == 0 || (a->len == 1 && a->limbs[0] == 0);
+    int zb = b->len == 0 || (b->len == 1 && b->limbs[0] == 0);
+    int sa = za ? 0 : (a->sign < 0 ? -1 : 1);
+    int sb = zb ? 0 : (b->sign < 0 ? -1 : 1);
+    if (sa != sb)
+        return sa < sb ? -1 : 1;
+    if (sa == 0)
+        return 0;
+    int mag = 0;
+    if (a->len != b->len) {
+        mag = a->len > b->len ? 1 : -1;
+    } else {
+        for (int i = (int) a->len - 1; i >= 0; i--) {
+            if (a->limbs[i] != b->limbs[i]) {
+                mag = a->limbs[i] > b->limbs[i] ? 1 : -1;
+                break;
+            }
+        }
+    }
+    return sa < 0 ? -mag : mag;
+}
+
 static inline uint64_t xrt_bigint_hash_value(XrValue v) {
     const xrt_bigint_view_t *b = xrt_bigint_view(v);
     if (!b)
@@ -1099,7 +1131,11 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
             if (i.tag == XR_TAG_I64) {
                 snprintf(buf, bufsz, "%lld", (long long) i.i);
             } else {
-                snprintf(buf, bufsz, "<BigInt@%p>", v.ptr);
+                /* Full decimal for a value beyond int64 needs a growable buffer
+                 * (xrt_bigint_format on a strbuf); print/toString take that
+                 * path. This fixed-buffer helper only backs secondary cstr
+                 * sites, so emit a marker rather than a raw pointer address. */
+                snprintf(buf, bufsz, "<BigInt>");
             }
             return buf;
         }

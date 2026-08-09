@@ -6522,11 +6522,36 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Infer body - process block statements inline (without xa_visit_block_stmt)
             // to match Pass 1 scope structure: Pass 1 processes for-in body block
             // statements in the for-in scope, so Pass 2 must do the same.
+
+            /* Loop header carries the entry edge and every back edge (spec
+             * §2.13 N-10). for-in exposes no user-visible condition, so the
+             * header stands in for the implicit "collection still has an
+             * element" test and the entry edge doubles as the zero-iteration
+             * (empty collection) path. Without the header the body-tail would
+             * flow straight into the code after the loop, so a body assignment
+             * would narrow past the loop and the empty-collection path would
+             * never join — under-reporting the type after the loop. */
+            XaFlowNode *loop_start = NULL;
+            if (ctx->flow) {
+                loop_start = xa_flow_create_loop_label(ctx->flow);
+                xa_flow_add_antecedent(loop_start, ctx->flow->current_flow);
+                ctx->flow->current_flow = loop_start;
+            }
+
             XaLoopScope loop_scope;
             xa_loop_scope_push(ctx, &loop_scope, fi->label, node);
             if (fi->body)
                 xa_visit_inline_statement_sequence_with_cursor(ctx, fi->body);
             xa_loop_scope_pop(ctx, &loop_scope);
+
+            /* Back edge: the body-tail feeds the next iteration's header, and
+             * the code after the loop resumes from that header — the join of
+             * the entry edge (zero iterations) with every back edge. for-in has
+             * no condition, so there is no trailing false fact to apply. */
+            if (ctx->flow && loop_start) {
+                xa_flow_add_antecedent(loop_start, ctx->flow->current_flow);
+                ctx->flow->current_flow = loop_start;
+            }
 
             xa_clear_active_loans_in_scope(ctx, ctx->analyzer->current_scope);
             xa_analyzer_exit_scope(ctx->analyzer);

@@ -189,36 +189,17 @@ export type XmlWriteOptions = {
     encoding: string
 }
 
-fn _defaultOptions() -> XmlOptions {
-    var options: XmlOptions = {
-        preserveWhitespace: false,
-        preserveComments: false,
-        preserveCData: true,
-        validateEntities: true
-    }
-    return options
+const XML_DEFAULT_OPTIONS: XmlOptions = {
+    preserveWhitespace: false,
+    preserveComments: false,
+    preserveCData: true,
+    validateEntities: true
 }
 
-fn _defaultWriteOptions() -> XmlWriteOptions {
-    var options: XmlWriteOptions = {
-        indent: 0,
-        declaration: true,
-        encoding: "UTF-8"
-    }
-    return options
-}
-
-// Option resolution is done inside the module (private default providers cannot
-// be referenced from a caller's scope as a default-argument expression), so the
-// public API takes nullable options and falls back to the defaults here.
-fn _resolveOptions(options: XmlOptions?) -> XmlOptions {
-    if (options == null) { return _defaultOptions() }
-    return copy(options!)
-}
-
-fn _resolveWriteOptions(options: XmlWriteOptions?) -> XmlWriteOptions {
-    if (options == null) { return _defaultWriteOptions() }
-    return copy(options!)
+const XML_DEFAULT_WRITE_OPTIONS: XmlWriteOptions = {
+    indent: 0,
+    declaration: true,
+    encoding: "UTF-8"
 }
 
 export class XmlParseReport {
@@ -980,8 +961,8 @@ fn _serializeNode(node: XmlNode, config: XmlWriteOptions, level: int, depth: int
 
 // parse is strict: any recoverable diagnostic or a missing root element enters
 // the typed error channel via `throw XmlError.Parse(...)`.
-export fn parse(data: string, options: XmlOptions? = null) -> XmlNode {
-    var parser = _parse(data, _resolveOptions(options))
+export fn parse(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlNode {
+    var parser = _parse(data, options)
     if (len(parser.errors) > 0) {
         throw XmlError.Parse(parser.errors[0])
     }
@@ -994,14 +975,14 @@ export fn parse(data: string, options: XmlOptions? = null) -> XmlNode {
 
 // parseReport opts into recovery and returns any partial document together with
 // the typed diagnostics collected during parsing.
-export fn parseReport(data: string, options: XmlOptions? = null) -> XmlParseReport {
-    var parser = _parse(data, _resolveOptions(options))
+export fn parseReport(data: string, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlParseReport {
+    var parser = _parse(data, options)
     var doc: XmlNode? = null
     if (parser.hasRoot) { doc = parser.root }
     return XmlParseReport(doc, parser.errors)
 }
 
-export fn parseFile(path: Path, options: XmlOptions? = null) -> XmlNode {
+export fn parseFile(path: Path, options: XmlOptions = XML_DEFAULT_OPTIONS) -> XmlNode {
     var content = io.readFile(path)
     if (content == null) {
         throw XmlError.Io("Failed to read file")
@@ -1009,8 +990,8 @@ export fn parseFile(path: Path, options: XmlOptions? = null) -> XmlNode {
     return parse(content!, options)
 }
 
-export fn stringify(node: XmlNode, options: XmlWriteOptions? = null) -> string {
-    var config = _resolveWriteOptions(options)
+export fn stringify(node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS) -> string {
+    var config = options
     var out = StringBuilder()
     if (config.declaration) {
         var encoding = config.encoding
@@ -1024,7 +1005,7 @@ export fn stringify(node: XmlNode, options: XmlWriteOptions? = null) -> string {
     return out.toString()
 }
 
-export fn writeFile(path: Path, node: XmlNode, options: XmlWriteOptions? = null) -> bool {
+export fn writeFile(path: Path, node: XmlNode, options: XmlWriteOptions = XML_DEFAULT_WRITE_OPTIONS) -> bool {
     return io.writeFile(path, stringify(node, options))
 }
 

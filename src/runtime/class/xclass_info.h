@@ -99,6 +99,13 @@ struct XrClassInfo {
     XrType **interface_types;
     int interface_count;
 
+    // Stable global-evidence class id for this declaration (0 = none). The
+    // evidence producer backfills it while building the class summary so that
+    // IR lowering can resolve a field access to the exact declaring class even
+    // when two modules export classes that share a name -- name-based lookup is
+    // ambiguous across such twins, this id is not.
+    uint32_t xg_class_id;
+
     XrLocation location;
 };
 

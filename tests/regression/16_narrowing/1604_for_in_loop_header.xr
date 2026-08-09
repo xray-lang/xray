@@ -1,0 +1,60 @@
+// 1604_for_in_loop_header.xr
+// Conformance: LANGUAGE_SPEC §2.13 N-10 for `for-in`. The loop header joins
+// the entry edge (zero iterations over an empty collection) with every back
+// edge, exactly like `while` / `for`. A binding written only in the body is
+// therefore possibly its pre-loop value after the loop, while a narrowing
+// established before a body that never writes the binding survives.
+
+@test
+fn test_for_in_readonly_body_keeps_pre_loop_narrowing() {
+    var conn: string? = "abc"
+    var total = 0
+    if (conn != null) {
+        // The body never writes `conn`, so its back edge carries the narrowed
+        // type and the pre-loop narrowing holds inside the loop.
+        for (v in [1, 2, 3]) {
+            total = total + len(conn)
+        }
+    }
+    assert_eq(total, 9)
+}
+
+@test
+fn test_for_in_empty_collection_keeps_pre_loop_value() {
+    var s: string? = "seed"
+    var xs: Array<int> = []
+    for (v in xs) {
+        s = null
+    }
+    // Zero iterations: the body never ran, so `s` still holds its pre-loop
+    // value. The header join keeps this entry-edge path alive.
+    assert_eq(s ?? "gone", "seed")
+}
+
+@test
+fn test_for_in_body_write_rejoins_at_header() {
+    var s: string? = null
+    var xs: Array<int> = [1, 2]
+    for (v in xs) {
+        s = "x"
+    }
+    // After the loop `s` is the join of null (zero iterations) and "x"
+    // (one or more iterations), so it is still nullable and must be unwrapped.
+    assert_eq(s ?? "empty", "x")
+}
+
+@test
+fn test_for_in_body_write_guarded_after_loop() {
+    var xs: Array<int> = []
+    var s: string? = null
+    for (v in xs) {
+        s = "x"
+    }
+    // The empty-collection path reaches the guard with `s` still null, so the
+    // re-narrowing `if` takes the false branch.
+    var out = "empty"
+    if (s != null) {
+        out = s
+    }
+    assert_eq(out, "empty")
+}

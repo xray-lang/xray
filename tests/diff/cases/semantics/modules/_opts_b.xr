@@ -1,0 +1,13 @@
+// Twin module B for xmod_same_name_classes.xr. Same bare class name as module
+// A but a different default so the two classes are observably distinct.
+// Skipped as a standalone diff case because its basename starts with '_'.
+export class Options {
+    weight: int
+    constructor(weight: int = 20) {
+        this.weight = weight
+    }
+}
+
+export fn pick(o: Options) -> int {
+    return o.weight
+}

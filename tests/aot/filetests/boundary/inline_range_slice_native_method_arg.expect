@@ -1,0 +1,4 @@
+# The bounded inline slice lowers to a borrowed span view over the source array
+# (xrt_span_from_array_slice), proving the backend received a typed Slice rather
+# than an unresolved node type that would have failed code generation.
+c_contains=xrt_span_from_array_slice

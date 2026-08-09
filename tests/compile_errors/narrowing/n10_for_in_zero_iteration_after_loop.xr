@@ -1,0 +1,19 @@
+// Spec §2.13 N-10: a for-in loop header joins the entry edge (the
+// zero-iteration, empty-collection path) with every back edge, so a binding
+// written only in the body keeps its pre-loop type on the empty path. `s` is
+// therefore `string?` after the loop, and returning it as `string` is
+// rejected. Without the header join the body assignment would leak out and
+// hide the null path, silently accepting a possibly-null return.
+fn f(xs: Array<int>) -> string {
+    var s: string? = null
+    for (v in xs) {
+        s = "x"
+    }
+    return s
+}
+
+fn main() {
+    print(f([1, 2]))
+}
+
+main()

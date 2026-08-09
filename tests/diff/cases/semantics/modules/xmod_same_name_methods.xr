@@ -1,0 +1,15 @@
+// Two sibling modules each export a class named `Widget` with methods that
+// return different values.  Calling a method on each twin must dispatch to that
+// twin's own method.  AOT resolved a method-by-index lookup by bare class name,
+// so the second twin's calls bound to the first twin's methods (kind() returned
+// 100 instead of 200, val() dropped the *10).  The VM keeps them distinct; AOT
+// must match it byte for byte.
+import "./_same_name_method_a" as a
+import "./_same_name_method_b" as b
+
+var wa = a.Widget(3)
+var wb = b.Widget(3)
+print(wa.kind())   // 100
+print(wb.kind())   // 200
+print(wa.val())    // 3
+print(wb.val())    // 30

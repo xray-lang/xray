@@ -4921,6 +4921,57 @@ static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, co
         bind->ctx->analyzer, bind->ctx->analyzer->global_scope, bind->decl_file, name);
 }
 
+static XaScope *xa_default_arg_import_scope(XaAnalyzer *analyzer) {
+    if (!analyzer || !analyzer->global_scope)
+        return NULL;
+    if (!analyzer->default_arg_import_scope)
+        analyzer->default_arg_import_scope = xa_scope_new(XA_SCOPE_BLOCK, analyzer->global_scope);
+    return analyzer->default_arg_import_scope;
+}
+
+/* A default-argument expression cloned from a declaring module may name a symbol
+ * exported by that module: a class constructor like `DialOptions()`, an exported
+ * helper the default calls, an enum member. The export table hands back the
+ * DECLARING analyzer's symbol, whose id belongs to that analyzer's registry and
+ * is meaningless here, so stamping it onto the cloned node leaves the reference
+ * unresolved (or aliased onto an unrelated caller symbol). Materialize a
+ * caller-local import view instead: a fresh symbol with a caller-owned id, the
+ * exported metadata copied in, and the cross-module identity recorded so that
+ * lowering resolves it through the module export table via XI_IMPORT_REF. */
+static XaSymbol *xa_default_arg_materialize_import(XaDefaultArgBindCtx *bind, const char *name,
+                                                   XaSymbol *export_sym) {
+    if (!bind || !bind->ctx || !bind->ctx->analyzer || !name || !export_sym)
+        return NULL;
+    XaAnalyzer *analyzer = bind->ctx->analyzer;
+    XaScope *scope = xa_default_arg_import_scope(analyzer);
+    if (!scope)
+        return NULL;
+
+    XaSymbol *local = xa_symbol_new(name, export_sym->kind);
+    if (!local)
+        return NULL;
+    local->is_imported = true;
+    local->is_const = true;
+    local->is_static = export_sym->is_static;
+    local->is_private = export_sym->is_private;
+    local->is_protected = export_sym->is_protected;
+    local->is_builtin = export_sym->is_builtin;
+    local->passing_mode = export_sym->passing_mode;
+    xa_scope_add_symbol(scope, local);
+
+    xa_symbol_links_copy_export_metadata(analyzer, &local->links, &export_sym->links);
+    /* copy_export_metadata carries the declaring analyzer's identity strings
+     * verbatim; overwrite them with caller-visible strings that outlive this
+     * pass. The member name is the exported name (== the reference spelling);
+     * the module and declaration file come from the bound call site. */
+    if (bind->module_name)
+        local->links.module_name = bind->module_name;
+    local->links.import_member_name = name;
+    if (bind->decl_file)
+        local->links.file_path = bind->decl_file;
+    return local;
+}
+
 static void xa_bind_default_arg_export_symbols(AstNode *node, XaDefaultArgBindCtx *bind) {
     if (!node || !bind)
         return;
@@ -4938,10 +4989,31 @@ static void xa_bind_default_arg_export_symbols(AstNode *node, XaDefaultArgBindCt
             if (node->as.variable.name) {
                 XaSymbol *sym = xa_default_arg_lookup_decl_symbol(bind, node->as.variable.name);
                 if (sym) {
-                    node->as.variable.symbol_id = sym->id;
-                    XaSymbolLinks *links = xa_analyzer_get_links(bind->ctx->analyzer, sym);
-                    if (links && !links->module_name && bind->module_name)
-                        links->module_name = bind->module_name;
+                    /* The lookup returns a symbol from the declaring module
+                     * (its export table or declaration file). When the default
+                     * argument is expanded at a call in that SAME file the symbol
+                     * is directly referenceable here, so keep its id. Across a
+                     * module boundary it is not: even when a whole-program (AOT)
+                     * analysis leaves the declaring symbol's id valid in the
+                     * shared registry, that symbol is the declaration itself, not
+                     * an import binding, and the caller unit cannot lower it.
+                     * Materialize a caller-local import view so the reference
+                     * resolves and lowering emits an XI_IMPORT_REF. */
+                    const char *caller_file = bind->ctx->file_path;
+                    bool cross_module =
+                        !(caller_file && bind->decl_file &&
+                          xa_default_arg_path_matches(caller_file, bind->decl_file));
+                    if (cross_module) {
+                        XaSymbol *local =
+                            xa_default_arg_materialize_import(bind, node->as.variable.name, sym);
+                        if (local)
+                            node->as.variable.symbol_id = local->id;
+                    } else {
+                        node->as.variable.symbol_id = sym->id;
+                        XaSymbolLinks *links = xa_analyzer_get_links(bind->ctx->analyzer, sym);
+                        if (links && !links->module_name && bind->module_name)
+                            links->module_name = bind->module_name;
+                    }
                     break;
                 }
                 XaSymbol *current = node->as.variable.symbol_id

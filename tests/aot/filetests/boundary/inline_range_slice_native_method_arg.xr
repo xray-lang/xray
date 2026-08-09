@@ -1,0 +1,13 @@
+/* A bounded inline range slice passed straight to a native builtin method
+ * (string.fromUtf8Lossy(raw[0:end])) must lower to a borrowed span view over the
+ * source array. The analyzer leaves such an inline slice's node type unresolved
+ * because the native method offers no Slice target, so lowering recovers the
+ * Slice<T> from the source element type; otherwise the backend faced an untyped
+ * slice and failed instead of emitting the span construction below. */
+
+fn decode(raw: Array<byte>, end: int) -> string {
+    return string.fromUtf8Lossy(raw[0:end])
+}
+
+var data: Array<byte> = [104, 105]
+print(decode(data, 2))

@@ -368,8 +368,8 @@ fn _originAllowed(origin: string?, allowedOrigins: Array<string>?) -> bool {
 }
 
 fn _validSecKey(secKey: string) -> bool {
-    if (!base64.isValid(secKey, null)) { return false }
-    var raw = base64.decode(secKey, null)
+    if (!base64.isValid(secKey)) { return false }
+    var raw = base64.decode(secKey)
     return len(raw) == 16
 }
 

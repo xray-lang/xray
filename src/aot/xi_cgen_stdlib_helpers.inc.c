@@ -512,11 +512,36 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
     }
 
     fprintf(out, "XrValue _arr%u = ", id);
-    const char *const *shape_names = object_ok
-                                         ? (const char *const *) object_type->object.field_names
-                                         : (const char *const *) layout->field_names;
-    int shape_id = cg_intern_object_shape_parts(ctx, 2, shape_names, object_ok ? object_type : NULL,
-                                                XR_OBJECT_DOMAIN_STRUCT);
+    if (object_ok) {
+        /* Store each pair half into the slot its field name sorts to under the
+         * canonical order the evidence table and the structural field-table
+         * verifier use, so a verified field read on the result lands on the
+         * value it named. The declared order is (first, second); the shape
+         * interner sorts the names, which may swap the two slots. */
+        const char *const *decl_names = (const char *const *) object_type->object.field_names;
+        uint64_t key_first = xg_object_stable_name_key(decl_names[0]);
+        uint64_t key_second = xg_object_stable_name_key(decl_names[1]);
+        bool first_leads =
+            key_first < key_second ||
+            (key_first == key_second && xg_name_id(decl_names[0]) <= xg_name_id(decl_names[1]));
+        int slot_first = first_leads ? 0 : 1;
+        int slot_second = first_leads ? 1 : 0;
+        int shape_id =
+            cg_intern_object_shape_type_domain(ctx, object_type, XR_OBJECT_DOMAIN_STRUCT);
+        if (shape_id < 0) {
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+        fprintf(out,
+                "xrt_object_new_shape(&_xobj_shape_%d); "
+                "xrt_json_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.first)); "
+                "xrt_json_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.second)); _arr%u; })",
+                shape_id, id, slot_first, id, id, slot_second, id, id);
+        return true;
+    }
+    int shape_id = cg_intern_object_shape_parts(ctx, 2, (const char *const *) layout->field_names,
+                                                NULL, XR_OBJECT_DOMAIN_STRUCT);
     if (shape_id < 0) {
         ctx->error = true;
         emit_codegen_abort_expr(out);
