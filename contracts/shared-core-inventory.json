@@ -304,7 +304,6 @@
       "owner": "shared-kernel",
       "production_callers": [
         "src/aot/xrt_coll.h",
-        "src/aot/xrt_defer.h",
         "src/aot/xrt_exception.h",
         "src/runtime/object/builtins/xarray_builtins.c",
         "src/runtime/object/xarray_methods.c",
@@ -678,6 +677,7 @@
       "id": "raw-scalar",
       "owner": "shared-kernel",
       "production_callers": [
+        "src/aot/xi_cgen_arith_helpers.inc.c",
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
         "src/aot/xrt.h",
         "src/aot/xrt_byte_array.inc.c",
@@ -696,6 +696,7 @@
         "xr_raw_bswap_u16",
         "xr_raw_bswap_u32",
         "xr_raw_bswap_u64",
+        "xr_raw_const_ptr_offset",
         "xr_raw_endian_matches_host",
         "xr_raw_f32_from_bits",
         "xr_raw_f32_to_bits",
@@ -707,6 +708,7 @@
         "xr_raw_load_u32_unaligned",
         "xr_raw_load_u64_unaligned",
         "xr_raw_load_u8_unaligned",
+        "xr_raw_mut_ptr_offset",
         "xr_raw_store_ptr_unaligned",
         "xr_raw_store_u16_unaligned",
         "xr_raw_store_u32_unaligned",
