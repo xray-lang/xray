@@ -1,0 +1,20 @@
+// Closing a hosted AOT listener must retire its scheduler PollDesc before the
+// operating system reuses the descriptor for a new connection.
+import net
+import os
+import strconv
+var triggerPort = strconv.parseInt(os.getenv("XRAY_TRIGGER_PORT")!)!
+var statusPort = strconv.parseInt(os.getenv("XRAY_STATUS_PORT")!)!
+var trigger = net.listen(triggerPort, 1)!
+var retiredFd = net.fd(trigger)
+var control = net.accept(trigger)!
+var token = net.read(control, 1)!
+assert(token == "x")
+net.close(control)
+net.close(trigger)
+var status = net.dial("127.0.0.1", statusPort, 5000)!
+assert(net.fd(status) == retiredFd)
+var report = net.read(status, 128)!
+net.close(status)
+assert(report == "fd-reuse-ok\n")
+print(report)

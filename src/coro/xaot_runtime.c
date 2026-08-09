@@ -10,6 +10,7 @@
 
 #include "xaot_runtime_internal.h"
 
+#include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -27,6 +28,7 @@
 #include "xblock.h"
 #include "xcoro_pool.h"
 #include "xcoroutine.h"
+#include "xnetpoll.h"
 #include "xscope_transfer.h"
 #include "xtask.h"
 #include "xworker.h"
@@ -1078,4 +1080,19 @@ XrAotResult xr_aot_wait_fd(const XrAotContext *ctx, int64_t fd, int events, int6
     if (block.kind == XR_CORO_BLOCK_READY)
         return xr_aot_result(XR_AOT_RUN_DONE);
     return xr_aot_error(XR_NULL_VAL, false);
+}
+
+void xr_aot_net_close_fd(int64_t fd_value) {
+    if (fd_value < 0 || fd_value > INT_MAX)
+        return;
+    int fd = (int) fd_value;
+    XrAotRuntime *runtime = xr_aot_runtime_current();
+    XrRuntime *scheduler = xr_aot_runtime_scheduler(runtime);
+    if (scheduler) {
+        XrPollDesc *pd = xr_fdmap_get(&scheduler->netpoll, fd);
+        if (pd && !atomic_load_explicit(&pd->closing, memory_order_acquire))
+            xr_netpoll_close(&scheduler->netpoll, pd);
+    }
+    shutdown((xr_socket_t) fd, XR_SHUT_RDWR);
+    xr_closesocket((xr_socket_t) fd);
 }

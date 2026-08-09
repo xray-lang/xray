@@ -419,6 +419,7 @@ XR_FUNC XrValue xr_aot_gen_iterator_new(const XrAotContext *ctx, const XrAotCoro
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
 XR_FUNC XrAotResult xr_aot_wait_fd(const XrAotContext *ctx, int64_t fd, int events,
                                    int64_t timeout_ms);
+XR_FUNC void xr_aot_net_close_fd(int64_t fd);
 XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode);
 // A scope block is a statement: exiting one produces no value. The result the
 // scope settles on already rides in XrAotResult.value, so there is no second

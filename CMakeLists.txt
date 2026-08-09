@@ -3592,6 +3592,19 @@ if(BUILD_TESTS)
         TIMEOUT 600
     )
 
+    add_test(
+        NAME aot_net_fd_reuse_close
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_net_fd_reuse.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_net_fd_reuse_close PROPERTIES
+        LABELS "aot;netpoll;regression"
+        PROCESSORS 1
+        TIMEOUT 150
+    )
+
     # P2: removed-surface-form drift scan. Fails closed on any live occurrence
     # of a deleted Xray surface form (`let` bindings, mem.free(), unchecked LE
     # load/store, direct Buffer indexing) across tests/, stdlib/, and knowledge

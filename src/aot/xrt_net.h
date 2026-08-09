@@ -29,6 +29,10 @@
 #define XRT_NET_DEFAULT_READ_BYTES 4096
 #define XRT_NET_MAX_READ_BYTES 1048576
 
+#if defined(XRAY_AOT_RUNTIME_BRIDGE)
+XR_FUNC void xr_aot_net_close_fd(int64_t fd);
+#endif
+
 typedef enum xrt_net_handle_kind {
     XRT_NET_HANDLE_CONN = 1,
     XRT_NET_HANDLE_LISTENER = 2,
@@ -269,8 +273,12 @@ static inline xrt_net_listener_object_t *xrt_net_listener_new(xr_socket_t fd, in
 static inline void xrt_net_close_fd(xr_socket_t fd) {
     if (fd == XR_INVALID_SOCKET)
         return;
+#if defined(XRAY_AOT_RUNTIME_BRIDGE)
+    xr_aot_net_close_fd((int64_t) fd);
+#else
     shutdown(fd, XR_SHUT_RDWR);
     xr_closesocket(fd);
+#endif
 }
 
 static inline void xrt_net_close_base(xrt_net_handle_base_t *base) {

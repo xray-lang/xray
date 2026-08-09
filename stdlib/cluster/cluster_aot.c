@@ -30,6 +30,7 @@
 
 #define XR_AOT_CLUSTER_QUEUE_HIGH_WATERMARK (4u * 1024u * 1024u)
 #define XR_AOT_CLUSTER_IO_TIMEOUT_MS 5000
+#define XR_AOT_CLUSTER_ACCEPT_POLL_MS 100
 
 typedef struct XrAotClusterFrame {
     uint8_t *data;
@@ -457,6 +458,15 @@ static bool aot_cluster_server_handshake(XrAotClusterState *cluster, xr_socket_t
 static void *aot_cluster_accept_main(void *argument) {
     XrAotClusterState *cluster = (XrAotClusterState *) argument;
     while (atomic_load_explicit(&cluster->running, memory_order_acquire)) {
+        /* Closing a listening socket from another thread does not reliably
+         * interrupt a blocking accept() on every supported OS. Poll with a
+         * bounded timeout so stop can flip running and join this thread before
+         * it closes the descriptor, avoiding both shutdown hangs and fd reuse. */
+        if (aot_cluster_wait_socket(cluster->listen_socket, true, XR_AOT_CLUSTER_ACCEPT_POLL_MS) !=
+            0)
+            continue;
+        if (!atomic_load_explicit(&cluster->running, memory_order_acquire))
+            break;
         xr_socket_t socket = accept(cluster->listen_socket, NULL, NULL);
         if (socket == XR_INVALID_SOCKET)
             break;
@@ -613,13 +623,13 @@ static void aot_cluster_state_destroy(XrAotClusterState *cluster) {
     if (!cluster)
         return;
     atomic_store_explicit(&cluster->running, false, memory_order_release);
+    if (cluster->accept_started)
+        (void) xr_thread_join(cluster->accept_thread, NULL);
     if (cluster->listen_socket != XR_INVALID_SOCKET) {
         shutdown(cluster->listen_socket, XR_SHUT_RDWR);
         xr_closesocket(cluster->listen_socket);
         cluster->listen_socket = XR_INVALID_SOCKET;
     }
-    if (cluster->accept_started)
-        (void) xr_thread_join(cluster->accept_thread, NULL);
 
     xr_mutex_lock(&cluster->nodes_lock);
     for (XrAotClusterNode *node = cluster->nodes; node; node = node->next)
