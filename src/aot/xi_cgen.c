@@ -677,6 +677,17 @@ typedef struct CgWriter {
     bool error;
 } CgWriter;
 
+/* One static no-payload enum member box referenced by the current unit.
+ * Body emission interns these; static-data emission writes exactly one
+ * immortal file-scope XrAotEnumBox per symbol. */
+typedef struct CgEnumMemberBox {
+    char *symbol; /* owned: file-scope C identifier */
+    const char *enum_name;
+    const char *member_name;
+    uint32_t member_index;
+    uint32_t layout_id;
+} CgEnumMemberBox;
+
 /* All mutable codegen state for one C-generation session.
  * Heap-allocated via xi_cgen_ctx_new; no file-scope globals. */
 struct XiCgenCtx {
@@ -764,6 +775,9 @@ struct XiCgenCtx {
     uint8_t *enum_scalar_sidecar_used;
     uint32_t enum_scalar_sidecar_cap;
     uint32_t prelude_enum_scalar_sidecar_mask;
+    CgEnumMemberBox *enum_member_boxes; /* per-unit static member box registry */
+    int nenum_member_boxes;
+    int enum_member_box_cap;
     const XiFunc *sync_go_targets[CG_MAX_SYNC_GO_TARGETS];
     int nsync_go_targets;
     const XiFunc *sync_heartbeat_targets[CG_MAX_SYNC_HEARTBEAT_TARGETS];

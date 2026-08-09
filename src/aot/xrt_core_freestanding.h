@@ -424,7 +424,7 @@ static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint32_t
 }
 
 typedef struct XrAotEnumBox {
-    uint64_t gc_words[2];
+    XrObjHeader hdr;
     void *klass;
     const char *enum_name;
     const char *member_name;

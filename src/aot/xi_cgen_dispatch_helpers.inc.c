@@ -4346,7 +4346,7 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     } else if (ctx && ctx->freestanding_profile && cg_prelude_enum_data((int) v->aux_int) != NULL) {
         fprintf(out, "XR_NULL_VAL /* freestanding prelude enum namespace: %s */",
                 v->aux ? (const char *) v->aux : "?");
-    } else if (emit_prelude_enum_type_expr(out, (int) v->aux_int)) {
+    } else if (emit_prelude_enum_type_expr(ctx, out, (int) v->aux_int)) {
         /* Prelude enum type object: standalone AOT uses the same lightweight
          * map representation as user enums, avoiding a full isolate solely for
          * enum member lookup. */

@@ -474,12 +474,17 @@ static inline int xrt_arc_value_has_header(XrValue v) {
            v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX || v.tag == XR_TAG_SYS_RWLOCK ||
            v.tag == XR_TAG_SYS_CONDVAR || v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE ||
            v.tag == XR_TAG_THREAD || v.tag == XR_TAG_BUFFER || v.tag == XR_TAG_NET_CONN ||
-           v.tag == XR_TAG_NET_LISTENER || v.tag == XR_TAG_RANGE || v.tag == XR_TAG_TUPLE;
+           v.tag == XR_TAG_NET_LISTENER || v.tag == XR_TAG_RANGE || v.tag == XR_TAG_TUPLE ||
+           v.tag == XR_TAG_ENUM;
 }
 
 static inline XrObjHeader *xrt_arc_value_header(XrValue v) {
     if (v.tag == XR_TAG_PTR &&
         (v.heap_type == XR_TINSTANCE || (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0))
+        return (XrObjHeader *) v.ptr;
+    /* Enum values point at header-first objects: XrAotEnumBox and the static
+     * scalar-layout / ctor metadata all start with their XrObjHeader. */
+    if (v.tag == XR_TAG_ENUM)
         return (XrObjHeader *) v.ptr;
     return XRT_ARC_HDR(v.ptr);
 }
@@ -598,6 +603,7 @@ static inline int xrt_rc_claim_release_last(XrObjHeader *hdr) {
 }
 
 static inline void xrt_array_ref_release_owned(XrValue v);
+static inline void xrt_release(XrValue v);
 
 /* ARC release: release one owning reference, free on the LAST one.
  * 0-based RC (matching the VM/AOT unified header): rc == 0 means a single
@@ -609,6 +615,12 @@ static inline void xrt_array_ref_release_owned(XrValue v);
  * destructor releases child references, which may recurse back into
  * xrt_release. */
 static inline void xrt_finalize_payload(XrObjHeader *hdr) {
+    if (hdr->type == XR_TENUM_BOX) {
+        XrAotEnumBox *box = (XrAotEnumBox *) hdr;
+        for (uint32_t i = 0; i < box->payload_count; i++)
+            xrt_release(box->payloads[i]);
+        return;
+    }
     void *obj =
         (hdr->extra & XR_OBJ_AOT_NATIVE) ? (void *) hdr : (char *) hdr + sizeof(XrObjHeader);
     if (hdr->extra & XR_OBJ_HAS_DTOR) {

@@ -249,7 +249,7 @@ baseline:
 #define XR_TAG_NET_LISTENER 37 /* AOT net.NetListener TCP handle */
 
 typedef struct XrAotEnumBox {
-    uint64_t gc_words[2];
+    XrObjHeader hdr;
     void *klass;
     const char *enum_name;
     const char *member_name;
@@ -258,6 +258,19 @@ typedef struct XrAotEnumBox {
     uint32_t layout_id;
     XrValue payloads[];
 } XrAotEnumBox;
+
+/* Boxes a compiler-emitted static no-payload member: immortal, sticky, and
+ * allocation-free, so a member constant never costs a heap object no matter
+ * how often it is evaluated. This is the boxed-form counterpart of
+ * xrt_enum_scalar_box for enums that keep XrAotEnumBox because a sibling
+ * variant carries a payload. */
+static inline XrValue xrt_enum_box_from_static(const XrAotEnumBox *box) {
+    XrValue out = {0};
+    out.tag = XR_TAG_ENUM;
+    out.ext = box->member_index;
+    out.ptr = (void *) box;
+    return out;
+}
 
 /* One immutable sidecar per reachable unit enum is sufficient to box any
  * compact ordinal at an erased/tagged boundary.  XrValue.ext carries the

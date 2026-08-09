@@ -172,6 +172,85 @@ static void emit_c_string_literal(FILE *out, const char *s) {
     emit_c_string_literal_bytes(out, s, s ? strlen(s) : 0);
 }
 
+/* ========== Static no-payload enum member boxes ==========
+ * A no-payload member value is a compile-time constant, so it never justifies
+ * a heap object: body emission interns each referenced member here and the
+ * static-data phase writes one immortal file-scope XrAotEnumBox per symbol,
+ * mirroring the scalar-layout sidecar. Payload-carrying constructions are the
+ * only enum boxes that still allocate. */
+
+static const char *cg_intern_enum_member_box(XiCgenCtx *ctx, const char *symbol,
+                                             const char *enum_name, const char *member_name,
+                                             uint32_t member_index, uint32_t layout_id) {
+    if (!ctx || !symbol)
+        return NULL;
+    for (int i = 0; i < ctx->nenum_member_boxes; i++) {
+        if (strcmp(ctx->enum_member_boxes[i].symbol, symbol) == 0)
+            return ctx->enum_member_boxes[i].symbol;
+    }
+    if (ctx->nenum_member_boxes == ctx->enum_member_box_cap) {
+        int cap = ctx->enum_member_box_cap ? ctx->enum_member_box_cap * 2 : 16;
+        CgEnumMemberBox *grown = (CgEnumMemberBox *) xr_realloc(
+            ctx->enum_member_boxes, (size_t) cap * sizeof(CgEnumMemberBox));
+        if (!grown) {
+            ctx->error = true;
+            return NULL;
+        }
+        ctx->enum_member_boxes = grown;
+        ctx->enum_member_box_cap = cap;
+    }
+    CgEnumMemberBox *e = &ctx->enum_member_boxes[ctx->nenum_member_boxes];
+    e->symbol = xr_strdup(symbol);
+    if (!e->symbol) {
+        ctx->error = true;
+        return NULL;
+    }
+    e->enum_name = enum_name ? enum_name : "";
+    e->member_name = member_name ? member_name : "";
+    e->member_index = member_index;
+    e->layout_id = layout_id;
+    ctx->nenum_member_boxes++;
+    return e->symbol;
+}
+
+static void emit_enum_member_box_value_expr(XiCgenCtx *ctx, FILE *out, const char *symbol,
+                                            const char *enum_name, const char *member_name,
+                                            uint32_t member_index, uint32_t layout_id) {
+    if (!cg_intern_enum_member_box(ctx, symbol, enum_name, member_name, member_index, layout_id)) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
+    fprintf(out, "xrt_enum_box_from_static(&%s)", symbol);
+}
+
+static void emit_enum_member_box_defs(XiCgenCtx *ctx, FILE *out) {
+    if (!ctx || !out || ctx->nenum_member_boxes == 0)
+        return;
+    for (int i = 0; i < ctx->nenum_member_boxes; i++) {
+        const CgEnumMemberBox *e = &ctx->enum_member_boxes[i];
+        fprintf(out,
+                "static const XrAotEnumBox %s = "
+                "{{XR_TENUM_BOX, XR_OBJ_IMMORTAL, XR_RC_STICKY, 0, 0}, NULL, ",
+                e->symbol);
+        emit_c_string_literal(out, e->enum_name);
+        fprintf(out, ", ");
+        emit_c_string_literal(out, e->member_name);
+        fprintf(out, ", %uu, 0u, %uu};\n", (unsigned) e->member_index, (unsigned) e->layout_id);
+    }
+    fprintf(out, "\n");
+}
+
+static void cg_reset_enum_member_boxes(XiCgenCtx *ctx) {
+    if (!ctx)
+        return;
+    for (int i = 0; i < ctx->nenum_member_boxes; i++)
+        xr_free(ctx->enum_member_boxes[i].symbol);
+    xr_free(ctx->enum_member_boxes);
+    ctx->enum_member_boxes = NULL;
+    ctx->nenum_member_boxes = 0;
+    ctx->enum_member_box_cap = 0;
+}
+
 static const XiEnumData *cg_enum_for_runtime_type(const XiCgenCtx *ctx, const void *runtime_type);
 
 static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed) {
@@ -189,11 +268,11 @@ static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed)
         if (ed->is_adt)
             fprintf(out, "XR_FROM_INT(%u)", (unsigned) i);
         else {
-            fprintf(out, "xrt_enum_box_new(%u, ", ed->layout_id);
-            emit_c_string_literal(out, ed->name ? ed->name : "");
-            fprintf(out, ", ");
-            emit_c_string_literal(out, name);
-            fprintf(out, ", %u)", (unsigned) i);
+            char symbol[64];
+            snprintf(symbol, sizeof(symbol), "_xenum_%u_%u", (unsigned) ed->layout_id,
+                     (unsigned) i);
+            emit_enum_member_box_value_expr(ctx, out, symbol, ed->name ? ed->name : "", name, i,
+                                            ed->layout_id);
         }
         fprintf(out, "); ");
     }
@@ -234,11 +313,11 @@ static bool emit_enum_namespace_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFu
         if (ed->is_adt) {
             fprintf(out, "XR_FROM_INT(%u)", (unsigned) i);
         } else {
-            fprintf(out, "xrt_enum_box_new(%u, ", ed->layout_id);
-            emit_c_string_literal(out, ed->name ? ed->name : "");
-            fprintf(out, ", ");
-            emit_c_string_literal(out, name);
-            fprintf(out, ", %u)", (unsigned) i);
+            char symbol[64];
+            snprintf(symbol, sizeof(symbol), "_xenum_%u_%u", (unsigned) ed->layout_id,
+                     (unsigned) i);
+            emit_enum_member_box_value_expr(ctx, out, symbol, ed->name ? ed->name : "", name, i,
+                                            ed->layout_id);
         }
         fprintf(out, ");\n");
     }
@@ -464,7 +543,8 @@ static bool emit_portable_scalar_enum_member_value_expr(XiCgenCtx *ctx, FILE *ou
     return true;
 }
 
-static void emit_prelude_enum_member_value_expr(FILE *out, const CgPreludeEnumData *ed,
+static void emit_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out,
+                                                const CgPreludeEnumData *ed,
                                                 uint32_t member_index) {
     const CgPreludeEnumMember *member =
         ed && member_index < ed->member_count ? &ed->members[member_index] : NULL;
@@ -476,21 +556,27 @@ static void emit_prelude_enum_member_value_expr(FILE *out, const CgPreludeEnumDa
         fprintf(out, "XR_FROM_INT(%u)", (unsigned) member_index);
         return;
     }
-    fprintf(out, "xrt_enum_box_new(0, ");
-    emit_c_string_literal(out, ed->enum_name ? ed->enum_name : "");
-    fprintf(out, ", ");
-    emit_c_string_literal(out, member->name ? member->name : "");
-    fprintf(out, ", %u)", (unsigned) member_index);
+    char symbol[256];
+    int written = snprintf(symbol, sizeof(symbol), "_ev_%s_%s", ed->enum_name ? ed->enum_name : "E",
+                           member->name ? member->name : "M");
+    if (written < 0 || (size_t) written >= sizeof(symbol)) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
+    emit_enum_member_box_value_expr(ctx, out, symbol, ed->enum_name ? ed->enum_name : "",
+                                    member->name ? member->name : "", member_index, 0);
 }
 
-static bool emit_prelude_enum_type_expr(FILE *out, int builtin_index) {
+static bool emit_prelude_enum_type_expr(XiCgenCtx *ctx, FILE *out, int builtin_index) {
     const CgPreludeEnumData *ed = cg_prelude_enum_data(builtin_index);
     if (!ed)
         return false;
     fprintf(out, "({ XrValue _e = xrt_map_new(%u); ", (unsigned) ed->member_count);
     for (uint32_t i = 0; i < ed->member_count; i++) {
         fprintf(out, "xrt_map_set((xrt_map_t*)_e.ptr, xr_box_str(\"%s\"), ", ed->members[i].name);
-        emit_prelude_enum_member_value_expr(out, ed, i);
+        emit_prelude_enum_member_value_expr(ctx, out, ed, i);
         fprintf(out, "); ");
     }
     fprintf(out, "_e; })");
@@ -513,7 +599,7 @@ static bool emit_static_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out
         fprintf(out, "INT64_C(%d)", member_index);
     else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, ed->enum_name, ed,
                                                           (uint32_t) member_index))
-        emit_prelude_enum_member_value_expr(out, ed, (uint32_t) member_index);
+        emit_prelude_enum_member_value_expr(ctx, out, ed, (uint32_t) member_index);
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }
@@ -534,13 +620,15 @@ static bool emit_static_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const 
     } else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, ed->name, NULL,
                                                             member_index)) {
         /* Reaching a tagged value is an erased representation boundary.
-         * Preserve nominal identity in the runtime box; fully typed scalar
-         * enum values still take the allocation-free sidecar path above. */
-        fprintf(out, "xrt_enum_box_new(%u, ", (unsigned) ed->layout_id);
-        emit_c_string_literal(out, ed->name ? ed->name : "");
-        fprintf(out, ", ");
-        emit_c_string_literal(out, member->name ? member->name : "");
-        fprintf(out, ", %u)", (unsigned) member_index);
+         * Preserve nominal identity in the static immortal box; fully typed
+         * scalar enum values still take the allocation-free sidecar path
+         * above. */
+        char symbol[64];
+        snprintf(symbol, sizeof(symbol), "_xenum_%u_%u", (unsigned) ed->layout_id,
+                 (unsigned) member_index);
+        emit_enum_member_box_value_expr(ctx, out, symbol, ed->name ? ed->name : "",
+                                        member->name ? member->name : "", member_index,
+                                        ed->layout_id);
     }
     emit_conversion_suffix(out, conv_suffix);
     return true;
@@ -574,11 +662,12 @@ static bool emit_static_builtin_enum_member_value_expr(XiCgenCtx *ctx, FILE *out
         fprintf(out, "INT64_C(%u)", (unsigned) member_index);
     } else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, decl->name, NULL,
                                                             member_index)) {
-        fprintf(out, "xrt_enum_box_new(%u, ", (unsigned) decl->layout_id);
-        emit_c_string_literal(out, decl->name ? decl->name : "");
-        fprintf(out, ", ");
-        emit_c_string_literal(out, member->name ? member->name : "");
-        fprintf(out, ", %u)", (unsigned) member_index);
+        char symbol[64];
+        snprintf(symbol, sizeof(symbol), "_xbuiltin_enum_%u_%u", (unsigned) decl->layout_id,
+                 (unsigned) member_index);
+        emit_enum_member_box_value_expr(ctx, out, symbol, decl->name ? decl->name : "",
+                                        member->name ? member->name : "", member_index,
+                                        decl->layout_id);
     }
     emit_conversion_suffix(out, conv_suffix);
     return true;

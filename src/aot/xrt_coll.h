@@ -513,6 +513,11 @@ static inline XrValue xrt_enum_box_new_payloads(uint32_t layout_id, const char *
         fprintf(stderr, "xrt_enum_box_new_payloads: out of memory\n");
         abort();
     }
+    /* Header-first refcounted object: rc 0 means this single caller-owned
+     * reference; the finalizer releases the payloads and the free path pairs
+     * with the raw allocation above. */
+    ev->hdr.type = XR_TENUM_BOX;
+    ev->hdr.objsize = (uint32_t) alloc_size;
     ev->enum_name = enum_name;
     ev->member_name = member_name;
     ev->member_index = member_index;

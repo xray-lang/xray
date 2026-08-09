@@ -162,6 +162,10 @@ typedef enum {
     XR_TWEAK_HANDLE,        /* Shared indirection cell for `weak` fields; holds a
                              * non-owning target pointer that is cleared when the
                              * target's last strong reference goes. */
+    XR_TENUM_BOX,           /* Boxed enum member (XrAotEnumBox): static immortal for
+                             * no-payload members, refcounted heap object when a
+                             * payload-carrying construction crosses a tagged
+                             * boundary. */
 } XrObjType;
 
 #endif  // XR_OBJ_HEADER_H
