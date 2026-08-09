@@ -204,14 +204,14 @@ static void xr_stdlib_vm_bind_mem_generated(XrVMRuntime *isolate, XrModule *modu
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_NET
 static void xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT_YIELDABLE(module, isolate, "__dial", net_dial_yieldable);
-    XRS_EXPORT(module, isolate, "__listen", net_listen_handle);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__resolveAll", net_resolve_all_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__connectFd", net_connect_fd_yieldable);
+    XRS_EXPORT(module, isolate, "__nowMs", net_now_ms_fn);
+    XRS_EXPORT(module, isolate, "__lastConnectCode", net_last_connect_code);
+    XRS_EXPORT(module, isolate, "__listenFd", net_listen_fd);
     XRS_EXPORT_YIELDABLE(module, isolate, "__accept", net_accept_handle_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "__read", net_read_handle_yieldable);
     XRS_EXPORT_YIELDABLE(module, isolate, "__readInto", net_read_into_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "__write", net_write_handle_yieldable);
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeBytes", net_write_bytes_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "__copy", net_copy_yieldable);
     XRS_EXPORT_YIELDABLE(module, isolate, "__copyBidirectional", net_copy_bidirectional_yieldable);
     XRS_EXPORT(module, isolate, "__shutdownRead", net_shutdown_read);
     XRS_EXPORT(module, isolate, "__shutdownWrite", net_shutdown_write);
@@ -222,19 +222,17 @@ static void xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *modu
     XRS_EXPORT(module, isolate, "__setWriteDeadline", net_set_write_deadline);
     XRS_EXPORT(module, isolate, "__setDeadline", net_set_deadline);
     XRS_EXPORT(module, isolate, "__setAcceptDeadline", net_set_accept_deadline);
-    XRS_EXPORT(module, isolate, "__lastError", net_last_error);
+    XRS_EXPORT(module, isolate, "__lastCode", net_last_code);
     XRS_EXPORT(module, isolate, "__lastErrno", net_last_errno);
-    XRS_EXPORT(module, isolate, "__lookup", net_dns_lookup);
     XRS_EXPORT(module, isolate, "__hasTLS", net_has_tls);
 #ifdef XR_ENABLE_TLS
-    XRS_EXPORT_YIELDABLE(module, isolate, "__dialTLS", net_dial_tls_yieldable);
-#endif  /* XR_ENABLE_TLS */
-#ifdef XR_ENABLE_TLS
-    XRS_EXPORT_YIELDABLE(module, isolate, "__upgradeTLS", net_upgrade_tls_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__tlsHandshake", net_tls_handshake_yieldable);
 #endif  /* XR_ENABLE_TLS */
     XRS_EXPORT(module, isolate, "__udpBind", net_udp_bind_handle);
-    XRS_EXPORT_YIELDABLE(module, isolate, "__sendTo", net_send_to_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "__recvFrom", net_recv_from_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__udpSendTo", net_udp_send_to_yieldable);
+    XRS_EXPORT_YIELDABLE(module, isolate, "__udpRecvInto", net_udp_recv_into_yieldable);
+    XRS_EXPORT(module, isolate, "__udpFromHost", net_udp_from_host);
+    XRS_EXPORT(module, isolate, "__udpFromPort", net_udp_from_port);
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_NET */
 

@@ -437,18 +437,6 @@ static const XaBuiltinMember g_gen_mem_functions[] = {
 };
 #define GEN_MEM_FUNCTION_COUNT 33
 
-// net.__UdpPacket handle fields
-static const XaBuiltinHandleField g_gen_net___udppacket_fields[] = {
-    {"data", "string", true},
-    {"host", "string", true},
-    {"port", "int", true},
-};
-
-static const XaBuiltinHandle g_gen_net_handles[] = {
-    {"__UdpPacket", g_gen_net___udppacket_fields, 3, NULL, 0},
-};
-#define GEN_NET_HANDLE_COUNT 1
-
 // net.__CopyBidirectionalResult object fields
 static const XaBuiltinObjectField g_gen_net___copybidirectionalresult_object_fields[] = {
     {"aToB", "int"},
@@ -474,7 +462,7 @@ static const XaBuiltinEnumVariant g_gen_net_neterror_variants[] = {
 };
 
 static const XaBuiltinEnum g_gen_net_enums[] = {
-    {"NetError", "Typed failure from native network operations", g_gen_net_neterror_variants, 10, UINT32_C(2184710811)},
+    {"NetError", "Typed failure from network operations; classification from native codes lives in net.xr", g_gen_net_neterror_variants, 10, UINT32_C(2184710811)},
 };
 #define GEN_NET_ENUM_COUNT 1
 
@@ -493,33 +481,33 @@ static const char *g_gen_net___copybidirectional_8_errors[] = {
 
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
-    {"__dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__listen", "(port: int, backlog?: int): NetListener?", "Start listening on a port", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__resolveAll", "(host: string): Array<string>", "Resolve every address for a host, RFC 8305 interleaved; empty on failure", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__connectFd", "(addr: string, port: int, timeoutMs: int): NetConn?", "Connect one literal address; null on failure with the code on __lastConnectCode", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__nowMs", "(): int", "Monotonic clock in milliseconds for net's own deadline arithmetic", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__lastConnectCode", "(): int", "Portable error code from the most recent __connectFd on this worker; 0 when the last attempt connected", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__listenFd", "(port: int, backlog: int, forceV4: bool): NetListener?", "Bind and listen; dual-stack preferred unless forceV4", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__accept", "(listener: NetListener): NetConn?", "Accept a new connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__readInto", "(conn: NetConn, buffer: Array<byte>, maxlen?: int): int", "Read data into a reusable Array<byte> buffer", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__write", "(conn: NetConn, data: string): int", "Write data to connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__copy", "(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__readInto", "(conn: NetConn, buffer: Array<byte>, maxlen: int): int", "Read once into a caller buffer; 0 is EOF, -1 is a stored error", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write the whole buffer; returns bytes written, -1 when nothing was sent", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", true, false, true, false, true, {XA_EFFECT_CONTRACT_ERRORS, g_gen_net___copybidirectional_8_errors, 10}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__shutdownRead", "(conn: NetConn): bool", "Shut down the read side of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__shutdown", "(conn: NetConn): bool", "Shut down both sides of a TCP connection", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__close", "(handle: NetConn | NetListener): ()", "Close a connection or listener", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__fd", "(handle: NetConn | NetListener): int", "Get fd from handle", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setReadDeadline", "(conn: NetConn, deadline: int): bool", "Set read deadline in monotonic ms", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setWriteDeadline", "(conn: NetConn, deadline: int): bool", "Set write deadline in monotonic ms", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setDeadline", "(conn: NetConn, deadline: int): bool", "Set read and write deadlines in monotonic ms", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__setAcceptDeadline", "(listener: NetListener, deadline: int): bool", "Set accept deadline in monotonic ms", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__lastError", "(handle: NetConn | NetListener): NetError?", "Return the last typed network error", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__lastErrno", "(handle: NetConn | NetListener): int", "Return the last system errno", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__lookup", "(hostname: string): string?", "DNS lookup", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__hasTLS", "(): bool", "Check if TLS support is available", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__dialTLS", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TLS connection", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__upgradeTLS", "(conn: NetConn, hostname: string, timeout?: int): NetConn?", "Upgrade connection to TLS", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_BORROWED_PARAM_0},
-    {"__udpBind", "(port: int, addr?: string): NetConn?", "Bind a UDP socket", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__recvFrom", "(handle: NetConn, maxlen?: int): __UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__shutdownRead", "(conn: NetConn): bool", "Shut down the read side", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__shutdown", "(conn: NetConn): bool", "Shut down both directions", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__close", "(handle: NetConn | NetListener): ()", "Close a connection or listener; idempotent", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__fd", "(handle: NetConn | NetListener): int", "Raw fd of a handle, -1 when closed", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setReadDeadline", "(conn: NetConn, deadline: int): bool", "Absolute monotonic read deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setWriteDeadline", "(conn: NetConn, deadline: int): bool", "Absolute monotonic write deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setDeadline", "(conn: NetConn, deadline: int): bool", "Set both read and write deadlines", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__setAcceptDeadline", "(listener: NetListener, deadline: int): bool", "Absolute monotonic accept deadline in ms; 0 clears", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__lastCode", "(handle: NetConn | NetListener): int", "Portable error code of the last failed operation; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__lastErrno", "(handle: NetConn | NetListener): int", "Raw errno captured for the last failed operation", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__hasTLS", "(): bool", "Whether TLS support is compiled in", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__tlsHandshake", "(conn: NetConn, hostname: string, deadlineMs: int): int", "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__udpBind", "(port: int, addr: string): NetConn?", "Bind a UDP socket; empty addr binds the wildcard address", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__udpSendTo", "(conn: NetConn, data: Array<byte>, addr: string, port: int, timeoutMs: int): int", "Send one datagram to a literal address; bytes sent or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__udpRecvInto", "(conn: NetConn, buffer: Array<byte>, timeoutMs: int): int", "Receive one datagram into a caller buffer; bytes received, or -1 with a stored code", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__udpFromPort", "(conn: NetConn): int", "Sender port of the last successful datagram receive; 0 when none", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
 #define GEN_NET_FUNCTION_COUNT 27
 
@@ -711,7 +699,7 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT, NULL, 0, NULL, 0},
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"mem", g_gen_mem_functions, GEN_MEM_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT, g_gen_net_object_shapes, GEN_NET_OBJECT_SHAPE_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT},
+    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, NULL, 0, g_gen_net_object_shapes, GEN_NET_OBJECT_SHAPE_COUNT, g_gen_net_enums, GEN_NET_ENUM_COUNT},
     {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT, NULL, 0, NULL, 0},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, g_gen_runtime_object_shapes, GEN_RUNTIME_OBJECT_SHAPE_COUNT, NULL, 0},

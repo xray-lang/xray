@@ -55,6 +55,8 @@ XrNetConn *xr_net_conn_new(struct XrVMRuntime *X, int fd, XrNetConnKind kind) {
     c->write_deadline_ms = 0;
     c->last_errno = 0;
     c->last_error = XR_NETERR_NONE;
+    c->udp_from_host[0] = '\0';
+    c->udp_from_port = 0;
     return c;
 }
 

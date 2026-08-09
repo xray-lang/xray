@@ -47,6 +47,12 @@ typedef enum {
     XR_NETCONN_TLS = 2, /* TLS over TCP (tls_state set) */
 } XrNetConnKind;
 
+/*
+ * Portable network error codes. The numbering is a stable script-facing
+ * contract: net.__lastCode returns these values verbatim and the NetError
+ * classification table in stdlib/net/net.xr maps them to enum variants,
+ * so renumbering is a breaking semantic change, not a refactor.
+ */
 typedef enum {
     XR_NETERR_NONE = 0,
     XR_NETERR_TIMEOUT = 1,
@@ -57,6 +63,7 @@ typedef enum {
     XR_NETERR_TLS = 6,
     XR_NETERR_IO = 7,
     XR_NETERR_INVALID = 8,
+    XR_NETERR_CANCELLED = 9,
 } XrNetErrorKind;
 
 /* ========== Connection handle ========== */
@@ -73,6 +80,11 @@ typedef struct XrNetConn {
     int64_t write_deadline_ms;   /* absolute time.monotonic() ms, 0 = no deadline   */
     int last_errno;              /* errno captured for the last failed operation    */
     uint8_t last_error;          /* XrNetErrorKind                                  */
+    /* Sender of the last successful datagram receive. Scalar fields instead
+     * of a composite return keep the primitive expressible on both the VM
+     * and the AOT direct-call ABI; one reader per UDP socket is assumed. */
+    char udp_from_host[46]; /* INET6_ADDRSTRLEN text, "" when none         */
+    int udp_from_port;
 } XrNetConn;
 
 /* ========== Listener handle ========== */

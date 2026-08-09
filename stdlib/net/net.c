@@ -5,10 +5,19 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * net.c - Network standard library implementation
+ * net.c - Raw network primitives behind the net.xr semantic layer
  *
  * KEY CONCEPT:
- *   Unified network interface built on http_io/http_tls/http_dns
+ *   This file holds only the yieldable socket/TLS/netpoll primitives and the
+ *   typed handle plumbing. Everything with a policy dimension — address
+ *   resolution order, dial fallback, timeout defaults, buffer sizing, error
+ *   classification into NetError, copy pumps, datagram shaping — lives in
+ *   stdlib/net/net.xr so VM and AOT execute the same Xray semantics.
+ *
+ *   Primitives never construct NetError values. They record a portable
+ *   XrNetErrorKind code plus the raw errno on the handle (net.__lastCode /
+ *   net.__lastErrno) or return the code directly when no handle exists yet
+ *   (net.__connectFd, net.__tlsHandshake); the script layer classifies.
  */
 
 #include "../../src/base/xmalloc.h"
@@ -16,7 +25,6 @@
 #include "net.h"
 #include "io.h"
 #include "tls.h"
-#include "xneterror.h"
 #include "../stdlib_cache.h"
 #include "../../src/io/xdns.h"
 #include "../../src/io/xnet_handle.h"
@@ -92,21 +100,6 @@ static void net_platform_init(void) {
 }
 #endif
 
-typedef enum {
-    XR_NET_IPV4,
-    XR_NET_IPV6
-} XrNetFamily;
-
-typedef struct XrNetAddr {
-    XrNetFamily family;
-    char host[256];
-    uint16_t port;
-    union {
-        uint8_t ipv4[4];
-        uint8_t ipv6[16];
-    } addr;
-} XrNetAddr;
-
 /*
  * Close a socket fd with proper netpoll cleanup.
  * Handles: netpoll deregistration, shutdown, close.
@@ -125,130 +118,11 @@ static void net_close_fd(XrVMRuntime *X, int fd) {
     xr_closesocket(fd);
 }
 
-/*
- * DNS resolve + create non-blocking TCP socket + start connect.
- * Returns fd on success (connect may still be in progress), -1 on failure.
- * On an in-progress socket error the caller should yield for write then check SO_ERROR.
- * On immediate connect (ret 0) the caller can proceed directly.
- * *out_ret receives the connect() return value.
- */
-/*
- * DNS resolve + create non-blocking TCP socket (TCP_NODELAY), without calling
- * connect(). Fills the resolved, port-set sockaddr into *sa_out / *salen_out so
- * the caller can connect() (readiness) or submit an io_uring connect op
- * (completion). Returns fd on success, -1 on failure.
- */
-static int net_tcp_socket_for(XrVMRuntime *X, const char *host, int port,
-                              struct sockaddr_storage *sa_out, socklen_t *salen_out) {
-    XrSockAddr addr;
-    if (!xr_dns_resolve(X, host, &addr, XR_AF_UNSPEC))
-        return -1;
-
-    int fd = socket(addr.family, SOCK_STREAM, 0);
-    if (fd < 0)
-        return -1;
-
-    xr_io_set_nonblocking(fd);
-    int opt = 1;
-    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &opt, sizeof(opt));
-
-    if (addr.family == AF_INET) {
-        addr.addr.v4.sin_port = htons(port);
-        memcpy(sa_out, &addr.addr.v4, sizeof(struct sockaddr_in));
-        *salen_out = sizeof(struct sockaddr_in);
-    } else {
-        addr.addr.v6.sin6_port = htons(port);
-        memcpy(sa_out, &addr.addr.v6, sizeof(struct sockaddr_in6));
-        *salen_out = sizeof(struct sockaddr_in6);
-    }
-    return fd;
-}
+// ========== TLS client context ==========
 
 #ifdef XR_ENABLE_TLS
-/*
- * DNS resolve + create non-blocking TCP socket + start connect.
- * Returns fd on success (connect may still be in progress), -1 on failure.
- * On an in-progress socket error the caller should yield for write then check SO_ERROR.
- * On immediate connect (ret 0) the caller can proceed directly.
- * *out_ret receives the connect() return value.
- */
-static int net_tcp_connect(XrVMRuntime *X, const char *host, int port, int *out_ret) {
-    struct sockaddr_storage sa;
-    socklen_t sa_len;
-    int fd = net_tcp_socket_for(X, host, port, &sa, &sa_len);
-    if (fd < 0)
-        return -1;
-
-    int ret = connect(fd, (struct sockaddr *) &sa, sa_len);
-    if (out_ret)
-        *out_ret = ret;
-
-    if (ret == 0 || xr_socket_err_is_inprogress(xr_get_socket_error()))
-        return fd;
-
-    xr_closesocket(fd);
-    return -1;
-}
-#endif
-
-// ========== DNS resolve helper (used by net.lookup binding) ==========
-
-static int net_dns_lookup_to_addrs(XrVMRuntime *X, const char *hostname, XrNetAddr *addrs,
-                                   int max_addrs) {
-    if (!hostname || !addrs || max_addrs <= 0)
-        return 0;
-
-    XrSockAddr resolved[8];
-    int count =
-        xr_dns_resolve_all(X, hostname, resolved, max_addrs > 8 ? 8 : max_addrs, XR_AF_UNSPEC);
-
-    for (int i = 0; i < count; i++) {
-        if (resolved[i].family == AF_INET) {
-            addrs[i].family = XR_NET_IPV4;
-            inet_ntop(AF_INET, &resolved[i].addr.v4.sin_addr, addrs[i].host, sizeof(addrs[i].host));
-        } else {
-            addrs[i].family = XR_NET_IPV6;
-            inet_ntop(AF_INET6, &resolved[i].addr.v6.sin6_addr, addrs[i].host,
-                      sizeof(addrs[i].host));
-        }
-        addrs[i].port = 0;
-    }
-    return count;
-}
-
-// ========== Script Bindings ==========
-
-// ========== TLS fd-indexed storage ==========
-
-#ifdef XR_ENABLE_TLS
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-
-#define NET_FD_INIT_CAP 256
-
-static XrTlsConn **g_tls_conns = NULL;
-static int g_tls_conns_cap = 0;
-static xr_mutex_t g_tls_conns_mutex = XR_MUTEX_INITIALIZER;
 static XrTlsContext *g_tls_client_ctx = NULL;
 static xr_once_t g_tls_client_once = XR_ONCE_INITIALIZER;
-
-// Grow g_tls_conns array to hold fd. Caller must hold g_tls_conns_mutex.
-static bool tls_fd_ensure_locked(int fd) {
-    if (fd < 0)
-        return false;
-    if (fd < g_tls_conns_cap)
-        return true;
-    int new_cap = (g_tls_conns_cap == 0) ? NET_FD_INIT_CAP : g_tls_conns_cap;
-    while (new_cap <= fd)
-        new_cap *= 2;
-    XrTlsConn **new_arr = (XrTlsConn **) xr_realloc(g_tls_conns, sizeof(XrTlsConn *) * new_cap);
-    if (!new_arr)
-        return false;
-    memset(new_arr + g_tls_conns_cap, 0, sizeof(XrTlsConn *) * (new_cap - g_tls_conns_cap));
-    g_tls_conns = new_arr;
-    g_tls_conns_cap = new_cap;
-    return true;
-}
 
 static void tls_client_ctx_init(void) {
     g_tls_client_ctx = xr_tls_context_new_client();
@@ -258,28 +132,7 @@ static XrTlsContext *get_tls_client_ctx(void) {
     xr_once_call(&g_tls_client_once, tls_client_ctx_init);
     return g_tls_client_ctx;
 }
-
-static XrTlsConn *get_tls_conn(int fd) {
-    xr_mutex_lock(&g_tls_conns_mutex);
-    XrTlsConn *tls = (fd >= 0 && fd < g_tls_conns_cap) ? g_tls_conns[fd] : NULL;
-    xr_mutex_unlock(&g_tls_conns_mutex);
-    return tls;
-}
-
-static bool set_tls_conn(int fd, XrTlsConn *tls) {
-    xr_mutex_lock(&g_tls_conns_mutex);
-    bool ok = tls_fd_ensure_locked(fd);
-    if (ok)
-        g_tls_conns[fd] = tls;
-    xr_mutex_unlock(&g_tls_conns_mutex);
-    return ok;
-}
 #endif
-
-// ========== Forward declarations for UDP buffers ==========
-
-static XR_THREAD_LOCAL char g_udp_recv_buf[65536];
-static XR_THREAD_LOCAL XrNetAddr g_udp_recv_addr;
 
 // ========== Typed Handle Helpers ==========
 
@@ -320,6 +173,11 @@ static int64_t net_timeout_until(int64_t deadline_ms) {
     return remaining <= 0 ? 1 : remaining;
 }
 
+/* Relative timeout parameter to absolute deadline; <0 means no deadline. */
+static int64_t net_deadline_from_timeout(int64_t timeout_ms) {
+    return timeout_ms < 0 ? 0 : net_now_ms() + timeout_ms;
+}
+
 static void net_conn_clear_error(XrNetConn *c) {
     if (!c)
         return;
@@ -334,6 +192,11 @@ static void net_listener_clear_error(XrNetListener *l) {
     l->last_errno = 0;
 }
 
+/*
+ * errno -> portable code normalization. This is the portability shim that
+ * keeps OS-specific errno numbering out of the script layer; the semantic
+ * mapping from codes to NetError variants lives in net.xr.
+ */
 static uint8_t net_error_from_errno(int err) {
     if (err == XR_ETIMEDOUT)
         return XR_NETERR_TIMEOUT;
@@ -344,6 +207,10 @@ static uint8_t net_error_from_errno(int err) {
     if (err == XR_EBADF || err == XR_ENOTCONN)
         return XR_NETERR_CLOSED;
     return XR_NETERR_IO;
+}
+
+static uint8_t net_code_from_resume(int status) {
+    return status == XR_RESUME_TIMEOUT ? XR_NETERR_TIMEOUT : XR_NETERR_CANCELLED;
 }
 
 static void net_conn_set_error(XrNetConn *c, uint8_t kind, int err) {
@@ -360,27 +227,10 @@ static void net_listener_set_error(XrNetListener *l, uint8_t kind, int err) {
     l->last_errno = err;
 }
 
-static XrValue make_conn_handle(XrVMRuntime *X, int fd, bool is_tls) {
-    XrNetConnKind kind = is_tls ? XR_NETCONN_TLS : XR_NETCONN_TCP;
-    XrNetConn *c = xr_net_conn_new(X, fd, kind);
+static XrValue make_conn_handle(XrVMRuntime *X, int fd) {
+    XrNetConn *c = xr_net_conn_new(X, fd, XR_NETCONN_TCP);
     if (!c)
         return XR_NULL_VAL;
-#ifdef XR_ENABLE_TLS
-    if (is_tls) {
-        /*
-         * Transfer ownership of the in-flight XrTlsConn from the
-         * fd-indexed g_tls_conns table into the typed handle. The
-         * handle is the sole owner from now on; xr_net_conn_close
-         * (or the GC destroy hook) will free the XrTlsConn so the
-         * legacy table no longer needs an entry for this fd.
-         */
-        XrTlsConn *tls = get_tls_conn(fd);
-        if (tls) {
-            xr_net_conn_set_tls(c, tls);
-            set_tls_conn(fd, NULL);
-        }
-    }
-#endif
     return XR_FROM_PTR(c);
 }
 
@@ -414,106 +264,253 @@ static int handle_get_fd(XrVMRuntime *X, XrValue handle) {
     return -1;
 }
 
-// ========== Handle-based API Functions ==========
+static inline XrArray *net_as_bytes(XrValue v) {
+    if (!XR_IS_ARRAY(v))
+        return NULL;
+    XrArray *arr = XR_TO_ARRAY(v);
+    return (arr && arr->elem_type == XR_ELEM_U8) ? arr : NULL;
+}
 
-// ========== Yieldable net.dial (handle-based) ==========
+static inline XrArray *net_as_writable_bytes(XrValue v) {
+    XrArray *arr = net_as_bytes(v);
+    if (!arr || xr_array_is_slice(arr) || arr->capacity <= 0 || !arr->data)
+        return NULL;
+    return arr;
+}
+
+// ========== Yieldable net.__resolveAll ==========
+
+/*
+ * A numeric literal needs no resolver round-trip; net.xr calls __resolveAll
+ * on every dial, so the literal case must stay allocation-plus-parse only.
+ */
+static bool net_is_literal_ip(const char *host) {
+    struct in_addr v4;
+    struct in6_addr v6;
+    return inet_pton(AF_INET, host, &v4) == 1 || inet_pton(AF_INET6, host, &v6) == 1;
+}
+
+static XrValue net_resolved_addrs_value(XrVMRuntime *X, const char *host) {
+    XrSockAddr resolved[XR_DNS_MAX_ADDRS];
+    int count = xr_dns_resolve_all(X, host, resolved, XR_DNS_MAX_ADDRS, XR_AF_UNSPEC);
+    XrArray *arr = xr_array_new(xr_current_coro(X));
+    if (!arr)
+        return XR_NULL_VAL;
+    for (int i = 0; i < count; i++) {
+        char text[INET6_ADDRSTRLEN];
+        const char *formatted = NULL;
+        if (resolved[i].family == AF_INET)
+            formatted = inet_ntop(AF_INET, &resolved[i].addr.v4.sin_addr, text, sizeof(text));
+        else
+            formatted = inet_ntop(AF_INET6, &resolved[i].addr.v6.sin6_addr, text, sizeof(text));
+        if (!formatted)
+            continue;
+        XrString *s = xr_string_intern(X, text, strlen(text), 0);
+        if (s)
+            xr_array_push(arr, xr_string_value(s));
+    }
+    return xr_value_from_array(arr);
+}
+
+typedef struct {
+    char host[256];
+} NetResolveState;
+
+static XrCFuncResult net_resolve_all_continue(XrVMRuntime *X, int status, XrValue resume_value,
+                                              void *ctx, XrValue *result) {
+    (void) resume_value;
+    NetResolveState *state = (NetResolveState *) ctx;
+    if (status == XR_RESUME_CANCELLED) {
+        xr_free(state);
+        XrArray *arr = xr_array_new(xr_current_coro(X));
+        if (!arr) {
+            *result = XR_NULL_VAL;
+            return XR_CFUNC_ERROR;
+        }
+        *result = xr_value_from_array(arr);
+        return XR_CFUNC_DONE;
+    }
+    // The async pool has warmed the runtime DNS cache; this lookup is now a
+    // cache hit (a rare LRU eviction falls back to a bounded sync resolve).
+    *result = net_resolved_addrs_value(X, state->host);
+    xr_free(state);
+    return XR_IS_NULL(*result) ? XR_CFUNC_ERROR : XR_CFUNC_DONE;
+}
+
+/*
+ * net.__resolveAll(host) -> Array<string>
+ * Yieldable: cache miss resolves on the async pool so the calling coroutine
+ * suspends instead of blocking its worker thread in getaddrinfo.
+ */
+static XrCFuncResult net_resolve_all_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
+                                               XrValue *result) {
+    if (nargs < 1 || !XR_IS_STRING(args[0])) {
+        *result = XR_NULL_VAL;
+        return XR_CFUNC_ERROR;
+    }
+    const char *host = XR_STRING_CHARS(XR_TO_STRING(args[0]));
+
+    XrCoroutine *coro = xr_current_coro(X);
+    XrWorker *worker = xr_current_worker();
+    if (!coro || !worker || net_is_literal_ip(host)) {
+        *result = net_resolved_addrs_value(X, host);
+        return XR_IS_NULL(*result) ? XR_CFUNC_ERROR : XR_CFUNC_DONE;
+    }
+
+    // Probe with family zeroed: a filled family means the cache (or the
+    // no-pool sync fallback) answered inline and no suspension happened.
+    XrSockAddr probe;
+    memset(&probe, 0, sizeof(probe));
+    if (!xr_dns_resolve_async(X, coro, worker->p.id, host, &probe, XR_AF_UNSPEC) ||
+        probe.family != 0) {
+        *result = net_resolved_addrs_value(X, host);
+        return XR_IS_NULL(*result) ? XR_CFUNC_ERROR : XR_CFUNC_DONE;
+    }
+
+    // Submitted: the pool already parked this coroutine; bind our resume.
+    NetResolveState *state = (NetResolveState *) xr_calloc(1, sizeof(NetResolveState));
+    if (!state) {
+        *result = XR_NULL_VAL;
+        return XR_CFUNC_ERROR;
+    }
+    strncpy(state->host, host, sizeof(state->host) - 1);
+    if (!xr_yield_set_continuation(X, net_resolve_all_continue, state)) {
+        xr_free(state);
+        *result = XR_NULL_VAL;
+        return XR_CFUNC_ERROR;
+    }
+    return XR_CFUNC_BLOCKED;
+}
+
+// ========== Yieldable net.__connectFd ==========
+
+/*
+ * Connect has no handle to carry an error until it succeeds, so the last
+ * failure code lives in a per-thread slot that net.__lastConnectCode reads.
+ * Each worker thread runs one coroutine at a time, and net.xr reads the code
+ * immediately after a null connect result, so a thread-local is sufficient
+ * and needs no synchronization.
+ */
+static XR_THREAD_LOCAL int g_last_connect_code = XR_NETERR_NONE;
 
 typedef struct {
     int fd;
-    int phase;                     // 0=connect_start done, waiting for writable; 1=connect_finish
     XrPollDesc *pd;                // set on the io_uring completion path
     struct sockaddr_storage addr;  // resolved target; kept valid for the connect op
     socklen_t addrlen;
-} NetDialState;
+} NetConnectState;
 
-static XrCFuncResult net_dial_step(XrVMRuntime *X, NetDialState *state, XrValue *result);
-
-static XrCFuncResult net_dial_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
-                                       XrValue *result) {
-    (void) resume_value;
-    NetDialState *state = (NetDialState *) ctx;
-    if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
+/* Record the failure code, release the socket and state, and yield a null
+ * result. The trailing dummy return lets call sites use the comma form
+ * `return (net_connect_fail(...), XR_CFUNC_DONE)`. */
+static void net_connect_fail(XrVMRuntime *X, NetConnectState *state, uint8_t code,
+                             XrValue *result) {
+    g_last_connect_code = code;
+    if (state) {
         net_close_fd(X, state->fd);
         xr_free(state);
-        *result = XR_NULL_VAL;
+    }
+    *result = XR_NULL_VAL;
+}
+
+static XrCFuncResult net_connect_fd_step(XrVMRuntime *X, NetConnectState *state, XrValue *result);
+
+static XrCFuncResult net_connect_fd_continue(XrVMRuntime *X, int status, XrValue resume_value,
+                                             void *ctx, XrValue *result) {
+    (void) resume_value;
+    NetConnectState *state = (NetConnectState *) ctx;
+    if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
+        net_connect_fail(X, state, net_code_from_resume(status), result);
         return XR_CFUNC_DONE;
     }
-    return net_dial_step(X, state, result);
+    return net_connect_fd_step(X, state, result);
 }
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
 // Completion continuation for connect: the connect op resolved to 0 (connected)
 // or -errno. No SO_ERROR round-trip needed — the CQE carries the verdict.
-static XrCFuncResult net_dial_complete(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
-                                       XrValue *result) {
+static XrCFuncResult net_connect_fd_complete(XrVMRuntime *X, int status, XrValue resume_value,
+                                             void *ctx, XrValue *result) {
     (void) status;
     (void) resume_value;
-    NetDialState *state = (NetDialState *) ctx;
+    NetConnectState *state = (NetConnectState *) ctx;
     XrUringXferKind kind;
     long res = xr_netpoll_uring_xfer_result(state->pd, XR_POLL_WRITE, &kind);
     if (kind == XR_URING_XFER_DATA && res == 0) {
         int fd = state->fd;
         xr_free(state);
-        *result = make_conn_handle(X, fd, false);
-        return XR_CFUNC_DONE;
+        g_last_connect_code = XR_NETERR_NONE;
+        *result = make_conn_handle(X, fd);
+        return XR_IS_NULL(*result) ? XR_CFUNC_ERROR : XR_CFUNC_DONE;
     }
-    net_close_fd(X, state->fd);
-    xr_free(state);
-    *result = XR_NULL_VAL;
+    uint8_t code = (kind == XR_URING_XFER_TIMEOUT)  ? XR_NETERR_TIMEOUT
+                   : (kind == XR_URING_XFER_CLOSED) ? XR_NETERR_CLOSED
+                                                    : net_error_from_errno((int) (-res));
+    net_connect_fail(X, state, code, result);
     return XR_CFUNC_DONE;
 }
 #endif
 
-static XrCFuncResult net_dial_step(XrVMRuntime *X, NetDialState *state, XrValue *result) {
-    // Check the connect result.
+static XrCFuncResult net_connect_fd_step(XrVMRuntime *X, NetConnectState *state, XrValue *result) {
     int error = xr_socket_get_error((xr_socket_t) state->fd);
     if (error != 0) {
-        net_close_fd(X, state->fd);
-        xr_free(state);
-        *result = XR_NULL_VAL;
+        net_connect_fail(X, state, net_error_from_errno(error), result);
         return XR_CFUNC_DONE;
     }
-    // Success - create Json handle
     int fd = state->fd;
     xr_free(state);
-    *result = make_conn_handle(X, fd, false);
-    return XR_CFUNC_DONE;
+    g_last_connect_code = XR_NETERR_NONE;
+    *result = make_conn_handle(X, fd);
+    return XR_IS_NULL(*result) ? XR_CFUNC_ERROR : XR_CFUNC_DONE;
 }
 
 /*
- * net.dial(host, port, timeout?) -> Json handle | null
- * Yieldable: non-blocking connect + waitIO
+ * net.__connectFd(addrLiteral, port, timeoutMs) -> NetConn?
+ * Yieldable: non-blocking connect to ONE literal address. Name resolution and
+ * multi-address fallback are net.xr policy; an unresolvable input here is an
+ * invalid-argument code. Null result carries its code on __lastConnectCode.
+ * The result is deliberately NOT a `NetConn | int` union: a union of a builtin
+ * native class with a scalar forces module-wide runtime discrimination that
+ * miscompiles suspended handle results in coroutine frames.
  */
-static XrCFuncResult net_dial_yieldable(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
-    if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1])) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-
-    XrString *host = XR_TO_STRING(args[0]);
+static XrCFuncResult net_connect_fd_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
+                                              XrValue *result) {
+    if (nargs < 3 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
+        return (net_connect_fail(X, NULL, XR_NETERR_INVALID, result), XR_CFUNC_DONE);
+    const char *addr_text = XR_STRING_CHARS(XR_TO_STRING(args[0]));
     int port_num = (int) XR_TO_INT(args[1]);
-    int timeout_ms = (nargs > 2 && XR_IS_INT(args[2])) ? (int) XR_TO_INT(args[2]) : 30000;
+    int64_t timeout_ms = (int64_t) XR_TO_INT(args[2]);
+    if (port_num < 0 || port_num > 65535)
+        return (net_connect_fail(X, NULL, XR_NETERR_INVALID, result), XR_CFUNC_DONE);
 
-    // Resolve + create the socket once; connect via io_uring completion when
-    // available, otherwise via connect() + readiness.
-    struct sockaddr_storage sa;
-    socklen_t sa_len;
-    int fd = net_tcp_socket_for(X, XR_STRING_CHARS(host), port_num, &sa, &sa_len);
-    if (fd < 0) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
+    XrSockAddr resolved;
+    if (!xr_dns_resolve(X, addr_text, &resolved, XR_AF_UNSPEC) || !net_is_literal_ip(addr_text))
+        return (net_connect_fail(X, NULL, XR_NETERR_INVALID, result), XR_CFUNC_DONE);
 
-    NetDialState *state = (NetDialState *) xr_calloc(1, sizeof(NetDialState));
+    int fd = socket(resolved.family, SOCK_STREAM, 0);
+    if (fd < 0)
+        return (net_connect_fail(X, NULL, net_error_from_errno(xr_get_socket_error()), result),
+                XR_CFUNC_DONE);
+    xr_io_set_nonblocking(fd);
+    int opt = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &opt, sizeof(opt));
+
+    NetConnectState *state = (NetConnectState *) xr_calloc(1, sizeof(NetConnectState));
     if (!state) {
         net_close_fd(X, fd);
         *result = XR_NULL_VAL;
         return XR_CFUNC_ERROR;
     }
     state->fd = fd;
-    state->phase = 1;
-    memcpy(&state->addr, &sa, sa_len);
-    state->addrlen = sa_len;
+    if (resolved.family == AF_INET) {
+        resolved.addr.v4.sin_port = htons((uint16_t) port_num);
+        memcpy(&state->addr, &resolved.addr.v4, sizeof(struct sockaddr_in));
+        state->addrlen = sizeof(struct sockaddr_in);
+    } else {
+        resolved.addr.v6.sin6_port = htons((uint16_t) port_num);
+        memcpy(&state->addr, &resolved.addr.v6, sizeof(struct sockaddr_in6));
+        state->addrlen = sizeof(struct sockaddr_in6);
+    }
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
     // Completion mode: submit a connect op; its CQE is the connect verdict.
@@ -527,8 +524,8 @@ static XrCFuncResult net_dial_yieldable(XrVMRuntime *X, XrValue *args, int nargs
                               .addr = &state->addr,
                               .addrlen = state->addrlen,
                               .timeout_ms = timeout_ms};
-            if (xr_yield_for_uring_io(X, pd, XR_POLL_WRITE, &req, net_dial_complete, state, result,
-                                      &cr))
+            if (xr_yield_for_uring_io(X, pd, XR_POLL_WRITE, &req, net_connect_fd_complete, state,
+                                      result, &cr))
                 return cr;
             state->pd = NULL;  // completion not taken — fall through to readiness connect
         }
@@ -539,19 +536,19 @@ static XrCFuncResult net_dial_yieldable(XrVMRuntime *X, XrValue *args, int nargs
     int ret = connect(fd, (struct sockaddr *) &state->addr, state->addrlen);
     if (ret == 0) {
         xr_free(state);
-        *result = make_conn_handle(X, fd, false);
-        return XR_CFUNC_DONE;
+        g_last_connect_code = XR_NETERR_NONE;
+        *result = make_conn_handle(X, fd);
+        return XR_IS_NULL(*result) ? XR_CFUNC_ERROR : XR_CFUNC_DONE;
     }
     if (!xr_socket_err_is_inprogress(xr_get_socket_error())) {
-        net_close_fd(X, fd);
-        xr_free(state);
-        *result = XR_NULL_VAL;
+        net_connect_fail(X, state, net_error_from_errno(xr_get_socket_error()), result);
         return XR_CFUNC_DONE;
     }
-    return xr_yield_for_io(X, fd, XR_WAIT_WRITE, timeout_ms, net_dial_continue, state, result);
+    return xr_yield_for_io(X, fd, XR_WAIT_WRITE, timeout_ms < 0 ? -1 : timeout_ms,
+                           net_connect_fd_continue, state, result);
 }
 
-// ========== Yieldable net.accept (handle-based) ==========
+// ========== Yieldable net.__accept ==========
 
 typedef struct {
     int listen_fd;
@@ -566,8 +563,7 @@ static XrCFuncResult net_accept_continue(XrVMRuntime *X, int status, XrValue res
     (void) resume_value;
     NetAcceptState *state = (NetAcceptState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
-        net_listener_set_error(
-            state->listener, status == XR_RESUME_TIMEOUT ? XR_NETERR_TIMEOUT : XR_NETERR_CLOSED, 0);
+        net_listener_set_error(state->listener, net_code_from_resume(status), 0);
         xr_free(state);
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
@@ -592,7 +588,7 @@ static XrCFuncResult net_accept_complete(XrVMRuntime *X, int status, XrValue res
         setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, (const char *) &opt, sizeof(opt));
         net_listener_clear_error(state->listener);
         xr_free(state);
-        *result = make_conn_handle(X, client_fd, false);
+        *result = make_conn_handle(X, client_fd);
         return XR_CFUNC_DONE;
     }
     uint8_t err = (kind == XR_URING_XFER_TIMEOUT)  ? XR_NETERR_TIMEOUT
@@ -617,7 +613,7 @@ static XrCFuncResult net_accept_step(XrVMRuntime *X, NetAcceptState *state, XrVa
         }
         net_listener_clear_error(state->listener);
         xr_free(state);
-        *result = make_conn_handle(X, client_fd, false);
+        *result = make_conn_handle(X, client_fd);
         return XR_CFUNC_DONE;
     }
     // EAGAIN - wait for an incoming connection.
@@ -645,8 +641,8 @@ static XrCFuncResult net_accept_step(XrVMRuntime *X, NetAcceptState *state, XrVa
 }
 
 /*
- * net.accept(listener_handle) -> Json handle | null
- * Yieldable: loop acceptFast + yield
+ * net.__accept(listener) -> NetConn | null
+ * Yieldable: try-accept fast path, then park until readable.
  */
 static XrCFuncResult net_accept_handle_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
                                                  XrValue *result) {
@@ -670,7 +666,7 @@ static XrCFuncResult net_accept_handle_yieldable(XrVMRuntime *X, XrValue *args, 
             return XR_CFUNC_DONE;
         }
         net_listener_clear_error(listener);
-        *result = make_conn_handle(X, r.value, false);
+        *result = make_conn_handle(X, r.value);
         return XR_CFUNC_DONE;
     }
 
@@ -681,243 +677,11 @@ static XrCFuncResult net_accept_handle_yieldable(XrVMRuntime *X, XrValue *args, 
     }
     state->listen_fd = listener->fd;
     state->listener = listener;
+    state->pd = NULL;
     return net_accept_step(X, state, result);
 }
 
-// ========== Handle-based net.read (yieldable, TCP + TLS dispatch) ==========
-
-// Ensure coroutine has I/O buffer of at least `needed` bytes.
-// Returns buffer pointer, or NULL on allocation failure.
-// Buffer is lazily allocated (initial 4KB) and grows up to 256KB.
-static inline char *xr_coro_ensure_io_buf(XrCoroutine *coro, size_t needed) {
-    XrCoroExt *ext = xr_coro_ensure_ext(coro);
-    if (!ext)
-        return NULL;
-    if (ext->io_buf && ext->io_buf_cap >= needed)
-        return ext->io_buf;
-    size_t cap = ext->io_buf_cap ? ext->io_buf_cap : 4096;
-    while (cap < needed && cap < 262144)
-        cap *= 2;
-    if (cap < needed)
-        cap = needed;
-    char *buf = (char *) xr_realloc(ext->io_buf, cap);
-    if (!buf)
-        return NULL;
-    ext->io_buf = buf;
-    ext->io_buf_cap = cap;
-    return buf;
-}
-
-static inline XrArray *net_as_bytes(XrValue v) {
-    if (!XR_IS_ARRAY(v))
-        return NULL;
-    XrArray *arr = XR_TO_ARRAY(v);
-    return (arr && arr->elem_type == XR_ELEM_U8) ? arr : NULL;
-}
-
-static inline XrArray *net_as_writable_bytes(XrValue v) {
-    XrArray *arr = net_as_bytes(v);
-    if (!arr || xr_array_is_slice(arr) || arr->capacity <= 0 || !arr->data)
-        return NULL;
-    return arr;
-}
-
-typedef struct {
-    int fd;
-    XrNetConn *conn;
-    char *buf;  // Points to coroutine's io_buf (not owned)
-    size_t max_len;
-    bool is_tls;
-    XrPollDesc *pd;  // set on the io_uring completion path; consumed by the completion continuation
-} NetReadHandleState;
-
-static XrCFuncResult net_read_handle_step(XrVMRuntime *X, NetReadHandleState *state,
-                                          XrValue *result);
-
-static XrCFuncResult net_read_handle_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                              void *ctx, XrValue *result) {
-    (void) resume_value;
-    NetReadHandleState *state = (NetReadHandleState *) ctx;
-    if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
-        net_conn_set_error(state->conn,
-                           status == XR_RESUME_TIMEOUT ? XR_NETERR_TIMEOUT : XR_NETERR_CLOSED, 0);
-        xr_free(state);
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-    return net_read_handle_step(X, state, result);
-}
-
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-// Completion continuation: the recv op finished, its byte count is in the pd.
-// Resume status is always IO_READY (the op CQE is the sole waker); the outcome
-// is read from xr_netpoll_uring_xfer_result, not from `status`.
-static XrCFuncResult net_read_handle_complete(XrVMRuntime *X, int status, XrValue resume_value,
-                                              void *ctx, XrValue *result) {
-    (void) status;
-    (void) resume_value;
-    NetReadHandleState *state = (NetReadHandleState *) ctx;
-    XrUringXferKind kind;
-    long n = xr_netpoll_uring_xfer_result(state->pd, XR_POLL_READ, &kind);
-    if (kind == XR_URING_XFER_DATA) {
-        net_conn_clear_error(state->conn);
-        *result = (n > 0) ? xr_string_value(xr_string_new(X, state->buf, (int) n)) : XR_NULL_VAL;
-        xr_free(state);
-        return XR_CFUNC_DONE;
-    }
-    uint8_t err = (kind == XR_URING_XFER_TIMEOUT)  ? XR_NETERR_TIMEOUT
-                  : (kind == XR_URING_XFER_CLOSED) ? XR_NETERR_CLOSED
-                                                   : net_error_from_errno((int) (-n));
-    net_conn_set_error(state->conn, err, (kind == XR_URING_XFER_ERROR) ? (int) (-n) : 0);
-    xr_free(state);
-    *result = XR_NULL_VAL;
-    return XR_CFUNC_DONE;
-}
-#endif
-
-static XrCFuncResult net_read_handle_step(XrVMRuntime *X, NetReadHandleState *state,
-                                          XrValue *result) {
-#ifdef XR_ENABLE_TLS
-    if (state->is_tls) {
-        XrTlsConn *tls = state->conn ? (XrTlsConn *) state->conn->tls_state : NULL;
-        if (!tls) {
-            net_conn_set_error(state->conn, XR_NETERR_TLS, 0);
-            xr_free(state);
-            *result = XR_NULL_VAL;
-            return XR_CFUNC_DONE;
-        }
-        int n = xr_tls_conn_read_try(tls, state->buf, (int) state->max_len);
-        if (n > 0) {
-            net_conn_clear_error(state->conn);
-            *result = xr_string_value(xr_string_new(X, state->buf, n));
-            xr_free(state);
-            return XR_CFUNC_DONE;
-        }
-        if (n == 0) {
-            net_conn_clear_error(state->conn);
-            xr_free(state);
-            *result = XR_NULL_VAL;
-            return XR_CFUNC_DONE;
-        }
-        if (n == -3) {
-            net_conn_set_error(state->conn, XR_NETERR_TLS, 0);
-            xr_free(state);
-            *result = XR_NULL_VAL;
-            return XR_CFUNC_DONE;
-        }
-        // -1=WANT_READ, -2=WANT_WRITE
-        int wait_mode = (n == -1) ? XR_WAIT_READ : XR_WAIT_WRITE;
-        int64_t deadline = (wait_mode == XR_WAIT_READ && state->conn)
-                               ? state->conn->read_deadline_ms
-                               : (state->conn ? state->conn->write_deadline_ms : 0);
-        return xr_yield_for_io(X, state->fd, wait_mode, net_timeout_until(deadline),
-                               net_read_handle_continue, state, result);
-    }
-#endif
-
-    // TCP read
-    ssize_t n = xr_socket_recv((xr_socket_t) state->fd, state->buf, state->max_len);
-    if (n > 0) {
-        net_conn_clear_error(state->conn);
-        *result = xr_string_value(xr_string_new(X, state->buf, n));
-        xr_free(state);
-        return XR_CFUNC_DONE;
-    }
-    if (n == 0) {
-        net_conn_clear_error(state->conn);
-        xr_free(state);
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-    int socket_error = xr_get_socket_error();
-    if (xr_socket_err_is_again(socket_error)) {
-        int64_t timeout_ms = net_timeout_until(state->conn ? state->conn->read_deadline_ms : 0);
-#if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
-        // Completion mode: submit a recv op and park; the CQE carries the byte
-        // count back directly (no second read() after readiness). Falls back to
-        // the readiness path below if io_uring is not the active backend.
-        XrRuntime *rt = (XrRuntime *) X->vm.scheduler;
-        if (rt && xr_netpoll_uring_active(&rt->netpoll)) {
-            XrPollDesc *pd = xr_netpoll_open(&rt->netpoll, state->fd);
-            if (pd) {
-                state->pd = pd;
-                XrCFuncResult cr;
-                XrUringReq req = {.kind = XR_URING_OP_RECV,
-                                  .buf = state->buf,
-                                  .len = (unsigned) state->max_len,
-                                  .timeout_ms = timeout_ms};
-                if (xr_yield_for_uring_io(X, pd, XR_POLL_READ, &req, net_read_handle_complete,
-                                          state, result, &cr))
-                    return cr;
-                state->pd = NULL;  // completion not taken — fall through to readiness
-            }
-        }
-#endif
-        return xr_yield_for_io(X, state->fd, XR_WAIT_READ, timeout_ms, net_read_handle_continue,
-                               state, result);
-    }
-    net_conn_set_error(state->conn, net_error_from_errno(socket_error), socket_error);
-    xr_free(state);
-    *result = XR_NULL_VAL;
-    return XR_CFUNC_DONE;
-}
-
-/*
- * net.read(conn_handle, maxlen?) -> string | null
- * Yieldable: handle-based, dispatches TCP/TLS
- */
-static XrCFuncResult net_read_handle_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
-                                               XrValue *result) {
-    if (nargs < 1) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_ERROR;
-    }
-
-    XrNetConn *conn = unwrap_conn(args[0]);
-    if (!conn || conn->closed || conn->fd < 0) {
-        net_conn_set_error(conn, XR_NETERR_CLOSED, 0);
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-
-    int fd = conn->fd;
-    bool is_tls = conn->kind == XR_NETCONN_TLS;
-    int max_len = (nargs >= 2 && XR_IS_INT(args[1])) ? (int) XR_TO_INT(args[1]) : 4096;
-    if (max_len > 1048576)
-        max_len = 1048576;
-    if (max_len <= 0) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_ERROR;
-    }
-
-    // Use per-coroutine reusable I/O buffer (avoid malloc/free per read)
-    XrCoroutine *coro = xr_current_coro(X);
-    char *buf = coro ? xr_coro_ensure_io_buf(coro, max_len) : NULL;
-    if (!buf) {
-        // Fallback to malloc if no coroutine context
-        buf = (char *) xr_malloc(max_len);
-    }
-    if (!buf) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_ERROR;
-    }
-
-    NetReadHandleState *state = (NetReadHandleState *) xr_malloc(sizeof(NetReadHandleState));
-    if (!state) {
-        if (!coro)
-            xr_free(buf);
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_ERROR;
-    }
-    state->fd = fd;
-    state->conn = conn;
-    state->max_len = max_len;
-    state->is_tls = is_tls;
-    state->buf = buf;
-    return net_read_handle_step(X, state, result);
-}
-
-// ========== Handle-based net.readInto (yieldable, TCP + TLS dispatch) ==========
+// ========== Yieldable net.__readInto (TCP + TLS dispatch) ==========
 
 typedef struct {
     int fd;
@@ -935,8 +699,7 @@ static XrCFuncResult net_read_into_continue(XrVMRuntime *X, int status, XrValue 
     (void) resume_value;
     NetReadIntoState *state = (NetReadIntoState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
-        net_conn_set_error(state->conn,
-                           status == XR_RESUME_TIMEOUT ? XR_NETERR_TIMEOUT : XR_NETERR_CLOSED, 0);
+        net_conn_set_error(state->conn, net_code_from_resume(status), 0);
         xr_free(state);
         *result = xr_int(-1);
         return XR_CFUNC_DONE;
@@ -993,6 +756,7 @@ static XrCFuncResult net_read_into_wait(XrVMRuntime *X, XrNetConn *conn, XrArray
     state->buf = buf;
     state->max_len = max_len;
     state->is_tls = is_tls;
+    state->pd = NULL;
     return xr_yield_for_io(X, state->fd, wait_mode, net_timeout_until(deadline_ms),
                            net_read_into_continue, state, result);
 }
@@ -1054,12 +818,12 @@ static XrCFuncResult net_read_into_step(XrVMRuntime *X, NetReadIntoState *state,
 }
 
 /*
- * net.__readInto(conn_handle, buffer, maxlen?) -> int
- * Read into a reusable Array<byte> buffer. EOF returns 0; errors return -1.
+ * net.__readInto(conn, buffer, maxlen) -> int
+ * Read once into a reusable Array<byte> buffer. EOF returns 0; errors return -1.
  */
 static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
                                              XrValue *result) {
-    if (nargs < 2) {
+    if (nargs < 3) {
         *result = xr_int(-1);
         return XR_CFUNC_ERROR;
     }
@@ -1077,7 +841,7 @@ static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int 
         return XR_CFUNC_ERROR;
     }
 
-    int max_len = (nargs >= 3 && XR_IS_INT(args[2])) ? (int) XR_TO_INT(args[2]) : buf->capacity;
+    int max_len = XR_IS_INT(args[2]) ? (int) XR_TO_INT(args[2]) : buf->capacity;
     if (max_len > buf->capacity)
         max_len = buf->capacity;
     if (max_len <= 0) {
@@ -1122,45 +886,43 @@ static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int 
     return net_read_into_value(conn, buf, -1, result);
 }
 
-// ========== Handle-based net.write (yieldable, TCP + TLS dispatch) ==========
+// ========== Yieldable net.__writeBytes (TCP + TLS dispatch) ==========
 
 typedef struct {
     int fd;
     XrNetConn *conn;
-    const char *data;  // Points directly into XrString/Array<byte> storage (not owned)
+    const char *data;  // Points directly into Array<byte> storage (not owned)
     size_t len;
     size_t written;
     bool is_tls;
     XrPollDesc *pd;  // set on the io_uring completion path
-} NetWriteHandleState;
+} NetWriteState;
 
-static XrCFuncResult net_write_handle_step(XrVMRuntime *X, NetWriteHandleState *state,
-                                           XrValue *result);
+static XrCFuncResult net_write_step(XrVMRuntime *X, NetWriteState *state, XrValue *result);
 
-static XrCFuncResult net_write_handle_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                               void *ctx, XrValue *result) {
+static XrCFuncResult net_write_continue(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
+                                        XrValue *result) {
     (void) resume_value;
-    NetWriteHandleState *state = (NetWriteHandleState *) ctx;
+    NetWriteState *state = (NetWriteState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
-        net_conn_set_error(state->conn,
-                           status == XR_RESUME_TIMEOUT ? XR_NETERR_TIMEOUT : XR_NETERR_CLOSED, 0);
+        net_conn_set_error(state->conn, net_code_from_resume(status), 0);
         int total = state->written > 0 ? (int) state->written : -1;
         xr_free(state);
         *result = XR_FROM_INT(total);
         return XR_CFUNC_DONE;
     }
-    return net_write_handle_step(X, state, result);
+    return net_write_step(X, state, result);
 }
 
 #if defined(XR_OS_LINUX) && defined(XR_HAS_IO_URING)
 // Completion continuation for write: a send op delivered its byte count. Add it
 // to the running total and re-enter the step to send any remainder (which uses a
 // non-blocking write() fast path and only submits another send op on EAGAIN).
-static XrCFuncResult net_write_handle_complete(XrVMRuntime *X, int status, XrValue resume_value,
-                                               void *ctx, XrValue *result) {
+static XrCFuncResult net_write_complete(XrVMRuntime *X, int status, XrValue resume_value, void *ctx,
+                                        XrValue *result) {
     (void) status;
     (void) resume_value;
-    NetWriteHandleState *state = (NetWriteHandleState *) ctx;
+    NetWriteState *state = (NetWriteState *) ctx;
     XrUringXferKind kind;
     long n = xr_netpoll_uring_xfer_result(state->pd, XR_POLL_WRITE, &kind);
     state->pd = NULL;
@@ -1168,7 +930,7 @@ static XrCFuncResult net_write_handle_complete(XrVMRuntime *X, int status, XrVal
         if (n > 0)
             state->written += (size_t) n;
         if (n > 0 && state->written < state->len)
-            return net_write_handle_step(X, state, result);  // send the remainder
+            return net_write_step(X, state, result);  // send the remainder
         int total = state->written > 0 ? (int) state->written : -1;
         if (state->written == state->len)
             net_conn_clear_error(state->conn);
@@ -1187,10 +949,10 @@ static XrCFuncResult net_write_handle_complete(XrVMRuntime *X, int status, XrVal
 }
 #endif
 
-static XrCFuncResult net_write_handle_wait(XrVMRuntime *X, XrNetConn *conn, const char *data,
-                                           size_t len, size_t written, bool is_tls, int wait_mode,
-                                           int64_t deadline_ms, XrValue *result) {
-    NetWriteHandleState *state = (NetWriteHandleState *) xr_calloc(1, sizeof(NetWriteHandleState));
+static XrCFuncResult net_write_wait(XrVMRuntime *X, XrNetConn *conn, const char *data, size_t len,
+                                    size_t written, bool is_tls, int wait_mode, int64_t deadline_ms,
+                                    XrValue *result) {
+    NetWriteState *state = (NetWriteState *) xr_calloc(1, sizeof(NetWriteState));
     if (!state) {
         *result = XR_FROM_INT(-1);
         return XR_CFUNC_ERROR;
@@ -1202,11 +964,10 @@ static XrCFuncResult net_write_handle_wait(XrVMRuntime *X, XrNetConn *conn, cons
     state->written = written;
     state->is_tls = is_tls;
     return xr_yield_for_io(X, state->fd, wait_mode, net_timeout_until(deadline_ms),
-                           net_write_handle_continue, state, result);
+                           net_write_continue, state, result);
 }
 
-static XrCFuncResult net_write_handle_step(XrVMRuntime *X, NetWriteHandleState *state,
-                                           XrValue *result) {
+static XrCFuncResult net_write_step(XrVMRuntime *X, NetWriteState *state, XrValue *result) {
 #ifdef XR_ENABLE_TLS
     if (state->is_tls) {
         XrTlsConn *tls = state->conn ? (XrTlsConn *) state->conn->tls_state : NULL;
@@ -1233,7 +994,7 @@ static XrCFuncResult net_write_handle_step(XrVMRuntime *X, NetWriteHandleState *
                                    ? state->conn->write_deadline_ms
                                    : (state->conn ? state->conn->read_deadline_ms : 0);
             return xr_yield_for_io(X, state->fd, wait_mode, net_timeout_until(deadline),
-                                   net_write_handle_continue, state, result);
+                                   net_write_continue, state, result);
         }
         int total = (int) state->written;
         if (total == (int) state->len)
@@ -1271,15 +1032,15 @@ static XrCFuncResult net_write_handle_step(XrVMRuntime *X, NetWriteHandleState *
                                       .buf = (void *) (state->data + state->written),
                                       .len = (unsigned) (state->len - state->written),
                                       .timeout_ms = timeout_ms};
-                    if (xr_yield_for_uring_io(X, pd, XR_POLL_WRITE, &req, net_write_handle_complete,
-                                              state, result, &cr))
+                    if (xr_yield_for_uring_io(X, pd, XR_POLL_WRITE, &req, net_write_complete, state,
+                                              result, &cr))
                         return cr;
                     state->pd = NULL;
                 }
             }
 #endif
-            return xr_yield_for_io(X, state->fd, XR_WAIT_WRITE, timeout_ms,
-                                   net_write_handle_continue, state, result);
+            return xr_yield_for_io(X, state->fd, XR_WAIT_WRITE, timeout_ms, net_write_continue,
+                                   state, result);
         }
         net_conn_set_error(state->conn, net_error_from_errno(socket_error), socket_error);
         break;
@@ -1295,52 +1056,9 @@ static XrCFuncResult net_write_handle_step(XrVMRuntime *X, NetWriteHandleState *
 }
 
 /*
- * net.write(conn_handle, data) -> int
- * Yieldable: handle-based, dispatches TCP/TLS
- */
-static XrCFuncResult net_write_handle_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
-                                                XrValue *result) {
-    if (nargs < 2 || !XR_IS_STRING(args[1])) {
-        *result = XR_FROM_INT(-1);
-        return XR_CFUNC_ERROR;
-    }
-
-    XrNetConn *conn = unwrap_conn(args[0]);
-    if (!conn || conn->closed || conn->fd < 0) {
-        net_conn_set_error(conn, XR_NETERR_CLOSED, 0);
-        *result = XR_FROM_INT(-1);
-        return XR_CFUNC_DONE;
-    }
-
-    bool is_tls = conn->kind == XR_NETCONN_TLS;
-    XrString *data = XR_TO_STRING(args[1]);
-
-    if (data->length == 0) {
-        net_conn_clear_error(conn);
-        *result = XR_FROM_INT(0);
-        return XR_CFUNC_DONE;
-    }
-
-    NetWriteHandleState *state = (NetWriteHandleState *) xr_calloc(1, sizeof(NetWriteHandleState));
-    if (!state) {
-        *result = XR_FROM_INT(-1);
-        return XR_CFUNC_ERROR;
-    }
-    state->fd = conn->fd;
-    state->conn = conn;
-    state->is_tls = is_tls;
-    state->len = data->length;
-    state->written = 0;
-    // Zero-copy: XrString is immutable and coroutine arena GC
-    // doesn't run while yielded, so direct reference is safe
-    state->data = XR_STRING_CHARS(data);
-
-    return net_write_handle_step(X, state, result);
-}
-
-/*
- * net.writeBytes(conn_handle, data) -> int
- * Yieldable: handle-based, dispatches TCP/TLS, sends Array<byte> or Slice<byte>.
+ * net.__writeBytes(conn, data) -> int
+ * Yieldable batch write: drains the whole buffer, parking on EAGAIN or TLS
+ * want-read/want-write, honouring the write deadline on every wait.
  */
 static XrCFuncResult net_write_bytes_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
                                                XrValue *result) {
@@ -1370,6 +1088,8 @@ static XrCFuncResult net_write_bytes_yieldable(XrVMRuntime *X, XrValue *args, in
 
     size_t len = (size_t) data->length;
     size_t written = 0;
+    // Zero-copy: coroutine arena GC doesn't run while yielded, so a direct
+    // reference into the array storage stays valid across the suspension.
     const char *raw = (const char *) xr_array_raw_u8(data);
 
 #ifdef XR_ENABLE_TLS
@@ -1395,8 +1115,7 @@ static XrCFuncResult net_write_bytes_yieldable(XrVMRuntime *X, XrValue *args, in
             int wait_mode = (n == -1) ? XR_WAIT_WRITE : XR_WAIT_READ;
             int64_t deadline =
                 (wait_mode == XR_WAIT_WRITE) ? conn->write_deadline_ms : conn->read_deadline_ms;
-            return net_write_handle_wait(X, conn, raw, len, written, true, wait_mode, deadline,
-                                         result);
+            return net_write_wait(X, conn, raw, len, written, true, wait_mode, deadline, result);
         }
         net_conn_clear_error(conn);
         *result = xr_int((xr_Integer) written);
@@ -1414,8 +1133,8 @@ static XrCFuncResult net_write_bytes_yieldable(XrVMRuntime *X, XrValue *args, in
             break;
         int socket_error = xr_get_socket_error();
         if (xr_socket_err_is_again(socket_error)) {
-            return net_write_handle_wait(X, conn, raw, len, written, false, XR_WAIT_WRITE,
-                                         conn->write_deadline_ms, result);
+            return net_write_wait(X, conn, raw, len, written, false, XR_WAIT_WRITE,
+                                  conn->write_deadline_ms, result);
         }
         net_conn_set_error(conn, net_error_from_errno(socket_error), socket_error);
         break;
@@ -1426,6 +1145,28 @@ static XrCFuncResult net_write_bytes_yieldable(XrVMRuntime *X, XrValue *args, in
     }
     *result = xr_int(written > 0 ? (xr_Integer) written : -1);
     return XR_CFUNC_DONE;
+}
+
+// Ensure coroutine has I/O buffer of at least `needed` bytes.
+// Returns buffer pointer, or NULL on allocation failure.
+// Buffer is lazily allocated (initial 4KB) and grows up to 256KB.
+static inline char *xr_coro_ensure_io_buf(XrCoroutine *coro, size_t needed) {
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext)
+        return NULL;
+    if (ext->io_buf && ext->io_buf_cap >= needed)
+        return ext->io_buf;
+    size_t cap = ext->io_buf_cap ? ext->io_buf_cap : 4096;
+    while (cap < needed && cap < 262144)
+        cap *= 2;
+    if (cap < needed)
+        cap = needed;
+    char *buf = (char *) xr_realloc(ext->io_buf, cap);
+    if (!buf)
+        return NULL;
+    ext->io_buf = buf;
+    ext->io_buf_cap = cap;
+    return buf;
 }
 
 // ========== Native TCP stream copy ==========
@@ -1777,55 +1518,6 @@ static XrCFuncResult net_copy_start_ex(XrVMRuntime *X, XrValue src, XrValue dst,
     return net_copy_step(X, state, result);
 }
 
-static XrCFuncResult net_copy_start(XrVMRuntime *X, XrValue src, XrValue dst, int buffer_size,
-                                    XrValue *result) {
-    return net_copy_start_ex(X, src, dst, buffer_size, NULL, 0, false, result);
-}
-
-/*
- * net.copy(src, dst, bufferSize?) -> int
- * Native TCP/TLS stream pump. Payload stays in a reusable C buffer.
- */
-static XrCFuncResult net_copy_yieldable(XrVMRuntime *X, XrValue *args, int nargs, XrValue *result) {
-    if (nargs < 2) {
-        *result = xr_int(-1);
-        return XR_CFUNC_ERROR;
-    }
-    int buffer_size = (nargs >= 3 && XR_IS_INT(args[2])) ? (int) XR_TO_INT(args[2]) : 65536;
-    return net_copy_start(X, args[0], args[1], buffer_size, result);
-}
-
-// ========== TCP half-close and bidirectional copy ==========
-
-static XrValue net_shutdown_mode(XrVMRuntime *X, XrValue *args, int nargs, int mode) {
-    (void) X;
-    if (nargs < 1)
-        return xr_bool(false);
-    XrNetConn *c = unwrap_conn(args[0]);
-    if (!c || c->closed || c->fd < 0) {
-        net_conn_set_error(c, XR_NETERR_CLOSED, 0);
-        return xr_bool(false);
-    }
-    if (shutdown(c->fd, mode) == 0) {
-        net_conn_clear_error(c);
-        return xr_bool(true);
-    }
-    net_conn_set_error(c, net_error_from_errno(errno), errno);
-    return xr_bool(false);
-}
-
-static XrValue net_shutdown_read(XrVMRuntime *X, XrValue *args, int nargs) {
-    return net_shutdown_mode(X, args, nargs, XR_SHUT_RD);
-}
-
-static XrValue net_shutdown_write(XrVMRuntime *X, XrValue *args, int nargs) {
-    return net_shutdown_mode(X, args, nargs, XR_SHUT_WR);
-}
-
-static XrValue net_shutdown_conn(XrVMRuntime *X, XrValue *args, int nargs) {
-    return net_shutdown_mode(X, args, nargs, XR_SHUT_RDWR);
-}
-
 typedef struct {
     NetBidiShared *shared;
 } NetBidiWaitState;
@@ -1962,19 +1654,55 @@ static XrCFuncResult net_copy_bidirectional_yieldable(XrVMRuntime *X, XrValue *a
     return net_bidi_wait_step(X, state, result);
 }
 
-// ========== Handle-based net.listen ==========
+// ========== TCP half-close ==========
+
+static XrValue net_shutdown_mode(XrVMRuntime *X, XrValue *args, int nargs, int mode) {
+    (void) X;
+    if (nargs < 1)
+        return xr_bool(false);
+    XrNetConn *c = unwrap_conn(args[0]);
+    if (!c || c->closed || c->fd < 0) {
+        net_conn_set_error(c, XR_NETERR_CLOSED, 0);
+        return xr_bool(false);
+    }
+    if (shutdown(c->fd, mode) == 0) {
+        net_conn_clear_error(c);
+        return xr_bool(true);
+    }
+    net_conn_set_error(c, net_error_from_errno(errno), errno);
+    return xr_bool(false);
+}
+
+static XrValue net_shutdown_read(XrVMRuntime *X, XrValue *args, int nargs) {
+    return net_shutdown_mode(X, args, nargs, XR_SHUT_RD);
+}
+
+static XrValue net_shutdown_write(XrVMRuntime *X, XrValue *args, int nargs) {
+    return net_shutdown_mode(X, args, nargs, XR_SHUT_WR);
+}
+
+static XrValue net_shutdown_conn(XrVMRuntime *X, XrValue *args, int nargs) {
+    return net_shutdown_mode(X, args, nargs, XR_SHUT_RDWR);
+}
+
+// ========== net.__listenFd ==========
 
 /*
- * net.listen(port, backlog?) -> Json listener handle | null
+ * net.__listenFd(port, backlog, forceV4) -> NetListener | null
+ * xr_io_listen owns the dual-stack-preferred bind; forceV4 pins the socket to
+ * an IPv4 wildcard for callers that must interoperate with v4-only tooling.
  */
-static XrValue net_listen_handle(XrVMRuntime *X, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_INT(args[0]))
+static XrValue net_listen_fd(XrVMRuntime *X, XrValue *args, int nargs) {
+    if (nargs < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]))
         return XR_NULL_VAL;
 
     int port_num = (int) XR_TO_INT(args[0]);
-    int backlog = (nargs > 1 && XR_IS_INT(args[1])) ? (int) XR_TO_INT(args[1]) : 1024;
+    int backlog = (int) XR_TO_INT(args[1]);
+    bool force_v4 = XR_IS_BOOL(args[2]) && XR_TO_BOOL(args[2]);
+    if (port_num < 0 || port_num > 65535 || backlog <= 0)
+        return XR_NULL_VAL;
 
-    int fd = xr_io_listen(NULL, port_num, backlog);
+    int fd = xr_io_listen(force_v4 ? "0.0.0.0" : NULL, port_num, backlog);
     if (fd < 0)
         return XR_NULL_VAL;
 
@@ -1993,10 +1721,10 @@ static XrValue net_listen_handle(XrVMRuntime *X, XrValue *args, int nargs) {
     return make_listener_handle(X, fd, port_num);
 }
 
-// ========== Handle-based net.close ==========
+// ========== net.__close / net.__fd ==========
 
 /*
- * net.close(handle) -> void
+ * net.__close(handle) -> void
  * Close connection, listener, or UDP socket. Safe to call multiple times.
  */
 static XrValue net_close_handle(XrVMRuntime *X, XrValue *args, int nargs) {
@@ -2016,18 +1744,13 @@ static XrValue net_close_handle(XrVMRuntime *X, XrValue *args, int nargs) {
     return XR_NULL_VAL;
 }
 
-// ========== Handle-based net.fd ==========
-
-/*
- * net.fd(handle) -> int
- */
 static XrValue net_fd_handle(XrVMRuntime *X, XrValue *args, int nargs) {
     if (nargs < 1)
         return xr_int(-1);
     return xr_int(handle_get_fd(X, args[0]));
 }
 
-// ========== Deadline and diagnostic error helpers ==========
+// ========== Deadline and diagnostic error primitives ==========
 
 static XrValue net_set_read_deadline(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
@@ -2086,26 +1809,31 @@ static XrValue net_set_accept_deadline(XrVMRuntime *X, XrValue *args, int nargs)
     return xr_bool(true);
 }
 
-static XrValue net_last_error(XrVMRuntime *X, XrValue *args, int nargs) {
+static XrValue net_last_code(XrVMRuntime *X, XrValue *args, int nargs) {
+    (void) X;
     if (nargs < 1)
-        return XR_NULL_VAL;
-    uint8_t kind = XR_NETERR_INVALID;
+        return xr_int(XR_NETERR_INVALID);
     XrNetConn *c = unwrap_conn(args[0]);
-    if (c) {
-        kind = c->last_error;
-    } else {
-        XrNetListener *l = unwrap_listener(args[0]);
-        if (l)
-            kind = l->last_error;
-    }
-    if (kind == XR_NETERR_NONE)
-        return XR_NULL_VAL;
-    XrEnumType *type = net_error_type(X);
-    if (!type)
-        return XR_NULL_VAL;
-    XrEnumAggregateValue *value =
-        xr_enum_zero_payload_value(X, type, net_error_variant_index(kind));
-    return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
+    if (c)
+        return xr_int(c->last_error);
+    XrNetListener *l = unwrap_listener(args[0]);
+    if (l)
+        return xr_int(l->last_error);
+    return xr_int(XR_NETERR_INVALID);
+}
+
+static XrValue net_now_ms_fn(XrVMRuntime *X, XrValue *args, int nargs) {
+    (void) X;
+    (void) args;
+    (void) nargs;
+    return xr_int(net_now_ms());
+}
+
+static XrValue net_last_connect_code(XrVMRuntime *X, XrValue *args, int nargs) {
+    (void) X;
+    (void) args;
+    (void) nargs;
+    return xr_int(g_last_connect_code);
 }
 
 static XrValue net_last_errno(XrVMRuntime *X, XrValue *args, int nargs) {
@@ -2121,11 +1849,8 @@ static XrValue net_last_errno(XrVMRuntime *X, XrValue *args, int nargs) {
     return xr_int(0);
 }
 
-// ========== net.hasTLS ==========
+// ========== net.__hasTLS ==========
 
-/*
- * net.hasTLS() -> bool
- */
 static XrValue net_has_tls(XrVMRuntime *X, XrValue *args, int nargs) {
     (void) X;
     (void) args;
@@ -2137,296 +1862,144 @@ static XrValue net_has_tls(XrVMRuntime *X, XrValue *args, int nargs) {
 #endif
 }
 
-// ========== Yieldable net.dialTLS (handle-based) ==========
+// ========== Yieldable net.__tlsHandshake ==========
 
 #ifdef XR_ENABLE_TLS
 
 typedef struct {
+    XrValue handle;  // NetConn being promoted; attach happens only on success
+    XrTlsConn *tls;  // owned by this state machine until attached or freed
     int fd;
-    int phase;  // 0=waiting tcp connect, 1=tls_wrap done, 2+=handshake loop
-    int timeout_ms;
-    char hostname[256];
-} NetDialTLSState;
+    int64_t deadline_ms;  // absolute; every wait re-derives the remaining slice
+} NetTlsHandshakeState;
 
-static XrCFuncResult net_dial_tls_step(XrVMRuntime *X, NetDialTLSState *state, XrValue *result);
+static XrCFuncResult net_tls_handshake_step(XrVMRuntime *X, NetTlsHandshakeState *state,
+                                            XrValue *result);
 
-static void net_dial_tls_cleanup(XrVMRuntime *X, NetDialTLSState *state) {
-    if (state->fd >= 0) {
-        // Close TLS if wrap was done
-        if (state->phase >= 2) {
-            XrTlsConn *tls = get_tls_conn(state->fd);
-            if (tls) {
-                xr_tls_conn_close(tls);
-                xr_tls_conn_free(tls);
-                set_tls_conn(state->fd, NULL);
-            }
-        }
-        net_close_fd(X, state->fd);
-    }
-}
-
-static XrCFuncResult net_dial_tls_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                           void *ctx, XrValue *result) {
-    (void) resume_value;
-    NetDialTLSState *state = (NetDialTLSState *) ctx;
-    if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
-        net_dial_tls_cleanup(X, state);
-        xr_free(state);
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-    return net_dial_tls_step(X, state, result);
-}
-
-static XrCFuncResult net_dial_tls_step(XrVMRuntime *X, NetDialTLSState *state, XrValue *result) {
-    if (state->phase == 1) {
-        // TCP connect finished - check result
-        int error = 0;
-        socklen_t elen = sizeof(error);
-        if (getsockopt(state->fd, SOL_SOCKET, SO_ERROR, &error, &elen) < 0 || error != 0) {
-            net_dial_tls_cleanup(X, state);
-            xr_free(state);
-            *result = XR_NULL_VAL;
-            return XR_CFUNC_DONE;
-        }
-        // TCP connected - setup TLS
-        XrTlsContext *ctx = get_tls_client_ctx();
-        if (!ctx) {
-            net_dial_tls_cleanup(X, state);
-            xr_free(state);
-            *result = XR_NULL_VAL;
-            return XR_CFUNC_DONE;
-        }
-        XrTlsConn *tls = xr_tls_conn_new(ctx, state->fd);
-        if (!tls) {
-            net_dial_tls_cleanup(X, state);
-            xr_free(state);
-            *result = XR_NULL_VAL;
-            return XR_CFUNC_DONE;
-        }
-        xr_tls_conn_set_hostname(tls, state->hostname);
-        set_tls_conn(state->fd, tls);
-        state->phase = 2;
-        // Fall through to handshake
-    }
-
-    if (state->phase >= 2) {
-        // TLS handshake loop
-        XrTlsConn *tls = get_tls_conn(state->fd);
-        if (!tls) {
-            net_dial_tls_cleanup(X, state);
-            xr_free(state);
-            *result = XR_NULL_VAL;
-            return XR_CFUNC_DONE;
-        }
-        int hs = xr_tls_conn_handshake_try(tls);
-        if (hs == 0) {
-            // Handshake complete
-            int fd = state->fd;
-            xr_free(state);
-            *result = make_conn_handle(X, fd, true);
-            return XR_CFUNC_DONE;
-        }
-        if (hs < 0) {
-            // Error
-            net_dial_tls_cleanup(X, state);
-            xr_free(state);
-            *result = XR_NULL_VAL;
-            return XR_CFUNC_DONE;
-        }
-        // 1=WANT_READ, 2=WANT_WRITE
-        int wait_mode = (hs == 1) ? XR_WAIT_READ : XR_WAIT_WRITE;
-        return xr_yield_for_io(X, state->fd, wait_mode, state->timeout_ms, net_dial_tls_continue,
-                               state, result);
-    }
-
-    // Should not reach here
+/* Any handshake failure closes the connection: the script layer receives a
+ * bare error code with no live handle to clean up, which is what lets dial
+ * keep its TLS arm as a single fresh-returning tail call. */
+static XrCFuncResult net_tls_handshake_fail(NetTlsHandshakeState *state, uint8_t code,
+                                            XrValue *result) {
+    XrNetConn *conn = unwrap_conn(state->handle);
+    net_conn_set_error(conn, code, 0);
+    xr_tls_conn_close(state->tls);
+    xr_tls_conn_free(state->tls);
+    if (conn)
+        xr_net_conn_close(conn);
     xr_free(state);
-    *result = XR_NULL_VAL;
+    *result = xr_int(code);
     return XR_CFUNC_DONE;
 }
 
-/*
- * net.dialTLS(host, port, timeout?) -> Json handle | null
- * Yieldable: TCP connect + TLS handshake
- */
-static XrCFuncResult net_dial_tls_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
-                                            XrValue *result) {
-    if (nargs < 2 || !XR_IS_STRING(args[0]) || !XR_IS_INT(args[1])) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-
-    XrString *host = XR_TO_STRING(args[0]);
-    int port_num = (int) XR_TO_INT(args[1]);
-
-    int conn_ret;
-    int fd = net_tcp_connect(X, XR_STRING_CHARS(host), port_num, &conn_ret);
-    if (fd < 0) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-
-    NetDialTLSState *state = (NetDialTLSState *) xr_calloc(1, sizeof(NetDialTLSState));
-    if (!state) {
-        net_close_fd(X, fd);
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_ERROR;
-    }
-    state->fd = fd;
-    state->timeout_ms = (nargs > 2 && XR_IS_INT(args[2])) ? (int) XR_TO_INT(args[2]) : 30000;
-    if (state->timeout_ms <= 0)
-        state->timeout_ms = 30000;
-    strncpy(state->hostname, XR_STRING_CHARS(host), sizeof(state->hostname) - 1);
-
-    if (conn_ret == 0) {
-        state->phase = 1;
-        return net_dial_tls_step(X, state, result);
-    }
-
-    // EINPROGRESS: yield for write
-    state->phase = 1;
-    return xr_yield_for_io(X, fd, XR_WAIT_WRITE, state->timeout_ms, net_dial_tls_continue, state,
-                           result);
-}
-
-// ========== Yieldable net.upgradeTLS (handle-based) ==========
-
-typedef struct {
-    int fd;
-    XrValue handle;  // kept for updating tls flag on success
-    int timeout_ms;
-} NetUpgradeTLSState;
-
-static XrCFuncResult net_upgrade_tls_step(XrVMRuntime *X, NetUpgradeTLSState *state,
-                                          XrValue *result);
-
-static XrCFuncResult net_upgrade_tls_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                              void *ctx, XrValue *result) {
+static XrCFuncResult net_tls_handshake_continue(XrVMRuntime *X, int status, XrValue resume_value,
+                                                void *ctx, XrValue *result) {
     (void) resume_value;
-    NetUpgradeTLSState *state = (NetUpgradeTLSState *) ctx;
-    if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
-        // Cleanup TLS
-        XrTlsConn *tls = get_tls_conn(state->fd);
-        if (tls) {
-            xr_tls_conn_close(tls);
-            xr_tls_conn_free(tls);
-            set_tls_conn(state->fd, NULL);
-        }
-        XrNetConn *conn = unwrap_conn(state->handle);
-        net_conn_set_error(conn, status == XR_RESUME_TIMEOUT ? XR_NETERR_TIMEOUT : XR_NETERR_CLOSED,
-                           0);
-        xr_free(state);
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-    return net_upgrade_tls_step(X, state, result);
+    NetTlsHandshakeState *state = (NetTlsHandshakeState *) ctx;
+    if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED)
+        return net_tls_handshake_fail(state, net_code_from_resume(status), result);
+    return net_tls_handshake_step(X, state, result);
 }
 
-static XrCFuncResult net_upgrade_tls_step(XrVMRuntime *X, NetUpgradeTLSState *state,
-                                          XrValue *result) {
-    XrTlsConn *tls = get_tls_conn(state->fd);
-    if (!tls) {
-        xr_free(state);
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-    int hs = xr_tls_conn_handshake_try(tls);
+static XrCFuncResult net_tls_handshake_step(XrVMRuntime *X, NetTlsHandshakeState *state,
+                                            XrValue *result) {
+    int hs = xr_tls_conn_handshake_try(state->tls);
     if (hs == 0) {
-        /*
-         * Handshake done: promote the existing conn to TLS in-place
-         * so the script keeps its handle reference intact. Ownership
-         * of the XrTlsConn moves from the legacy g_tls_conns slot
-         * into the typed handle.
-         */
         XrNetConn *conn = unwrap_conn(state->handle);
-        if (conn) {
-            xr_net_conn_set_tls(conn, tls);
-            set_tls_conn(state->fd, NULL);
-        }
-        XrValue h = state->handle;
+        if (!conn || conn->closed)
+            return net_tls_handshake_fail(state, XR_NETERR_CLOSED, result);
+        xr_net_conn_set_tls(conn, state->tls);
+        net_conn_clear_error(conn);
         xr_free(state);
-        *result = h;
+        *result = xr_int(0);
         return XR_CFUNC_DONE;
     }
-    if (hs < 0) {
-        xr_tls_conn_close(tls);
-        xr_tls_conn_free(tls);
-        set_tls_conn(state->fd, NULL);
-        xr_free(state);
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
+    if (hs < 0)
+        return net_tls_handshake_fail(state, XR_NETERR_TLS, result);
+    // 1=WANT_READ, 2=WANT_WRITE; the wait consumes the remaining slice of the
+    // one absolute deadline instead of re-arming the full timeout per yield.
     int wait_mode = (hs == 1) ? XR_WAIT_READ : XR_WAIT_WRITE;
-    return xr_yield_for_io(X, state->fd, wait_mode, state->timeout_ms, net_upgrade_tls_continue,
-                           state, result);
+    return xr_yield_for_io(X, state->fd, wait_mode, net_timeout_until(state->deadline_ms),
+                           net_tls_handshake_continue, state, result);
 }
 
 /*
- * net.upgradeTLS(conn_handle, hostname, timeout?) -> conn_handle | null
- * Yieldable: TLS wrap + handshake on existing TCP connection
+ * net.__tlsHandshake(conn, hostname, deadlineMs) -> int
+ * Yieldable client handshake on an established TCP conn under one absolute
+ * monotonic deadline (0 means none). Returns 0 on success (the conn is
+ * promoted to TLS in place); every failure closes the conn and returns a
+ * portable net error code, also stored on the handle. The result is a bare
+ * int, not `NetConn | int`: unioning a builtin native class with a scalar
+ * forces module-wide discrimination that miscompiles suspended handle
+ * results inside coroutine frames.
  */
-static XrCFuncResult net_upgrade_tls_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
-                                               XrValue *result) {
-    if (nargs < 2 || !XR_IS_STRING(args[1])) {
-        *result = XR_NULL_VAL;
+static XrCFuncResult net_tls_handshake_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
+                                                 XrValue *result) {
+    if (nargs < 3 || !XR_IS_STRING(args[1]) || !XR_IS_INT(args[2])) {
+        *result = xr_int(XR_NETERR_INVALID);
+        return XR_CFUNC_DONE;
+    }
+    XrNetConn *conn = unwrap_conn(args[0]);
+    if (!conn || conn->closed || conn->fd < 0 || conn->kind != XR_NETCONN_TCP) {
+        net_conn_set_error(conn, XR_NETERR_INVALID, 0);
+        if (conn)
+            xr_net_conn_close(conn);
+        *result = xr_int(XR_NETERR_INVALID);
         return XR_CFUNC_DONE;
     }
 
-    int fd = handle_get_fd(X, args[0]);
-    if (fd < 0) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-
-    XrString *hostname = XR_TO_STRING(args[1]);
     XrTlsContext *ctx = get_tls_client_ctx();
     if (!ctx) {
-        *result = XR_NULL_VAL;
+        net_conn_set_error(conn, XR_NETERR_TLS, 0);
+        xr_net_conn_close(conn);
+        *result = xr_int(XR_NETERR_TLS);
         return XR_CFUNC_DONE;
     }
-
-    XrTlsConn *tls = xr_tls_conn_new(ctx, fd);
+    XrTlsConn *tls = xr_tls_conn_new(ctx, conn->fd);
     if (!tls) {
-        *result = XR_NULL_VAL;
+        net_conn_set_error(conn, XR_NETERR_TLS, 0);
+        xr_net_conn_close(conn);
+        *result = xr_int(XR_NETERR_TLS);
         return XR_CFUNC_DONE;
     }
-    xr_tls_conn_set_hostname(tls, XR_STRING_CHARS(hostname));
-    set_tls_conn(fd, tls);
+    xr_tls_conn_set_hostname(tls, XR_STRING_CHARS(XR_TO_STRING(args[1])));
 
-    NetUpgradeTLSState *state = (NetUpgradeTLSState *) xr_malloc(sizeof(NetUpgradeTLSState));
+    NetTlsHandshakeState *state =
+        (NetTlsHandshakeState *) xr_calloc(1, sizeof(NetTlsHandshakeState));
     if (!state) {
         xr_tls_conn_close(tls);
         xr_tls_conn_free(tls);
-        set_tls_conn(fd, NULL);
+        xr_net_conn_close(conn);
         *result = XR_NULL_VAL;
         return XR_CFUNC_ERROR;
     }
-    state->fd = fd;
     state->handle = args[0];
-    state->timeout_ms = (nargs > 2 && XR_IS_INT(args[2])) ? (int) XR_TO_INT(args[2]) : 30000;
-    if (state->timeout_ms <= 0)
-        state->timeout_ms = 30000;
-
-    return net_upgrade_tls_step(X, state, result);
+    state->tls = tls;
+    state->fd = conn->fd;
+    state->deadline_ms = (int64_t) XR_TO_INT(args[2]);
+    if (state->deadline_ms < 0)
+        state->deadline_ms = 0;
+    return net_tls_handshake_step(X, state, result);
 }
 
 #endif  // XR_ENABLE_TLS
 
-// ========== Handle-based UDP functions ==========
+// ========== UDP primitives ==========
 
 /*
- * net.udpBind(port, addr?) -> Json handle | null
+ * net.__udpBind(port, addr) -> NetConn | null
+ * Empty addr binds the family-appropriate wildcard.
  */
 static XrValue net_udp_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
-    int port_num = (nargs >= 1 && XR_IS_INT(args[0])) ? (int) XR_TO_INT(args[0]) : 0;
-    const char *addr = NULL;
-    if (nargs >= 2 && XR_IS_STRING(args[1]))
-        addr = XR_STRING_CHARS(XR_TO_STRING(args[1]));
+    if (nargs < 2 || !XR_IS_INT(args[0]) || !XR_IS_STRING(args[1]))
+        return XR_NULL_VAL;
+    int port_num = (int) XR_TO_INT(args[0]);
+    const char *addr = XR_STRING_CHARS(XR_TO_STRING(args[1]));
+    if (port_num < 0 || port_num > 65535)
+        return XR_NULL_VAL;
 
-    // Detect IPv6 and create socket directly (no XrUdpConn overhead)
     sa_family_t family = AF_INET;
-    if (addr && strchr(addr, ':'))
+    if (addr[0] && strchr(addr, ':'))
         family = AF_INET6;
 
     int fd = socket(family, SOCK_DGRAM, 0);
@@ -2437,8 +2010,8 @@ static XrValue net_udp_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
         struct sockaddr_in sa;
         memset(&sa, 0, sizeof(sa));
         sa.sin_family = AF_INET;
-        sa.sin_port = htons(port_num);
-        if (addr && addr[0])
+        sa.sin_port = htons((uint16_t) port_num);
+        if (addr[0])
             inet_pton(AF_INET, addr, &sa.sin_addr);
         else
             sa.sin_addr.s_addr = INADDR_ANY;
@@ -2450,8 +2023,8 @@ static XrValue net_udp_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
         struct sockaddr_in6 sa;
         memset(&sa, 0, sizeof(sa));
         sa.sin6_family = AF_INET6;
-        sa.sin6_port = htons(port_num);
-        if (addr && addr[0])
+        sa.sin6_port = htons((uint16_t) port_num);
+        if (addr[0])
             inet_pton(AF_INET6, addr, &sa.sin6_addr);
         else
             sa.sin6_addr = in6addr_any;
@@ -2467,249 +2040,224 @@ static XrValue net_udp_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
     return make_udp_handle(X, fd);
 }
 
-// ========== Yieldable net.sendTo (handle-based) ==========
-
 typedef struct {
     int fd;
-    char *data;
+    XrNetConn *conn;
+    const char *data;  // Points into Array<byte> storage (not owned)
     size_t len;
     struct sockaddr_storage addr;
     socklen_t addr_len;
-} NetSendToState;
+    int64_t deadline_ms;
+} NetUdpSendState;
 
-static XrCFuncResult net_send_to_step(XrVMRuntime *X, NetSendToState *state, XrValue *result);
+static XrCFuncResult net_udp_send_step(XrVMRuntime *X, NetUdpSendState *state, XrValue *result);
 
-static XrCFuncResult net_send_to_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                          void *ctx, XrValue *result) {
+static XrCFuncResult net_udp_send_continue(XrVMRuntime *X, int status, XrValue resume_value,
+                                           void *ctx, XrValue *result) {
     (void) resume_value;
-    NetSendToState *state = (NetSendToState *) ctx;
+    NetUdpSendState *state = (NetUdpSendState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
-        xr_free(state->data);
+        net_conn_set_error(state->conn, net_code_from_resume(status), 0);
         xr_free(state);
         *result = xr_int(-1);
         return XR_CFUNC_DONE;
     }
-    return net_send_to_step(X, state, result);
+    return net_udp_send_step(X, state, result);
 }
 
-static XrCFuncResult net_send_to_step(XrVMRuntime *X, NetSendToState *state, XrValue *result) {
-    (void) X;
+static XrCFuncResult net_udp_send_step(XrVMRuntime *X, NetUdpSendState *state, XrValue *result) {
     ssize_t n = sendto(state->fd, state->data, state->len, 0, (struct sockaddr *) &state->addr,
                        state->addr_len);
     if (n >= 0) {
-        xr_free(state->data);
+        net_conn_clear_error(state->conn);
         xr_free(state);
-        *result = xr_int((int) n);
+        *result = xr_int((xr_Integer) n);
         return XR_CFUNC_DONE;
     }
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        return xr_yield_for_io(X, state->fd, XR_WAIT_WRITE, 5000, net_send_to_continue, state,
-                               result);
+        return xr_yield_for_io(X, state->fd, XR_WAIT_WRITE, net_timeout_until(state->deadline_ms),
+                               net_udp_send_continue, state, result);
     }
-    xr_free(state->data);
+    net_conn_set_error(state->conn, net_error_from_errno(errno), errno);
     xr_free(state);
     *result = xr_int(-1);
     return XR_CFUNC_DONE;
 }
 
 /*
- * net.sendTo(handle, data, host, port) -> int
- * Yieldable: handle-based UDP send with EAGAIN retry
+ * net.__udpSendTo(conn, data, addrLiteral, port, timeoutMs) -> int
+ * Yieldable single datagram send. The destination must be a literal address;
+ * hostname resolution is net.xr policy.
  */
-static XrCFuncResult net_send_to_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
-                                           XrValue *result) {
-    if (nargs < 4 || !XR_IS_STRING(args[1]) || !XR_IS_STRING(args[2]) || !XR_IS_INT(args[3])) {
+static XrCFuncResult net_udp_send_to_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
+                                               XrValue *result) {
+    if (nargs < 5 || !XR_IS_STRING(args[2]) || !XR_IS_INT(args[3]) || !XR_IS_INT(args[4])) {
         *result = xr_int(-1);
         return XR_CFUNC_DONE;
     }
-
-    int fd = handle_get_fd(X, args[0]);
-    if (fd < 0) {
+    XrNetConn *conn = unwrap_conn(args[0]);
+    if (!conn || conn->closed || conn->fd < 0) {
+        net_conn_set_error(conn, XR_NETERR_CLOSED, 0);
         *result = xr_int(-1);
         return XR_CFUNC_DONE;
     }
-
-    XrString *data = XR_TO_STRING(args[1]);
-    XrString *host = XR_TO_STRING(args[2]);
+    XrArray *data = net_as_bytes(args[1]);
+    if (!data || (data->length > 0 && !data->data)) {
+        net_conn_set_error(conn, XR_NETERR_INVALID, 0);
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+    const char *addr_text = XR_STRING_CHARS(XR_TO_STRING(args[2]));
     int port_num = (int) XR_TO_INT(args[3]);
+    int64_t timeout_ms = (int64_t) XR_TO_INT(args[4]);
+    if (port_num < 0 || port_num > 65535 || !net_is_literal_ip(addr_text)) {
+        net_conn_set_error(conn, XR_NETERR_INVALID, 0);
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
 
-    // DNS resolve for dual-stack support
     XrSockAddr resolved;
-    if (!xr_dns_resolve(X, XR_STRING_CHARS(host), &resolved, XR_AF_UNSPEC)) {
+    if (!xr_dns_resolve(X, addr_text, &resolved, XR_AF_UNSPEC)) {
+        net_conn_set_error(conn, XR_NETERR_INVALID, 0);
         *result = xr_int(-1);
         return XR_CFUNC_DONE;
     }
 
-    struct sockaddr_storage addr;
-    socklen_t addr_len;
-    memset(&addr, 0, sizeof(addr));
-    if (resolved.family == AF_INET) {
-        resolved.addr.v4.sin_port = htons(port_num);
-        memcpy(&addr, &resolved.addr.v4, sizeof(struct sockaddr_in));
-        addr_len = sizeof(struct sockaddr_in);
-    } else {
-        resolved.addr.v6.sin6_port = htons(port_num);
-        memcpy(&addr, &resolved.addr.v6, sizeof(struct sockaddr_in6));
-        addr_len = sizeof(struct sockaddr_in6);
-    }
-
-    // Try first
-    ssize_t n =
-        sendto(fd, XR_STRING_CHARS(data), data->length, 0, (struct sockaddr *) &addr, addr_len);
-    if (n >= 0) {
-        *result = xr_int((int) n);
-        return XR_CFUNC_DONE;
-    }
-    if (errno != EAGAIN && errno != EWOULDBLOCK) {
-        *result = xr_int(-1);
-        return XR_CFUNC_DONE;
-    }
-
-    // EAGAIN - yield
-    NetSendToState *state = (NetSendToState *) xr_malloc(sizeof(NetSendToState));
+    NetUdpSendState *state = (NetUdpSendState *) xr_calloc(1, sizeof(NetUdpSendState));
     if (!state) {
         *result = xr_int(-1);
         return XR_CFUNC_ERROR;
     }
-    state->fd = fd;
-    state->addr = addr;
-    state->addr_len = addr_len;
-    state->len = data->length;
-    state->data = (char *) xr_malloc(data->length);
-    if (!state->data) {
-        xr_free(state);
-        *result = xr_int(-1);
-        return XR_CFUNC_ERROR;
+    state->fd = conn->fd;
+    state->conn = conn;
+    // Zero-copy: the array storage stays pinned while this coroutine is parked.
+    state->data = (const char *) xr_array_raw_u8(data);
+    state->len = (size_t) data->length;
+    state->deadline_ms = net_deadline_from_timeout(timeout_ms);
+    memset(&state->addr, 0, sizeof(state->addr));
+    if (resolved.family == AF_INET) {
+        resolved.addr.v4.sin_port = htons((uint16_t) port_num);
+        memcpy(&state->addr, &resolved.addr.v4, sizeof(struct sockaddr_in));
+        state->addr_len = sizeof(struct sockaddr_in);
+    } else {
+        resolved.addr.v6.sin6_port = htons((uint16_t) port_num);
+        memcpy(&state->addr, &resolved.addr.v6, sizeof(struct sockaddr_in6));
+        state->addr_len = sizeof(struct sockaddr_in6);
     }
-    memcpy(state->data, XR_STRING_CHARS(data), data->length);
-
-    return xr_yield_for_io(X, fd, XR_WAIT_WRITE, 5000, net_send_to_continue, state, result);
+    return net_udp_send_step(X, state, result);
 }
-
-// ========== Yieldable net.recvFrom (handle-based) ==========
 
 typedef struct {
     int fd;
-    int max_len;
-} NetRecvFromState;
+    XrNetConn *conn;
+    XrArray *buf;  // caller-owned Array<byte>
+    int64_t deadline_ms;
+} NetUdpRecvState;
 
-static XrCFuncResult net_recv_from_step(XrVMRuntime *X, NetRecvFromState *state, XrValue *result);
+static XrCFuncResult net_udp_recv_step(XrVMRuntime *X, NetUdpRecvState *state, XrValue *result);
 
-static XrCFuncResult net_recv_from_continue(XrVMRuntime *X, int status, XrValue resume_value,
-                                            void *ctx, XrValue *result) {
+static XrCFuncResult net_udp_recv_continue(XrVMRuntime *X, int status, XrValue resume_value,
+                                           void *ctx, XrValue *result) {
     (void) resume_value;
-    NetRecvFromState *state = (NetRecvFromState *) ctx;
+    NetUdpRecvState *state = (NetUdpRecvState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
+        net_conn_set_error(state->conn, net_code_from_resume(status), 0);
         xr_free(state);
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
     }
-    return net_recv_from_step(X, state, result);
+    return net_udp_recv_step(X, state, result);
 }
 
-static XrCFuncResult net_recv_from_step(XrVMRuntime *X, NetRecvFromState *state, XrValue *result) {
-    int maxlen = state->max_len;
-    if (maxlen > (int) sizeof(g_udp_recv_buf))
-        maxlen = (int) sizeof(g_udp_recv_buf);
-
+static XrCFuncResult net_udp_recv_step(XrVMRuntime *X, NetUdpRecvState *state, XrValue *result) {
+    uint8_t *data = xr_array_raw_u8(state->buf);
     struct sockaddr_storage saddr;
     socklen_t slen = sizeof(saddr);
 
-    ssize_t n = recvfrom(state->fd, g_udp_recv_buf, maxlen, 0, (struct sockaddr *) &saddr, &slen);
+    ssize_t n = recvfrom(state->fd, data, (size_t) state->buf->capacity, 0,
+                         (struct sockaddr *) &saddr, &slen);
     if (n >= 0) {
-        // Store sender address
-        memset(&g_udp_recv_addr, 0, sizeof(g_udp_recv_addr));
+        state->buf->length = (int32_t) n;
+        XrNetConn *conn = state->conn;
+        conn->udp_from_host[0] = '\0';
+        conn->udp_from_port = 0;
         if (saddr.ss_family == AF_INET) {
             struct sockaddr_in *sin = (struct sockaddr_in *) &saddr;
-            g_udp_recv_addr.family = XR_NET_IPV4;
-            inet_ntop(AF_INET, &sin->sin_addr, g_udp_recv_addr.host, sizeof(g_udp_recv_addr.host));
-            g_udp_recv_addr.port = ntohs(sin->sin_port);
+            inet_ntop(AF_INET, &sin->sin_addr, conn->udp_from_host, sizeof(conn->udp_from_host));
+            conn->udp_from_port = ntohs(sin->sin_port);
         } else if (saddr.ss_family == AF_INET6) {
             struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *) &saddr;
-            g_udp_recv_addr.family = XR_NET_IPV6;
-            inet_ntop(AF_INET6, &sin6->sin6_addr, g_udp_recv_addr.host,
-                      sizeof(g_udp_recv_addr.host));
-            g_udp_recv_addr.port = ntohs(sin6->sin6_port);
+            inet_ntop(AF_INET6, &sin6->sin6_addr, conn->udp_from_host, sizeof(conn->udp_from_host));
+            conn->udp_from_port = ntohs(sin6->sin6_port);
         }
-
-        // Build UdpPacket handle: { data: string, host: string, port: int }
-        // Flat layout — direct .field access instead of .addr.host / .addr.port.
-        XrJson *json = xr_json_new(xr_current_coro(X));
-        if (!json) {
-            xr_free(state);
-            *result = XR_NULL_VAL;
-            return XR_CFUNC_DONE;
-        }
-        xr_json_set_by_key(X, json, "data",
-                           xr_string_value(xr_string_intern(X, g_udp_recv_buf, n, 0)));
-        xr_json_set_by_key(X, json, "host",
-                           xr_string_value(xr_string_intern(X, g_udp_recv_addr.host,
-                                                            strlen(g_udp_recv_addr.host), 0)));
-        xr_json_set_by_key(X, json, "port", xr_int(g_udp_recv_addr.port));
-
+        net_conn_clear_error(conn);
         xr_free(state);
-        *result = xr_json_value(json);
+        *result = xr_int((xr_Integer) n);
         return XR_CFUNC_DONE;
     }
 
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        return xr_yield_for_io(X, state->fd, XR_WAIT_READ, -1, net_recv_from_continue, state,
-                               result);
+        return xr_yield_for_io(X, state->fd, XR_WAIT_READ, net_timeout_until(state->deadline_ms),
+                               net_udp_recv_continue, state, result);
     }
 
-    // Error
+    net_conn_set_error(state->conn, net_error_from_errno(errno), errno);
     xr_free(state);
-    *result = XR_NULL_VAL;
+    *result = xr_int(-1);
     return XR_CFUNC_DONE;
 }
 
 /*
- * net.recvFrom(handle, maxlen?) -> { data, addr: { host, port } } | null
- * Yieldable: handle-based UDP receive
+ * net.__udpRecvInto(conn, buffer, timeoutMs) -> int
+ * Yieldable single datagram receive into a caller buffer. Returns the byte
+ * count and records the sender on the handle; -1 means timeout, cancellation,
+ * or a socket error with the code stored.
  */
-static XrCFuncResult net_recv_from_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
-                                             XrValue *result) {
-    if (nargs < 1) {
-        *result = XR_NULL_VAL;
+static XrCFuncResult net_udp_recv_into_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
+                                                 XrValue *result) {
+    if (nargs < 3 || !XR_IS_INT(args[2])) {
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+    XrNetConn *conn = unwrap_conn(args[0]);
+    if (!conn || conn->closed || conn->fd < 0) {
+        net_conn_set_error(conn, XR_NETERR_CLOSED, 0);
+        *result = xr_int(-1);
+        return XR_CFUNC_DONE;
+    }
+    XrArray *buf = net_as_writable_bytes(args[1]);
+    if (!buf) {
+        net_conn_set_error(conn, XR_NETERR_INVALID, 0);
+        *result = xr_int(-1);
         return XR_CFUNC_DONE;
     }
 
-    int fd = handle_get_fd(X, args[0]);
-    if (fd < 0) {
-        *result = XR_NULL_VAL;
-        return XR_CFUNC_DONE;
-    }
-
-    int maxlen = (nargs >= 2 && XR_IS_INT(args[1])) ? (int) XR_TO_INT(args[1]) : 4096;
-
-    NetRecvFromState *state = (NetRecvFromState *) xr_malloc(sizeof(NetRecvFromState));
+    NetUdpRecvState *state = (NetUdpRecvState *) xr_calloc(1, sizeof(NetUdpRecvState));
     if (!state) {
-        *result = XR_NULL_VAL;
+        *result = xr_int(-1);
         return XR_CFUNC_ERROR;
     }
-    state->fd = fd;
-    state->max_len = maxlen;
-
-    return net_recv_from_step(X, state, result);
+    state->fd = conn->fd;
+    state->conn = conn;
+    state->buf = buf;
+    state->deadline_ms = net_deadline_from_timeout((int64_t) XR_TO_INT(args[2]));
+    return net_udp_recv_step(X, state, result);
 }
 
-/*
- * net.lookup(hostname) -> string
- * DNS resolution
- */
-static XrValue net_dns_lookup(XrVMRuntime *isolate, XrValue *args, int nargs) {
-    if (nargs < 1 || !XR_IS_STRING(args[0])) {
-        return XR_NULL_VAL;
-    }
+static XrValue net_udp_from_host(XrVMRuntime *X, XrValue *args, int nargs) {
+    if (nargs < 1)
+        return xr_string_value(xr_string_intern(X, "", 0, 0));
+    XrNetConn *conn = unwrap_conn(args[0]);
+    const char *host = conn ? conn->udp_from_host : "";
+    return xr_string_value(xr_string_intern(X, host, strlen(host), 0));
+}
 
-    XrString *hostname = XR_TO_STRING(args[0]);
-    XrNetAddr addrs[8];
-    int count = net_dns_lookup_to_addrs(isolate, XR_STRING_CHARS(hostname), addrs, 8);
-
-    if (count <= 0)
-        return XR_NULL_VAL;
-
-    return xr_string_value(xr_string_intern(isolate, addrs[0].host, strlen(addrs[0].host), 0));
+static XrValue net_udp_from_port(XrVMRuntime *X, XrValue *args, int nargs) {
+    (void) X;
+    if (nargs < 1)
+        return xr_int(0);
+    XrNetConn *conn = unwrap_conn(args[0]);
+    return xr_int(conn ? conn->udp_from_port : 0);
 }
 
 #define XR_STDLIB_VM_BIND_MODULE_NET 1

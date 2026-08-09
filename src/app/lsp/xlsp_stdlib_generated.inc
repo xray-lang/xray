@@ -364,16 +364,17 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
-    {"dial", XLSP_SYM_FUNCTION, "fn(host: string, port: int, timeout?: int): NetConn?", "", NULL, 0},
-    {"dialTLS", XLSP_SYM_FUNCTION, "fn(host: string, port: int, timeout?: int): NetConn?", "", NULL, 0},
-    {"listen", XLSP_SYM_FUNCTION, "fn(port: int, backlog?: int): NetListener?", "", NULL, 0},
+    {"lookup", XLSP_SYM_FUNCTION, "fn(hostname: string): Array<IpAddress>", "", NULL, 0},
+    {"resolve", XLSP_SYM_FUNCTION, "fn(hostname: string): IpAddress?", "", NULL, 0},
+    {"dial", XLSP_SYM_FUNCTION, "fn(host: string, port: int, options?: DialOptions?): NetConn", "", NULL, 0},
+    {"dialEndpoint", XLSP_SYM_FUNCTION, "fn(endpoint: Endpoint, options?: DialOptions?): NetConn", "", NULL, 0},
+    {"upgradeTLS", XLSP_SYM_FUNCTION, "fn(conn: NetConn, hostname: string, timeoutMs?: int): ()", "", NULL, 0},
+    {"hasTLS", XLSP_SYM_FUNCTION, "fn(): bool", "", NULL, 0},
+    {"listen", XLSP_SYM_FUNCTION, "fn(port: int, backlog?: int, forceV4?: bool): NetListener", "", NULL, 0},
     {"accept", XLSP_SYM_FUNCTION, "fn(listener: NetListener): NetConn?", "", NULL, 0},
-    {"read", XLSP_SYM_FUNCTION, "fn(conn: NetConn, maxlen?: int): string?", "", NULL, 0},
     {"readInto", XLSP_SYM_FUNCTION, "fn(conn: NetConn, buffer: ref Array<byte>, maxlen?: int): int", "", NULL, 0},
-    {"write", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: string): int", "", NULL, 0},
+    {"readBytes", XLSP_SYM_FUNCTION, "fn(conn: NetConn, maxBytes?: int): Array<byte>?", "", NULL, 0},
     {"writeBytes", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: Array<byte>): int", "", NULL, 0},
-    {"copy", XLSP_SYM_FUNCTION, "fn(src: NetConn, dst: NetConn, bufferSize?: int): int", "", NULL, 0},
-    {"copyBidirectional", XLSP_SYM_FUNCTION, "fn(a: NetConn, b: NetConn): CopyBidirectionalResult", "", NULL, 0},
     {"shutdownRead", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "", NULL, 0},
     {"shutdownWrite", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "", NULL, 0},
     {"shutdown", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "", NULL, 0},
@@ -385,23 +386,20 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"setAcceptDeadline", XLSP_SYM_FUNCTION, "fn(listener: NetListener, deadline: int): bool", "", NULL, 0},
     {"lastError", XLSP_SYM_FUNCTION, "fn(handle: NetConn | NetListener): NetError?", "", NULL, 0},
     {"lastErrno", XLSP_SYM_FUNCTION, "fn(handle: NetConn | NetListener): int", "", NULL, 0},
-    {"lookup", XLSP_SYM_FUNCTION, "fn(hostname: string): string?", "", NULL, 0},
-    {"resolve", XLSP_SYM_FUNCTION, "fn(hostname: string): IpAddress?", "", NULL, 0},
-    {"hasTLS", XLSP_SYM_FUNCTION, "fn(): bool", "", NULL, 0},
-    {"upgradeTLS", XLSP_SYM_FUNCTION, "fn(conn: NetConn, hostname: string, timeout?: int): NetConn?", "", NULL, 0},
-    {"udpBind", XLSP_SYM_FUNCTION, "fn(port: int, address?: string): NetConn?", "", NULL, 0},
-    {"sendTo", XLSP_SYM_FUNCTION, "fn(handle: NetConn, data: string, host: string, port: int): int", "", NULL, 0},
-    {"recvFrom", XLSP_SYM_FUNCTION, "fn(handle: NetConn, maxlen?: int): UdpPacket?", "", NULL, 0},
-    {"__UdpPacket", XLSP_SYM_CLASS, "type __UdpPacket", "Native handle type", NULL, 0},
+    {"copy", XLSP_SYM_FUNCTION, "fn(src: NetConn, dst: NetConn, bufferSize?: int): int", "", NULL, 0},
+    {"copyBidirectional", XLSP_SYM_FUNCTION, "fn(a: NetConn, b: NetConn): CopyBidirectionalResult", "", NULL, 0},
+    {"udpBind", XLSP_SYM_FUNCTION, "fn(port: int, address?: string): NetConn", "", NULL, 0},
+    {"sendTo", XLSP_SYM_FUNCTION, "fn(handle: NetConn, data: Array<byte>, host: string, port: int, timeoutMs?: int): int", "", NULL, 0},
+    {"recvFrom", XLSP_SYM_FUNCTION, "fn(handle: NetConn, buffer: ref Array<byte>, timeoutMs?: int): UdpFrom?", "", NULL, 0},
     {"IpAddress", XLSP_SYM_CLASS, "type IpAddress", "Class type", NULL, 0},
     {"Endpoint", XLSP_SYM_CLASS, "type Endpoint", "Class type", NULL, 0},
     {"DialOptions", XLSP_SYM_CLASS, "type DialOptions", "Class type", NULL, 0},
     {"CopyBidirectionalResult", XLSP_SYM_CLASS, "type CopyBidirectionalResult", "Class type", NULL, 0},
-    {"UdpPacket", XLSP_SYM_CLASS, "type UdpPacket", "Class type", NULL, 0},
+    {"UdpFrom", XLSP_SYM_CLASS, "type UdpFrom", "Class type", NULL, 0},
     {"__CopyBidirectionalResult", XLSP_SYM_CLASS, "type __CopyBidirectionalResult = { aToB: int, bToA: int }", "Byte counts copied in each direction by copyBidirectional", NULL, 0},
-    {"NetError", XLSP_SYM_CLASS, "enum NetError", "Typed failure from native network operations", NULL, 0},
+    {"NetError", XLSP_SYM_CLASS, "enum NetError", "Typed failure from network operations; classification from native codes lives in net.xr", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 36
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 34
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
