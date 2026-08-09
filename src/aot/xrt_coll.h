@@ -1498,11 +1498,10 @@ static inline int xrt_swar_first(uint64_t bits) {
  * compile-time literal hashing in the C backend). */
 
 static inline uint64_t xrt_hash_f64(double d) {
-    uint64_t bits;
-    if (d == 0.0)
-        d = 0.0; /* canonicalize -0.0: IEEE == treats them equal */
-    memcpy(&bits, &d, sizeof(bits));
-    return xr_hash_core_mix_u64(bits);
+    /* Container keys hash the canonical equivalence bits: one NaN pattern for
+     * the whole NaN space and +0.0 for both zeros, matching the typed-storage
+     * path and xr_hash_core_key_eq_f64. */
+    return xr_hash_core_mix_u64(xr_hash_core_f64_key_bits(d));
 }
 
 /* Hash for tagged values, consistent with xrt_eq: strings hash content
@@ -1734,6 +1733,11 @@ static inline int xrt_value_key_eq(XrValue stored, XrValue query) {
         if (eq_fn)
             return eq_fn(NULL, stored.ptr, query.ptr) != 0;
     }
+    /* Key identity is an equivalence relation, not IEEE `==`: every NaN is one
+     * key and both zeros are the same key, so a stored key always finds
+     * itself. Value-level `==` (xrt_eq) keeps IEEE semantics untouched. */
+    if (stored.tag == XR_TAG_F64 && query.tag == XR_TAG_F64)
+        return xr_hash_core_key_eq_f64(stored.f, query.f);
     return xrt_eq(stored, query) != 0;
 }
 
