@@ -303,7 +303,7 @@ static void init_spawn_probe_children(XrCoroutine *children, int count, int base
     }
 }
 
-TEST(local_runq_pops_recent_owner_items_first) {
+TEST(local_runq_pops_oldest_owner_items_first) {
     SchedulerFixture f;
     ASSERT_TRUE(scheduler_fixture_init(&f));
 
@@ -318,28 +318,36 @@ TEST(local_runq_pops_recent_owner_items_first) {
     xr_worker_push(&f.worker, &b);
     xr_worker_push(&f.worker, &c);
 
-    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &c);
-    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &b);
     ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &a);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &b);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &c);
     ASSERT_EQ_PTR(xr_worker_pop(&f.worker), NULL);
     ASSERT_EQ_INT(xr_proc_local_runq_len(&f.worker.p), 0);
 
     scheduler_fixture_cleanup(&f);
 }
 
-TEST(lifo_budget_flushes_run_next_to_local_queue) {
+TEST(lifo_budget_flush_yields_to_older_local_work) {
     SchedulerFixture f;
     ASSERT_TRUE(scheduler_fixture_init(&f));
 
-    XrCoroutine coro;
-    init_ready_coro(&coro, 201, &f.isolate_storage);
+    XrCoroutine older_a;
+    XrCoroutine older_b;
+    XrCoroutine hot;
+    init_ready_coro(&older_a, 201, &f.isolate_storage);
+    init_ready_coro(&older_b, 202, &f.isolate_storage);
+    init_ready_coro(&hot, 203, &f.isolate_storage);
 
-    xr_worker_push_lifo(&f.worker, &coro);
+    xr_worker_push(&f.worker, &older_a);
+    xr_worker_push(&f.worker, &older_b);
+    xr_worker_push_lifo(&f.worker, &hot);
     f.worker.p.lifo_polls = XR_MAX_LIFO_POLLS;
 
-    ASSERT_EQ_PTR(xr_worker_try_pop_lifo(&f.worker, true), NULL);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &older_a);
     ASSERT_EQ_INT((int) f.worker.p.stats.lifo_flush_count, 1);
-    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &coro);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &older_b);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &hot);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), NULL);
 
     scheduler_fixture_cleanup(&f);
 }
@@ -897,8 +905,8 @@ TEST(spawn_burst_resets_after_block) {
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Scheduler Run Queue");
-RUN_TEST(local_runq_pops_recent_owner_items_first);
-RUN_TEST(lifo_budget_flushes_run_next_to_local_queue);
+RUN_TEST(local_runq_pops_oldest_owner_items_first);
+RUN_TEST(lifo_budget_flush_yields_to_older_local_work);
 RUN_TEST(global_inject_spill_preserves_all_work);
 RUN_TEST(io_ready_burst_runs_one_direct_and_publishes_the_rest);
 RUN_TEST(global_coro_pool_get_pops_bounded_batches);

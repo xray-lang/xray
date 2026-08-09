@@ -59,10 +59,11 @@
  * improve reaction time when a short local burst turns into backlog. */
 #define XR_STEAL_BACKOFF_MAX_MS 2
 
-/* Upper bound on consecutive "BLOCKED fast-redispatch" hops inside
- * worker_exec_with_cont_stealing. Limits worst-case starvation of other
- * coroutines when A and B bounce through a channel for ms-scale bursts. */
-#define XR_FAST_DISPATCH_BUDGET 64
+/* Exact upper bound on consecutive "BLOCKED fast-redispatch" hops inside
+ * worker_exec_with_cont_stealing (and direct VM switches inside one dispatch).
+ * Three preserves a complete request -> service -> reply locality chain while
+ * returning to the fair ready queue before the same caller can monopolize it. */
+#define XR_FAST_DISPATCH_BUDGET 3
 
 /* In-dispatch direct coroutine switch (VM interpreter): when a coroutine
  * blocks on a channel/await op and a just-woken partner sits in the LIFO
