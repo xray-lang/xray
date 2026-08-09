@@ -210,6 +210,15 @@ typedef struct XaInferContext {
     AstNode *block_cursor_nodes[XA_BLOCK_CURSOR_MAX];
     int block_cursor_indices[XA_BLOCK_CURSOR_MAX];
     int block_cursor_depth;
+
+    // Declarations whose default arguments are currently being expanded at a
+    // call site, spanning the inference of the filled arguments. A default
+    // expression whose resolution reaches its own declaration again would
+    // otherwise clone itself without bound and overflow the stack; the guard
+    // skips re-expansion so the call surfaces an ordinary arity diagnostic.
+#define XA_DEFAULT_EXPANSION_MAX 16
+    const struct XaSymbolLinks *default_expansion_links[XA_DEFAULT_EXPANSION_MAX];
+    int default_expansion_depth;
 } XaInferContext;
 
 // API: Context lifecycle

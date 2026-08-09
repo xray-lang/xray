@@ -6689,7 +6689,18 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (fn_links && fn_links->param_defaults && !is_variadic &&
         fn_links->param_count == param_count) {
         if (call->arg_count < param_count) {
-            xa_complete_call_default_args(ctx, call, fn_links, param_count);
+            bool cyclic_expansion = false;
+            for (int gi = 0; gi < ctx->default_expansion_depth; gi++) {
+                if (ctx->default_expansion_links[gi] == fn_links) {
+                    cyclic_expansion = true;
+                    break;
+                }
+            }
+            /* A default expression that resolves back to its own declaration
+             * would clone itself forever; skip the expansion and let the call
+             * report its ordinary arity diagnostic instead of overflowing. */
+            if (!cyclic_expansion)
+                xa_complete_call_default_args(ctx, call, fn_links, param_count);
         } else if (call->arg_count == param_count) {
             xa_mark_call_default_arg_contract(call, fn_links, param_count);
         }
@@ -6941,8 +6952,19 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             xa_parallel_callback_label_for_plan(parallel_call_plan, i);
         XrParamMode param_mode = xa_call_param_mode(callee_type, param_slot);
         XrCallArgAccess access = xa_call_arg_access(call, i);
+        /* While a filled default expression is being inferred, its declaration
+         * stays on the expansion stack so a default whose resolution reaches
+         * the same declaration again cannot re-clone itself without bound. */
+        bool guard_default_expansion = fn_links && call->default_arg_count > 0 &&
+                                       call->supplied_arg_count >= 0 &&
+                                       i >= call->supplied_arg_count &&
+                                       ctx->default_expansion_depth < XA_DEFAULT_EXPANSION_MAX;
+        if (guard_default_expansion)
+            ctx->default_expansion_links[ctx->default_expansion_depth++] = fn_links;
         XrType *arg_type = xa_visit_call_arg_for_param_mode(ctx, arg_node, parallel_callback_label,
                                                             access, param_mode);
+        if (guard_default_expansion)
+            ctx->default_expansion_depth--;
         ctx->allow_view_expr_for_copy = saved_copy_view;
         ctx->expected_type = saved_expected;
         ctx->expected_from_signature = saved_from_signature;
