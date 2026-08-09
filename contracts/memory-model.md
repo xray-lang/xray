@@ -96,7 +96,7 @@ A change to these rules re-runs and, where the expected output moves, updates:
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 9091256d150269d3b16cd9b7f60371292a5d8d357d48f513e0608cb32d663ce5
+anchor-sha256: xisa/xi/ops.def 64109091ac59eb9c359238505d25e2d191e821e478e30ed5d1b2733a24cae7ed
 anchor-sha256: src/ir/xi_tbaa.c 304e00919092f45875e76dc0d9e958bc706ecc8cf0f0b89ed80d51392276f6f4
 anchor-sha256: src/ir/xi_tbaa.h 3f361c253c2a6073043d9a8c77f100cf3b51bc16077fbff3f6f3a381d634c027
 anchor-sha256: src/ir/xi_opt_licm.c 89d57c968d90e08f7fed4df46308630d00c92df47ab1c5a059f9e4a7bc750ee0
@@ -105,4 +105,4 @@ anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a
 anchor-sha256: src/coro/xchannel.c a29dda3df9fd51b80fc383758f5a45d379a27246e97e3a4029b7a57367e81d97
 anchor-sha256: src/coro/xtask.c 0557f8dbbfa4e8fdd1cecbd4724107aa83db4e629d53bb7ff3d0a67497ec1e20
 anchor-sha256: src/coro/xtask_await.c 1d6026df35f12ff155091a2ee0e54ed46f094e34ee6af89df011382028bd9708
-anchor-sha256: src/frontend/canonical/xcanon.c 6511de9fd3a2a07df02441ceae660a0e47d1cb784fe0a8c6a0cea674f9785ff3
+anchor-sha256: src/frontend/canonical/xcanon.c 76853161312a8bee898a9073ac2d2c5fcb4946af9b20702c7a2b29d26c69709e

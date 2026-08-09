@@ -387,8 +387,6 @@ static bool cg_builtin_receiver_registry_matches(const XrType *receiver_type,
 static bool cg_is_void_like(const XiValue *v) {
     if (!v)
         return false;
-    if (v->op == XI_DEFER)
-        return true;
     if (v->type && XR_TYPE_IS_UNIT(v->type))
         return true;
 
@@ -1473,8 +1471,8 @@ static bool cg_array_data_cache_decl_mark(XiCgenCtx *ctx, const XiValue *origin)
  * Uses arena-safe XiClassMethod array (no AST dependency). The child
  * indices are relative to the function that lowered the class; when a
  * caller probes a different parent, the index may land on an unrelated
- * child (e.g. a defer closure), so verify the resolved child really is
- * a constructor before trusting it. */
+ * closure child, so verify the resolved child really is a constructor before
+ * trusting it. */
 static const XiFunc *cg_find_constructor(const XiFunc *parent, const XiClassData *cd) {
     if (!cd || !cd->methods || !parent)
         return NULL;
@@ -5080,22 +5078,6 @@ typedef struct CgClassNativeRefStackReturn {
     const char *ctor_prefix; /* owned: XiModule prefix (Xi arena)/NULL; local struct, emit-scope */
 } CgClassNativeRefStackReturn;
 
-static bool cg_func_has_defer_stmt(const XiFunc *f) {
-    if (!f)
-        return false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (v && v->op == XI_DEFER)
-                return true;
-        }
-    }
-    return false;
-}
-
 static bool cg_class_native_ref_stack_ctor_uses_only_return_call(XiCgenCtx *ctx, const XiFunc *f,
                                                                  const XiValue *target,
                                                                  const XiValue *return_call,
@@ -5152,7 +5134,7 @@ static bool cg_class_native_ref_stack_return_info(XiCgenCtx *ctx, const XiFunc *
         (return_call->op != XI_CALL_METHOD && return_call->op != XI_CALL_METHOD_DIRECT) ||
         return_call->nargs < 1 || !return_call->block ||
         return_call->block->kind != XI_BLOCK_RETURN || return_call->block->control != return_call ||
-        cg_has_exception_handling(f) || cg_func_has_defer_stmt(f))
+        cg_has_exception_handling(f))
         return false;
 
     const XiValue *ctor_call = cg_class_native_trace_ctor_origin(ctx, f, return_call->args[0], 0);
@@ -5277,21 +5259,6 @@ static bool emit_class_native_ref_stack_return_stmt(XiCgenCtx *ctx, FILE *out, c
     return true;
 }
 
-/* Run this function's pending defers at an exit point. The IR lowers every
- * `defer` into a zero-arg closure pushed onto a stack-local XrtDeferScope at the
- * defer site (xicgen_stmt_defer); here we unlink that scope and run it LIFO.
- * Doing this dynamically — rather than statically unrolling each defer site at
- * every exit — is what makes loops, conditional registration, and early returns
- * run exactly the defers that executed, matching the VM. The panic path is
- * handled by xrt_throw_exc (xrt_defer_unwind_to); ordering and Go-style error
- * replacement live in the runtime (xrt_defer.h). */
-static void emit_deferred_calls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
-    (void) ctx;
-    (void) prefix;
-    if (cg_func_has_defer_stmt(f))
-        fprintf(out, "    xrt_defer_leave(&_xrt_ds);\n");
-}
-
 static void emit_default_return_for_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
     if (cg_func_return_abi_is_aggregate(ctx, f)) {
         emit_aggregate_zero_expr(out, cg_func_return_abi_value_rep(ctx, f));
@@ -5368,8 +5335,8 @@ static void emit_return_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiFunc
 
 static void emit_fallthrough_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                     const char *prefix) {
+    (void) prefix;
     emit_class_field_cache_flush(ctx, out);
-    emit_deferred_calls(ctx, out, f, prefix);
     if (cg_func_return_abi_rep(ctx, f) == XR_REP_VOID) {
         fprintf(out, "    return;\n");
     } else {
@@ -7820,13 +7787,6 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     XR_DCHECK(v != NULL, "emit_value_stmt: NULL value");
     emit_value_source_line(ctx, out, v);
 
-    /* defer registers its closure onto the function's defer scope at this site
-     * (xicgen_stmt_defer); the scope runs LIFO at exit. */
-    if (v->op == XI_DEFER) {
-        xi_to_c_emit_stmt_generated(ctx, out, f, v, prefix);
-        return;
-    }
-
     if (cg_lowbits_binop_elided_into_unsigned_narrow(f, v))
         return;
     if (xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v))
@@ -8265,17 +8225,6 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 
 /* Emit phi assignments for all phis in `target` whose predecessor
  * at index `pred_idx` is `pred_blk`. Called before the jump/branch. */
-static bool cg_block_has_defer_run_to(const XiBlock *blk) {
-    if (!blk)
-        return false;
-    for (uint32_t i = 0; i < blk->nvalues; i++) {
-        const XiValue *v = blk->values[i];
-        if (v && v->op == XI_DEFER_RUN_TO)
-            return true;
-    }
-    return false;
-}
-
 static bool cg_phi_copy_should_emit(XiCgenCtx *ctx, const XiFunc *f, const XiPhi *phi,
                                     uint16_t pred_idx) {
     if (!phi || !cg_phi_has_storage(phi))
@@ -8288,9 +8237,8 @@ static bool cg_phi_copy_should_emit(XiCgenCtx *ctx, const XiFunc *f, const XiPhi
     return pred_idx < phi->value.nargs && phi->value.args[pred_idx] != NULL;
 }
 
-static void emit_phi_incoming_as_rep(XiCgenCtx *ctx, FILE *out, const XiPhi *phi, uint16_t pred_idx,
-                                     bool pred_ran_defer) {
-    (void) pred_ran_defer;
+static void emit_phi_incoming_as_rep(XiCgenCtx *ctx, FILE *out, const XiPhi *phi,
+                                     uint16_t pred_idx) {
     const XiValue *incoming =
         (phi && pred_idx < phi->value.nargs) ? phi->value.args[pred_idx] : NULL;
     if (cg_value_plan_is_aggregate(ctx, &phi->value)) {
@@ -8375,8 +8323,6 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
                             uint16_t pred_idx) {
     if (!target)
         return;
-    const XiBlock *pred = (pred_idx < target->npreds) ? target->preds[pred_idx] : NULL;
-    bool pred_ran_defer = cg_block_has_defer_run_to(pred);
 
     /* PHI edge updates are parallel assignments. Read every incoming value before
      * writing any target phi so loops like (ip, anchor) = (ip + 1, anchor), and
@@ -8393,7 +8339,7 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         fprintf(out, "    ");
         emit_phi_tmp_ref(out, target, phi, pred_idx);
         fprintf(out, " = ");
-        emit_phi_incoming_as_rep(ctx, out, phi, pred_idx, pred_ran_defer);
+        emit_phi_incoming_as_rep(ctx, out, phi, pred_idx);
         fprintf(out, ";\n");
     }
     if (!any)
@@ -8860,7 +8806,7 @@ static const XiValue *cg_block_musttail_call(XiCgenCtx *ctx, const XiFunc *f, co
         !cg_cfn_musttail_abi_compatible(ctx, f, callee->type, call))
         return NULL;
     /* Nothing may run between the tail call and the return under musttail. */
-    if (cg_has_exception_handling(f) || cg_func_has_defer_stmt(f))
+    if (cg_has_exception_handling(f))
         return NULL;
     XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
     if (ret_rep == XR_REP_VOID || cg_func_return_abi_is_aggregate(ctx, f))
@@ -8922,7 +8868,6 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
             }
             emit_block_terminator_source_line(ctx, out, blk);
             emit_class_field_cache_flush(ctx, out);
-            emit_deferred_calls(ctx, out, f, prefix);
             if (emit_class_native_ref_stack_return_stmt(ctx, out, f, blk, prefix))
                 break;
             if (emit_class_native_return_stmt(ctx, out, f, blk))
@@ -9422,6 +9367,23 @@ static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
     }
 }
 
+static bool cg_value_is_cleanup_live_local_source(const XiFunc *f, const XiValue *value) {
+    if (!f || !value)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *place = blk->values[vi];
+            if (place && place->op == XI_LOCAL_ADDR && place->nargs == 1 &&
+                place->args[0] == value && (place->aux_int & XI_LOCAL_ADDR_AUX_CLEANUP_LIVE) != 0)
+                return true;
+        }
+    }
+    return false;
+}
+
 /* Collect all values and phis to declare at function top.
  * All synchronous functions pre-declare SSA values so the generated translation
  * unit is valid in both C and C++: arbitrary CFG edges may not jump over a C++
@@ -9449,7 +9411,9 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 ctx->phi_repr[phi->value.id] != phi->value.id)
                 continue;
             XrRep rep = cg_value_plan_storage_rep(ctx, &phi->value);
-            fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, &phi->value));
+            fprintf(out, "    %s%s ",
+                    cg_value_is_cleanup_live_local_source(f, &phi->value) ? "volatile " : "",
+                    local_ctype_str_ctx(ctx, f, &phi->value));
             emit_phi_ref(ctx, out, phi);
             if (!needs_defensive_init) {
                 fprintf(out, ";\n");
@@ -9507,7 +9471,9 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                  * a null pointer, while its plan rep is tagged and would emit
                  * XR_NULL_VAL into a pointer. */
                 XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
-                fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+                fprintf(out, "    %s%s ",
+                        cg_value_is_cleanup_live_local_source(f, v) ? "volatile " : "",
+                        local_ctype_str_ctx(ctx, f, v));
                 emit_vref(out, v);
                 if (!needs_defensive_init) {
                     fprintf(out, ";\n");
@@ -9681,6 +9647,10 @@ static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
         "xrt_mem_move",
         "xrt_mem_set",
         "xrt_mem_compare",
+        /* Static cleanup depth is header-inline thread-local state, not a
+         * runtime dispatch or dynamic registration stack. */
+        "xrt_cleanup_enter",
+        "xrt_cleanup_leave",
     };
     if (n < 4 || memcmp(s, "xrt_", 4) != 0)
         return true; /* not an xrt_ helper: never R1 */
@@ -12856,13 +12826,6 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     if (!has_cl && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
         fprintf(out, "    (void)_cl;\n");
 
-    /* Function-scoped defer: own a stack-local scope and link it onto the global
-     * defer chain at entry. Defers (lowered to zero-arg closures) are pushed
-     * here and run LIFO at every exit (emit_deferred_calls -> xrt_defer_leave)
-     * or during a panic unwind (xrt_throw_exc -> xrt_defer_unwind_to). */
-    if (cg_func_has_defer_stmt(f))
-        fprintf(out, "    XrtDeferScope _xrt_ds; xrt_defer_enter(&_xrt_ds);\n");
-
     if (cg_func_emits_sync_backedge_heartbeat(ctx, f))
         fprintf(out, "    uint32_t _xr_aot_sync_backedge_count = 0;\n");
 
@@ -13185,7 +13148,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, "%svoid *", cg_linkage(ctx));
         emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
         fprintf(out, "(");
-        emit_aot_frame_new_params(out, f, needs_sync_go);
+        emit_aot_frame_new_params(out, f, needs_sync_go, true);
         fprintf(out, ");\n");
         if (needs_aot_coro) {
             fprintf(out, "%sbool ", cg_linkage(ctx));
@@ -13193,7 +13156,7 @@ static void emit_one_forward_decl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
             fprintf(out, "(void *raw_frame");
             if (cg_func_frame_needs_cl(f) || cg_coro_param_count(f) > 0)
                 fprintf(out, ", ");
-            emit_aot_frame_new_params(out, f, false);
+            emit_aot_frame_new_params(out, f, false, false);
             fprintf(out, ");\n");
         }
         fprintf(out, "%sXrAotResult ", cg_linkage(ctx));

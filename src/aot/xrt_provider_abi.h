@@ -104,6 +104,7 @@ static inline XrSlotRef xr_slot_aot_frame_offset(void *base, uint32_t offset, ui
 typedef XrAotResult (*XrAotResumeFn)(void *frame, const XrAotContext *ctx);
 typedef void (*XrAotFrameTraceFn)(void *frame, void *visitor);
 typedef void (*XrAotFrameReleaseFn)(void *frame, struct XrCoroHeap *heap);
+typedef void (*XrAotFrameRunCleanupFn)(void *frame, const XrAotContext *ctx);
 
 typedef struct XrAotCoroDesc {
     const char *name;
@@ -113,6 +114,7 @@ typedef struct XrAotCoroDesc {
     XrAotResumeFn resume;
     XrAotFrameTraceFn trace_roots;
     XrAotFrameReleaseFn release_frame;
+    XrAotFrameRunCleanupFn run_pending_cleanup;
 } XrAotCoroDesc;
 
 typedef struct XrAotSpawnResult {

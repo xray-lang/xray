@@ -3687,7 +3687,7 @@ static bool cg_class_native_receiver_use_is_structural(const XiValue *u, uint16_
 /* Scan the whole function for a use of the native receiver that reads it as a
  * first-class value. Identity aliases (copy/move/box/unbox) of the receiver are
  * transparent to receiver detection, so this catches `return this`,
- * `defer { this.x }` closure capture, passing `this` as an argument, etc. Used
+ * `defer { this.x }` cleanup reads, passing `this` as an argument, etc. Used
  * to decide whether the receiver's `v0 = p0` alias must be materialized instead
  * of elided. */
 static bool cg_class_native_receiver_escapes_as_value(const XiCgenCtx *ctx, const XiFunc *f) {

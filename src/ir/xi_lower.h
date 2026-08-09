@@ -96,13 +96,37 @@ typedef struct XiLoopTarget {
     const char *label;
     XiBlock *break_target;
     XiBlock *continue_target;
-    int defer_scope_depth;
+    int cleanup_scope_depth;
     struct XiLoopTarget *prev;
 } XiLoopTarget;
 
-typedef struct XiDeferScope {
-    XiValue *mark;
-} XiDeferScope;
+typedef struct XiCleanupPanicEdge {
+    XiBlock *block;
+    XiValue *try_op;
+    uint16_t frontier_count;
+} XiCleanupPanicEdge;
+
+typedef enum XiCleanupSiteKind {
+    XI_CLEANUP_SITE_BLOCK = 0,
+    XI_CLEANUP_SITE_PARALLEL_PLAN_END = 1,
+} XiCleanupSiteKind;
+
+typedef struct XiCleanupSite {
+    struct AstNode *statement;
+    XiValue *value;
+    uint8_t kind;
+    uint32_t line;
+} XiCleanupSite;
+
+typedef struct XiCleanupScope {
+    XiCleanupSite *sites;
+    uint16_t site_count;
+    uint16_t site_capacity;
+    XiCleanupPanicEdge *panic_edges;
+    uint16_t panic_edge_count;
+    uint16_t panic_edge_capacity;
+    XiValue *active_try;
+} XiCleanupScope;
 
 /* ========== Lowering Context ========== */
 
@@ -137,12 +161,22 @@ typedef struct XiLower {
     XiBlock *continue_target;
     XiLoopTarget *loop_targets;
 
-    /* Lexical defer scopes.  A scope receives a mark lazily when the first
-     * `defer` owned by that block is lowered; scopes with no direct defer stay
-     * free at runtime. */
-#define XI_MAX_DEFER_SCOPE_NESTING 256
-    XiDeferScope defer_scopes[XI_MAX_DEFER_SCOPE_NESTING];
-    int defer_scope_depth;
+    /* Lexical cleanup scopes. Cleanup bodies are ordinary same-frame CFG.
+     * Each registration interval owns a hidden panic handler whose catch edge
+     * runs the statically known LIFO frontier and rethrows. */
+#define XI_MAX_CLEANUP_SCOPE_NESTING 256
+    XiCleanupScope cleanup_scopes[XI_MAX_CLEANUP_SCOPE_NESTING];
+    int cleanup_scope_depth;
+    int cleanup_body_depth;
+    int cleanup_body_try_base_depth;
+
+    /* Analyzer symbol IDs whose lexical storage is read by a cleanup body.
+     * The pre-scan is completed before parameters and declarations are
+     * lowered, so their stable same-frame places dominate every registration,
+     * loop exit, and cold panic edge that can read them. */
+    uint32_t *cleanup_place_symbols;
+    int cleanup_place_symbol_count;
+    int cleanup_place_symbol_cap;
 
     /* Cached singleton types (obtained once from isolate) */
     struct XrType *type_int;
@@ -212,7 +246,7 @@ typedef struct XiLower {
      * throw inside try { } writes pending_error and jumps here. */
 #define XI_MAX_TRY_NESTING 32
     struct XiBlock *catch_targets[XI_MAX_TRY_NESTING];
-    int catch_defer_depths[XI_MAX_TRY_NESTING];
+    int catch_cleanup_depths[XI_MAX_TRY_NESTING];
 
     /* True when cur_block's last instruction is XI_ERR_RETURN but the
      * block is kept alive for SSA predecessor edges (try_depth > 0).

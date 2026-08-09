@@ -318,7 +318,7 @@ static int count_unresolved_vars(AstNode *node) {
             break;
         }
         case AST_DEFER_STMT:
-            count += count_unresolved_vars(node->as.defer_stmt.expr);
+            count += count_unresolved_vars(node->as.defer_stmt.body);
             break;
         case AST_SCOPE_BLOCK:
             count += count_unresolved_vars(node->as.scope_block.body);

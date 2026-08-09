@@ -1967,6 +1967,39 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+(define-xi-op xi.cleanup.enter
+  :class cleanup
+  :arity 0
+  :result-kind void
+  :result-ownership none
+  :own-use consume
+  :effects (side-effect)
+  :requires ()
+  :observable (cleanup-boundary)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.cleanup.leave
+  :class cleanup
+  :arity 0
+  :result-kind void
+  :result-ownership none
+  :own-use consume
+  :effects (side-effect)
+  :requires ()
+  :observable (cleanup-boundary)
+  :targets (vm-bytecode aot-c aot-verify))
+
+(define-xi-op xi.cleanup.err.check
+  :class cleanup
+  :arity 0
+  :result-kind void
+  :result-ownership none
+  :own-use consume
+  :effects (side-effect)
+  :requires ()
+  :observable (cleanup-failure)
+  :targets (vm-bytecode aot-c aot-verify))
+
 (define-xi-op xi.iter.new
   :class iterator
   :arity 1
@@ -1999,39 +2032,6 @@
   :observable ()
   :targets (vm-bytecode aot-verify)
   :backend-rewrite (builtin "iter_valid"))
-
-(define-xi-op xi.defer
-  :class side-effect
-  :arity variadic
-  :result-ownership none
-  :own-use consume
-  :effects (side-effect)
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify))
-
-(define-xi-op xi.defer.mark
-  :class side-effect
-  :arity 0
-  :result-ownership none
-  :own-use consume
-  :tbaa-group top
-  :effects (side-effect memory-read)
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify))
-
-(define-xi-op xi.defer.run.to
-  :class side-effect
-  :arity 1
-  :result-kind void
-  :result-ownership none
-  :own-use borrow
-  :tbaa-group top
-  :effects (side-effect memory-read memory-write)
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify))
 
 (define-xi-op xi.chan.new
   :class coroutine

@@ -56,8 +56,8 @@ fn cleanup(name: string) {
 
 @test
 fn test_defer() {
-    defer cleanup("resource1")
-    defer cleanup("resource2")
+    defer { cleanup("resource1") }
+    defer { cleanup("resource2") }
     print("working")
     // 函数结束时按 LIFO 执行 defer
 }

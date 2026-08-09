@@ -72,16 +72,6 @@ static void vm_machine_ctx_free(XrVMContext *ctx) {
         ctx->struct_ret_arena_cap = 0;
     }
     xr_vm_ctx_free_ic_tables(ctx);
-    if (ctx->defer_stack) {
-        xr_free(ctx->defer_stack);
-        ctx->defer_stack = NULL;
-    }
-    if (ctx->defer_frame_marks) {
-        xr_free(ctx->defer_frame_marks);
-        ctx->defer_frame_marks = NULL;
-    }
-    ctx->defer_count = 0;
-    ctx->defer_capacity = 0;
 }
 
 static void vm_machine_storage_destroy(void *ptr) {

@@ -25,6 +25,7 @@
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xanalyzer.h"
+#include "../frontend/analyzer/xanalyzer_ast_visitor.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
@@ -120,7 +121,7 @@ static void xi_lower_loop_push(XiLower *l, XiLoopTarget *target, const char *lab
     target->label = label;
     target->break_target = break_target;
     target->continue_target = continue_target;
-    target->defer_scope_depth = l->defer_scope_depth;
+    target->cleanup_scope_depth = l->cleanup_scope_depth;
     target->prev = l->loop_targets;
     l->loop_targets = target;
     l->break_target = break_target;
@@ -218,88 +219,261 @@ static int stmt_print_slot_hint_for_value(XiValue *v) {
     return 0;
 }
 
-static void lower_emit_defer_run_to_mark(XiLower *l, XiValue *mark, int line) {
-    if (!l || !l->cur_block || !mark)
-        return;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER_RUN_TO, l->type_unit, 1);
-    if (!v)
-        return;
-    v->args[0] = mark;
-    v->flags |= XI_FLAG_SIDE_EFFECT;
-    v->line = (uint32_t) line;
+static bool lower_cleanup_discard_empty_panic_interval(XiLower *l, XiCleanupScope *scope) {
+    if (!l || !scope || !scope->active_try || !scope->active_try->block || !l->cur_block)
+        return false;
+    XiBlock *try_block = scope->active_try->block;
+    if (try_block->succs[0] != l->cur_block || try_block->succs[1] || l->cur_block->nvalues != 0 ||
+        try_block->nvalues == 0 || try_block->values[try_block->nvalues - 1] != scope->active_try)
+        return false;
+    if (scope->panic_edge_count == 0 ||
+        scope->panic_edges[scope->panic_edge_count - 1].try_op != scope->active_try)
+        return false;
+
+    /* No instruction can panic between registration and consumption. Keep
+     * the static cleanup ladder, but erase the empty handler interval so a
+     * loop with a tail-position cleanup does not execute setjmp per iteration. */
+    try_block->nvalues--;
+    scope->panic_edge_count--;
+    scope->active_try = NULL;
+    return true;
 }
 
-XR_FUNC void xi_lower_defer_scope_push(XiLower *l) {
-    XR_DCHECK(l != NULL, "xi_lower_defer_scope_push: NULL lowerer");
-    XR_CHECK(l->defer_scope_depth < XI_MAX_DEFER_SCOPE_NESTING,
-             "defer scope nesting limit exceeded");
-    l->defer_scopes[l->defer_scope_depth].mark = NULL;
-    l->defer_scope_depth++;
-}
-
-XR_FUNC void xi_lower_defer_scope_pop_normal(XiLower *l, int line) {
-    XR_DCHECK(l != NULL, "xi_lower_defer_scope_pop_normal: NULL lowerer");
-    if (l->defer_scope_depth <= 0)
+static void lower_cleanup_emit_end_try(XiLower *l, XiCleanupScope *scope, int line) {
+    if (!l || !scope || !l->cur_block || !scope->active_try)
         return;
-    XiDeferScope *scope = &l->defer_scopes[l->defer_scope_depth - 1];
-    if (l->cur_block && scope->mark)
-        lower_emit_defer_run_to_mark(l, scope->mark, line);
-    l->defer_scope_depth--;
+    if (lower_cleanup_discard_empty_panic_interval(l, scope))
+        return;
+    XiValue *end = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
+    if (!end)
+        return;
+    end->aux = (void *) scope->active_try;
+    end->flags |= XI_FLAG_SIDE_EFFECT;
+    end->line = (uint32_t) line;
 }
 
-XR_FUNC void xi_lower_defer_run_to_depth(XiLower *l, int target_depth, int line) {
-    XR_DCHECK(l != NULL, "xi_lower_defer_run_to_depth: NULL lowerer");
+static void lower_cleanup_frontier(XiLower *l, XiCleanupScope *scope, uint16_t count) {
+    if (!l || !scope || !l->cur_block)
+        return;
+    if (count > scope->site_count)
+        count = scope->site_count;
+    for (uint16_t i = count; i > 0 && l->cur_block; i--) {
+        XiCleanupSite *site = &scope->sites[i - 1];
+        XiValue *enter = xi_value_new(l->func, l->cur_block, XI_CLEANUP_ENTER, l->type_unit, 0);
+        if (!enter) {
+            l->had_error = true;
+            return;
+        }
+        enter->flags |= XI_FLAG_SIDE_EFFECT;
+        enter->line = site->line;
+        int saved_try_base = l->cleanup_body_try_base_depth;
+        if (l->cleanup_body_depth == 0)
+            l->cleanup_body_try_base_depth = l->try_depth;
+        l->cleanup_body_depth++;
+        if (site->kind == XI_CLEANUP_SITE_BLOCK && site->statement)
+            xi_lower_stmt(l, site->statement->as.defer_stmt.body);
+        else if (site->kind == XI_CLEANUP_SITE_PARALLEL_PLAN_END && site->value)
+            (void) xi_lower_parallel_plan_lifecycle_call(l, NULL, site->value, "_end");
+        l->cleanup_body_depth--;
+        l->cleanup_body_try_base_depth = saved_try_base;
+        if (l->cur_block) {
+            XiValue *leave = xi_value_new(l->func, l->cur_block, XI_CLEANUP_LEAVE, l->type_unit, 0);
+            if (!leave) {
+                l->had_error = true;
+                return;
+            }
+            leave->flags |= XI_FLAG_SIDE_EFFECT;
+            leave->line = site->line;
+        }
+    }
+}
+
+static void lower_cleanup_compile_panic_edges(XiLower *l, XiCleanupScope *scope) {
+    if (!l || !scope)
+        return;
+    XiBlock *saved_block = l->cur_block;
+    bool saved_dead_after_throw = l->dead_after_throw;
+    for (uint16_t i = 0; i < scope->panic_edge_count; i++) {
+        XiCleanupPanicEdge *edge = &scope->panic_edges[i];
+        if (!edge->block || !edge->try_op)
+            continue;
+        if (edge->block->npreds == 0 && edge->try_op->block)
+            xi_block_add_pred(edge->block, edge->try_op->block);
+        xi_lower_braun_seal(l, edge->block);
+        l->cur_block = edge->block;
+        l->dead_after_throw = false;
+
+        XiValue *caught =
+            xi_value_new(l->func, l->cur_block, XI_CATCH,
+                         xi_lower_type_or_any(l, NULL, "cleanup panic propagation",
+                                              edge->try_op ? (int) edge->try_op->line : 0),
+                         0);
+        if (!caught)
+            continue;
+        caught->aux = (void *) edge->try_op;
+        caught->flags |= XI_FLAG_SIDE_EFFECT;
+        caught->line = edge->try_op->line;
+
+        lower_cleanup_frontier(l, scope, edge->frontier_count);
+        if (l->cur_block) {
+            XiValue *rethrow = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
+            if (rethrow) {
+                rethrow->args[0] = caught;
+                rethrow->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+                rethrow->line = caught->line;
+            }
+            l->cur_block->kind = XI_BLOCK_UNREACHABLE;
+            l->cur_block->control = caught;
+            l->cur_block = NULL;
+        }
+    }
+    l->cur_block = saved_block;
+    l->dead_after_throw = saved_dead_after_throw;
+}
+
+XR_FUNC void xi_lower_cleanup_scope_push(XiLower *l) {
+    XR_DCHECK(l != NULL, "xi_lower_cleanup_scope_push: NULL lowerer");
+    XR_CHECK(l->cleanup_scope_depth < XI_MAX_CLEANUP_SCOPE_NESTING,
+             "cleanup scope nesting limit exceeded");
+    memset(&l->cleanup_scopes[l->cleanup_scope_depth], 0, sizeof(XiCleanupScope));
+    l->cleanup_scope_depth++;
+}
+
+XR_FUNC void xi_lower_cleanup_scope_pop_normal(XiLower *l, int line) {
+    XR_DCHECK(l != NULL, "xi_lower_cleanup_scope_pop_normal: NULL lowerer");
+    if (l->cleanup_scope_depth <= 0)
+        return;
+    XiCleanupScope *scope = &l->cleanup_scopes[l->cleanup_scope_depth - 1];
+    if (l->cur_block && scope->active_try) {
+        lower_cleanup_emit_end_try(l, scope, line);
+        lower_cleanup_frontier(l, scope, scope->site_count);
+    }
+    lower_cleanup_compile_panic_edges(l, scope);
+    xr_free(scope->sites);
+    xr_free(scope->panic_edges);
+    memset(scope, 0, sizeof(*scope));
+    l->cleanup_scope_depth--;
+}
+
+XR_FUNC void xi_lower_cleanup_run_to_depth(XiLower *l, int target_depth, int line) {
+    XR_DCHECK(l != NULL, "xi_lower_cleanup_run_to_depth: NULL lowerer");
     if (!l->cur_block)
         return;
     if (target_depth < 0)
         target_depth = 0;
-    if (target_depth > l->defer_scope_depth)
-        target_depth = l->defer_scope_depth;
-    for (int i = l->defer_scope_depth - 1; i >= target_depth; i--) {
-        if (l->defer_scopes[i].mark)
-            lower_emit_defer_run_to_mark(l, l->defer_scopes[i].mark, line);
+    if (target_depth > l->cleanup_scope_depth)
+        target_depth = l->cleanup_scope_depth;
+    for (int i = l->cleanup_scope_depth - 1; i >= target_depth && l->cur_block; i--) {
+        XiCleanupScope *scope = &l->cleanup_scopes[i];
+        if (!scope->active_try)
+            continue;
+        lower_cleanup_emit_end_try(l, scope, line);
+        lower_cleanup_frontier(l, scope, scope->site_count);
     }
 }
 
-XR_FUNC bool xi_lower_defer_has_active_mark(XiLower *l) {
+XR_FUNC bool xi_lower_cleanup_has_active_site(XiLower *l) {
     if (!l)
         return false;
-    for (int i = l->defer_scope_depth - 1; i >= 0; i--) {
-        if (l->defer_scopes[i].mark)
+    for (int i = l->cleanup_scope_depth - 1; i >= 0; i--) {
+        if (l->cleanup_scopes[i].active_try)
             return true;
     }
     return false;
 }
 
-static XiValue *lower_defer_scope_ensure_mark(XiLower *l, int line) {
-    if (l->defer_scope_depth <= 0)
-        xi_lower_defer_scope_push(l);
-    XiDeferScope *scope = &l->defer_scopes[l->defer_scope_depth - 1];
-    if (scope->mark)
-        return scope->mark;
-    XiValue *mark = xi_value_new(l->func, l->cur_block, XI_DEFER_MARK, l->type_int, 0);
-    if (!mark)
+static XiCleanupSite *lower_cleanup_scope_append_site(XiCleanupScope *scope) {
+    if (!scope || scope->site_count == UINT16_MAX)
         return NULL;
-    mark->flags |= XI_FLAG_SIDE_EFFECT;
-    mark->line = (uint32_t) line;
-    scope->mark = mark;
-    return mark;
+    if (scope->site_count >= scope->site_capacity) {
+        uint16_t capacity = scope->site_capacity ? (uint16_t) (scope->site_capacity * 2u) : 4u;
+        if (capacity < scope->site_capacity)
+            capacity = UINT16_MAX;
+        XiCleanupSite *grown =
+            (XiCleanupSite *) xr_realloc(scope->sites, (size_t) capacity * sizeof(XiCleanupSite));
+        if (!grown)
+            return NULL;
+        scope->sites = grown;
+        scope->site_capacity = capacity;
+    }
+    XiCleanupSite *site = &scope->sites[scope->site_count++];
+    memset(site, 0, sizeof(*site));
+    return site;
 }
 
-XR_FUNC bool xi_lower_defer_register_closure(XiLower *l, XiValue *callee, int line) {
-    if (!l || !l->cur_block || !callee)
+static bool lower_cleanup_scope_append_block(XiCleanupScope *scope, AstNode *statement) {
+    XiCleanupSite *site = lower_cleanup_scope_append_site(scope);
+    if (!site || !statement)
         return false;
-
-    if (!lower_defer_scope_ensure_mark(l, line))
-        return false;
-
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_DEFER, l->type_unit, 1);
-    if (!v)
-        return false;
-    v->args[0] = callee;
-    v->flags |= XI_FLAG_SIDE_EFFECT;
-    v->line = (uint32_t) line;
+    site->statement = statement;
+    site->kind = XI_CLEANUP_SITE_BLOCK;
+    site->line = (uint32_t) statement->line;
     return true;
+}
+
+static bool lower_cleanup_scope_append_panic_edge(XiCleanupScope *scope, XiBlock *block,
+                                                  XiValue *try_op) {
+    if (!scope || !block || !try_op || scope->panic_edge_count == UINT16_MAX)
+        return false;
+    if (scope->panic_edge_count >= scope->panic_edge_capacity) {
+        uint16_t capacity =
+            scope->panic_edge_capacity ? (uint16_t) (scope->panic_edge_capacity * 2u) : 4u;
+        if (capacity < scope->panic_edge_capacity)
+            capacity = UINT16_MAX;
+        XiCleanupPanicEdge *grown = (XiCleanupPanicEdge *) xr_realloc(
+            scope->panic_edges, (size_t) capacity * sizeof(XiCleanupPanicEdge));
+        if (!grown)
+            return false;
+        scope->panic_edges = grown;
+        scope->panic_edge_capacity = capacity;
+    }
+    XiCleanupPanicEdge *edge = &scope->panic_edges[scope->panic_edge_count++];
+    edge->block = block;
+    edge->try_op = try_op;
+    edge->frontier_count = scope->site_count;
+    return true;
+}
+
+static bool lower_cleanup_open_panic_interval(XiLower *l, XiCleanupScope *scope, int line) {
+    if (!l || !scope || !l->cur_block)
+        return false;
+    XiBlock *registration_block = l->cur_block;
+    XiBlock *panic_block = xi_block_new(l->func);
+    XiBlock *continuation = xi_block_new(l->func);
+    XiValue *try_op = xi_value_new(l->func, registration_block, XI_TRY, l->type_unit, 0);
+    if (!panic_block || !continuation || !try_op)
+        return false;
+    try_op->aux = (void *) panic_block;
+    try_op->aux_int = XI_TRY_AUX_STATIC_CLEANUP;
+    try_op->flags |= XI_FLAG_SIDE_EFFECT;
+    try_op->line = (uint32_t) line;
+    /* End the registration block at the exact program point covered by this
+     * hidden panic edge. The verifier and ownership passes can then seed the
+     * cold cleanup block from the pre-body state instead of from normal-path
+     * releases that occur later in the same source block. */
+    xi_block_set_jump(registration_block, continuation);
+    xi_lower_braun_seal(l, continuation);
+    l->cur_block = continuation;
+    scope->active_try = try_op;
+    return lower_cleanup_scope_append_panic_edge(scope, panic_block, try_op);
+}
+
+XR_FUNC bool xi_lower_cleanup_register_parallel_end(XiLower *l, AstNode *node, XiValue *plan) {
+    if (!l || !l->cur_block || !plan)
+        return false;
+    if (l->cleanup_scope_depth <= 0)
+        xi_lower_cleanup_scope_push(l);
+    XiCleanupScope *scope = &l->cleanup_scopes[l->cleanup_scope_depth - 1];
+    int line = node ? node->line : 0;
+    if (scope->active_try)
+        lower_cleanup_emit_end_try(l, scope, line);
+    XiCleanupSite *site = lower_cleanup_scope_append_site(scope);
+    if (!site)
+        return false;
+    site->kind = XI_CLEANUP_SITE_PARALLEL_PLAN_END;
+    site->value = plan;
+    site->line = (uint32_t) line;
+    return lower_cleanup_open_panic_interval(l, scope, line);
 }
 
 static bool stmt_value_is_fresh_value_struct(XiValue *v) {
@@ -514,8 +688,11 @@ static bool stmt_function_may_suspend(XiLower *l) {
 
 static bool stmt_decl_prefers_stable_value_place(XiLower *l, AstNode *node, int var_id,
                                                  struct XrType *type) {
-    if (!l || !l->analyzer || !node || node->type != AST_VAR_DECL || var_id < 0 ||
-        var_id >= l->var_count || l->vars[var_id].captured_by_child)
+    if (!l || !l->analyzer || !node || var_id < 0 || var_id >= l->var_count)
+        return false;
+    if (xi_lower_cleanup_symbol_needs_place(l, node->as.var_decl.symbol_id))
+        return !(l->is_program && l->shared_map && l->shared_map[var_id] >= 0);
+    if (node->type != AST_VAR_DECL || l->vars[var_id].captured_by_child)
         return false;
     /* Coroutine locals that survive suspension must ultimately live in the
      * heap frame.  XI_LOCAL_ADDR currently denotes ordinary function-local
@@ -539,6 +716,8 @@ static bool stmt_decl_prefers_stable_value_place(XiLower *l, AstNode *node, int 
 static bool stmt_bind_stable_value_place(XiLower *l, AstNode *node, int var_id, XiValue *init_val) {
     if (!stmt_decl_prefers_stable_value_place(l, node, var_id, l->vars[var_id].type))
         return true;
+    if (xi_lower_cleanup_symbol_needs_place(l, node->as.var_decl.symbol_id))
+        return xi_lower_cleanup_bind_place(l, var_id, init_val, node->line);
     XiValue *place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR, l->vars[var_id].type, 1);
     if (!place)
         return false;
@@ -2542,11 +2721,14 @@ XR_FUNC void xi_lower_reprop_error(XiLower *l, XiValue *val, AstNode *node) {
             set->flags |= XI_FLAG_SIDE_EFFECT;
             set->line = (uint32_t) node->line;
         }
-        xi_lower_defer_run_to_depth(l, l->catch_defer_depths[l->try_depth - 1], node->line);
+        xi_lower_cleanup_run_to_depth(l, l->catch_cleanup_depths[l->try_depth - 1], node->line);
         XiBlock *catch_blk = l->catch_targets[l->try_depth - 1];
         xi_block_set_jump(l->cur_block, catch_blk);
         l->cur_block = NULL;
     } else {
+        xi_lower_cleanup_run_to_depth(l, 0, node->line);
+        if (!l->cur_block)
+            return;
         XiValue *reprop = xi_value_new(l->func, l->cur_block, XI_ERR_RETURN, l->type_unit, 1);
         if (reprop) {
             reprop->args[0] = val;
@@ -2725,7 +2907,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
         try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
         if (try_op) {
             try_op->aux = (void *) panic_blk;
-            try_op->aux_int = -1;
+            try_op->aux_int = l->cleanup_body_depth > 0 ? XI_TRY_AUX_CLEANUP_LOCAL_HANDLER : -1;
             try_op->flags |= XI_FLAG_SIDE_EFFECT;
             try_op->line = (uint32_t) node->line;
         }
@@ -2739,7 +2921,7 @@ static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
      * xi_lower_insert_err_check, which consult try_depth/catch_targets). */
     if (has_err) {
         l->catch_targets[l->try_depth] = catch_blk;
-        l->catch_defer_depths[l->try_depth] = l->defer_scope_depth;
+        l->catch_cleanup_depths[l->try_depth] = l->cleanup_scope_depth;
         l->try_depth++;
     }
     l->cur_block = try_blk;
@@ -2839,23 +3021,249 @@ XR_FUNC void xi_lower_try_catch(XiLower *l, AstNode *node) {
 
 static void stmt_mark_storage_allocs_in_range(XiBlock *block, uint32_t begin, uint8_t storage_mode);
 
+typedef struct XiCleanupPlaceScan {
+    XiLower *lower;
+    XaAstVisitor visitor;
+    AstNode *root;
+    XaScope *body_scope;
+} XiCleanupPlaceScan;
+
+typedef struct XiCleanupPlacePlanScan {
+    XiLower *lower;
+    XaAstVisitor visitor;
+    AstNode *root;
+} XiCleanupPlacePlanScan;
+
+static bool cleanup_scope_is_within(XaScope *scope, XaScope *ancestor) {
+    for (XaScope *current = scope; current; current = current->parent) {
+        if (current == ancestor)
+            return true;
+    }
+    return false;
+}
+
+static bool lower_cleanup_place_symbol_append(XiLower *l, uint32_t symbol_id) {
+    if (!l || symbol_id == 0)
+        return true;
+    for (int i = 0; i < l->cleanup_place_symbol_count; i++) {
+        if (l->cleanup_place_symbols[i] == symbol_id)
+            return true;
+    }
+    if (l->cleanup_place_symbol_count >= l->cleanup_place_symbol_cap) {
+        int capacity = l->cleanup_place_symbol_cap ? l->cleanup_place_symbol_cap * 2 : 8;
+        uint32_t *grown =
+            (uint32_t *) xr_realloc(l->cleanup_place_symbols, (size_t) capacity * sizeof(uint32_t));
+        if (!grown)
+            return false;
+        l->cleanup_place_symbols = grown;
+        l->cleanup_place_symbol_cap = capacity;
+    }
+    l->cleanup_place_symbols[l->cleanup_place_symbol_count++] = symbol_id;
+    return true;
+}
+
+XR_FUNC bool xi_lower_cleanup_symbol_needs_place(const XiLower *l, uint32_t symbol_id) {
+    if (!l || symbol_id == 0)
+        return false;
+    for (int i = 0; i < l->cleanup_place_symbol_count; i++) {
+        if (l->cleanup_place_symbols[i] == symbol_id)
+            return true;
+    }
+    return false;
+}
+
+XR_FUNC bool xi_lower_cleanup_bind_place(XiLower *l, int var_id, XiValue *initial_value, int line) {
+    if (!l || var_id < 0 || var_id >= l->var_count || !initial_value)
+        return false;
+    if (l->vars[var_id].call_place ||
+        !xi_lower_cleanup_symbol_needs_place(l, l->vars[var_id].symbol_id))
+        return true;
+    if (l->is_program && l->shared_map && l->shared_map[var_id] >= 0)
+        return true;
+    XiValue *place =
+        xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR,
+                     l->vars[var_id].type ? l->vars[var_id].type : initial_value->type, 1);
+    if (!place)
+        return false;
+    place->args[0] = initial_value;
+    place->aux_int |= XI_LOCAL_ADDR_AUX_CLEANUP_LIVE;
+    place->line = (uint32_t) line;
+    l->vars[var_id].call_place = place;
+    l->vars[var_id].place_mode = XR_PARAM_REF;
+    return true;
+}
+
+static void lower_cleanup_place_plan_ref(AstNode *node, void *user_data) {
+    XiCleanupPlaceScan *scan = (XiCleanupPlaceScan *) user_data;
+    if (!scan || !node)
+        return;
+    if (node != scan->root && (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR ||
+                               node->type == AST_METHOD_DECL)) {
+        scan->visitor.skip_children = true;
+        return;
+    }
+    uint32_t symbol_id = 0;
+    switch (node->type) {
+        case AST_VARIABLE:
+            symbol_id = node->as.variable.symbol_id;
+            break;
+        case AST_ASSIGNMENT:
+            symbol_id = node->as.assignment.symbol_id;
+            break;
+        case AST_COMPOUND_ASSIGNMENT:
+            symbol_id = node->as.compound_assignment.symbol_id;
+            break;
+        case AST_INC:
+            symbol_id = node->as.inc.symbol_id;
+            break;
+        case AST_DEC:
+            symbol_id = node->as.dec.symbol_id;
+            break;
+        default:
+            return;
+    }
+    XaSymbol *symbol =
+        symbol_id ? xa_scope_lookup_by_id(scan->lower->analyzer->global_scope, symbol_id) : NULL;
+    if (!symbol || cleanup_scope_is_within(symbol->scope, scan->body_scope))
+        return;
+    if (!lower_cleanup_place_symbol_append(scan->lower, symbol_id))
+        scan->lower->had_error = true;
+}
+
+static void lower_cleanup_place_plan_pre(AstNode *node, void *user_data) {
+    XiCleanupPlacePlanScan *scan = (XiCleanupPlacePlanScan *) user_data;
+    if (!scan || !node)
+        return;
+    if (node != scan->root && (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR ||
+                               node->type == AST_METHOD_DECL)) {
+        scan->visitor.skip_children = true;
+        return;
+    }
+    if (node->type != AST_DEFER_STMT || !node->as.defer_stmt.body)
+        return;
+    XiCleanupPlaceScan refs;
+    memset(&refs, 0, sizeof(refs));
+    refs.lower = scan->lower;
+    refs.root = node->as.defer_stmt.body;
+    refs.body_scope = xa_scope_find_by_node(scan->lower->analyzer->global_scope, refs.root);
+    refs.visitor.visit_pre = lower_cleanup_place_plan_ref;
+    refs.visitor.user_ctx = &refs;
+    xa_ast_visit(refs.root, &refs.visitor);
+}
+
+XR_FUNC void xi_lower_prepare_cleanup_places(XiLower *l, AstNode *root) {
+    if (!l || !root || !l->analyzer)
+        return;
+    XiCleanupPlacePlanScan scan;
+    memset(&scan, 0, sizeof(scan));
+    scan.lower = l;
+    scan.root = root;
+    scan.visitor.visit_pre = lower_cleanup_place_plan_pre;
+    scan.visitor.user_ctx = &scan;
+    xa_ast_visit(root, &scan.visitor);
+}
+
+static void lower_cleanup_promote_symbol(XiCleanupPlaceScan *scan, uint32_t symbol_id,
+                                         const char *name, int line) {
+    if (!scan || !scan->lower || !scan->lower->cur_block || symbol_id == 0)
+        return;
+    XiLower *l = scan->lower;
+    XaSymbol *symbol = xa_scope_lookup_by_id(l->analyzer->global_scope, symbol_id);
+    if (!symbol || cleanup_scope_is_within(symbol->scope, scan->body_scope))
+        return;
+    int var_id = xi_lower_var_find(l, symbol_id, name);
+    if (var_id < 0 || var_id >= l->var_count || l->vars[var_id].call_place)
+        return;
+    if (l->is_program && l->shared_map && l->shared_map[var_id] >= 0)
+        return;
+    XiValue *current = xi_lower_braun_read(l, var_id, l->cur_block);
+    if (!current)
+        return;
+    XiValue *place = xi_value_new(l->func, l->cur_block, XI_LOCAL_ADDR,
+                                  l->vars[var_id].type ? l->vars[var_id].type : current->type, 1);
+    if (!place) {
+        l->had_error = true;
+        return;
+    }
+    place->args[0] = current;
+    place->aux_int |= XI_LOCAL_ADDR_AUX_CLEANUP_LIVE;
+    place->line = (uint32_t) line;
+    l->vars[var_id].call_place = place;
+    l->vars[var_id].place_mode = XR_PARAM_REF;
+}
+
+static void lower_cleanup_place_scan_pre(AstNode *node, void *user_data) {
+    XiCleanupPlaceScan *scan = (XiCleanupPlaceScan *) user_data;
+    if (!scan || !node)
+        return;
+    if (node != scan->root && (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR ||
+                               node->type == AST_METHOD_DECL)) {
+        scan->visitor.skip_children = true;
+        return;
+    }
+    switch (node->type) {
+        case AST_VARIABLE:
+            lower_cleanup_promote_symbol(scan, node->as.variable.symbol_id, node->as.variable.name,
+                                         node->line);
+            break;
+        case AST_ASSIGNMENT:
+            lower_cleanup_promote_symbol(scan, node->as.assignment.symbol_id,
+                                         node->as.assignment.name, node->line);
+            break;
+        case AST_COMPOUND_ASSIGNMENT:
+            lower_cleanup_promote_symbol(scan, node->as.compound_assignment.symbol_id,
+                                         node->as.compound_assignment.name, node->line);
+            break;
+        case AST_INC:
+            lower_cleanup_promote_symbol(scan, node->as.inc.symbol_id, node->as.inc.name,
+                                         node->line);
+            break;
+        case AST_DEC:
+            lower_cleanup_promote_symbol(scan, node->as.dec.symbol_id, node->as.dec.name,
+                                         node->line);
+            break;
+        default:
+            return;
+    }
+}
+
+static void lower_cleanup_promote_places(XiLower *l, AstNode *body) {
+    if (!l || !body || !l->analyzer)
+        return;
+    XiCleanupPlaceScan scan;
+    memset(&scan, 0, sizeof(scan));
+    scan.lower = l;
+    scan.root = body;
+    scan.body_scope = xa_scope_find_by_node(l->analyzer->global_scope, body);
+    scan.visitor.visit_pre = lower_cleanup_place_scan_pre;
+    scan.visitor.user_ctx = &scan;
+    xa_ast_visit(body, &scan.visitor);
+}
+
 static void lower_defer(XiLower *l, AstNode *node) {
     DeferStmtNode *d = &node->as.defer_stmt;
-    AstNode *expr = d->expr;
-    if (!expr || !l->cur_block)
+    AstNode *body = d->body;
+    if (!body || body->type != AST_BLOCK || !l->cur_block)
         return;
+    if (l->cleanup_scope_depth <= 0)
+        xi_lower_cleanup_scope_push(l);
+    XiCleanupScope *scope = &l->cleanup_scopes[l->cleanup_scope_depth - 1];
 
-    /* The parser desugars every `defer <call>` into a deferred closure (see
-     * defer_desugar_call: arguments are snapshotted eagerly, the call moves into
-     * an anonymous function) and wraps `defer { block }` in an anonymous
-     * function too. A bare `defer <expr>` is a first-class callable. So the
-     * deferred target is always a single closure value; OP_DEFER stores it and
-     * the backend invokes it with no arguments at scope exit. */
-    XiValue *callee = xi_lower_expr(l, expr);
-    if (!callee || !l->cur_block)
+    /* Every external binding read by the cleanup uses stable same-frame
+     * storage. This makes normal and panic copies of the cleanup CFG observe
+     * the latest value without creating an upvalue or cell. */
+    lower_cleanup_promote_places(l, body);
+
+    /* A new registration closes the preceding panic interval and opens one
+     * whose catch edge owns the larger, statically known frontier. */
+    if (scope->active_try)
+        lower_cleanup_emit_end_try(l, scope, node->line);
+    if (!lower_cleanup_scope_append_block(scope, node)) {
+        l->had_error = true;
         return;
-
-    (void) xi_lower_defer_register_closure(l, callee, node->line);
+    }
+    if (!lower_cleanup_open_panic_interval(l, scope, node->line))
+        l->had_error = true;
 }
 
 static void lower_yield_stmt(XiLower *l, AstNode *node) {
@@ -3453,9 +3861,19 @@ static void lower_return(XiLower *l, AstNode *node) {
         return;
     }
 
-    if (xi_lower_defer_has_active_mark(l) && val)
+    if (xi_lower_cleanup_has_active_site(l) && val) {
         val->flags &= (uint16_t) ~XI_FLAG_TAIL;
-    xi_lower_defer_run_to_depth(l, 0, node->line);
+        XiValue *frozen = xi_value_new(l->func, l->cur_block, XI_COPY, val->type, 1);
+        if (!frozen) {
+            l->had_error = true;
+            return;
+        }
+        frozen->args[0] = val;
+        frozen->aux_int = XI_COPY_KIND_CLEANUP_RETURN;
+        frozen->line = (uint32_t) node->line;
+        val = frozen;
+    }
+    xi_lower_cleanup_run_to_depth(l, 0, node->line);
 
     int ret_line = node->line;
     if (ret_line <= 0 && ret->value_count == 1 && ret->values[0])
@@ -3470,12 +3888,9 @@ static void lower_block(XiLower *l, AstNode *node) {
     /* No scope push/pop needed: the analyzer assigns unique symbol_ids
      * to variables in different scopes, so shadowed variables naturally
      * get distinct var_id slots in the Braun SSA. */
-    bool owns_defer_scope = !node->as.block.is_synthetic_defer_capture;
-    if (owns_defer_scope)
-        xi_lower_defer_scope_push(l);
+    xi_lower_cleanup_scope_push(l);
     lower_stmts(l, node->as.block.statements, node->as.block.count);
-    if (owns_defer_scope)
-        xi_lower_defer_scope_pop_normal(l, node->line);
+    xi_lower_cleanup_scope_pop_normal(l, node->line);
 }
 
 static void lower_if(XiLower *l, AstNode *node) {
@@ -3623,7 +4038,7 @@ static void lower_for(XiLower *l, AstNode *node) {
 static void lower_break(XiLower *l, AstNode *node) {
     XiLoopTarget *target = xi_lower_loop_find(l, node ? node->as.break_stmt.label : NULL);
     if (target && target->break_target && l->cur_block) {
-        xi_lower_defer_run_to_depth(l, target->defer_scope_depth, node ? node->line : 0);
+        xi_lower_cleanup_run_to_depth(l, target->cleanup_scope_depth, node ? node->line : 0);
         xi_block_set_jump(l->cur_block, target->break_target);
         l->cur_block = NULL;
     }
@@ -3632,7 +4047,7 @@ static void lower_break(XiLower *l, AstNode *node) {
 static void lower_continue(XiLower *l, AstNode *node) {
     XiLoopTarget *target = xi_lower_loop_find(l, node ? node->as.continue_stmt.label : NULL);
     if (target && target->continue_target && l->cur_block) {
-        xi_lower_defer_run_to_depth(l, target->defer_scope_depth, node ? node->line : 0);
+        xi_lower_cleanup_run_to_depth(l, target->cleanup_scope_depth, node ? node->line : 0);
         xi_block_set_jump(l->cur_block, target->continue_target);
         l->cur_block = NULL;
     }

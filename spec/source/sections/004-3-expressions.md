@@ -38,7 +38,7 @@ xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）
 
 **E10（切片与范围）**：`a[lo:hi]` 依次求值 a → lo → hi；`lo..hi` 与 `lo..=hi` 依次求值 lo → hi。
 
-**E11（语句）**：语句按源码顺序求值。`defer` 在注册处求值其捕获，执行时机见 §4.9。
+**E11（语句）**：语句按源码顺序求值。`defer` 在注册处建立静态 cleanup 边，块内外部绑定在 cleanup 执行时读取；执行时机见 §4.9。
 
 ```xray @id=eval-order-rules
 fn t(tag: string, v: int) -> int { print(tag); return v }
@@ -715,7 +715,7 @@ This is a requirement rather than a conservative preference. Differential testin
 
 **E10 (slices and ranges)**: `a[lo:hi]` evaluates a → lo → hi; `lo..hi` and `lo..=hi` evaluate lo → hi.
 
-**E11 (statements)**: statements are evaluated in source order. A `defer` evaluates its captures where it is registered; for when the body runs see §4.9.
+**E11 (statements)**: statements are evaluated in source order. A `defer` establishes a static cleanup edge where it appears, while its outer bindings are read when cleanup executes; see §4.9 for timing.
 
 ```xray @id=eval-order-rules
 fn t(tag: string, v: int) -> int { print(tag); return v }

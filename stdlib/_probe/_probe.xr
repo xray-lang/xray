@@ -5,7 +5,7 @@
 //   * module-level functions (named import + namespace call)
 //   * module-level values/constants
 //   * variadic functions
-//   * exported functions that use closure/defer internally
+//   * exported functions that use closures and static cleanup internally
 //   * a plain class, and functions constructing/consuming that class
 //   * static methods and generic class methods with closure-taking bodies
 // Keep it tiny: it ships in every binary as the permanent compiler gate.
@@ -31,7 +31,7 @@ export fn probeSum(...nums: int) -> int {
     return total
 }
 
-// --- closure + defer in exported module functions (T3.4 permanent guard) ---
+// --- closure and static cleanup in exported module functions (T3.4 permanent guard) ---
 
 export fn probeDeferValue(base: int) -> int {
     var total = base

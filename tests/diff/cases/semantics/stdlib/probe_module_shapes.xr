@@ -1,7 +1,7 @@
 // _probe capability matrix: pins VM/AOT parity for every export shape a
 // pure-Xray stdlib module can use. Kept permanently as the compiler gate for
 // pure-Xray stdlib migration (module-level values/functions via named import
-// and namespace call, variadic functions, closure/defer shapes, plain class +
+// and namespace call, variadic functions, closure/static-cleanup shapes, plain class +
 // functions using it, static methods, and generic class methods with closure
 // bodies).
 import {
@@ -32,7 +32,7 @@ print(probeSum())
 print(probeSum(1, 2, 3))
 // variadic module-level function, namespace call
 print(_probe.probeSum(10, 20, 30))
-// closure + defer inside an exported stdlib module function
+// static cleanup inside an exported stdlib module function
 print(probeDeferValue(5))
 var addTen = probeMakeAdder(10)
 print(addTen(5))

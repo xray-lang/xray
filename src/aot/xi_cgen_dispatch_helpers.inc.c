@@ -5491,7 +5491,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     if (!target && shared_class_data) {
         /* Shared-slot classes are lowered by the module init function, so the
          * class data's child indices are relative to it. Resolve there first:
-         * indexing the current function's children (e.g. defer closures)
+         * indexing the current function's closure children
          * with those indices would silently pick an unrelated function. */
         if (ctx && ctx->module && ctx->module->init)
             target = cg_find_constructor(ctx->module->init, shared_class_data);
@@ -5788,6 +5788,9 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                                                      cg_value_plan_storage_rep(ctx, v));
             if (span_result)
                 fprintf(out, "xrt_span_from_value_ref(");
+            fprintf(out, "(xrt_guard_callable_effects(((xrt_closure_t *)");
+            emit_value_as_rep(out, callee, XR_REP_TAGGED);
+            fprintf(out, ".ptr)->callable), ");
             fprintf(out, "((XrValue (*)(xrt_closure_t *");
             for (uint16_t a = 1; a < v->nargs; a++)
                 fprintf(out, ", XrValue");
@@ -5800,6 +5803,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                 fprintf(out, ", ");
                 emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
             }
+            fprintf(out, ")");
             fprintf(out, ")");
             if (span_result)
                 fprintf(out, ")");
@@ -6319,14 +6323,18 @@ static void xicgen_go(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     one_shot_await = (v->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0;
     result_copy_shared = (v->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) != 0;
     fire_and_forget = (v->flags & XI_FLAG_FIRE_AND_FORGET) != 0;
-    fprintf(out, "xr_aot_spawn(%s, &", xicgen_aot_context_expr(ctx, f));
+    if (ctx->freestanding_profile)
+        fprintf(out, "(xr_aot_spawn(%s, &", xicgen_aot_context_expr(ctx, f));
+    else
+        fprintf(out, "(xrt_guard_task_spawn(), xr_aot_spawn(%s, &",
+                xicgen_aot_context_expr(ctx, f));
     emit_fname_suffix(ctx, out, target_prefix, target, "_aot_desc");
     fprintf(out, ", ");
     emit_fname_suffix(ctx, out, target_prefix, target, "_aot_frame_new");
     fprintf(out, "(");
     emit_aot_frame_new_call_args(ctx, out, f, v->args[0], target, target_is_sync_go, v->args, 1,
                                  v->nargs, v);
-    fprintf(out, "), %d, %s, %s, %s, \"%s\").task_value", link_mode,
+    fprintf(out, "), %d, %s, %s, %s, \"%s\").task_value)", link_mode,
             fire_and_forget ? "true" : "false", one_shot_await ? "true" : "false",
             result_copy_shared ? "true" : "false", target->name ? target->name : "aot");
 }
@@ -9678,7 +9686,7 @@ static bool xicgen_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f, uint8_t 
                 continue;
             if (value->op == XI_THROW || value->op == XI_ERR_SET || value->op == XI_ERR_RETURN ||
                 value->op == XI_ERR_CHECK || value->op == XI_ERR_CATCH || value->op == XI_TRY ||
-                value->op == XI_CATCH || value->op == XI_END_TRY || value->op == XI_DEFER)
+                value->op == XI_CATCH || value->op == XI_END_TRY)
                 return true;
             if (value->flags & XI_FLAG_MAY_SUSPEND)
                 return true;
@@ -15638,7 +15646,11 @@ static void xicgen_place_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     XrRep from_rep = xaot_value_storage_rep(pointee_rep);
     XrRep to_rep = cg_value_plan_storage_rep(ctx, v);
     const char *conv_suffix = emit_conversion_prefix(out, v->type, from_rep, to_rep);
-    fprintf(out, "(*(%s *)(", cty);
+    bool cleanup_live = (v->args[0]->aux_int & XI_LOCAL_ADDR_AUX_CLEANUP_LIVE) != 0;
+    if (cleanup_live && (from_rep == XR_REP_PTR || from_rep == XR_REP_RAWPTR))
+        fprintf(out, "(*(%s volatile *)(", cty);
+    else
+        fprintf(out, "(*(%s%s *)(", cleanup_live ? "volatile " : "", cty);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
     fprintf(out, "))");
     emit_conversion_suffix(out, conv_suffix);
@@ -15748,7 +15760,11 @@ static void xicgen_place_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     XaotValueRep pointee_rep;
     const char *cty = xicgen_place_pointee_c_type(ctx, f, v->args[0], &pointee_rep);
     XrRep pointee_storage_rep = xaot_value_storage_rep(pointee_rep);
-    fprintf(out, "(*(%s *)(", cty);
+    bool cleanup_live = (v->args[0]->aux_int & XI_LOCAL_ADDR_AUX_CLEANUP_LIVE) != 0;
+    if (cleanup_live && (pointee_storage_rep == XR_REP_PTR || pointee_storage_rep == XR_REP_RAWPTR))
+        fprintf(out, "(*(%s volatile *)(", cty);
+    else
+        fprintf(out, "(*(%s%s *)(", cleanup_live ? "volatile " : "", cty);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
     fprintf(out, ")) = ");
     const XaotValuePlan *value_plan = cg_value_plan(ctx, v->args[1]);
@@ -17121,7 +17137,7 @@ typedef enum XicgenParallelCallbackMode {
 
 /* Worker callbacks cannot unwind through another native thread.  A callback
  * that may throw therefore executes on the invoking thread, preserving the
- * ordinary exception/defer stack.  This is a semantic fallback, not a hidden
+ * ordinary exception stack. This is a semantic fallback, not a hidden
  * failure: proven no-throw callbacks still take the parallel runtime path,
  * while genuinely suspendable callbacks remain rejected until the runtime has
  * an explicit cross-scheduler callback protocol. */
@@ -17936,7 +17952,11 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         return;
     }
     const XiValue *unsupported = xicgen_find_par_for_unsupported_body_value(ctx, body);
-    if (unsupported) {
+    /* Plan callbacks that may throw must stay on the invoking thread: worker
+     * threads cannot unwind into the caller's exception stack. This also keeps
+     * statically lowered Plan cleanup ladders valid after inlining. */
+    bool serial_plan_state = unsupported && data->plan_state;
+    if (unsupported && !serial_plan_state) {
         ctx->error = true;
         const char *detail = NULL;
         if (unsupported->op == XI_CALL_BUILTIN && unsupported->aux)
@@ -17983,7 +18003,34 @@ static void xicgen_par_for(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         xicgen_emit_par_for_scoped_closure(ctx, out, f, v, body, v->args[3], prefix,
                                            data->plan_state);
     }
-    if (data->inclusive_end) {
+    if (serial_plan_state) {
+        if (data->inclusive_end) {
+            fprintf(out, "        if (_xr_par_start_%u <= _xr_par_end_%u) {\n", v->id, v->id);
+        } else {
+            fprintf(out, "        if (_xr_par_start_%u < _xr_par_end_%u) {\n", v->id, v->id);
+        }
+        fprintf(out,
+                "            XrValue _xr_par_state_%u = "
+                "xrt_index_get(_xr_par_states_%u, XR_FROM_INT(0));\n",
+                v->id, v->id);
+        if (data->inclusive_end) {
+            fprintf(out, "            for (int64_t %s = _xr_par_start_%u; ; %s++) {\n", iter_name,
+                    v->id, iter_name);
+        } else {
+            fprintf(out,
+                    "            for (int64_t %s = _xr_par_start_%u; %s < _xr_par_end_%u; "
+                    "%s++) {\n",
+                    iter_name, v->id, iter_name, v->id, iter_name);
+        }
+        xicgen_emit_par_for_plan_state_call(ctx, out, f, body, v->args[3], prefix, plan_state_name,
+                                            iter_name, "0",
+                                            scoped_closure ? scoped_closure_name : NULL);
+        if (data->inclusive_end) {
+            fprintf(out, "                if (%s == _xr_par_end_%u) break;\n", iter_name, v->id);
+        }
+        fprintf(out, "            }\n");
+        fprintf(out, "        }\n");
+    } else if (data->inclusive_end) {
         fprintf(out, "        if (_xr_par_end_%u == INT64_MAX) {\n", v->id);
         if (data->range_body) {
             fprintf(out, "            abort();\n");

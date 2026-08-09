@@ -11,7 +11,7 @@
  * KEY CONCEPT:
  *   XrVMState is the isolate's VM storage host: it embeds the fixed-size
  *   value stack, frame array, exception-handler array, builtin globals,
- *   shared variables, Cycle counters, defer stack, scheduler mount, and VM
+ *   shared variables, Cycle counters, scheduler mount, and VM
  *   bookkeeping.
  *
  *   IMPORTANT: XrVMState and XrVMContext (xexec_frame.h) are
@@ -19,7 +19,7 @@
  *
  *     - XrVMState owns the storage. The fields stack[], frames[],
  *       exception_handlers[], strings_map, builtins[], shared,
- *       defer_stack, coro_state, ctor_call_stack are
+ *       coroutine state and constructor-call state are
  *       the actual backing memory.
  *     - XrVMContext is the access path (xexec_frame.h). It carries
  *       pointers (stack / frames / handlers / ic_*_tables) that the

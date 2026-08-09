@@ -280,43 +280,45 @@ throw AppError.NotFound                      // 值返回错误通道
 ### 4.9 `defer`
 
 ```ebnf
-DeferStmt ::= 'defer' (CallExpr | Block)
+DeferStmt ::= 'defer' Block
 ```
 
 ```xray @id=stmt-defer
 fn read_file(path: string) -> string {
     var f = open(path)
-    defer f.close()                  // 函数返回前必执行
+    defer { f.close() }              // 函数返回前必执行
     return f.readAll()
 }
 
 fn process() {
-    defer {                          // 块形式
+    defer {
         log.info("done")
         cleanup()
     }
     do_work()
 }
 
-fn snapshot_vs_reference() {
+fn late_binding_and_copy() {
     var n = 1
-    defer print("call", n)            // 注册时保存 1
-    defer { print("block", n) }       // 退出时读取 2
+    defer { print("late", n) }        // 退出时读取 2
+    const saved = copy(n)
+    defer { print("saved", saved) }   // 显式副本保持 1
     n = 2
-}                                      // 输出 block 2，再输出 call 1
+}                                      // 输出 saved 1，再输出 late 2
 ```
 
 **语义**：
-- `defer` 只有两种正文：调用表达式或块；赋值、成员赋值、裸值和其他非调用表达式都是语法错误。任意清理逻辑写成 `defer { ... }`。
-- 调用形式在注册时按从左到右顺序立即求值并保存调用目标的接收者及全部实参，退出时只执行已保存的调用。动态可调用目标若无法静态证明为稳定调用，按 `E0392` 拒绝。
-- 块形式不做值快照；块体在退出时执行，并按引用观察届时的局部绑定值。因此 `defer conn.close()` 保存当时的 `conn`，而 `defer { conn.close() }` 读取退出时的 `conn`。
-- 调用快照或块捕获引用的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许，并由上述快照与引用语义决定 defer 最终观察到哪个值。
+- `defer` 仅接受块；调用表达式、赋值、裸值及其他非块正文都是语法错误。
+- 块体在退出时执行，并读取届时的局部绑定值（late binding）。需要注册时值时，必须先用 `copy(...)` 或普通值绑定创建显式副本，再在块中读取该副本。
+- cleanup 块读取的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许。
 - `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
 - **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
 - **必执行**：所属块正常结束，或通过 `break`、`continue`、`return`、值错误传播、panic 展开退出时都执行。
 - 循环体内的 `defer` 每轮迭代结束时执行，不会堆积到函数尾。
 - `defer` 是 Xray 唯一的确定性清理机制（取代其他语言的 `finally`）：它绑定词法块退出边，而不是整个函数的单一栈尾。
-- **`defer` 体不得让错误逃逸**：目标可调用体的推断错误集非空时报 `E0387`；错误须在 `defer` 体内用 `try` / `catch` 消化。静态判定不了的由运行时 `E0443` 兜底终止。完整规则见 §8.3.1。
+- **`defer` 体不得让错误逃逸**：cleanup 块的推断逃逸错误集非空时报 `E0387`；错误须在 `defer` 体内用 `try` / `catch` 消化。静态判定不了的由运行时 `E0443` 兜底终止。完整规则见 §8.3.1。
+- cleanup 块不得直接或传递地挂起、创建任务、`return` 外层函数，或 `break` / `continue` 到块外目标；动态未知调用在产生调度或派生副作用前由运行时 fail-closed。
+- cleanup 块可包含本地分支、循环、本地 `try` / `catch` 和嵌套 `defer`；嵌套 cleanup 同样按 LIFO 执行。
 
 ### 4.10 内置打印函数
 
@@ -647,43 +649,45 @@ throw AppError.NotFound                      // value-return error channel
 ### 4.9 `defer`
 
 ```ebnf
-DeferStmt ::= 'defer' (CallExpr | Block)
+DeferStmt ::= 'defer' Block
 ```
 
 ```xray @id=stmt-defer
 fn read_file(path: string) -> string {
     var f = open(path)
-    defer f.close()                  // always runs before the function returns
+    defer { f.close() }              // always runs before the function returns
     return f.readAll()
 }
 
 fn process() {
-    defer {                          // block form
+    defer {
         log.info("done")
         cleanup()
     }
     do_work()
 }
 
-fn snapshot_vs_reference() {
+fn late_binding_and_copy() {
     var n = 1
-    defer print("call", n)            // saves 1 at registration
-    defer { print("block", n) }       // reads 2 at exit
+    defer { print("late", n) }        // reads 2 at exit
+    const saved = copy(n)
+    defer { print("saved", saved) }   // explicit copy remains 1
     n = 2
-}                                      // prints block 2, then call 1
+}                                      // prints saved 1, then late 2
 ```
 
 **Semantics**:
-- A `defer` body has exactly two forms: a call expression or a block. Assignments, member assignments, bare values, and every other non-call expression are syntax errors; write arbitrary cleanup as `defer { ... }`.
-- The call form immediately evaluates and saves the callee receiver and every argument from left to right. Block exit only invokes that saved call. A dynamic callable that cannot be proven stable statically is rejected with `E0392`.
-- The block form does not snapshot values. Its body runs at block exit and observes captured local bindings by reference at that time. Thus `defer conn.close()` saves the current `conn`, while `defer { conn.close() }` reads `conn` at exit.
-- A movable owner referenced by a call snapshot or block capture is under a lexical loan until the owning block exits. Moving or returning it earlier reports `E0382`. Ordinary rebinding/mutation remains legal; the snapshot-versus-reference rule above determines which value the defer observes.
+- `defer` accepts only a block. A call expression, assignment, bare value, or any other non-block body is a syntax error.
+- The body runs at block exit and reads the local bindings that exist then (late binding). Code that needs a registration-time value must first create an explicit copy with `copy(...)` or an ordinary value binding and read that copy from the block.
+- A movable owner read by a cleanup block is under a lexical loan until the owning block exits. Moving or returning it earlier reports `E0382`; ordinary rebinding and mutation remain legal.
 - A `defer` belongs to the nearest enclosing real block `{ ... }`. A function body is a block, so a top-level function-body `defer` still runs before the function exits.
 - **LIFO**: multiple `defer` statements in the same block run in reverse declaration order.
 - **Always executes**: runs when the owning block falls through or exits by `break`, `continue`, `return`, value-error propagation, or panic unwinding.
 - A `defer` inside a loop body runs at the end of each iteration, not at the end of the function.
 - `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to lexical block exits, not to a single function tail.
-- **No error may escape a `defer` body**: `E0387` is reported when the deferred callable's inferred error set is non-empty; errors must be absorbed inside the `defer` body with `try` / `catch`. What static analysis cannot decide is backstopped at runtime by `E0443`. Full rules in §8.3.1.
+- **No error may escape a `defer` body**: `E0387` is reported when the cleanup block's inferred escaping error set is non-empty; errors must be absorbed inside the `defer` body with `try` / `catch`. What static analysis cannot decide is backstopped at runtime by `E0443`. Full rules in §8.3.1.
+- A cleanup block must not directly or transitively suspend, create a task, return from the owning function, or break/continue to a target outside the block. A dynamically unknown call fails closed before any scheduling or task-spawn side effect.
+- A cleanup block may contain local branches, loops, local `try` / `catch`, and nested `defer`; nested cleanup also runs LIFO.
 
 ### 4.10 Built-in Print Functions
 

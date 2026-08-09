@@ -1,2 +1,2 @@
-defer takes a call or a block
+expected '{' after defer
 defer { ... }

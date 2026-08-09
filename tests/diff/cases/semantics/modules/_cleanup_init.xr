@@ -1,0 +1,5 @@
+// Shared dependency whose top-level cleanup must finish before an importer runs.
+print("dependency body")
+defer { print("dependency cleanup") }
+
+export fn dependency_value() -> int { return 40 }

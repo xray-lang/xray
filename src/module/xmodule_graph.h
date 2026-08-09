@@ -25,6 +25,7 @@
 
 /* Forward declarations */
 struct AstNode;
+struct XrModule;
 struct XrCompilerSession;
 struct XrVMRuntime;
 
@@ -139,5 +140,11 @@ XR_FUNC int xr_module_graph_topological_sort(XrModuleGraph *g);
 
 /* Lookup a module spec by canonical ID.  Returns index or -1. */
 XR_FUNC int xr_module_graph_find(const XrModuleGraph *g, const char *canonical);
+
+/* Initialize every dependency exactly once in topological order and return a
+ * table indexed by topo position. The caller owns the table, but not its
+ * module pointers. A failed dependency aborts the whole preload. */
+XR_FUNC bool xr_module_graph_preload(struct XrVMRuntime *X, const XrModuleGraph *g,
+                                     struct XrModule ***out_table);
 
 #endif  // XMODULE_GRAPH_H

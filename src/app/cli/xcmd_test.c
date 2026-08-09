@@ -334,26 +334,17 @@ static int prepare_test_module_graph(XrVMRuntime *X, XrCompilerSession *session,
 
     xr_compiler_session_set_module_graph(session, graph);
 
-    int nmod = graph->topo_count;
-    XrModule **mod_table = (XrModule **) xr_calloc((size_t) nmod, sizeof(XrModule *));
-    if (mod_table) {
-        for (int ti = 0; ti < nmod; ti++) {
-            int idx = graph->topo_order[ti];
-            if (idx == graph->entry_index)
-                continue;
-            XrModuleSpec *spec = &graph->specs[idx];
-            if (!spec->source_path)
-                continue;
-            const char *import_name = (spec->kind == XR_MOD_STDLIB && spec->canonical)
-                                          ? spec->canonical
-                                          : spec->source_path;
-            XrValue val = xr_module_import(X, import_name);
-            if (!XR_IS_NULL(val))
-                mod_table[ti] = xr_value_to_module(val);
-        }
-        registry->module_table = mod_table;
-        registry->module_table_count = nmod;
+    XrModule **mod_table = NULL;
+    if (!xr_module_graph_preload(X, graph, &mod_table)) {
+        snprintf(err_buf, err_buf_sz, "module dependency initialization failed");
+        xr_compiler_session_set_module_graph(session, NULL);
+        xa_analyzer_set_graph(analyzer, NULL);
+        xa_analyzer_free(analyzer);
+        xr_module_graph_free(graph);
+        return 1;
     }
+    registry->module_table = mod_table;
+    registry->module_table_count = graph->topo_count;
 
     if (out_graph)
         *out_graph = graph;

@@ -592,6 +592,6 @@ XR_FUNC void patch_jumps(EmitCtx *ctx) {
                 target_pc = pc + 1;
         }
         XrInstruction *inst = PROTO_CODE_PTR(ctx->proto, pc);
-        *inst = CREATE_ABx(OP_TRY, 0, target_pc);
+        *inst = CREATE_ABx(OP_TRY, GETARG_A(*inst), target_pc);
     }
 }

@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xvm_dispatch_misc.inc.c — defer / bytes / scope / time / sleep dispatch
+ * xvm_dispatch_misc.inc.c — bytes / scope / time / sleep dispatch
  *
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
@@ -15,74 +15,9 @@
  * startfunc label, ...) provided by the surrounding scope.
  * CMake excludes *.inc.c from the VM_SRC glob.
  *
- * Owns: OP_DEFER, OP_ARRAY_COPY_NEW, OP_SCOPE_ENTER, OP_SCOPE_EXIT,
+ * Owns: OP_ARRAY_COPY_NEW, OP_SCOPE_ENTER, OP_SCOPE_EXIT,
  *       OP_TIME_AFTER, OP_SLEEP, OP_SELECT_BLOCK dispatch.
  */
-
-vmcase(OP_DEFER) {
-    /* OP_DEFER A B - push closure and args to defer stack
-     * A = closure register
-     * B = argument count (args at R[A+1]..R[A+B])
-     *
-     * defer stack storage format (each entry):
-     *   [0] = closure
-     *   [1] = argument count (integer)
-     *   [2..n+1] = argument values
-     */
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);  // Argument count
-    XrValue closure_val = R(a);
-
-    // Required stack space: closure + arg count + arg values
-    int needed = 2 + b;
-
-    // Lazy allocate per-context defer stack
-    if (vm_ctx->defer_stack == NULL) {
-        vm_ctx->defer_capacity = XR_DEFER_ENTRIES_MAX;
-        XR_MALLOC_OR_ABORT(vm_ctx->defer_stack, sizeof(XrValue) * vm_ctx->defer_capacity,
-                           "vm defer_stack init");
-        XR_MALLOC_OR_ABORT(vm_ctx->defer_frame_marks, sizeof(int) * vm_ctx->frame_capacity,
-                           "vm defer_frame_marks init");
-        // Zero-init all slots.  Active frames whose startfunc ran before this
-        // allocation get mark 0, which is correct because no OP_DEFER could
-        // have fired before this first lazy allocation.
-        for (int j = 0; j < vm_ctx->frame_capacity; j++) {
-            vm_ctx->defer_frame_marks[j] = 0;
-        }
-    }
-
-    // Capacity expansion check
-    while (vm_ctx->defer_count + needed > vm_ctx->defer_capacity) {
-        vm_ctx->defer_capacity *= 2;
-        XR_REALLOC_OR_ABORT(vm_ctx->defer_stack, sizeof(XrValue) * (size_t) vm_ctx->defer_capacity,
-                            "vm defer_stack grow");
-    }
-
-    // Push to defer stack: closure + arg count + args
-    vm_ctx->defer_stack[vm_ctx->defer_count++] = closure_val;
-    vm_ctx->defer_stack[vm_ctx->defer_count++] = xr_int(b);
-    for (int j = 0; j < b; j++) {
-        vm_ctx->defer_stack[vm_ctx->defer_count++] = R(a + 1 + j);
-    }
-    vmbreak;
-}
-
-vmcase(OP_DEFER_MARK) {
-    int a = GETARG_A(i);
-    R(a) = xr_int(vm_ctx->defer_count);
-    vmbreak;
-}
-
-vmcase(OP_DEFER_RUN_TO) {
-    int a = GETARG_A(i);
-    int mark = XR_IS_INT(R(a)) ? (int) XR_TO_INT(R(a)) : 0;
-    if (vm_ctx->defer_count > mark) {
-        savepc();
-        xr_vm_run_defers_to_mark(isolate, vm_ctx, mark);
-        VM_REFRESH_FRAME_CACHE();
-    }
-    vmbreak;
-}
 
 vmcase(OP_ARRAY_COPY_NEW) {
     /* R[A] = Array<T>(R[B]) copy/convert.

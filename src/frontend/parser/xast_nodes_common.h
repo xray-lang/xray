@@ -147,20 +147,11 @@ typedef struct PrintNode {
     bool skip_null;
 } PrintNode;
 
-/* Name prefix of the argument temporaries that `defer f(a, b)` desugars into.
- * The parser mints them (xparse_coroutine.c) and the formatter matches on them
- * to print the `defer` the user actually wrote (xfmt_expr.c), so the spelling
- * has to be shared rather than repeated. */
-#define XR_DEFER_TEMP_PREFIX "__xr_dtmp_"
-
 // Block node
 typedef struct BlockNode {
     AstNode **statements;
     int count;
     int capacity;
-    /* Set on the wrapper block `defer f(a, b)` desugars into: it isolates the
-     * argument temporaries without becoming a defer scope of its own. */
-    bool is_synthetic_defer_capture;
     /* Canonicalizer value block: `{ var __t = recv; <expr using __t> }`,
      * produced when a place expression must be evaluated exactly once
      * (spec §3.0 E5/E6).  It is an expression, not a user scope: its last

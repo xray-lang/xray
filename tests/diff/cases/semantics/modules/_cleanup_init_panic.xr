@@ -1,0 +1,6 @@
+print("panic dependency body")
+defer { print("panic dependency cleanup") }
+var zero = 0
+print(1 / zero)
+
+export fn unreachable_value() -> int { return 1 }

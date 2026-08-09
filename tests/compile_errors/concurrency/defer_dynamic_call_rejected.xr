@@ -1,0 +1,17 @@
+fn child() -> int {
+    print("child must not start")
+    return 1
+}
+
+fn starts_task() {
+    var task = go child()
+    print(task)
+}
+
+fn owner(action: fn()) {
+    defer {
+        action()
+    }
+}
+
+owner(starts_task)

@@ -1,0 +1,7 @@
+enum InitError { Failed }
+
+print("error dependency body")
+defer { print("error dependency cleanup") }
+throw InitError.Failed
+
+export fn unreachable_value() -> int { return 1 }

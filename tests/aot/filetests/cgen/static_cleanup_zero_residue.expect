@@ -1,0 +1,6 @@
+c_contains=int64_t cleanupZeroCost(int64_t p0)
+c_contains=xrt_cleanup_enter()
+c_contains=xrt_cleanup_leave()
+c_not_contains=xrt_defer
+c_not_contains=xrt_closure_new
+c_not_contains=upvals[

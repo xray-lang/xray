@@ -45,7 +45,7 @@ throw AppErr.InvalidInput("bad format")     // ✅ 带载荷的 ADT 枚举变体
 抛出后行为：
 
 ```
-抛出点 → 写入 pending_error → 沿调用栈返回 → 沿途执行 defer → catch 处理 → 否则继续返回 → 顶层诊断
+抛出点 → 写入 pending_error → 沿调用栈返回 → 执行每条跨域边上的静态 cleanup 区域 → catch 处理 → 否则继续返回 → 顶层诊断
 ```
 
 - 不展开栈帧（不同于传统异常的 unwind）
@@ -291,12 +291,12 @@ main()
 
 `defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
 
-调用形式在注册时快照接收者与实参；块形式在退出时按引用读取捕获绑定。两种形式持有的可移动 owner 在块退出前都不得被 `move` 或返回，否则报 `E0382`。这个 owner-lifetime 规则与下述错误通道规则相互独立。
+cleanup 块在退出时读取外部绑定。被读取的可移动 owner 在块退出前不得被 `move` 或返回，否则报 `E0382`；需要注册时值时必须先创建显式副本。这个 owner-lifetime 规则与下述错误通道规则相互独立。
 
 ```xray
 fn fetch(url: string) -> string {
     var conn = open(url)
-    defer conn.close()                       // 无论后续如何，conn 一定关闭
+    defer { conn.close() }                   // 无论后续如何，conn 一定关闭
 
     var data = conn.read()
     if (len(data) == 0) {
@@ -312,12 +312,15 @@ fn fetch(url: string) -> string {
 - `defer` 在块正常结束、`break`、`continue`、`return`、`throw`、panic 展开时均执行
 - 循环体中的 `defer` 每轮迭代退出时执行
 - `defer` 体不得让错误逃逸（见 §8.3.1）
+- `defer` 体不得直接或传递地挂起或创建任务（`E0392`）；动态未知调用在侧效前以 `E0444` 失败关闭
+- `return` 及跳出 cleanup 边界的 `break` / `continue` 非法（`E0395`）；cleanup 内部循环的本地跳转合法
+- 每个注册点降低为程序点相关的静态 cleanup frontier；不生成闭包、回调对象或动态 defer 栈
 
 #### 8.3.1 `defer` 与错误
 
 `defer` 是**资源清理边**，不是错误传播边。清理路径失败意味着资源状态已不可知，因此语言既不允许清理错误覆盖在途错误（Go 模型），也不允许静默吞掉它。
 
-**规则 D1（静态，规范性）**：若 `defer` 目标可调用体的推断错误集**非空**，编译器报 `E0387`。
+**规则 D1（静态，规范性）**：若 `defer` 块的推断逃逸错误集**非空**，编译器报 `E0387`。
 
 与 §8.0 的 throw-effect bit 不同，D1 **不是** fail-closed：xray 没有用户可书写的 no-throw 标注，若"无法证明不抛"即报错，作者面对间接调用、高阶内建方法、尚未登记契约的原生成员时将无从消解。无法证明的那部分交给规则 D3 的运行时兜底——这正是分层的意义。若将来引入用户可写的 no-throw 标注，D1 可收紧为"必须被证明"，D3 随之变为构造上不可达。
 
@@ -325,7 +328,7 @@ fn fetch(url: string) -> string {
 fn close(c: Conn) { throw IoErr.Closed }
 
 fn bad(c: Conn) {
-    defer close(c)                           // ❌ E0387：defer 目标会抛出错误
+    defer { close(c) }                       // ❌ E0387：错误会逃出 cleanup
 }
 
 fn good(c: Conn) {
@@ -408,7 +411,7 @@ class Conn {
 
 fn fetchData(alive: bool) -> string {
     var conn = Conn(alive)
-    defer conn.close()                 // 无论成功或抛错都会执行
+    defer { conn.close() }             // 无论成功或抛错都会执行
     if (!conn.isAlive()) { throw ConnErr.Timeout }
     return "payload"
 }
@@ -502,8 +505,8 @@ main()
 enum E { Boom }
 
 fn work() {
-    defer print("defer 1")
-    defer print("defer 2")
+    defer { print("defer 1") }
+    defer { print("defer 2") }
     print("body")
     throw E.Boom                             // 抛错时 defer 仍会执行
 }
@@ -583,7 +586,7 @@ throw AppErr.InvalidInput("bad format")     // ✅ ADT enum variant with payload
 After a throw:
 
 ```
-throw point → write to pending_error → return up the call stack → run defer on the way → catch handles → otherwise keep returning → top-level diagnostic
+throw point → write to pending_error → return up the call stack → run static cleanup regions on every crossed scope edge → catch handles → otherwise keep returning → top-level diagnostic
 ```
 
 - No stack frame unwinding (unlike traditional exception unwinding)
@@ -841,12 +844,12 @@ formatters). The contract covers exactly that surface.
 
 `defer` is a block-scoped cleanup statement guaranteed to run when the owning block exits (whether by fallthrough, `break` / `continue`, `return`, `throw`, or panic). Syntax: see §4.9.
 
-The call form snapshots its receiver and arguments at registration; the block form reads captured bindings by reference at exit. A movable owner held by either form may not be moved or returned before the block exits (`E0382`). This owner-lifetime rule is independent of the error-channel rules below.
+A cleanup block reads its outer bindings at exit. A movable owner read by the block may not be moved or returned before the block exits (`E0382`); code that needs a registration-time value must create an explicit copy first. This owner-lifetime rule is independent of the error-channel rules below.
 
 ```xray
 fn fetch(url: string) -> string {
     var conn = open(url)
-    defer conn.close()                       // conn is guaranteed to close
+    defer { conn.close() }                   // conn is guaranteed to close
 
     var data = conn.read()
     if (len(data) == 0) {
@@ -862,12 +865,15 @@ fn fetch(url: string) -> string {
 - `defer` executes on block fallthrough, `break`, `continue`, `return`, `throw`, and panic unwinding
 - A `defer` in a loop body runs as each iteration exits
 - No error may escape a `defer` body (see §8.3.1)
+- A `defer` body must not directly or transitively suspend or create a task (`E0392`); an unresolved dynamic call fails closed with `E0444` before the side effect
+- `return` and any `break` / `continue` that crosses the cleanup boundary are illegal (`E0395`); a local jump within a cleanup-owned loop is legal
+- Each registration point lowers to a program-point-sensitive static cleanup frontier; no closure, callback object, or dynamic defer stack is generated
 
 #### 8.3.1 `defer` and errors
 
 `defer` is a **resource-cleanup edge**, not an error-propagation edge. A failure on the cleanup path means the resource state is no longer known, so the language neither lets a cleanup error overwrite an in-flight error (the Go model) nor silently swallows it.
 
-**Rule D1 (static, normative)**: if the inferred error set of the callable a `defer` defers is **non-empty**, the compiler reports `E0387`.
+**Rule D1 (static, normative)**: if the inferred escaping error set of a `defer` block is **non-empty**, the compiler reports `E0387`.
 
 Unlike the throw-effect bit in §8.0, D1 is **not** fail-closed: xray has no user-writable no-throw annotation, so rejecting everything that cannot be proven non-throwing would leave an author facing an indirect call, a higher-order builtin, or a native member whose contract is not yet written with no way to discharge the obligation. What cannot be proven is left to rule D3's runtime backstop — that is what the layering is for. Should a user-writable no-throw annotation ever be added, D1 can tighten to "must be proven" and D3 becomes unreachable by construction.
 
@@ -875,7 +881,7 @@ Unlike the throw-effect bit in §8.0, D1 is **not** fail-closed: xray has no use
 fn close(c: Conn) { throw IoErr.Closed }
 
 fn bad(c: Conn) {
-    defer close(c)                           // ❌ E0387: the deferred target throws
+    defer { close(c) }                       // ❌ E0387: error escapes cleanup
 }
 
 fn good(c: Conn) {
@@ -958,7 +964,7 @@ class Conn {
 
 fn fetchData(alive: bool) -> string {
     var conn = Conn(alive)
-    defer conn.close()                 // runs whether we succeed or throw
+    defer { conn.close() }             // runs whether we succeed or throw
     if (!conn.isAlive()) { throw ConnErr.Timeout }
     return "payload"
 }
@@ -1052,8 +1058,8 @@ main()
 enum E { Boom }
 
 fn work() {
-    defer print("defer 1")
-    defer print("defer 2")
+    defer { print("defer 1") }
+    defer { print("defer 2") }
     print("body")
     throw E.Boom                             // defers still run when throwing
 }

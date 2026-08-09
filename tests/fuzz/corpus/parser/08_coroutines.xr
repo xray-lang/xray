@@ -57,9 +57,9 @@ select {
 // Defer
 fn processFile(path) {
     let file = openFile(path)
-    defer file.close()
+    defer { file.close() }
     let data = file.read()
-    defer print("Processing complete")
+    defer { print("Processing complete") }
     return process(data)
 }
 

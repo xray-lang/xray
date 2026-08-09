@@ -1,0 +1,10 @@
+import sys
+
+fn owner() {
+    defer {
+        var thread = sys.Thread.spawn(fn() -> int { return 1 })
+        print(thread.join())
+    }
+}
+
+owner()

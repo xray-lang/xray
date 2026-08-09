@@ -24,7 +24,7 @@ static uint32_t xicgen_stmt_bound_try_id(const XiFunc *f, const XiValue *v) {
 }
 
 static bool xicgen_stmt_codegen_compiler_fence(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                const XiValue *v, const char *prefix) {
+                                               const XiValue *v, const char *prefix) {
     (void) ctx;
     (void) f;
     (void) v;
@@ -41,12 +41,6 @@ static bool xicgen_stmt_try(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     const XiBlock *catch_blk = (const XiBlock *) v->aux;
     fprintf(out, "    XrtExcFrame _ef%u;\n", v->id);
     fprintf(out, "    _ef%u.prev = xrt_exc_top;\n", v->id);
-    /* Record both the active defer scope and its count at try entry. A caught
-     * panic unwinds skipped functions and then runs this same scope back to the
-     * count mark, so block-scoped defers inside the try do not leak to the
-     * enclosing block. */
-    fprintf(out, "    _ef%u.defer_scope_mark = xrt_defer_top;\n", v->id);
-    fprintf(out, "    _ef%u.defer_count_mark = xrt_defer_top ? xrt_defer_top->count : 0;\n", v->id);
     fprintf(out, "    xrt_exc_top = &_ef%u;\n", v->id);
     if (catch_blk) {
         fprintf(out,
@@ -84,37 +78,6 @@ static bool xicgen_stmt_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, " = ");
     }
     fprintf(out, "_ef%u.exception;\n", xicgen_stmt_bound_try_id(f, v));
-    return true;
-}
-
-static bool xicgen_stmt_defer(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                              const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    /* Register the deferred closure onto this function's defer scope. The IR
-     * desugars every `defer` into a zero-arg closure that eagerly captures its
-     * operands, so registration is a single push; the scope runs it LIFO at
-     * exit (emit_deferred_calls) or on panic unwind (xrt_throw_exc). XI_DEFER
-     * consumes the closure, so the scope owns this reference. */
-    if (!v || v->nargs < 1)
-        return true;
-    fprintf(out, "    xrt_defer_push(&_xrt_ds, ");
-    emit_value_as_rep(out, cg_unwrap_identity_value(v->args[0]), XR_REP_TAGGED);
-    fprintf(out, ");\n");
-    return true;
-}
-
-static bool xicgen_stmt_defer_run_to(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                     const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    if (!v || v->nargs < 1)
-        return true;
-    fprintf(out, "    xrt_defer_run_to(&_xrt_ds, (int)");
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, ");\n");
     return true;
 }
 
@@ -163,7 +126,6 @@ static bool xicgen_stmt_err_return(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     XR_DCHECK(v->nargs >= 1, "xicgen_stmt_err_return: missing error value");
     xicgen_emit_set_pending_error(ctx, out, v->args[0]);
     emit_class_field_cache_flush(ctx, out);
-    emit_deferred_calls(ctx, out, f, prefix);
     emit_default_return_stmt_for_abi(ctx, out, f);
     return true;
 }
@@ -238,7 +200,6 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
 
     fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n");
     emit_class_field_cache_flush(ctx, out);
-    emit_deferred_calls(ctx, out, f, prefix);
     xicgen_emit_err_check_arc_cleanups(ctx, out, f, v, prefix);
     if (cg_func_return_abi_rep(ctx, f) == XR_REP_VOID) {
         fprintf(out, "        return;\n");
@@ -287,6 +248,36 @@ static bool xicgen_stmt_err_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
     }
     fprintf(out, "    xrt_pending_error = XR_NULL_VAL;\n");
     xicgen_emit_clear_freestanding_enum_error(ctx, out);
+    return true;
+}
+
+static bool xicgen_stmt_cleanup_enter(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) v;
+    (void) prefix;
+    fprintf(out, "    xrt_cleanup_enter();\n");
+    return true;
+}
+
+static bool xicgen_stmt_cleanup_leave(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) v;
+    (void) prefix;
+    fprintf(out, "    xrt_cleanup_leave();\n");
+    return true;
+}
+
+static bool xicgen_stmt_cleanup_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                          const XiValue *v, const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) v;
+    (void) prefix;
+    fprintf(out, "    xrt_cleanup_err_check();\n");
     return true;
 }
 

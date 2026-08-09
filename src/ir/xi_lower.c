@@ -796,6 +796,13 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrVMR
 }
 
 XR_FUNC void xi_lower_cleanup(XiLower *l) {
+    for (int i = 0; i < l->cleanup_scope_depth; i++) {
+        xr_free(l->cleanup_scopes[i].sites);
+        xr_free(l->cleanup_scopes[i].panic_edges);
+        l->cleanup_scopes[i].sites = NULL;
+        l->cleanup_scopes[i].panic_edges = NULL;
+    }
+    l->cleanup_scope_depth = 0;
     xr_free(l->var_defs);
     l->var_defs = NULL;
     xr_free(l->vars);
@@ -814,6 +821,10 @@ XR_FUNC void xi_lower_cleanup(XiLower *l) {
     l->global_asm_templates = NULL;
     l->global_asm_count = 0;
     l->global_asm_cap = 0;
+    xr_free(l->cleanup_place_symbols);
+    l->cleanup_place_symbols = NULL;
+    l->cleanup_place_symbol_count = 0;
+    l->cleanup_place_symbol_cap = 0;
 }
 
 XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent) {
@@ -1812,6 +1823,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     entry->sealed = true;
     l.cur_block = entry;
 
+    xi_lower_prepare_cleanup_places(&l, fdecl->body);
+
     /* Lower parameters */
     l.func->nparams = (uint16_t) fdecl->param_count;
     if (fdecl->param_count > 0) {
@@ -1882,6 +1895,12 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
             l.vars[var_id].call_place = param_val;
             l.vars[var_id].place_mode = pmode;
         } else {
+            if (!xi_lower_cleanup_bind_place(&l, var_id, param_val,
+                                             p ? p->line : func_node->line)) {
+                xi_func_free(l.func);
+                xi_lower_cleanup(&l);
+                return NULL;
+            }
             xi_lower_braun_write(&l, var_id, entry, param_val);
         }
     }
@@ -1924,11 +1943,11 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
 
     /* Lower function body (extern functions are bodyless) */
-    xi_lower_defer_scope_push(&l);
+    xi_lower_cleanup_scope_push(&l);
     if (fdecl->body) {
         xi_lower_stmt(&l, fdecl->body);
     }
-    xi_lower_defer_scope_pop_normal(&l, func_node->line);
+    xi_lower_cleanup_scope_pop_normal(&l, func_node->line);
 
     /* If last block not terminated, add implicit return. Extern functions
      * return a zero of the declared type so the synthesized stub type-checks;
@@ -2877,7 +2896,7 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
     }
     prescan_top_level_bindings(&l, stmts, count, next_shared_start);
 
-    xi_lower_defer_scope_push(&l);
+    xi_lower_cleanup_scope_push(&l);
 
     /* Lower top-level declaration values before executable code so forward
      * references see initialized bindings, not shared-slot null values. */
@@ -2910,7 +2929,7 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
         xi_lower_stmt(&l, s);
     }
 
-    xi_lower_defer_scope_pop_normal(&l, program_node->line);
+    xi_lower_cleanup_scope_pop_normal(&l, program_node->line);
 
     if (l.cur_block) {
         xi_block_set_return(l.cur_block, NULL);

@@ -260,28 +260,22 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                          * Ensures correct initialization order and populates
                          * module_table for indexed access (OP_LOAD_MODULE_SLOT).
                          * The entry module is skipped — it runs via dofile. */
-                        int nmod = graph->topo_count;
-                        XrModule **mod_table =
-                            (XrModule **) xr_calloc((size_t) nmod, sizeof(XrModule *));
-                        if (mod_table) {
-                            for (int ti = 0; ti < nmod; ti++) {
-                                int idx = graph->topo_order[ti];
-                                if (idx == graph->entry_index)
-                                    continue; /* entry runs via dofile */
-                                XrModuleSpec *spec = &graph->specs[idx];
-                                if (!spec->source_path)
-                                    continue;
-                                const char *import_name =
-                                    (spec->kind == XR_MOD_STDLIB && spec->canonical)
-                                        ? spec->canonical
-                                        : spec->source_path;
-                                XrValue val = xr_module_import(iso, import_name);
-                                if (!XR_IS_NULL(val))
-                                    mod_table[ti] = xr_value_to_module(val);
-                            }
-                            registry->module_table = mod_table;
-                            registry->module_table_count = nmod;
+                        XrModule **mod_table = NULL;
+                        if (!xr_module_graph_preload(iso, graph, &mod_table)) {
+                            xr_free(err);
+                            xr_compiler_session_set_module_graph(session, NULL);
+                            xa_analyzer_set_graph(active_graph_analyzer, NULL);
+                            xa_analyzer_free(active_graph_analyzer);
+                            active_graph_analyzer = NULL;
+                            xr_module_graph_free(active_graph);
+                            active_graph = NULL;
+                            xr_project_free(project);
+                            xray_vm_multicore_destroy(iso);
+                            xray_vm_delete(iso);
+                            return XR_CLI_EXIT_FAIL;
                         }
+                        registry->module_table = mod_table;
+                        registry->module_table_count = graph->topo_count;
                         graph = NULL;
                     }
                 }

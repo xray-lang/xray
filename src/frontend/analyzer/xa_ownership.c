@@ -16,12 +16,12 @@
  *   slot being overwritten.
  *
  *   Loans -- bounded place facts with a borrower and a last use.  One registry
- *   holds views, raw-pointer borrows, ordinary closure captures, and defer
- *   captures/snapshots.  They share a registry because they answer the same
+ *   holds views, raw-pointer borrows, ordinary closure captures, and cleanup
+ *   lexical reads. They share a registry because they answer the same
  *   question: is someone still holding this root?
  *
- * Ordinary loans use last-use liveness.  Defer loans are lexical: their owner
- * remains held until the surrounding user block exits and runs its defers.
+ * Ordinary loans use last-use liveness. Cleanup loans are lexical: their owner
+ * remains held until the surrounding user block exits and runs its cleanup.
  *
  * The binding-state and capability axes stay with the visitors that compute
  * them: binding state is a CFG fact and capability is a declaration fact,
@@ -30,8 +30,8 @@
 
 #include "xanalyzer_visitor_internal.h"
 #include "xanalyzer_infer.h"
+#include "xanalyzer_ast_visitor.h"
 #include "xa_ownership.h"
-#include "../parser/xast_walk.h"
 
 XR_FUNC XaActiveLoan *xa_active_loan_for_borrower(XaInferContext *ctx, XaSymbol *view_sym) {
     if (!ctx || !view_sym)
@@ -50,10 +50,8 @@ static const char *xa_loan_kind_label(XaLoanKind kind) {
             return "raw pointer borrow";
         case XA_LOAN_CAPTURE:
             return "closure capture";
-        case XA_LOAN_DEFER_CAPTURE:
-            return "defer capture";
-        case XA_LOAN_DEFER_SNAPSHOT:
-            return "defer snapshot";
+        case XA_LOAN_CLEANUP_READ:
+            return "cleanup lexical read";
         case XA_LOAN_READ:
         case XA_LOAN_WRITE:
             break;
@@ -69,8 +67,7 @@ static bool xa_owner_paths_may_overlap(const char *borrow_path, const char *muta
 }
 
 static bool xa_active_loan_may_be_live_after_mutation(XaInferContext *ctx, XaActiveLoan *borrow) {
-    if (borrow && (borrow->loan.kind == XA_LOAN_DEFER_CAPTURE ||
-                   borrow->loan.kind == XA_LOAN_DEFER_SNAPSHOT))
+    if (borrow && borrow->loan.kind == XA_LOAN_CLEANUP_READ)
         return true;
     if (!ctx || !ctx->analyzer || !borrow || !borrow->borrower_symbol ||
         !borrow->borrower_symbol->name)
@@ -218,9 +215,9 @@ XR_FUNC void xa_clear_active_loans_in_scope(XaInferContext *ctx, XaScope *scope)
 
 /* Record one live loan of `owner` (or of the place `owner_path` inside it)
  * held by `borrower_sym`. The loan ends at the borrower's last use. */
-static void xa_add_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym,
-                               XaScope *borrower_scope, XaSymbol *owner,
-                               const char *owner_path, XaLoanKind kind, AstNode *site) {
+static void xa_add_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym, XaScope *borrower_scope,
+                               XaSymbol *owner, const char *owner_path, XaLoanKind kind,
+                               AstNode *site) {
     if (!ctx || !owner || owner == borrower_sym)
         return;
     XaActiveLoan *loan = xr_calloc(1, sizeof(XaActiveLoan));
@@ -237,8 +234,8 @@ static void xa_add_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym,
     if (owner_path && owner_path[0] != '\0')
         loan->owner_path = xr_strdup(owner_path);
     loan->borrower_symbol = borrower_sym;
-    loan->borrower_scope = borrower_scope ? borrower_scope
-                                          : (borrower_sym ? borrower_sym->scope : NULL);
+    loan->borrower_scope =
+        borrower_scope ? borrower_scope : (borrower_sym ? borrower_sym->scope : NULL);
     if (!loan->borrower_scope) {
         xr_free(loan->owner_path);
         xr_free(loan);
@@ -325,76 +322,53 @@ XR_FUNC void xa_register_pending_capture_loans(XaInferContext *ctx, XaSymbol *bo
     ctx->pending_capture_count = 0;
 }
 
-XR_FUNC void xa_register_pending_defer_loans(XaInferContext *ctx, AstNode *site,
-                                             bool is_snapshot) {
-    if (!ctx || !ctx->analyzer)
-        return;
-    XaScope *lifetime_scope = ctx->analyzer->current_scope;
-    /* Parser-generated eager-capture blocks isolate synthetic names only. The
-     * defer belongs to the surrounding user block and its loan must survive
-     * this synthetic scope's immediate exit. */
-    if (is_snapshot && lifetime_scope && lifetime_scope->parent)
-        lifetime_scope = lifetime_scope->parent;
-    XaLoanKind kind = is_snapshot ? XA_LOAN_DEFER_SNAPSHOT : XA_LOAN_DEFER_CAPTURE;
-    for (int i = 0; i < ctx->pending_capture_count; i++) {
-        XaSymbol *captured = ctx->pending_captures[i];
-        if (captured)
-            xa_add_active_loan(ctx, NULL, lifetime_scope, captured, NULL, kind, site);
-    }
-    ctx->pending_capture_count = 0;
-}
-
-typedef struct XaDeferSnapshotWalk {
+typedef struct XaCleanupLoanWalk {
     XaInferContext *ctx;
+    XaScope *body_scope;
     XaScope *lifetime_scope;
     AstNode *site;
-} XaDeferSnapshotWalk;
+} XaCleanupLoanWalk;
 
-static void xa_register_defer_snapshot_node(XaDeferSnapshotWalk *walk, AstNode *node);
-
-static bool xa_register_defer_snapshot_child(AstNode *child, void *user_data) {
-    xa_register_defer_snapshot_node((XaDeferSnapshotWalk *) user_data, child);
-    return true;
+static bool xa_scope_is_within(XaScope *scope, XaScope *ancestor) {
+    for (XaScope *current = scope; current; current = current->parent) {
+        if (current == ancestor)
+            return true;
+    }
+    return false;
 }
 
-static void xa_register_defer_snapshot_node(XaDeferSnapshotWalk *walk, AstNode *node) {
+static void xa_register_cleanup_loan_node(AstNode *node, void *user_data) {
+    XaCleanupLoanWalk *walk = (XaCleanupLoanWalk *) user_data;
     if (!walk || !walk->ctx || !node)
         return;
-    if (node->type == AST_VARIABLE && node->as.variable.name) {
-        XaSymbol *owner =
-            xa_scope_lookup(walk->ctx->analyzer->current_scope, node->as.variable.name);
-        XaSymbolLinks *links = owner ? xa_analyzer_get_links(walk->ctx->analyzer, owner) : NULL;
-        if (links && links->root_id != 0 && xa_type_has_movable_root(links->type)) {
-            bool duplicate = false;
-            for (XaActiveLoan *loan = walk->ctx->active_loans; loan; loan = loan->next) {
-                if (loan->loan.kind == XA_LOAN_DEFER_SNAPSHOT &&
-                    loan->loan.root == links->root_id &&
-                    loan->borrower_scope == walk->lifetime_scope) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (!duplicate)
-                xa_add_active_loan(walk->ctx, NULL, walk->lifetime_scope, owner, NULL,
-                                   XA_LOAN_DEFER_SNAPSHOT, walk->site);
-        }
+    if (node->type != AST_VARIABLE || node->as.variable.symbol_id == 0)
+        return;
+    XaSymbol *owner =
+        xa_scope_lookup_by_id(walk->ctx->analyzer->global_scope, node->as.variable.symbol_id);
+    XaSymbolLinks *links = owner ? xa_analyzer_get_links(walk->ctx->analyzer, owner) : NULL;
+    if (!owner || !links || links->root_id == 0 || !xa_type_has_movable_root(links->type) ||
+        xa_scope_is_within(owner->scope, walk->body_scope))
+        return;
+    for (XaActiveLoan *loan = walk->ctx->active_loans; loan; loan = loan->next) {
+        if (loan->loan.kind == XA_LOAN_CLEANUP_READ && loan->loan.root == links->root_id &&
+            loan->borrower_scope == walk->lifetime_scope)
+            return;
     }
-    (void) xr_ast_for_each_child(node, xa_register_defer_snapshot_child, walk);
+    xa_add_active_loan(walk->ctx, NULL, walk->lifetime_scope, owner, NULL, XA_LOAN_CLEANUP_READ,
+                       walk->site);
 }
 
-XR_FUNC void xa_register_defer_snapshot_expr_loans(XaInferContext *ctx, AstNode *expr,
-                                                   AstNode *site) {
-    if (!ctx || !ctx->analyzer || !expr)
+XR_FUNC void xa_register_cleanup_loans(XaInferContext *ctx, AstNode *site) {
+    AstNode *body = site && site->type == AST_DEFER_STMT ? site->as.defer_stmt.body : NULL;
+    if (!ctx || !ctx->analyzer || !body)
         return;
-    XaScope *lifetime_scope = ctx->analyzer->current_scope;
-    if (lifetime_scope && lifetime_scope->parent)
-        lifetime_scope = lifetime_scope->parent;
-    XaDeferSnapshotWalk walk = {
+    XaCleanupLoanWalk walk = {
         .ctx = ctx,
-        .lifetime_scope = lifetime_scope,
+        .body_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, body),
+        .lifetime_scope = ctx->analyzer->current_scope,
         .site = site,
     };
-    xa_register_defer_snapshot_node(&walk, expr);
+    xa_ast_walk(body, xa_register_cleanup_loan_node, NULL, &walk);
 }
 
 XR_FUNC void xa_discard_pending_captures(XaInferContext *ctx) {
@@ -420,17 +394,14 @@ XR_FUNC void xa_check_active_loan_owner_path_mutation(XaInferContext *ctx, AstNo
     if (!ctx || !ctx->analyzer || !owner_sym || !loc_node)
         return;
     for (XaActiveLoan *b = ctx->active_loans; b; b = b->next) {
-        if ((b->loan.kind == XA_LOAN_DEFER_CAPTURE ||
-             b->loan.kind == XA_LOAN_DEFER_SNAPSHOT) &&
+        if (b->loan.kind == XA_LOAN_CLEANUP_READ &&
             (!operation || (strcmp(operation, "moving the owner") != 0 &&
                             strcmp(operation, "returning the owner") != 0)))
             continue;
         bool same_owner = b->owner_symbol == owner_sym;
-        bool defer_root_match =
-            (b->loan.kind == XA_LOAN_DEFER_CAPTURE ||
-             b->loan.kind == XA_LOAN_DEFER_SNAPSHOT) &&
-            b->loan.root != 0 && owner_sym->links.root_id == b->loan.root;
-        if (!same_owner && !defer_root_match)
+        bool cleanup_root_match = b->loan.kind == XA_LOAN_CLEANUP_READ && b->loan.root != 0 &&
+                                  owner_sym->links.root_id == b->loan.root;
+        if (!same_owner && !cleanup_root_match)
             continue;
         if (!xa_owner_paths_may_overlap(b->owner_path, owner_path))
             continue;
@@ -441,18 +412,14 @@ XR_FUNC void xa_check_active_loan_owner_path_mutation(XaInferContext *ctx, AstNo
         XrLocation loc = {
             .file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
         char msg[320];
-        if (b->loan.kind == XA_LOAN_DEFER_CAPTURE ||
-            b->loan.kind == XA_LOAN_DEFER_SNAPSHOT) {
-            const char *form = b->loan.kind == XA_LOAN_DEFER_SNAPSHOT ? "snapshotted" : "captured";
-            const char *verb = operation && strcmp(operation, "moving the owner") == 0
-                                   ? "move"
-                                   : (operation && strcmp(operation, "returning the owner") == 0
-                                          ? "return"
-                                          : "mutate");
-            snprintf(msg, sizeof(msg),
-                     "cannot %s '%s': a defer in this block holds it (%s at line %u)", verb,
-                     owner_sym->name ? owner_sym->name : "?", form,
-                     (unsigned) b->site_line);
+        if (b->loan.kind == XA_LOAN_CLEANUP_READ) {
+            const char *verb =
+                operation && strcmp(operation, "moving the owner") == 0
+                    ? "move"
+                    : (operation && strcmp(operation, "returning the owner") == 0 ? "return"
+                                                                                  : "mutate");
+            snprintf(msg, sizeof(msg), "cannot %s '%s': a cleanup in this block reads it (line %u)",
+                     verb, owner_sym->name ? owner_sym->name : "?", (unsigned) b->site_line);
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_BORROW_CONFLICT, msg, &loc);
             return;

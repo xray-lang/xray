@@ -36,6 +36,7 @@
 #include "xanalyzer.h"
 #include "xanalyzer_ast_visitor.h"
 #include "xanalyzer_symbol.h"
+#include "xanalyzer_visitor_internal.h"
 #include "../parser/xast_nodes.h"
 #include "../../base/xchecks.h"
 #include "../../base/xmalloc.h"
@@ -65,7 +66,7 @@ typedef struct XaSuspendEdge {
     bool is_callback;
     /* The call sits inside a `defer` body, so the callee's suspend result
      * decides whether that cleanup can run to completion. */
-    bool in_defer_body;
+    bool in_cleanup_body;
 } XaSuspendEdge;
 
 typedef struct XaSuspendRow {
@@ -82,6 +83,12 @@ typedef struct XaSuspendRow {
      * reason instead so the witness names the real gap. */
     XaUnknownReason direct_incomplete_reason;
     XaUnknownReason result_incomplete_reason;
+    XaSuspendState spawn_direct;
+    XaSuspendCause spawn_direct_cause;
+    XaUnknownReason spawn_direct_incomplete_reason;
+    XaSuspendState spawn_result;
+    XaSuspendCause spawn_result_cause;
+    XaUnknownReason spawn_result_incomplete_reason;
     /* Generator suspension is lexical and local: it needs no lattice, no edge
      * propagation, and has no incomplete state. */
     bool has_generator_yield;
@@ -90,13 +97,11 @@ typedef struct XaSuspendRow {
     /* Depth of `defer` bodies the scan is currently inside, and the first
      * suspension point found in one. A defer body runs as a nested VM call on
      * a frame that is already unwinding, so it cannot park and resume. */
-    int defer_body_depth;
-    XaSuspendCause defer_suspend_cause;
-    bool has_defer_suspend;
-    /* This row IS a defer body. `defer { ... }` parses to a function
-     * expression, so the cleanup gets its own row and its own converged
-     * suspend result -- which is exactly the answer the rule needs. */
-    bool is_defer_body;
+    int cleanup_body_depth;
+    XaSuspendCause cleanup_suspend_cause;
+    bool has_cleanup_suspend;
+    XaSuspendCause cleanup_spawn_cause;
+    bool has_cleanup_spawn;
     XaSuspendEdge *edges;
     int edge_count;
     int edge_capacity;
@@ -113,6 +118,9 @@ typedef struct XaSuspendScan {
     XaSuspendPass *pass;
     XaSuspendRow *row;
     int nested_function_depth;
+    const char *cleanup_loop_labels[64];
+    int cleanup_loop_count;
+    int cleanup_loop_bases[64];
 } XaSuspendScan;
 
 static AstNode *sus_identity_expr(AstNode *expr) {
@@ -246,6 +254,9 @@ static bool sus_append_row(XaSuspendPass *pass, AstNode *node, XaSymbol *symbol)
     row->direct = XA_SUSPEND_NONE;
     row->direct_incomplete_reason = XA_UNKNOWN_DYNAMIC_CALL_TARGET;
     row->result_incomplete_reason = XA_UNKNOWN_DYNAMIC_CALL_TARGET;
+    row->spawn_direct = XA_SUSPEND_NONE;
+    row->spawn_direct_incomplete_reason = XA_UNKNOWN_DYNAMIC_CALL_TARGET;
+    row->spawn_result_incomplete_reason = XA_UNKNOWN_DYNAMIC_CALL_TARGET;
     return true;
 }
 
@@ -282,14 +293,28 @@ static void sus_mark_direct(XaSuspendRow *row, XaSuspendState state, AstNode *si
                             const char *kind, const char *detail) {
     if (!row || !site)
         return;
-    if (row->defer_body_depth > 0 && !row->has_defer_suspend) {
-        sus_set_cause(&row->defer_suspend_cause, site, kind, detail);
-        row->has_defer_suspend = true;
+    if (row->cleanup_body_depth > 0 && !row->has_cleanup_suspend) {
+        sus_set_cause(&row->cleanup_suspend_cause, site, kind, detail);
+        row->has_cleanup_suspend = true;
     }
     if (state <= row->direct)
         return;
     row->direct = state;
     sus_set_cause(&row->direct_cause, site, kind, detail);
+}
+
+static void sus_mark_spawn(XaSuspendRow *row, XaSuspendState state, AstNode *site, const char *kind,
+                           const char *detail) {
+    if (!row || !site)
+        return;
+    if (row->cleanup_body_depth > 0 && state == XA_SUSPEND_MAY && !row->has_cleanup_spawn) {
+        sus_set_cause(&row->cleanup_spawn_cause, site, kind, detail);
+        row->has_cleanup_spawn = true;
+    }
+    if (state <= row->spawn_direct)
+        return;
+    row->spawn_direct = state;
+    sus_set_cause(&row->spawn_direct_cause, site, kind, detail);
 }
 
 static bool sus_add_edge(XaSuspendRow *row, XaSymbol *callee, AstNode *site, bool is_callback) {
@@ -309,10 +334,11 @@ static bool sus_add_edge(XaSuspendRow *row, XaSymbol *callee, AstNode *site, boo
         row->edges = next;
         row->edge_capacity = next_capacity;
     }
-    row->edges[row->edge_count++] = (XaSuspendEdge) {.callee = callee,
-                                                     .site = site,
-                                                     .is_callback = is_callback,
-                                                     .in_defer_body = row->defer_body_depth > 0};
+    row->edges[row->edge_count++] =
+        (XaSuspendEdge) {.callee = callee,
+                         .site = site,
+                         .is_callback = is_callback,
+                         .in_cleanup_body = row->cleanup_body_depth > 0};
     return true;
 }
 
@@ -373,12 +399,16 @@ static void sus_scan_symbol_call(XaSuspendScan *scan, XaSymbol *callee, AstNode 
     if (!callee) {
         sus_mark_direct(scan->row, XA_SUSPEND_INCOMPLETE, site,
                         is_callback ? "dynamic callback" : "dynamic call", NULL);
+        sus_mark_spawn(scan->row, XA_SUSPEND_INCOMPLETE, site,
+                       is_callback ? "dynamic callback" : "dynamic call", NULL);
         return;
     }
     /* A function-valued parameter/local has no statically closed target. */
     if (callee->kind == XA_SYM_PARAMETER || callee->kind == XA_SYM_VARIABLE) {
         sus_mark_direct(scan->row, XA_SUSPEND_INCOMPLETE, site,
                         is_callback ? "dynamic callback" : "dynamic call", callee->name);
+        sus_mark_spawn(scan->row, XA_SUSPEND_INCOMPLETE, site,
+                       is_callback ? "dynamic callback" : "dynamic call", callee->name);
         return;
     }
     if (sus_row_for_symbol(scan->pass, callee) || sus_symbol_has_body(callee)) {
@@ -412,6 +442,7 @@ static void sus_scan_callback(XaSuspendScan *scan, AstNode *callback, AstNode *s
         return;
     }
     sus_mark_direct(scan->row, XA_SUSPEND_INCOMPLETE, site, "dynamic callback", NULL);
+    sus_mark_spawn(scan->row, XA_SUSPEND_INCOMPLETE, site, "dynamic callback", NULL);
 }
 
 static int sus_hof_callback_index(const XrType *receiver, const char *method) {
@@ -479,11 +510,15 @@ static void sus_scan_call(XaSuspendScan *scan, AstNode *node) {
             if (open_dispatch)
                 sus_mark_direct(scan->row, XA_SUSPEND_INCOMPLETE, node, "open dispatch",
                                 member->name);
+            if (open_dispatch)
+                sus_mark_spawn(scan->row, XA_SUSPEND_INCOMPLETE, node, "open dispatch",
+                               member->name);
             else
                 sus_add_edge(scan->row, target, node, false);
         } else if (target &&
                    (target->kind == XA_SYM_PARAMETER || target->kind == XA_SYM_VARIABLE)) {
             sus_mark_direct(scan->row, XA_SUSPEND_INCOMPLETE, node, "dynamic call", member->name);
+            sus_mark_spawn(scan->row, XA_SUSPEND_INCOMPLETE, node, "dynamic call", member->name);
         }
         /* Otherwise: builtin member / resolved native — non-suspending. */
 
@@ -495,6 +530,7 @@ static void sus_scan_call(XaSuspendScan *scan, AstNode *node) {
         return;
     }
     sus_mark_direct(scan->row, XA_SUSPEND_INCOMPLETE, node, "dynamic call", NULL);
+    sus_mark_spawn(scan->row, XA_SUSPEND_INCOMPLETE, node, "dynamic call", NULL);
 }
 
 static void sus_scan_node_pre(AstNode *node, void *userdata) {
@@ -512,6 +548,9 @@ static void sus_scan_node_pre(AstNode *node, void *userdata) {
         case AST_AWAIT_EXPR:
             sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "await", NULL);
             break;
+        case AST_GO_EXPR:
+            sus_mark_spawn(scan->row, XA_SUSPEND_MAY, node, "task spawn", "go");
+            break;
         case AST_YIELD_STMT:
             /* Generator value production: the driver resumes this frame, the
              * scheduler is not involved.  Deliberately does not mark the
@@ -523,16 +562,68 @@ static void sus_scan_node_pre(AstNode *node, void *userdata) {
              * rejected, and the walk may reach the defer before the yield. */
             if (!scan->row->defer_site)
                 scan->row->defer_site = node;
-            /* Block form: the body is a function expression with its own row.
-             * Inline form: it stays in this row, tracked by the depth. */
-            AstNode *deferred = node->as.defer_stmt.expr;
-            XaSuspendRow *deferred_row = deferred && deferred->type == AST_FUNCTION_EXPR
-                                             ? sus_row_for_node(scan->pass, deferred)
-                                             : NULL;
-            if (deferred_row)
-                deferred_row->is_defer_body = true;
-            else
-                scan->row->defer_body_depth++;
+            int depth = scan->row->cleanup_body_depth;
+            if (depth <
+                (int) (sizeof(scan->cleanup_loop_bases) / sizeof(scan->cleanup_loop_bases[0])))
+                scan->cleanup_loop_bases[depth] = scan->cleanup_loop_count;
+            scan->row->cleanup_body_depth++;
+            break;
+        }
+        case AST_WHILE_STMT:
+        case AST_FOR_STMT:
+        case AST_FOR_IN_STMT:
+            if (scan->row->cleanup_body_depth > 0 &&
+                scan->cleanup_loop_count < (int) (sizeof(scan->cleanup_loop_labels) /
+                                                  sizeof(scan->cleanup_loop_labels[0]))) {
+                const char *label = node->type == AST_WHILE_STMT ? node->as.while_stmt.label
+                                    : node->type == AST_FOR_STMT ? node->as.for_stmt.label
+                                                                 : node->as.for_in_stmt.label;
+                scan->cleanup_loop_labels[scan->cleanup_loop_count++] = label;
+            }
+            break;
+        case AST_RETURN_STMT: {
+            if (scan->row->cleanup_body_depth <= 0)
+                break;
+            XrLocation location = {.file = scan->row->symbol ? scan->row->symbol->links.file_path
+                                                             : NULL,
+                                   .line = (uint32_t) node->line,
+                                   .column = (uint32_t) node->column};
+            xa_analyzer_add_diagnostic(
+                scan->pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_DEFER_CONTROL,
+                "a defer body cannot return from its owning function", &location);
+            break;
+        }
+        case AST_BREAK_STMT:
+        case AST_CONTINUE_STMT: {
+            if (scan->row->cleanup_body_depth <= 0)
+                break;
+            int depth = scan->row->cleanup_body_depth - 1;
+            int base = depth < (int) (sizeof(scan->cleanup_loop_bases) /
+                                      sizeof(scan->cleanup_loop_bases[0]))
+                           ? scan->cleanup_loop_bases[depth]
+                           : scan->cleanup_loop_count;
+            const char *label = node->type == AST_BREAK_STMT ? node->as.break_stmt.label
+                                                             : node->as.continue_stmt.label;
+            bool local_target = !label ? scan->cleanup_loop_count > base : false;
+            for (int i = scan->cleanup_loop_count - 1; label && i >= base; i--) {
+                if (scan->cleanup_loop_labels[i] &&
+                    strcmp(scan->cleanup_loop_labels[i], label) == 0) {
+                    local_target = true;
+                    break;
+                }
+            }
+            if (local_target)
+                break;
+            XrLocation location = {.file = scan->row->symbol ? scan->row->symbol->links.file_path
+                                                             : NULL,
+                                   .line = (uint32_t) node->line,
+                                   .column = (uint32_t) node->column};
+            xa_analyzer_add_diagnostic(
+                scan->pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_DEFER_CONTROL,
+                node->type == AST_BREAK_STMT
+                    ? "a defer body cannot break to a loop outside the cleanup"
+                    : "a defer body cannot continue a loop outside the cleanup",
+                &location);
             break;
         }
         case AST_SELECT_STMT:
@@ -542,6 +633,8 @@ static void sus_scan_node_pre(AstNode *node, void *userdata) {
             sus_mark_direct(scan->row, XA_SUSPEND_MAY, node, "scope join", NULL);
             break;
         case AST_CALL_EXPR:
+            if (xa_expr_is_sys_thread_spawn_call(node))
+                sus_mark_spawn(scan->row, XA_SUSPEND_MAY, node, "task spawn", "sys.Thread.spawn");
             sus_scan_call(scan, node);
             break;
         default:
@@ -553,16 +646,20 @@ static void sus_scan_node_post(AstNode *node, void *userdata) {
     XaSuspendScan *scan = (XaSuspendScan *) userdata;
     if (!scan || !node)
         return;
-    if ((node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR ||
-         node->type == AST_METHOD_DECL) &&
-        scan->nested_function_depth > 0)
-        scan->nested_function_depth--;
-    if (node->type == AST_DEFER_STMT && scan->row && scan->row->defer_body_depth > 0) {
-        AstNode *deferred = node->as.defer_stmt.expr;
-        if (!deferred || deferred->type != AST_FUNCTION_EXPR ||
-            !sus_row_for_node(scan->pass, deferred))
-            scan->row->defer_body_depth--;
+    if (node->type == AST_FUNCTION_DECL || node->type == AST_FUNCTION_EXPR ||
+        node->type == AST_METHOD_DECL) {
+        if (scan->nested_function_depth > 0)
+            scan->nested_function_depth--;
+        return;
     }
+    if (scan->nested_function_depth > 0)
+        return;
+    if ((node->type == AST_WHILE_STMT || node->type == AST_FOR_STMT ||
+         node->type == AST_FOR_IN_STMT) &&
+        scan->row->cleanup_body_depth > 0 && scan->cleanup_loop_count > 0)
+        scan->cleanup_loop_count--;
+    if (node->type == AST_DEFER_STMT && scan->row && scan->row->cleanup_body_depth > 0)
+        scan->row->cleanup_body_depth--;
 }
 
 /* A bodyless extern "C" declaration has nothing to walk, so an empty scan must
@@ -607,6 +704,29 @@ static void sus_combine_row(XaSuspendPass *pass, XaSuspendRow *row, XaSuspendSta
             state = edge_state;
             if (edge_state == XA_SUSPEND_INCOMPLETE && callee_row)
                 incomplete_reason = callee_row->result_incomplete_reason;
+            sus_set_cause(&cause, edge->site, edge->is_callback ? "callback" : "call",
+                          edge->callee && edge->callee->name ? edge->callee->name : "?");
+        }
+    }
+    *out_state = state;
+    *out_cause = cause;
+    *out_incomplete_reason = incomplete_reason;
+}
+
+static void sus_combine_spawn_row(XaSuspendPass *pass, XaSuspendRow *row, XaSuspendState *out_state,
+                                  XaSuspendCause *out_cause,
+                                  XaUnknownReason *out_incomplete_reason) {
+    XaSuspendState state = row->spawn_direct;
+    XaSuspendCause cause = row->spawn_direct_cause;
+    XaUnknownReason incomplete_reason = row->spawn_direct_incomplete_reason;
+    for (int i = 0; i < row->edge_count; i++) {
+        XaSuspendEdge *edge = &row->edges[i];
+        XaSuspendRow *callee_row = sus_row_for_symbol(pass, edge->callee);
+        XaSuspendState edge_state = callee_row ? callee_row->spawn_result : XA_SUSPEND_NONE;
+        if (edge_state > state) {
+            state = edge_state;
+            if (edge_state == XA_SUSPEND_INCOMPLETE && callee_row)
+                incomplete_reason = callee_row->spawn_result_incomplete_reason;
             sus_set_cause(&cause, edge->site, edge->is_callback ? "callback" : "call",
                           edge->callee && edge->callee->name ? edge->callee->name : "?");
         }
@@ -705,20 +825,15 @@ static void sus_reject_suspending_generator(XaSuspendPass *pass, const XaSuspend
  * would ban every callback-driven cleanup instead of the broken ones. An
  * unknown target that does reach the scheduler is caught where it happens: the
  * leaving frame has no suspension point to park at and aborts. */
-static void sus_reject_suspending_defer(XaSuspendPass *pass, const XaSuspendRow *row) {
+static void sus_reject_suspending_cleanup(XaSuspendPass *pass, const XaSuspendRow *row) {
     XaSuspendCause edge_cause;
     const XaSuspendCause *cause = NULL;
-    if (row->is_defer_body && row->result == XA_SUSPEND_MAY) {
-        /* Block form: this row is the cleanup body, and its converged result
-         * already accounts for everything it calls. */
-        cause = &row->result_cause;
-    } else if (row->has_defer_suspend) {
-        /* Inline form: the suspension point sits directly in `defer expr`. */
-        cause = &row->defer_suspend_cause;
+    if (row->has_cleanup_suspend) {
+        cause = &row->cleanup_suspend_cause;
     } else {
         for (int i = 0; i < row->edge_count; i++) {
             const XaSuspendEdge *edge = &row->edges[i];
-            if (!edge->in_defer_body)
+            if (!edge->in_cleanup_body)
                 continue;
             XaSuspendRow *callee = sus_row_for_symbol(pass, edge->callee);
             if (!callee || callee->result != XA_SUSPEND_MAY)
@@ -748,6 +863,44 @@ static void sus_reject_suspending_defer(XaSuspendPass *pass, const XaSuspendRow 
                                message, &location);
 }
 
+static void sus_reject_spawning_cleanup(XaSuspendPass *pass, const XaSuspendRow *row) {
+    XaSuspendCause edge_cause;
+    const XaSuspendCause *cause = NULL;
+    if (row->has_cleanup_spawn) {
+        cause = &row->cleanup_spawn_cause;
+    } else {
+        for (int i = 0; i < row->edge_count; i++) {
+            const XaSuspendEdge *edge = &row->edges[i];
+            if (!edge->in_cleanup_body)
+                continue;
+            XaSuspendRow *callee = sus_row_for_symbol(pass, edge->callee);
+            if (!callee || callee->spawn_result != XA_SUSPEND_MAY)
+                continue;
+            sus_set_cause(&edge_cause, edge->site, edge->is_callback ? "callback" : "call",
+                          edge->callee && edge->callee->name ? edge->callee->name : "?");
+            cause = &edge_cause;
+            break;
+        }
+    }
+    if (!cause)
+        return;
+    char feature[160];
+    sus_format_cause(cause, feature, sizeof(feature));
+    char message[320];
+    snprintf(message, sizeof(message),
+             "a deferred action cannot create a task; %s would let work escape the cleanup "
+             "boundary\n"
+             "hint: create and join the task before registering cleanup, or transfer resource "
+             "ownership to the task",
+             feature);
+    AstNode *site = cause->site ? cause->site : row->node;
+    XrLocation location = {.file = row->symbol ? row->symbol->links.file_path : NULL,
+                           .line = (uint32_t) site->line,
+                           .column = (uint32_t) site->column};
+    xa_analyzer_add_diagnostic(pass->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_DEFER_SUSPEND,
+                               message, &location);
+}
+
 static void sus_publish_summaries(XaSuspendPass *pass) {
     if (!pass)
         return;
@@ -758,15 +911,27 @@ static void sus_publish_summaries(XaSuspendPass *pass) {
             XaSuspendCause cause;
             XaUnknownReason incomplete_reason;
             sus_combine_row(pass, &pass->rows[i], &state, &cause, &incomplete_reason);
+            XaSuspendState spawn_state;
+            XaSuspendCause spawn_cause;
+            XaUnknownReason spawn_incomplete_reason;
+            sus_combine_spawn_row(pass, &pass->rows[i], &spawn_state, &spawn_cause,
+                                  &spawn_incomplete_reason);
             if (state != pass->rows[i].result ||
-                incomplete_reason != pass->rows[i].result_incomplete_reason) {
+                incomplete_reason != pass->rows[i].result_incomplete_reason ||
+                spawn_state != pass->rows[i].spawn_result ||
+                spawn_incomplete_reason != pass->rows[i].spawn_result_incomplete_reason) {
                 pass->rows[i].result = state;
                 pass->rows[i].result_cause = cause;
                 pass->rows[i].result_incomplete_reason = incomplete_reason;
+                pass->rows[i].spawn_result = spawn_state;
+                pass->rows[i].spawn_result_cause = spawn_cause;
+                pass->rows[i].spawn_result_incomplete_reason = spawn_incomplete_reason;
                 changed = true;
             } else if (state != XA_SUSPEND_NONE) {
                 pass->rows[i].result_cause = cause;
             }
+            if (spawn_state != XA_SUSPEND_NONE)
+                pass->rows[i].spawn_result_cause = spawn_cause;
         }
         if (!changed)
             break;
@@ -790,9 +955,15 @@ static void sus_publish_summaries(XaSuspendPass *pass) {
          * over call edges and never incomplete. */
         if (row->has_generator_yield)
             xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_GEN_SUSPEND);
+        if (row->spawn_result == XA_SUSPEND_MAY)
+            xa_effect_summary_add_semantic_effects(&summary, XA_SEM_EFFECT_TASK_SPAWN);
+        else if (row->spawn_result == XA_SUSPEND_INCOMPLETE)
+            xa_effect_summary_mark_semantic_incomplete(&summary, XA_SEM_EFFECT_TASK_SPAWN,
+                                                       row->spawn_result_incomplete_reason);
         sus_reject_suspending_generator(pass, row);
         sus_reject_generator_defer(pass, row);
-        sus_reject_suspending_defer(pass, row);
+        sus_reject_suspending_cleanup(pass, row);
+        sus_reject_spawning_cleanup(pass, row);
         XaEffectId effect_id =
             ok ? xa_effect_db_intern(pass->analyzer->effect_db, &summary) : XA_EFFECT_NONE;
         xa_effect_summary_clear(&summary);

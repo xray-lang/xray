@@ -3,7 +3,7 @@
 // each task awaited before the next is spawned, the schedule is deterministic,
 // so VM and AOT must agree on the interleaving of body / deferred output.
 fn task(id: int) -> int {
-    defer print("task-defer " + string(id))
+    defer { print("task-defer " + string(id)) }
     print("task-body " + string(id))
     return id * 10
 }

@@ -529,7 +529,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_BLOCK:
             n->as.block.count = node->as.block.count;
             n->as.block.capacity = node->as.block.count;
-            n->as.block.is_synthetic_defer_capture = node->as.block.is_synthetic_defer_capture;
             n->as.block.statements = clone_node_array(node->as.block.statements,
                                                       node->as.block.count, map, mc, clone_ctx);
             break;
@@ -929,7 +928,7 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
                 xr_ast_clone_ctx(node->as.channel_new.buffer_size, map, mc, clone_ctx);
             break;
         case AST_DEFER_STMT:
-            n->as.defer_stmt.expr = xr_ast_clone_ctx(node->as.defer_stmt.expr, map, mc, clone_ctx);
+            n->as.defer_stmt.body = xr_ast_clone_ctx(node->as.defer_stmt.body, map, mc, clone_ctx);
             break;
         case AST_SCOPE_BLOCK:
             n->as.scope_block.body =
@@ -1903,7 +1902,7 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
                                         import_aliases, local_only);
             break;
         case AST_DEFER_STMT:
-            collect_instantiation_sites(node->as.defer_stmt.expr, registry, collector,
+            collect_instantiation_sites(node->as.defer_stmt.body, registry, collector,
                                         import_aliases, local_only);
             break;
         case AST_YIELD_STMT:
@@ -2244,7 +2243,7 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
             rewrite_call_sites(node->as.scope_block.body, registry, collector, import_aliases);
             break;
         case AST_DEFER_STMT:
-            rewrite_call_sites(node->as.defer_stmt.expr, registry, collector, import_aliases);
+            rewrite_call_sites(node->as.defer_stmt.body, registry, collector, import_aliases);
             break;
         case AST_YIELD_STMT:
             rewrite_call_sites(node->as.yield_stmt.value, registry, collector, import_aliases);

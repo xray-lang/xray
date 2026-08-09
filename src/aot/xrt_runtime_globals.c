@@ -17,5 +17,4 @@
 
 #include "xrt_class.h"
 #include "xrt_coll.h"
-#include "xrt_defer.h"
 #include "xrt_exception.h"

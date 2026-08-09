@@ -529,6 +529,24 @@
   :vm-bytecode (driver xi_emit_err_catch)
   :aot-c-stmt (driver xicgen_stmt_err_catch))
 
+(lower xi.cleanup.enter
+  :match ()
+  :required-targets (vm-bytecode aot-c-stmt)
+  :vm-bytecode (driver xi_emit_cleanup_enter)
+  :aot-c-stmt (driver xicgen_stmt_cleanup_enter))
+
+(lower xi.cleanup.leave
+  :match ()
+  :required-targets (vm-bytecode aot-c-stmt)
+  :vm-bytecode (driver xi_emit_cleanup_leave)
+  :aot-c-stmt (driver xicgen_stmt_cleanup_leave))
+
+(lower xi.cleanup.err.check
+  :match ()
+  :required-targets (vm-bytecode aot-c-stmt)
+  :vm-bytecode (driver xi_emit_cleanup_err_check)
+  :aot-c-stmt (driver xicgen_stmt_cleanup_err_check))
+
 (lower xi.retain
   :match ()
   :required-targets (vm-bytecode aot-c)
@@ -935,24 +953,6 @@
   :match ()
   :required-targets (vm-bytecode)
   :vm-bytecode (driver xi_emit_chan_new))
-
-(lower xi.defer
-  :match ()
-  :required-targets (vm-bytecode aot-c-stmt)
-  :vm-bytecode (driver xi_emit_defer)
-  :aot-c-stmt (driver xicgen_stmt_defer))
-
-(lower xi.defer.mark
-  :match ()
-  :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_defer_mark)
-  :aot-c (driver xicgen_defer_mark))
-
-(lower xi.defer.run.to
-  :match ()
-  :required-targets (vm-bytecode aot-c-stmt)
-  :vm-bytecode (driver xi_emit_defer_run_to)
-  :aot-c-stmt (driver xicgen_stmt_defer_run_to))
 
 (lower xi.json.new
   :match ()

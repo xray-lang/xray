@@ -24,8 +24,8 @@
 // ARC 把值的 drop 放在死亡点，对跨越该调用仍存活的值来说那个位置正好在
 // 调用**之后**——于是整帧的 owned 局部全部泄漏。
 //
-// lowering 早就为 `defer` 做过同样的事（有 defer 时清除 XI_FLAG_TAIL），
-// 理由一模一样。ARC 是第一个知道 release 存在的 pass，所以标志在那里撤销。
+// 静态 cleanup 也会在存在离开边工作时禁用尾调用，理由一模一样。
+// ARC 是第一个知道 release 存在的 pass，所以标志在那里撤销。
 //
 // FAIL_AT: `return f()` 形态每轮泄漏 3 个对象；不调用 f 则 0
 // PASS_AT: 两者都是 0

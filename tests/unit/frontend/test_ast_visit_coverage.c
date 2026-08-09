@@ -472,7 +472,7 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
         }
 
         case AST_DEFER_STMT:
-            check_node(ctx, node->as.defer_stmt.expr);
+            check_node(ctx, node->as.defer_stmt.body);
             break;
 
         case AST_SCOPE_BLOCK:
@@ -801,7 +801,7 @@ TEST(slice_expr) {
 
 TEST(defer_stmt) {
     return assert_all_typed("fn cleanup() {\n"
-                            "    defer print(\"done\")\n"
+                            "    defer { print(\"done\") }\n"
                             "    print(\"working\")\n"
                             "}\n"
                             "cleanup()\n",

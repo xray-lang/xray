@@ -2172,8 +2172,8 @@ static bool xa_thread_lint_mark_nonempty_for_in_finalizer_loop(XaThreadHandleLin
     return closed;
 }
 
-static void xa_thread_lint_scan_defer_expr(XaThreadHandleLintState *states, AstNode *expr,
-                                           bool can_escape) {
+static void xa_thread_lint_scan_cleanup_body(XaThreadHandleLintState *states, AstNode *expr,
+                                             bool can_escape) {
     if (!states || !expr || !can_escape)
         return;
 
@@ -2191,7 +2191,9 @@ static void xa_thread_lint_scan_defer_expr(XaThreadHandleLintState *states, AstN
 
     xa_thread_lint_snapshot_states(states, before);
     AstNode *deferred = xa_thread_lint_unwrap_expr(expr);
-    if (deferred && deferred->type == AST_FUNCTION_EXPR)
+    if (deferred && deferred->type == AST_BLOCK)
+        xa_thread_lint_scan_stmt(states, deferred, true);
+    else if (deferred && deferred->type == AST_FUNCTION_EXPR)
         xa_thread_lint_scan_stmt(states, deferred->as.function_expr.body, true);
     else
         xa_thread_lint_scan_expr(states, deferred, false, true);
@@ -2298,7 +2300,7 @@ static void xa_thread_lint_scan_stmt(XaThreadHandleLintState *states, AstNode *s
             xa_thread_lint_scan_expr(states, stmt->as.throw_stmt.expression, false, can_escape);
             return;
         case AST_DEFER_STMT:
-            xa_thread_lint_scan_defer_expr(states, stmt->as.defer_stmt.expr, can_escape);
+            xa_thread_lint_scan_cleanup_body(states, stmt->as.defer_stmt.body, can_escape);
             return;
         case AST_SCOPE_BLOCK:
             xa_thread_lint_scan_stmt(states, stmt->as.scope_block.body, can_escape);
@@ -4187,8 +4189,8 @@ static bool xa_os_resource_lint_mark_nonempty_for_in_finalizer_loop(XaOsResource
     return closed || partial;
 }
 
-static void xa_os_resource_lint_scan_defer_expr(XaOsResourceLintState *states, AstNode *expr,
-                                                bool can_escape) {
+static void xa_os_resource_lint_scan_cleanup_body(XaOsResourceLintState *states, AstNode *expr,
+                                                  bool can_escape) {
     if (!states || !expr || !can_escape)
         return;
 
@@ -4206,7 +4208,9 @@ static void xa_os_resource_lint_scan_defer_expr(XaOsResourceLintState *states, A
 
     xa_os_resource_lint_snapshot_states(states, before);
     AstNode *deferred = xa_thread_lint_unwrap_expr(expr);
-    if (deferred && deferred->type == AST_FUNCTION_EXPR)
+    if (deferred && deferred->type == AST_BLOCK)
+        xa_os_resource_lint_scan_stmt(states, deferred, true);
+    else if (deferred && deferred->type == AST_FUNCTION_EXPR)
         xa_os_resource_lint_scan_stmt(states, deferred->as.function_expr.body, true);
     else
         xa_os_resource_lint_scan_expr(states, deferred, false, true);
@@ -4946,7 +4950,7 @@ static void xa_os_resource_lint_scan_stmt(XaOsResourceLintState *states, AstNode
             xa_os_resource_lint_scan_stmt(states, stmt->as.select_case.body, can_escape);
             return;
         case AST_DEFER_STMT:
-            xa_os_resource_lint_scan_defer_expr(states, stmt->as.defer_stmt.expr, can_escape);
+            xa_os_resource_lint_scan_cleanup_body(states, stmt->as.defer_stmt.body, can_escape);
             return;
         case AST_SCOPE_BLOCK:
             xa_os_resource_lint_scan_stmt(states, stmt->as.scope_block.body, can_escape);
@@ -6546,7 +6550,7 @@ XR_FUNC bool xa_node_uses_symbol_name(AstNode *node, const char *name) {
         case AST_YIELD_STMT:
             return xa_node_uses_symbol_name(node->as.yield_stmt.value, name);
         case AST_DEFER_STMT:
-            return xa_node_uses_symbol_name(node->as.defer_stmt.expr, name);
+            return xa_node_uses_symbol_name(node->as.defer_stmt.body, name);
         case AST_SCOPE_BLOCK:
             return xa_node_uses_symbol_name(node->as.scope_block.body, name);
         case AST_MOVE_EXPR:
@@ -8808,9 +8812,6 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     xa_update_borrowed_alias_root(ctx, sym, var->initializer, var_type);
     xa_register_active_loan(ctx, sym, var->initializer, var_type);
     xa_register_pending_capture_loans(ctx, sym, var->initializer);
-    if (ctx->current_block_node && ctx->current_block_node->type == AST_BLOCK &&
-        ctx->current_block_node->as.block.is_synthetic_defer_capture && var->initializer)
-        xa_register_defer_snapshot_expr_loans(ctx, var->initializer, node);
     xa_record_pointer_provenance(ctx, sym, var->initializer, var_type);
 
     /* Synchronization handles derive their interior-mutable/shareable

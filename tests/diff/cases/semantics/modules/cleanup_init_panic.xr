@@ -1,0 +1,4 @@
+// anchor: module-init-panic-runs-cleanup-before-importer
+import { unreachable_value } from "./_cleanup_init_panic"
+
+print(unreachable_value())

@@ -47,7 +47,7 @@ export fn exported() {
 export x
 go task()
 await promise
-defer cleanup()
+defer { cleanup() }
 const config = {}
 select {
     _ -> {

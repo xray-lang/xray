@@ -1,0 +1,7 @@
+// The shared dependency initializes once, drains cleanup, then both importers
+// become observable to the entry module.
+import { left } from "./_cleanup_init_left"
+import { right } from "./_cleanup_init_right"
+
+print(left())
+print(right())

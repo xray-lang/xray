@@ -3455,7 +3455,7 @@ static const XaEffectContract *es_imported_function_effect_contract(ErrorSetCtx 
      * symbol: it is intentionally hidden from user lookup, but its generated
      * error contract remains authoritative for the Xray wrapper that calls it. */
     return xa_builtin_get_module_func_abi_effect_contract(links->module_name,
-                                                           links->import_member_name);
+                                                          links->import_member_name);
 }
 
 static const XaEffectContract *es_handle_method_effect_contract(ErrorSetCtx *ctx, AstNode *callee) {
@@ -4475,7 +4475,9 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             break;
 
         case AST_DEFER_STMT:
-            es_walk_expr(ctx, node->as.defer_stmt.expr);
+            /* Cleanup errors are validated in an isolated summary after the
+             * ordinary function fixpoint. They do not become errors of the
+             * function that registered the cleanup. */
             break;
 
         case AST_SCOPE_BLOCK: {
@@ -4628,6 +4630,45 @@ static bool compute_function_expr_summary(ErrorSetCtx *ctx, AstNode *node, XaEff
     restore_catch_alias_state(ctx, &saved_catch_alias_state);
     ctx->current_caught = saved_caught;
     ctx->current_catch_alias_control_depth = saved_catch_alias_control_depth;
+    ctx->analyzer->current_scope = saved_scope;
+    return true;
+}
+
+static bool compute_defer_block_summary(ErrorSetCtx *ctx, AstNode *body, XaEffectSummary *out) {
+    if (!ctx || !body || !out || body->type != AST_BLOCK)
+        return false;
+
+    XaScope *saved_scope = ctx->analyzer->current_scope;
+    XaScope *body_scope = xa_scope_find_by_node(ctx->analyzer->global_scope, body);
+    if (body_scope)
+        ctx->analyzer->current_scope = body_scope;
+    XaEffectSummary *saved_summary = ctx->current_summary;
+    XaSymbol *saved_func = ctx->current_func;
+    FunctionValueTarget saved_return_target = ctx->current_return_target;
+    bool saved_return_seen = ctx->current_return_target_seen;
+    bool saved_return_unknown = ctx->current_return_target_unknown;
+    FunctionValueAliasState saved_alias_state;
+    capture_function_value_alias_state(ctx, &saved_alias_state);
+    CatchAliasState saved_catch_alias_state;
+    capture_catch_alias_state(ctx, &saved_catch_alias_state);
+    CoroBoundaryState saved_coro_state;
+    enter_callee_body_coro_boundary(ctx, &saved_coro_state);
+
+    ctx->current_summary = out;
+    ctx->current_func = NULL;
+    ctx->current_return_target = function_value_target_none();
+    ctx->current_return_target_seen = false;
+    ctx->current_return_target_unknown = false;
+    es_walk_block(ctx, body);
+
+    ctx->current_summary = saved_summary;
+    ctx->current_func = saved_func;
+    ctx->current_return_target = saved_return_target;
+    ctx->current_return_target_seen = saved_return_seen;
+    ctx->current_return_target_unknown = saved_return_unknown;
+    restore_function_value_alias_state(ctx, &saved_alias_state);
+    restore_catch_alias_state(ctx, &saved_catch_alias_state);
+    leave_callee_body_coro_boundary(ctx, &saved_coro_state);
     ctx->analyzer->current_scope = saved_scope;
     return true;
 }
@@ -4870,37 +4911,7 @@ static void validate_no_throw_value_constraints(ErrorSetCtx *ctx, AstNode *ast) 
 
 /* ---- defer must not throw (spec §8.3.1 rule D1) ---- */
 
-/* Name the deferred target for the diagnostic. The parser desugars `defer
- * callee(args)` into an anonymous closure wrapping the rewritten call (see
- * defer_wrap_in_closure), so the useful name lives one level in: report the
- * inner callee rather than "<anonymous>". */
-static const char *defer_target_name(ErrorSetCtx *ctx, AstNode *target) {
-    target = identity_source(target);
-    if (!target)
-        return "defer body";
-    if (target->type == AST_FUNCTION_EXPR && !target->as.function_expr.name) {
-        AstNode *body = target->as.function_expr.body;
-        if (body && body->type == AST_BLOCK && body->as.block.count == 1) {
-            AstNode *only = body->as.block.statements[0];
-            if (only && only->type == AST_EXPR_STMT) {
-                AstNode *inner = identity_source(only->as.expr_stmt);
-                if (inner && inner->type == AST_CALL_EXPR)
-                    return no_throw_argument_name(ctx, inner->as.call_expr.callee);
-            }
-        }
-        return "defer body";
-    }
-    return no_throw_argument_name(ctx, target);
-}
-
-/* Escaping error set of a resolved defer target, if the analyzer has one. */
-static const XaEffectSummary *defer_symbol_summary(ErrorSetCtx *ctx, XaSymbol *sym) {
-    if (!ctx || !sym)
-        return NULL;
-    return xa_effect_db_get(ctx->analyzer->effect_db, sym->links.effect_id);
-}
-
-/* Does the deferred callable demonstrably throw — i.e. did inference land on a
+/* Does the cleanup block demonstrably throw -- i.e. did inference land on a
  * non-empty escaping error set, not merely fail to prove emptiness?
  *
  * The distinction is the whole design of spec 8.3.1. Rule D1 is deliberately
@@ -4912,64 +4923,38 @@ static const XaEffectSummary *defer_symbol_summary(ErrorSetCtx *ctx, XaSymbol *s
  * unproven remainder, and keeping it live is what makes the layering honest.
  * If a user-facing no-throw annotation is ever added, D1 can tighten to
  * "must be proven" and D3 becomes unreachable-by-construction. */
-static bool defer_target_definitely_throws(ErrorSetCtx *ctx, AstNode *target) {
-    target = identity_source(target);
-    if (!ctx || !target)
+static bool cleanup_block_definitely_throws(ErrorSetCtx *ctx, AstNode *body) {
+    body = identity_source(body);
+    if (!ctx || !body || body->type != AST_BLOCK)
         return false;
 
-    if (target->type == AST_FUNCTION_EXPR) {
-        XaEffectSummary summary;
-        xa_effect_summary_init(&summary);
-        bool throws =
-            compute_function_expr_summary(ctx, target, &summary) && summary.escaping.count > 0;
-        xa_effect_summary_clear(&summary);
-        return throws;
-    }
-
-    FunctionValueTarget resolved = resolve_function_value_expr_target(ctx, target, 0);
-    if (!function_value_target_is_exact(resolved))
-        return false;
-    for (int i = 0; i < resolved.target_count; i++) {
-        if (resolved.target_function_exprs[i]) {
-            XaEffectSummary summary;
-            xa_effect_summary_init(&summary);
-            bool throws =
-                compute_function_expr_summary(ctx, resolved.target_function_exprs[i], &summary) &&
-                summary.escaping.count > 0;
-            xa_effect_summary_clear(&summary);
-            if (throws)
-                return true;
-            continue;
-        }
-        const XaEffectSummary *summary = defer_symbol_summary(ctx, resolved.target_symbols[i]);
-        if (summary && summary->escaping.count > 0)
-            return true;
-    }
-    return false;
+    XaEffectSummary summary;
+    xa_effect_summary_init(&summary);
+    bool throws = compute_defer_block_summary(ctx, body, &summary) && summary.escaping.count > 0;
+    xa_effect_summary_clear(&summary);
+    return throws;
 }
 
 /* A `defer` is a resource-cleanup edge, not an error-propagation edge: cleanup
  * that fails leaves the resource in an unknown state, so the language neither
  * replaces the in-flight error (the Go model) nor swallows the cleanup error.
  *
- * The parser reduces every defer form — `defer call(...)`, `defer { block }`,
- * and a bare callable value — to one deferred callable, so the rule is exactly
- * "that callable must not throw". Errors must be absorbed inside the defer body
- * with try/catch. The runtime backstop for what static analysis cannot see is
+ * The language has one form, `defer { block }`. Its escaping error set must be
+ * empty; errors may be absorbed by local try/catch inside the block. The
+ * runtime backstop for a target that static analysis cannot resolve is
  * XR_ERR_DEFER_THROW; see spec 8.3.1 rule D3. */
 static void defer_no_throw_scan_pre(AstNode *node, void *userdata) {
     ErrorSetCtx *ctx = (ErrorSetCtx *) userdata;
     if (!ctx || !node || node->type != AST_DEFER_STMT)
         return;
-    AstNode *target = node->as.defer_stmt.expr;
-    if (!target || !defer_target_definitely_throws(ctx, target))
+    AstNode *body = node->as.defer_stmt.body;
+    if (!body || !cleanup_block_definitely_throws(ctx, body))
         return;
 
-    char message[512];
-    snprintf(message, sizeof(message),
-             "deferred target '%s' throws: a defer body must not let errors escape. "
-             "Absorb it inside the defer: defer { try { ... } catch (e) { ... } }",
-             defer_target_name(ctx, target));
+    const char *message =
+        "a defer cleanup block has an escaping error; a defer body must not let errors "
+        "escape. Absorb it inside the defer: "
+        "defer { try { ... } catch (e) { ... } }";
     XrLocation location = {.file = ctx->analyzer->current_file,
                            .line = (uint32_t) node->line,
                            .column = (uint32_t) node->column};

@@ -1,7 +1,7 @@
-// A native class method that uses `this` as a value (return this, capture this
-// in a defer) must materialize a `v0 = p0` receiver alias instead of eliding it,
-// otherwise the generated C references an undeclared `v0`. The constructor's
-// implicit `return this` still lowers to `return p0` with no dead alias.
+// A native class method that returns `this` must materialize a `v0 = p0`
+// receiver alias instead of eliding it, otherwise the generated C references
+// an undeclared `v0`. A cleanup reads `this` directly from its stable receiver
+// place; the constructor's implicit `return this` remains `return p0`.
 
 class Box {
     n: int

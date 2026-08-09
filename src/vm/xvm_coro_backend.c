@@ -434,7 +434,8 @@ static void vm_backend_reset_execution_state(XrCoroutine *coro, XrVMRuntime *X) 
     ctx->instruction_count = 0;
     ctx->preempt_pending = false;
     ctx->last_nret = 0;
-    ctx->defer_count = 0;
+    ctx->cleanup_depth = 0;
+    ctx->cancellation_cleanup_active = false;
     ctx->trace_execution = false;
     ctx->isolate = X;
 }
@@ -766,21 +767,6 @@ static void vm_backend_free_struct_storage(XrVMContext *ctx) {
     }
 }
 
-static void vm_backend_free_defer_state(XrVMContext *ctx) {
-    if (!ctx)
-        return;
-    if (ctx->defer_stack) {
-        xr_free(ctx->defer_stack);
-        ctx->defer_stack = NULL;
-    }
-    if (ctx->defer_frame_marks) {
-        xr_free(ctx->defer_frame_marks);
-        ctx->defer_frame_marks = NULL;
-    }
-    ctx->defer_count = 0;
-    ctx->defer_capacity = 0;
-}
-
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
     (void) worker;
     XrVmCoroState *state = vm_state_for_coro(coro);
@@ -796,7 +782,6 @@ static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
     ctx->stack_top = ctx->stack;
     ctx->frame_count = 0;
     ctx->handler_count = 0;
-    vm_backend_free_defer_state(ctx);
     if (trim_backend_storage) {
         vm_backend_free_stack_frames(coro, ctx);
         vm_backend_reset_handlers(ctx);
@@ -930,7 +915,6 @@ static void vm_backend_destroy(XrCoroutine *coro) {
     vm_backend_free_stack_frames(coro, ctx);
     vm_backend_reset_handlers(ctx);
     vm_backend_free_struct_storage(ctx);
-    vm_backend_free_defer_state(ctx);
     xr_vm_ctx_free_ic_tables(ctx);
     vm_backend_clear_entry_state(coro);
 
@@ -993,19 +977,6 @@ bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots) {
         if (!new_frames)
             return false;
         ctx->frames = new_frames;
-
-        // defer_frame_marks is indexed by frame index and lazily allocated to
-        // frame_capacity; grow it in lockstep, otherwise deep recursion under an
-        // active defer overruns it (startfunc records a mark per frame entry).
-        if (ctx->defer_frame_marks) {
-            int *new_marks =
-                (int *) xr_realloc(ctx->defer_frame_marks, sizeof(int) * new_frame_cap);
-            if (!new_marks)
-                return false;
-            for (int j = ctx->frame_capacity; j < new_frame_cap; j++)
-                new_marks[j] = 0;
-            ctx->defer_frame_marks = new_marks;
-        }
 
         ctx->frame_capacity = new_frame_cap;
     }
@@ -1350,11 +1321,6 @@ static XrVMResult run_finalize(XrVMRuntime *isolate, XrWorker *worker, XrCorouti
         ctx->current_coro = NULL;
         return result;
     }
-    if (result == XR_VM_CANCELLED) {
-        /* The interpreter stopped between statements, so no return or unwind
-         * edge will walk these frames. Run the defer chain here. */
-        xr_vm_run_cancellation_defers(isolate, coro_ctx);
-    }
     if (result == XR_VM_BLOCKED || result == XR_VM_YIELD) {
         if (result == XR_VM_YIELD) {
             xr_coro_transition_to_ready(coro);
@@ -1691,28 +1657,60 @@ static XrCoroRunKind vm_backend_gen_drive(XrCoroutine *coro, XrValue *out) {
 
 // ========== Cancellation Cleanup ==========
 //
-// A cancelled coroutine stops between statements: no OP_RETURN runs, no
-// exception unwinds, so nothing else drains its defer stack. Run it here, on
-// the owner worker, while the coroutine's frames and stack are still intact.
+// Static cleanup frontiers are attached to suspension states. The backend
+// reports pending cancellation cleanup when such a frontier is active.
 static bool vm_backend_has_cancellation_cleanup(const XrCoroutine *coro) {
-    if (!coro || !xr_coro_flags_has(coro, XR_CORO_FLG_STARTED))
+    if (!coro || !xr_coro_flags_has((XrCoroutine *) coro, XR_CORO_FLG_STARTED))
         return false;
-    XrVmCoroState *state = vm_state_for_coro((XrCoroutine *) coro);
-    return state && state->ctx.defer_count > 0;
+    const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
+    if (!state)
+        return false;
+    const XrVMContext *ctx = &state->ctx;
+    for (int i = ctx->handler_count - 1; i >= 0; i--) {
+        if (ctx->handlers[i].is_cleanup && !ctx->handlers[i].caught)
+            return true;
+    }
+    return false;
 }
 
 static void vm_backend_run_cancellation_cleanup(XrCoroutine *coro) {
-    if (!coro || !xr_coro_flags_has(coro, XR_CORO_FLG_STARTED))
+    if (!coro)
         return;
     XrVmCoroState *state = vm_state_for_coro(coro);
     if (!state)
         return;
-    XrVMRuntime *isolate = state->ctx.isolate;
+    XrVMContext *ctx = &state->ctx;
+    XrVMRuntime *isolate = ctx->isolate;
     if (!isolate)
         return;
-    XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
-    xr_vm_run_cancellation_defers(isolate, &state->ctx);
-    xr_exec_context_restore(previous);
+    int cleanup_index = -1;
+    for (int i = ctx->handler_count - 1; i >= 0; i--) {
+        if (ctx->handlers[i].is_cleanup && !ctx->handlers[i].caught) {
+            cleanup_index = i;
+            break;
+        }
+    }
+    if (cleanup_index < 0)
+        return;
+
+    XrExceptionHandler *handler = &ctx->handlers[cleanup_index];
+    ctx->handler_count = cleanup_index + 1;
+    ctx->stack_top = ctx->stack + handler->stack_size;
+    ctx->frame_count = handler->frame_count;
+    handler->exception = xr_bool(false);
+    handler->caught = false;
+    ctx->current_exception = handler->exception;
+    ctx->cancellation_cleanup_active = true;
+    if (ctx->frame_count > 0 && handler->catch_offset > 0) {
+        XrBcCallFrame *frame = &ctx->frames[ctx->frame_count - 1];
+        frame->pc = PROTO_CODE_BASE(frame->closure->proto) + handler->catch_offset;
+        XrExecutionContext *previous = xr_exec_context_enter(&coro->exec_ctx);
+        ctx->current_coro = coro;
+        (void) run(isolate, ctx);
+        ctx->current_coro = NULL;
+        xr_exec_context_restore(previous);
+    }
+    ctx->cancellation_cleanup_active = false;
 }
 
 XrCoroRunKind xr_vm_coro_run_to_completion(XrCoroutine *coro, XrValue *out) {
@@ -1864,11 +1862,6 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
     XR_DCHECK(isolate != NULL, "worker thread: VM scheduler host isolate is NULL");
 
     if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
-        /* Cancelled while suspended: the coroutine is never resumed, so this
-         * is the only place its defer chain can still run. */
-        XrVmCoroState *cancel_state = vm_state_for_coro(coro);
-        if (cancel_state)
-            xr_vm_run_cancellation_defers(isolate, &cancel_state->ctx);
         return XR_VM_CANCELLED;
     }
 

@@ -2030,12 +2030,10 @@ TEST(cmp_object_literal) {
 /* ========== Coroutine Tests ========== */
 
 TEST(cmp_defer_simple) {
-    /* Legacy analyzer doesn't recognize 'print' as a builtin inside defer
-     * expressions, so use a user-defined cleanup function instead. */
     run_compare((CompareSpec) {
         .source = "fn cleanup() { print(\"deferred\") }\n"
                   "fn f() {\n"
-                  "  defer cleanup()\n"
+                  "  defer { cleanup() }\n"
                   "  print(\"body\")\n"
                   "}\n"
                   "f()",
@@ -2051,8 +2049,8 @@ TEST(cmp_defer_lifo) {
         .source = "fn first() { print(\"first\") }\n"
                   "fn second() { print(\"second\") }\n"
                   "fn f() {\n"
-                  "  defer first()\n"
-                  "  defer second()\n"
+                  "  defer { first() }\n"
+                  "  defer { second() }\n"
                   "  print(\"body\")\n"
                   "}\n"
                   "f()",

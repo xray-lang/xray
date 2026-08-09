@@ -727,7 +727,7 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             break;
 
         case AST_DEFER_STMT:
-            canon_node(ctx, node->as.defer_stmt.expr);
+            canon_node(ctx, node->as.defer_stmt.body);
             break;
 
         /* ---- Print statement ---- */

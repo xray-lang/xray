@@ -902,7 +902,7 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             break;
 
         case AST_DEFER_STMT:
-            ea_walk(ctx, node->as.defer_stmt.expr);
+            ea_walk(ctx, node->as.defer_stmt.body);
             break;
 
         case AST_MATCH_EXPR:

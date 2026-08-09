@@ -5,21 +5,21 @@
 // the defer order observed during the panic unwind, and the handler's own
 // frame's defers run at its normal exit afterward.
 fn boom(x: int) -> int {
-    defer print("boom-defer")
+    defer { print("boom-defer") }
     var z = 0
     return x / z
 }
 
 fn mid() -> int {
-    defer print("mid-defer-1")
-    defer print("mid-defer-2")
+    defer { print("mid-defer-1") }
+    defer { print("mid-defer-2") }
     var r = boom(10)
     print("unreachable-mid")
     return r
 }
 
 fn top() {
-    defer print("top-defer")
+    defer { print("top-defer") }
     try {
         mid()
         print("unreachable-top")

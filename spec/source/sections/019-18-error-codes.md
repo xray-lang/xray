@@ -92,12 +92,13 @@ order: 019
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 生成器体内抵达调度器挂起点（`await` / `select` / `scope` / `Coro.yield()` / 阻塞句柄方法 / 可挂起调用），或证据不完整（经未解析函数值调用）——见 §3.16.2 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 生成器体内使用 `defer`；提前放弃的生成器不再恢复，该清理可能永不执行——见 §3.16.3 |
-| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | `defer` 目标会抛出错误（见 §8.3.1） |
+| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | 错误可从 `defer` cleanup 块逃逸（见 §8.3.1） |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | 程序超出单态化实例预算（广度）；每个实例克隆一份完整声明——见 §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | 单态化嵌套超出深度预算；多态递归（`f<T>` 请求 `f<Box<T>>`）没有有限特化，必然触发——见 §9.4 |
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union 成员在运行期无法判别（同一数值族出现多个成员）|
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | `move` 的唯一性证据不成立（存活别名 / 已发布根 / 来源未知 / 存储计划不完整）|
-| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | defer 体抵达调度器挂起点——见 §2.14.4 |
+| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | defer 体抵达调度器挂起点或创建任务——见 §2.14.4 |
+| `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | defer 体以 `return` 退出所在函数，或以 `break` / `continue` 跳出 cleanup 边界 |
 
 ### 18.3 运行时
 
@@ -134,6 +135,7 @@ order: 019
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | 内存不足 |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | 运行时 match 失败 |
 | `E0443` | `XR_ERR_DEFER_THROW` | 错误从 `defer` 体逃逸，不可捕获，终止进程（见 §8.3.1 规则 D3） |
+| `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup 尝试创建任务或抵达调度器；在任何该类侧效前失败关闭 |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 运行时实参数量错误 |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
 | `E0460` | `XR_ERR_CORO_DEAD` | 操作已结束 coroutine |
@@ -270,12 +272,13 @@ order: 019
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | the borrow source is not a stable, uniquely inferable owner (temporary owner, multi-source return, borrowed from a local) |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | a generator body reaches a scheduler suspension point (`await` / `select` / `scope` / `Coro.yield()` / a blocking handle method / a suspending call), or the evidence is incomplete (a call through an unresolved function value); see §3.16.2 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | `defer` inside a generator body; an abandoned generator is never resumed, so the cleanup may never run; see §3.16.3 |
-| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | the `defer` target throws (see §8.3.1) |
+| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | an error can escape a `defer` cleanup block (see §8.3.1) |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | the program exceeds the monomorphization instance budget (breadth); each instance clones a whole declaration; see §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | monomorphization nested past the depth budget; polymorphic recursion (`f<T>` requesting `f<Box<T>>`) has no finite specialization and always reaches it; see §9.4 |
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union members are not discriminable at run time (two members of the same numeric family) |
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | the uniqueness evidence `move` requires does not hold (live alias, published root, unknown provenance, incomplete storage plan) |
-| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point; see §2.14.4 |
+| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | a defer body reaches a scheduler suspension point or creates a task; see §2.14.4 |
+| `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | a defer body exits its function with `return`, or crosses the cleanup boundary with `break` / `continue` |
 
 ### 18.3 Runtime
 
@@ -312,6 +315,7 @@ order: 019
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | out of memory |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | runtime match failure |
 | `E0443` | `XR_ERR_DEFER_THROW` | an error escaped a `defer` body; uncatchable, terminates the process (see §8.3.1 rule D3) |
+| `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup attempted to create a task or reach the scheduler; fails closed before any such side effect |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | runtime argument-count mismatch |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | runtime argument-type mismatch |
 | `E0460` | `XR_ERR_CORO_DEAD` | operation on a dead coroutine |

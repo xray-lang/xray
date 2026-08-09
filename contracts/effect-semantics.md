@@ -134,26 +134,35 @@ complete effect product.
     suppressed when an expected callable contract requires `ref` or the mode
     came from inference. The diagnostic never changes the function type,
     effect product, exit status, or runtime semantics.
+16. Task creation is a canonical transitive effect fact independent of
+    scheduler suspension. `go`, `sys.Thread.spawn`, and any statically resolved
+    callee that can create a task publish it; unresolved dynamic calls are
+    incomplete and fail closed where task creation is forbidden. A `defer`
+    cleanup block admits neither scheduler suspension nor task creation. The
+    analyzer rejects both before lowering (`E0392`), and VM/AOT retain an
+    `E0444` guard before any scheduling or task-creation side effect. Treating
+    task creation as mere syntax, inferring it in a backend, or allowing work to
+    escape a cleanup boundary is a contract change.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_effect_db.h 251acc9d21570dff99192330e665472a9a38ac4c9c2b9483955cf046defe51d8
-anchor-sha256: src/frontend/analyzer/xa_effect_db.c 433236c34b67ef15d492e53ad9a0471502675fb266e56a3f9f950afbe8753b3a
+anchor-sha256: src/frontend/analyzer/xa_effect_db.h 3f8e0952e2b25291fa4aaeb96baa05197f789c4292db2ec2291da407d9724b01
+anchor-sha256: src/frontend/analyzer/xa_effect_db.c bbf0a9f9fd78e8daf7301437bcaace000fd4d22ac91167d79ca7b71307814a7f
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.h 4a2527c4da62c7238c5df9f13b4fbcf9e210bb3555745425ace07b3704e674c3
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.c 1c3b0121cb1d9814189b615c7a5314a4dc873d1ef7ab87d86ed6deb7ba51a5e0
-anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 8c57bbc803567ab5951f6c7cc988ce76665b60f492c5471d836a2c02c5cb0147
+anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c 902c94cf1d567b19f120ca14b547b6847d0a1a8df079f3dc723e6c590c58d3f1
 anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c d4cd4b47a2e498d1602dd1e0d01751be3e88acbcc197edcc49ad99557f57d93f
-anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b71501e112a6aee3caa413c03e883fbd3f05e9d458dfdbeb8240025cd431ff92
+anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c c3bc4a292cb414774c0611ab6a2c4efedaff54d85286c9519e3509a7966c88e0
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 19585145d88b00d1c1e4fad9fe23ac841e75c941eeaf7c18be3779befc872367
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c dc666a71819aa81f3573754e55626d8bec56766e16eed6191cbcfa293914b723
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 49c446c2994e1b96958c7f019f80920b88455dc254341ed00c57488481c127e4
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c e1ab23a79c4aeafabda086cc71005e9ad66407d2584102e8647ad7136dc6b5e4
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c e196521cf096f758056c2e7b400635acbd3406d4bc9371211d24ec11950442f1
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h f23552df1eed9779aef5194ee4965a58b10ed503b75ee897af6e55e480b06497
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 66fbbba4737c2bb60f1244ad4e0dc688204b1c543919be6e14adac386dde6f08
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c f948b4d703eb5f7aaf8a52ee204410ce74e9ae73116a4407f94b4781bcb91d32
 anchor-sha256: src/runtime/value/xtype.h 3fc485e57ddc2bd95778f995f5df0e6f334b0f86197b40dfe468564e1b0b6426
-anchor-sha256: src/ir/xi.h a5e67f9b9bc5b305c6d4fe52de8af42cc84eb0067429691f425df798831a716b
-anchor-sha256: src/ir/xi_lower.c 32812c7b32aa79d82c0455245f7e04ad451b3d8e13bffc9f98182789f1a63601
+anchor-sha256: src/ir/xi.h 95bf585e19b29937247868861d7bd2bfa75b7cd409a28d5693f10ff976eeb111
+anchor-sha256: src/ir/xi_lower.c 7928176180b88db3b1cc3cfbff5b877305cdca655a08e96c532fc0a4895c391a
 anchor-sha256: src/app/cli/xcmd_verify.c 621d117db22a9c3c101d183f3c5554616bdba614d6ebbaf942d50d6b3ccf6f29
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
 anchor-sha256: tests/unit/analyzer/test_analyzer.c 2adbdacac92c0950033cebc57b9905b8fa738b587fbf54763fc7f3b5b93ae1a0
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1
-anchor-sha256: tests/unit/ir/test_xi_lower.c 211970b45a10d091196e541541990b139001d8bb2840fa28a6934a939ba56663
+anchor-sha256: tests/unit/ir/test_xi_lower.c eb684e94affee8b2c69ca571ad1cecdc8df09950f50fe8850c9f4b9854608d95

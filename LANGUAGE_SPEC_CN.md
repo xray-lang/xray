@@ -1754,7 +1754,7 @@ xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）
 
 **E10（切片与范围）**：`a[lo:hi]` 依次求值 a → lo → hi；`lo..hi` 与 `lo..=hi` 依次求值 lo → hi。
 
-**E11（语句）**：语句按源码顺序求值。`defer` 在注册处求值其捕获，执行时机见 §4.9。
+**E11（语句）**：语句按源码顺序求值。`defer` 在注册处建立静态 cleanup 边，块内外部绑定在 cleanup 执行时读取；执行时机见 §4.9。
 
 ```xray
 fn t(tag: string, v: int) -> int { print(tag); return v }
@@ -2671,43 +2671,45 @@ throw AppError.NotFound                      // 值返回错误通道
 ### 4.9 `defer`
 
 ```ebnf
-DeferStmt ::= 'defer' (CallExpr | Block)
+DeferStmt ::= 'defer' Block
 ```
 
 ```xray
 fn read_file(path: string) -> string {
     var f = open(path)
-    defer f.close()                  // 函数返回前必执行
+    defer { f.close() }              // 函数返回前必执行
     return f.readAll()
 }
 
 fn process() {
-    defer {                          // 块形式
+    defer {
         log.info("done")
         cleanup()
     }
     do_work()
 }
 
-fn snapshot_vs_reference() {
+fn late_binding_and_copy() {
     var n = 1
-    defer print("call", n)            // 注册时保存 1
-    defer { print("block", n) }       // 退出时读取 2
+    defer { print("late", n) }        // 退出时读取 2
+    const saved = copy(n)
+    defer { print("saved", saved) }   // 显式副本保持 1
     n = 2
-}                                      // 输出 block 2，再输出 call 1
+}                                      // 输出 saved 1，再输出 late 2
 ```
 
 **语义**：
-- `defer` 只有两种正文：调用表达式或块；赋值、成员赋值、裸值和其他非调用表达式都是语法错误。任意清理逻辑写成 `defer { ... }`。
-- 调用形式在注册时按从左到右顺序立即求值并保存调用目标的接收者及全部实参，退出时只执行已保存的调用。动态可调用目标若无法静态证明为稳定调用，按 `E0392` 拒绝。
-- 块形式不做值快照；块体在退出时执行，并按引用观察届时的局部绑定值。因此 `defer conn.close()` 保存当时的 `conn`，而 `defer { conn.close() }` 读取退出时的 `conn`。
-- 调用快照或块捕获引用的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许，并由上述快照与引用语义决定 defer 最终观察到哪个值。
+- `defer` 仅接受块；调用表达式、赋值、裸值及其他非块正文都是语法错误。
+- 块体在退出时执行，并读取届时的局部绑定值（late binding）。需要注册时值时，必须先用 `copy(...)` 或普通值绑定创建显式副本，再在块中读取该副本。
+- cleanup 块读取的可移动 owner 会形成持续到所属块退出的词法 loan；在此之前 `move` 或返回该 owner 报 `E0382`。普通重绑定/修改仍然允许。
 - `defer` 绑定到包含它的**最近真实块** `{ ... }`。函数体本身也是块，因此写在函数体顶层的 `defer` 仍在函数退出前执行。
 - **LIFO**：同一块内多个 `defer` 按声明的逆序执行。
 - **必执行**：所属块正常结束，或通过 `break`、`continue`、`return`、值错误传播、panic 展开退出时都执行。
 - 循环体内的 `defer` 每轮迭代结束时执行，不会堆积到函数尾。
 - `defer` 是 Xray 唯一的确定性清理机制（取代其他语言的 `finally`）：它绑定词法块退出边，而不是整个函数的单一栈尾。
-- **`defer` 体不得让错误逃逸**：目标可调用体的推断错误集非空时报 `E0387`；错误须在 `defer` 体内用 `try` / `catch` 消化。静态判定不了的由运行时 `E0443` 兜底终止。完整规则见 §8.3.1。
+- **`defer` 体不得让错误逃逸**：cleanup 块的推断逃逸错误集非空时报 `E0387`；错误须在 `defer` 体内用 `try` / `catch` 消化。静态判定不了的由运行时 `E0443` 兜底终止。完整规则见 §8.3.1。
+- cleanup 块不得直接或传递地挂起、创建任务、`return` 外层函数，或 `break` / `continue` 到块外目标；动态未知调用在产生调度或派生副作用前由运行时 fail-closed。
+- cleanup 块可包含本地分支、循环、本地 `try` / `catch` 和嵌套 `defer`；嵌套 cleanup 同样按 LIFO 执行。
 
 ### 4.10 内置打印函数
 
@@ -4354,7 +4356,7 @@ throw AppErr.InvalidInput("bad format")     // ✅ 带载荷的 ADT 枚举变体
 抛出后行为：
 
 ```
-抛出点 → 写入 pending_error → 沿调用栈返回 → 沿途执行 defer → catch 处理 → 否则继续返回 → 顶层诊断
+抛出点 → 写入 pending_error → 沿调用栈返回 → 执行每条跨域边上的静态 cleanup 区域 → catch 处理 → 否则继续返回 → 顶层诊断
 ```
 
 - 不展开栈帧（不同于传统异常的 unwind）
@@ -4600,12 +4602,12 @@ main()
 
 `defer` 是块作用域的清理语句，在所属块退出时**保证执行**（无论正常结束、`break` / `continue`、`return`、`throw`、还是 panic）。语法见 §4.9。
 
-调用形式在注册时快照接收者与实参；块形式在退出时按引用读取捕获绑定。两种形式持有的可移动 owner 在块退出前都不得被 `move` 或返回，否则报 `E0382`。这个 owner-lifetime 规则与下述错误通道规则相互独立。
+cleanup 块在退出时读取外部绑定。被读取的可移动 owner 在块退出前不得被 `move` 或返回，否则报 `E0382`；需要注册时值时必须先创建显式副本。这个 owner-lifetime 规则与下述错误通道规则相互独立。
 
 ```xray
 fn fetch(url: string) -> string {
     var conn = open(url)
-    defer conn.close()                       // 无论后续如何，conn 一定关闭
+    defer { conn.close() }                   // 无论后续如何，conn 一定关闭
 
     var data = conn.read()
     if (len(data) == 0) {
@@ -4621,12 +4623,15 @@ fn fetch(url: string) -> string {
 - `defer` 在块正常结束、`break`、`continue`、`return`、`throw`、panic 展开时均执行
 - 循环体中的 `defer` 每轮迭代退出时执行
 - `defer` 体不得让错误逃逸（见 §8.3.1）
+- `defer` 体不得直接或传递地挂起或创建任务（`E0392`）；动态未知调用在侧效前以 `E0444` 失败关闭
+- `return` 及跳出 cleanup 边界的 `break` / `continue` 非法（`E0395`）；cleanup 内部循环的本地跳转合法
+- 每个注册点降低为程序点相关的静态 cleanup frontier；不生成闭包、回调对象或动态 defer 栈
 
 #### 8.3.1 `defer` 与错误
 
 `defer` 是**资源清理边**，不是错误传播边。清理路径失败意味着资源状态已不可知，因此语言既不允许清理错误覆盖在途错误（Go 模型），也不允许静默吞掉它。
 
-**规则 D1（静态，规范性）**：若 `defer` 目标可调用体的推断错误集**非空**，编译器报 `E0387`。
+**规则 D1（静态，规范性）**：若 `defer` 块的推断逃逸错误集**非空**，编译器报 `E0387`。
 
 与 §8.0 的 throw-effect bit 不同，D1 **不是** fail-closed：xray 没有用户可书写的 no-throw 标注，若"无法证明不抛"即报错，作者面对间接调用、高阶内建方法、尚未登记契约的原生成员时将无从消解。无法证明的那部分交给规则 D3 的运行时兜底——这正是分层的意义。若将来引入用户可写的 no-throw 标注，D1 可收紧为"必须被证明"，D3 随之变为构造上不可达。
 
@@ -4634,7 +4639,7 @@ fn fetch(url: string) -> string {
 fn close(c: Conn) { throw IoErr.Closed }
 
 fn bad(c: Conn) {
-    defer close(c)                           // ❌ E0387：defer 目标会抛出错误
+    defer { close(c) }                       // ❌ E0387：错误会逃出 cleanup
 }
 
 fn good(c: Conn) {
@@ -4717,7 +4722,7 @@ class Conn {
 
 fn fetchData(alive: bool) -> string {
     var conn = Conn(alive)
-    defer conn.close()                 // 无论成功或抛错都会执行
+    defer { conn.close() }             // 无论成功或抛错都会执行
     if (!conn.isAlive()) { throw ConnErr.Timeout }
     return "payload"
 }
@@ -4811,8 +4816,8 @@ main()
 enum E { Boom }
 
 fn work() {
-    defer print("defer 1")
-    defer print("defer 2")
+    defer { print("defer 1") }
+    defer { print("defer 2") }
     print("body")
     throw E.Boom                             // 抛错时 defer 仍会执行
 }
@@ -6595,7 +6600,7 @@ class PanicInfo {
 
 用户级可恢复错误不使用 `PanicInfo`：`throw` 语句只接受 enum 变体值（见 §8.1.1）；非 enum 错误值在编译期被拒绝（错误码 `E0370`）。
 
-栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler，逐帧释放局部、执行 defer，到达 handler 后跳转。可恢复错误走值返回通道，不展开栈。详见 §8。
+栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler。每条跨越 cleanup 所属作用域的边都进入编译期生成的静态 cleanup 区域，按 LIFO 顺序执行后再释放局部并继续展开；运行时不维护动态 defer 栈。可恢复错误走值返回通道，不展开栈。详见 §8。
 
 ### 16.7 值返回错误通道运行时
 
@@ -6611,9 +6616,9 @@ class PanicInfo {
 
 唯一保证确定性、且跨后端（VM / AOT）一致的资源清理机制是 **`defer`**：它在所属作用域退出时按 LIFO 顺序执行，与对象回收时机无关。需要确定性释放外部资源（文件 / 句柄 / 锁）的代码必须使用 `defer`，而非依赖对象析构。
 
-**`defer` 在每一条退出边上都执行**，包括：正常返回、`throw` 展开、panic 展开，以及**协程被取消**。取消不是一次外部击杀：被取消的协程若仍欠着 defer 链，会被交回调度器、在自己的 worker 上恢复一次、展开完成后才被标记为已取消；`task.cancel()` 也因此不会在清理完成前让 `await` 观察到取消结果。
+**`defer` 在每一条跨越其所属词法作用域的退出边上都执行**，包括：正常落出、`return`、`break`、`continue`、值错误向外传播、panic 展开，以及**协程被取消**。前端把每个注册点编译为程序点相关的静态 cleanup frontier；没有闭包、回调对象或动态运行时栈。取消不是一次外部击杀：可挂起帧仅保存定长 cleanup 区域标识与深度，调度器在该协程的 worker 上调用生成的静态 frontier，清理完成后才标记为已取消；`task.cancel()` 也因此不会在清理完成前让 `await` 观察到取消结果。
 
-为了让这条保证是**全称**的，defer 体**不得抵达调度器挂起点**（`E0392`，见 §2.14.4）。defer 体运行在一个正在离开的帧上，没有可供挂起后恢复的位置；允许它挂起就意味着允许清理执行到一半被丢弃，那样 `defer` 就不再是确定性机制。清理期间取消被屏蔽，因此清理本身不会被取消打断。
+为了让这条保证是**全称**的，defer 体**不得抵达调度器挂起点，也不得创建任务**（`E0392`，见 §2.14.4）。挂起无法保证静态 cleanup 区域在帧离开前完成；创建任务则会让工作逃逸清理边界。静态分析对直接、传递与动态调用保守拒绝，VM/AOT 还在任务创建或调度侧效之前以 `E0444` 失败关闭。清理期间取消被屏蔽，因此清理本身不会被取消打断。
 
 > 演进说明：当确定性析构（RAII / `Drop`）被正式纳入语言时，本节将升级为**确定性回收契约**（明确析构点与顺序），并由跨后端差分测试逐字节守门。在此之前，"回收时机 / finalizer 行为"被显式声明为实现定义的非确定项。
 
@@ -6837,12 +6842,13 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | `E0384` | `XR_ERR_ANALYZE_BORROW_SOURCE` | 借用来源不是稳定且唯一可推断的 owner（临时 owner、多来源返回、借自局部值） |
 | `E0385` | `XR_ERR_ANALYZE_GENERATOR_SUSPEND` | 生成器体内抵达调度器挂起点（`await` / `select` / `scope` / `Coro.yield()` / 阻塞句柄方法 / 可挂起调用），或证据不完整（经未解析函数值调用）——见 §3.16.2 |
 | `E0386` | `XR_ERR_ANALYZE_GENERATOR_DEFER` | 生成器体内使用 `defer`；提前放弃的生成器不再恢复，该清理可能永不执行——见 §3.16.3 |
-| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | `defer` 目标会抛出错误（见 §8.3.1） |
+| `E0387` | `XR_ERR_ANALYZE_DEFER_MAY_THROW` | 错误可从 `defer` cleanup 块逃逸（见 §8.3.1） |
 | `E0388` | `XR_ERR_ANALYZE_MONO_BUDGET` | 程序超出单态化实例预算（广度）；每个实例克隆一份完整声明——见 §9.4 |
 | `E0389` | `XR_ERR_ANALYZE_MONO_DEPTH` | 单态化嵌套超出深度预算；多态递归（`f<T>` 请求 `f<Box<T>>`）没有有限特化，必然触发——见 §9.4 |
 | `E0390` | `XR_ERR_ANALYZE_UNION_INDISCRIMINABLE` | union 成员在运行期无法判别（同一数值族出现多个成员）|
 | `E0391` | `XR_ERR_ANALYZE_MOVE_NOT_UNIQUE` | `move` 的唯一性证据不成立（存活别名 / 已发布根 / 来源未知 / 存储计划不完整）|
-| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | defer 体抵达调度器挂起点——见 §2.14.4 |
+| `E0392` | `XR_ERR_ANALYZE_DEFER_SUSPEND` | defer 体抵达调度器挂起点或创建任务——见 §2.14.4 |
+| `E0395` | `XR_ERR_ANALYZE_DEFER_CONTROL` | defer 体以 `return` 退出所在函数，或以 `break` / `continue` 跳出 cleanup 边界 |
 
 ### 18.3 运行时
 
@@ -6879,6 +6885,7 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 | `E0441` | `XR_ERR_OUT_OF_MEMORY` | 内存不足 |
 | `E0442` | `XR_ERR_MATCH_FAILURE` | 运行时 match 失败 |
 | `E0443` | `XR_ERR_DEFER_THROW` | 错误从 `defer` 体逃逸，不可捕获，终止进程（见 §8.3.1 规则 D3） |
+| `E0444` | `XR_ERR_DEFER_ASYNC` | defer cleanup 尝试创建任务或抵达调度器；在任何该类侧效前失败关闭 |
 | `E0450` | `XR_ERR_WRONG_ARG_COUNT` | 运行时实参数量错误 |
 | `E0451` | `XR_ERR_INVALID_ARG_TYPE` | 运行时实参类型错误 |
 | `E0460` | `XR_ERR_CORO_DEAD` | 操作已结束 coroutine |
@@ -7159,7 +7166,7 @@ ThrowStmt ::= 'throw' Expression
 TryStmt   ::= 'try' Block CatchClause+
 CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
 
-DeferStmt ::= 'defer' (CallExpr | Block)
+DeferStmt ::= 'defer' Block
 
 // print 是普通全局函数调用，语法上属于 ExprStmt。
 
@@ -7467,7 +7474,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **Channel** | 类型化的协程通信管道（见 §10.5） |
 | **closure** | 闭包：捕获外层变量的函数 |
 | **coroutine** | 协程：用户态可暂停/恢复的执行流 |
-| **defer** | 延迟执行：函数退出前执行（见 §4.9） |
+| **defer** | 静态延迟清理：在跨越所属词法作用域的每条退出边上按 LIFO 执行（见 §4.9） |
 | **enum** | 枚举类型（见 §5.6） |
 | **GC** | Garbage Collection 的泛称；Xray 没有 tracing GC 或环收集器。对象死亡只由引用计数决定，因此回收点精确；引用环不被收集，而是在类型图上被静态排除、用 `weak` 字段断开，或以所属 execution-local 回收域为上界随 physical coroutine 结束批量处置残余图（§16.8） |
 | **safepoint** | 调度器可检查抢占、取消或挂起状态的安全位置 |

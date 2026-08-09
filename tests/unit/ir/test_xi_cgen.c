@@ -8143,7 +8143,7 @@ TEST(cgen_uses_closed_world_effects_for_conservative_direct_call_checks) {
     xi_func_free(ir);
 }
 
-TEST(cgen_defer_isolates_existing_pending_error) {
+TEST(cgen_static_cleanup_isolates_existing_pending_error) {
     const char *src = "enum E { Bad(code: int) }\n"
                       "fn run() -> int {\n"
                       "    var log: Array<int> = []\n"
@@ -8162,20 +8162,23 @@ TEST(cgen_defer_isolates_existing_pending_error) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "defer over pending error should generate");
+    assert(!had_error && "static cleanup over pending error should generate");
 
-    assert(contains(code, "XrtDeferScope _xrt_ds; xrt_defer_enter(&_xrt_ds);") &&
-           "defer emission must create a runtime defer scope");
-    assert(contains(code, "xrt_defer_push(&_xrt_ds,") &&
-           "defer emission must register the deferred closure");
-    assert(contains(code, "xrt_defer_leave(&_xrt_ds);") &&
-           "defer emission must drain the runtime defer scope on exit");
+    assert(contains(code, "xrt_cleanup_enter();") &&
+           "cleanup emission must isolate the pending error channel");
+    assert(contains(code, "xrt_cleanup_leave();") &&
+           "cleanup emission must restore the pending error channel");
+    assert(contains(code, "XrtExcFrame _ef") &&
+           "cleanup registration must use a static panic interval");
+    assert(!contains(code, "XrtDeferScope") && !contains(code, "xrt_defer_") &&
+           "generated C must not retain the dynamic defer runtime");
     assert(contains(code, "xrt_pending_error = ") &&
            "throw path must still route through the pending-error channel before draining defers");
     assert(contains(code, "xrt_pending_error = XR_NULL_VAL;") &&
            "catch path must still clear the handled pending error");
 
-    printf("  Generated defer pending-error isolation %zu bytes of C code\n", strlen(code));
+    printf("  Generated static cleanup pending-error isolation %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -11707,7 +11710,7 @@ int main(void) {
     run_cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain();
     run_cgen_codegen_controls_emit_provider_constructs_without_runtime_calls();
     run_cgen_uses_closed_world_effects_for_conservative_direct_call_checks();
-    run_cgen_defer_isolates_existing_pending_error();
+    run_cgen_static_cleanup_isolates_existing_pending_error();
     run_cgen_err_return_stops_unreachable_tail();
     run_cgen_unsupported_coroutine_ops_fail_fast();
     run_cgen_unresolved_import_fails_fast();

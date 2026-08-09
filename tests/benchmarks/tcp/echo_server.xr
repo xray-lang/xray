@@ -5,12 +5,12 @@ import net
 import time
 
 fn serveStream(conn: NetConn) {
-    defer net.close(conn)
+    defer { net.close(conn) }
     net.copy(conn, conn, 65536)
 }
 
 fn serveMessage(conn: NetConn) {
-    defer net.close(conn)
+    defer { net.close(conn) }
     while (true) {
         var data = net.read(conn, 65536)
         if (data == null) {
@@ -24,7 +24,7 @@ fn serveMessage(conn: NetConn) {
 }
 
 fn serveBytes(conn: NetConn) {
-    defer net.close(conn)
+    defer { net.close(conn) }
     var buf = Array<byte>(65536)
     while (true) {
         var n = net.readInto(conn, ref buf)
@@ -39,7 +39,7 @@ fn serveBytes(conn: NetConn) {
 }
 
 fn serveDiscard(conn: NetConn) {
-    defer net.close(conn)
+    defer { net.close(conn) }
     while (true) {
         var data = net.read(conn, 65536)
         if (data == null) {
@@ -50,7 +50,7 @@ fn serveDiscard(conn: NetConn) {
 }
 
 fn serveSlowDiscard(conn: NetConn, delayMs: int) {
-    defer net.close(conn)
+    defer { net.close(conn) }
     while (true) {
         var data = net.read(conn, 4096)
         if (data == null) {
@@ -64,7 +64,7 @@ fn serveSlowDiscard(conn: NetConn, delayMs: int) {
 }
 
 fn serveSource(conn: NetConn, totalBytes: int) {
-    defer net.close(conn)
+    defer { net.close(conn) }
     var chunk = "S".repeat(65536)
     var remaining = totalBytes
     while (remaining > 0) {

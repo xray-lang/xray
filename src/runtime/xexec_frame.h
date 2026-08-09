@@ -27,6 +27,8 @@
 #include "closure/xclosure.h"
 #include "../../include/xray_yieldable_abi.h"
 
+#define XR_CLEANUP_NESTING_MAX 256
+
 /* ========== Call Frame ========== */
 
 // Call status flags
@@ -74,9 +76,9 @@ typedef struct XrExceptionHandler {
     uint32_t catch_offset;  // absolute PC of the catch block
     int stack_size;         // stack size when entering try
     int frame_count;        // frame count when entering try
-    int defer_count_mark;   // defer stack count when entering try
     XrValue exception;      // caught exception value
     bool caught;            // exception was caught
+    bool is_cleanup;        // hidden static-cleanup panic frontier
 } XrExceptionHandler;
 
 /* ========== C Function Types ========== */
@@ -176,27 +178,16 @@ typedef struct XrVMContext {
     struct XrICMethodTable **ic_method_tables;
     uint32_t ic_tables_capacity;
 
-    // Per-coroutine defer stack.  Stored here (not on XrVMState) so that
-    // child coroutines do not corrupt the parent's defer_frame_marks when
-    // their frame indices collide.  Lazy-allocated on first OP_DEFER.
-    XrValue *defer_stack;
-    int defer_count;
-    int defer_capacity;
-    int *defer_frame_marks;
-
-    // Nesting depth of defer bodies currently running, and the handler_count
+    // Nesting depth of cleanup bodies currently running, and the handler_count
     // captured when the innermost one started. Together they answer "would a
     // throw raised right now escape a defer body?": only when we are inside one
     // AND no handler has been pushed since it started. Spec 8.3.1 rule D3 makes
     // that case uncatchable; a throw the body catches itself stays ordinary.
-    // Mirrors xrt_defer_depth / xrt_defer_exc_barrier on the AOT side.
-    int defer_depth;
-    int defer_handler_barrier;
-    // Nonzero while a defer body runs. Cleanup is what makes cancellation
-    // safe, so cancellation is not delivered inside it: a suspension point in
-    // a defer body must not abandon the rest of the cleanup. The request stays
-    // pending and is observed again once the defer chain completes.
-    int defer_body_depth;
+    // Mirrors xrt_cleanup_depth / xrt_cleanup_exc_barrier on the AOT side.
+    int cleanup_depth;
+    XrValue cleanup_saved_errors[XR_CLEANUP_NESTING_MAX];
+    int cleanup_handler_barriers[XR_CLEANUP_NESTING_MAX];
+    bool cancellation_cleanup_active;
 } XrVMContext;
 
 /*

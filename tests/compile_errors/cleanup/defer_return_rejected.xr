@@ -1,0 +1,6 @@
+fn owner() -> int {
+    defer { return 2 }
+    return 1
+}
+
+print(owner())

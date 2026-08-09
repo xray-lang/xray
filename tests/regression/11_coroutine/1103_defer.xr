@@ -1,5 +1,5 @@
-// 测试 defer 语句
-// defer 延迟执行函数调用，按 LIFO 顺序
+// 测试 defer cleanup 块
+// defer 块在离开所有者作用域时按 LIFO 顺序执行
 
 fn cleanup1() { print("cleanup 1") }
 fn cleanup2() { print("cleanup 2") }
@@ -9,10 +9,10 @@ fn cleanup3() { print("cleanup 3") }
 fn test_defer() {
     print("start")
     
-    // 注册 defer（后注册的先执行）
-    defer cleanup1()
-    defer cleanup2()
-    defer cleanup3()
+    // 注册 cleanup（后注册的先执行）
+    defer { cleanup1() }
+    defer { cleanup2() }
+    defer { cleanup3() }
     
     print("work done")
     
