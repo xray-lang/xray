@@ -8344,6 +8344,54 @@ TEST(cgen_direct_suspend_call_borrows_read_argument) {
     xi_func_free(ir);
 }
 
+TEST(cgen_direct_suspend_enum_result_consumes_owned_box) {
+    const char *src =
+        "import mem\n"
+        "export enum Failure { Closed, Failed }\n"
+        "export enum Outcome { Unit(id: int, generation: int), Echo(id: int, generation: int, "
+        "payload: Buffer?), State(id: int, generation: int, n: int), Failed(reason: Failure) }\n"
+        "fn pause() { Coro.yield() }\n"
+        "fn step() { pause() }\n"
+        "fn worker(n: int) -> Outcome {\n"
+        "    var owned = Outcome.Echo(1, 2, mem.allocZeroed(n))\n"
+        "    step()\n"
+        "    return owned\n"
+        "}\n"
+        "fn run() -> int {\n"
+        "    var result = worker(41)\n"
+        "    return match (result) { Outcome.Echo(_id, _generation, payload) -> "
+        "len(payload!.asBytes()), _ -> 0 }\n"
+        "}\n"
+        "print(run())\n";
+
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
+    TEST_REQUIRE(ir != NULL, "suspend enum result IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "suspend enum result C generation failed");
+    TEST_REQUIRE(!had_error, "suspend enum result should lower through the typed aggregate ABI");
+    TEST_REQUIRE(contains(code, "xrt_enum_aggregate_take_from_boxed(_call_value_"),
+                 "caller consumes the owned suspend-result box");
+    TEST_REQUIRE(contains(code, "xrt_enum_aggregate_box_from_borrowed("),
+                 "frame-root enum return acquires payload owners before frame release");
+    const char *take = strstr(code, "xrt_enum_aggregate_take_from_boxed(_call_value_");
+    unsigned call_id = 0;
+    TEST_REQUIRE(
+        take && sscanf(take, "xrt_enum_aggregate_take_from_boxed(_call_value_%u)", &call_id) == 1,
+        "owned suspend-result call id is recoverable from generated C");
+    char retain_needle[64];
+    snprintf(retain_needle, sizeof(retain_needle), "xrt_retain(_call_value_%u)", call_id);
+    TEST_REQUIRE(!contains(code, retain_needle),
+                 "inline enum result transfers payload ownership without retaining its wrapper");
+    TEST_REQUIRE(contains(code, "xrt_enum_aggregate_release("),
+                 "discarded local call result releases every owned inline enum payload lane");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_returned_suspendable_closure_uses_verified_child_frame) {
     const char *src = "fn makeWorker() -> () -> int {\n"
                       "    return fn() -> int {\n"
@@ -9316,6 +9364,8 @@ TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
     const char *send_call = strstr(code, "xr_aot_chan_send_transfer(ctx,");
     assert(send_bridge != NULL && send_call != NULL && send_bridge < send_call &&
            "transfer bridge should be emitted before the send call");
+    assert(contains_between(send_bridge, send_call, "xr_aot_bridge_xrt_to_runtime(ctx,") &&
+           "every boxed send must enter the backend-neutral runtime envelope");
     assert(!contains_between(send_bridge, send_call, "xrt_value_clone_for_coro(") &&
            "copy send must not clone before the transfer-aware channel helper");
 
@@ -10070,20 +10120,24 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
                       "print(value)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT channel recv should generate");
-    assert(contains(code, "xr_aot_chan_recv_slot(ctx,") &&
-           "initial channel recv must register a backend-neutral slot");
-    assert(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,") &&
-           "channel recv must publish the AOT resume state before runtime blocking");
-    assert(contains(code, "xr_aot_chan_recv_slot_resume(ctx, xr_slot_none(), true);") &&
-           "channel recv resume must recover the slot from coroutine wait state and store Recv");
-    assert(!contains(code, "xr_aot_chan_recv_slot_resume(ctx, _chan_recv_slot_") &&
-           "channel recv resume must not depend on a local slot variable");
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "AOT channel recv should generate");
+    TEST_REQUIRE(contains(code, "xr_aot_chan_recv_slot(ctx,"),
+                 "initial channel recv must register a backend-neutral slot");
+    TEST_REQUIRE(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,"),
+                 "channel recv must publish the AOT resume state before runtime blocking");
+    TEST_REQUIRE(
+        contains(code, "xr_aot_chan_recv_slot_resume(ctx, xr_slot_none(), true);"),
+        "channel recv resume must recover the slot from coroutine wait state and store Recv");
+    TEST_REQUIRE(!contains(code, "xr_aot_chan_recv_slot_resume(ctx, _chan_recv_slot_"),
+                 "channel recv resume must not depend on a local slot variable");
+    TEST_REQUIRE(
+        contains(code, "xr_aot_bridge_owned_value_to_xrt(ctx,"),
+        "channel recv must consume the provider-owned Recv after representation conversion");
 
     printf("  Generated channel recv wait-state slot %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -10436,6 +10490,9 @@ TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
            "sendTimeout must publish the AOT resume state before runtime blocking");
     assert(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,") &&
            "recvTimeout must publish the AOT resume state before runtime blocking");
+    TEST_REQUIRE(
+        contains(recv_timeout, "xr_aot_bridge_owned_value_to_xrt(ctx,"),
+        "recvTimeout must consume the provider-owned Recv after representation conversion");
 
     printf("  Generated channel timeout state publication %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -11516,6 +11573,7 @@ int main(void) {
     run_cgen_suspendable_function_has_no_sync_wrapper();
     run_cgen_direct_suspend_call_propagates_cps();
     run_cgen_direct_suspend_call_borrows_read_argument();
+    run_cgen_direct_suspend_enum_result_consumes_owned_box();
     run_cgen_returned_suspendable_closure_uses_verified_child_frame();
     run_cgen_mixed_callable_targets_use_stable_descriptor_switch();
     run_cgen_direct_suspend_method_call_propagates_cps();

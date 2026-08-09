@@ -230,4 +230,9 @@ static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value) {
     return value;
 }
 
+static inline XrValue xr_aot_bridge_owned_value_to_xrt(const XrAotContext *ctx, XrValue value) {
+    (void) ctx;
+    return value;
+}
+
 #endif /* XRT_PROVIDER_ABI_H */

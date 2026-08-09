@@ -11408,8 +11408,16 @@ static void xicgen_ownership_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         fprintf(out, "((void)0)");
         return;
     }
-    if (cg_value_plan_is_aggregate(ctx, cg_unwrap_identity_value(arg)) ||
-        cg_value_plan_is_vector(ctx, cg_unwrap_identity_value(arg))) {
+    const XiValue *storage = cg_unwrap_identity_value(arg);
+    if (cg_value_plan_is_adt_aggregate(ctx, storage)) {
+        fprintf(out, "%s(",
+                strcmp(fn_name, "xrt_retain") == 0 ? "xrt_enum_aggregate_retain"
+                                                   : "xrt_enum_aggregate_release");
+        emit_adt_aggregate_as_base_expr(ctx, out, arg);
+        fprintf(out, ")");
+        return;
+    }
+    if (cg_value_plan_is_aggregate(ctx, storage) || cg_value_plan_is_vector(ctx, storage)) {
         fprintf(out, "((void)0)");
         return;
     }

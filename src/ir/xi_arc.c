@@ -498,6 +498,7 @@ static bool op_is_call(uint16_t op) {
 }
 
 static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv);
+static XiFunc *arc_resolve_namespace_method_callee(const XiFunc *caller, const XiValue *user);
 
 static bool arc_type_is_raw_pointer(const XrType *type) {
     return type && XR_TYPE_IS_POINTER(type);
@@ -742,6 +743,13 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
 static bool call_returns_fresh(const XiFunc *f, const XiValue *v) {
     if (call_returns_intrinsic_fresh(f, v))
         return true;
+    XiFunc *callee = NULL;
+    if (v && v->op == XI_CALL && v->nargs >= 1)
+        callee = arc_resolve_callee(f, v->args[0]);
+    else if (v && (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT))
+        callee = arc_resolve_namespace_method_callee(f, v);
+    if (callee && callee->arc_return_ownership.complete)
+        return callee->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_OWNED;
     if (v && v->call_return_ownership.complete)
         return v->call_return_ownership.kind == XI_RETURN_OWNERSHIP_OWNED;
     return false;
@@ -919,8 +927,15 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
             return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
         if (xi_call_result_aliases_receiver(value) && value->nargs >= 1)
             return arc_return_value_ownership(f, value->args[0], (uint8_t) (depth + 1));
-        if (value->call_return_ownership.complete) {
-            XiReturnOwnership summary = value->call_return_ownership;
+        XiFunc *callee = NULL;
+        if (value->op == XI_CALL && value->nargs >= 1)
+            callee = arc_resolve_callee(f, value->args[0]);
+        else if (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT)
+            callee = arc_resolve_namespace_method_callee(f, value);
+        XiReturnOwnership summary = callee && callee->arc_return_ownership.complete
+                                        ? callee->arc_return_ownership
+                                        : value->call_return_ownership;
+        if (summary.complete) {
             if (summary.kind != XI_RETURN_OWNERSHIP_BORROWED_PARAM)
                 return summary;
             uint16_t actual = (uint16_t) (summary.param_index + 1);

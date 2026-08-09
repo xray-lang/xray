@@ -394,8 +394,9 @@ static void emit_coro_runtime_channel_bridge_temp(XiCgenCtx *ctx, FILE *out,
     emit_value_as_rep_ctx(ctx, out, send_value, XR_REP_TAGGED);
     fprintf(out, ";\n");
     fprintf(out, "    uint8_t %s = %u;\n", mode_name, (unsigned) transfer_mode);
-    fprintf(out, "    if (XR_IS_STR(%s)) {\n", value_name);
-    fprintf(out, "        %s = xr_aot_bridge_xrt_to_runtime(ctx, %s);\n", value_name, value_name);
+    fprintf(out, "    bool _%s_was_string_%u = XR_IS_STR(%s);\n", name_prefix, id, value_name);
+    fprintf(out, "    %s = xr_aot_bridge_xrt_to_runtime(ctx, %s);\n", value_name, value_name);
+    fprintf(out, "    if (_%s_was_string_%u) {\n", name_prefix, id);
     fprintf(out, "        %s = XR_TRANSFER_MOVE;\n", mode_name);
     fprintf(out, "    }\n");
 }
@@ -460,6 +461,24 @@ static void emit_assign_from_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, const X
     if (cg_value_rep_is_typed_adt_aggregate(plan->rep))
         fprintf(out, "%s_from_base(", plan->rep.c_type);
     fprintf(out, "xrt_enum_aggregate_from_boxed(%s)", temp_name);
+    if (cg_value_rep_is_typed_adt_aggregate(plan->rep))
+        fprintf(out, ")");
+    fprintf(out, ";\n");
+}
+
+static void emit_assign_from_owned_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *dst,
+                                                    const char *temp_name) {
+    const XaotValuePlan *plan = cg_value_plan(ctx, dst);
+    if (!plan || !cg_value_rep_is_adt_aggregate(plan->rep)) {
+        emit_assign_from_xrvalue_temp(out, dst, temp_name);
+        return;
+    }
+    fprintf(out, "    ");
+    emit_vref(out, dst);
+    fprintf(out, " = ");
+    if (cg_value_rep_is_typed_adt_aggregate(plan->rep))
+        fprintf(out, "%s_from_base(", plan->rep.c_type);
+    fprintf(out, "xrt_enum_aggregate_take_from_boxed(%s)", temp_name);
     if (cg_value_rep_is_typed_adt_aggregate(plan->rep))
         fprintf(out, ")");
     fprintf(out, ";\n");
@@ -555,6 +574,16 @@ static void emit_bridge_stored_tagged_value(FILE *out, const XiValue *value) {
     fprintf(out, "    ");
     emit_vref(out, value);
     fprintf(out, " = xr_aot_bridge_value_to_xrt(");
+    emit_vref(out, value);
+    fprintf(out, ");\n");
+}
+
+static void emit_bridge_stored_owned_tagged_value(FILE *out, const XiValue *value) {
+    if (!value || cg_rep(value) != XR_REP_TAGGED)
+        return;
+    fprintf(out, "    ");
+    emit_vref(out, value);
+    fprintf(out, " = xr_aot_bridge_owned_value_to_xrt(ctx, ");
     emit_vref(out, value);
     fprintf(out, ");\n");
 }
@@ -923,6 +952,13 @@ static void emit_coro_aot_done_value(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         return;
     }
     if (cg_coro_return_value_needs_retain(ctx, f, value)) {
+        const XaotValuePlan *plan = cg_value_plan(ctx, value);
+        if (plan && cg_value_rep_is_adt_aggregate(plan->rep)) {
+            fprintf(out, "xrt_enum_aggregate_box_from_borrowed(");
+            emit_adt_aggregate_as_base_expr(ctx, out, value);
+            fprintf(out, ")");
+            return;
+        }
         fprintf(out, "({ XrValue _xrt_ret = ");
         emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
         fprintf(out, "; xrt_retain(_xrt_ret); _xrt_ret; })");
@@ -2427,7 +2463,7 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
             if (cg_coro_value_has_storage(f, v)) {
                 char tmp[40];
                 snprintf(tmp, sizeof(tmp), "_call_value_%u", v->id);
-                emit_assign_from_xrvalue_temp_ctx(ctx, out, v, tmp);
+                emit_assign_from_owned_xrvalue_temp_ctx(ctx, out, v, tmp);
             }
             fprintf(out, "            f->call_target_id_%u = 0;\n", v->id);
             fprintf(out, "            goto S%d_DONE;\n", sid);
@@ -2456,7 +2492,7 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
     fprintf(out, "S%d_RESULT:;\n", sid);
     fprintf(out, "    if (_call_%u.kind == XR_AOT_RUN_DONE) {\n", v->id);
     fprintf(out, "        _call_value_%u = _call_%u.value;\n", v->id, v->id);
-    if (cg_rep(v) == XR_REP_TAGGED)
+    if (cg_rep(v) == XR_REP_TAGGED && !cg_value_plan_is_aggregate(ctx, v))
         fprintf(out,
                 "        if (_call_value_%u.tag == XR_TAG_PTR || _call_value_%u.tag >= "
                 "XR_TAG_STR)\n"
@@ -2468,7 +2504,7 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
     if (cg_coro_value_has_storage(f, v)) {
         char tmp[40];
         snprintf(tmp, sizeof(tmp), "_call_value_%u", v->id);
-        emit_assign_from_xrvalue_temp_ctx(ctx, out, v, tmp);
+        emit_assign_from_owned_xrvalue_temp_ctx(ctx, out, v, tmp);
     }
     fprintf(out, "        f->state = 0;\n");
     fprintf(out, "        goto S%d_DONE;\n", sid);
@@ -2646,7 +2682,7 @@ static bool emit_coro_net_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, 
     if (cg_coro_value_has_storage(f, v)) {
         char temp[48];
         snprintf(temp, sizeof(temp), "_net_value_%u", v->id);
-        emit_assign_from_xrvalue_temp_ctx(ctx, out, v, temp);
+        emit_assign_from_owned_xrvalue_temp_ctx(ctx, out, v, temp);
     }
     fprintf(out, "    f->state = 0;\n");
     fprintf(out, "    goto S%d_DONE;\n", sid);
@@ -3267,7 +3303,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_call_%u.kind == XR_AOT_RUN_DONE) {\n", v->id);
         fprintf(out, "        _call_value_%u = _call_%u.value;\n", v->id, v->id);
-        if (cg_rep(v) == XR_REP_TAGGED)
+        if (cg_rep(v) == XR_REP_TAGGED && !cg_value_plan_is_aggregate(ctx, v))
             fprintf(out,
                     "        if (_call_value_%u.tag == XR_TAG_PTR || "
                     "_call_value_%u.tag >= XR_TAG_STR)\n"
@@ -3282,7 +3318,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_call_value_%u", v->id);
-            emit_assign_from_xrvalue_temp_ctx(ctx, out, v, tmp);
+            emit_assign_from_owned_xrvalue_temp_ctx(ctx, out, v, tmp);
         }
         fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        goto S%d_DONE;\n", sid);
@@ -3307,7 +3343,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_call_%u.kind == XR_AOT_RUN_DONE) {\n", v->id);
         fprintf(out, "        _call_value_%u = _call_%u.value;\n", v->id, v->id);
-        if (cg_rep(v) == XR_REP_TAGGED)
+        if (cg_rep(v) == XR_REP_TAGGED && !cg_value_plan_is_aggregate(ctx, v))
             fprintf(out,
                     "        if (_call_value_%u.tag == XR_TAG_PTR || "
                     "_call_value_%u.tag >= XR_TAG_STR)\n"
@@ -3322,7 +3358,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[40];
             snprintf(tmp, sizeof(tmp), "_call_value_%u", v->id);
-            emit_assign_from_xrvalue_temp_ctx(ctx, out, v, tmp);
+            emit_assign_from_owned_xrvalue_temp_ctx(ctx, out, v, tmp);
         }
         fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        goto S%d_DONE;\n", sid);
@@ -4696,7 +4732,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "        return _chan_recv_timeout_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
         if (result_observed && cg_coro_value_has_storage(f, v))
-            emit_bridge_stored_tagged_value(out, v);
+            emit_bridge_stored_owned_tagged_value(out, v);
         if (result_observed)
             emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;
@@ -4876,7 +4912,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
         if (result_observed && cg_coro_value_has_storage(f, v))
-            emit_bridge_stored_tagged_value(out, v);
+            emit_bridge_stored_owned_tagged_value(out, v);
         if (result_observed)
             emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;

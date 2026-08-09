@@ -96,6 +96,6 @@ that cite the affected category.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h 696ddc204e161c42bee708528a2eddc90eaaa8dfc1f8f2bb9590cc5b798371b0
-anchor-sha256: src/aot/xi_cgen.c d5def56c508774fe4880711e0c729d257827a6afe398b8cd02bffe20f4b6612f
+anchor-sha256: src/aot/xi_cgen.c 1b4b203fc3a8fff026cd776ad3ae10c030b945f55a5fee7c28eab248c0380135
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 94d85a40ae5a6b8d3b237984a7457ce15d76f6b1fd5e6095719969a7515ad582
 anchor-sha256: src/app/cli/xcmd_verify.c ca122153d89cbc4fa2b2fcffe08604c109729941a5a9b34ff0d72b1d0226e8a8

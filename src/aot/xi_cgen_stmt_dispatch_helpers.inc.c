@@ -24,7 +24,7 @@ static uint32_t xicgen_stmt_bound_try_id(const XiFunc *f, const XiValue *v) {
 }
 
 static bool xicgen_stmt_codegen_compiler_fence(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                const XiValue *v, const char *prefix) {
+                                               const XiValue *v, const char *prefix) {
     (void) ctx;
     (void) f;
     (void) v;
@@ -274,7 +274,7 @@ static bool xicgen_stmt_err_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         if (freestanding_aggregate) {
             fprintf(out, "xrt_pending_enum_error");
         } else {
-            fprintf(out, "xrt_enum_aggregate_from_boxed(xrt_pending_error)");
+            fprintf(out, "xrt_enum_aggregate_take_from_boxed(xrt_pending_error)");
         }
         if (plan && cg_value_rep_is_typed_adt_aggregate(plan->rep))
             fprintf(out, ")");

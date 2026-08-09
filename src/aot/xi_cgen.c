@@ -8885,7 +8885,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                     } else {
                         XaotValueRep ret_value_rep = cg_func_return_abi_value_rep(ctx, f);
                         emit_adt_base_to_value_rep_prefix(out, ret_value_rep);
-                        fprintf(out, "xrt_enum_aggregate_from_boxed(");
+                        fprintf(out, "xrt_enum_aggregate_take_from_boxed(");
                         emit_value_as_rep_ctx(ctx, out, blk->control, XR_REP_TAGGED);
                         fprintf(out, ")");
                         emit_adt_base_to_value_rep_suffix(out, ret_value_rep);

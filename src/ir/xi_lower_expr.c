@@ -5183,10 +5183,34 @@ static const char *lower_call_namespace_module_name(XiLower *l, CallExprNode *ca
     return links ? links->module_name : NULL;
 }
 
+/* A payload-enum variant call constructs a new inline aggregate whose active
+ * lanes own the values moved into them.  It is therefore a fresh +1 result even
+ * though, unlike a class constructor, it allocates no object header.  Publish
+ * that semantic fact at lowering so ARC, VM, and every AOT representation read
+ * one backend-neutral ownership contract. */
+static bool lower_call_is_payload_enum_constructor(XiLower *l, CallExprNode *call) {
+    if (!l || !l->analyzer || !call || !call->callee)
+        return false;
+    const XaSelection *selection = xa_analyzer_get_selection(l->analyzer, call->callee);
+    if (!selection || selection->kind != XA_SEL_ENUM_MEMBER || !selection->target_symbol ||
+        selection->target_symbol->kind != XA_SYM_ENUM)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, selection->target_symbol);
+    XaEnumInfo *info = links ? links->enum_info : NULL;
+    return info && info->variants && selection->field_index >= 0 &&
+           (uint32_t) selection->field_index < info->variant_count &&
+           info->variants[selection->field_index].payload_count > 0;
+}
+
 static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *call,
                                                      XiValue *callee_value) {
     XiReturnOwnership result = {
         .kind = XI_RETURN_OWNERSHIP_UNKNOWN, .param_index = -1, .complete = false};
+    if (lower_call_is_payload_enum_constructor(l, call)) {
+        result.kind = XI_RETURN_OWNERSHIP_OWNED;
+        result.complete = true;
+        return result;
+    }
     XaSymbolLinks *links = lower_call_return_ownership_links(l, call);
     if (links && links->return_ownership.complete) {
         switch ((XaReturnOwnershipKind) links->return_ownership.kind) {

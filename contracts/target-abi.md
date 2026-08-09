@@ -77,6 +77,16 @@ public tagged value ABI: an I64 consumer keeps the ordinal, while a tagged or
 erased consumer receives the existing `XR_TAG_ENUM` representation backed by
 one immutable scalar-layout sidecar. Invalid ordinals abort at that boundary;
 enum tags, layout identifiers, names, and calling conventions do not drift.
+Tasks 261-262 make hosted coroutine/provider values cross one backend-neutral
+ownership envelope. AOT-native tuple and payload-enum boxes carry the canonical
+`XrObjHeader` at the value pointer and enter runtime-owned queues as `XR_TAG_PTR`
+with `HEADER_AT_PTR`; generated code restores the richer native tuple/enum tag
+from the header after the owner returns. Retagging preserves pointer identity
+and changes no reference count. A representation conversion that allocates a
+new AOT object consumes and releases the provider owner, while conversion of a
+borrowed aggregate lane acquires one independent owner. Runtime tuple, enum,
+array, map, and set graphs are converted recursively under this same rule; a
+tag-specific fast path may not bypass the envelope.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -220,6 +230,11 @@ emission, and native linking:
   compile-time size/alignment/offset assertions on both sides. A fragment may
   borrow these objects but cannot invent a second layout, retain an unowned
   runtime root, or bypass the declared argument/return ownership convention.
+  Hosted runtime queues recognize the neutral `XR_TAG_PTR` envelope rather
+  than AOT-only extended tags. Native tuple and enum identities are recovered
+  only from the canonical header kind after the ownership transfer; their
+  payload lanes remain balanced across borrow, move, box, unbox, publication,
+  and coroutine-frame cleanup.
 - T13: `XI_STORE_FIELD` consumes its stored value on every backend. Native-class
   CGen therefore releases the previous reference field and transfers the
   compiler-provided owner without adding an implicit retain. If the source must
@@ -260,15 +275,17 @@ the compiler core does not download a provider.
 anchor-sha256: src/aot/xaot_link.c a268bec7948a3a9cecf081d63d51545e3fe41af0b6ab32a9a38b21b031127da0
 anchor-sha256: src/aot/xaot_prepare.c aafc236f21231b6509fca91e544d948f7ea2d06b059fd0c8101f0286f4a66bbd
 anchor-sha256: src/aot/xaot_verify.c 7fe97d173ac206666af4d63052ee0abb41b26eac8451da308ab5f8110fad6e16
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 5cafb87f5a28356200cdd737e84e7e7f6896b7c8ec97461262e872cb5f05b698
+anchor-sha256: src/aot/xaot_coro.h a809800bed392770ab43ff9f5b3e3df2d8d3882e957f8c9c3790369bf210520d
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c a60c7684a1a930bc5105a84ffca32acb9e2177215dd783fe4a29aeec3e0b008c
 anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 495a6b15c1a963c95bc26d98f4791adf0b6d16c1b33660900587a07bf738d7a1
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 618628f3a903675d603562435acafe6ee76baeea66f1ecf4524169b55dd85b2f
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2803a9189904ea6e4dc3100bb741aae456d32b544cdcb74a62ffcb0dff04af14
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ebd369480abc12eec5ff54458649bb497698bf26d1d4e6194d2487a69686d145
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 05a8d51d49eba2f97c1b713e444c16651ba68a5d6880a0ef0e14bdf66d650ece
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 4ad72c173bf880b48ff9c232aee4d3648c7848d749c0a34881373e0e9ac051f7
-anchor-sha256: src/aot/xi_cgen.c d5def56c508774fe4880711e0c729d257827a6afe398b8cd02bffe20f4b6612f
-anchor-sha256: src/aot/xrt_coll.h d486fb006def4b702fc9a2e47642f954a4d9e5dacbbf4a7e00f938b83d0a2d30
-anchor-sha256: src/aot/xrt_core_freestanding.h 13af59f530ac1a77bb9f050bb391a65cbaebe941d77efd4f65043c4d811c7e00
+anchor-sha256: src/aot/xi_cgen.c 1b4b203fc3a8fff026cd776ad3ae10c030b945f55a5fee7c28eab248c0380135
+anchor-sha256: src/aot/xrt_coll.h dd3c06c5322f34243609164d98aeea8510e0ddb612e6c6d8b93e5750080aee3d
+anchor-sha256: src/aot/xrt_core_freestanding.h 4c198d1280922272bf7e1693606b42da762e1daadec8495fd6fcbc6ca4ad623f
+anchor-sha256: src/aot/xrt_provider_abi.h 6907e8dc56d42b1076ee467f26b0d65cc6794354ab9564d7aa9433bf73c76955
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: src/app/cli/xcmd_build.c 3d2c8d70f9858e26ce1cbdc9d40451cb052ab2628417e6a556e00cfa2ed886c9
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
