@@ -29,6 +29,7 @@
 #include "../../module/xlockfile.h"
 #include "../../module/xresolver.h"
 #include "../../module/xpkg_client.h"
+#include "../../api/xisolate_profile.h"
 #include "../../module/xproject.h"
 #include "../../base/xtoml.h"
 #include <stdio.h>
@@ -803,23 +804,49 @@ XR_FUNC int cmd_pkg(const XrCliInvocation *inv) {
     int sub_argc = inv->positional_count - 1;
     char **sub_argv = (char **) inv->positionals + 1;
 
-    if (strcmp(subcmd, "init") == 0)
-        return cmd_pkg_init(sub_argc, sub_argv);
-    if (strcmp(subcmd, "add") == 0)
-        return cmd_pkg_add(sub_argc, sub_argv);
-    if (strcmp(subcmd, "remove") == 0)
-        return cmd_pkg_remove(sub_argc, sub_argv);
-    if (strcmp(subcmd, "install") == 0)
-        return cmd_pkg_install(sub_argc, sub_argv);
-    if (strcmp(subcmd, "update") == 0)
-        return cmd_pkg_update(sub_argc, sub_argv);
-    if (strcmp(subcmd, "tree") == 0)
-        return cmd_pkg_tree(sub_argc, sub_argv);
-    if (strcmp(subcmd, "login") == 0)
-        return cmd_pkg_login(sub_argc, sub_argv);
-    if (strcmp(subcmd, "publish") == 0)
-        return cmd_pkg_publish(sub_argc, sub_argv);
+    /* Registry subcommands drive http.request, which suspends on socket I/O, so
+     * they run inside a scheduler-backed isolate the package client pumps to
+     * completion. Local subcommands (init, tree, remove, update) touch no
+     * network and start no runtime. */
+    bool needs_runtime = strcmp(subcmd, "add") == 0 || strcmp(subcmd, "install") == 0 ||
+                         strcmp(subcmd, "publish") == 0;
+    XrVMRuntime *iso = NULL;
+    if (needs_runtime) {
+        XrVMConfig params;
+        xr_isolate_profile_params(XR_ISOLATE_PROFILE_RUN, &params);
+        iso = xr_isolate_profile_create(&params);
+        if (!iso) {
+            xr_cli_error("pkg", "cannot initialize runtime for registry access");
+            return XR_CLI_EXIT_FAIL;
+        }
+        xr_pkg_client_set_isolate(iso);
+    }
 
-    xr_cli_error("pkg", "unknown subcommand '%s'", subcmd);
-    return XR_CLI_EXIT_USAGE;
+    int rc;
+    if (strcmp(subcmd, "init") == 0)
+        rc = cmd_pkg_init(sub_argc, sub_argv);
+    else if (strcmp(subcmd, "add") == 0)
+        rc = cmd_pkg_add(sub_argc, sub_argv);
+    else if (strcmp(subcmd, "remove") == 0)
+        rc = cmd_pkg_remove(sub_argc, sub_argv);
+    else if (strcmp(subcmd, "install") == 0)
+        rc = cmd_pkg_install(sub_argc, sub_argv);
+    else if (strcmp(subcmd, "update") == 0)
+        rc = cmd_pkg_update(sub_argc, sub_argv);
+    else if (strcmp(subcmd, "tree") == 0)
+        rc = cmd_pkg_tree(sub_argc, sub_argv);
+    else if (strcmp(subcmd, "login") == 0)
+        rc = cmd_pkg_login(sub_argc, sub_argv);
+    else if (strcmp(subcmd, "publish") == 0)
+        rc = cmd_pkg_publish(sub_argc, sub_argv);
+    else {
+        xr_cli_error("pkg", "unknown subcommand '%s'", subcmd);
+        rc = XR_CLI_EXIT_USAGE;
+    }
+
+    if (iso) {
+        xray_vm_multicore_destroy(iso);
+        xray_vm_delete(iso);
+    }
+    return rc;
 }

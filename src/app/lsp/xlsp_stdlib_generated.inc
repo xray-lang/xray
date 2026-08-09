@@ -155,6 +155,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"textResponse", XLSP_SYM_FUNCTION, "fn(body: string, status?: int, headers?: Headers?): HttpResponse", "", NULL, 0},
     {"jsonResponse", XLSP_SYM_FUNCTION, "fn(value: T, status?: int, headers?: Headers?): HttpResponse", "", NULL, 0},
     {"request", XLSP_SYM_FUNCTION, "fn(options: HttpRequestOptions): HttpResponse", "", NULL, 0},
+    {"get", XLSP_SYM_FUNCTION, "fn(url: string): HttpResponse", "", NULL, 0},
+    {"post", XLSP_SYM_FUNCTION, "fn(url: string, contentType: string, body: Array<byte>, authorization?: string): HttpResponse", "", NULL, 0},
     {"parseChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int, maxTrailerHeaders?: int): ChunkedBody?", "Decode a complete Transfer-Encoding: chunked body.", NULL, 0},
     {"decodeChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int): string?", "Decode a chunked body and discard trailers.", NULL, 0},
     {"parseRequestHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): RequestHead?", "Parse an HTTP/1.x request head without reading sockets.", NULL, 0},
@@ -188,7 +190,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"RequestMessage", XLSP_SYM_CLASS, "type RequestMessage", "Parsed HTTP/1.x request head and decoded body.", NULL, 0},
     {"ResponseMessage", XLSP_SYM_CLASS, "type ResponseMessage", "Parsed HTTP/1.x response head and decoded body.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 40
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 42
 
 // http2 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http2_symbols[] = {

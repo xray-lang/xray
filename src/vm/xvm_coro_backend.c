@@ -319,6 +319,45 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrVMRuntime *X, XrClosure *closur
     atomic_store_explicit(&coro->current_scope, NULL, memory_order_relaxed);
 }
 
+/*
+** Reset a reusable main coroutine to invoke `closure` with `nargs` arguments.
+**
+** Mirrors xr_coro_reset_for_call but carries call arguments: each is deep-copied
+** into the coroutine heap under the COPY transfer mode, so the caller keeps its
+** own references and the coroutine owns independent copies it releases when it
+** finishes. The runtime deliberately refuses to SHARE a caller-built private
+** object across the coroutine boundary, so COPY is the correct and only safe
+** mode for argument values assembled outside the VM.
+*/
+void xr_coro_reset_for_call_args(XrCoroutine *coro, XrVMRuntime *X, XrClosure *closure,
+                                 XrValue *args, int nargs) {
+    XR_DCHECK(coro != NULL, "coro_reset_for_call_args: NULL coro");
+    XR_DCHECK(X != NULL, "coro_reset_for_call_args: NULL isolate");
+    XR_DCHECK(closure != NULL, "coro_reset_for_call_args: NULL closure");
+    XR_DCHECK(nargs >= 0, "coro_reset_for_call_args: negative nargs");
+
+    vm_backend_reset_execution_state(coro, X);
+
+    uint8_t inline_modes[8];
+    uint8_t *modes = NULL;
+    if (nargs > 0) {
+        modes = nargs <= (int) sizeof(inline_modes) ? inline_modes
+                                                    : (uint8_t *) xr_malloc((size_t) nargs);
+        XR_CHECK(modes != NULL, "coro_reset_for_call_args: mode allocation failed");
+        for (int i = 0; i < nargs; i++)
+            modes[i] = XR_TRANSFER_COPY;
+    }
+    bool bound = vm_backend_bind_closure_entry_modes(coro, X, closure, args, modes, nargs, false);
+    if (modes && modes != inline_modes)
+        xr_free(modes);
+    XR_CHECK(bound, "coro_reset_for_call_args: failed to bind VM closure");
+    (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
+
+    coro->result = xr_null();
+    coro->error = xr_null();
+    atomic_store_explicit(&coro->current_scope, NULL, memory_order_relaxed);
+}
+
 XrCoroutine *xr_coro_create_vm_closure(XrVMRuntime *X, XrClosure *closure, XrValue *args,
                                        const uint8_t *arg_modes, int arg_count, const char *name,
                                        const char *file, int line) {

@@ -2152,6 +2152,27 @@ export fn request(options: HttpRequestOptions) -> HttpResponse {
     throw HttpError.InvalidUrl(options.url)
 }
 
+// get performs a GET request for the given URL and returns the response.
+// Transport failures throw HttpError exactly as request() does; an HTTP error
+// status is a completed exchange and is returned with its real status.
+export fn get(url: string) -> HttpResponse {
+    return request({ url: url })
+}
+
+// post performs a POST request carrying body under the given content type. A
+// non-empty authorization value is sent verbatim as the Authorization header,
+// covering the common bearer-token case without the caller assembling a Headers
+// collection. Transport failures throw HttpError exactly as request() does.
+export fn post(url: string, contentType: string, body: Array<byte>,
+               authorization: string = "") -> HttpResponse {
+    var headers = Headers()
+    headers.set("Content-Type", contentType)
+    if (len(authorization) > 0) {
+        headers.set("Authorization", authorization)
+    }
+    return request({ url: url, method: HttpMethod.post(), headers: headers, body: body })
+}
+
 // ResponseHead - Parsed HTTP/1.x response status line and headers.
 export class ResponseHead {
     version: string
