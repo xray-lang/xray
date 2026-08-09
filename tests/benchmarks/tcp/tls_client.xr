@@ -2,26 +2,35 @@
 // Called by tls_bench.py; prints RESULT lines parsed by the Python harness.
 
 import net
+import { DialOptions } from net
 import time
 
-fn readFull(conn: NetConn, size: int) -> bool {
+fn readFull(conn: NetConn, buf: ref Array<byte>, size: int) -> bool {
     var received = 0
     while (received < size) {
-        var chunk = net.read(conn, size - received)
-        if (chunk == null) {
+        var n = net.readInto(conn, ref buf, size - received)
+        if (n <= 0) {
             return false
         }
-        received = received + len(chunk!)
+        received = received + n
     }
     return true
 }
 
-fn echoOnce(conn: NetConn, payload: string) -> bool {
-    var n = net.write(conn, payload)
+fn tryDialTLS(host: string, port: int) -> NetConn? {
+    try {
+        return net.dial(host, port, DialOptions(30000, true))
+    } catch (e) {
+        return null
+    }
+}
+
+fn echoOnce(conn: NetConn, payload: Array<byte>, scratch: ref Array<byte>) -> bool {
+    var n = net.writeBytes(conn, payload)
     if (n != len(payload)) {
         return false
     }
-    return readFull(conn, len(payload))
+    return readFull(conn, ref scratch, len(payload))
 }
 
 fn printResult(name: string, fields: string) {
@@ -32,7 +41,7 @@ fn benchHandshake(host: string, port: int, count: int) {
     var ok = 0
     var start = time.micros()
     for (var i = 0; i < count; i++) {
-        var conn = net.dialTLS(host, port, 30000)
+        var conn = tryDialTLS(host, port)
         if (conn != null) {
             ok++
             net.close(conn!)
@@ -49,15 +58,16 @@ fn benchHandshake(host: string, port: int, count: int) {
 }
 
 fn benchLatency(host: string, port: int, iterations: int) {
-    var conn = net.dialTLS(host, port, 30000)
+    var conn = tryDialTLS(host, port)
     if (conn == null) {
         printResult("tls_latency", "complete=false error=dial")
         return
     }
 
-    var payload = "L".repeat(64)
+    var payload = "L".repeat(64).copyBytes()
+    var scratch = Array<byte>(65536)
     for (var i = 0; i < 20; i++) {
-        if (!echoOnce(conn!, payload)) {
+        if (!echoOnce(conn!, payload, ref scratch)) {
             printResult("tls_latency", "complete=false error=warmup")
             net.close(conn!)
             return
@@ -68,7 +78,7 @@ fn benchLatency(host: string, port: int, iterations: int) {
     var total = 0
     for (var i = 0; i < iterations; i++) {
         var start = time.micros()
-        if (!echoOnce(conn!, payload)) {
+        if (!echoOnce(conn!, payload, ref scratch)) {
             printResult("tls_latency", "complete=false error=echo")
             net.close(conn!)
             return
@@ -92,15 +102,16 @@ fn benchLatency(host: string, port: int, iterations: int) {
 }
 
 fn benchThroughput(host: string, port: int, iterations: int, msgSize: int) {
-    var conn = net.dialTLS(host, port, 30000)
+    var conn = tryDialTLS(host, port)
     if (conn == null) {
         printResult("tls_throughput", "complete=false error=dial")
         return
     }
 
-    var payload = "T".repeat(msgSize)
+    var payload = "T".repeat(msgSize).copyBytes()
+    var scratch = Array<byte>(65536)
     for (var i = 0; i < 50; i++) {
-        if (!echoOnce(conn!, payload)) {
+        if (!echoOnce(conn!, payload, ref scratch)) {
             printResult("tls_throughput", "complete=false error=warmup")
             net.close(conn!)
             return
@@ -109,7 +120,7 @@ fn benchThroughput(host: string, port: int, iterations: int, msgSize: int) {
 
     var start = time.micros()
     for (var i = 0; i < iterations; i++) {
-        if (!echoOnce(conn!, payload)) {
+        if (!echoOnce(conn!, payload, ref scratch)) {
             printResult("tls_throughput", "complete=false error=echo")
             net.close(conn!)
             return
@@ -131,16 +142,17 @@ fn benchThroughput(host: string, port: int, iterations: int, msgSize: int) {
 }
 
 fn benchLarge(host: string, port: int, sizeMb: int) {
-    var conn = net.dialTLS(host, port, 30000)
+    var conn = tryDialTLS(host, port)
     if (conn == null) {
         printResult("tls_large", "complete=false error=dial")
         return
     }
 
     var size = sizeMb * 1024 * 1024
-    var payload = "G".repeat(size)
+    var payload = "G".repeat(size).copyBytes()
+    var scratch = Array<byte>(65536)
     var start = time.micros()
-    var ok = echoOnce(conn!, payload)
+    var ok = echoOnce(conn!, payload, ref scratch)
     var elapsed_us = time.micros() - start
     net.close(conn!)
 

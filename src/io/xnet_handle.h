@@ -10,10 +10,9 @@
  * KEY CONCEPT:
  *   Replaces the old XrJson-based "{fd, type, tls}" handles that scripts
  *   could read by name. XrNetConn / XrNetListener are opaque heap objects
- *   carrying the underlying fd plus type-specific state. Scripts can
- *   only operate on them via the net.read / net.write / net.close
- *   entry points (eventually via instance methods on the registered
- *   native types).
+ *   carrying the underlying fd plus type-specific state. Scripts operate
+ *   on them only through the net module's byte primitives (readInto,
+ *   writeBytes, accept, close, ...) and the registered handle methods.
  *
  * WHY THIS DESIGN:
  *   - Type safety: a TLS conn is never confused with a UDP socket; net
@@ -47,6 +46,12 @@ typedef enum {
     XR_NETCONN_TLS = 2, /* TLS over TCP (tls_state set) */
 } XrNetConnKind;
 
+/*
+ * Portable network error codes. The numbering is a stable script-facing
+ * contract: net.__lastCode returns these values verbatim and the NetError
+ * classification table in stdlib/net/net.xr maps them to enum variants,
+ * so renumbering is a breaking semantic change, not a refactor.
+ */
 typedef enum {
     XR_NETERR_NONE = 0,
     XR_NETERR_TIMEOUT = 1,
@@ -57,6 +62,7 @@ typedef enum {
     XR_NETERR_TLS = 6,
     XR_NETERR_IO = 7,
     XR_NETERR_INVALID = 8,
+    XR_NETERR_CANCELLED = 9,
 } XrNetErrorKind;
 
 /* ========== Connection handle ========== */
@@ -73,6 +79,11 @@ typedef struct XrNetConn {
     int64_t write_deadline_ms;   /* absolute time.monotonic() ms, 0 = no deadline   */
     int last_errno;              /* errno captured for the last failed operation    */
     uint8_t last_error;          /* XrNetErrorKind                                  */
+    /* Sender of the last successful datagram receive. Scalar fields instead
+     * of a composite return keep the primitive expressible on both the VM
+     * and the AOT direct-call ABI; one reader per UDP socket is assumed. */
+    char udp_from_host[46]; /* INET6_ADDRSTRLEN text, "" when none         */
+    int udp_from_port;
 } XrNetConn;
 
 /* ========== Listener handle ========== */

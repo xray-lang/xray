@@ -1,77 +1,82 @@
 // 1430_net_basic.xr
-// 作者：xingleixu@gmail.com
-// 测试：net 库基本功能测试
+// net module basics: DNS resolution and module exports.
 //
-// 覆盖功能：
-//   - DNS 解析 (lookup)
-//   - IPv4/IPv6 双栈支持
+// Covers:
+//   - lookup returns Array<IpAddress>, empty on failure, never null
+//   - resolve returns the first address or null
+//   - IPv4/IPv6 dual-stack results
 
 import net
 
 // ============================================================
-// 第一部分：DNS 解析测试
+// Part 1: DNS resolution
 // ============================================================
 
 @test
 fn test_lookup_localhost() {
-    // 解析 localhost
-    var addr = net.lookup("localhost")
-    assert_true(addr != null)
-    // localhost 通常解析为 127.0.0.1 或 ::1
-    assert_true(addr == "127.0.0.1" || addr!.startsWith("::"))
+    var addrs = net.lookup("localhost")
+    assert_true(len(addrs) > 0)
+    // localhost resolves to 127.0.0.1 or ::1 depending on stack order.
+    var first = addrs[0].toString()
+    assert_true(first == "127.0.0.1" || first.startsWith("::"))
 }
 
 @test
 fn test_lookup_invalid_host() {
-    // 解析无效主机名应返回 null 或被 DNS 劫持返回 IP
-    // 某些 ISP/DNS 会对不存在的域名返回有效 IP（DNS hijacking）
-    var addr = net.lookup("this-host-does-not-exist-12345.invalid")
-    // 只验证不会崩溃，结果是 null 或字符串都可接受
-    assert_true(addr == null || typeName(addr) == "string")
+    // A non-resolvable name must not crash: the result is an empty array,
+    // unless a hijacking resolver still hands back addresses.
+    var addrs = net.lookup("this-host-does-not-exist-12345.invalid")
+    for (var i = 0; i < len(addrs); i++) {
+        assert_true(len(addrs[i].toString()) > 0)
+    }
+}
+
+@test
+fn test_resolve_matches_lookup_head() {
+    var first = net.resolve("localhost")
+    assert_true(first != null)
+    var addrs = net.lookup("localhost")
+    assert_true(len(addrs) > 0)
+    assert_eq(first!.toString(), addrs[0].toString())
 }
 
 // ============================================================
-// 第二部分：模块导入测试
+// Part 2: module exports
 // ============================================================
 
 @test
 fn test_net_module_exists() {
-    // 验证 net 模块可以正常导入
     assert_true(typeName(net.lookup) == "function")
 }
 
 @test
 fn test_net_dial_exists() {
-    // 验证 dial 函数存在
     assert_true(typeName(net.dial) == "function")
 }
 
 @test
-fn test_net_lookup_exists() {
-    // 验证 lookup 函数存在
-    assert_true(typeName(net.lookup) == "function")
+fn test_net_resolve_exists() {
+    assert_true(typeName(net.resolve) == "function")
 }
 
 // ============================================================
-// 第三部分：IPv6 双栈支持验证
+// Part 3: IPv6 dual-stack support
 // ============================================================
 
 @test
 fn test_lookup_ipv6_localhost() {
-    // localhost 支持 IPv6 解析
-    // 注意：结果可能是 IPv4 或 IPv6，取决于系统配置
-    var addr = net.lookup("localhost")
-    assert_true(addr != null)
+    // The result set may contain IPv4, IPv6, or both, depending on the
+    // system configuration.
+    var addrs = net.lookup("localhost")
+    assert_true(len(addrs) > 0)
 }
 
 @test
-fn test_lookup_returns_valid_address() {
-    // 验证返回的地址格式正确
-    var addr = net.lookup("localhost")
-    if (addr != null) {
-        // 地址应该是非空字符串
-        assert_true(len(addr) > 0)
-        // 地址应该包含数字
-        assert_true(addr.contains(".") || addr.contains(":"))
+fn test_lookup_returns_valid_addresses() {
+    var addrs = net.lookup("localhost")
+    for (var i = 0; i < len(addrs); i++) {
+        var value = addrs[i].toString()
+        assert_true(len(value) > 0)
+        assert_true(value.contains(".") || value.contains(":"))
     }
 }

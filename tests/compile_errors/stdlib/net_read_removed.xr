@@ -1,0 +1,3 @@
+import net
+
+net.read(null, 4096)

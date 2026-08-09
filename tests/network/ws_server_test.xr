@@ -1,41 +1,46 @@
 /*
  * ws_server_test.xr - WebSocket server test
- * 
+ *
  * Run this server, then connect with a WebSocket client to test.
  * Example: wscat -c ws://localhost:8765
  */
 
 import ws
+import { WsConn } from ws
 
 print("=== WebSocket Server Test ===")
 
-// Echo server: sends back whatever it receives
-ws.serve(8765, fn(conn) {
+// Echo server: sends back whatever it receives. serve runs until `running`
+// clears; stop it from another coroutine or a signal with running.store(false).
+const running = Atomic(true)
+
+ws.serve(8765, fn(conn: ref WsConn) {
     print("Client connected!")
-    
+
     // Echo loop
     while (true) {
-        var msg = ws.recv(conn, null)
+        var msg = conn.recv()
         if (msg == null) {
             print("recv returned null")
             break
         }
-        if (msg.error) {
-            print("Recv error: " + msg.error)
+        if (msg!.error != null) {
+            print("Recv error: " + msg!.error!)
             break
         }
-        if (msg.data) {
-            print("Received: " + msg.data)
+        var text = msg!.text()
+        if (text != null) {
+            print("Received: " + text!)
             // Echo back
-            var ok = ws.send(conn, "Echo: " + msg.data, null)
+            var ok = conn.sendText("Echo: " + text!)
             if (!ok) {
                 print("Send failed")
                 break
             }
         }
     }
-    
+
     print("Client disconnected")
-})
+}, running)
 
 print("Server stopped")

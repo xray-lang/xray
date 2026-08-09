@@ -1,43 +1,41 @@
 // 1433_net_loopback.xr
-// 作者：xingleixu@gmail.com
-// 测试：TCP loopback over coroutines — yieldable handle results + cross-go handles
+// TCP loopback over coroutines: yieldable handle results + cross-go handles.
 //
-// 覆盖：
-//   - net.accept / net.dial / net.read / net.write 的 yieldable 返回值必须写回
-//     调用者寄存器（typeof 为 NetConn / string，而非 int / module）。
-//   - NetListener / NetConn 跨 `go` 边界传参后在子协程中仍然有效（fd >= 0，
-//     可读写），因为 handle 分配在共享 sysheap 上。
-//   - net.read 返回的二进制数据通过 Array<byte> 逐字节还原，高位字节 (>= 0x80)
-//     保持原始 octet。
+// Covers:
+//   - net.accept / net.dial / net.readInto / net.writeBytes yieldable results
+//     must be written back to the caller's registers (typeof NetConn / int,
+//     not a stale int or module value).
+//   - An accepted NetConn stays valid after being moved across a `go`
+//     boundary into its own service coroutine, the shape real servers use.
+//   - Binary data with high bytes (>= 0x80) survives the loopback octet
+//     for octet through the Array<byte> surface.
 
 import net
+import { NetError } from net
 
-// Accept one client and echo back whatever it sends, then close.
-// `lst` and the accepted `conn` cross `go` boundaries here.
-fn acceptEcho(lst: NetListener) {
-    var conn = net.accept(lst)!
-    go serveEcho(conn)
+fn tryListen(backlog: int) -> NetListener? {
+    try {
+        return net.listen(0, backlog)
+    } catch (e: NetError) {
+        return null
+    }
 }
 
-fn serveEcho(c: NetConn) {
-    var data = net.read(c)!
-    net.write(c, data)
+// The accepted connection is moved in; the coroutine owns it for its lifetime.
+fn serveEcho(c: move NetConn) {
+    var data = net.readBytes(c)
+    if (data != null) {
+        net.writeBytes(c, data!)
+    }
     net.close(c)
 }
 
-fn serveNativeCopyEcho(c: NetConn) {
+fn serveNativeCopyEcho(c: move NetConn) {
     net.copy(c, c)
     net.close(c)
 }
 
-fn acceptNativeCopyEcho(lst: NetListener) {
-    var conn = net.accept(lst)!
-    go serveNativeCopyEcho(conn)
-}
-
-fn acceptRelay(lst: NetListener) {
-    var src = net.accept(lst)!
-    var dst = net.accept(lst)!
+fn relayOnce(src: move NetConn, dst: move NetConn) {
     net.copy(src, dst)
     net.close(src)
     net.close(dst)
@@ -45,25 +43,31 @@ fn acceptRelay(lst: NetListener) {
 
 @test
 fn test_loopback_echo() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
     assert_true(port > 0)
 
-    // Listener handle passed into a child coroutine (Gap 008 path).
-    go acceptEcho(lst)
-
-    // Dial / write / read are yieldable; their results must be delivered
-    // to the caller's registers (Gap 007 path).
-    var c = net.dial("127.0.0.1", port)!
+    // dial / accept are yieldable; their results must be delivered to the
+    // caller's registers. The accepted conn is then moved into its coroutine.
+    var c = net.dial("127.0.0.1", port)
     assert_true(net.fd(c) >= 0)
+    var served = net.accept(lst)!
+    go serveEcho(move served)
 
-    var n = net.write(c, "hello")
+    // "hello"
+    var n = net.writeBytes(c, Array<byte>([104, 101, 108, 108, 111]))
     assert_eq(n, 5)
 
-    var resp = net.read(c)!
-    assert_eq(resp, "hello")
+    var resp = Array<byte>(16)
+    var got = net.readInto(c, ref resp)
+    assert_eq(got, 5)
+    assert_eq(resp[0], 104)
+    assert_eq(resp[1], 101)
+    assert_eq(resp[2], 108)
+    assert_eq(resp[3], 108)
+    assert_eq(resp[4], 111)
 
     net.close(c)
     net.close(lst)
@@ -71,25 +75,28 @@ fn test_loopback_echo() {
 
 @test
 fn test_loopback_binary_high_bytes() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
     assert_true(port > 0)
 
-    go acceptEcho(lst)
+    var c = net.dial("127.0.0.1", port)
+    var served = net.accept(lst)!
+    go serveEcho(move served)
 
-    var c = net.dial("127.0.0.1", port)!
-    // "é€" = 0xC3 0xA9 0xE2 0x82 0xAC — contains high bytes.
-    net.write(c, "é€")
+    // UTF-8 bytes of "é€": 0xC3 0xA9 0xE2 0x82 0xAC — every octet >= 0x80.
+    var payload = Array<byte>([195, 169, 226, 130, 172])
+    assert_eq(net.writeBytes(c, payload), 5)
 
-    var resp = net.read(c)!
-    assert_eq(len(resp.bytes()), 5)
-    assert_eq(resp.bytes()[0]!, 195)
-    assert_eq(resp.bytes()[1]!, 169)
-    assert_eq(resp.bytes()[2]!, 226)
-    assert_eq(resp.bytes()[3]!, 130)
-    assert_eq(resp.bytes()[4]!, 172)
+    var resp = Array<byte>(16)
+    var n = net.readInto(c, ref resp)
+    assert_eq(n, 5)
+    assert_eq(resp[0], 195)
+    assert_eq(resp[1], 169)
+    assert_eq(resp[2], 226)
+    assert_eq(resp[3], 130)
+    assert_eq(resp[4], 172)
 
     net.close(c)
     net.close(lst)
@@ -97,19 +104,24 @@ fn test_loopback_binary_high_bytes() {
 
 @test
 fn test_native_copy_self_loopback() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
     assert_true(port > 0)
 
-    go acceptNativeCopyEcho(lst)
+    var c = net.dial("127.0.0.1", port)
+    var served = net.accept(lst)!
+    go serveNativeCopyEcho(move served)
 
-    var c = net.dial("127.0.0.1", port)!
-    net.write(c, "native")
+    // "native"
+    assert_eq(net.writeBytes(c, Array<byte>([110, 97, 116, 105, 118, 101])), 6)
 
-    var resp = net.read(c)!
-    assert_eq(resp, "native")
+    var resp = Array<byte>(16)
+    var n = net.readInto(c, ref resp)
+    assert_eq(n, 6)
+    assert_eq(resp[0], 110)
+    assert_eq(resp[5], 101)
 
     net.close(c)
     net.close(lst)
@@ -117,20 +129,25 @@ fn test_native_copy_self_loopback() {
 
 @test
 fn test_native_copy_loopback() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
     assert_true(port > 0)
 
-    go acceptRelay(lst)
+    var src = net.dial("127.0.0.1", port)
+    var acceptedSrc = net.accept(lst)!
+    var dst = net.dial("127.0.0.1", port)
+    var acceptedDst = net.accept(lst)!
+    go relayOnce(move acceptedSrc, move acceptedDst)
 
-    var src = net.dial("127.0.0.1", port)!
-    var dst = net.dial("127.0.0.1", port)!
-
-    net.write(src, "relay")
-    var resp = net.read(dst)!
-    assert_eq(resp, "relay")
+    // "relay"
+    assert_eq(net.writeBytes(src, Array<byte>([114, 101, 108, 97, 121])), 5)
+    var resp = Array<byte>(16)
+    var n = net.readInto(dst, ref resp)
+    assert_eq(n, 5)
+    assert_eq(resp[0], 114)
+    assert_eq(resp[4], 121)
 
     net.close(src)
     net.close(dst)

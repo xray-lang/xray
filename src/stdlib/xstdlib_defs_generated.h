@@ -340,37 +340,33 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"mem", "compare", "(a: Ptr<byte>, b: Ptr<byte>, n: int): int", "Compare n bytes at a and b (memcmp: <0, 0, >0)", "mem_compare", "normal", "", "xrt_mem_compare", "vvv", "value", "", "", "", "core", "method", 3, true},
     {"mem", "volatileLoad", "(ptr: Ptr<byte>, size: int): int", "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)", "mem_volatile_load", "normal", "", "xrt_mem_volatile_load", "vv", "value", "", "", "", "core", "method", 2, true},
     {"mem", "volatileStore", "(ptr: MutPtr<byte>, v: int, size: int): ()", "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)", "mem_volatile_store", "normal", "", "xrt_mem_volatile_store", "vvv", "value", "", "", "", "core", "method", 3, true},
-    {"net", "__dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", "net_dial_yieldable", "yieldable", "", "xrt_net_dial_default", "sv", "value", "", "", "", "runtime", "method", 2, true},
-    {"net", "__dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", "net_dial_yieldable", "yieldable", "", "xrt_net_dial", "svv", "value", "", "", "", "runtime", "method", 3, true},
-    {"net", "__listen", "(port: int, backlog?: int): NetListener?", "Start listening on a port", "net_listen_handle", "normal", "", "xrt_net_listen_default", "v", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__listen", "(port: int, backlog?: int): NetListener?", "Start listening on a port", "net_listen_handle", "normal", "", "xrt_net_listen", "vv", "value", "", "", "", "runtime", "method", 2, true},
+    {"net", "__resolveAll", "(host: string): Array<string>", "Resolve every address for a host, RFC 8305 interleaved; empty on failure", "net_resolve_all_yieldable", "yieldable", "", "xrt_net_resolve_all", "s", "value", "", "", "", "runtime", "method", 1, true},
+    {"net", "__connectFd", "(addr: string, port: int, timeoutMs: int): NetConn?", "Connect one literal address; null on failure with the code on __lastConnectCode", "net_connect_fd_yieldable", "yieldable", "", "xrt_net_connect_fd", "vvv", "value", "", "", "", "runtime", "method", 3, true},
+    {"net", "__nowMs", "(): int", "Monotonic clock in milliseconds for net's own deadline arithmetic", "net_now_ms_fn", "normal", "", "xrt_net_now_ms_fn", "", "value", "", "", "", "runtime", "method", 0, true},
+    {"net", "__lastConnectCode", "(): int", "Portable error code from the most recent __connectFd on this worker; 0 when the last attempt connected", "net_last_connect_code", "normal", "", "xrt_net_last_connect_code", "", "value", "", "", "", "runtime", "method", 0, true},
+    {"net", "__listenFd", "(port: int, backlog: int, forceV4: bool): NetListener?", "Bind and listen; dual-stack preferred unless forceV4", "net_listen_fd", "normal", "", "xrt_net_listen_fd", "vvv", "value", "", "", "", "runtime", "method", 3, true},
     {"net", "__accept", "(listener: NetListener): NetConn?", "Accept a new connection", "net_accept_handle_yieldable", "yieldable", "", "xrt_net_accept", "v", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", "net_read_handle_yieldable", "yieldable", "", "xrt_net_read_default", "v", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__read", "(conn: NetConn, maxlen?: int): string?", "Read data from connection", "net_read_handle_yieldable", "yieldable", "", "xrt_net_read", "vv", "value", "", "", "", "runtime", "method", 2, true},
-    {"net", "__readInto", "(conn: NetConn, buffer: Array<byte>, maxlen?: int): int", "Read data into a reusable Array<byte> buffer", "net_read_into_yieldable", "yieldable", "", "xrt_net_read_into", "vvv", "value", "", "", "", "runtime", "method", 3, true},
-    {"net", "__write", "(conn: NetConn, data: string): int", "Write data to connection", "net_write_handle_yieldable", "yieldable", "", "xrt_net_write", "vs", "value", "", "", "", "runtime", "method", 2, true},
-    {"net", "__writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write Array<byte> data to connection", "net_write_bytes_yieldable", "yieldable", "", "xrt_net_write_bytes", "vv", "value", "", "", "", "runtime", "method", 2, true},
-    {"net", "__copy", "(src: NetConn, dst: NetConn, bufferSize?: int): int", "Copy a TCP/TLS stream using a reusable native buffer", "net_copy_yieldable", "yieldable", "", "", "vvv", "value", "", "", "", "runtime", "", 3, false},
+    {"net", "__readInto", "(conn: NetConn, buffer: Array<byte>, maxlen: int): int", "Read once into a caller buffer; 0 is EOF, -1 is a stored error", "net_read_into_yieldable", "yieldable", "", "xrt_net_read_into", "vvv", "value", "", "", "", "runtime", "method", 3, true},
+    {"net", "__writeBytes", "(conn: NetConn, data: Array<byte>): int", "Write the whole buffer; returns bytes written, -1 when nothing was sent", "net_write_bytes_yieldable", "yieldable", "", "xrt_net_write_bytes", "vv", "value", "", "", "", "runtime", "method", 2, true},
     {"net", "__copyBidirectional", "(a: NetConn, b: NetConn): __CopyBidirectionalResult", "Copy two TCP/TLS streams in both directions", "net_copy_bidirectional_yieldable", "yieldable", "", "xrt_net_copy_bidirectional", "vv", "i64_pair_result", "NetError", "", "", "runtime", "method", 2, true},
-    {"net", "__shutdownRead", "(conn: NetConn): bool", "Shut down the read side of a TCP connection", "net_shutdown_read", "normal", "", "xrt_net_shutdown_read", "v", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side of a TCP connection", "net_shutdown_write", "normal", "", "xrt_net_shutdown_write", "v", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__shutdown", "(conn: NetConn): bool", "Shut down both sides of a TCP connection", "net_shutdown_conn", "normal", "", "xrt_net_shutdown", "v", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__close", "(handle: NetConn | NetListener): ()", "Close a connection or listener", "net_close_handle", "normal", "", "xrt_net_close", "v", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__fd", "(handle: NetConn | NetListener): int", "Get fd from handle", "net_fd_handle", "normal", "", "xrt_net_fd", "v", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__setReadDeadline", "(conn: NetConn, deadline: int): bool", "Set read deadline in monotonic ms", "net_set_read_deadline", "normal", "", "xrt_net_set_read_deadline", "vv", "value", "", "", "", "runtime", "method", 2, true},
-    {"net", "__setWriteDeadline", "(conn: NetConn, deadline: int): bool", "Set write deadline in monotonic ms", "net_set_write_deadline", "normal", "", "xrt_net_set_write_deadline", "vv", "value", "", "", "", "runtime", "method", 2, true},
-    {"net", "__setDeadline", "(conn: NetConn, deadline: int): bool", "Set read and write deadlines in monotonic ms", "net_set_deadline", "normal", "", "xrt_net_set_deadline", "vv", "value", "", "", "", "runtime", "method", 2, true},
-    {"net", "__setAcceptDeadline", "(listener: NetListener, deadline: int): bool", "Set accept deadline in monotonic ms", "net_set_accept_deadline", "normal", "", "xrt_net_set_accept_deadline", "vv", "value", "", "", "", "runtime", "method", 2, true},
-    {"net", "__lastError", "(handle: NetConn | NetListener): NetError?", "Return the last typed network error", "net_last_error", "normal", "", "xrt_net_last_error", "v", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__lastErrno", "(handle: NetConn | NetListener): int", "Return the last system errno", "net_last_errno", "normal", "", "xrt_net_last_errno", "v", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__lookup", "(hostname: string): string?", "DNS lookup", "net_dns_lookup", "normal", "", "xrt_net_lookup", "s", "value", "", "", "", "runtime", "method", 1, true},
-    {"net", "__hasTLS", "(): bool", "Check if TLS support is available", "net_has_tls", "normal", "", "xrt_net_has_tls", "", "value", "", "", "", "runtime", "method", 0, true},
-    {"net", "__dialTLS", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TLS connection", "net_dial_tls_yieldable", "yieldable", "XR_ENABLE_TLS", "xrt_net_dial_tls_default", "sv", "value", "", "", "", "runtime", "method", 2, true},
-    {"net", "__dialTLS", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TLS connection", "net_dial_tls_yieldable", "yieldable", "XR_ENABLE_TLS", "xrt_net_dial_tls", "svv", "value", "", "", "", "runtime", "method", 3, true},
-    {"net", "__upgradeTLS", "(conn: NetConn, hostname: string, timeout?: int): NetConn?", "Upgrade connection to TLS", "net_upgrade_tls_yieldable", "yieldable", "XR_ENABLE_TLS", "", "vvv", "value", "", "", "", "runtime", "", 3, false},
-    {"net", "__udpBind", "(port: int, addr?: string): NetConn?", "Bind a UDP socket", "net_udp_bind_handle", "normal", "", "", "vv", "value", "", "", "", "runtime", "", 2, false},
-    {"net", "__sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram", "net_send_to_yieldable", "yieldable", "", "", "vvvv", "value", "", "", "", "runtime", "", 4, false},
-    {"net", "__recvFrom", "(handle: NetConn, maxlen?: int): __UdpPacket?", "Receive UDP datagram (returns flat handle: data, host, port)", "net_recv_from_yieldable", "yieldable", "", "", "vv", "value", "", "", "", "runtime", "", 2, false},
+    {"net", "__shutdownRead", "(conn: NetConn): bool", "Shut down the read side", "net_shutdown_read", "normal", "", "xrt_net_shutdown_read", "v", "value", "", "", "", "runtime", "method", 1, true},
+    {"net", "__shutdownWrite", "(conn: NetConn): bool", "Shut down the write side", "net_shutdown_write", "normal", "", "xrt_net_shutdown_write", "v", "value", "", "", "", "runtime", "method", 1, true},
+    {"net", "__shutdown", "(conn: NetConn): bool", "Shut down both directions", "net_shutdown_conn", "normal", "", "xrt_net_shutdown", "v", "value", "", "", "", "runtime", "method", 1, true},
+    {"net", "__close", "(handle: NetConn | NetListener): ()", "Close a connection or listener; idempotent", "net_close_handle", "normal", "", "xrt_net_close", "v", "value", "", "", "", "runtime", "method", 1, true},
+    {"net", "__fd", "(handle: NetConn | NetListener): int", "Raw fd of a handle, -1 when closed", "net_fd_handle", "normal", "", "xrt_net_fd", "v", "value", "", "", "", "runtime", "method", 1, true},
+    {"net", "__setReadDeadline", "(conn: NetConn, deadline: int): bool", "Absolute monotonic read deadline in ms; 0 clears", "net_set_read_deadline", "normal", "", "xrt_net_set_read_deadline", "vv", "value", "", "", "", "runtime", "method", 2, true},
+    {"net", "__setWriteDeadline", "(conn: NetConn, deadline: int): bool", "Absolute monotonic write deadline in ms; 0 clears", "net_set_write_deadline", "normal", "", "xrt_net_set_write_deadline", "vv", "value", "", "", "", "runtime", "method", 2, true},
+    {"net", "__setDeadline", "(conn: NetConn, deadline: int): bool", "Set both read and write deadlines", "net_set_deadline", "normal", "", "xrt_net_set_deadline", "vv", "value", "", "", "", "runtime", "method", 2, true},
+    {"net", "__setAcceptDeadline", "(listener: NetListener, deadline: int): bool", "Absolute monotonic accept deadline in ms; 0 clears", "net_set_accept_deadline", "normal", "", "xrt_net_set_accept_deadline", "vv", "value", "", "", "", "runtime", "method", 2, true},
+    {"net", "__lastCode", "(handle: NetConn | NetListener): int", "Portable error code of the last failed operation; 0 when none", "net_last_code", "normal", "", "xrt_net_last_code", "v", "value", "", "", "", "runtime", "method", 1, true},
+    {"net", "__lastErrno", "(handle: NetConn | NetListener): int", "Raw errno captured for the last failed operation", "net_last_errno", "normal", "", "xrt_net_last_errno", "v", "value", "", "", "", "runtime", "method", 1, true},
+    {"net", "__hasTLS", "(): bool", "Whether TLS support is compiled in", "net_has_tls", "normal", "", "xrt_net_has_tls", "", "value", "", "", "", "runtime", "method", 0, true},
+    {"net", "__tlsHandshake", "(conn: NetConn, hostname: string, deadlineMs: int): int", "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code", "net_tls_handshake_yieldable", "yieldable", "XR_ENABLE_TLS", "xrt_net_tls_handshake", "vvv", "value", "", "", "", "runtime", "method", 3, true},
+    {"net", "__udpBind", "(port: int, addr: string): NetConn?", "Bind a UDP socket; empty addr binds the wildcard address", "net_udp_bind_handle", "normal", "", "xrt_net_udp_bind", "vv", "value", "", "", "", "runtime", "method", 2, true},
+    {"net", "__udpSendTo", "(conn: NetConn, data: Array<byte>, addr: string, port: int, timeoutMs: int): int", "Send one datagram to a literal address; bytes sent or -1 with a stored code", "net_udp_send_to_yieldable", "yieldable", "", "xrt_net_udp_send_to", "vvvvv", "value", "", "", "", "runtime", "method", 5, true},
+    {"net", "__udpRecvInto", "(conn: NetConn, buffer: Array<byte>, timeoutMs: int): int", "Receive one datagram into a caller buffer; bytes received, or -1 with a stored code", "net_udp_recv_into_yieldable", "yieldable", "", "xrt_net_udp_recv_into", "vvv", "value", "", "", "", "runtime", "method", 3, true},
+    {"net", "__udpFromHost", "(conn: NetConn): string", "Sender address of the last successful datagram receive; empty when none", "net_udp_from_host", "normal", "", "xrt_net_udp_from_host", "v", "value", "", "", "", "runtime", "method", 1, true},
+    {"net", "__udpFromPort", "(conn: NetConn): int", "Sender port of the last successful datagram receive; 0 when none", "net_udp_from_port", "normal", "", "xrt_net_udp_from_port", "v", "value", "", "", "", "runtime", "method", 1, true},
     {"http2", "supported", "(): bool", "Whether the built-in HTTP/2 standard module is available on this target", "h2_supported", "normal", "", "xrt_http_h2_supported", "", "value", "", "", "", "runtime", "method", 0, true},
     {"http2", "request", "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?", "Execute one typed HTTP/2 request", "h2_request_typed", "normal", "", "xrt_http_h2_request_unavailable", "vvvvvv", "value", "", "", "", "runtime", "method", 6, true},
     {"cluster", "start", "(config: ClusterConfig): bool", "Start cluster node", "cluster_start", "normal", "", "", "v", "value", "", "", "", "runtime", "", 1, false},
@@ -384,13 +380,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "publish", "(topic: string, value: Json): bool", "Publish to topic", "cluster_publish_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", "cluster_subscribe_fn", "normal", "", "", "v", "value", "", "", "", "runtime", "", 1, false},
-    {"ws", "connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "vv", "value", "", "", "", "runtime", "", 2, false},
-    {"ws", "send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "vvv", "value", "", "", "", "runtime", "", 3, false},
-    {"ws", "recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", "ws_recv_yieldable", "yieldable", "", "", "vv", "value", "", "", "", "runtime", "", 2, false},
-    {"ws", "close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", "ws_close", "normal", "", "", "vvv", "value", "", "", "", "runtime", "", 3, false},
-    {"ws", "ping", "(conn: WsConn): bool", "Send a ping frame", "ws_ping", "normal", "", "", "v", "value", "", "", "", "runtime", "", 1, false},
-    {"ws", "serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", "ws_serve_yieldable", "yieldable", "", "", "vv", "value", "", "", "", "runtime", "", 2, false},
-    {"ws", "stopServer", "(): ()", "Stop the WebSocket server", "ws_stop_server", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
 
@@ -510,13 +499,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_Cluster
     {"cluster", "ClusterInfo", "tls", "ClusterTlsStatus", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_ws_WsConnectOptions[] = {
-    {"ws", "WsConnectOptions", "timeout", "int?", true},
-    {"ws", "WsConnectOptions", "pingInterval", "int?", true},
-    {"ws", "WsConnectOptions", "pongTimeout", "int?", true},
-    {"ws", "WsConnectOptions", "maxMessageSize", "int?", true},
-};
-
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
     {"runtime", "RuntimeInfo", "Typed snapshot of the current execution-local reclamation domain", xr_stdlib_object_fields_runtime_RuntimeInfo, 7, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
@@ -528,7 +510,6 @@ static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = 
     {"cluster", "ClusterTlsStatus", "Effective TLS posture of a running cluster node", xr_stdlib_object_fields_cluster_ClusterTlsStatus, 3, true},
     {"cluster", "ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", xr_stdlib_object_fields_cluster_ClusterNodeInfo, 16, true},
     {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_object_fields_cluster_ClusterInfo, 11, true},
-    {"ws", "WsConnectOptions", "Typed WebSocket client connection options", xr_stdlib_object_fields_ws_WsConnectOptions, 4, true},
 };
 #define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_object_shape_def_entries) / sizeof(xr_stdlib_object_shape_def_entries[0])))
 
@@ -575,7 +556,7 @@ static const XrStdlibEnumDefEntry xr_stdlib_enum_def_entries[] = {
     {"Coro", "CoroState", "Lifecycle state captured in a coroutine diagnostic snapshot", xr_stdlib_enum_Coro_CoroState_variants, 5, UINT32_C(2882116571)},
     {"Coro", "CoroGroupKey", "Stable key used to group coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroGroupKey_variants, 2, UINT32_C(2434143071)},
     {"Coro", "CoroMetric", "Metric used to rank coroutine diagnostic snapshots", xr_stdlib_enum_Coro_CoroMetric_variants, 2, UINT32_C(4039818693)},
-    {"net", "NetError", "Typed failure from native network operations", xr_stdlib_enum_net_NetError_variants, 10, UINT32_C(2184710811)},
+    {"net", "NetError", "Typed failure from network operations; classification from native codes lives in net.xr", xr_stdlib_enum_net_NetError_variants, 10, UINT32_C(2184710811)},
     {"cluster", "ClusterNodeState", "Lifecycle state of a remote cluster node", xr_stdlib_enum_cluster_ClusterNodeState_variants, 5, UINT32_C(2784952505)},
 };
 #define XR_STDLIB_ENUM_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_enum_def_entries) / sizeof(xr_stdlib_enum_def_entries[0])))
@@ -599,30 +580,9 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_io___FileStat[]
     {"io", "__FileStat", "isSymlink", "bool", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_net___UdpPacket[] = {
-    {"net", "__UdpPacket", "data", "string", true},
-    {"net", "__UdpPacket", "host", "string", true},
-    {"net", "__UdpPacket", "port", "int", true},
-};
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsConn[] = {
-    {"ws", "WsConn", "wsid", "int", true},
-    {"ws", "WsConn", "url", "string", false},
-    {"ws", "WsConn", "state", "string", false},
-};
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsMessage[] = {
-    {"ws", "WsMessage", "data", "string | Array<byte> | null", true},
-    {"ws", "WsMessage", "binary", "bool", true},
-    {"ws", "WsMessage", "error", "string?", true},
-};
-
 static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
     {"os", "__ExecResult", "Native handle type", xr_stdlib_handle_fields_os___ExecResult, 3},
     {"io", "__FileStat", "Native handle type", xr_stdlib_handle_fields_io___FileStat, 10},
-    {"net", "__UdpPacket", "Native handle type", xr_stdlib_handle_fields_net___UdpPacket, 3},
-    {"ws", "WsConn", "Native handle type", xr_stdlib_handle_fields_ws_WsConn, 3},
-    {"ws", "WsMessage", "Native handle type", xr_stdlib_handle_fields_ws_WsMessage, 3},
 };
 #define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / sizeof(xr_stdlib_handle_def_entries[0])))
 

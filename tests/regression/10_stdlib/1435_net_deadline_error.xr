@@ -1,15 +1,29 @@
 // 1435_net_deadline_error.xr
-// 测试：TCP deadline 与 lastError / lastErrno 基础诊断
+// TCP deadlines and lastError / lastErrno diagnostics.
+//
+// accept and the byte reads keep in-band null / negative results; the
+// reason is queryable per handle: a deadline elapse reports
+// NetError.Timeout, a closed handle reports NetError.Closed, and a clean
+// shutdown never fabricates an error.
 
 import net
 import { NetError } from net
 import time
 
+fn tryListen(backlog: int) -> NetListener? {
+    try {
+        return net.listen(0, backlog)
+    } catch (e: NetError) {
+        return null
+    }
+}
+
 fn acceptSlowWrite(lst: NetListener) {
     var conn = net.accept(lst)
     if (conn != null) {
         time.sleep(100)
-        net.write(conn!, "late")
+        // "late"
+        net.writeBytes(conn!, Array<byte>([108, 97, 116, 101]))
         net.close(conn!)
     }
 }
@@ -23,7 +37,7 @@ fn acceptAndClose(lst: NetListener) {
 
 @test
 fn test_accept_deadline_timeout() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var deadline = time.monotonic() + 20
@@ -38,17 +52,33 @@ fn test_accept_deadline_timeout() {
 }
 
 @test
+fn test_accept_closed_reports_closed() {
+    // The other half of the accept null contract: a closed listener
+    // reports NetError.Closed, distinct from a deadline elapse.
+    var maybeLst = tryListen(8)
+    if (maybeLst == null) { return }
+    var lst = maybeLst!
+    net.close(lst)
+
+    var conn = net.accept(lst)
+    assert_true(conn == null)
+    assert_eq(net.lastError(lst), NetError.Closed)
+}
+
+@test
 fn test_read_deadline_timeout() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
     go acceptSlowWrite(lst)
 
-    var c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)
     assert_true(net.setReadDeadline(c, time.monotonic() + 20))
 
-    var data = net.read(c)
+    // readBytes returns null for both EOF and error; a deadline elapse is
+    // the error case, so lastError must say Timeout.
+    var data = net.readBytes(c)
     assert_true(data == null)
     assert_eq(net.lastError(c), NetError.Timeout)
     assert_eq(net.lastErrno(c), 0)
@@ -59,16 +89,16 @@ fn test_read_deadline_timeout() {
 
 @test
 fn test_closed_handle_error() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
     go acceptAndClose(lst)
 
-    var c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)
     net.close(c)
 
-    assert_eq(net.write(c, "x"), -1)
+    assert_eq(net.writeBytes(c, Array<byte>([120])), -1)
     assert_eq(net.lastError(c), NetError.Closed)
 
     net.close(lst)

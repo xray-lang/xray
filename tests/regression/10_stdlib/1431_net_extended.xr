@@ -6,11 +6,11 @@ import net
 @test
 fn test_net_core_apis() {
     assert(typeName(net.dial) == "function")
+    assert(typeName(net.dialEndpoint) == "function")
     assert(typeName(net.listen) == "function")
     assert(typeName(net.accept) == "function")
-    assert(typeName(net.read) == "function")
     assert(typeName(net.readInto) == "function")
-    assert(typeName(net.write) == "function")
+    assert(typeName(net.readBytes) == "function")
     assert(typeName(net.writeBytes) == "function")
     assert(typeName(net.copy) == "function")
     assert(typeName(net.copyBidirectional) == "function")
@@ -19,6 +19,7 @@ fn test_net_core_apis() {
     assert(typeName(net.shutdown) == "function")
     assert(typeName(net.close) == "function")
     assert(typeName(net.lookup) == "function")
+    assert(typeName(net.resolve) == "function")
     assert(typeName(net.fd) == "function")
     assert(typeName(net.setReadDeadline) == "function")
     assert(typeName(net.setWriteDeadline) == "function")
@@ -32,6 +33,7 @@ fn test_net_core_apis() {
 @test
 fn test_net_tls_apis() {
     assert(typeName(net.hasTLS) == "function")
+    assert(typeName(net.upgradeTLS) == "function")
     var tls = net.hasTLS()
     assert(typeName(tls) == "bool")
 }
@@ -49,16 +51,19 @@ fn test_net_udp_apis() {
 fn test_lookup_consistent() {
     var a1 = net.lookup("localhost")
     var a2 = net.lookup("localhost")
-    assert_eq(a1, a2)
+    assert_eq(len(a1), len(a2))
+    if (len(a1) > 0) {
+        assert_eq(a1[0].toString(), a2[0].toString())
+    }
 }
 
-// @test DNS lookup - returns string or null
+// @test DNS lookup - returns typed addresses
 @test
 fn test_lookup_type() {
-    var addr = net.lookup("localhost")
-    if (addr != null) {
-        assert_eq(typeName(addr), "string")
-        assert(len(addr) > 0)
+    var addrs = net.lookup("localhost")
+    for (var i = 0; i < len(addrs); i++) {
+        assert(len(addrs[i].value) > 0)
+        assert_eq(addrs[i].value, addrs[i].toString())
     }
 }
 

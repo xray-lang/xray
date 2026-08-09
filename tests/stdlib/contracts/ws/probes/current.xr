@@ -16,3 +16,7 @@ var payload = Array<byte>([0, 1, 127, 128, 255])
 var framed = ws.frame(payload, 2, false)
 var frame = ws.parseFrame(framed, false)!
 emit("frame-byte-roundtrip", frame.opcode == 2 && len(frame.payload) == 5 && frame.payload[0] == 0 && frame.payload[3] == 128 && frame.payload[4] == 255 && frame.consumedBytes == len(framed))
+// The connection layer is pure Xray over net: connect fails closed by returning
+// a WsConn whose error is set (here an unroutable URL, verified before any socket).
+var badConn = ws.connect("ws://:80/", null)
+emit("connection-layer-pure-xray", badConn.error != null && badConn.error! == "URL parse error")

@@ -455,11 +455,8 @@ public = true
 layer = "L5"
 policy = "xray_semantic"
 semantic_source = "stdlib/ws/ws.xr"
-loader = "stdlib/ws/ws_binding.c"
-loader_symbol = "ws"
-public_native = ["WsConn", "WsConnectOptions", "WsMessage", "close", "connect", "ping", "recv", "send", "serve", "stopServer"]
-private_native_sources = ["stdlib/ws/*.c"]
-private_native_reason = "Connection I/O, compression and HTTP upgrade data plane consumed by ws.xr"
+loader = "stdlib/ws/ws.c"
+public_native = []
 perf_suite = "stdlib/ws"
 
 [[module]]

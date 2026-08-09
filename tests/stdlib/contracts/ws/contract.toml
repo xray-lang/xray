@@ -1,11 +1,20 @@
 schema = 1
 module = "ws"
-contract_revision = 1
-legacy_commit = "05b0bf0f61cb2e8a39ba294570dd62cdc1f5b54e"
+contract_revision = 2
+legacy_commit = "12fe80b75c633ffee5542a1feab8cc6b2bb8b892"
 legacy_oracle = "executable"
 legacy_cases_manifest = "tests/stdlib/contracts/ws/legacy_expected.jsonl"
 legacy_public_surface = [
+  "WsConn",
+  "WsConnectOptions",
   "WsMessage",
+  "connect",
+  "sendText",
+  "sendBytes",
+  "recv",
+  "ping",
+  "close",
+  "serve",
   "acceptKey",
   "randomKey",
   "parseUpgradeRequest",
@@ -24,14 +33,19 @@ legacy_public_surface = [
   "pongFrame"
 ]
 intentional_semantic_changes = [
+  "the WebSocket connection layer (connect, sendText, sendBytes, recv, ping, close, serve) is implemented in pure Xray over the net module instead of native runtime code",
+  "connect never returns optional and never throws: a failed connection is a WsConn whose error field explains why, matching the streaming recv/send surface",
+  "WsMessage carries an Array<byte>? body with a text() decoder, so binary frames are never forced through UTF-8 and text and binary payloads are never aliased",
+  "serve stops when its running Atomic<bool> flag clears, replacing the process-global stopServer singleton",
+  "the connection layer does not offer permessage-deflate; the wire stays uncompressed until a bounded inflate primitive lands",
   "WebSocket protocol helpers carry frame payloads as Array<byte>",
   "close payload reason decoding remains strict UTF-8 and rejects malformed bytes",
-  "masking and frame parsing preserve exact byte payloads across VM and AOT",
-  "future WsMessage convergence should distinguish text and binary messages without string-binary aliases"
+  "masking and frame parsing preserve exact byte payloads across VM and AOT"
 ]
 known_legacy_bugs = [
-  "connection-level message APIs still need the final binary/text ADT switch after native contracts stabilize",
-  "legacy close reason decoding rendered UTF-8 bytes through Array.toString instead of constructing a string",
+  "the native connection layer advertised permessage-deflate during the handshake without a working inflate path; the pure-Xray layer stops offering it until a bounded inflate primitive lands",
+  "legacy connection message APIs aliased text and binary payloads through a string-or-bytes union; WsMessage now carries Array<byte>? with an explicit text() decoder",
+  "legacy close reason decoding rendered UTF-8 bytes through Array.toString instead of constructing a string"
 ]
 equivalence = ["value", "error", "effect", "complexity"]
 diff_cases_manifest = "tests/stdlib/contracts/ws/diff_cases.txt"
@@ -58,9 +72,29 @@ classification = "required"
 new_behavior = "maskPayload, frame, and parseFrame preserve exact byte payloads, extended lengths, mask rules, and consumed-byte counts"
 
 [[legacy_behavior]]
+id = "connection-layer-pure-xray"
+classification = "required"
+new_behavior = "connect, sendText, sendBytes, recv, ping, close, and serve run in pure Xray over the net module (TLS, deadlines, coroutine I/O) instead of native runtime code; connect fails closed by returning a WsConn whose error is set"
+
+[[legacy_behavior]]
+id = "permessage-deflate-not-offered"
+classification = "bug"
+new_behavior = "the connection layer no longer advertises permessage-deflate; connect and serve negotiate an uncompressed wire until a bounded inflate primitive lands, so no extension is offered that the layer cannot honor"
+
+[[legacy_behavior]]
+id = "send-union-split"
+classification = "removed"
+new_behavior = "the string-or-bytes ws.send delegator is removed; callers use sendText for text frames and sendBytes for binary or raw byte frames"
+
+[[legacy_behavior]]
+id = "stopserver-to-running"
+classification = "removed"
+new_behavior = "the process-global ws.stopServer singleton is removed; serve takes a running Atomic<bool> flag and stops when it clears"
+
+[[legacy_behavior]]
 id = "string-binary-message-alias"
 classification = "removed"
-new_behavior = "future WsMessage public surface must distinguish text and binary payloads without treating arbitrary bytes as string"
+new_behavior = "WsMessage distinguishes text and binary payloads through an Array<byte>? body and a text() decoder instead of treating arbitrary bytes as string"
 
 [[legacy_behavior]]
 id = "close-reason-array-render"

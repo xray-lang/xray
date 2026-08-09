@@ -11,6 +11,26 @@ fn recv_line(ch: Channel<string>) -> string {
     }
 }
 
+// listen now throws; restricted environments without socket access should
+// still skip these tests quietly instead of failing them.
+fn tryListen(port: int, backlog: int) -> NetListener? {
+    try {
+        return net.listen(port, backlog)
+    } catch (e) {
+        return null
+    }
+}
+
+fn readText(conn: NetConn, maxBytes: int) -> string {
+    var bytes = net.readBytes(conn, maxBytes)
+    if (bytes == null) { return "" }
+    return string.fromUtf8(bytes![:]) ?? ""
+}
+
+fn writeText(conn: NetConn, data: string) {
+    net.writeBytes(conn, data.copyBytes())
+}
+
 fn capture_request_line(lst: NetListener, lines: Channel<string>) {
     var conn = net.accept(lst)
     if (conn == null) {
@@ -19,13 +39,13 @@ fn capture_request_line(lst: NetListener, lines: Channel<string>) {
         return
     }
 
-    var raw = net.read(conn!, 4096) ?? ""
+    var raw = readText(conn!, 4096)
     var end = raw.indexOf("\r\n")
     var line = raw
     if (end >= 0) { line = raw.slice(0, end) }
     lines.send(line)
 
-    net.write(conn!, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+    writeText(conn!, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
     net.close(conn!)
     net.close(lst)
 }
@@ -38,10 +58,10 @@ fn capture_request_raw(lst: NetListener, requests: Channel<string>) {
         return
     }
 
-    var raw = net.read(conn!, 4096) ?? ""
+    var raw = readText(conn!, 4096)
     requests.send(raw)
 
-    net.write(conn!, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+    writeText(conn!, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
     net.close(conn!)
     net.close(lst)
 }
@@ -53,8 +73,8 @@ fn serve_raw_response(lst: NetListener, response: string) {
         return
     }
 
-    net.read(conn!, 4096)
-    net.write(conn!, response)
+    readText(conn!, 4096)
+    writeText(conn!, response)
     net.close(conn!)
     net.close(lst)
 }
@@ -66,19 +86,19 @@ fn serve_binary_response(lst: NetListener, framing: string) {
         return
     }
 
-    net.read(conn!, 4096)
+    readText(conn!, 4096)
     if (framing == "chunked") {
-        net.write(
+        writeText(
             conn!,
             "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n3\r\n"
         )
         net.writeBytes(conn!, Array<byte>([0xff, 0x00, 0x7f]))
-        net.write(conn!, "\r\n0\r\n\r\n")
+        writeText(conn!, "\r\n0\r\n\r\n")
     } else if (framing == "close") {
-        net.write(conn!, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
+        writeText(conn!, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
         net.writeBytes(conn!, Array<byte>([0xff, 0x00, 0x7f]))
     } else {
-        net.write(
+        writeText(
             conn!,
             "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\n"
         )
@@ -89,7 +109,7 @@ fn serve_binary_response(lst: NetListener, framing: string) {
 }
 
 fn assert_binary_response(framing: string) {
-    var maybeLst = net.listen(0, 1)
+    var maybeLst = tryListen(0, 1)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     go serve_binary_response(lst, framing)
@@ -157,7 +177,7 @@ fn test_request_rejects_url_userinfo() {
 
 @test
 fn test_request_preserves_custom_method_token() {
-    var maybeLst = net.listen(0, 1)
+    var maybeLst = tryListen(0, 1)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     const lines: Channel<string> = Channel(1)
@@ -175,7 +195,7 @@ fn test_request_preserves_custom_method_token() {
 
 @test
 fn test_request_defaults_identity_accept_encoding() {
-    var maybeLst = net.listen(0, 1)
+    var maybeLst = tryListen(0, 1)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     const requests: Channel<string> = Channel(1)
@@ -193,7 +213,7 @@ fn test_request_defaults_identity_accept_encoding() {
 
 @test
 fn test_request_ignores_no_body_status_payload() {
-    var maybeLst = net.listen(0, 1)
+    var maybeLst = tryListen(0, 1)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     go serve_raw_response(
@@ -227,7 +247,7 @@ fn test_request_preserves_non_utf8_close_delimited_body() {
 
 @test
 fn test_request_body_is_written_as_bytes() {
-    var maybeLst = net.listen(0, 1)
+    var maybeLst = tryListen(0, 1)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     const requests: Channel<string> = Channel(1)

@@ -1,12 +1,11 @@
 // Imported by xmod_dead_net_helper.xr. The private helper deliberately touches
 // net.* so AOT cgen must not emit it when no reachable path references it.
 import net
+import { DialOptions } from net
 
 fn unusedDial() {
-    var conn = net.dial("127.0.0.1", 9, 1)
-    if (conn != null) {
-        net.close(conn!)
-    }
+    var conn = net.dial("127.0.0.1", 9, DialOptions(1))
+    net.close(conn)
 }
 
 export fn label() -> string {

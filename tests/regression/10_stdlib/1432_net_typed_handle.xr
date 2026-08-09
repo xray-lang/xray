@@ -1,17 +1,28 @@
 // 1432_net_typed_handle.xr
-// 作者：xingleixu@gmail.com
-// 测试：net 模块的 typed native handle (XrNetConn / XrNetListener) 的方法
+// Typed native handle (XrNetConn / XrNetListener) methods.
 //
-// 覆盖：
+// Covers:
 //   - listener.fd() / listener.port() / listener.close() / listener.isClosed()
-//   - 模块层 net.close / net.fd 仍可与 typed handle 互操作
+//   - module-level net.close / net.fd interoperate with typed handles
+//
+// net.listen throws NetError on setup failure, so the environment-dependent
+// skip folds the throw back into null here.
 
 import net
+import { NetError } from net
+
+fn tryListen(backlog: int) -> NetListener? {
+    try {
+        return net.listen(0, backlog)
+    } catch (e: NetError) {
+        return null
+    }
+}
 
 @test
 fn test_listener_methods() {
-    // listen on an ephemeral port (0 → kernel picks)
-    var listener = net.listen(0, 16)
+    // listen on an ephemeral port (0 -> kernel picks)
+    var listener = tryListen(16)
     if (listener == null) { return }
 
     // method-style accessors
@@ -32,9 +43,9 @@ fn test_listener_methods() {
 
 @test
 fn test_module_and_method_interop() {
-    // The module-level cfunc (net.fd) and the typed method must agree
+    // The module-level function (net.fd) and the typed method must agree
     // both before and after close.
-    var listener = net.listen(0, 1)
+    var listener = tryListen(1)
     if (listener == null) { return }
 
     assert_true(net.fd(listener!) == listener!.fd())
@@ -51,7 +62,7 @@ fn test_module_and_method_interop() {
 
 @test
 fn test_method_dispatch_via_inference() {
-    var listener = net.listen(0, 1)
+    var listener = tryListen(1)
     if (listener == null) { return }
 
     var l = listener!
@@ -66,16 +77,14 @@ fn test_method_dispatch_via_inference() {
 // Method dispatch via explicit typed annotations
 //
 // NetConn / NetListener are registered as prelude entries with the
-// XrClasses pre-installed by xr_prelude_register_all_native_types,
-// and the cfunc signatures advertise NetConn? / NetListener?, so a
-// user-side `var conn: NetConn? = net.dial(...)` annotation now
-// type-checks and dispatches methods through the same path that
-// inference uses.
+// XrClasses pre-installed by xr_prelude_register_all_native_types, so a
+// user-side NetListener? / NetListener annotation type-checks and
+// dispatches methods through the same path that inference uses.
 // ============================================================
 
 @test
 fn test_explicit_typed_listener() {
-    var listener: NetListener? = net.listen(0, 1)
+    var listener: NetListener? = tryListen(1)
     if (listener == null) { return }
 
     var l: NetListener = listener!

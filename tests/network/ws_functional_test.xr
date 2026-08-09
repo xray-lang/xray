@@ -1,6 +1,6 @@
 /*
  * ws_functional_test.xr - WebSocket 功能测试
- * 
+ *
  * 测试 ws 模块的基本功能
  */
 
@@ -14,180 +14,186 @@ print("")
 const TEST_URL = "wss://ws.postman-echo.com/raw"
 
 /* 测试 1: 基本连接 */
-fn test_connect() {
+fn test_connect() -> bool {
     print("[测试 1] 基本连接...")
-    
+
     var conn = ws.connect(TEST_URL, null)
-    
-    if (conn!.error) {
-        print("  ❌ 连接失败: " + conn!.error)
+
+    if (conn.error != null) {
+        print("  连接失败: " + conn.error!)
         return false
     }
-    
-    print("  ✓ 连接成功")
-    print("  URL: " + conn!.url)
-    print("  状态: " + conn!.state)
-    
-    ws.close(conn, null, null)
-    print("  ✓ 连接已关闭")
+
+    print("  连接成功")
+    print("  URL: " + conn.url)
+    print("  Open: " + string(conn.isOpen()))
+
+    conn.close()
+    print("  连接已关闭")
     return true
 }
 
 /* 测试 2: 发送和接收消息 */
-fn test_send_recv() {
+fn test_send_recv() -> bool {
     print("")
     print("[测试 2] 发送和接收消息...")
-    
+
     var conn = ws.connect(TEST_URL, null)
-    if (conn!.error) {
-        print("  ❌ 连接失败: " + conn!.error)
+    if (conn.error != null) {
+        print("  连接失败: " + conn.error!)
         return false
     }
-    
+
     // 发送消息
     var testMsg = "Hello from xray WebSocket!"
-    var sent = ws.send(conn, testMsg, null)
+    var sent = conn.sendText(testMsg)
     if (!sent) {
-        print("  ❌ 发送失败")
-        ws.close(conn, null, null)
+        print("  发送失败")
+        conn.close()
         return false
     }
-    print("  ✓ 已发送: " + testMsg)
-    
+    print("  已发送: " + testMsg)
+
     // 接收回显
-    var msg = ws.recv(conn, null)
-    if (msg!.error) {
-        print("  ❌ 接收失败: " + msg!.error)
-        ws.close(conn, null, null)
+    var msg = conn.recv(5000)
+    if (msg == null || msg!.error != null) {
+        print("  接收失败")
+        conn.close()
         return false
     }
-    
-    print("  ✓ 已接收: " + msg!.data)
-    
+
+    var text = msg!.text()
+    if (text == null) {
+        print("  接收到空消息")
+        conn.close()
+        return false
+    }
+    print("  已接收: " + text!)
+
     // 验证回显
-    if (msg!.data == testMsg) {
-        print("  ✓ 回显验证通过")
+    var ok = text! == testMsg
+    if (ok) {
+        print("  回显验证通过")
     } else {
-        print("  ❌ 回显不匹配")
-        ws.close(conn, null, null)
-        return false
+        print("  回显不匹配")
     }
-    
-    ws.close(conn, null, null)
-    return true
+
+    conn.close()
+    return ok
 }
 
 /* 测试 3: 多条消息 */
-fn test_multiple_messages() {
+fn test_multiple_messages() -> bool {
     print("")
     print("[测试 3] 多条消息...")
-    
+
     var conn = ws.connect(TEST_URL, null)
-    if (conn!.error) {
-        print("  ❌ 连接失败: " + conn!.error)
+    if (conn.error != null) {
+        print("  连接失败: " + conn.error!)
         return false
     }
-    
+
     var messages = ["消息1", "消息2", "消息3", "Hello", "World"]
     var success = 0
-    
-    for (msg in messages) {
-        ws.send(conn, msg, null)
-        var resp = ws.recv(conn, null)
-        if (resp!.data == msg) {
-            success = success + 1
+
+    for (m in messages) {
+        conn.sendText(m)
+        var resp = conn.recv(5000)
+        if (resp != null && resp!.error == null) {
+            var t = resp!.text()
+            if (t != null && t! == m) {
+                success = success + 1
+            }
         }
     }
-    
+
     print("  发送/接收: " + success.toString() + "/" + len(messages).toString())
-    
-    ws.close(conn, null, null)
-    
+
+    conn.close()
+
     if (success == len(messages)) {
-        print("  ✓ 所有消息验证通过")
+        print("  所有消息验证通过")
         return true
     } else {
-        print("  ❌ 部分消息失败")
+        print("  部分消息失败")
         return false
     }
 }
 
 /* 测试 4: 连接结果状态字段 */
-fn test_state() {
+fn test_state() -> bool {
     print("")
     print("[测试 4] 连接结果状态字段...")
-    
+
     var conn = ws.connect(TEST_URL, null)
-    if (conn!.error) {
-        print("  ❌ 连接失败: " + conn!.error)
+    if (conn.error != null) {
+        print("  连接失败: " + conn.error!)
         return false
     }
-    
-    // 检查打开状态字段
-    if (conn!.state == "open") {
-        print("  ✓ state = open (连接已打开)")
+
+    // 检查打开状态
+    if (conn.isOpen()) {
+        print("  isOpen() = true (连接已打开)")
     } else {
-        print("  ❌ state 应该为 open")
-        ws.close(conn, null, null)
+        print("  isOpen() 应该为 true")
+        conn.close()
         return false
     }
-    
+
     // 检查错误字段
-    if (conn!.error == null) {
-        print("  ✓ error = null (无错误)")
+    if (conn.error == null) {
+        print("  error = null (无错误)")
     } else {
-        print("  ❌ error 应该为 null")
-        ws.close(conn, null, null)
+        print("  error 应该为 null")
+        conn.close()
         return false
     }
-    
+
     // 关闭后检查状态
-    ws.close(conn, null, null)
-    
-    var state = conn!.state
-    print("  关闭后状态: " + state)
-    
+    conn.close()
+    print("  关闭后 isOpen(): " + string(conn.isOpen()))
+
     return true
 }
 
 /* 测试 5: Ping 保活 */
-fn test_ping() {
+fn test_ping() -> bool {
     print("")
     print("[测试 5] Ping 保活...")
-    
+
     var conn = ws.connect(TEST_URL, null)
-    if (conn!.error) {
-        print("  ❌ 连接失败: " + conn!.error)
+    if (conn.error != null) {
+        print("  连接失败: " + conn.error!)
         return false
     }
-    
-    var pingOk = ws.ping(conn)
+
+    var pingOk = conn.ping()
     if (pingOk) {
-        print("  ✓ Ping 发送成功")
+        print("  Ping 发送成功")
     } else {
-        print("  ❌ Ping 发送失败")
-        ws.close(conn, null, null)
+        print("  Ping 发送失败")
+        conn.close()
         return false
     }
-    
-    ws.close(conn, null, null)
+
+    conn.close()
     return true
 }
 
 /* 测试 6: 连接失败处理 */
-fn test_connection_failure() {
+fn test_connection_failure() -> bool {
     print("")
     print("[测试 6] 连接失败处理...")
-    
+
     var conn = ws.connect("ws://invalid.nonexistent.domain.xyz/ws", null)
-    
-    if (conn!.error) {
-        print("  ✓ 正确处理连接失败")
-        print("  错误信息: " + conn!.error)
+
+    if (conn.error != null) {
+        print("  正确处理连接失败")
+        print("  错误信息: " + conn.error!)
         return true
     } else {
-        print("  ❌ 应该返回错误")
-        ws.close(conn, null, null)
+        print("  应该返回错误")
+        conn.close()
         return false
     }
 }
@@ -196,22 +202,22 @@ fn test_connection_failure() {
 fn main() {
     var passed = 0
     var total = 6
-    
+
     if (test_connect()) { passed = passed + 1 }
     if (test_send_recv()) { passed = passed + 1 }
     if (test_multiple_messages()) { passed = passed + 1 }
     if (test_state()) { passed = passed + 1 }
     if (test_ping()) { passed = passed + 1 }
     if (test_connection_failure()) { passed = passed + 1 }
-    
+
     print("")
     print("=== 测试结果 ===")
     print("通过: " + passed.toString() + "/" + total.toString())
-    
+
     if (passed == total) {
-        print("✓ 所有测试通过!")
+        print("所有测试通过!")
     } else {
-        print("✗ 有测试失败")
+        print("有测试失败")
     }
 }
 

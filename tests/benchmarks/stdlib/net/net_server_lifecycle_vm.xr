@@ -5,13 +5,15 @@ import strconv
 @test
 fn benchmark_server_lifecycle() {
     var port = strconv.parseInt(os.getenv("XRAY_BENCH_PORT")!)!
-    var listener = net.listen(port, 8)!
+    var listener = net.listen(port, 8)
     var conn = net.accept(listener)!
+    var buf = Array<byte>(4)
     var completed = 0
     while (completed < 64) {
-        var request = net.read(conn, 4)!
-        net.write(conn, request)
-        if (request == "ping") { completed = completed + 1 }
+        var n = net.readInto(conn, ref buf, 4)
+        if (n <= 0) { break }
+        net.writeBytes(conn, buf)
+        if (n == 4 && string.fromUtf8(buf[:])! == "ping") { completed = completed + 1 }
     }
     net.close(conn)
     net.close(listener)

@@ -12,6 +12,7 @@
  */
 
 import ws
+import { WsConn } from ws
 
 print("=== WebSocket Echo Server (Benchmark Mode) ===")
 print("Port: 8765")
@@ -23,26 +24,22 @@ print("")
 print("Press Ctrl+C to stop")
 print("")
 
-var connectionCount = 0
-var messageCount = 0
+// serve runs one coroutine per accepted connection until `running` clears.
+const running = Atomic(true)
 
-ws.serve(8765, fn(conn) {
-    connectionCount = connectionCount + 1
-    var connId = connectionCount
-    
-    // Echo loop - minimal overhead for max performance
+ws.serve(8765, fn(conn: ref WsConn) {
+    // Echo loop - minimal overhead for max performance.
     while (true) {
-        var msg = ws.recv(conn, null)
-        if (msg == null || msg.error) {
+        var msg = conn.recv()
+        if (msg == null || msg!.error != null) {
             break
         }
-        if (msg!.data) {
-            messageCount = messageCount + 1
+        var text = msg!.text()
+        if (text != null) {
             // Echo back with prefix
-            ws.send(conn, "Echo: " + msg!.data, null)
+            conn.sendText("Echo: " + text!)
         }
     }
-})
+}, running)
 
-print("Server stopped. Total connections: " + connectionCount.toString())
-print("Total messages processed: " + messageCount.toString())
+print("Server stopped.")

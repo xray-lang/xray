@@ -1,7 +1,16 @@
 // 1434_net_byte_array_loopback.xr
-// 测试：TCP Array<byte> path — net.readInto / net.writeBytes
+// TCP Array<byte> path: net.readInto / net.writeBytes
 
 import net
+import { NetError } from net
+
+fn tryListen(backlog: int) -> NetListener? {
+    try {
+        return net.listen(0, backlog)
+    } catch (e: NetError) {
+        return null
+    }
+}
 
 fn serveBytesEcho(c: NetConn) {
     var buf = Array<byte>(16)
@@ -33,7 +42,7 @@ fn acceptBytesMaxLen(lst: NetListener) {
 
 @test
 fn test_byte_array_echo_roundtrip() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
@@ -41,7 +50,7 @@ fn test_byte_array_echo_roundtrip() {
 
     go acceptBytesEcho(lst)
 
-    var c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)
     var payload = Array<byte>([65, 0, 255, 66])
     assert_eq(net.writeBytes(c, payload), 4)
 
@@ -59,7 +68,7 @@ fn test_byte_array_echo_roundtrip() {
 
 @test
 fn test_read_into_maxlen_controls_length() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
@@ -67,7 +76,7 @@ fn test_read_into_maxlen_controls_length() {
 
     go acceptBytesMaxLen(lst)
 
-    var c = net.dial("127.0.0.1", port)!
+    var c = net.dial("127.0.0.1", port)
     var payload = Array<byte>([80, 81, 82, 83, 84])
     assert_eq(net.writeBytes(c, payload), 5)
 

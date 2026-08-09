@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify task-256's terminal built-in stdlib and L2 native boundary.
 
-The retained cluster/ws/http2/compress/crypto modules share Xray's release and
+The retained cluster/http2/compress/crypto modules share Xray's release and
 installation unit.  They have one physical home under ``stdlib/`` and one bare
 module name; package aliases and package-loader fallbacks are forbidden.
 """
@@ -21,7 +21,7 @@ from gen_api_inventory import collect_def_stdlib, collect_pure_stdlib  # noqa: E
 from stdlib_manifest import def_public_symbols, load_manifest, load_toml  # noqa: E402
 
 
-RETAINED_STDLIB_MODULES = {"cluster", "ws", "http2", "compress", "crypto"}
+RETAINED_STDLIB_MODULES = {"cluster", "http2", "compress", "crypto"}
 TERMINAL_STDLIB_MODULE_COUNT = 34
 L2_PUBLIC_NATIVE = {
     "io": set(),
@@ -63,7 +63,7 @@ ABI_EVIDENCE = {
 }
 FORBIDDEN_PACKAGE_IMPORT = re.compile(
     r"(?m)^\s*import\s+(?:\{[^}\n]+\}\s+from\s+)?"
-    r"(?:[\"'])?xray/(?:cluster|ws|http2|compress|crypto)\b"
+    r"(?:[\"'])?xray/(?:cluster|http2|compress|crypto)\b"
 )
 
 

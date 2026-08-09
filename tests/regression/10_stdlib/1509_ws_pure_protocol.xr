@@ -1,9 +1,33 @@
 // Pure-Xray WebSocket protocol helpers.
 
 import ws
-import { WsConnectOptions } from ws
+import { WsConnectOptions, WsConn } from ws
 import net
 import time
+
+// listen/dial now throw; restricted environments without socket access
+// should still skip the networked tests quietly instead of failing them.
+fn tryListen(port: int, backlog: int) -> NetListener? {
+    try {
+        return net.listen(port, backlog)
+    } catch (e) {
+        return null
+    }
+}
+
+fn tryDial(host: string, port: int) -> NetConn? {
+    try {
+        return net.dial(host, port)
+    } catch (e) {
+        return null
+    }
+}
+
+fn readText(conn: NetConn, maxBytes: int) -> string? {
+    var bytes = net.readBytes(conn, maxBytes)
+    if (bytes == null) { return null }
+    return string.fromUtf8(bytes![:])
+}
 
 fn headerValue(headers: string, name: string) -> string? {
     var prefix = name + ": "
@@ -22,24 +46,24 @@ fn serveMissingUpgradeResponse(lst: NetListener) {
         return
     }
     var conn = maybeConn!
-    var req = net.read(conn)
+    var req = readText(conn, 4096)
     if (req != null) {
         var key = headerValue(req!, "Sec-WebSocket-Key")
         if (key != null) {
             var response = "HTTP/1.1 101 Switching Protocols\r\n" +
                 "Connection: Upgrade\r\n" +
                 "Sec-WebSocket-Accept: " + ws.acceptKey(key!) + "\r\n\r\n"
-            net.write(conn, response)
+            net.writeBytes(conn, response.copyBytes())
         }
     }
     net.close(conn)
     net.close(lst)
 }
 
-fn startRejectingUpgradeServer(port: int) {
-    ws.serve(port, fn(conn) {
-        ws.close(conn)
-    })
+fn startRejectingUpgradeServer(port: int, running: Atomic<bool>) {
+    ws.serve(port, fn(conn: ref WsConn) {
+        conn.close()
+    }, running)
 }
 
 @test
@@ -75,40 +99,31 @@ fn test_upgrade_request_and_protocol_pick() {
 
 @test
 fn test_connect_rejects_invalid_urls_before_network() {
-    var options: WsConnectOptions = {
-        timeout: 25,
-        pingInterval: 0,
-        pongTimeout: 40,
-        maxMessageSize: 4096
-    }
+    // connect never returns optional: a rejected URL surfaces as a WsConn whose
+    // error is set, before any socket is touched.
+    var options = WsConnectOptions(25, 0, 40, 4096)
     var zeroPort = ws.connect("ws://example.com:0/", options)
-    assert(zeroPort != null)
-    assert_eq(zeroPort!.error, "URL parse error")
+    assert_eq(zeroPort.error, "URL parse error")
 
     var badPort = ws.connect("ws://example.com:abc/", null)
-    assert(badPort != null)
-    assert_eq(badPort!.error, "URL parse error")
+    assert_eq(badPort.error, "URL parse error")
 
     var tooLargePort = ws.connect("ws://example.com:99999/", null)
-    assert(tooLargePort != null)
-    assert_eq(tooLargePort!.error, "URL parse error")
+    assert_eq(tooLargePort.error, "URL parse error")
 
     var emptyHost = ws.connect("ws://:80/", null)
-    assert(emptyHost != null)
-    assert_eq(emptyHost!.error, "URL parse error")
+    assert_eq(emptyHost.error, "URL parse error")
 
     var fragment = ws.connect("ws://example.com/#frag", null)
-    assert(fragment != null)
-    assert_eq(fragment!.error, "URL parse error")
+    assert_eq(fragment.error, "URL parse error")
 
     var badIpv6 = ws.connect("ws://[::1]x/", null)
-    assert(badIpv6 != null)
-    assert_eq(badIpv6!.error, "URL parse error")
+    assert_eq(badIpv6.error, "URL parse error")
 }
 
 @test
 fn test_connect_rejects_missing_upgrade_response_header() {
-    var maybeLst = net.listen(0, 8)
+    var maybeLst = tryListen(0, 8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
@@ -116,23 +131,23 @@ fn test_connect_rejects_missing_upgrade_response_header() {
     go serveMissingUpgradeResponse(lst)
 
     var conn = ws.connect("ws://127.0.0.1:" + port.toString() + "/", null)
-    assert(conn != null)
-    assert_eq(conn!.error, "Handshake failed")
+    assert_eq(conn.error, "Handshake failed")
 }
 
 @test
 fn test_serve_rejects_missing_connection_upgrade_header() {
     var port = 9191
-    var probe = net.listen(port, 1)
+    var probe = tryListen(port, 1)
     if (probe == null) { return }
     net.close(probe!)
 
-    go startRejectingUpgradeServer(port)
+    const running = Atomic(true)
+    go startRejectingUpgradeServer(port, running)
     time.sleep(100)
 
-    var tcp = net.dial("127.0.0.1", port)
+    var tcp = tryDial("127.0.0.1", port)
     if (tcp == null) {
-        ws.stopServer()
+        running.store(false)
         return
     }
 
@@ -141,12 +156,12 @@ fn test_serve_rejects_missing_connection_upgrade_header() {
         "Upgrade: websocket\r\n" +
         "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
         "Sec-WebSocket-Version: 13\r\n\r\n"
-    net.write(tcp!, request)
-    var response = net.read(tcp!)
+    net.writeBytes(tcp!, request.copyBytes())
+    var response = readText(tcp!, 4096)
     assert(response != null)
     assert(response!.startsWith("HTTP/1.1 400 Bad Request"))
     net.close(tcp!)
-    ws.stopServer()
+    running.store(false)
 }
 
 @test

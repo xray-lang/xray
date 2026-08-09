@@ -1,7 +1,8 @@
 import net
 
-fn echoThree(listener: move NetListener) -> int {
-    var conn = net.accept(listener)!
+// The server connection is accepted in the parent and moved into the echo
+// coroutine, mirroring how real servers hand each connection to its own task.
+fn echoThree(conn: move NetConn) -> int {
     var buffer = Array<byte>(8)
     var read = net.readInto(conn, ref buffer, 3)
     if (read > 0) {
@@ -10,14 +11,14 @@ fn echoThree(listener: move NetListener) -> int {
     var drain = Array<byte>(8)
     while (net.readInto(conn, ref drain, 8) > 0) {}
     net.close(conn)
-    net.close(listener)
     return read
 }
 
-var listener = net.listen(0, 1)!
+var listener = net.listen(0, 1)
 const port = listener.port()
-var server = go echoThree(move listener)
-var client = net.dial("127.0.0.1", port, 1000)!
+var client = net.dial("127.0.0.1", port)
+var accepted = net.accept(listener)!
+var server = go echoThree(move accepted)
 
 var payload = Array<byte>([0xff, 0x00, 0x7f, 0x41])
 print(net.writeBytes(client, payload))
@@ -32,3 +33,4 @@ print(response[2])
 print(await server)
 
 net.close(client)
+net.close(listener)

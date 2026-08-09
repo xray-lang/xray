@@ -1,2 +1,2 @@
-{"case":"high-byte-loopback","classification":"required","effects":{"transport":"loopback"},"error":null,"legacy_commit":"e1eed9fc7f5e44aaebb2e06fb9df877cbdfbcf7e","outcome":"value","value":true}
-{"case":"native-copy-byte-boundary","classification":"required","effects":{"transport":"loopback"},"error":null,"legacy_commit":"e1eed9fc7f5e44aaebb2e06fb9df877cbdfbcf7e","outcome":"value","value":true}
+{"case":"high-byte-loopback","classification":"required","effects":{"transport":"loopback"},"error":null,"legacy_commit":"b6955520e9bc142e23e3a7486c00dbcaf4a55127","outcome":"value","value":true}
+{"case":"native-copy-byte-boundary","classification":"required","effects":{"transport":"loopback"},"error":null,"legacy_commit":"b6955520e9bc142e23e3a7486c00dbcaf4a55127","outcome":"value","value":true}

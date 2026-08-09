@@ -9,9 +9,13 @@ import text
 
 import crypto
 import base64
+import net
+import { NetError, DialOptions } from net
+import time
 
 const _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 const _B64_STD = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+const _OP_CONTINUATION = 0
 const _OP_TEXT = 1
 const _OP_BINARY = 2
 const _OP_CLOSE = 8
@@ -781,4 +785,459 @@ export fn pingFrame(data: Array<byte>? = null, mask: bool = true) -> Array<byte>
 export fn pongFrame(data: Array<byte>? = null, mask: bool = true) -> Array<byte> {
     var payload = data != null ? data! : Array<byte>(0)
     return frame(payload, _OP_PONG, mask)
+}
+
+// ========== Connection layer ==========
+//
+// The RFC 6455 protocol math above is composed here into live connections
+// over the net module. net owns TLS, partial-write draining, deadlines and
+// coroutine I/O, so this layer only sequences the handshake, frames, control
+// messages and fragmentation — it never touches sockets or TLS directly.
+// permessage-deflate is not offered: the wire stays uncompressed until a
+// bounded inflate primitive lands, which keeps this layer dependency-free.
+
+const _WS_MAX_MESSAGE_BYTES = 67108864
+const _WS_READ_CHUNK = 8192
+const _WS_ACCEPT_POLL_MS = 100
+const _WS_UPGRADE_MAX_BYTES = 16384
+const _WS_CLOSE_NORMAL = 1000
+const _WS_CLOSE_GOING_AWAY = 1001
+const _WS_CLOSE_PROTOCOL_ERROR = 1002
+const _WS_CLOSE_TOO_LARGE = 1009
+
+export final class WsConnectOptions {
+    timeoutMs: int
+    pingIntervalMs: int
+    pongTimeoutMs: int
+    maxMessageSize: int
+
+    constructor(
+        timeoutMs: int = 30000,
+        pingIntervalMs: int = 0,
+        pongTimeoutMs: int = 0,
+        maxMessageSize: int = _WS_MAX_MESSAGE_BYTES
+    ) {
+        this.timeoutMs = timeoutMs
+        this.pingIntervalMs = pingIntervalMs
+        this.pongTimeoutMs = pongTimeoutMs
+        this.maxMessageSize = maxMessageSize
+    }
+}
+
+// A received application message. Bodies are bytes so binary frames are never
+// forced through UTF-8; text() decodes on demand. error is set (with data
+// null) when the peer closed or the stream faulted, so recv callers can loop
+// on `msg.error == null`.
+export final class WsMessage {
+    data: Array<byte>?
+    binary: bool
+    error: string?
+
+    constructor(data: Array<byte>? = null, binary: bool = false, error: string? = null) {
+        this.data = data
+        this.binary = binary
+        this.error = error
+    }
+
+    text() -> string? {
+        if (this.data == null) { return null }
+        return string.fromUtf8(this.data![:])
+    }
+}
+
+// Total byte span of the frame at the front of raw: a positive complete-frame
+// length, 0 when more bytes are needed, or -1 on a protocol violation. This
+// gives recv the three-way verdict parseFrame's nullable result cannot, so a
+// malformed frame closes with 1002 instead of blocking for more data.
+fn _frameSpan(raw: Array<byte>, maxPayload: int) -> int {
+    var n = len(raw)
+    if (n < 2) { return 0 }
+    var first: int = raw[0] as int
+    var rsv23 = (first & 48) != 0
+    if (rsv23) { return -1 }
+    var opcode: int = first & 15
+    if (!_validOpcode(opcode)) { return -1 }
+    var control = (opcode & 8) != 0
+    var fin = (first & 128) != 0
+    if (control && !fin) { return -1 }
+
+    var second: int = raw[1] as int
+    var masked = (second & 128) != 0
+    var lenCode: int = second & 127
+    if (control && lenCode > 125) { return -1 }
+
+    var offset = 2
+    var payloadLen = lenCode
+    if (lenCode == 126) {
+        if (n < 4) { return 0 }
+        payloadLen = ((raw[2] as int) << 8) | (raw[3] as int)
+        offset = 4
+    } else if (lenCode == 127) {
+        if (n < 10) { return 0 }
+        payloadLen = 0
+        for (var i = 0; i < 8; i++) {
+            if (i < 4 && raw[2 + i] != 0) { return -1 }
+            payloadLen = (payloadLen << 8) | (raw[2 + i] as int)
+        }
+        if (payloadLen < 0) { return -1 }
+        offset = 10
+    }
+    if (payloadLen > maxPayload) { return -1 }
+    if (masked) { offset = offset + 4 }
+    var total = offset + payloadLen
+    if (n < total) { return 0 }
+    return total
+}
+
+// A WebSocket connection. Wraps a net connection plus the read buffer and the
+// fragmentation and close state needed to reassemble messages.
+export final class WsConn {
+    private _conn: NetConn?
+    private _isServer: bool
+    private _rbuf: Array<byte>
+    private _fragBuf: Array<byte>?
+    private _fragBinary: bool
+    private _closed: bool
+    private _maxMessage: int
+    url: string
+    error: string?
+
+    constructor(
+        conn: NetConn?,
+        isServer: bool,
+        url: string,
+        error: string?,
+        maxMessage: int
+    ) {
+        this._conn = conn
+        this._isServer = isServer
+        this._rbuf = Array<byte>()
+        this._fragBuf = null
+        this._fragBinary = false
+        this._closed = conn == null
+        this._maxMessage = maxMessage
+        this.url = url
+        this.error = error
+    }
+
+    isOpen() -> bool { return !this._closed && this._conn != null }
+
+    // Send one frame; a client masks, a server does not (RFC 6455 5.1).
+    private _sendFrame(payload: Array<byte>, opcode: int) -> bool {
+        if (this._conn == null) { return false }
+        var f = frame(payload, opcode, !this._isServer)
+        return net.writeBytes(this._conn!, f) == len(f)
+    }
+
+    // Pull more bytes into the read buffer; false at EOF or on error.
+    private _fill() -> bool {
+        if (this._conn == null) { return false }
+        var chunk = Array<byte>(_WS_READ_CHUNK)
+        var n = net.readInto(this._conn!, ref chunk, _WS_READ_CHUNK)
+        if (n <= 0) { return false }
+        for (var i = 0; i < n; i++) { this._rbuf.push(chunk[i]) }
+        return true
+    }
+
+    private _consume(count: int) {
+        if (count <= 0) { return }
+        var rest = Array<byte>()
+        for (var i = count; i < len(this._rbuf); i++) { rest.push(this._rbuf[i]) }
+        this._rbuf = rest
+    }
+
+    private _writeClose(code: int, reason: string) {
+        if (this._conn == null) { return }
+        var f = closeFrame(code, reason, !this._isServer)
+        net.writeBytes(this._conn!, f)
+    }
+
+    // Close the transport after an error and surface it as a WsMessage.
+    private _fail(code: int, reason: string) -> WsMessage {
+        if (!this._closed) { this._writeClose(code, reason) }
+        this._closed = true
+        if (this._conn != null) {
+            net.close(this._conn!)
+            this._conn = null
+        }
+        return WsMessage(null, false, reason)
+    }
+
+    // Reassemble the next application message. Control frames (ping/pong/close)
+    // are handled inline and never surface. A returned message with a non-null
+    // error marks a clean close or a fault; null means the read deadline
+    // elapsed with no complete frame.
+    recv(timeout: int = -1) -> WsMessage? {
+        if (this._conn == null) { return WsMessage(null, false, "closed") }
+        net.setReadDeadline(this._conn!, timeout >= 0 ? time.monotonic() + timeout : 0)
+        while (true) {
+            var span = _frameSpan(this._rbuf, this._maxMessage)
+            if (span < 0) { return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error") }
+            if (span == 0) {
+                if (!this._fill()) {
+                    if (this._conn != null && net.lastError(this._conn!) == NetError.Timeout) {
+                        return null
+                    }
+                    return this._fail(_WS_CLOSE_GOING_AWAY, "closed")
+                }
+                continue
+            }
+
+            var enforce = this._isServer
+            var parsed = parseFrame(this._rbuf, enforce, enforce, false, this._maxMessage)
+            if (parsed == null) { return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error") }
+            this._consume(parsed!.consumedBytes)
+            var opcode = parsed!.opcode
+            var payload = parsed!.payload
+
+            if (opcode == _OP_CLOSE) {
+                if (len(payload) == 1) {
+                    return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error")
+                }
+                if (len(payload) >= 2 && parseClosePayload(payload) == null) {
+                    return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error")
+                }
+                if (!this._closed) { this._writeClose(_WS_CLOSE_NORMAL, "") }
+                this._closed = true
+                net.close(this._conn!)
+                this._conn = null
+                return WsMessage(null, false, "closed")
+            }
+            if (opcode == _OP_PING) {
+                this._sendFrame(payload, _OP_PONG)
+                continue
+            }
+            if (opcode == _OP_PONG) { continue }
+
+            if (opcode == _OP_CONTINUATION) {
+                if (this._fragBuf == null) {
+                    return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error")
+                }
+                if (len(this._fragBuf!) + len(payload) > this._maxMessage) {
+                    return this._fail(_WS_CLOSE_TOO_LARGE, "message too large")
+                }
+                for (var i = 0; i < len(payload); i++) { this._fragBuf!.push(payload[i]) }
+                if (parsed!.fin) {
+                    var whole = this._fragBuf!
+                    var binary = this._fragBinary
+                    this._fragBuf = null
+                    if (!binary && !_validUtf8Bytes(whole, 0, len(whole))) {
+                        return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "invalid utf8")
+                    }
+                    return WsMessage(whole, binary, null)
+                }
+                continue
+            }
+
+            if (this._fragBuf != null) {
+                return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "protocol error")
+            }
+            var binary = opcode == _OP_BINARY
+            if (!parsed!.fin) {
+                this._fragBuf = payload
+                this._fragBinary = binary
+                continue
+            }
+            if (!binary && !_validUtf8Bytes(payload, 0, len(payload))) {
+                return this._fail(_WS_CLOSE_PROTOCOL_ERROR, "invalid utf8")
+            }
+            return WsMessage(payload, binary, null)
+        }
+        return null
+    }
+
+    sendText(data: string) -> bool {
+        return this._sendFrame(data.copyBytes(), _OP_TEXT)
+    }
+
+    sendBytes(data: Array<byte>, binary: bool = false) -> bool {
+        return this._sendFrame(data, binary ? _OP_BINARY : _OP_TEXT)
+    }
+
+    ping() -> bool { return this._sendFrame(Array<byte>(0), _OP_PING) }
+
+    close(code: int = _WS_CLOSE_NORMAL, reason: string = "") -> bool {
+        if (this._closed || this._conn == null) { return true }
+        this._writeClose(code, reason)
+        this._closed = true
+        net.close(this._conn!)
+        this._conn = null
+        return true
+    }
+}
+
+// Find the byte after the CRLFCRLF that ends an HTTP head, or -1.
+fn _crlfCrlf(raw: Array<byte>) -> int {
+    for (var i = 0; i + 3 < len(raw); i++) {
+        if (raw[i] == 13 && raw[i + 1] == 10 && raw[i + 2] == 13 && raw[i + 3] == 10) {
+            return i + 4
+        }
+    }
+    return -1
+}
+
+// Read an HTTP upgrade head (through the terminating CRLFCRLF) as text.
+fn _wsReadHandshake(conn: NetConn, timeoutMs: int) -> string? {
+    var raw = Array<byte>()
+    net.setReadDeadline(conn, time.monotonic() + timeoutMs)
+    while (len(raw) < _WS_UPGRADE_MAX_BYTES) {
+        var end = _crlfCrlf(raw)
+        if (end >= 0) {
+            var head: Slice<byte> = raw[0:end]
+            return string.fromUtf8Lossy(head)
+        }
+        var chunk = Array<byte>(_WS_READ_CHUNK)
+        var n = net.readInto(conn, ref chunk, _WS_READ_CHUNK)
+        if (n <= 0) { return null }
+        for (var i = 0; i < n; i++) { raw.push(chunk[i]) }
+    }
+    return null
+}
+
+// Connect to a ws:// or wss:// endpoint. Never throws: a failed connection is
+// a WsConn whose error explains why, matching the streaming recv/send surface.
+export fn connect(url: string, options: WsConnectOptions? = null) -> WsConn {
+    var opts = options ?? WsConnectOptions()
+    var parsed = parseUrl(url)
+    if (parsed == null) { return WsConn(null, false, url, "URL parse error", opts.maxMessageSize) }
+    var wsurl = parsed!
+
+    var conn: NetConn? = null
+    try {
+        conn = net.dial(wsurl.host, wsurl.port, DialOptions(opts.timeoutMs, wsurl.secure))
+    } catch (e: NetError) {
+        return WsConn(null, false, url, "Connection failed", opts.maxMessageSize)
+    }
+    var live = conn!
+
+    var key = randomKey()
+    var request = clientHandshakeRequest(wsurl, key, null, false)
+    if (request == null) {
+        net.close(live)
+        return WsConn(null, false, url, "Invalid request", opts.maxMessageSize)
+    }
+    var reqBytes = request!.copyBytes()
+    if (net.writeBytes(live, reqBytes) != len(reqBytes)) {
+        net.close(live)
+        return WsConn(null, false, url, "Handshake failed", opts.maxMessageSize)
+    }
+
+    var responseText = _wsReadHandshake(live, opts.timeoutMs)
+    if (responseText == null) {
+        net.close(live)
+        return WsConn(null, false, url, "Handshake failed", opts.maxMessageSize)
+    }
+    var upgrade = parseUpgradeResponse(responseText!, key, null, false)
+    if (upgrade == null || upgrade!.statusCode != 101) {
+        net.close(live)
+        return WsConn(null, false, url, "Handshake failed", opts.maxMessageSize)
+    }
+    return WsConn(live, false, url, null, opts.maxMessageSize)
+}
+
+// Accept and upgrade one client, then run the handler for its lifetime.
+// Per-connection service context, shared read-only into each connection
+// coroutine. Boxing the handler in a const-shareable object (rather than
+// passing the function value straight into `go`) is what the AOT
+// cross-execution transfer planner can verify — the same shape http's server
+// uses for its route snapshot.
+final class _WsServeCtx {
+    handler: fn(ref WsConn)
+    maxMessage: int
+
+    constructor(handler: fn(ref WsConn), maxMessage: int) {
+        this.handler = handler
+        this.maxMessage = maxMessage
+    }
+}
+
+fn _wsServeConn(conn: move NetConn, ctx: _WsServeCtx) {
+    var live = conn
+    var head = _wsReadHandshake(live, 30000)
+    if (head == null) {
+        net.close(live)
+        return
+    }
+    var request = parseUpgradeRequest(head!, null, false, null)
+    if (request == null) {
+        net.writeBytes(live, "HTTP/1.1 400 Bad Request\r\n\r\n".copyBytes())
+        net.close(live)
+        return
+    }
+    var response = upgradeResponse(request!.secKey, request!.protocol, false)
+    var respBytes = response.copyBytes()
+    if (net.writeBytes(live, respBytes) != len(respBytes)) {
+        net.close(live)
+        return
+    }
+    var wsconn = WsConn(live, true, request!.target, null, ctx.maxMessage)
+    ctx.handler(ref wsconn)
+    wsconn.close()
+}
+
+// Public delegators over the WsConn methods, so callers may write either
+// ws.send(conn, data) or conn.send(data).
+export fn sendText(conn: ref WsConn, data: string) -> bool {
+    return conn.sendText(data)
+}
+
+export fn sendBytes(conn: ref WsConn, data: Array<byte>, binary: bool = false) -> bool {
+    return conn.sendBytes(data, binary)
+}
+
+export fn recv(conn: ref WsConn, timeout: int = -1) -> WsMessage? {
+    return conn.recv(timeout)
+}
+
+export fn ping(conn: ref WsConn) -> bool { return conn.ping() }
+
+export fn close(conn: ref WsConn, code: int = _WS_CLOSE_NORMAL, reason: string = "") -> bool {
+    return conn.close(code, reason)
+}
+
+// Listen, returning null instead of throwing so the caller keeps a clean
+// ownership summary (a try-assigned local defeats the move analysis).
+fn _wsListen(port: int) -> NetListener? {
+    try {
+        return net.listen(port, 1024)
+    } catch (e: NetError) {
+        return null
+    }
+}
+
+// Serve WebSocket connections while `running` stays true, one coroutine per
+// accepted connection (the http server shape). Setting running to false stops
+// the accept loop and the linked scope cancels in-flight handlers.
+export fn serve(
+    port: int,
+    handler: fn(ref WsConn),
+    running: Atomic<bool>,
+    maxMessage: int = _WS_MAX_MESSAGE_BYTES
+) -> bool {
+    if (!running.load()) { return false }
+    var maybeListener = _wsListen(port)
+    if (maybeListener == null) { return false }
+    var live = maybeListener!
+    const ctx = _WsServeCtx(handler, maxMessage)
+    var healthy = true
+    linked scope {
+        while (running.load()) {
+            net.setAcceptDeadline(live, time.monotonic() + _WS_ACCEPT_POLL_MS)
+            var accepted = net.accept(live)
+            if (accepted != null) {
+                var client: NetConn = accepted!
+                accepted = null
+                go _wsServeConn(move client, ctx)
+                continue
+            }
+            var err = net.lastError(live)
+            if (!running.load() || err == NetError.Closed) { break }
+            if (err == NetError.Timeout) { continue }
+            healthy = false
+            running.store(false)
+            break
+        }
+    }
+    net.close(live)
+    return healthy
 }
