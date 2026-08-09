@@ -18,7 +18,7 @@ import crypto
 import http2
 import io
 import net
-import { NetError } from net
+import { DialOptions, NetError } from net
 import path as pathutil
 import time
 
@@ -791,13 +791,13 @@ fn _serverQuery(target: string) -> QueryParams {
     return parseQuery(target.slice(q + 1, end))
 }
 
-fn _serverRequest(msg: RequestMessage, params: Map<string, string>) -> HttpRequest {
+fn _serverRequest(msg: _HttpRequestBytes, params: Map<string, string>) -> HttpRequest {
     return HttpRequest(
         HttpMethod(msg.head.method),
         _serverTargetPath(msg.head.target),
         _serverQuery(msg.head.target),
         msg.head.headers,
-        msg.body.copyBytes(),
+        _copyByteArray(msg.body),
         msg.head.contentLength,
         params
     )
@@ -900,15 +900,11 @@ fn _serverWriteHttpResponse(conn: NetConn, response: HttpResponse, keepAlive: bo
 }
 
 fn _serverWriteAll(conn: NetConn, data: string) -> bool {
-    var pos = 0
-    while (pos < len(data.bytes())) {
-        var chunk = _byteSlice(data, pos, len(data.bytes()))
-        if (chunk == null) { return false }
-        var n = net.write(conn, chunk!)
-        if (n <= 0) { return false }
-        pos = pos + n
-    }
-    return true
+    // writeBytes either sends the whole buffer or reports failure, so head
+    // and status strings need no partial-write loop.
+    var bytes = data.copyBytes()
+    if (len(bytes) == 0) { return true }
+    return net.writeBytes(conn, bytes) == len(bytes)
 }
 
 fn _serverGracefulClose(conn: NetConn) {
@@ -920,7 +916,7 @@ fn _serverGracefulClose(conn: NetConn) {
     net.shutdownRead(conn)
 }
 
-fn _serverDispatch(router: _ServerRouter, conn: NetConn, msg: RequestMessage) -> bool {
+fn _serverDispatch(router: _ServerRouter, conn: NetConn, msg: _HttpRequestBytes) -> bool {
     var path = _serverTargetPath(msg.head.target)
     var found = router.find(msg.head.method, path)
     if (found == null) {
@@ -953,11 +949,18 @@ fn _serveHttpConnection(
     defer {
         try { net.close(live) } catch (e) {}
     }
-    var raw = ""
+    // Byte accumulation with a consumed-offset cursor: chunk pushes are
+    // amortized O(1) and pipelined requests advance `start` without copying
+    // the buffer.  The consumed prefix is dropped once per request boundary,
+    // right before blocking for more input.
+    var raw = Array<byte>()
+    var start = 0
     while (running.load()) {
-        var headEnd = _responseHeadEnd(raw)
+        var headEnd = _byteArrayHeadEnd(raw, start)
         if (headEnd >= 0) {
-            var head = parseRequestHead(raw)
+            var headText = _byteArrayText(raw, start, headEnd)
+            var head: RequestHead? = null
+            if (headText != null) { head = parseRequestHead(headText!) }
             if (head == null) {
                 _serverWriteAll(live, _serverStatusResponse(400, "Bad Request", false))
                 _serverGracefulClose(live)
@@ -969,32 +972,40 @@ fn _serveHttpConnection(
                 return false
             }
 
-            var msg = parseRequestText(raw, HTTP_SERVER_MAX_BODY_BYTES)
+            var msg = _parseRequestBytes(raw, start, headEnd, head!, HTTP_SERVER_MAX_BODY_BYTES)
             if (msg != null) {
                 var keep = _serverDispatch(router, live, msg!)
                 if (!keep) {
                     _serverGracefulClose(live)
                     return true
                 }
-                var rest = _byteSlice(raw, msg!.consumedBytes, len(raw.bytes()))
-                raw = rest ?? ""
-                if (len(raw.bytes()) > 0) { continue }
+                start = start + msg!.consumedBytes
+                if (start < len(raw)) { continue }
+                raw = Array<byte>()
+                start = 0
             }
         }
-        if (len(raw.bytes()) > HTTP_SERVER_MAX_BODY_BYTES + HTTP_SERVER_READ_CHUNK_BYTES) {
+        if (len(raw) - start > HTTP_SERVER_MAX_BODY_BYTES + HTTP_SERVER_READ_CHUNK_BYTES) {
             _serverWriteAll(live, _serverStatusResponse(413, "Payload Too Large", false))
             _serverGracefulClose(live)
             return false
         }
 
+        if (start > 0) {
+            var rest = _byteArrayRange(raw, start, len(raw))
+            raw = rest ?? Array<byte>()
+            start = 0
+        }
         net.setReadDeadline(live, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
-        var chunk = net.read(live, HTTP_SERVER_READ_CHUNK_BYTES)
-        if (chunk == null) {
+        var chunk = Array<byte>(HTTP_SERVER_READ_CHUNK_BYTES)
+        var read = net.readInto(live, ref chunk, HTTP_SERVER_READ_CHUNK_BYTES)
+        if (read < 0) {
             var err = net.lastError(live)
             if (running.load() && err == NetError.Timeout) { continue }
             return true
         }
-        raw = raw + chunk!
+        if (read == 0) { return true }
+        for (var i = 0; i < read; i++) { raw.push(chunk[i]) }
     }
     return true
 }
@@ -1010,9 +1021,19 @@ fn _serverStopWatch(running: Atomic<bool>) {
     throw _ServerControl.StopRequested
 }
 
+// listen throws NetError; the server keeps its boolean listen contract, so
+// setup failure is folded back into null here.
+fn _serverListenSocket(port: int) -> NetListener? {
+    try {
+        return net.listen(port, HTTP_SERVER_BACKLOG)
+    } catch (e: NetError) {
+        return null
+    }
+}
+
 fn _serverListen(router: _ServerRouter, port: int, running: Atomic<bool>) -> bool {
     if (!running.load()) { return false }
-    var listener = net.listen(port, HTTP_SERVER_BACKLOG)
+    var listener = _serverListenSocket(port)
     if (listener == null) { return false }
 
     // `const` publishes this one-time deep copy into Xray's read-only shared
@@ -1916,8 +1937,8 @@ fn _byteArrayCrlfIndex(raw: Array<byte>, start: int) -> int {
     return -1
 }
 
-fn _byteArrayHeadEnd(raw: Array<byte>) -> int {
-    var pos = 0
+fn _byteArrayHeadEnd(raw: Array<byte>, start: int = 0) -> int {
+    var pos = start
     while (pos + 1 < len(raw)) {
         if (pos + 3 < len(raw) && raw[pos] == 13 && raw[pos + 1] == 10 &&
             raw[pos + 2] == 13 && raw[pos + 3] == 10) {
@@ -1935,7 +1956,19 @@ fn _copyByteArray(data: Array<byte>) -> Array<byte> {
     return out
 }
 
-fn _parseChunkedBytes(raw: Array<byte>, start: int, maxBodyBytes: int) -> Array<byte>? {
+// _ChunkedBytes - Decoded chunked payload plus the offset one past its
+// terminating trailer block inside the scanned buffer.
+class _ChunkedBytes {
+    body: Array<byte>
+    endOffset: int
+
+    constructor(body: Array<byte>, endOffset: int) {
+        this.body = body
+        this.endOffset = endOffset
+    }
+}
+
+fn _parseChunkedBytes(raw: Array<byte>, start: int, maxBodyBytes: int) -> _ChunkedBytes? {
     var pos = start
     var out = Array<byte>()
 
@@ -1955,7 +1988,7 @@ fn _parseChunkedBytes(raw: Array<byte>, start: int, maxBodyBytes: int) -> Array<
                 var trailer = _byteArrayText(raw, pos, trailerEnd)
                 if (trailer == null) { return null }
                 pos = trailerEnd + 2
-                if (len(trailer!) == 0) { return out }
+                if (len(trailer!) == 0) { return _ChunkedBytes(out, pos) }
                 if (_parseHeaderLine(trailer!) == null) { return null }
             }
         }
@@ -1970,6 +2003,43 @@ fn _parseChunkedBytes(raw: Array<byte>, start: int, maxBodyBytes: int) -> Array<
         pos = pos + 2
     }
     return null
+}
+
+// _HttpRequestBytes - Parsed request head plus raw body bytes and the count
+// of buffered bytes the request consumed.  The server loop keeps bodies
+// byte-exact instead of routing them through UTF-8 request text.
+class _HttpRequestBytes {
+    head: RequestHead
+    body: Array<byte>
+    consumedBytes: int
+
+    constructor(head: RequestHead, body: Array<byte>, consumedBytes: int) {
+        this.head = head
+        this.body = body
+        this.consumedBytes = consumedBytes
+    }
+}
+
+// Assemble one request from raw[start:] once its head has been parsed.
+// headEnd is the absolute offset one past the head terminator.  Null means
+// the buffered bytes do not yet hold the complete body (or its chunked
+// framing is invalid), so the caller keeps reading.  Chunked trailers are
+// validated and discarded because HttpRequest does not expose them.
+fn _parseRequestBytes(raw: Array<byte>, start: int, headEnd: int, head: RequestHead,
+                      maxBodyBytes: int) -> _HttpRequestBytes? {
+    if (head.chunked) {
+        var chunked = _parseChunkedBytes(raw, headEnd, maxBodyBytes)
+        if (chunked == null) { return null }
+        return _HttpRequestBytes(head, chunked!.body, chunked!.endOffset - start)
+    }
+    if (head.contentLength >= 0) {
+        if (maxBodyBytes > 0 && head.contentLength > maxBodyBytes) { return null }
+        var bodyEnd = headEnd + head.contentLength
+        var body = _byteArrayRange(raw, headEnd, bodyEnd)
+        if (body == null) { return null }
+        return _HttpRequestBytes(head, body!, bodyEnd - start)
+    }
+    return _HttpRequestBytes(head, Array<byte>(0), headEnd - start)
 }
 
 fn _readHttpResponse(conn: NetConn, method: string) -> _HttpResponseBytes? {
@@ -1996,7 +2066,7 @@ fn _readHttpResponse(conn: NetConn, method: string) -> _HttpResponseBytes? {
 
         if (head!.chunked) {
             var chunked = _parseChunkedBytes(raw, headEnd, HTTP_MAX_RESPONSE_BYTES)
-            if (chunked != null) { return _HttpResponseBytes(head!, chunked!) }
+            if (chunked != null) { return _HttpResponseBytes(head!, chunked!.body) }
             continue
         }
 
@@ -2025,10 +2095,19 @@ fn _readHttpResponse(conn: NetConn, method: string) -> _HttpResponseBytes? {
     return null
 }
 
+// dial throws NetError; the HTTP client folds every setup failure back into
+// null so _singleRequest keeps its single ConnectionFailed classification.
+fn _dialHttpConn(url: _HttpRequestUrl, timeoutMs: int) -> NetConn? {
+    try {
+        return net.dial(url.host, url.port, DialOptions(timeoutMs, url.isHttps))
+    } catch (e: NetError) {
+        return null
+    }
+}
+
 fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, body: Array<byte>,
                   timeoutMs: int, stripSensitive: bool) -> HttpResponse {
-    var conn = url.isHttps ? net.dialTLS(url.host, url.port, timeoutMs) :
-                             net.dial(url.host, url.port, timeoutMs)
+    var conn = _dialHttpConn(url, timeoutMs)
     if (conn == null) { throw HttpError.ConnectionFailed(_httpRequestUrlText(url)) }
 
     var deadline = time.monotonic() + timeoutMs
@@ -2049,7 +2128,8 @@ fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, bo
         throw HttpError.ProtocolError("invalid request head")
     }
 
-    if (net.write(conn!, requestHead!) != len(requestHead!.bytes())) {
+    var headBytes = requestHead!.copyBytes()
+    if (net.writeBytes(conn!, headBytes) != len(headBytes)) {
         net.close(conn!)
         throw HttpError.WriteFailed
     }
