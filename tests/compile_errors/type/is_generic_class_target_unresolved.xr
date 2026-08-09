@@ -1,0 +1,15 @@
+// A generic class instance is not resolvable as a runtime `is` target yet:
+// there is no class value or type id for the lowering to test against.
+// The compile must fail with a diagnostic that names the target, never by
+// handing a one-operand IS to the verifier, which reports an internal
+// consistency error instead of pointing at the source. If generic-instance
+// tests gain runtime support (spec §2.13 N-6 treats them like named types),
+// this case moves to the regression suite.
+class Box<T> {
+    value: T
+    constructor(v: T) { this.value = v }
+}
+
+fn f(x: Box<int> | int) -> bool { return x is Box<int> }
+
+print(f(42))

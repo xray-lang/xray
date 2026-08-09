@@ -38,17 +38,12 @@
 #      form for every array that needs a hoisted declaration (any array built in
 #      a loop).
 #
-# The one entry left is a different mechanism, not this one:
-# typed_container_plan expects a class-field array to be constructed directly
-# into the field (`(p0)->f0 = (xrt_array_t*)xrt_array_new_typed_uninit(...)`)
-# via the XaotArrayClassFieldAllocPlan path. Refusing native-local there is
-# correct -- storing into a field is an escape -- and the current emission is
-# also safer than the expectation, which has no release of the field's previous
-# array and would leak on reassignment (ArrayBag.refill does reassign). Fixing
-# this means making the class-field alloc plan apply, then re-deriving what the
-# expectation should assert; do not simply relax it.
+# Group B is now empty. typed_container_plan was the last entry: the
+# class-field alloc plan applies today (the dump carries
+# array-class-field-alloc for ArrayBag.refill) and the expectation has since
+# been re-derived to require the release-then-assign form, so the case passes
+# against the current compiler and its line is deleted per the shrink rule.
 # ---------------------------------------------------------------------------
-tests/aot/filetests/container/typed_container_plan.xr
 
 # Groups C, D and E are empty: all 16 entries were expectation drift and were
 # updated on 2026-07-30 after confirming, per case, that the property each case

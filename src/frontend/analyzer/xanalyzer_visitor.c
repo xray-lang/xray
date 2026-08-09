@@ -6524,9 +6524,27 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // statements in the for-in scope, so Pass 2 must do the same.
             XaLoopScope loop_scope;
             xa_loop_scope_push(ctx, &loop_scope, fi->label, node);
+            XaFlowNode *continue_label = NULL;
+            XaFlowNode *break_label = NULL;
+            if (ctx->flow) {
+                continue_label = xa_flow_create_branch_label(ctx->flow);
+                break_label = xa_flow_create_branch_label(ctx->flow);
+                loop_scope.continue_flow_target = continue_label;
+                loop_scope.break_flow_target = break_label;
+            }
             if (fi->body)
                 xa_visit_inline_statement_sequence_with_cursor(ctx, fi->body);
             xa_loop_scope_pop(ctx, &loop_scope);
+
+            /* for-in has no modeled loop header; `continue` and `break`
+             * edges rejoin the linear flow at the loop tail so their writes
+             * stay visible after the loop (spec §2.13 N-8). */
+            if (ctx->flow) {
+                xa_flow_add_antecedent(continue_label, ctx->flow->current_flow);
+                ctx->flow->current_flow = xa_flow_finish_label(ctx->flow, continue_label);
+                xa_flow_add_antecedent(break_label, ctx->flow->current_flow);
+                ctx->flow->current_flow = xa_flow_finish_label(ctx->flow, break_label);
+            }
 
             xa_clear_active_loans_in_scope(ctx, ctx->analyzer->current_scope);
             xa_analyzer_exit_scope(ctx->analyzer);
@@ -6996,9 +7014,11 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         }
         case AST_BREAK_STMT:
             xa_validate_loop_control(ctx, node, node->as.break_stmt.label, false);
+            xa_flow_loop_jump(ctx, node->as.break_stmt.label, false);
             break;
         case AST_CONTINUE_STMT:
             xa_validate_loop_control(ctx, node, node->as.continue_stmt.label, true);
+            xa_flow_loop_jump(ctx, node->as.continue_stmt.label, true);
             break;
         case AST_ENUM_DECL: {
             EnumDeclNode *ed = &node->as.enum_decl;

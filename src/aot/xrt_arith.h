@@ -690,6 +690,10 @@ static inline int64_t xrt_typeof_id(XrValue v) {
             return XR_TID_ENUM_VALUE;
         case XR_TAG_BIGINT:
             return XR_TID_BIGINT;
+        case XR_TAG_NET_CONN:
+            return XR_TID_NETCONN;
+        case XR_TAG_NET_LISTENER:
+            return XR_TID_NETLISTENER;
         default:
             return XR_TID_INSTANCE;
     }

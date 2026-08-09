@@ -1,0 +1,13 @@
+// Spec §2.13 N-8 / N-10: a `break` terminates the branch, but a write made
+// before the jump still reaches the code after the loop. Dropping the jump
+// edge from the flow graph would wrongly keep `s` narrowed to string here;
+// the access after the loop must still see the possibly-null state.
+fn firstFlag(xs: Array<int>) -> int {
+    var s: string? = "abc"
+    for (v in xs) {
+        if (v > 0) { s = null; break }
+    }
+    return len(s)
+}
+
+print(firstFlag([1]))

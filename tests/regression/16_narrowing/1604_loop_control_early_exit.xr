@@ -1,0 +1,128 @@
+// 1604_loop_control_early_exit.xr
+// Conformance: LANGUAGE_SPEC §2.13 N-8 for the loop-control terminators.
+// A then-branch ending in `continue` / `break` terminates, so the code after
+// the `if` inherits the opposite fact — exactly as it does for `return`.
+// Writes on the jump path must still reach the code after the loop (N-10),
+// so each test also drives the runtime result, not just the compile.
+
+// ===== N-8: continue in for-in narrows the fallthrough =====
+
+fn pickFirstString(xs: Array<int | string>) -> string {
+    for (x in xs) {
+        if (x is int) { continue }
+        return x
+    }
+    return ""
+}
+
+@test
+fn test_n8_continue_for_in() {
+    assert_eq(pickFirstString([1, 2, "a", 3]), "a")
+    assert_eq(pickFirstString([7]), "")
+}
+
+// ===== N-8: continue in while narrows the fallthrough =====
+
+fn sumStringsWhile(xs: Array<int | string>) -> int {
+    var total = 0
+    var i = 0
+    while (i < len(xs)) {
+        var x = xs[i]
+        i = i + 1
+        if (x is int) { continue }
+        total = total + len(x)
+    }
+    return total
+}
+
+@test
+fn test_n8_continue_while() {
+    assert_eq(sumStringsWhile([1, "ab", 2, "cde"]), 5)
+}
+
+// ===== N-8: continue in a classic for narrows the fallthrough =====
+
+fn sumStringsFor(xs: Array<int | string>) -> int {
+    var total = 0
+    for (var i = 0; i < len(xs); i = i + 1) {
+        var x = xs[i]
+        if (x is int) { continue }
+        total = total + len(x)
+    }
+    return total
+}
+
+@test
+fn test_n8_continue_classic_for() {
+    assert_eq(sumStringsFor(["a", 1, "bc"]), 3)
+}
+
+// ===== N-8: break narrows the fallthrough inside the body =====
+
+fn firstLenBeforeInt(xs: Array<int | string>) -> int {
+    var total = 0
+    for (x in xs) {
+        if (x is int) { break }
+        total = total + len(x)
+    }
+    return total
+}
+
+@test
+fn test_n8_break_for_in() {
+    assert_eq(firstLenBeforeInt(["ab", "c", 9, "zzz"]), 3)
+}
+
+// ===== N-8: null test with continue =====
+
+fn joinNonNull(xs: Array<string?>) -> int {
+    var total = 0
+    for (x in xs) {
+        if (x == null) { continue }
+        total = total + len(x)
+    }
+    return total
+}
+
+@test
+fn test_n8_continue_null_check() {
+    assert_eq(joinNonNull([null, "ab", null, "c"]), 3)
+}
+
+// ===== N-8: labeled continue targeting the outer loop =====
+
+fn countPairs(xs: Array<int | string>) -> int {
+    var count = 0
+    outer: for (x in xs) {
+        for (y in xs) {
+            if (x is int) { continue outer }
+            count = count + len(x)
+            break
+        }
+    }
+    return count
+}
+
+@test
+fn test_n8_labeled_continue() {
+    assert_eq(countPairs([1, "ab"]), 2)
+}
+
+// ===== N-10: a write on the jump path survives to the loop header =====
+
+fn drainWithContinue(first: string?) -> int {
+    var cur = first
+    var rounds = 0
+    while (cur != null) {
+        rounds = rounds + 1
+        if (rounds >= 2) { cur = null; continue }
+        cur = "x"
+    }
+    return rounds
+}
+
+@test
+fn test_n10_continue_write_reaches_header() {
+    assert_eq(drainWithContinue("seed"), 2)
+    assert_eq(drainWithContinue(null), 0)
+}

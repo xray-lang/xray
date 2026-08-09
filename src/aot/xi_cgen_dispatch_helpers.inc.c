@@ -12590,6 +12590,23 @@ static void xicgen_emit_enum_is_predicate(FILE *out, const XiValue *value, uint3
     fprintf(out, ")");
 }
 
+/* Prelude native classes carry no class slot in the shared table; their
+ * values answer a dedicated tag, so an is-test against them is a tag
+ * compare. Mirrors xi_lower_prelude_native_class_typeid on the VM side. */
+static const char *xicgen_prelude_native_class_tag_name(const char *class_name) {
+    if (!class_name)
+        return NULL;
+    if (strcmp(class_name, "NetConn") == 0)
+        return "XR_TAG_NET_CONN";
+    if (strcmp(class_name, "NetListener") == 0)
+        return "XR_TAG_NET_LISTENER";
+    if (strcmp(class_name, "BigInt") == 0)
+        return "XR_TAG_BIGINT";
+    if (strcmp(class_name, "StringBuilder") == 0)
+        return "XR_TAG_STRBUF";
+    return NULL;
+}
+
 static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                       const char *prefix) {
     (void) prefix;
@@ -12685,12 +12702,19 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
                 fprintf(out, "xrt_instanceof(");
                 emit_vref(out, v->args[0]);
                 fprintf(out, ", (uint16_t)%s[%d].i)", ctx->shared_name, slot);
-            } else {
-                fprintf(out, "(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ".tag == %u) /* is %s: class not resolved */", (unsigned) XR_TAG_PTR,
-                        cname ? cname : "?");
+                break;
             }
+            const char *native_tag = xicgen_prelude_native_class_tag_name(cname);
+            if (native_tag) {
+                fprintf(out, "(");
+                emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+                fprintf(out, ".tag == %s)", native_tag);
+                break;
+            }
+            fprintf(out, "(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ".tag == %u) /* is %s: class not resolved */", (unsigned) XR_TAG_PTR,
+                    cname ? cname : "?");
             break;
         }
         case XR_KIND_ENUM:

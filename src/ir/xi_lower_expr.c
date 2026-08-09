@@ -124,6 +124,25 @@ static int xi_lower_type_constant_id(const char *name) {
     return xr_type_from_name(name);
 }
 
+/* Prelude-registered native classes (SIMPLE prelude kinds) have no class
+ * value in any scope or global slot, so a type test against them cannot be
+ * a class compare. Their instances answer a dedicated runtime type id on
+ * both backends -- the VM through the instance builtin_kind, the AOT
+ * runtime through the value tag -- so the test lowers to that id. */
+static int xi_lower_prelude_native_class_typeid(const char *name) {
+    if (!name)
+        return -1;
+    if (strcmp(name, "NetConn") == 0)
+        return XR_TID_NETCONN;
+    if (strcmp(name, "NetListener") == 0)
+        return XR_TID_NETLISTENER;
+    if (strcmp(name, "BigInt") == 0)
+        return XR_TID_BIGINT;
+    if (strcmp(name, "StringBuilder") == 0)
+        return XR_TID_STRINGBUILDER;
+    return -1;
+}
+
 static XiValue *xi_lower_emit_builtin_class(XiLower *l, const char *name, int line) {
     int index = xi_lower_builtin_class_global_index(name);
     if (index < 0)
@@ -9585,9 +9604,13 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             case XR_TREF_NULL:
                 tid = 0;
                 break; /* XR_TID_NULL */
-            case XR_TREF_ERROR:
             case XR_TREF_INT_WIDTH:
             case XR_TREF_FLOAT_WIDTH:
+                /* A fixed-width target is answered by representability on
+                 * both backends, keyed by the width's own type id. */
+                tid = (int) xr_scalar_rep_typeid(tref->scalar_rep);
+                break;
+            case XR_TREF_ERROR:
             case XR_TREF_NAMED:
             case XR_TREF_GENERIC:
             case XR_TREF_OPTIONAL:
@@ -9682,16 +9705,40 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
                     }
                 }
             }
+            /* Last resort for named targets: prelude native classes, which
+             * own a runtime type id instead of a reachable class value. This
+             * runs after the scope chain so a user class of the same name
+             * still wins through its binding. */
+            if (!type_val) {
+                int native_tid = xi_lower_prelude_native_class_typeid(tref->name);
+                if (native_tid >= 0) {
+                    type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
+                    if (type_val)
+                        type_val->aux_int = native_tid;
+                }
+            }
         }
     }
 
-    uint16_t nargs = (type_val != NULL) ? 2 : 1;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IS, l->type_bool, nargs);
+    /* XI_IS has a fixed arity of two; without a resolved target operand the
+     * op cannot be formed, and handing it to the verifier anyway turns a
+     * source-level problem into an internal-consistency failure. Reject the
+     * program here, where the offending type is still nameable. */
+    if (!type_val) {
+        const char *shown = (tref && tref->name && tref->name[0]) ? tref->name
+                            : target_type                         ? xr_type_to_string(target_type)
+                                                                  : "<unknown>";
+        fprintf(stderr, "[LOWER] type test target '%s' has no runtime type test at line %d\n",
+                shown, line);
+        l->had_error = true;
+        return NULL;
+    }
+
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IS, l->type_bool, 2);
     if (!v)
         return NULL;
     v->args[0] = val;
-    if (type_val)
-        v->args[1] = type_val;
+    v->args[1] = type_val;
     v->aux = (void *) target_type;
     v->line = (uint32_t) line;
     return v;
@@ -9742,9 +9789,15 @@ static void lower_dynamic_as_target(XrTypeRef *tref, int *out_tid, const char **
             tid = 0;
             name = "null";
             break;
-        case XR_TREF_ERROR:
         case XR_TREF_INT_WIDTH:
         case XR_TREF_FLOAT_WIDTH:
+            /* Fixed-width casts run the same representability test `is`
+             * does; leaving these unresolved would silently degrade the
+             * cast to a move that accepts out-of-range values. */
+            tid = (int) xr_scalar_rep_typeid(inner->scalar_rep);
+            name = xr_typeid_name((XrTypeId) tid);
+            break;
+        case XR_TREF_ERROR:
         case XR_TREF_NAMED:
         case XR_TREF_GENERIC:
         case XR_TREF_OPTIONAL:
@@ -9766,6 +9819,8 @@ static void lower_dynamic_as_target(XrTypeRef *tref, int *out_tid, const char **
             tid = 15;
         else if (strcmp(inner->name, "Json") == 0)
             tid = 18;
+        else
+            tid = xi_lower_prelude_native_class_typeid(inner->name);
     }
     if (tid < 0 && inner->kind == XR_TREF_GENERIC && inner->name) {
         name = inner->name;
