@@ -3386,6 +3386,9 @@ static const XrTypeRef *body_expr_type_ref(XgBodyCollect *bc, const AstNode *exp
     }
 }
 
+static const ObjectLiteralNode *body_static_object_literal(const AstNode *node);
+static uint32_t body_struct_object_type_key(const ObjectLiteralNode *obj);
+
 static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
     if (!bc || !expr)
         return 0;
@@ -3407,6 +3410,15 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             return hash_named_type_key32("BigInt", NULL, 0);
         case AST_LITERAL_REGEX:
             return hash_named_type_key32("Regex", NULL, 0);
+        case AST_OBJECT_LITERAL: {
+            /* A structural object literal keys by its own shape, so a field
+             * summary or binding derived from a nested literal can find the
+             * shape that nested literal registers. */
+            const ObjectLiteralNode *literal = body_static_object_literal(expr);
+            if (literal)
+                return body_struct_object_type_key(literal);
+            break;
+        }
         case AST_ENUM_ACCESS:
         case AST_MEMBER_ACCESS: {
             const char *enum_name = NULL;
@@ -6735,6 +6747,10 @@ static void body_bind_static_object_shape_for_type_key(XgBodyCollect *bc, const 
     if (!bc || !name || type_key == 0)
         return;
     object_shape = body_find_object_shape_for_type_key(bc, type_key, XG_OBJECT_SHAPE_STATIC);
+    /* A structural literal registers its shape as a literal row; a binding
+     * keyed by that literal's type key is the same shape. */
+    if (!object_shape)
+        object_shape = body_find_object_shape_for_type_key(bc, type_key, XG_OBJECT_SHAPE_LITERAL);
     if (!object_shape || object_shape->type_key != type_key ||
         (object_shape->flags & XG_OBJECT_SHAPE_JSON_BRIDGEABLE) == 0)
         return;
