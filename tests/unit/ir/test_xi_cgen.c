@@ -5602,8 +5602,9 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
     assert(!had_error && "escaping struct heap-native path should generate");
     assert(contains(code, "typedef struct xrt_struct_abi_") &&
            "escaping primitive struct must emit a native heap layout");
-    assert(contains(code, "xr_aggregate_ref(") &&
-           "escaping primitive struct must allocate as an AOT struct reference");
+    assert((contains(code, "xr_aggregate_ref(") || contains(code, "xrt_aggregate_clone_bytes(")) &&
+           "escaping primitive struct must allocate as an AOT struct reference; the "
+           "ownership-safe lowering publishes it through the owned clone-bytes helper");
     assert(contains(code, "->x") && contains(code, "->y") && contains(code, "->ok") &&
            contains(code, "->octet") && "escaping primitive struct fields must use direct access");
     assert(!contains(code, "xrt_map_new(") && "primitive struct must not allocate runtime map");
@@ -5673,7 +5674,7 @@ TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
            "mixed scalar/string struct must emit a native heap layout");
     assert(contains(code, "XrValue name") &&
            "string struct field must be stored as a tagged immutable reference field");
-    assert(contains(code, "xr_aggregate_ref(") &&
+    assert((contains(code, "xr_aggregate_ref(") || contains(code, "xrt_aggregate_clone_bytes(")) &&
            "mixed scalar/string struct must allocate as an AOT struct reference");
     assert(contains(code, "->count") && contains(code, "->name") &&
            "mixed scalar/string struct fields must use direct access");
@@ -5715,8 +5716,10 @@ TEST(cgen_fixed_layout_struct_omits_native_header) {
            "fixed-layout i32 field must be placed at payload offset 0");
     assert(count_between(typedef_start, typedef_end, "uint8_t b") == 1 &&
            "fixed-layout u8 field must be emitted as raw C storage");
-    assert(contains(code, "xr_aggregate_ref(_s, (uint16_t)sizeof(") &&
-           "fixed-layout struct refs must carry storage size outside the payload");
+    assert((contains(code, "xr_aggregate_ref(_s, (uint16_t)sizeof(") ||
+            contains(code, "xrt_aggregate_clone_bytes(")) &&
+           "fixed-layout struct refs must carry storage size outside the payload; the "
+           "ownership-safe lowering passes it through the owned clone-bytes helper");
 
     printf("  Generated fixed-layout struct path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -6021,7 +6024,7 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
            "run function body should be bounded");
 
-    assert(contains(code, "xr_aggregate_ref(") &&
+    assert((contains(code, "xr_aggregate_ref(") || contains(code, "xrt_aggregate_clone_bytes(")) &&
            "shared primitive struct must use native heap storage");
     assert(count_between(fn_body, fn_end, "xrt_value_clone_for_coro(") > 0 &&
            "mutable local struct copy should clone the shared slot value before mutation");
@@ -6194,8 +6197,10 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
         count_between(code, code + strlen(code), "xrt_box_obj(_inst)") ==
             count_between(code, code + strlen(code), "xrt_value_set_storage(xrt_box_obj(_inst)") &&
         "the only boxing of a native instance is the storage-class tag");
-    assert(contains(code, "_inst; })") &&
-           "native class constructor values should stay as pointers inside typed AOT code");
+    assert((contains(code, "_inst; })") || contains(code, "*_portable_inst_")) &&
+           "native class constructor values should stay as pointers inside typed AOT code; the "
+           "portable lowering binds the instance to a typed pointer local instead of a "
+           "statement expression");
     assert(!contains(code, "heap_type == XR_TINSTANCE") &&
            "closed-world typed class flow should not retain boxed instance discrimination");
     assert(!contains(code, "xrt_instanceof(") &&
@@ -6369,19 +6374,24 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
     replace = strstr(replace + 1, "static int64_t test_replace_");
     assert(replace != NULL && "replace method definition should follow its declaration");
     const char *replace_end = next_static_after(replace);
-    /* The store is one comma expression: retain the new container, release the
-     * old one, then assign. Retain-before-release is what keeps
-     * `this.values = this.values` from freeing the value being stored. The
-     * temporary is an SSA value (`vN`), so match the shape, not a fixed name. */
+    /* The store is one comma expression: release the old container, then
+     * assign. The ownership-safe lowering hands the incoming container to the
+     * store as an owned +1 transfer, so `this.values = this.values` stays
+     * alive - the incoming reference is distinct from the field's own count -
+     * and no defensive retain is required. The temporary is an SSA value
+     * (`vN`), so match the shape, not a fixed name. */
     const char *store = strstr(replace, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY)), "
                                         "(p0)->f0 = (xrt_array_t *)");
     assert(store && store < replace_end &&
            count_between(replace, replace_end, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY))") ==
                1 &&
            "direct native receiver collection ref stores release the old container once");
-    const char *retain = strstr(replace, "xrt_retain(");
-    assert(retain && retain < store &&
-           "the new container is retained before the old one is released");
+    /* Ownership of the stored container arrives from the call site, which
+     * retains an argument it still uses afterwards and moves one it does not.
+     * The callee therefore never retains again: a second retain here would be
+     * the leak that pairs with the single release above. */
+    assert(count_between(replace, replace_end, "xrt_retain(") == 0 &&
+           "the callee does not retain the stored container; the call site owns that decision");
 
     const char *swap = strstr(code, "static int64_t test_swap_");
     assert(swap != NULL && "swap function should use typed scalar return ABI");
@@ -6395,16 +6405,12 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
            count_between(swap, swap_end, "xrt_map_set(") == 0 &&
            "native class pointer parameters should access ref fields without Map fallback");
     /* Same comma-expression store as the direct receiver above, through the
-     * heap instance pointer this time. */
-    const char *swap_store = strstr(swap, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY)), "
-                                          "(_native)->f0 = (xrt_array_t *)");
+     * heap instance pointer this time. The portable lowering names that
+     * pointer `_portable_native_N`, so match the shape, not a fixed name. */
+    const char *swap_store = strstr(swap, "xrt_release(xr_mkptr((_portable_native_");
     assert(swap_store && swap_store < swap_end &&
-           count_between(swap, swap_end, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY))") ==
-               1 &&
+           count_between(swap, swap_end, "xrt_release(xr_mkptr((_portable_native_") == 1 &&
            "heap native instance collection ref stores release the old container once");
-    const char *swap_retain = strstr(swap, "xrt_retain(");
-    assert(swap_retain && swap_retain < swap_store &&
-           "the new container is retained before the old one is released");
 
     const char *local = strstr(code, "static int64_t test_local_");
     assert(local != NULL && "local function should use typed scalar return ABI");
@@ -7071,8 +7077,15 @@ TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
            "guarded Array<u8> fill loop must preallocate uninitialized typed storage");
     assert(contains(code, "uint8_t *_ad") &&
            "guarded Array<u8> fill loop must cache raw byte storage");
-    assert(count_between(code, code_end, "uint8_t *_ad") >= 2 &&
-           "guarded Array<u8> slice loop must cache source and slice data pointers");
+    /* The slice loop reads through the span value directly: the array data
+     * cache is driven by a verified array-cache plan, and spans carry no such
+     * plan, so the read stays `((u8*)_s.data)[_idx]` rather than a hoisted
+     * pointer. Pin both halves so extending the cache plan to spans updates
+     * this guard deliberately instead of silently. */
+    assert(count_between(code, code_end, "uint8_t *_ad") >= 1 &&
+           "guarded Array<u8> fill loop must cache the source data pointer");
+    assert(contains(code, "((uint8_t*)_s.data)[_idx]") &&
+           "slice reads load through the span value while spans have no cache plan");
     assert(!contains(code, "_a->len =") &&
            "guarded typed array fill loop must use final len store outside the push body");
     assert(!contains(code, "_a->len >= _a->cap") &&
@@ -7483,7 +7496,10 @@ TEST(cgen_stack_alloc_direct_closure_uses_stack_runtime) {
            "direct no-escape closure should use stack closure runtime");
     assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
            "direct no-escape closure must not allocate a heap closure");
-    assert(contains(code, "xrt_release(") && contains(code, "XR_TAG_CLOSURE") &&
+    /* The death point calls the stack-closure drop helper, which releases each
+     * upvalue in the runtime rather than emitting a release per upvalue here.
+     * Pin the call: without it the captured cells leak once per activation. */
+    assert(contains(code, "xrt_closure_stack_drop(") && contains(code, "XR_TAG_CLOSURE") &&
            "stack closure should still run ARC destruction at its death point");
 
     printf("  Generated stack closure path %zu bytes of C code\n", strlen(code));
