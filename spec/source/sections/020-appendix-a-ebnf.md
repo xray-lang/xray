@@ -145,7 +145,7 @@ ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
 FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
 // Note: arrow lambdas cannot declare an explicit return type;
-// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 
 ComptimeExpr ::= 'comptime' (Expression | Block)
 
@@ -481,7 +481,7 @@ ArrowParams ::= ArrowParam (',' ArrowParam)* ','?
 ArrowParam  ::= Identifier (':' ParamType)?
 FnExpression ::= 'fn' TypeParams? '(' ArrowParams? ')' ReturnType? Block
 // Note: arrow lambdas cannot declare an explicit return type;
-// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: (T) -> R = ...`) instead.
+// use `fn(p: T) -> R { ... }` or annotate the binding (`var f: fn(T) -> R = ...`) instead.
 
 ComptimeExpr ::= 'comptime' (Expression | Block)
 

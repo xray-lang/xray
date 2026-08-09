@@ -451,7 +451,7 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 | `??` | 空值合并 (`a ?? b`) |
 | `!` | 强制解包（后缀，`expr!`）/ 逻辑非（前缀） |
 | `\|` | union 类型 (`int \| string`) / 位或 |
-| `->` | 统一箭头：函数返回类型、函数类型、闭包、`match` / `select` 分支 |
+| `->` | 统一箭头：函数返回类型、闭包、`match` / `select` 分支；函数类型以 `fn` 引导（`fn(T) -> R`），返回 unit 时省略箭头（`fn(T)`） |
 | `...` | rest / spread |
 | `..` | 半开范围 (`0..10`) |
 | `..=` | 闭区间范围 (`0..=10`) |
@@ -933,7 +933,7 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `??` | null coalescing (`a ?? b`) |
 | `!` | force unwrap (postfix, `expr!`) / logical not (prefix) |
 | `\|` | union type (`int \| string`) / bitwise or |
-| `->` | unified arrow: function return type, function type, closures, `match` / `select` arms |
+| `->` | unified arrow: function return type, closures, `match` / `select` arms; a function type is led by `fn` (`fn(T) -> R`) and drops the arrow when it returns unit (`fn(T)`) |
 | `...` | rest / spread |
 | `..` | half-open range (`0..10`) |
 | `..=` | inclusive range (`0..=10`) |

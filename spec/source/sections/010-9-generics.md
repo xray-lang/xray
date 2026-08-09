@@ -273,7 +273,7 @@ describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 
 **为什么是永久决定**：HKT 与全程序单态化在根本上冲突。对类型构造器抽象意味着实例集合在编译期不再有限可枚举，实现只能退回字典传递或类型擦除——两者都会重新引入 Xray 的整条 AOT 路线（无装箱表示、精确布局、`xray verify` 的 shape 合同）明确要消除的间接层。这与"轻量脚本语言"的定位也不一致。
 
-需要类似抽象能力时，使用 interface + 具体类型参数（`interface Mappable { map(f: (T) -> U) -> Self<U> }` 这类签名同样不提供），或在调用点用具体实例化。
+需要类似抽象能力时，使用 interface + 具体类型参数（`interface Mappable { map(f: fn(T) -> U) -> Self<U> }` 这类签名同样不提供），或在调用点用具体实例化。
 
 ### 9.7 泛型与类型身份
 
@@ -565,7 +565,7 @@ describe({ x: 1.0 })                  // compile error E0356: missing field 'y'
 
 **Why this is permanent**: HKT is fundamentally at odds with whole-program monomorphization. Abstracting over a type constructor means the instance set is no longer finitely enumerable at compile time, leaving only dictionary passing or type erasure — and both reintroduce exactly the indirection that Xray's AOT line (unboxed representations, exact layout, `xray verify` shape contracts) exists to remove. It is also inconsistent with the lightweight-scripting-language positioning.
 
-Where similar abstraction is wanted, use an interface with concrete type parameters (signatures like `interface Mappable { map(f: (T) -> U) -> Self<U> }` are likewise not provided), or instantiate concretely at the call site.
+Where similar abstraction is wanted, use an interface with concrete type parameters (signatures like `interface Mappable { map(f: fn(T) -> U) -> Self<U> }` are likewise not provided), or instantiate concretely at the call site.
 
 ### 9.7 Generics and Type Identity
 

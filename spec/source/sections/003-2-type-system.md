@@ -38,7 +38,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
-| FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<(T) -> R>`、`usize`、`isize` |
+| FFI / C ABI | `Ptr<T>`、`MutPtr<T>`、`CFn<fn(T) -> R>`、`usize`、`isize` |
 | Class / Struct / Interface | 用户定义（nominal） |
 | Enum | 用户定义（含 ADT enum，见 §5.6） |
 | Type alias | `type Name = SomeType`、`type Name<T> = SomeType` |
@@ -232,7 +232,7 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 | `isize` | `ptrdiff_t` / 平台有符号宽度 | 宽度由编译目标决定；不得按宿主机 `i64` 代用 |
 | `Ptr<T>` | `const void *` 边界值 | 只读裸指针；`T` 用于 xray 端解引用/索引宽度 |
 | `MutPtr<T>` | `void *` 边界值 | 可写裸指针；可传给需要 `Ptr<T>` 的位置 |
-| `CFn<(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `extern "C"` 函数 |
+| `CFn<fn(A, B) -> R>` | C ABI 函数指针 | 用于把 xray 函数作为 C 回调传入 `extern "C"` 函数 |
 
 裸指针值可以安全地保存、传递、比较和用 `offset(i)` 做按元素宽度缩放的指针偏移；真正读写外部内存必须写在 `unsafe { }` 内：
 
@@ -254,7 +254,7 @@ unsafe {
 
 `usize` / `isize` 在 FFI 调用、`mem.load/store<T>`、manifest 绑定的 C layout 和生成 C 中使用同一份目标 ABI 标量描述。VM、AOT 与布局 introspection 必须采用编译目标的宽度和对齐；交叉编译时不得读取构建宿主机的 `sizeof(size_t)` 作为语义。
 
-`CFn<(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
+`CFn<fn(...) -> ...>` 不是普通 xray 闭包类型。当前 VM/AOT 后端支持把模块级、非捕获、签名精确匹配的 xray 函数传给 C；捕获闭包、匿名函数和 extern 函数本身不能作为 `CFn` 回调实参。
 
 ### 2.4 复合类型
 
@@ -714,10 +714,10 @@ main()
 
 ```xray @id=types-alias
 type Result = int | string
-type Mapper = (int) -> int
+type Mapper = fn(int) -> int
 type Point = { x: float, y: float }
 type Pair<T> = { first: T, second: T }
-type Mapper2<T, U> = (T) -> U
+type Mapper2<T, U> = fn(T) -> U
 ```
 
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
@@ -728,6 +728,8 @@ var f: Mapper2<int, string> = (n) -> string(n)
 ```
 
 泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
+
+**函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref int) -> int`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> int)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
 ### 2.9 类型推断
 
@@ -740,7 +742,7 @@ var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<int>
 var m = #{"a": 1}    // m: Map<string, int>
 var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
-var f = (x: int) -> x   // f: (int) -> int —— 箭头参数显式、返回类型推断
+var f = (x: int) -> x   // f: fn(int) -> int —— 箭头参数显式、返回类型推断
 ```
 
 ### 2.10 类型兼容性与转换
@@ -1169,7 +1171,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Union | `A \| B \| ...` |
 | Tuple | `(T1, T2, ...)` |
 | Function | `fn(T1, T2) -> R` |
-| FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<(T) -> R>`, `usize`, `isize` |
+| FFI / C ABI | `Ptr<T>`, `MutPtr<T>`, `CFn<fn(T) -> R>`, `usize`, `isize` |
 | Class / Struct / Interface | user-defined (nominal) |
 | Enum | user-defined (incl. ADT enum, see §5.6) |
 | Type alias | `type Name = SomeType`, `type Name<T> = SomeType` |
@@ -1363,7 +1365,7 @@ Xray's C FFI uses explicit boundary types so ordinary xray objects are not impli
 | `isize` | `ptrdiff_t` / platform signed width | width comes from the compilation target; it must not be substituted with the host's `i64` |
 | `Ptr<T>` | `const void *` boundary value | read-only raw pointer; `T` gives the xray-side dereference/index width |
 | `MutPtr<T>` | `void *` boundary value | mutable raw pointer; assignable where `Ptr<T>` is expected |
-| `CFn<(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `extern "C"` function |
+| `CFn<fn(A, B) -> R>` | C ABI function pointer | passes an xray function as a C callback argument to an `extern "C"` function |
 
 Raw pointer values may be stored, passed, compared, and offset with `offset(i)` using element-width scaling in safe code; actually reading or writing foreign memory must be inside `unsafe { }`:
 
@@ -1385,7 +1387,7 @@ unsafe {
 
 `usize` / `isize` use one target-ABI scalar descriptor across FFI calls, `mem.load/store<T>`, extern-layout fields, and generated C. The VM, AOT backend, and layout introspection must use the compilation target's width and alignment; cross-compilation never derives language semantics from the build host's `sizeof(size_t)`.
 
-`CFn<(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and extern functions themselves cannot be used as `CFn` callback arguments.
+`CFn<fn(...) -> ...>` is not an ordinary xray closure type. The current VM/AOT backends support passing module-level, noncapturing xray functions with an exact signature match to C; capturing closures, anonymous functions, and extern functions themselves cannot be used as `CFn` callback arguments.
 
 ### 2.4 Composite Types
 
@@ -1845,10 +1847,10 @@ main()
 
 ```xray @id=types-alias
 type Result = int | string
-type Mapper = (int) -> int
+type Mapper = fn(int) -> int
 type Point = { x: float, y: float }
 type Pair<T> = { first: T, second: T }
-type Mapper2<T, U> = (T) -> U
+type Mapper2<T, U> = fn(T) -> U
 ```
 
 Aliases are **purely syntactic** equivalences; they do not introduce new types,
@@ -1866,6 +1868,18 @@ struct / enum / interface that uses the alias. Aliases may be forward
 referenced, but cyclic aliases, including recursive object aliases, are compile
 errors.
 
+**Function-type syntax.** A function type is led by `fn`, written
+`fn(T1, T2) -> R`; parameters may carry a `ref` / `move` mode (e.g.
+`fn(ref int) -> int`). When the return is `unit` the arrow segment is omitted,
+written `fn(T)` / `fn()` — an explicit `-> ()` is **not** allowed in type
+position. This is a deliberate asymmetry with the declaration position, where
+both `fn f() -> ()` and `fn f()` are valid (§5.2); a type appears in dense
+inline positions (parameters, generic arguments, container elements) and keeps
+a single spelling. A bare `(` in type position is only a tuple or a grouping,
+matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups — so
+a nullable function type is written directly as `(fn() -> int)?`. `CFn<...>`
+uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
+
 ### 2.9 Type Inference
 
 See §7.4 for details. In summary:
@@ -1877,7 +1891,7 @@ var z = "hello"         // z: string
 var a = [1, 2, 3]       // a: Array<int>
 var m = #{"a": 1}    // m: Map<string, int>
 var p = { name: "A" }   // p: { name: string } — structured object type
-var f = (x: int) -> x   // f: (int) -> int — explicit parameter, inferred return
+var f = (x: int) -> x   // f: fn(int) -> int — explicit parameter, inferred return
 ```
 
 ### 2.10 Type Compatibility and Conversion

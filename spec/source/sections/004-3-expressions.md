@@ -43,7 +43,7 @@ xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）
 ```xray @id=eval-order-rules
 fn t(tag: string, v: int) -> int { print(tag); return v }
 fn add(a: int, b: int) -> int { return a + b }
-fn pick(tag: string) -> (int, int) -> int { print(tag); return add }
+fn pick(tag: string) -> fn(int, int) -> int { print(tag); return add }
 
 class Counter {
     hits: int = 0
@@ -720,7 +720,7 @@ This is a requirement rather than a conservative preference. Differential testin
 ```xray @id=eval-order-rules
 fn t(tag: string, v: int) -> int { print(tag); return v }
 fn add(a: int, b: int) -> int { return a + b }
-fn pick(tag: string) -> (int, int) -> int { print(tag); return add }
+fn pick(tag: string) -> fn(int, int) -> int { print(tag); return add }
 
 class Counter {
     hits: int = 0
