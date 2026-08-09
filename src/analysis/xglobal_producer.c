@@ -3410,15 +3410,6 @@ static uint32_t body_expr_type_key(XgBodyCollect *bc, const AstNode *expr) {
             return hash_named_type_key32("BigInt", NULL, 0);
         case AST_LITERAL_REGEX:
             return hash_named_type_key32("Regex", NULL, 0);
-        case AST_OBJECT_LITERAL: {
-            /* A structural object literal keys by its own shape, so a field
-             * summary or binding derived from a nested literal can find the
-             * shape that nested literal registers. */
-            const ObjectLiteralNode *literal = body_static_object_literal(expr);
-            if (literal)
-                return body_struct_object_type_key(literal);
-            break;
-        }
         case AST_ENUM_ACCESS:
         case AST_MEMBER_ACCESS: {
             const char *enum_name = NULL;
@@ -6599,17 +6590,6 @@ static XgObjectShapeId body_add_object_shape_for_literal_domain(XgBodyCollect *b
                                                shape_hash, source_span_id);
     body_add_object_fields_for_keys(bc, row.object_shape_id, shape_keys, shape_key_count,
                                     XG_OBJECT_FIELD_REQUIRED, obj);
-    /* Object-literal field values are shapes of their own: register them so a
-     * destructured or projected binding can carry the nested shape through
-     * its type key. */
-    for (int i = 0; i < obj->count; i++) {
-        if (body_object_literal_entry_is_spread(obj, i) || !body_object_literal_static_key(obj, i))
-            continue;
-        const ObjectLiteralNode *child = body_static_object_literal(obj->values[i]);
-        if (child)
-            (void) body_add_object_shape_for_literal_domain(
-                bc, child, source_span_id, body_expr_type_key(bc, obj->values[i]), domain);
-    }
     if (!body_finalize_object_shape_identity(bc->evidence, row.object_shape_id)) {
         xr_free(shape_keys);
         return XG_NO_ID;

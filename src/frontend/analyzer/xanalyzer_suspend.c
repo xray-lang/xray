@@ -699,10 +699,16 @@ static void sus_reject_suspending_generator(XaSuspendPass *pass, const XaSuspend
  * agree on that wrong answer, so a differential test cannot catch it either.
  * Rejecting it here is what makes `defer` total: every registered action runs
  * to completion on every exit path, cancellation included. */
+/* Only a proven suspension is rejected. A dynamic target - a `fn()` parameter
+ * called from a defer body - is INCOMPLETE, not MAY, and the language offers no
+ * way to declare a function value non-suspending, so rejecting the unknown
+ * would ban every callback-driven cleanup instead of the broken ones. An
+ * unknown target that does reach the scheduler is caught where it happens: the
+ * leaving frame has no suspension point to park at and aborts. */
 static void sus_reject_suspending_defer(XaSuspendPass *pass, const XaSuspendRow *row) {
     XaSuspendCause edge_cause;
     const XaSuspendCause *cause = NULL;
-    if (row->is_defer_body && row->result != XA_SUSPEND_NONE) {
+    if (row->is_defer_body && row->result == XA_SUSPEND_MAY) {
         /* Block form: this row is the cleanup body, and its converged result
          * already accounts for everything it calls. */
         cause = &row->result_cause;
@@ -715,7 +721,7 @@ static void sus_reject_suspending_defer(XaSuspendPass *pass, const XaSuspendRow 
             if (!edge->in_defer_body)
                 continue;
             XaSuspendRow *callee = sus_row_for_symbol(pass, edge->callee);
-            if (!callee || callee->result == XA_SUSPEND_NONE)
+            if (!callee || callee->result != XA_SUSPEND_MAY)
                 continue;
             sus_set_cause(&edge_cause, edge->site, edge->is_callback ? "callback" : "call",
                           edge->callee && edge->callee->name ? edge->callee->name : "?");
