@@ -9777,9 +9777,13 @@ static bool xicgen_emit_channel_method(FILE *out, const XiValue *v, const char *
         fprintf(out, "%s(", helper);
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1],
-                          (send_rep == XR_REP_I64 || send_rep == XR_REP_F64) ? send_rep
-                                                                             : XR_REP_TAGGED);
+        if (send_rep == XR_REP_I64 || send_rep == XR_REP_F64) {
+            emit_value_as_rep(out, v->args[1], send_rep);
+        } else {
+            fprintf(out, "xr_aot_bridge_xrt_to_runtime(&xrt_global_ctx, ");
+            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            fprintf(out, ")");
+        }
         fprintf(out, ")");
     } else if (is_try_recv) {
         fprintf(out, "xr_aot_bridge_value_to_xrt(xr_aot_chan_try_recv_sync(");

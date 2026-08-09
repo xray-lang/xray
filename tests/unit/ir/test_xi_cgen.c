@@ -9458,8 +9458,44 @@ TEST(cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge) {
         "scalar channel trySend values must not call the deep-copy helper");
     assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
            "trySend returns a native no-payload SendResult enum and must not be bridged");
+    assert(!contains(code, "xr_aot_bridge_xrt_to_runtime(&xrt_global_ctx,") &&
+           "scalar channel trySend must stay on the typed fast path");
 
     printf("  Generated scalar channel trySend %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_descriptor_tagged_channel_try_send_normalizes_runtime_envelope) {
+    const char *src = "fn try_tuple(ch: Channel<(int, int)>) -> SendResult {\n"
+                      "    var frame = (1, 2)\n"
+                      "    return ch.trySend(move frame)\n"
+                      "}\n"
+                      "const ch = Channel<(int, int)>(1)\n"
+                      "print(try_tuple(ch))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT tagged channel trySend should generate");
+    const char *try_send_call = strstr(code, "xr_aot_chan_try_send_sync(");
+    assert(try_send_call != NULL &&
+           "tagged channel trySend must use the synchronous tagged bridge");
+    const char *try_send_end = strchr(try_send_call, ';');
+    assert(try_send_end != NULL &&
+           contains_between(try_send_call, try_send_end,
+                            "xr_aot_bridge_xrt_to_runtime(&xrt_global_ctx,") &&
+           "tagged channel trySend must normalize the AOT value into the runtime envelope");
+    assert(!contains_between(try_send_call, try_send_end, "xrt_value_clone_for_coro(") &&
+           "move trySend must not deep-copy the transferred value");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
+           "trySend returns a native no-payload SendResult enum and must not be bridged");
+
+    printf("  Generated tagged channel trySend runtime envelope %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -11601,6 +11637,7 @@ int main(void) {
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_unit_match_send_omits_void_phi();
     run_cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge();
+    run_cgen_descriptor_tagged_channel_try_send_normalizes_runtime_envelope();
     run_cgen_coro_builtin_no_payload_enum_fields_skip_bridge();
     run_cgen_coro_await_clones_tagged_result();
     run_cgen_coro_native_class_await_uses_tagged_boundary_slot();
