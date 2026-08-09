@@ -898,14 +898,20 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
         xr_fdmap_cas(np, fd, &exp, NULL);
     }
 
-    // Unregister from owner worker's local poll (if bound)
-    if (fd >= 0 && pd->owner_worker_id >= 0) {
+    // Unregister from owner worker's local poll when the descriptor actually
+    // left the shared backend. A bound descriptor can still be shared when a
+    // platform has no worker-local poller or local registration failed.
+    if (fd >= 0 && pd->owner_worker_id >= 0 && !pd->shared_registered) {
         XrWorker *current = xr_current_worker();
         if (current && current->p.runtime) {
             XrRuntime *rt = current->p.runtime;
             if (pd->owner_worker_id < rt->worker_count) {
-                XrLocalPoll *lp = &rt->workers[pd->owner_worker_id].p.local_poll;
-                xr_local_poll_del_fd(lp, fd);
+                XrProc *owner = &rt->workers[pd->owner_worker_id].p;
+                xr_local_poll_del_fd(&owner->local_poll, fd);
+                int previous =
+                    atomic_fetch_sub_explicit(&owner->local_poll_fd_count, 1, memory_order_release);
+                XR_DCHECK(previous > 0, "netpoll_close: local fd count underflow");
+                (void) previous;
             }
         }
     }
@@ -1180,8 +1186,12 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
 }
 
 static bool netpoll_try_add_local(XrPollDesc *pd, XrWorker *worker) {
-    return pd && worker && pd->fd >= 0 && worker->p.local_poll.poll_fd >= 0 &&
-           xr_local_poll_add_fd(&worker->p.local_poll, pd->fd, pd) == 0;
+    if (!pd || !worker || pd->fd < 0 || worker->p.local_poll.poll_fd < 0 ||
+        xr_local_poll_add_fd(&worker->p.local_poll, pd->fd, pd) != 0) {
+        return false;
+    }
+    atomic_fetch_add_explicit(&worker->p.local_poll_fd_count, 1, memory_order_release);
+    return true;
 }
 
 static bool netpoll_ensure_shared(XrPollDesc *pd) {
@@ -1243,6 +1253,10 @@ static void netpoll_rebind_worker(XrPollDesc *pd, XrWorker *current) {
         // Deregister fd from the old worker only after its replacement exists.
         if (old_was_local && pd->fd >= 0 && old_w->p.local_poll.poll_fd >= 0) {
             xr_local_poll_del_fd(&old_w->p.local_poll, pd->fd);
+            int previous =
+                atomic_fetch_sub_explicit(&old_w->p.local_poll_fd_count, 1, memory_order_release);
+            XR_DCHECK(previous > 0, "netpoll_rebind_worker: local fd count underflow");
+            (void) previous;
         }
     }
 

@@ -239,6 +239,7 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     use_uring = runtime->netpoll.uring_avail;
 #endif
     xr_local_poll_init(&worker->p.local_poll, use_uring);
+    atomic_store_explicit(&worker->p.local_poll_fd_count, 0, memory_order_relaxed);
 
     // Initialize continuation stealing deque
     xr_steal_queue_init(&worker->p.cont_deque, 64);

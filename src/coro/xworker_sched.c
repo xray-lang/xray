@@ -1525,9 +1525,14 @@ static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime, _Atomic bo
         }
         worker_drain_inbox(worker);
         worker_pull_inject(worker, XR_INJECT_POP_BATCH);
-        coro = worker_poll_local_io(worker, NULL);
-        if (coro)
-            break;
+        // Only descriptor owners benefit from a zero-time local poll here.
+        // Empty workers still poll the wake pipe while parked; skipping their
+        // spin-time syscall avoids multiplying idle CPU cost by worker count.
+        if (atomic_load_explicit(&worker->p.local_poll_fd_count, memory_order_acquire) > 0) {
+            coro = worker_poll_local_io(worker, NULL);
+            if (coro)
+                break;
+        }
         if ((spin & 0x3) == 0) {
             cached_now = xr_runtime_now_ticks(runtime);
         }

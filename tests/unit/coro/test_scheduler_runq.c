@@ -405,6 +405,8 @@ TEST(local_io_ready_burst_runs_one_direct_and_keeps_the_rest_local) {
         ASSERT_TRUE(poll_descs[i]->shared_registered);
         ASSERT_EQ_INT(xr_netpoll_bind_worker(poll_descs[i]), 0);
         ASSERT_FALSE(poll_descs[i]->shared_registered);
+        ASSERT_EQ_INT(
+            atomic_load_explicit(&f.workers[0].p.local_poll_fd_count, memory_order_acquire), i + 1);
         init_blocked_io_probe(&coros[i], &extensions[i], 400 + i, &f.isolate_storage,
                               sockets[i][0]);
         poll_descs[i]->user_data = &coros[i];
@@ -428,11 +430,25 @@ TEST(local_io_ready_burst_runs_one_direct_and_keeps_the_rest_local) {
     ASSERT_EQ_INT(atomic_load(&f.runtime.injectq.len), 0);
     ASSERT_EQ_INT(xr_proc_local_runq_len(&f.workers[0].p), TOTAL - 1);
 
+    tls_current_worker = &f.workers[1];
+    tls_current_machine = f.workers[1].m;
+    ASSERT_EQ_INT(xr_netpoll_bind_worker(poll_descs[0]), 1);
+    ASSERT_EQ_INT(atomic_load_explicit(&f.workers[0].p.local_poll_fd_count, memory_order_acquire),
+                  TOTAL - 1);
+    ASSERT_EQ_INT(atomic_load_explicit(&f.workers[1].p.local_poll_fd_count, memory_order_acquire),
+                  1);
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = f.workers[0].m;
+
     for (int i = 0; i < TOTAL; i++) {
         xr_netpoll_close(&f.runtime.netpoll, poll_descs[i]);
         xr_closesocket((xr_socket_t) sockets[i][0]);
         xr_closesocket((xr_socket_t) sockets[i][1]);
     }
+    ASSERT_EQ_INT(atomic_load_explicit(&f.workers[0].p.local_poll_fd_count, memory_order_acquire),
+                  0);
+    ASSERT_EQ_INT(atomic_load_explicit(&f.workers[1].p.local_poll_fd_count, memory_order_acquire),
+                  0);
     xr_netpoll_cleanup(&f.runtime.netpoll);
     steal_fixture_cleanup(&f);
 #endif

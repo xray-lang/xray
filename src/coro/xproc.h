@@ -341,6 +341,10 @@ typedef struct XrProc {
 
     /* === Per-Worker I/O Poll (kqueue/epoll fd per worker) === */
     XrLocalPoll local_poll;  // Per-worker kqueue/epoll for IO event collection
+    /* Number of descriptors logically owned by local_poll (the wakeup pipe is
+     * excluded). Bind/rebind/close can update this from another worker, while
+     * the owner reads it on the scheduler spin path. */
+    _Atomic int local_poll_fd_count;
 
     /* === Backend Worker Storage === */
     void *backend_worker_storage;
