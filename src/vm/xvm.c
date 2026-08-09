@@ -607,7 +607,7 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
         if (xr_value_is_instance(left_val)) {                                                      \
             _cls = xr_instance_get_class(xr_value_to_instance(left_val));                          \
         } else if (XR_IS_AGG_REF(left_val)) {                                                      \
-            _cls = *(XrClass **) xr_to_struct_ptr(left_val);                                       \
+            _cls = invoke_resolve_class(isolate, (left_val));                                      \
         }                                                                                          \
         if (_cls && XCLASS_HAS_OP(_cls, op_flag)) {                                                \
             XrMethod *_method = xr_class_lookup_method(_cls, op_symbol);                           \
@@ -624,23 +624,23 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
                 /* Place operator frame above caller's maxstacksize to avoid */                    \
                 /* clobbering caller's local registers */                                          \
                 int _safe_base = (int) (base - VM_STACK) + cl->proto->maxstacksize;                \
-                if (_cls->struct_layout != NULL) {                                                 \
-                    /* Value-aggregate methods receive `this` as a call-bound                      \
-                     * place. Dynamic operator dispatch has no lowering-time                       \
-                     * lvalue plan, so keep the aggregate reference in a stable                    \
-                     * scratch slot just beyond the callee register file and pass                  \
-                     * an absolute place descriptor as parameter 0. */                             \
-                    VM_STACK_CHECK(cl->proto->maxstacksize + _proto->maxstacksize + 1);            \
-                    _safe_base = (int) (base - VM_STACK) + cl->proto->maxstacksize;                \
-                    int _backing = _safe_base + _proto->maxstacksize;                              \
-                    VM_STACK[_backing] = (left_val);                                               \
-                    VM_STACK[_safe_base] = (XrValue) {0};                                          \
-                    VM_STACK[_safe_base].tag = XR_TAG_PLACE;                                       \
-                    VM_STACK[_safe_base].i = _backing;                                             \
-                } else {                                                                           \
-                    VM_STACK[_safe_base] = (left_val);                                             \
+                uint64_t _place_bitmap = _proto->call_place_param_bitmap;                          \
+                int _place_count = ((_place_bitmap & UINT64_C(1)) ? 1 : 0) +                       \
+                                   ((_place_bitmap & UINT64_C(2)) ? 1 : 0);                        \
+                VM_STACK_CHECK(cl->proto->maxstacksize + _proto->maxstacksize + _place_count);     \
+                _safe_base = (int) (base - VM_STACK) + cl->proto->maxstacksize;                    \
+                int _backing = _safe_base + _proto->maxstacksize;                                  \
+                XrValue _operator_args[2] = {(left_val), (right_val)};                             \
+                for (int _pi = 0; _pi < 2; _pi++) {                                                \
+                    if ((_place_bitmap & (UINT64_C(1) << _pi)) != 0) {                             \
+                        VM_STACK[_backing] = _operator_args[_pi];                                  \
+                        VM_STACK[_safe_base + _pi] = (XrValue) {0};                                \
+                        VM_STACK[_safe_base + _pi].tag = XR_TAG_PLACE;                             \
+                        VM_STACK[_safe_base + _pi].i = _backing++;                                 \
+                    } else {                                                                       \
+                        VM_STACK[_safe_base + _pi] = _operator_args[_pi];                          \
+                    }                                                                              \
                 }                                                                                  \
-                VM_STACK[_safe_base + 1] = (right_val);                                            \
                 savepc();                                                                          \
                 int _fidx = VM_FRAME_COUNT;                                                        \
                 VM_INC_FRAME_COUNT;                                                                \
@@ -659,9 +659,8 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
 // Usage: VM_TRY_UNARY_OP_OVERLOAD(vb, a, sym, "-")
 #define VM_TRY_UNARY_OP_OVERLOAD(operand_val, result_reg, op_symbol, op_name)                      \
     do {                                                                                           \
-        if (xr_value_is_instance(operand_val)) {                                                   \
-            XrInstance *_inst = xr_value_to_instance(operand_val);                                 \
-            XrClass *_cls = xr_instance_get_class(_inst);                                          \
+        if (xr_value_is_instance(operand_val) || XR_IS_AGG_REF(operand_val)) {                     \
+            XrClass *_cls = invoke_resolve_class(isolate, (operand_val));                          \
             XrMethod *_method = xr_class_lookup_method(_cls, op_symbol);                           \
             if (_method && _method->type == XMETHOD_OPERATOR && _method->as.closure) {             \
                 XrClosure *_closure = _method->as.closure;                                         \

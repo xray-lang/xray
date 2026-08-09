@@ -1289,6 +1289,14 @@ static XrType *xa_class_constructor_instance_type(XaInferContext *ctx, AstNode *
     }
 
     xa_check_class_constructor_args(ctx, node, call, class_name, class_links, class_info, NULL, 0);
+    /* An inheritable native class owns XrClassInfo for the inheritance graph,
+     * but its value type must retain builtin declaration identity
+     * (class_ref == NULL).  Attaching the synthetic analyzer metadata here
+     * would make lowering mistake PanicInfo for a user class that shadows a
+     * builtin and invoke constructor on a null/source binding. */
+    if (class_links && class_links->type && class_links->type->kind == XR_KIND_CLASS &&
+        class_links->type->instance.class_ref == NULL)
+        return xr_type_new_named_instance(ctx->analyzer->isolate, class_name);
     XrType *semantic_instance =
         xa_semantic_constructor_instance(ctx, call, semantic_type_id, class_info);
     if (semantic_instance) {
@@ -5199,10 +5207,11 @@ static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, co
     if (bind->exports) {
         XaSymbol *sym = (XaSymbol *) xr_hashmap_get(bind->exports, name);
         if (sym)
-            return sym;
+            return xa_analyzer_import_export_symbol(bind->ctx->analyzer, sym);
     }
-    return xa_default_arg_find_decl_file_symbol(
+    XaSymbol *fallback = xa_default_arg_find_decl_file_symbol(
         bind->ctx->analyzer, bind->ctx->analyzer->global_scope, bind->decl_file, name);
+    return fallback ? xa_analyzer_import_export_symbol(bind->ctx->analyzer, fallback) : NULL;
 }
 
 static void xa_bind_default_arg_export_symbols(AstNode *node, XaDefaultArgBindCtx *bind) {
@@ -5737,6 +5746,18 @@ static void xa_check_transfer_storage_param_arg(XaInferContext *ctx, AstNode *ca
     XaSymbol *move_source = xa_boundary_move_source_symbol(ctx, arg_node);
     XaSymbolLinks *source_links =
         move_source ? xa_analyzer_get_links(ctx->analyzer, move_source) : NULL;
+    if (source_links && source_links->allocation_plan.exec_local_only) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = arg_node && arg_node->line ? arg_node->line : call_node->line,
+                          .column =
+                              arg_node && arg_node->column ? arg_node->column : call_node->column};
+        xa_analyzer_add_diagnostic(
+            ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WEAK_FIELD,
+            "a weak-referenced root cannot be promoted to transferable parameter storage; pass "
+            "copy(...) instead",
+            &loc);
+        return;
+    }
     if (source_links && source_links->root_id != 0 && source_links->root_alias == XA_ROOT_UNIQUE &&
         source_links->final_move.complete && source_links->allocation_plan.complete) {
         source_links->storage_domain = XR_STORAGE_TRANSFERABLE;

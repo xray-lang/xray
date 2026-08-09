@@ -183,13 +183,26 @@ static XrValue xr_json_builtin_merge_with_rest(XrVMRuntime *X, XrValue self, XrV
 }
 
 static XrValue xr_json_builtin_parse_value(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
-    return xr_json_fn_parse(X, self, args, argc);
+    (void) self;
+    XrJsonParseResult parsed = xr_json_parse_core(X, argc >= 1 ? args[0] : xr_null());
+    if (!parsed.has_error)
+        return parsed.result;
+
+    XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID, "JSON.parse: invalid JSON");
+    xr_vm_unwind_with_trace(X, exc);
+    return xr_null();
 }
 
 static XrValue xr_json_builtin_parse_object(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
-    XrValue value = xr_json_fn_parse(X, self, args, argc);
-    if (XR_IS_MAP(value))
-        return value;
+    (void) self;
+    XrJsonParseResult parsed = xr_json_parse_core(X, argc >= 1 ? args[0] : xr_null());
+    if (parsed.has_error) {
+        XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID, "JSON.parseObject: invalid JSON");
+        xr_vm_unwind_with_trace(X, exc);
+        return xr_null();
+    }
+    if (XR_IS_MAP(parsed.result))
+        return parsed.result;
     XrValue exc = xr_panic_info_newf(X, XR_ERR_JSON_INVALID,
                                      "JSON.parseObject: root value must be an object");
     xr_vm_unwind_with_trace(X, exc);
@@ -389,7 +402,7 @@ static XrClass *create_json_utility_class(XrVMRuntime *X) {
     xr_class_builder_add_static_method(builder, "isObject", xr_json_static_is_object, 1, 0);
 
     // JSON parse/stringify — core engine in xjson_serde.c, throw wrapper above
-    xr_class_builder_add_static_method(builder, "parse", xr_json_fn_parse, 1, 0);
+    xr_class_builder_add_static_method(builder, "parse", xr_json_builtin_parse_value, 1, 0);
     xr_class_builder_add_static_method(builder, "parseValue", xr_json_builtin_parse_value, 1, 0);
     xr_class_builder_add_static_method(builder, "parseObject", xr_json_builtin_parse_object, 1, 0);
     xr_class_builder_add_static_method(builder, "stringify", xr_json_builtin_stringify, 2, 0);

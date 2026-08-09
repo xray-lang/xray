@@ -138,6 +138,32 @@ static uint32_t xaot_stdlib_generated_caps_for_symbol(const char *symbol) {
         return 0;
     if (strcmp(symbol, "time.sleep") == 0)
         return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_TIMER;
+    if (strcmp(symbol, "net.__dial") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__accept") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__read") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__readInto") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__write") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__writeBytes") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__copy") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__copyBidirectional") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__close") == 0)
+        return XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__dialTLS") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__upgradeTLS") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__sendTo") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
+    if (strcmp(symbol, "net.__recvFrom") == 0)
+        return XAOT_STDLIB_CAP_CORO | XAOT_STDLIB_CAP_NETPOLL;
     return 0;
 }
 

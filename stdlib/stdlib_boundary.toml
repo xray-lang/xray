@@ -56,10 +56,6 @@ reason = "stateful-module-slot-identity"
 symbol = "log.setLevel"
 reason = "stateful-module-slot-identity"
 
-[[hosted_fragment_deferred]]
-symbol = "log.setOutput"
-reason = "stateful-module-slot-identity"
-
 [dynamic_audit]
 # These modules still expose fixed-shape dynamic APIs and must be migrated
 # by task 196 after the typed enum error-channel and 191/197 consumer prerequisites land.

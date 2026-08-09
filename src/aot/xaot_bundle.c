@@ -192,6 +192,7 @@ static void xaot_bundle_clear_global_lowered_plans(XaotBundle *bundle) {
         return;
     memset(&bundle->entry_plan, 0, sizeof(bundle->entry_plan));
     bundle->has_entry_plan = false;
+    bundle->has_callable_reachability = false;
     xr_free(bundle->storage_plans);
     bundle->storage_plans = NULL;
     bundle->nstorage_plans = 0;
@@ -3907,6 +3908,7 @@ static bool xaot_bundle_add_link_dependency_plan(XaotBundle *bundle,
     plan = &bundle->link_dependency_plans[bundle->nlink_dependency_plans++];
     memset(plan, 0, sizeof(*plan));
     plan->link_id = summary->link_id;
+    plan->owner_func_id = summary->owner_func_id;
     plan->kind = summary->kind;
     plan->name_id = summary->name_id;
     plan->evidence = XAOT_LINK_DEP_EV_GLOBAL_SUMMARY;
@@ -4682,8 +4684,6 @@ XR_FUNC const XaotCapabilityPlan *xaot_bundle_find_capability_plan(const XaotBun
 
 XR_FUNC bool xaot_bundle_sync_transfer_capability_plans(XaotBundle *bundle) {
     uint32_t deep_copy_transfer_count = 0;
-    uint32_t body_count = 0;
-    const XaotCapabilityPlan *existing;
 
     if (!bundle)
         return false;
@@ -4692,24 +4692,23 @@ XR_FUNC bool xaot_bundle_sync_transfer_capability_plans(XaotBundle *bundle) {
             (bundle->transfer_plans[i].evidence & XAOT_TRANSFER_EV_BOUNDARY_CLONE) != 0)
             deep_copy_transfer_count++;
     }
-    existing = xaot_bundle_find_capability_plan(bundle, XG_CAP_DEEP_COPY);
-    if (existing)
-        body_count = existing->body_count;
-    if (!xaot_bundle_add_capability_plan(bundle, XG_CAP_DEEP_COPY, body_count,
-                                         deep_copy_transfer_count))
-        return false;
 
     /* Callable-flow discovery can upgrade the executable root to a coroutine
      * after the initial global-evidence plans were attached.  Synchronize the
      * canonical capability table from that refreshed entry contract before
-     * verification/link planning. */
+     * verification/link planning. Rebuild rather than merge so capabilities
+     * removed by precise Xi reachability cannot leave stale whole-package
+     * rows behind. */
+    xr_free(bundle->capability_plans);
+    bundle->capability_plans = NULL;
+    bundle->ncapability_plans = 0;
+    bundle->capability_plan_cap = 0;
     uint32_t capability_count = 0;
     const uint32_t *capabilities = xg_capability_catalog(&capability_count);
     for (uint32_t i = 0; i < capability_count; i++) {
         uint32_t cap = capabilities[i];
         uint32_t entry_count = (bundle->entry_plan.required_capability_bits & cap) != 0 ? 1u : 0u;
-        const XaotCapabilityPlan *plan = xaot_bundle_find_capability_plan(bundle, cap);
-        uint32_t transfer_count = plan ? plan->transfer_count : 0;
+        uint32_t transfer_count = cap == XG_CAP_DEEP_COPY ? deep_copy_transfer_count : 0;
         if (!xaot_bundle_add_capability_plan(bundle, cap, entry_count, transfer_count))
             return false;
     }
@@ -8069,9 +8068,10 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     for (uint32_t li = 0; li < bundle->nlink_dependency_plans; li++) {
         const XaotLinkDependencyPlan *lp = &bundle->link_dependency_plans[li];
         fprintf(out,
-                "link-dependency %u id=%u kind=%s name_id=%u name=%s evidence=0x%x reason=%u\n", li,
-                lp->link_id, xg_link_dependency_kind_name(lp->kind), lp->name_id, lp->name,
-                lp->evidence, (unsigned) lp->unproven_reason);
+                "link-dependency %u id=%u kind=%s owner=%u name_id=%u name=%s evidence=0x%x "
+                "reason=%u\n",
+                li, lp->link_id, xg_link_dependency_kind_name(lp->kind), lp->owner_func_id,
+                lp->name_id, lp->name, lp->evidence, (unsigned) lp->unproven_reason);
     }
 
     for (uint32_t ei = 0; ei < bundle->nextern_decls; ei++) {
@@ -8092,13 +8092,15 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
 
         fprintf(out,
                 "function %u name=%s module=%u depth=%u abi=%s boundary=%s params=%u "
-                "ret=%s/%s/%s may_suspend=%u captures=%u blocks=%u values=%u\n",
+                "ret=%s/%s/%s may_suspend=%u captures=%u blocks=%u values=%u body=%u "
+                "reachable=%u\n",
                 fi, safe_str(func ? func->name : NULL), plan->module_index, (unsigned) plan->depth,
                 xaot_abi_kind_name(abi->kind), xaot_boundary_reason_name(abi->boundary_reason),
                 (unsigned) abi->nparams, safe_str(abi->ret.c_type),
                 xaot_value_kind_name(abi->ret.rep.kind), rep_name(abi->ret.rep.rep),
                 (unsigned) plan->may_suspend, func ? (unsigned) func->ncaptures : 0u,
-                func ? (unsigned) func->nblocks : 0u, count_func_values(func));
+                func ? (unsigned) func->nblocks : 0u, count_func_values(func),
+                func ? (unsigned) func->xg_body_func_id : 0u, (unsigned) plan->reachable);
         dump_slot(out, "  ret", &abi->ret);
         for (pi = 0; pi < abi->nparams; pi++) {
             char prefix[32];

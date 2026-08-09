@@ -303,6 +303,12 @@ typedef struct XrProto {
     struct XrType **param_types;  // [numparams] parameter types
     uint8_t param_types_count;    // = numparams when allocated
 
+    /* bit[i]=1: parameter i uses the verified call-bound-place ABI.  Dynamic
+     * dispatch (notably operator overloads) cannot see the Xi call plan at its
+     * source call site, so it consumes this detached proto contract when
+     * constructing the callee frame. */
+    uint64_t call_place_param_bitmap;
+
     /*
      * Per-instruction type annotations (flow-sensitive, authoritative for non-params).
      * inst_types[pc] = XrType* for the result of instruction at pc (NULL = untyped).

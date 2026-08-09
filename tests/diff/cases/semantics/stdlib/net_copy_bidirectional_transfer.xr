@@ -11,23 +11,27 @@ fn bridgeOnce(listener: move NetListener) -> CopyBidirectionalResult {
     return result
 }
 
-var listener = net.listen(0, 2)!
-const port = listener.port()
-var bridge = go bridgeOnce(move listener)
-var left = net.dial("127.0.0.1", port, 1000)!
-var right = net.dial("127.0.0.1", port, 1000)!
+fn run() {
+    var listener = net.listen(0, 2)!
+    const port = listener.port()
+    var bridge = go bridgeOnce(move listener)
+    var left = net.dial("127.0.0.1", port, 1000)!
+    var right = net.dial("127.0.0.1", port, 1000)!
 
-net.write(left, "left")
-net.write(right, "right")
-net.shutdownWrite(left)
-net.shutdownWrite(right)
+    net.write(left, "left")
+    net.write(right, "right")
+    net.shutdownWrite(left)
+    net.shutdownWrite(right)
 
-print(net.read(left)!)
-print(net.read(right)!)
+    print(net.read(left)!)
+    print(net.read(right)!)
 
-var result = await bridge
-print(result.aToB)
-print(result.bToA)
+    var result = await bridge
+    print(result.aToB)
+    print(result.bToA)
 
-net.close(left)
-net.close(right)
+    net.close(left)
+    net.close(right)
+}
+
+run()

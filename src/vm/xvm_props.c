@@ -169,11 +169,10 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
 
     // Struct ref: stored field write or setter method
     if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SLICE_REF(obj)) {
-        uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
         XrAggregateLayout *slayout = NULL;
         uint8_t *payload = xr_vm_struct_ref_payload(isolate, obj, &slayout);
         XrClass *scls =
-            (slayout && !xr_aggregate_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
+            slayout ? xr_vm_struct_layout_class(&isolate->vm, xr_aggregate_layout_id(obj)) : NULL;
 
         // Try stored field first
         int fidx = xr_vm_struct_layout_field_index(isolate, slayout, prop_symbol);
@@ -272,6 +271,21 @@ XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrVMRuntime *isolate, XrVMCo
 
     if (!setter)
         return XR_DISP_FALLTHROUGH;
+
+    if (setter->type == XMETHOD_PRIMITIVE && setter->as.primitive) {
+        if (setter->param_count != 1) {
+            VM_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT, "setter should have one parameter");
+        }
+        (void) setter->as.primitive(isolate, obj, &value, 1);
+        if (!XR_IS_NULL(vm_ctx->current_exception))
+            return xr_vm_is_catch_reachable(isolate) ? XR_DISP_RAISE : XR_DISP_FATAL;
+        return XR_DISP_NEXT;
+    }
+
+    if (setter->type != XMETHOD_CLOSURE || !setter->as.closure) {
+        VM_THROW(frame, pc, XR_ERR_TYPE_NO_METHOD,
+                 "property setter is not a synchronous closure or primitive");
+    }
 
     XrClosure *closure = setter->as.closure;
     XrProto *proto = closure->proto;
@@ -823,10 +837,9 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrVMRuntime *isolate, XrVMCont
 
     // Struct ref: getter/method lookup when field not found in layout
     if (XR_IS_AGG_REF(obj) && !XR_IS_ARRAY_REF(obj) && !XR_IS_SLICE_REF(obj)) {
-        uint8_t *sptr = (uint8_t *) xr_to_struct_ptr(obj);
         XrAggregateLayout *slayout = xr_vm_struct_ref_layout(isolate, obj);
         XrClass *scls =
-            (slayout && !xr_aggregate_layout_is_headerless(slayout)) ? *(XrClass **) sptr : NULL;
+            slayout ? xr_vm_struct_layout_class(&isolate->vm, xr_aggregate_layout_id(obj)) : NULL;
         XrSymbolTable *sym_table = (XrSymbolTable *) isolate->core_rt->symbol_table;
         const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
         if (prop_name && scls) {

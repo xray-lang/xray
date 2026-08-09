@@ -322,7 +322,7 @@ static char *bc_read_optional_string(BcReader *r);
 
 /* ========== Canonical Aggregate Layout Table ========== */
 
-#define BC_LAYOUT_FORMAT_VERSION 2u
+#define BC_LAYOUT_FORMAT_VERSION 3u
 #define BC_MAX_LAYOUTS 4096u
 #define BC_MAX_LAYOUT_DEPTH 16u
 
@@ -419,7 +419,8 @@ static bool bc_write_layout_table(BcWriter *w) {
         if (!bc_put_u32(w, BC_LAYOUT_FORMAT_VERSION) || !bc_put_u64(w, entry->key) ||
             !bc_put_u64(w, layout->target_abi_hash) || !bc_put_u8(w, layout->kind) ||
             !bc_put_u32(w, layout->total_size) || !bc_put_u32(w, layout->alignment) ||
-            !bc_put_u32(w, layout->explicit_align) || !bc_put_u16(w, layout->field_count))
+            !bc_put_u32(w, layout->explicit_align) ||
+            !bc_put_optional_string(w, layout->nominal_name) || !bc_put_u16(w, layout->field_count))
             return false;
         for (uint16_t fi = 0; fi < layout->field_count; fi++) {
             const XrAggregateFieldLayout *field = &layout->fields[fi];
@@ -590,23 +591,29 @@ static bool bc_read_layout_table(BcReader *r) {
         uint32_t total_size = bc_get_u32(r);
         uint32_t alignment = bc_get_u32(r);
         uint32_t explicit_align = bc_get_u32(r);
+        char *nominal_name = bc_read_optional_string(r);
         uint16_t field_count = bc_get_u16(r);
-        if (r->error != XR_BC_OK)
+        if (r->error != XR_BC_OK) {
+            xr_free(nominal_name);
             return false;
+        }
         if (format != BC_LAYOUT_FORMAT_VERSION || entry->key == 0 ||
             (li > 0 && entry->key <= previous_key) || kind > XR_AGG_LAYOUT_UNION ||
             total_size > UINT16_MAX || alignment == 0 || alignment > UINT16_MAX ||
             field_count > XR_MAX_AGG_FIELDS) {
+            xr_free(nominal_name);
             r->error = XR_BC_ERR_CORRUPT;
             return false;
         }
         if (target_hash != target->stable_hash) {
+            xr_free(nominal_name);
             r->error = XR_BC_ERR_TARGET_ABI;
             return false;
         }
         previous_key = entry->key;
         XrAggregateLayout *layout = (XrAggregateLayout *) xr_calloc(1, sizeof(*layout));
         if (!layout) {
+            xr_free(nominal_name);
             r->error = XR_BC_ERR_ALLOC;
             return false;
         }
@@ -616,6 +623,7 @@ static bool bc_read_layout_table(BcReader *r) {
         layout->total_size = (uint16_t) total_size;
         layout->alignment = alignment;
         layout->explicit_align = explicit_align;
+        layout->nominal_name = nominal_name;
         layout->field_count = field_count;
         if (field_count > 0) {
             layout->field_names = (const char **) xr_calloc(field_count, sizeof(char *));
@@ -1696,6 +1704,8 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         return false;
     if (!bc_put_u32(w, proto->struct_area_size))
         return false;
+    if (!bc_put_u64(w, proto->call_place_param_bitmap))
+        return false;
     if (!bc_put_u8(w, proto->is_vararg ? 1 : 0))
         return false;
     if (!bc_put_u8(w, proto->is_coro_safe ? 1 : 0))
@@ -1878,6 +1888,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     proto->num_globals = bc_get_u32(r);
     uint32_t struct_area_size = bc_get_u32(r);
     proto->struct_area_size = struct_area_size;
+    proto->call_place_param_bitmap = bc_get_u64(r);
     proto->is_vararg = bc_get_u8(r) != 0;
     proto->is_coro_safe = bc_get_u8(r) != 0;
     if (r->error != XR_BC_OK)

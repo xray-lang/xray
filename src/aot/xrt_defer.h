@@ -114,11 +114,11 @@ static inline int xrt_defer_mark(XrtDeferScope *s) {
  * The in-flight error is parked across the call so the callee starts from a
  * clean slot and any pending error afterwards is unambiguously the defer's own.
  *
- * The closure itself is not released here because it can capture upvalues that
- * were borrowed, rather than retained, at capture time. Running its destructor
- * would over-release them. AOT heap objects currently remain live until process
- * exit, so deterministic defer-closure reclamation needs an ownership model
- * that distinguishes borrowed captures. */
+ * XI_DEFER consumes the closure. Heap closures in closed IR own every captured
+ * value: argument-sourced captures move their reference into the upvalue slot,
+ * while enclosing-upvalue captures take an explicit retain in codegen. Release
+ * the consumed closure after invocation so its captured graph is reclaimed at
+ * the lexical cleanup point instead of surviving until execution-arena sweep. */
 static inline void xrt_defer_invoke_one(XrValue closure) {
     XrValue saved_error = xrt_pending_error;
     int had_error = xrt_has_pending_error();
@@ -134,6 +134,8 @@ static inline void xrt_defer_invoke_one(XrValue closure) {
         xrt_defer_depth--;
         xrt_defer_exc_barrier = outer_barrier;
     }
+
+    xrt_release(closure);
 
     if (xrt_has_pending_error())
         xr_error_core_defer_throw_abort(XR_ERR_DEFER_THROW,

@@ -9,9 +9,9 @@
  *
  * KEY CONCEPT:
  *   RFC 8259 compliant JSON parser and serializer. Handles escape sequences,
- *   Unicode (\uXXXX), and proper type conversion between JSON and xray values.
- *   Enum values serialize as member name strings; DateTime as ISO 8601.
- *   Non-serializable types (function, class, channel) cause stringify to
+ *   Unicode (\uXXXX), and proper type conversion between JSON and Xray values.
+ *   Enum values serialize as member name strings. Values outside the
+ *   JSON.Encodable domain (function, non-derived class, opaque handle) cause stringify to
  *   return an error result; the caller (xjson_builtins.c) decides whether
  *   to throw. This keeps the serde layer free of VM dependencies.
  */
@@ -40,33 +40,6 @@
 #include "../symbol/xsymbol_table.h"
 #include "../xisolate_internal.h"
 #include "../value/xtype_names.h"
-
-static bool json_value_is_named_datetime(XrValue val, XrInstance **out_inst) {
-    if (!xr_value_is_instance(val))
-        return false;
-    XrInstance *inst = xr_value_to_instance(val);
-    XrClass *cls = inst ? xr_instance_get_class(inst) : NULL;
-    const char *name = cls ? xr_class_display_name(cls) : NULL;
-    if (!name || strcmp(name, "DateTime") != 0)
-        return false;
-    if (out_inst)
-        *out_inst = inst;
-    return true;
-}
-
-static bool json_datetime_call_string(XrVMRuntime *X, XrInstance *inst, const char *method,
-                                      XrString **out) {
-    if (out)
-        *out = NULL;
-    if (!X || !inst || !method)
-        return false;
-    XrValue result = xr_instance_call_method(X, inst, method, NULL, 0);
-    if (!XR_IS_STRING(result))
-        return false;
-    if (out)
-        *out = XR_TO_STRING(result);
-    return true;
-}
 
 /* ========== JSON Parser ========== */
 
@@ -1670,14 +1643,6 @@ static void stringify_value(JsonWriter *w, XrValue val) {
             stringify_string(w, name, strlen(name));
         else
             writer_str(w, "null");
-    } else if (json_value_is_named_datetime(val, NULL)) {
-        XrInstance *dt_inst = xr_value_to_instance(val);
-        XrString *iso = NULL;
-        if (json_datetime_call_string(w->isolate, dt_inst, "toISOString", &iso) && iso) {
-            stringify_string(w, iso->data, iso->length);
-        } else {
-            writer_str(w, "null");
-        }
     } else if (xr_value_is_instance(val)) {
         // Struct or Class instance
         XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
@@ -1853,12 +1818,6 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
         if (!name)
             name = "";
         *out = xr_string_value(xr_string_intern(e->isolate, name, strlen(name), 0));
-    } else if (json_value_is_named_datetime(val, NULL)) {
-        XrInstance *dt_inst = xr_value_to_instance(val);
-        XrString *iso = NULL;
-        *out = json_datetime_call_string(e->isolate, dt_inst, "toISOString", &iso) && iso
-                   ? xr_string_value(iso)
-                   : xr_null();
     } else if (xr_value_is_instance(val)) {
         XrInstance *inst = (XrInstance *) XR_TO_PTR(val);
         XrClass *cls = xr_instance_get_class(inst);
@@ -1880,18 +1839,15 @@ static void encode_value(JsonEncoder *e, XrValue val, XrValue *out) {
 
 /* ========== Public Functions ========== */
 
-// parse(str) - Parse JSON string
-XrValue xr_json_fn_parse(XrVMRuntime *X, XrValue self, XrValue *args, int argc) {
-    (void) self;
-    if (argc < 1 || !XR_IS_STRING(args[0])) {
-        return xr_null();
-    }
+XrJsonParseResult xr_json_parse_core(XrVMRuntime *X, XrValue text) {
+    XrJsonParseResult out = {.result = xr_null(), .has_error = true};
+    if (!XR_IS_STRING(text))
+        return out;
 
-    XrString *str = XR_TO_STRING(args[0]);
-    XrValue result = xr_null();
-    if (!json_parse_runtime_direct(X, str->data, str->length, &result))
-        return xr_null();
-    return result;
+    XrString *str = XR_TO_STRING(text);
+    if (json_parse_runtime_direct(X, str->data, str->length, &out.result))
+        out.has_error = false;
+    return out;
 }
 
 // Core stringify: serialize value to string, return result + error info.

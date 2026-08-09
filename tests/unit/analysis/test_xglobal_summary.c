@@ -701,6 +701,7 @@ static void init_cache_key_fixture(XgGlobalEvidence *ev, XgBuildKey key) {
     XgLinkDependencySummary link = {.link_id = 1,
                                     .module_id = key.module_id,
                                     .decl_id = 1,
+                                    .owner_func_id = 1,
                                     .source_span_id = 43,
                                     .name_id = 13,
                                     .kind = XG_LINK_DEP_STDLIB_SYMBOL};
@@ -844,7 +845,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=41 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=42 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1218,15 +1219,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=41 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=41 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=41 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=41 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=42 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=42 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=42 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=42 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=41 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=41 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=41 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=41 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=42 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=42 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=42 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=42 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -1248,9 +1249,12 @@ TEST(global_evidence_dump_lists_core_rows) {
     ASSERT_NOT_NULL(strstr(dump, "metadata=0x8[tooling]"));
     ASSERT_NOT_NULL(strstr(dump, "static=0x10[runtime_init]"));
     ASSERT_NOT_NULL(strstr(dump, "callsite 0 id=5 owner=4 node=703 span=0 kind=method ordinal=2"));
-    ASSERT_NOT_NULL(strstr(dump, "link-dep 0 id=6 module=1 decl=2 span=77 kind=extern_dylib"));
-    ASSERT_NOT_NULL(strstr(dump, "link-dep 1 id=7 module=1 decl=0 span=78 kind=stdlib_module"));
-    ASSERT_NOT_NULL(strstr(dump, "link-dep 2 id=8 module=1 decl=0 span=79 kind=stdlib_symbol"));
+    ASSERT_NOT_NULL(
+        strstr(dump, "link-dep 0 id=6 module=1 decl=2 owner=0 span=77 kind=extern_dylib"));
+    ASSERT_NOT_NULL(
+        strstr(dump, "link-dep 1 id=7 module=1 decl=0 owner=0 span=78 kind=stdlib_module"));
+    ASSERT_NOT_NULL(
+        strstr(dump, "link-dep 2 id=8 module=1 decl=0 owner=0 span=79 kind=stdlib_symbol"));
     ASSERT_NOT_NULL(strstr(dump, "generic-inst 0 id=9 module=1 kind=method"));
     ASSERT_NOT_NULL(strstr(dump, "origin_decl=2 origin_func=4 origin_method=3 origin_class=2"));
     ASSERT_NOT_NULL(strstr(dump, "root_callsite=5 constraint_iface=123"));
@@ -13351,6 +13355,42 @@ TEST(entry_plan_elides_unreachable_coroutine_capabilities) {
     xg_global_evidence_free(&ev);
 }
 
+TEST(parallel_intrinsic_scan_uses_prepared_reachability) {
+    XiFunc *entry = xi_func_new("entry", &stub_int_type);
+    XiFunc *dead = xi_func_new("dead_parallel", &stub_int_type);
+    ASSERT_NOT_NULL(entry);
+    ASSERT_NOT_NULL(dead);
+    XiBlock *dead_block = xi_block_new(dead);
+    ASSERT_NOT_NULL(dead_block);
+    ASSERT_NOT_NULL(xi_value_new(dead, dead_block, XI_PAR_FOR, &stub_int_type, 0));
+
+    XiModule module;
+    memset(&module, 0, sizeof(module));
+    module.path = "entry_dead_parallel.xr";
+    module.name = "entry_dead_parallel";
+    module.init = entry;
+    XiModule *modules[1] = {&module};
+
+    XaotBundle bundle;
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    XaotFuncPlan *entry_plan = xaot_bundle_add_func_plan(&bundle, entry, 0, 0);
+    XaotFuncPlan *dead_plan = xaot_bundle_add_func_plan(&bundle, dead, 0, 0);
+    ASSERT_NOT_NULL(entry_plan);
+    ASSERT_NOT_NULL(dead_plan);
+    ASSERT_TRUE(xaot_bundle_uses_parallel_intrinsic(&bundle));
+
+    entry_plan->reachable = 1;
+    dead_plan->reachable = 0;
+    bundle.has_callable_reachability = true;
+    ASSERT_TRUE(!xaot_bundle_uses_parallel_intrinsic(&bundle));
+    dead_plan->reachable = 1;
+    ASSERT_TRUE(xaot_bundle_uses_parallel_intrinsic(&bundle));
+
+    xaot_bundle_free(&bundle);
+    xi_func_free(dead);
+    xi_func_free(entry);
+}
+
 TEST(entry_plan_includes_imported_module_initializer_capabilities) {
     XgBuildKey key = {.source_hash = 0x198,
                       .compiler_semver_hash = 2,
@@ -13896,6 +13936,7 @@ RUN_TEST(xaot_verifier_rejects_stale_enum_scalar_plan);
 RUN_TEST(global_evidence_producer_marks_module_init_body);
 RUN_TEST(entry_plan_uses_only_reachable_effects_and_provider_contract);
 RUN_TEST(entry_plan_elides_unreachable_coroutine_capabilities);
+RUN_TEST(parallel_intrinsic_scan_uses_prepared_reachability);
 RUN_TEST(entry_plan_includes_imported_module_initializer_capabilities);
 RUN_TEST(storage_and_capture_plans_close_owner_actions);
 RUN_TEST(global_evidence_producer_records_storage_provenance);

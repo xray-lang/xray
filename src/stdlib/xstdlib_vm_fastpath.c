@@ -378,6 +378,34 @@ static bool stdlib_host_array_set(void *host, XrValue value, uint64_t index, XrV
     return true;
 }
 
+static bool stdlib_host_byte_span_view(void *host, XrValue value,
+                                       XrHostedFragmentByteSpanView *out) {
+    (void) host;
+    if (!out)
+        return false;
+    memset(out, 0, sizeof(*out));
+    if (XR_IS_SLICE_REF(value)) {
+        const XrSliceView *slice = XR_TO_SLICE_REF(value);
+        if (!slice || slice->length < 0 || XR_SLICE_REF_ELEM_TYPE(value) != XR_ELEM_U8 ||
+            XR_SLICE_REF_ELEM_SIZE(value) != 1 || (!slice->data && slice->length != 0))
+            return false;
+        out->data = (uint8_t *) slice->data;
+        out->length = (uint64_t) slice->length;
+        out->readonly = XR_SLICE_REF_IS_READONLY(value) ? 1u : 0u;
+        return true;
+    }
+    if (XR_IS_ARRAY(value) && value.ptr) {
+        const XrArray *array = (const XrArray *) value.ptr;
+        if (array->length < 0 || array->elem_type != XR_ELEM_U8 || array->elem_size != 1 ||
+            (!array->data && array->length != 0))
+            return false;
+        out->data = (uint8_t *) array->data;
+        out->length = (uint64_t) array->length;
+        return true;
+    }
+    return false;
+}
+
 static void stdlib_host_retain(void *host, XrValue value) {
     (void) host;
     xr_rc_retain_value(value);
@@ -400,6 +428,7 @@ const XrHostedFragmentHostOps xr_stdlib_vm_fastpath_host_ops = {
     .array_get = stdlib_host_array_get,
     .array_new = stdlib_host_array_new,
     .array_set = stdlib_host_array_set,
+    .byte_span_view = stdlib_host_byte_span_view,
     .object_view = stdlib_host_object_view,
     .object_new = stdlib_host_object_new,
     .retain = stdlib_host_retain,

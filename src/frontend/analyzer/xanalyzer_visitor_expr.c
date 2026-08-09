@@ -2813,10 +2813,17 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
     // Reject `[...]` indexing of a possibly-null container (strict null checks).
     xa_check_nullable_access(ctx, node, ig->array, container, "index access", true);
 
-    /* Visit the index expression so variable references get their symbol_id resolved */
+    /* The key is contextually typed by the container. This must mirror index
+     * writes: otherwise `m[1] = v` can store a float/i32 key while the matching
+     * `m[1]` read is diagnosed as an int-key access. */
     XrType *index_type = NULL;
     if (ig->index) {
+        XrType *key_expected = xa_index_key_expected_type(ctx, container);
+        XrType *saved_key_expected = ctx->expected_type;
+        if (key_expected && !XR_TYPE_IS_UNKNOWN(key_expected))
+            ctx->expected_type = key_expected;
         index_type = xa_visit_infer_expr(ctx, ig->index);
+        ctx->expected_type = saved_key_expected;
     }
 
     if (container && XR_TYPE_IS_ERROR(container))
@@ -3967,6 +3974,7 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     if (!class_sym) {
         class_sym = xa_scope_lookup(ctx->analyzer->global_scope, ne->class_name);
     }
+    ne->class_symbol_id = class_sym && class_sym->kind == XA_SYM_CLASS ? class_sym->id : 0;
 
     XrClassInfo *class_info = NULL;
     XaSymbolLinks *class_links = NULL;
@@ -5292,7 +5300,14 @@ bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
         case XR_KIND_STRUCT_OBJECT:
             return true;
         case XR_KIND_INSTANCE:
-            return xr_type_is_builtin_named_class(type, "StringBuilder");
+            return xa_type_declares_weak_field(type) ||
+                   xr_type_is_builtin_named_class(type, "StringBuilder");
+        case XR_KIND_TUPLE:
+            for (uint16_t i = 0; i < type->tuple.element_count; i++) {
+                if (xa_boundary_transfer_type_needs_explicit(type->tuple.element_types[i]))
+                    return true;
+            }
+            return false;
         case XR_KIND_UNION:
             for (uint8_t i = 0; i < type->union_type.member_count; i++) {
                 if (xa_boundary_transfer_type_needs_explicit(type->union_type.members[i]))
@@ -5323,8 +5338,9 @@ bool xa_boundary_arg_is_shared(XaInferContext *ctx, AstNode *arg_node) {
             ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, arg_node->as.variable.symbol_id)
             : (name ? xa_scope_lookup(ctx->analyzer->current_scope, name) : NULL);
     XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
-    if (!links || (links->value_capability != XA_CAP_CONST &&
-                   links->value_capability != XA_CAP_SYNC_INTERIOR_MUTABLE))
+    if (!links || links->allocation_plan.exec_local_only ||
+        (links->value_capability != XA_CAP_CONST &&
+         links->value_capability != XA_CAP_SYNC_INTERIOR_MUTABLE))
         return false;
     if (links->storage_domain == XR_STORAGE_CONST_SHARED ||
         links->storage_domain == XR_STORAGE_SYNC_SHARED ||
@@ -5355,9 +5371,10 @@ XaSymbol *xa_boundary_move_source_symbol(XaInferContext *ctx, AstNode *arg_node)
 static bool xa_boundary_arg_is_verified_move(XaInferContext *ctx, AstNode *arg_node) {
     XaSymbol *sym = xa_boundary_move_source_symbol(ctx, arg_node);
     XaSymbolLinks *links = sym ? xa_analyzer_get_links(ctx->analyzer, sym) : NULL;
-    if (!links || links->root_id == 0 || links->root_alias != XA_ROOT_UNIQUE ||
-        links->value_capability == XA_CAP_UNKNOWN || !links->ownership_candidate.complete ||
-        !links->final_move.complete || !links->allocation_plan.complete)
+    if (!links || links->allocation_plan.exec_local_only || links->root_id == 0 ||
+        links->root_alias != XA_ROOT_UNIQUE || links->value_capability == XA_CAP_UNKNOWN ||
+        !links->ownership_candidate.complete || !links->final_move.complete ||
+        !links->allocation_plan.complete)
         return false;
     /* Boundary context is a compile-time constraint on the allocation
      * instance, not a runtime promotion. Re-solve materialization before Xi
@@ -5412,15 +5429,50 @@ void xa_check_boundary_transfer_arg(XaInferContext *ctx, AstNode *boundary_node,
         xa_check_span_value_escape(ctx, arg_node, arg_type, context);
         return;
     }
-    if (!xa_boundary_transfer_type_needs_explicit(arg_type))
+    bool explicit_copy = xa_boundary_arg_is_explicit_copy(arg_node);
+    if (xa_type_declares_weak_field(arg_type)) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = arg_node->line ? arg_node->line
+                                                 : (boundary_node ? boundary_node->line : 0),
+                          .column = arg_node->column ? arg_node->column
+                                                     : (boundary_node ? boundary_node->column : 0)};
+        char msg[288];
+        snprintf(msg, sizeof(msg),
+                 "%s cannot transfer type '%s': instances with weak fields are "
+                 "execution-local",
+                 boundary_label ? boundary_label : "cross-coroutine value",
+                 xr_type_to_string(arg_type));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WEAK_FIELD, msg,
+                                   &loc);
         return;
+    }
+    AstNode *source_expr = arg_node->type == AST_MOVE_EXPR ? arg_node->as.move_expr.expr : arg_node;
+    XaSymbol *source = xa_whole_binding_symbol(ctx, source_expr);
+    XaSymbolLinks *source_links = source ? xa_analyzer_get_links(ctx->analyzer, source) : NULL;
+    if (!explicit_copy && source_links && source_links->allocation_plan.exec_local_only) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = arg_node->line ? arg_node->line
+                                                 : (boundary_node ? boundary_node->line : 0),
+                          .column = arg_node->column ? arg_node->column
+                                                     : (boundary_node ? boundary_node->column : 0)};
+        char msg[288];
+        snprintf(msg, sizeof(msg),
+                 "%s cannot transfer weak-referenced root '%s'; send copy(%s) instead",
+                 boundary_label ? boundary_label : "cross-coroutine value",
+                 source->name ? source->name : "?", source->name ? source->name : "?");
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WEAK_FIELD, msg,
+                                   &loc);
+        return;
+    }
     if (arg_node->type == AST_MOVE_EXPR) {
         if (xa_boundary_arg_is_verified_move(ctx, arg_node))
             return;
         xa_report_boundary_local_move(ctx, boundary_node, arg_node, boundary_label);
         return;
     }
-    if (xa_boundary_arg_is_explicit_copy(arg_node) || xa_boundary_arg_is_shared(ctx, arg_node) ||
+    if (!xa_boundary_transfer_type_needs_explicit(arg_type))
+        return;
+    if (explicit_copy || xa_boundary_arg_is_shared(ctx, arg_node) ||
         (arg_type && xr_type_is_const(arg_type)))
         return;
 

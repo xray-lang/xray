@@ -180,6 +180,9 @@ typedef struct MethodDeclNode {
 typedef struct NewExprNode {
     char *module_name;
     char *class_name;
+    /* Analyzer-resolved nominal declaration identity.  Lowering must not
+     * rediscover a class/struct by spelling after leaving the source scope. */
+    uint32_t class_symbol_id;
     AstNode **arguments;
     XrCallArgAccess *arg_accesses;
     int arg_count;

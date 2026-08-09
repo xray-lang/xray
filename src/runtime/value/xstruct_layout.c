@@ -162,6 +162,7 @@ static uint64_t aggregate_layout_stable_key_depth(const XrAggregateLayout *layou
     hash = layout_hash_word(hash, layout->total_size);
     hash = layout_hash_word(hash, layout->alignment);
     hash = layout_hash_word(hash, layout->field_count);
+    hash = layout_hash_string(hash, layout->nominal_name);
     for (uint16_t i = 0; i < layout->field_count && i < XR_MAX_AGG_FIELDS; i++) {
         const XrAggregateFieldLayout *field = &layout->fields[i];
         hash = layout_hash_string(hash, layout->field_names ? layout->field_names[i] : NULL);
@@ -190,6 +191,9 @@ static bool aggregate_layout_equal_depth(const XrAggregateLayout *left,
         left->kind != right->kind || left->explicit_align != right->explicit_align ||
         left->total_size != right->total_size || left->alignment != right->alignment ||
         left->field_count != right->field_count || left->field_count > XR_MAX_AGG_FIELDS)
+        return false;
+    if ((left->nominal_name == NULL) != (right->nominal_name == NULL) ||
+        (left->nominal_name && strcmp(left->nominal_name, right->nominal_name) != 0))
         return false;
     for (uint16_t i = 0; i < left->field_count; i++) {
         const XrAggregateFieldLayout *lf = &left->fields[i];
@@ -221,6 +225,7 @@ void xr_aggregate_layout_free_owned(XrAggregateLayout *layout) {
             xr_free((void *) layout->field_names[i]);
         xr_free(layout->field_names);
     }
+    xr_free((void *) layout->nominal_name);
     xr_free(layout);
 }
 

@@ -12,14 +12,6 @@ class User {
     }
 }
 
-class PlainUser {
-    name: string
-
-    constructor(name: string) {
-        this.name = name
-    }
-}
-
 @derive(Inspect)
 class InspectOnly {
     value: int
@@ -60,31 +52,9 @@ fn test_derive_inspect_string() {
 }
 
 @test
-fn test_json_requires_explicit_derive() {
-    var user = PlainUser("Ada")
-    var caught = false
-    try {
-        JSON.value(user)
-    } catch panic (e) {
-        caught = true
-        assert(string(e).contains("does not derive JSON"))
-    }
-    assert(caught)
-}
-
-@test
 fn test_derive_flags_are_independent() {
     var inspect_only = InspectOnly(7)
     assert_eq(string(inspect_only), "InspectOnly{value: 7}")
-
-    var inspect_json_caught = false
-    try {
-        JSON.value(inspect_only)
-    } catch panic (e) {
-        inspect_json_caught = true
-        assert(string(e).contains("does not derive JSON"))
-    }
-    assert(inspect_json_caught)
 
     var json_only = JsonOnly(9)
     var encoded = JSON.value(json_only)

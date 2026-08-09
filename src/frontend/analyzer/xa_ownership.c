@@ -69,8 +69,8 @@ static bool xa_owner_paths_may_overlap(const char *borrow_path, const char *muta
 }
 
 static bool xa_active_loan_may_be_live_after_mutation(XaInferContext *ctx, XaActiveLoan *borrow) {
-    if (borrow && (borrow->loan.kind == XA_LOAN_DEFER_CAPTURE ||
-                   borrow->loan.kind == XA_LOAN_DEFER_SNAPSHOT))
+    if (borrow &&
+        (borrow->loan.kind == XA_LOAN_DEFER_CAPTURE || borrow->loan.kind == XA_LOAN_DEFER_SNAPSHOT))
         return true;
     if (!ctx || !ctx->analyzer || !borrow || !borrow->borrower_symbol ||
         !borrow->borrower_symbol->name)
@@ -218,9 +218,9 @@ XR_FUNC void xa_clear_active_loans_in_scope(XaInferContext *ctx, XaScope *scope)
 
 /* Record one live loan of `owner` (or of the place `owner_path` inside it)
  * held by `borrower_sym`. The loan ends at the borrower's last use. */
-static void xa_add_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym,
-                               XaScope *borrower_scope, XaSymbol *owner,
-                               const char *owner_path, XaLoanKind kind, AstNode *site) {
+static void xa_add_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym, XaScope *borrower_scope,
+                               XaSymbol *owner, const char *owner_path, XaLoanKind kind,
+                               AstNode *site) {
     if (!ctx || !owner || owner == borrower_sym)
         return;
     XaActiveLoan *loan = xr_calloc(1, sizeof(XaActiveLoan));
@@ -237,8 +237,8 @@ static void xa_add_active_loan(XaInferContext *ctx, XaSymbol *borrower_sym,
     if (owner_path && owner_path[0] != '\0')
         loan->owner_path = xr_strdup(owner_path);
     loan->borrower_symbol = borrower_sym;
-    loan->borrower_scope = borrower_scope ? borrower_scope
-                                          : (borrower_sym ? borrower_sym->scope : NULL);
+    loan->borrower_scope =
+        borrower_scope ? borrower_scope : (borrower_sym ? borrower_sym->scope : NULL);
     if (!loan->borrower_scope) {
         xr_free(loan->owner_path);
         xr_free(loan);
@@ -325,8 +325,7 @@ XR_FUNC void xa_register_pending_capture_loans(XaInferContext *ctx, XaSymbol *bo
     ctx->pending_capture_count = 0;
 }
 
-XR_FUNC void xa_register_pending_defer_loans(XaInferContext *ctx, AstNode *site,
-                                             bool is_snapshot) {
+XR_FUNC void xa_register_pending_defer_loans(XaInferContext *ctx, AstNode *site, bool is_snapshot) {
     if (!ctx || !ctx->analyzer)
         return;
     XaScope *lifetime_scope = ctx->analyzer->current_scope;
@@ -420,15 +419,13 @@ XR_FUNC void xa_check_active_loan_owner_path_mutation(XaInferContext *ctx, AstNo
     if (!ctx || !ctx->analyzer || !owner_sym || !loc_node)
         return;
     for (XaActiveLoan *b = ctx->active_loans; b; b = b->next) {
-        if ((b->loan.kind == XA_LOAN_DEFER_CAPTURE ||
-             b->loan.kind == XA_LOAN_DEFER_SNAPSHOT) &&
+        if ((b->loan.kind == XA_LOAN_DEFER_CAPTURE || b->loan.kind == XA_LOAN_DEFER_SNAPSHOT) &&
             (!operation || (strcmp(operation, "moving the owner") != 0 &&
                             strcmp(operation, "returning the owner") != 0)))
             continue;
         bool same_owner = b->owner_symbol == owner_sym;
         bool defer_root_match =
-            (b->loan.kind == XA_LOAN_DEFER_CAPTURE ||
-             b->loan.kind == XA_LOAN_DEFER_SNAPSHOT) &&
+            (b->loan.kind == XA_LOAN_DEFER_CAPTURE || b->loan.kind == XA_LOAN_DEFER_SNAPSHOT) &&
             b->loan.root != 0 && owner_sym->links.root_id == b->loan.root;
         if (!same_owner && !defer_root_match)
             continue;
@@ -441,18 +438,16 @@ XR_FUNC void xa_check_active_loan_owner_path_mutation(XaInferContext *ctx, AstNo
         XrLocation loc = {
             .file = ctx->file_path, .line = loc_node->line, .column = loc_node->column};
         char msg[320];
-        if (b->loan.kind == XA_LOAN_DEFER_CAPTURE ||
-            b->loan.kind == XA_LOAN_DEFER_SNAPSHOT) {
+        if (b->loan.kind == XA_LOAN_DEFER_CAPTURE || b->loan.kind == XA_LOAN_DEFER_SNAPSHOT) {
             const char *form = b->loan.kind == XA_LOAN_DEFER_SNAPSHOT ? "snapshotted" : "captured";
-            const char *verb = operation && strcmp(operation, "moving the owner") == 0
-                                   ? "move"
-                                   : (operation && strcmp(operation, "returning the owner") == 0
-                                          ? "return"
-                                          : "mutate");
+            const char *verb =
+                operation && strcmp(operation, "moving the owner") == 0
+                    ? "move"
+                    : (operation && strcmp(operation, "returning the owner") == 0 ? "return"
+                                                                                  : "mutate");
             snprintf(msg, sizeof(msg),
                      "cannot %s '%s': a defer in this block holds it (%s at line %u)", verb,
-                     owner_sym->name ? owner_sym->name : "?", form,
-                     (unsigned) b->site_line);
+                     owner_sym->name ? owner_sym->name : "?", form, (unsigned) b->site_line);
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_BORROW_CONFLICT, msg, &loc);
             return;
@@ -490,6 +485,30 @@ XR_FUNC void xa_note_owner_escapes_into_heap(XaInferContext *ctx, AstNode *value
     if (!links || links->root_id == 0 || !xa_type_has_movable_root(links->type))
         return;
     xa_mark_root_alias_state(ctx, links->root_id, XA_ROOT_ESCAPED);
+}
+
+static void xa_mark_scope_root_exec_local_only(XaScope *scope, XaRootId root) {
+    if (!scope || root == 0)
+        return;
+    for (XaSymbol *symbol = scope->owned_symbols; symbol; symbol = symbol->scope_owned_next) {
+        XaSymbolLinks *links = &symbol->links;
+        if (links->root_id != root)
+            continue;
+        links->storage_domain = XR_STORAGE_EXEC_LOCAL;
+        links->allocation_plan.domain = XR_STORAGE_EXEC_LOCAL;
+        links->allocation_plan.materialization = XR_MATERIALIZE_EXEC_HEAP;
+        links->allocation_plan.exec_local_only = true;
+        links->allocation_plan.evidence |= XA_OWNERSHIP_EV_STORAGE;
+        links->allocation_plan.evidence &= ~XA_OWNERSHIP_EV_TRANSFER;
+    }
+    for (int i = 0; i < scope->child_count; i++)
+        xa_mark_scope_root_exec_local_only(scope->children[i], root);
+}
+
+XR_FUNC void xa_mark_root_exec_local_only(XaInferContext *ctx, XaRootId root) {
+    if (!ctx || !ctx->analyzer || !ctx->analyzer->global_scope || root == 0)
+        return;
+    xa_mark_scope_root_exec_local_only(ctx->analyzer->global_scope, root);
 }
 
 /* The uniqueness evidence `move` requires (LANGUAGE_SPEC 2.13.5). Every axis

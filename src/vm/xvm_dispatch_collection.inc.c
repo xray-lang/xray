@@ -89,7 +89,7 @@ vmcase(OP_NEWARRAY) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c_field = GETARG_C(i);
-    int storage_mode = c_field & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (c_field & 0x03));
     uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
@@ -152,7 +152,7 @@ vmcase(OP_ARRAY_NEW_CAP) {
     if (cap < 0)
         cap = 0;
 
-    int storage_mode = c_field & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (c_field & 0x03));
     uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
@@ -190,7 +190,7 @@ vmcase(OP_ARRAY_NEW_LEN) {
     if (length < 0)
         length = 0;
 
-    int storage_mode = c_field & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (c_field & 0x03));
     uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
 
@@ -233,7 +233,7 @@ vmcase(OP_NEWTUPLE) {
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    int storage_mode = GETARG_C(i) & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (GETARG_C(i) & 0x03));
     XrTuple *tup = xr_tuple_new_storage(VM_CURRENT_CORO, (uint16_t) b, (uint8_t) storage_mode);
     if (tup) {
         for (int j = 0; j < b; j++)
@@ -280,7 +280,7 @@ vmcase(OP_NEWMAP) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int c = GETARG_C(i);
-    int storage_mode = c & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (c & 0x03));
     uint8_t value_tid = (uint8_t) ((c >> 3) & 0x1F);
     int key_kind = (c >> 8) & 0x03;
     uint8_t key_tid = (key_kind == 1) ? XR_TID_STRING : (key_kind == 2) ? XR_TID_INT : 0;
@@ -326,7 +326,7 @@ vmcase(OP_NEWSET) {
     int a = GETARG_A(i);
     int b_arg = GETARG_B(i);
     int init_mode = GETARG_C(i);
-    int storage_mode = b_arg & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (b_arg & 0x03));
     uint8_t elem_tid = (uint8_t) ((b_arg >> 3) & 0x1F);
 
     XrSet *set;
@@ -438,7 +438,7 @@ vmcase(OP_NEWSTRINGBUILDER) {
     ** B = storage mode (0=normal, 1=shared, 2=owned)
     */
     int a = GETARG_A(i);
-    int storage_mode = GETARG_B(i);
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) GETARG_B(i));
 
     XrStringBuilder *sb;
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {

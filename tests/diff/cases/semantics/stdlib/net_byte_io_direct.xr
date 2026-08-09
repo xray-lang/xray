@@ -14,21 +14,25 @@ fn echoThree(listener: move NetListener) -> int {
     return read
 }
 
-var listener = net.listen(0, 1)!
-const port = listener.port()
-var server = go echoThree(move listener)
-var client = net.dial("127.0.0.1", port, 1000)!
+fn run() {
+    var listener = net.listen(0, 1)!
+    const port = listener.port()
+    var server = go echoThree(move listener)
+    var client = net.dial("127.0.0.1", port, 1000)!
 
-var payload = Array<byte>([0xff, 0x00, 0x7f, 0x41])
-print(net.writeBytes(client, payload))
-net.shutdownWrite(client)
+    var payload = Array<byte>([0xff, 0x00, 0x7f, 0x41])
+    print(net.writeBytes(client, payload))
+    net.shutdownWrite(client)
 
-var response = Array<byte>(8)
-var read = net.readInto(client, ref response, 8)
-print(read)
-print(response[0])
-print(response[1])
-print(response[2])
-print(await server)
+    var response = Array<byte>(8)
+    var read = net.readInto(client, ref response, 8)
+    print(read)
+    print(response[0])
+    print(response[1])
+    print(response[2])
+    print(await server)
 
-net.close(client)
+    net.close(client)
+}
+
+run()

@@ -125,7 +125,7 @@ vmcase(OP_SET_STORAGE_CTX) {
     ** For class instance shared support
     ** Set before constructor call, OP_INVOKE reads this context
     */
-    int storage_mode = GETARG_A(i);
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) GETARG_A(i));
     atomic_store_explicit(&isolate->current_storage_mode, (uint8_t) storage_mode,
                           memory_order_relaxed);
     vmbreak;
@@ -305,7 +305,7 @@ vmcase(OP_NEWOBJECT) {
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    int storage_mode = GETARG_C(i);
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) GETARG_C(i));
     XrValue cls_val = k[b];
     // Class stored as integer pointer (not GC managed; lives with isolate)
     XrClass *cls = (XrClass *) (intptr_t) XR_TO_INT(cls_val);

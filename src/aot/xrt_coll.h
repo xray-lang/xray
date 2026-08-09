@@ -133,13 +133,31 @@ static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_siz
 static inline void xrt_coll_set_storage_header(XrObjHeader *h, uint8_t storage_mode) {
     if (!h)
         return;
+    uint8_t previous_storage = XR_OBJ_GET_STORAGE(h);
+    int32_t previous_refcount = atomic_load_explicit(&h->refcount, memory_order_relaxed);
     if (storage_mode != XR_OBJ_STORAGE_NORMAL)
         xrt_execution_unbind(h);
     XR_OBJ_SET_STORAGE(h, storage_mode);
-    if (storage_mode == XR_OBJ_STORAGE_SHARED)
-        atomic_store_explicit(&h->refcount, -1, memory_order_relaxed);
-    else if (!(h->extra & XR_OBJ_IMMORTAL))
-        atomic_store_explicit(&h->refcount, 0, memory_order_relaxed);
+    if (h->extra & XR_OBJ_IMMORTAL)
+        return;
+
+    /* Local and shared objects encode the same ownership count differently:
+     * local rc=N means N+1 owners, while shared rc=-N means N owners. Storage
+     * promotion happens after child values may already have been retained, so
+     * resetting every promoted header to -1 drops those owners and lets the
+     * first release destroy a still-referenced child. Preserve the count while
+     * changing only its encoding. The graph is execution-local until this
+     * promotion completes, so no shared observer can race this transition. */
+    int32_t next_refcount = previous_refcount;
+    if (storage_mode == XR_OBJ_STORAGE_SHARED && previous_storage != XR_OBJ_STORAGE_SHARED &&
+        previous_refcount >= 0) {
+        int64_t owners = (int64_t) previous_refcount + 1;
+        next_refcount = owners >= -(int64_t) XR_RC_STICKY_BAND ? XR_RC_STICKY : (int32_t) -owners;
+    } else if (storage_mode != XR_OBJ_STORAGE_SHARED && previous_storage == XR_OBJ_STORAGE_SHARED &&
+               previous_refcount < 0 && previous_refcount > XR_RC_STICKY_BAND) {
+        next_refcount = (int32_t) (-(int64_t) previous_refcount - 1);
+    }
+    atomic_store_explicit(&h->refcount, next_refcount, memory_order_relaxed);
 }
 
 static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t etype,
@@ -1724,6 +1742,11 @@ static inline void xrt_map_init_header(xrt_map_t *m) {
  * governs; falls through to xrt_eq (reference identity) when the class has none.
  * Pointers are borrowed, matching the specialized-plan convention. */
 static inline int xrt_value_key_eq(XrValue stored, XrValue query) {
+    /* Map and Set key identity is reflexive even for NaN. The hash path already
+     * canonicalizes every NaN payload; the equality path must make the same
+     * choice or a stored NaN can neither be overwritten nor looked up. */
+    if (stored.tag == XR_TAG_F64 && query.tag == XR_TAG_F64)
+        return stored.f == query.f || (isnan(stored.f) && isnan(query.f));
     if (query.tag == XR_TAG_PTR && query.heap_type == XR_TINSTANCE && query.ptr && stored.ptr &&
         stored.tag == XR_TAG_PTR && stored.heap_type == XR_TINSTANCE) {
         XrtUserEqFn eq_fn = xrt_instance_user_eq_fn(query);
@@ -3267,7 +3290,9 @@ static inline XrValue xrt_map_keys(xrt_map_t *m) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_keys((xrt_boolmap_t *) m);
     if (!xrt_map_is_typed(m)) {
-        XrValue arr = xrt_array_with_capacity(xrt_map_len(m));
+        /* One non-scalar side keeps the Map itself in tagged storage, but the
+         * declared scalar key side still requires packed Array<K> lanes. */
+        XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, m->key_type), XR_TAG_ARRAY);
         for (uint32_t i = 0; i < m->nentries; i++) {
             if (m->entries[i].key_tt != XR_MAP_ENTRY_NIL_KEY)
                 xrt_array_push(arr, m->entries[i].key);
@@ -5798,51 +5823,52 @@ xrt_json_parse_with_rest_class_or_throw(XrValue text, const XrtObjectShape *wrap
     return wrapper;
 }
 
-static inline XrValue xrt_json_parse(XrValue text) {
+static inline int xrt_json_try_parse(XrValue text, XrValue *out) {
+    if (out)
+        *out = XR_NULL_VAL;
+    if (!out)
+        return 0;
     if (!XR_IS_STR(text))
-        return XR_NULL_VAL;
+        return 0;
     const char *data = xr_str_data(text);
     int64_t len = xr_str_len(text);
     if (!data || len <= 0)
-        return XR_NULL_VAL;
+        return 0;
     xrt_json_parser_t p = {.src = data, .end = data + len, .pos = data, .depth = 0};
-    XrValue out = XR_NULL_VAL;
-    if (!xrt_json_parse_value(&p, &out))
-        return XR_NULL_VAL;
+    if (!xrt_json_parse_value(&p, out))
+        return 0;
     xrt_json_parse_skip_ws(&p);
     if (p.pos == p.end)
-        return out;
-    xrt_release(out);
-    return XR_NULL_VAL;
+        return 1;
+    xrt_release(*out);
+    *out = XR_NULL_VAL;
+    return 0;
+}
+
+static inline XrValue xrt_json_parse_or_throw(XrValue text) {
+    XrValue value = XR_NULL_VAL;
+    if (!xrt_json_try_parse(text, &value))
+        xrt_throw_error(XR_ERR_JSON_INVALID, "JSON.parse: invalid JSON");
+    return value;
 }
 
 static inline XrValue xrt_json_parse_object_or_throw(XrValue text) {
-    XrValue value = xrt_json_parse(text);
-    if (!XR_IS_MAP(value))
+    XrValue value = XR_NULL_VAL;
+    if (!xrt_json_try_parse(text, &value))
+        xrt_throw_error(XR_ERR_JSON_INVALID, "JSON.parseObject: invalid JSON");
+    if (!XR_IS_MAP(value)) {
+        xrt_release(value);
         xrt_throw_error(XR_ERR_JSON_INVALID, "JSON.parseObject: root value must be an object");
+    }
     return value;
 }
 
 static inline int64_t xrt_json_is_valid(XrValue text) {
-    if (!XR_IS_STR(text))
-        return 0;
-    const char *data = xr_str_data(text);
-    int64_t len = xr_str_len(text);
-    if (!data || len <= 0)
-        return 0;
-    xrt_json_parser_t parser = {
-        .src = data,
-        .end = data + len,
-        .pos = data,
-        .depth = 0,
-    };
     XrValue value = XR_NULL_VAL;
-    if (!xrt_json_parse_value(&parser, &value))
+    if (!xrt_json_try_parse(text, &value))
         return 0;
-    xrt_json_parse_skip_ws(&parser);
-    int valid = parser.pos == parser.end;
     xrt_release(value);
-    return valid;
+    return 1;
 }
 
 static inline XrValue xrt_object_set_name(XrValue obj, const char *name, XrValue val) {
@@ -6511,8 +6537,8 @@ static inline XrValue xrt_json_merge_with_rest_consume(XrValue parts) {
     return out;
 }
 
-static inline XrValue xrt_json_parse_consume(XrValue text) {
-    XrValue out = xrt_json_parse(text);
+static inline XrValue xrt_json_parse_or_throw_consume(XrValue text) {
+    XrValue out = xrt_json_parse_or_throw(text);
     xrt_release(text);
     return out;
 }

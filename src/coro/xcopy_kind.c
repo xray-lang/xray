@@ -17,10 +17,21 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
     if (!XR_IS_PTR(value))
         return XR_COPY_IMMEDIATE;
 
+    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    /* Scheduler-owned handles (Task, Coroutine, CoroPool, and future managed
+     * control-plane objects) are identity values, never execution-local data
+     * graphs. Their signed atomic-band RC and MANAGED lifetime make compiler
+     * dup/drop no-ops; classifying them as deep-copy candidates makes a valid
+     * Task argument fail closed at every `go` boundary. Keep the rule on the
+     * object-model flag so adding another managed handle cannot silently drift
+     * from transfer semantics. */
+    if (obj && XR_OBJ_GET_FLAG(obj, XR_OBJ_MANAGED))
+        return XR_COPY_SHARED_REF;
+
     uint8_t type = XR_HEAP_TYPE(value);
     switch (type) {
         case XR_TSTRING:
-            return XR_OBJ_IS_SHARED(XR_VALUE_GCPTR(value)) ? XR_COPY_SHARED_REF : XR_COPY_DEEP;
+            return XR_OBJ_IS_SHARED(obj) ? XR_COPY_SHARED_REF : XR_COPY_DEEP;
         case XR_TCHANNEL:
         case XR_TATOMIC:
         case XR_TWORKQUEUE:

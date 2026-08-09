@@ -197,12 +197,6 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
             fprintf(out, "XR_NULL_VAL");
         else
             emit_enum_type_expr(ctx, out, ed);
-    } else if (v->type->kind == XR_KIND_UNKNOWN && v->aux) {
-        const XiEnumData *ed = cg_enum_for_runtime_type(ctx, v->aux);
-        if (ctx && ctx->freestanding_profile && ed)
-            fprintf(out, "XR_NULL_VAL");
-        else
-            emit_enum_type_expr(ctx, out, ed);
     } else {
         fprintf(out, "XR_NULL_VAL /* unknown const kind */");
     }
@@ -4121,11 +4115,10 @@ static void xicgen_closure_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 
 static void xicgen_cell_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     fprintf(out, "xrt_cell_new(");
-    emit_boxed_value_ref(out, v->args[0]);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ")");
 }
 
@@ -4155,7 +4148,7 @@ static void xicgen_cell_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     fprintf(out, "(xrt_cell_set(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
-    emit_boxed_value_ref(out, v->args[1]);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out, "), XR_NULL_VAL)");
 }
 
@@ -5774,10 +5767,12 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     {
         const XiValue *fn_val = cg_unwrap_identity_value(callee);
         /* A function-valued upvalue can lose its static function type through
-         * capture, but a value used as a call target is always a closure, so a
-         * LOAD_UPVAL callee is invoked through the same boxed-entry path. */
-        if (fn_val &&
-            ((fn_val->type && XR_TYPE_IS_FUNCTION(fn_val->type)) || fn_val->op == XI_LOAD_UPVAL)) {
+         * capture. Mutable/transitively captured upvalues are closed into an
+         * explicit CELL_GET before CGen, while immutable ones can remain a
+         * LOAD_UPVAL. A value in either form that is used as a call target is a
+         * closure and must use the same boxed-entry path. */
+        if (fn_val && ((fn_val->type && XR_TYPE_IS_FUNCTION(fn_val->type)) ||
+                       fn_val->op == XI_LOAD_UPVAL || fn_val->op == XI_CELL_GET)) {
             bool span_result = cg_value_plan_is_span_aggregate(ctx, v);
             const char *conv_suffix =
                 span_result ? NULL
@@ -7880,6 +7875,18 @@ static const XiClassData *xicgen_parallel_plan_class_for_call(XiCgenCtx *ctx, co
         receiver->op == XI_GET_SHARED) {
         class_data = xicgen_parallel_plan_shared_slot_init_class(ctx, f, (int) receiver->aux_int);
     }
+    /* A shared slot's declared type can retain the generic Plan skeleton even
+     * though its one initializer constructs Plan<T>.  Prefer that concrete
+     * constructor identity for lifecycle dispatch; otherwise CGen declares an
+     * unspecialized Plan_close_m symbol that no module emits. */
+    if (receiver && receiver->op == XI_GET_SHARED) {
+        const XiClassData *initialized =
+            xicgen_parallel_plan_shared_slot_init_class(ctx, f, (int) receiver->aux_int);
+        if (xicgen_class_data_is_parallel_plan(ctx, initialized) && initialized->is_monomorphized &&
+            (!xicgen_class_data_is_parallel_plan(ctx, class_data) ||
+             class_data->is_generic_skeleton))
+            class_data = initialized;
+    }
     if (!xicgen_class_data_is_parallel_plan(ctx, class_data))
         class_data = cg_class_data_for_type_name(ctx, receiver ? receiver->type : v->args[0]->type);
     if (!xicgen_class_data_is_parallel_plan(ctx, class_data)) {
@@ -7993,8 +8000,7 @@ static const XiClassData *xicgen_parallel_plan_lifecycle_class(XiCgenCtx *ctx, c
          strcmp(method, "close") != 0))
         return NULL;
     const XiClassData *class_data = xicgen_parallel_plan_class_for_call(ctx, f, v);
-    if (class_data && class_data->is_generic_skeleton &&
-        (v->lowering_flags & XI_LOWERING_FLAG_PARALLEL_PLAN_LIFECYCLE)) {
+    if (class_data && class_data->is_generic_skeleton) {
         const XiClassData *closed_world = xicgen_find_parallel_plan_class_data(ctx);
         if (closed_world && closed_world->is_monomorphized)
             class_data = closed_world;
@@ -9184,9 +9190,14 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(const XiValue *call) {
     if (receiver_type && receiver_type->kind == XR_KIND_STRING)
         return (strcmp(method, "runes") == 0 || strcmp(method, "iterator") == 0) && nargs == 0;
     if (xr_type_is_builtin_named_class(receiver_type, "Iterator"))
-        return ((strcmp(method, "hasNext") == 0 || strcmp(method, "next") == 0 ||
-                 strcmp(method, "iterator") == 0) &&
-                nargs == 0);
+        /* Iterator<T> deliberately does not encode its producer kind.  A
+         * collection iterator cannot publish a value-channel error, but a
+         * generator-backed iterator forwards the producer's error through
+         * xrt_pending_error from both hasNext() and next().  Static receiver
+         * type alone therefore proves only iterator() nothrow.  Treating all
+         * Iterator methods as collection helpers swallowed the generator
+         * error until an unrelated later check. */
+        return strcmp(method, "iterator") == 0 && nargs == 0;
     if (xr_type_is_builtin_named_class(receiver_type, "StringBuilder"))
         return ((strcmp(method, "toString") == 0 || strcmp(method, "clear") == 0) && nargs == 0) ||
                (strcmp(method, "append") == 0 && nargs == 1);
@@ -10067,7 +10078,7 @@ static bool xicgen_emit_json_static_method(XiCgenCtx *ctx, FILE *out, const XiVa
     if ((strcmp(method, "parse") == 0 || strcmp(method, "parseValue") == 0) && nargs == 1 &&
         v->nargs >= 2) {
         const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-        fprintf(out, "xrt_json_parse_consume(");
+        fprintf(out, "xrt_json_parse_or_throw_consume(");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
@@ -10866,7 +10877,8 @@ static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc
  * effects. Materialize it as ordinary C11 statements for every artifact;
  * native-layout classes are handled by the earlier native constructor path. */
 static bool emit_portable_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                    const char *prefix, const XiValue *v) {
+                                                    const char *prefix, const XiValue *v,
+                                                    bool storage_predeclared) {
     if (!ctx || !out || !f || !v || (v->op != XI_CALL && v->op != XI_CALL_METHOD) || v->nargs == 0)
         return false;
 
@@ -10943,7 +10955,7 @@ static bool emit_portable_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, c
         fprintf(out, "    (void)xrt_value_set_storage(_portable_map_inst_%u, %u);\n", v->id,
                 (unsigned) storage_mode);
 
-    if (ctx->pre_decl_all) {
+    if (storage_predeclared || ctx->pre_decl_all) {
         fprintf(out, "    ");
         emit_vref(out, v);
         fprintf(out, " = ");
@@ -12547,13 +12559,22 @@ static bool emit_fixed_array_ref_length_expr(XiCgenCtx *ctx, FILE *out, const Xi
     return true;
 }
 
-static bool xicgen_load_field_receiver_is_map_backed_class(XiCgenCtx *ctx, const XiValue *recv) {
+static bool xicgen_load_field_receiver_supports_builtin_getprop(const XiValue *recv) {
     const XrType *type = recv ? recv->type : NULL;
-    const char *class_name = type ? xr_type_get_class_name((XrType *) (uintptr_t) type) : NULL;
-    if (!class_name || cg_type_is_json(type))
+    if (!type)
         return false;
-    const XiClassData *cd = cg_class_native_data_by_name(ctx, class_name);
-    return cd && !cg_class_native_value_type_data(ctx, recv);
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_STRING:
+            return true;
+        default:
+            break;
+    }
+    return xr_type_is_builtin_named_class(type, "Buffer") ||
+           xr_type_is_builtin_named_class(type, "StringBuilder") ||
+           xr_type_is_builtin_named_class(type, "Range");
 }
 
 static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -12851,11 +12872,9 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     if (field && emit_class_native_getter_field_expr(ctx, out, f, prefix, v))
         return;
-    bool map_backed_class_field =
-        field && xicgen_load_field_receiver_is_map_backed_class(ctx, v->args[0]);
     int sym = cg_method_sym(field);
     const XiValue *receiver = xicgen_getprop_receiver_value(ctx, v->args[0]);
-    if (sym >= 0 && !map_backed_class_field) {
+    if (sym >= 0 && xicgen_load_field_receiver_supports_builtin_getprop(receiver)) {
         const char *conv_suffix = emit_tagged_to_value_storage_prefix(ctx, out, v);
         fprintf(out, "xrt_getprop(");
         emit_value_as_rep_ctx(ctx, out, receiver, XR_REP_TAGGED);

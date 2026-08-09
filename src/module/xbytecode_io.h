@@ -45,7 +45,7 @@ struct XrCompilerSession;
 struct XrProto;
 
 #define XR_BC_MAGIC 0x59415258  // "XRAY" (little-endian)
-#define XR_BC_VERSION 28        // v28: structural object opcodes are distinct from JSON codecs
+#define XR_BC_VERSION 29        // v29: proto carries call-bound-place parameter ABI bitmap
 
 // Serialization flags
 #define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)

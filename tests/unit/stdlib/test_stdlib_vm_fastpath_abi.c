@@ -7,6 +7,7 @@
 #include "../../../src/runtime/class/xenum.h"
 #include "../../../src/runtime/mem/xcoro_heap.h"
 #include "../../../src/runtime/xisolate_api.h"
+#include "../../../src/runtime/xexec_frame.h"
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/stdlib/xstdlib_vm_fastpath.h"
 #include "../test_helper.h"
@@ -112,6 +113,20 @@ static int verify_runtime_overlay(void) {
     return 0;
 }
 
+static int verify_yieldable_runtime_overlay(void) {
+    XrVMConfig config;
+    xray_vm_config_init(&config);
+    XrVMRuntime *isolate = xray_vm_new_full(&config);
+    ASSERT_TRUE(isolate != NULL);
+    XrValue module_value = xr_module_import(isolate, "os");
+    ASSERT_TRUE(xr_value_is_module(module_value));
+    XrValue exported = xr_module_get_export(isolate, xr_value_to_module(module_value), "sleep");
+    ASSERT_TRUE(xr_value_is_cfunction(exported));
+    ASSERT_TRUE(xr_value_to_cfunction(exported)->is_yieldable);
+    xray_vm_delete(isolate);
+    return 0;
+}
+
 static int verify_string_boundary(void) {
     XrVMConfig config;
     xray_vm_config_init(&config);
@@ -184,6 +199,15 @@ static int verify_byte_array_boundary(void) {
     XrString *encoded_string = XR_TO_STRING(encoded);
     ASSERT_TRUE(encoded_string->length == 6);
     ASSERT_TRUE(memcmp(encoded_string->data, "00abff", 6) == 0);
+
+    XrSliceView readonly_view = {bytes->data, bytes->length};
+    XrValue readonly_argument =
+        xr_span_ref_typed(&readonly_view, XR_ELEM_U8, 1, 0, 0, XR_SLICE_VIEW_READONLY);
+    XrValue encoded_view = encode(isolate, &readonly_argument, 1);
+    ASSERT_TRUE(XR_IS_STRING(encoded_view));
+    XrString *encoded_view_string = XR_TO_STRING(encoded_view);
+    ASSERT_TRUE(encoded_view_string->length == 6);
+    ASSERT_TRUE(memcmp(encoded_view_string->data, "00abff", 6) == 0);
 
     XrStdlibVmFastpathFn decode = xr_stdlib_vm_fastpath_lookup("encoding", "hexDecode");
     ASSERT_TRUE(decode != NULL);
@@ -269,19 +293,23 @@ static int verify_deferred_log_state_boundary(void) {
 
 int main(void) {
     ASSERT_TRUE(XR_HOSTED_OBJECT_ABI_VERSION == 1);
-    ASSERT_TRUE(XR_HOSTED_FRAGMENT_ABI_VERSION == 6);
+    ASSERT_TRUE(XR_HOSTED_FRAGMENT_ABI_VERSION == 7);
     ASSERT_TRUE(sizeof(XrValue) == 16);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_count() >= 71);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("codegen", "compilerFence") != NULL);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("net", "hasTLS") != NULL);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("os", "getpid") != NULL);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("os", "clock") != NULL);
-    ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("os", "sleep") != NULL);
+    /* The synchronous lookup is intentionally type-safe: suspendable entries
+     * are installed through the yieldable VM C-function ABI instead. */
+    ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("os", "sleep") == NULL);
     if (verify_function("http", "isRedirectStatus", legacy_http_adapter, 0, 5999) != 0)
         return 1;
     if (verify_function("ws", "isValidCloseCode", legacy_ws_adapter, 0, 5999) != 0)
         return 1;
     if (verify_runtime_overlay() != 0)
+        return 1;
+    if (verify_yieldable_runtime_overlay() != 0)
         return 1;
     if (verify_string_boundary() != 0)
         return 1;

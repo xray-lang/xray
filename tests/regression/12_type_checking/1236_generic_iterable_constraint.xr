@@ -23,9 +23,9 @@
 //             with iterator()), and the for-in analyzer types a type
 //             parameter's item from its constraint.
 //
-// A user class may reuse the prelude name; `class Range { ... }` earns these
-// interfaces only by declaring them, never by name. Covered in
-// tests/compile_errors/type/024_generic_user_range_not_iterable.xr.
+// Builtin/prelude type names are reserved, so a source declaration cannot
+// shadow Range and create two incompatible meanings for the same type name.
+// The reservation contract is covered by the builtin_name_* compile errors.
 //
 // The constraint admits every for-in domain that runs through the iterator
 // protocol, including the Iterator<T> a generator returns. Channel<T> is the

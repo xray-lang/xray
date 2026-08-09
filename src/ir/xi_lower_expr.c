@@ -63,7 +63,9 @@
 static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode *call);
 static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result_type,
                                 const char *module_name, const char *cname, AstNode **arguments,
-                                XrCallArgAccess *arg_accesses, int arg_count);
+                                XrCallArgAccess *arg_accesses, int arg_count,
+                                XaSymbol *resolved_class_sym);
+static bool lower_value_known_allocation_storage_mode(const XiValue *value, uint8_t *out_mode);
 static XiValue *lower_parallel_module_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
                                                      XaParallelCallKind kind);
 static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, CallExprNode *call,
@@ -2596,17 +2598,18 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
         v->op = XI_WEAK_STORE_FIELD;
         v->flags = xi_op_default_effects(v->op);
     }
-    /* A value allocated for this store leaves the execution-local domain the
-     * moment the field takes it: the owning object outlives the statement and
-     * its destructor runs where this execution's heap is already gone, so the
-     * child can never be released. Declaration lowering marks a `var` for the
-     * same reason, which is why `var tmp = Node(); h.n = tmp` was balanced
-     * while `h.n = Node()` leaked one object per store -- the second had no
-     * declaration to carry the mark. The helper only marks fresh allocations,
-     * so a borrowed value or a plain register read is left alone, and a weak
-     * store never reaches here because it has changed op above. */
-    if (v->op == XI_STORE_FIELD)
-        (void) xi_lower_mark_storage_allocation(val, XR_OBJ_STORAGE_TRANSFER);
+    /* A fresh child must inhabit the receiver's storage domain. In particular,
+     * storing one execution-local instance into another must not promote both
+     * to the transfer heap: local cycles are reclaimed with the coroutine,
+     * whereas a promoted RC cycle has no physical execution boundary. When the
+     * receiver is not a traceable fresh allocation, keep the fail-closed
+     * transfer choice because its lifetime may exceed this execution. */
+    if (v->op == XI_STORE_FIELD && !(l->func && l->func->is_constructor)) {
+        uint8_t receiver_mode = XR_OBJ_STORAGE_TRANSFER;
+        (void) lower_value_known_allocation_storage_mode(obj, &receiver_mode);
+        if (receiver_mode != XR_OBJ_STORAGE_NORMAL)
+            (void) xi_lower_mark_storage_allocation(val, receiver_mode);
+    }
     xi_lower_bind_class_field_id(l, v, obj->type, ms->member);
     return v;
 }
@@ -3726,7 +3729,7 @@ static XiValue *lower_ct_struct_value(XiLower *l, AstNode *node, const XrCtValue
             return NULL;
     }
 
-    XiValue *inst = lower_construct(l, node, result_type, NULL, struct_name, NULL, NULL, 0);
+    XiValue *inst = lower_construct(l, node, result_type, NULL, struct_name, NULL, NULL, 0, NULL);
     if (!inst)
         return NULL;
 
@@ -4250,6 +4253,42 @@ static bool lower_expr_is_copy_call(AstNode *node, AstNode **inner_out) {
     return true;
 }
 
+/* Immutable pointer-backed values still need a storage-domain handoff when
+ * they cross an execution boundary.  Source `copy(...)` remains mandatory for
+ * mutable graphs; strings, tuples and enum values have value semantics, so
+ * their boundary copy is implicit just like passing an immediate scalar.
+ *
+ * Keep this decision on the concrete lowered type.  In particular an erased
+ * union of EnumVariant<E> descriptors is pointer-backed even though each
+ * descriptor was an ordinal before erasure. */
+static bool lower_boundary_type_uses_value_copy(const XrType *type, unsigned depth) {
+    if (!type || depth > 32)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_STRING:
+        case XR_KIND_ENUM:
+            return true;
+        case XR_KIND_TUPLE:
+            /* A tuple containing only immediates makes COPY a runtime no-op;
+             * using one uniform mode avoids representation-dependent rules. */
+            return true;
+        case XR_KIND_INSTANCE:
+            return xr_type_is_enum_metadata(type);
+        case XR_KIND_UNION:
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                if (lower_boundary_type_uses_value_copy(type->union_type.members[i], depth + 1))
+                    return true;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+static uint8_t lower_boundary_default_transfer_mode(const XrType *type) {
+    return lower_boundary_type_uses_value_copy(type, 0) ? XR_TRANSFER_COPY : XR_TRANSFER_SHARE;
+}
+
 static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList *args, int max_args,
                                int line) {
     for (int i = 0; i < call->arg_count; i++) {
@@ -4270,7 +4309,8 @@ static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList 
                     return false;
                 get->args[0] = src;
                 get->aux_int = j;
-                if (!xi_lower_go_arg_list_push(l, args, get, XR_TRANSFER_SHARE, max_args, line))
+                uint8_t mode = lower_boundary_default_transfer_mode(et);
+                if (!xi_lower_go_arg_list_push(l, args, get, mode, max_args, line))
                     return false;
             }
             continue;
@@ -4291,6 +4331,8 @@ static bool lower_go_call_args(XiLower *l, CallExprNode *call, XiLowerGoArgList 
         XiValue *a = xi_lower_expr(l, value_node);
         if (!a)
             return false;
+        if (mode == XR_TRANSFER_SHARE)
+            mode = lower_boundary_default_transfer_mode(a->type);
         if (!xi_lower_go_arg_list_push(l, args, a, mode, max_args, line))
             return false;
     }
@@ -4321,6 +4363,8 @@ XR_FUNC bool xi_lower_boundary_transfer_arg(XiLower *l, AstNode *child, XiValue 
     XiValue *value = xi_lower_expr(l, value_node);
     if (!value)
         return false;
+    if (mode == XR_TRANSFER_SHARE)
+        mode = lower_boundary_default_transfer_mode(value->type);
     *out_value = value;
     *out_mode = mode;
     return true;
@@ -4724,8 +4768,11 @@ static bool lower_call_slot_uses_read_place(XiLower *l, XrParamMode mode, int in
     if (mode != XR_PARAM_READ || index < 0)
         return false;
     bool requested = read_places && index < read_place_count && read_places[index];
-    if (!requested && function_type && function_type->kind == XR_KIND_FUNCTION &&
-        index < function_type->function.param_count) {
+    /* A supplied slot decision is authoritative.  In particular, mutators
+     * such as Array.push store their argument and therefore require an owned
+     * value copy instead of the ordinary nonescaping read-place ABI. */
+    if (!requested && (!read_places || index >= read_place_count) && function_type &&
+        function_type->kind == XR_KIND_FUNCTION && index < function_type->function.param_count) {
         XrType *formal = xr_type_function_param_type(function_type, index);
         requested = xi_lower_type_uses_read_place(l, formal);
     }
@@ -6364,28 +6411,53 @@ static XrType *lower_known_expr_type(XiLower *l, AstNode *node) {
     return xi_top_binding_valid(top) ? top.type : NULL;
 }
 
-static uint8_t lower_value_allocation_storage_mode(const XiValue *value) {
-    if (!value)
-        return XR_OBJ_STORAGE_NORMAL;
-    switch (value->op) {
-        case XI_ARRAY_NEW:
-        case XI_MAP_NEW:
-        case XI_SET_NEW:
-        case XI_CALL_METHOD:
-        case XI_CALL_BUILTIN:
-            return xi_value_allocation_storage_mode(value);
-        case XI_OBJECT_NEW:
-            return xi_object_storage_mode(value);
-        case XI_TUPLE_NEW:
-            return xi_tuple_storage_mode(value);
-        case XI_COPY:
-        case XI_SOURCE_MOVE:
-        case XI_OWNER_FORWARD:
-            return value->nargs > 0 ? lower_value_allocation_storage_mode(value->args[0])
-                                    : XR_OBJ_STORAGE_NORMAL;
-        default:
-            return XR_OBJ_STORAGE_NORMAL;
+static bool lower_value_known_allocation_storage_mode(const XiValue *value, uint8_t *out_mode) {
+    if (out_mode)
+        *out_mode = XR_OBJ_STORAGE_NORMAL;
+    const XiValue *current = value;
+    for (uint8_t depth = 0; current && depth < 16; depth++) {
+        switch (current->op) {
+            case XI_ARRAY_NEW:
+            case XI_MAP_NEW:
+            case XI_SET_NEW:
+                if (out_mode)
+                    *out_mode = xi_value_allocation_storage_mode(current);
+                return true;
+            case XI_OBJECT_NEW:
+                if (out_mode)
+                    *out_mode = xi_object_storage_mode(current);
+                return true;
+            case XI_TUPLE_NEW:
+                if (out_mode)
+                    *out_mode = xi_tuple_storage_mode(current);
+                return true;
+            case XI_CALL:
+            case XI_CALL_METHOD:
+                if (!xi_value_is_constructor_call(current))
+                    return false;
+                if (out_mode)
+                    *out_mode = xi_value_allocation_storage_mode(current);
+                return true;
+            case XI_COPY:
+            case XI_SOURCE_MOVE:
+            case XI_OWNER_FORWARD:
+            case XI_BOX:
+            case XI_UNBOX:
+                if (current->nargs < 1)
+                    return false;
+                current = current->args[0];
+                continue;
+            default:
+                return false;
+        }
     }
+    return false;
+}
+
+static uint8_t lower_value_allocation_storage_mode(const XiValue *value) {
+    uint8_t mode = XR_OBJ_STORAGE_NORMAL;
+    (void) lower_value_known_allocation_storage_mode(value, &mode);
+    return mode;
 }
 
 static bool lower_method_stores_argument(const XrType *receiver_type, const char *method_name,
@@ -6670,7 +6742,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (lower_value_is_whole_module_import(l, recv, "sync") &&
             xi_lower_builtin_class_global_index(ma->name) >= 0) {
             return lower_construct(l, node, xi_lower_node_type(l, node), "sync", ma->name,
-                                   call->arguments, call->arg_accesses, call->arg_count);
+                                   call->arguments, call->arg_accesses, call->arg_count, NULL);
         }
 
         if (lower_value_is_whole_module_import(l, recv, "mem") && ma->name) {
@@ -6747,6 +6819,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 return NULL;
             lower_collect_read_place_params(l, NULL, method_type, method_modes, method_pcount,
                                             method_read_places, method_read_place_count);
+            for (int i = 0; i < method_read_place_count; i++) {
+                if (lower_method_stores_argument(recv->type, ma->name, i))
+                    method_read_places[i] = false;
+            }
         }
 
         XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
@@ -8734,7 +8810,8 @@ static XiValue *lower_parallel_plan_intrinsic_call(XiLower *l, AstNode *node, Ca
  * from the node table. */
 static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result_type,
                                 const char *module_name, const char *cname, AstNode **arguments,
-                                XrCallArgAccess *arg_accesses, int arg_count) {
+                                XrCallArgAccess *arg_accesses, int arg_count,
+                                XaSymbol *resolved_class_sym) {
     XR_DCHECK(cname != NULL, "construct must have class name");
 
     /* The parser rewrites `Map(..)`, `Array(..)`, `StringBuilder(..)` and the
@@ -8890,7 +8967,8 @@ generic_constructor:;
     int n = args.count;
 
     XiValue *cls = NULL;
-    XaSymbol *class_sym = xi_lower_lookup_class_symbol(l, cname);
+    XaSymbol *class_sym =
+        resolved_class_sym ? resolved_class_sym : xi_lower_lookup_class_symbol(l, cname);
     XaSymbolLinks *class_links =
         (class_sym && l->analyzer) ? xa_analyzer_get_links(l->analyzer, class_sym) : NULL;
     struct XrType *constructor_type = xi_lower_class_constructor_type(l, class_sym);
@@ -8968,7 +9046,13 @@ generic_constructor:;
     /* Zero-arg struct with compile-time layout → XI_AGG_NEW.
      * The emitter decides stack vs heap via struct_can_stack_alloc. */
     if (arg_count == 0 && module_name == NULL && l->analyzer) {
-        XrAggregateLayout *slayout = xi_lower_lookup_struct_layout(l, cname);
+        XrAggregateLayout *slayout = (class_links && class_links->class_info)
+                                         ? class_links->class_info->struct_layout
+                                         : NULL;
+        if (!slayout)
+            slayout = xi_lower_type_struct_layout(l, result_type);
+        if (!slayout)
+            slayout = xi_lower_lookup_struct_layout(l, cname);
         if (slayout) {
             XiValue *inst = xi_value_new(l->func, l->cur_block, XI_AGG_NEW, result_type, 1);
             if (!inst)
@@ -9020,8 +9104,11 @@ generic_constructor:;
 
 static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     NewExprNode *ne = &node->as.new_expr;
+    XaSymbol *class_sym = NULL;
+    if (ne->class_symbol_id && l->analyzer)
+        class_sym = xa_scope_lookup_by_id(l->analyzer->global_scope, ne->class_symbol_id);
     return lower_construct(l, node, xi_lower_node_type(l, node), ne->module_name, ne->class_name,
-                           ne->arguments, ne->arg_accesses, ne->arg_count);
+                           ne->arguments, ne->arg_accesses, ne->arg_count, class_sym);
 }
 
 /* True if the named class is `Exception` or derives from it. Exception is a
@@ -9060,10 +9147,12 @@ static bool lower_class_is_generic(XiLower *l, const char *name) {
 }
 
 /* A bare `T(args)` call constructs through the new-expr construction path when
- * the normal class-binding call path cannot handle it: Exception (built-in
- * primitive class) and its subclasses, and generic classes (monomorphization).
- * Plain non-generic user classes (top-level and nested) construct correctly via
- * the normal call lowering and are left alone (preserves cross-module dispatch).
+ * the normal class-binding call path cannot handle it: PanicInfo (built-in
+ * primitive class) and its subclasses, generic classes (monomorphization), and
+ * fixed-layout value aggregates.  A zero-arg struct must become XI_AGG_NEW;
+ * invoking its class binding as if it were a reference-class constructor
+ * returns null and violates the language's default-value contract.
+ * Plain non-generic reference classes keep the normal call lowering.
  * Returns NULL when the normal call path should be used. */
 static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode *call) {
     if (!call->callee || call->callee->type != AST_VARIABLE)
@@ -9078,10 +9167,23 @@ static XiValue *lower_try_construct_call(XiLower *l, AstNode *node, CallExprNode
         generic_class_call = true;
     if (!generic_class_call && strchr(name, '$') && xi_lower_lookup_class_symbol(l, name))
         generic_class_call = true;
-    if (!lower_class_is_exception_kind(l, name) && !generic_class_call)
+    XaSymbol *resolved_class_sym = NULL;
+    if (call->callee->as.variable.symbol_id)
+        resolved_class_sym =
+            xa_scope_lookup_by_id(l->analyzer->global_scope, call->callee->as.variable.symbol_id);
+    if (!resolved_class_sym || resolved_class_sym->kind != XA_SYM_CLASS)
+        resolved_class_sym = xi_lower_lookup_class_symbol(l, name);
+    XaSymbolLinks *resolved_links =
+        resolved_class_sym ? xa_analyzer_get_links(l->analyzer, resolved_class_sym) : NULL;
+    struct XrType *call_type = xi_lower_node_type(l, node);
+    bool value_aggregate_call = (call_type && call_type->is_value_type) ||
+                                (resolved_links && resolved_links->class_info &&
+                                 resolved_links->class_info->struct_layout != NULL) ||
+                                xi_lower_lookup_struct_layout(l, name) != NULL;
+    if (!lower_class_is_exception_kind(l, name) && !generic_class_call && !value_aggregate_call)
         return NULL;
     return lower_construct(l, node, xi_lower_node_type(l, node), NULL, name, call->arguments,
-                           call->arg_accesses, call->arg_count);
+                           call->arg_accesses, call->arg_count, resolved_class_sym);
 }
 
 static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
@@ -9529,13 +9631,34 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
         }
     }
 
-    uint16_t nargs = (type_val != NULL) ? 2 : 1;
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IS, l->type_bool, nargs);
+    /* XI_IS has one backend-neutral contract: the checked value and a reified
+     * runtime target token are both operands.  Fixed-width scalar refs and
+     * union-pattern refs can arrive here without one of the syntactic tref
+     * cases above, but their resolved type is still authoritative.  Reify
+     * those builtin targets from the resolved type instead of emitting the
+     * historical one-operand AOT-only shape that the Xi verifier and VM must
+     * reject.  Nominal instances deliberately stay on the class-value path;
+     * XR_TID_INSTANCE would erase the class identity. */
+    if (!type_val && target_type) {
+        int tid = -1;
+        XrTypeKind kind = target_type->kind;
+        if (kind == XR_KIND_INT || kind == XR_KIND_FLOAT || kind == XR_KIND_STRING ||
+            kind == XR_KIND_BOOL || kind == XR_KIND_NULL || kind == XR_KIND_RUNE)
+            tid = (int) xr_type_to_tid(target_type);
+        if (tid >= 0) {
+            type_val = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_int, 0);
+            if (type_val)
+                type_val->aux_int = tid;
+        }
+    }
+
+    if (!type_val)
+        return NULL;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_IS, l->type_bool, 2);
     if (!v)
         return NULL;
     v->args[0] = val;
-    if (type_val)
-        v->args[1] = type_val;
+    v->args[1] = type_val;
     v->aux = (void *) target_type;
     v->line = (uint32_t) line;
     return v;

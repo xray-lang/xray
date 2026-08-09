@@ -61,7 +61,7 @@ enum {
      * with enum static-domain and descriptor metadata evidence from task 210.
      * Use a fresh version so caches from either parent lineage are invalidated.
      * 41: bodies and methods publish return ownership. */
-    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 41,
+    XG_GLOBAL_EVIDENCE_SCHEMA_VERSION = 42,
 };
 
 /* Return ownership as published to the whole-program evidence.
@@ -865,6 +865,7 @@ typedef struct XgLinkDependencySummary {
     XgLinkId link_id;
     XgModuleId module_id;
     XgDeclId decl_id;
+    XgFuncId owner_func_id;
     uint32_t source_span_id;
     uint32_t name_id;
     uint8_t kind;

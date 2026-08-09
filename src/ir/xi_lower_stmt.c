@@ -3708,9 +3708,11 @@ static void lower_reexport_stmt(XiLower *l, AstNode *node) {
 }
 
 /* Selective import: import { square, cube } from "./math_lib"
- * Creates XI_IMPORT_REF values for each member and binds them as local
- * variables.  The AOT driver resolves module_path + member_name to the
- * target module's shared slot after all modules are lowered. */
+ * Creates XI_IMPORT_REF values for runtime members and binds them as local
+ * variables. Type-only members are already available to semantic type
+ * resolution and intentionally have no runtime slot. The AOT driver resolves
+ * module_path + member_name to the target module's shared slot after all
+ * modules are lowered. */
 static void lower_import_stmt(XiLower *l, AstNode *node) {
     XR_DCHECK(l != NULL, "lower_import_stmt: NULL lowerer");
     XR_DCHECK(node != NULL, "lower_import_stmt: NULL node");
@@ -3764,6 +3766,8 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
 
     for (int i = 0; i < imp->member_count; i++) {
         ImportMember *m = &imp->members[i];
+        if (xi_lower_import_member_is_type_only(l, m))
+            continue;
         const char *local_name = m->alias ? m->alias : m->name;
 
         if (imp->module_name && strcmp(imp->module_name, "sync") == 0 &&

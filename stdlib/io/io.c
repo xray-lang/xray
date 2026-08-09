@@ -951,7 +951,7 @@ static XrClass *io_get_stat_class(XrVMRuntime *X) {
     if (cache->io_stat_class)
         return cache->io_stat_class;
 
-    XrClass *cls = xr_stdlib_object_shape_class_get(X, "io", "__FileStat");
+    XrClass *cls = xr_stdlib_record_class_get(X, "io", "__FileStat");
     if (!cls)
         return NULL;
     cache->io_stat_class = cls;

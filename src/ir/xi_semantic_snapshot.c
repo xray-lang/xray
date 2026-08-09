@@ -185,6 +185,9 @@ static XrAggregateLayout *snapshot_aggregate_layout(XiSemanticSnapshot *snapshot
         return NULL;
     }
     *copy = *source;
+    copy->nominal_name = snapshot_strdup(snapshot, source->nominal_name);
+    if (source->nominal_name && !copy->nominal_name)
+        return NULL;
     copy->field_names = NULL;
     if (source->field_count > 0) {
         copy->field_names = (const char **) snapshot_alloc(

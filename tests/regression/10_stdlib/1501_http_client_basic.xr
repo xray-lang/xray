@@ -9,8 +9,8 @@ fn test_http_client_apis_exist() {
 
 @test
 fn test_http_server_apis_exist() {
-    assert(typeName(http.route) == "function")
-    assert(typeName(http.listen) == "function")
+    var server = http.Server()
+    assert(server.route("GET", "/health", { ok: true }))
     assert(typeName(http.urlEncode) == "function")
     assert(typeName(http.urlDecode) == "function")
 }

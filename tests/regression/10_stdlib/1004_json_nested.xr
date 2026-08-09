@@ -10,37 +10,37 @@
 @test
 fn test_nested_array_2_levels() {
     var arr = JSON.parseValue("[[1, 2], [3, 4]]")
-    assert_eq(len(arr), 2)
-    assert_eq(arr[0][0], 1)
-    assert_eq(arr[0][1], 2)
-    assert_eq(arr[1][0], 3)
-    assert_eq(arr[1][1], 4)
+    assert_eq(len(JSON.asArray(arr)!), 2)
+    assert_eq(JSON.require<int>(arr, [0, 0]), 1)
+    assert_eq(JSON.require<int>(arr, [0, 1]), 2)
+    assert_eq(JSON.require<int>(arr, [1, 0]), 3)
+    assert_eq(JSON.require<int>(arr, [1, 1]), 4)
 }
 
 @test
 fn test_nested_array_3_levels() {
     var arr = JSON.parseValue("[[[1, 2], [3, 4]], [[5, 6], [7, 8]]]")
-    assert_eq(arr[0][0][0], 1)
-    assert_eq(arr[0][1][1], 4)
-    assert_eq(arr[1][0][0], 5)
-    assert_eq(arr[1][1][1], 8)
+    assert_eq(JSON.require<int>(arr, [0, 0, 0]), 1)
+    assert_eq(JSON.require<int>(arr, [0, 1, 1]), 4)
+    assert_eq(JSON.require<int>(arr, [1, 0, 0]), 5)
+    assert_eq(JSON.require<int>(arr, [1, 1, 1]), 8)
 }
 
 @test
 fn test_nested_array_deep() {
     // 6 层嵌套
     var arr = JSON.parseValue("[[[[[[42]]]]]]")
-    assert_eq(arr[0][0][0][0][0][0], 42)
+    assert_eq(JSON.require<int>(arr, [0, 0, 0, 0, 0, 0]), 42)
 }
 
 @test
 fn test_nested_empty_arrays() {
     var arr = JSON.parseValue("[[], [[]], [[], []]]")
-    assert_eq(len(arr), 3)
-    assert_eq(len(arr[0]), 0)
-    assert_eq(len(arr[1]), 1)
-    assert_eq(len(arr[1][0]), 0)
-    assert_eq(len(arr[2]), 2)
+    assert_eq(len(JSON.asArray(arr)!), 3)
+    assert_eq(len(JSON.require<Array<JSON.Value>>(arr, [0])), 0)
+    assert_eq(len(JSON.require<Array<JSON.Value>>(arr, [1])), 1)
+    assert_eq(len(JSON.require<Array<JSON.Value>>(arr, [1, 0])), 0)
+    assert_eq(len(JSON.require<Array<JSON.Value>>(arr, [2])), 2)
 }
 
 // ===== 对象嵌套测试 =====
@@ -48,28 +48,28 @@ fn test_nested_empty_arrays() {
 @test
 fn test_nested_object_2_levels() {
     var obj = JSON.parseValue("{\"user\": {\"name\": \"Alice\", \"age\": 30}}")
-    assert_eq(obj.user.name, "Alice")
-    assert_eq(obj.user.age, 30)
+    assert_eq(JSON.require<string>(obj, ["user", "name"]), "Alice")
+    assert_eq(JSON.require<int>(obj, ["user", "age"]), 30)
 }
 
 @test
 fn test_nested_object_3_levels() {
     var obj = JSON.parseValue("{\"a\": {\"b\": {\"c\": 42}}}")
-    assert_eq(obj.a.b.c, 42)
+    assert_eq(JSON.require<int>(obj, ["a", "b", "c"]), 42)
 }
 
 @test
 fn test_nested_object_deep() {
     // 深层嵌套对象
     var obj = JSON.parseValue("{\"l1\": {\"l2\": {\"l3\": {\"l4\": {\"value\": 100}}}}}")
-    assert_eq(obj.l1.l2.l3.l4.value, 100)
+    assert_eq(JSON.require<int>(obj, ["l1", "l2", "l3", "l4", "value"]), 100)
 }
 
 @test
 fn test_nested_empty_objects() {
     var obj = JSON.parseValue("{\"a\": {}, \"b\": {\"c\": {}}}")
-    assert_eq(obj.a != null, true)
-    assert_eq(obj.b.c != null, true)
+    assert(JSON.isObject(JSON.require<JSON.Value>(obj, ["a"])))
+    assert(JSON.isObject(JSON.require<JSON.Value>(obj, ["b", "c"])))
 }
 
 // ===== 混合嵌套测试 =====
@@ -77,28 +77,28 @@ fn test_nested_empty_objects() {
 @test
 fn test_object_with_arrays() {
     var obj = JSON.parseValue("{\"numbers\": [1, 2, 3], \"letters\": [\"a\", \"b\", \"c\"]}")
-    assert_eq(len(obj.numbers), 3)
-    assert_eq(obj.numbers[0], 1)
-    assert_eq(obj.letters[0], "a")
+    assert_eq(len(JSON.require<Array<JSON.Value>>(obj, ["numbers"])), 3)
+    assert_eq(JSON.require<int>(obj, ["numbers", 0]), 1)
+    assert_eq(JSON.require<string>(obj, ["letters", 0]), "a")
 }
 
 @test
 fn test_array_with_objects() {
     var arr = JSON.parseValue("[{\"id\": 1}, {\"id\": 2}, {\"id\": 3}]")
-    assert_eq(len(arr), 3)
-    assert_eq(arr[0].id, 1)
-    assert_eq(arr[1].id, 2)
-    assert_eq(arr[2].id, 3)
+    assert_eq(len(JSON.asArray(arr)!), 3)
+    assert_eq(JSON.require<int>(arr, [0, "id"]), 1)
+    assert_eq(JSON.require<int>(arr, [1, "id"]), 2)
+    assert_eq(JSON.require<int>(arr, [2, "id"]), 3)
 }
 
 @test
 fn test_complex_mixed() {
     var data = JSON.parseValue("{\"users\": [{\"name\": \"Alice\", \"scores\": [90, 85]}, {\"name\": \"Bob\", \"scores\": [78, 92]}]}")
-    assert_eq(len(data.users), 2)
-    assert_eq(data.users[0].name, "Alice")
-    assert_eq(data.users[0].scores[0], 90)
-    assert_eq(data.users[1].name, "Bob")
-    assert_eq(data.users[1].scores[1], 92)
+    assert_eq(len(JSON.require<Array<JSON.Value>>(data, ["users"])), 2)
+    assert_eq(JSON.require<string>(data, ["users", 0, "name"]), "Alice")
+    assert_eq(JSON.require<int>(data, ["users", 0, "scores", 0]), 90)
+    assert_eq(JSON.require<string>(data, ["users", 1, "name"]), "Bob")
+    assert_eq(JSON.require<int>(data, ["users", 1, "scores", 1]), 92)
 }
 
 // ===== 多键对象测试 =====
@@ -106,16 +106,16 @@ fn test_complex_mixed() {
 @test
 fn test_object_many_keys() {
     var obj = JSON.parseValue("{\"a\":1,\"b\":2,\"c\":3,\"d\":4,\"e\":5,\"f\":6,\"g\":7,\"h\":8,\"i\":9,\"j\":10}")
-    assert_eq(obj.a, 1)
-    assert_eq(obj.e, 5)
-    assert_eq(obj.j, 10)
+    assert_eq(JSON.require<int>(obj, ["a"]), 1)
+    assert_eq(JSON.require<int>(obj, ["e"]), 5)
+    assert_eq(JSON.require<int>(obj, ["j"]), 10)
 }
 
 @test
 fn test_object_long_keys() {
     var obj = JSON.parseValue("{\"very_long_key_name_here\": 42, \"another_very_long_key\": 100}")
-    assert_eq(obj.very_long_key_name_here, 42)
-    assert_eq(obj.another_very_long_key, 100)
+    assert_eq(JSON.require<int>(obj, ["very_long_key_name_here"]), 42)
+    assert_eq(JSON.require<int>(obj, ["another_very_long_key"]), 100)
 }
 
 // ===== 大型数组测试 =====
@@ -135,10 +135,10 @@ fn test_large_array() {
     jsonStr = jsonStr + "]"
     
     var arr = JSON.parseValue(jsonStr)
-    assert_eq(len(arr), 100)
-    assert_eq(arr[0], 0)
-    assert_eq(arr[50], 50)
-    assert_eq(arr[99], 99)
+    assert_eq(len(JSON.asArray(arr)!), 100)
+    assert_eq(JSON.require<int>(arr, [0]), 0)
+    assert_eq(JSON.require<int>(arr, [50]), 50)
+    assert_eq(JSON.require<int>(arr, [99]), 99)
 }
 
 // ===== 真实数据结构模拟 =====
@@ -147,45 +147,45 @@ fn test_large_array() {
 fn test_user_profile() {
     var jsonStr = "{\"id\": 12345, \"username\": \"johndoe\", \"email\": \"john@example.com\", \"profile\": {\"firstName\": \"John\", \"lastName\": \"Doe\", \"age\": 28}, \"settings\": {\"theme\": \"dark\", \"notifications\": true}}"
     var user = JSON.parseValue(jsonStr)
-    assert_eq(user.id, 12345)
-    assert_eq(user.username, "johndoe")
-    assert_eq(user.profile.firstName, "John")
-    assert_eq(user.profile.age, 28)
-    assert_eq(user.settings.theme, "dark")
-    assert_eq(user.settings.notifications, true)
+    assert_eq(JSON.require<int>(user, ["id"]), 12345)
+    assert_eq(JSON.require<string>(user, ["username"]), "johndoe")
+    assert_eq(JSON.require<string>(user, ["profile", "firstName"]), "John")
+    assert_eq(JSON.require<int>(user, ["profile", "age"]), 28)
+    assert_eq(JSON.require<string>(user, ["settings", "theme"]), "dark")
+    assert_eq(JSON.require<bool>(user, ["settings", "notifications"]), true)
 }
 
 @test
 fn test_api_response() {
     var jsonStr = "{\"status\": \"success\", \"code\": 200, \"data\": {\"items\": [{\"id\": 1, \"name\": \"Item 1\"}, {\"id\": 2, \"name\": \"Item 2\"}], \"total\": 2}, \"meta\": {\"page\": 1, \"limit\": 10}}"
     var response = JSON.parseValue(jsonStr)
-    assert_eq(response.status, "success")
-    assert_eq(response.code, 200)
-    assert_eq(len(response.data.items), 2)
-    assert_eq(response.data.items[0].name, "Item 1")
-    assert_eq(response.data.total, 2)
-    assert_eq(response.meta.page, 1)
+    assert_eq(JSON.require<string>(response, ["status"]), "success")
+    assert_eq(JSON.require<int>(response, ["code"]), 200)
+    assert_eq(len(JSON.require<Array<JSON.Value>>(response, ["data", "items"])), 2)
+    assert_eq(JSON.require<string>(response, ["data", "items", 0, "name"]), "Item 1")
+    assert_eq(JSON.require<int>(response, ["data", "total"]), 2)
+    assert_eq(JSON.require<int>(response, ["meta", "page"]), 1)
 }
 
 @test
 fn test_geojson_like() {
     var jsonStr = "{\"geoType\": \"Point\", \"coordinates\": [125.6, 10.1]}"
     var geo = JSON.parseValue(jsonStr)
-    assert_eq(geo.geoType, "Point")
-    assert_eq(len(geo.coordinates), 2)
-    assert_eq(geo.coordinates[0], 125.6)
-    assert_eq(geo.coordinates[1], 10.1)
+    assert_eq(JSON.require<string>(geo, ["geoType"]), "Point")
+    assert_eq(len(JSON.require<Array<JSON.Value>>(geo, ["coordinates"])), 2)
+    assert_eq(JSON.require<float>(geo, ["coordinates", 0]), 125.6)
+    assert_eq(JSON.require<float>(geo, ["coordinates", 1]), 10.1)
 }
 
 @test
 fn test_config_file() {
     var jsonStr = "{\"version\": \"1.0.0\", \"debug\": false, \"database\": {\"host\": \"localhost\", \"port\": 5432, \"name\": \"mydb\"}, \"features\": [\"feature1\", \"feature2\", \"feature3\"]}"
     var config = JSON.parseValue(jsonStr)
-    assert_eq(config.version, "1.0.0")
-    assert_eq(config.debug, false)
-    assert_eq(config.database.host, "localhost")
-    assert_eq(config.database.port, 5432)
-    assert_eq(len(config.features), 3)
+    assert_eq(JSON.require<string>(config, ["version"]), "1.0.0")
+    assert_eq(JSON.require<bool>(config, ["debug"]), false)
+    assert_eq(JSON.require<string>(config, ["database", "host"]), "localhost")
+    assert_eq(JSON.require<int>(config, ["database", "port"]), 5432)
+    assert_eq(len(JSON.require<Array<JSON.Value>>(config, ["features"])), 3)
 }
 
 // ===== 边界情况 =====
@@ -193,42 +193,42 @@ fn test_config_file() {
 @test
 fn test_single_element_array() {
     var arr = JSON.parseValue("[42]")
-    assert_eq(len(arr), 1)
-    assert_eq(arr[0], 42)
+    assert_eq(len(JSON.asArray(arr)!), 1)
+    assert_eq(JSON.require<int>(arr, [0]), 42)
 }
 
 @test
 fn test_single_key_object() {
     var obj = JSON.parseValue("{\"key\": \"value\"}")
-    assert_eq(obj.key, "value")
+    assert_eq(JSON.require<string>(obj, ["key"]), "value")
 }
 
 @test
 fn test_mixed_types_array() {
     var arr = JSON.parseValue("[1, \"two\", true, null, 3.14, {\"key\": \"value\"}, [1, 2]]")
-    assert_eq(len(arr), 7)
-    assert_eq(arr[0], 1)
-    assert_eq(arr[1], "two")
-    assert_eq(arr[2], true)
-    assert_eq(arr[3], null)
-    assert_eq(arr[4], 3.14)
-    assert_eq(arr[5].key, "value")
-    assert_eq(arr[6][0], 1)
+    assert_eq(len(JSON.asArray(arr)!), 7)
+    assert_eq(JSON.require<int>(arr, [0]), 1)
+    assert_eq(JSON.require<string>(arr, [1]), "two")
+    assert_eq(JSON.require<bool>(arr, [2]), true)
+    assert(JSON.isNull(JSON.require<JSON.Value>(arr, [3])))
+    assert_eq(JSON.require<float>(arr, [4]), 3.14)
+    assert_eq(JSON.require<string>(arr, [5, "key"]), "value")
+    assert_eq(JSON.require<int>(arr, [6, 0]), 1)
 }
 
 @test
 fn test_null_values_in_object() {
     var obj = JSON.parseValue("{\"a\": null, \"b\": null, \"c\": 1}")
-    assert_eq(obj.a, null)
-    assert_eq(obj.b, null)
-    assert_eq(obj.c, 1)
+    assert(JSON.isNull(JSON.require<JSON.Value>(obj, ["a"])))
+    assert(JSON.isNull(JSON.require<JSON.Value>(obj, ["b"])))
+    assert_eq(JSON.require<int>(obj, ["c"]), 1)
 }
 
 @test
 fn test_boolean_values_in_object() {
     var obj = JSON.parseValue("{\"yes\": true, \"no\": false}")
-    assert_eq(obj.yes, true)
-    assert_eq(obj.no, false)
+    assert_eq(JSON.require<bool>(obj, ["yes"]), true)
+    assert_eq(JSON.require<bool>(obj, ["no"]), false)
 }
 
 // ===== stringify 嵌套测试 =====
@@ -238,8 +238,8 @@ fn test_stringify_nested_array() {
     var arr = [[1, 2], [3, 4]]
     var jsonStr = JSON.stringify(arr)
     var parsed = JSON.parseValue(jsonStr)
-    assert_eq(parsed[0][0], 1)
-    assert_eq(parsed[1][1], 4)
+    assert_eq(JSON.require<int>(parsed, [0, 0]), 1)
+    assert_eq(JSON.require<int>(parsed, [1, 1]), 4)
 }
 
 @test
@@ -247,7 +247,7 @@ fn test_stringify_nested_object() {
     var obj = { user: { name: "Alice" } }
     var jsonStr = JSON.stringify(obj)
     var parsed = JSON.parseValue(jsonStr)
-    assert_eq(parsed.user.name, "Alice")
+    assert_eq(JSON.require<string>(parsed, ["user", "name"]), "Alice")
 }
 
 @test
@@ -260,7 +260,6 @@ fn test_stringify_complex() {
     }
     var jsonStr = JSON.stringify(data)
     var parsed = JSON.parseValue(jsonStr)
-    assert_eq(len(parsed.users), 2)
-    assert_eq(parsed.users[0].name, "Alice")
+    assert_eq(len(JSON.require<Array<JSON.Value>>(parsed, ["users"])), 2)
+    assert_eq(JSON.require<string>(parsed, ["users", 0, "name"]), "Alice")
 }
-

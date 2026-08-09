@@ -20,6 +20,10 @@ _PRELUDE_TYPE_RE = re.compile(
     r'\s*(?P<native>[^,]+?)\s*,\s*(?P<kind>[A-Z0-9_]+)\s*\)'
 )
 _TYPE_RE = re.compile(r'XR_BUILTIN_TYPE\(\s*"(?P<name>[^"]+)"\s*,\s*(?P<arity>\d+)\s*\)')
+_NAMESPACE_TYPE_RE = re.compile(
+    r'XR_BUILTIN_NAMESPACE_TYPE\(\s*"(?P<namespace>[^"]+)"\s*,\s*'
+    r'"(?P<name>[^"]+)"\s*,\s*(?P<arity>\d+)\s*\)'
+)
 _IFACE_RE = re.compile(r'XR_BUILTIN_IFACE\(\s*"(?P<name>[^"]+)"\s*,\s*(?P<arity>\d+)\s*\)')
 _ENUM_RE = re.compile(
     r'XR_BUILTIN_ENUM\(\s*"(?P<name>[^"]+)"\s*,\s*(?P<arity>\d+)\s*,'
@@ -41,7 +45,7 @@ _MACRO_DEFINITION_LINE = re.compile(r'^\s*#\s*(define|ifndef|undef)\b')
 @dataclass(frozen=True)
 class Symbol:
     name: str
-    category: str  # prelude_type | type | enum | interface | hint
+    category: str  # prelude_type | type | namespace_type | enum | interface | hint
     arity: int = 0
     native_type: str | None = None
     prelude_kind: str | None = None
@@ -52,7 +56,13 @@ class Symbol:
     @property
     def is_language_surface(self) -> bool:
         """Nameable by user code and therefore owed a specification entry."""
-        return self.category in {"prelude_type", "type", "enum", "interface"}
+        return self.category in {
+            "prelude_type",
+            "type",
+            "namespace_type",
+            "enum",
+            "interface",
+        }
 
     @property
     def spelling(self) -> str:
@@ -120,6 +130,15 @@ def load(root: Path | str = ".") -> Registry:
             Symbol(
                 name=match.group("name"),
                 category="type",
+                arity=int(match.group("arity")),
+                line=_line_of(body, match.start()),
+            )
+        )
+    for match in _NAMESPACE_TYPE_RE.finditer(body):
+        registry.symbols.append(
+            Symbol(
+                name=f'{match.group("namespace")}.{match.group("name")}',
+                category="namespace_type",
                 arity=int(match.group("arity")),
                 line=_line_of(body, match.start()),
             )

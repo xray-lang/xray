@@ -34,7 +34,7 @@ fn test_decode_wrong_type() {
 @test
 fn test_decode_extra_fields() {
     var extra = JSON.parseValue("{\"name\": \"Carol\", \"age\": 25, \"email\": \"c@test.com\"}")
-    var user = JSON.decode<User>(extra)
+    var user = JSON.decode<User>(extra, JSON.UnknownFields.Ignore)
     assert(user != null)
     assert_eq(user!.name, "Carol")
     assert_eq(user!.age, 25)

@@ -302,6 +302,10 @@ invoke_dispatch:;
 
         /* Primitive method (C function): all native type methods land here */
         if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
+            if (!invoke_unwrap_primitive_args(vm_ctx, &R(a + 2), nargs)) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                                 "invalid call-bound place passed to primitive method");
+            }
             XrValue result = method->as.primitive(isolate, receiver, &R(a + 2), nargs);
             VM_REBIND_AFTER_NATIVE_CALL();
             R(a) = result;
@@ -311,6 +315,10 @@ invoke_dispatch:;
 
         if (method && method->type == XMETHOD_YIELDABLE_PRIMITIVE &&
             method->as.yieldable_primitive) {
+            if (!invoke_unwrap_primitive_args(vm_ctx, &R(a + 2), nargs)) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                                 "invalid call-bound place passed to primitive method");
+            }
             ci->cfunc_result_slot = (int16_t) a;
             ci->has_cfunc_result = false;
             savepc();
@@ -507,8 +515,7 @@ vmcase(OP_INVOKE_DIRECT) {
     }
     XrClass *cls = NULL;
     if (XR_IS_AGG_REF(receiver)) {
-        // Stack-allocated struct: class ptr at head
-        cls = *(XrClass **) xr_to_struct_ptr(receiver);
+        cls = invoke_resolve_class(isolate, receiver);
     } else {
         if (XR_UNLIKELY(!XR_IS_INSTANCE(receiver))) {
             XrProto *cur_proto = cl ? cl->proto : NULL;
@@ -535,6 +542,10 @@ vmcase(OP_INVOKE_DIRECT) {
      * native method), accessing .as.closure would read the wrong union
      * member and crash.  Guard defensively. */
     if (method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
+        if (!invoke_unwrap_primitive_args(vm_ctx, &R(a + 2), nargs)) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                             "invalid call-bound place passed to direct primitive method");
+        }
         XrValue result = method->as.primitive(isolate, receiver, &R(a + 2), nargs);
         VM_REBIND_AFTER_NATIVE_CALL();
         R(a) = result;
@@ -542,6 +553,10 @@ vmcase(OP_INVOKE_DIRECT) {
         vmbreak;
     }
     if (method->type == XMETHOD_YIELDABLE_PRIMITIVE && method->as.yieldable_primitive) {
+        if (!invoke_unwrap_primitive_args(vm_ctx, &R(a + 2), nargs)) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                             "invalid call-bound place passed to direct primitive method");
+        }
         ci->cfunc_result_slot = (int16_t) a;
         ci->has_cfunc_result = false;
         savepc();

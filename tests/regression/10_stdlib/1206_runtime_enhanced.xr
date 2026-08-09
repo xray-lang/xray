@@ -64,7 +64,7 @@ fn test_mem_live_bytes_decreases_after_collect() {
     fn make_garbage() {
         var temp: Array<JSON.Value> = []
         for (var i = 0; i < 200; i++) {
-            temp.push({"garbage": i})
+            temp.push(JSON.value({"garbage": i}))
         }
     }
     make_garbage()
@@ -81,7 +81,7 @@ fn test_mem_live_objects_tracks_alloc() {
     var before = runtime.liveObjects()
     var arr: Array<JSON.Value> = []
     for (var i = 0; i < 10; i++) {
-        arr.push({"k": i})
+        arr.push(JSON.value({"k": i}))
     }
     // Xray reclaims by reference counting: a value is freed at its LAST use, not
     // at the end of the enclosing scope. `arr` must therefore be used again

@@ -59,6 +59,12 @@ generates the first scalar stdlib fragment from authoritative Xray source. The
 fragment borrows the embedding runtime and exports only manifest-declared C ABI
 entries; it cannot synthesize a program main, runtime implementation, or
 constructor lifecycle.
+Hosted Fragment ABI v7 adds a layout-neutral, call-scoped byte-span view for
+`Array<byte>` and `Slice<byte>`. Generated fragments receive only `(data,
+length, readonly)` from the host operation table and never reinterpret a VM
+container header. A mutable `ref` parameter rejects readonly provenance before
+entry; this explicit ABI revision changes no Xray value tag or native Slice
+layout.
 Task 260 carries recursive typed-Json schemas across VM bytecode and generated
 C. Decoding a derived value struct writes its existing native aggregate layout;
 heap materialization uses the registered type destructor and storage promoter.
@@ -200,6 +206,11 @@ emission, and native linking:
   compile-time size/alignment/offset assertions on both sides. A fragment may
   borrow these objects but cannot invent a second layout, retain an unowned
   runtime root, or bypass the declared argument/return ownership convention.
+  Hosted Fragment ABI v7 is the only accepted fragment interface. Contiguous
+  byte input crosses through `byte_span_view`, never through a cast of the host
+  Array or Slice representation; its pointer is borrowed for the call only,
+  length must fit the signed native Slice ABI, and readonly provenance makes a
+  mutable `ref` argument invalid rather than silently copying or mutating it.
 
 The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
@@ -234,14 +245,15 @@ anchor-sha256: src/aot/xaot_link.c 77db5eea55ef7ed4a31553ac05bf7efa88490b9e5b428
 anchor-sha256: src/aot/xaot_prepare.c aafc236f21231b6509fca91e544d948f7ea2d06b059fd0c8101f0286f4a66bbd
 anchor-sha256: src/aot/xaot_verify.c 9f4bbdb1adb242c60cdae763ee53ba9d9145e2954dbef8d482b5561aba7983bb
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 9ab2e136a896154cfc86acb3b7ad3daf82386737746b4ca6bb2ffbf03c2cbc79
-anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 8d0d6340823b79665146e038be43bdf861913bf9913bf61afa024d7a0c5b6813
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 85fa12cd74b1f7a98de2fe9466d78c246ac8a579ecfdf80ee9ac5bfd20c64af1
+anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 66989a96bd54fdeefda0cf8f821c212a78871129281928fad82a582a163c6f7f
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 99a056e221868950d21fd080a22054ba2d36b6797c111c0344af161f4038d1a8
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c f6afb1ccff465f73ee3ddec54fd659f7b8a9f6a2499fff356d850c5099da6d47
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 940017887575c4f01c23d45d934410b739322bbf07288765e504b31621e48812
-anchor-sha256: src/aot/xi_cgen.c 03ba78e41fe06d2f1a5bfeb6053667be968a32b299c86c3b2cab9c4412fa3330
-anchor-sha256: src/aot/xrt_coll.h aecb7ab9fa6e51e303deafbd82ce1eb5035a2d32357edf269b90b16cb5a8e836
+anchor-sha256: src/aot/xi_cgen.c ba195d041a4181360bcb13ba121478dedd16c78d9c9b563a941bfcb6a56113be
+anchor-sha256: src/aot/xrt_coll.h 5e5b8547d59a0cec4144f10db2fab50c5035c3041df22081e4cbf525b90b6e28
 anchor-sha256: src/aot/xrt_core_freestanding.h 7e06f2892f89bd95120c737100bcdc90dd1ef15f1ca249d199c9119bc37dfc25
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
+anchor-sha256: include/xray_hosted_fragment_abi.h bcf50466f8320c265a49c6776f669912b83ac4ac3d04f397d4f6c527f1ead02c
 anchor-sha256: src/app/cli/xcmd_build.c 5176cb4b44a22335b74882f74be75ab08b05a18e04872e89acfadffe2fd8e61b
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 4e59251373523665674da4c863fac624fadef9cf077ebf8b6e9301768573490d

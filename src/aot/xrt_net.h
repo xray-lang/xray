@@ -29,6 +29,14 @@
 #define XRT_NET_DEFAULT_READ_BYTES 4096
 #define XRT_NET_MAX_READ_BYTES 1048576
 
+#if defined(XRT_ENABLE_NETPOLL)
+/* Hosted executor hook: remove an fd from the runtime netpoll before the
+ * platform handle is closed. The declaration and call are capability-gated so
+ * synchronous network values do not pull the coroutine runtime into otherwise
+ * runtime-free AOT artifacts. */
+XR_FUNC void xr_aot_netpoll_close_fd(int fd);
+#endif
+
 typedef enum xrt_net_handle_kind {
     XRT_NET_HANDLE_CONN = 1,
     XRT_NET_HANDLE_LISTENER = 2,
@@ -79,6 +87,20 @@ typedef struct xrt_net_array_view {
     XrObjHeader hdr;
     XR_ARRAY_ABI_FIELDS;
 } xrt_net_array_view_t;
+
+typedef enum xrt_net_try_state {
+    XRT_NET_TRY_DONE = 0,
+    XRT_NET_TRY_WAIT_READ = 1,
+    XRT_NET_TRY_WAIT_WRITE = 2,
+} xrt_net_try_state_t;
+
+typedef struct xrt_net_try_result {
+    XrValue value;
+    int state;
+    int fd;
+    int64_t timeout_ms;
+    int64_t progress;
+} xrt_net_try_result_t;
 
 static inline void xrt_net_init_once(void) {
 #if defined(XR_OS_WINDOWS)
@@ -209,6 +231,29 @@ static inline XrValue xrt_net_listener_box(xrt_net_listener_object_t *listener) 
     return listener ? xr_mkptr(listener, XR_TAG_NET_LISTENER) : XR_NULL_VAL;
 }
 
+static inline xrt_net_try_result_t xrt_net_try_done(XrValue value, int64_t progress) {
+    xrt_net_try_result_t result = {value, XRT_NET_TRY_DONE, -1, -1, progress};
+    return result;
+}
+
+static inline int64_t xrt_net_timeout_until(int64_t deadline_ms) {
+    if (deadline_ms <= 0)
+        return -1;
+    int64_t remaining = deadline_ms - xrt_net_now_ms();
+    return remaining > 0 ? remaining : 0;
+}
+
+static inline xrt_net_try_result_t xrt_net_try_wait(int state, xr_socket_t fd, int64_t deadline_ms,
+                                                    int64_t progress) {
+    xrt_net_try_result_t result = {XR_NULL_VAL, state, (int) fd, xrt_net_timeout_until(deadline_ms),
+                                   progress};
+    return result;
+}
+
+static inline void xrt_net_mark_timeout(XrValue handle_value) {
+    xrt_net_set_error_base(xrt_net_handle_base_ptr(handle_value), XRT_NETERR_TIMEOUT, XR_ETIMEDOUT);
+}
+
 static inline xrt_net_conn_object_t *xrt_net_conn_new(xr_socket_t fd, uint8_t conn_kind) {
     xrt_net_conn_object_t *conn = (xrt_net_conn_object_t *) xrt_arc_alloc(sizeof(*conn));
     memset(conn, 0, sizeof(*conn));
@@ -233,6 +278,9 @@ static inline xrt_net_listener_object_t *xrt_net_listener_new(xr_socket_t fd, in
 static inline void xrt_net_close_fd(xr_socket_t fd) {
     if (fd == XR_INVALID_SOCKET)
         return;
+#if defined(XRT_ENABLE_NETPOLL)
+    xr_aot_netpoll_close_fd((int) fd);
+#endif
     shutdown(fd, XR_SHUT_RDWR);
     xr_closesocket(fd);
 }
@@ -485,6 +533,141 @@ static inline XrValue xrt_net_listen(XrValue port_value, XrValue backlog_value) 
 
 static inline XrValue xrt_net_listen_default(XrValue port_value) {
     return xrt_net_listen(port_value, XR_FROM_INT(1024));
+}
+
+/* Non-blocking AOT steps. Generated coroutine frames retry these after the
+ * scheduler's netpoll wait, so hosted AOT uses the same non-blocking worker
+ * contract as the VM instead of occupying an OS worker in select(). */
+static inline xrt_net_try_result_t xrt_net_accept_try(XrValue listener_value) {
+    xrt_net_listener_object_t *listener = xrt_net_listener_ptr(listener_value);
+    if (!listener || listener->base.closed || listener->base.fd == XR_INVALID_SOCKET) {
+        if (listener)
+            xrt_net_set_error_base(&listener->base, XRT_NETERR_CLOSED, 0);
+        return xrt_net_try_done(XR_NULL_VAL, 0);
+    }
+    for (;;) {
+        struct sockaddr_storage addr;
+        socklen_t addrlen = sizeof(addr);
+        xr_socket_t fd = accept(listener->base.fd, (struct sockaddr *) &addr, &addrlen);
+        if (fd != XR_INVALID_SOCKET) {
+            xr_socket_set_nonblocking(fd);
+            xr_socket_set_nodelay(fd, true);
+            xrt_net_clear_error_base(&listener->base);
+            return xrt_net_try_done(xrt_net_conn_box(xrt_net_conn_new(fd, XRT_NETCONN_TCP)), 0);
+        }
+        int err = xr_get_socket_error();
+        if (xr_socket_err_is_again(err))
+            return xrt_net_try_wait(XRT_NET_TRY_WAIT_READ, listener->base.fd,
+                                    listener->accept_deadline_ms, 0);
+        if (err == XR_EINTR)
+            continue;
+        xrt_net_set_error_base(&listener->base, xrt_net_error_from_errno(err), err);
+        return xrt_net_try_done(XR_NULL_VAL, 0);
+    }
+}
+
+static inline xrt_net_try_result_t xrt_net_read_try(XrValue conn_value, XrValue maxlen_value) {
+    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
+    if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET) {
+        if (conn)
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_CLOSED, 0);
+        return xrt_net_try_done(XR_NULL_VAL, 0);
+    }
+    if (conn->conn_kind == XRT_NETCONN_TLS) {
+        xrt_net_set_error_base(&conn->base, XRT_NETERR_TLS, 0);
+        return xrt_net_try_done(XR_NULL_VAL, 0);
+    }
+
+    int64_t requested = xrt_net_int_arg(maxlen_value);
+    if (requested <= 0)
+        requested = XRT_NET_DEFAULT_READ_BYTES;
+    if (requested > XRT_NET_MAX_READ_BYTES)
+        requested = XRT_NET_MAX_READ_BYTES;
+    char *buf = (char *) XRT_MALLOC((size_t) requested);
+    if (!buf) {
+        xrt_net_set_error_base(&conn->base, XRT_NETERR_IO, 0);
+        return xrt_net_try_done(XR_NULL_VAL, 0);
+    }
+    for (;;) {
+        ssize_t n = xr_socket_recv(conn->base.fd, buf, (size_t) requested);
+        if (n > 0) {
+            XrValue out = xrt_str_alloc((size_t) n);
+            memcpy(xr_str_buf(out), buf, (size_t) n);
+            XRT_FREE(buf);
+            xrt_net_clear_error_base(&conn->base);
+            return xrt_net_try_done(out, 0);
+        }
+        if (n == 0) {
+            XRT_FREE(buf);
+            xrt_net_clear_error_base(&conn->base);
+            return xrt_net_try_done(XR_NULL_VAL, 0);
+        }
+        int err = xr_get_socket_error();
+        if (err == XR_EINTR)
+            continue;
+        XRT_FREE(buf);
+        if (xr_socket_err_is_again(err))
+            return xrt_net_try_wait(XRT_NET_TRY_WAIT_READ, conn->base.fd, conn->read_deadline_ms,
+                                    0);
+        xrt_net_set_error_base(&conn->base, xrt_net_error_from_errno(err), err);
+        return xrt_net_try_done(XR_NULL_VAL, 0);
+    }
+}
+
+static inline xrt_net_try_result_t xrt_net_write_try(XrValue conn_value, const char *data,
+                                                     int64_t len, int64_t progress) {
+    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
+    if (!conn || conn->base.closed || conn->base.fd == XR_INVALID_SOCKET) {
+        if (conn)
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_CLOSED, 0);
+        return xrt_net_try_done(XR_FROM_INT(progress > 0 ? progress : -1), progress);
+    }
+    if (conn->conn_kind == XRT_NETCONN_TLS) {
+        xrt_net_set_error_base(&conn->base, XRT_NETERR_TLS, 0);
+        return xrt_net_try_done(XR_FROM_INT(progress > 0 ? progress : -1), progress);
+    }
+    if ((!data && len > 0) || progress < 0 || progress > len) {
+        xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+        return xrt_net_try_done(XR_FROM_INT(progress > 0 ? progress : -1), progress);
+    }
+    while (progress < len) {
+        ssize_t n = xr_socket_send(conn->base.fd, data + progress, (size_t) (len - progress));
+        if (n > 0) {
+            progress += n;
+            continue;
+        }
+        if (n == 0)
+            break;
+        int err = xr_get_socket_error();
+        if (err == XR_EINTR)
+            continue;
+        if (xr_socket_err_is_again(err))
+            return xrt_net_try_wait(XRT_NET_TRY_WAIT_WRITE, conn->base.fd, conn->write_deadline_ms,
+                                    progress);
+        xrt_net_set_error_base(&conn->base, xrt_net_error_from_errno(err), err);
+        return xrt_net_try_done(XR_FROM_INT(progress > 0 ? progress : -1), progress);
+    }
+    if (progress == len)
+        xrt_net_clear_error_base(&conn->base);
+    return xrt_net_try_done(XR_FROM_INT(progress > 0 || len == 0 ? progress : -1), progress);
+}
+
+static inline xrt_net_try_result_t xrt_net_write_bytes_try(XrValue conn_value, XrValue data_value,
+                                                           int64_t progress) {
+    xrt_net_conn_object_t *conn = xrt_net_conn_ptr(conn_value);
+    if (!XR_IS_ARRAY(data_value) || !data_value.ptr) {
+        if (conn)
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+        return xrt_net_try_done(XR_FROM_INT(-1), progress);
+    }
+    xrt_net_array_view_t *data = (xrt_net_array_view_t *) data_value.ptr;
+    if (data->elem_type != XR_ELEM_U8 || data->elem_size != 1 || data->length < 0 ||
+        (data->length > 0 && !data->data)) {
+        if (conn)
+            xrt_net_set_error_base(&conn->base, XRT_NETERR_INVALID, 0);
+        return xrt_net_try_done(XR_FROM_INT(-1), progress);
+    }
+    return xrt_net_write_try(conn_value, (const char *) data->data, data->length, progress);
 }
 
 static inline XrValue xrt_net_accept(XrValue listener_value) {

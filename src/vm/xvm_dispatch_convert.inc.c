@@ -365,8 +365,14 @@ vmcase(OP_TOBOOL) {
 vmcase(OP_COPY) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    int storage_mode = GETARG_C(i);
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) GETARG_C(i));
     XrValue _src = R(b);
+    if (XR_IS_AGG_REF(_src) && !XR_IS_ARRAY_REF(_src) && !XR_IS_SLICE_REF(_src)) {
+        R(a) = xr_vm_struct_materialize_instance(isolate, _src);
+        if (XR_IS_NULL(R(a)))
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to materialize value-struct copy");
+        vmbreak;
+    }
     if (XR_IS_SLICE_REF(_src)) {
         XrSliceView *span = XR_TO_SLICE_REF(_src);
         uint8_t elem_type = XR_SLICE_REF_ELEM_TYPE(_src);

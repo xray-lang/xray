@@ -118,6 +118,10 @@ vmcase(OP_AGG_NEW) {
     XrAggregateLayout *layout = cls->struct_layout;
     XR_DCHECK(layout != NULL, "OP_AGG_NEW requires struct_layout");
     uint16_t layout_id = xr_vm_struct_layout_register(&isolate->vm, layout);
+    if (layout->nominal_name &&
+        XR_UNLIKELY(!xr_vm_struct_layout_bind_class(&isolate->vm, layout, cls))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "value-struct layout/class identity collision");
+    }
     if (XR_UNLIKELY(layout_id == 0 && xr_aggregate_layout_is_headerless(layout))) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "failed to register fixed-layout aggregate");
     }

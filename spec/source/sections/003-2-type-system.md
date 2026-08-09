@@ -64,7 +64,14 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `EnumVariant<T>` | 解析器内建 |
 | `EnumVariants<T>` | 解析器内建 |
 | `Iterator<T>` | prelude |
-| `JSON.Value` / `JSON.Object` | prelude `JSON` 命名空间 |
+| `JSON.Decodable` | 解析器内建 |
+| `JSON.Encodable` | 解析器内建 |
+| `JSON.Object` | 解析器内建 |
+| `JSON.Path` | 解析器内建 |
+| `JSON.PathSegment` | 解析器内建 |
+| `JSON.UnknownFields` | 解析器内建 |
+| `JSON.Value` | 解析器内建 |
+| `JSON.WithRest<T>` | 解析器内建 |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | 解析器内建 |
 | `NetConn` | prelude |
@@ -1193,7 +1200,14 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `EnumVariant<T>` | resolver built-in |
 | `EnumVariants<T>` | resolver built-in |
 | `Iterator<T>` | prelude |
-| `JSON.Value` / `JSON.Object` | prelude `JSON` namespace |
+| `JSON.Decodable` | resolver built-in |
+| `JSON.Encodable` | resolver built-in |
+| `JSON.Object` | resolver built-in |
+| `JSON.Path` | resolver built-in |
+| `JSON.PathSegment` | resolver built-in |
+| `JSON.UnknownFields` | resolver built-in |
+| `JSON.Value` | resolver built-in |
+| `JSON.WithRest<T>` | resolver built-in |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | resolver built-in |
 | `NetConn` | prelude |

@@ -156,19 +156,14 @@ static const char *cg_class_native_prefix_for_data(const XiCgenCtx *ctx, const X
 
 /* Native class data for a *type* rather than a bare name.
  *
- * A builtin named instance carries no declaration identity, so it must never
- * resolve to a module's native class however that class is spelled. Without
- * this guard, `class Range { ... }` in the module makes an ordinary `2..6`
- * value adopt the class's native pointer layout, and CGen emits a `void *`
- * slot holding a tagged XrValue — C that does not compile.
- *
- * Resolution stays name-based for the user-class case on purpose: a
- * monomorphized generic is found through display_name / generic_origin_name,
- * which no single XrClassInfo pointer identifies. */
+ * Resolution stays name-based because imported class annotations can be
+ * reconstructed from module metadata without preserving their analyzer-local
+ * XrClassInfo pointer, and a monomorphized generic is found through
+ * display_name / generic_origin_name. Builtin names are reserved at source
+ * declaration time, so a source class cannot make a builtin Range/Buffer/etc.
+ * collide with this lookup. */
 static const XiClassData *cg_class_native_data_for_type(const XiCgenCtx *ctx, const XrType *type) {
     if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE))
-        return NULL;
-    if (type->kind == XR_KIND_INSTANCE && !type->instance.class_ref)
         return NULL;
     return cg_class_native_data_by_name(ctx, xr_type_get_class_name((XrType *) (uintptr_t) type));
 }

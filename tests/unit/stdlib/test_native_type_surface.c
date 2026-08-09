@@ -14,6 +14,8 @@
 #include "xray_vm.h"
 #include "../../../src/frontend/analyzer/xanalyzer_builtins.h"
 #include "../../../src/frontend/analyzer/xanalyzer_native_types.h"
+#include "../../../src/analysis/xglobal_summary.h"
+#include "../../../src/runtime/class/xclass.h"
 #include "../../../src/runtime/class/xenum.h"
 #include "../../../stdlib/stdlib_cache.h"
 
@@ -76,6 +78,15 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_NOT_NULL(object_shape_type);
     ASSERT_EQ_INT(object_shape_type->kind, XR_KIND_STRUCT_OBJECT);
     ASSERT_EQ_INT(object_shape_type->object.field_count, 2);
+
+    XrClass *record_class = xr_stdlib_record_class_get(iso, "net", "__CopyBidirectionalResult");
+    ASSERT_NOT_NULL(record_class);
+    int a_to_b_index = xr_class_lookup_field_by_name(iso, record_class, "aToB");
+    int b_to_a_index = xr_class_lookup_field_by_name(iso, record_class, "bToA");
+    int expected_a_to_b =
+        xg_object_stable_name_key("bToA") < xg_object_stable_name_key("aToB") ? 1 : 0;
+    ASSERT_EQ_INT(a_to_b_index, expected_a_to_b);
+    ASSERT_EQ_INT(b_to_a_index, 1 - expected_a_to_b);
 
     const XaBuiltinEnum *enum_decl = xa_builtin_get_enum_type("net", "NetError");
     ASSERT_NOT_NULL(enum_decl);
@@ -142,10 +153,9 @@ TEST(native_module_object_and_enum_metadata) {
     ASSERT_TRUE(strcmp(cluster_config->fields[3].name, "tls") == 0);
     ASSERT_TRUE(strcmp(cluster_info->fields[6].name, "deadNodes") == 0);
 
-    XrClass *cluster_info_class = xr_stdlib_object_shape_class_get(iso, "cluster", "ClusterInfo");
+    XrClass *cluster_info_class = xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo");
     ASSERT_NOT_NULL(cluster_info_class);
-    ASSERT_TRUE(cluster_info_class ==
-                xr_stdlib_object_shape_class_get(iso, "cluster", "ClusterInfo"));
+    ASSERT_TRUE(cluster_info_class == xr_stdlib_record_class_get(iso, "cluster", "ClusterInfo"));
 
     const XaBuiltinEnum *cluster_state = xa_builtin_get_enum_type("cluster", "ClusterNodeState");
     ASSERT_NOT_NULL(cluster_state);

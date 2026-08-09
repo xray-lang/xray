@@ -2067,6 +2067,72 @@ TEST(go_await) {
     xi_func_free(f);
 }
 
+#define STORAGE_DOMAIN_REQUIRE(cond, msg)                                                          \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "local_class_cycle_storage_domain: %s\n", (msg));                      \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+TEST(local_class_cycle_storage_domain) {
+    XiFunc *f = lower_source("class Node {\n"
+                             "  peer: Node?\n"
+                             "  value: int\n"
+                             "  constructor(value: int) { this.peer = null; this.value = value }\n"
+                             "}\n"
+                             "fn localPair() {\n"
+                             "  var left = Node(1)\n"
+                             "  var right = Node(2)\n"
+                             "  left.peer = right\n"
+                             "  right.peer = left\n"
+                             "}\n"
+                             "fn returned() -> Node {\n"
+                             "  var result = Node(3)\n"
+                             "  return result\n"
+                             "}\n");
+    STORAGE_DOMAIN_REQUIRE(f != NULL, "storage-domain fixture should lower");
+    XiFunc *local_pair = func_tree_find_func_name(f, "localPair");
+    XiFunc *returned = func_tree_find_func_name(f, "returned");
+    STORAGE_DOMAIN_REQUIRE(local_pair != NULL && returned != NULL,
+                           "fixture functions should be present");
+
+    int local_constructors = 0;
+    for (uint32_t bi = 0; bi < local_pair->nblocks; bi++) {
+        XiBlock *block = local_pair->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!xi_value_is_constructor_call(value))
+                continue;
+            STORAGE_DOMAIN_REQUIRE(xi_value_allocation_storage_mode(value) == XR_OBJ_STORAGE_NORMAL,
+                                   "local class graph must remain in the execution heap");
+            local_constructors++;
+        }
+    }
+    STORAGE_DOMAIN_REQUIRE(local_constructors == 2,
+                           "local graph should contain two constructor allocations");
+
+    XiValue *returned_constructor = NULL;
+    for (uint32_t bi = 0; bi < returned->nblocks && !returned_constructor; bi++) {
+        XiBlock *block = returned->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            if (xi_value_is_constructor_call(block->values[vi])) {
+                returned_constructor = block->values[vi];
+                break;
+            }
+        }
+    }
+    STORAGE_DOMAIN_REQUIRE(returned_constructor != NULL,
+                           "returned graph should contain its constructor allocation");
+    STORAGE_DOMAIN_REQUIRE(xi_value_allocation_storage_mode(returned_constructor) ==
+                               XR_OBJ_STORAGE_TRANSFER,
+                           "a returned fresh class root must materialize in the transfer domain");
+
+    xi_func_free(f);
+}
+
+#undef STORAGE_DOMAIN_REQUIRE
+
 TEST(direct_await_go_one_shot) {
     XiFunc *f = lower_source("fn work() -> int { return 42 }\n"
                              "var r = await go work()\n"
@@ -2206,6 +2272,15 @@ TEST(go_arg_transfer_modes) {
     assert(xi_go_arg_transfer_mode(share_go, 0) == XR_TRANSFER_SHARE &&
            "sync-handle go arguments should be encoded as zero-copy SHARE transfer");
     xi_func_free(share_ir);
+
+    XiFunc *string_ir = lower_source("fn consume(value: string) -> int { return len(value) }\n"
+                                     "var task = go consume(\"hello\")\n"
+                                     "print(await task)\n");
+    assert(string_ir != NULL);
+    XiValue *string_go = func_tree_find_op(string_ir, XI_GO);
+    assert(string_go != NULL && xi_go_arg_transfer_mode(string_go, 0) == XR_TRANSFER_COPY &&
+           "immutable strings must receive an implicit boundary value copy");
+    xi_func_free(string_ir);
 }
 
 TEST(hoisted_sync_handle_capture_is_shared) {
@@ -2277,6 +2352,14 @@ TEST(channel_send_transfer_modes) {
     assert(xi_chan_send_transfer_mode(timeout_send) == XR_TRANSFER_COPY &&
            "copy(...) at sendTimeout boundary must be encoded as COPY transfer");
     xi_func_free(timeout_ir);
+
+    XiFunc *tuple_ir = lower_source("const ch: Channel<(int, string)> = Channel(1)\n"
+                                    "ch.send((1, \"value\"))\n");
+    assert(tuple_ir != NULL);
+    XiValue *tuple_send = func_tree_find_op(tuple_ir, XI_CHAN_SEND);
+    assert(tuple_send != NULL && xi_chan_send_transfer_mode(tuple_send) == XR_TRANSFER_COPY &&
+           "tuple values must receive an implicit boundary value copy");
+    xi_func_free(tuple_ir);
 }
 
 TEST(defer_stmt) {
@@ -2345,12 +2428,40 @@ TEST(is_expr) {
                              "var ok = x is int\n"
                              "print(ok)\n");
     assert(f != NULL);
-    int found_is = 0;
+    XiValue *found_is = NULL;
     for (uint32_t i = 0; i < f->entry->nvalues; i++) {
         if (f->entry->values[i]->op == XI_IS)
-            found_is = 1;
+            found_is = f->entry->values[i];
     }
     assert(found_is && "should have IS op");
+    assert(found_is->nargs == 2 && found_is->args[1] &&
+           "XI_IS must carry a reified runtime target operand");
+    xi_func_free(f);
+}
+
+TEST(is_fixed_width_and_union_patterns_reify_runtime_targets) {
+    XiFunc *f = lower_source("var erased: JSON.Value = 7\n"
+                             "print(erased is i32)\n"
+                             "var value: int | float = 1\n"
+                             "print(value is int)\n"
+                             "match (value) {\n"
+                             "  is float -> print(0),\n"
+                             "  is int -> print(1),\n"
+                             "}\n");
+    assert(f != NULL);
+    int found = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *value = blk->values[i];
+            if (!value || value->op != XI_IS)
+                continue;
+            found++;
+            assert(value->nargs == 2 && value->args[1] &&
+                   "every XI_IS form must reify its runtime target");
+        }
+    }
+    assert(found >= 4 && "fixed-width, union expression, and pattern tests should lower");
     xi_func_free(f);
 }
 
@@ -2456,6 +2567,24 @@ TEST(struct_literal_inside_function) {
            "function-local struct literal should set fields via AGG_SET");
     assert(func_tree_has_op(f, XI_AGG_GET) &&
            "function-local struct field access should emit AGG_GET");
+    xi_func_free(f);
+}
+
+TEST(zero_arg_struct_with_methods_lowers_to_value_aggregate) {
+    XiFunc *f =
+        lower_source("struct Vec2 {\n"
+                     "    x: float\n"
+                     "    y: float\n"
+                     "    magnitudeSq() -> float { return this.x * this.x + this.y * this.y }\n"
+                     "}\n"
+                     "fn make() -> Vec2 { return Vec2() }\n"
+                     "print(make().magnitudeSq())\n");
+    assert(f != NULL);
+    XiFunc *make = func_tree_find_func_name(f, "make");
+    assert(make && func_tree_has_op(make, XI_AGG_NEW) &&
+           "a zero-arg value struct remains AGG_NEW even when it declares methods");
+    assert(!func_tree_has_op(make, XI_OBJECT_NEW) &&
+           "a value struct constructor must not fall back to reference-object allocation");
     xi_func_free(f);
 }
 
@@ -2655,6 +2784,46 @@ TEST(struct_method_fixed_array_args_preserve_caller_places) {
            "method read fixed-array arguments must use the internal read-place ABI directly");
     assert(!func_tree_has_op(exercise, XI_COPY) &&
            "method fixed-array call setup must not introduce deep value clones");
+
+    xi_func_free(f);
+}
+
+TEST(collection_storage_mutators_take_owned_value_struct_copies) {
+    XiFunc *f = lower_source("struct Point { x: int }\n"
+                             "fn exercise(point: Point) -> int {\n"
+                             "    var points: Array<Point> = [Point{x: 0}]\n"
+                             "    points.push(point)\n"
+                             "    points.unshift(point)\n"
+                             "    points.fill(point)\n"
+                             "    var byId: Map<int, Point> = #{}\n"
+                             "    byId.set(1, point)\n"
+                             "    return points[0].x + byId[1].x\n"
+                             "}\n"
+                             "print(exercise(Point{x: 7}))\n");
+    assert(f != NULL);
+
+    XiFunc *exercise = func_tree_find_func_name(f, "exercise");
+    XiValue *calls[8] = {0};
+    int call_count = func_collect_method_calls(exercise, calls, 8);
+    int checked = 0;
+    for (int i = 0; i < call_count; i++) {
+        XiValue *call = calls[i];
+        const char *method = call && call->aux ? (const char *) call->aux : NULL;
+        int value_slot = -1;
+        if (method && (strcmp(method, "push") == 0 || strcmp(method, "unshift") == 0 ||
+                       strcmp(method, "fill") == 0))
+            value_slot = 1;
+        else if (method && strcmp(method, "set") == 0)
+            value_slot = 2;
+        if (value_slot < 0)
+            continue;
+        assert(call->nargs > (uint16_t) value_slot && call->args[value_slot] &&
+               call->args[value_slot]->op == XI_COPY &&
+               call->args[value_slot]->aux_int == XI_COPY_KIND_VALUE_CLONE &&
+               "collection storage mutators must receive an owned value clone, not a read place");
+        checked++;
+    }
+    assert(checked == 4 && "push, unshift, fill, and Map.set ownership must all be covered");
 
     xi_func_free(f);
 }
@@ -2970,6 +3139,7 @@ int main(void) {
     run_multiple_functions();
     run_template_string();
     run_go_await();
+    run_local_class_cycle_storage_domain();
     run_direct_await_go_one_shot();
     run_unique_result_task_await_consumes_handle();
     run_tuple_result_task_await_consumes_handle();
@@ -2981,6 +3151,7 @@ int main(void) {
     run_defer_args_lower_before_defer();
     run_set_literal();
     run_is_expr();
+    run_is_fixed_width_and_union_patterns_reify_runtime_targets();
     run_slice_expr();
     run_range_expr();
     run_range_inclusive_expr();
@@ -2988,6 +3159,7 @@ int main(void) {
     run_optional_call();
     run_struct_literal();
     run_struct_literal_inside_function();
+    run_zero_arg_struct_with_methods_lowers_to_value_aggregate();
     run_unresolved_struct_literal_does_not_lower_to_json();
     run_struct_field_store_narrows_scalar_rep();
     run_struct_method_receivers_use_call_bound_places();
@@ -2995,6 +3167,7 @@ int main(void) {
     run_large_readonly_struct_local_stays_in_ssa();
     run_rawptr_struct_method_receivers_mark_native_borrow_shape();
     run_struct_method_fixed_array_args_preserve_caller_places();
+    run_collection_storage_mutators_take_owned_value_struct_copies();
     run_read_value_struct_param_uses_internal_call_place();
     run_as_to_scalar_rep_int_lowers_to_narrow();
     run_numeric_as_carries_typed_conversion_evidence();

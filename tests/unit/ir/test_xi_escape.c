@@ -726,6 +726,40 @@ static void test_arc_call_result_retain_before_same_block_phi_consume(void) {
     xi_func_free(f);
 }
 
+static void test_arc_orders_adjacent_retain_before_release(void) {
+    XiFunc *f = make_func("arc_adjacent_rc_order", &t_int);
+    XiBlock *entry = f->entry;
+
+    /* Model two SSA names that may coalesce to one VM register and hold the
+     * same runtime object.  RC insertion walks are independent, so this is the
+     * minimal post-insertion ordering shape that must be normalized. */
+    XiValue *old_owner = xi_value_new(f, entry, XI_GET_SHARED, &t_array, 0);
+    old_owner->escape = XI_ESC_GLOBAL;
+    XiValue *incoming = xi_value_new(f, entry, XI_GET_SHARED, &t_array, 0);
+    incoming->escape = XI_ESC_GLOBAL;
+    XiValue *release = xi_value_new(f, entry, XI_RELEASE, &t_array, 1);
+    release->args[0] = old_owner;
+    release->flags = XI_FLAG_SIDE_EFFECT;
+    XiValue *retain = xi_value_new(f, entry, XI_RETAIN, &t_array, 1);
+    retain->args[0] = incoming;
+    retain->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    uint32_t retain_index = UINT32_MAX;
+    uint32_t release_index = UINT32_MAX;
+    for (uint32_t i = 0; i < entry->nvalues; i++) {
+        if (entry->values[i] == retain)
+            retain_index = i;
+        if (entry->values[i] == release)
+            release_index = i;
+    }
+    ASSERT_EQ(retain_index < release_index, true,
+              "adjacent RC run must acquire replacement ownership before releasing old owner");
+    xi_func_free(f);
+}
+
 static void test_arc_unknown_call_result_retains_before_single_consume(void) {
     XiFunc *f = make_func("arc_unknown_call_result_single_consume", &t_int);
     XiBlock *entry = f->entry;
@@ -1354,6 +1388,7 @@ int main(void) {
     test_arc_phi_move_drops_owner_on_sibling_edge();
     test_arc_call_result_forward_retains_across_sibling_borrow();
     test_arc_call_result_retain_before_same_block_phi_consume();
+    test_arc_orders_adjacent_retain_before_release();
     test_arc_unknown_call_result_retains_before_single_consume();
     test_arc_stringbuilder_builtin_result_is_fresh();
     test_arc_builtin_iterator_results_are_fresh();

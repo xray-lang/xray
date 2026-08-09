@@ -60,7 +60,7 @@ extern char **environ;
 #endif
 
 static XrObjectInstance *os_exec_result_new(XrVMRuntime *X) {
-    XrClass *cls = xr_stdlib_object_shape_class_get(X, "os", "__ExecResult");
+    XrClass *cls = xr_stdlib_record_class_get(X, "os", "__ExecResult");
     return cls ? xr_object_instance_new_with_class(xr_current_coro(X), cls) : NULL;
 }
 

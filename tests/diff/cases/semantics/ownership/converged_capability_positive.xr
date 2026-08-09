@@ -4,21 +4,25 @@ fn build() -> Array<int> {
     return result
 }
 
-var source = build()
-var alias = source
-print(len(alias))
+fn run() {
+    var source = build()
+    var alias = source
+    print(len(alias))
 
-var sealSource = [4, 5]
-const sealed = move sealSource
-print(sealed[0] + sealed[1])
+    var sealSource = [4, 5]
+    const sealed = move sealSource
+    print(sealed[0] + sealed[1])
 
-const ch: Channel<int> = Channel(1)
-ch.send(7)
-print(ch.recv())
-ch.close()
+    const ch: Channel<int> = Channel(1)
+    ch.send(7)
+    print(ch.recv())
+    ch.close()
 
-const captured = [8, 9]
-var task = go fn() {
-    return len(captured)
-}()
-print(await task)
+    const captured = [8, 9]
+    var task = go fn() {
+        return len(captured)
+    }()
+    print(await task)
+}
+
+run()

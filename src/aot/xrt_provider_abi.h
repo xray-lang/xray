@@ -206,6 +206,15 @@ XR_FUNC XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_valu
 XR_FUNC XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef out_slot,
                                              bool discard_result, bool one_shot_await);
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
+enum {
+    XR_AOT_IO_WAIT_READY = 0,
+    XR_AOT_IO_WAIT_TIMEOUT = 1,
+    XR_AOT_IO_EVENT_READ = 1,
+    XR_AOT_IO_EVENT_WRITE = 2,
+};
+XR_FUNC XrAotResult xr_aot_io_wait(const XrAotContext *ctx, int fd, int events, int64_t timeout_ms);
+XR_FUNC XrAotResult xr_aot_io_wait_resume(const XrAotContext *ctx);
+XR_FUNC void xr_aot_netpoll_close_fd(int fd);
 XR_FUNC XrValue xr_aot_time_after(const XrAotContext *ctx, int64_t milliseconds);
 XR_FUNC XrAotResult xr_aot_poll_yield(const XrAotContext *ctx);
 XR_FUNC void xr_aot_trace_frame_value(void *visitor, XrValue value);

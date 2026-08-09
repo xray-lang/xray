@@ -20,6 +20,10 @@ struct XrModuleGraph;
 struct XrModuleSpec;
 struct XaAnalyzer;
 
+/* Cache identity for evidence produced on behalf of a compiler executable.
+ * An unavailable path falls back to the semantic-version identity, matching
+ * the compiler's own fail-open behavior. */
+XR_FUNC uint64_t xg_compiler_image_hash_for_path(const char *path);
 XR_FUNC bool xg_module_summary_from_module_spec(XgModuleSummary *out_summary, XgModuleId module_id,
                                                 const struct XrModuleSpec *spec);
 XR_FUNC bool xg_standalone_build_key_from_module_spec(XgBuildKey *out_key,

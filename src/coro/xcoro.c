@@ -506,6 +506,7 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrVMRuntime *X, XrRuntim
             xr_coro_clear_debug_identity(coro);
             atomic_store_explicit(&coro->ext->lock_count, 0, memory_order_relaxed);
             coro->ext->locked_worker = -1;
+            coro->ext->resume_target_worker = -1;
             coro_timer_state_reset(coro->ext);
             coro_channel_wait_reset(coro->core, coro->ext);
             coro_recv_slot_reset(coro->ext);
@@ -918,6 +919,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
         coro->ext->watched_by = NULL;
         atomic_store_explicit(&coro->ext->lock_count, 0, memory_order_relaxed);
         coro->ext->locked_worker = -1;
+        coro->ext->resume_target_worker = -1;
     }
     xr_coro_clear_debug_identity(coro);
     atomic_store_explicit(&coro->flags, 0, memory_order_relaxed);

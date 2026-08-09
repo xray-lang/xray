@@ -373,6 +373,7 @@ static uint64_t hash_link_dependency_summary(uint64_t hash, const XgLinkDependen
     hash = hash_u32(hash, row->link_id);
     hash = hash_u32(hash, row->module_id);
     hash = hash_u32(hash, row->decl_id);
+    hash = hash_u32(hash, row->owner_func_id);
     hash = hash_u32(hash, row->source_span_id);
     hash = hash_u32(hash, row->name_id);
     hash = hash_u8(hash, row->kind);
@@ -3681,9 +3682,10 @@ static void dump_cache_payload_body(FILE *out, const XgGlobalEvidence *evidence)
     for (uint32_t i = 0; i < evidence->nlink_deps; i++) {
         const XgLinkDependencySummary *l = &evidence->link_deps[i];
         fprintf(out,
-                "link-dep id=%u module=%u decl=%u span=%u name_id=%u kind=%u flags=0x%x name=%s\n",
-                l->link_id, l->module_id, l->decl_id, l->source_span_id, l->name_id,
-                (unsigned) l->kind, l->flags, l->name);
+                "link-dep id=%u module=%u decl=%u owner=%u span=%u name_id=%u kind=%u "
+                "flags=0x%x name=%s\n",
+                l->link_id, l->module_id, l->decl_id, l->owner_func_id, l->source_span_id,
+                l->name_id, (unsigned) l->kind, l->flags, l->name);
     }
     for (uint32_t i = 0; i < evidence->ngeneric_insts; i++) {
         const XgGenericInstSummary *g = &evidence->generic_insts[i];
@@ -4467,10 +4469,11 @@ static bool materialize_payload_body_cursor(const char **cursor, XgGlobalEvidenc
         memset(&row, 0, sizeof(row));
         memset(name, 0, sizeof(name));
         if (sscanf(line,
-                   "link-dep id=%" SCNu32 " module=%" SCNu32 " decl=%" SCNu32 " span=%" SCNu32
-                   " name_id=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32 " name=%511[^\n]%c",
-                   &row.link_id, &row.module_id, &row.decl_id, &row.source_span_id, &row.name_id,
-                   &kind, &row.flags, name, &trailing) < 8)
+                   "link-dep id=%" SCNu32 " module=%" SCNu32 " decl=%" SCNu32 " owner=%" SCNu32
+                   " span=%" SCNu32 " name_id=%" SCNu32 " kind=%" SCNu32 " flags=0x%" SCNx32
+                   " name=%511[^\n]%c",
+                   &row.link_id, &row.module_id, &row.decl_id, &row.owner_func_id,
+                   &row.source_span_id, &row.name_id, &kind, &row.flags, name, &trailing) < 9)
             return false;
         row.kind = (uint8_t) kind;
         snprintf(row.name, sizeof(row.name), "%s", name);
@@ -5539,12 +5542,13 @@ static bool package_import_would_duplicate_existing_rows(const XgGlobalEvidence 
 }
 
 static bool target_has_link_dependency_identity(const XgGlobalEvidence *target, uint8_t kind,
-                                                const char *name) {
+                                                XgFuncId owner_func_id, const char *name) {
     if (!target || !name || !name[0])
         return false;
     for (uint32_t i = 0; i < target->nlink_deps; i++) {
         const XgLinkDependencySummary *dep = &target->link_deps[i];
-        if (dep->kind == kind && strcmp(dep->name, name) == 0)
+        if (dep->kind == kind && dep->owner_func_id == owner_func_id &&
+            strcmp(dep->name, name) == 0)
             return true;
     }
     return false;
@@ -5838,13 +5842,14 @@ XR_FUNC bool xg_global_evidence_import_package_payload(XgGlobalEvidence *target,
     }
     for (uint32_t i = 0; i < package.nlink_deps; i++) {
         XgLinkDependencySummary row = package.link_deps[i];
-        if (target_has_link_dependency_identity(target, row.kind, row.name)) {
-            skipped_link_deps++;
-            continue;
-        }
         REMAP_ID(row.link_id, offsets.link_id);
         REMAP_MODULE(row.module_id);
         REMAP_ID(row.decl_id, offsets.decl_id);
+        REMAP_ID(row.owner_func_id, offsets.func_id);
+        if (target_has_link_dependency_identity(target, row.kind, row.owner_func_id, row.name)) {
+            skipped_link_deps++;
+            continue;
+        }
         if (!xg_global_evidence_add_link_dependency(target, &row))
             goto done;
     }
@@ -6351,10 +6356,11 @@ XR_FUNC char *xg_global_evidence_dump(const XgGlobalEvidence *evidence) {
     for (uint32_t i = 0; i < evidence->nlink_deps; i++) {
         const XgLinkDependencySummary *dep = &evidence->link_deps[i];
         fprintf(out,
-                "link-dep %u id=%u module=%u decl=%u span=%u kind=%s name_id=%u name=%s "
+                "link-dep %u id=%u module=%u decl=%u owner=%u span=%u kind=%s name_id=%u name=%s "
                 "flags=0x%x\n",
-                i, dep->link_id, dep->module_id, dep->decl_id, dep->source_span_id,
-                xg_link_dependency_kind_name(dep->kind), dep->name_id, dep->name, dep->flags);
+                i, dep->link_id, dep->module_id, dep->decl_id, dep->owner_func_id,
+                dep->source_span_id, xg_link_dependency_kind_name(dep->kind), dep->name_id,
+                dep->name, dep->flags);
     }
     for (uint32_t i = 0; i < evidence->ngeneric_insts; i++) {
         const XgGenericInstSummary *inst = &evidence->generic_insts[i];

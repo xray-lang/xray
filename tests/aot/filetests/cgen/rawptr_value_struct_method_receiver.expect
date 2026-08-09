@@ -4,10 +4,12 @@ regex=value v[0-9]+ op=PTR_LOAD kind=aggregate rep=tagged c_type=xrt_struct_abi_
 regex=value v[0-9]+ op=PTR_STORE kind=void rep=void c_type=void
 c_regex=xrt_struct_abi_[A-Za-z0-9_]+ v[0-9]+ = \(\*\(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\)\);
 c_regex=\(void\)\(\(\*\(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\)\) = v[0-9]+\);
-# Generated pointer casts are now the exact pointer type instead of `void *`;
-# the address-of itself is unchanged.
-c_count=4:= (xrt_struct_abi_d63efd376d245bc3 *)(v
-c_count=1:= (xrt_struct_abi_d63efd376d245bc3 *)(&v
+# Direct value-struct method receivers use the exact generated aggregate type.
+# Match that shape without coupling the contract to the layout hash.
+c_regex=_State_reset_m\(NULL, \(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\), v[0-9]+\)
+c_regex=_State_copyFrom_m\(NULL, \(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\), \(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\)\)
+c_regex=_State_digest_m\(NULL, \(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\)\)
+c_regex=xrt_struct_abi_[A-Za-z0-9_]+ \* v[0-9]+ = \(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(&v[0-9]+\);
 c_not_contains=xr_raw_load_ptr_unaligned(
 c_not_contains=xr_raw_store_ptr_unaligned(
 c_syntax=pass

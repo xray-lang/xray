@@ -3771,6 +3771,33 @@ static bool cg_class_native_receiver_escapes_as_value(const XiCgenCtx *ctx, cons
     return false;
 }
 
+/* True when ARC gave a first-class use of the borrowed native receiver its own
+ * reference.  Unlike a structural field access or a synchronous `return this`
+ * alias, such a use requires a real object header: a closure owns the retained
+ * receiver until its destructor releases that reference.
+ *
+ * This query deliberately consumes the final post-ARC IR.  Re-deriving
+ * ownership from source-level use shapes here would create a second, weaker
+ * ownership system in CGen and is exactly how receiver captures were once
+ * emitted without the retain ARC had already proved necessary. */
+static bool cg_class_native_receiver_requires_owned_storage(const XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f || !cg_class_func_uses_native_receiver(ctx, f))
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks ? f->blocks[bi] : NULL;
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
+                continue;
+            if (cg_class_native_receiver_value(ctx, f, v->args[0]))
+                return true;
+        }
+    }
+    return false;
+}
+
 static bool cg_class_native_value_stmt_is_elided(XiCgenCtx *ctx, const XiFunc *f,
                                                  const XiValue *v) {
     if (!v || !cg_class_func_uses_native_receiver(ctx, f))
@@ -3788,9 +3815,15 @@ static bool cg_class_native_value_stmt_is_elided(XiCgenCtx *ctx, const XiFunc *f
     if (cg_class_native_is_identity_alias(v) && v->nargs >= 1 &&
         cg_class_native_receiver_value(ctx, f, v->args[0]))
         return true;
+    /* ARC operations are semantic, not representation noise.  A native
+     * receiver is borrowed by the method ABI, so ARC emits RETAIN precisely
+     * when an owning consumer (for example a closure capture) needs an
+     * independent reference.  The receiver is materialized above whenever it
+     * flows as a value; let the ordinary ARC emitter box that pointer and
+     * preserve the proven retain/release instead of silently erasing it. */
     if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1 &&
         cg_class_native_receiver_value(ctx, f, v->args[0]))
-        return true;
+        return false;
     return false;
 }
 
@@ -4204,8 +4237,12 @@ static bool emit_class_native_receiver_field_store_expr(XiCgenCtx *ctx, FILE *ou
 
 static bool emit_class_native_instance_field_load_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                        const XiValue *v, const char *prefix) {
-    (void) f;
     if (!ctx || !v || v->op != XI_LOAD_FIELD || v->nargs < 1 || !v->aux)
+        return false;
+    /* The implicit receiver has a declaration-local pointer ABI and may have
+     * its SSA alias elided. Let the receiver-specific path spell it through
+     * p0; treating it as an arbitrary typed instance can emit the absent v0. */
+    if (cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
     const XiClassData *cd = cg_class_native_value_type_data(ctx, v->args[0]);
     if (!cd)
@@ -4245,8 +4282,9 @@ static bool emit_class_native_instance_field_load_expr(XiCgenCtx *ctx, FILE *out
 
 static bool emit_class_native_instance_field_store_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                         const XiValue *v, const char *prefix) {
-    (void) f;
     if (!ctx || !v || v->op != XI_STORE_FIELD || v->nargs < 2 || !v->aux)
+        return false;
+    if (cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
     const XiClassData *cd = cg_class_native_value_type_data(ctx, v->args[0]);
     if (!cd)
@@ -4297,8 +4335,9 @@ static bool emit_class_native_instance_field_store_expr(XiCgenCtx *ctx, FILE *ou
 static bool emit_portable_class_native_instance_field_store_stmt(XiCgenCtx *ctx, FILE *out,
                                                                  const XiFunc *f, const XiValue *v,
                                                                  const char *prefix) {
-    (void) f;
     if (!ctx || !out || !v || v->op != XI_STORE_FIELD || v->nargs < 2 || !v->aux)
+        return false;
+    if (cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
     const XiClassData *cd = cg_class_native_value_type_data(ctx, v->args[0]);
     if (!cd || !cd->instance_layout)
@@ -4698,6 +4737,13 @@ static bool cg_class_native_ctor_uses_safe(XiCgenCtx *ctx, const XiFunc *f, cons
                     else
                         mfunc = cg_lookup_method(ctx, method, recv_class, &prefix);
                     if (!cg_class_func_uses_native_receiver(ctx, mfunc))
+                        return false;
+                    /* A stack-inlined native class has no XrObjHeader.  If the
+                     * method's final ARC owns its receiver, retain/release must
+                     * operate on a heap instance instead.  Pure borrowed
+                     * receiver methods, including synchronous `return this`
+                     * chains, remain eligible for the stack fast path. */
+                    if (cg_class_native_receiver_requires_owned_storage(ctx, mfunc))
                         return false;
                     continue;
                 }

@@ -95,7 +95,7 @@ static XrValue vm_coro_state_value(XrVMRuntime *isolate, const char *state) {
 
 static XrObjectInstance *vm_coro_object_new(XrVMRuntime *isolate, XrCoroutine *owner,
                                             const char *name) {
-    XrClass *cls = xr_stdlib_object_shape_class_get(isolate, "Coro", name);
+    XrClass *cls = xr_stdlib_record_class_get(isolate, "Coro", name);
     return cls ? xr_object_instance_new_with_class(owner, cls) : NULL;
 }
 

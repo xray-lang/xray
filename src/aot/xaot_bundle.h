@@ -41,6 +41,10 @@ typedef struct XaotFuncPlan {
     XiFunc *func;
     uint32_t module_index;
     uint16_t depth;
+    /* Exact executable reachability after final Xi direct-call and callable
+     * target convergence. Source summaries cannot name every cross-module
+     * import edge, so entry capability derivation consumes this prepared bit. */
+    uint8_t reachable;
     /* Closed-world execution shape after direct-call and function-value
      * target-set convergence.  Backends consume this prepared fact instead of
      * recursively rediscovering suspendability with translation-unit-local
@@ -1665,6 +1669,7 @@ enum {
 
 typedef struct XaotLinkDependencyPlan {
     XgLinkId link_id;
+    XgFuncId owner_func_id;
     uint8_t kind;
     uint32_t name_id;
     uint32_t evidence;
@@ -1711,6 +1716,7 @@ typedef struct XaotBundle {
     XaotTargetCapabilityProvider target_provider;
     XrEntryPlan entry_plan;
     bool has_entry_plan;
+    bool has_callable_reachability;
     XaotStoragePlan *storage_plans;
     uint32_t nstorage_plans;
     uint32_t storage_plan_cap;

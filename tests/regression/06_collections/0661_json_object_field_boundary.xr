@@ -21,9 +21,9 @@ fn test_static_object_hot_updates() {
 fn test_dynamic_json_path_chain() {
     var root = JSON.parseValue("{}")
     for (i in 0..10) {
-        JSON.set(root, ["nodes", i, "value"], i * i, true)
+        JSON.set(root, ["nodes", string(i), "value"], i * i, true)
     }
     var sum = 0
-    for (i in 0..10) { sum += JSON.require<int>(root, ["nodes", i, "value"]) }
+    for (i in 0..10) { sum += JSON.require<int>(root, ["nodes", string(i), "value"]) }
     assert_eq(sum, 285)
 }

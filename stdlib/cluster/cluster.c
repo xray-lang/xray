@@ -1250,7 +1250,7 @@ static XrValue cluster_subscribe_fn(XrVMRuntime *X, XrValue *args, int argc) {
 /* ========== Cluster Info API ========== */
 
 static XrObjectInstance *cluster_object_new(XrVMRuntime *X, const char *name) {
-    XrClass *cls = xr_stdlib_object_shape_class_get(X, "cluster", name);
+    XrClass *cls = xr_stdlib_record_class_get(X, "cluster", name);
     return cls ? xr_object_instance_new_with_class(NULL, cls) : NULL;
 }
 

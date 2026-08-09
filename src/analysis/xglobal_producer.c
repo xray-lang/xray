@@ -81,6 +81,7 @@ typedef struct XgLocalName XgLocalName;
 
 typedef struct XgProducer {
     XgGlobalEvidence *evidence;
+    const XrModuleGraph *module_graph;
     XgClassNameRow *classes;
     uint32_t nclasses;
     uint32_t class_cap;
@@ -578,14 +579,16 @@ static bool producer_stdlib_member_is_constant(const char *module, const char *m
 }
 
 static bool producer_add_link_dependency(XgProducer *p, XgModuleId module_id, XgDeclId decl_id,
-                                         uint32_t source_span_id, uint8_t kind, const char *name) {
+                                         XgFuncId owner_func_id, uint32_t source_span_id,
+                                         uint8_t kind, const char *name) {
     XgLinkDependencySummary dep;
     size_t len;
     if (!p || !p->evidence || !name || !name[0])
         return true;
     for (uint32_t i = 0; i < p->evidence->nlink_deps; i++) {
         const XgLinkDependencySummary *existing = &p->evidence->link_deps[i];
-        if (existing->kind == kind && strcmp(existing->name, name) == 0)
+        if (existing->kind == kind && existing->owner_func_id == owner_func_id &&
+            strcmp(existing->name, name) == 0)
             return true;
     }
     len = strlen(name);
@@ -595,6 +598,7 @@ static bool producer_add_link_dependency(XgProducer *p, XgModuleId module_id, Xg
     dep.link_id = (XgLinkId) (p->evidence->nlink_deps + 1);
     dep.module_id = module_id;
     dep.decl_id = decl_id;
+    dep.owner_func_id = owner_func_id;
     dep.source_span_id = source_span_id;
     dep.kind = kind;
     dep.name_id = hash_name32(name);
@@ -604,8 +608,8 @@ static bool producer_add_link_dependency(XgProducer *p, XgModuleId module_id, Xg
 }
 
 static bool producer_add_stdlib_symbol_dependency(XgProducer *p, XgModuleId module_id,
-                                                  uint32_t source_span_id, const char *module,
-                                                  const char *member) {
+                                                  XgFuncId owner_func_id, uint32_t source_span_id,
+                                                  const char *module, const char *member) {
     char symbol[XG_LINK_DEP_NAME_MAX];
     int n;
     if (!module || !module[0] || !member || !member[0])
@@ -613,7 +617,7 @@ static bool producer_add_stdlib_symbol_dependency(XgProducer *p, XgModuleId modu
     n = snprintf(symbol, sizeof(symbol), "%s.%s", module, member);
     if (n <= 0 || n >= (int) sizeof(symbol))
         return true;
-    return producer_add_link_dependency(p, module_id, XG_NO_ID, source_span_id,
+    return producer_add_link_dependency(p, module_id, XG_NO_ID, owner_func_id, source_span_id,
                                         XG_LINK_DEP_STDLIB_SYMBOL, symbol);
 }
 
@@ -1212,6 +1216,38 @@ static XgFuncNameRow *producer_lookup_func_row(const XgProducer *p, const char *
             return &p->funcs[i];
     }
     return NULL;
+}
+
+static XgFuncNameRow *producer_lookup_func_row_in_module(const XgProducer *p, XgModuleId module_id,
+                                                         const char *name) {
+    if (!p || module_id == XG_NO_ID || !name)
+        return NULL;
+    for (uint32_t i = 0; i < p->nfuncs; i++) {
+        if (p->funcs[i].module_id == module_id && p->funcs[i].name &&
+            strcmp(p->funcs[i].name, name) == 0)
+            return &p->funcs[i];
+    }
+    return NULL;
+}
+
+static XgModuleId producer_import_target_module_id(const XgProducer *p, const char *canonical) {
+    const XrModuleGraph *graph = p ? p->module_graph : NULL;
+    if (!graph || !canonical)
+        return XG_NO_ID;
+    for (int ti = 0; ti < graph->topo_count; ti++) {
+        int spec_index = graph->topo_order[ti];
+        const XrModuleSpec *spec =
+            spec_index >= 0 && spec_index < graph->spec_count ? &graph->specs[spec_index] : NULL;
+        if (spec && spec->canonical && strcmp(spec->canonical, canonical) == 0)
+            return (XgModuleId) (ti + 1);
+    }
+    return XG_NO_ID;
+}
+
+static XgFuncNameRow *producer_lookup_imported_func_row(const XgProducer *p, const char *module,
+                                                        const char *member) {
+    return producer_lookup_func_row_in_module(p, producer_import_target_module_id(p, module),
+                                              member);
 }
 
 static bool producer_reserve_stdlib_imports(XgProducer *p, uint32_t needed) {
@@ -3128,19 +3164,26 @@ static bool body_call_is_array_data_ptr_leaf(XgBodyCollect *bc, const AstNode *n
  * have no AST declaration for the closed-world producer to register.  Preserve their
  * analyzer-owned identity here so an effectful native call cannot be mistaken for an
  * unresolved, effect-free function value. */
-static bool body_variable_is_stdlib_native_function(XgBodyCollect *bc,
-                                                    const VariableNode *variable) {
+static XaSymbolLinks *body_variable_stdlib_native_function_links(XgBodyCollect *bc,
+                                                                 const VariableNode *variable) {
     XaSymbol *symbol;
     XaSymbolLinks *links;
     if (!bc || !bc->producer || !bc->producer->analyzer || !variable || variable->symbol_id == 0)
-        return false;
+        return NULL;
     symbol = xa_scope_lookup_by_id(bc->producer->analyzer->global_scope, variable->symbol_id);
     if (!symbol || symbol->kind != XA_SYM_FUNCTION || !symbol->is_builtin)
-        return false;
+        return NULL;
     links = xa_analyzer_get_links(bc->producer->analyzer, symbol);
     return links && links->function_decl_node == NULL && links->module_name &&
-           links->module_name[0] != '\0' && links->import_member_name &&
-           links->import_member_name[0] != '\0';
+                   links->module_name[0] != '\0' && links->import_member_name &&
+                   links->import_member_name[0] != '\0'
+               ? links
+               : NULL;
+}
+
+static bool body_variable_is_stdlib_native_function(XgBodyCollect *bc,
+                                                    const VariableNode *variable) {
+    return body_variable_stdlib_native_function_links(bc, variable) != NULL;
 }
 
 static XgClassId body_parent_class_id(XgBodyCollect *bc) {
@@ -8130,7 +8173,14 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     callee = call->as.call_expr.callee;
     if (callee && callee->type == AST_VARIABLE) {
         const char *callee_name = callee->as.variable.name;
-        XgFuncNameRow *target = producer_lookup_func_row(bc->producer, callee_name);
+        const XgStdlibImportRow *import =
+            producer_lookup_stdlib_import(bc->producer, bc->module_id, callee_name);
+        XgFuncNameRow *target = import && import->member_name
+                                    ? producer_lookup_imported_func_row(
+                                          bc->producer, import->module_name, import->member_name)
+                                    : NULL;
+        if (!target)
+            target = producer_lookup_func_row(bc->producer, callee_name);
         const XgPendingBody *child_target =
             !target ? producer_find_child_function_body(bc->producer, bc->owner_func_id,
                                                         hash_name32(callee_name))
@@ -8148,14 +8198,18 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         generic_name = callee_name;
         if (target)
             generic_origin_decl_id = target->decl_id;
+        if (import && import->member_name && producer_stdlib_module_known(import->module_name))
+            (void) producer_add_stdlib_symbol_dependency(bc->producer, bc->module_id,
+                                                         bc->owner_func_id, (uint32_t) call->line,
+                                                         import->module_name, import->member_name);
         if (class_row)
             bc->capability_bits |= XG_CAP_OBJECTS;
         bc->capability_bits |= body_capabilities_for_builtin_constructor(callee_name);
         if (target && (target->decl_flags & XG_DECL_EXTERN)) {
             if (target->extern_dylib && target->extern_dylib[0])
-                (void) producer_add_link_dependency(bc->producer, target->module_id,
-                                                    target->decl_id, (uint32_t) call->line,
-                                                    XG_LINK_DEP_EXTERN_DYLIB, target->extern_dylib);
+                (void) producer_add_link_dependency(
+                    bc->producer, target->module_id, target->decl_id, bc->owner_func_id,
+                    (uint32_t) call->line, XG_LINK_DEP_EXTERN_DYLIB, target->extern_dylib);
             bc->effect_bits |= XG_BODY_MAY_CALL_NATIVE;
             bc->escape_bits |= XG_BODY_ESCAPE_EXTERN;
             if ((target->decl_flags & (XG_DECL_NAKED | XG_DECL_INTERRUPT)) == 0)
@@ -8205,6 +8259,10 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
         const char *stdlib_module =
             body_stdlib_module_for_expr(bc, callee->as.member_access.object);
+        XgFuncNameRow *stdlib_target =
+            stdlib_module ? producer_lookup_imported_func_row(bc->producer, stdlib_module,
+                                                              callee->as.member_access.name)
+                          : NULL;
         const XaBuiltinReceiverMethodSpec *builtin_receiver_method =
             body_builtin_receiver_method_spec(bc, &callee->as.member_access,
                                               call->as.call_expr.arg_count);
@@ -8214,12 +8272,17 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         generic_name = callee->as.member_access.name;
         generic_kind = XG_GENERIC_INST_METHOD;
         if (stdlib_module && producer_stdlib_module_known(stdlib_module))
-            (void) producer_add_stdlib_symbol_dependency(bc->producer, bc->module_id,
-                                                         (uint32_t) call->line, stdlib_module,
-                                                         callee->as.member_access.name);
+            (void) producer_add_stdlib_symbol_dependency(
+                bc->producer, bc->module_id, bc->owner_func_id, (uint32_t) call->line,
+                stdlib_module, callee->as.member_access.name);
         bc->capability_bits |=
             body_capabilities_for_builtin_member_constructor(&callee->as.member_access);
-        if (receiver_interface != XG_NO_ID) {
+        if (stdlib_target) {
+            row.kind = XG_CALL_DIRECT_FUNC;
+            row.static_target_func_id = stdlib_target->func_id;
+            generic_origin_decl_id = stdlib_target->decl_id;
+            generic_origin_func_id = stdlib_target->func_id;
+        } else if (receiver_interface != XG_NO_ID) {
             const XgInterfaceMethodSummary *interface_method =
                 producer_find_interface_method_summary(bc->producer, receiver_interface,
                                                        method_name_id);
@@ -8600,15 +8663,21 @@ static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call)
     } else {
         const XgStdlibImportRow *row =
             producer_lookup_stdlib_import(bc->producer, bc->module_id, callee->as.variable.name);
-        name = row ? row->member_name : NULL;
-        module = row ? row->module_name : NULL;
+        XaSymbolLinks *links = body_variable_stdlib_native_function_links(bc, &callee->as.variable);
+        name = row ? row->member_name : links ? links->import_member_name : NULL;
+        module = row ? row->module_name : links ? links->module_name : NULL;
     }
     if (!name)
         return false;
     if (!module)
         return false;
+    if (xr_stdlib_metadata_function_may_suspend(module, name))
+        return true;
     if (strcmp(module, "time") == 0)
         return strcmp(name, "sleep") == 0;
+    if (strcmp(module, "net") == 0)
+        return strcmp(name, "accept") == 0 || strcmp(name, "read") == 0 ||
+               strcmp(name, "write") == 0 || strcmp(name, "writeBytes") == 0;
     if (strcmp(module, "test_yield") != 0)
         return false;
     return strcmp(name, "simple") == 0 || strcmp(name, "add") == 0 ||
@@ -8616,6 +8685,26 @@ static bool body_stdlib_call_may_suspend(XgBodyCollect *bc, const AstNode *call)
            strcmp(name, "error_test") == 0 || strcmp(name, "cancel_test") == 0 ||
            strcmp(name, "counter_inc") == 0 || strcmp(name, "nested") == 0 ||
            strcmp(name, "long_task") == 0;
+}
+
+static uint32_t body_stdlib_call_runtime_capabilities(XgBodyCollect *bc, const AstNode *call) {
+    const AstNode *callee;
+    const char *module = NULL;
+    const char *name = NULL;
+    if (!bc || !call || call->type != AST_CALL_EXPR || !(callee = call->as.call_expr.callee) ||
+        (callee->type != AST_MEMBER_ACCESS && callee->type != AST_VARIABLE))
+        return 0;
+    if (callee->type == AST_MEMBER_ACCESS) {
+        module = body_stdlib_module_for_expr(bc, callee->as.member_access.object);
+        name = callee->as.member_access.name;
+    } else {
+        const XgStdlibImportRow *row =
+            producer_lookup_stdlib_import(bc->producer, bc->module_id, callee->as.variable.name);
+        XaSymbolLinks *links = body_variable_stdlib_native_function_links(bc, &callee->as.variable);
+        module = row ? row->module_name : links ? links->module_name : NULL;
+        name = row ? row->member_name : links ? links->import_member_name : NULL;
+    }
+    return xr_stdlib_metadata_function_runtime_capabilities(module, name);
 }
 
 static bool body_stdlib_call_observes_coro_heap(XgBodyCollect *bc, const AstNode *call) {
@@ -8722,6 +8811,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_CALL_EXPR: {
             bool intrinsic_sequence_len = body_add_sequence_len_call(bc, node);
             bool intrinsic_array_data_ptr = body_call_is_array_data_ptr_leaf(bc, node);
+            bc->capability_bits |= body_stdlib_call_runtime_capabilities(bc, node);
             if (body_call_uses_coro_runtime(bc, &node->as.call_expr))
                 bc->capability_bits |= XG_CAP_COROUTINE;
             if (body_call_is_coro_local_set(bc, &node->as.call_expr)) {
@@ -8788,6 +8878,15 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
             break;
         case AST_VARIABLE:
             body_note_variable_read(bc, &node->as.variable);
+            {
+                const XgStdlibImportRow *import = producer_lookup_stdlib_import(
+                    bc->producer, bc->module_id, node->as.variable.name);
+                if (import && import->member_name &&
+                    producer_stdlib_module_known(import->module_name))
+                    (void) producer_add_stdlib_symbol_dependency(
+                        bc->producer, bc->module_id, bc->owner_func_id, (uint32_t) node->line,
+                        import->module_name, import->member_name);
+            }
             break;
         case AST_PRINT_STMT:
             for (int i = 0; i < node->as.print_stmt.expr_count; i++)
@@ -9074,9 +9173,9 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 bc->effect_bits |= XG_BODY_MAY_READ_MEM;
             if (stdlib_module &&
                 producer_stdlib_member_is_constant(stdlib_module, node->as.member_access.name)) {
-                (void) producer_add_stdlib_symbol_dependency(bc->producer, bc->module_id,
-                                                             (uint32_t) node->line, stdlib_module,
-                                                             node->as.member_access.name);
+                (void) producer_add_stdlib_symbol_dependency(
+                    bc->producer, bc->module_id, bc->owner_func_id, (uint32_t) node->line,
+                    stdlib_module, node->as.member_access.name);
             }
             body_add_object_field_access(bc, node, false);
             body_add_enum_metadata_use(bc, node);
@@ -9979,8 +10078,9 @@ static bool add_import_link_dependencies(XgProducer *p, XgModuleId module_id, co
     link_known = producer_stdlib_module_known(import->module_name);
     if (!link_known && !producer_vm_control_module_known(import->module_name))
         return true;
-    if (link_known && !producer_add_link_dependency(p, module_id, XG_NO_ID, (uint32_t) node->line,
-                                                    XG_LINK_DEP_STDLIB_MODULE, import->module_name))
+    if (link_known &&
+        !producer_add_link_dependency(p, module_id, XG_NO_ID, XG_NO_ID, (uint32_t) node->line,
+                                      XG_LINK_DEP_STDLIB_MODULE, import->module_name))
         return false;
     if (import->member_count == 0) {
         const char *local_name = import->alias ? import->alias : import->module_name;
@@ -9989,10 +10089,6 @@ static bool add_import_link_dependencies(XgProducer *p, XgModuleId module_id, co
     for (int i = 0; i < import->member_count; i++) {
         const ImportMember *member = &import->members[i];
         const char *local_name = member->alias ? member->alias : member->name;
-        if (link_known &&
-            !producer_add_stdlib_symbol_dependency(p, module_id, (uint32_t) node->line,
-                                                   import->module_name, member->name))
-            return false;
         if (!producer_register_stdlib_import(p, module_id, local_name, import->module_name,
                                              member->name))
             return false;
@@ -10161,21 +10257,27 @@ static uint64_t module_source_hash(const XrModuleSpec *spec);
  * once per process. A compiler we cannot locate or stat falls back to the
  * version hash alone: degrading to today's behavior beats refusing to build.
  */
+XR_FUNC uint64_t xg_compiler_image_hash_for_path(const char *path) {
+    uint64_t hash = XG_COMPILER_SEMVER_HASH;
+    XrFsStat st;
+    if (!path || xr_fs_stat(path, &st) != 0 || st.kind != XR_FS_FILE)
+        return hash;
+    hash = fold_u64(hash, st.size);
+    hash = fold_u64(hash, (uint64_t) st.mtime_ns);
+    return hash;
+}
+
 static uint64_t compiler_image_hash(void) {
     static uint64_t cached;
     static bool computed;
     char exe[4096];
-    XrFsStat st;
     if (computed)
         return cached;
     computed = true;
     cached = XG_COMPILER_SEMVER_HASH;
     if (xr_proc_self_exe_path(exe, sizeof(exe)) != 0)
         return cached;
-    if (xr_fs_stat(exe, &st) != 0 || st.kind != XR_FS_FILE)
-        return cached;
-    cached = fold_u64(cached, st.size);
-    cached = fold_u64(cached, (uint64_t) st.mtime_ns);
+    cached = xg_compiler_image_hash_for_path(exe);
     return cached;
 }
 
@@ -10343,6 +10445,7 @@ XR_FUNC bool xg_global_evidence_build_from_module_graph_with_imported_modules_an
     xg_global_evidence_init(evidence, key);
     memset(&producer, 0, sizeof(producer));
     producer.evidence = evidence;
+    producer.module_graph = graph;
     producer.next_func_id = 1;
     producer.analyzer = analyzer;
 

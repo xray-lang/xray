@@ -1642,6 +1642,50 @@ TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars) {
     setup_pool();
 }
 
+TEST(symbol_export_view_rekeys_foreign_symbol_identity) {
+    XaAnalyzer *source = xa_analyzer_new(g_session);
+    ASSERT(source != NULL);
+    XaSymbol *source_enum = xa_symbol_new("Signal", XA_SYM_ENUM);
+    ASSERT(source_enum != NULL);
+    source_enum->is_const = true;
+    source_enum->is_exported = true;
+    xa_scope_add_symbol(source->global_scope, source_enum);
+    XaSymbolLinks *source_links = xa_analyzer_get_links(source, source_enum);
+    source_links->type = xr_type_new_enum(source->isolate, "Signal");
+    source_links->declared_type = source_links->type;
+    source_links->is_definitely_assigned = true;
+    source_links->file_path = "signal_module.xr";
+
+    XaAnalyzer *target = xa_analyzer_new(g_session);
+    ASSERT(target != NULL);
+    while (target->next_symbol_id < source_enum->id) {
+        XaSymbol *padding = xa_symbol_new("padding", XA_SYM_VARIABLE);
+        ASSERT(padding != NULL);
+        xa_scope_add_symbol(target->global_scope, padding);
+    }
+    XaSymbol *collision = xa_symbol_new("unrelated", XA_SYM_VARIABLE);
+    ASSERT(collision != NULL);
+    xa_scope_add_symbol(target->global_scope, collision);
+    ASSERT(collision->id == source_enum->id);
+    ASSERT(xa_scope_lookup_by_id(target->global_scope, source_enum->id) == collision);
+
+    XaSymbol *view = xa_analyzer_import_export_symbol(target, source_enum);
+    ASSERT(view != NULL);
+    ASSERT(view != source_enum);
+    ASSERT(view->id != source_enum->id);
+    ASSERT(view->kind == XA_SYM_ENUM);
+    ASSERT(view->links.summary_owner == target);
+    ASSERT(view->links.type == source_links->type);
+    ASSERT(view->links.is_definitely_assigned);
+    ASSERT(xa_scope_lookup_by_id(target->global_scope, view->id) == view);
+    ASSERT(xa_scope_lookup_by_id(target->global_scope, source_enum->id) == collision);
+    ASSERT(xa_analyzer_import_export_symbol(target, source_enum) == view);
+
+    xa_analyzer_free(target);
+    xa_analyzer_free(source);
+    setup_pool();
+}
+
 TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
@@ -6861,6 +6905,7 @@ int main(void) {
     RUN_TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows);
     RUN_TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed);
     RUN_TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars);
+    RUN_TEST(symbol_export_view_rekeys_foreign_symbol_identity);
     RUN_TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result);
     RUN_TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint);
     RUN_TEST(analyzer_generator_suspend_is_separate_from_scheduler_suspend);

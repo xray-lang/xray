@@ -51,7 +51,7 @@ BASELINES = (
             "xrt_sys_thread_local_id()",
             "xrt_map_new_typed(0, XR_ELEM_I64, XR_ELEM_I64)",
             "xrt_map_new_typed(0, XR_ELEM_I64, XR_ELEM_BOOL)",
-            'xrt_map_set_class_name(_inst, "ThreadLocal$i64")',
+            r'c_regex=xrt_map_set_class_name\([^,]+, "ThreadLocal\$i64"\)',
             r"c_regex=int64_t sys_[0-9a-f]+_ThreadLocal_i64_get_m",
             r"c_regex=void sys_[0-9a-f]+_ThreadLocal_i64_set_m",
             "xrt_map_has_i64_typed",
@@ -62,7 +62,7 @@ BASELINES = (
         category="JSON_ENCODE_AOT_BASELINE",
         xr_path="tests/aot/filetests/cgen/json_decode_object_plan_consumption.xr",
         expect_path="tests/aot/filetests/cgen/json_decode_object_plan_consumption.expect",
-        source_contains=("Json.decode<User>", "Json.encode(user!)"),
+        source_contains=("JSON.decode<User>", "JSON.value(user!)"),
         expect_contains=(
             "kind=encode action=encode_field_table",
             "xrt_json_decode_struct_object",
@@ -79,11 +79,11 @@ BASELINES = (
         # qualified one and is checked on the expect side below.
         source_contains=(".routeHandler(", "handle(req: HttpRequest) -> HttpResponse"),
         expect_contains=(
-            "name=http.routeHandler",
+            "name=routeHandler",
             "c_not_contains=xrt_typename(",
             'c_not_contains=xrt_map_set_class_name(_inst, "_RouteHandler")',
-            "c_not_contains=xrt_json_get_name_owned",
-            r"c_regex=void http_[0-9a-f]+_routeHandler_exp",
+            "c_not_contains=xrt_object_get_name_owned",
+            r"c_regex=XRT_INTERNAL uint8_t http_[0-9a-f]+_Server_routeHandler_m",
         ),
     ),
 )

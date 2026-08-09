@@ -709,7 +709,6 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, vr, fresh_reg, 0));
         }
     }
-
 }
 
 /* ========== Public API ========== */
@@ -893,6 +892,15 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrVMRuntime *isolate, struct XrPr
     ctx.proto->is_vararg = f->is_vararg;
     ctx.proto->entry_type = f->entry_type;
     ctx.proto->min_params = f->min_params;
+    ctx.proto->call_place_param_bitmap = 0;
+    for (uint16_t pi = 0; pi < f->nparams && pi < 64; pi++) {
+        XiValue *param = f->params ? f->params[pi] : NULL;
+        XrParamMode mode = xi_func_param_passing_mode(f, pi);
+        bool is_place = (pi == 0 && f->receiver_call_place) || mode == XR_PARAM_REF ||
+                        xi_value_is_read_place_param(param);
+        if (is_place)
+            ctx.proto->call_place_param_bitmap |= UINT64_C(1) << pi;
+    }
     /* Set struct_area_size for VM per-frame struct allocation */
     ctx.proto->struct_area_size = ctx.struct_area_offset * 16u;
     ctx.proto->test_attr = f->test_attr;

@@ -1116,18 +1116,14 @@ static int builtin_interface_type_arity(const char *name) {
 static int known_type_head_arity(const char *name) {
     if (!name)
         return -1;
-    if (strcmp(name, "JSON.Value") == 0 || strcmp(name, "JSON.Object") == 0 ||
-        strcmp(name, "JSON.PathSegment") == 0 || strcmp(name, "JSON.Path") == 0 ||
-        strcmp(name, "JSON.UnknownFields") == 0 || strcmp(name, "JSON.Encodable") == 0 ||
-        strcmp(name, "JSON.Decodable") == 0)
-        return 0;
-    if (strcmp(name, "JSON.WithRest") == 0)
-        return 1;
 #define XR_BUILTIN_PRELUDE_TYPE(type_name, type_arity, native_type, prelude_kind)                  \
     if (strcmp(name, type_name) == 0)                                                              \
         return (type_arity);
 #define XR_BUILTIN_TYPE(type_name, type_arity)                                                     \
     if (strcmp(name, type_name) == 0)                                                              \
+        return (type_arity);
+#define XR_BUILTIN_NAMESPACE_TYPE(namespace_name, member_name, type_arity)                         \
+    if (strcmp(name, namespace_name "." member_name) == 0)                                         \
         return (type_arity);
 #include "../../../stdlib/prelude/builtin_symbols.def"
     return builtin_interface_type_arity(name);

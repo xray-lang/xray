@@ -7021,7 +7021,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
             const XgLinkDependencySummary *prev = &ev->link_deps[prev_i];
             if (prev->link_id == dep->link_id)
                 return set_error(errbuf, errbuf_len, "AOT link dependency id is duplicated");
-            if (prev->kind == dep->kind && strcmp(prev->name, dep->name) == 0)
+            if (prev->kind == dep->kind && prev->owner_func_id == dep->owner_func_id &&
+                strcmp(prev->name, dep->name) == 0)
                 return set_error(errbuf, errbuf_len, "AOT link dependency evidence is duplicated");
         }
         if (!verify_link_dependency_name_shape(dep, errbuf, errbuf_len))
@@ -7030,8 +7031,8 @@ static bool verify_global_evidence_plan(const XaotBundle *bundle, char *errbuf, 
         plan = xaot_bundle_find_link_dependency_plan(bundle, dep->link_id);
         if (!plan)
             return set_error(errbuf, errbuf_len, "AOT link dependency has no plan");
-        if (plan->kind != dep->kind || plan->name_id != dep->name_id ||
-            strcmp(plan->name, dep->name) != 0)
+        if (plan->owner_func_id != dep->owner_func_id || plan->kind != dep->kind ||
+            plan->name_id != dep->name_id || strcmp(plan->name, dep->name) != 0)
             return set_error(errbuf, errbuf_len, "AOT link dependency plan mismatches evidence");
         if (plan->evidence != XAOT_LINK_DEP_EV_GLOBAL_SUMMARY ||
             plan->unproven_reason != XAOT_LINK_DEP_UNPROVEN_NONE)

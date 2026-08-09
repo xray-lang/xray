@@ -180,6 +180,17 @@ typedef struct {
     XiEmitReg *var_reg; /* [var_state_count], var_id -> pinned register (NO_REG = unassigned) */
 } EmitCtx;
 
+/* VM class instances are allocated before their constructor body runs.  Every
+ * otherwise-normal allocation in that body must follow the receiver's chosen
+ * storage domain so the object graph never straddles the execution and system
+ * heaps.  AOT deliberately keeps the Xi mode normal and promotes the completed
+ * reachable graph at the constructor call site. */
+static inline uint8_t xi_emit_allocation_storage_mode(const EmitCtx *ctx, uint8_t storage_mode) {
+    if (storage_mode == XR_OBJ_STORAGE_NORMAL && ctx && ctx->func && ctx->func->is_constructor)
+        return XR_OBJ_STORAGE_INHERIT;
+    return storage_mode;
+}
+
 static inline bool xi_emit_var_id_in_state(const EmitCtx *ctx, XiVarId var_id) {
     return ctx && xi_var_id_is_valid(var_id) && var_id < ctx->var_state_count;
 }

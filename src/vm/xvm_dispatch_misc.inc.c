@@ -101,7 +101,7 @@ vmcase(OP_ARRAY_COPY_NEW) {
     if (len > INT32_MAX) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array length exceeds VM allocation limit");
     }
-    int storage_mode = c_field & 0x03;
+    int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (c_field & 0x03));
     uint8_t elem_tid = (uint8_t) (c_field >> 2);
     uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {

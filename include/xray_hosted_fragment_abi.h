@@ -15,7 +15,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_HOSTED_FRAGMENT_ABI_VERSION UINT32_C(6)
+#define XR_HOSTED_FRAGMENT_ABI_VERSION UINT32_C(7)
 
 typedef enum XrHostedFragmentStatus {
     XR_HOSTED_FRAGMENT_RETURN = 0,
@@ -51,6 +51,17 @@ typedef struct XrHostedFragmentArrayView {
     uint8_t elem_type;
     uint8_t reserved8[7];
 } XrHostedFragmentArrayView;
+
+/* A call-scoped borrow of contiguous byte storage.  Both Array<byte> and
+ * Slice<byte> use this operation: generated fragments must never reinterpret
+ * a host container header.  `readonly` preserves the host's dynamic view
+ * provenance so a `ref` parameter can fail closed before native code runs. */
+typedef struct XrHostedFragmentByteSpanView {
+    uint8_t *data;
+    uint64_t length;
+    uint8_t readonly;
+    uint8_t reserved8[7];
+} XrHostedFragmentByteSpanView;
 
 /* Class instances retain their native representation and identity inside the
  * generated fragment. The VM stores `native_value` only as an opaque owned
@@ -110,10 +121,9 @@ typedef struct XrHostedFragmentHostOps {
     uint32_t struct_size;
 
     bool (*string_view)(void *host, XrValue value, XrHostedFragmentStringView *out);
-    XrValue (*string_new_utf8)(void *host, const char *data, size_t byte_length,
-                               size_t rune_length, uint32_t hash);
-    XrValue (*error_new_utf8)(void *host, int32_t code, const char *message,
-                              size_t byte_length);
+    XrValue (*string_new_utf8)(void *host, const char *data, size_t byte_length, size_t rune_length,
+                               uint32_t hash);
+    XrValue (*error_new_utf8)(void *host, int32_t code, const char *message, size_t byte_length);
     XrValue (*enum_new)(void *host, const char *module_name, const char *enum_name,
                         const char *member_name, const XrHostedFragmentValueView *payloads,
                         uint32_t payload_count);
@@ -123,6 +133,7 @@ typedef struct XrHostedFragmentHostOps {
     bool (*array_get)(void *host, XrValue value, uint64_t index, XrValue *out);
     XrValue (*array_new)(void *host, uint64_t length, uint8_t elem_type);
     bool (*array_set)(void *host, XrValue array, uint64_t index, XrValue value);
+    bool (*byte_span_view)(void *host, XrValue value, XrHostedFragmentByteSpanView *out);
 
     bool (*object_view)(void *host, XrValue value, XrHostedFragmentObjectView *out);
     XrValue (*object_new)(void *host, const char *nominal_owner, const char *type_name,
@@ -147,12 +158,12 @@ typedef struct XrHostedFragmentContext {
      * pointer was published by XrHostedFragmentSignal.continuation and remains
      * owned by the generated entry until it returns or reports an error. */
     void *continuation;
-    const char *module_name; /* nominal owner used for type identity imports */
+    const char *module_name;        /* nominal owner used for type identity imports */
     XrHostedFragmentSignal *signal; /* caller-owned, zeroed before every call */
 } XrHostedFragmentContext;
 
-typedef XrValue (*XrHostedFragmentEntry)(
-    const XrHostedFragmentContext *context, const XrValue *arguments, uint32_t argument_count);
+typedef XrValue (*XrHostedFragmentEntry)(const XrHostedFragmentContext *context,
+                                         const XrValue *arguments, uint32_t argument_count);
 
 static inline XrValue xr_hosted_fragment_invalid_call(const XrHostedFragmentContext *context,
                                                       uint16_t argument_index) {
@@ -160,15 +171,13 @@ static inline XrValue xr_hosted_fragment_invalid_call(const XrHostedFragmentCont
         context->signal->status = XR_HOSTED_FRAGMENT_INVALID_CALL;
         context->signal->argument_index = argument_index;
     }
-    return (XrValue){0};
+    return (XrValue) {0};
 }
 
 #if defined(__cplusplus)
-static_assert(offsetof(XrHostedFragmentSignal, error) == 8,
-              "hosted fragment signal ABI changed");
+static_assert(offsetof(XrHostedFragmentSignal, error) == 8, "hosted fragment signal ABI changed");
 #else
-_Static_assert(offsetof(XrHostedFragmentSignal, error) == 8,
-               "hosted fragment signal ABI changed");
+_Static_assert(offsetof(XrHostedFragmentSignal, error) == 8, "hosted fragment signal ABI changed");
 #endif
 
 #endif /* XRAY_HOSTED_FRAGMENT_ABI_H */

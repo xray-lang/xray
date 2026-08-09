@@ -5483,6 +5483,44 @@ static void xa_for_in_reject_range_keyvalue(XaInferContext *ctx, AstNode *node,
                                "Range iteration yields values only; use `for (i in range)`", &loc);
 }
 
+/* A weak handle is owned by the current execution's weak table, so its target
+ * must be an allocation that the caller can keep in that execution heap.  A
+ * fresh local expression satisfies that contract.  An object returned from a
+ * function, imported from foreign/shared storage, or received as a parameter
+ * does not: changing the receiving binding's annotation cannot relocate an
+ * object that was already allocated elsewhere. */
+static void xa_constrain_weak_target_exec_local(XaInferContext *ctx, AstNode *store,
+                                                AstNode *value) {
+    if (!ctx || !ctx->analyzer || !value)
+        return;
+    AstNode *identity = xa_whole_binding_value(value);
+    if (!identity || identity->type == AST_LITERAL_NULL)
+        return;
+    if (xa_boundary_arg_is_explicit_copy(identity) || xa_expr_creates_fresh_root(ctx, identity))
+        return;
+
+    XaSymbol *source = xa_whole_binding_symbol(ctx, identity);
+    XaSymbolLinks *links = source ? xa_analyzer_get_links(ctx->analyzer, source) : NULL;
+    if (source && source->kind == XA_SYM_VARIABLE && links && links->root_id != 0 &&
+        (links->allocation_plan.source_local_materializable ||
+         links->allocation_plan.exec_local_only)) {
+        xa_mark_root_exec_local_only(ctx, links->root_id);
+        return;
+    }
+
+    XrLocation loc = {.file = ctx->file_path,
+                      .line = value->line ? value->line : (store ? store->line : 0),
+                      .column = value->column ? value->column : (store ? store->column : 0)};
+    const char *name = source && source->name ? source->name : "value";
+    char msg[320];
+    snprintf(msg, sizeof(msg),
+             "weak target '%s' is not proven execution-local; assign a fresh local value or "
+             "store copy(%s)",
+             name, name);
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_WEAK_FIELD, msg,
+                               &loc);
+}
+
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -5650,6 +5688,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Bidirectional inference: propagate field declared type to value
             XrType *saved_expected = ctx->expected_type;
             XrType *member_type = NULL;
+            bool member_is_weak = false;
             if (ms->member) {
                 XaSymbolLinks *class_links = NULL;
                 XrClassInfo *class_info = member_set_class_info(ctx, obj_type, &class_links);
@@ -5705,6 +5744,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         }
                     }
                     if (field) {
+                        member_is_weak = field->is_weak;
                         // Enforce private/protected visibility on the write target.
                         xa_check_member_visibility(ctx, node, field, field_owner);
 
@@ -5762,7 +5802,10 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             xa_check_span_value_escape(ctx, node, value_type, "store Slice view into a member");
             xa_check_pointer_borrow_escape(ctx, node, ms->value, value_type,
                                            "store raw pointer borrow into a member");
-            xa_note_owner_escapes_into_heap(ctx, ms->value);
+            if (member_is_weak)
+                xa_constrain_weak_target_exec_local(ctx, node, ms->value);
+            else
+                xa_note_owner_escapes_into_heap(ctx, ms->value);
             if (xa_type_needs_borrow_escape_guard(value_type)) {
                 XaSymbol *borrowed_root = xa_borrowed_param_root_symbol(ctx, ms->value);
                 if (borrowed_root && borrowed_root->passing_mode == XR_PARAM_REF) {

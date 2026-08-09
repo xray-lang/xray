@@ -2284,6 +2284,52 @@ static void arc_order_release_before_var_redef(XiFunc *f) {
     }
 }
 
+/* ========== Adjacent retain/release ordering ==========
+ *
+ * Phi-edge ownership promotion and death-point cleanup are computed in
+ * separate walks.  Their insertions can therefore leave a pure RC run in
+ * either order:
+ *
+ *     RELEASE old
+ *     RETAIN  incoming
+ *
+ * The values are distinct SSA definitions, but VM register coalescing may map
+ * both to the same source-variable register.  When the two definitions hold
+ * the same object (the normal ref-parameter loop shape), DROP destroys the
+ * last reference before DUP can acquire the replacement owner.  AOT happens
+ * to avoid the UAF because it keeps distinct C temporaries, but the ownership
+ * contract must not depend on backend register allocation.
+ *
+ * RETAIN has no user-visible side effect and acquiring replacement ownership
+ * before relinquishing old ownership is the universally safe order, including
+ * self-assignment.  Stable-partition each contiguous RC-only run so retains
+ * execute before releases; never cross a non-RC instruction. */
+static void arc_order_adjacent_rc_runs(XiFunc *f) {
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            arc_order_adjacent_rc_runs(f->children[i]);
+    }
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 1; vi < blk->nvalues; vi++) {
+            XiValue *retain = blk->values[vi];
+            if (!retain || retain->op != XI_RETAIN)
+                continue;
+            uint32_t dest = vi;
+            while (dest > 0) {
+                XiValue *prev = blk->values[dest - 1];
+                if (!prev || prev->op != XI_RELEASE)
+                    break;
+                blk->values[dest] = prev;
+                dest--;
+            }
+            blk->values[dest] = retain;
+        }
+    }
+}
+
 XR_FUNC void xi_arc_insert(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_arc_insert: NULL func");
     /* Promote escaping borrow-copies to moves BEFORE computing borrow
@@ -2295,6 +2341,7 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
     arc_precompute_sigs(f);
     arc_insert_rec(f);
     arc_order_release_before_var_redef(f);
+    arc_order_adjacent_rc_runs(f);
     arc_withdraw_tail_flag_before_releases(f);
 }
 

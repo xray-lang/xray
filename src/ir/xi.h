@@ -1663,6 +1663,7 @@ typedef struct XiFunc {
     uint32_t loop_recomputes;
 
     /* VM entry metadata (propagated to XrProto during emission) */
+    bool is_constructor; /* instance constructor body; VM allocations inherit `this` storage */
     bool is_vararg;      /* has rest parameter (...args) */
     uint8_t entry_type;  /* 0=normal, 1=has_defaults, 2=generator */
     uint16_t min_params; /* required parameter count (no defaults) */

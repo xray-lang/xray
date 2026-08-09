@@ -4403,7 +4403,7 @@ TEST(cgen_checked_typed_array_store_proves_nonnull_data) {
     xi_func_free(ir);
 }
 
-TEST(cgen_stringbuilder_and_builtin_iterator_methods_are_direct_nothrow) {
+TEST(cgen_builtin_iterator_pull_methods_preserve_error_polls) {
     const char *src = "fn copyRunes(text: string) -> string {\n"
                       "    var out = StringBuilder()\n"
                       "    var iter = text.runes()\n"
@@ -4428,8 +4428,9 @@ TEST(cgen_stringbuilder_and_builtin_iterator_methods_are_direct_nothrow) {
     assert(fn != NULL && "copyRunes definition should exist");
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "copyRunes function body should be bounded");
-    assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "exact built-in StringBuilder/Iterator helpers must not retain impossible error polls");
+    assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 2 &&
+           "Iterator.hasNext/next must poll the error channel because the static handle may be "
+           "generator-backed");
     assert(count_between(fn, fn_end, "xrt_release(") >= 2 &&
            "fresh StringBuilder and Iterator owners must both be released");
 
@@ -6185,6 +6186,50 @@ TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
     xi_func_free(ir);
 }
 
+TEST(cgen_native_receiver_closure_capture_preserves_arc) {
+    const char *src = "class Box {\n"
+                      "    n: int\n"
+                      "    constructor(n: int) { this.n = n }\n"
+                      "    bump() -> int {\n"
+                      "        defer { this.n = this.n + 100 }\n"
+                      "        return this.n\n"
+                      "    }\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    var b = Box(5)\n"
+                      "    return b.bump()\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "native receiver closure capture should generate");
+
+    const char *bump = find_static_function_definition(code, "test_bump_");
+    assert(bump != NULL && "bump method definition should be present");
+    const char *bump_end = next_static_after(bump);
+    const char *retain = strstr(bump, "xrt_retain(xrt_box_obj(");
+    const char *capture = strstr(bump, "_c->upvals[0] = xrt_box_obj(");
+    assert(retain != NULL && retain < bump_end && capture != NULL && capture < bump_end &&
+           retain < capture &&
+           "borrowed native receiver must be retained before an owning closure capture");
+
+    const char *run = find_static_function_definition(code, "test_run_");
+    assert(run != NULL && "run function definition should be present");
+    const char *run_end = next_static_after(run);
+    assert(count_between(run, run_end, "xrt_obj_alloc(") == 1 &&
+           count_between(run, run_end, "xrt_native_test_Box _ci") == 0 &&
+           "a receiver retained by its method must have a heap object header");
+
+    printf("  Generated native receiver capture ARC path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_class_constructor_returns_heap_native_instance) {
     const char *src = "class Counter {\n"
                       "    value: int\n"
@@ -7044,6 +7089,28 @@ TEST(cgen_closure_values_and_indirect_calls_use_portable_c) {
                  "closure construction and indirect calls emit standard C11");
     TEST_REQUIRE(contains(code, ".sync_entry=(void (*)(void))"),
                  "callable descriptors use a standard generic function pointer");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_cell_backed_function_upvalue_uses_boxed_indirect_call) {
+    const char *src = "fn outer() {\n"
+                      "    fn cleanup(msg: string) { print(msg) }\n"
+                      "    fn worker() { defer cleanup(\"upval-cleanup\") }\n"
+                      "    worker()\n"
+                      "}\n"
+                      "outer()\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "cell-backed function-upvalue fixture compiled");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "CELL_GET call target generated through the boxed closure entry");
+    TEST_REQUIRE(contains(code, "->callable->sync_entry"),
+                 "cell-backed function upvalue invokes its closure descriptor");
 
     xr_free(code);
     xi_func_free(ir);
@@ -9171,6 +9238,117 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_owner_forward_clears_moved_frame_root) {
+    const char *src = "fn worker() -> string {\n"
+                      "    var value = \"hello\" + \"_owner\"\n"
+                      "    Coro.yield()\n"
+                      "    var result = value\n"
+                      "    return result\n"
+                      "}\n"
+                      "var task = go worker()\n"
+                      "var result = await task\n"
+                      "print(result)\n";
+
+    XiPipelineConfig cfg = xi_pipeline_aot_config();
+    XiFunc *ir = compile_to_ir_with_config(src, cfg);
+    TEST_REQUIRE(ir != NULL, "owner-forward coroutine IR compilation failed");
+
+    const XiFunc *worker = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "worker") == 0) {
+            worker = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(worker != NULL, "owner-forward coroutine worker function missing");
+
+    const XiValue *retained_source = NULL;
+    const XiValue *moved_source = NULL;
+    const XiValue *forward_source = NULL;
+    const XiValue *forward = NULL;
+    XiBlock *forward_block = NULL;
+    uint32_t retain_index = UINT32_MAX;
+    uint32_t source_release_index = UINT32_MAX;
+    for (uint32_t bi = 0; bi < worker->nblocks && !forward; bi++) {
+        XiBlock *block = worker->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (!value || value->op != XI_OWNER_FORWARD || value->nargs < 1 || !value->args[0])
+                continue;
+            const XiValue *owner = value->args[0];
+            while (owner &&
+                   (owner->op == XI_BOX || owner->op == XI_UNBOX ||
+                    xi_copy_is_identity_alias(owner)) &&
+                   owner->nargs >= 1)
+                owner = owner->args[0];
+            if (!owner || !owner->type || owner->type->kind != XR_KIND_STRING)
+                continue;
+            const XiValue *prev = vi > 0 ? block->values[vi - 1] : NULL;
+            if (!prev || prev->op != XI_RETAIN || prev->nargs < 1 ||
+                (prev->args[0] != owner && prev->args[0] != value->args[0]))
+                continue;
+            retained_source = prev->args[0];
+            moved_source = value->args[0];
+            forward_source = value->args[0];
+            forward = value;
+            forward_block = block;
+            retain_index = vi - 1;
+            for (uint32_t ri = vi + 1; ri < block->nvalues; ri++) {
+                const XiValue *release = block->values[ri];
+                if (release && release->op == XI_RELEASE && release->nargs >= 1 &&
+                    release->args[0] == retained_source) {
+                    source_release_index = ri;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+    TEST_REQUIRE(retained_source && moved_source && forward_source && forward && forward_block &&
+                     retain_index != UINT32_MAX && source_release_index != UINT32_MAX,
+                 "fixture should contain a retained frame-owner forward");
+
+    /* Model the legal last-owner shape produced on the HTTP close edge:
+     * OWNER_FORWARD(source) without a balancing retain/release of source. The
+     * backend plan and suspension liveness are unchanged; only ownership of the
+     * already-planned frame slot transfers to the forward. */
+    memmove(&forward_block->values[source_release_index],
+            &forward_block->values[source_release_index + 1],
+            (forward_block->nvalues - source_release_index - 1) * sizeof(XiValue *));
+    forward_block->nvalues--;
+    memmove(&forward_block->values[retain_index], &forward_block->values[retain_index + 1],
+            (forward_block->nvalues - retain_index - 1) * sizeof(XiValue *));
+    forward_block->nvalues--;
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "AOT owner-forward coroutine should generate");
+    const char *resume = find_static_function_definition(code, "static XrAotResult test_worker_");
+    TEST_REQUIRE(resume != NULL, "owner-forward coroutine resume definition missing");
+    const char *resume_end = next_static_after(resume);
+
+    char move_line[64];
+    char clear_tagged_line[64];
+    char clear_ptr_line[64];
+    snprintf(move_line, sizeof(move_line), "v%u = v%u;", forward->id, forward_source->id);
+    snprintf(clear_tagged_line, sizeof(clear_tagged_line), "v%u = XR_NULL_VAL;", moved_source->id);
+    snprintf(clear_ptr_line, sizeof(clear_ptr_line), "v%u = NULL;", moved_source->id);
+    const char *move_pos = strstr(resume, move_line);
+    const char *clear_tagged_pos = move_pos ? strstr(move_pos, clear_tagged_line) : NULL;
+    const char *clear_ptr_pos = move_pos ? strstr(move_pos, clear_ptr_line) : NULL;
+    const char *clear_pos = clear_tagged_pos ? clear_tagged_pos : clear_ptr_pos;
+    const char *return_pos = clear_pos ? strstr(clear_pos, "return xr_aot_done(") : NULL;
+    TEST_REQUIRE(move_pos && move_pos < resume_end, "frame owner forward assignment missing");
+    TEST_REQUIRE(clear_pos && clear_pos < resume_end,
+                 "moved frame owner must be cleared before frame teardown");
+    TEST_REQUIRE(return_pos && return_pos < resume_end,
+                 "forwarded owner must remain available after the source frame slot is cleared");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_go_clones_tagged_args) {
     const char *src = "fn worker(xs: move Array<int>) -> int {\n"
                       "    xs.push(99)\n"
@@ -9717,6 +9895,46 @@ TEST(cgen_hosted_string_array_boundary_uses_deep_value_bridge) {
         hosted_init_context ? strstr(hosted_init_context, "xrt_has_pending_error()") : NULL;
     TEST_REQUIRE(hosted_init_call && hosted_init_check && hosted_init_call < hosted_init_check,
                  "hosted initialization executes the module graph before exports");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_hosted_byte_slice_boundary_uses_layout_neutral_view) {
+    const char *src = "fn bridge(data: Slice<byte>) -> int { return len(data) }\n"
+                      "var text = \"abc\"\n"
+                      "bridge(text.bytes())\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "hosted byte-slice fixture compiled");
+
+    XiFunc *bridge = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "bridge") == 0) {
+            bridge = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(bridge != NULL, "hosted byte-slice bridge function lowered");
+    XrCExportPlan export_plan = {
+        .xray_name = "bridge",
+        .symbol = "xr_hosted_byte_slice_bridge",
+        .visibility = "hidden",
+        .abi = "hosted-vm-v1",
+        .header = true,
+    };
+    bridge->export_plan = &export_plan;
+
+    bool had_error = false;
+    char *code = generate_c_with_status_and_stats_for_artifact(ir, "test", &had_error, NULL,
+                                                               XAOT_ARTIFACT_HOSTED_FRAGMENT);
+    TEST_REQUIRE(code != NULL && !had_error, "hosted byte-slice C bridge generated");
+    TEST_REQUIRE(contains(code, "XrHostedFragmentByteSpanView _hosted_byte_span_0"),
+                 "byte slice is borrowed through the hosted byte-span ABI");
+    TEST_REQUIRE(contains(code, "context->ops->byte_span_view"),
+                 "byte slice uses the host operation");
+    TEST_REQUIRE(!contains(code, "(xrt_array_t *)arguments[0].ptr"),
+                 "host container headers are never reinterpreted");
 
     xr_free(code);
     xi_func_free(ir);
@@ -11678,6 +11896,7 @@ int main(void) {
     run_cgen_inline_attribute_forces_native_expansion();
     run_cgen_c_export_wrapper_keeps_default_visibility();
     run_cgen_hosted_string_array_boundary_uses_deep_value_bridge();
+    run_cgen_hosted_byte_slice_boundary_uses_layout_neutral_view();
     run_cgen_hosted_runtime_capability_installs_scoped_vm_context();
     run_cgen_hosted_coroutine_export_publishes_resumable_continuation();
     run_cgen_hosted_class_boundary_uses_nominal_opaque_proxy();
@@ -11715,7 +11934,7 @@ int main(void) {
     run_cgen_parallel_for_body_closure_stack_allocates();
     run_cgen_typed_array_uses_raw_storage_fast_path();
     run_cgen_checked_typed_array_store_proves_nonnull_data();
-    run_cgen_stringbuilder_and_builtin_iterator_methods_are_direct_nothrow();
+    run_cgen_builtin_iterator_pull_methods_preserve_error_polls();
     run_cgen_err_check_releases_live_arc_owners_on_cold_edge();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
     run_cgen_string_copy_bytes_preserves_byte_storage_fast_path();
@@ -11757,6 +11976,7 @@ int main(void) {
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
+    run_cgen_native_receiver_closure_capture_preserves_arc();
     run_cgen_class_constructor_returns_heap_native_instance();
     run_cgen_native_class_ref_field_constructor_result_uses_ptr_storage();
     run_cgen_native_class_collection_ref_fields_use_arc();
@@ -11771,6 +11991,7 @@ int main(void) {
     run_cgen_typename_as_and_slice_use_direct_drivers();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();
+    run_cgen_cell_backed_function_upvalue_uses_boxed_indirect_call();
     run_cgen_range_uses_direct_aot_driver();
     run_cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load();
     run_cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store();
@@ -11817,6 +12038,7 @@ int main(void) {
     run_cgen_sync_blocking_direct_methods_mark_aot_coroutines();
     run_cgen_runtime_managed_types_skip_arc();
     run_cgen_coro_frame_release_uses_aot_arc();
+    run_cgen_coro_owner_forward_clears_moved_frame_root();
     run_cgen_coro_go_clones_tagged_args();
     run_cgen_coro_go_sync_function_uses_wrapper_desc();
     run_cgen_coro_go_sync_scalar_wrapper_skips_param_roots();

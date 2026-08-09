@@ -41,6 +41,19 @@ ALLOWED_RUNTIME_CASES = {
     "tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr",
     "tests/diff/cases/semantics/concurrency/once_compose.xr",
     "tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr",
+    # Scheduler liveness cases intentionally exercise progress, cancellation,
+    # deadlock, and orphan diagnostics. Their observable contract is provided
+    # by the coroutine scheduler rather than the freestanding runtime.
+    "tests/diff/cases/liveness/blocking_recv_progress.xr",
+    "tests/diff/cases/liveness/busy_poll_progress.xr",
+    "tests/diff/cases/liveness/busy_poll_progress_single_worker.xr",
+    "tests/diff/cases/liveness/cancel_reaches_cpu_loop.xr",
+    "tests/diff/cases/liveness/cancel_responsive_blocking.xr",
+    "tests/diff/cases/liveness/deadlock_reported.xr",
+    "tests/diff/cases/liveness/orphan_warned.xr",
+    # This fixture's `go` lambda is itself the runtime-backed behavior under
+    # test, even though the captured values are otherwise ordinary locals.
+    "tests/diff/cases/semantics/concurrency/go_lambda_local_scope.xr",
     # The hosted parallel module uses runtime-backed worker/task state. These
     # cases are the explicit positive coverage for that API surface, so the
     # coroutine runtime archive is expected.
@@ -67,7 +80,26 @@ ALLOWED_RUNTIME_CASES = {
     # Typed coroutine-local slots and CoroPool.submit are explicit wrappers
     # around coroutine runtime storage and task scheduling.
     "tests/diff/cases/semantics/stdlib/coro_typed_local_pool.xr",
+    "tests/diff/cases/semantics/stdlib/coro_typed_local_shell_reuse.xr",
     "tests/diff/cases/semantics/stdlib/coro_typed_local_sync.xr",
+    # These fixtures execute file, process, logging, or HTTP form-data paths
+    # whose reachable stdlib operations may suspend on hosted I/O.
+    "tests/diff/cases/semantics/stdlib/http_formdata_pure_direct.xr",
+    "tests/diff/cases/semantics/stdlib/io_binary_file_boundary_direct.xr",
+    "tests/diff/cases/semantics/stdlib/io_chmod_shared_core.xr",
+    "tests/diff/cases/semantics/stdlib/io_path_result_shared_core.xr",
+    "tests/diff/cases/semantics/stdlib/io_read_dir_shared_core.xr",
+    "tests/diff/cases/semantics/stdlib/io_remove_all_shared_core.xr",
+    "tests/diff/cases/semantics/stdlib/io_system_direct.xr",
+    "tests/diff/cases/semantics/stdlib/io_touch_shared_core.xr",
+    "tests/diff/cases/semantics/stdlib/io_write_shared_core.xr",
+    "tests/diff/cases/semantics/stdlib/log_pure_module_direct.xr",
+    "tests/diff/cases/semantics/stdlib/sys_process_direct.xr",
+    # Timer, parallel worker, and runtime-domain channel fixtures directly
+    # exercise services implemented by the coroutine runtime archive.
+    "tests/diff/cases/semantics/stdlib/os_sleep_system_direct.xr",
+    "tests/diff/cases/semantics/stdlib/parallel_default_options.xr",
+    "tests/diff/cases/semantics/stdlib/runtime_domain_bytes.xr",
     # `sync.fence` itself lowers to the freestanding mem.fence helper, but the
     # hosted `sync` module is a pure-Xray script module that also exports
     # coroutine-aware Mutex/RwLock/Once/Barrier/Condvar. Current AOT compiles

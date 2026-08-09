@@ -8118,7 +8118,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (emit_portable_class_native_ctor_value_stmt(ctx, out, f, prefix, v, false))
         return;
 
-    if (emit_portable_map_class_ctor_value_stmt(ctx, out, f, prefix, v))
+    if (emit_portable_map_class_ctor_value_stmt(ctx, out, f, prefix, v, false))
         return;
 
     if (xicgen_emit_slice_stmt(ctx, out, f, v, prefix))
@@ -8184,7 +8184,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (xi_to_c_emit_stmt_generated(ctx, out, f, v, prefix))
         return;
 
-    if (emit_str_concat_value_stmt(ctx, out, f, v))
+    if (emit_str_concat_value_stmt(ctx, out, f, v, false))
         return;
 
     if (emit_closure_new_value_stmt(ctx, out, f, prefix, v, false))
@@ -11393,7 +11393,8 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
         const XrType *type = f->params && f->params[i] ? f->params[i]->type : NULL;
         if (type &&
             (type->kind == XR_KIND_STRING || type->kind == XR_KIND_ENUM ||
-             cg_hosted_vm_is_object_type(type) || cg_hosted_vm_array_has_string_elements(type)))
+             cg_hosted_vm_is_object_type(type) || cg_hosted_vm_array_has_string_elements(type) ||
+             (type->kind == XR_KIND_SLICE && xr_type_is_u8_slice(type))))
             needs_host_ops = true;
     }
 
@@ -11648,15 +11649,22 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
                         "return xr_hosted_fragment_invalid_call(context, %uu);\n",
                         i, (unsigned) i + 1u);
         } else if (type && type->kind == XR_KIND_SLICE && xr_type_is_u8_slice(type)) {
-            emit_hosted_vm_type_guard(out, type, i);
             fprintf(out,
-                    "    xrt_array_t *_hosted_array_%u = "
-                    "(xrt_array_t *)arguments[%u].ptr;\n"
-                    "    if (!_hosted_array_%u || _hosted_array_%u->elem_type != XR_ELEM_U8)\n"
+                    "    XrHostedFragmentByteSpanView _hosted_byte_span_%u = {0};\n"
+                    "    if (!context->ops->byte_span_view ||\n"
+                    "        !context->ops->byte_span_view(context->host, arguments[%u], "
+                    "&_hosted_byte_span_%u) ||\n"
+                    "        _hosted_byte_span_%u.length > (uint64_t)INT64_MAX ||\n"
+                    "        (!_hosted_byte_span_%u.data && _hosted_byte_span_%u.length != 0u)",
+                    i, i, i, i, i, i);
+            if (xi_func_param_passing_mode(f, i) == XR_PARAM_REF)
+                fprintf(out, " || _hosted_byte_span_%u.readonly", i);
+            fprintf(out,
+                    ")\n"
                     "        return xr_hosted_fragment_invalid_call(context, %uu);\n"
                     "    xr_span_t _hosted_slice_%u = "
-                    "{_hosted_array_%u->data, _hosted_array_%u->length};\n",
-                    i, i, i, i, (unsigned) i + 1u, i, i, i);
+                    "{_hosted_byte_span_%u.data, (int64_t)_hosted_byte_span_%u.length};\n",
+                    (unsigned) i + 1u, i, i, i);
         } else {
             emit_hosted_vm_type_guard(out, type, i);
             const char *array_elem = cg_hosted_vm_array_elem_constant(type);

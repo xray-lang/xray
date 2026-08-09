@@ -62,7 +62,7 @@ static XrValue ws_make_string(XrVMRuntime *X, const char *str, size_t len) {
 }
 
 static XrObjectInstance *ws_shape_new(XrVMRuntime *X, const char *name) {
-    XrClass *cls = xr_stdlib_object_shape_class_get(X, "ws", name);
+    XrClass *cls = xr_stdlib_record_class_get(X, "ws", name);
     return cls ? xr_object_instance_new_with_class(xr_current_coro(X), cls) : NULL;
 }
 

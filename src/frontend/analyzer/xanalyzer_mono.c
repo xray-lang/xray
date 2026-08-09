@@ -862,6 +862,9 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_NEW_EXPR:
             n->as.new_expr.module_name = clone_str(node->as.new_expr.module_name);
             n->as.new_expr.class_name = clone_str(node->as.new_expr.class_name);
+            /* The clone is analyzed in its destination scope and receives a
+             * destination-owned symbol identity there. */
+            n->as.new_expr.class_symbol_id = 0;
             n->as.new_expr.arg_count = node->as.new_expr.arg_count;
             n->as.new_expr.arguments = clone_node_array(
                 node->as.new_expr.arguments, node->as.new_expr.arg_count, map, mc, clone_ctx);

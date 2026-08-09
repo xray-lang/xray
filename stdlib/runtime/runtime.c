@@ -115,7 +115,7 @@ static XrValue runtime_info(XrVMRuntime *isolate, XrValue *args, int argc) {
     (void) args;
 
     XrCoroHeap *heap = get_heap(isolate);
-    XrClass *cls = xr_stdlib_object_shape_class_get(isolate, "runtime", "RuntimeInfo");
+    XrClass *cls = xr_stdlib_record_class_get(isolate, "runtime", "RuntimeInfo");
     XR_CHECK(cls != NULL, "runtime.info: RuntimeInfo class unavailable");
     XrObjectInstance *object = xr_object_instance_new_with_class(xr_current_coro(isolate), cls);
     XR_CHECK(object != NULL, "runtime.info: RuntimeInfo allocation failed");

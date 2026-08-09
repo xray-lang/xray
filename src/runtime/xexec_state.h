@@ -182,6 +182,9 @@ typedef struct XrVMState {
     // Isolate-wide value-struct layout registry. STRUCT_REF.heap_type stores
     // this 16-bit id when the payload has no XrClass* header.
     struct XrAggregateLayout **struct_layouts;
+    /* Runtime nominal class bound to each named layout id. Anonymous layouts
+     * keep a NULL entry and therefore cannot participate in method dispatch. */
+    struct XrClass **struct_layout_classes;
     bool *struct_layout_owned;
     uint16_t struct_layout_count;
     uint16_t struct_layout_capacity;
@@ -190,6 +193,9 @@ typedef struct XrVMState {
 
 XR_FUNC uint16_t xr_vm_struct_layout_register(XrVMState *vm, struct XrAggregateLayout *layout);
 XR_FUNC struct XrAggregateLayout *xr_vm_struct_layout_lookup(XrVMState *vm, uint16_t layout_id);
+XR_FUNC bool xr_vm_struct_layout_bind_class(XrVMState *vm, struct XrAggregateLayout *layout,
+                                            struct XrClass *cls);
+XR_FUNC struct XrClass *xr_vm_struct_layout_class(XrVMState *vm, uint16_t layout_id);
 XR_FUNC struct XrAggregateLayout *xr_vm_struct_layout_lookup_stable_key(XrVMState *vm,
                                                                         uint64_t stable_key);
 /* Intern a validated heap-materialized layout by stable semantic identity.

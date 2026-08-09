@@ -362,7 +362,7 @@ static bool xa_type_can_be_weak(const XrType *type) {
 }
 
 /* Does an instance of this type carry a `weak` field, its bases included? */
-static bool xa_type_declares_weak_field(const XrType *type) {
+bool xa_type_declares_weak_field(const XrType *type) {
     if (!type)
         return false;
     if (type->kind != XR_KIND_INSTANCE && type->kind != XR_KIND_CLASS)
@@ -386,18 +386,19 @@ static bool xa_type_declares_weak_field(const XrType *type) {
  * that some other execution context already released. Rejecting it at the
  * declaration is the only place the user can still choose a different design.
  *
- * TRANSFERABLE is deliberately absent: a transferred object moves between
- * coroutines one owner at a time, so a death point still exists. */
+ * TRANSFERABLE is forbidden as well.  The weak table belongs to one execution
+ * heap; moving the holder would leave its handle in the old heap. */
 static void xa_check_weak_storage_domain(XaInferContext *ctx, const XrType *type, uint8_t domain,
                                          const XrLocation *loc) {
-    if (domain != XR_STORAGE_CONST_SHARED && domain != XR_STORAGE_SYNC_SHARED &&
-        domain != XR_STORAGE_MODULE_STATIC)
+    if (domain == XR_STORAGE_EXEC_LOCAL || domain == XR_STORAGE_DOMAIN_UNKNOWN)
         return;
     if (!xa_type_declares_weak_field(type))
         return;
     const char *domain_label = domain == XR_STORAGE_MODULE_STATIC  ? "module-static"
                                : domain == XR_STORAGE_CONST_SHARED ? "const-shared"
-                                                                   : "sync-shared";
+                               : domain == XR_STORAGE_SYNC_SHARED  ? "sync-shared"
+                               : domain == XR_STORAGE_TRANSFERABLE ? "transferable"
+                                                                   : "non-local";
     char msg[256];
     snprintf(msg, sizeof(msg),
              "a type with a weak field cannot live in %s storage: nothing there would clear the "
@@ -3897,6 +3898,11 @@ skip_interfaces:
         XrAggregateLayout *layout = xr_calloc(1, sizeof(XrAggregateLayout));
         if (!layout)
             goto skip_layout;
+        layout->nominal_name = cls->name ? xr_strdup(cls->name) : NULL;
+        if (cls->name && !layout->nominal_name) {
+            xr_free(layout);
+            goto skip_layout;
+        }
         layout->field_count = (uint16_t) info->field_count;
         ClassDeclNode *st = is_union_decl ? &node->as.union_decl : &node->as.struct_decl;
         if (is_union_decl) {
@@ -3923,7 +3929,7 @@ skip_interfaces:
          * analyzer teardown), so field names are layout-owned copies. */
         layout->field_names = xr_calloc((size_t) info->field_count, sizeof(const char *));
         if (!layout->field_names) {
-            xr_free(layout);
+            xr_aggregate_layout_free_owned(layout);
             goto skip_layout;
         }
         for (int i = 0; i < info->field_count; i++) {

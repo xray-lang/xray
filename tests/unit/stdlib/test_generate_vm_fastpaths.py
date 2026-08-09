@@ -161,6 +161,69 @@ class HostedSignatureTest(unittest.TestCase):
             [entry["symbol"] for entry in unsupported],
         )
 
+    def test_unhosted_class_producer_removes_proxy_and_consumers(self) -> None:
+        entries = [
+            {
+                "symbol": "path.Path.constructor.constructor",
+                "module": "path",
+                "class_name": "Path",
+                "reference": "stdlib/path/path.xr::Path.constructor",
+                "abi": "string->object:path:Path",
+            },
+            {
+                "symbol": "path.from",
+                "module": "path",
+                "class_name": "",
+                "reference": "stdlib/path/path.xr::from",
+                "abi": "string->object:path:Path",
+            },
+            {
+                "symbol": "io.exists",
+                "module": "io",
+                "class_name": "",
+                "reference": "stdlib/io/io.xr::exists",
+                "abi": "object:path:Path->bool",
+            },
+        ]
+        source_exports = [
+            {
+                "symbol": "path.Path.constructor.constructor",
+                "module": "path",
+                "class_name": "Path",
+                "source": "stdlib/path/path.xr",
+                "signature": "(raw: string): ()",
+            },
+            {
+                "symbol": "path.from",
+                "module": "path",
+                "class_name": "",
+                "source": "stdlib/path/path.xr",
+                "signature": "(raw: string): Path",
+            },
+            {
+                "symbol": "path.join",
+                "module": "path",
+                "class_name": "",
+                "source": "stdlib/path/path.xr",
+                "signature": "(...parts: Path): Path",
+            },
+            {
+                "symbol": "io.exists",
+                "module": "io",
+                "class_name": "",
+                "source": "stdlib/io/io.xr",
+                "signature": "(path: Path): bool",
+            },
+        ]
+        filtered, unsupported = generator.enforce_atomic_class_coverage(
+            entries, source_exports
+        )
+        self.assertEqual([], filtered)
+        self.assertEqual(
+            ["io.exists", "path.Path.constructor.constructor", "path.from", "path.join"],
+            [entry["symbol"] for entry in unsupported],
+        )
+
     def test_registry_requires_generated_suspendability_header(self) -> None:
         registry = generator.render_registry(1, [], "fingerprint", "test-target")
         self.assertIn("#ifndef XR_HOSTED_FRAGMENT_SUSPENDABILITY_DECLARED", registry)

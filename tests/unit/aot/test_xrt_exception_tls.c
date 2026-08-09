@@ -72,6 +72,42 @@ typedef struct ThreadTlsSnapshot {
     int has_defer_top;
 } ThreadTlsSnapshot;
 
+static int g_defer_calls;
+
+static XrValue defer_capture_probe(xrt_closure_t *closure) {
+    if (!closure || closure->nupvals != 1 || XR_TO_INT(xrt_cell_get(closure->upvals[0])) != 37) {
+        g_failed++;
+        return XR_NULL_VAL;
+    }
+    g_defer_calls++;
+    return XR_NULL_VAL;
+}
+
+static void test_defer_consumes_closure_and_captured_graph(void) {
+    static const XrAotCallableDesc callable = {
+        .target_id = 1,
+        .effect_bits = 0,
+        .signature_key = 1,
+        .sync_entry = (void (*)(void)) defer_capture_probe,
+    };
+    XrtExecutionArena *arena = xrt_execution_current();
+    uint64_t baseline = arena->live_objects;
+    XrValue captured = xrt_cell_new(XR_FROM_INT(37));
+    XrValue closure = xrt_closure_new(&callable, 1);
+    ((xrt_closure_t *) closure.ptr)->upvals[0] = captured;
+    ASSERT_TRUE(arena->live_objects == baseline + 2,
+                "capture and defer closure are registered in the execution arena");
+
+    XrtDeferScope scope;
+    xrt_defer_enter(&scope);
+    xrt_defer_push(&scope, closure);
+    xrt_defer_leave(&scope);
+
+    ASSERT_TRUE(g_defer_calls == 1, "defer callback runs exactly once");
+    ASSERT_TRUE(arena->live_objects == baseline,
+                "draining defer releases the closure and its captured graph");
+}
+
 static void *worker_tls_probe(void *arg) {
     ThreadTlsSnapshot *snapshot = (ThreadTlsSnapshot *) arg;
     XrtExcFrame frame;
@@ -139,6 +175,7 @@ static void test_aot_exception_defer_state_is_thread_local(void) {
 
 int main(void) {
     test_aot_exception_defer_state_is_thread_local();
+    test_defer_consumes_closure_and_captured_graph();
     if (g_failed != 0) {
         fprintf(stderr, "test_xrt_exception_tls: %d passed, %d failed\n", g_passed, g_failed);
         return 1;

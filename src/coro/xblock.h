@@ -34,6 +34,15 @@ typedef enum {
     XR_CORO_BLOCK_ERROR
 } XrCoroBlockKind;
 
+typedef enum {
+    XR_CORO_IO_WAIT_READY = 0,
+    XR_CORO_IO_WAIT_BLOCKED,
+    XR_CORO_IO_WAIT_YIELD,
+    XR_CORO_IO_WAIT_TIMEOUT,
+    XR_CORO_IO_WAIT_CANCELLED,
+    XR_CORO_IO_WAIT_ERROR,
+} XrCoroIoWaitKind;
+
 typedef struct {
     XrCoroBlockKind kind;
     XrValue value;
@@ -128,6 +137,17 @@ XR_FUNC void xr_coro_rollback_reversible_block(struct XrCoroutine *coro,
  * performs the RUNNING→BLOCKED transition. */
 XR_FUNC bool xr_coro_finalize_blocked_suspend(struct XrCoroutine *coro);
 XR_FUNC void xr_coro_finish_backend_resume_tokens(struct XrCoroutine *coro, int resume_status);
+/* Register one backend-neutral netpoll wait. The caller must first attempt the
+ * non-blocking socket operation and call this only after EAGAIN/EWOULDBLOCK.
+ * A descriptor whose private deadline node belongs to another worker returns
+ * YIELD and installs a one-shot targeted scheduler handoff; retrying on that
+ * worker can then arm the descriptor without cross-wheel timer reuse. */
+XR_FUNC XrCoroIoWaitKind xr_coro_io_wait(struct XrCoroutine *coro, int fd, int poll_mode,
+                                         int64_t timeout_ms);
+/* Consume the terminal token after a netpoll wake. IDLE is also READY: it is
+ * the expected state after a targeted owner-worker handoff that did not arm a
+ * wait yet. */
+XR_FUNC XrCoroIoWaitKind xr_coro_io_wait_resume(struct XrCoroutine *coro);
 XR_FUNC XrCoroBlockResult xr_coro_sleep(struct XrCoroutine *coro, int64_t milliseconds);
 XR_FUNC XrCoroBlockResult xr_coro_select_block(struct XrCoroutine *coro,
                                                const XrValue *channel_values, int ch_count,

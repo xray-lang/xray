@@ -29,4 +29,31 @@ static inline bool xr_stdlib_metadata_link_dependency_module_known(const char *n
     return false;
 }
 
+static inline uint32_t xr_stdlib_metadata_function_runtime_capabilities(const char *module,
+                                                                        const char *name) {
+    uint32_t capabilities = 0;
+    if (!module || !name)
+        return 0;
+    for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibDefEntry *entry = &xr_stdlib_def_entries[i];
+        if (entry->module && entry->name && strcmp(entry->module, module) == 0 &&
+            strcmp(entry->name, name) == 0)
+            capabilities |= entry->runtime_capabilities;
+    }
+    return capabilities;
+}
+
+static inline bool xr_stdlib_metadata_function_may_suspend(const char *module, const char *name) {
+    if (!module || !name)
+        return false;
+    for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibDefEntry *entry = &xr_stdlib_def_entries[i];
+        if (entry->module && entry->name && entry->vm_binding &&
+            strcmp(entry->module, module) == 0 && strcmp(entry->name, name) == 0 &&
+            strcmp(entry->vm_binding, "yieldable") == 0)
+            return true;
+    }
+    return false;
+}
+
 #endif  // XSTDLIB_METADATA_H

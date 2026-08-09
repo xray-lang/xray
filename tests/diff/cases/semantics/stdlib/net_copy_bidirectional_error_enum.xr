@@ -9,16 +9,20 @@ fn acceptOnce(listener: move NetListener) {
     net.close(listener)
 }
 
-var listener = net.listen(0, 1)!
-const port = listener.port()
-var acceptTask = go acceptOnce(move listener)
-var conn = net.dial("127.0.0.1", port, 1000)!
-net.close(conn)
-await acceptTask
+fn run() {
+    var listener = net.listen(0, 1)!
+    const port = listener.port()
+    var acceptTask = go acceptOnce(move listener)
+    var conn = net.dial("127.0.0.1", port, 1000)!
+    net.close(conn)
+    await acceptTask
 
-try {
-    net.copyBidirectional(conn, conn)
-} catch (error: NetError) {
-    print(error.name)
-    print(error == NetError.Closed)
+    try {
+        net.copyBidirectional(conn, conn)
+    } catch (error: NetError) {
+        print(error.name)
+        print(error == NetError.Closed)
+    }
 }
+
+run()

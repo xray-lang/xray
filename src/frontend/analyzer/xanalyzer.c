@@ -35,6 +35,14 @@
 #include <string.h>
 #include <stdio.h>
 
+typedef struct XaForeignSymbolView {
+    const XaSymbol *source;
+    const XaAnalyzer *source_owner;
+    uint64_t source_revision;
+    XaSymbol *view;
+    struct XaForeignSymbolView *next;
+} XaForeignSymbolView;
+
 const XrTargetDataLayout *xa_analyzer_target_data_layout(const XaAnalyzer *analyzer) {
     return analyzer ? xr_compiler_session_target_data_layout(analyzer->compiler_session) : NULL;
 }
@@ -145,6 +153,93 @@ static void register_builtin_module_types_in_prelude(XaAnalyzer *analyzer,
     }
 }
 
+/* Native classes that are legal inheritance roots need ordinary analyzer
+ * class metadata, not only the XaBuiltinType signature table used for direct
+ * member calls.  Without this bridge `PanicInfo.message` works while
+ * `class E extends PanicInfo; e.message` fails: the subclass has no base
+ * XrClassInfo to traverse.  Materialise the metadata once in the analyzer's
+ * builtin scope so inheritance, visibility, selections and Xi lowering all
+ * observe one canonical parent graph. */
+static void register_inheritable_builtin_class(XaAnalyzer *analyzer, const char *name) {
+    if (!analyzer || !name || xa_scope_lookup_local(analyzer->global_scope, name))
+        return;
+
+    const XaBuiltinType *builtin = xa_builtin_get_by_name(name);
+    if (!builtin || !builtin->members || builtin->member_count <= 0)
+        return;
+
+    XaSymbol *class_sym = xa_symbol_new(name, XA_SYM_CLASS);
+    if (!class_sym)
+        return;
+    class_sym->location.line = 0;
+    class_sym->is_builtin = true;
+    class_sym->is_const = true;
+    xa_scope_add_symbol(analyzer->global_scope, class_sym);
+
+    XaSymbolLinks *class_links = xa_analyzer_get_links(analyzer, class_sym);
+    XrClassInfo *info = xa_class_info_new(name);
+    XaScope *class_scope = xa_scope_new(XA_SCOPE_CLASS, analyzer->global_scope);
+    if (!class_links || !info || !class_scope)
+        return;
+
+    class_scope->class_symbol = class_sym;
+    info->scope = class_scope;
+    class_links->class_info = info;
+    class_links->owns_class_info = true;
+    /* Keep the builtin type token declaration-identity-free.  User classes
+     * carry class_ref; native builtin identity is deliberately class_ref==NULL. */
+    class_links->type = xr_type_new_class(analyzer->isolate, name);
+    class_links->declared_type = class_links->type;
+    class_links->is_definitely_assigned = true;
+
+    for (int i = 0; i < builtin->member_count; i++) {
+        const XaBuiltinMember *member = &builtin->members[i];
+        if (!member->name || member->is_static || member->is_internal)
+            continue;
+
+        XaSymbol *member_sym =
+            xa_symbol_new(member->name, member->is_method ? XA_SYM_METHOD : XA_SYM_PROPERTY);
+        if (!member_sym)
+            continue;
+        member_sym->location.line = 0;
+        member_sym->is_builtin = true;
+        xa_scope_add_symbol(class_scope, member_sym);
+
+        XaSymbolLinks *member_links = xa_analyzer_get_links(analyzer, member_sym);
+        if (!member_links)
+            continue;
+        if (member->is_method) {
+            member_links->type =
+                xa_builtin_parse_full_signature(analyzer->isolate, member->signature);
+            xa_class_info_add_method(info, member_sym);
+            if (strcmp(member->name, "constructor") == 0 && member_links->type &&
+                XR_TYPE_IS_FUNCTION(member_links->type)) {
+                info->has_constructor = true;
+                info->constructor_param_count = member_links->type->function.param_count;
+                info->constructor_required_params = member_links->type->function.min_params;
+                if (info->constructor_param_count > 0) {
+                    info->constructor_params =
+                        xr_calloc((size_t) info->constructor_param_count, sizeof(XrType *));
+                    for (int p = 0; p < info->constructor_param_count; p++)
+                        info->constructor_params[p] = member_links->type->function.params[p].type;
+                }
+            }
+        } else {
+            const char *type_text = member->signature;
+            if (type_text && type_text[0] == ':')
+                type_text++;
+            while (type_text && *type_text == ' ')
+                type_text++;
+            member_links->type = xa_builtin_parse_type_string(analyzer->isolate, type_text);
+            xa_class_info_add_field(info, member_sym);
+        }
+        if (!member_links->type)
+            member_links->type = xr_type_new_unknown(analyzer->isolate);
+        member_links->declared_type = member_links->type;
+        member_links->is_definitely_assigned = true;
+    }
+}
+
 // Register all Codegen builtin functions/constructors that are available at runtime
 static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     // Reusable param types
@@ -230,6 +325,8 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_module_types_in_prelude(analyzer, "Coro");
     register_builtin_module(analyzer, "CoroPool");
     register_builtin_module(analyzer, "Channel");
+
+    register_inheritable_builtin_class(analyzer, "PanicInfo");
 
     // Runtime global variables (set by xray_vm_set_script_info)
     register_builtin_var(analyzer, "process", p_any, true);
@@ -503,6 +600,16 @@ void xa_analyzer_free(XaAnalyzer *analyzer) {
     analyzer->retired_enum_layouts = NULL;
     analyzer->retired_enum_layout_count = 0;
     analyzer->retired_enum_layout_cap = 0;
+
+    XaForeignSymbolView *foreign_view = (XaForeignSymbolView *) analyzer->foreign_symbol_views;
+    while (foreign_view) {
+        XaForeignSymbolView *next = foreign_view->next;
+        xr_free(foreign_view);
+        foreign_view = next;
+    }
+    analyzer->foreign_symbol_views = NULL;
+    xa_scope_free(analyzer->foreign_symbol_scope);
+    analyzer->foreign_symbol_scope = NULL;
 
     xa_scope_free(analyzer->global_scope);
 
@@ -947,6 +1054,73 @@ XaSymbol *xa_analyzer_lookup_deep(XaAnalyzer *analyzer, const char *name) {
         }
     }
     return best;
+}
+
+XaSymbol *xa_analyzer_import_export_symbol(XaAnalyzer *analyzer, const XaSymbol *source) {
+    if (!analyzer || !source)
+        return NULL;
+
+    const XaAnalyzer *source_owner = source->links.summary_owner;
+    if (source_owner == analyzer)
+        return (XaSymbol *) source;
+
+    const uint64_t source_revision = source_owner ? source_owner->semantic_revision : 0;
+    for (XaForeignSymbolView *entry = (XaForeignSymbolView *) analyzer->foreign_symbol_views; entry;
+         entry = entry->next) {
+        if (entry->source == source && entry->source_owner == source_owner &&
+            entry->source_revision == source_revision)
+            return entry->view;
+    }
+
+    if (!analyzer->foreign_symbol_scope) {
+        /* Keep declaration-context views outside the lexical scope tree.
+         * Their fresh ids are resolved through symbols_by_id only; exposing
+         * their source names to deep lookup would make an unimported foreign
+         * declaration appear visible to LSP and recovery paths. */
+        analyzer->foreign_symbol_scope = xa_scope_new(XA_SCOPE_GLOBAL, NULL);
+        if (!analyzer->foreign_symbol_scope)
+            return NULL;
+    }
+
+    /* Symbol construction and registration use analyzer-selected TLS only as
+     * a routing mechanism.  Select the destination explicitly so a retained
+     * graph analyzer cannot receive this view by accident. */
+    xa_symbol_set_id_counter(&analyzer->next_symbol_id);
+    xa_symbol_set_registry(analyzer->symbols_by_id);
+
+    XaSymbol *view = xa_symbol_new(source->name, source->kind);
+    if (!view)
+        return NULL;
+    view->location = source->location;
+    view->is_const = source->is_const;
+    view->is_weak = source->is_weak;
+    view->is_rebindable = source->is_rebindable;
+    view->is_readonly_binding = source->is_readonly_binding;
+    view->is_exported = source->is_exported;
+    view->is_static = source->is_static;
+    view->is_private = source->is_private;
+    view->is_protected = source->is_protected;
+    view->is_override = source->is_override;
+    view->is_imported = true;
+    view->is_builtin = source->is_builtin;
+    view->mutates_receiver = source->mutates_receiver;
+    view->has_declared_default = source->has_declared_default;
+    view->passing_mode = source->passing_mode;
+    view->type_alias_node = source->type_alias_node;
+    view->alias_type = source->alias_type;
+    xa_scope_add_symbol(analyzer->foreign_symbol_scope, view);
+    xa_symbol_links_copy_export_metadata(analyzer, &view->links, &source->links);
+
+    XaForeignSymbolView *entry = (XaForeignSymbolView *) xr_calloc(1, sizeof(*entry));
+    if (entry) {
+        entry->source = source;
+        entry->source_owner = source_owner;
+        entry->source_revision = source_revision;
+        entry->view = view;
+        entry->next = (XaForeignSymbolView *) analyzer->foreign_symbol_views;
+        analyzer->foreign_symbol_views = entry;
+    }
+    return view;
 }
 
 bool xa_symbol_is_module(XaAnalyzer *analyzer, XaSymbol *symbol, const char *module_name) {

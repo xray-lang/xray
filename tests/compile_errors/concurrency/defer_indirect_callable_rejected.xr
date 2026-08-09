@@ -1,0 +1,12 @@
+// A defer body must be statically known not to suspend. A call through a
+// function parameter has no concrete suspend summary, so cleanup cannot save
+// it for execution on a frame that is already leaving.
+
+fn cleanup() {}
+
+fn runWithCleanup(action: () -> ()) {
+    defer action()
+    print("body-ran")
+}
+
+runWithCleanup(cleanup)

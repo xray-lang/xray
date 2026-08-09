@@ -82,28 +82,22 @@ fn test_connect_rejects_invalid_urls_before_network() {
         maxMessageSize: 4096
     }
     var zeroPort = ws.connect("ws://example.com:0/", options)
-    assert(zeroPort != null)
-    assert_eq(zeroPort!.error, "URL parse error")
+    assert(zeroPort == null)
 
     var badPort = ws.connect("ws://example.com:abc/", null)
-    assert(badPort != null)
-    assert_eq(badPort!.error, "URL parse error")
+    assert(badPort == null)
 
     var tooLargePort = ws.connect("ws://example.com:99999/", null)
-    assert(tooLargePort != null)
-    assert_eq(tooLargePort!.error, "URL parse error")
+    assert(tooLargePort == null)
 
     var emptyHost = ws.connect("ws://:80/", null)
-    assert(emptyHost != null)
-    assert_eq(emptyHost!.error, "URL parse error")
+    assert(emptyHost == null)
 
     var fragment = ws.connect("ws://example.com/#frag", null)
-    assert(fragment != null)
-    assert_eq(fragment!.error, "URL parse error")
+    assert(fragment == null)
 
     var badIpv6 = ws.connect("ws://[::1]x/", null)
-    assert(badIpv6 != null)
-    assert_eq(badIpv6!.error, "URL parse error")
+    assert(badIpv6 == null)
 }
 
 @test
@@ -116,8 +110,7 @@ fn test_connect_rejects_missing_upgrade_response_header() {
     go serveMissingUpgradeResponse(lst)
 
     var conn = ws.connect("ws://127.0.0.1:" + port.toString() + "/", null)
-    assert(conn != null)
-    assert_eq(conn!.error, "Handshake failed")
+    assert(conn == null)
 }
 
 @test

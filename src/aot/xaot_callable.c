@@ -822,9 +822,12 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
     if (!bundle->global_evidence_plan.evidence)
         return callable_refresh_reachable_funcs(a, &changed);
 
-    if (bundle->entry_module < bundle->nmodules) {
-        const XiModule *entry = bundle->modules[bundle->entry_module];
-        if (entry && entry->init && !callable_mark_reachable_func(a, entry->init, &changed))
+    /* Every module initializer executes in topological order before the entry
+     * body. Seed all of them so their final Xi direct edges participate in the
+     * same precise reachability closure as the entry initializer. */
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        const XiModule *module = bundle->modules[mi];
+        if (module && module->init && !callable_mark_reachable_func(a, module->init, &changed))
             return false;
     }
     for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
@@ -949,8 +952,10 @@ static bool callable_append_plan(XaotBundle *bundle, const CallableAnalysis *a,
 }
 
 static bool callable_materialize(XaotBundle *bundle, const CallableAnalysis *a) {
-    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++)
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+        bundle->func_plans[fi].reachable = a->reachable_funcs[fi] != 0;
         bundle->func_plans[fi].may_suspend = (a->funcs[fi].effect_bits & XG_BODY_MAY_SUSPEND) != 0;
+    }
 
     for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
         XiFunc *func = bundle->func_plans[fi].func;
@@ -996,6 +1001,7 @@ XR_FUNC bool xaot_callable_plans_build(XaotBundle *bundle) {
     bool ok;
     if (!bundle)
         return false;
+    bundle->has_callable_reachability = false;
     xr_free(bundle->callable_invoke_plans);
     xr_free(bundle->callable_target_cases);
     bundle->callable_invoke_plans = NULL;
@@ -1012,6 +1018,7 @@ XR_FUNC bool xaot_callable_plans_build(XaotBundle *bundle) {
     if (ok)
         ok = callable_materialize(bundle, &analysis);
     callable_analysis_free(&analysis);
+    bundle->has_callable_reachability = ok;
     return ok;
 }
 
@@ -1045,10 +1052,21 @@ static bool callable_rederive_matches(const XaotBundle *bundle, char *errbuf, si
                                      "failed to rederive AOT callable invoke plans");
     }
 
+    bool verify_reachability = false;
+    if (bundle->has_callable_reachability) {
+        for (uint32_t i = 0; i < bundle->nlink_dependency_plans; i++) {
+            if (bundle->link_dependency_plans[i].owner_func_id != XG_NO_ID) {
+                verify_reachability = true;
+                break;
+            }
+        }
+    }
     bool matches = expected.ncallable_invoke_plans == bundle->ncallable_invoke_plans &&
                    expected.ncallable_target_cases == bundle->ncallable_target_cases;
     for (uint32_t i = 0; matches && i < bundle->nfunc_plans; i++)
         matches = expected.func_plans[i].func == bundle->func_plans[i].func &&
+                  (!verify_reachability ||
+                   expected.func_plans[i].reachable == bundle->func_plans[i].reachable) &&
                   expected.func_plans[i].may_suspend == bundle->func_plans[i].may_suspend;
     for (uint32_t i = 0; matches && i < expected.ncallable_invoke_plans; i++) {
         const XaotCallableInvokePlan *a = &expected.callable_invoke_plans[i];

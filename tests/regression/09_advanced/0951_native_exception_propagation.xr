@@ -1,13 +1,11 @@
 // 0951_native_exception_propagation.xr
-// Regression: C primitive methods must propagate exceptions to try/catch
+// Regression: C primitive methods must propagate exceptions to try/catch.
 
 @test
-fn test_json_stringify_catches_function() {
-    var f = fn() {}
-    var obj = { handler: f }
+fn test_json_parse_value_catches_malformed_input() {
     var caught = false
     try {
-        JSON.stringify(obj)
+        JSON.parseValue("{broken")
     } catch panic (e) {
         caught = true
     }
@@ -15,13 +13,11 @@ fn test_json_stringify_catches_function() {
 }
 
 @test
-fn test_json_stringify_catches_nested() {
-    var inner = fn() {}
-    var obj = { callback: inner }
+fn test_json_parse_object_catches_non_object_root() {
     var caught = false
     var msg = ""
     try {
-        JSON.stringify(obj)
+        JSON.parseObject("[1, 2, 3]")
     } catch panic (e) {
         caught = true
         msg = string(e)
@@ -31,19 +27,17 @@ fn test_json_stringify_catches_nested() {
 }
 
 @test
-fn test_json_stringify_normal_succeeds() {
+fn test_json_stringify_succeeds() {
     var result = JSON.stringify({a: 1, b: "hello"})
     assert_eq(len(result) > 0, true)
 }
 
 @test
 fn test_exception_after_catch_continues() {
-    var f = fn() {}
-    var obj = { handler: f }
     var step1 = false
     var step2 = false
     try {
-        JSON.stringify(obj)
+        JSON.parseValue("")
     } catch panic (e) {
         step1 = true
     }
@@ -54,12 +48,10 @@ fn test_exception_after_catch_continues() {
 
 @test
 fn test_multiple_catch_blocks() {
-    var f = fn() {}
     var count = 0
     for (i in 0..3) {
-        var obj = { handler: f }
         try {
-            JSON.stringify(obj)
+            JSON.parseValue("invalid")
         } catch panic (e) {
             count = count + 1
         }

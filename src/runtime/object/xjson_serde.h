@@ -9,9 +9,9 @@
  *
  * KEY CONCEPT:
  *   Core JSON serialize/deserialize between XrValue and JSON strings.
- *   Used by the Json builtin class (xjson_builtins.c) and the embedding
- *   API. RFC 8259 compliant. Handles Enum (member name), DateTime (ISO
- *   8601), and throws on non-serializable types (function, class, etc.).
+ *   Used by the JSON namespace (xjson_builtins.c) and the embedding API.
+ *   RFC 8259 compliant. Enum values use their member name; values outside
+ *   the JSON.Encodable domain are rejected.
  */
 
 #ifndef XJSON_SERDE_H
@@ -35,6 +35,11 @@ typedef struct {
     char error_msg[128];  // human-readable description of the offending type
 } XrJsonEncodeResult;
 
+typedef struct {
+    XrValue result;  // parsed value; valid JSON null is represented by xr_null()
+    bool has_error;  // distinguishes valid JSON null from malformed input
+} XrJsonParseResult;
+
 typedef struct XrJsonTypedParseError {
     char path[160];
     char expected[48];
@@ -46,8 +51,8 @@ struct XrCoroutine;
 
 /* ========== Script-callable Functions ========== */
 
-// parse(str) → XrValue
-XR_FUNC XrValue xr_json_fn_parse(XrVMRuntime *X, XrValue self, XrValue *args, int argc);
+// Parse without throwing. Script-facing wrappers turn has_error into a panic.
+XR_FUNC XrJsonParseResult xr_json_parse_core(XrVMRuntime *X, XrValue text);
 
 // Core stringify: returns result + error info without throwing.
 // Callers that need exception semantics should inspect has_error and throw.
