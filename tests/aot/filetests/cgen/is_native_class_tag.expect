@@ -1,0 +1,5 @@
+c_contains=.tag == XR_TAG_NET_CONN)
+c_contains=.tag == XR_TAG_NET_LISTENER)
+c_contains=.tag == XR_TAG_BIGINT)
+c_contains=.tag == XR_TAG_STRBUF)
+c_not_contains=class not resolved

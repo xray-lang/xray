@@ -26,6 +26,13 @@ typedef struct XaLoopScope {
     int line;
     struct XaScope *entry_scope;
     struct XaLoopScope *prev;
+    /* Flow-graph jump targets for `continue` / `break` (spec §2.13 N-8): a
+     * loop-control statement joins its flow into the matching label and the
+     * code after it becomes unreachable, so the enclosing branch merge keeps
+     * only the surviving paths. NULL when the loop form does not model flow
+     * (comptime loops); the jump then keeps the fall-through approximation. */
+    struct XaFlowNode *continue_flow_target;
+    struct XaFlowNode *break_flow_target;
 } XaLoopScope;
 
 /* One live loan against an ownership root.  `loan.kind` is the discriminator:

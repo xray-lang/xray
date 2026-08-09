@@ -5511,6 +5511,8 @@ XR_FUNC void xa_loop_scope_push(XaInferContext *ctx, XaLoopScope *scope, const c
     scope->line = node ? node->line : 0;
     scope->entry_scope = ctx->analyzer ? ctx->analyzer->current_scope : NULL;
     scope->prev = ctx->loop_scope;
+    scope->continue_flow_target = NULL;
+    scope->break_flow_target = NULL;
 
     if (label) {
         for (XaLoopScope *it = ctx->loop_scope; it; it = it->prev) {
@@ -5539,6 +5541,29 @@ XR_FUNC void xa_loop_scope_pop(XaInferContext *ctx, XaLoopScope *scope) {
         ctx->loop_scope = scope->prev;
     if (ctx->loop_depth > 0)
         ctx->loop_depth--;
+}
+
+/* Route a `continue` / `break` through the flow graph (spec §2.13 N-8): the
+ * jump's flow joins the target loop's matching label and the statements after
+ * the jump become unreachable, which is what lets the enclosing branch merge
+ * drop the terminated path and apply the opposite condition fact. A loop form
+ * that did not publish flow targets keeps the older fall-through
+ * approximation, which is sound but does not narrow. */
+XR_FUNC void xa_flow_loop_jump(XaInferContext *ctx, const char *label, bool is_continue) {
+    if (!ctx || !ctx->flow)
+        return;
+    XaLoopScope *target = ctx->loop_scope;
+    if (label) {
+        while (target && !(target->label && strcmp(target->label, label) == 0))
+            target = target->prev;
+    }
+    if (!target)
+        return;
+    XaFlowNode *edge = is_continue ? target->continue_flow_target : target->break_flow_target;
+    if (!edge)
+        return;
+    xa_flow_add_antecedent(edge, ctx->flow->current_flow);
+    ctx->flow->current_flow = ctx->flow->unreachable_flow;
 }
 
 XR_FUNC void xa_validate_loop_control(XaInferContext *ctx, AstNode *node, const char *label,
@@ -9053,16 +9078,29 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
      * gets its own scope keyed on the body node, matching Pass 1. */
     XaLoopScope loop_scope;
     xa_loop_scope_push(ctx, &loop_scope, while_stmt->label, node);
+    XaFlowNode *continue_label = NULL;
+    XaFlowNode *break_label = NULL;
+    if (ctx->flow && loop_start) {
+        continue_label = xa_flow_create_branch_label(ctx->flow);
+        break_label = xa_flow_create_branch_label(ctx->flow);
+        loop_scope.continue_flow_target = continue_label;
+        loop_scope.break_flow_target = break_label;
+    }
     if (while_stmt->body)
         xa_visit_infer_stmt(ctx, while_stmt->body);
     xa_loop_scope_pop(ctx, &loop_scope);
 
     // Back edge to loop start
     if (ctx->flow && loop_start) {
-        xa_flow_add_antecedent(loop_start, ctx->flow->current_flow);
-        /* Code after the loop runs with the condition false. */
+        /* `continue` edges rejoin ahead of the back edge (spec §2.13 N-8). */
+        xa_flow_add_antecedent(continue_label, ctx->flow->current_flow);
+        xa_flow_add_antecedent(loop_start, xa_flow_finish_label(ctx->flow, continue_label));
+        /* Code after the loop runs with the condition false, or arrives
+         * through a `break`. */
         ctx->flow->current_flow = loop_start;
-        ctx->flow->current_flow = xa_flow_create_condition(ctx->flow, while_stmt->condition, false);
+        xa_flow_add_antecedent(break_label,
+                               xa_flow_create_condition(ctx->flow, while_stmt->condition, false));
+        ctx->flow->current_flow = xa_flow_finish_label(ctx->flow, break_label);
     }
 }
 
@@ -9102,9 +9140,24 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
     // Analyze body - inline block to match Pass 1 scope structure
     XaLoopScope loop_scope;
     xa_loop_scope_push(ctx, &loop_scope, for_stmt->label, node);
+    XaFlowNode *continue_label = NULL;
+    XaFlowNode *break_label = NULL;
+    if (ctx->flow && loop_start) {
+        continue_label = xa_flow_create_branch_label(ctx->flow);
+        break_label = xa_flow_create_branch_label(ctx->flow);
+        loop_scope.continue_flow_target = continue_label;
+        loop_scope.break_flow_target = break_label;
+    }
     if (for_stmt->body)
         xa_visit_inline_statement_sequence_with_cursor(ctx, for_stmt->body);
     xa_loop_scope_pop(ctx, &loop_scope);
+
+    /* `continue` skips the rest of the body but still runs the increment, so
+     * its edges rejoin here (spec §2.13 N-8). */
+    if (ctx->flow && continue_label) {
+        xa_flow_add_antecedent(continue_label, ctx->flow->current_flow);
+        ctx->flow->current_flow = xa_flow_finish_label(ctx->flow, continue_label);
+    }
 
     // Analyze increment
     if (for_stmt->increment) {
@@ -9119,6 +9172,9 @@ void xa_visit_for_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->flow->current_flow =
                 xa_flow_create_condition(ctx->flow, for_stmt->condition, false);
         }
+        /* ... or arrives through a `break`. */
+        xa_flow_add_antecedent(break_label, ctx->flow->current_flow);
+        ctx->flow->current_flow = xa_flow_finish_label(ctx->flow, break_label);
     }
     xa_clear_active_loans_in_scope(ctx, ctx->analyzer->current_scope);
     xa_analyzer_exit_scope(ctx->analyzer);

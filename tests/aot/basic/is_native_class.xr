@@ -1,0 +1,58 @@
+// `is` / `as` against prelude native classes must answer identically under
+// VM and AOT: the VM reads the instance type id, the AOT backend compares
+// the value tag. Sockets stay out except `net.listen`, whose behavior is
+// backend-identical; `net.dial` is not, so the NetConn positive lives in the
+// VM regression suite and the AOT tag path is pinned by the cgen filetest.
+
+import net
+
+fn isConn(x: NetConn | int) -> bool { return x is NetConn }
+fn isListener(x: NetListener | int) -> bool { return x is NetListener }
+fn isBig(x: BigInt | int) -> bool { return x is BigInt }
+fn isSb(x: StringBuilder | int) -> bool { return x is StringBuilder }
+
+fn describeBig(x: BigInt | int) -> string {
+    match (x) {
+        is BigInt -> { return "big" }
+        is int -> { return "int" }
+    }
+}
+
+fn main() {
+    print(isConn(1))
+    print(isListener(2))
+    print(isBig(3))
+    print(isSb(4))
+
+    print(isBig(123n))
+    print(describeBig(45n))
+    print(describeBig(6))
+    var sb = StringBuilder()
+    print(isSb(sb))
+
+    var u: NetConn | int = 42
+    var c = u as NetConn?
+    print(c == null)
+
+    var wide: int = 70000
+    var small: int = 42
+    print(small is i16)
+    print(wide is i16)
+    print(small is u64)
+    print((-1) is u16)
+    var clipped = wide as i16?
+    print(clipped == null)
+    var kept = small as i16?
+    print(kept == null)
+
+    var maybeLst = net.listen(0, 8)
+    if (maybeLst == null) {
+        print("no-listen")
+    } else {
+        var lst = maybeLst!
+        print(isListener(lst))
+        net.close(lst)
+    }
+}
+
+main()

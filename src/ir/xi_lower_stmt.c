@@ -2645,6 +2645,11 @@ static void lower_error_catch_clauses(XiLower *l, XrCatchClause **errc, int errn
 
         if (has_type) {
             XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line, 0);
+            if (!is_val) {
+                /* Rejected target type; the clause dispatch cannot be built. */
+                l->had_error = true;
+                return;
+            }
             XiBlock *type_blk = xi_block_new(l->func);
             next_blk = xi_block_new(l->func);
             xi_block_set_if(l->cur_block, is_val, type_blk, next_blk);
@@ -2658,6 +2663,11 @@ static void lower_error_catch_clauses(XiLower *l, XrCatchClause **errc, int errn
 
         if (has_pattern_test) {
             XiValue *pattern_test = xi_lower_pattern_test(l, match_value, cc->pattern);
+            if (!pattern_test) {
+                /* Rejected pattern; the clause dispatch cannot be built. */
+                l->had_error = true;
+                return;
+            }
             XiBlock *body_blk = xi_block_new(l->func);
             if (!next_blk)
                 next_blk = xi_block_new(l->func);
