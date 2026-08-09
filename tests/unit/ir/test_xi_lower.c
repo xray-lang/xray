@@ -2622,8 +2622,7 @@ TEST(channel_send_transfer_modes) {
 }
 
 TEST(defer_stmt) {
-    XiFunc *f = lower_source("fn cleanup() { print(0) }\n"
-                             "defer { cleanup() }\n"
+    XiFunc *f = lower_source("defer { print(0) }\n"
                              "print(1)\n");
     assert(f != NULL);
     assert(func_tree_has_op(f, XI_TRY) && "cleanup registration should open a static panic region");
@@ -2638,17 +2637,21 @@ TEST(defer_stmt) {
 }
 
 TEST(defer_block_uses_late_binding) {
-    XiFunc *f = lower_source("fn cleanup(msg: string, value: int) { print(msg); print(value) }\n"
-                             "var value = 1\n"
-                             "defer { cleanup(\"result\", value) }\n"
-                             "value = 42\n");
+    XiFunc *f = lower_source("fn run() {\n"
+                             "    var value = 1\n"
+                             "    defer { print(\"result\"); print(value) }\n"
+                             "    value = 42\n"
+                             "}\n"
+                             "run()\n");
     assert(f != NULL);
-    XiValue *place = func_tree_find_op(f, XI_LOCAL_ADDR);
+    XiFunc *run = func_tree_find_func_name(f, "run");
+    assert(run != NULL);
+    XiValue *place = func_tree_find_op(run, XI_LOCAL_ADDR);
     assert(place && (place->aux_int & XI_LOCAL_ADDR_AUX_CLEANUP_LIVE) != 0 &&
            "a cleanup-read binding should use stable same-frame storage");
-    assert(func_tree_has_op(f, XI_PLACE_LOAD) &&
+    assert(func_tree_has_op(run, XI_PLACE_LOAD) &&
            "the cleanup frontier should load the binding at execution time");
-    assert(!func_tree_has_op(f, XI_CLOSURE_NEW) &&
+    assert(!func_tree_has_op(run, XI_CLOSURE_NEW) &&
            "late binding must not be implemented with a hidden capture closure");
     xi_func_free(f);
 }
@@ -3330,6 +3333,7 @@ int main(void) {
     run_channel_send_transfer_modes();
     run_defer_stmt();
     run_defer_block_uses_late_binding();
+    run_defer_loop_cleanup_place_dominates_zero_iteration_exit();
     run_set_literal();
     run_is_expr();
     run_slice_expr();

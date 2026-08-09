@@ -3801,8 +3801,9 @@ TEST(cgen_coro_emits_source_line_directives) {
                           "#line 1 \"<xray-generated>\"") &&
            "yield should reset generated control flow after the source-mapped yield");
     assert(contains(code, "#line 5 \"debug_coro.xr\"\n"
+                          "    xrt_guard_task_spawn();\n"
                           "    void *_child_frame_") &&
-           "go should map only its source operation, not later state-machine control flow");
+           "go and its fail-closed spawn guard should share the source operation mapping");
     assert(contains(code, ");\n"
                           "#line 1 \"<xray-generated>\"\n"
                           "    XrAotSpawnResult _spawn_") &&

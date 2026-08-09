@@ -165,4 +165,4 @@ anchor-sha256: src/app/cli/xcmd_verify.c 621d117db22a9c3c101d183f3c5554616bdba61
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
 anchor-sha256: tests/unit/analyzer/test_analyzer.c 2adbdacac92c0950033cebc57b9905b8fa738b587fbf54763fc7f3b5b93ae1a0
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1
-anchor-sha256: tests/unit/ir/test_xi_lower.c eb684e94affee8b2c69ca571ad1cecdc8df09950f50fe8850c9f4b9854608d95
+anchor-sha256: tests/unit/ir/test_xi_lower.c 372033d5fa8ebd6d00b50f5c4d3233cc53061d0188504603d9ff57cbf4aca248
