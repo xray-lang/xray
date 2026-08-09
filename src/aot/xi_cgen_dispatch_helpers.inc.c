@@ -5775,11 +5775,12 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
      * through the coroutine emitter). */
     {
         const XiValue *fn_val = cg_unwrap_identity_value(callee);
-        /* A function-valued upvalue can lose its static function type through
-         * capture, but a value used as a call target is always a closure, so a
-         * LOAD_UPVAL callee is invoked through the same boxed-entry path. */
-        if (fn_val &&
-            ((fn_val->type && XR_TYPE_IS_FUNCTION(fn_val->type)) || fn_val->op == XI_LOAD_UPVAL)) {
+        /* A function-valued upvalue or capture cell can lose its static
+         * function type through capture, but a value used as a call target is
+         * always a closure, so LOAD_UPVAL and CELL_GET callees are invoked
+         * through the same boxed-entry path. */
+        if (fn_val && ((fn_val->type && XR_TYPE_IS_FUNCTION(fn_val->type)) ||
+                       fn_val->op == XI_LOAD_UPVAL || fn_val->op == XI_CELL_GET)) {
             bool span_result = cg_value_plan_is_span_aggregate(ctx, v);
             const char *conv_suffix =
                 span_result ? NULL
