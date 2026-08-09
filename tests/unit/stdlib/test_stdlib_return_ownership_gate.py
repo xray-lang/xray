@@ -72,6 +72,7 @@ class ReturnOwnershipManifestTests(unittest.TestCase):
     doc: \"alias\"
     vm: \"sample_alias\"
     argc: 1
+    arg_spec: \"s\"
     return_ownership: \"borrowed_param:1\"
   }
 }

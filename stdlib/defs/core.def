@@ -3471,7 +3471,7 @@ module net {
     vm: "net_copy_yieldable"
     vm_binding: "yieldable"
     argc: 3
-    arg_spec: ""
+    arg_spec: "vvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3689,7 +3689,7 @@ module net {
     vm_binding: "yieldable"
     vm_ifdef: "XR_ENABLE_TLS"
     argc: 3
-    arg_spec: ""
+    arg_spec: "vvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3701,7 +3701,7 @@ module net {
     doc: "Bind a UDP socket"
     vm: "net_udp_bind_handle"
     argc: 2
-    arg_spec: ""
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3714,7 +3714,7 @@ module net {
     vm: "net_send_to_yieldable"
     vm_binding: "yieldable"
     argc: 4
-    arg_spec: ""
+    arg_spec: "vvvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3726,7 +3726,7 @@ module net {
     vm: "net_recv_from_yieldable"
     vm_binding: "yieldable"
     argc: 2
-    arg_spec: ""
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3803,7 +3803,7 @@ module cluster {
     doc: "Start cluster node"
     vm: "cluster_start"
     argc: 1
-    arg_spec: ""
+    arg_spec: "v"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3814,7 +3814,7 @@ module cluster {
     doc: "Join cluster by address"
     vm: "cluster_join"
     argc: 1
-    arg_spec: ""
+    arg_spec: "v"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3849,7 +3849,7 @@ module cluster {
     doc: "Create or get named distributed channel"
     vm: "cluster_channel_fn"
     argc: 2
-    arg_spec: ""
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3861,7 +3861,7 @@ module cluster {
     doc: "Monitor node or remote coroutine"
     vm: "cluster_monitor_coro_fn"
     argc: 2
-    arg_spec: ""
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3907,7 +3907,7 @@ module cluster {
     doc: "Publish to topic"
     vm: "cluster_publish_fn"
     argc: 2
-    arg_spec: ""
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3918,7 +3918,7 @@ module cluster {
     doc: "Subscribe to topic pattern"
     vm: "cluster_subscribe_fn"
     argc: 1
-    arg_spec: ""
+    arg_spec: "v"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3947,7 +3947,7 @@ module ws {
     vm: "ws_connect_yieldable"
     vm_binding: "yieldable"
     argc: 2
-    arg_spec: ""
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3960,7 +3960,7 @@ module ws {
     vm: "ws_send_yieldable"
     vm_binding: "yieldable"
     argc: 3
-    arg_spec: ""
+    arg_spec: "vvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3972,7 +3972,7 @@ module ws {
     vm: "ws_recv_yieldable"
     vm_binding: "yieldable"
     argc: 2
-    arg_spec: ""
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3984,7 +3984,7 @@ module ws {
     doc: "Close a WebSocket connection"
     vm: "ws_close"
     argc: 3
-    arg_spec: ""
+    arg_spec: "vvv"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -3995,7 +3995,7 @@ module ws {
     doc: "Send a ping frame"
     vm: "ws_ping"
     argc: 1
-    arg_spec: ""
+    arg_spec: "v"
     aot_direct: false
     link_object: false
     layer: "runtime"
@@ -4007,7 +4007,7 @@ module ws {
     vm: "ws_serve_yieldable"
     vm_binding: "yieldable"
     argc: 2
-    arg_spec: ""
+    arg_spec: "vv"
     aot_direct: false
     link_object: false
     layer: "runtime"

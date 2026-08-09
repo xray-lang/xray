@@ -43,7 +43,10 @@ typedef struct CgAotStdlibMethod {
      *   's' = string, lowered to specialized (const char *data, int64_t len)
      *   'p' = Path owner, lowered to specialized (const char *data, int64_t len)
      *   'v' = tagged XrValue passed as-is
-     *   '*' = variadic strings, lowered to (argc, data[], len[]) */
+     *   'i' = opaque int handle, passed as a tagged XrValue like 'v'
+     *   '*' = variadic strings, lowered to (argc, data[], len[])
+     * stdlibgen rejects rows whose spec length differs from the fixed argc, so
+     * a fixed-arity spec always covers every argument position. */
     const char *arg_spec; /* owned: static literal (generated table) */
     CgAotRetKind ret_kind;
     const char *extern_decl; /* owned: static literal; forward decl emitted into generated C */
@@ -399,16 +402,22 @@ static const char *cg_aot_stdlib_module_of_receiver(const XiCgenCtx *ctx, const 
 
 /* Emit the comma-separated shim arguments per the method's arg_spec. String
  * args ('s') are lowered to the specialized (data, length) pair via the AOT
- * string accessors; other args ('v') pass through as tagged values. SSA arg
- * references have no side effects, so emitting one twice (data + length) is
- * safe. */
+ * string accessors; other args ('v'/'i') pass through as tagged values. SSA
+ * arg references have no side effects, so emitting one twice (data + length)
+ * is safe. stdlibgen guarantees the spec covers every fixed argument; a NULL
+ * or exhausted spec (variadic rows, or call_argc beyond the spec length) must
+ * still never be indexed past its NUL, so those positions take the default
+ * tagged form. */
 static void cg_emit_aot_stdlib_args(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                     const CgAotStdlibMethod *m, uint16_t call_argc,
                                     uint16_t arg_base) {
     (void) f;
+    const char *spec_cursor = m->arg_spec ? m->arg_spec : "";
     for (uint16_t a = 0; a < call_argc; a++) {
         const XiValue *arg = v->args[arg_base + a];
-        char spec = m->arg_spec[a];
+        char spec = *spec_cursor;
+        if (spec != '\0')
+            spec_cursor++;
         if (a > 0)
             fprintf(out, ", ");
         if (spec == 's') {

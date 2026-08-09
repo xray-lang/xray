@@ -2096,6 +2096,17 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME test_stdlib_arg_spec_gate
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_stdlib_arg_spec_gate.py
+    )
+    set_tests_properties(test_stdlib_arg_spec_gate PROPERTIES
+        LABELS "stdlib;metadata;unit"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME test_binary_public_native_readiness
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/stdlib/test_binary_public_native_readiness.py

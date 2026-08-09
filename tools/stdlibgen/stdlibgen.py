@@ -515,6 +515,47 @@ def parse_def_metadata(
                     f"{path}:{line_no}: {current_module}.{current_name} aot_error_enum "
                     "requires ret: i64_pair_result"
                 )
+            argc_raw = str(props["argc"])
+            arg_spec = str(props.get("arg_spec", ""))
+            if argc_raw == "variadic":
+                variadic_spec = "*" if aot_direct and aot_kind == "method" else ""
+                if arg_spec != variadic_spec:
+                    raise SystemExit(
+                        f"{path}:{line_no}: {current_module}.{current_name} variadic arg_spec "
+                        f"must be {variadic_spec!r}, got {arg_spec!r}"
+                    )
+            else:
+                try:
+                    argc_count = int(argc_raw)
+                except ValueError:
+                    raise SystemExit(
+                        f"{path}:{line_no}: {current_module}.{current_name} argc must be an "
+                        f"integer or variadic, got {argc_raw!r}"
+                    ) from None
+                if argc_count < 0:
+                    raise SystemExit(
+                        f"{path}:{line_no}: {current_module}.{current_name} argc must not be "
+                        f"negative, got {argc_count}"
+                    )
+                if aot_kind == "builtin":
+                    if arg_spec:
+                        raise SystemExit(
+                            f"{path}:{line_no}: {current_module}.{current_name} builtin rows "
+                            "have dedicated lowerings and do not consume arg_spec; omit it"
+                        )
+                elif len(arg_spec) != argc_count:
+                    raise SystemExit(
+                        f"{path}:{line_no}: {current_module}.{current_name} arg_spec length "
+                        f"{len(arg_spec)} does not match argc {argc_count}; the AOT emitter "
+                        "consumes one spec character per argument"
+                    )
+                else:
+                    unknown = sorted(set(arg_spec) - set("ipsv"))
+                    if unknown:
+                        raise SystemExit(
+                            f"{path}:{line_no}: {current_module}.{current_name} arg_spec has "
+                            f"unsupported characters {''.join(unknown)!r} (allowed: i, p, s, v)"
+                        )
             vm_binding = str(props.get("vm_binding", "normal"))
             if vm_binding not in {"normal", "yieldable", "slow"}:
                 raise SystemExit(
@@ -575,8 +616,8 @@ def parse_def_metadata(
                     vm_binding=vm_binding,
                     vm_ifdef=vm_ifdef,
                     aot=str(props.get("aot", "")),
-                    argc=str(props["argc"]),
-                    arg_spec=str(props.get("arg_spec", "")),
+                    argc=argc_raw,
+                    arg_spec=arg_spec,
                     ret=ret,
                     aot_error_enum=aot_error_enum,
                     aot_direct=aot_direct,
