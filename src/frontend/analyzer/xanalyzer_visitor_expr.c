@@ -5342,7 +5342,6 @@ bool xa_boundary_transfer_type_needs_explicit(const XrType *type) {
         case XR_KIND_MAP:
         case XR_KIND_SET:
         case XR_KIND_FIXED_ARRAY:
-        case XR_KIND_TUPLE:
         case XR_KIND_JSON:
         case XR_KIND_STRUCT_OBJECT:
             return true;

@@ -649,7 +649,14 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 | `EnumVariant<T>` | resolver built-in |
 | `EnumVariants<T>` | resolver built-in |
 | `Iterator<T>` | prelude |
-| `JSON.Value` / `JSON.Object` | prelude `JSON` namespace |
+| `JSON.Decodable` | resolver built-in |
+| `JSON.Encodable` | resolver built-in |
+| `JSON.Object` | resolver built-in |
+| `JSON.Path` | resolver built-in |
+| `JSON.PathSegment` | resolver built-in |
+| `JSON.UnknownFields` | resolver built-in |
+| `JSON.Value` | resolver built-in |
+| `JSON.WithRest<T>` | resolver built-in |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | resolver built-in |
 | `NetConn` | prelude |

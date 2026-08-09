@@ -2735,7 +2735,6 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live
     }
     if (!has_retain)
         return eliminated;
-    bool block_is_cyclic = arc_block_is_in_cycle(f, blk);
 
     /* Pattern 2: single-consumer retain elimination.
      * After removing redundant bracket pairs, check remaining RETAINs:

@@ -650,7 +650,14 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `EnumVariant<T>` | 解析器内建 |
 | `EnumVariants<T>` | 解析器内建 |
 | `Iterator<T>` | prelude |
-| `JSON.Value` / `JSON.Object` | prelude `JSON` 命名空间 |
+| `JSON.Decodable` | 解析器内建 |
+| `JSON.Encodable` | 解析器内建 |
+| `JSON.Object` | 解析器内建 |
+| `JSON.Path` | 解析器内建 |
+| `JSON.PathSegment` | 解析器内建 |
+| `JSON.UnknownFields` | 解析器内建 |
+| `JSON.Value` | 解析器内建 |
+| `JSON.WithRest<T>` | 解析器内建 |
 | `Map<K, V>` | prelude |
 | `MutPtr<T>` | 解析器内建 |
 | `NetConn` | prelude |

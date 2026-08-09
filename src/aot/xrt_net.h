@@ -119,21 +119,6 @@ typedef struct xrt_net_array_view {
     uint8_t data_on_region_heap;
     uint8_t _vm_abi_pad[2];
 } xrt_net_array_view_t;
-
-typedef enum xrt_net_try_state {
-    XRT_NET_TRY_DONE = 0,
-    XRT_NET_TRY_WAIT_READ = 1,
-    XRT_NET_TRY_WAIT_WRITE = 2,
-} xrt_net_try_state_t;
-
-typedef struct xrt_net_try_result {
-    XrValue value;
-    int state;
-    int fd;
-    int64_t timeout_ms;
-    int64_t progress;
-} xrt_net_try_result_t;
-
 static inline void xrt_net_init_once(void) {
 #if defined(XR_OS_WINDOWS)
     static int initialized = 0;
@@ -1378,25 +1363,6 @@ static inline XrValue xrt_net_shutdown(XrValue conn_value) {
  * after netpoll wakes up. Only the primitives the net module still exposes are
  * covered: accept, readInto, and writeBytes.
  * ========================================================================== */
-
-static inline xrt_net_try_result_t xrt_net_try_done(XrValue value, int64_t progress) {
-    xrt_net_try_result_t result = {value, XRT_NET_TRY_DONE, -1, -1, progress};
-    return result;
-}
-
-static inline int64_t xrt_net_timeout_until(int64_t deadline_ms) {
-    if (deadline_ms <= 0)
-        return -1;
-    int64_t remaining = deadline_ms - xrt_net_now_ms();
-    return remaining > 0 ? remaining : 0;
-}
-
-static inline xrt_net_try_result_t xrt_net_try_wait(int state, xr_socket_t fd, int64_t deadline_ms,
-                                                    int64_t progress) {
-    xrt_net_try_result_t result = {XR_NULL_VAL, state, (int) fd, xrt_net_timeout_until(deadline_ms),
-                                   progress};
-    return result;
-}
 
 static inline xrt_net_try_result_t xrt_net_accept_try(XrValue listener_value) {
     xrt_net_listener_object_t *listener = xrt_net_listener_ptr(listener_value);

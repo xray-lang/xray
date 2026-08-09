@@ -5314,14 +5314,6 @@ static XaSymbol *xa_default_arg_lookup_decl_symbol(XaDefaultArgBindCtx *bind, co
                                                 name);
 }
 
-static XaScope *xa_default_arg_import_scope(XaAnalyzer *analyzer) {
-    if (!analyzer || !analyzer->global_scope)
-        return NULL;
-    if (!analyzer->default_arg_import_scope)
-        analyzer->default_arg_import_scope = xa_scope_new(XA_SCOPE_BLOCK, analyzer->global_scope);
-    return analyzer->default_arg_import_scope;
-}
-
 /* A default-argument expression cloned from a declaring module may name a symbol
  * exported by that module: a class constructor like `DialOptions()`, an exported
  * helper the default calls, an enum member. The export table hands back the

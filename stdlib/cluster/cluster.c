@@ -1469,7 +1469,7 @@ static XrValue cluster_info_fn(XrVMRuntime *X, XrValue *args, int argc) {
     }
 
     // Listener count is diagnostic and may be momentarily stale.
-    xr_json_set_by_key(X, info, "listeners", xr_int(c->topic_sub_count));
+    xr_object_instance_set_by_key(X, info, "listeners", xr_int(c->topic_sub_count));
 
     /*
      * Tombstone snapshot — number of nodes in the recently-dead

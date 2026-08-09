@@ -5782,9 +5782,8 @@ static XgObjectShapeId body_add_native_return_object_shape(XgBodyCollect *bc, co
     uint32_t type_key;
     int field_count;
     if (!bc || !bc->evidence || !type || type->kind != XR_KIND_STRUCT_OBJECT ||
-        type->object.row_mode != XR_OBJECT_ROW_EXACT || type->object.field_count <= 0 ||
-        type->object.field_count > UINT16_MAX || !type->object.field_names ||
-        !type->object.field_types)
+        type->object.field_count <= 0 || type->object.field_count > UINT16_MAX ||
+        !type->object.field_names || !type->object.field_types)
         return XG_NO_ID;
     field_count = type->object.field_count;
     type_key = hash_folded32(xr_type_stable_key(type));
@@ -5843,7 +5842,7 @@ static XgObjectShapeId body_add_native_return_object_shape(XgBodyCollect *bc, co
         row.provenance = XG_OBJECT_SHAPE_STATIC;
         row.concrete_exact = 1;
         row.flags =
-            XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_JSON_BRIDGEABLE;
+            XG_OBJECT_SHAPE_SEALED | XG_OBJECT_SHAPE_STATIC_KEYS | XG_OBJECT_SHAPE_JSON_ENCODABLE;
         row.stable_type_key = type_key;
         if (!xg_global_evidence_add_object_shape(bc->evidence, &row)) {
             xr_free(inputs);
@@ -8318,10 +8317,13 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
         const char *callee_name = callee->as.variable.name;
         const XgStdlibImportRow *import =
             producer_lookup_stdlib_import(bc->producer, bc->module_id, callee_name);
-        XgFuncNameRow *target = import && import->member_name
-                                    ? producer_lookup_imported_func_row(
-                                          bc->producer, import->module_name, import->member_name)
-                                    : NULL;
+        XgFuncNameRow *target =
+            import && import->member_name
+                ? producer_lookup_func_row_scoped(
+                      bc->producer,
+                      producer_module_id_for_canonical(bc->producer, import->module_name),
+                      import->member_name)
+                : NULL;
         if (!target)
             target = producer_lookup_func_row(bc->producer, callee_name);
         const XgPendingBody *child_target =
@@ -8996,7 +8998,7 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
         case AST_CALL_EXPR: {
             bool intrinsic_sequence_len = body_add_sequence_len_call(bc, node);
             bool intrinsic_array_data_ptr = body_call_is_array_data_ptr_leaf(bc, node);
-            bc->capability_bits |= body_stdlib_call_runtime_capabilities(bc, node);
+            bc->capability_bits |= body_stdlib_suspend_capabilities(bc, node);
             if (body_call_uses_coro_runtime(bc, &node->as.call_expr))
                 bc->capability_bits |= XG_CAP_COROUTINE;
             if (body_call_is_coro_local_set(bc, &node->as.call_expr)) {
@@ -9745,20 +9747,6 @@ static void walk_body_for_calls(XgBodyCollect *bc, const AstNode *node) {
                 bc->nname_locals = base_name_locals;
             }
             break;
-        case AST_MATCH_EXPR: {
-            walk_body_for_calls(bc, node->as.match_expr.expr);
-            for (int i = 0; i < node->as.match_expr.arm_count; i++) {
-                const AstNode *arm_node =
-                    node->as.match_expr.arms ? node->as.match_expr.arms[i] : NULL;
-                if (!arm_node || arm_node->type != AST_MATCH_ARM)
-                    continue;
-                const MatchArmNode *arm = &arm_node->as.match_arm;
-                body_add_match_object_pattern_accesses(bc, arm->pattern, node->as.match_expr.expr);
-                walk_body_for_calls(bc, arm->guard);
-                walk_body_for_calls(bc, arm->body);
-            }
-            break;
-        }
         default:
             break;
     }

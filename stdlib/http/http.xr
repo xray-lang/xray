@@ -670,7 +670,7 @@ export fn router<T>() -> Router<T> {
 }
 
 class _ServerRouteMatch {
-    value: Json
+    value: JSON.Value
     handler: fn(HttpRequest) -> HttpResponse
     hasHandler: bool
     params: Map<string, string>
@@ -691,14 +691,14 @@ class _ServerRouteMatch {
 class _ServerRouteEntry {
     method: string
     path: string
-    value: Json
+    value: JSON.Value
     handler: fn(HttpRequest) -> HttpResponse
     hasHandler: bool
 
     constructor(
         method: string,
         path: string,
-        value: Json,
+        value: JSON.Value,
         handler: fn(HttpRequest) -> HttpResponse,
         hasHandler: bool
     ) {
@@ -732,14 +732,14 @@ class _ServerRouter {
     }
 
     addHandler(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse) -> bool {
-        var value: Json = {}
+        var value: JSON.Value = JSON.value({})
         return this.addRouteJson(method, path, value, handler, true)
     }
 
     addRouteJson(
         method: string,
         path: string,
-        value: Json,
+        value: JSON.Value,
         handler: fn(HttpRequest) -> HttpResponse,
         hasHandler: bool
     ) -> bool {
@@ -1045,15 +1045,19 @@ fn _serverListen(router: _ServerRouter, port: int, running: Atomic<bool>) -> boo
         // scope cancellation.  Active reads are therefore cancelled and run
         // their socket defer before listen returns; completed child tasks are
         // reaped by the scope without an ever-growing task registry.
+        /* The accept loop still writes through `running`; the coroutine
+         * boundary needs the binding itself proven shared, so bind it once as
+         * a const alias of the same atomic and hand that to every task. */
+        const shared_running: Atomic<bool> = running
         linked scope {
-            go _serverStopWatch(running)
+            go _serverStopWatch(shared_running)
             while (running.load()) {
                 net.setAcceptDeadline(listener!, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
                 var conn = net.accept(listener!)
                 if (conn != null) {
                     var accepted: NetConn = conn!
                     conn = null
-                    go _serveHttpConnection(move accepted, snapshot, running)
+                    go _serveHttpConnection(move accepted, snapshot, shared_running)
                     continue
                 }
                 var err = net.lastError(listener!)

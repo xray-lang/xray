@@ -3425,7 +3425,7 @@ static inline XrValue xrt_map_entries(xrt_map_t *m) {
         const xrt_boolmap_t *b = (const xrt_boolmap_t *) m;
         for (int64_t cursor = 0; cursor < xrt_boolmap_len(b); cursor++) {
             XrValue items[2] = {xrt_boolmap_iter_key(b, cursor), xrt_boolmap_iter_value(b, cursor)};
-            xrt_array_push(arr, xrt_tuple_make(2, items));
+            xrt_array_push(arr, xrt_tuple_make_from_borrowed(2, items));
         }
         return arr;
     }
@@ -3435,7 +3435,7 @@ static inline XrValue xrt_map_entries(xrt_map_t *m) {
             if (!xrt_map_slot_is_full(m, slot))
                 continue;
             XrValue items[2] = {xrt_map_slot_key(m, slot), xrt_map_slot_value(m, slot)};
-            xrt_array_push(arr, xrt_tuple_make(2, items));
+            xrt_array_push(arr, xrt_tuple_make_from_borrowed(2, items));
         }
         return arr;
     }
@@ -3443,7 +3443,7 @@ static inline XrValue xrt_map_entries(xrt_map_t *m) {
         if (!xrt_map_slot_is_full(m, slot))
             continue;
         XrValue items[2] = {xrt_map_slot_key(m, slot), xrt_map_slot_value(m, slot)};
-        xrt_array_push(arr, xrt_tuple_make(2, items));
+        xrt_array_push(arr, xrt_tuple_make_from_borrowed(2, items));
     }
     return arr;
 }
@@ -3629,79 +3629,6 @@ static inline XrRangeCore xrt_range_iter_core(const xrt_iterator_t *it) {
     return xr_range_core_make_with_bound(r->start, r->end, r->step, r->inclusive_end);
 }
 
-static inline int64_t xrt_json_dynamic_len(const xrt_json_t *j) {
-    return (j && j->dynamic_fields) ? xrt_map_len(j->dynamic_fields) : 0;
-}
-
-static inline int64_t xrt_json_iter_count(const xrt_json_t *j) {
-    return xrt_object_field_count(j) + xrt_json_dynamic_len(j);
-}
-
-static inline int xrt_json_dynamic_iter_has_next(xrt_map_t *m, int64_t *cursor) {
-    if (!m || !cursor)
-        return 0;
-    while ((uint32_t) *cursor < m->nentries) {
-        if (xrt_map_slot_is_full(m, *cursor))
-            return 1;
-        (*cursor)++;
-    }
-    return 0;
-}
-
-static inline int xrt_json_iterator_has_next(xrt_iterator_t *it) {
-    xrt_json_t *j = (xrt_json_t *) it->coll.ptr;
-    int64_t field_count = xrt_object_field_count(j);
-    while (it->cursor < field_count) {
-        if (!xrt_object_field_name(j, it->cursor)) {
-            it->cursor++;
-            continue;
-        }
-        return 1;
-    }
-    if (!j->dynamic_fields)
-        return 0;
-    int64_t dyn_cursor = it->cursor - field_count;
-    if (!xrt_json_dynamic_iter_has_next(j->dynamic_fields, &dyn_cursor))
-        return 0;
-    it->cursor = field_count + dyn_cursor;
-    return 1;
-}
-
-static inline XrValue xrt_json_iterator_next(xrt_iterator_t *it) {
-    xrt_json_t *j = (xrt_json_t *) it->coll.ptr;
-    int64_t field_count = xrt_object_field_count(j);
-    if (it->cursor < field_count) {
-        int64_t idx = it->cursor++;
-        const char *field_name = xrt_object_field_name(j, idx);
-        XrValue key = xr_box_str(field_name ? field_name : "");
-        XrValue value = j->fields[idx];
-        if (it->kind == XRT_ITER_PAIRS) {
-            XrValue kv[2] = {key, value};
-            return xrt_tuple_make_from_borrowed(2, kv);
-        }
-        if (it->kind == XRT_ITER_VALUES)
-            return value;
-        return key;
-    }
-    if (!j->dynamic_fields)
-        return XR_NULL_VAL;
-    int64_t dyn_cursor = it->cursor - field_count;
-    if (!xrt_json_dynamic_iter_has_next(j->dynamic_fields, &dyn_cursor))
-        return XR_NULL_VAL;
-    int64_t slot = dyn_cursor;
-    it->cursor = field_count + dyn_cursor + 1;
-    XrValue key = xrt_map_slot_key(j->dynamic_fields, slot);
-    XrValue value = xrt_map_slot_value(j->dynamic_fields, slot);
-    if (it->kind == XRT_ITER_PAIRS) {
-        XrValue kv[2] = {key, value};
-        return xrt_tuple_make_from_borrowed(2, kv);
-    }
-    if (it->kind == XRT_ITER_VALUES)
-        return value;
-    return key;
-}
-
-// Park cursor at the next live entry/order[] slot; return 1 if one exists.
 static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
     if (it->kind == XRT_ITER_GENERATOR) {
 #ifdef XRT_ENABLE_GENERATORS

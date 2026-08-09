@@ -1602,14 +1602,14 @@ static XrValue net_bidi_result_object(XrVMRuntime *X, NetBidiWaitState *state) {
      * slot 0/1 would land each count under the wrong name whenever the canonical
      * order differs, so route both through the same name lookup the reader does.
      * ab is the a-to-b byte count, ba is b-to-a. */
-    if (!xr_json_set_by_key(
+    if (!xr_object_instance_set_by_key(
             X, object, "aToB",
             xr_int((xr_Integer) atomic_load_explicit(&state->shared->ab, memory_order_acquire))) ||
-        !xr_json_set_by_key(
+        !xr_object_instance_set_by_key(
             X, object, "bToA",
             xr_int((xr_Integer) atomic_load_explicit(&state->shared->ba, memory_order_acquire))))
         return XR_NULL_VAL;
-    return xr_json_value(object);
+    return xr_object_instance_value(object);
 }
 
 static XrCFuncResult net_bidi_wait_step(XrVMRuntime *X, NetBidiWaitState *state, XrValue *result) {

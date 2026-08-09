@@ -27,13 +27,11 @@ error_channel = "vm_pending_error"
 ownership = "borrow_args_owned_result"
 unsupported_policy = "fail_closed"
 
-[[hosted_fragment_deferred]]
-symbol = "cluster.join"
-reason = "The facade must dispatch to the current VM or AOT cluster runtime instead of capturing an AOT direct shim in a VM native fastpath"
-
-[[hosted_fragment_deferred]]
-symbol = "cluster.stop"
-reason = "The facade must stop the current VM or AOT cluster runtime instead of capturing an AOT direct shim in a VM native fastpath"
+# cluster is excluded from hosted fragments as a whole module: its Xray source
+# calls private `__`-prefixed native primitives, which a freestanding fragment
+# cannot reach. That subsumes the earlier per-symbol deferrals of the join and
+# stop facades, which had to keep dispatching to the current VM or AOT cluster
+# runtime rather than capture an AOT direct shim in a VM native fastpath.
 
 [dynamic_audit]
 # These modules still expose fixed-shape dynamic APIs and must be migrated

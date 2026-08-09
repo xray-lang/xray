@@ -21,51 +21,44 @@ static const XlspSymbolInfo g_xlsp_stdlib_coro_symbols[] = {
 
 // base64 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
-    {"encode", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>, options?: Base64EncodeOptions?): string", "", NULL, 0},
-    {"decode", XLSP_SYM_FUNCTION, "fn(text: string, options?: Base64DecodeOptions?): Array<byte>", "", NULL, 0},
-    {"isValid", XLSP_SYM_FUNCTION, "fn(text: string, options?: Base64DecodeOptions?): bool", "", NULL, 0},
     {"Base64Alphabet", XLSP_SYM_CLASS, "type Base64Alphabet", "Enum type", NULL, 0},
     {"Base64PaddingPolicy", XLSP_SYM_CLASS, "type Base64PaddingPolicy", "Enum type", NULL, 0},
     {"Base64Error", XLSP_SYM_CLASS, "type Base64Error", "Enum type", NULL, 0},
     {"Base64EncodeOptions", XLSP_SYM_CLASS, "type Base64EncodeOptions", "Class type", NULL, 0},
     {"Base64DecodeOptions", XLSP_SYM_CLASS, "type Base64DecodeOptions", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 8
+#define GEN_XLSP_STDLIB_BASE64_SYMBOL_COUNT 5
 
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
-    {"start", XLSP_SYM_FUNCTION, "fn(config: ClusterConfig): bool", "Start cluster node", NULL, 0},
-    {"join", XLSP_SYM_FUNCTION, "fn(addr: string): bool", "Join cluster by address", NULL, 0},
     {"self", XLSP_SYM_FUNCTION, "fn(): string", "Get own node name", NULL, 0},
     {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>", "List cluster node names", NULL, 0},
-    {"channel", XLSP_SYM_FUNCTION, "fn(name: string, size?: int): Channel", "Create or get named distributed channel", NULL, 0},
     {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", NULL, 0},
     {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "Start LAN auto-discovery", NULL, 0},
-    {"stop", XLSP_SYM_FUNCTION, "fn(): ()", "Stop cluster node", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): ClusterInfo?", "Get cluster status info", NULL, 0},
-    {"publish", XLSP_SYM_FUNCTION, "fn(topic: string, value: JSON.Value): bool", "Publish to topic", NULL, 0},
-    {"subscribe", XLSP_SYM_FUNCTION, "fn(pattern: string): Channel", "Subscribe to topic pattern", NULL, 0},
+    {"send", XLSP_SYM_FUNCTION, "fn(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
-    {"validChannelName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): NodeAddress", "", NULL, 0},
     {"validTopicName", XLSP_SYM_FUNCTION, "fn(topic: string): bool", "", NULL, 0},
     {"validTopicPattern", XLSP_SYM_FUNCTION, "fn(pattern: string): bool", "", NULL, 0},
     {"topicMatches", XLSP_SYM_FUNCTION, "fn(pattern: string, topic: string): bool", "", NULL, 0},
+    {"start", XLSP_SYM_FUNCTION, "fn(config: ClusterConfig): bool", "", NULL, 0},
+    {"join", XLSP_SYM_FUNCTION, "fn(addr: string): bool", "", NULL, 0},
+    {"stop", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
+    {"listen", XLSP_SYM_FUNCTION, "fn(pattern: string, capacity?: int): Channel<Buffer>?", "", NULL, 0},
     {"HANDSHAKE_VERSION", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"TOPIC_DEFAULT_HOP_LIMIT", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"NODE_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
-    {"CHANNEL_NAME_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"TOPIC_PATTERN_MAX", XLSP_SYM_CONSTANT, "int", "", NULL, 0},
     {"AddressError", XLSP_SYM_CLASS, "type AddressError", "Enum type", NULL, 0},
     {"NodeAddress", XLSP_SYM_CLASS, "type NodeAddress", "Class type", NULL, 0},
-    {"ClusterTlsOptions", XLSP_SYM_CLASS, "type ClusterTlsOptions = { enabled: bool, caFile: string?, certFile: string?, keyFile: string?, insecure: bool }", "Typed TLS configuration for a cluster node", NULL, 0},
-    {"ClusterConfig", XLSP_SYM_CLASS, "type ClusterConfig = { name: string, port: int, secret: string?, tls: ClusterTlsOptions? }", "Typed cluster node startup configuration", NULL, 0},
     {"ClusterTlsStatus", XLSP_SYM_CLASS, "type ClusterTlsStatus = { enabled: bool, clientReady: bool, serverReady: bool }", "Effective TLS posture of a running cluster node", NULL, 0},
     {"ClusterNodeInfo", XLSP_SYM_CLASS, "type ClusterNodeInfo = { name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }", "Typed diagnostic snapshot for one remote cluster node", NULL, 0},
-    {"ClusterInfo", XLSP_SYM_CLASS, "type ClusterInfo = { self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, channels: int, topicSubscriptions: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }", "Typed diagnostic snapshot for the local cluster runtime", NULL, 0},
+    {"ClusterInfo", XLSP_SYM_CLASS, "type ClusterInfo = { self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, listeners: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }", "Typed diagnostic snapshot for the local cluster runtime", NULL, 0},
+    {"ClusterDelivery", XLSP_SYM_CLASS, "enum ClusterDelivery", "Outcome of handing one opaque service envelope to the cluster transport", NULL, 0},
     {"ClusterNodeState", XLSP_SYM_CLASS, "enum ClusterNodeState", "Lifecycle state of a remote cluster node", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 30
+#define GEN_XLSP_STDLIB_CLUSTER_SYMBOL_COUNT 26
 
 // codegen module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_codegen_symbols[] = {
@@ -141,14 +134,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_encoding_symbols[] = {
     {"hexDecode", XLSP_SYM_FUNCTION, "fn(hex: string): Array<byte>", "", NULL, 0},
     {"hexValid", XLSP_SYM_FUNCTION, "fn(hex: string): bool", "", NULL, 0},
     {"utf8Valid", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>): bool", "", NULL, 0},
-    {"utf16Encode", XLSP_SYM_FUNCTION, "fn(data: string, options?: Utf16EncodeOptions?): Array<byte>", "", NULL, 0},
-    {"utf16Decode", XLSP_SYM_FUNCTION, "fn(data: Slice<byte>, options?: Utf16DecodeOptions?): string", "", NULL, 0},
     {"HexError", XLSP_SYM_CLASS, "type HexError", "Enum type", NULL, 0},
     {"Utf16Error", XLSP_SYM_CLASS, "type Utf16Error", "Enum type", NULL, 0},
     {"Utf16DecodeOptions", XLSP_SYM_CLASS, "type Utf16DecodeOptions", "Class type", NULL, 0},
     {"Utf16EncodeOptions", XLSP_SYM_CLASS, "type Utf16EncodeOptions", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 10
+#define GEN_XLSP_STDLIB_ENCODING_SYMBOL_COUNT 8
 
 // http module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
@@ -161,6 +152,8 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"jsonResponse", XLSP_SYM_FUNCTION, "fn(value: T, status?: int, headers?: Headers?): HttpResponse", "", NULL, 0},
     {"json", XLSP_SYM_FUNCTION, "fn(value: T, status?: int): HttpResponse", "", NULL, 0},
     {"request", XLSP_SYM_FUNCTION, "fn(options: HttpRequestOptions): HttpResponse", "", NULL, 0},
+    {"get", XLSP_SYM_FUNCTION, "fn(url: string): HttpResponse", "", NULL, 0},
+    {"post", XLSP_SYM_FUNCTION, "fn(url: string, contentType: string, body: Array<byte>, authorization?: string): HttpResponse", "", NULL, 0},
     {"parseChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int, maxTrailerHeaders?: int): ChunkedBody?", "Decode a complete Transfer-Encoding: chunked body.", NULL, 0},
     {"decodeChunkedBody", XLSP_SYM_FUNCTION, "fn(raw: string, maxBodyBytes?: int): string?", "Decode a chunked body and discard trailers.", NULL, 0},
     {"parseRequestHead", XLSP_SYM_FUNCTION, "fn(raw: string, maxHeaders?: int): RequestHead?", "Parse an HTTP/1.x request head without reading sockets.", NULL, 0},
@@ -194,7 +187,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_http_symbols[] = {
     {"RequestMessage", XLSP_SYM_CLASS, "type RequestMessage", "Parsed HTTP/1.x request head and decoded body.", NULL, 0},
     {"ResponseMessage", XLSP_SYM_CLASS, "type ResponseMessage", "Parsed HTTP/1.x response head and decoded body.", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 41
+#define GEN_XLSP_STDLIB_HTTP_SYMBOL_COUNT 43
 
 // http2 module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_http2_symbols[] = {
@@ -365,16 +358,17 @@ static const XlspSymbolInfo g_xlsp_stdlib_mem_symbols[] = {
 
 // net module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
-    {"dial", XLSP_SYM_FUNCTION, "fn(host: string, port: int, timeout?: int): NetConn?", "", NULL, 0},
-    {"dialTLS", XLSP_SYM_FUNCTION, "fn(host: string, port: int, timeout?: int): NetConn?", "", NULL, 0},
-    {"listen", XLSP_SYM_FUNCTION, "fn(port: int, backlog?: int): NetListener?", "", NULL, 0},
+    {"lookup", XLSP_SYM_FUNCTION, "fn(hostname: string): Array<IpAddress>", "", NULL, 0},
+    {"resolve", XLSP_SYM_FUNCTION, "fn(hostname: string): IpAddress?", "", NULL, 0},
+    {"dial", XLSP_SYM_FUNCTION, "fn(host: string, port: int, options?: DialOptions?): NetConn", "", NULL, 0},
+    {"dialEndpoint", XLSP_SYM_FUNCTION, "fn(endpoint: Endpoint, options?: DialOptions?): NetConn", "", NULL, 0},
+    {"upgradeTLS", XLSP_SYM_FUNCTION, "fn(conn: NetConn, hostname: string, timeoutMs?: int): ()", "", NULL, 0},
+    {"hasTLS", XLSP_SYM_FUNCTION, "fn(): bool", "", NULL, 0},
+    {"listen", XLSP_SYM_FUNCTION, "fn(port: int, backlog?: int, forceV4?: bool): NetListener", "", NULL, 0},
     {"accept", XLSP_SYM_FUNCTION, "fn(listener: NetListener): NetConn?", "", NULL, 0},
-    {"read", XLSP_SYM_FUNCTION, "fn(conn: NetConn, maxlen?: int): string?", "", NULL, 0},
     {"readInto", XLSP_SYM_FUNCTION, "fn(conn: NetConn, buffer: ref Array<byte>, maxlen?: int): int", "", NULL, 0},
-    {"write", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: string): int", "", NULL, 0},
+    {"readBytes", XLSP_SYM_FUNCTION, "fn(conn: NetConn, maxBytes?: int): Array<byte>?", "", NULL, 0},
     {"writeBytes", XLSP_SYM_FUNCTION, "fn(conn: NetConn, data: Array<byte>): int", "", NULL, 0},
-    {"copy", XLSP_SYM_FUNCTION, "fn(src: NetConn, dst: NetConn, bufferSize?: int): int", "", NULL, 0},
-    {"copyBidirectional", XLSP_SYM_FUNCTION, "fn(a: NetConn, b: NetConn): CopyBidirectionalResult", "", NULL, 0},
     {"shutdownRead", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "", NULL, 0},
     {"shutdownWrite", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "", NULL, 0},
     {"shutdown", XLSP_SYM_FUNCTION, "fn(conn: NetConn): bool", "", NULL, 0},
@@ -386,23 +380,20 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
     {"setAcceptDeadline", XLSP_SYM_FUNCTION, "fn(listener: NetListener, deadline: int): bool", "", NULL, 0},
     {"lastError", XLSP_SYM_FUNCTION, "fn(handle: NetConn | NetListener): NetError?", "", NULL, 0},
     {"lastErrno", XLSP_SYM_FUNCTION, "fn(handle: NetConn | NetListener): int", "", NULL, 0},
-    {"lookup", XLSP_SYM_FUNCTION, "fn(hostname: string): string?", "", NULL, 0},
-    {"resolve", XLSP_SYM_FUNCTION, "fn(hostname: string): IpAddress?", "", NULL, 0},
-    {"hasTLS", XLSP_SYM_FUNCTION, "fn(): bool", "", NULL, 0},
-    {"upgradeTLS", XLSP_SYM_FUNCTION, "fn(conn: NetConn, hostname: string, timeout?: int): NetConn?", "", NULL, 0},
-    {"udpBind", XLSP_SYM_FUNCTION, "fn(port: int, address?: string): NetConn?", "", NULL, 0},
-    {"sendTo", XLSP_SYM_FUNCTION, "fn(handle: NetConn, data: string, host: string, port: int): int", "", NULL, 0},
-    {"recvFrom", XLSP_SYM_FUNCTION, "fn(handle: NetConn, maxlen?: int): UdpPacket?", "", NULL, 0},
-    {"__UdpPacket", XLSP_SYM_CLASS, "type __UdpPacket", "Native handle type", NULL, 0},
+    {"copy", XLSP_SYM_FUNCTION, "fn(src: NetConn, dst: NetConn, bufferSize?: int): int", "", NULL, 0},
+    {"copyBidirectional", XLSP_SYM_FUNCTION, "fn(a: NetConn, b: NetConn): CopyBidirectionalResult", "", NULL, 0},
+    {"udpBind", XLSP_SYM_FUNCTION, "fn(port: int, address?: string): NetConn", "", NULL, 0},
+    {"sendTo", XLSP_SYM_FUNCTION, "fn(handle: NetConn, data: Array<byte>, host: string, port: int, timeoutMs?: int): int", "", NULL, 0},
+    {"recvFrom", XLSP_SYM_FUNCTION, "fn(handle: NetConn, buffer: ref Array<byte>, timeoutMs?: int): UdpFrom?", "", NULL, 0},
     {"IpAddress", XLSP_SYM_CLASS, "type IpAddress", "Class type", NULL, 0},
     {"Endpoint", XLSP_SYM_CLASS, "type Endpoint", "Class type", NULL, 0},
     {"DialOptions", XLSP_SYM_CLASS, "type DialOptions", "Class type", NULL, 0},
     {"CopyBidirectionalResult", XLSP_SYM_CLASS, "type CopyBidirectionalResult", "Class type", NULL, 0},
-    {"UdpPacket", XLSP_SYM_CLASS, "type UdpPacket", "Class type", NULL, 0},
+    {"UdpFrom", XLSP_SYM_CLASS, "type UdpFrom", "Class type", NULL, 0},
     {"__CopyBidirectionalResult", XLSP_SYM_CLASS, "type __CopyBidirectionalResult = { aToB: int, bToA: int }", "Byte counts copied in each direction by copyBidirectional", NULL, 0},
-    {"NetError", XLSP_SYM_CLASS, "enum NetError", "Typed failure from native network operations", NULL, 0},
+    {"NetError", XLSP_SYM_CLASS, "enum NetError", "Typed failure from network operations; classification from native codes lives in net.xr", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 36
+#define GEN_XLSP_STDLIB_NET_SYMBOL_COUNT 34
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
@@ -441,15 +432,14 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
 
 // parallel module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_parallel_symbols[] = {
-    {"forEach", XLSP_SYM_FUNCTION, "fn(range: Range, body: (int): (), options: Options = Options())", "", NULL, 0},
-    {"map", XLSP_SYM_FUNCTION, "fn(range: Range, body: (int): T, options: Options = Options()) -> Array<T>", "", NULL, 0},
-    {"mapInto", XLSP_SYM_FUNCTION, "fn(range: Range, output: ref Array<T>, body: (int): T, options: Options = Options())", "", NULL, 0},
-    {"reduce", XLSP_SYM_FUNCTION, "fn(range: Range, initial: A, body: (int): A, combine: (A, A) -> A, options: Options = Options()) -> A", "", NULL, 0},
+    {"map", XLSP_SYM_FUNCTION, "fn(range: Range, body: fn(int): T, options: Options = Options()) -> Array<T>", "", NULL, 0},
+    {"mapInto", XLSP_SYM_FUNCTION, "fn(range: Range, output: ref Array<T>, body: fn(int): T, options: Options = Options())", "", NULL, 0},
+    {"reduce", XLSP_SYM_FUNCTION, "fn(range: Range, initial: A, body: fn(int): A, combine: fn(A, A) -> A, options: Options = Options()) -> A", "", NULL, 0},
     {"ParallelError", XLSP_SYM_CLASS, "type ParallelError", "Enum type", NULL, 0},
     {"Options", XLSP_SYM_CLASS, "type Options", "Class type", NULL, 0},
     {"Plan", XLSP_SYM_CLASS, "type Plan", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_PARALLEL_SYMBOL_COUNT 7
+#define GEN_XLSP_STDLIB_PARALLEL_SYMBOL_COUNT 6
 
 // path module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_path_symbols[] = {
@@ -549,7 +539,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"threadYield", XLSP_SYM_FUNCTION, "fn(): ()", "Yield the current OS thread to another runnable OS thread", NULL, 0},
     {"sleepMs", XLSP_SYM_FUNCTION, "fn(ms: int): ()", "Block the current OS thread for at least ms milliseconds", NULL, 0},
     {"pinToCpu", XLSP_SYM_FUNCTION, "fn(cpu: int): bool", "Best-effort pin of the current OS thread to a CPU index", NULL, 0},
-    {"onSignal", XLSP_SYM_FUNCTION, "fn(signal: Signal, handler: (): ()) -> bool", "", NULL, 0},
     {"Signal", XLSP_SYM_CLASS, "type Signal", "Enum type", NULL, 0},
     {"Pipe", XLSP_SYM_CLASS, "type Pipe", "Class type", NULL, 0},
     {"ProcessOptions", XLSP_SYM_CLASS, "type ProcessOptions", "Class type", NULL, 0},
@@ -557,7 +546,7 @@ static const XlspSymbolInfo g_xlsp_stdlib_sys_symbols[] = {
     {"ThreadLocal", XLSP_SYM_CLASS, "type ThreadLocal", "Class type", NULL, 0},
     {"Dylib", XLSP_SYM_CLASS, "type Dylib", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 16
+#define GEN_XLSP_STDLIB_SYS_SYMBOL_COUNT 15
 
 // text module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_text_symbols[] = {
@@ -643,13 +632,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_url_symbols[] = {
 
 // ws module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
-    {"connect", XLSP_SYM_FUNCTION, "fn(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", NULL, 0},
-    {"send", XLSP_SYM_FUNCTION, "fn(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", NULL, 0},
-    {"recv", XLSP_SYM_FUNCTION, "fn(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", NULL, 0},
-    {"close", XLSP_SYM_FUNCTION, "fn(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", NULL, 0},
-    {"ping", XLSP_SYM_FUNCTION, "fn(conn: WsConn): bool", "Send a ping frame", NULL, 0},
-    {"serve", XLSP_SYM_FUNCTION, "fn(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", NULL, 0},
-    {"stopServer", XLSP_SYM_FUNCTION, "fn(): ()", "Stop the WebSocket server", NULL, 0},
     {"acceptKey", XLSP_SYM_FUNCTION, "fn(secKey: string): string", "", NULL, 0},
     {"randomKey", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
     {"parseUpgradeRequest", XLSP_SYM_FUNCTION, "fn(request: string, serverProtocols?: Array<string>?, allowDeflate?: bool, allowedOrigins?: Array<string>?): ParsedUpgradeRequest?", "", NULL, 0},
@@ -667,16 +649,22 @@ static const XlspSymbolInfo g_xlsp_stdlib_ws_symbols[] = {
     {"closeFrame", XLSP_SYM_FUNCTION, "fn(code?: int, reason?: string, mask?: bool): Array<byte>", "", NULL, 0},
     {"pingFrame", XLSP_SYM_FUNCTION, "fn(data?: Array<byte>?, mask?: bool): Array<byte>", "", NULL, 0},
     {"pongFrame", XLSP_SYM_FUNCTION, "fn(data?: Array<byte>?, mask?: bool): Array<byte>", "", NULL, 0},
-    {"WsConn", XLSP_SYM_CLASS, "type WsConn", "Native handle type", NULL, 0},
-    {"WsMessage", XLSP_SYM_CLASS, "type WsMessage", "Native handle type", NULL, 0},
+    {"connect", XLSP_SYM_FUNCTION, "fn(url: string, options?: WsConnectOptions?): WsConn", "", NULL, 0},
+    {"sendText", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn, data: string): bool", "", NULL, 0},
+    {"sendBytes", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn, data: Array<byte>, binary?: bool): bool", "", NULL, 0},
+    {"recv", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn, timeout?: int): WsMessage?", "", NULL, 0},
+    {"ping", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn): bool", "", NULL, 0},
+    {"close", XLSP_SYM_FUNCTION, "fn(conn: ref WsConn, code?: int, reason?: string): bool", "", NULL, 0},
     {"ParsedFrame", XLSP_SYM_CLASS, "type ParsedFrame", "Class type", NULL, 0},
     {"WsUrl", XLSP_SYM_CLASS, "type WsUrl", "Class type", NULL, 0},
     {"ClosePayload", XLSP_SYM_CLASS, "type ClosePayload", "Class type", NULL, 0},
     {"ParsedUpgradeResponse", XLSP_SYM_CLASS, "type ParsedUpgradeResponse", "Class type", NULL, 0},
     {"ParsedUpgradeRequest", XLSP_SYM_CLASS, "type ParsedUpgradeRequest", "Class type", NULL, 0},
-    {"WsConnectOptions", XLSP_SYM_CLASS, "type WsConnectOptions = { timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }", "Typed WebSocket client connection options", NULL, 0},
+    {"WsConnectOptions", XLSP_SYM_CLASS, "type WsConnectOptions", "Class type", NULL, 0},
+    {"WsMessage", XLSP_SYM_CLASS, "type WsMessage", "Class type", NULL, 0},
+    {"WsConn", XLSP_SYM_CLASS, "type WsConn", "Class type", NULL, 0},
 };
-#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 32
+#define GEN_XLSP_STDLIB_WS_SYMBOL_COUNT 31
 
 // xml module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
@@ -688,11 +676,11 @@ static const XlspSymbolInfo g_xlsp_stdlib_xml_symbols[] = {
     {"children", XLSP_SYM_FUNCTION, "fn(node: XmlNode): Array<XmlNode>", "", NULL, 0},
     {"nodeText", XLSP_SYM_FUNCTION, "fn(node: XmlNode): string?", "", NULL, 0},
     {"textContent", XLSP_SYM_FUNCTION, "fn(node: XmlNode): string", "", NULL, 0},
-    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions?): XmlNode", "", NULL, 0},
-    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions?): XmlParseReport", "", NULL, 0},
-    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: Path, options?: XmlOptions?): XmlNode", "", NULL, 0},
-    {"stringify", XLSP_SYM_FUNCTION, "fn(node: XmlNode, options?: XmlWriteOptions?): string", "", NULL, 0},
-    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, node: XmlNode, options?: XmlWriteOptions?): bool", "", NULL, 0},
+    {"parse", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions): XmlNode", "", NULL, 0},
+    {"parseReport", XLSP_SYM_FUNCTION, "fn(data: string, options?: XmlOptions): XmlParseReport", "", NULL, 0},
+    {"parseFile", XLSP_SYM_FUNCTION, "fn(path: Path, options?: XmlOptions): XmlNode", "", NULL, 0},
+    {"stringify", XLSP_SYM_FUNCTION, "fn(node: XmlNode, options?: XmlWriteOptions): string", "", NULL, 0},
+    {"writeFile", XLSP_SYM_FUNCTION, "fn(path: Path, node: XmlNode, options?: XmlWriteOptions): bool", "", NULL, 0},
     {"document", XLSP_SYM_FUNCTION, "fn(children?: Array<XmlNode>?): XmlNode", "", NULL, 0},
     {"element", XLSP_SYM_FUNCTION, "fn(tag: string, attrs?: Array<XmlAttribute>?, children?: Array<XmlNode>?): XmlNode", "", NULL, 0},
     {"text", XLSP_SYM_FUNCTION, "fn(content: string): XmlNode", "", NULL, 0},
