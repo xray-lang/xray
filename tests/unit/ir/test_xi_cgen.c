@@ -3110,8 +3110,11 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
             contains(buf, "\nstatic XR_AINLINE XRT_FN_CONST int64_t lib_helper_")) &&
            "private helper should be file-local and inlineable in multi-module C");
     assert((contains(buf, "\nXRT_INTERNAL int64_t lib_public_exp(") ||
-            contains(buf, "\nXRT_INTERNAL XRT_FN_CONST int64_t lib_public_exp(")) &&
-           "module-ABI functions need an out-of-line definition on every C provider");
+            contains(buf, "\nXRT_INTERNAL XRT_FN_CONST int64_t lib_public_exp(") ||
+            contains(buf, "\nXRT_INTERNAL XR_FORCEINLINE int64_t lib_public_exp(") ||
+            contains(buf, "\nXRT_INTERNAL XR_FORCEINLINE XRT_FN_CONST int64_t lib_public_exp(")) &&
+           "module-ABI functions need an out-of-line definition on every C provider; the "
+           "owning unit may add XR_FORCEINLINE while the cross-unit declaration strips it");
     assert(!contains(buf, "static XR_AINLINE int64_t lib_public_exp(") &&
            !contains(buf, "static XR_AINLINE XRT_FN_CONST int64_t lib_public_exp(") &&
            "exported function must not become file-static");
