@@ -8133,7 +8133,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (emit_portable_class_native_ctor_value_stmt(ctx, out, f, prefix, v, false))
         return;
 
-    if (emit_portable_map_class_ctor_value_stmt(ctx, out, f, prefix, v))
+    if (emit_portable_map_class_ctor_value_stmt(ctx, out, f, prefix, v, false))
         return;
 
     if (xicgen_emit_slice_stmt(ctx, out, f, v, prefix))

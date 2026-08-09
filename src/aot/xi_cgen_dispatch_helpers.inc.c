@@ -11066,7 +11066,8 @@ static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc
  * effects. Materialize it as ordinary C11 statements for every artifact;
  * native-layout classes are handled by the earlier native constructor path. */
 static bool emit_portable_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                    const char *prefix, const XiValue *v) {
+                                                    const char *prefix, const XiValue *v,
+                                                    bool in_coro) {
     if (!ctx || !out || !f || !v || (v->op != XI_CALL && v->op != XI_CALL_METHOD) || v->nargs == 0)
         return false;
 
@@ -11136,7 +11137,9 @@ static bool emit_portable_map_class_ctor_value_stmt(XiCgenCtx *ctx, FILE *out, c
         fprintf(out, "    (void)xrt_value_set_storage(_portable_map_inst_%u, %u);\n", v->id,
                 (unsigned) storage_mode);
 
-    if (ctx->pre_decl_all) {
+    /* Coroutine bodies declare every value in the frame prologue, so an
+     * inline declaration here would redefine the C local. */
+    if (in_coro || ctx->pre_decl_all) {
         fprintf(out, "    ");
         emit_vref(out, v);
         fprintf(out, " = ");
