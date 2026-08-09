@@ -2709,7 +2709,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (emit_portable_map_class_ctor_value_stmt(ctx, out, f, prefix, v))
         return;
 
-    if (emit_str_concat_value_stmt(ctx, out, f, v))
+    if (emit_str_concat_value_stmt(ctx, out, f, v, true))
         return;
 
     if (v->op == XI_GO) {

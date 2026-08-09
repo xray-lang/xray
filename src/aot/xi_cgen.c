@@ -8199,7 +8199,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (xi_to_c_emit_stmt_generated(ctx, out, f, v, prefix))
         return;
 
-    if (emit_str_concat_value_stmt(ctx, out, f, v))
+    if (emit_str_concat_value_stmt(ctx, out, f, v, false))
         return;
 
     if (emit_closure_new_value_stmt(ctx, out, f, prefix, v, false))

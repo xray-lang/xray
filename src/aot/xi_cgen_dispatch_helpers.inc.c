@@ -4121,11 +4121,13 @@ static void xicgen_closure_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 
 static void xicgen_cell_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     fprintf(out, "xrt_cell_new(");
-    emit_boxed_value_ref(out, v->args[0]);
+    /* The stored value must be a tagged XrValue regardless of its planned
+     * storage rep; a native-class instance held in a raw struct pointer
+     * boxes here instead of leaking its pointer rep into the cell ABI. */
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ")");
 }
 
@@ -4155,7 +4157,7 @@ static void xicgen_cell_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     fprintf(out, "(xrt_cell_set(");
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
-    emit_boxed_value_ref(out, v->args[1]);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
     fprintf(out, "), XR_NULL_VAL)");
 }
 

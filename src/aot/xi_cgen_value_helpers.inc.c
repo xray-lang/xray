@@ -1234,12 +1234,14 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     fprintf(out, "xrt_str_concat_parts(%u, _scp_%u); })", (unsigned) v->nargs, v->id);
 }
 
-static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                       const XiValue *v) {
+static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                       bool in_coro) {
     if (!ctx || !out || !f || !v || v->op != XI_STR_CONCAT || v->nargs <= 1)
         return false;
 
-    if (!ctx->pre_decl_all) {
+    /* Coroutine bodies declare every value in the frame prologue, so an
+     * inline declaration here would redefine the C local. */
+    if (!in_coro && !ctx->pre_decl_all) {
         fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
         emit_vref(out, v);
         fprintf(out, ";\n");
