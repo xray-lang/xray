@@ -1,7 +1,7 @@
 // Pure-Xray WebSocket protocol helpers.
 
 import ws
-import { WsConnectOptions } from ws
+import { WsConnectOptions, WsConn } from ws
 import net
 import time
 
@@ -60,10 +60,10 @@ fn serveMissingUpgradeResponse(lst: NetListener) {
     net.close(lst)
 }
 
-fn startRejectingUpgradeServer(port: int) {
-    ws.serve(port, fn(conn) {
-        ws.close(conn)
-    })
+fn startRejectingUpgradeServer(port: int, running: Atomic<bool>) {
+    ws.serve(port, fn(conn: ref WsConn) {
+        conn.close()
+    }, running)
 }
 
 @test
@@ -99,35 +99,26 @@ fn test_upgrade_request_and_protocol_pick() {
 
 @test
 fn test_connect_rejects_invalid_urls_before_network() {
-    var options: WsConnectOptions = {
-        timeout: 25,
-        pingInterval: 0,
-        pongTimeout: 40,
-        maxMessageSize: 4096
-    }
+    // connect never returns optional: a rejected URL surfaces as a WsConn whose
+    // error is set, before any socket is touched.
+    var options = WsConnectOptions(25, 0, 40, 4096)
     var zeroPort = ws.connect("ws://example.com:0/", options)
-    assert(zeroPort != null)
-    assert_eq(zeroPort!.error, "URL parse error")
+    assert_eq(zeroPort.error, "URL parse error")
 
     var badPort = ws.connect("ws://example.com:abc/", null)
-    assert(badPort != null)
-    assert_eq(badPort!.error, "URL parse error")
+    assert_eq(badPort.error, "URL parse error")
 
     var tooLargePort = ws.connect("ws://example.com:99999/", null)
-    assert(tooLargePort != null)
-    assert_eq(tooLargePort!.error, "URL parse error")
+    assert_eq(tooLargePort.error, "URL parse error")
 
     var emptyHost = ws.connect("ws://:80/", null)
-    assert(emptyHost != null)
-    assert_eq(emptyHost!.error, "URL parse error")
+    assert_eq(emptyHost.error, "URL parse error")
 
     var fragment = ws.connect("ws://example.com/#frag", null)
-    assert(fragment != null)
-    assert_eq(fragment!.error, "URL parse error")
+    assert_eq(fragment.error, "URL parse error")
 
     var badIpv6 = ws.connect("ws://[::1]x/", null)
-    assert(badIpv6 != null)
-    assert_eq(badIpv6!.error, "URL parse error")
+    assert_eq(badIpv6.error, "URL parse error")
 }
 
 @test
@@ -140,8 +131,7 @@ fn test_connect_rejects_missing_upgrade_response_header() {
     go serveMissingUpgradeResponse(lst)
 
     var conn = ws.connect("ws://127.0.0.1:" + port.toString() + "/", null)
-    assert(conn != null)
-    assert_eq(conn!.error, "Handshake failed")
+    assert_eq(conn.error, "Handshake failed")
 }
 
 @test
@@ -151,12 +141,13 @@ fn test_serve_rejects_missing_connection_upgrade_header() {
     if (probe == null) { return }
     net.close(probe!)
 
-    go startRejectingUpgradeServer(port)
+    const running = Atomic(true)
+    go startRejectingUpgradeServer(port, running)
     time.sleep(100)
 
     var tcp = tryDial("127.0.0.1", port)
     if (tcp == null) {
-        ws.stopServer()
+        running.store(false)
         return
     }
 
@@ -170,7 +161,7 @@ fn test_serve_rejects_missing_connection_upgrade_header() {
     assert(response != null)
     assert(response!.startsWith("HTTP/1.1 400 Bad Request"))
     net.close(tcp!)
-    ws.stopServer()
+    running.store(false)
 }
 
 @test

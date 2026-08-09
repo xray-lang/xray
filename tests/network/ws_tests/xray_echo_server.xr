@@ -6,10 +6,11 @@
  */
 
 import ws
+import { WsConn } from ws
 
 var port = 9100
 if (len(process.args) > 0) {
-    port = int(process.args[0])
+    port = int(process.args[0]) ?? 9100
 }
 
 print("=== WebSocket Echo Server (Pure Benchmark) ===")
@@ -17,14 +18,18 @@ print("Port: " + port.toString())
 print("Mode: pure echo (zero-copy)")
 print("")
 
-ws.serve(port, fn(conn) {
+// serve runs one coroutine per accepted connection until `running` clears.
+const running = Atomic(true)
+
+ws.serve(port, fn(conn: ref WsConn) {
     while (true) {
-        var msg = ws.recv(conn, null)
-        if (msg == null || msg.error) {
+        var msg = conn.recv()
+        if (msg == null || msg!.error != null) {
             break
         }
-        if (msg!.data != null) {
-            ws.send(conn, msg!.data, msg!.binary)
+        var data = msg!.data
+        if (data != null) {
+            conn.sendBytes(data!, msg!.binary)
         }
     }
-})
+}, running)

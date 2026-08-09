@@ -1,6 +1,6 @@
 /*
  * ws_server_client_test.xr - WebSocket server + client integration test
- * 
+ *
  * Tests the coroutine-per-connection model:
  * 1. Start server in one coroutine
  * 2. Connect client in another coroutine
@@ -10,31 +10,36 @@
 
 import ws
 import time
+import { WsConn } from ws
 
 print("=== WebSocket Server/Client Integration Test ===")
 
-var testPassed = false
+// Shared, coroutine-safe flags: `running` stops the server accept loop and
+// `testPassed` reports the client verdict back to the main coroutine.
+const running = Atomic(true)
+const testPassed = Atomic(false)
 
 // Server coroutine
 go fn() {
     print("[Server] Starting on port 8766...")
-    
-    ws.serve(8766, fn(conn) {
+
+    ws.serve(8766, fn(conn: ref WsConn) {
         print("[Server] Client connected")
-        
+
         while (true) {
-            var msg = ws.recv(conn, null)
-            if (msg == null || msg.error) {
+            var msg = conn.recv()
+            if (msg == null || msg!.error != null) {
                 break
             }
-            if (msg!.data) {
-                print("[Server] Received: " + msg!.data)
-                ws.send(conn, "Echo: " + msg!.data, null)
+            var text = msg!.text()
+            if (text != null) {
+                print("[Server] Received: " + text!)
+                conn.sendText("Echo: " + text!)
             }
         }
-        
+
         print("[Server] Client disconnected")
-    })
+    }, running)
 }()
 
 // Wait for server to start
@@ -43,46 +48,51 @@ time.sleep(100)
 // Client coroutine
 go fn() {
     print("[Client] Connecting to ws://localhost:8766...")
-    
+
     var conn = ws.connect("ws://localhost:8766", null)
-    if (conn!.error) {
-        print("[Client] Connection error: " + conn!.error)
-        ws.stopServer()
+    if (conn.error != null) {
+        print("[Client] Connection error: " + conn.error!)
+        running.store(false)
         return
     }
-    
+
     print("[Client] Connected!")
-    
+
     // Send test message
     print("[Client] Sending: Hello Server!")
-    ws.send(conn, "Hello Server!", null)
-    
+    conn.sendText("Hello Server!")
+
     // Receive echo
-    var msg = ws.recv(conn, null)
-    if (msg != null && msg!.data) {
-        print("[Client] Received: " + msg!.data)
-        if (msg!.data == "Echo: Hello Server!") {
-            print("[Client] Test PASSED!")
-            testPassed = true
+    var msg = conn.recv(5000)
+    if (msg != null && msg!.error == null) {
+        var text = msg!.text()
+        if (text != null) {
+            print("[Client] Received: " + text!)
+            if (text! == "Echo: Hello Server!") {
+                print("[Client] Test PASSED!")
+                testPassed.store(true)
+            } else {
+                print("[Client] Test FAILED - unexpected response")
+            }
         } else {
-            print("[Client] Test FAILED - unexpected response")
+            print("[Client] Test FAILED - no response")
         }
     } else {
         print("[Client] Test FAILED - no response")
     }
-    
+
     // Close connection
-    ws.close(conn, null, null)
+    conn.close()
     print("[Client] Disconnected")
-    
+
     // Stop server
-    ws.stopServer()
+    running.store(false)
 }()
 
 // Wait for test to complete
 time.sleep(2000)
 
-if (testPassed) {
+if (testPassed.load()) {
     print("\n=== ALL TESTS PASSED ===")
 } else {
     print("\n=== TESTS FAILED ===")

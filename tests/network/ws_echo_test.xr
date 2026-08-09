@@ -11,37 +11,40 @@ const TEST_URL = "wss://ws.postman-echo.com/raw"
 print("Connecting to: " + TEST_URL)
 var conn = ws.connect(TEST_URL, null)
 
-if (conn!.error) {
-    print("Connection error: " + conn!.error)
+if (conn.error != null) {
+    print("Connection error: " + conn.error!)
 } else {
     print("Connected!")
-    print("State: " + conn.state)
-    
+    print("Open: " + string(conn.isOpen()))
+
     // Send message
     print("Sending message...")
-    var sent = ws.send(conn, "Hello WebSocket!", null)
+    var sent = conn.sendText("Hello WebSocket!")
     if (sent) {
         print("Message sent!")
     } else {
         print("Send failed")
     }
-    
+
     // Receive echo
     print("Waiting for echo...")
-    var msg = ws.recv(conn, null)
+    var msg = conn.recv(5000)
     if (msg == null) {
-        print("recv returned null")
-    } else if (msg.error) {
-        print("Recv error: " + msg.error)
-    } else if (msg.data) {
-        print("Received: " + msg.data)
+        print("recv returned null (timeout)")
+    } else if (msg!.error != null) {
+        print("Recv error: " + msg!.error!)
     } else {
-        print("No data in message")
+        var text = msg!.text()
+        if (text != null) {
+            print("Received: " + text!)
+        } else {
+            print("No data in message")
+        }
     }
-    
+
     // Close
     print("Closing...")
-    ws.close(conn, null, null)
+    conn.close()
     print("Closed!")
 }
 

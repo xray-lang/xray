@@ -644,51 +644,6 @@ static const XaBuiltinMember g_gen_time_functions[] = {
 };
 #define GEN_TIME_FUNCTION_COUNT 8
 
-// ws.WsConn handle fields
-static const XaBuiltinHandleField g_gen_ws_wsconn_fields[] = {
-    {"wsid", "int", true},
-    {"url", "string", false},
-    {"state", "string", false},
-};
-
-// ws.WsMessage handle fields
-static const XaBuiltinHandleField g_gen_ws_wsmessage_fields[] = {
-    {"data", "string | Array<byte> | null", true},
-    {"binary", "bool", true},
-    {"error", "string?", true},
-};
-
-static const XaBuiltinHandle g_gen_ws_handles[] = {
-    {"WsConn", g_gen_ws_wsconn_fields, 3, NULL, 0},
-    {"WsMessage", g_gen_ws_wsmessage_fields, 3, NULL, 0},
-};
-#define GEN_WS_HANDLE_COUNT 2
-
-// ws.WsConnectOptions object fields
-static const XaBuiltinObjectField g_gen_ws_wsconnectoptions_object_fields[] = {
-    {"timeout", "int?"},
-    {"pingInterval", "int?"},
-    {"pongTimeout", "int?"},
-    {"maxMessageSize", "int?"},
-};
-
-static const XaBuiltinObjectShape g_gen_ws_object_shapes[] = {
-    {"WsConnectOptions", "Typed WebSocket client connection options", g_gen_ws_wsconnectoptions_object_fields, 4, true},
-};
-#define GEN_WS_OBJECT_SHAPE_COUNT 1
-
-// ws module functions
-static const XaBuiltinMember g_gen_ws_functions[] = {
-    {"connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"ping", "(conn: WsConn): bool", "Send a ping frame", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", true, false, false, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"stopServer", "(): ()", "Stop the WebSocket server", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-};
-#define GEN_WS_FUNCTION_COUNT 7
-
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"Coro", NULL, 0, NULL, 0, g_gen_Coro_object_shapes, GEN_CORO_OBJECT_SHAPE_COUNT, g_gen_Coro_enums, GEN_CORO_ENUM_COUNT},
@@ -705,9 +660,8 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"runtime", g_gen_runtime_functions, GEN_RUNTIME_FUNCTION_COUNT, NULL, 0, g_gen_runtime_object_shapes, GEN_RUNTIME_OBJECT_SHAPE_COUNT, NULL, 0},
     {"sys", g_gen_sys_functions, GEN_SYS_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0, NULL, 0, NULL, 0},
-    {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT, g_gen_ws_object_shapes, GEN_WS_OBJECT_SHAPE_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 15
+#define GEN_BUILTIN_MODULE_COUNT 14
 
 /* clang-format on */
 

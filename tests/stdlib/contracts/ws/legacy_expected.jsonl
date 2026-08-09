@@ -1,5 +1,6 @@
-{"case":"rfc6455-accept-key","classification":"required","effects":{},"error":null,"legacy_commit":"05b0bf0f61cb2e8a39ba294570dd62cdc1f5b54e","outcome":"value","value":true}
-{"case":"upgrade-handshake","classification":"required","effects":{},"error":null,"legacy_commit":"05b0bf0f61cb2e8a39ba294570dd62cdc1f5b54e","outcome":"value","value":true}
-{"case":"close-payload-utf8","classification":"required","effects":{},"error":null,"legacy_commit":"05b0bf0f61cb2e8a39ba294570dd62cdc1f5b54e","outcome":"value","value":true}
-{"case":"close-reason-array-render","classification":"bug","effects":{},"error":null,"legacy_commit":"05b0bf0f61cb2e8a39ba294570dd62cdc1f5b54e","outcome":"value","value":false}
-{"case":"frame-byte-roundtrip","classification":"required","effects":{},"error":null,"legacy_commit":"05b0bf0f61cb2e8a39ba294570dd62cdc1f5b54e","outcome":"value","value":true}
+{"case":"rfc6455-accept-key","classification":"required","effects":{},"error":null,"legacy_commit":"12fe80b75c633ffee5542a1feab8cc6b2bb8b892","outcome":"value","value":true}
+{"case":"upgrade-handshake","classification":"required","effects":{},"error":null,"legacy_commit":"12fe80b75c633ffee5542a1feab8cc6b2bb8b892","outcome":"value","value":true}
+{"case":"close-payload-utf8","classification":"required","effects":{},"error":null,"legacy_commit":"12fe80b75c633ffee5542a1feab8cc6b2bb8b892","outcome":"value","value":true}
+{"case":"close-reason-array-render","classification":"bug","effects":{},"error":null,"legacy_commit":"12fe80b75c633ffee5542a1feab8cc6b2bb8b892","outcome":"value","value":false}
+{"case":"frame-byte-roundtrip","classification":"required","effects":{},"error":null,"legacy_commit":"12fe80b75c633ffee5542a1feab8cc6b2bb8b892","outcome":"value","value":true}
+{"case":"connection-layer-pure-xray","classification":"required","effects":{},"error":null,"legacy_commit":"12fe80b75c633ffee5542a1feab8cc6b2bb8b892","outcome":"value","value":true}

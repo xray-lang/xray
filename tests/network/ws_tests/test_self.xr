@@ -6,26 +6,29 @@
  */
 
 import ws
+import { WsConn } from ws
 import time
 
 print("=== xray Server + Client Self-Test ===")
 print("")
 
-var testResults = ""
+// Shared, coroutine-safe stop flag: the client clears it to stop the server.
+const running = Atomic(true)
 
 // Start echo server in background coroutine
 go fn() {
-    ws.serve(9102, fn(conn) {
+    ws.serve(9102, fn(conn: ref WsConn) {
         while (true) {
-            var msg = ws.recv(conn, null)
-            if (msg == null || msg.error) {
+            var msg = conn.recv()
+            if (msg == null || msg!.error != null) {
                 break
             }
-            if (msg!.data) {
-                ws.send(conn, msg!.data, null)
+            var data = msg!.data
+            if (data != null) {
+                conn.sendBytes(data!, msg!.binary)
             }
         }
-    })
+    }, running)
 }()
 
 // Wait for server to start
@@ -36,28 +39,28 @@ go fn() {
     var passed = 0
     var failed = 0
     var URL = "ws://127.0.0.1:9102"
-    
+
     // I1: Basic local echo
     var conn1 = ws.connect(URL, null)
-    if (conn1 == null) {
+    if (conn1.error != null) {
         print("  FAIL  I1 local echo -- connect failed")
         failed = failed + 1
     } else {
-        ws.send(conn1, "hello self", false)
-        var resp = ws.recv(conn1, 5000)
-        if (resp != null && resp.data == "hello self") {
+        conn1.sendText("hello self")
+        var resp = conn1.recv(5000)
+        if (resp != null && resp!.text() == "hello self") {
             print("  PASS  I1 local echo")
             passed = passed + 1
         } else {
             print("  FAIL  I1 local echo -- mismatch")
             failed = failed + 1
         }
-        ws.close(conn1)
+        conn1.close()
     }
-    
+
     // I2: Multiple messages round-trip (20 messages)
     var conn2 = ws.connect(URL, null)
-    if (conn2 == null) {
+    if (conn2.error != null) {
         print("  FAIL  I2 multi messages -- connect failed")
         failed = failed + 1
     } else {
@@ -65,13 +68,13 @@ go fn() {
         var success = 0
         for (var i = 0; i < count; i = i + 1) {
             var msg = "self-msg-" + i.toString()
-            ws.send(conn2, msg, false)
-            var resp = ws.recv(conn2, 5000)
-            if (resp != null && resp.data == msg) {
+            conn2.sendText(msg)
+            var resp = conn2.recv(5000)
+            if (resp != null && resp!.text() == msg) {
                 success = success + 1
             }
         }
-        ws.close(conn2)
+        conn2.close()
         if (success == count) {
             print("  PASS  I2 multi messages (" + count.toString() + "/" + count.toString() + ")")
             passed = passed + 1
@@ -80,25 +83,25 @@ go fn() {
             failed = failed + 1
         }
     }
-    
+
     // I3: Sequential multi-client (3 connections one after another)
     var allOk = true
     for (var c = 0; c < 3; c = c + 1) {
         var conn = ws.connect(URL, null)
-        if (conn == null) {
+        if (conn.error != null) {
             allOk = false
             break
         }
         for (var i = 0; i < 5; i = i + 1) {
             var msg = "client" + c.toString() + "-" + i.toString()
-            ws.send(conn, msg, false)
-            var resp = ws.recv(conn, 5000)
-            if (resp == null || resp.data != msg) {
+            conn.sendText(msg)
+            var resp = conn.recv(5000)
+            if (resp == null || resp!.text() != msg) {
                 allOk = false
                 break
             }
         }
-        ws.close(conn)
+        conn.close()
     }
     if (allOk) {
         print("  PASS  I3 multi clients (3x5 messages)")
@@ -107,11 +110,11 @@ go fn() {
         print("  FAIL  I3 multi clients")
         failed = failed + 1
     }
-    
+
     print("")
     print("=== Results: " + passed.toString() + " passed, " + failed.toString() + " failed ===")
-    
-    ws.stopServer()
+
+    running.store(false)
 }()
 
 // Wait for test to complete

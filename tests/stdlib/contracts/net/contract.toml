@@ -50,6 +50,9 @@ intentional_semantic_changes = [
   "copyBidirectional throws NetError only for argument validation (Closed, Invalid); a per-direction I/O error ends that direction and the byte counts are still returned",
   "NetError gains Cancelled so cooperative cancellation is distinct from Closed"
 ]
+# Byte-first convergence roadmap:
+#   converged byte read: readBytes returns Array<byte>
+#   future converged writeBytes and sendTo accept Slice<byte>
 known_legacy_bugs = [
   "legacy net.read exposes arbitrary socket bytes as string?",
   "legacy dial/listen/udpBind/upgradeTLS report setup failure as null without a typed reason",

@@ -8,6 +8,7 @@
  */
 
 import ws
+import { WsConn } from ws
 
 var port = 9001
 if (len(process.args) > 0) {
@@ -16,14 +17,18 @@ if (len(process.args) > 0) {
 
 print("xray WebSocket Echo Server on port " + string(port))
 
-ws.serve(port, fn(conn) {
+// serve runs one coroutine per accepted connection until `running` clears.
+const running = Atomic(true)
+
+ws.serve(port, fn(conn: ref WsConn) {
     while (true) {
-        var msg = ws.recv(conn, null)
+        var msg = conn.recv()
         if (msg == null || msg!.error != null) {
             break
         }
-        if (msg!.data != null) {
-            ws.send(conn, msg!.data!, msg!.binary)
+        var data = msg!.data
+        if (data != null) {
+            conn.sendBytes(data!, msg!.binary)
         }
     }
-})
+}, running)

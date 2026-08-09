@@ -92,9 +92,13 @@ def check_manifest(root: Path) -> list[str]:
 
 
 def check_builtin_distribution(root: Path) -> list[str]:
-    """Keep task-256's five retained modules inside the one stdlib boundary."""
+    """Keep the retained native-library modules inside the one stdlib boundary.
+
+    ws left this set once its connection layer became pure Xray: it now has no
+    core.def binding block and, like http, carries only a script loader.
+    """
     errors: list[str] = []
-    expected = {"cluster", "ws", "http2", "compress", "crypto"}
+    expected = {"cluster", "http2", "compress", "crypto"}
     manifest = load_manifest(root)
     names = set(manifest.by_name)
     core_def = (root / "stdlib/defs/core.def").read_text(encoding="utf-8")

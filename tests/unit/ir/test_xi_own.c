@@ -125,12 +125,8 @@ static void test_use_policy(void) {
               "public Xray net payload without a lowering plan fails closed");
 
     XiCallArgPlan net_write_arg_plans[2] = {
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = &net_conn},
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = &string_value},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = &net_conn},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = &string_value},
     };
     XiCallPlan net_write_plan = {
         .args = net_write_arg_plans,
@@ -145,7 +141,7 @@ static void test_use_policy(void) {
 
     XiImportRef net_native_write_ref = {
         .module_path = "net",
-        .member_name = "__write",
+        .member_name = "__writeBytes",
         .resolved_mod_index = -1,
         .resolved_shared_slot = -1,
     };
@@ -187,12 +183,8 @@ static void test_use_policy(void) {
               "shared-slot public Xray payload without a lowering plan fails closed");
 
     XiCallArgPlan method_write_arg_plans[2] = {
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = conn_value},
-        {.param_mode = XR_PARAM_READ,
-         .access = XR_CALL_ARG_PLAIN,
-         .place = payload_value},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = conn_value},
+        {.param_mode = XR_PARAM_READ, .access = XR_CALL_ARG_PLAIN, .place = payload_value},
     };
     XiCallPlan method_write_plan = {
         .args = method_write_arg_plans,
@@ -205,7 +197,7 @@ static void test_use_policy(void) {
     ASSERT_EQ(xi_own_value_arg_is_consuming(method_write, 2), false,
               "shared-slot public Xray method borrows its payload through the call plan");
 
-    method_write->aux = (void *) "__write";
+    method_write->aux = (void *) "__writeBytes";
     method_write->call_plan = NULL;
     ASSERT_EQ(xi_own_value_arg_is_consuming(method_write, 1), false,
               "shared-slot private net primitive borrows its connection from ABI metadata");

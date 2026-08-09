@@ -340,16 +340,4 @@ static void xr_stdlib_vm_bind_time_generated(XrVMRuntime *isolate, XrModule *mod
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_TIME */
 
-#ifdef XR_STDLIB_VM_BIND_MODULE_WS
-static void xr_stdlib_vm_bind_ws_generated(XrVMRuntime *isolate, XrModule *module) {
-    XRS_EXPORT_YIELDABLE(module, isolate, "connect", ws_connect_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "send", ws_send_yieldable);
-    XRS_EXPORT_YIELDABLE(module, isolate, "recv", ws_recv_yieldable);
-    XRS_EXPORT(module, isolate, "close", ws_close);
-    XRS_EXPORT(module, isolate, "ping", ws_ping);
-    XRS_EXPORT_YIELDABLE(module, isolate, "serve", ws_serve_yieldable);
-    XRS_EXPORT(module, isolate, "stopServer", ws_stop_server);
-}
-#endif  /* XR_STDLIB_VM_BIND_MODULE_WS */
-
 /* clang-format on */

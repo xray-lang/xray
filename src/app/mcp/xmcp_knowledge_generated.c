@@ -3083,7 +3083,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "DialOptions.constructor",
-        .signature = "(timeoutMs: int = 30000, tls: bool = false): ()",
+        .signature = "(timeoutMs: int = _DEFAULT_TIMEOUT_MS, tls: bool = false): ()",
         .summary = "",
     },
     {
@@ -3139,7 +3139,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     {
         .name = "NetError",
         .signature = "enum NetError",
-        .summary = "Typed failure from native network operations",
+        .summary = "Typed failure from network operations; classification from native codes lives in net.xr",
     },
     {
         .name = "NetError.Cancelled",
@@ -3192,27 +3192,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "Enum variant",
     },
     {
-        .name = "UdpPacket",
-        .signature = "UdpPacket",
+        .name = "UdpFrom",
+        .signature = "UdpFrom",
         .summary = "",
     },
     {
-        .name = "UdpPacket.constructor",
-        .signature = "(data: string, host: string, port: int): ()",
+        .name = "UdpFrom.constructor",
+        .signature = "(n: int, host: string, port: int): ()",
         .summary = "",
     },
     {
-        .name = "UdpPacket.data",
+        .name = "UdpFrom.host",
         .signature = ": string",
         .summary = "",
     },
     {
-        .name = "UdpPacket.host",
-        .signature = ": string",
+        .name = "UdpFrom.n",
+        .signature = ": int",
         .summary = "",
     },
     {
-        .name = "UdpPacket.port",
+        .name = "UdpFrom.port",
         .signature = ": int",
         .summary = "",
     },
@@ -3228,7 +3228,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "copy",
-        .signature = "(src: NetConn, dst: NetConn, bufferSize: int = 65536): int",
+        .signature = "(src: NetConn, dst: NetConn, bufferSize: int = _DEFAULT_COPY_BUFFER): int",
         .summary = "",
     },
     {
@@ -3238,17 +3238,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "dial",
-        .signature = "(host: string, port: int, timeout: int = 30000): NetConn?",
+        .signature = "(host: string, port: int, options: DialOptions? = null): NetConn",
         .summary = "",
     },
     {
         .name = "dialEndpoint",
-        .signature = "(endpoint: Endpoint, options: DialOptions = DialOptions()): NetConn?",
-        .summary = "",
-    },
-    {
-        .name = "dialTLS",
-        .signature = "(host: string, port: int, timeout: int = 30000): NetConn?",
+        .signature = "(endpoint: Endpoint, options: DialOptions? = null): NetConn",
         .summary = "",
     },
     {
@@ -3273,17 +3268,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "listen",
-        .signature = "(port: int, backlog: int = 1024): NetListener?",
+        .signature = "(port: int, backlog: int = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener",
         .summary = "",
     },
     {
         .name = "lookup",
-        .signature = "(hostname: string): string?",
+        .signature = "(hostname: string): Array<IpAddress>",
         .summary = "",
     },
     {
-        .name = "read",
-        .signature = "(conn: NetConn, maxlen: int = 4096): string?",
+        .name = "readBytes",
+        .signature = "(conn: NetConn, maxBytes: int = 4096): Array<byte>?",
         .summary = "",
     },
     {
@@ -3293,7 +3288,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "recvFrom",
-        .signature = "(handle: NetConn, maxlen: int = 4096): UdpPacket?",
+        .signature = "(handle: NetConn, buffer: ref Array<byte>, timeoutMs: int = -1): UdpFrom?",
         .summary = "",
     },
     {
@@ -3303,7 +3298,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "sendTo",
-        .signature = "(handle: NetConn, data: string, host: string, port: int): int",
+        .signature = "(handle: NetConn, data: Array<byte>, host: string, port: int, timeoutMs: int = _DEFAULT_TIMEOUT_MS): int",
         .summary = "",
     },
     {
@@ -3343,17 +3338,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "udpBind",
-        .signature = "(port: int, address: string = \"\"): NetConn?",
+        .signature = "(port: int, address: string = \"\"): NetConn",
         .summary = "",
     },
     {
         .name = "upgradeTLS",
-        .signature = "(conn: NetConn, hostname: string, timeout: int = 30000): NetConn?",
-        .summary = "",
-    },
-    {
-        .name = "write",
-        .signature = "(conn: NetConn, data: string): int",
+        .signature = "(conn: NetConn, hostname: string, timeoutMs: int = _DEFAULT_TIMEOUT_MS): ()",
         .summary = "",
     },
     {
@@ -5761,67 +5751,112 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     {
         .name = "WsConn",
         .signature = "WsConn",
-        .summary = "Native handle type",
+        .summary = "",
     },
     {
-        .name = "WsConn.state",
-        .signature = "string",
-        .summary = "Handle field",
+        .name = "WsConn.close",
+        .signature = "(code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool",
+        .summary = "",
+    },
+    {
+        .name = "WsConn.constructor",
+        .signature = "(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: int): ()",
+        .summary = "",
+    },
+    {
+        .name = "WsConn.error",
+        .signature = ": string?",
+        .summary = "",
+    },
+    {
+        .name = "WsConn.isOpen",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "WsConn.ping",
+        .signature = "(): bool",
+        .summary = "",
+    },
+    {
+        .name = "WsConn.recv",
+        .signature = "(timeout: int = -1): WsMessage?",
+        .summary = "",
+    },
+    {
+        .name = "WsConn.sendBytes",
+        .signature = "(data: Array<byte>, binary: bool = false): bool",
+        .summary = "",
+    },
+    {
+        .name = "WsConn.sendText",
+        .signature = "(data: string): bool",
+        .summary = "",
     },
     {
         .name = "WsConn.url",
-        .signature = "string",
-        .summary = "Handle field",
-    },
-    {
-        .name = "WsConn.wsid",
-        .signature = "const int",
-        .summary = "Handle field",
+        .signature = ": string",
+        .summary = "",
     },
     {
         .name = "WsConnectOptions",
-        .signature = "{ timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }",
-        .summary = "Typed WebSocket client connection options",
+        .signature = "WsConnectOptions",
+        .summary = "",
+    },
+    {
+        .name = "WsConnectOptions.constructor",
+        .signature = "(timeoutMs: int = 30000, pingIntervalMs: int = 0, pongTimeoutMs: int = 0, maxMessageSize: int = _WS_MAX_MESSAGE_BYTES): ()",
+        .summary = "",
     },
     {
         .name = "WsConnectOptions.maxMessageSize",
-        .signature = "const int?",
-        .summary = "Object field",
+        .signature = ": int",
+        .summary = "",
     },
     {
-        .name = "WsConnectOptions.pingInterval",
-        .signature = "const int?",
-        .summary = "Object field",
+        .name = "WsConnectOptions.pingIntervalMs",
+        .signature = ": int",
+        .summary = "",
     },
     {
-        .name = "WsConnectOptions.pongTimeout",
-        .signature = "const int?",
-        .summary = "Object field",
+        .name = "WsConnectOptions.pongTimeoutMs",
+        .signature = ": int",
+        .summary = "",
     },
     {
-        .name = "WsConnectOptions.timeout",
-        .signature = "const int?",
-        .summary = "Object field",
+        .name = "WsConnectOptions.timeoutMs",
+        .signature = ": int",
+        .summary = "",
     },
     {
         .name = "WsMessage",
         .signature = "WsMessage",
-        .summary = "Native handle type",
+        .summary = "",
     },
     {
         .name = "WsMessage.binary",
-        .signature = "const bool",
-        .summary = "Handle field",
+        .signature = ": bool",
+        .summary = "",
+    },
+    {
+        .name = "WsMessage.constructor",
+        .signature = "(data: Array<byte>? = null, binary: bool = false, error: string? = null): ()",
+        .summary = "",
     },
     {
         .name = "WsMessage.data",
-        .signature = "const string | Array<byte> | null",
-        .summary = "Handle field",
+        .signature = ": Array<byte>?",
+        .summary = "",
     },
     {
         .name = "WsMessage.error",
-        .signature = "const string?",
-        .summary = "Handle field",
+        .signature = ": string?",
+        .summary = "",
+    },
+    {
+        .name = "WsMessage.text",
+        .signature = "(): string?",
+        .summary = "",
     },
     {
         .name = "WsUrl",
@@ -5870,8 +5905,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "close",
-        .signature = "(conn: WsConn, code?: int?, reason?: string?): bool",
-        .summary = "Close a WebSocket connection",
+        .signature = "(conn: ref WsConn, code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool",
+        .summary = "",
     },
     {
         .name = "closeFrame",
@@ -5880,8 +5915,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "connect",
-        .signature = "(url: string, options?: WsConnectOptions?): WsConn?",
-        .summary = "Connect to a WebSocket server",
+        .signature = "(url: string, options: WsConnectOptions? = null): WsConn",
+        .summary = "",
     },
     {
         .name = "frame",
@@ -5925,8 +5960,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "ping",
-        .signature = "(conn: WsConn): bool",
-        .summary = "Send a ping frame",
+        .signature = "(conn: ref WsConn): bool",
+        .summary = "",
     },
     {
         .name = "pingFrame",
@@ -5945,23 +5980,23 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "recv",
-        .signature = "(conn: WsConn, timeout?: int?): WsMessage?",
-        .summary = "Receive data from WebSocket connection",
+        .signature = "(conn: ref WsConn, timeout: int = -1): WsMessage?",
+        .summary = "",
     },
     {
-        .name = "send",
-        .signature = "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool",
-        .summary = "Send data over WebSocket connection",
+        .name = "sendBytes",
+        .signature = "(conn: ref WsConn, data: Array<byte>, binary: bool = false): bool",
+        .summary = "",
+    },
+    {
+        .name = "sendText",
+        .signature = "(conn: ref WsConn, data: string): bool",
+        .summary = "",
     },
     {
         .name = "serve",
-        .signature = "(port: int, handler: fn(conn: WsConn): ()): bool",
-        .summary = "Start WebSocket server",
-    },
-    {
-        .name = "stopServer",
-        .signature = "(): ()",
-        .summary = "Stop the WebSocket server",
+        .signature = "(port: int, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: int = _WS_MAX_MESSAGE_BYTES): bool",
+        .summary = "",
     },
     {
         .name = "textFrame",
@@ -7962,10 +7997,10 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Type aliases\n"
             "```xray\n"
             "type Result = int | string\n"
-            "type Mapper = fn(int) -> int\n"
+            "type Mapper = (int) -> int\n"
             "type Point = { x: float, y: float }\n"
             "type Pair<T> = { first: T, second: T }\n"
-            "type Mapper2<T, U> = fn(T) -> U\n"
+            "type Mapper2<T, U> = (T) -> U\n"
             "```\n"
             "\n"
             "### Type inference\n"
@@ -7976,7 +8011,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var a = [1, 2, 3]       // a: Array<int>\n"
             "var m = #{\"a\": 1}    // m: Map<string, int>\n"
             "var p = { name: \"A\" }   // p: { name: string } \xe2\x80\x94 structured object type\n"
-            "var f = (x: int) -> x   // f: fn(int) -> int \xe2\x80\x94 explicit parameter, inferred return\n"
+            "var f = (x: int) -> x   // f: (int) -> int \xe2\x80\x94 explicit parameter, inferred return\n"
             "```\n"
             "\n"
             "### Explicit casts\n"
@@ -9024,7 +9059,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `CopyBidirectionalResult.bToA` | `: int` |  |\n"
             "| `CopyBidirectionalResult.constructor` | `(aToB: int, bToA: int): ()` |  |\n"
             "| `DialOptions` | `DialOptions` |  |\n"
-            "| `DialOptions.constructor` | `(timeoutMs: int = 30000, tls: bool = false): ()` |  |\n"
+            "| `DialOptions.constructor` | `(timeoutMs: int = _DEFAULT_TIMEOUT_MS, tls: bool = false): ()` |  |\n"
             "| `DialOptions.timeoutMs` | `: int` |  |\n"
             "| `DialOptions.tls` | `: bool` |  |\n"
             "| `Endpoint` | `Endpoint` |  |\n"
@@ -9035,7 +9070,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `IpAddress.constructor` | `(value: string): ()` |  |\n"
             "| `IpAddress.toString` | `(): string` |  |\n"
             "| `IpAddress.value` | `: string` |  |\n"
-            "| `net.NetError` | `enum NetError` | Typed failure from native network operations |\n"
+            "| `net.NetError` | `enum NetError` | Typed failure from network operations; classification from native codes lives in net.xr |\n"
             "| `net.NetError.Cancelled` | `NetError.Cancelled` | Enum variant |\n"
             "| `net.NetError.Closed` | `NetError.Closed` | Enum variant |\n"
             "| `net.NetError.Dns` | `NetError.Dns` | Enum variant |\n"
@@ -9046,29 +9081,28 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.NetError.Reset` | `NetError.Reset` | Enum variant |\n"
             "| `net.NetError.Timeout` | `NetError.Timeout` | Enum variant |\n"
             "| `net.NetError.Tls` | `NetError.Tls` | Enum variant |\n"
-            "| `UdpPacket` | `UdpPacket` |  |\n"
-            "| `UdpPacket.constructor` | `(data: string, host: string, port: int): ()` |  |\n"
-            "| `UdpPacket.data` | `: string` |  |\n"
-            "| `UdpPacket.host` | `: string` |  |\n"
-            "| `UdpPacket.port` | `: int` |  |\n"
+            "| `UdpFrom` | `UdpFrom` |  |\n"
+            "| `UdpFrom.constructor` | `(n: int, host: string, port: int): ()` |  |\n"
+            "| `UdpFrom.host` | `: string` |  |\n"
+            "| `UdpFrom.n` | `: int` |  |\n"
+            "| `UdpFrom.port` | `: int` |  |\n"
             "| `net.accept` | `(listener: NetListener): NetConn?` |  |\n"
             "| `net.close` | `(handle: NetConn \\| NetListener): ()` |  |\n"
-            "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize: int = 65536): int` |  |\n"
+            "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize: int = _DEFAULT_COPY_BUFFER): int` |  |\n"
             "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): CopyBidirectionalResult` |  |\n"
-            "| `net.dial` | `(host: string, port: int, timeout: int = 30000): NetConn?` |  |\n"
-            "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions = DialOptions()): NetConn?` |  |\n"
-            "| `net.dialTLS` | `(host: string, port: int, timeout: int = 30000): NetConn?` |  |\n"
+            "| `net.dial` | `(host: string, port: int, options: DialOptions? = null): NetConn` |  |\n"
+            "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions? = null): NetConn` |  |\n"
             "| `net.fd` | `(handle: NetConn \\| NetListener): int` |  |\n"
             "| `net.hasTLS` | `(): bool` |  |\n"
             "| `net.lastErrno` | `(handle: NetConn \\| NetListener): int` |  |\n"
             "| `net.lastError` | `(handle: NetConn \\| NetListener): NetError?` |  |\n"
-            "| `net.listen` | `(port: int, backlog: int = 1024): NetListener?` |  |\n"
-            "| `net.lookup` | `(hostname: string): string?` |  |\n"
-            "| `net.read` | `(conn: NetConn, maxlen: int = 4096): string?` |  |\n"
+            "| `net.listen` | `(port: int, backlog: int = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener` |  |\n"
+            "| `net.lookup` | `(hostname: string): Array<IpAddress>` |  |\n"
+            "| `net.readBytes` | `(conn: NetConn, maxBytes: int = 4096): Array<byte>?` |  |\n"
             "| `net.readInto` | `(conn: NetConn, buffer: ref Array<byte>, maxlen: int = 1048576): int` |  |\n"
-            "| `net.recvFrom` | `(handle: NetConn, maxlen: int = 4096): UdpPacket?` |  |\n"
+            "| `net.recvFrom` | `(handle: NetConn, buffer: ref Array<byte>, timeoutMs: int = -1): UdpFrom?` |  |\n"
             "| `net.resolve` | `(hostname: string): IpAddress?` |  |\n"
-            "| `net.sendTo` | `(handle: NetConn, data: string, host: string, port: int): int` |  |\n"
+            "| `net.sendTo` | `(handle: NetConn, data: Array<byte>, host: string, port: int, timeoutMs: int = _DEFAULT_TIMEOUT_MS): int` |  |\n"
             "| `net.setAcceptDeadline` | `(listener: NetListener, deadline: int): bool` |  |\n"
             "| `net.setDeadline` | `(conn: NetConn, deadline: int): bool` |  |\n"
             "| `net.setReadDeadline` | `(conn: NetConn, deadline: int): bool` |  |\n"
@@ -9076,9 +9110,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.shutdown` | `(conn: NetConn): bool` |  |\n"
             "| `net.shutdownRead` | `(conn: NetConn): bool` |  |\n"
             "| `net.shutdownWrite` | `(conn: NetConn): bool` |  |\n"
-            "| `net.udpBind` | `(port: int, address: string = \"\"): NetConn?` |  |\n"
-            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeout: int = 30000): NetConn?` |  |\n"
-            "| `net.write` | `(conn: NetConn, data: string): int` |  |\n"
+            "| `net.udpBind` | `(port: int, address: string = \"\"): NetConn` |  |\n"
+            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeoutMs: int = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
             "| `net.writeBytes` | `(conn: NetConn, data: Array<byte>): int` |  |\n"
             "",
         .symbols = _symbols_net,
@@ -9868,19 +9901,28 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ParsedUpgradeResponse.deflate` | `: bool` |  |\n"
             "| `ParsedUpgradeResponse.protocol` | `: string?` |  |\n"
             "| `ParsedUpgradeResponse.statusCode` | `: int` |  |\n"
-            "| `ws.WsConn` | `WsConn` | Native handle type |\n"
-            "| `ws.WsConn.state` | `string` | Handle field |\n"
-            "| `ws.WsConn.url` | `string` | Handle field |\n"
-            "| `ws.WsConn.wsid` | `const int` | Handle field |\n"
-            "| `ws.WsConnectOptions` | `{ timeout: int?, pingInterval: int?, pongTimeout: int?, maxMessageSize: int? }` | Typed WebSocket client connection options |\n"
-            "| `ws.WsConnectOptions.maxMessageSize` | `const int?` | Object field |\n"
-            "| `ws.WsConnectOptions.pingInterval` | `const int?` | Object field |\n"
-            "| `ws.WsConnectOptions.pongTimeout` | `const int?` | Object field |\n"
-            "| `ws.WsConnectOptions.timeout` | `const int?` | Object field |\n"
-            "| `ws.WsMessage` | `WsMessage` | Native handle type |\n"
-            "| `ws.WsMessage.binary` | `const bool` | Handle field |\n"
-            "| `ws.WsMessage.data` | `const string \\| Array<byte> \\| null` | Handle field |\n"
-            "| `ws.WsMessage.error` | `const string?` | Handle field |\n"
+            "| `WsConn` | `WsConn` |  |\n"
+            "| `WsConn.close` | `(code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n"
+            "| `WsConn.constructor` | `(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: int): ()` |  |\n"
+            "| `WsConn.error` | `: string?` |  |\n"
+            "| `WsConn.isOpen` | `(): bool` |  |\n"
+            "| `WsConn.ping` | `(): bool` |  |\n"
+            "| `WsConn.recv` | `(timeout: int = -1): WsMessage?` |  |\n"
+            "| `WsConn.sendBytes` | `(data: Array<byte>, binary: bool = false): bool` |  |\n"
+            "| `WsConn.sendText` | `(data: string): bool` |  |\n"
+            "| `WsConn.url` | `: string` |  |\n"
+            "| `WsConnectOptions` | `WsConnectOptions` |  |\n"
+            "| `WsConnectOptions.constructor` | `(timeoutMs: int = 30000, pingIntervalMs: int = 0, pongTimeoutMs: int = 0, maxMessageSize: int = _WS_MAX_MESSAGE_BYTES): ()` |  |\n"
+            "| `WsConnectOptions.maxMessageSize` | `: int` |  |\n"
+            "| `WsConnectOptions.pingIntervalMs` | `: int` |  |\n"
+            "| `WsConnectOptions.pongTimeoutMs` | `: int` |  |\n"
+            "| `WsConnectOptions.timeoutMs` | `: int` |  |\n"
+            "| `WsMessage` | `WsMessage` |  |\n"
+            "| `WsMessage.binary` | `: bool` |  |\n"
+            "| `WsMessage.constructor` | `(data: Array<byte>? = null, binary: bool = false, error: string? = null): ()` |  |\n"
+            "| `WsMessage.data` | `: Array<byte>?` |  |\n"
+            "| `WsMessage.error` | `: string?` |  |\n"
+            "| `WsMessage.text` | `(): string?` |  |\n"
             "| `WsUrl` | `WsUrl` |  |\n"
             "| `WsUrl.constructor` | `(secure: bool, host: string, port: int, path: string): ()` |  |\n"
             "| `WsUrl.host` | `: string` |  |\n"
@@ -9890,9 +9932,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.acceptKey` | `(secKey: string): string` |  |\n"
             "| `ws.binaryFrame` | `(data: Array<byte>, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.clientHandshakeRequest` | `(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?` |  |\n"
-            "| `ws.close` | `(conn: WsConn, code?: int?, reason?: string?): bool` | Close a WebSocket connection |\n"
+            "| `ws.close` | `(conn: ref WsConn, code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n"
             "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Array<byte>` |  |\n"
-            "| `ws.connect` | `(url: string, options?: WsConnectOptions?): WsConn?` | Connect to a WebSocket server |\n"
+            "| `ws.connect` | `(url: string, options: WsConnectOptions? = null): WsConn` |  |\n"
             "| `ws.frame` | `(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.isValidCloseCode` | `(code: int): bool` |  |\n"
             "| `ws.maskPayload` | `(payload: Array<byte>, key: Array<byte>): Array<byte>` |  |\n"
@@ -9901,14 +9943,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.parseUpgradeRequest` | `(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?` |  |\n"
             "| `ws.parseUpgradeResponse` | `(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?` |  |\n"
             "| `ws.parseUrl` | `(url: string): WsUrl?` |  |\n"
-            "| `ws.ping` | `(conn: WsConn): bool` | Send a ping frame |\n"
+            "| `ws.ping` | `(conn: ref WsConn): bool` |  |\n"
             "| `ws.pingFrame` | `(data: Array<byte>? = null, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.pongFrame` | `(data: Array<byte>? = null, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.randomKey` | `(): string` |  |\n"
-            "| `ws.recv` | `(conn: WsConn, timeout?: int?): WsMessage?` | Receive data from WebSocket connection |\n"
-            "| `ws.send` | `(conn: WsConn, data: string \\| Array<byte>, binary?: bool?): bool` | Send data over WebSocket connection |\n"
-            "| `ws.serve` | `(port: int, handler: fn(conn: WsConn): ()): bool` | Start WebSocket server |\n"
-            "| `ws.stopServer` | `(): ()` | Stop the WebSocket server |\n"
+            "| `ws.recv` | `(conn: ref WsConn, timeout: int = -1): WsMessage?` |  |\n"
+            "| `ws.sendBytes` | `(conn: ref WsConn, data: Array<byte>, binary: bool = false): bool` |  |\n"
+            "| `ws.sendText` | `(conn: ref WsConn, data: string): bool` |  |\n"
+            "| `ws.serve` | `(port: int, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: int = _WS_MAX_MESSAGE_BYTES): bool` |  |\n"
             "| `ws.textFrame` | `(data: string, mask: bool = true): Array<byte>` |  |\n"
             "| `ws.upgradeResponse` | `(secKey: string, protocol: string? = null, deflate: bool = false): string` |  |\n"
             "",

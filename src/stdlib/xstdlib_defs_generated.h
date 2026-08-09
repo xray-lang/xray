@@ -380,13 +380,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
     {"cluster", "publish", "(topic: string, value: Json): bool", "Publish to topic", "cluster_publish_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 2, false},
     {"cluster", "subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", "cluster_subscribe_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
-    {"ws", "connect", "(url: string, options?: WsConnectOptions?): WsConn?", "Connect to a WebSocket server", "ws_connect_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
-    {"ws", "send", "(conn: WsConn, data: string | Array<byte>, binary?: bool?): bool", "Send data over WebSocket connection", "ws_send_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 3, false},
-    {"ws", "recv", "(conn: WsConn, timeout?: int?): WsMessage?", "Receive data from WebSocket connection", "ws_recv_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
-    {"ws", "close", "(conn: WsConn, code?: int?, reason?: string?): bool", "Close a WebSocket connection", "ws_close", "normal", "", "", "", "value", "", "", "", "runtime", "", 3, false},
-    {"ws", "ping", "(conn: WsConn): bool", "Send a ping frame", "ws_ping", "normal", "", "", "", "value", "", "", "", "runtime", "", 1, false},
-    {"ws", "serve", "(port: int, handler: fn(conn: WsConn): ()): bool", "Start WebSocket server", "ws_serve_yieldable", "yieldable", "", "", "", "value", "", "", "", "runtime", "", 2, false},
-    {"ws", "stopServer", "(): ()", "Stop the WebSocket server", "ws_stop_server", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, false},
 };
 #define XR_STDLIB_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_def_entries) / sizeof(xr_stdlib_def_entries[0])))
 
@@ -506,13 +499,6 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_cluster_Cluster
     {"cluster", "ClusterInfo", "tls", "ClusterTlsStatus", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_object_fields_ws_WsConnectOptions[] = {
-    {"ws", "WsConnectOptions", "timeout", "int?", true},
-    {"ws", "WsConnectOptions", "pingInterval", "int?", true},
-    {"ws", "WsConnectOptions", "pongTimeout", "int?", true},
-    {"ws", "WsConnectOptions", "maxMessageSize", "int?", true},
-};
-
 static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = {
     {"runtime", "RuntimeInfo", "Typed snapshot of the current execution-local reclamation domain", xr_stdlib_object_fields_runtime_RuntimeInfo, 7, true},
     {"Coro", "CoroStats", "Typed aggregate counters for the coroutine scheduler", xr_stdlib_object_fields_Coro_CoroStats, 5, true},
@@ -524,7 +510,6 @@ static const XrStdlibObjectShapeDefEntry xr_stdlib_object_shape_def_entries[] = 
     {"cluster", "ClusterTlsStatus", "Effective TLS posture of a running cluster node", xr_stdlib_object_fields_cluster_ClusterTlsStatus, 3, true},
     {"cluster", "ClusterNodeInfo", "Typed diagnostic snapshot for one remote cluster node", xr_stdlib_object_fields_cluster_ClusterNodeInfo, 16, true},
     {"cluster", "ClusterInfo", "Typed diagnostic snapshot for the local cluster runtime", xr_stdlib_object_fields_cluster_ClusterInfo, 11, true},
-    {"ws", "WsConnectOptions", "Typed WebSocket client connection options", xr_stdlib_object_fields_ws_WsConnectOptions, 4, true},
 };
 #define XR_STDLIB_OBJECT_SHAPE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_object_shape_def_entries) / sizeof(xr_stdlib_object_shape_def_entries[0])))
 
@@ -595,23 +580,9 @@ static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_io___FileStat[]
     {"io", "__FileStat", "isSymlink", "bool", true},
 };
 
-static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsConn[] = {
-    {"ws", "WsConn", "wsid", "int", true},
-    {"ws", "WsConn", "url", "string", false},
-    {"ws", "WsConn", "state", "string", false},
-};
-
-static const XrStdlibHandleFieldDefEntry xr_stdlib_handle_fields_ws_WsMessage[] = {
-    {"ws", "WsMessage", "data", "string | Array<byte> | null", true},
-    {"ws", "WsMessage", "binary", "bool", true},
-    {"ws", "WsMessage", "error", "string?", true},
-};
-
 static const XrStdlibHandleDefEntry xr_stdlib_handle_def_entries[] = {
     {"os", "__ExecResult", "Native handle type", xr_stdlib_handle_fields_os___ExecResult, 3},
     {"io", "__FileStat", "Native handle type", xr_stdlib_handle_fields_io___FileStat, 10},
-    {"ws", "WsConn", "Native handle type", xr_stdlib_handle_fields_ws_WsConn, 3},
-    {"ws", "WsMessage", "Native handle type", xr_stdlib_handle_fields_ws_WsMessage, 3},
 };
 #define XR_STDLIB_HANDLE_DEF_ENTRY_COUNT ((uint32_t) (sizeof(xr_stdlib_handle_def_entries) / sizeof(xr_stdlib_handle_def_entries[0])))
 

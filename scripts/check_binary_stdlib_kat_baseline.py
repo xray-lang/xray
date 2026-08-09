@@ -333,8 +333,8 @@ BASELINES = (
             'id = "high-byte-loopback"',
             'id = "native-copy-byte-boundary"',
             'diff_cases_manifest = "tests/stdlib/contracts/net/diff_cases.txt"',
-            "future converged net.read returns Array<byte>",
-            "future converged net.write and sendTo accept Slice<byte>",
+            "converged byte read: readBytes returns Array<byte>",
+            "future converged writeBytes and sendTo accept Slice<byte>",
         ),
     ),
     Baseline(
