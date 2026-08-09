@@ -3271,7 +3271,10 @@ static inline XrValue xrt_map_keys(xrt_map_t *m) {
     if (xrt_map_is_boolmap(m))
         return xrt_boolmap_keys((xrt_boolmap_t *) m);
     if (!xrt_map_is_typed(m)) {
-        XrValue arr = xrt_array_with_capacity(xrt_map_len(m));
+        /* Untyped storage may still carry a declared scalar key type
+         * (xrt_map_new_declared); honor it so the result lanes match the
+         * consumer's static Array<K> layout. */
+        XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, m->key_type), XR_TAG_ARRAY);
         for (uint32_t i = 0; i < m->nentries; i++) {
             if (m->entries[i].key_tt != XR_MAP_ENTRY_NIL_KEY)
                 xrt_array_push(arr, m->entries[i].key);
