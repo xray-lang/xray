@@ -40,7 +40,7 @@ migration_modules = [
   "Coro", "CoroPool", "csv", "log", "toml", "url", "xml", "yaml",
 ]
 # No dynamic boundary is allowed today: the log and HTTP surfaces that used to
-# take arbitrary Json values now carry exact types. An entry may only be added
+# accepted values of any shape now carry exact types. An entry may only be added
 # back for a symbol the source API still exposes dynamically, and it must carry
 # complete ownership and domain metadata.
 
