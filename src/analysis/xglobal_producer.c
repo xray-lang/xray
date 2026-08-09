@@ -6587,6 +6587,17 @@ static XgObjectShapeId body_add_object_shape_for_literal_domain(XgBodyCollect *b
                                                shape_hash, source_span_id);
     body_add_object_fields_for_keys(bc, row.object_shape_id, shape_keys, shape_key_count,
                                     XG_OBJECT_FIELD_REQUIRED, obj);
+    /* Object-literal field values are shapes of their own: register them so a
+     * destructured or projected binding can carry the nested shape through
+     * its type key. */
+    for (int i = 0; i < obj->count; i++) {
+        if (body_object_literal_entry_is_spread(obj, i) || !body_object_literal_static_key(obj, i))
+            continue;
+        const ObjectLiteralNode *child = body_static_object_literal(obj->values[i]);
+        if (child)
+            (void) body_add_object_shape_for_literal_domain(
+                bc, child, source_span_id, body_expr_type_key(bc, obj->values[i]), domain);
+    }
     if (!body_finalize_object_shape_identity(bc->evidence, row.object_shape_id)) {
         xr_free(shape_keys);
         return XG_NO_ID;
@@ -7030,6 +7041,10 @@ static void body_push_destructure_pattern_locals(XgBodyCollect *bc,
             (void) body_push_local(bc, pattern->as.identifier.name,
                                    pattern->as.identifier.symbol_id, XG_NO_ID, XG_NO_ID, type_key,
                                    NULL, type_key != 0);
+            /* A binding whose field is itself an object shape must carry that
+             * shape, exactly as a var declaration does, or member accesses on
+             * the bound name lose their verified access rows. */
+            body_bind_static_object_shape_for_type_key(bc, pattern->as.identifier.name, type_key);
             break;
         case PATTERN_ARRAY:
         case PATTERN_TUPLE:
