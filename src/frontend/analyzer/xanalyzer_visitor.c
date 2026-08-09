@@ -636,6 +636,45 @@ static XaSymbol *xa_parallel_module_member_symbol(XaInferContext *ctx, AstNode *
     return xa_parallel_import_target_symbol(ctx, member);
 }
 
+static XaSymbol *xa_parallel_module_export_symbol(XaInferContext *ctx, const char *module_name,
+                                                  const char *member_name) {
+    if (!ctx || !ctx->analyzer || !module_name || !member_name)
+        return NULL;
+    XrHashMap *exports = resolve_graph_export_symbols(ctx->analyzer, module_name);
+    XaSymbol *member = exports ? (XaSymbol *) xr_hashmap_get(exports, member_name) : NULL;
+    return xa_parallel_import_target_symbol(ctx, member);
+}
+
+/* Stdlib modules whose public surface lives in Xray source (io, os, ...) have
+ * no builtin-table row for their exported members, so the name tables cannot
+ * classify them. Ask the analyzer's inferred effect summary of the resolved
+ * export instead: a member that suspends, blocks the thread, may throw, or
+ * has an incomplete summary disqualifies the callback, and an absent summary
+ * fails closed. Builtin-table modules never resolve to graph exports and keep
+ * their table verdicts. */
+static const char *xa_parallel_summary_effect_feature(XaInferContext *ctx, XaSymbol *sym,
+                                                      const char *module_name,
+                                                      const char *member_name, char *feature_buf,
+                                                      size_t feature_buf_size, bool *is_suspend) {
+    if (!ctx || !ctx->analyzer || !sym || sym->kind != XA_SYM_FUNCTION || !module_name ||
+        !member_name || !feature_buf || feature_buf_size == 0)
+        return NULL;
+    const XaEffectSummary *summary =
+        sym->links.effect_id != XA_EFFECT_NONE
+            ? xa_effect_db_get(ctx->analyzer->effect_db, sym->links.effect_id)
+            : NULL;
+    bool suspends = !summary || !xa_effect_summary_is_complete(summary) ||
+                    xa_effect_summary_has_semantic_effect(summary, XA_SEM_EFFECT_SCHED_SUSPEND) ||
+                    xa_effect_summary_has_semantic_effect(summary, XA_SEM_EFFECT_THREAD_BLOCK);
+    bool throws = !summary || !xa_effect_summary_is_nothrow(summary);
+    if (!suspends && !throws)
+        return NULL;
+    if (is_suspend)
+        *is_suspend = suspends;
+    snprintf(feature_buf, feature_buf_size, "%s.%s()", module_name, member_name);
+    return feature_buf;
+}
+
 static XrType *xa_parallel_node_type(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
         return NULL;
@@ -977,6 +1016,40 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
         if (is_suspend)
             *is_suspend = true;
         return "call through dynamic function value";
+    }
+
+    /* Body recursion above treats builtin `__*` bridges as effect-free, so an
+     * Xray-source stdlib wrapper such as io.readFile scans clean. The inferred
+     * effect summary of the resolved export is the authority of last resort. */
+    if (ctx && call->callee->type == AST_MEMBER_ACCESS) {
+        MemberAccessNode *ma = &call->callee->as.member_access;
+        if (ma->name && ma->object && ma->object->type == AST_VARIABLE) {
+            XaSymbol *mod_sym = xa_resolve_variable_symbol(ctx, ma->object);
+            if (mod_sym && mod_sym->kind == XA_SYM_MODULE) {
+                XaSymbolLinks *mod_links = xa_analyzer_get_links(ctx->analyzer, mod_sym);
+                const char *module_name = mod_links && mod_links->module_name
+                                              ? mod_links->module_name
+                                              : ma->object->as.variable.name;
+                const char *summary_feature = xa_parallel_summary_effect_feature(
+                    ctx, callee_sym, module_name, ma->name, scan->feature_buf,
+                    sizeof(scan->feature_buf), is_suspend);
+                if (summary_feature)
+                    return summary_feature;
+            }
+        }
+    } else if (ctx && call->callee->type == AST_VARIABLE && callee_sym && callee_sym->is_imported) {
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, callee_sym);
+        if (links && links->module_name) {
+            const char *member_name =
+                links->import_member_name ? links->import_member_name : callee_sym->name;
+            XaSymbol *export_sym =
+                xa_parallel_module_export_symbol(ctx, links->module_name, member_name);
+            const char *summary_feature = xa_parallel_summary_effect_feature(
+                ctx, export_sym ? export_sym : callee_sym, links->module_name, member_name,
+                scan->feature_buf, sizeof(scan->feature_buf), is_suspend);
+            if (summary_feature)
+                return summary_feature;
+        }
     }
 
     return NULL;
