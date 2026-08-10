@@ -2584,8 +2584,15 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
 
 static const char *cg_coro_test_yield_call_name(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
                                                 uint16_t *arg_base_out) {
-    if (!ctx || !f || !v || v->nargs < 1 || (v->flags & XI_FLAG_MAY_SUSPEND) == 0)
+    if (!ctx || !f || !v || v->nargs < 1)
         return NULL;
+    /* test_yield is an internal provider whose suspend contract is established
+     * by closed-world provider identity.  The shared coroutine analyzer and
+     * global evidence producer use that identity as their source of truth; do
+     * not additionally require an incidental Xi call flag here.  XRD imports
+     * carry type signatures, not provider suspension metadata, and the extra
+     * flag gate therefore made planning see a suspension that emission later
+     * misclassified as a synchronous call. */
     if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
         cg_value_is_module_import_ctx(ctx, f, v->args[0], "test_yield")) {
         if (arg_base_out)

@@ -832,7 +832,13 @@ static XrRep cg_emitted_value_storage_rep(XiCgenCtx *ctx, const XiValue *v,
         return rep;
     if (v->aux_int == 0 && cg_class_func_uses_native_receiver(ctx, owner))
         return XR_REP_PTR;
-    return cg_rep(v);
+    /* Coroutine factories accept XrValue at the stable boundary, then
+     * emit_coro_frame_init converts each parameter into the prepared frame
+     * representation.  Every later read must describe that physical slot,
+     * not the pre-plan Xi representation: returning cg_rep(v) here made a
+     * scalar frame field look tagged and emitted XR_TO_INT(int64_t), while a
+     * native receiver looked tagged and emitted `.ptr` on void*. */
+    return rep;
 }
 
 static void emit_unit_materialized_as_rep(FILE *out, XrRep target_rep) {
