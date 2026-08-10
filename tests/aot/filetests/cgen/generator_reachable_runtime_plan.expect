@@ -1,0 +1,8 @@
+contains=entry-plan
+contains=required=0x80001
+contains=runtime=0x80001 root=elided scheduler=single
+contains="runtime_caps": ["coro"]
+contains="runtime_objects": ["xray_rt_coro"]
+contains=XRT_ENABLE_GENERATORS
+c_contains=xr_aot_frame_alloc(
+c_contains=xr_aot_gen_iterator_new(

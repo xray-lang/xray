@@ -272,6 +272,20 @@ static bool callable_call_is_function_value(const XaotBundle *bundle, const XiFu
     return (callee->type && XR_TYPE_IS_FUNCTION(callee->type)) || callee->op == XI_LOAD_UPVAL;
 }
 
+/* A generator call is deliberately not an ordinary callable invocation: it
+ * captures the arguments into a producer frame and returns an iterator without
+ * running the producer body.  The target is nevertheless executable once the
+ * iterator is pulled, so callable reachability must retain it and its runtime
+ * capabilities.  Keep this as a separate edge instead of classifying GEN_CALL
+ * as a function-value call, which would incorrectly project MAY_SUSPEND from
+ * the producer onto the synchronous caller. */
+static CallableSet *callable_generator_targets(CallableAnalysis *a, const XiFunc *owner,
+                                               const XiValue *call) {
+    if (!a || !owner || !call || call->op != XI_GEN_CALL || call->nargs < 1 || !call->args[0])
+        return NULL;
+    return callable_value_set(a, owner, call->args[0]);
+}
+
 static const XiModule *callable_module_for_func(const XaotBundle *bundle, const XiFunc *func,
                                                 uint32_t *out_index) {
     if (!bundle || !func)
@@ -524,6 +538,24 @@ static bool callable_propagate_value(CallableAnalysis *a, const XiFunc *func, co
             }
             if (!callable_set_union(dst, &target->returns, changed))
                 return false;
+        }
+    }
+
+    if (value->op == XI_GEN_CALL) {
+        CallableSet *targets = callable_generator_targets(a, func, value);
+        if (!targets)
+            return false;
+        for (uint32_t ti = 0; ti < targets->count; ti++) {
+            CallableFuncFacts *target = &a->funcs[targets->items[ti]];
+            uint16_t argc = value->nargs - 1;
+            uint16_t nparams = target->func ? target->func->nparams : 0;
+            uint16_t n = argc < nparams ? argc : nparams;
+            for (uint16_t ai = 0; ai < n; ai++) {
+                CallableSet *arg = callable_value_set(a, func, value->args[ai + 1]);
+                CallableSet *param = callable_value_set(a, target->func, target->func->params[ai]);
+                if (arg && param && !callable_set_union(param, arg, changed))
+                    return false;
+            }
         }
     }
 
@@ -880,6 +912,16 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
                     const XiFunc *direct = callable_resolve_direct_target(a->bundle, func, call);
                     if (direct && !callable_mark_reachable_func(a, direct, &changed))
                         return false;
+                    if (call->op == XI_GEN_CALL) {
+                        const CallableSet *targets = callable_generator_targets(a, func, call);
+                        if (!targets || targets->count == 0)
+                            return false;
+                        for (uint32_t ti = 0; ti < targets->count; ti++) {
+                            const XiFunc *target = a->funcs[targets->items[ti]].func;
+                            if (!callable_mark_reachable_func(a, target, &changed))
+                                return false;
+                        }
+                    }
                     if (!callable_call_is_function_value(a->bundle, func, call))
                         continue;
                     const CallableSet *targets = callable_value_set(a, func, call->args[0]);

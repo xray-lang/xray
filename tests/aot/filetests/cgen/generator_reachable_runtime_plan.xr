@@ -1,0 +1,9 @@
+fn counter(limit: int) -> Iterator<int> {
+    for (var i = 0; i < limit; i++) {
+        yield i
+    }
+}
+
+for (value in counter(2)) {
+    print(value)
+}
