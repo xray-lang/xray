@@ -102,9 +102,9 @@ def compiler_identity(root: Path, xray: Path) -> dict[str, Any]:
     head = git_head.stdout.strip()
     if git_status.stdout.strip():
         raise RuntimeError("calibration requires a clean source tree")
-    if version_data.get("git", {}).get("commit") != head:
+    if version_data.get("commit") != head:
         raise RuntimeError("calibration binary commit does not match Git HEAD")
-    if version_data.get("git", {}).get("dirty"):
+    if version_data.get("dirty"):
         raise RuntimeError("calibration binary reports dirty build inputs")
     return {
         "git_commit": head,
