@@ -68,13 +68,6 @@ static XaSymbol *xi_lower_function_symbol(XaAnalyzer *analyzer, AstNode *node) {
     return scope ? scope->function_symbol : NULL;
 }
 
-XR_FUNC bool xi_lower_import_member_is_type_only(const XiLower *l, const ImportMember *member) {
-    if (!l || !l->analyzer || !l->analyzer->global_scope || !member || member->symbol_id == 0)
-        return false;
-    XaSymbol *symbol = xa_scope_lookup_by_id(l->analyzer->global_scope, member->symbol_id);
-    return symbol && symbol->kind == XA_SYM_TYPE_ALIAS;
-}
-
 XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, XaAnalyzer *analyzer,
                                               XaSymbol *symbol) {
     if (!func || !analyzer || !symbol)

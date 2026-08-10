@@ -106,9 +106,6 @@ XR_FUNC bool xi_lower_capture_source_vars(XiLower *l);
 XR_FUNC int xi_lower_var_find(XiLower *l, uint32_t symbol_id, const char *name);
 XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char *name,
                                      struct XrType **out_type);
-XR_FUNC bool xi_lower_import_member_is_type_only(const XiLower *l,
-                                                 const struct ImportMember *member);
-
 /* ========== Top-level Binding Helpers (xi_lower.c) ========== */
 
 /* A resolved program-level binding.  Carries both the slot index

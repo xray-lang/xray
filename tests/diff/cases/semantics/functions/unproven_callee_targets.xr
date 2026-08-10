@@ -1,5 +1,6 @@
 // anchor: unproven-callee-targets
 // diff-backends: vm
+// diff-aot-reject: native compilation cannot prove the target of an indirect call
 // Task 264 D9. AOT native plans every indirect call by proving a finite set of
 // target functions for it. When the callee's provenance is opaque the plan is
 // rejected and the build fails with an internal dump:
@@ -21,7 +22,7 @@
 // AOT backend rejects each shape with an actionable message that names the
 // provenance and suggests a rewrite, while the VM runs the program. This case
 // checks the VM run; the native rejection is a compile-time diagnostic and is
-// covered separately, so the differential net runs the VM backend only.
+// covered as the symmetric AOT rejection half of this differential contract.
 type Mapper = fn(int) -> int
 type IntThunk = fn() -> int
 

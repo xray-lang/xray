@@ -3691,8 +3691,6 @@ static uint32_t xaot_capability_profile_action(const XaotBundle *bundle, uint32_
         if ((bundle->target_provider.provided_capability_bits & capability) != 0)
             return XAOT_CAPABILITY_ACTION_LINK;
         switch (capability) {
-            case XG_CAP_NATIVE:
-            case XG_CAP_EXTERN:
             case XG_CAP_COROUTINE:
             case XG_CAP_CHANNEL:
             case XG_CAP_EXCEPTION:

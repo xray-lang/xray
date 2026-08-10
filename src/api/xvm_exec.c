@@ -296,8 +296,8 @@ void xr_vm_cleanup(XrVMRuntime *isolate) {
      * unused legacy xr_vm_vm_free() helper. */
     xr_shared_array_free(&isolate->vm.shared);
 
-    /* Globals dict struct is xr_malloc'd; the underlying XrMap nodes
-     * are fixed heap-owned and reclaimed by xr_fixed_heap_cleanup later. */
+    /* Globals dict struct is xr_malloc'd; the underlying XrMap nodes are
+     * reclaimed by the fixed heap after its teardown finalizers have run. */
     if (isolate->vm.globals != NULL) {
         xr_global_dict_destroy(isolate->vm.globals);
         xr_free(isolate->vm.globals);

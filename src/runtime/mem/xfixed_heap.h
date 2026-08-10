@@ -17,7 +17,12 @@
 #include <stdlib.h>
 #include "xobj_ops.h"
 
-#define XFIXED_HEAP_IDLE 0
+typedef enum XrFixedHeapState {
+    XFIXED_HEAP_LIVE = 0,
+    XFIXED_HEAP_FINALIZING,
+    XFIXED_HEAP_FINALIZED,
+    XFIXED_HEAP_RECLAIMED,
+} XrFixedHeapState;
 
 /* The fixed heap manages objects that live until runtime teardown and never
  * participate in mark-sweep. It is a small bootstrap/fallback allocator, not a
@@ -42,7 +47,8 @@ typedef struct XrFixedHeap {
 } XrFixedHeap;
 
 XR_FUNC void xr_fixed_heap_init(XrFixedHeap *heap, struct XrVMRuntime *isolate);
-XR_FUNC void xr_fixed_heap_cleanup(XrFixedHeap *heap);
+XR_FUNC void xr_fixed_heap_finalize(XrFixedHeap *heap);
+XR_FUNC void xr_fixed_heap_reclaim(XrFixedHeap *heap);
 XR_FUNC void *xr_fixed_heap_alloc(XrFixedHeap *heap, size_t size, uint8_t type);
 XR_FUNC XrObjHeader *xr_fixed_heap_new_obj(XrFixedHeap *heap, uint8_t type, size_t size);
 XR_FUNC void xr_fixed_heap_print_stats(XrFixedHeap *heap);

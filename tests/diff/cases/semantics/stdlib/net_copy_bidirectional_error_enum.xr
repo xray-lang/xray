@@ -1,23 +1,21 @@
-// diff-backends: vm
-// AOT coverage is blocked by a pre-existing cgen defect: copyBidirectional's
-// __CopyBidirectionalResult field reads lose object access identity under the
-// AOT backend (see xray-docs/known_bugs.md 2026-08-09). VM pins the semantics.
 import net
 import { NetError } from net
 
 // Two datagram sockets stand in for closed streams: copyBidirectional rejects
 // any closed connection with a typed NetError.Closed before touching the
 // socket, so no live TCP peer or coroutine is needed to exercise the guard.
-var a = net.udpBind(0, "")
-var b = net.udpBind(0, "")
-net.close(a)
-net.close(b)
+fn main() {
+    var a = net.udpBind(0, "")
+    var b = net.udpBind(0, "")
+    net.close(a)
+    net.close(b)
 
-try {
-    net.copyBidirectional(a, b)
-} catch (error: NetError) {
-    print(error.name)
-    print(error == NetError.Closed)
+    try {
+        net.copyBidirectional(a, b)
+    } catch (error: NetError) {
+        print(error.name)
+        print(error == NetError.Closed)
+    }
 }
 
-run()
+main()

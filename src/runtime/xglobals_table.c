@@ -42,7 +42,8 @@ void xr_globals_destroy(XrGlobalsTable *globals) {
     // closures, etc.) but globals does NOT own those bodies. Each
     // pointee participates in its own owner protocol — fixed heap, system
     // heap, or shared/refcount — and is released by the corresponding
-    // cleanup path (xr_fixed_heap_cleanup, xr_sysheap_destroy, xr_shared_decref).
+    // cleanup path (fixed-heap finalization/reclaim, xr_sysheap_destroy,
+    // xr_shared_decref).
     // Releasing the values array here is the full extent of this owner.
     if (globals->values)
         xr_free(globals->values);

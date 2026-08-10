@@ -2354,11 +2354,11 @@ TEST(channel_send_transfer_modes) {
     xi_func_free(timeout_ir);
 
     XiFunc *tuple_ir = lower_source("const ch: Channel<(int, string)> = Channel(1)\n"
-                                    "ch.send((1, \"value\"))\n");
+                                    "ch.send(copy((1, \"value\")))\n");
     assert(tuple_ir != NULL);
     XiValue *tuple_send = func_tree_find_op(tuple_ir, XI_CHAN_SEND);
     assert(tuple_send != NULL && xi_chan_send_transfer_mode(tuple_send) == XR_TRANSFER_COPY &&
-           "tuple values must receive an implicit boundary value copy");
+           "explicit tuple copy at a channel boundary must be encoded as COPY transfer");
     xi_func_free(tuple_ir);
 }
 

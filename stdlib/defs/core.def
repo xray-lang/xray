@@ -2,11 +2,12 @@ module time {
   fn now {
     signature: "(): int"
     doc: "Current time in milliseconds since epoch"
+    effect: "nothrow"
     vm: "xr_time_now"
     aot: "xrt_time_now"
     argc: 0
     arg_spec: ""
-    aot_direct: false
+    aot_direct: true
     link_object: true
     layer: "system"
   }
@@ -14,11 +15,12 @@ module time {
   fn clock {
     signature: "(): int"
     doc: "CPU clock time in milliseconds"
+    effect: "nothrow"
     vm: "xr_time_clock"
     aot: "xrt_time_clock"
     argc: 0
     arg_spec: ""
-    aot_direct: false
+    aot_direct: true
     link_object: true
     layer: "system"
   }
@@ -26,11 +28,12 @@ module time {
   fn monotonic {
     signature: "(): int"
     doc: "Monotonic time in milliseconds"
+    effect: "nothrow"
     vm: "xr_time_monotonic"
     aot: "xrt_time_monotonic"
     argc: 0
     arg_spec: ""
-    aot_direct: false
+    aot_direct: true
     link_object: true
     layer: "system"
   }
@@ -38,11 +41,12 @@ module time {
   fn nanos {
     signature: "(): int"
     doc: "Monotonic time in nanoseconds"
+    effect: "nothrow"
     vm: "xr_time_nanos"
     aot: "xrt_time_nanos"
     argc: 0
     arg_spec: ""
-    aot_direct: false
+    aot_direct: true
     link_object: true
     layer: "system"
   }
@@ -50,11 +54,12 @@ module time {
   fn micros {
     signature: "(): int"
     doc: "Monotonic time in microseconds"
+    effect: "nothrow"
     vm: "xr_time_micros"
     aot: "xrt_time_micros"
     argc: 0
     arg_spec: ""
-    aot_direct: false
+    aot_direct: true
     link_object: true
     layer: "system"
   }
@@ -62,11 +67,12 @@ module time {
   fn localOffset {
     signature: "(): int"
     doc: "Local UTC offset in minutes for the current wall time"
+    effect: "nothrow"
     vm: "xr_time_local_offset"
     aot: "xrt_time_local_offset"
     argc: 0
     arg_spec: ""
-    aot_direct: false
+    aot_direct: true
     link_object: true
     layer: "system"
   }
@@ -74,11 +80,12 @@ module time {
   fn localOffsetAt {
     signature: "(timestamp: int): int"
     doc: "Local UTC offset in minutes at a Unix timestamp"
+    effect: "nothrow"
     vm: "xr_time_local_offset_at"
     aot: "xrt_time_local_offset_at"
     argc: 1
     arg_spec: "v"
-    aot_direct: false
+    aot_direct: true
     link_object: true
     layer: "system"
   }
@@ -3868,4 +3875,3 @@ module cluster {
     caps: "channel"
   }
 }
-

@@ -1,9 +1,10 @@
 contains=xaot-plan v0
 contains="generated_c_files": ["<aot-generated-c>"]
-contains="runtime_objects": []
+contains="runtime_caps": ["coro", "objects"]
+contains="runtime_objects": ["xray_rt_coro"]
 contains="stdlib_objects": []
-contains="stdlib_symbols": ["path.Path", "os.getcwd", "io.tempDir", "path.join", "path.from", "io.mkdirp", "io.isDir", "io.writeFile", "io.exists", "io.isFile", "io.fileSize", "io.readFile", "io.appendFile", "io.readLines", "io.writeFileBytes", "io.readFileBytes", "io.copyFile", "io.rename", "io.stat", "io.touch", "io.chmod", "io.readDir", "io.readDirRecursive", "io.realpath", "io.cwd", "io.chdir", "io.symlink", "io.isSymlink", "io.readlink", "io.tempFile", "io.remove", "io.removeAll"]
-contains="system_libs": ["m"]
+contains="stdlib_symbols": ["path.Path", "io.tempDir", "path.join", "path.from", "io.mkdirp", "io.isDir", "io.writeFile", "io.exists", "io.isFile", "io.fileSize", "io.readFile", "io.appendFile", "io.readLines", "io.writeFileBytes", "io.readFileBytes", "io.copyFile", "io.rename", "io.stat", "io.touch", "io.chmod", "io.readDir", "io.readDirRecursive", "io.realpath", "io.cwd", "io.chdir", "io.symlink", "io.isSymlink", "io.readlink", "io.tempFile", "io.remove", "io.removeAll"]
+contains="system_libs": ["m", "pthread"]
 contains="defines": ["XRT_IMPL"]
 not_contains="runtime_objects": ["xray_core"]
 not_contains="stdlib_objects": ["io"]

@@ -60,11 +60,19 @@ typedef struct {
     int64_t value;
 } TestToken;
 
-/* A generated program unit supplies the throw path; these tests never take a
- * missing-key branch, so reaching it means the fixture itself is wrong. */
+/* A generated program unit supplies the exception/index failure paths. These
+ * tests never take either branch, so reaching one means the fixture is wrong.
+ * Keep both definitions in the standalone header test: Debug sanitizer builds
+ * intentionally preserve cold inline branches that Release can optimize out. */
 XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     (void) exc;
     fprintf(stderr, "unexpected xrt_throw_exc in test_xrt_user_hash_eq\n");
+    abort();
+}
+
+XRT_COLD _Noreturn void xrt_type_no_index(const char *message) {
+    fprintf(stderr, "unexpected xrt_type_no_index in test_xrt_user_hash_eq: %s\n",
+            message ? message : "");
     abort();
 }
 

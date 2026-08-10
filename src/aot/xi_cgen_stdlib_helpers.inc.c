@@ -642,8 +642,8 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
         }
         fprintf(out,
                 "xrt_object_new_shape(&_xobj_shape_%d); "
-                "xrt_json_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.first)); "
-                "xrt_json_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.second)); _arr%u; })",
+                "xrt_object_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.first)); "
+                "xrt_object_set_field(_arr%u, %d, XR_FROM_INT(_arp%u.second)); _arr%u; })",
                 shape_id, id, slot_first, id, id, slot_second, id, id);
         return true;
     }

@@ -189,7 +189,7 @@ export type XmlWriteOptions = {
     encoding: string
 }
 
-const XML_DEFAULT_OPTIONS: XmlOptions = {
+export const XML_DEFAULT_OPTIONS: XmlOptions = {
     preserveWhitespace: false,
     preserveComments: false,
     preserveCData: true,

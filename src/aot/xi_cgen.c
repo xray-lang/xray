@@ -11063,7 +11063,7 @@ XR_FUNC void xi_cgen_c_export_header(XiCgenCtx *ctx, FILE *out, struct XiModule 
         }
     }
     for (int i = 0; i < typedef_count; i++)
-        emit_struct_native_typedef(out, typedefs[i].layout, typedefs[i].prefix);
+        emit_struct_native_typedef(out, typedefs[i].layout, typedefs[i].prefix, false);
     if (typedef_count > 0)
         fprintf(out, "\n");
     fprintf(out, "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n");

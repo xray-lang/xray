@@ -3,3 +3,4 @@ contains=xglobal-evidence v1
 regex=body [0-9]+ .* kind=function .* effect=0x[0-9a-f]+\[[^]]*error
 regex=body [0-9]+ .* kind=function .* effect=0x400\[panic\]
 not_contains=[throw]
+c_contains=xrt_report_uncaught_error(

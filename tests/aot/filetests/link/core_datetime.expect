@@ -1,8 +1,8 @@
 contains=xaot-plan v0
 contains="generated_c_files": ["<aot-generated-c>"]
 contains="runtime_objects": []
-contains="stdlib_objects": ["time.localOffsetAt", "time.now", "time.localOffset"]
-contains="stdlib_symbols": ["time.localOffsetAt", "time.now", "time.localOffset", "datetime.createUTC", "datetime.fromTimestamp", "datetime.fromTimestampMs", "datetime.parse"]
+contains="stdlib_objects": ["time.localOffsetAt"]
+contains="stdlib_symbols": ["time.localOffsetAt", "datetime.createUTC", "datetime.fromTimestamp", "datetime.fromTimestampMs", "datetime.parse"]
 contains="system_libs": ["m"]
 contains="defines": ["XRT_IMPL"]
 not_contains="runtime_objects": ["xray_core"]

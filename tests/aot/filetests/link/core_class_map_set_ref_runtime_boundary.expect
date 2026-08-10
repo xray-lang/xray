@@ -15,10 +15,8 @@ c_contains=xrt_set_t * f1;
 c_contains=static void xrt_native_core_class_map_set_ref_runtime_boundary_Registry_dtor(void *obj)
 c_contains=xrt_release(xr_mkptr((self)->f0, XR_TAG_MAP));
 c_contains=xrt_release(xr_mkptr((self)->f1, XR_TAG_SET));
-c_contains=XrValue _new = xr_mkptr(_cf0, XR_TAG_MAP); xrt_retain(_new); xrt_release(xr_mkptr(p0->f0, XR_TAG_MAP))
-c_contains=XrValue _new = xr_mkptr(_cf1, XR_TAG_SET); xrt_retain(_new); xrt_release(xr_mkptr(p0->f1, XR_TAG_SET))
-c_contains=xrt_release(xr_mkptr(p0->f0, XR_TAG_MAP));
-c_contains=xrt_release(xr_mkptr(p0->f1, XR_TAG_SET));
+c_contains=(void)((xrt_release(xr_mkptr((p0)->f0, XR_TAG_MAP)), (p0)->f0 = (xrt_map_t *)(v5).ptr));
+c_contains=(void)((xrt_release(xr_mkptr((p0)->f1, XR_TAG_SET)), (p0)->f1 = (xrt_set_t *)(v6).ptr));
 c_contains=xrt_map_set_i64_i64_typed(
 c_contains=xrt_map_get_i64_value_typed(
 c_contains=xrt_set_add_i64(

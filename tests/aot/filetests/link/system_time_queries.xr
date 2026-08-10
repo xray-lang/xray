@@ -1,7 +1,7 @@
-import time
+import { now, monotonic, nanos, micros, clock } from time
 
-print(time.now() > 0)
-print(time.monotonic() >= 0)
-print(time.nanos() >= 0)
-print(time.micros() >= 0)
-print(time.clock() >= 0)
+print(now() > 0 &&
+      monotonic() >= 0 &&
+      nanos() >= 0 &&
+      micros() >= 0 &&
+      clock() >= 0)

@@ -1388,6 +1388,15 @@ static XrVMResult run_finalize(XrVMRuntime *isolate, XrWorker *worker, XrCorouti
         }
         coro_ctx->current_exception = xr_null();
         coro_ctx->pending_error = xr_null();
+        /* A value-return error may reach the coroutine boundary with run()
+         * reporting XR_VM_OK: OP_ERR_RETURN unwinds the bytecode frames via
+         * the ordinary return path and records the failure in pending_error.
+         * We consumed that channel into coro->error above, so translate the
+         * backend result as well.  Otherwise worker_run_result_from_vm()
+         * reports DONE and the scheduler publishes a failed Task as
+         * COMPLETED. */
+        if (result == XR_VM_OK)
+            result = XR_VM_RUNTIME_ERROR;
     }
 
     ctx->current_coro = NULL;

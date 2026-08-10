@@ -100,10 +100,16 @@ void xr_runtime_core_teardown_root_heap(XrRuntimeCore *core) {
     xr_coro_heap_teardown_inplace(&core->root_heap);
 }
 
-void xr_runtime_core_cleanup_fixed_heap(XrRuntimeCore *core) {
+void xr_runtime_core_finalize_fixed_heap(XrRuntimeCore *core) {
     if (!core)
         return;
-    xr_fixed_heap_cleanup(&core->fixed_heap);
+    xr_fixed_heap_finalize(&core->fixed_heap);
+}
+
+void xr_runtime_core_reclaim_fixed_heap(XrRuntimeCore *core) {
+    if (!core)
+        return;
+    xr_fixed_heap_reclaim(&core->fixed_heap);
 }
 
 struct XrVMRuntime *xr_runtime_core_vm_owner(const XrRuntimeCore *core) {
@@ -178,10 +184,12 @@ void xr_runtime_core_delete(XrRuntimeCore *core) {
     xr_runtime_core_free_tmp_strbuf(core);
 
     xr_runtime_core_destroy_coro_storage(core);
-    /* Root heap first: its finalizers may still reach module-static objects,
-     * which the fixed heap is about to tear down. */
+    /* Fixed and root objects may reference each other. Run fixed destructors
+     * while root storage is alive, keep fixed bodies addressable while root
+     * destructors run, then reclaim the finalized fixed bodies. */
+    xr_runtime_core_finalize_fixed_heap(core);
     xr_runtime_core_teardown_root_heap(core);
-    xr_runtime_core_cleanup_fixed_heap(core);
+    xr_runtime_core_reclaim_fixed_heap(core);
 
     if (core->global_string_pool) {
         xr_global_pool_free(core->global_string_pool);

@@ -25,7 +25,7 @@ fn test_overlapping_await_any_waiters() {
     const ready = Channel<int>(2)
     const out = Channel<int>(2)
 
-    var task = go delayed_value()
+    const task = go delayed_value()
     var a = go await_any_report(1, task, ready, out)
     var b = go await_any_report(2, task, ready, out)
 

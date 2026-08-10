@@ -24,7 +24,7 @@ fn recv_int(ch: Channel<int>) -> int {
 fn test_multiple_task_awaiters() {
     const ready = Channel<int>(2)
     const out = Channel<int>(2)
-    var task = go delayed_value()
+    const task = go delayed_value()
     var a = go await_and_report(1, task, ready, out)
     var b = go await_and_report(2, task, ready, out)
 

@@ -100,8 +100,7 @@ static XrEnumLayout *xr_enum_layout_from_members(const char *nominal_owner, cons
     for (int i = 0; i < count; i++)
         names[i] = members[i].name;
 
-    XrEnumLayout *layout =
-        xr_enum_layout_new(nominal_owner, name, names, (uint32_t) count);
+    XrEnumLayout *layout = xr_enum_layout_new(nominal_owner, name, names, (uint32_t) count);
     xr_free(names);
     return layout;
 }
@@ -167,8 +166,8 @@ XrEnumType *xr_enum_type_new(XrVMRuntime *X, const char *nominal_owner, const ch
     return enum_type;
 }
 
-XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *nominal_owner,
-                                  const char *name, char **member_names, int count) {
+XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *nominal_owner, const char *name,
+                                  char **member_names, int count) {
     if (!core || !nominal_owner || !nominal_owner[0] || !name || !member_names || count <= 0)
         return NULL;
 
@@ -199,9 +198,8 @@ XrEnumType *xr_enum_type_new_core(XrRuntimeCore *core, const char *nominal_owner
             enum_type->members[i].ctor->parent_type = enum_type;
     }
 
-    enum_type->layout = xr_enum_layout_from_members(nominal_owner, enum_type->name,
-                                                    enum_type->members,
-                                                    (int) enum_type->member_count);
+    enum_type->layout = xr_enum_layout_from_members(
+        nominal_owner, enum_type->name, enum_type->members, (int) enum_type->member_count);
     if (!enum_type->layout) {
         xr_free(enum_type->members);
         enum_type->members = NULL;
@@ -529,7 +527,7 @@ XrValue xr_enum_aggregate_payload_get(const XrEnumAggregateValue *value, uint32_
 
 /* Release malloc-backed side resources owned by the enum constructor metadata.
  * The body itself lives on the isolate fixed_heap list and is freed by
- * xr_fixed_heap_cleanup; this hook must NOT call xr_free(obj). */
+ * fixed-heap reclaim; this hook must NOT call xr_free(obj). */
 void xr_obj_destroy_enum_ctor(XrObjHeader *obj, XrCoroHeap *owner_heap) {
     (void) owner_heap;
     if (!obj)

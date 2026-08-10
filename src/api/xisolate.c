@@ -216,10 +216,10 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     tmp_strbuf_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     // The globals table stores XrValue entries that reference fixed heap
-    // bodies (enum types and the like). Drop the table BEFORE
-    // xr_fixed_heap_cleanup so any post-VM hook that scans globals during
-    // teardown still sees consistent pointers, and so xr_fixed_heap_cleanup is
-    // the single authoritative free path for those bodies.
+    // bodies (enum types and the like). Drop the table before fixed-heap
+    // finalization so any post-VM hook that scans globals during teardown still
+    // sees consistent pointers. Fixed-heap reclaim remains the single
+    // authoritative free path for those bodies.
     stage_start_ns = xr_time_monotonic_ns();
     if (isolate->globals) {
         xr_globals_destroy((XrGlobalsTable *) isolate->globals);
@@ -235,23 +235,32 @@ void xray_vm_delete(XrVMRuntime *isolate) {
     coro_storage_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
-    xr_runtime_core_cleanup_fixed_heap(isolate->core_rt);
+    /* Fixed and root objects may reference each other. Finalize the fixed
+     * graph while root objects are alive, but keep every fixed body allocated
+     * until root finalization has finished. */
+    xr_runtime_core_finalize_fixed_heap(isolate->core_rt);
     gc_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    stage_start_ns = xr_time_monotonic_ns();
+    /* Root teardown runs after fixed finalization, so fixed destroy hooks can
+     * release root references, and before fixed reclaim, so root destructors
+     * may still inspect sticky module-static headers. It also precedes the
+     * system heap free because Region returns blocks through the sys_heap
+     * pointer captured at initialization. */
+    xr_runtime_core_teardown_root_heap(isolate->core_rt);
+    root_heap_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+
+    /* Runtime-owned Task shells may still be named by residual root-heap
+     * containers. Free them only after those containers have run their
+     * destructors, while fixed metadata and task payload dependencies remain
+     * addressable. */
     stage_start_ns = xr_time_monotonic_ns();
     xr_task_isolate_destroy_deferred(isolate);
     deferred_tasks_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
-    /* Root-heap teardown is pinned between two hard constraints. It must run
-     * AFTER xr_fixed_heap_cleanup: fixed-object destroy hooks release field
-     * references into the root heap (rc_probe lanes die under ASAN the other
-     * way around). It must run BEFORE the sys_heap free below: the region
-     * returns its blocks through a sys_heap pointer cached at init, so
-     * deferring to xr_runtime_core_delete would push blocks into an
-     * already-freed block pool. */
-    xr_runtime_core_teardown_root_heap(isolate->core_rt);
-    root_heap_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+    xr_runtime_core_reclaim_fixed_heap(isolate->core_rt);
+    gc_cleanup_ms += isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
     if (isolate->core_rt && isolate->core_rt->sys_heap) {

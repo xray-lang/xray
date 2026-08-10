@@ -19,11 +19,18 @@ void xr_fixed_heap_init(XrFixedHeap *heap, struct XrVMRuntime *isolate) {
     XR_DCHECK(heap != NULL, "fixed_heap_init: NULL heap");
     memset(heap, 0, sizeof(XrFixedHeap));
     heap->isolate = isolate;
-    heap->state = XFIXED_HEAP_IDLE;
+    heap->state = XFIXED_HEAP_LIVE;
 }
 
-void xr_fixed_heap_cleanup(XrFixedHeap *heap) {
-    XR_DCHECK(heap != NULL, "fixed_heap_cleanup: NULL heap");
+void xr_fixed_heap_finalize(XrFixedHeap *heap) {
+    XR_DCHECK(heap != NULL, "fixed_heap_finalize: NULL heap");
+    if (!heap || heap->state == XFIXED_HEAP_FINALIZED || heap->state == XFIXED_HEAP_RECLAIMED)
+        return;
+    XR_DCHECK(heap->state == XFIXED_HEAP_LIVE, "fixed_heap_finalize: invalid or reentrant state");
+    if (heap->state != XFIXED_HEAP_LIVE)
+        return;
+
+    heap->state = XFIXED_HEAP_FINALIZING;
     XrRuntimeCore *core = heap->isolate ? xr_isolate_get_runtime_core(heap->isolate) : NULL;
 
     /* Fixed-lifetime objects can reference one another.  Run every destructor
@@ -40,6 +47,18 @@ void xr_fixed_heap_cleanup(XrFixedHeap *heap) {
             destroy(obj, NULL);
     }
 
+    heap->state = XFIXED_HEAP_FINALIZED;
+}
+
+void xr_fixed_heap_reclaim(XrFixedHeap *heap) {
+    XR_DCHECK(heap != NULL, "fixed_heap_reclaim: NULL heap");
+    if (!heap || heap->state == XFIXED_HEAP_RECLAIMED)
+        return;
+    XR_DCHECK(heap->state == XFIXED_HEAP_FINALIZED,
+              "fixed_heap_reclaim: objects must be finalized first");
+    if (heap->state != XFIXED_HEAP_FINALIZED)
+        return;
+
     XrFixedHeapObjectNode *node = heap->objects;
     while (node != NULL) {
         XrFixedHeapObjectNode *next = node->next;
@@ -51,12 +70,17 @@ void xr_fixed_heap_cleanup(XrFixedHeap *heap) {
 
     heap->object_count = 0;
     heap->totalbytes = 0;
+    heap->state = XFIXED_HEAP_RECLAIMED;
 }
 
 void *xr_fixed_heap_alloc(XrFixedHeap *heap, size_t size, uint8_t type) {
     XR_DCHECK(heap != NULL, "fixed_heap_alloc: NULL heap");
     XR_DCHECK(size >= sizeof(XrObjHeader), "fixed_heap_alloc: size too small");
     XR_DCHECK(type < XR_OBJ_TYPE_MAX, "fixed_heap_alloc: invalid object type");
+    XR_DCHECK(heap->state == XFIXED_HEAP_LIVE,
+              "fixed_heap_alloc: allocation after finalization began");
+    if (heap->state != XFIXED_HEAP_LIVE)
+        return NULL;
     XrFixedHeapObjectNode *node =
         (XrFixedHeapObjectNode *) xr_malloc(sizeof(XrFixedHeapObjectNode));
     if (!node)

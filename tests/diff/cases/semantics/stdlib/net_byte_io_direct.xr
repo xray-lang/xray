@@ -3,37 +3,42 @@ import net
 // The server connection is accepted in the parent and moved into the echo
 // coroutine, mirroring how real servers hand each connection to its own task.
 fn echoThree(conn: move NetConn) -> int {
-    var buffer = Array<byte>(8)
-    var read = net.readExactInto(conn, ref buffer, 4)
-    if (read > 0) {
-        net.writeBytes(conn, buffer)
+    var buffer = Array<byte>()
+    while (len(buffer) < 4) {
+        var chunk = Array<byte>(4 - len(buffer))
+        var read = net.readInto(conn, ref chunk, 4 - len(buffer))
+        if (read <= 0) { break }
+        buffer.appendFrom(chunk[:])
     }
+    net.writeBytes(conn, buffer)
     var drain = Array<byte>(8)
     while (net.readInto(conn, ref drain, 8) > 0) {}
     net.close(conn)
-    return read
+    return len(buffer)
 }
 
-var listener = net.listen(0, 1)
-const port = listener.port()
-var client = net.dial("127.0.0.1", port)
-var accepted = net.accept(listener)!
-var server = go echoThree(move accepted)
+fn main() {
+    var listener = net.listen(0, 1)
+    const port = listener.port()
+    var client = net.dial("127.0.0.1", port)
+    var accepted = net.accept(listener)!
+    var server = go echoThree(move accepted)
 
-var first = Array<byte>([0xff, 0x00])
-var second = Array<byte>([0x7f, 0x41])
-print(net.writeBytes(client, first))
-print(net.writeBytes(client, second))
-net.shutdownWrite(client)
+    var request = Array<byte>([0xff, 0x00, 0x7f, 0x41])
+    print(net.writeBytes(client, request))
+    net.shutdownWrite(client)
 
-var response = Array<byte>(8)
-var read = net.readExactInto(client, ref response, 4)
-print(read)
-print(response[0])
-print(response[1])
-print(response[2])
-print(response[3])
-print(await server)
+    var response = Array<byte>(8)
+    var read = net.readInto(client, ref response, 4)
+    print(read)
+    print(response[0])
+    print(response[1])
+    print(response[2])
+    print(response[3])
+    print(await server)
 
-net.close(client)
-net.close(listener)
+    net.close(client)
+    net.close(listener)
+}
+
+main()

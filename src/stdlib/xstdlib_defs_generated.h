@@ -137,13 +137,13 @@ typedef struct XrStdlibClassFieldDefEntry {
 } XrStdlibClassFieldDefEntry;
 
 static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
-    {"time", "now", "(): int", "Current time in milliseconds since epoch", "xr_time_now", "normal", "", "xrt_time_now", "", "value", "", "time.now", "", "system", "", 0, 0, false},
-    {"time", "clock", "(): int", "CPU clock time in milliseconds", "xr_time_clock", "normal", "", "xrt_time_clock", "", "value", "", "time.clock", "", "system", "", 0, 0, false},
-    {"time", "monotonic", "(): int", "Monotonic time in milliseconds", "xr_time_monotonic", "normal", "", "xrt_time_monotonic", "", "value", "", "time.monotonic", "", "system", "", 0, 0, false},
-    {"time", "nanos", "(): int", "Monotonic time in nanoseconds", "xr_time_nanos", "normal", "", "xrt_time_nanos", "", "value", "", "time.nanos", "", "system", "", 0, 0, false},
-    {"time", "micros", "(): int", "Monotonic time in microseconds", "xr_time_micros", "normal", "", "xrt_time_micros", "", "value", "", "time.micros", "", "system", "", 0, 0, false},
-    {"time", "localOffset", "(): int", "Local UTC offset in minutes for the current wall time", "xr_time_local_offset", "normal", "", "xrt_time_local_offset", "", "value", "", "time.localOffset", "", "system", "", 0, 0, false},
-    {"time", "localOffsetAt", "(timestamp: int): int", "Local UTC offset in minutes at a Unix timestamp", "xr_time_local_offset_at", "normal", "", "xrt_time_local_offset_at", "v", "value", "", "time.localOffsetAt", "", "system", "", 0, 1, false},
+    {"time", "now", "(): int", "Current time in milliseconds since epoch", "xr_time_now", "normal", "", "xrt_time_now", "", "value", "", "time.now", "", "system", "method", 0, 0, true},
+    {"time", "clock", "(): int", "CPU clock time in milliseconds", "xr_time_clock", "normal", "", "xrt_time_clock", "", "value", "", "time.clock", "", "system", "method", 0, 0, true},
+    {"time", "monotonic", "(): int", "Monotonic time in milliseconds", "xr_time_monotonic", "normal", "", "xrt_time_monotonic", "", "value", "", "time.monotonic", "", "system", "method", 0, 0, true},
+    {"time", "nanos", "(): int", "Monotonic time in nanoseconds", "xr_time_nanos", "normal", "", "xrt_time_nanos", "", "value", "", "time.nanos", "", "system", "method", 0, 0, true},
+    {"time", "micros", "(): int", "Monotonic time in microseconds", "xr_time_micros", "normal", "", "xrt_time_micros", "", "value", "", "time.micros", "", "system", "method", 0, 0, true},
+    {"time", "localOffset", "(): int", "Local UTC offset in minutes for the current wall time", "xr_time_local_offset", "normal", "", "xrt_time_local_offset", "", "value", "", "time.localOffset", "", "system", "method", 0, 0, true},
+    {"time", "localOffsetAt", "(timestamp: int): int", "Local UTC offset in minutes at a Unix timestamp", "xr_time_local_offset_at", "normal", "", "xrt_time_local_offset_at", "v", "value", "", "time.localOffsetAt", "", "system", "method", 0, 1, true},
     {"time", "sleep", "(ms: int): ()", "Sleep for milliseconds", "xr_time_sleep", "yieldable", "", "", "v", "value", "", "", "", "runtime", "", XR_CAP_COROUTINE | XR_CAP_TIMER, 1, false},
     {"math", "abs", "(x: float): float", "Absolute value (preserves int)", "math_abs", "normal", "", "builtin", "", "value", "", "", "", "core", "builtin", 0, 1, true},
     {"math", "floor", "(x: float): int", "Floor to integer", "math_floor", "normal", "", "builtin", "", "value", "", "", "", "core", "builtin", 0, 1, true},

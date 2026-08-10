@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -273,6 +274,7 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
     name = rel_path(case)
     anchor = read_first_directive(case, "// anchor: ", 1)
     case_backends_raw = read_first_directive(case, "// diff-backends: ", 5)
+    aot_reject = read_first_directive(case, "// diff-aot-reject: ", 5)
     case_backends = [b.strip() for b in case_backends_raw.split(",") if b.strip()]
 
     enabled: list[str] = []
@@ -287,6 +289,34 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
 
     prefix = f"  {name:<84}"
     if len(enabled) < 2:
+        if enabled == ["vm"] and aot_reject:
+            args = read_args(case)
+            stdin_bytes = read_stdin(case)
+            vm = run_backend(config, "vm", case, args, stdin_bytes)
+            expected_stdout = read_expected_stdout(case)
+            if vm.rc != 0 or (expected_stdout is not None and vm.stdout != expected_stdout):
+                return CaseResult(
+                    order, "fail",
+                    prefix + "FAIL (VM half of rejection contract)\n"
+                    f"      vm: rc={vm.rc} stdout: {head_text(vm.stdout)}",
+                    name,
+                )
+            with tempfile.TemporaryDirectory(prefix="xray-diff-reject-") as temp_dir:
+                out_c = Path(temp_dir) / "rejected.c"
+                rejected = proc.run(
+                    [config.xray, "build", "--native", "-c", "-o", out_c, case],
+                    timeout=config.case_timeout,
+                )
+            diagnostic = rejected.stdout + rejected.stderr
+            if rejected.timed_out or rejected.returncode == 0 or aot_reject.encode() not in diagnostic:
+                return CaseResult(
+                    order, "fail",
+                    prefix + "FAIL (AOT rejection contract)\n"
+                    f"      aot: rc={124 if rejected.timed_out else rejected.returncode} "
+                    f"diagnostic: {head_text(diagnostic)}",
+                    name,
+                )
+            return CaseResult(order, "pass", prefix + "PASS (VM run + AOT rejection)", name)
         return CaseResult(
             order, "skip",
             prefix + f"SKIP (need >=2 backends; case={case_backends_raw or 'all'} "

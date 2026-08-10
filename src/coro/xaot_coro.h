@@ -42,6 +42,8 @@ typedef struct XrAotRuntime XrAotRuntime;
 typedef struct XrAotValueOps XrAotValueOps;
 typedef void (*XrAotRuntimeConfigureCoreFn)(struct XrRuntimeCore *core, uint32_t caps,
                                             void *userdata);
+typedef void (*XrAotAsyncInvokeFn)(void *data);
+typedef void (*XrAotAsyncDestroyFn)(void *data);
 
 typedef enum {
     XR_AOT_CAP_NONE = 0,
@@ -421,6 +423,12 @@ enum {
 };
 XR_FUNC XrAotResult xr_aot_io_wait(const XrAotContext *ctx, int fd, int events, int64_t timeout_ms);
 XR_FUNC XrAotResult xr_aot_io_wait_resume(const XrAotContext *ctx);
+/* Submit one genuinely blocking hosted operation to the bounded scheduler
+ * pool. The submit call consumes one data owner on every path; destroy_data
+ * releases that owner after completion or immediate rejection. */
+XR_FUNC XrAotResult xr_aot_async_submit(const XrAotContext *ctx, XrAotAsyncInvokeFn invoke,
+                                        void *data, XrAotAsyncDestroyFn destroy_data);
+XR_FUNC XrAotResult xr_aot_async_resume(const XrAotContext *ctx);
 XR_FUNC void xr_aot_netpoll_close_fd(int fd);
 XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode);
 // A scope block is a statement: exiting one produces no value. The result the

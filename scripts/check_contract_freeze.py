@@ -76,6 +76,10 @@ CONTRACT_SPECS = (
             "src/ir/xi_lower_expr.c",
             "src/aot/xi_cgen_dispatch_helpers.inc.c",
             "src/aot/xrt_coll.h",
+            "src/runtime/mem/xfixed_heap.c",
+            "src/runtime/core/xr_runtime_core.c",
+            "src/api/xisolate.c",
+            "tests/unit/mem/test_fixed_heap_teardown.c",
         ),
     ),
     ContractSpec(

@@ -2,5 +2,5 @@ contains=xaot-plan v0
 contains="runtime_caps": ["coro", "netpoll"]
 contains="runtime_objects": ["xray_rt_coro"]
 contains="stdlib_symbols": ["net.listen", "net.accept", "net.close"]
-contains="defines": ["XRT_IMPL", "XRT_ENABLE_AOT_NETPOLL_CLOSE"]
+contains="defines": ["XRT_IMPL", "XRT_ENABLE_NETPOLL", "XRT_ENABLE_AOT_NETPOLL_CLOSE"]
 not_contains=xray_core

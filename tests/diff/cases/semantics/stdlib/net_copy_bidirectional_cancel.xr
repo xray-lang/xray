@@ -1,0 +1,38 @@
+import net
+import time
+import { CopyBidirectionalResult } from net
+
+// copyBidirectional is a real suspension point in both executors.  Cancelling
+// its task must publish TaskResult.Cancelled and wake any provider-side wait;
+// an AOT implementation that merely abandons a blocking async job hangs while
+// the runtime drains that job at process shutdown.
+fn bridgeUntilCancelled(a: move NetConn, b: move NetConn) -> CopyBidirectionalResult {
+    return net.copyBidirectional(a, b)
+}
+
+fn main() {
+    var listener = net.listen(0, 2)
+    const port = listener.port()
+    var left = net.dial("127.0.0.1", port)
+    var acceptedA = net.accept(listener)!
+    var right = net.dial("127.0.0.1", port)
+    var acceptedB = net.accept(listener)!
+    var bridge = go bridgeUntilCancelled(move acceptedA, move acceptedB)
+
+    // Let the child publish its suspend state before cancellation.  No bytes
+    // or half-closes are sent, so cancellation is the only wakeup source for
+    // the bidirectional pump.
+    time.sleep(10)
+    bridge.cancel()
+    match (bridge.awaitResult()) {
+        TaskResult.Cancelled -> print("cancelled")
+        _ -> print("unexpected")
+    }
+
+    net.close(left)
+    net.close(right)
+    net.close(listener)
+    print("closed")
+}
+
+main()

@@ -39,6 +39,13 @@ int xrt_gen_iter_has_next(xrt_iterator_t *it) {
         it->cursor = 1;
         return 1;
     }
+    /* gen_drive exposes the producer's terminal value from the producer's
+     * execution arena.  Materialize the failure in the consumer arena before
+     * finish destroys the producer arena; retaining alone cannot extend an
+     * arena's lifetime.  The pending-error / exception channel takes the
+     * cloned owner. */
+    if (kind == XR_AOT_GEN_DRIVE_ERROR && !XR_IS_NULL(out))
+        out = xrt_value_clone_for_coro(out);
     xrt_gen_iter_finish(it);
     if (kind == XR_AOT_GEN_DRIVE_ERROR && !XR_IS_NULL(out)) {
         if (error_is_value)

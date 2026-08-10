@@ -7472,6 +7472,22 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             uint32_t size = storage_size ? storage_size : *(uint32_t *) val.ptr;
             if (size == 0 || size > (16u * 1024u * 1024u))
                 return val;
+            /* Nominal boxed value-structs carry their type identity in the
+             * aggregate allocation header.  Their registered clone owns the
+             * field-by-field ARC operation; a raw memcpy would alias owning
+             * string/container fields and the first release would invalidate
+             * the clone. */
+            XrObjHeader *header = XRT_ARC_HDR(val.ptr);
+            if (header->type == XR_TINSTANCE) {
+                uint16_t type_id = xrt_aot_class_type_id(header);
+                if (type_id != 0 && type_id < xrt_type_count) {
+                    XrtRuntimeClone clone_fn = xrt_type_table[type_id].runtime_clone;
+                    if (clone_fn) {
+                        void *cloned = clone_fn(val.ptr);
+                        return cloned ? xr_aggregate_ref(cloned, storage_size) : XR_NULL_VAL;
+                    }
+                }
+            }
             void *dst = xrt_arc_alloc(size);
             memcpy(dst, val.ptr, size);
             return storage_size ? xr_aggregate_ref(dst, storage_size)

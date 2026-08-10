@@ -38,6 +38,7 @@ add_xray_unit_test(test_arena util/test_arena.c)
 
 add_xray_unit_test(test_region mem/test_region.c)
 add_xray_unit_test(test_obj_header mem/test_obj_header.c)
+add_xray_unit_test(test_fixed_heap_teardown mem/test_fixed_heap_teardown.c)
 # The runtime half of `weak`, tested before any language
 # surface exists for it (W1 read-promotes, W5 definite clearing point).
 add_xray_unit_test(test_weak_handle mem/test_weak_handle.c)

@@ -256,11 +256,90 @@ static void emit_struct_arc_value_expr(FILE *out, uint8_t native_type, const cha
     }
 }
 
-static void emit_struct_native_lifecycle_helpers(FILE *out, const XrAggregateLayout *sl) {
+static void emit_struct_native_lifecycle_helpers(FILE *out, const XrAggregateLayout *sl,
+                                                 bool emit_runtime_clone) {
     if (!cg_struct_layout_has_arc_refs(sl))
         return;
     char tname[128];
     cg_struct_heap_type_name(tname, sizeof(tname), NULL, sl);
+
+    if (emit_runtime_clone) {
+        /* A boxed value-struct is an aggregate-ref whose payload lives after an
+         * allocation header.  A byte copy is only valid for trivial layouts:
+         * for owning fields it creates two payloads that both believe they own
+         * the same reference.  Hosted execution therefore registers one
+         * type-directed clone for every aggregate execution boundary. */
+        fprintf(out, "static void ");
+        emit_struct_lifecycle_helper_name(out, sl, "clone_into");
+        fprintf(out,
+                "(void *dst_obj, const void *src_obj) {\n"
+                "    %s *dst = (%s*)dst_obj;\n"
+                "    const %s *src = (const %s*)src_obj;\n"
+                "    if (!dst || !src) return;\n"
+                "    memcpy(dst, src, sizeof(*dst));\n",
+                tname, tname, tname, tname);
+        for (uint16_t i = 0; i < sl->field_count; i++) {
+            const XrAggregateFieldLayout *field = &sl->fields[i];
+            char field_name[128];
+            char src_expr[300];
+            char dst_expr[300];
+            cg_struct_field_c_name(sl, i, field_name, sizeof(field_name));
+            snprintf(src_expr, sizeof(src_expr), "src->%s", field_name);
+            snprintf(dst_expr, sizeof(dst_expr), "dst->%s", field_name);
+            if (cg_struct_native_type_is_arc_ref(field->native_type)) {
+                fprintf(out, "    { XrValue cloned = xrt_value_clone_for_coro(");
+                emit_struct_arc_value_expr(out, field->native_type, src_expr);
+                fprintf(out, "); %s = ", dst_expr);
+                if (field->native_type == XR_NATIVE_STRING || field->native_type == XR_NATIVE_VALUE)
+                    fprintf(out, "cloned");
+                else
+                    fprintf(out, "(%s)cloned.ptr", cg_struct_field_c_type(sl, i));
+                fprintf(out, "; }\n");
+            } else if (field->native_type == XR_NATIVE_NESTED_AGGREGATE &&
+                       cg_struct_layout_has_arc_refs(field->sub_layout)) {
+                fprintf(out, "    ");
+                emit_struct_lifecycle_helper_name(out, field->sub_layout, "clone_into");
+                fprintf(out, "(&%s, &%s);\n", dst_expr, src_expr);
+            } else if (field->native_type == XR_NATIVE_ARRAY && field->elem_count > 0 &&
+                       cg_struct_native_type_is_arc_ref(field->elem_native_type)) {
+                fprintf(out,
+                        "    for (uint32_t i = 0; i < %uu; i++) { XrValue cloned = "
+                        "xrt_value_clone_for_coro(",
+                        (unsigned) field->elem_count);
+                char src_item_expr[340];
+                snprintf(src_item_expr, sizeof(src_item_expr), "%s[i]", src_expr);
+                emit_struct_arc_value_expr(out, field->elem_native_type, src_item_expr);
+                fprintf(out, "); %s[i] = ", dst_expr);
+                if (field->elem_native_type == XR_NATIVE_STRING ||
+                    field->elem_native_type == XR_NATIVE_VALUE)
+                    fprintf(out, "cloned");
+                else
+                    fprintf(out, "(%s)cloned.ptr",
+                            cg_struct_native_c_type(field->elem_native_type));
+                fprintf(out, "; }\n");
+            }
+        }
+        fprintf(out, "}\n");
+
+        fprintf(out, "static void *");
+        emit_struct_lifecycle_helper_name(out, sl, "runtime_clone");
+        fprintf(out,
+                "(void *obj) {\n"
+                "    %s *src = (%s*)obj;\n"
+                "    if (!src) return NULL;\n"
+                "    XrObjHeader *src_header = XRT_ARC_HDR(src);\n"
+                "    uint16_t type_id = xrt_aot_class_type_id(src_header);\n"
+                "    if (type_id == 0) return NULL;\n"
+                "    %s *dst = (%s*)xrt_arc_alloc(sizeof(*dst));\n"
+                "    XrObjHeader *dst_header = XRT_ARC_HDR(dst);\n"
+                "    xrt_heap_header_init(dst_header, XR_TINSTANCE);\n"
+                "    xrt_aot_class_type_set(dst_header, type_id);\n"
+                "    dst_header->extra |= XR_OBJ_HAS_DTOR;\n"
+                "    ",
+                tname, tname, tname, tname);
+        emit_struct_lifecycle_helper_name(out, sl, "clone_into");
+        fprintf(out, "(dst, src);\n    return dst;\n}\n");
+    }
 
     fprintf(out, "static void ");
     emit_struct_lifecycle_helper_name(out, sl, "promote_storage");
@@ -326,7 +405,8 @@ static void emit_struct_native_lifecycle_helpers(FILE *out, const XrAggregateLay
     fprintf(out, "}\n");
 }
 
-static void emit_struct_native_typedef(FILE *out, const XrAggregateLayout *sl, const char *prefix) {
+static void emit_struct_native_typedef(FILE *out, const XrAggregateLayout *sl, const char *prefix,
+                                       bool emit_runtime_clone) {
     char tname[128];
     cg_struct_heap_type_name(tname, sizeof(tname), prefix, sl);
     bool is_union = sl && sl->kind == XR_AGG_LAYOUT_UNION;
@@ -343,7 +423,7 @@ static void emit_struct_native_typedef(FILE *out, const XrAggregateLayout *sl, c
         fprintf(out, "; ");
     }
     fprintf(out, "} %s;\n", tname);
-    emit_struct_native_lifecycle_helpers(out, sl);
+    emit_struct_native_lifecycle_helpers(out, sl, emit_runtime_clone);
     fprintf(out, "#endif\n");
 }
 
@@ -420,13 +500,14 @@ static void cg_collect_struct_layouts_from_func(const XiFunc *f, const XrAggrega
         cg_collect_struct_layouts_from_func(f->children[ci], layouts, hashes, count);
 }
 
-static void emit_struct_native_typedefs(FILE *out, const XiFunc *f, const char *prefix) {
+static void emit_struct_native_typedefs(FILE *out, const XiFunc *f, const char *prefix,
+                                        bool emit_runtime_clone) {
     const XrAggregateLayout *layouts[CG_STRUCT_TYPEDEF_MAX];
     uint64_t hashes[CG_STRUCT_TYPEDEF_MAX];
     int count = 0;
     cg_collect_struct_layouts_from_func(f, layouts, hashes, &count);
     for (int i = 0; i < count; i++)
-        emit_struct_native_typedef(out, layouts[i], prefix);
+        emit_struct_native_typedef(out, layouts[i], prefix, emit_runtime_clone);
 }
 
 static const XrAggregateFieldLayout *cg_struct_field(const XrAggregateLayout *sl, int64_t idx) {

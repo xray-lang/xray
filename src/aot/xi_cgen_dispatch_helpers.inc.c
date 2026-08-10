@@ -5838,6 +5838,28 @@ static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiFun
     return arg;
 }
 
+static const XiValue *xicgen_native_bool_print_source(XiCgenCtx *ctx, const XiFunc *f,
+                                                      const XiValue *v) {
+    if (!ctx || !v || v->nargs != 1)
+        return NULL;
+    const XiValue *arg = v->args[0];
+    if (!arg)
+        return NULL;
+    const XiValue *boxed = NULL;
+    if (arg->op == XI_BOX && arg->nargs >= 1) {
+        boxed = arg;
+        arg = arg->args[0];
+    }
+    if (boxed && cg_func_needs_aot_coro_ctx(ctx, f) && cg_coro_value_needs_frame(ctx, f, boxed))
+        return NULL;
+    if (!arg->type || arg->type->kind != XR_KIND_BOOL || arg->type->is_nullable)
+        return NULL;
+    XrRep rep = cg_value_plan_storage_rep(ctx, arg);
+    if (rep != XR_REP_I64 && rep != XR_REP_TAGGED)
+        return NULL;
+    return arg;
+}
+
 static bool xicgen_type_is_unsigned_int(const XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->is_nullable)
         return false;
@@ -5934,7 +5956,10 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     bool add_space = (flags & 1) != 0;
     bool newline = (flags & 2) != 0;
     const XiValue *native_int = xicgen_native_int_print_source(ctx, f, v);
-    bool print_span = !native_int && v->args[0] && cg_value_plan_is_span_aggregate(ctx, v->args[0]);
+    const XiValue *native_bool =
+        ctx && !ctx->freestanding_profile ? xicgen_native_bool_print_source(ctx, f, v) : NULL;
+    bool print_span = !native_int && !native_bool && v->args[0] &&
+                      cg_value_plan_is_span_aggregate(ctx, v->args[0]);
 
     if (ctx && ctx->freestanding_profile) {
         if (add_space)
@@ -5973,7 +5998,14 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
 
     if (add_space)
         fprintf(out, "(putchar(' '), ");
-    if (native_int) {
+    if (native_bool) {
+        fprintf(out, "%s((", newline ? "puts" : "fputs");
+        emit_value_as_rep_ctx(ctx, out, native_bool, XR_REP_I64);
+        fprintf(out, ") ? \"true\" : \"false\"");
+        if (!newline)
+            fprintf(out, ", stdout");
+        fprintf(out, ")");
+    } else if (native_int) {
         if (xicgen_type_is_unsigned_int(native_int->type)) {
             fprintf(out, "printf(\"%%llu\", (unsigned long long)(uint64_t)");
             emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
@@ -11391,6 +11423,11 @@ static void emit_one_class_native_type_register_helper(XiCgenCtx *ctx, FILE *out
     if (cd->instance_layout) {
         fprintf(out, "    xrt_type_set_runtime_clone(_tid, ");
         emit_class_native_runtime_clone_name(out, prefix, cd);
+        fprintf(out, ");\n");
+    } else if (!ctx->freestanding_profile && cd->struct_layout &&
+               cg_struct_layout_has_arc_refs(cd->struct_layout)) {
+        fprintf(out, "    xrt_type_set_runtime_clone(_tid, ");
+        emit_struct_lifecycle_helper_name(out, cd->struct_layout, "runtime_clone");
         fprintf(out, ");\n");
     }
     if (emit_type_names)

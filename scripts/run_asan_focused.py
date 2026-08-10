@@ -62,12 +62,13 @@ LANE = "asan_focused"
 # This lane still exercises the sanitized compiler and C generator below via
 # real AOT workloads and the backend-diff subset.
 DEFAULT_CTEST_EXCLUDE = (
-    "native_error_abi|param_mode_diagnostics|param_contract|test_cli_toolchain|test_xi_cgen"
+    "native_error_abi|param_mode_diagnostics|param_contract|test_cli_toolchain|"
+    "test_lsp_protocol_transcript|test_xi_cgen"
 )
-# The toolchain unit test starts short-lived provider processes under the
-# public 5s version-probe bound; run it serially so a saturated ASan lane
-# cannot consume that budget through scheduler starvation.
-DEFAULT_SERIAL_REGEX = "^test_cli_toolchain$"
+# These tests start short-lived subprocesses under public protocol timeouts;
+# run them serially so a saturated ASan lane cannot consume those budgets
+# through scheduler starvation.
+DEFAULT_SERIAL_REGEX = "^(test_cli_toolchain|test_lsp_protocol_transcript)$"
 DEFAULT_DIFF_REGEX = "task190_.*_backend_diff"
 
 ASAN_OPTIONS = ("detect_leaks=0:abort_on_error=1:symbolize=1:"

@@ -57,6 +57,14 @@ For every RC-managed value, including registered identity aliases:
   (L0 type graph), broken explicitly with a `weak` field (L1), and capped by
   this boundary (L2); the development detector reports them — coroutine heaps
   per teardown, the shared domain at main-execution exit — and never reclaims.
+- C7: root-execution and module-static objects may reference each other, so
+  teardown is a three-stage lifetime barrier rather than an arbitrary heap
+  ordering. Fixed-heap finalization runs every module-static destructor while
+  root storage is alive; root-heap teardown then runs while all finalized fixed
+  bodies and sticky headers remain addressable; fixed-heap reclaim frees those
+  bodies only after root finalization is complete. Each stage is idempotent,
+  allocation is closed as soon as fixed finalization begins, and no combined
+  finalize-and-free shortcut may reintroduce order-dependent destruction.
 
 The independent verifier must not reuse ARC closure/alias implementation logic.
 It runs after ARC insertion in every build and reports violations as ICEs with
@@ -84,5 +92,9 @@ this one. A contract names what it proves; this line names what it does not.
 anchor-sha256: src/ir/xi_arc_verify.c 58d5224154e99dc36587c68c1a3250dbdb11b17e817ece51ce127bdcdd24af63
 anchor-sha256: src/ir/xi_arc.c a2bbd81d9ff88c6c730bfa45e962037165e419254bbdc4f54e1e5004965fd2b2
 anchor-sha256: src/ir/xi_lower_expr.c 60ab5b5afe44118d4d66b7c582373c24dc21ced1745d1b509eeadae0313210f1
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 9870bcf62eeae96bc436538e03def9bb3db3e8010535037539f9032e54805fd7
-anchor-sha256: src/aot/xrt_coll.h eb25a78e95dbcb241a31cb9a6040edb1d8aa1032bc1e4d1703727231f307042d
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c e1272f72c47bd66a1abd8aff438939460f10afb0ddb4a237a8a2f3e00fb9137b
+anchor-sha256: src/aot/xrt_coll.h 203ac6f1a46b9c96a6d1f942e7aaa6a1cbf16c43e5f6ff7d1c7f39e4bbb3b6a5
+anchor-sha256: src/runtime/mem/xfixed_heap.c 46e45573a71b10592f12f5215f374c6dd896b4cf0e16bfc85f04b586a33fb5c3
+anchor-sha256: src/runtime/core/xr_runtime_core.c cbd57898ab2362dcd2c3676b0762037c93d85b3a9ddcff5bd8ce18f8a78c5b82
+anchor-sha256: src/api/xisolate.c 1fe98a6c6dbc491fa6ca2f8554c73883ad9fdf719b93a9441ddb9089a377b271
+anchor-sha256: tests/unit/mem/test_fixed_heap_teardown.c 5522ad5fbc6a273595a33a05dac4cc87da9d96395a4278d39b66530c8362389e

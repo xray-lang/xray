@@ -245,7 +245,14 @@ static bool cg_entry_uses_root_descriptor(XiCgenCtx *ctx) {
 /* The freestanding and C90 runtime kernels carry neither the shared value
  * formatter nor stderr, so only the hosted profile can render a diagnostic. */
 static bool cg_can_report_uncaught_error(const XiCgenCtx *ctx) {
-    return ctx && !ctx->freestanding_profile && ctx->c_dialect != XI_CGEN_C_DIALECT_C90;
+    const XaotBundle *bundle;
+    if (!ctx || ctx->freestanding_profile || ctx->c_dialect == XI_CGEN_C_DIALECT_C90)
+        return false;
+    bundle = cg_ctx_aot_bundle(ctx);
+    if (!bundle || !bundle->has_entry_plan)
+        return true;
+    return (bundle->entry_plan.reachable_effect_bits &
+            (XR_EFFECT_MAY_ERROR | XR_EFFECT_MAY_PANIC)) != 0;
 }
 
 /* Uncaught top-level value-return error (spec §8.1.1): report, then exit 1.
@@ -1024,7 +1031,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
 
     emit_class_native_typedefs(ctx, types, module, prefix);
     emit_class_shared_native_storage_decls(ctx, types, prefix);
-    emit_struct_native_typedefs(types, main_func, prefix);
+    emit_struct_native_typedefs(types, main_func, prefix, !ctx->freestanding_profile);
     emit_enum_native_typedefs(ctx, types, module);
 
     emit_forward_decls(ctx, forwards, main_func, prefix);
@@ -1367,7 +1374,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
             emit_class_shared_native_storage_decls(ctx, unit, prefix);
             emit_imported_class_shared_native_storage_decls(ctx, unit);
         }
-        emit_struct_native_typedefs(unit, module->init, prefix);
+        emit_struct_native_typedefs(unit, module->init, prefix, !ctx->freestanding_profile);
         /* enum aggregate from_base converters (emitted next, in the TYPES phase
          * as file-scope static inline functions) may reference module shared-slot
          * arrays for class native type ids after the unified native class

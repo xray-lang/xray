@@ -17,7 +17,11 @@ fn same_items(items: move Array<int>) -> Array<int> {
     return items
 }
 
-print(choose(true, add_i64(21, 21)))
-print(echo_text("ptr"))
-var items: Array<int> = [1, 2, 3]
-print(len(same_items(move items)))
+fn main() {
+    print(choose(true, add_i64(21, 21)))
+    print(echo_text("ptr"))
+    var items: Array<int> = [1, 2, 3]
+    print(len(same_items(move items)))
+}
+
+main()

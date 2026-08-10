@@ -26,6 +26,7 @@
 #include "../runtime/mem/xobj_destroy_ops.h"
 #include "../runtime/object/xstring.h"
 #include "xblock.h"
+#include "xasync.h"
 #include "xcoro_pool.h"
 #include "xcoroutine.h"
 #include "xnetpoll.h"
@@ -1108,6 +1109,43 @@ XrAotResult xr_aot_io_wait_resume(const XrAotContext *ctx) {
     if (aot_coro_cancelled(ctx->coro))
         return xr_aot_result(XR_AOT_RUN_CANCELLED);
     return aot_io_wait_result(xr_coro_io_wait_resume(ctx->coro));
+}
+
+XrAotResult xr_aot_async_submit(const XrAotContext *ctx, XrAotAsyncInvokeFn invoke, void *data,
+                                XrAotAsyncDestroyFn destroy_data) {
+    XrRuntime *scheduler = ctx && ctx->runtime ? xr_aot_runtime_scheduler(ctx->runtime) : NULL;
+    XrWorker *worker = ctx ? (XrWorker *) ctx->worker : NULL;
+    if (!ctx || !ctx->coro || !scheduler || !scheduler->async_pool || !worker || !invoke) {
+        if (destroy_data && data)
+            destroy_data(data);
+        return xr_aot_error(XR_NULL_VAL, false);
+    }
+    if (aot_coro_cancelled(ctx->coro)) {
+        if (destroy_data && data)
+            destroy_data(data);
+        return xr_aot_result(XR_AOT_RUN_CANCELLED);
+    }
+
+    XrAsyncJob *job = xr_async_job_create(ctx->coro, worker->p.id, invoke, data);
+    if (!job) {
+        if (destroy_data && data)
+            destroy_data(data);
+        return xr_aot_error(XR_NULL_VAL, false);
+    }
+    job->destroy_data = destroy_data;
+    if (!xr_async_submit(scheduler->async_pool, job)) {
+        xr_async_job_free(job);
+        return xr_aot_error(XR_NULL_VAL, false);
+    }
+    return xr_aot_blocked();
+}
+
+XrAotResult xr_aot_async_resume(const XrAotContext *ctx) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+    if (aot_coro_cancelled(ctx->coro))
+        return xr_aot_result(XR_AOT_RUN_CANCELLED);
+    return xr_aot_result(XR_AOT_RUN_DONE);
 }
 
 void xr_aot_netpoll_close_fd(int fd) {

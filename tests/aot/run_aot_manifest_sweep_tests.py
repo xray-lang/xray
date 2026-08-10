@@ -20,14 +20,14 @@ from typing import Any
 PROJECT_DIR = pathlib.Path(__file__).resolve().parents[2]
 DIFF_CASE_DIR = PROJECT_DIR / "tests" / "diff" / "cases"
 
-ALLOWED_RUNTIME_PREFIXES = (
+EXPECTED_RUNTIME_PREFIXES = (
     "tests/diff/cases/semantics/coro/",
     # Generators lower to stackless coroutines, so they legitimately pull the
     # coroutine runtime archive.
     "tests/diff/cases/semantics/generator/",
 )
 
-ALLOWED_RUNTIME_CASES = {
+EXPECTED_RUNTIME_CASES = {
     "tests/diff/cases/limits/select_cases_over_32.xr",
     "tests/diff/cases/semantics/cleanup/defer_async_await.xr",
     "tests/diff/cases/semantics/cleanup/defer_coroutine.xr",
@@ -51,6 +51,19 @@ ALLOWED_RUNTIME_CASES = {
     "tests/diff/cases/liveness/cancel_responsive_blocking.xr",
     "tests/diff/cases/liveness/deadlock_reported.xr",
     "tests/diff/cases/liveness/orphan_warned.xr",
+    "tests/diff/cases/liveness/channel_handoff_not_deadlock.xr",
+    # These fixtures contain a reachable coroutine/generator body.  The
+    # executable closure therefore needs the coroutine runtime even though the
+    # surrounding ownership/generic assertions are not scheduler tests.
+    "tests/diff/cases/semantics/cleanup/defer_coroutine_local_panic_handler.xr",
+    "tests/diff/cases/semantics/collections/method_self_return_ownership.xr",
+    "tests/diff/cases/semantics/generic_iterable_constraint.xr",
+    # runtime.liveBytes/liveObjects observe the execution-local reclamation
+    # domain, whose identity and counters are owned by the coroutine runtime.
+    "tests/diff/cases/semantics/modules/value_struct_return_release.xr",
+    # time.sleep is a yieldable timer operation and the class payload exercises
+    # runtime-owned object accounting.
+    "tests/diff/cases/semantics/oop/native_class_reference_field_transfer.xr",
     # This fixture's `go` lambda is itself the runtime-backed behavior under
     # test, even though the captured values are otherwise ordinary locals.
     "tests/diff/cases/semantics/concurrency/go_lambda_local_scope.xr",
@@ -69,6 +82,7 @@ ALLOWED_RUNTIME_CASES = {
     # directions can make progress concurrently; these cases intentionally
     # exercise that runtime-backed implementation and therefore pull coro/task.
     "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_error_enum.xr",
+    "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_cancel.xr",
     "tests/diff/cases/semantics/stdlib/net_copy_bidirectional_transfer.xr",
     # The direct byte-I/O loopback case runs its echo endpoint in a `go` task
     # and awaits it after the client exchange. The net calls stay direct, while
@@ -127,10 +141,36 @@ def rel(path: pathlib.Path) -> str:
     return path.relative_to(PROJECT_DIR).as_posix()
 
 
-def is_allowed_runtime_case(case: str) -> bool:
-    return case in ALLOWED_RUNTIME_CASES or any(
-        case.startswith(prefix) for prefix in ALLOWED_RUNTIME_PREFIXES
+def is_expected_runtime_case(case: str) -> bool:
+    return case in EXPECTED_RUNTIME_CASES or any(
+        case.startswith(prefix) for prefix in EXPECTED_RUNTIME_PREFIXES
     )
+
+
+def expects_closed_world_rejection(case: pathlib.Path) -> bool:
+    """A VM-only differential case is still checked, not silently skipped.
+
+    The sole VM-only fixture pins the intentional closed-world boundary: AOT
+    must reject its open callable target with the canonical user diagnostic.
+    """
+    return "// diff-backends: vm" in case.read_text(encoding="utf-8").splitlines()
+
+
+def run_closed_world_rejection(xray: pathlib.Path, case: pathlib.Path,
+                               out_c: pathlib.Path) -> None:
+    result = subprocess.run(
+        [str(xray), "build", "--native", "-c", "-o", str(out_c), str(case)],
+        cwd=PROJECT_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    output = result.stdout + result.stderr
+    canonical = b"native compilation cannot prove the target of an indirect call"
+    if result.returncode == 0 or canonical not in output:
+        excerpt = repr(b"\n".join(output.strip().splitlines()[:40]))
+        raise RuntimeError(
+            f"expected canonical closed-world AOT rejection for {rel(case)}\n{excerpt}"
+        )
 
 
 def manifest_from_stdout(stdout: bytes) -> dict[str, Any]:
@@ -187,13 +227,18 @@ def main(argv: list[str]) -> int:
     cases = collect_cases()
     failures: list[str] = []
     checked = 0
-    allowed_runtime = 0
+    expected_runtime = 0
+    checked_rejections = 0
 
     with tempfile.TemporaryDirectory(prefix="xray_aot_manifest_sweep.") as tmp:
         out_c = pathlib.Path(tmp) / "case.c"
         for case in cases:
             case_rel = rel(case)
             try:
+                if expects_closed_world_rejection(case):
+                    run_closed_world_rejection(xray, case, out_c)
+                    checked_rejections += 1
+                    continue
                 manifest = run_manifest(xray, case, out_c)
             except Exception as exc:  # keep sweeping so the report is actionable
                 failures.append(str(exc))
@@ -208,11 +253,11 @@ def main(argv: list[str]) -> int:
                 failures.append(f"{case_rel}: manifest references xray_core")
 
             if runtime_objects:
-                if is_allowed_runtime_case(case_rel):
-                    allowed_runtime += 1
+                if is_expected_runtime_case(case_rel):
+                    expected_runtime += 1
                     if runtime_objects != ["xray_rt_coro"]:
                         failures.append(
-                            f"{case_rel}: allowed runtime case has unexpected runtime_objects "
+                            f"{case_rel}: runtime contract has unexpected runtime_objects "
                             f"{runtime_objects!r}"
                         )
                     continue
@@ -229,7 +274,8 @@ def main(argv: list[str]) -> int:
 
     print(
         f"PASS: AOT manifest sweep checked {checked} diff cases; "
-        f"{allowed_runtime} explicit runtime cases allowed"
+        f"{expected_runtime} explicit runtime contracts and "
+        f"{checked_rejections} closed-world rejection contracts verified"
     )
     return 0
 

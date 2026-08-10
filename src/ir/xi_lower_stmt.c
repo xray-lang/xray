@@ -4163,7 +4163,7 @@ static void lower_reexport_stmt(XiLower *l, AstNode *node) {
     }
 }
 
-bool xi_lower_import_member_is_type_only(const XiLower *l, const ImportMember *member) {
+XR_FUNC bool xi_lower_import_member_is_type_only(const XiLower *l, const ImportMember *member) {
     XaSymbol *symbol;
     if (!l || !l->analyzer || !l->analyzer->global_scope || !member || member->symbol_id == 0)
         return false;

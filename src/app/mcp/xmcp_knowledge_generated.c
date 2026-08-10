@@ -6212,6 +6212,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     {
+        .name = "XML_DEFAULT_OPTIONS",
+        .signature = ": XmlOptions",
+        .summary = "",
+    },
+    {
         .name = "XmlAttribute",
         .signature = "XmlAttribute",
         .summary = "",
@@ -10283,6 +10288,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `xml.XML_DEFAULT_OPTIONS` | `: XmlOptions` |  |\n"
             "| `XmlAttribute` | `XmlAttribute` |  |\n"
             "| `XmlAttribute.constructor` | `(name: XmlName, value: string): ()` |  |\n"
             "| `XmlAttribute.name` | `: XmlName` |  |\n"

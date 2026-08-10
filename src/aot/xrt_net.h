@@ -19,6 +19,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1079,6 +1080,66 @@ static inline XrtI64PairResult xrt_net_copy_bidirectional(XrValue a_value, XrVal
             }
         }
     }
+}
+
+/* A blocking bidirectional pump runs on the scheduler's bounded async pool.
+ * The two handles have already been promoted out of their coroutine execution
+ * arena before this state is created.  One state owner belongs to the AOT
+ * frame and one to the async job, so cancellation can release the frame while
+ * the blocking syscall still finishes without leaving dangling handle views. */
+typedef struct XrtNetBidiAsyncState {
+    _Atomic int refs;
+    XrValue a;
+    XrValue b;
+    XrtI64PairResult result;
+} XrtNetBidiAsyncState;
+
+static inline XrtNetBidiAsyncState *xrt_net_bidi_async_state_new(XrValue a, XrValue b) {
+    XrtNetBidiAsyncState *state =
+        (XrtNetBidiAsyncState *) XRT_CALLOC(1, sizeof(XrtNetBidiAsyncState));
+    if (!state)
+        return NULL;
+    atomic_init(&state->refs, 1);
+    state->a = a;
+    state->b = b;
+    state->result = xrt_net_bidi_result(0, 0, 9); /* NetError.OutOfMemory */
+    xrt_retain(a);
+    xrt_retain(b);
+    return state;
+}
+
+static inline void xrt_net_bidi_async_state_retain(XrtNetBidiAsyncState *state) {
+    if (state)
+        atomic_fetch_add_explicit(&state->refs, 1, memory_order_relaxed);
+}
+
+static inline void xrt_net_bidi_async_state_cancel(XrtNetBidiAsyncState *state) {
+    if (!state)
+        return;
+    xrt_net_conn_object_t *a = xrt_net_conn_ptr(state->a);
+    xrt_net_conn_object_t *b = xrt_net_conn_ptr(state->b);
+    /* shutdown is thread-safe for a live socket and wakes select/recv/send.
+     * The job's state owner keeps both handle objects alive until its callback
+     * returns; ordinary close/destruction remains with the language owners. */
+    if (a && !a->base.closed && a->base.fd != XR_INVALID_SOCKET)
+        (void) shutdown(a->base.fd, XR_SHUT_RDWR);
+    if (b && !b->base.closed && b->base.fd != XR_INVALID_SOCKET)
+        (void) shutdown(b->base.fd, XR_SHUT_RDWR);
+}
+
+static inline void xrt_net_bidi_async_state_release(void *raw_state) {
+    XrtNetBidiAsyncState *state = (XrtNetBidiAsyncState *) raw_state;
+    if (!state || atomic_fetch_sub_explicit(&state->refs, 1, memory_order_acq_rel) != 1)
+        return;
+    xrt_release(state->a);
+    xrt_release(state->b);
+    XRT_FREE(state);
+}
+
+static inline void xrt_net_bidi_async_invoke(void *raw_state) {
+    XrtNetBidiAsyncState *state = (XrtNetBidiAsyncState *) raw_state;
+    if (state)
+        state->result = xrt_net_copy_bidirectional(state->a, state->b);
 }
 
 /*

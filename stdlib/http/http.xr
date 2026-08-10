@@ -449,14 +449,7 @@ fn _limitExceeded(limit: int, current: int, added: int) -> bool {
 }
 
 fn _formBasename(path: Path) -> string {
-    var raw = path.raw
-    if (len(raw) == 0) { return "" }
-    var end = len(raw)
-    while (end > 0 && raw.slice(end - 1, end) == "/") { end = end - 1 }
-    if (end == 0) { return "" }
-    var start = end
-    while (start > 0 && raw.slice(start - 1, start) != "/") { start = start - 1 }
-    return raw.slice(start, end)
+    return pathutil.basename(path)
 }
 
 fn _boundary() -> string {

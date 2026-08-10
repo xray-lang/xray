@@ -14,4 +14,4 @@ c_regex=static XRT_ATTR_USED XRT_FN_CONST void \* function_abi_[0-9a-f]+_echo_te
 c_regex=static XRT_ATTR_USED XRT_FN_CONST void \* function_abi_[0-9a-f]+_same_items_[0-9]+\(xrt_closure_t \*_cl, void \* p0\)
 c_not_regex=xr_str_value_from_ptr\(function_abi_[0-9a-f]+_echo_text_
 c_not_regex=xr_mkptr\(function_abi_[0-9a-f]+_same_items_
-contains=stats functions=5 native=4 tagged=1 coro=0
+contains=stats functions=6 native=5 tagged=1 coro=0

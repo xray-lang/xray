@@ -190,7 +190,7 @@ void xr_sysheap_destroy_coro_storage(XrSystemHeap *heap) {
 
     /* The Region block L2 pool is deliberately NOT drained here. A coroutine
      * Region block flushed to this pool can still back a live object that a
-     * fixed-heap (immortal) container references. xr_fixed_heap_cleanup runs
+     * fixed-heap (immortal) container references. Fixed-heap finalization runs
      * those container destructors AFTER coroutine-struct teardown, so the block
      * memory must stay addressable until then, otherwise the destructor's
      * xr_rc_release() reads a freed object header (heap-use-after-free at
@@ -207,7 +207,7 @@ void xr_sysheap_destroy(XrSystemHeap *heap) {
 
     // Drain the Region block L2 pool last: coroutine heap teardown and worker
     // exit push recycled blocks here. Freeing them only now — after fixed-heap
-    // cleanup has released every reference into these blocks — keeps container
+    // finalization has released every reference into these blocks — keeps container
     // destructors from dereferencing already-freed coroutine-heap objects.
     sysheap_block_pool_drain(heap);
 

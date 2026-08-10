@@ -425,11 +425,11 @@ static void emit_int64_arg(FILE *out, const XiValue *v) {
     }
 }
 
-static void emit_assign_from_xrvalue_temp(FILE *out, const XiValue *dst, const char *temp_name) {
+static void emit_assign_from_xrvalue_temp_rep(FILE *out, const XiValue *dst, const char *temp_name,
+                                              XrRep rep) {
     fprintf(out, "    ");
     emit_vref(out, dst);
     fprintf(out, " = ");
-    XrRep rep = cg_rep(dst);
     if (rep == XR_REP_I64) {
         fprintf(out, "XR_TO_INT(%s)", temp_name);
     } else if (rep == XR_REP_F64) {
@@ -444,6 +444,10 @@ static void emit_assign_from_xrvalue_temp(FILE *out, const XiValue *dst, const c
     fprintf(out, ";\n");
 }
 
+static void emit_assign_from_xrvalue_temp(FILE *out, const XiValue *dst, const char *temp_name) {
+    emit_assign_from_xrvalue_temp_rep(out, dst, temp_name, cg_rep(dst));
+}
+
 /* Suspend-call results cross the runtime boundary as XrValue even when the
  * verified destination representation is an inline enum aggregate.  Keep that
  * boundary conversion here, next to the other coroutine result conversions,
@@ -452,7 +456,8 @@ static void emit_assign_from_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, const X
                                               const char *temp_name) {
     const XaotValuePlan *plan = cg_value_plan(ctx, dst);
     if (!plan || !cg_value_rep_is_adt_aggregate(plan->rep)) {
-        emit_assign_from_xrvalue_temp(out, dst, temp_name);
+        emit_assign_from_xrvalue_temp_rep(out, dst, temp_name,
+                                          plan ? xaot_value_storage_rep(plan->rep) : cg_rep(dst));
         return;
     }
     fprintf(out, "    ");
@@ -470,7 +475,8 @@ static void emit_assign_from_owned_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, c
                                                     const char *temp_name) {
     const XaotValuePlan *plan = cg_value_plan(ctx, dst);
     if (!plan || !cg_value_rep_is_adt_aggregate(plan->rep)) {
-        emit_assign_from_xrvalue_temp(out, dst, temp_name);
+        emit_assign_from_xrvalue_temp_rep(out, dst, temp_name,
+                                          plan ? xaot_value_storage_rep(plan->rep) : cg_rep(dst));
         return;
     }
     fprintf(out, "    ");
@@ -819,6 +825,7 @@ typedef enum {
     CG_CORO_NET_ACCEPT,
     CG_CORO_NET_READ_INTO,
     CG_CORO_NET_WRITE_BYTES,
+    CG_CORO_NET_COPY_BIDIRECTIONAL,
 } CgCoroNetCallKind;
 static CgCoroNetCallKind cg_coro_net_call_kind(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 
@@ -1080,6 +1087,8 @@ static size_t estimate_coro_frame_size(XiCgenCtx *ctx, const XiFunc *f) {
             CgCoroNetCallKind net_layout_kind = cg_coro_net_call_kind(ctx, f, v);
             if (net_layout_kind == CG_CORO_NET_WRITE_BYTES)
                 cg_coro_layout_add(&size, &max_align, sizeof(int64_t), _Alignof(int64_t));
+            if (net_layout_kind == CG_CORO_NET_COPY_BIDIRECTIONAL)
+                cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
             if (cg_coro_call_needs_child_frame(ctx, f, v)) {
                 cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
                 if (cg_coro_callable_target_switch_plan(ctx, v))
@@ -1298,18 +1307,27 @@ static void cg_collect_sync_go_targets_from_func(XiCgenCtx *ctx, const XiFunc *f
     if (!ctx || !f)
         return;
 
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (!v || (v->op != XI_GO && v->op != XI_THREAD_SPAWN) || v->nargs < 1)
+    /* Heartbeat/wrapper requirements are executable-code requirements, not
+     * whole-package inventory facts.  Imported libraries can contain dead
+     * coroutine callers of an otherwise live synchronous function.  Scanning
+     * those dead callers used to instrument the live function while the entry
+     * plan (correctly) omitted the coroutine runtime, leaving an undefined
+     * xr_aot_sync_backedge_heartbeat at link time.  Use the exact same
+     * reachability predicate that controls function-body emission. */
+    if (cg_func_body_is_reachable_from_roots(ctx, f, 0)) {
+        for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+            const XiBlock *blk = f->blocks[bi];
+            if (!blk)
                 continue;
-            CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
-            if (call.func && cg_func_can_emit_sync_go_wrapper_ctx(ctx, call.func)) {
-                (void) cg_mark_sync_go_target(ctx, call.func);
-                (void) cg_mark_sync_heartbeat_target(ctx, call.func);
+            for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+                const XiValue *v = blk->values[vi];
+                if (!v || (v->op != XI_GO && v->op != XI_THREAD_SPAWN) || v->nargs < 1)
+                    continue;
+                CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+                if (call.func && cg_func_can_emit_sync_go_wrapper_ctx(ctx, call.func)) {
+                    (void) cg_mark_sync_go_target(ctx, call.func);
+                    (void) cg_mark_sync_heartbeat_target(ctx, call.func);
+                }
             }
         }
     }
@@ -1322,7 +1340,7 @@ static void cg_collect_sync_heartbeat_targets_from_func(XiCgenCtx *ctx, const Xi
     if (!ctx || !f)
         return;
 
-    if (cg_func_needs_aot_coro_ctx(ctx, f)) {
+    if (cg_func_body_is_reachable_from_roots(ctx, f, 0) && cg_func_needs_aot_coro_ctx(ctx, f)) {
         for (uint32_t bi = 0; bi < f->nblocks; bi++) {
             const XiBlock *blk = f->blocks[bi];
             if (!blk)
@@ -2005,6 +2023,8 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             CgCoroNetCallKind net_kind = cg_coro_net_call_kind(ctx, f, v);
             if (net_kind == CG_CORO_NET_WRITE_BYTES)
                 fprintf(out, "    int64_t net_progress_%u;\n", v->id);
+            if (net_kind == CG_CORO_NET_COPY_BIDIRECTIONAL)
+                fprintf(out, "    XrtNetBidiAsyncState *net_bidi_state_%u;\n", v->id);
             if (cg_coro_call_needs_child_frame(ctx, f, v)) {
                 fprintf(out, "    void *call_frame_%u;\n", v->id);
                 if (cg_coro_callable_target_switch_plan(ctx, v))
@@ -2551,7 +2571,9 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
     fprintf(out, "S%d_RESULT:;\n", sid);
     fprintf(out, "    if (_call_%u.kind == XR_AOT_RUN_DONE) {\n", v->id);
     fprintf(out, "        _call_value_%u = _call_%u.value;\n", v->id, v->id);
-    if (cg_rep(v) == XR_REP_TAGGED && !cg_value_plan_is_aggregate(ctx, v))
+    XrRep result_storage_rep = cg_value_plan_storage_rep(ctx, v);
+    if ((result_storage_rep == XR_REP_TAGGED || result_storage_rep == XR_REP_PTR) &&
+        !cg_value_plan_is_aggregate(ctx, v))
         fprintf(out,
                 "        if (_call_value_%u.tag == XR_TAG_PTR || _call_value_%u.tag >= "
                 "XR_TAG_STR)\n"
@@ -2630,6 +2652,7 @@ static CgCoroNetCallKind cg_coro_net_call_kind(XiCgenCtx *ctx, const XiFunc *f, 
     CG_NET_MEMBER("__accept", CG_CORO_NET_ACCEPT);
     CG_NET_MEMBER("__readInto", CG_CORO_NET_READ_INTO);
     CG_NET_MEMBER("__writeBytes", CG_CORO_NET_WRITE_BYTES);
+    CG_NET_MEMBER("__copyBidirectional", CG_CORO_NET_COPY_BIDIRECTIONAL);
 #undef CG_NET_MEMBER
     return CG_CORO_NET_NONE;
 }
@@ -2658,11 +2681,164 @@ static void emit_coro_net_timeout_result(XiCgenCtx *ctx, FILE *out, const XiFunc
     fprintf(out, "        f->state = 0;\n        goto %s;\n    }\n", done_label);
 }
 
+static void emit_coro_net_bidi_materialize(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v,
+                                           const XrStdlibEnumDefEntry *error_enum) {
+    (void) f;
+    const XrType *object_type = v ? v->type : NULL;
+    bool object_ok = object_type && XR_TYPE_IS_STRUCT_OBJECT(object_type) &&
+                     object_type->object.field_count == 2 && object_type->object.field_names &&
+                     object_type->object.field_types && object_type->object.field_types[0] &&
+                     object_type->object.field_types[1] &&
+                     XR_TYPE_IS_INT(object_type->object.field_types[0]) &&
+                     XR_TYPE_IS_INT(object_type->object.field_types[1]);
+    if (!ctx || !out || !v || !error_enum || !object_ok || !error_enum->name ||
+        !error_enum->variants || error_enum->variant_count == 0) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: invalid yieldable net.copyBidirectional result contract\n");
+        emit_codegen_abort_aot_result(out);
+        return;
+    }
+
+    const char *const *names = (const char *const *) object_type->object.field_names;
+    uint64_t key_first = xg_object_stable_name_key(names[0]);
+    uint64_t key_second = xg_object_stable_name_key(names[1]);
+    bool first_leads = key_first < key_second ||
+                       (key_first == key_second && xg_name_id(names[0]) <= xg_name_id(names[1]));
+    int slot_first = first_leads ? 0 : 1;
+    int slot_second = first_leads ? 1 : 0;
+    int shape_id = cg_intern_object_shape_type_domain(ctx, object_type, XR_OBJECT_DOMAIN_STRUCT);
+    if (shape_id < 0) {
+        ctx->error = true;
+        emit_codegen_abort_aot_result(out);
+        return;
+    }
+
+    fprintf(out, "    if (_net_bidi_result_%u.error_index >= 0) {\n", v->id);
+    fprintf(out,
+            "        uint32_t _net_bidi_error_%u = "
+            "(uint32_t)_net_bidi_result_%u.error_index;\n",
+            v->id, v->id);
+    fprintf(out,
+            "        if (_net_bidi_error_%u >= UINT32_C(%u)) { "
+            "fputs(\"invalid yieldable stdlib error ordinal\\n\", stderr); abort(); }\n",
+            v->id, (unsigned) error_enum->variant_count);
+    fprintf(out, "        xrt_pending_error = xrt_enum_box_new(UINT32_C(%u), ",
+            (unsigned) error_enum->layout_id);
+    emit_c_string_literal(out, error_enum->name);
+    fprintf(out, ", ((const char *const[]){");
+    for (uint16_t i = 0; i < error_enum->variant_count; i++) {
+        if (i > 0)
+            fprintf(out, ", ");
+        emit_c_string_literal(out, error_enum->variants[i].name);
+    }
+    fprintf(out, "})[_net_bidi_error_%u], _net_bidi_error_%u);\n", v->id, v->id);
+    fprintf(out, "    }\n");
+    fprintf(out, "    XrValue _net_bidi_value_%u = xrt_object_new_shape(&_xobj_shape_%d);\n", v->id,
+            shape_id);
+    fprintf(out,
+            "    xrt_object_set_field(_net_bidi_value_%u, %d, "
+            "XR_FROM_INT(_net_bidi_result_%u.first));\n",
+            v->id, slot_first, v->id);
+    fprintf(out,
+            "    xrt_object_set_field(_net_bidi_value_%u, %d, "
+            "XR_FROM_INT(_net_bidi_result_%u.second));\n",
+            v->id, slot_second, v->id);
+    char value_name[64];
+    snprintf(value_name, sizeof(value_name), "_net_bidi_value_%u", v->id);
+    emit_assign_from_xrvalue_temp_ctx(ctx, out, v, value_name);
+}
+
+static bool emit_coro_net_bidi_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const XiValue *v, int *state_id) {
+    if (cg_coro_net_call_kind(ctx, f, v) != CG_CORO_NET_COPY_BIDIRECTIONAL)
+        return false;
+    uint16_t argc = v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
+    const XrStdlibDefEntry *method = NULL;
+    const XrStdlibEnumDefEntry *error_enum = NULL;
+    for (uint32_t i = 0; i < XR_STDLIB_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibDefEntry *candidate = &xr_stdlib_def_entries[i];
+        if (candidate->module && candidate->name && strcmp(candidate->module, "net") == 0 &&
+            strcmp(candidate->name, "__copyBidirectional") == 0 && candidate->argc == argc) {
+            method = candidate;
+            break;
+        }
+    }
+    for (uint32_t i = 0; i < XR_STDLIB_ENUM_DEF_ENTRY_COUNT; i++) {
+        const XrStdlibEnumDefEntry *candidate = &xr_stdlib_enum_def_entries[i];
+        if (candidate->module && candidate->name && strcmp(candidate->module, "net") == 0 &&
+            strcmp(candidate->name, "NetError") == 0) {
+            error_enum = candidate;
+            break;
+        }
+    }
+    if (argc != 2 || !method || !method->ret || strcmp(method->ret, "i64_pair_result") != 0 ||
+        !method->aot_enum || strcmp(method->aot_enum, "NetError") != 0 || !error_enum) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT net.copyBidirectional contract\n");
+        emit_codegen_abort_aot_result(out);
+        return true;
+    }
+
+    int sid = ++(*state_id);
+    fprintf(out,
+            "    XrtI64PairResult _net_bidi_result_%u = "
+            "xrt_net_bidi_result(0, 0, 9);\n",
+            v->id);
+    fprintf(out, "    {\n");
+    fprintf(out, "        XrValue _net_bidi_a_%u = xrt_value_set_storage_graph(", v->id);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ", XR_OBJ_STORAGE_SHARED);\n");
+    fprintf(out, "        XrValue _net_bidi_b_%u = xrt_value_set_storage_graph(", v->id);
+    emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_TAGGED);
+    fprintf(out, ", XR_OBJ_STORAGE_SHARED);\n");
+    fprintf(out,
+            "        f->net_bidi_state_%u = "
+            "xrt_net_bidi_async_state_new(_net_bidi_a_%u, _net_bidi_b_%u);\n",
+            v->id, v->id, v->id);
+    fprintf(out, "    }\n");
+    fprintf(out, "    if (!f->net_bidi_state_%u) goto N%u_DONE;\n", v->id, v->id);
+    fprintf(out, "    xrt_net_bidi_async_state_retain(f->net_bidi_state_%u);\n", v->id);
+    fprintf(out, "    f->state = %d;\n", sid);
+    fprintf(out,
+            "    XrAotResult _net_bidi_submit_%u = xr_aot_async_submit("
+            "ctx, xrt_net_bidi_async_invoke, f->net_bidi_state_%u, "
+            "xrt_net_bidi_async_state_release);\n",
+            v->id, v->id);
+    fprintf(out, "    if (_net_bidi_submit_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
+    fprintf(out, "        return _net_bidi_submit_%u;\n", v->id);
+    fprintf(out, "    f->state = 0;\n");
+    fprintf(out, "    xrt_net_bidi_async_state_release(f->net_bidi_state_%u);\n", v->id);
+    fprintf(out, "    f->net_bidi_state_%u = NULL;\n", v->id);
+    fprintf(out, "    if (_net_bidi_submit_%u.kind == XR_AOT_RUN_CANCELLED)\n", v->id);
+    fprintf(out, "        return _net_bidi_submit_%u;\n", v->id);
+    fprintf(out, "    goto N%u_DONE;\n", v->id);
+
+    fprintf(out, "S%d:;\n", sid);
+    fprintf(out, "    f->state = 0;\n");
+    fprintf(out, "    XrAotResult _net_bidi_resume_%u = xr_aot_async_resume(ctx);\n", v->id);
+    fprintf(out, "    if (_net_bidi_resume_%u.kind != XR_AOT_RUN_DONE) {\n", v->id);
+    fprintf(out, "        xrt_net_bidi_async_state_release(f->net_bidi_state_%u);\n", v->id);
+    fprintf(out, "        f->net_bidi_state_%u = NULL;\n", v->id);
+    fprintf(out, "        return _net_bidi_resume_%u;\n", v->id);
+    fprintf(out, "    }\n");
+    fprintf(out, "    _net_bidi_result_%u = f->net_bidi_state_%u->result;\n", v->id, v->id);
+    fprintf(out, "    xrt_net_bidi_async_state_release(f->net_bidi_state_%u);\n", v->id);
+    fprintf(out, "    f->net_bidi_state_%u = NULL;\n", v->id);
+    fprintf(out, "N%u_DONE:;\n", v->id);
+    emit_coro_net_bidi_materialize(ctx, out, f, v, error_enum);
+    emit_coro_debug_result_source_var_sync(ctx, out, f, v);
+    return true;
+}
+
 static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        int *state_id) {
     CgCoroNetCallKind kind = cg_coro_net_call_kind(ctx, f, v);
     if (kind == CG_CORO_NET_NONE)
         return false;
+    if (kind == CG_CORO_NET_COPY_BIDIRECTIONAL)
+        return emit_coro_net_bidi_call_stmt(ctx, out, f, v, state_id);
     uint16_t argc = v->nargs > 0 ? (uint16_t) (v->nargs - 1) : 0;
     bool arity_ok = (kind == CG_CORO_NET_ACCEPT && argc == 1) ||
                     (kind == CG_CORO_NET_READ_INTO && argc == 3) ||
@@ -3410,7 +3586,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_call_%u.kind == XR_AOT_RUN_DONE) {\n", v->id);
         fprintf(out, "        _call_value_%u = _call_%u.value;\n", v->id, v->id);
-        if (cg_rep(v) == XR_REP_TAGGED && !cg_value_plan_is_aggregate(ctx, v))
+        XrRep result_storage_rep = cg_value_plan_storage_rep(ctx, v);
+        if ((result_storage_rep == XR_REP_TAGGED || result_storage_rep == XR_REP_PTR) &&
+            !cg_value_plan_is_aggregate(ctx, v))
             fprintf(out,
                     "        if (_call_value_%u.tag == XR_TAG_PTR || "
                     "_call_value_%u.tag >= XR_TAG_STR)\n"
@@ -3450,7 +3628,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    if (_call_%u.kind == XR_AOT_RUN_DONE) {\n", v->id);
         fprintf(out, "        _call_value_%u = _call_%u.value;\n", v->id, v->id);
-        if (cg_rep(v) == XR_REP_TAGGED && !cg_value_plan_is_aggregate(ctx, v))
+        if ((result_storage_rep == XR_REP_TAGGED || result_storage_rep == XR_REP_PTR) &&
+            !cg_value_plan_is_aggregate(ctx, v))
             fprintf(out,
                     "        if (_call_value_%u.tag == XR_TAG_PTR || "
                     "_call_value_%u.tag >= XR_TAG_STR)\n"
@@ -5574,6 +5753,25 @@ static void emit_coro_direct_call_frame_release(XiCgenCtx *ctx, FILE *out, const
     }
 }
 
+static void emit_coro_net_async_state_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (cg_coro_net_call_kind(ctx, f, v) != CG_CORO_NET_COPY_BIDIRECTIONAL)
+                continue;
+            fprintf(out, "    if (f->net_bidi_state_%u) {\n", v->id);
+            fprintf(out, "        xrt_net_bidi_async_state_cancel(f->net_bidi_state_%u);\n", v->id);
+            fprintf(out, "        xrt_net_bidi_async_state_release(f->net_bidi_state_%u);\n",
+                    v->id);
+            fprintf(out, "        f->net_bidi_state_%u = NULL;\n", v->id);
+            fprintf(out, "    }\n");
+        }
+    }
+}
+
 /* One child-frame pointer slot per direct suspend-call site; each such pointer
  * is both a GC root and an ARC release in the parent frame. */
 static uint32_t cg_coro_direct_call_frame_count(XiCgenCtx *ctx, const XiFunc *f) {
@@ -5584,6 +5782,20 @@ static uint32_t cg_coro_direct_call_frame_count(XiCgenCtx *ctx, const XiFunc *f)
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             if (cg_coro_call_needs_child_frame(ctx, f, blk->values[vi]))
+                count++;
+        }
+    }
+    return count;
+}
+
+static uint32_t cg_coro_net_async_state_count(XiCgenCtx *ctx, const XiFunc *f) {
+    uint32_t count = 0;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            if (cg_coro_net_call_kind(ctx, f, blk->values[vi]) == CG_CORO_NET_COPY_BIDIRECTIONAL)
                 count++;
         }
     }
@@ -5673,8 +5885,9 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
  * suspend-call pointers.  Matches emit_coro_frame_arc_release by construction. */
 static uint32_t cg_coro_plan_frame_releases(XiCgenCtx *ctx, const XiFunc *f,
                                             const XiCoroPlan *plan) {
-    uint32_t count =
-        (cg_func_frame_needs_cl(f) ? 1u : 0u) + cg_coro_direct_call_frame_count(ctx, f);
+    uint32_t count = (cg_func_frame_needs_cl(f) ? 1u : 0u) +
+                     cg_coro_direct_call_frame_count(ctx, f) +
+                     cg_coro_net_async_state_count(ctx, f);
     if (!plan)
         return count;
     for (uint16_t i = 0; i < cg_coro_param_count(f); i++) {
@@ -5862,6 +6075,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, "    (void)heap;\n");
     fprintf(out, "    if (!f)\n        return;\n");
     emit_coro_direct_call_frame_release(ctx, out, f, prefix);
+    emit_coro_net_async_state_release(ctx, out, f);
     emit_coro_frame_arc_release(ctx, out, f);
     if (cg_func_frame_needs_cl(f))
         fprintf(out, "    xrt_release(xr_mkptr(f->_cl, XR_TAG_CLOSURE));\n");
