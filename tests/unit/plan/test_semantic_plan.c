@@ -3,6 +3,7 @@
  */
 
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/base/xsha256.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate.h"
@@ -189,6 +190,41 @@ static uint8_t *copy_bytes(const uint8_t *bytes, size_t size) {
     return copy;
 }
 
+static void rewrite_payload_digest(uint8_t *bytes, size_t size) {
+    REQUIRE(size >= XR_XSM_HEADER_SIZE);
+    xr_sha256(bytes + XR_XSM_HEADER_SIZE, size - XR_XSM_HEADER_SIZE, bytes + 24);
+}
+
+static size_t find_bytes(const uint8_t *bytes, size_t size, const char *needle) {
+    size_t length = strlen(needle);
+    if (length == 0 || length > size)
+        return SIZE_MAX;
+    for (size_t i = 0; i <= size - length; i++) {
+        if (memcmp(bytes + i, needle, length) == 0)
+            return i;
+    }
+    return SIZE_MAX;
+}
+
+static char *dump_plan(const XrSemanticPlan *plan, size_t *size) {
+    FILE *stream = tmpfile();
+    REQUIRE(stream != NULL);
+    REQUIRE(xr_semantic_plan_dump(plan, stream));
+    REQUIRE(fflush(stream) == 0);
+    REQUIRE(fseek(stream, 0, SEEK_END) == 0);
+    long end = ftell(stream);
+    REQUIRE(end >= 0);
+    REQUIRE(fseek(stream, 0, SEEK_SET) == 0);
+    char *text = (char *) xr_malloc((size_t) end + 1u);
+    REQUIRE(text != NULL);
+    REQUIRE(fread(text, 1, (size_t) end, stream) == (size_t) end);
+    text[end] = '\0';
+    fclose(stream);
+    if (size)
+        *size = (size_t) end;
+    return text;
+}
+
 static void expect_decode_failure(const uint8_t *bytes, size_t size, const char *code) {
     XrSemanticPlan *decoded = NULL;
     char error[512] = {0};
@@ -268,12 +304,21 @@ static void test_xsm_roundtrip_and_determinism(void) {
     REQUIRE(xr_fingerprint_equal(xr_semantic_plan_fingerprint(first),
                                  xr_semantic_plan_fingerprint(decoded)));
 
+    size_t first_dump_size = 0;
+    size_t decoded_dump_size = 0;
+    char *first_dump = dump_plan(first, &first_dump_size);
+    char *decoded_dump = dump_plan(decoded, &decoded_dump_size);
+    REQUIRE(first_dump_size == decoded_dump_size);
+    REQUIRE(memcmp(first_dump, decoded_dump, first_dump_size) == 0);
+
     uint8_t *roundtrip = NULL;
     size_t roundtrip_size = 0;
     REQUIRE(xr_xsm_encode(decoded, &roundtrip, &roundtrip_size, error, sizeof(error)));
     REQUIRE(roundtrip_size == first_size);
     REQUIRE(memcmp(roundtrip, first_bytes, first_size) == 0);
 
+    xr_free(decoded_dump);
+    xr_free(first_dump);
     xr_free(roundtrip);
     xr_semantic_plan_free(decoded);
     xr_free(second_bytes);
@@ -366,6 +411,27 @@ static void test_xsm_fail_closed_mutations(void) {
     expect_decode_failure(mutation, size, "XR_ARTIFACT_2002");
     xr_free(mutation);
 
+    mutation = copy_bytes(bytes, size);
+    size_t key_offset =
+        find_bytes(mutation + XR_XSM_HEADER_SIZE, size - XR_XSM_HEADER_SIZE, "type-v2");
+    REQUIRE(key_offset != SIZE_MAX);
+    mutation[XR_XSM_HEADER_SIZE + key_offset + 4] = '\0';
+    rewrite_payload_digest(mutation, size);
+    expect_decode_failure(mutation, size, "XR_ARTIFACT_2001");
+    xr_free(mutation);
+
+    mutation = copy_bytes(bytes, size);
+    size_t operation_count_offset = XR_XSM_HEADER_SIZE + 3u * sizeof(uint32_t);
+    uint32_t excessive_operations = 10000000u;
+    for (unsigned i = 0; i < sizeof(uint32_t); i++)
+        mutation[operation_count_offset + i] = (uint8_t) (excessive_operations >> (i * 8));
+    rewrite_payload_digest(mutation, size);
+    expect_decode_failure(mutation, size, "XR_EXEC_5003");
+    xr_free(mutation);
+
+    uint8_t truncated = 0;
+    expect_decode_failure(&truncated, XR_XSM_MAX_ARTIFACT_SIZE + 1u, "XR_EXEC_5003");
+
     xr_free(bytes);
     xr_semantic_plan_free(plan);
 }
@@ -418,6 +484,13 @@ static void test_semantic_and_ownership_mutations(void) {
     uint32_t saved_line = plan->operations[0].source_line;
     plan->operations[0].source_line = saved_line + 1;
     expect_verify_failure(plan, "XR_SEM_0004");
+    uint8_t *invalid_artifact = NULL;
+    size_t invalid_artifact_size = 0;
+    char encode_error[512] = {0};
+    REQUIRE(!xr_xsm_encode(plan, &invalid_artifact, &invalid_artifact_size, encode_error,
+                           sizeof(encode_error)));
+    REQUIRE(invalid_artifact == NULL && invalid_artifact_size == 0);
+    REQUIRE(strncmp(encode_error, "XR_SEM_0004", strlen("XR_SEM_0004")) == 0);
     plan->operations[0].source_line = saved_line;
 
     char error[512] = {0};

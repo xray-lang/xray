@@ -11,6 +11,7 @@
 #include "xr_xsm_schema.h"
 #include "xr_xsm_io.h"
 #include "../semantic/xr_semantic_plan_internal.h"
+#include "../semantic/xr_semantic_verify.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xsha256.h"
 #include <stdio.h>
@@ -215,7 +216,9 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
                      "XR_ARTIFACT_2004: encoder requires a verified frozen SemanticPlan");
         return false;
     }
-    XrXsmWriter payload = {0};
+    if (!xr_semantic_plan_verify(plan, error, error_size))
+        return false;
+    XrXsmWriter payload = {.limit = XR_XSM_MAX_PAYLOAD_SIZE};
     encode_counts(&payload, plan);
     encode_types(&payload, plan);
     encode_functions(&payload, plan);
@@ -232,7 +235,7 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
     }
     uint8_t digest[32];
     xr_sha256(payload.data, payload.size, digest);
-    XrXsmWriter artifact = {0};
+    XrXsmWriter artifact = {.limit = XR_XSM_MAX_ARTIFACT_SIZE};
     xr_xsm_put_bytes(&artifact, xr_xsm_magic, sizeof(xr_xsm_magic));
     xr_xsm_put_u32(&artifact, XR_SEMANTIC_SCHEMA_VERSION);
     xr_xsm_put_u32(&artifact, XR_XSM_HEADER_SIZE);

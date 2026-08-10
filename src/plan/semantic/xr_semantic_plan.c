@@ -448,6 +448,23 @@ const XrOwnershipCertificate *xr_semantic_plan_ownership(const XrSemanticPlan *p
     return plan ? plan->ownership : NULL;
 }
 
+static void dump_id(FILE *out, XrStableId id) {
+    char hex[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(id, hex);
+    fputs(hex, out);
+}
+
+static void dump_text(FILE *out, const char *text) {
+    if (!text) {
+        fputs("-", out);
+        return;
+    }
+    size_t length = strlen(text);
+    fprintf(out, "%zu:", length);
+    for (size_t i = 0; i < length; i++)
+        fprintf(out, "%02x", (unsigned char) text[i]);
+}
+
 bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
     if (!plan || !out)
         return false;
@@ -458,18 +475,137 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
     fprintf(out, "  types=%u functions=%u blocks=%u operations=%u edges=%u constants=%u\n",
             plan->type_count, plan->function_count, plan->block_count, plan->operation_count,
             plan->edge_count, plan->constant_count);
+    for (uint32_t i = 0; i < plan->type_count; i++) {
+        const XrSemanticTypeRecord *record = &plan->types[i];
+        fprintf(out, "  type[%u] id=", i);
+        dump_id(out, record->id);
+        fputs(" key=", out);
+        dump_text(out, record->canonical_key);
+        fprintf(out, " kind=%u scalar=%u flags=%u children=[", record->kind, record->scalar_rep,
+                record->flags);
+        for (uint16_t c = 0; c < record->child_count; c++)
+            fprintf(out, "%s%u", c ? "," : "", plan->type_children[record->child_begin + c]);
+        fputs("]\n", out);
+    }
     for (uint32_t i = 0; i < plan->function_count; i++) {
-        char id[XR_STABLE_ID_BYTES * 2 + 1];
-        xr_stable_id_hex(plan->functions[i].id, id);
-        fprintf(out, "  fn[%u] id=%s name=%s blocks=%u values=%u\n", i, id, plan->functions[i].name,
-                plan->functions[i].block_count, plan->functions[i].value_count);
+        const XrSemanticFunctionRecord *record = &plan->functions[i];
+        fprintf(out, "  fn[%u] id=", i);
+        dump_id(out, record->id);
+        fputs(" key=", out);
+        dump_text(out, record->canonical_key);
+        fputs(" name=", out);
+        dump_text(out, record->name);
+        fprintf(out,
+                " return=%u children=%u blocks=%u+%u values=%u+%u effects=%u caps=%u "
+                "return-provenance=%u:%d flags=%u params=[",
+                record->return_type, record->child_count, record->block_begin, record->block_count,
+                record->value_begin, record->value_count, record->semantic_effects,
+                record->capability_mask, record->return_provenance, record->return_parameter,
+                record->flags);
+        for (uint16_t p = 0; p < record->parameter_count; p++)
+            fprintf(out, "%s%u", p ? "," : "", plan->parameters[record->parameter_begin + p]);
+        fputs("]\n", out);
+    }
+    for (uint32_t i = 0; i < plan->block_count; i++) {
+        const XrSemanticBlockRecord *record = &plan->blocks[i];
+        fprintf(out, "  block[%u] id=", i);
+        dump_id(out, record->id);
+        fputs(" key=", out);
+        dump_text(out, record->canonical_key);
+        fprintf(out, " fn=%u ops=%u+%u kind=%u successors=%u,%u control=%u line=%u preds=[",
+                record->function, record->operation_begin, record->operation_count, record->kind,
+                record->successors[0], record->successors[1], record->control_value,
+                record->source_line);
+        for (uint16_t p = 0; p < record->predecessor_count; p++)
+            fprintf(out, "%s%u", p ? "," : "", plan->predecessors[record->predecessor_begin + p]);
+        fputs("]\n", out);
+    }
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        const XrSemanticOperationRecord *record = &plan->operations[i];
+        fprintf(out, "  op[%u] id=", i);
+        dump_id(out, record->id);
+        fputs(" allocation-id=", out);
+        dump_id(out, record->allocation_id);
+        fputs(" key=", out);
+        dump_text(out, record->canonical_key);
+        fputs(" allocation-key=", out);
+        dump_text(out, record->allocation_key);
+        fprintf(out,
+                " fn=%u block=%u result=%u:%u opcode=%u aux=%u immediate=%lld effects=%u "
+                "line=%u constant=%u own=%u:%u transfer=%u param=%u:%u flags=%u "
+                "alias=%d return=%u:%d:%u evidence=[",
+                record->function, record->block, record->result_value, record->result_type,
+                record->opcode, record->auxiliary_kind, (long long) record->semantic_immediate,
+                record->effects, record->source_line, record->constant, record->ownership_use,
+                record->result_ownership, record->transfer_mode, record->parameter_mode,
+                record->parameter_ownership, record->flags, record->result_alias_operand,
+                record->return_provenance, record->return_parameter, record->return_complete);
+        for (unsigned e = 0; e < 8; e++)
+            fprintf(out, "%s%u", e ? "," : "", record->evidence[e]);
+        fputs("] operands=[", out);
+        for (uint16_t a = 0; a < record->operand_count; a++) {
+            uint32_t cursor = record->operand_begin + a;
+            fprintf(out, "%s%u:%u:%u:%u", a ? "," : "", plan->operands[cursor],
+                    plan->operand_transfer_modes[cursor], plan->operand_ownership_actions[cursor],
+                    plan->operand_contracts[cursor]);
+        }
+        fputs("] metadata=[", out);
+        for (uint16_t m = 0; m < record->metadata_count; m++) {
+            if (m)
+                fputc(',', out);
+            dump_text(out, plan->metadata[record->metadata_begin + m]);
+        }
+        fputs("]\n", out);
     }
     for (uint32_t i = 0; i < plan->edge_count; i++) {
-        char id[XR_STABLE_ID_BYTES * 2 + 1];
-        xr_stable_id_hex(plan->edges[i].id, id);
-        fprintf(out, "  edge[%u] id=%s kind=%u from=%u to=%u operation=%u key=%s\n", i, id,
-                plan->edges[i].kind, plan->edges[i].from_block, plan->edges[i].to_block,
-                plan->edges[i].operation, plan->edges[i].canonical_key);
+        const XrSemanticEdgeRecord *record = &plan->edges[i];
+        fprintf(out, "  edge[%u] id=", i);
+        dump_id(out, record->id);
+        fputs(" key=", out);
+        dump_text(out, record->canonical_key);
+        fprintf(out, " fn=%u kind=%u flags=%u from=%u to=%u operation=%u\n", record->function,
+                record->kind, record->flags, record->from_block, record->to_block,
+                record->operation);
+    }
+    for (uint32_t i = 0; i < plan->constant_count; i++) {
+        const XrSemanticConstantRecord *record = &plan->constants[i];
+        fprintf(out, "  const[%u] type=%u kind=%u integer=%lld float=%llu text=", i, record->type,
+                record->kind, (long long) record->integer, (unsigned long long) record->float_bits);
+        dump_text(out, record->string);
+        fputc('\n', out);
+    }
+    if (plan->ownership) {
+        const XrOwnershipCertificate *certificate = plan->ownership;
+        fprintf(out, "  ownership owners=%u events=%u edge-states=%u\n", certificate->owner_count,
+                certificate->event_count, certificate->edge_state_count);
+        for (uint32_t i = 0; i < certificate->owner_count; i++) {
+            const XrOwnershipOwnerRecord *record = &certificate->owners[i];
+            fprintf(out, "  owner[%u] id=", i);
+            dump_id(out, record->id);
+            fputs(" key=", out);
+            dump_text(out, record->canonical_key);
+            fprintf(out, " fn=%u origin=%u initial=%u exit=%u return=%u flags=%u\n",
+                    record->function, record->origin_value, record->initial_state,
+                    record->exit_state, record->return_provenance, record->flags);
+        }
+        for (uint32_t i = 0; i < certificate->event_count; i++) {
+            const XrOwnershipEventRecord *record = &certificate->events[i];
+            fprintf(out, "  owner-event[%u] id=", i);
+            dump_id(out, record->id);
+            fputs(" key=", out);
+            dump_text(out, record->canonical_key);
+            fprintf(out, " owner=%u operation=%u block=%u successor=%u delta=%d kind=%u state=%u\n",
+                    record->owner, record->operation, record->block, record->successor,
+                    record->logical_delta, record->kind, record->state_after);
+        }
+        for (uint32_t i = 0; i < certificate->edge_state_count; i++) {
+            const XrOwnershipEdgeStateRecord *record = &certificate->edge_states[i];
+            fprintf(out,
+                    "  owner-edge[%u] owner=%u block=%u successor=%u balance=%d:%d "
+                    "state=%u:%u flags=%u\n",
+                    i, record->owner, record->block, record->successor, record->entry_balance,
+                    record->exit_balance, record->entry_state, record->exit_state, record->flags);
+        }
     }
     return !ferror(out);
 }

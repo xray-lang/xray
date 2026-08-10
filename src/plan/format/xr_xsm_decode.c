@@ -44,7 +44,10 @@ static bool report(char *error, size_t size, const char *code, const char *detai
 
 static char *take_string(XrXsmReader *reader, uint32_t max_length) {
     uint32_t length = xr_xsm_take_u32(reader);
-    if (reader->failed || length > max_length || length > reader->size - reader->offset) {
+    if (reader->failed || length > max_length || length > XR_XSM_MAX_STRING_SIZE ||
+        reader->offset > reader->size || length > reader->size - reader->offset ||
+        reader->string_bytes > XR_XSM_MAX_STRING_STORAGE ||
+        length > XR_XSM_MAX_STRING_STORAGE - reader->string_bytes) {
         reader->failed = true;
         return NULL;
     }
@@ -57,6 +60,12 @@ static char *take_string(XrXsmReader *reader, uint32_t max_length) {
         xr_free(text);
         return NULL;
     }
+    if (memchr(text, '\0', length) != NULL) {
+        xr_free(text);
+        reader->failed = true;
+        return NULL;
+    }
+    reader->string_bytes += length;
     text[length] = '\0';
     return text;
 }
@@ -76,8 +85,48 @@ static const char *take_plan_string(XrXsmReader *reader, XrSemanticPlan *plan, b
     return copy;
 }
 
+static bool checked_storage_add(size_t *total, uint32_t count, size_t element_size) {
+    if (count != 0 && element_size > SIZE_MAX / count)
+        return false;
+    size_t bytes = (size_t) count * element_size;
+    if (*total > XR_XSM_MAX_TABLE_STORAGE || bytes > XR_XSM_MAX_TABLE_STORAGE - *total)
+        return false;
+    *total += bytes;
+    return true;
+}
+
+static bool counts_fit_storage_budget(XrXsmCounts count) {
+    size_t total = 0;
+#define XR_COUNT_STORAGE(field, type)                                                              \
+    do {                                                                                           \
+        if (!checked_storage_add(&total, count.field, sizeof(type)))                               \
+            return false;                                                                          \
+    } while (0)
+    XR_COUNT_STORAGE(types, XrSemanticTypeRecord);
+    XR_COUNT_STORAGE(functions, XrSemanticFunctionRecord);
+    XR_COUNT_STORAGE(blocks, XrSemanticBlockRecord);
+    XR_COUNT_STORAGE(operations, XrSemanticOperationRecord);
+    XR_COUNT_STORAGE(edges, XrSemanticEdgeRecord);
+    XR_COUNT_STORAGE(constants, XrSemanticConstantRecord);
+    XR_COUNT_STORAGE(type_children, uint32_t);
+    XR_COUNT_STORAGE(parameters, uint32_t);
+    XR_COUNT_STORAGE(predecessors, uint32_t);
+    XR_COUNT_STORAGE(operands, uint32_t);
+    XR_COUNT_STORAGE(operands, uint8_t);
+    XR_COUNT_STORAGE(operands, uint8_t);
+    XR_COUNT_STORAGE(operands, uint32_t);
+    XR_COUNT_STORAGE(metadata, const char *);
+    XR_COUNT_STORAGE(owners, XrOwnershipOwnerRecord);
+    XR_COUNT_STORAGE(events, XrOwnershipEventRecord);
+    XR_COUNT_STORAGE(edge_states, XrOwnershipEdgeStateRecord);
+#undef XR_COUNT_STORAGE
+    return true;
+}
+
 static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certificate,
                             XrXsmCounts count) {
+    if (!counts_fit_storage_budget(count))
+        return false;
 #define XR_ALLOC_TABLE(field, count_value, type)                                                   \
     do {                                                                                           \
         if ((count_value) != 0) {                                                                  \
@@ -331,7 +380,9 @@ bool xr_xsm_decode(const uint8_t *bytes, size_t size, XrSemanticPlan **out, char
         *out = NULL;
     if (!bytes || !out || size < XR_XSM_HEADER_SIZE)
         return report(error, error_size, "XR_ARTIFACT_2001", "XSM header is truncated");
-    XrXsmReader header = {bytes, size, 0, false};
+    if (size > XR_XSM_MAX_ARTIFACT_SIZE)
+        return report(error, error_size, "XR_EXEC_5003", "XSM artifact exceeds its hard budget");
+    XrXsmReader header = {.data = bytes, .size = size};
     uint8_t magic[8], digest[32];
     XrFingerprint expected_fingerprint;
     xr_xsm_take_bytes(&header, magic, sizeof(magic));
@@ -359,7 +410,10 @@ bool xr_xsm_decode(const uint8_t *bytes, size_t size, XrSemanticPlan **out, char
         return report(error, error_size, "XR_EXEC_5003", "XSM decoder allocation failed");
     }
     certificate->schema = schema;
-    XrXsmReader reader = {bytes + XR_XSM_HEADER_SIZE, (size_t) payload_size, 0, false};
+    XrXsmReader reader = {
+        .data = bytes + XR_XSM_HEADER_SIZE,
+        .size = (size_t) payload_size,
+    };
     XrXsmCounts count;
     if (!take_counts(&reader, &count) || !allocate_tables(plan, certificate, count)) {
         xr_semantic_plan_free(plan);

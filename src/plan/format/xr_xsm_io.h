@@ -22,6 +22,7 @@ typedef struct XrXsmWriter {
     size_t size;
     size_t capacity;
     bool failed;
+    size_t limit;
 } XrXsmWriter;
 
 typedef struct XrXsmReader {
@@ -29,10 +30,13 @@ typedef struct XrXsmReader {
     size_t size;
     size_t offset;
     bool failed;
+    size_t string_bytes;
 } XrXsmReader;
 
 static inline bool xr_xsm_writer_reserve(XrXsmWriter *writer, size_t extra) {
-    if (writer->failed || extra > SIZE_MAX - writer->size) {
+    if (writer->failed || extra > SIZE_MAX - writer->size ||
+        (writer->limit != 0 &&
+         (writer->size > writer->limit || extra > writer->limit - writer->size))) {
         writer->failed = true;
         return false;
     }
@@ -99,7 +103,7 @@ static inline void xr_xsm_put_string(XrXsmWriter *writer, const char *text) {
 }
 
 static inline bool xr_xsm_take_bytes(XrXsmReader *reader, void *out, size_t size) {
-    if (reader->failed || size > reader->size - reader->offset) {
+    if (reader->failed || reader->offset > reader->size || size > reader->size - reader->offset) {
         reader->failed = true;
         return false;
     }
