@@ -108,7 +108,7 @@ static void test_stable_ids(void) {
     const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, 0);
     REQUIRE(function != NULL);
     xr_stable_id_hex(function->id, hex);
-    REQUIRE(strcmp(hex, "8fd3e779975b93083fe75ecb5d6783e5") == 0);
+    REQUIRE(strcmp(hex, "e10b14c3c809c4f4c2bd4a0f694ef998") == 0);
     xr_semantic_plan_free(plan);
 }
 

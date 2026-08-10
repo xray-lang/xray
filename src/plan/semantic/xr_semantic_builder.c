@@ -118,19 +118,33 @@ static bool text_append(XrTextBuilder *text, const char *value) {
 }
 
 static bool text_append_format(XrTextBuilder *text, const char *format, ...) {
-    char buffer[128];
     va_list args;
     va_start(args, format);
-    int written = vsnprintf(buffer, sizeof(buffer), format, args);
-    va_end(args);
-    if (written < 0 || (size_t) written >= sizeof(buffer))
+    va_list measure;
+    va_copy(measure, args);
+    int written = vsnprintf(NULL, 0, format, measure);
+    va_end(measure);
+    if (written < 0 || !text_reserve(text, (size_t) written)) {
+        va_end(args);
         return false;
-    return text_append(text, buffer);
+    }
+    int emitted = vsnprintf(text->data + text->size, text->capacity - text->size, format, args);
+    va_end(args);
+    if (emitted != written)
+        return false;
+    text->size += (size_t) written;
+    return true;
 }
 
 static bool text_append_component(XrTextBuilder *text, const char *value) {
     const char *component = value ? value : "";
     return text_append_format(text, "%zu:", strlen(component)) && text_append(text, component);
+}
+
+static bool text_append_stable_id(XrTextBuilder *text, XrStableId id) {
+    char hex[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(id, hex);
+    return text_append(text, hex);
 }
 
 static void text_dispose(XrTextBuilder *text) {
@@ -568,6 +582,22 @@ static int function_index(const XrSemanticBuildContext *ctx, const XiFunc *funct
     return -1;
 }
 
+static bool function_lexical_ordinal(const XiFunc *function, uint16_t *out) {
+    if (!function || !out)
+        return false;
+    if (!function->parent_func) {
+        *out = 0;
+        return true;
+    }
+    for (uint16_t i = 0; i < function->parent_func->nchildren; i++) {
+        if (function->parent_func->children[i] == function) {
+            *out = i;
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool build_function_records(XrSemanticBuildContext *ctx) {
     if (!reserve_array((void **) &ctx->plan->functions, &ctx->plan->function_capacity,
                        ctx->function_count, sizeof(*ctx->plan->functions),
@@ -579,21 +609,9 @@ static bool build_function_records(XrSemanticBuildContext *ctx) {
         const XiFunc *source = ctx->functions[i].source;
         XrSemanticFunctionRecord *record = &ctx->plan->functions[i];
         memset(record, 0, sizeof(*record));
-        XrTextBuilder key = {0};
         int parent = function_index(ctx, source->parent_func);
-        if (!text_append_format(&key, "function-v1:parent=%d:index=%u:name=", parent, i) ||
-            !text_append_component(&key, source->name) ||
-            !text_append_format(&key, ":body=%u", source->xg_body_func_id)) {
-            text_dispose(&key);
-            return fail(ctx, "XR_EXEC_5003", "semantic function key allocation failed");
-        }
-        record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
-        text_dispose(&key);
         record->name = xr_semantic_plan_copy_string(ctx->plan, source->name ? source->name : "");
-        XrFingerprint digest;
-        if (!record->canonical_key || !record->name ||
-            !xr_stable_id_from_key(record->canonical_key, &record->id, &digest) ||
-            !add_type(ctx, source->return_type, &record->return_type))
+        if (!record->name || !add_type(ctx, source->return_type, &record->return_type))
             return false;
         record->parameter_begin = ctx->plan->parameter_count;
         record->parameter_count = xi_func_semantic_param_count(source);
@@ -615,6 +633,41 @@ static bool build_function_records(XrSemanticBuildContext *ctx) {
                 return false;
             }
         }
+        uint16_t lexical_ordinal = 0;
+        XrTextBuilder key = {0};
+        if (!function_lexical_ordinal(source, &lexical_ordinal) ||
+            !text_append(&key, "function-v1:parent=") ||
+            (parent >= 0 && !text_append_stable_id(&key, ctx->plan->functions[parent].id)) ||
+            (parent < 0 && !text_append(&key, "module-root")) ||
+            !text_append_format(&key, ":ordinal=%u:name=", lexical_ordinal) ||
+            !text_append_component(&key, source->name) ||
+            !text_append_format(&key, ":body=%u:return=", source->xg_body_func_id) ||
+            !text_append_stable_id(&key, ctx->plan->types[record->return_type].id) ||
+            !text_append_format(&key, ":params=%u", record->parameter_count)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_EXEC_5003", "semantic function key allocation failed");
+        }
+        for (uint16_t p = 0; p < record->parameter_count; p++) {
+            uint32_t type_index = ctx->plan->parameters[record->parameter_begin + p];
+            if (!text_append_format(&key, ":p%u:mode=%u:type=", p,
+                                    (unsigned) source->params[p]->param_mode) ||
+                !text_append_stable_id(&key, ctx->plan->types[type_index].id)) {
+                text_dispose(&key);
+                return fail(ctx, "XR_EXEC_5003", "semantic function key allocation failed");
+            }
+        }
+        if (!text_append_format(&key, ":effects=%u:unsafe=%u:entry=%u:extern=%u",
+                                source->semantic_effects, source->requires_unsafe_at_call ? 1u : 0u,
+                                (unsigned) source->entry_type, source->is_extern ? 1u : 0u)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_EXEC_5003", "semantic function key allocation failed");
+        }
+        record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+        text_dispose(&key);
+        XrFingerprint digest;
+        if (!record->canonical_key ||
+            !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+            return fail(ctx, "XR_EXEC_5003", "semantic function identity allocation failed");
         record->child_count = source->nchildren;
         record->block_begin = block_cursor;
         record->block_count = source->nblocks;
