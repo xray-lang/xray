@@ -18,7 +18,7 @@ The support matrix distinguishes supported, CI-only, unqualified, and
 unsupported configurations.  A failed row cannot be relabelled as a skipped
 configuration.
 
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 09898ff7ba5f345b52e7d501f4f5c31ca2187dd8e8e1dbea40887ec7a060ce45
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 35ba38c8c2f8d3b019ef4d958d39d110c7843540333e2e0cf39f8555a57bb28e
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 30d79df402954c0fe4afe482524d5b831d5865d3637ae08ff9fbe8eb6e4cb38e
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json c2b700923df4081aabfd9554aea992e7451f63c40cf958bac4440c5a1b97c321
 anchor-sha256: contracts/target-machine/object-extent-inventory.json e62c7ab4f82bfd1ccba2a11641ef31a237ab380f9c1d83a299e578c3808e0798

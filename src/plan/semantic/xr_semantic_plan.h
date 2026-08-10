@@ -176,6 +176,7 @@ XR_FUNC bool xr_semantic_plan_is_frozen(const XrSemanticPlan *plan);
 XR_FUNC bool xr_semantic_plan_is_verified(const XrSemanticPlan *plan);
 XR_FUNC uint32_t xr_semantic_plan_schema(const XrSemanticPlan *plan);
 XR_FUNC XrFingerprint xr_semantic_plan_fingerprint(const XrSemanticPlan *plan);
+XR_FUNC XrFingerprint xr_semantic_plan_operation_registry_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_type_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_function_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_block_count(const XrSemanticPlan *plan);

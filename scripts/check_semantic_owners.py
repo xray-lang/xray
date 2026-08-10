@@ -11,6 +11,13 @@ import tomllib
 from pathlib import Path
 
 
+XISAGEN_DIR = Path(__file__).resolve().parent.parent / "tools" / "xisagen"
+if str(XISAGEN_DIR) not in sys.path:
+    sys.path.insert(0, str(XISAGEN_DIR))
+
+from xisagen import parse_xi_ops_def, parse_xi_semantic_owners  # noqa: E402
+
+
 SOURCE_SUFFIXES = (".c", ".h")
 SIGNATURE_RE = re.compile(r"\b(?:static\s+)?inline\s+[^;{}]*?\b(xr_[A-Za-z0-9_]+)\s*\(")
 SORT_OLD_SYMBOLS = (
@@ -90,6 +97,43 @@ def verify_sort_ratchet(root: Path) -> list[str]:
     return errors
 
 
+def verify_operation_registry(root: Path) -> tuple[list[str], int]:
+    errors: list[str] = []
+    source_path = root / "xisa/xi/ops.def"
+    try:
+        source = source_path.read_text(encoding="utf-8")
+        operations = parse_xi_ops_def(source, source_path.as_posix())
+        owners = parse_xi_semantic_owners(source, operations, source_path.as_posix())
+    except SystemExit:
+        return ["xisa/xi/ops.def does not define a complete unique semantic owner registry"], 0
+
+    operation_names = {operation.name for operation in operations}
+    inventory_path = root / "contracts/target-machine/semantic-owner-inventory.json"
+    if not inventory_path.is_file():
+        errors.append("target-machine semantic owner inventory is missing")
+        return errors, len(operations)
+    inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    inventory_rows = {
+        row["operation_id"]: row
+        for row in inventory.get("operations", [])
+        if row.get("operation_id", "").startswith("xi.")
+    }
+    if set(inventory_rows) != operation_names:
+        errors.append("target-machine Xi operation inventory differs from xisa/xi/ops.def")
+    for name, category in owners.items():
+        row = inventory_rows.get(name)
+        if row and row.get("future_semantic_owner") != "SemanticPlan.operation_registry":
+            errors.append(f"{name}: phase-zero inventory does not point at the operation registry")
+        if category not in {
+            "declarative-primitive",
+            "shared-semantic-kernel",
+            "capability-provider",
+            "generated-specialization",
+        }:
+            errors.append(f"{name}: invalid semantic owner category {category}")
+    return errors, len(operations)
+
+
 def verify(root: Path, write: bool) -> list[str]:
     manifest_path = root / "contracts/semantic-owners.toml"
     snapshot_path = root / "contracts/shared-core-inventory.json"
@@ -123,6 +167,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("shared-core caller inventory drifted; review it and run with --write")
 
     errors.extend(verify_sort_ratchet(root))
+    registry_errors, _ = verify_operation_registry(root)
+    errors.extend(registry_errors)
     return errors
 
 
@@ -148,7 +194,9 @@ def main() -> int:
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         return 1
-    print("semantic-owner gate: PASS (25 cores, Array.sort production ratchet)")
+    _, operation_count = verify_operation_registry(root)
+    print(f"semantic-owner gate: PASS (25 cores, {operation_count} Xi ops, "
+          "unique owner categories, Array.sort production ratchet)")
     return 0
 
 

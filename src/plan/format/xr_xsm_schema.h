@@ -16,7 +16,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_XSM_HEADER_SIZE 88u
+#define XR_XSM_HEADER_SIZE 120u
 #define XR_XSM_MAX_ARTIFACT_SIZE ((size_t) 256u * 1024u * 1024u)
 #define XR_XSM_MAX_PAYLOAD_SIZE (XR_XSM_MAX_ARTIFACT_SIZE - XR_XSM_HEADER_SIZE)
 #define XR_XSM_MAX_TABLE_STORAGE ((size_t) 192u * 1024u * 1024u)

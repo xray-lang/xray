@@ -10,12 +10,12 @@
 
 #include "xr_semantic_verify.h"
 #include "xr_semantic_graph.h"
+#include "xr_semantic_ops.h"
 #include "xr_semantic_plan_internal.h"
 #include "../ownership/xr_ownership_check.h"
 #include "../../base/xmalloc.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
-#include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 #include <string.h>
@@ -300,8 +300,8 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
         const XrSemanticFunctionRecord *function = operation->function < plan->function_count
                                                        ? &plan->functions[operation->function]
                                                        : NULL;
-        uint8_t arity = operation->opcode < XI_OP_COUNT ? xi_generated_op_arity(operation->opcode)
-                                                        : XI_OP_ARITY_VARIADIC;
+        const XrSemanticOpContract *contract = xr_semantic_op_contract(operation->opcode);
+        uint8_t arity = contract ? contract->arity : XR_SEMANTIC_OP_ARITY_VARIADIC;
         if (!verify_id(operation->canonical_key, operation->id) || !function ||
             operation->block >= plan->block_count ||
             plan->blocks[operation->block].function != operation->function ||
@@ -311,13 +311,13 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
             operation->result_type >= plan->type_count || operation->result_value >= value_count ||
             operation->result_value < function->value_begin ||
             operation->result_value >= function->value_begin + function->value_count ||
-            operation->opcode >= XI_OP_COUNT || !xi_generated_op_name(operation->opcode) ||
-            (arity != XI_OP_ARITY_VARIADIC && arity != operation->operand_count) ||
-            operation->effects != xi_generated_op_effects(operation->opcode) ||
-            operation->ownership_use != xi_generated_op_own_use(operation->opcode) ||
-            operation->result_ownership >= XI_GEN_RESULT_OWNERSHIP__COUNT ||
-            (xi_generated_op_result_ownership(operation->opcode) == XI_GEN_RESULT_OWNERSHIP_NONE &&
-             operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_NONE) ||
+            operation->opcode >= XI_OP_COUNT || !contract ||
+            (arity != XR_SEMANTIC_OP_ARITY_VARIADIC && arity != operation->operand_count) ||
+            operation->effects != contract->effects ||
+            operation->ownership_use != contract->ownership_use ||
+            operation->result_ownership >= XR_SEM_RESULT_OWNERSHIP_COUNT ||
+            (contract->result_ownership == XR_SEM_RESULT_OWNERSHIP_NONE &&
+             operation->result_ownership != XR_SEM_RESULT_OWNERSHIP_NONE) ||
             operation->parameter_ownership > XI_OWN_BORROWED ||
             operation->result_alias_operand < -1 ||
             (operation->result_alias_operand >= 0 &&
@@ -423,6 +423,12 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
     if (!plan || !plan->frozen || plan->schema != XR_SEMANTIC_SCHEMA_VERSION)
         return report(error, error_size, "XR_SEM_0004",
                       "verifier requires a frozen exact-version SemanticPlan");
+    XrFingerprint current_registry;
+    xr_semantic_op_registry_fingerprint(&current_registry);
+    if (!xr_semantic_op_registry_verify(error, error_size) ||
+        !xr_fingerprint_equal(plan->operation_registry_fingerprint, current_registry))
+        return report(error, error_size, "XR_SEM_0017",
+                      "SemanticPlan operation registry is missing or incompatible");
     if (plan->type_count > 1000000u || plan->function_count > 100000u ||
         plan->block_count > 2000000u || plan->operation_count > 10000000u ||
         plan->edge_count > 40000000u || plan->operand_count > 40000000u)

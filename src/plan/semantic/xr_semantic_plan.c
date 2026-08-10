@@ -9,6 +9,7 @@
  */
 
 #include "xr_semantic_plan_internal.h"
+#include "xr_semantic_ops.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
@@ -113,11 +114,13 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v2\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v3\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
     hash_u64(&ctx, plan->schema);
+    hash_bytes(&ctx, plan->operation_registry_fingerprint.bytes,
+               sizeof(plan->operation_registry_fingerprint.bytes));
     hash_u64(&ctx, plan->type_count);
     hash_u64(&ctx, plan->function_count);
     hash_u64(&ctx, plan->block_count);
@@ -283,6 +286,7 @@ XrSemanticPlan *xr_semantic_plan_create(void) {
     if (plan) {
         atomic_init(&plan->references, 1);
         plan->schema = XR_SEMANTIC_SCHEMA_VERSION;
+        xr_semantic_op_registry_fingerprint(&plan->operation_registry_fingerprint);
     }
     return plan;
 }
@@ -323,6 +327,15 @@ bool xr_semantic_plan_freeze(XrSemanticPlan *plan, char *error, size_t error_siz
     }
     if (!plan->ownership) {
         set_error(error, error_size, "XR_OWN_3001", "semantic plan has no ownership certificate");
+        return false;
+    }
+    XrFingerprint current_registry;
+    xr_semantic_op_registry_fingerprint(&current_registry);
+    if (!xr_semantic_op_registry_verify(error, error_size))
+        return false;
+    if (!xr_fingerprint_equal(plan->operation_registry_fingerprint, current_registry)) {
+        set_error(error, error_size, "XR_SEM_0017",
+                  "operation registry fingerprint does not match the compiler");
         return false;
     }
     if (!xr_semantic_plan_verify_identity_set(plan, error, error_size))
@@ -382,6 +395,11 @@ uint32_t xr_semantic_plan_schema(const XrSemanticPlan *plan) {
 XrFingerprint xr_semantic_plan_fingerprint(const XrSemanticPlan *plan) {
     XrFingerprint empty = {{0}};
     return plan ? plan->fingerprint : empty;
+}
+
+XrFingerprint xr_semantic_plan_operation_registry_fingerprint(const XrSemanticPlan *plan) {
+    XrFingerprint zero = {{0}};
+    return plan ? plan->operation_registry_fingerprint : zero;
 }
 
 #define XR_PLAN_COUNT_ACCESSOR(name, field)                                                        \
@@ -469,9 +487,11 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
     if (!plan || !out)
         return false;
     char fingerprint[XR_FINGERPRINT_BYTES * 2 + 1];
+    char registry_fingerprint[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->fingerprint, fingerprint);
-    fprintf(out, "semantic-plan schema=%u frozen=%u fingerprint=%s\n", plan->schema,
-            plan->frozen ? 1u : 0u, fingerprint);
+    xr_fingerprint_hex(plan->operation_registry_fingerprint, registry_fingerprint);
+    fprintf(out, "semantic-plan schema=%u frozen=%u fingerprint=%s operation-registry=%s\n",
+            plan->schema, plan->frozen ? 1u : 0u, fingerprint, registry_fingerprint);
     fprintf(out, "  types=%u functions=%u blocks=%u operations=%u edges=%u constants=%u\n",
             plan->type_count, plan->function_count, plan->block_count, plan->operation_count,
             plan->edge_count, plan->constant_count);

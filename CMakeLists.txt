@@ -267,6 +267,7 @@ file(GLOB_RECURSE XRAY_STDLIB_METADATA_SOURCES CONFIGURE_DEPENDS
 
 set(XRAY_GEN_XI_OPS_DEPS
     ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
+    ${CMAKE_SOURCE_DIR}/src/plan/semantic/xr_semantic_ops_gen.h
 )
 
 set(XRAY_GEN_XI_VERIFY_DEPS
@@ -310,6 +311,15 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
     DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
     COMMENT "xisagen: generating xi_ops_gen.h from ops.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/plan/semantic/xr_semantic_ops_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} semantic-ops
+            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+            ${CMAKE_SOURCE_DIR}/src/plan/semantic/xr_semantic_ops_gen.h
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+    COMMENT "xisagen: generating target-neutral SemanticPlan op registry"
 )
 
 add_custom_command(

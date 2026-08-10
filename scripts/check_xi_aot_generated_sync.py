@@ -40,6 +40,7 @@ AOT_SOURCES = (XISAGEN, Path("xisa/aot/rep.def"), Path("xisa/aot/abi.def"),
 
 XI_ARTIFACTS = (
     "src/ir/xi_ops_gen.h",
+    "src/plan/semantic/xr_semantic_ops_gen.h",
     "src/ir/xi_verify_gen.h",
     "src/ir/xi_lowering_coverage_gen.h",
     "src/ir/xi_emit_vm_gen.h",
@@ -128,6 +129,8 @@ def main(argv: list[str]) -> int:
         if require_files(gate, XI_SOURCES):
             if (run_gen(gate, ["xi-ops", "xisa/xi/ops.def",
                                scratch / "src/ir/xi_ops_gen.h"])
+                    and run_gen(gate, ["semantic-ops", "xisa/xi/ops.def",
+                                       scratch / "src/plan/semantic/xr_semantic_ops_gen.h"])
                     and run_gen(gate, ["xi-verify", "xisa/xi/ops.def",
                                        "xisa/xi/verifier.def",
                                        scratch / "src/ir/xi_verify_gen.h"])

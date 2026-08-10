@@ -9,6 +9,7 @@
 #include "../../../src/plan/ownership/xr_ownership_certificate.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_ops.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -254,6 +255,10 @@ static void test_immutable_owned_snapshot(void) {
     REQUIRE(xr_semantic_plan_is_frozen(plan));
     REQUIRE(xr_semantic_plan_is_verified(plan));
     REQUIRE(xr_semantic_plan_schema(plan) == XR_SEMANTIC_SCHEMA_VERSION);
+    XrFingerprint registry_fingerprint;
+    xr_semantic_op_registry_fingerprint(&registry_fingerprint);
+    REQUIRE(xr_fingerprint_equal(registry_fingerprint,
+                                 xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
     REQUIRE(xr_semantic_plan_block_count(plan) == 1);
     REQUIRE(xr_semantic_plan_operation_count(plan) == 3);
@@ -278,6 +283,23 @@ static void test_immutable_owned_snapshot(void) {
     REQUIRE(ownership != NULL);
     REQUIRE(xr_ownership_certificate_owner_count(ownership) == 1);
     xr_semantic_plan_free(plan);
+}
+
+static void test_operation_registry(void) {
+    char error[512] = {0};
+    REQUIRE(xr_semantic_op_registry_verify(error, sizeof(error)));
+    REQUIRE(xr_semantic_op_contract_count() == XI_OP_COUNT);
+
+    const XrSemanticOpContract *add = xr_semantic_op_contract(XI_ADD);
+    const XrSemanticOpContract *decode = xr_semantic_op_contract(XI_JSON_DECODE);
+    const XrSemanticOpContract *print = xr_semantic_op_contract(XI_PRINT);
+    const XrSemanticOpContract *generated = xr_semantic_op_contract(XI_GEN_CALL);
+    REQUIRE(add != NULL && strcmp(add->canonical_name, "xi.add") == 0);
+    REQUIRE(add->owner == XR_SEM_OWNER_DECLARATIVE_PRIMITIVE);
+    REQUIRE(decode != NULL && decode->owner == XR_SEM_OWNER_SHARED_SEMANTIC_KERNEL);
+    REQUIRE(print != NULL && print->owner == XR_SEM_OWNER_CAPABILITY_PROVIDER);
+    REQUIRE(generated != NULL && generated->owner == XR_SEM_OWNER_GENERATED_SPECIALIZATION);
+    REQUIRE(xr_semantic_op_contract(XI_OP_COUNT) == NULL);
 }
 
 static void test_xsm_roundtrip_and_determinism(void) {
@@ -408,6 +430,11 @@ static void test_xsm_fail_closed_mutations(void) {
 
     mutation = copy_bytes(bytes, size);
     mutation[56] ^= 0x01;
+    expect_decode_failure(mutation, size, "XR_ARTIFACT_2003");
+    xr_free(mutation);
+
+    mutation = copy_bytes(bytes, size);
+    mutation[88] ^= 0x01;
     expect_decode_failure(mutation, size, "XR_ARTIFACT_2002");
     xr_free(mutation);
 
@@ -448,6 +475,10 @@ static void test_semantic_and_ownership_mutations(void) {
     REQUIRE(plan->ownership != NULL);
     REQUIRE(plan->ownership->event_count >= 2);
     REQUIRE(plan->ownership->edge_state_count >= 1);
+
+    plan->operation_registry_fingerprint.bytes[0] ^= 0x01;
+    expect_verify_failure(plan, "XR_SEM_0017");
+    plan->operation_registry_fingerprint.bytes[0] ^= 0x01;
 
     uint16_t saved_opcode = plan->operations[0].opcode;
     plan->operations[0].opcode = XI_OP_COUNT;
@@ -598,6 +629,7 @@ static void test_stack_extent_is_logical_and_fail_closed(void) {
 
 int main(void) {
     test_stable_ids();
+    test_operation_registry();
     test_immutable_owned_snapshot();
     test_xsm_roundtrip_and_determinism();
     test_explicit_panic_edge_and_roundtrip();

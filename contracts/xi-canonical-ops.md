@@ -5,8 +5,9 @@ memory scope (`:tbaa-group`) and every synchronising operation gained its
 language-level happens-before edge (`:sync`).
 
 1. `xisa/xi/ops.def` is the canonical operation table. Opcode semantics,
-   effects, result ownership, operand ownership, memory scope, and
-   synchronisation edge are generated from it.
+   effects, result ownership, operand ownership, memory scope,
+   synchronisation edge, and the unique language-semantic owner category are
+   generated from it.
 2. Every operation declares `:own-use` explicitly. Missing ownership metadata
    is a generator error; no consumer may supply a default guess.
 3. `borrow`, `consume`, `pass`, `stored-value`, and `method-args` retain the
@@ -55,8 +56,21 @@ language-level happens-before edge (`:sync`).
     There is no Xi defer-push/pop/invoke operation, closure or callback
     representation, dynamic cleanup stack, or backend reconstruction. Panic and
     coroutine-cancellation paths dispatch to the same static regions.
+14. Every Xi operation is listed exactly once in one of four owner groups:
+    `declarative-primitive`, `shared-semantic-kernel`, `capability-provider`,
+    or `generated-specialization`. Missing categories, missing operations,
+    duplicate membership, and unknown operations are generator errors.
+15. `xr_semantic_ops_gen.h` contains only target-neutral fields. Target support,
+    C/native spelling, backend rewrite, and lowering policy remain outside the
+    SemanticPlan registry. The independent registry verifier checks all 226
+    rows, and the SemanticPlan verifier reads arity, effects, result ownership,
+    and operand ownership from this registry instead of backend metadata.
+16. The operation-registry fingerprint covers every target-neutral contract
+    field and owner category. It is part of the SemanticPlan fingerprint and
+    the exact-version `.xsm` header. A missing or incompatible registry fails
+    before artifact allocation or execution; there is no compatibility shim.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 6916b12552475cbb147e30be9c3245ddc28d67867dbeb6f08d586623de451ec7
+anchor-sha256: xisa/xi/ops.def a63483aadb891e7a4d864d4eb1193cfddd9024d04e43a5d30d8b3c670563c034
 anchor-sha256: xisa/xi/lowering.def 8537a11e486566ce11847065319b2115558ea85ea7420deddc5753e61b6fda30

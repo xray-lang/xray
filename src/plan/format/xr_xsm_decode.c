@@ -11,6 +11,7 @@
 #include "xr_xsm_schema.h"
 #include "xr_xsm_io.h"
 #include "../semantic/xr_semantic_plan_internal.h"
+#include "../semantic/xr_semantic_ops.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xsha256.h"
@@ -384,18 +385,25 @@ bool xr_xsm_decode(const uint8_t *bytes, size_t size, XrSemanticPlan **out, char
         return report(error, error_size, "XR_EXEC_5003", "XSM artifact exceeds its hard budget");
     XrXsmReader header = {.data = bytes, .size = size};
     uint8_t magic[8], digest[32];
-    XrFingerprint expected_fingerprint;
+    XrFingerprint expected_registry_fingerprint, expected_fingerprint;
     xr_xsm_take_bytes(&header, magic, sizeof(magic));
     uint32_t schema = xr_xsm_take_u32(&header);
     uint32_t header_size = xr_xsm_take_u32(&header);
     uint64_t payload_size = xr_xsm_take_u64(&header);
     xr_xsm_take_bytes(&header, digest, sizeof(digest));
+    xr_xsm_take_bytes(&header, expected_registry_fingerprint.bytes,
+                      sizeof(expected_registry_fingerprint.bytes));
     xr_xsm_take_bytes(&header, expected_fingerprint.bytes, sizeof(expected_fingerprint.bytes));
     if (header.failed || memcmp(magic, xr_xsm_magic, sizeof(magic)) != 0 ||
         schema != XR_SEMANTIC_SCHEMA_VERSION || header_size != XR_XSM_HEADER_SIZE)
         return report(error, error_size, "XR_ARTIFACT_2000", "XSM schema is not exactly supported");
     if (payload_size != size - XR_XSM_HEADER_SIZE)
         return report(error, error_size, "XR_ARTIFACT_2001", "XSM payload bounds are invalid");
+    XrFingerprint current_registry_fingerprint;
+    xr_semantic_op_registry_fingerprint(&current_registry_fingerprint);
+    if (!xr_fingerprint_equal(expected_registry_fingerprint, current_registry_fingerprint))
+        return report(error, error_size, "XR_ARTIFACT_2003",
+                      "XSM operation registry fingerprint is incompatible");
     uint8_t actual_digest[32];
     xr_sha256(bytes + XR_XSM_HEADER_SIZE, (size_t) payload_size, actual_digest);
     if (memcmp(digest, actual_digest, sizeof(digest)) != 0)

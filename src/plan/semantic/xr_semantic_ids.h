@@ -16,7 +16,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_SEMANTIC_SCHEMA_VERSION UINT32_C(2)
+#define XR_SEMANTIC_SCHEMA_VERSION UINT32_C(3)
 #define XR_STABLE_ID_BYTES 16
 #define XR_FINGERPRINT_BYTES 32
 

@@ -26,6 +26,7 @@ struct XrSemanticPlan {
     bool frozen;
     bool verified;
     XrFingerprint fingerprint;
+    XrFingerprint operation_registry_fingerprint;
     XrSemanticTypeRecord *types;
     uint32_t type_count;
     uint32_t type_capacity;
