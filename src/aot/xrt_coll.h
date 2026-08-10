@@ -1138,9 +1138,9 @@ static inline XrValue xrt_tuple_make_consuming(int64_t len, const XrValue *items
     return tuple;
 }
 
-/* Construct a tuple from lanes that transfer in: an ordinary value is stored
- * as-is because the construction site already gave up its owner, while an
- * array-ref lane materializes, since a borrowed view cannot be stored. */
+/* Construct a tuple from borrowed lanes.  Ordinary reference values acquire
+ * an independent owner; an array-ref lane materializes because a borrowed
+ * view cannot be stored. */
 static inline XrValue xrt_tuple_make_from_borrowed(int64_t len, const XrValue *items) {
     XrValue tuple = xrt_tuple_new(len);
     xrt_tuple_t *t = (xrt_tuple_t *) tuple.ptr;
@@ -1149,8 +1149,10 @@ static inline XrValue xrt_tuple_make_from_borrowed(int64_t len, const XrValue *i
             t->items[i] = XR_NULL_VAL;
         else if (XR_IS_ARRAY_REF(items[i]))
             t->items[i] = xrt_array_ref_to_owned(items[i]);
-        else
+        else {
             t->items[i] = items[i];
+            xrt_retain(t->items[i]);
+        }
     }
     return tuple;
 }
