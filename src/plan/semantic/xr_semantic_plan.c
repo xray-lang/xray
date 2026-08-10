@@ -114,7 +114,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v3\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v4\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -211,10 +211,19 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, op->return_complete);
     }
     for (uint32_t i = 0; i < plan->operand_count; i++) {
-        hash_u64(&ctx, plan->operands[i]);
-        hash_u64(&ctx, plan->operand_transfer_modes[i]);
-        hash_u64(&ctx, plan->operand_ownership_actions[i]);
-        hash_u64(&ctx, plan->operand_contracts[i]);
+        const XrSemanticOperandRecord *operand = &plan->operands[i];
+        hash_u64(&ctx, operand->value);
+        hash_u64(&ctx, operand->type);
+        hash_u64(&ctx, (uint16_t) operand->parameter);
+        hash_u64(&ctx, operand->role);
+        hash_u64(&ctx, operand->transfer_mode);
+        hash_u64(&ctx, operand->ownership_action);
+        hash_u64(&ctx, operand->parameter_mode);
+        hash_u64(&ctx, operand->access);
+        hash_u64(&ctx, operand->origin);
+        hash_u64(&ctx, operand->lifetime);
+        hash_u64(&ctx, operand->escape);
+        hash_u64(&ctx, operand->flags);
     }
     for (uint32_t i = 0; i < plan->metadata_count; i++)
         hash_string(&ctx, plan->metadata[i]);
@@ -372,9 +381,6 @@ void xr_semantic_plan_free(XrSemanticPlan *plan) {
     xr_free(plan->parameters);
     xr_free(plan->predecessors);
     xr_free(plan->operands);
-    xr_free(plan->operand_transfer_modes);
-    xr_free(plan->operand_ownership_actions);
-    xr_free(plan->operand_contracts);
     xr_free(plan->metadata);
     xr_ownership_certificate_free(plan->ownership);
     xr_free(plan);
@@ -438,22 +444,13 @@ XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_constant, XrSemanticConstantRecord, con
 XR_PLAN_INDEX_ACCESSOR(xr_semantic_plan_type_children, type_children, type_child_count)
 XR_PLAN_INDEX_ACCESSOR(xr_semantic_plan_parameters, parameters, parameter_count)
 XR_PLAN_INDEX_ACCESSOR(xr_semantic_plan_predecessors, predecessors, predecessor_count)
-XR_PLAN_INDEX_ACCESSOR(xr_semantic_plan_operands, operands, operand_count)
-XR_PLAN_INDEX_ACCESSOR(xr_semantic_plan_operand_contracts, operand_contracts, operand_count)
 #undef XR_PLAN_INDEX_ACCESSOR
 
-const uint8_t *xr_semantic_plan_operand_transfer_modes(const XrSemanticPlan *plan,
-                                                       uint32_t *count) {
+const XrSemanticOperandRecord *xr_semantic_plan_operands(const XrSemanticPlan *plan,
+                                                         uint32_t *count) {
     if (count)
         *count = plan ? plan->operand_count : 0;
-    return plan ? plan->operand_transfer_modes : NULL;
-}
-
-const uint8_t *xr_semantic_plan_operand_ownership_actions(const XrSemanticPlan *plan,
-                                                          uint32_t *count) {
-    if (count)
-        *count = plan ? plan->operand_count : 0;
-    return plan ? plan->operand_ownership_actions : NULL;
+    return plan ? plan->operands : NULL;
 }
 
 const char *const *xr_semantic_plan_metadata(const XrSemanticPlan *plan, uint32_t *count) {
@@ -565,9 +562,11 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
         fputs("] operands=[", out);
         for (uint16_t a = 0; a < record->operand_count; a++) {
             uint32_t cursor = record->operand_begin + a;
-            fprintf(out, "%s%u:%u:%u:%u", a ? "," : "", plan->operands[cursor],
-                    plan->operand_transfer_modes[cursor], plan->operand_ownership_actions[cursor],
-                    plan->operand_contracts[cursor]);
+            const XrSemanticOperandRecord *operand = &plan->operands[cursor];
+            fprintf(out, "%s%u:%u:%d:%u:%u:%u:%u:%u:%u:%u:%u:%u", a ? "," : "", operand->value,
+                    operand->type, operand->parameter, operand->role, operand->transfer_mode,
+                    operand->ownership_action, operand->parameter_mode, operand->access,
+                    operand->origin, operand->lifetime, operand->escape, operand->flags);
         }
         fputs("] metadata=[", out);
         for (uint16_t m = 0; m < record->metadata_count; m++) {

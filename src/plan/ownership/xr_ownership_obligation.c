@@ -107,7 +107,8 @@ static uint32_t aliased_call_operand(const XrSemanticPlan *plan,
     if (operation->result_alias_operand < 0 ||
         (uint16_t) operation->result_alias_operand >= operation->operand_count)
         return XR_SEMANTIC_INDEX_NONE;
-    return plan->operands[operation->operand_begin + (uint16_t) operation->result_alias_operand];
+    return plan->operands[operation->operand_begin + (uint16_t) operation->result_alias_operand]
+        .value;
 }
 
 static bool build_equivalence_classes(XrOwnershipBuildContext *ctx) {
@@ -118,13 +119,15 @@ static bool build_equivalence_classes(XrOwnershipBuildContext *ctx) {
             continue;
         if (operation->ownership_use == XI_GEN_OWN_USE_PASS && operation->opcode != XI_PHI) {
             for (uint16_t a = 0; a < operation->operand_count; a++) {
-                uint32_t operand = ctx->plan->operands[operation->operand_begin + a];
+                uint32_t operand = ctx->plan->operands[operation->operand_begin + a].value;
                 if (operand < ctx->value_count)
                     union_values(ctx, operation->result_value, operand);
             }
         } else if (operation->result_alias_operand >= 0 && operation->operand_count > 0) {
-            uint32_t operand = ctx->plan->operands[operation->operand_begin +
-                                                   (uint16_t) operation->result_alias_operand];
+            uint32_t operand = ctx->plan
+                                   ->operands[operation->operand_begin +
+                                              (uint16_t) operation->result_alias_operand]
+                                   .value;
             if (operand < ctx->value_count)
                 union_values(ctx, operation->result_value, operand);
         } else if (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT) {
@@ -342,7 +345,7 @@ static bool add_operand_events(XrOwnershipBuildContext *ctx, uint32_t operation_
         if (ctx->certificate->owners[result_owner].initial_state == XR_OWN_UNINITIALIZED)
             ctx->certificate->owners[result_owner].initial_state = XR_OWN_OWNED_LOCAL;
         for (uint16_t a = 0; a < operation->operand_count; a++) {
-            uint32_t source_value = ctx->plan->operands[operation->operand_begin + a];
+            uint32_t source_value = ctx->plan->operands[operation->operand_begin + a].value;
             uint32_t source_owner = owner_for_value(ctx, source_value);
             if (source_owner == result_owner)
                 continue;
@@ -370,7 +373,7 @@ static bool add_operand_events(XrOwnershipBuildContext *ctx, uint32_t operation_
         return true;
     }
     for (uint16_t a = 0; a < operation->operand_count; a++) {
-        uint32_t value = ctx->plan->operands[operation->operand_begin + a];
+        uint32_t value = ctx->plan->operands[operation->operand_begin + a].value;
         uint32_t owner = owner_for_value(ctx, value);
         if (owner == XR_SEMANTIC_INDEX_NONE)
             continue;
@@ -397,7 +400,7 @@ static bool add_operand_events(XrOwnershipBuildContext *ctx, uint32_t operation_
                 return false;
         } else {
             bool stored = operation->ownership_use == XI_GEN_OWN_USE_STORED_VALUE && a > 0;
-            bool consumed = ctx->plan->operand_ownership_actions[operation->operand_begin + a] ==
+            bool consumed = ctx->plan->operands[operation->operand_begin + a].ownership_action ==
                             XR_SEM_OPERAND_CONSUME;
             /* PASS operations rename or merge the same logical token. Their
              * operands are consume sites for ARC placement, but not ownership

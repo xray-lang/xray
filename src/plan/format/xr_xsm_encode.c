@@ -131,10 +131,19 @@ static void encode_operations(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u8(writer, record->return_complete);
     }
     for (uint32_t i = 0; i < plan->operand_count; i++) {
-        xr_xsm_put_u32(writer, plan->operands[i]);
-        xr_xsm_put_u8(writer, plan->operand_transfer_modes[i]);
-        xr_xsm_put_u8(writer, plan->operand_ownership_actions[i]);
-        xr_xsm_put_u32(writer, plan->operand_contracts[i]);
+        const XrSemanticOperandRecord *record = &plan->operands[i];
+        xr_xsm_put_u32(writer, record->value);
+        xr_xsm_put_u32(writer, record->type);
+        xr_xsm_put_u16(writer, (uint16_t) record->parameter);
+        xr_xsm_put_u8(writer, record->role);
+        xr_xsm_put_u8(writer, record->transfer_mode);
+        xr_xsm_put_u8(writer, record->ownership_action);
+        xr_xsm_put_u8(writer, record->parameter_mode);
+        xr_xsm_put_u8(writer, record->access);
+        xr_xsm_put_u8(writer, record->origin);
+        xr_xsm_put_u8(writer, record->lifetime);
+        xr_xsm_put_u8(writer, record->escape);
+        xr_xsm_put_u8(writer, record->flags);
     }
     for (uint32_t i = 0; i < plan->metadata_count; i++)
         xr_xsm_put_string(writer, plan->metadata[i]);

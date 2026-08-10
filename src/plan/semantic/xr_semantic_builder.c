@@ -863,23 +863,62 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
     }
 }
 
-static uint32_t pack_call_contract(const XiValue *value, uint16_t operand) {
-    if (!value->call_plan)
-        return 0;
-    const XiCallArgPlan *arg = NULL;
-    if (value->call_plan->has_receiver) {
-        if (operand == 0)
-            arg = &value->call_plan->receiver;
-        else if (operand - 1 < value->call_plan->nargs)
-            arg = &value->call_plan->args[operand - 1];
-    } else if (operand < value->call_plan->nargs) {
-        arg = &value->call_plan->args[operand];
+static bool operation_has_explicit_call_layout(uint16_t opcode) {
+    return opcode == XI_CALL || opcode == XI_TAIL_CALL || opcode == XI_CALL_METHOD ||
+           opcode == XI_CALL_METHOD_DIRECT;
+}
+
+static const XiCallArgPlan *call_argument_plan(const XiValue *value, uint16_t operand) {
+    if (!value || !value->call_plan || !operation_has_explicit_call_layout(value->op))
+        return NULL;
+    if (operand == 0)
+        return value->call_plan->has_receiver ? &value->call_plan->receiver : NULL;
+    uint16_t parameter = (uint16_t) (operand - 1);
+    return parameter < value->call_plan->nargs ? &value->call_plan->args[parameter] : NULL;
+}
+
+static bool classify_operand_contract(XrSemanticBuildContext *ctx, const XiValue *operation,
+                                      uint16_t index, XrSemanticOperandRecord *record) {
+    record->parameter = -1;
+    record->role = XR_SEM_OPERAND_VALUE;
+    record->parameter_mode = XR_PARAM_READ;
+    record->access = XR_CALL_ARG_PLAIN;
+    if (operation_has_explicit_call_layout(operation->op)) {
+        if (operation->nargs == 0)
+            return fail(ctx, "XR_SEM_0018", "call operation has no callee or receiver operand");
+        if (operation->nargs > (uint32_t) INT16_MAX + 1u)
+            return fail(ctx, "XR_EXEC_5003", "call parameter index budget exhausted");
+        if (operation->call_plan &&
+            operation->call_plan->nargs != (uint16_t) (operation->nargs - 1))
+            return fail(ctx, "XR_SEM_0018", "call argument plan does not match operation arity");
+        if (index == 0) {
+            record->role = operation->op == XI_CALL || operation->op == XI_TAIL_CALL
+                               ? XR_SEM_OPERAND_CALLEE
+                               : XR_SEM_OPERAND_RECEIVER;
+        } else {
+            record->role = XR_SEM_OPERAND_ARGUMENT;
+            record->parameter = (int16_t) (index - 1);
+        }
+        if (record->role != XR_SEM_OPERAND_CALLEE)
+            record->flags |= XR_SEM_OPERAND_CALL_CONTRACT;
+    } else if (operation->op == XI_CALL_BUILTIN) {
+        if (index > INT16_MAX)
+            return fail(ctx, "XR_EXEC_5003", "builtin call parameter index budget exhausted");
+        record->role = XR_SEM_OPERAND_ARGUMENT;
+        record->parameter = (int16_t) index;
+        record->flags |= XR_SEM_OPERAND_CALL_CONTRACT;
     }
-    if (!arg)
-        return 0;
-    return (uint32_t) arg->param_mode | ((uint32_t) arg->access << 4) |
-           ((uint32_t) arg->origin << 8) | ((uint32_t) arg->lifetime << 12) |
-           ((uint32_t) arg->escape << 16) | ((uint32_t) (arg->addressable ? 1u : 0u) << 20);
+    const XiCallArgPlan *argument = call_argument_plan(operation, index);
+    if (!argument)
+        return true;
+    record->parameter_mode = argument->param_mode;
+    record->access = argument->access;
+    record->origin = argument->origin;
+    record->lifetime = argument->lifetime;
+    record->escape = argument->escape;
+    if (argument->addressable)
+        record->flags |= XR_SEM_OPERAND_ADDRESSABLE;
+    return true;
 }
 
 static bool append_operand(XrSemanticBuildContext *ctx, const XiFunc *function,
@@ -887,38 +926,33 @@ static bool append_operand(XrSemanticBuildContext *ctx, const XiFunc *function,
     if (ctx->plan->operand_count >= XR_SEMANTIC_MAX_OPERANDS ||
         !reserve_array((void **) &ctx->plan->operands, &ctx->plan->operand_capacity,
                        ctx->plan->operand_count + 1, sizeof(*ctx->plan->operands),
-                       XR_SEMANTIC_MAX_OPERANDS) ||
-        !reserve_array((void **) &ctx->plan->operand_transfer_modes,
-                       &ctx->plan->operand_transfer_capacity, ctx->plan->operand_count + 1,
-                       sizeof(*ctx->plan->operand_transfer_modes), XR_SEMANTIC_MAX_OPERANDS) ||
-        !reserve_array((void **) &ctx->plan->operand_ownership_actions,
-                       &ctx->plan->operand_ownership_capacity, ctx->plan->operand_count + 1,
-                       sizeof(*ctx->plan->operand_ownership_actions), XR_SEMANTIC_MAX_OPERANDS) ||
-        !reserve_array((void **) &ctx->plan->operand_contracts,
-                       &ctx->plan->operand_contract_capacity, ctx->plan->operand_count + 1,
-                       sizeof(*ctx->plan->operand_contracts), XR_SEMANTIC_MAX_OPERANDS))
+                       XR_SEMANTIC_MAX_OPERANDS))
         return fail(ctx, "XR_EXEC_5003", "semantic operand budget exhausted");
     uint32_t ref = value_ref(ctx, function, value->args[index]);
     if (ref == XR_SEMANTIC_INDEX_NONE)
         return fail(ctx, "XR_SEM_0008", "operation has an invalid SSA operand");
     uint32_t cursor = ctx->plan->operand_count++;
-    ctx->plan->operands[cursor] = ref;
+    XrSemanticOperandRecord *record = &ctx->plan->operands[cursor];
+    memset(record, 0, sizeof(*record));
+    record->value = ref;
+    if (!add_type(ctx, value->args[index]->type, &record->type) ||
+        !classify_operand_contract(ctx, value, index, record))
+        return false;
     uint8_t transfer_mode = XR_TRANSFER_SHARE;
     if ((value->op == XI_GO || value->op == XI_THREAD_SPAWN) && index > 0)
         transfer_mode = xi_go_arg_transfer_mode(value, (uint16_t) (index - 1));
     else if ((value->op == XI_CHAN_SEND || value->op == XI_CHAN_TRY_SEND) && index > 0)
         transfer_mode = xi_chan_send_transfer_mode(value);
-    ctx->plan->operand_transfer_modes[cursor] = transfer_mode;
+    record->transfer_mode = transfer_mode;
     const XiValue *operand = value->args[index];
     bool destroys_scoped_stack_closure =
         operand && operand->op == XI_STACK_ALLOC && operand->aux_int == XI_CLOSURE_NEW &&
         ((value->op == XI_PAR_FOR && index == 3) || (value->op == XI_PAR_MAP && index == 3) ||
          (value->op == XI_PAR_REDUCE && (index == 4 || index == 5)));
-    ctx->plan->operand_ownership_actions[cursor] =
+    record->ownership_action =
         destroys_scoped_stack_closure || xi_arc_operand_consumes(function, value, index)
             ? XR_SEM_OPERAND_CONSUME
             : XR_SEM_OPERAND_BORROW;
-    ctx->plan->operand_contracts[cursor] = pack_call_contract(value, index);
     return true;
 }
 

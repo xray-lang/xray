@@ -50,6 +50,19 @@ typedef enum XrSemanticOperandOwnershipAction {
     XR_SEM_OPERAND_CONSUME = 1,
 } XrSemanticOperandOwnershipAction;
 
+typedef enum XrSemanticOperandRole {
+    XR_SEM_OPERAND_VALUE = 0,
+    XR_SEM_OPERAND_CALLEE,
+    XR_SEM_OPERAND_RECEIVER,
+    XR_SEM_OPERAND_ARGUMENT,
+    XR_SEM_OPERAND_ROLE_COUNT,
+} XrSemanticOperandRole;
+
+typedef enum XrSemanticOperandFlag {
+    XR_SEM_OPERAND_CALL_CONTRACT = 1u << 0,
+    XR_SEM_OPERAND_ADDRESSABLE = 1u << 1,
+} XrSemanticOperandFlag;
+
 typedef enum XrSemanticTypeFlag {
     XR_SEM_TYPE_NULLABLE = 1u << 0,
     XR_SEM_TYPE_CONST = 1u << 1,
@@ -170,6 +183,21 @@ typedef struct XrSemanticConstantRecord {
     const char *string;
 } XrSemanticConstantRecord;
 
+typedef struct XrSemanticOperandRecord {
+    uint32_t value;
+    uint32_t type;
+    int16_t parameter;
+    uint8_t role;
+    uint8_t transfer_mode;
+    uint8_t ownership_action;
+    uint8_t parameter_mode;
+    uint8_t access;
+    uint8_t origin;
+    uint8_t lifetime;
+    uint8_t escape;
+    uint8_t flags;
+} XrSemanticOperandRecord;
+
 XR_FUNC XrSemanticPlan *xr_semantic_plan_retain(XrSemanticPlan *plan);
 XR_FUNC void xr_semantic_plan_free(XrSemanticPlan *plan);
 XR_FUNC bool xr_semantic_plan_is_frozen(const XrSemanticPlan *plan);
@@ -198,13 +226,8 @@ XR_FUNC const XrSemanticConstantRecord *xr_semantic_plan_constant(const XrSemant
 XR_FUNC const uint32_t *xr_semantic_plan_type_children(const XrSemanticPlan *plan, uint32_t *count);
 XR_FUNC const uint32_t *xr_semantic_plan_parameters(const XrSemanticPlan *plan, uint32_t *count);
 XR_FUNC const uint32_t *xr_semantic_plan_predecessors(const XrSemanticPlan *plan, uint32_t *count);
-XR_FUNC const uint32_t *xr_semantic_plan_operands(const XrSemanticPlan *plan, uint32_t *count);
-XR_FUNC const uint8_t *xr_semantic_plan_operand_transfer_modes(const XrSemanticPlan *plan,
-                                                               uint32_t *count);
-XR_FUNC const uint8_t *xr_semantic_plan_operand_ownership_actions(const XrSemanticPlan *plan,
-                                                                  uint32_t *count);
-XR_FUNC const uint32_t *xr_semantic_plan_operand_contracts(const XrSemanticPlan *plan,
-                                                           uint32_t *count);
+XR_FUNC const XrSemanticOperandRecord *xr_semantic_plan_operands(const XrSemanticPlan *plan,
+                                                                 uint32_t *count);
 XR_FUNC const char *const *xr_semantic_plan_metadata(const XrSemanticPlan *plan, uint32_t *count);
 XR_FUNC const XrOwnershipCertificate *xr_semantic_plan_ownership(const XrSemanticPlan *plan);
 XR_FUNC bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out);

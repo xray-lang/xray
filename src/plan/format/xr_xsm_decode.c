@@ -112,10 +112,7 @@ static bool counts_fit_storage_budget(XrXsmCounts count) {
     XR_COUNT_STORAGE(type_children, uint32_t);
     XR_COUNT_STORAGE(parameters, uint32_t);
     XR_COUNT_STORAGE(predecessors, uint32_t);
-    XR_COUNT_STORAGE(operands, uint32_t);
-    XR_COUNT_STORAGE(operands, uint8_t);
-    XR_COUNT_STORAGE(operands, uint8_t);
-    XR_COUNT_STORAGE(operands, uint32_t);
+    XR_COUNT_STORAGE(operands, XrSemanticOperandRecord);
     XR_COUNT_STORAGE(metadata, const char *);
     XR_COUNT_STORAGE(owners, XrOwnershipOwnerRecord);
     XR_COUNT_STORAGE(events, XrOwnershipEventRecord);
@@ -145,10 +142,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     XR_ALLOC_TABLE(type_children, count.type_children, uint32_t);
     XR_ALLOC_TABLE(parameters, count.parameters, uint32_t);
     XR_ALLOC_TABLE(predecessors, count.predecessors, uint32_t);
-    XR_ALLOC_TABLE(operands, count.operands, uint32_t);
-    XR_ALLOC_TABLE(operand_transfer_modes, count.operands, uint8_t);
-    XR_ALLOC_TABLE(operand_ownership_actions, count.operands, uint8_t);
-    XR_ALLOC_TABLE(operand_contracts, count.operands, uint32_t);
+    XR_ALLOC_TABLE(operands, count.operands, XrSemanticOperandRecord);
     XR_ALLOC_TABLE(metadata, count.metadata, const char *);
 #undef XR_ALLOC_TABLE
 #define XR_ALLOC_CERT(field, count_value, type)                                                    \
@@ -173,8 +167,6 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     plan->parameter_count = plan->parameter_capacity = count.parameters;
     plan->predecessor_count = plan->predecessor_capacity = count.predecessors;
     plan->operand_count = plan->operand_capacity = count.operands;
-    plan->operand_transfer_capacity = count.operands;
-    plan->operand_contract_capacity = count.operands;
     plan->metadata_count = plan->metadata_capacity = count.metadata;
     certificate->owner_count = certificate->owner_capacity = count.owners;
     certificate->event_count = certificate->event_capacity = count.events;
@@ -301,10 +293,19 @@ static void decode_operations(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->return_complete = xr_xsm_take_u8(reader);
     }
     for (uint32_t i = 0; i < plan->operand_count; i++) {
-        plan->operands[i] = xr_xsm_take_u32(reader);
-        plan->operand_transfer_modes[i] = xr_xsm_take_u8(reader);
-        plan->operand_ownership_actions[i] = xr_xsm_take_u8(reader);
-        plan->operand_contracts[i] = xr_xsm_take_u32(reader);
+        XrSemanticOperandRecord *record = &plan->operands[i];
+        record->value = xr_xsm_take_u32(reader);
+        record->type = xr_xsm_take_u32(reader);
+        record->parameter = (int16_t) xr_xsm_take_u16(reader);
+        record->role = xr_xsm_take_u8(reader);
+        record->transfer_mode = xr_xsm_take_u8(reader);
+        record->ownership_action = xr_xsm_take_u8(reader);
+        record->parameter_mode = xr_xsm_take_u8(reader);
+        record->access = xr_xsm_take_u8(reader);
+        record->origin = xr_xsm_take_u8(reader);
+        record->lifetime = xr_xsm_take_u8(reader);
+        record->escape = xr_xsm_take_u8(reader);
+        record->flags = xr_xsm_take_u8(reader);
     }
     for (uint32_t i = 0; i < plan->metadata_count; i++)
         plan->metadata[i] = take_plan_string(reader, plan, false);

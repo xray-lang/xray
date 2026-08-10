@@ -33,6 +33,12 @@ static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 4, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 6, .frozen = true};
+static XrType stub_function = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 7,
+    .frozen = true,
+    .function = {.return_type = &stub_int, .throw_effect = XR_FN_EFFECT_NO_THROW},
+};
 static XrType stub_array = {
     .kind = XR_KIND_ARRAY,
     .id = 5,
@@ -187,6 +193,56 @@ static XrSemanticPlan *build_phi_dominance_plan(void) {
     return plan;
 }
 
+static XrSemanticPlan *build_typed_call_operand_plan(void) {
+    XiFunc *function = xi_func_new("typed_call_operand_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiImportRef import_ref = {
+        .module_path = "./operand_contract",
+        .member_name = "target",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+    };
+    XiValue *callee = xi_value_new(function, entry, XI_IMPORT_REF, &stub_function, 0);
+    XiValue *first = xi_const_int(function, entry, 11, &stub_int);
+    XiValue *second = xi_const_int(function, entry, 22, &stub_int);
+    REQUIRE(callee != NULL && first != NULL && second != NULL);
+    callee->aux = &import_ref;
+
+    XiCallArgPlan arguments[2] = {0};
+    arguments[0].param_mode = XR_PARAM_REF;
+    arguments[0].access = XR_CALL_ARG_REF;
+    arguments[0].origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    arguments[0].lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    arguments[0].addressable = true;
+    arguments[0].origin_var_id = 0;
+    arguments[0].place = first;
+    arguments[1].param_mode = XR_PARAM_MOVE;
+    arguments[1].access = XR_CALL_ARG_MOVE;
+    arguments[1].origin_var_id = XI_NO_VAR_ID;
+    XiCallPlan call_plan = {.args = arguments, .nargs = 2, .verified = true};
+
+    XiValue *call = xi_value_new(function, entry, XI_CALL, &stub_int, 3);
+    REQUIRE(call != NULL);
+    call->args[0] = callee;
+    call->args[1] = first;
+    call->args[2] = second;
+    call->call_plan = &call_plan;
+    xi_block_set_return(entry, call);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "typed-call-operand plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    return plan;
+}
+
 static uint8_t *copy_bytes(const uint8_t *bytes, size_t size) {
     uint8_t *copy = (uint8_t *) xr_malloc(size);
     REQUIRE(copy != NULL);
@@ -236,6 +292,8 @@ static void expect_decode_failure(const uint8_t *bytes, size_t size, const char 
     REQUIRE(decoded == NULL);
     REQUIRE(strncmp(error, code, strlen(code)) == 0);
 }
+
+static void expect_verify_failure(XrSemanticPlan *plan, const char *code);
 
 static void test_stable_ids(void) {
     XrStableId id;
@@ -407,6 +465,63 @@ static void test_explicit_error_edge(void) {
     xr_semantic_plan_free(plan);
 }
 
+static void test_typed_call_operand_contract(void) {
+    XrSemanticPlan *plan = build_typed_call_operand_plan();
+    const XrSemanticOperationRecord *call = NULL;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        if (plan->operations[i].opcode == XI_CALL) {
+            call = &plan->operations[i];
+            break;
+        }
+    }
+    REQUIRE(call != NULL && call->operand_count == 3);
+    XrSemanticOperandRecord *callee = &plan->operands[call->operand_begin];
+    XrSemanticOperandRecord *first = &plan->operands[call->operand_begin + 1];
+    XrSemanticOperandRecord *second = &plan->operands[call->operand_begin + 2];
+    REQUIRE(callee->role == XR_SEM_OPERAND_CALLEE && callee->parameter == -1);
+    REQUIRE((callee->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0);
+    REQUIRE(first->role == XR_SEM_OPERAND_ARGUMENT && first->parameter == 0);
+    REQUIRE(first->parameter_mode == XR_PARAM_REF && first->access == XR_CALL_ARG_REF);
+    REQUIRE(first->origin == XI_PLACE_ORIGIN_STACK_LOCAL);
+    REQUIRE(first->lifetime == XI_PLACE_LIFETIME_CALL_BOUND);
+    REQUIRE((first->flags & (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE)) ==
+            (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE));
+    REQUIRE(second->role == XR_SEM_OPERAND_ARGUMENT && second->parameter == 1);
+    REQUIRE(second->parameter_mode == XR_PARAM_MOVE && second->access == XR_CALL_ARG_MOVE);
+
+    uint32_t saved_type = first->type;
+    first->type = callee->type;
+    expect_verify_failure(plan, "XR_SEM_0015");
+    first->type = saved_type;
+    uint8_t saved_role = first->role;
+    first->role = XR_SEM_OPERAND_RECEIVER;
+    expect_verify_failure(plan, "XR_SEM_0018");
+    first->role = saved_role;
+
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    char error[512] = {0};
+    REQUIRE(xr_xsm_encode(plan, &bytes, &size, error, sizeof(error)));
+    XrSemanticPlan *decoded = NULL;
+    REQUIRE(xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)));
+    const XrSemanticOperationRecord *decoded_call = NULL;
+    for (uint32_t i = 0; i < decoded->operation_count; i++) {
+        if (decoded->operations[i].opcode == XI_CALL) {
+            decoded_call = &decoded->operations[i];
+            break;
+        }
+    }
+    REQUIRE(decoded_call != NULL);
+    const XrSemanticOperandRecord *decoded_first =
+        &decoded->operands[decoded_call->operand_begin + 1];
+    REQUIRE(decoded_first->type == saved_type && decoded_first->parameter == 0);
+    REQUIRE(decoded_first->parameter_mode == XR_PARAM_REF &&
+            decoded_first->access == XR_CALL_ARG_REF);
+    xr_semantic_plan_free(decoded);
+    xr_free(bytes);
+    xr_semantic_plan_free(plan);
+}
+
 static void test_xsm_fail_closed_mutations(void) {
     XrSemanticPlan *plan = build_probe_plan();
     uint8_t *bytes = NULL;
@@ -568,11 +683,11 @@ static void test_semantic_and_ownership_mutations(void) {
     }
     REQUIRE(phi != NULL && left_value != XR_SEMANTIC_INDEX_NONE &&
             right_value != XR_SEMANTIC_INDEX_NONE && phi->operand_count == 2);
-    uint32_t saved_operand = plan->operands[phi->operand_begin];
+    uint32_t saved_operand = plan->operands[phi->operand_begin].value;
     REQUIRE(saved_operand == left_value);
-    plan->operands[phi->operand_begin] = right_value;
+    plan->operands[phi->operand_begin].value = right_value;
     expect_verify_failure(plan, "XR_SEM_0016");
-    plan->operands[phi->operand_begin] = saved_operand;
+    plan->operands[phi->operand_begin].value = saved_operand;
     char graph_error[512] = {0};
     REQUIRE(xr_semantic_plan_verify(plan, graph_error, sizeof(graph_error)));
     xr_semantic_plan_free(plan);
@@ -729,6 +844,7 @@ int main(void) {
     test_xsm_roundtrip_and_determinism();
     test_explicit_panic_edge_and_roundtrip();
     test_explicit_error_edge();
+    test_typed_call_operand_contract();
     test_xsm_fail_closed_mutations();
     test_semantic_and_ownership_mutations();
     test_stack_extent_is_logical_and_fail_closed();

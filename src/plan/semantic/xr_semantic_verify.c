@@ -243,7 +243,7 @@ static bool verify_ssa_use(const XrSemanticPlan *plan, const XrSemanticGraph *gr
                            const uint32_t *definitions, uint32_t operation_index,
                            uint16_t operand_index, char *error, size_t error_size) {
     const XrSemanticOperationRecord *operation = &plan->operations[operation_index];
-    uint32_t value = plan->operands[operation->operand_begin + operand_index];
+    uint32_t value = plan->operands[operation->operand_begin + operand_index].value;
     uint32_t definition_index = definitions[value];
     const XrSemanticOperationRecord *definition = &plan->operations[definition_index];
     if (definition->function != operation->function)
@@ -280,6 +280,52 @@ static bool verify_ssa_use(const XrSemanticPlan *plan, const XrSemanticGraph *gr
     return true;
 }
 
+static bool verify_operand_contract(const XrSemanticOperationRecord *operation,
+                                    const XrSemanticOperandRecord *operand, uint16_t index,
+                                    char *error, size_t error_size) {
+    uint8_t expected_role = XR_SEM_OPERAND_VALUE;
+    int16_t expected_parameter = -1;
+    bool call_contract = false;
+    if (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) {
+        expected_role = index == 0 ? XR_SEM_OPERAND_CALLEE : XR_SEM_OPERAND_ARGUMENT;
+        if (index > 0) {
+            expected_parameter = (int16_t) (index - 1);
+            call_contract = true;
+        }
+    } else if (operation->opcode == XI_CALL_METHOD || operation->opcode == XI_CALL_METHOD_DIRECT) {
+        expected_role = index == 0 ? XR_SEM_OPERAND_RECEIVER : XR_SEM_OPERAND_ARGUMENT;
+        expected_parameter = index == 0 ? -1 : (int16_t) (index - 1);
+        call_contract = true;
+    } else if (operation->opcode == XI_CALL_BUILTIN) {
+        expected_role = XR_SEM_OPERAND_ARGUMENT;
+        expected_parameter = (int16_t) index;
+        call_contract = true;
+    }
+    if (operand->role != expected_role || operand->parameter != expected_parameter ||
+        operand->role >= XR_SEM_OPERAND_ROLE_COUNT || operand->transfer_mode > XR_TRANSFER_MOVE ||
+        operand->ownership_action > XR_SEM_OPERAND_CONSUME ||
+        !xr_param_mode_is_valid((XrParamMode) operand->parameter_mode) ||
+        !xr_call_arg_access_is_valid((XrCallArgAccess) operand->access) ||
+        operand->origin > XI_PLACE_ORIGIN_PROJECTION_TEMP ||
+        operand->lifetime > XI_PLACE_LIFETIME_CALL_BOUND ||
+        operand->escape > XI_PLACE_ESCAPE_THREAD ||
+        (operand->flags & ~(XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE)) != 0 ||
+        ((operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0) != call_contract)
+        return report(error, error_size, "XR_SEM_0018", "typed operand contract is invalid");
+    if (!call_contract &&
+        (operand->parameter_mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
+         operand->origin != XI_PLACE_ORIGIN_NONE || operand->lifetime != XI_PLACE_LIFETIME_NONE ||
+         operand->escape != XI_PLACE_ESCAPE_NONE ||
+         (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0))
+        return report(error, error_size, "XR_SEM_0018",
+                      "non-call operand carries a call-bound contract");
+    if ((operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0 &&
+        (operand->origin != XI_PLACE_ORIGIN_NONE || operand->lifetime != XI_PLACE_LIFETIME_NONE))
+        return report(error, error_size, "XR_SEM_0018",
+                      "non-addressable operand carries place provenance");
+    return true;
+}
+
 static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_mask,
                               const XrSemanticGraph *graph, char *error, size_t error_size) {
     uint32_t value_count = 0;
@@ -302,6 +348,9 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
                                                        : NULL;
         const XrSemanticOpContract *contract = xr_semantic_op_contract(operation->opcode);
         uint8_t arity = contract ? contract->arity : XR_SEMANTIC_OP_ARITY_VARIADIC;
+        bool explicit_call = operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
+                             operation->opcode == XI_CALL_METHOD ||
+                             operation->opcode == XI_CALL_METHOD_DIRECT;
         if (!verify_id(operation->canonical_key, operation->id) || !function ||
             operation->block >= plan->block_count ||
             plan->blocks[operation->block].function != operation->function ||
@@ -313,6 +362,9 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
             operation->result_value >= function->value_begin + function->value_count ||
             operation->opcode >= XI_OP_COUNT || !contract ||
             (arity != XR_SEMANTIC_OP_ARITY_VARIADIC && arity != operation->operand_count) ||
+            (explicit_call &&
+             (operation->operand_count == 0 || operation->operand_count > INT16_MAX + 1u)) ||
+            (operation->opcode == XI_CALL_BUILTIN && operation->operand_count > INT16_MAX) ||
             operation->effects != contract->effects ||
             operation->ownership_use != contract->ownership_use ||
             operation->result_ownership >= XR_SEM_RESULT_OWNERSHIP_COUNT ||
@@ -359,11 +411,18 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
         const XrSemanticOperationRecord *operation = &plan->operations[i];
         for (uint16_t operand = 0; operand < operation->operand_count; operand++) {
             uint32_t cursor = operation->operand_begin + operand;
-            if (plan->operands[cursor] >= value_count ||
-                definitions[plan->operands[cursor]] == XR_SEMANTIC_INDEX_NONE ||
-                plan->operand_ownership_actions[cursor] > XR_SEM_OPERAND_CONSUME) {
+            const XrSemanticOperandRecord *record = &plan->operands[cursor];
+            if (record->value >= value_count ||
+                definitions[record->value] == XR_SEMANTIC_INDEX_NONE ||
+                record->type >= plan->type_count ||
+                plan->operations[definitions[record->value]].result_type != record->type) {
                 xr_free(definitions);
-                return report(error, error_size, "XR_SEM_0015", "operand has no SSA definition");
+                return report(error, error_size, "XR_SEM_0015",
+                              "operand has no matching typed SSA definition");
+            }
+            if (!verify_operand_contract(operation, record, operand, error, error_size)) {
+                xr_free(definitions);
+                return false;
             }
             if (!verify_ssa_use(plan, graph, definitions, i, operand, error, error_size)) {
                 xr_free(definitions);

@@ -54,15 +54,9 @@ struct XrSemanticPlan {
     uint32_t *predecessors;
     uint32_t predecessor_count;
     uint32_t predecessor_capacity;
-    uint32_t *operands;
+    XrSemanticOperandRecord *operands;
     uint32_t operand_count;
     uint32_t operand_capacity;
-    uint8_t *operand_transfer_modes;
-    uint32_t operand_transfer_capacity;
-    uint8_t *operand_ownership_actions;
-    uint32_t operand_ownership_capacity;
-    uint32_t *operand_contracts;
-    uint32_t operand_contract_capacity;
     const char **metadata;
     uint32_t metadata_count;
     uint32_t metadata_capacity;
