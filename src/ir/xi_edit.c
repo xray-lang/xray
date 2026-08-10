@@ -41,6 +41,7 @@ static uint64_t value_semantic_hash(uint64_t hash, const XiValue *value, bool in
     hash = hash_u64(hash, value->conversion.target_scalar_rep);
     hash = hash_u64(hash, value->conversion.is_implicit ? 1u : 0u);
     hash = hash_u64(hash, value->conversion.is_compile_time ? 1u : 0u);
+    hash = hash_u64(hash, (uint16_t) value->result_alias_operand);
     hash = hash_u64(hash, value->xa_intrinsic_id);
     hash = hash_u64(hash, value->xg_callsite_id);
     hash = hash_u64(hash, value->xg_method_id);

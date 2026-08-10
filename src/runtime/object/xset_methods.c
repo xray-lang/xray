@@ -70,7 +70,7 @@ static XrValue xr_set_method_clear(XrVMRuntime *iso, XrValue self, XrValue *args
  * Set<T>, so callers own the result at +1 and release it. Returning `self`
  * here would hand back the receiver's single reference under a second name and
  * make that release a double release (rc-contract C1/C2) — the same defect
- * class the `@returns_receiver` methods declare explicitly. Intersection
+ * class that receiver-alias contracts prevent. Intersection
  * already returns a fresh empty set on this path. */
 static XrValue set_fresh_copy_value(XrSet *s) {
     return xr_value_from_set(xr_set_union(NULL, s, s));

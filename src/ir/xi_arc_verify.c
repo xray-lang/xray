@@ -38,15 +38,13 @@
  *       incident 4) and a RETAIN/RELEASE on a non-RC value (metadata, the
  *       incident-5 class).
  *
- * RECEIVER ALIASES — per-SSA-value deltas have one blind spot. A member
- * declared `// @returns_receiver` hands its receiver straight back, so the
+ * RECEIVER ALIASES — per-SSA-value deltas have one blind spot. A member whose
+ * compiler-owned contract returns its receiver hands that receiver straight back, so the
  * result and the receiver are ONE object under two SSA names. Releasing the
  * receiver and then using the result reads freed memory, yet each name's own
- * delta stays at 0 and nothing above fires. The verifier therefore reads that
- * declaration (xi_receiver_alias) and folds such a result into its receiver's
- * tracked reference, so an over-released receiver is visible at every use of
- * the alias. It reads the DECLARATION only — no ARC closure or alias code — so
- * the two implementations stay independent as the contract requires.
+ * delta stays at 0 and nothing above fires. Lowering seals the alias operand on
+ * the Xi value; the verifier folds that result into its receiver's tracked
+ * reference, so an over-released receiver is visible at every use of the alias.
  */
 
 #include "xi_arc_verify.h"
@@ -315,10 +313,9 @@ static void build_owners(ArcVerify *av) {
     }
 }
 
-/* Record, for every call result the native declaration marks `@returns_receiver`,
- * the receiver it aliases. Both names denote one object, so they must share one
- * reference budget. Chains collapse to the original owner: `a.reverse().sort()`
- * makes both results alias `a`. */
+/* Record each sealed receiver-alias call result. Both names denote one object,
+ * so they must share one reference budget. Chains collapse to the original
+ * owner: `a.reverse().sort()` makes both results alias `a`. */
 static void build_aliases(ArcVerify *av) {
     XiFunc *f = av->f;
     for (uint32_t b = 0; b < f->nblocks; b++) {

@@ -212,6 +212,8 @@ static void dump_value(FILE *out, const XiValue *v) {
     }
     if (v->xa_intrinsic_id != 0 && v->op != XI_CALL)
         fprintf(out, " [intrinsic=%u]", v->xa_intrinsic_id);
+    if (v->result_alias_operand >= 0)
+        fprintf(out, " [result_alias=arg%d]", (int) v->result_alias_operand);
     if (v->op >= XI_VEC_LOAD && v->op <= XI_VEC_REDUCE_ADD &&
         xi_vec_shape_is_explicit(v->aux_int)) {
         fprintf(out, " [shape=%ux%u%s%s%s%s%s]", (unsigned) xi_vec_shape_native_type(v->aux_int),

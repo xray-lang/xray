@@ -1,5 +1,5 @@
 // 0804_self_returning_method_rc.xr
-// Members declared `// @returns_receiver` hand back the receiver itself, so the
+// Members whose compiler-owned contract returns the receiver hand it back, so the
 // result and the receiver are ONE object. Each case below lets the receiver's
 // owner die BEFORE the result is used — the shape that used to release the
 // object once for the receiver and once for the result (rc-contract C1/C2,

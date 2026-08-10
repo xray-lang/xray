@@ -53,11 +53,13 @@ typedef struct NativeMemberContractEntry {
     XaAllocationContractKind allocation;
     XaEffectContractKind effect;
     const char *errors_csv;
+    XaBuiltinReturnOwnership return_ownership;
 } NativeMemberContractEntry;
 
 static const NativeMemberContractEntry native_member_contracts[] = {
-#define XA_NATIVE_MEMBER_CONTRACT(type, member, is_static, allocation, effect, errors_csv)         \
-    {type, member, is_static, allocation, effect, errors_csv},
+#define XA_NATIVE_MEMBER_CONTRACT(type, member, is_static, allocation, effect, errors_csv,         \
+                                  return_ownership)                                                \
+    {type, member, is_static, allocation, effect, errors_csv, return_ownership},
 #include "xa_native_member_contract.def"
 #undef XA_NATIVE_MEMBER_CONTRACT
 };
@@ -123,6 +125,7 @@ static void native_member_apply_contract(const char *type_name, XaBuiltinMember 
         native_member_contract(type_name, member->name, member->is_static);
     member->allocation_contract = entry ? entry->allocation : XA_ALLOCATION_CONTRACT_MISSING;
     member->effect_contract.kind = entry ? entry->effect : XA_EFFECT_CONTRACT_MISSING;
+    member->return_ownership = entry ? entry->return_ownership : XA_BUILTIN_RETURN_UNKNOWN;
     if (!entry || entry->effect != XA_EFFECT_CONTRACT_ERRORS || !entry->errors_csv[0])
         return;
     uint32_t count = 1;
@@ -171,7 +174,6 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
     const char *p = source;
     bool next_member_lowered_only = false;
     bool next_member_mutates_receiver = false;
-    bool next_member_returns_receiver = false;
 
     /* Find "class <Name>" line */
     while (*p) {
@@ -189,8 +191,6 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
                 next_member_lowered_only = true;
             if (strstr(line, "@receiver_write"))
                 next_member_mutates_receiver = true;
-            if (strstr(line, "@returns_receiver"))
-                next_member_returns_receiver = true;
             p = next_line(p);
             continue;
         }
@@ -232,8 +232,6 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
                 next_member_lowered_only = true;
             if (strstr(line, "@receiver_write"))
                 next_member_mutates_receiver = true;
-            if (strstr(line, "@returns_receiver"))
-                next_member_returns_receiver = true;
             p = next_line(p);
             continue;
         }
@@ -306,13 +304,10 @@ static XaBuiltinMember *parse_native_class(const char *source, char **out_class_
         members[count].is_internal = false;
         members[count].is_lowered_only = next_member_lowered_only;
         members[count].mutates_receiver = next_member_mutates_receiver;
-        members[count].return_ownership =
-            next_member_returns_receiver ? XA_BUILTIN_RETURN_RECEIVER : XA_BUILTIN_RETURN_UNKNOWN;
         members[count].is_yieldable = false;
         native_member_apply_contract(*out_class_name, &members[count]);
         next_member_lowered_only = false;
         next_member_mutates_receiver = false;
-        next_member_returns_receiver = false;
         count++;
 
         p = next_line(p);

@@ -3183,21 +3183,10 @@ static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op, struct XrT
     XR_DCHECK(f != NULL, "sr_make_convert: NULL func");
     XR_DCHECK(blk != NULL, "sr_make_convert: NULL block");
     XR_DCHECK(arg != NULL, "sr_make_convert: NULL arg");
-    XiValue *v = (XiValue *) xi_func_arena_alloc(f, sizeof(XiValue));
+    XiValue *v = xi_value_new_unlinked(f, blk, op, type, 1);
     if (!v)
         return NULL;
-    memset(v, 0, sizeof(XiValue));
-    v->id = f->next_value_id++;
-    v->op = op;
-    v->flags = xi_op_default_effects(op);
     v->var_id = arg->var_id;
-    v->type = type;
-    v->nargs = 1;
-    v->uses = -1;
-    v->block = blk;
-    v->args = (XiValue **) xi_func_arena_alloc(f, sizeof(XiValue *));
-    if (!v->args)
-        return NULL;
     v->args[0] = arg;
     v->enum_metadata_owner = arg->enum_metadata_owner;
     v->enum_metadata_field = arg->enum_metadata_field;

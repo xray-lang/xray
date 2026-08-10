@@ -403,6 +403,20 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
              blk->id, v->nargs);
         return;
     }
+    if (v->result_alias_operand < -1 ||
+        (v->result_alias_operand >= 0 && (uint16_t) v->result_alias_operand >= v->nargs)) {
+        verr(ctx, "func '%s': value v%u in b%u has invalid result alias operand %d", f->name, v->id,
+             blk->id, (int) v->result_alias_operand);
+        return;
+    }
+    if (v->result_alias_operand >= 0 && !xi_own_type_is_rc(v->type)) {
+        verr(ctx,
+             "func '%s': non-RC value v%u %s in b%u carries result alias operand %d "
+             "(type kind=%u)",
+             f->name, v->id, xi_op_name(v->op), blk->id, (int) v->result_alias_operand,
+             (unsigned) v->type->kind);
+        return;
+    }
 
     /* Each arg should be a plausible value (non-NULL, has type).
      * Exception: closure capture args may be NULL for an upvalue-chain capture

@@ -106,7 +106,7 @@ anchor-sha256: xisa/xi/ops.def a63483aadb891e7a4d864d4eb1193cfddd9024d04e43a5d30
 anchor-sha256: src/ir/xi_tbaa.c 304e00919092f45875e76dc0d9e958bc706ecc8cf0f0b89ed80d51392276f6f4
 anchor-sha256: src/ir/xi_tbaa.h 3f361c253c2a6073043d9a8c77f100cf3b51bc16077fbff3f6f3a381d634c027
 anchor-sha256: src/ir/xi_opt_licm.c 89d57c968d90e08f7fed4df46308630d00c92df47ab1c5a059f9e4a7bc750ee0
-anchor-sha256: src/ir/xi_opt_gvn_pre.c e0975b657d6a3fe6e38fa1d9e30712f741c5867040dadae4268af1d86ca7ebef
+anchor-sha256: src/ir/xi_opt_gvn_pre.c 1f4bd9cb11456fc45547c485381b1a49a46985c0bbfacf586970612e037d2def
 anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a5b384a2b2174598be7
 anchor-sha256: src/coro/xchannel.c 4ac92d6b0cc987bc5c2809812b6728843231f0c6887f0dde2595f532e474a943
 anchor-sha256: src/coro/xtask.c 0557f8dbbfa4e8fdd1cecbd4724107aa83db4e629d53bb7ff3d0a67497ec1e20

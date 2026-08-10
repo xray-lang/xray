@@ -24,12 +24,11 @@ typedef enum XaBuiltinReturnOwnership {
     XA_BUILTIN_RETURN_UNKNOWN = 0,
     XA_BUILTIN_RETURN_FRESH,
     /* The member hands back its own receiver at +0 (`return self`), so the
-     * result and the receiver are ONE object. Declared by `// @returns_receiver`
-     * on the native declaration; it is a manifest property of the runtime
-     * binding, never inferred from the signature (a method returning the
-     * receiver's TYPE — Array.concat, Array.filter — usually returns a fresh
-     * object). ARC and the independent RC verifier each read this fact to keep
-     * the receiver's reference alive through the aliased result (contract C1). */
+     * result and the receiver are ONE object. This is compiler-owned typed
+     * contract data, never a source comment or an inference from the signature
+     * (a method returning the receiver's TYPE — Array.concat, Array.filter —
+     * usually returns a fresh object). Lowering seals the alias operand into
+     * Xi so later ownership consumers never reconstruct it by method name. */
     XA_BUILTIN_RETURN_RECEIVER,
     XA_BUILTIN_RETURN_BORROWED_STATIC,
     XA_BUILTIN_RETURN_BORROWED_PARAM_0,

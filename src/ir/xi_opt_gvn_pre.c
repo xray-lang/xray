@@ -98,6 +98,7 @@ static void gvn_rewrite_to_copy(XiValue *value, XiValue *source, int64_t copy_ki
     memset(&value->view_evidence, 0, sizeof(value->view_evidence));
     memset(&value->call_return_ownership, 0, sizeof(value->call_return_ownership));
     value->call_return_ownership.param_index = -1;
+    value->result_alias_operand = -1;
     value->xg_callsite_id = 0;
     value->xa_intrinsic_id = 0;
     value->xg_method_id = 0;
@@ -225,6 +226,7 @@ static uint32_t vn_value_hash(const VnTable *vn, const XiValue *v) {
     h = vn_hash_mix(h, (uint64_t) v->aux_int);
     h = vn_hash_mix(h, (uintptr_t) v->aux);
     h = vn_hash_mix(h, (uintptr_t) v->call_plan);
+    h = vn_hash_mix(h, (uint16_t) v->result_alias_operand);
     h = vn_hash_mix(h, v->xa_intrinsic_id);
     h = vn_hash_mix(h, v->xg_callsite_id);
     h = vn_hash_mix(h, v->xg_method_id);
@@ -262,6 +264,7 @@ static bool vn_same_semantic_metadata(const XiValue *a, const XiValue *b) {
            a->conversion.is_implicit == b->conversion.is_implicit &&
            a->conversion.is_compile_time == b->conversion.is_compile_time &&
            a->aux_int == b->aux_int && a->aux == b->aux && a->call_plan == b->call_plan &&
+           a->result_alias_operand == b->result_alias_operand &&
            a->xa_intrinsic_id == b->xa_intrinsic_id && a->xg_callsite_id == b->xg_callsite_id &&
            a->xg_method_id == b->xg_method_id &&
            a->xg_interface_dispatch_slot == b->xg_interface_dispatch_slot &&

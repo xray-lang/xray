@@ -1027,6 +1027,8 @@ XR_FUNC uint8_t xi_arc_value_result_ownership(const XiFunc *function, const XiVa
 XR_FUNC int16_t xi_arc_value_alias_operand(const XiFunc *function, const XiValue *value) {
     if (!function || !value)
         return -1;
+    if (value->result_alias_operand >= 0)
+        return value->result_alias_operand;
     if (value->nargs == 1 && value->op == XI_CHECKTYPE)
         return 0;
     if (value->nargs == 1 &&
@@ -1035,8 +1037,6 @@ XR_FUNC int16_t xi_arc_value_alias_operand(const XiFunc *function, const XiValue
         return 0;
     if (!op_is_call(value->op))
         return -1;
-    if (xi_call_result_aliases_receiver(value) && value->nargs >= 1)
-        return 0;
     XiFunc *callee = NULL;
     if (value->op == XI_CALL && value->nargs >= 1)
         callee = arc_resolve_callee((XiFunc *) function, value->args[0]);

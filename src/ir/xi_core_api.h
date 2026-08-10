@@ -21,6 +21,11 @@ XR_FUNC bool xi_block_ensure_value_capacity(XiBlock *blk, uint32_t min_cap);
 
 XR_FUNC XiValue *xi_value_new(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
                               uint16_t nargs);
+/* Allocate and fully initialize a value without adding it to the block list.
+ * Passes that rebuild block order must use this instead of zero-initializing
+ * XiValue, whose valid defaults include non-zero sentinels. */
+XR_FUNC XiValue *xi_value_new_unlinked(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
+                                       uint16_t nargs);
 XR_FUNC XiValue *xi_value_insert_after(XiFunc *f, XiBlock *blk, XiValue *anchor, uint16_t op,
                                        struct XrType *type, uint16_t nargs);
 XR_FUNC XiValue *xi_value_insert_before(XiFunc *f, XiBlock *blk, XiValue *anchor, uint16_t op,

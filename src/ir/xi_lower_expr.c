@@ -6608,6 +6608,20 @@ static void lower_align_fresh_store_arguments(XiValue *receiver, const char *met
     }
 }
 
+/* Seal a native member's result alias while both the selected receiver type
+ * and compiler-owned member contract are available. No ownership consumer is
+ * allowed to recover this fact from a lowered opcode or method spelling. */
+static void lower_seal_member_result_alias(XiValue *value, XrType *receiver_type,
+                                           const char *member_name) {
+    if (!value || !receiver_type || !member_name ||
+        !xa_builtin_member_returns_receiver(receiver_type, member_name))
+        return;
+    XR_DCHECK(value->nargs > 0 && value->args[0] != NULL,
+              "receiver-alias member call lacks receiver operand");
+    if (value->nargs > 0 && value->args[0])
+        value->result_alias_operand = 0;
+}
+
 /* obj.field(args) where `field` holds a function value is a call through a
  * data member, not a method dispatch: read the field into a value and call it.
  * The analyzer records XA_SEL_FIELD on the callee node for exactly this, so a
@@ -7082,6 +7096,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->aux = (void *) "array_reserve";
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
+            lower_seal_member_result_alias(v, method_receiver_type, ma->name);
             xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
             return v;
         }
@@ -7098,6 +7113,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             v->aux = (void *) "array_resize";
             v->flags |= XI_FLAG_SIDE_EFFECT;
             v->line = (uint32_t) node->line;
+            lower_seal_member_result_alias(v, method_receiver_type, ma->name);
             return v;
         }
 
@@ -7345,6 +7361,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
          * instance methods the analyzer selection supplies the summary; an
          * unresolved shape remains fail-closed. */
         v->call_return_ownership = lower_call_return_ownership(l, call, recv);
+        lower_seal_member_result_alias(v, method_receiver_type, ma->name);
         if (is_time_sleep)
             v->lowering_flags |= XI_LOWERING_FLAG_TIME_SLEEP;
         lower_instantiate_call_view_evidence(v, NULL, method_type, true);

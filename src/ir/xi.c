@@ -386,6 +386,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->aux = NULL;
     memset(&v->conversion, 0, sizeof(v->conversion));
     v->call_return_ownership.param_index = -1;
+    v->result_alias_operand = -1;
     v->args = NULL;
     v->nargs = nargs;
     v->uses = -1; /* not yet computed */
@@ -441,6 +442,11 @@ XiValue *xi_value_new(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
         return NULL;
     block_append_value(blk, v);
     return v;
+}
+
+XiValue *xi_value_new_unlinked(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
+                               uint16_t nargs) {
+    return value_alloc(f, blk, op, type, nargs);
 }
 
 /* Create a value and splice it into blk immediately AFTER `anchor`.

@@ -2780,7 +2780,8 @@ static bool body_is_compiler_owned_native_member(uint32_t type_name_id, const ch
                                                  bool member_is_static) {
     if (type_name_id == 0 || !member_name)
         return false;
-#define XA_NATIVE_MEMBER_CONTRACT(type, member, is_static, allocation, effect, errors_csv)         \
+#define XA_NATIVE_MEMBER_CONTRACT(type, member, is_static, allocation, effect, errors_csv,         \
+                                  return_ownership)                                                \
     if (member_is_static == (is_static) && type_name_id == hash_name32(type) &&                    \
         strcmp(member_name, member) == 0)                                                          \
         return true;

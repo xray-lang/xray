@@ -448,12 +448,15 @@ static void test_legal_trivial(void) {
 
 /* ========== Receiver aliases (C1): `return self` outlives its receiver ==== */
 
-/* A call to a member the native declaration marks `// @returns_receiver`.
+/* A call whose compiler-owned member contract aliases the receiver.
  * Array.reverse is such a member; its result IS args[0]. */
-static XiValue *self_returning_call(XiFunc *f, XiBlock *b, XiValue *recv, const char *method) {
+static XiValue *member_call(XiFunc *f, XiBlock *b, XiValue *recv, const char *method,
+                            bool aliases_receiver) {
     XiValue *c = xi_value_new(f, b, XI_CALL_METHOD, &t_array, 1);
     c->args[0] = recv;
     c->aux = (void *) method;
+    if (aliases_receiver)
+        c->result_alias_operand = 0;
     return c;
 }
 
@@ -467,7 +470,7 @@ static void test_receiver_alias_returned_after_receiver_release(void) {
     XiBlock *b0 = f->entry;
 
     XiValue *a = rc_new(f, b0);
-    XiValue *r = self_returning_call(f, b0, a, "reverse");
+    XiValue *r = member_call(f, b0, a, "reverse", true);
     release(f, b0, a); /* a dies — but r is the same object */
     xi_block_set_return(b0, r);
 
@@ -483,7 +486,7 @@ static void test_receiver_alias_read_after_receiver_release(void) {
     XiBlock *b0 = f->entry;
 
     XiValue *a = rc_new(f, b0);
-    XiValue *r = self_returning_call(f, b0, a, "sort");
+    XiValue *r = member_call(f, b0, a, "sort", true);
     release(f, b0, a);
     XiValue *u = index_get(f, b0, r);
     xi_block_set_return(b0, u);
@@ -501,7 +504,7 @@ static void test_receiver_alias_phi_merges_released_receiver(void) {
     XiBlock *b1 = xi_block_new(f);
 
     XiValue *a = rc_new(f, b0);
-    XiValue *r = self_returning_call(f, b0, a, "reverse");
+    XiValue *r = member_call(f, b0, a, "reverse", true);
     release(f, b0, a);
     xi_block_set_jump(b0, b1);
 
@@ -522,7 +525,7 @@ static void test_legal_retained_receiver_alias(void) {
     XiBlock *b0 = f->entry;
 
     XiValue *a = rc_new(f, b0);
-    XiValue *r = self_returning_call(f, b0, a, "reverse");
+    XiValue *r = member_call(f, b0, a, "reverse", true);
     retain(f, b0, r); /* compensating retain (C1's escape hatch) */
     release(f, b0, a);
     xi_block_set_return(b0, r);
@@ -537,7 +540,7 @@ static void test_legal_receiver_alias_used_before_release(void) {
     XiBlock *b0 = f->entry;
 
     XiValue *a = rc_new(f, b0);
-    XiValue *r = self_returning_call(f, b0, a, "reverse");
+    XiValue *r = member_call(f, b0, a, "reverse", true);
     XiValue *u = index_get(f, b0, r);
     release(f, b0, a);
     xi_block_set_return(b0, u);
@@ -555,11 +558,27 @@ static void test_legal_fresh_returning_method_is_not_an_alias(void) {
     XiBlock *b0 = f->entry;
 
     XiValue *a = rc_new(f, b0);
-    XiValue *r = self_returning_call(f, b0, a, "concat");
+    XiValue *r = member_call(f, b0, a, "concat", false);
     release(f, b0, a); /* legal: r is a different object */
     xi_block_set_return(b0, r);
 
     ASSERT_OK(f, "legal: concat result is fresh, not a receiver alias");
+    xi_func_free(f);
+}
+
+/* Method spelling is diagnostic text only. Without sealed alias evidence even
+ * a name normally associated with `return self` must not create an alias in a
+ * later verifier pass. */
+static void test_legal_method_name_does_not_reconstruct_alias(void) {
+    XiFunc *f = make_func("legal_unsealed_alias_name", &t_array);
+    XiBlock *b0 = f->entry;
+
+    XiValue *a = rc_new(f, b0);
+    XiValue *r = member_call(f, b0, a, "reverse", false);
+    release(f, b0, a);
+    xi_block_set_return(b0, r);
+
+    ASSERT_OK(f, "legal: method name alone does not reconstruct receiver alias");
     xi_func_free(f);
 }
 
@@ -599,6 +618,7 @@ int main(void) {
     test_legal_retained_receiver_alias();
     test_legal_receiver_alias_used_before_release();
     test_legal_fresh_returning_method_is_not_an_alias();
+    test_legal_method_name_does_not_reconstruct_alias();
     test_legal_trivial();
     test_verifier_resource_failure_is_not_success();
 

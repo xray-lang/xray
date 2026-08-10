@@ -1089,6 +1089,10 @@ typedef struct XiValue {
     /* Instantiated result provenance for calls whose body is outside this Xi
      * unit.  Local direct calls may refine it from the XiFunc fixpoint. */
     XiReturnOwnership call_return_ownership;
+    /* Operand aliased by this result, or -1 for a distinct result. Lowering
+     * seals native member aliases here before SemanticPlan construction so
+     * ownership passes never reconstruct the fact from names. */
+    int16_t result_alias_operand;
     struct XiValue **args;    /* operand values (SSA uses) */
     uint16_t nargs;           /* number of args */
     int16_t uses;             /* use count (for DCE; -1 = not computed) */
@@ -1188,6 +1192,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->conversion = src->conversion;
     dst->view_evidence = src->view_evidence;
     dst->call_return_ownership = src->call_return_ownership;
+    dst->result_alias_operand = src->result_alias_operand;
     dst->line = src->line;
     dst->xg_callsite_id = src->xg_callsite_id;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;

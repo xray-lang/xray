@@ -22,20 +22,16 @@ class Array<T> {
     // @receiver_write
     clear()
     // @receiver_write
-    // @returns_receiver
     reserve(capacity: int) -> Array<T>
     // @receiver_write
-    // @returns_receiver
     resize(length: int, fill: T) -> Array<T>
     concat(...arrays: Array<T>) -> Array<T>
     indexOf(value: T) -> int
     contains(value: T) -> bool
     join(separator?: string) -> string
     // @receiver_write
-    // @returns_receiver
     reverse() -> Array<T>
     // @receiver_write
-    // @returns_receiver
     sort(compareFn?: fn(a: T, b: T) -> int) -> Array<T>
     map(fn: fn(item: T, index: int) -> U) -> Array<U>
     filter(fn: fn(item: T, index: int) -> bool) -> Array<T>
@@ -46,7 +42,6 @@ class Array<T> {
     every(fn: fn(item: T) -> bool) -> bool
     some(fn: fn(item: T) -> bool) -> bool
     // @receiver_write
-    // @returns_receiver
     fill(value: T, start?: int, end?: int) -> Array<T>
     // All arrays, including Array<byte>, render the "[a, b]" container form.
     // Decode UTF-8 byte arrays explicitly with string.fromUtf8().

@@ -37,6 +37,17 @@ static const XaBuiltinMember *find_module_member(const char *module_name, const 
     return NULL;
 }
 
+static const XaBuiltinMember *find_type_member(const char *type_name, const char *member_name) {
+    const XaBuiltinType *type = xa_builtin_get_by_name(type_name);
+    if (!type || !member_name)
+        return NULL;
+    for (int i = 0; i < type->member_count; i++) {
+        if (type->members[i].name && strcmp(type->members[i].name, member_name) == 0)
+            return &type->members[i];
+    }
+    return NULL;
+}
+
 TEST(native_type_methods_match_runtime_tables) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);
@@ -50,6 +61,40 @@ TEST(native_type_methods_match_runtime_tables) {
 
 TEST(native_type_protocol_rejects_null_isolate) {
     ASSERT_EQ_INT(xa_native_verify_protocol(NULL), -1);
+}
+
+TEST(native_receiver_alias_contracts_are_typed_data) {
+    XrVMRuntime *iso = make_full_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    XrType *array_type = xr_type_new_array(iso, xr_type_new_int(iso));
+    ASSERT_NOT_NULL(array_type);
+    ASSERT_TRUE(xa_builtin_member_returns_receiver(array_type, "reserve"));
+    ASSERT_TRUE(xa_builtin_member_returns_receiver(array_type, "resize"));
+    ASSERT_TRUE(xa_builtin_member_returns_receiver(array_type, "reverse"));
+    ASSERT_TRUE(xa_builtin_member_returns_receiver(array_type, "sort"));
+    ASSERT_TRUE(xa_builtin_member_returns_receiver(array_type, "fill"));
+    ASSERT_FALSE(xa_builtin_member_returns_receiver(array_type, "concat"));
+
+    static const struct {
+        const char *type;
+        const char *member;
+    } receiver_aliases[] = {
+        {"Array", "reserve"},        {"Array", "resize"},        {"Array", "reverse"},
+        {"Array", "sort"},           {"Array", "fill"},          {"iterator", "iterator"},
+        {"StringBuilder", "append"}, {"StringBuilder", "clear"},
+    };
+    for (size_t i = 0; i < sizeof(receiver_aliases) / sizeof(receiver_aliases[0]); i++) {
+        const XaBuiltinMember *member =
+            find_type_member(receiver_aliases[i].type, receiver_aliases[i].member);
+        ASSERT_NOT_NULL(member);
+        ASSERT_EQ_INT(member->return_ownership, XA_BUILTIN_RETURN_RECEIVER);
+    }
+    const XaBuiltinMember *concat = find_type_member("Array", "concat");
+    ASSERT_NOT_NULL(concat);
+    ASSERT_EQ_INT(concat->return_ownership, XA_BUILTIN_RETURN_UNKNOWN);
+
+    xray_vm_delete(iso);
 }
 
 TEST(native_type_lookup_and_typed_json_contract_are_total) {
@@ -184,6 +229,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("stdlib/native-type-surface");
 RUN_TEST(native_type_methods_match_runtime_tables);
 RUN_TEST(native_type_protocol_rejects_null_isolate);
+RUN_TEST(native_receiver_alias_contracts_are_typed_data);
 RUN_TEST(native_type_lookup_and_typed_json_contract_are_total);
 RUN_TEST(native_module_object_and_enum_metadata);
 TEST_MAIN_END()
