@@ -1468,9 +1468,13 @@ TEST(select_rep_advances_empty_func_tree) {
     assert(closed != NULL);
     XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
     assert(owned != NULL);
-    XiLoweredProgram *lowered = xi_program_lower_semantics(owned, error, sizeof(error));
-    assert(lowered != NULL);
-    XiOptimizedProgram *optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
+    XiSemanticLoweredProgram *semantic_lowered =
+        xi_program_lower_semantics(owned, error, sizeof(error));
+    assert(semantic_lowered != NULL);
+    XiCoroLoweredProgram *coro =
+        xi_program_lower_coroutines(semantic_lowered, error, sizeof(error));
+    assert(coro != NULL);
+    XiOptimizedProgram *optimized = xi_program_finish_optimization(coro, error, sizeof(error));
     assert(optimized != NULL);
     assert(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
     XiSemanticPlannedProgram *semantic =

@@ -14,6 +14,7 @@
 #include "../../../src/ir/xi_backend_lower.h"
 #include "../../../src/ir/xi_effect.h"
 #include "../../../src/ir/xi_evidence.h"
+#include "../../../src/ir/xi_escape.h"
 #include "../../../src/ir/xi_pass.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_pipeline.h"
@@ -30,17 +31,37 @@
 #include <string.h>
 #include <assert.h>
 
+/* Stage contracts are mandatory in Release builds too. Several helpers use
+ * assertions as consuming API calls, so NDEBUG must never erase them. */
+#ifdef NDEBUG
+#undef assert
+#define assert(condition)                                                                          \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            fprintf(stderr, "stage assertion failed: %s (%s:%d)\n", #condition, __FILE__,          \
+                    __LINE__);                                                                     \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+#endif
+
 /* Minimal XrType stubs */
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 2, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
-static XrType stub_array = {.kind = XR_KIND_ARRAY, .id = 4, .frozen = true};
-static XrType stub_map = {.kind = XR_KIND_MAP, .id = 5, .frozen = true};
-static XrType stub_set = {.kind = XR_KIND_SET, .id = 6, .frozen = true};
+static XrType stub_array = {
+    .kind = XR_KIND_ARRAY, .id = 4, .frozen = true, .container = {.element_type = &stub_int}};
+static XrType stub_map = {.kind = XR_KIND_MAP,
+                          .id = 5,
+                          .frozen = true,
+                          .map = {.key_type = &stub_int, .value_type = &stub_int}};
+static XrType stub_set = {
+    .kind = XR_KIND_SET, .id = 6, .frozen = true, .container = {.element_type = &stub_int}};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 7, .frozen = true};
-static XrType stub_function = {.kind = XR_KIND_FUNCTION, .id = 8, .frozen = true};
+static XrType stub_function = {
+    .kind = XR_KIND_FUNCTION, .id = 8, .frozen = true, .function = {.return_type = &stub_int}};
 
-static XiLoweredProgram *advance_to_lowered(XiFunc *f) {
+static XiCoroLoweredProgram *advance_to_coro_lowered(XiFunc *f) {
     char error[512] = {0};
     XiRawProgram *raw = xi_stage_adopt_raw(f, error, sizeof(error));
     if (!raw)
@@ -51,19 +72,27 @@ static XiLoweredProgram *advance_to_lowered(XiFunc *f) {
     xi_pass_close(f);
     XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
     assert(closed != NULL);
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+    xi_arc_elim(f);
     XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
     assert(owned != NULL);
-    XiLoweredProgram *lowered = xi_program_lower_semantics(owned, error, sizeof(error));
-    assert(lowered != NULL);
-    return lowered;
+    XiSemanticLoweredProgram *semantic = xi_program_lower_semantics(owned, error, sizeof(error));
+    assert(semantic != NULL);
+    XiCoroLoweredProgram *coro = xi_program_lower_coroutines(semantic, error, sizeof(error));
+    assert(coro != NULL);
+    return coro;
 }
 
 static XiReppedProgram *advance_to_repped(XiFunc *f) {
     char error[512] = {0};
-    XiLoweredProgram *lowered = advance_to_lowered(f);
+    XiCoroLoweredProgram *lowered = advance_to_coro_lowered(f);
     XiOptimizedProgram *optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
     assert(optimized != NULL);
-    assert(xr_semantic_plan_build_and_attach(f, error, sizeof(error)));
+    bool planned = xr_semantic_plan_build_and_attach(f, error, sizeof(error));
+    if (!planned)
+        fprintf(stderr, "semantic plan attachment failed: %s\n", error);
+    assert(planned);
     XiSemanticPlannedProgram *semantic =
         xi_program_freeze_semantics(optimized, error, sizeof(error));
     assert(semantic != NULL);
@@ -102,19 +131,21 @@ static void test_stage_enum(void) {
     assert(XI_STAGE_CANONICAL > XI_STAGE_RAW);
     assert(XI_STAGE_CLOSED > XI_STAGE_CANONICAL);
     assert(XI_STAGE_OWNED > XI_STAGE_CLOSED);
-    assert(XI_STAGE_LOWERED > XI_STAGE_OWNED);
-    assert(XI_STAGE_OPTIMIZED > XI_STAGE_LOWERED);
+    assert(XI_STAGE_SEMANTIC_LOWERED > XI_STAGE_OWNED);
+    assert(XI_STAGE_CORO_LOWERED > XI_STAGE_SEMANTIC_LOWERED);
+    assert(XI_STAGE_OPTIMIZED > XI_STAGE_CORO_LOWERED);
     assert(XI_STAGE_SEMANTIC_PLANNED > XI_STAGE_OPTIMIZED);
     assert(XI_STAGE_REPPED > XI_STAGE_SEMANTIC_PLANNED);
     assert(XI_STAGE_BACKEND > XI_STAGE_REPPED);
-    assert(XI_STAGE_COUNT == 9);
+    assert(XI_STAGE_COUNT == 10);
 
     /* Verify names */
     assert(strcmp(xi_stage_name(XI_STAGE_RAW), "Raw") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_CANONICAL), "Canonical") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_CLOSED), "Closed") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_OWNED), "Owned") == 0);
-    assert(strcmp(xi_stage_name(XI_STAGE_LOWERED), "Lowered") == 0);
+    assert(strcmp(xi_stage_name(XI_STAGE_SEMANTIC_LOWERED), "SemanticLowered") == 0);
+    assert(strcmp(xi_stage_name(XI_STAGE_CORO_LOWERED), "CoroLowered") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_OPTIMIZED), "Optimized") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_SEMANTIC_PLANNED), "SemanticPlanned") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_REPPED), "Repped") == 0);
@@ -194,13 +225,13 @@ static void test_pass_desc_fields(void) {
         .min_level = XI_OPT_LIGHT,
         .flags = XI_PASS_NONE,
         .min_stage = XI_STAGE_RAW,
-        .max_stage = XI_STAGE_LOWERED,
+        .max_stage = XI_STAGE_CORO_LOWERED,
         .requires_evidence = XI_EVD_ALIAS,
         .produces_evidence = XI_EVD_RANGE,
     };
 
     assert(desc.min_stage == XI_STAGE_RAW);
-    assert(desc.max_stage == XI_STAGE_LOWERED);
+    assert(desc.max_stage == XI_STAGE_CORO_LOWERED);
     assert(desc.requires_evidence == XI_EVD_ALIAS);
     assert(desc.produces_evidence == XI_EVD_RANGE);
 
@@ -209,8 +240,8 @@ static void test_pass_desc_fields(void) {
         .fn = NULL,
         .min_level = XI_OPT_NONE,
         .flags = XI_PASS_REQUIRED,
-        .min_stage = XI_STAGE_LOWERED,
-        .max_stage = XI_STAGE_LOWERED,
+        .min_stage = XI_STAGE_CORO_LOWERED,
+        .max_stage = XI_STAGE_CORO_LOWERED,
         .requires_inv_mask = 0,
         .produces_inv_mask = XI_INV_EVAL_ORDER_FIXED,
     };
@@ -547,8 +578,9 @@ static void test_stage_monotonicity(void) {
     assert(XI_STAGE_RAW < XI_STAGE_CANONICAL);
     assert(XI_STAGE_CANONICAL < XI_STAGE_CLOSED);
     assert(XI_STAGE_CLOSED < XI_STAGE_OWNED);
-    assert(XI_STAGE_OWNED < XI_STAGE_LOWERED);
-    assert(XI_STAGE_LOWERED < XI_STAGE_OPTIMIZED);
+    assert(XI_STAGE_OWNED < XI_STAGE_SEMANTIC_LOWERED);
+    assert(XI_STAGE_SEMANTIC_LOWERED < XI_STAGE_CORO_LOWERED);
+    assert(XI_STAGE_CORO_LOWERED < XI_STAGE_OPTIMIZED);
     assert(XI_STAGE_OPTIMIZED < XI_STAGE_SEMANTIC_PLANNED);
     assert(XI_STAGE_SEMANTIC_PLANNED < XI_STAGE_REPPED);
     assert(XI_STAGE_REPPED < XI_STAGE_BACKEND);
@@ -598,16 +630,54 @@ static void test_lowering_fact_corruption_fails_closed(void) {
     XiFunc *f = xi_func_new("corrupt_lowering_fact", &stub_void);
     XiBlock *entry = xi_block_new(f);
     xi_block_set_return(entry, NULL);
-    XiLoweredProgram *lowered = advance_to_lowered(f);
+    XiCoroLoweredProgram *lowered = advance_to_coro_lowered(f);
     assert(f->lowering_facts.initialized);
 
     f->lowering_facts.semantic_ops_lowered = false;
     char error[256] = {0};
-    assert(!xi_verify_stage(f, XI_STAGE_LOWERED, error, sizeof(error)));
+    assert(!xi_verify_stage(f, XI_STAGE_CORO_LOWERED, error, sizeof(error)));
     assert(strstr(error, "semantic lowering") != NULL);
     f->lowering_facts.semantic_ops_lowered = true;
 
-    xi_func_free(xi_lowered_program_release(lowered));
+    f->lowering_facts.coroutine_required = true;
+    f->lowering_facts.coroutine_lowered = false;
+    error[0] = '\0';
+    assert(!xi_verify_stage(f, XI_STAGE_CORO_LOWERED, error, sizeof(error)));
+    assert(strstr(error, "coroutine lowering") != NULL);
+    f->lowering_facts.coroutine_lowered = true;
+
+    xi_func_free(xi_coro_lowered_program_release(lowered));
+    printf("  PASS\n");
+}
+
+static void test_semantic_stage_cannot_skip_coroutine_lowering(void) {
+    printf("--- test_semantic_stage_cannot_skip_coroutine_lowering ---\n");
+
+    XiFunc *f = xi_func_new("cannot_skip_coro", &stub_void);
+    XiBlock *entry = xi_block_new(f);
+    xi_block_set_return(entry, NULL);
+    char error[256] = {0};
+    XiRawProgram *raw = xi_stage_adopt_raw(f, error, sizeof(error));
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+    assert(canonical != NULL);
+    xi_pass_close(f);
+    XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
+    assert(closed != NULL);
+    XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
+    assert(owned != NULL);
+    XiSemanticLoweredProgram *semantic = xi_program_lower_semantics(owned, error, sizeof(error));
+    assert(semantic != NULL);
+
+    error[0] = '\0';
+    assert(xi_program_finish_optimization((XiCoroLoweredProgram *) semantic, error,
+                                          sizeof(error)) == NULL);
+    assert(strstr(error, "wrong-stage") != NULL);
+    assert(f->stage == XI_STAGE_SEMANTIC_LOWERED);
+
+    XiCoroLoweredProgram *coro = xi_program_lower_coroutines(semantic, error, sizeof(error));
+    assert(coro != NULL);
+    xi_func_free(xi_coro_lowered_program_release(coro));
     printf("  PASS\n");
 }
 
@@ -642,21 +712,21 @@ static void test_semantic_intrinsic_corruption_fails_closed(void) {
     assert(f->stage == XI_STAGE_OWNED);
 
     vec->xa_intrinsic_id = XA_INTRINSIC_SIMD_U32X4_WIDEN_MUL_ODD;
-    XiLoweredProgram *lowered = xi_program_lower_semantics(owned, error, sizeof(error));
+    XiSemanticLoweredProgram *lowered = xi_program_lower_semantics(owned, error, sizeof(error));
     assert(lowered != NULL);
 
     vec->op = XI_VEC_ADD;
     error[0] = '\0';
-    assert(!xi_verify_stage(f, XI_STAGE_LOWERED, error, sizeof(error)));
+    assert(!xi_verify_stage(f, XI_STAGE_SEMANTIC_LOWERED, error, sizeof(error)));
     assert(strstr(error, "requires Xi op") != NULL);
     vec->op = XI_VEC_WIDEN_MUL;
 
     vec->xa_intrinsic_id = XA_INTRINSIC_NONE;
     error[0] = '\0';
-    assert(!xi_verify_stage(f, XI_STAGE_LOWERED, error, sizeof(error)));
+    assert(!xi_verify_stage(f, XI_STAGE_SEMANTIC_LOWERED, error, sizeof(error)));
     assert(strstr(error, "has no intrinsic identity") != NULL);
 
-    xi_func_free(xi_lowered_program_release(lowered));
+    xi_func_free(xi_semantic_lowered_program_release(lowered));
     printf("  PASS\n");
 }
 
@@ -675,7 +745,7 @@ static void test_pass_order_and_invariants(void) {
     assert(c42 != NULL);
     xi_block_set_return(entry, c42);
 
-    XiLoweredProgram *lowered = advance_to_lowered(f);
+    XiCoroLoweredProgram *lowered = advance_to_coro_lowered(f);
 
     XiOptResult opt = xi_opt_run_pipeline(f, XI_OPT_FULL);
     assert(opt.ok);
@@ -957,6 +1027,7 @@ int main(void) {
     test_consumed_handle_is_rejected();
     test_corrupt_stage_contract_is_rejected();
     test_lowering_fact_corruption_fails_closed();
+    test_semantic_stage_cannot_skip_coroutine_lowering();
     test_semantic_intrinsic_corruption_fails_closed();
     test_pass_order_and_invariants();
     test_optimizer_invariant_failure_is_data();

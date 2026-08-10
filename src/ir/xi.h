@@ -78,7 +78,8 @@ typedef enum {
     XI_STAGE_CANONICAL,
     XI_STAGE_CLOSED,
     XI_STAGE_OWNED,
-    XI_STAGE_LOWERED,
+    XI_STAGE_SEMANTIC_LOWERED,
+    XI_STAGE_CORO_LOWERED,
     XI_STAGE_OPTIMIZED,
     XI_STAGE_SEMANTIC_PLANNED,
     XI_STAGE_REPPED,
@@ -89,8 +90,8 @@ typedef enum {
 /* Human-readable stage name (for dumps and diagnostics). */
 static inline const char *xi_stage_name(XiStage s) {
     static const char *names[] = {
-        "Raw",       "Canonical",       "Closed", "Owned",   "Lowered",
-        "Optimized", "SemanticPlanned", "Repped", "Backend",
+        "Raw",         "Canonical", "Closed",          "Owned",  "SemanticLowered",
+        "CoroLowered", "Optimized", "SemanticPlanned", "Repped", "Backend",
     };
     return (unsigned) s < XI_STAGE_COUNT ? names[s] : "?";
 }
@@ -108,10 +109,11 @@ typedef uint32_t XiInvariantMask;
 #define XI_INV_UPVALS_RESOLVED ((XiInvariantMask) (1u << 3))
 #define XI_INV_OWNERSHIP_EXPLICIT ((XiInvariantMask) (1u << 4))
 #define XI_INV_SEMANTIC_OPS_LOWERED ((XiInvariantMask) (1u << 5))
-#define XI_INV_OPTIMIZATION_COMPLETE ((XiInvariantMask) (1u << 6))
-#define XI_INV_SEMANTIC_PLAN_FROZEN ((XiInvariantMask) (1u << 7))
-#define XI_INV_REPS_SELECTED ((XiInvariantMask) (1u << 8))
-#define XI_INV_BACKEND_LEGAL ((XiInvariantMask) (1u << 9))
+#define XI_INV_COROUTINES_LOWERED ((XiInvariantMask) (1u << 6))
+#define XI_INV_OPTIMIZATION_COMPLETE ((XiInvariantMask) (1u << 7))
+#define XI_INV_SEMANTIC_PLAN_FROZEN ((XiInvariantMask) (1u << 8))
+#define XI_INV_REPS_SELECTED ((XiInvariantMask) (1u << 9))
+#define XI_INV_BACKEND_LEGAL ((XiInvariantMask) (1u << 10))
 
 typedef uint16_t XiVarId;
 
@@ -213,10 +215,12 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
             return xi_stage_invariants(XI_STAGE_CANONICAL) | XI_INV_UPVALS_RESOLVED;
         case XI_STAGE_OWNED:
             return xi_stage_invariants(XI_STAGE_CLOSED) | XI_INV_OWNERSHIP_EXPLICIT;
-        case XI_STAGE_LOWERED:
+        case XI_STAGE_SEMANTIC_LOWERED:
             return xi_stage_invariants(XI_STAGE_OWNED) | XI_INV_SEMANTIC_OPS_LOWERED;
+        case XI_STAGE_CORO_LOWERED:
+            return xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED) | XI_INV_COROUTINES_LOWERED;
         case XI_STAGE_OPTIMIZED:
-            return xi_stage_invariants(XI_STAGE_LOWERED) | XI_INV_OPTIMIZATION_COMPLETE;
+            return xi_stage_invariants(XI_STAGE_CORO_LOWERED) | XI_INV_OPTIMIZATION_COMPLETE;
         case XI_STAGE_SEMANTIC_PLANNED:
             return xi_stage_invariants(XI_STAGE_OPTIMIZED) | XI_INV_SEMANTIC_PLAN_FROZEN;
         case XI_STAGE_REPPED:

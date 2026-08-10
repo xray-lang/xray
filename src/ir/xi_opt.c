@@ -3970,7 +3970,7 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
         .min_level = level,                                                                        \
         .flags = pass_flags,                                                                       \
         .min_stage = XI_STAGE_RAW,                                                                 \
-        .max_stage = XI_STAGE_LOWERED,                                                             \
+        .max_stage = XI_STAGE_CORO_LOWERED,                                                        \
         .requires_inv_mask = 0,                                                                    \
         .produces_inv_mask = 0,                                                                    \
         .requires_evidence = required_evidence,                                                    \
@@ -3986,7 +3986,7 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
         .min_level = level,                                                                        \
         .flags = pass_flags,                                                                       \
         .min_stage = XI_STAGE_RAW,                                                                 \
-        .max_stage = XI_STAGE_LOWERED,                                                             \
+        .max_stage = XI_STAGE_CORO_LOWERED,                                                        \
         .requires_inv_mask = 0,                                                                    \
         .produces_inv_mask = 0,                                                                    \
         .requires_evidence = 0,                                                                    \

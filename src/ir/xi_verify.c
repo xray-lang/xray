@@ -1913,23 +1913,19 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
-/* LOWERED: target-independent coroutine/callable and semantic lowering facts
+/* SEMANTIC_LOWERED: target-independent callable and semantic lowering facts
  * are explicit. Selective lowering is represented per function, not as a
  * skippable global stage. */
-static void verify_lowered(VerifyCtx *ctx, const XiFunc *f) {
-    if (ctx->failed || f->stage < XI_STAGE_LOWERED)
+static void verify_semantic_lowered(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed || f->stage < XI_STAGE_SEMANTIC_LOWERED)
         return;
     const XiLoweringFacts *facts = &f->lowering_facts;
     if (!facts->initialized) {
-        verr(ctx, "func '%s': Lowered stage has no XiLoweringFacts", f->name);
+        verr(ctx, "func '%s': SemanticLowered stage has no XiLoweringFacts", f->name);
         return;
     }
     if (!facts->semantic_ops_lowered) {
         verr(ctx, "func '%s': target-independent semantic lowering is incomplete", f->name);
-        return;
-    }
-    if (facts->coroutine_required && !facts->coroutine_lowered) {
-        verr(ctx, "func '%s': required coroutine lowering is incomplete", f->name);
         return;
     }
     if (facts->callable_required && !facts->callable_lowered) {
@@ -1965,6 +1961,14 @@ static void verify_lowered(VerifyCtx *ctx, const XiFunc *f) {
             }
         }
     }
+}
+
+static void verify_coro_lowered(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed || f->stage < XI_STAGE_CORO_LOWERED)
+        return;
+    const XiLoweringFacts *facts = &f->lowering_facts;
+    if (facts->coroutine_required && !facts->coroutine_lowered)
+        verr(ctx, "func '%s': required coroutine lowering is incomplete", f->name);
 }
 
 /* ========== Check 17: NARROW Required Before Typed-Array Store ========== */
@@ -2426,8 +2430,10 @@ XR_FUNC bool xi_verify_stage(const XiFunc *f, XiStage stage, char *errbuf, int e
         verify_closed(&ctx, f);
     if (!ctx.failed && stage >= XI_STAGE_OWNED)
         verify_owned(&ctx, f);
-    if (!ctx.failed && stage >= XI_STAGE_LOWERED)
-        verify_lowered(&ctx, f);
+    if (!ctx.failed && stage >= XI_STAGE_SEMANTIC_LOWERED)
+        verify_semantic_lowered(&ctx, f);
+    if (!ctx.failed && stage >= XI_STAGE_CORO_LOWERED)
+        verify_coro_lowered(&ctx, f);
     /* REPPED and BACKEND already gated inside verify_repped/verify_backend
      * (called by xi_verify above), so no double-run needed. */
 

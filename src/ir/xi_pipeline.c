@@ -253,8 +253,10 @@ static XiFunc *xi_pipeline_release_stage_handle(void *program, XiStage stage) {
             return xi_closed_program_release((XiClosedProgram *) program);
         case XI_STAGE_OWNED:
             return xi_owned_program_release((XiOwnedProgram *) program);
-        case XI_STAGE_LOWERED:
-            return xi_lowered_program_release((XiLoweredProgram *) program);
+        case XI_STAGE_SEMANTIC_LOWERED:
+            return xi_semantic_lowered_program_release((XiSemanticLoweredProgram *) program);
+        case XI_STAGE_CORO_LOWERED:
+            return xi_coro_lowered_program_release((XiCoroLoweredProgram *) program);
         case XI_STAGE_OPTIMIZED:
             return xi_optimized_program_release((XiOptimizedProgram *) program);
         case XI_STAGE_SEMANTIC_PLANNED:
@@ -431,12 +433,22 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         goto fail;
     }
     program = next;
-    current_stage = XI_STAGE_LOWERED;
+    current_stage = XI_STAGE_SEMANTIC_LOWERED;
 
     if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OWNERSHIP))
         goto fail;
 
-    /* Optimization consumes Lowered and produces a verified Optimized program. */
+    next = xi_program_lower_coroutines((XiSemanticLoweredProgram *) program, transition_error,
+                                       sizeof(transition_error));
+    if (!next) {
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OWNERSHIP,
+                              XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
+        goto fail;
+    }
+    program = next;
+    current_stage = XI_STAGE_CORO_LOWERED;
+
+    /* Optimization consumes CoroLowered and produces a verified Optimized program. */
     if (cfg->run_optimize) {
         XiOptLevel level = cfg->opt_level;
         if (level == XI_OPT_NONE)
@@ -454,7 +466,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
             xi_pipeline_stats_dump(&stats, ir->name);
     }
 
-    next = xi_program_finish_optimization((XiLoweredProgram *) program, transition_error,
+    next = xi_program_finish_optimization((XiCoroLoweredProgram *) program, transition_error,
                                           sizeof(transition_error));
     if (!next) {
         xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OPTIMIZE,

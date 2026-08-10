@@ -50,13 +50,21 @@ static void initialize_lowering_facts(XiFunc *func) {
         return;
     func->lowering_facts.initialized = true;
     func->lowering_facts.coroutine_required = func->entry_type == 2 || func->coro_plan != NULL;
-    func->lowering_facts.coroutine_lowered = true;
+    func->lowering_facts.coroutine_lowered = false;
     func->lowering_facts.callable_required = func->ncaptures != 0;
     func->lowering_facts.callable_lowered =
         !func->lowering_facts.callable_required || func->closure_meta != NULL;
     func->lowering_facts.semantic_ops_lowered = true;
     for (uint16_t i = 0; i < func->nchildren; i++)
         initialize_lowering_facts(func->children[i]);
+}
+
+static void finalize_coroutine_lowering_facts(XiFunc *func) {
+    if (!func)
+        return;
+    func->lowering_facts.coroutine_lowered = true;
+    for (uint16_t i = 0; i < func->nchildren; i++)
+        finalize_coroutine_lowering_facts(func->children[i]);
 }
 
 static bool verify_tree(const XiFunc *func, XiStage stage, char *error, size_t error_size) {
@@ -99,8 +107,10 @@ static XiStageHandle *transition(XiStageHandle *handle, XiStage from, XiStage to
     }
 
     set_tree_stage(handle->graph, to);
-    if (to == XI_STAGE_LOWERED)
+    if (to == XI_STAGE_SEMANTIC_LOWERED)
         initialize_lowering_facts(handle->graph);
+    if (to == XI_STAGE_CORO_LOWERED)
+        finalize_coroutine_lowering_facts(handle->graph);
     if (!verify_tree(handle->graph, to, error, error_size)) {
         set_tree_stage(handle->graph, from);
         return NULL;
@@ -166,10 +176,12 @@ XI_DEFINE_TRANSITION(xi_program_close, XiCanonicalProgram, XiClosedProgram, XI_S
                      XI_STAGE_CLOSED)
 XI_DEFINE_TRANSITION(xi_program_make_owned, XiClosedProgram, XiOwnedProgram, XI_STAGE_CLOSED,
                      XI_STAGE_OWNED)
-XI_DEFINE_TRANSITION(xi_program_lower_semantics, XiOwnedProgram, XiLoweredProgram, XI_STAGE_OWNED,
-                     XI_STAGE_LOWERED)
-XI_DEFINE_TRANSITION(xi_program_finish_optimization, XiLoweredProgram, XiOptimizedProgram,
-                     XI_STAGE_LOWERED, XI_STAGE_OPTIMIZED)
+XI_DEFINE_TRANSITION(xi_program_lower_semantics, XiOwnedProgram, XiSemanticLoweredProgram,
+                     XI_STAGE_OWNED, XI_STAGE_SEMANTIC_LOWERED)
+XI_DEFINE_TRANSITION(xi_program_lower_coroutines, XiSemanticLoweredProgram, XiCoroLoweredProgram,
+                     XI_STAGE_SEMANTIC_LOWERED, XI_STAGE_CORO_LOWERED)
+XI_DEFINE_TRANSITION(xi_program_finish_optimization, XiCoroLoweredProgram, XiOptimizedProgram,
+                     XI_STAGE_CORO_LOWERED, XI_STAGE_OPTIMIZED)
 XI_DEFINE_TRANSITION(xi_program_freeze_semantics, XiOptimizedProgram, XiSemanticPlannedProgram,
                      XI_STAGE_OPTIMIZED, XI_STAGE_SEMANTIC_PLANNED)
 XI_DEFINE_TRANSITION(xi_program_select_reps, XiSemanticPlannedProgram, XiReppedProgram,
@@ -207,7 +219,8 @@ XI_DEFINE_HANDLE_ACCESSORS(xi_raw, XiRawProgram, XI_STAGE_RAW)
 XI_DEFINE_HANDLE_ACCESSORS(xi_canonical, XiCanonicalProgram, XI_STAGE_CANONICAL)
 XI_DEFINE_HANDLE_ACCESSORS(xi_closed, XiClosedProgram, XI_STAGE_CLOSED)
 XI_DEFINE_HANDLE_ACCESSORS(xi_owned, XiOwnedProgram, XI_STAGE_OWNED)
-XI_DEFINE_HANDLE_ACCESSORS(xi_lowered, XiLoweredProgram, XI_STAGE_LOWERED)
+XI_DEFINE_HANDLE_ACCESSORS(xi_semantic_lowered, XiSemanticLoweredProgram, XI_STAGE_SEMANTIC_LOWERED)
+XI_DEFINE_HANDLE_ACCESSORS(xi_coro_lowered, XiCoroLoweredProgram, XI_STAGE_CORO_LOWERED)
 XI_DEFINE_HANDLE_ACCESSORS(xi_optimized, XiOptimizedProgram, XI_STAGE_OPTIMIZED)
 XI_DEFINE_HANDLE_ACCESSORS(xi_semantic_planned, XiSemanticPlannedProgram, XI_STAGE_SEMANTIC_PLANNED)
 XI_DEFINE_HANDLE_ACCESSORS(xi_repped, XiReppedProgram, XI_STAGE_REPPED)
