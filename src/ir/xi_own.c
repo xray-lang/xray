@@ -488,7 +488,7 @@ static void compute_last_use(XiFunc *f, const XiDefUse *du, const XiLiveness *li
  * intraprocedural result as its initial state. */
 static void infer_borrow_sig(XiFunc *f, const XiOwnResult *r, XiBorrowSig *sig) {
     memset(sig, 0, sizeof(*sig));
-    uint16_t n = f->nparams;
+    uint16_t n = xi_func_semantic_param_count(f);
     if (n > XI_OWN_MAX_PARAMS)
         n = XI_OWN_MAX_PARAMS;
     sig->nparams = (uint8_t) n;
@@ -569,7 +569,7 @@ XR_FUNC bool xi_own_analyze(XiFunc *f, XiOwnResult *out) {
 
     /* Parameters are owning references handed in by the caller; classify
      * their RC status for the borrow signature. */
-    for (uint16_t p = 0; p < f->nparams; p++) {
+    for (uint16_t p = 0; p < xi_func_semantic_param_count(f); p++) {
         XiValue *pv = f->params[p];
         if (!pv || pv->id >= max_id)
             continue;

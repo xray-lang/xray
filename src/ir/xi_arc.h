@@ -27,6 +27,30 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f);
  * Modifies the IR in place. */
 XR_FUNC void xi_arc_insert(XiFunc *f);
 
+/* Exact post-analysis ownership action for a semantic operand. This includes
+ * call-site borrow signatures and ARC-only exceptions that the generated
+ * operation-wide ownership class cannot express. */
+XR_FUNC bool xi_arc_operand_consumes(const XiFunc *function, const XiValue *operation,
+                                     uint16_t operand);
+
+/* Effective ownership convention of a semantic parameter after receiver,
+ * operator, variadic-rest, and inferred borrow rules are combined. */
+XR_FUNC uint8_t xi_arc_parameter_ownership(const XiFunc *function, const XiValue *parameter);
+
+/* Exact post-analysis provenance of a semantic value. This is the same
+ * recursive call/alias/freshness proof ARC uses for function returns. */
+XR_FUNC XiReturnOwnership xi_arc_value_return_ownership(const XiFunc *function,
+                                                        const XiValue *value);
+
+/* Effective result-ownership class after following representation-only
+ * adapters and resolving call freshness. The returned value is one of the
+ * XI_GEN_RESULT_OWNERSHIP_* constants consumed by SemanticPlan. */
+XR_FUNC uint8_t xi_arc_value_result_ownership(const XiFunc *function, const XiValue *value);
+
+/* Immediate operand aliased by a call result, or -1 when the result is fresh,
+ * static, unresolved, or not a call. The index is normalized to args[]. */
+XR_FUNC int16_t xi_arc_value_alias_operand(const XiFunc *function, const XiValue *value);
+
 /* Eliminate redundant retain/release pairs (copy→move optimization).
  * Must run AFTER xi_arc_insert. Removes RETAIN(v)+RELEASE(v) pairs where
  * the retain merely extends lifetime to a single forwarding consumer and

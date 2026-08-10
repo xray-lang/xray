@@ -60,6 +60,61 @@ name = "frozen-plan-mutation"
 message = "immutable semantic plan was mutated after freeze"
 
 [[code]]
+id = "XR_SEM_0005"
+name = "unsupported-semantic-type"
+message = "semantic plan contains a removed, unknown, or null type"
+
+[[code]]
+id = "XR_SEM_0006"
+name = "semantic-type-recursion-budget"
+message = "semantic type recursion exceeds the declared hard budget"
+
+[[code]]
+id = "XR_SEM_0007"
+name = "invalid-operation-metadata"
+message = "semantic operation metadata is absent, malformed, or references an unknown entity"
+
+[[code]]
+id = "XR_SEM_0008"
+name = "invalid-ssa-operand"
+message = "semantic operation references an invalid SSA operand"
+
+[[code]]
+id = "XR_SEM_0009"
+name = "unsupported-semantic-constant"
+message = "semantic constant has no exact target-neutral encoding"
+
+[[code]]
+id = "XR_SEM_0010"
+name = "invalid-canonical-cfg"
+message = "semantic control-flow graph is not dense, symmetric, or function-local"
+
+[[code]]
+id = "XR_SEM_0011"
+name = "wrong-semantic-plan-input-stage"
+message = "semantic plan construction requires an exact optimized Xi graph"
+
+[[code]]
+id = "XR_SEM_0012"
+name = "invalid-type-table"
+message = "semantic type table contains an invalid child range or index"
+
+[[code]]
+id = "XR_SEM_0013"
+name = "invalid-function-table"
+message = "semantic function table contains an invalid type or table range"
+
+[[code]]
+id = "XR_SEM_0014"
+name = "invalid-block-table"
+message = "semantic block table contains an invalid record or asymmetric edge"
+
+[[code]]
+id = "XR_SEM_0015"
+name = "invalid-operation-table"
+message = "semantic operation table contains an invalid record or SSA definition"
+
+[[code]]
 id = "XR_TARGET_1000"
 name = "profile-fingerprint-mismatch"
 message = "target profile fingerprint does not match the requested executor or emitter"

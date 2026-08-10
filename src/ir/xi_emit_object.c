@@ -1136,7 +1136,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* Only verified representation-selected IR may cross the AOT attachment
      * boundary.  Raw xi_emit() calls are bytecode-emitter unit boundaries;
      * their child IR remains owned by the parent graph. */
-    if (child_func->stage >= XI_STAGE_REPPED || child_func->stage == XI_STAGE_OPTIMIZED) {
+    if (child_func->stage >= XI_STAGE_REPPED || child_func->stage == XI_STAGE_SEMANTIC_PLANNED) {
         if (!xi_emit_attach_ir(child_proto, child_func)) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
@@ -1550,7 +1550,7 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
                                 (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
     }
 
-    if (child->stage >= XI_STAGE_REPPED || child->stage == XI_STAGE_OPTIMIZED) {
+    if (child->stage >= XI_STAGE_REPPED || child->stage == XI_STAGE_SEMANTIC_PLANNED) {
         if (!xi_emit_attach_ir(child_proto, child))
             return -1;
         ctx->func->children[child_func_idx] = NULL;

@@ -18,6 +18,7 @@
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_stage.h"
+#include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -62,7 +63,11 @@ static XiReppedProgram *advance_to_repped(XiFunc *f) {
     XiLoweredProgram *lowered = advance_to_lowered(f);
     XiOptimizedProgram *optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
     assert(optimized != NULL);
-    XiReppedProgram *repped = xi_program_select_reps(optimized, error, sizeof(error));
+    assert(xr_semantic_plan_build_and_attach(f, error, sizeof(error)));
+    XiSemanticPlannedProgram *semantic =
+        xi_program_freeze_semantics(optimized, error, sizeof(error));
+    assert(semantic != NULL);
+    XiReppedProgram *repped = xi_program_select_reps(semantic, error, sizeof(error));
     assert(repped != NULL);
     return repped;
 }
@@ -99,9 +104,10 @@ static void test_stage_enum(void) {
     assert(XI_STAGE_OWNED > XI_STAGE_CLOSED);
     assert(XI_STAGE_LOWERED > XI_STAGE_OWNED);
     assert(XI_STAGE_OPTIMIZED > XI_STAGE_LOWERED);
-    assert(XI_STAGE_REPPED > XI_STAGE_OPTIMIZED);
+    assert(XI_STAGE_SEMANTIC_PLANNED > XI_STAGE_OPTIMIZED);
+    assert(XI_STAGE_REPPED > XI_STAGE_SEMANTIC_PLANNED);
     assert(XI_STAGE_BACKEND > XI_STAGE_REPPED);
-    assert(XI_STAGE_COUNT == 8);
+    assert(XI_STAGE_COUNT == 9);
 
     /* Verify names */
     assert(strcmp(xi_stage_name(XI_STAGE_RAW), "Raw") == 0);
@@ -110,6 +116,7 @@ static void test_stage_enum(void) {
     assert(strcmp(xi_stage_name(XI_STAGE_OWNED), "Owned") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_LOWERED), "Lowered") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_OPTIMIZED), "Optimized") == 0);
+    assert(strcmp(xi_stage_name(XI_STAGE_SEMANTIC_PLANNED), "SemanticPlanned") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_REPPED), "Repped") == 0);
     assert(strcmp(xi_stage_name(XI_STAGE_BACKEND), "Backend") == 0);
 
@@ -542,7 +549,8 @@ static void test_stage_monotonicity(void) {
     assert(XI_STAGE_CLOSED < XI_STAGE_OWNED);
     assert(XI_STAGE_OWNED < XI_STAGE_LOWERED);
     assert(XI_STAGE_LOWERED < XI_STAGE_OPTIMIZED);
-    assert(XI_STAGE_OPTIMIZED < XI_STAGE_REPPED);
+    assert(XI_STAGE_OPTIMIZED < XI_STAGE_SEMANTIC_PLANNED);
+    assert(XI_STAGE_SEMANTIC_PLANNED < XI_STAGE_REPPED);
     assert(XI_STAGE_REPPED < XI_STAGE_BACKEND);
 
     xi_func_free(xi_backend_program_release(backend));

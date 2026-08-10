@@ -961,17 +961,18 @@ XR_FUNC bool xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir) {
     XR_DCHECK(proto != NULL, "xi_emit_attach_ir: NULL proto");
     XR_DCHECK(proto->xi_func == NULL, "xi_emit_attach_ir: proto already has xi_func");
 
-    if (ir && ir->stage == XI_STAGE_OPTIMIZED) {
+    if (ir && ir->stage == XI_STAGE_SEMANTIC_PLANNED) {
         char error[512] = {0};
-        XiOptimizedProgram *optimized = xi_stage_adopt_optimized(ir, error, sizeof(error));
-        if (!optimized)
+        XiSemanticPlannedProgram *semantic =
+            xi_stage_adopt_semantic_planned(ir, error, sizeof(error));
+        if (!semantic)
             return false;
         XiRepPolicy policy = xi_rep_policy_tagged_boundary();
         xi_opt_select_rep_with_policy(ir, &policy);
         xi_opt_box_elim(ir);
-        XiReppedProgram *repped = xi_program_select_reps(optimized, error, sizeof(error));
+        XiReppedProgram *repped = xi_program_select_reps(semantic, error, sizeof(error));
         if (!repped) {
-            xi_optimized_program_release(optimized);
+            xi_semantic_planned_program_release(semantic);
             return false;
         }
         ir = xi_repped_program_release(repped);

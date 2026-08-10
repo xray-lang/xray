@@ -21,11 +21,14 @@ typedef struct XiClosedProgram XiClosedProgram;
 typedef struct XiOwnedProgram XiOwnedProgram;
 typedef struct XiLoweredProgram XiLoweredProgram;
 typedef struct XiOptimizedProgram XiOptimizedProgram;
+typedef struct XiSemanticPlannedProgram XiSemanticPlannedProgram;
 typedef struct XiReppedProgram XiReppedProgram;
 typedef struct XiBackendProgram XiBackendProgram;
 
 XR_FUNC XiRawProgram *xi_stage_adopt_raw(XiFunc *graph, char *error, size_t error_size);
 XR_FUNC XiOptimizedProgram *xi_stage_adopt_optimized(XiFunc *graph, char *error, size_t error_size);
+XR_FUNC XiSemanticPlannedProgram *xi_stage_adopt_semantic_planned(XiFunc *graph, char *error,
+                                                                  size_t error_size);
 XR_FUNC XiReppedProgram *xi_stage_adopt_repped(XiFunc *graph, char *error, size_t error_size);
 XR_FUNC XiCanonicalProgram *xi_program_canonicalize(XiRawProgram *input, char *error,
                                                     size_t error_size);
@@ -37,7 +40,9 @@ XR_FUNC XiLoweredProgram *xi_program_lower_semantics(XiOwnedProgram *input, char
                                                      size_t error_size);
 XR_FUNC XiOptimizedProgram *xi_program_finish_optimization(XiLoweredProgram *input, char *error,
                                                            size_t error_size);
-XR_FUNC XiReppedProgram *xi_program_select_reps(XiOptimizedProgram *input, char *error,
+XR_FUNC XiSemanticPlannedProgram *xi_program_freeze_semantics(XiOptimizedProgram *input,
+                                                              char *error, size_t error_size);
+XR_FUNC XiReppedProgram *xi_program_select_reps(XiSemanticPlannedProgram *input, char *error,
                                                 size_t error_size);
 XR_FUNC XiBackendProgram *xi_program_plan_backend(XiReppedProgram *input, char *error,
                                                   size_t error_size);
@@ -48,6 +53,7 @@ XR_FUNC XiFunc *xi_closed_program_graph(XiClosedProgram *program);
 XR_FUNC XiFunc *xi_owned_program_graph(XiOwnedProgram *program);
 XR_FUNC XiFunc *xi_lowered_program_graph(XiLoweredProgram *program);
 XR_FUNC XiFunc *xi_optimized_program_graph(XiOptimizedProgram *program);
+XR_FUNC XiFunc *xi_semantic_planned_program_graph(XiSemanticPlannedProgram *program);
 XR_FUNC XiFunc *xi_repped_program_graph(XiReppedProgram *program);
 XR_FUNC XiFunc *xi_backend_program_graph(XiBackendProgram *program);
 
@@ -57,6 +63,7 @@ XR_FUNC XiFunc *xi_closed_program_release(XiClosedProgram *program);
 XR_FUNC XiFunc *xi_owned_program_release(XiOwnedProgram *program);
 XR_FUNC XiFunc *xi_lowered_program_release(XiLoweredProgram *program);
 XR_FUNC XiFunc *xi_optimized_program_release(XiOptimizedProgram *program);
+XR_FUNC XiFunc *xi_semantic_planned_program_release(XiSemanticPlannedProgram *program);
 XR_FUNC XiFunc *xi_repped_program_release(XiReppedProgram *program);
 XR_FUNC XiFunc *xi_backend_program_release(XiBackendProgram *program);
 

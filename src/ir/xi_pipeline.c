@@ -26,6 +26,7 @@
 #include "xi_import_resolve.h"
 #include "xi_source_move_verify.h"
 #include "xi_stage.h"
+#include "../plan/semantic/xr_semantic_builder.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast.h"
@@ -256,6 +257,8 @@ static XiFunc *xi_pipeline_release_stage_handle(void *program, XiStage stage) {
             return xi_lowered_program_release((XiLoweredProgram *) program);
         case XI_STAGE_OPTIMIZED:
             return xi_optimized_program_release((XiOptimizedProgram *) program);
+        case XI_STAGE_SEMANTIC_PLANNED:
+            return xi_semantic_planned_program_release((XiSemanticPlannedProgram *) program);
         case XI_STAGE_REPPED:
             return xi_repped_program_release((XiReppedProgram *) program);
         case XI_STAGE_BACKEND:
@@ -463,11 +466,33 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OPTIMIZE))
         goto fail;
 
+    if (xi_env_is_enabled("XRAY_XI_SEMANTIC_DUMP")) {
+        fprintf(stderr, "=== Xi IR consumed by SemanticPlan ===\n");
+        xi_func_dump(ir, stderr);
+        fprintf(stderr, "=======================================\n");
+    }
+    if (!xr_semantic_plan_build_and_attach(ir, transition_error, sizeof(transition_error))) {
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_SEMANTIC_PLAN,
+                              XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
+        goto fail;
+    }
+    next = xi_program_freeze_semantics((XiOptimizedProgram *) program, transition_error,
+                                       sizeof(transition_error));
+    if (!next) {
+        xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_SEMANTIC_PLAN,
+                              XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
+        goto fail;
+    }
+    program = next;
+    current_stage = XI_STAGE_SEMANTIC_PLANNED;
+    if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_SEMANTIC_PLAN))
+        goto fail;
+
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
      * Run after general optimization so constants/copies are resolved first. */
     if (cfg->run_select_rep) {
         xi_opt_refresh_representations_with_policy(ir, &cfg->rep_policy);
-        next = xi_program_select_reps((XiOptimizedProgram *) program, transition_error,
+        next = xi_program_select_reps((XiSemanticPlannedProgram *) program, transition_error,
                                       sizeof(transition_error));
         if (!next) {
             xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_REPRESENTATION,
@@ -530,13 +555,13 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         }
         res.proto = proto;
 
-        /* The VM emitter consumes Optimized semantic IR. After bytecode is
+        /* The VM emitter consumes frozen target-neutral semantic IR. After bytecode is
          * fixed, select the VM/JIT tagged representation and close the Repped
          * transition for the IR retained by the proto. */
-        if (current_stage == XI_STAGE_OPTIMIZED) {
+        if (current_stage == XI_STAGE_SEMANTIC_PLANNED) {
             XiRepPolicy vm_policy = xi_rep_policy_tagged_boundary();
             xi_opt_refresh_representations_with_policy(ir, &vm_policy);
-            next = xi_program_select_reps((XiOptimizedProgram *) program, transition_error,
+            next = xi_program_select_reps((XiSemanticPlannedProgram *) program, transition_error,
                                           sizeof(transition_error));
             if (!next) {
                 xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_REPRESENTATION,
@@ -777,6 +802,8 @@ XR_FUNC const char *xi_pipeline_stage_str(XiPipelineStage stage) {
             return "escape";
         case XI_PIPE_STAGE_OWNERSHIP:
             return "ownership";
+        case XI_PIPE_STAGE_SEMANTIC_PLAN:
+            return "semantic-plan";
         case XI_PIPE_STAGE_REPRESENTATION:
             return "representation";
         case XI_PIPE_STAGE_BACKEND:

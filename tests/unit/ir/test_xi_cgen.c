@@ -22,6 +22,7 @@
 #include "../../../src/ir/xi_coro_analyze.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_stage.h"
+#include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/ir/xi_backend_lower.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/module/xnative_package.h"
@@ -993,12 +994,21 @@ static bool test_prepare_backend_ir(XiFunc *ir) {
         optimized = xi_stage_adopt_optimized(ir, error, sizeof(error));
     }
 
-    XiReppedProgram *repped = NULL;
+    XiSemanticPlannedProgram *semantic = NULL;
     if (optimized) {
+        if (!xr_semantic_plan_build_and_attach(ir, error, sizeof(error)))
+            goto fail;
+        semantic = xi_program_freeze_semantics(optimized, error, sizeof(error));
+    } else if (ir->stage == XI_STAGE_SEMANTIC_PLANNED) {
+        semantic = xi_stage_adopt_semantic_planned(ir, error, sizeof(error));
+    }
+
+    XiReppedProgram *repped = NULL;
+    if (semantic) {
         XiRepPolicy policy = xi_rep_policy_native_boundary();
         xi_opt_select_rep_with_policy(ir, &policy);
         xi_opt_box_elim(ir);
-        repped = xi_program_select_reps(optimized, error, sizeof(error));
+        repped = xi_program_select_reps(semantic, error, sizeof(error));
     } else if (ir->stage == XI_STAGE_REPPED) {
         repped = xi_stage_adopt_repped(ir, error, sizeof(error));
     }

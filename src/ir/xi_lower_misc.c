@@ -340,11 +340,13 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
         enum_data->runtime_type = et;
     }
 
-    /* Store as XI_CONST with type_any (emitter handles via LOADK) */
+    /* Store the detached enum descriptor, never the compiler-isolate runtime
+     * pointer. VM and AOT both consume the same XiEnumData contract. */
     XiValue *cv = xi_value_new(l->func, l->cur_block, XI_CONST, l->type_any, 0);
     if (!cv)
         return;
-    cv->aux = (void *) et;
+    cv->aux = enum_data;
+    cv->aux_kind = XI_AUX_KIND_ENUM_NAMESPACE;
     cv->line = (uint32_t) node->line;
 
     /* Write to shared variable so enum access resolves correctly */

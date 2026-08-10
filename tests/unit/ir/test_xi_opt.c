@@ -14,6 +14,7 @@
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_stage.h"
+#include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
@@ -1471,10 +1472,14 @@ TEST(select_rep_advances_empty_func_tree) {
     assert(lowered != NULL);
     XiOptimizedProgram *optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
     assert(optimized != NULL);
+    assert(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    XiSemanticPlannedProgram *semantic =
+        xi_program_freeze_semantics(optimized, error, sizeof(error));
+    assert(semantic != NULL);
 
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XiPassChange change = xi_opt_select_rep_with_policy(root, &policy);
-    XiReppedProgram *repped = xi_program_select_reps(optimized, error, sizeof(error));
+    XiReppedProgram *repped = xi_program_select_reps(semantic, error, sizeof(error));
     assert(repped != NULL);
 
     assert(change.cfg_changed && change.values_changed && change.types_changed &&

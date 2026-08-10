@@ -738,6 +738,10 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
         strcmp((const char *) v->aux, "StringBuilder") == 0 &&
         xr_type_is_builtin_named_class(v->type, "StringBuilder"))
         return true;
+    if (v->op == XI_CALL_METHOD && v->nargs == 1 && v->args[0] && v->aux &&
+        strcmp((const char *) v->aux, "toString") == 0 &&
+        xr_type_is_builtin_named_class(v->args[0]->type, "StringBuilder"))
+        return true;
     /* Container-building intrinsics allocate a new array on both backends;
      * the result aliases no argument, so it is a fresh +1 the caller owns
      * (and must drop at its death point when never consumed). */
@@ -913,8 +917,9 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
     if (!f || !value || depth > 32)
         return arc_return_unknown();
 
-    for (uint16_t p = 0; p < f->nparams; p++) {
-        if (f->params[p] == value && xi_func_param_passing_mode(f, p) == XR_PARAM_MOVE)
+    for (uint16_t p = 0; p < xi_func_semantic_param_count(f); p++) {
+        if (f->params[p] == value && f->arc_borrow_sig && f->arc_borrow_sig->valid &&
+            p < f->arc_borrow_sig->nparams && f->arc_borrow_sig->param_own[p] == XI_OWN_OWNED)
             return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
         if (f->params[p] == value)
             return arc_return_ownership(XI_RETURN_OWNERSHIP_BORROWED_PARAM, (int16_t) p, true);
@@ -971,11 +976,59 @@ static XiReturnOwnership arc_return_value_ownership(XiFunc *f, XiValue *value, u
         return arc_return_unknown();
     }
 
+    if ((value->op == XI_BOX || value->op == XI_UNBOX || value->op == XI_CONVERT) &&
+        value->nargs == 1 && arc_value_is_borrow_alias(value, 0))
+        return arc_return_value_ownership(f, value->args[0], (uint8_t) (depth + 1));
     if (arc_value_produces_borrow(value))
         return arc_return_unknown();
     if (arc_value_produces_owned(value))
         return arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
     return arc_return_unknown();
+}
+
+XR_FUNC XiReturnOwnership xi_arc_value_return_ownership(const XiFunc *function,
+                                                        const XiValue *value) {
+    XiReturnOwnership ownership =
+        arc_return_value_ownership((XiFunc *) function, (XiValue *) value, 0);
+    if (ownership.complete && ownership.kind == XI_RETURN_OWNERSHIP_NULL_JOIN)
+        return arc_return_ownership(XI_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
+    return ownership;
+}
+
+XR_FUNC uint8_t xi_arc_value_result_ownership(const XiFunc *function, const XiValue *value) {
+    if (!value)
+        return XI_GEN_RESULT_OWNERSHIP_NONE;
+    if (xi_copy_is_value_clone(value))
+        return XI_GEN_RESULT_OWNERSHIP_OWNED;
+    if (arc_value_is_borrow_alias(value, 0))
+        return XI_GEN_RESULT_OWNERSHIP_BORROWED;
+    if (!op_is_call(value->op))
+        return op_result_ownership(value->op);
+    XiReturnOwnership ownership = xi_arc_value_return_ownership(function, value);
+    if (!ownership.complete)
+        return XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
+    return ownership.kind == XI_RETURN_OWNERSHIP_OWNED ? XI_GEN_RESULT_OWNERSHIP_OWNED
+                                                       : XI_GEN_RESULT_OWNERSHIP_BORROWED;
+}
+
+XR_FUNC int16_t xi_arc_value_alias_operand(const XiFunc *function, const XiValue *value) {
+    if (!function || !value || !op_is_call(value->op))
+        return -1;
+    if (xi_call_result_aliases_receiver(value) && value->nargs >= 1)
+        return 0;
+    XiFunc *callee = NULL;
+    if (value->op == XI_CALL && value->nargs >= 1)
+        callee = arc_resolve_callee((XiFunc *) function, value->args[0]);
+    else if (value->op == XI_CALL_METHOD || value->op == XI_CALL_METHOD_DIRECT)
+        callee = arc_resolve_namespace_method_callee((XiFunc *) function, value);
+    XiReturnOwnership summary = callee && callee->arc_return_ownership.complete
+                                    ? callee->arc_return_ownership
+                                    : value->call_return_ownership;
+    if (!summary.complete || summary.kind != XI_RETURN_OWNERSHIP_BORROWED_PARAM ||
+        summary.param_index < 0)
+        return -1;
+    uint32_t operand = (uint32_t) summary.param_index + 1u;
+    return operand < value->nargs && operand <= INT16_MAX ? (int16_t) operand : -1;
 }
 
 static XiReturnOwnership arc_infer_return_ownership(XiFunc *f) {
@@ -1048,7 +1101,41 @@ static bool arc_call_arg_is_callee_borrowed(XiFunc *f, const XiValue *user, uint
         callee = arc_resolve_callee(f, user->args[0]);
     else if (user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT)
         callee = arc_resolve_namespace_method_callee(f, user);
-    return callee && arc_callee_borrows_param(callee, (uint16_t) (a - 1));
+    if (!callee)
+        return false;
+    uint16_t parameter = (uint16_t) (a - 1);
+    if (callee->is_vararg && parameter >= callee->nparams)
+        parameter = callee->nparams;
+    return arc_callee_borrows_param(callee, parameter);
+}
+
+XR_FUNC bool xi_arc_operand_consumes(const XiFunc *function, const XiValue *operation,
+                                     uint16_t operand) {
+    if (!function || !operation || operand >= operation->nargs)
+        return false;
+    const XiValue *argument = operation->args[operand];
+    if (stack_alloc_closure_use_is_scoped_par_for_callback(operation, operand, argument))
+        return argument && argument->op != XI_STACK_ALLOC;
+    if (!xi_own_value_arg_is_consuming(operation, operand))
+        return false;
+    if (operation->op == XI_STACK_ALLOC &&
+        stack_alloc_closure_uses_are_scoped_par_for_callbacks((XiFunc *) function, operation))
+        return false;
+    return !arc_call_arg_is_callee_borrowed((XiFunc *) function, operation, operand);
+}
+
+XR_FUNC uint8_t xi_arc_parameter_ownership(const XiFunc *function, const XiValue *parameter) {
+    if (!function || !parameter || parameter->op != XI_PARAM || parameter->aux_int < 0)
+        return XI_OWN_NONE;
+    uint32_t index = (uint32_t) parameter->aux_int;
+    if ((function->receiver_borrowed && index == 0) || function->operator_borrowed)
+        return xi_own_type_is_rc(parameter->type) ? XI_OWN_BORROWED : XI_OWN_NONE;
+    if (function->arc_borrow_sig && function->arc_borrow_sig->valid &&
+        index < function->arc_borrow_sig->nparams)
+        return function->arc_borrow_sig->param_own[index];
+    if (function->is_vararg && index == function->nparams)
+        return xi_own_type_is_rc(parameter->type) ? XI_OWN_OWNED : XI_OWN_NONE;
+    return xi_own_type_is_rc(parameter->type) ? XI_OWN_OWNED : XI_OWN_NONE;
 }
 
 /* Collect consuming uses of `target` across the function, in program order.
@@ -1089,6 +1176,11 @@ static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *si
         for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
             for (uint16_t a = 0; a < phi->value.nargs; a++) {
                 if (phi->value.args[a] != target)
+                    continue;
+                /* A loop-carried phi may forward its own current SSA owner on
+                 * a backedge. That is slot continuity, not a second consume;
+                 * retaining it once per iteration leaks unboundedly. */
+                if (target == &phi->value)
                     continue;
                 XiBlock *pred = (a < blk->npreds) ? blk->preds[a] : NULL;
                 if (!pred)
@@ -1662,14 +1754,112 @@ static bool insert_drops_at_death(XiFunc *f, XiValue *target) {
  * just because the other arm also consumes — the arms are not on a common path.
  * `live`/`pos_by_id` come from arc_compute_liveness (uses = consume + borrow
  * closure), so "live after" correctly accounts for borrows-after-consume too. */
-static bool consume_is_live_after(const ConsumeSite *site, const ArcLive *live,
-                                  const uint32_t *pos_by_id) {
+static bool arc_phi_edge_owner_live_after(XiFunc *f, XiValue *target, const ConsumeSite *site) {
+    if (!f || !target || !site || !site->blk || !site->user || site->user->op != XI_PHI ||
+        !site->user->block)
+        return true;
+    uint32_t tracked_count = 0;
+    XiValue **tracked = arc_collect_borrow_closure(f, target, &tracked_count);
+    uint32_t max_block_id = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        if (f->blocks[b] && f->blocks[b]->id > max_block_id)
+            max_block_id = f->blocks[b]->id;
+    }
+    uint8_t *reachable = (uint8_t *) xr_calloc((size_t) max_block_id + 1u, sizeof(*reachable));
+    XiBlock **queue = (XiBlock **) xr_malloc((size_t) f->nblocks * sizeof(*queue));
+    if (!tracked || !reachable || !queue) {
+        xr_free(tracked);
+        xr_free(reachable);
+        xr_free(queue);
+        return true;
+    }
+    uint32_t head = 0, tail = 0;
+    reachable[site->user->block->id] = 1;
+    queue[tail++] = site->user->block;
+    bool found = false;
+    while (head < tail && !found) {
+        XiBlock *block = queue[head++];
+        if (!block)
+            continue;
+        /* Re-entering the target's definition block starts the next dynamic
+         * loop instance. Uses beyond that PHI/definition belong to the next
+         * token, not to the owner consumed on the current edge. */
+        if (block == target->block)
+            continue;
+        for (uint32_t i = 0; i < block->nvalues && !found; i++) {
+            XiValue *user = block->values[i];
+            if (!user)
+                continue;
+            for (uint16_t a = 0; a < user->nargs && !found; a++) {
+                for (uint32_t t = 0; t < tracked_count; t++) {
+                    XiValue *member = tracked[t];
+                    if (member != target &&
+                        (!member->block || !xi_dominates(member->block, site->blk)))
+                        continue;
+                    if (user->args[a] == member)
+                        found = true;
+                }
+            }
+        }
+        for (uint32_t t = 0; t < tracked_count && !found; t++) {
+            XiValue *member = tracked[t];
+            if (member != target && (!member->block || !xi_dominates(member->block, site->blk)))
+                continue;
+            if (block->control == member)
+                found = true;
+        }
+        for (unsigned s = 0; s < 2; s++) {
+            XiBlock *successor = block->succs[s];
+            if (!successor || successor->id > max_block_id || reachable[successor->id])
+                continue;
+            /* A PHI reads only the operand on the edge that actually reaches
+             * it. Scanning every PHI operand after merely reaching its block
+             * confuses mutually exclusive paths and, in loops, treats a
+             * future iteration's incoming token as a use of the current one.
+             * Inspect the operand for block->successor before enqueueing that
+             * exact edge instead. Re-entering the target definition starts a
+             * new dynamic token and is deliberately excluded. */
+            if (successor != target->block) {
+                for (XiPhi *phi = successor->phis; phi && !found; phi = phi->next) {
+                    for (uint16_t a = 0; a < phi->value.nargs && a < successor->npreds && !found;
+                         a++) {
+                        if (successor->preds[a] != block)
+                            continue;
+                        for (uint32_t t = 0; t < tracked_count; t++) {
+                            XiValue *member = tracked[t];
+                            if (member != target &&
+                                (!member->block || !xi_dominates(member->block, site->blk)))
+                                continue;
+                            if (phi->value.args[a] == member) {
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if (found)
+                break;
+            reachable[successor->id] = 1;
+            queue[tail++] = successor;
+        }
+    }
+    xr_free(tracked);
+    xr_free(reachable);
+    xr_free(queue);
+    return found;
+}
+
+static bool consume_is_live_after(XiFunc *f, XiValue *target, const ConsumeSite *site,
+                                  const ArcLive *live, const uint32_t *pos_by_id) {
     if (!site->blk || !pos_by_id[site->blk->id])
         return true; /* unknown: conservatively dup (never a wrong move) */
     const ArcLive *li = &live[pos_by_id[site->blk->id] - 1];
     uint32_t idx = site->order & 0xFFFF;
     /* Phi-edge (0xFFFE) and return (0xFFFF) consumes sit at block end: the
      * value is only still live afterwards if a successor uses it. */
+    if (site->user && site->user->op == XI_PHI)
+        return arc_phi_edge_owner_live_after(f, target, site);
     if (idx >= 0xFFFE)
         return li->live_out;
     /* Regular consume at index idx: live after iff a later ordinary use exists
@@ -1763,24 +1953,37 @@ static bool arc_return_forwards_borrow(const XiFunc *f) {
             f->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_BORROWED_STATIC);
 }
 
-static void insert_dup_at_consume_site(XiFunc *f, XiValue *target, const ConsumeSite *site) {
+static bool insert_dup_at_consume_site(XiFunc *f, XiValue *target, const ConsumeSite *site) {
     if (!site->user && arc_return_forwards_borrow(f))
-        return;
+        return false;
     if (!site->user || site->user->op == XI_PHI) {
-        XiValue *last = phi_dup_anchor(site->blk);
-        insert_dup_after(f, site->blk, last, target);
-        return;
+        XiBlock *placement = site->blk;
+        bool split = false;
+        if (site->user && site->user->op == XI_PHI && site->user->block && site->blk->succs[0] &&
+            site->blk->succs[1]) {
+            XiBlock *mid = arc_split_edge(f, site->blk, site->user->block);
+            if (mid) {
+                placement = mid;
+                split = true;
+            }
+        }
+        XiValue *last = phi_dup_anchor(placement);
+        insert_dup_after(f, placement, last, target);
+        return split;
     }
     insert_dup_before(f, site->blk, site->user, target);
+    return false;
 }
 
-static void process_call_result_consumes(XiFunc *f, XiValue *target, const ConsumeSiteVec *sites) {
+static bool process_call_result_consumes(XiFunc *f, XiValue *target, const ConsumeSiteVec *sites) {
     /* UNKNOWN is fail-closed as a +0 borrow. A last consuming use transfers an
      * owning reference to its consumer, so it needs a retain just as much as
      * every earlier consume. Liveness decides only how many independent
      * owners are needed; it cannot prove that the original result was +1. */
+    bool split_any = false;
     for (uint32_t i = 0; i < sites->count; i++)
-        insert_dup_at_consume_site(f, target, &sites->items[i]);
+        split_any |= insert_dup_at_consume_site(f, target, &sites->items[i]);
+    return split_any;
 }
 
 static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
@@ -1806,16 +2009,17 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
     if (mode == OWN_BORROWED) {
         /* Borrowed: the function owns no reference, so every consuming use
          * must dup first; nothing is moved out and nothing is dropped. */
+        bool split_any = false;
         for (uint32_t i = 0; i < sites.count; i++)
-            insert_dup_at_consume_site(f, target, &sites.items[i]);
+            split_any |= insert_dup_at_consume_site(f, target, &sites.items[i]);
         xr_free(sites.items);
-        return false;
+        return split_any;
     }
 
     if (mode == OWN_CALL_RESULT) {
-        process_call_result_consumes(f, target, &sites);
+        bool split_any = process_call_result_consumes(f, target, &sites);
         xr_free(sites.items);
-        return false;
+        return split_any;
     }
 
     /* OWNED: a consuming use moves the owned reference out only when the value
@@ -1837,20 +2041,16 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
          * A frame-pinned value dups at the last value consume too: no
          * death-drop exists here, so its slot reference is the one the frame
          * teardown release list gives up. */
+        bool split_any = false;
         for (uint32_t i = 0; i < sites.count; i++) {
             if (!frame_pinned && i + 1 == sites.count)
                 break;
             if (sites.items[i].user == NULL)
                 continue;
-            if (sites.items[i].user->op == XI_PHI) {
-                XiValue *last = phi_dup_anchor(sites.items[i].blk);
-                insert_dup_after(f, sites.items[i].blk, last, target);
-                continue;
-            }
-            insert_dup_before(f, sites.items[i].blk, sites.items[i].user, target);
+            split_any |= insert_dup_at_consume_site(f, target, &sites.items[i]);
         }
         xr_free(sites.items);
-        return false;
+        return split_any;
     }
 
     /* Decide move vs dup per site and record whether the MOVE happens in the
@@ -1866,7 +2066,7 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
         return false;
     }
     for (uint32_t i = 0; i < sites.count; i++) {
-        moves[i] = !consume_is_live_after(&sites.items[i], live, pos_by_id) &&
+        moves[i] = !consume_is_live_after(f, target, &sites.items[i], live, pos_by_id) &&
                    !(frame_pinned && sites.items[i].user != NULL);
         if (moves[i] && sites.items[i].blk && pos_by_id[sites.items[i].blk->id]) {
             ArcLive *site_live = &live[pos_by_id[sites.items[i].blk->id] - 1];
@@ -1889,16 +2089,7 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
             continue; /* MOVE: the consume transfers the owned reference */
         if (sites.items[i].user == NULL)
             continue; /* return terminator: last use, never live after */
-        if (sites.items[i].user->op == XI_PHI) {
-            /* Edge consume: dup at the end of the predecessor block so the
-             * +1 executes only on this incoming path. Anchor ahead of any
-             * trailing death-drop so the promote-retain precedes a release of
-             * the projection's source. */
-            XiValue *last = phi_dup_anchor(sites.items[i].blk);
-            insert_dup_after(f, sites.items[i].blk, last, target);
-            continue;
-        }
-        insert_dup_before(f, sites.items[i].blk, sites.items[i].user, target);
+        split_any |= insert_dup_at_consume_site(f, target, &sites.items[i]);
     }
 
     xr_free(moves);
@@ -1916,7 +2107,7 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
 static bool param_is_borrowed(const XiFunc *f, const XiValue *pv, const XiBorrowSig *sig) {
     if (!sig || !sig->valid)
         return false;
-    for (uint16_t p = 0; p < f->nparams && p < sig->nparams; p++) {
+    for (uint16_t p = 0; p < xi_func_semantic_param_count(f) && p < sig->nparams; p++) {
         if (f->params[p] == pv)
             return sig->param_own[p] == XI_OWN_BORROWED;
     }
@@ -1973,7 +2164,8 @@ static void arc_init_sigs_collect(XiFunc *f, XiFuncVec *vec) {
     if (!sig)
         return; /* OOM: leave NULL; arc_get_borrow_sig falls back per-function */
     memset(sig, 0, sizeof(*sig));
-    uint16_t n = f->nparams > XI_OWN_MAX_PARAMS ? XI_OWN_MAX_PARAMS : f->nparams;
+    uint16_t semantic_params = xi_func_semantic_param_count(f);
+    uint16_t n = semantic_params > XI_OWN_MAX_PARAMS ? XI_OWN_MAX_PARAMS : semantic_params;
     sig->nparams = (uint8_t) n;
     sig->valid = true;
     for (uint16_t p = 0; p < n; p++) {
@@ -2015,7 +2207,7 @@ static void arc_precompute_sigs(XiFunc *f) {
             for (uint16_t p = 0; p < sig->nparams; p++) {
                 if (sig->param_own[p] != XI_OWN_BORROWED)
                     continue;
-                if (p < fn->nparams && fn->params[p] &&
+                if (p < xi_func_semantic_param_count(fn) && fn->params[p] &&
                     param_has_consuming_use(fn, fn->params[p])) {
                     sig->param_own[p] = XI_OWN_OWNED;
                     changed = true;
@@ -2110,7 +2302,7 @@ static void arc_insert_rec(XiFunc *f) {
      * later RC values would leave required retain/release ops uninjected. */
     XiValueVec targets = {0};
 
-    for (uint16_t p = 0; p < f->nparams; p++) {
+    for (uint16_t p = 0; p < xi_func_semantic_param_count(f); p++) {
         if (f->params[p] && tracks_rc(f->params[p]) && !xi_value_vec_push(&targets, f->params[p])) {
             xr_free(targets.items);
             XR_CHECK(false, "xi_arc: out of memory collecting ARC targets");
@@ -2452,7 +2644,7 @@ static void arc_attach_error_cleanups_func(XiFunc *f) {
      * queries of its own, so refresh the cached tree at the final IR shape. */
     xi_ensure_dominators(f);
 
-    for (uint16_t p = 0; p < f->nparams; p++) {
+    for (uint16_t p = 0; p < xi_func_semantic_param_count(f); p++) {
         if (f->params[p] && tracks_rc(f->params[p]) && !xi_value_vec_push(&targets, f->params[p]))
             goto oom;
     }
@@ -2628,7 +2820,7 @@ static bool arc_elim_can_remove_single_consumer_retain(const XiFunc *f, const Xi
             return false;
         return true;
     }
-    if (arc_value_produces_borrow(target))
+    if (arc_value_is_borrow_alias(target, 0))
         return false;
     if (op_is_call(target->op))
         return call_returns_fresh(f, target);

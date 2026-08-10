@@ -9,6 +9,7 @@
 #include "xi_stage.h"
 #include "xi_evidence.h"
 #include "xi_verify.h"
+#include "../plan/semantic/xr_semantic_plan.h"
 #include "../base/xmalloc.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -90,6 +91,12 @@ static XiStageHandle *transition(XiStageHandle *handle, XiStage from, XiStage to
         set_error(error, error_size, "Xi graph does not satisfy the exact input-stage contract");
         return NULL;
     }
+    if (to == XI_STAGE_SEMANTIC_PLANNED &&
+        !xr_semantic_plan_is_verified(handle->graph->semantic_plan)) {
+        set_error(error, error_size,
+                  "SemanticPlanned transition requires a frozen verified SemanticPlan");
+        return NULL;
+    }
 
     set_tree_stage(handle->graph, to);
     if (to == XI_STAGE_LOWERED)
@@ -132,6 +139,17 @@ XiOptimizedProgram *xi_stage_adopt_optimized(XiFunc *graph, char *error, size_t 
     return (XiOptimizedProgram *) adopt_stage(graph, XI_STAGE_OPTIMIZED, error, error_size);
 }
 
+XiSemanticPlannedProgram *xi_stage_adopt_semantic_planned(XiFunc *graph, char *error,
+                                                          size_t error_size) {
+    if (!graph || !xr_semantic_plan_is_verified(graph->semantic_plan)) {
+        set_error(error, error_size,
+                  "SemanticPlanned adoption requires a frozen verified SemanticPlan");
+        return NULL;
+    }
+    return (XiSemanticPlannedProgram *) adopt_stage(graph, XI_STAGE_SEMANTIC_PLANNED, error,
+                                                    error_size);
+}
+
 XiReppedProgram *xi_stage_adopt_repped(XiFunc *graph, char *error, size_t error_size) {
     return (XiReppedProgram *) adopt_stage(graph, XI_STAGE_REPPED, error, error_size);
 }
@@ -152,8 +170,10 @@ XI_DEFINE_TRANSITION(xi_program_lower_semantics, XiOwnedProgram, XiLoweredProgra
                      XI_STAGE_LOWERED)
 XI_DEFINE_TRANSITION(xi_program_finish_optimization, XiLoweredProgram, XiOptimizedProgram,
                      XI_STAGE_LOWERED, XI_STAGE_OPTIMIZED)
-XI_DEFINE_TRANSITION(xi_program_select_reps, XiOptimizedProgram, XiReppedProgram,
-                     XI_STAGE_OPTIMIZED, XI_STAGE_REPPED)
+XI_DEFINE_TRANSITION(xi_program_freeze_semantics, XiOptimizedProgram, XiSemanticPlannedProgram,
+                     XI_STAGE_OPTIMIZED, XI_STAGE_SEMANTIC_PLANNED)
+XI_DEFINE_TRANSITION(xi_program_select_reps, XiSemanticPlannedProgram, XiReppedProgram,
+                     XI_STAGE_SEMANTIC_PLANNED, XI_STAGE_REPPED)
 XI_DEFINE_TRANSITION(xi_program_plan_backend, XiReppedProgram, XiBackendProgram, XI_STAGE_REPPED,
                      XI_STAGE_BACKEND)
 
@@ -189,6 +209,7 @@ XI_DEFINE_HANDLE_ACCESSORS(xi_closed, XiClosedProgram, XI_STAGE_CLOSED)
 XI_DEFINE_HANDLE_ACCESSORS(xi_owned, XiOwnedProgram, XI_STAGE_OWNED)
 XI_DEFINE_HANDLE_ACCESSORS(xi_lowered, XiLoweredProgram, XI_STAGE_LOWERED)
 XI_DEFINE_HANDLE_ACCESSORS(xi_optimized, XiOptimizedProgram, XI_STAGE_OPTIMIZED)
+XI_DEFINE_HANDLE_ACCESSORS(xi_semantic_planned, XiSemanticPlannedProgram, XI_STAGE_SEMANTIC_PLANNED)
 XI_DEFINE_HANDLE_ACCESSORS(xi_repped, XiReppedProgram, XI_STAGE_REPPED)
 XI_DEFINE_HANDLE_ACCESSORS(xi_backend, XiBackendProgram, XI_STAGE_BACKEND)
 

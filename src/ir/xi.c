@@ -18,6 +18,7 @@
 #include "xi_module.h"
 #include "xi_range.h"
 #include "xi_effect.h"
+#include "../plan/semantic/xr_semantic_plan.h"
 #include "../runtime/value/xtype.h" /* XR_REP_TAGGED */
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
@@ -255,6 +256,9 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
 void xi_func_free(XiFunc *f) {
     if (!f)
         return;
+
+    xr_semantic_plan_free(f->semantic_plan);
+    f->semantic_plan = NULL;
 
     /* Free nested children recursively */
     for (uint16_t i = 0; i < f->nchildren; i++) {
