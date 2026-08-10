@@ -1,0 +1,3 @@
+# schema-version	path	replacement	reason
+1	tests/compile_errors/stdlib/http_get_removed.xr	tests/diff/cases/semantics/stdlib/http_request_head_pure_direct.xr	http.get is the canonical self-hosted convenience API and is no longer an invalid program
+1	tests/compile_errors/type/builtin_name_native_handle_redeclared.xr	tests/unit/stdlib/test_native_type_surface.c	WsConn is a pure Xray class and no longer occupies the native-handle namespace

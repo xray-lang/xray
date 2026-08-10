@@ -1,1 +1,0 @@
-class 'WsConn' conflicts with the builtin native handle type 'ws.WsConn'

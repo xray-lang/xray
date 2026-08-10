@@ -1,1 +1,1 @@
-type 'JSON.Object' is not assignable to parameter type '{timeout,pingInterval,pongTimeout,maxMessageSize}?'
+type 'JSON.Object' is not assignable to parameter type 'WsConnectOptions?'

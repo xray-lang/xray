@@ -1,0 +1,8 @@
+import http
+
+fn jsonHandler(req: JSON.Value) -> JSON.Value {
+    return req
+}
+
+var server = http.Server()
+server.routeHandler("GET", "/json", jsonHandler)

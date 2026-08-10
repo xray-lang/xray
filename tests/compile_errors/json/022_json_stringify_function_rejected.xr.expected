@@ -1,1 +1,1 @@
-JSON.stringify() cannot encode type 'fn(): int': FUNCTION_FIELD
+JSON.stringify() cannot encode type 'fn() -> int': FUNCTION_FIELD

@@ -1,0 +1,1 @@
+type 'fn(JSON.Value) -> JSON.Value' is not assignable to parameter type 'fn(HttpRequest) -> HttpResponse'

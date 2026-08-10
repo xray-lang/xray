@@ -1,3 +1,0 @@
-import http
-
-http.get("http://example.com/")

@@ -1,1 +1,1 @@
-type 'JSON.Object' is not assignable to parameter type '{name,port,secret,tls}'
+type 'JSON.Object' is not assignable to parameter type 'ClusterConfig'

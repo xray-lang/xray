@@ -4,8 +4,8 @@
 
 fn cleanup() {}
 
-fn runWithCleanup(action: () -> ()) {
-    defer action()
+fn runWithCleanup(action: fn()) {
+    defer { action() }
     print("body-ran")
 }
 
