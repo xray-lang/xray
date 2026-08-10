@@ -1,10 +1,11 @@
 contains=xaot-plan v0
-contains=name=net.readExactInto
+contains=name=net.readInto
 contains=name=net.writeBytes
-c_contains=xrt_net_read_exact_into_step(
-c_contains=xrt_net_write_bytes_step(
-c_contains=xr_aot_wait_fd(
+c_contains=xrt_net_read_into_try(
+c_contains=xrt_net_write_bytes_try(
+c_contains=xr_aot_io_wait(
+c_contains=xr_aot_io_wait_resume(
 c_contains=_RETRY:;
-c_not_contains=xrt_net_read_exact_into(
+c_not_contains=xrt_net_read_into(
 c_not_contains=xrt_net_write_bytes(
 c_not_contains=xrt_call_dynamic(

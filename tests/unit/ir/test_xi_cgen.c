@@ -7138,7 +7138,7 @@ TEST(cgen_closure_values_and_indirect_calls_use_portable_c) {
 TEST(cgen_cell_backed_function_upvalue_uses_boxed_indirect_call) {
     const char *src = "fn outer() {\n"
                       "    fn cleanup(msg: string) { print(msg) }\n"
-                      "    fn worker() { defer cleanup(\"upval-cleanup\") }\n"
+                      "    fn worker() { defer { cleanup(\"upval-cleanup\") } }\n"
                       "    worker()\n"
                       "}\n"
                       "outer()\n";
