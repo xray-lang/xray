@@ -286,6 +286,19 @@ static CallableSet *callable_generator_targets(CallableAnalysis *a, const XiFunc
     return callable_value_set(a, owner, call->args[0]);
 }
 
+/* A spawned callable is an executable root even though XI_GO/XI_THREAD_SPAWN
+ * do not have synchronous call semantics.  In particular, projecting the
+ * child's MAY_SUSPEND effect onto the spawning parent would be wrong, but
+ * omitting the edge entirely retires the child from entry/runtime capability
+ * planning while the generated executor can still run it. */
+static CallableSet *callable_spawn_targets(CallableAnalysis *a, const XiFunc *owner,
+                                           const XiValue *spawn) {
+    if (!a || !owner || !spawn || (spawn->op != XI_GO && spawn->op != XI_THREAD_SPAWN) ||
+        spawn->nargs < 1 || !spawn->args[0])
+        return NULL;
+    return callable_value_set(a, owner, spawn->args[0]);
+}
+
 static const XiModule *callable_module_for_func(const XaotBundle *bundle, const XiFunc *func,
                                                 uint32_t *out_index) {
     if (!bundle || !func)
@@ -543,6 +556,24 @@ static bool callable_propagate_value(CallableAnalysis *a, const XiFunc *func, co
 
     if (value->op == XI_GEN_CALL) {
         CallableSet *targets = callable_generator_targets(a, func, value);
+        if (!targets)
+            return false;
+        for (uint32_t ti = 0; ti < targets->count; ti++) {
+            CallableFuncFacts *target = &a->funcs[targets->items[ti]];
+            uint16_t argc = value->nargs - 1;
+            uint16_t nparams = target->func ? target->func->nparams : 0;
+            uint16_t n = argc < nparams ? argc : nparams;
+            for (uint16_t ai = 0; ai < n; ai++) {
+                CallableSet *arg = callable_value_set(a, func, value->args[ai + 1]);
+                CallableSet *param = callable_value_set(a, target->func, target->func->params[ai]);
+                if (arg && param && !callable_set_union(param, arg, changed))
+                    return false;
+            }
+        }
+    }
+
+    if (value->op == XI_GO || value->op == XI_THREAD_SPAWN) {
+        CallableSet *targets = callable_spawn_targets(a, func, value);
         if (!targets)
             return false;
         for (uint32_t ti = 0; ti < targets->count; ti++) {
@@ -914,6 +945,16 @@ static bool callable_analysis_solve_reachability(CallableAnalysis *a) {
                         return false;
                     if (call->op == XI_GEN_CALL) {
                         const CallableSet *targets = callable_generator_targets(a, func, call);
+                        if (!targets || targets->count == 0)
+                            return false;
+                        for (uint32_t ti = 0; ti < targets->count; ti++) {
+                            const XiFunc *target = a->funcs[targets->items[ti]].func;
+                            if (!callable_mark_reachable_func(a, target, &changed))
+                                return false;
+                        }
+                    }
+                    if (call->op == XI_GO || call->op == XI_THREAD_SPAWN) {
+                        const CallableSet *targets = callable_spawn_targets(a, func, call);
                         if (!targets || targets->count == 0)
                             return false;
                         for (uint32_t ti = 0; ti < targets->count; ti++) {

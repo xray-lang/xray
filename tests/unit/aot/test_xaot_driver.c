@@ -689,6 +689,57 @@ static bool manifest_has_define(const XaotLinkManifest *manifest, const char *ne
     return false;
 }
 
+static bool manifest_has_runtime_cap(const XaotLinkManifest *manifest, const char *needle) {
+    if (!manifest || !needle)
+        return false;
+    for (uint32_t i = 0; i < manifest->n_runtime_caps; i++) {
+        if (manifest->runtime_caps[i] && strcmp(manifest->runtime_caps[i], needle) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool dump_line_contains(const char *dump, const char *anchor, const char *needle) {
+    const char *line;
+    const char *end;
+    const char *match;
+    if (!dump || !anchor || !needle || !(line = strstr(dump, anchor)))
+        return false;
+    end = strchr(line, '\n');
+    match = strstr(line, needle);
+    return match && (!end || match < end);
+}
+
+static void test_spawn_target_contributes_artifact_runtime_capabilities(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result;
+
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-spawn-caps-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(source_path, "import time\n"
+                                             "fn worker() {\n"
+                                             "    time.sleep(1)\n"
+                                             "}\n"
+                                             "await go worker()\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.emit_plan_dump = true;
+    memset(&result, 0, sizeof(result));
+
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(manifest_has_runtime_cap(&result.link_manifest, "timer"));
+    ASSERT_TRUE(result.plan_dump != NULL);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=worker", "reachable=1"));
+
+    xaot_build_result_free(&result);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
 static void test_driver_hosted_fragment_borrows_runtime_ownership(void) {
     char source_path[256];
     XaotTarget target = {0};
@@ -952,6 +1003,7 @@ int main(void) {
     test_driver_rejects_invalid_imported_summary_payload_set();
     test_driver_analyzes_aggregate_layout_with_selected_target();
     test_driver_analyzes_riscv64_layout_with_selected_target();
+    test_spawn_target_contributes_artifact_runtime_capabilities();
     test_driver_hosted_fragment_borrows_runtime_ownership();
     test_driver_validates_freestanding_runtime_provider();
     test_driver_auto_discovers_package_summary_payloads();
