@@ -957,6 +957,29 @@ cleanup:;
     return result;
 }
 
+static bool xi_emit_ir_tree_can_attach(const XrProto *proto, const XiFunc *ir) {
+    if (!proto || !ir || proto->xi_func || ir->stage < XI_STAGE_REPPED ||
+        PROTO_PROTO_COUNT(proto) != ir->nchildren)
+        return false;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        XrProto *child_proto = PROTO_PROTO(proto, i);
+        XiFunc *child_ir = ir->children[i];
+        if (!xi_emit_ir_tree_can_attach(child_proto, child_ir))
+            return false;
+    }
+    return true;
+}
+
+static void xi_emit_ir_tree_commit(XrProto *proto, XiFunc *ir) {
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        XrProto *child_proto = PROTO_PROTO(proto, i);
+        XiFunc *child_ir = ir->children[i];
+        xi_emit_ir_tree_commit(child_proto, child_ir);
+        ir->children[i] = NULL;
+    }
+    proto->xi_func = ir;
+}
+
 XR_FUNC bool xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir) {
     XR_DCHECK(proto != NULL, "xi_emit_attach_ir: NULL proto");
     XR_DCHECK(proto->xi_func == NULL, "xi_emit_attach_ir: proto already has xi_func");
@@ -977,9 +1000,9 @@ XR_FUNC bool xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir) {
         }
         ir = xi_repped_program_release(repped);
     }
-    if (!ir || ir->stage < XI_STAGE_REPPED)
+    if (!xi_emit_ir_tree_can_attach(proto, ir))
         return false;
-    proto->xi_func = ir;
+    xi_emit_ir_tree_commit(proto, ir);
     return true;
 }
 

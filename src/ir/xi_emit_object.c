@@ -1133,19 +1133,9 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
                                 (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
     }
 
-    /* Only verified representation-selected IR may cross the AOT attachment
-     * boundary.  Raw xi_emit() calls are bytecode-emitter unit boundaries;
-     * their child IR remains owned by the parent graph. */
-    if (child_func->stage >= XI_STAGE_REPPED || child_func->stage == XI_STAGE_SEMANTIC_PLANNED) {
-        if (!xi_emit_attach_ir(child_proto, child_func)) {
-            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-            return;
-        }
-        uint16_t cidx = (uint16_t) v->aux_int;
-        if (cidx < ctx->func->nchildren && ctx->func->children[cidx] == child_func) {
-            ctx->func->children[cidx] = NULL;
-        }
-    }
+    /* IR ownership is transferred only after the complete proto tree exists.
+     * xi_emit_attach_ir then validates and commits the whole tree atomically,
+     * so a SemanticPlanned graph can make one whole-tree Repped transition. */
 
     int proto_idx = xr_vm_proto_add_proto(ctx->proto, child_proto);
     emit_inst(ctx, CREATE_ABx(OP_CLOSURE, dst, proto_idx));
@@ -1548,12 +1538,6 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
         }
         xr_vm_proto_add_upvalue(child_proto, uv_idx, 0, 0, 0, cap->source,
                                 (uint8_t) xi_capture_cross_execution_action(cap), cap->type);
-    }
-
-    if (child->stage >= XI_STAGE_REPPED || child->stage == XI_STAGE_SEMANTIC_PLANNED) {
-        if (!xi_emit_attach_ir(child_proto, child))
-            return -1;
-        ctx->func->children[child_func_idx] = NULL;
     }
 
     return xr_vm_proto_add_proto(ctx->proto, child_proto);

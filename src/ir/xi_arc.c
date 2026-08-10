@@ -483,8 +483,15 @@ static bool arc_value_is_borrow_alias(const XiValue *value, uint8_t depth) {
     switch (value->op) {
         case XI_BOX:
         case XI_UNBOX:
-        case XI_CONVERT:
             return value->nargs == 1 &&
+                   arc_value_is_borrow_alias(value->args[0], (uint8_t) (depth + 1));
+        case XI_CONVERT:
+            /* Only a reference-to-reference representation adapter preserves
+             * a borrowed owner.  Semantic conversions such as int -> string
+             * allocate a fresh value even when their scalar source came from
+             * a borrowed PLACE_LOAD. */
+            return value->nargs == 1 && xi_own_type_is_rc(value->type) &&
+                   xi_own_type_is_rc(value->args[0] ? value->args[0]->type : NULL) &&
                    arc_value_is_borrow_alias(value->args[0], (uint8_t) (depth + 1));
         default:
             return false;
@@ -1012,7 +1019,15 @@ XR_FUNC uint8_t xi_arc_value_result_ownership(const XiFunc *function, const XiVa
 }
 
 XR_FUNC int16_t xi_arc_value_alias_operand(const XiFunc *function, const XiValue *value) {
-    if (!function || !value || !op_is_call(value->op))
+    if (!function || !value)
+        return -1;
+    if (value->nargs == 1 && value->op == XI_CHECKTYPE)
+        return 0;
+    if (value->nargs == 1 &&
+        (value->op == XI_BOX || value->op == XI_UNBOX || value->op == XI_CONVERT) &&
+        arc_value_is_borrow_alias(value, 0))
+        return 0;
+    if (!op_is_call(value->op))
         return -1;
     if (xi_call_result_aliases_receiver(value) && value->nargs >= 1)
         return 0;
@@ -1533,11 +1548,18 @@ static void arc_seed_uses(XiFunc *f, XiValue **tracked, uint32_t ntracked, ArcLi
                 }
             }
         }
-        for (uint32_t t = 0; t < ntracked; t++) {
-            if (blk->control == tracked[t]) {
-                li->has_use = 1;
-                li->use_at_end = 1;
-                break;
+        /* Only RETURN and IF read block->control as a terminator operand.
+         * UNREACHABLE blocks retain the thrown value there as diagnostic
+         * metadata, but XI_THROW already performs the sole consuming use.
+         * Counting both forces a spurious retain before rethrow and leaks one
+         * reference on every exceptional exit. */
+        if (blk->kind == XI_BLOCK_RETURN || blk->kind == XI_BLOCK_IF) {
+            for (uint32_t t = 0; t < ntracked; t++) {
+                if (blk->control == tracked[t]) {
+                    li->has_use = 1;
+                    li->use_at_end = 1;
+                    break;
+                }
             }
         }
     }
@@ -1551,6 +1573,21 @@ static bool arc_edge_forwards_target_to_phi(const XiBlock *pred, const XiBlock *
     if (!pred || !succ || !target)
         return false;
     for (const XiPhi *phi = succ->phis; phi; phi = phi->next) {
+        for (uint16_t a = 0; a < phi->value.nargs && a < succ->npreds; a++) {
+            if (succ->preds[a] == pred && phi->value.args[a] == target)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool arc_edge_forwards_target_to_self_phi(const XiBlock *pred, const XiBlock *succ,
+                                                 const XiValue *target) {
+    if (!pred || !succ || !target)
+        return false;
+    for (const XiPhi *phi = succ->phis; phi; phi = phi->next) {
+        if (&phi->value != target)
+            continue;
         for (uint16_t a = 0; a < phi->value.nargs && a < succ->npreds; a++) {
             if (succ->preds[a] == pred && phi->value.args[a] == target)
                 return true;
@@ -1589,9 +1626,8 @@ static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *
              * owner must still be dropped on sibling edges which neither
              * transfer nor keep it live. */
             bool forwarded_to_phi = false;
-            for (int s = 0; s < 2 && !forwarded_to_phi; s++) {
+            for (int s = 0; s < 2 && !forwarded_to_phi; s++)
                 forwarded_to_phi = arc_edge_forwards_target_to_phi(blk, blk->succs[s], target);
-            }
             if (li->moved_on_phi_edge) {
                 for (int s = 0; s < 2; s++) {
                     XiBlock *succ = blk->succs[s];
@@ -1609,10 +1645,53 @@ static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *
                 }
                 continue;
             }
-            /* A phi transfer should have been classified as an edge MOVE when
-             * live_out is false. Fail closed rather than release before it. */
-            if (forwarded_to_phi)
+            if (forwarded_to_phi) {
+                /* A frame-pinned owner is duplicated for a distinct PHI: the
+                 * PHI receives the retained reference while the old frame
+                 * owner dies on that exact edge. A self-PHI loop edge instead
+                 * carries the same frame owner into its next iteration and
+                 * must not release it. Keep the disposition edge-specific so
+                 * a branch can contain both shapes without over-releasing the
+                 * self edge or leaking the distinct transfer. */
+                for (int s = 0; s < 2; s++) {
+                    XiBlock *succ = blk->succs[s];
+                    if (!succ || arc_edge_forwards_target_to_self_phi(blk, succ, target))
+                        continue;
+                    if (succ->npreds == 1) {
+                        insert_drop_at_head(f, succ, target);
+                    } else {
+                        XiBlock *mid = arc_split_edge(f, blk, succ);
+                        if (mid) {
+                            insert_drop_after(f, mid, NULL, target);
+                            split_any = true;
+                        }
+                    }
+                }
                 continue;
+            }
+            if (li->use_at_end && blk->control == target && blk->kind != XI_BLOCK_RETURN) {
+                /* A branch control is read by the terminator after every
+                 * ordinary value in the block.  Inserting a death-drop after
+                 * the last ordinary value therefore releases it before that
+                 * final read.  End the owner on each outgoing edge instead;
+                 * this also prevents if-conversion from hoisting the drop in
+                 * front of the SELECT that replaces the branch. */
+                for (int s = 0; s < 2; s++) {
+                    XiBlock *succ = blk->succs[s];
+                    if (!succ)
+                        continue;
+                    if (succ->npreds == 1) {
+                        insert_drop_at_head(f, succ, target);
+                    } else {
+                        XiBlock *mid = arc_split_edge(f, blk, succ);
+                        if (mid) {
+                            insert_drop_after(f, mid, NULL, target);
+                            split_any = true;
+                        }
+                    }
+                }
+                continue;
+            }
             /* Death in block: release after the last use (after the def
              * itself when the block never uses the value). */
             XiValue *anchor;
@@ -2246,6 +2325,21 @@ static void arc_precompute_sigs(XiFunc *f) {
         for (uint32_t i = 0; i < vec.count; i++)
             vec.items[i]->arc_return_ownership = arc_return_unknown();
     }
+
+    /* Every source-defined function must publish an exact reference-return
+     * contract before caller ARC placement.  A return whose provenance could
+     * not be proven as a stable borrow uses the owned ABI: borrowed and
+     * unknown values are retained at the return edge, while an existing local
+     * owner is moved.  Leaving that contract UNKNOWN makes both sides retain
+     * defensively; after inlining the two increments survive under one SSA
+     * name and leak. */
+    for (uint32_t i = 0; i < vec.count; i++) {
+        XiFunc *fn = vec.items[i];
+        if (!fn || fn->is_extern || !xi_own_type_is_rc(fn->return_type) ||
+            fn->arc_return_ownership.complete)
+            continue;
+        fn->arc_return_ownership = arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
+    }
     xr_free(vec.items);
 }
 
@@ -2801,6 +2895,20 @@ static int count_real_uses(const XiFunc *f, const XiValue *v) {
     return count;
 }
 
+static bool function_has_target_op(const XiFunc *f, uint16_t op, const XiValue *target) {
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *value = blk->values[i];
+            if (value && value->op == op && value->nargs >= 1 && value->args[0] == target)
+                return true;
+        }
+    }
+    return false;
+}
+
 /* Pattern 2 is a move optimization, so it is valid only for values whose
  * consumer may receive the existing owned reference. Borrowed values own no
  * reference in this function; their retain before a consuming use is the
@@ -2944,7 +3052,8 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live
         if (real_uses <= 1 && !arc_retain_reuses_owner_across_iterations(loops, blk, target) &&
             value_has_consuming_use(f, target) &&
             arc_elim_can_remove_single_consumer_retain(f, target) &&
-            !arc_value_is_coro_frame_pinned(f, coro_live, target)) {
+            !arc_value_is_coro_frame_pinned(f, coro_live, target) &&
+            !function_has_target_op(f, XI_RELEASE, target)) {
             /* The value flows to at most one real consumer; the retain is
              * dead weight only when that use consumes ownership. A sole
              * borrowing use can intentionally sit between RETAIN and RELEASE
@@ -2958,6 +3067,11 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live
              * iteration with a dangling reference. A value produced inside
              * the same innermost loop has a fresh owner each iteration and is
              * still eligible for forwarding.
+             *
+             * An explicit release of the same owner also excludes the
+             * rewrite: the retain then materializes a distinct owner for a
+             * PHI or other consuming alias, and removing only the retain
+             * makes the explicit drop over-release the incoming reference.
              *
              * A coroutine frame member is excluded for the same reason in a
              * different shape: its retain is not a forwarding copy but the

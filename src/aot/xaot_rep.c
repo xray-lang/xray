@@ -62,6 +62,8 @@ static XaotValueRep value_rep_make(const XrType *type, XaotRep rep) {
 }
 
 XR_FUNC XaotValueRep xaot_value_rep_for_type(const XrType *type) {
+    if (type && !type->is_nullable && XR_TYPE_IS_C_FUNCTION(type))
+        return value_rep_make(type, XAOT_REP_RAWPTR);
     return value_rep_make(type, xaot_abi_rep_for_type(type));
 }
 
@@ -248,6 +250,11 @@ XR_FUNC XaotValueRep xaot_value_rep_for_value(const XiValue *value) {
     if ((value->type && XR_TYPE_IS_UNIT(value->type)) ||
         xi_generated_op_result_kind(value->op) == XI_GEN_RESULT_VOID)
         return value_rep_make(value->type, XAOT_REP_VOID);
+    /* CFn has one AOT representation everywhere: a bare native entry pointer.
+     * Opcode-local legacy reps (notably CHECKTYPE's tagged result) must not
+     * override the semantic type at the frozen backend-plan boundary. */
+    if (value->type && !value->type->is_nullable && XR_TYPE_IS_C_FUNCTION(value->type))
+        return value_rep_make(value->type, XAOT_REP_RAWPTR);
     if (value->op == XI_LOCAL_ADDR)
         return call_bound_raw_view_rep(value);
     if (value->type && value->type->kind == XR_KIND_SLICE)

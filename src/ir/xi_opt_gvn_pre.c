@@ -80,6 +80,54 @@ static bool gvn_is_load(uint16_t op) {
     return xi_op_value_numbering_reads_mem(op);
 }
 
+static void gvn_rewrite_to_copy(XiValue *value, XiValue *source, int64_t copy_kind) {
+    XR_DCHECK(value != NULL && source != NULL, "gvn_rewrite_to_copy: NULL value");
+    value->op = XI_COPY;
+    value->args[0] = source;
+    value->nargs = 1;
+    value->flags = xi_op_default_effects(XI_COPY);
+    value->transfer_mode = XR_TRANSFER_SHARE;
+    value->aux_kind = XI_AUX_KIND_NONE;
+    value->mem_group = XI_MEM_NONE;
+    value->lowering_flags = 0;
+    value->param_mode = XR_PARAM_READ;
+    value->aux_int = copy_kind;
+    value->aux = NULL;
+    memset(&value->conversion, 0, sizeof(value->conversion));
+    value->call_plan = NULL;
+    memset(&value->view_evidence, 0, sizeof(value->view_evidence));
+    memset(&value->call_return_ownership, 0, sizeof(value->call_return_ownership));
+    value->call_return_ownership.param_index = -1;
+    value->xg_callsite_id = 0;
+    value->xa_intrinsic_id = 0;
+    value->xg_method_id = 0;
+    value->xg_interface_dispatch_slot = UINT32_MAX;
+    value->xg_json_codec_id = 0;
+    value->xg_object_access_id = 0;
+    value->xg_object_merge_id = 0;
+    value->xg_key_access_id = 0;
+    value->xg_map_shape_id = 0;
+    value->xg_class_field_id = 0;
+    value->xg_sequence_access_id = 0;
+    value->xg_capacity_op_id = 0;
+    value->xg_bulk_op_id = 0;
+    value->xg_encoding_op_id = 0;
+    value->move_evidence_id = 0;
+    value->move_source_root_id = 0;
+    value->move_source_symbol_id = 0;
+    value->move_storage_plan_id = 0;
+    value->move_transfer_plan_id = 0;
+    value->move_evidence_bits = 0;
+    value->move_source_capability = 0;
+    value->move_target_capability = 0;
+    value->move_source_domain = 0;
+    value->move_target_domain = 0;
+    value->enum_metadata_owner = NULL;
+    value->json_decode_target_type = NULL;
+    value->enum_metadata_field = 0;
+    value->enum_metadata_kind = 0;
+}
+
 /* ========== Value Number Table ========== */
 
 #define GVN_MIN_TABLE 64
@@ -343,6 +391,13 @@ typedef struct {
 static bool pre_is_candidate(const XiValue *v) {
     if (!gvn_is_eligible(v))
         return false;
+    /* PRE materializes new definitions and PHIs after ARC insertion.  An
+     * ownership-root result would therefore require a freshly proven lifetime
+     * frontier, which this pass does not construct.  Full redundancy remains
+     * available for explicit vector values below, where the replacement is an
+     * explicit value clone rather than an ownership-identity copy. */
+    if (xi_own_type_is_rc(v->type))
+        return false;
     if (gvn_is_load(v->op))
         return false;
     if (v->flags & XI_FLAG_MEM_ANY)
@@ -479,14 +534,7 @@ static bool pre_try_value(XiFunc *f, VnTable *vn, XiBlock *blk, XiValue *v, GvnP
         phi->value.args[p] = edge_vals[p];
 
     /* Replace the join expression with a copy of the phi. */
-    v->op = XI_COPY;
-    v->args[0] = &phi->value;
-    v->nargs = 1;
-    v->flags = xi_op_default_effects(XI_COPY);
-    v->aux_int = 0;
-    v->aux = NULL;
-    v->aux_kind = XI_AUX_KIND_NONE;
-    v->mem_group = XI_MEM_NONE;
+    gvn_rewrite_to_copy(v, &phi->value, XI_COPY_KIND_IDENTITY);
     vn_set(vn, v, target_vn);
 
     stats->n_inserted += inserted;
@@ -624,13 +672,9 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
                 if (!v->args)
                     continue;
             }
-            v->op = XI_COPY;
-            v->args[0] = leader;
-            v->nargs = 1;
-            v->aux_int = XI_COPY_KIND_IDENTITY;
-            v->aux = NULL;
-            v->aux_kind = XI_AUX_KIND_NONE;
-            v->mem_group = XI_MEM_NONE;
+            gvn_rewrite_to_copy(v, leader,
+                                xi_own_type_is_rc(v->type) ? XI_COPY_KIND_VALUE_CLONE
+                                                           : XI_COPY_KIND_IDENTITY);
             n_replaced++;
         }
     }

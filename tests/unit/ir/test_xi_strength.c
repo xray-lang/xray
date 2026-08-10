@@ -16,6 +16,7 @@
 #include <string.h>
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_erased = {.kind = XR_KIND_UNKNOWN, .id = 2, .frozen = true};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -63,6 +64,19 @@ TEST(add_zero_lhs) {
 
     xi_opt_strength_reduce(f);
     assert(add->op == XI_COPY && add->args[0] == x);
+    xi_func_free(f);
+}
+
+TEST(erased_add_zero_preserves_owned_result) {
+    XiFunc *f = make_func("test", &stub_erased);
+    XiBlock *blk = f->entry;
+    XiValue *x = xi_param(f, blk, 0, &stub_erased);
+    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *add = xi_binary(f, blk, XI_ADD, &stub_erased, x, c0);
+
+    XiPassChange change = xi_opt_strength_reduce(f);
+    assert(!change.values_changed);
+    assert(add->op == XI_ADD && add->args[0] == x && add->args[1] == c0);
     xi_func_free(f);
 }
 
@@ -244,6 +258,7 @@ int main(void) {
 
     run_add_zero_rhs();
     run_add_zero_lhs();
+    run_erased_add_zero_preserves_owned_result();
     run_sub_self_is_zero();
     run_mul_zero_rhs_is_zero();
     run_mul_zero_lhs_is_zero();

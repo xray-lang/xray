@@ -391,6 +391,21 @@ static int count_ops(const XiFunc *f, uint16_t op) {
     return count;
 }
 
+static int count_target_ops(const XiFunc *f, uint16_t op, const XiValue *target) {
+    int count = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *value = blk->values[i];
+            if (value && value->op == op && value->nargs >= 1 && value->args[0] == target)
+                count++;
+        }
+    }
+    return count;
+}
+
 static void test_arc_no_escape_still_released_without_stack_rewrite(void) {
     /* A NO_ESCAPE heap allocation is still a HEAP allocation until something
      * actually rewrites it. escape + ARC alone (the VM's pipeline: see
@@ -757,6 +772,48 @@ static void test_arc_phi_move_drops_owner_on_sibling_edge(void) {
     XiArcVerifyReport rep;
     ASSERT_EQ(xi_arc_verify(f, &rep), true,
               "edge-specific phi transfer and sibling drop must verify");
+    xi_func_free(f);
+}
+
+static void test_arc_frame_pinned_distinct_phi_releases_old_owner(void) {
+    XiFunc *f = make_func("arc_frame_pinned_distinct_phi", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *selected = xi_block_new(f);
+    XiBlock *fallback = xi_block_new(f);
+    XiBlock *join = xi_block_new(f);
+
+    XiValue *source = xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+    (void) xi_value_new(f, entry, XI_YIELD, &t_unit, 0);
+    XiValue *condition = xi_const_bool(f, entry, true, &t_bool);
+    xi_block_set_if(entry, condition, selected, fallback);
+
+    xi_block_set_jump(selected, join);
+    XiValue *alternate = xi_value_new(f, fallback, XI_ARRAY_NEW, &t_array, 0);
+    alternate->escape = XI_ESC_ARG;
+    xi_block_set_jump(fallback, join);
+
+    XiPhi *merged = xi_phi_new(f, join, &t_array, join->npreds);
+    merged->value.args[0] = source;
+    merged->value.args[1] = alternate;
+    XiValue *consume = xi_value_new(f, join, XI_SET_SHARED, &t_any, 1);
+    consume->args[0] = &merged->value;
+    consume->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_return(join, xi_const_int(f, join, 0, &t_int));
+    selected->sealed = true;
+    fallback->sealed = true;
+    join->sealed = true;
+
+    xi_arc_insert(f);
+    xi_arc_elim(f);
+
+    ASSERT_EQ(count_target_ops(f, XI_RETAIN, source), 1,
+              "distinct phi retain must survive ARC elimination for the new phi owner");
+    ASSERT_EQ(count_target_ops(f, XI_RELEASE, source), 2,
+              "old frame owner must drop on both the distinct-phi and sibling edges");
+    XiArcVerifyReport rep;
+    ASSERT_EQ(xi_arc_verify(f, &rep), true,
+              "frame-pinned distinct-phi transfer must satisfy ARC verification");
     xi_func_free(f);
 }
 
@@ -1492,6 +1549,32 @@ static void test_stack_alloc_escaping_stays(void) {
     xi_func_free(f);
 }
 
+static void test_arc_rethrow_moves_caught_owner_once(void) {
+    XiFunc *f = make_func("rethrow_moves_caught_owner", &t_int);
+    XiBlock *b0 = f->entry;
+    XiValue *caught = xi_value_new(f, b0, XI_CATCH, &t_any, 0);
+    XiValue *rethrow = xi_value_new(f, b0, XI_THROW, &t_unit, 1);
+    rethrow->args[0] = caught;
+    rethrow->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    b0->kind = XI_BLOCK_UNREACHABLE;
+    b0->control = caught;
+
+    xi_arc_insert(f);
+
+    int retain_count = 0;
+    int release_count = 0;
+    for (uint32_t i = 0; i < b0->nvalues; i++) {
+        XiValue *value = b0->values[i];
+        if (value && value->nargs == 1 && value->args[0] == caught) {
+            retain_count += value->op == XI_RETAIN;
+            release_count += value->op == XI_RELEASE;
+        }
+    }
+    ASSERT_EQ(retain_count, 0, "rethrow must move the caught owner without a retain");
+    ASSERT_EQ(release_count, 0, "rethrow consumer owns the caught value's final disposition");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1517,6 +1600,7 @@ int main(void) {
     test_arc_owner_forward_tracks_repeated_consumes();
     test_arc_tracks_owner_forward_through_phi();
     test_arc_phi_move_drops_owner_on_sibling_edge();
+    test_arc_frame_pinned_distinct_phi_releases_old_owner();
     test_arc_call_result_forward_retains_across_sibling_borrow();
     test_arc_call_result_retain_before_same_block_phi_consume();
     test_arc_orders_adjacent_retain_before_release();
@@ -1540,6 +1624,7 @@ int main(void) {
     test_stack_alloc_closure_through_read_copy();
     test_stack_alloc_direct_closure_in_resumable_function_stays_heap();
     test_stack_alloc_escaping_stays();
+    test_arc_rethrow_moves_caught_owner_once();
 
     printf("\n=== test_xi_escape: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;

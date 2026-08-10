@@ -591,6 +591,44 @@ TEST(array_and_map_literal) {
                           "array_and_map_literal"));
 }
 
+TEST(select_receive_binding_preserves_element_type) {
+    const char *source = "fn consume(ch: Channel<int>) {\n"
+                         "    select {\n"
+                         "        value from ch -> { var exact: int = value }\n"
+                         "    }\n"
+                         "}\n";
+    AstNode *program = xr_parse(g_session, source);
+    if (!program || program->type != AST_PROGRAM || program->as.program.count != 1)
+        abort();
+    XaAnalyzer *analyzer = xa_analyzer_new(g_session);
+    if (!analyzer)
+        abort();
+    xa_analyzer_analyze(analyzer, "select_binding_test.xr", program);
+
+    AstNode *function = program->as.program.statements[0];
+    if (!function || function->type != AST_FUNCTION_DECL)
+        abort();
+    AstNode *body = function->as.function_decl.body;
+    if (!body || body->type != AST_BLOCK || body->as.block.count != 1)
+        abort();
+    AstNode *select = body->as.block.statements[0];
+    if (!select || select->type != AST_SELECT_STMT || select->as.select_stmt.case_count != 1)
+        abort();
+    AstNode *case_node = select->as.select_stmt.cases[0];
+    if (!case_node || case_node->type != AST_SELECT_CASE)
+        abort();
+    uint32_t binding_id = case_node->as.select_case.var_symbol_id;
+    XaSymbol *binding = xa_scope_lookup_by_id(analyzer->global_scope, binding_id);
+    XaSymbolLinks *links = binding ? xa_analyzer_get_links(analyzer, binding) : NULL;
+    if (!links || !links->type || links->type->kind != XR_KIND_INT) {
+        fprintf(stderr, "select receive binding did not preserve Channel<int> element type\n");
+        abort();
+    }
+
+    xa_analyzer_free(analyzer);
+    xr_program_destroy(program);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -615,6 +653,7 @@ int main(void) {
     run_class_method_this();
     run_try_catch_binding();
     run_array_and_map_literal();
+    run_select_receive_binding_preserves_element_type();
 
     teardown();
 

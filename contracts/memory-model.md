@@ -65,6 +65,12 @@ either side has to be argued rather than drift.
   `xi.cell.set` operations in the `upval` group. Weak field promotion/storage
   are explicit weak-field operations; neither meaning may be recovered from a
   lowering flag or backend register state.
+- M11a: GVN/PRE may not synthesize a new ownership root: an expression whose
+  result needs ARC is not a PRE candidate. Full redundancy may replace an
+  explicit-RC value only with `XI_COPY(VALUE_CLONE)`, after atomically clearing
+  every opcode-specific plan/evidence field; the clone is the new owner and
+  the eliminated expression contributes no stale effect, intrinsic, or alias
+  identity.
 
 ## Reference counting
 
@@ -100,7 +106,7 @@ anchor-sha256: xisa/xi/ops.def 6916b12552475cbb147e30be9c3245ddc28d67867dbeb6f08
 anchor-sha256: src/ir/xi_tbaa.c 304e00919092f45875e76dc0d9e958bc706ecc8cf0f0b89ed80d51392276f6f4
 anchor-sha256: src/ir/xi_tbaa.h 3f361c253c2a6073043d9a8c77f100cf3b51bc16077fbff3f6f3a381d634c027
 anchor-sha256: src/ir/xi_opt_licm.c 89d57c968d90e08f7fed4df46308630d00c92df47ab1c5a059f9e4a7bc750ee0
-anchor-sha256: src/ir/xi_opt_gvn_pre.c e4f6796893286f7c848816609e62d86b3ecc7e79636602614727c086d38c55ec
+anchor-sha256: src/ir/xi_opt_gvn_pre.c 35341bd173418b58966b12aca071d08ace81287e4156418605e76be67eabf04c
 anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a5b384a2b2174598be7
 anchor-sha256: src/coro/xchannel.c 4ac92d6b0cc987bc5c2809812b6728843231f0c6887f0dde2595f532e474a943
 anchor-sha256: src/coro/xtask.c 0557f8dbbfa4e8fdd1cecbd4724107aa83db4e629d53bb7ff3d0a67497ec1e20

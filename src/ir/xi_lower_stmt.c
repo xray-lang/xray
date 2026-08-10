@@ -1128,7 +1128,12 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                 if (chan) {
                     if (!lower_select_block_channel_add(l, &lists, chan, case_node->line))
                         return;
-                    struct XrType *val_type = l->type_any;
+                    struct XrType *val_type =
+                        stmt_channel_element_type(xi_lower_node_type(l, sc->channel));
+                    if (!val_type)
+                        val_type = stmt_channel_element_type(chan->type);
+                    if (!val_type)
+                        val_type = l->type_any;
                     XiValue *recv =
                         xi_value_new(l->func, l->cur_block, XI_CHAN_TRY_RECV, val_type, 1);
                     if (recv) {

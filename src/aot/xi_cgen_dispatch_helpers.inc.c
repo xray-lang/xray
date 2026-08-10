@@ -6638,6 +6638,25 @@ static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     int32_t tid = (int32_t) (v->aux_int >> 1);
     bool allow_null = (v->aux_int & 1) != 0;
 
+    /* A source function-to-CFn coercion is proved statically and the target
+     * representation is a native function pointer.  The VM-side source value
+     * is a tagged closure, so routing this boundary through the generic
+     * TAGGED->RAWPTR conversion would reinterpret the closure payload as an
+     * integer address.  Materialize the verified native entry directly and
+     * fail closed when the source is not a supported static CFn value. */
+    if (v->type && XR_TYPE_IS_C_FUNCTION(v->type)) {
+        if (out_rep != XR_REP_RAWPTR) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: CFn CHECKTYPE v%u does not use native pointer storage\n",
+                    v->id);
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        emit_cfn_value_rawptr(ctx, out, f, v->type, arg);
+        return;
+    }
+
     if (cg_value_plan_is_span_aggregate(ctx, v)) {
         if (cg_value_plan_is_span_aggregate(ctx, arg)) {
             emit_vref(out, arg);

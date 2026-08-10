@@ -89,6 +89,14 @@ static void test_use_policy(void) {
     ASSERT_EQ(xi_own_use_is_consuming(XI_CALL, 1), true, "CALL consumes ordinary args");
     ASSERT_EQ(xi_own_use_is_consuming(XI_OP_COUNT, 0), true, "unknown op conservatively consumes");
 
+    XiValue select_args_storage[3] = {{.type = &t_any}, {.type = &t_any}, {.type = &t_any}};
+    XiValue *select_args[] = {&select_args_storage[0], &select_args_storage[1],
+                              &select_args_storage[2]};
+    XiValue select = {.op = XI_SELECT, .type = &t_any, .nargs = 3, .args = select_args};
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&select, 0), false, "SELECT borrows its condition");
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&select, 1), true, "SELECT transfers its true arm");
+    ASSERT_EQ(xi_own_value_arg_is_consuming(&select, 2), true, "SELECT transfers its false arm");
+
     XiValue string_value = {.op = XI_PARAM, .type = &t_str};
     XiValue *string_byte_slice_args[] = {&string_value};
     XiValue string_byte_slice = {

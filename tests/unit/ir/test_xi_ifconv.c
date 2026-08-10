@@ -14,6 +14,7 @@
 #include <string.h>
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_string = {.kind = XR_KIND_STRING, .id = 2, .frozen = true};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -212,6 +213,24 @@ TEST(rejects_side_effect_arm) {
     xi_func_free(f);
 }
 
+/* ========== Test: ownership-root PHI is rejected after ARC ========== */
+
+TEST(rejects_owning_phi) {
+    XiFunc *f = make_func();
+    XiBlock *entry, *then_b, *else_b, *join;
+    XiPhi *phi;
+    XiValue *cond, *tv, *ev;
+    build_diamond(f, &entry, &then_b, &else_b, &join, &phi, &cond, &tv, &ev);
+    phi->value.type = &stub_string;
+
+    XiPassChange chg = xi_opt_ifconv(f);
+    ASSERT(!chg.cfg_changed);
+    ASSERT(entry->kind == XI_BLOCK_IF);
+    ASSERT(join->phis == phi);
+
+    xi_func_free(f);
+}
+
 /* ========== Test: zero-effect op without speculation policy is rejected ========== */
 
 TEST(rejects_unspeculatable_zero_effect_arm) {
@@ -286,6 +305,7 @@ int main(void) {
     run_basic_diamond();
     run_rejects_oversized_arm();
     run_rejects_side_effect_arm();
+    run_rejects_owning_phi();
     run_rejects_unspeculatable_zero_effect_arm();
     run_rejects_three_pred_join();
     run_no_phi_no_change();

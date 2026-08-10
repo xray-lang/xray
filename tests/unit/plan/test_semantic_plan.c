@@ -28,6 +28,12 @@ static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 4, .frozen = true};
+static XrType stub_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 5,
+    .frozen = true,
+    .container = {.element_type = &stub_int},
+};
 
 static XrSemanticPlan *build_probe_plan(void) {
     XiFunc *function = xi_func_new("artifact_probe", &stub_int);
@@ -63,10 +69,6 @@ static XrSemanticPlan *build_owned_parameter_plan(void) {
     function->params = (XiValue **) xr_malloc(sizeof(*function->params));
     REQUIRE(function->params != NULL);
     function->params[0] = parameter;
-    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_string, 1);
-    REQUIRE(release != NULL);
-    release->args[0] = parameter;
-    release->flags = XI_FLAG_SIDE_EFFECT;
     XiValue *result = xi_const_int(function, entry, 7, &stub_int);
     REQUIRE(result != NULL);
     xi_block_set_return(entry, result);
@@ -141,6 +143,40 @@ static XrSemanticPlan *build_error_edge_plan(void) {
     bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "error-edge plan build failed: %s\n", error);
+    REQUIRE(built);
+    xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticPlan *build_phi_dominance_plan(void) {
+    XiFunc *function = xi_func_new("phi_dominance_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    XiBlock *left = xi_block_new(function);
+    XiBlock *right = xi_block_new(function);
+    XiBlock *merge = xi_block_new(function);
+    REQUIRE(entry != NULL && left != NULL && right != NULL && merge != NULL);
+
+    XiValue *condition = xi_const_bool(function, entry, true, &stub_bool);
+    REQUIRE(condition != NULL);
+    xi_block_set_if(entry, condition, left, right);
+    XiValue *left_value = xi_const_int(function, left, 10, &stub_int);
+    XiValue *right_value = xi_const_int(function, right, 20, &stub_int);
+    REQUIRE(left_value != NULL && right_value != NULL);
+    xi_block_set_jump(left, merge);
+    xi_block_set_jump(right, merge);
+    XiPhi *phi = xi_phi_new(function, merge, &stub_int, merge->npreds);
+    REQUIRE(phi != NULL && merge->npreds == 2);
+    phi->value.args[0] = left_value;
+    phi->value.args[1] = right_value;
+    xi_block_set_return(merge, &phi->value);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "PHI dominance plan build failed: %s\n", error);
     REQUIRE(built);
     xi_func_free(function);
     return plan;
@@ -342,7 +378,7 @@ static void expect_verify_failure(XrSemanticPlan *plan, const char *code) {
 
 static void test_semantic_and_ownership_mutations(void) {
     XrSemanticPlan *plan = build_owned_parameter_plan();
-    REQUIRE(plan->operation_count >= 3);
+    REQUIRE(plan->operation_count >= 2);
     REQUIRE(plan->ownership != NULL);
     REQUIRE(plan->ownership->event_count >= 2);
     REQUIRE(plan->ownership->edge_state_count >= 1);
@@ -409,6 +445,82 @@ static void test_semantic_and_ownership_mutations(void) {
     panic->operation = XR_SEMANTIC_INDEX_NONE;
     expect_verify_failure(plan, "XR_SEM_0010");
     xr_semantic_plan_free(plan);
+
+    plan = build_phi_dominance_plan();
+    XrSemanticOperationRecord *phi = NULL;
+    uint32_t left_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t right_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        XrSemanticOperationRecord *operation = &plan->operations[i];
+        if (operation->opcode == XI_PHI)
+            phi = operation;
+        else if (operation->block == 1)
+            left_value = operation->result_value;
+        else if (operation->block == 2)
+            right_value = operation->result_value;
+    }
+    REQUIRE(phi != NULL && left_value != XR_SEMANTIC_INDEX_NONE &&
+            right_value != XR_SEMANTIC_INDEX_NONE && phi->operand_count == 2);
+    uint32_t saved_operand = plan->operands[phi->operand_begin];
+    REQUIRE(saved_operand == left_value);
+    plan->operands[phi->operand_begin] = right_value;
+    expect_verify_failure(plan, "XR_SEM_0016");
+    plan->operands[phi->operand_begin] = saved_operand;
+    char graph_error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(plan, graph_error, sizeof(graph_error)));
+    xr_semantic_plan_free(plan);
+}
+
+static void test_stack_extent_is_logical_and_fail_closed(void) {
+    XiFunc *function = xi_func_new("stack_extent_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *stack = xi_value_new(function, entry, XI_STACK_ALLOC, &stub_array, 0);
+    REQUIRE(stack != NULL);
+    stack->aux_int = XI_ARRAY_NEW;
+    XiValue *result = xi_const_int(function, entry, 1, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "stack extent plan build failed: %s\n", error);
+    REQUIRE(built);
+    const XrOwnershipCertificate *ownership = xr_semantic_plan_ownership(plan);
+    REQUIRE(ownership != NULL);
+    bool saw_alloc = false;
+    bool saw_destroy = false;
+    bool saw_physical_release = false;
+    for (uint32_t i = 0; i < xr_ownership_certificate_event_count(ownership); i++) {
+        const XrOwnershipEventRecord *event = xr_ownership_certificate_event(ownership, i);
+        REQUIRE(event != NULL);
+        saw_alloc |= event->kind == XR_OWN_EVENT_ALLOC && event->logical_delta == 1;
+        saw_destroy |= event->kind == XR_OWN_EVENT_DESTROY && event->logical_delta == -1;
+        saw_physical_release |= event->kind == XR_OWN_EVENT_RELEASE;
+    }
+    REQUIRE(saw_alloc && saw_destroy && !saw_physical_release);
+    xr_semantic_plan_free(plan);
+    xi_func_free(function);
+
+    function = xi_func_new("stack_extent_escape_probe", &stub_array);
+    REQUIRE(function != NULL);
+    entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    stack = xi_value_new(function, entry, XI_STACK_ALLOC, &stub_array, 0);
+    REQUIRE(stack != NULL);
+    stack->aux_int = XI_ARRAY_NEW;
+    xi_block_set_return(entry, stack);
+    function->stage = XI_STAGE_OPTIMIZED;
+    plan = NULL;
+    memset(error, 0, sizeof(error));
+    REQUIRE(!xr_semantic_plan_build(function, &plan, error, sizeof(error)));
+    REQUIRE(plan == NULL);
+    REQUIRE(strncmp(error, "XR_OWN_3001", strlen("XR_OWN_3001")) == 0);
+    xi_func_free(function);
 }
 
 int main(void) {
@@ -419,6 +531,7 @@ int main(void) {
     test_explicit_error_edge();
     test_xsm_fail_closed_mutations();
     test_semantic_and_ownership_mutations();
+    test_stack_extent_is_logical_and_fail_closed();
     printf("SemanticPlan/XSM tests passed\n");
     return 0;
 }

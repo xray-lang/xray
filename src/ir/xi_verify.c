@@ -412,8 +412,9 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
      * transitive capture from a grandparent scope reaches this path. */
     for (uint16_t a = 0; a < v->nargs; a++) {
         if (!v->args[a]) {
-            if (v->op == XI_CLOSURE_NEW ||
-                (v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW))
+            if (f->stage < XI_STAGE_CLOSED &&
+                (v->op == XI_CLOSURE_NEW ||
+                 (v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)))
                 continue;
             verr(ctx, "func '%s': value v%u in b%u arg[%u] is NULL", f->name, v->id, blk->id, a);
             return;
@@ -1836,15 +1837,12 @@ static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
                 }
                 for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
                     const XiCapture *cap = &child->captures[ci];
-                    if (!cap->needs_cell)
-                        continue;
                     if (cap->source != XI_CAPTURE_SRC_REG || !v->args[ci]) {
-                        verr(ctx,
-                             "func '%s': v%u mutable capture %u is not an explicit register cell",
+                        verr(ctx, "func '%s': v%u capture %u is not an explicit register value",
                              f->name, v->id, ci);
                         return;
                     }
-                    if (f->stage == XI_STAGE_CLOSED &&
+                    if (cap->needs_cell && f->stage == XI_STAGE_CLOSED &&
                         (!closed_is_cell_reference(f, v->args[ci]) || cap->value != v->args[ci])) {
                         verr(ctx,
                              "func '%s': v%u mutable capture %u does not point at its cell XiValue",

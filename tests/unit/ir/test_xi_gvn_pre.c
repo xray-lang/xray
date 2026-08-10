@@ -1805,6 +1805,8 @@ TEST(gvn_uses_complete_semantic_identity) {
 
     assert(even_duplicate->op == XI_COPY && even_duplicate->args[0] == even &&
            "an exact semantic duplicate should still be eliminated");
+    assert(xi_copy_is_value_clone(even_duplicate) &&
+           "owned vector redundancy must preserve an independent value token");
     assert(odd->op == XI_VEC_WIDEN_MUL &&
            "even and odd lane selection must not share a value number");
     assert(different_intrinsic->op == XI_VEC_WIDEN_MUL &&

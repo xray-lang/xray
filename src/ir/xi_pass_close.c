@@ -204,10 +204,9 @@ static XiLocalCellBinding *find_local_cell_binding(XiLocalCellBinding *bindings,
 }
 
 static bool value_is_existing_cell_ref(const XiFunc *f, const XiValue *value) {
-    return value &&
-           (value->op == XI_CELL_NEW ||
-            (value->op == XI_LOAD_UPVAL && value->aux_int >= 0 && value->aux_int < f->ncaptures &&
-             f->captures[value->aux_int].needs_cell));
+    return value && (value->op == XI_CELL_NEW ||
+                     (value->op == XI_LOAD_UPVAL && value->aux_int >= 0 &&
+                      value->aux_int < f->ncaptures && f->captures[value->aux_int].needs_cell));
 }
 
 static XiLocalCellBinding *collect_local_cell_bindings(XiFunc *f, uint32_t *out_count) {
@@ -284,8 +283,7 @@ static void materialize_local_cells(XiFunc *f, XiLocalCellBinding *bindings,
             XiValue *v = blk->values[vi];
             if (!v || v->op == XI_CELL_NEW || v->op == XI_CELL_GET || v->op == XI_CELL_SET)
                 continue;
-            XiLocalCellBinding *binding =
-                find_local_cell_binding(bindings, binding_count, v);
+            XiLocalCellBinding *binding = find_local_cell_binding(bindings, binding_count, v);
             if (!binding || !binding->cell || binding->cell == v)
                 continue;
             XiValue *set = xi_value_insert_after(f, blk, v, XI_CELL_SET, unit_type, 2);
@@ -329,25 +327,28 @@ static void rewrite_cell_uses(XiFunc *f, XiLocalCellBinding *bindings, uint32_t 
                 uint16_t inserted = 0;
                 for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
                     XiCapture *cap = &child->captures[ci];
-                    if (!cap->needs_cell)
-                        continue;
                     if (cap->source == XI_CAPTURE_SRC_REG) {
-                        XiLocalCellBinding *binding =
-                            find_local_cell_binding(bindings, binding_count, cap->value);
-                        XR_CHECK(binding && binding->cell,
-                                 "xi_pass_close: mutable local capture has no cell value");
-                        v->args[ci] = binding->cell;
-                        cap->value = v->args[ci];
+                        if (cap->needs_cell) {
+                            XiLocalCellBinding *binding =
+                                find_local_cell_binding(bindings, binding_count, cap->value);
+                            XR_CHECK(binding && binding->cell,
+                                     "xi_pass_close: mutable local capture has no cell value");
+                            v->args[ci] = binding->cell;
+                            cap->value = binding->cell;
+                        }
                         continue;
                     }
-
-                    XR_CHECK(cap->source == XI_CAPTURE_SRC_UPVAL && cap->index < f->ncaptures &&
-                                 f->captures[cap->index].needs_cell,
-                             "xi_pass_close: mutable transitive capture has no cell upvalue");
+                    XR_CHECK(cap->source == XI_CAPTURE_SRC_UPVAL && cap->index < f->ncaptures,
+                             "xi_pass_close: transitive capture has no parent upvalue");
+                    if (cap->needs_cell) {
+                        XR_CHECK(f->captures[cap->index].needs_cell,
+                                 "xi_pass_close: mutable transitive capture has no cell upvalue");
+                    }
+                    struct XrType *forward_type = cap->needs_cell ? cell_type : cap->type;
                     XiValue *raw =
-                        xi_value_insert_before(f, blk, v, XI_LOAD_UPVAL, cell_type, 0);
+                        xi_value_insert_before(f, blk, v, XI_LOAD_UPVAL, forward_type, 0);
                     XR_CHECK(raw != NULL,
-                             "xi_pass_close: out of memory forwarding transitive capture cell");
+                             "xi_pass_close: out of memory forwarding transitive capture");
                     raw->aux_int = cap->index;
                     raw->line = v->line;
                     v->args[ci] = raw;
@@ -387,7 +388,8 @@ static void rewrite_cell_uses(XiFunc *f, XiLocalCellBinding *bindings, uint32_t 
                 v->op = XI_CELL_SET;
                 v->nargs = 2;
                 v->args = (XiValue **) xi_func_arena_alloc(f, 2u * sizeof(XiValue *));
-                XR_CHECK(v->args != NULL, "xi_pass_close: out of memory allocating cell write args");
+                XR_CHECK(v->args != NULL,
+                         "xi_pass_close: out of memory allocating cell write args");
                 v->args[0] = raw;
                 v->args[1] = stored;
                 v->aux_int = 0;

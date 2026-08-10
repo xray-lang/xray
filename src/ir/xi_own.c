@@ -350,6 +350,10 @@ XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
 XR_FUNC bool xi_own_value_arg_is_consuming(const XiValue *user, uint16_t arg_idx) {
     if (!user)
         return true;
+    /* SELECT transfers exactly one value arm to its result.  The condition is
+     * only inspected and must never consume an ownership token. */
+    if (user->op == XI_SELECT && arg_idx == 0)
+        return false;
     if ((user->op == XI_GO || user->op == XI_THREAD_SPAWN) && arg_idx > 0)
         return xi_go_arg_transfer_mode(user, (uint16_t) (arg_idx - 1)) == XR_TRANSFER_MOVE;
     if ((user->op == XI_CALL || user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT) &&

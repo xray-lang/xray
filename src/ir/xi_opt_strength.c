@@ -26,8 +26,8 @@ static bool is_one(const XiValue *v) {
     return is_const_int(v) && v->aux_int == 1;
 }
 
-static bool is_numeric(const XiValue *v) {
-    return v && v->type && v->type->kind != XR_KIND_STRING;
+static bool is_exact_int(const XiValue *v) {
+    return v && v->type && v->type->kind == XR_KIND_INT && !v->type->is_nullable;
 }
 
 /* Rewrite `v` as a COPY of `src`. Caller ensures src is dominating. */
@@ -79,8 +79,8 @@ static bool reduce_sub(XiValue *v, XiValue *lhs, XiValue *rhs) {
 }
 
 static bool reduce_mul(XiValue *v, XiValue *lhs, XiValue *rhs) {
-    /* x * 0 / 0 * x: numeric only — string * 0 must produce "" via runtime. */
-    if ((is_zero(rhs) || is_zero(lhs)) && is_numeric(lhs) && is_numeric(rhs)) {
+    /* x * 0 / 0 * x: exact integers only; string * 0 produces "". */
+    if ((is_zero(rhs) || is_zero(lhs)) && is_exact_int(lhs) && is_exact_int(rhs)) {
         rewrite_to_zero(v);
         return true;
     }
@@ -154,7 +154,13 @@ static bool reduce_shift(XiValue *v, XiValue *lhs, XiValue *rhs) {
 /* Dispatch a single value through the reducer for its op.
  * Returns true if `v` was rewritten. */
 static bool reduce_value(XiValue *v) {
-    if (v->nargs != 2)
+    /* ARC runs before semantic optimization. Rewriting a reference-capable
+     * owned result such as dynamic ADD into a borrowed COPY would leave the
+     * already-inserted drop for both names and can double-release the source.
+     * This pass is specified for integer identities, so reject erased,
+     * nullable, and otherwise reference-capable values instead of changing
+     * their ownership contract after ARC insertion. */
+    if (v->nargs != 2 || !is_exact_int(v))
         return false;
     XiValue *lhs = v->args[0];
     XiValue *rhs = v->args[1];

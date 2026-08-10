@@ -9,6 +9,7 @@
  */
 
 #include "xr_semantic_verify.h"
+#include "xr_semantic_graph.h"
 #include "xr_semantic_plan_internal.h"
 #include "../ownership/xr_ownership_check.h"
 #include "../../base/xmalloc.h"
@@ -238,8 +239,49 @@ static bool verify_edges(const XrSemanticPlan *plan, uint8_t *block_edge_mask,
     return true;
 }
 
-static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_mask, char *error,
-                              size_t error_size) {
+static bool verify_ssa_use(const XrSemanticPlan *plan, const XrSemanticGraph *graph,
+                           const uint32_t *definitions, uint32_t operation_index,
+                           uint16_t operand_index, char *error, size_t error_size) {
+    const XrSemanticOperationRecord *operation = &plan->operations[operation_index];
+    uint32_t value = plan->operands[operation->operand_begin + operand_index];
+    uint32_t definition_index = definitions[value];
+    const XrSemanticOperationRecord *definition = &plan->operations[definition_index];
+    if (definition->function != operation->function)
+        return report(error, error_size, "XR_SEM_0016", "SSA use crosses a function boundary");
+
+    if (operation->opcode == XI_PHI) {
+        const XrSemanticBlockRecord *block = &plan->blocks[operation->block];
+        if (operation->operand_count != block->predecessor_count)
+            return report(error, error_size, "XR_SEM_0016",
+                          "PHI operands do not match SSA predecessor slots");
+        uint32_t predecessor = plan->predecessors[block->predecessor_begin + operand_index];
+        if (!xr_semantic_graph_is_reachable(graph, operation->block))
+            return true;
+        /* Braun construction and panic lowering may retain an SSA-only
+         * predecessor slot after the executable edge becomes unreachable.
+         * Such an input can never be selected at runtime, so dominance is
+         * defined only for reachable incoming edges.  The slot and operand
+         * remain frozen for exact SSA reconstruction. */
+        if (!xr_semantic_graph_is_reachable(graph, predecessor))
+            return true;
+        if (!xr_semantic_graph_dominates(graph, definition->block, predecessor))
+            return report(error, error_size, "XR_SEM_0016",
+                          "PHI input definition does not dominate its incoming edge");
+        return true;
+    }
+
+    if (!xr_semantic_graph_is_reachable(graph, operation->block))
+        return true;
+    if (!xr_semantic_graph_dominates(graph, definition->block, operation->block))
+        return report(error, error_size, "XR_SEM_0016", "SSA definition does not dominate its use");
+    if (definition->block == operation->block && definition_index >= operation_index)
+        return report(error, error_size, "XR_SEM_0016",
+                      "same-block SSA definition does not precede its use");
+    return true;
+}
+
+static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_mask,
+                              const XrSemanticGraph *graph, char *error, size_t error_size) {
     uint32_t value_count = 0;
     for (uint32_t f = 0; f < plan->function_count; f++) {
         uint64_t end = (uint64_t) plan->functions[f].value_begin + plan->functions[f].value_count;
@@ -248,9 +290,11 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
         if (end > value_count)
             value_count = (uint32_t) end;
     }
-    uint8_t *defined = (uint8_t *) xr_calloc(value_count, sizeof(*defined));
-    if (value_count && !defined)
+    uint32_t *definitions = (uint32_t *) xr_malloc((size_t) value_count * sizeof(*definitions));
+    if (value_count && !definitions)
         return report(error, error_size, "XR_EXEC_5003", "SSA verifier budget exhausted");
+    for (uint32_t value = 0; value < value_count; value++)
+        definitions[value] = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &plan->operations[i];
         const XrSemanticFunctionRecord *function = operation->function < plan->function_count
@@ -283,22 +327,22 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
                          plan->metadata_count) ||
             (operation->constant != XR_SEMANTIC_INDEX_NONE &&
              operation->constant >= plan->constant_count)) {
-            xr_free(defined);
+            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0015", "operation record is invalid");
         }
-        if (defined[operation->result_value]) {
-            xr_free(defined);
+        if (definitions[operation->result_value] != XR_SEMANTIC_INDEX_NONE) {
+            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0015", "SSA value is defined twice");
         }
-        defined[operation->result_value] = 1;
+        definitions[operation->result_value] = i;
         if (operation->allocation_key &&
             !verify_id(operation->allocation_key, operation->allocation_id)) {
-            xr_free(defined);
+            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0002", "allocation identity is invalid");
         }
         if (operation->opcode == XI_TRY && (operation->evidence[7] >= plan->block_count ||
                                             (edge_mask[i] & XR_SEM_OPERATION_EDGE_PANIC) == 0)) {
-            xr_free(defined);
+            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0010",
                           "try operation is missing its explicit panic edge");
         }
@@ -306,19 +350,48 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
             plan->blocks[operation->block].control_value == operation->result_value &&
             plan->blocks[operation->block].successors[0] != XR_SEMANTIC_INDEX_NONE &&
             (edge_mask[i] & XR_SEM_OPERATION_EDGE_ERROR) == 0) {
-            xr_free(defined);
+            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0010",
                           "error check is missing its explicit error edge");
         }
     }
-    for (uint32_t i = 0; i < plan->operand_count; i++) {
-        if (plan->operands[i] >= value_count || !defined[plan->operands[i]] ||
-            plan->operand_ownership_actions[i] > XR_SEM_OPERAND_CONSUME) {
-            xr_free(defined);
-            return report(error, error_size, "XR_SEM_0015", "operand has no SSA definition");
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        const XrSemanticOperationRecord *operation = &plan->operations[i];
+        for (uint16_t operand = 0; operand < operation->operand_count; operand++) {
+            uint32_t cursor = operation->operand_begin + operand;
+            if (plan->operands[cursor] >= value_count ||
+                definitions[plan->operands[cursor]] == XR_SEMANTIC_INDEX_NONE ||
+                plan->operand_ownership_actions[cursor] > XR_SEM_OPERAND_CONSUME) {
+                xr_free(definitions);
+                return report(error, error_size, "XR_SEM_0015", "operand has no SSA definition");
+            }
+            if (!verify_ssa_use(plan, graph, definitions, i, operand, error, error_size)) {
+                xr_free(definitions);
+                return false;
+            }
         }
     }
-    xr_free(defined);
+    for (uint32_t b = 0; b < plan->block_count; b++) {
+        const XrSemanticBlockRecord *block = &plan->blocks[b];
+        if (block->control_value == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        if (block->control_value >= value_count ||
+            definitions[block->control_value] == XR_SEMANTIC_INDEX_NONE) {
+            xr_free(definitions);
+            return report(error, error_size, "XR_SEM_0016",
+                          "block control value has no SSA definition");
+        }
+        const XrSemanticOperationRecord *definition =
+            &plan->operations[definitions[block->control_value]];
+        if (definition->function != block->function ||
+            (xr_semantic_graph_is_reachable(graph, b) &&
+             !xr_semantic_graph_dominates(graph, definition->block, b))) {
+            xr_free(definitions);
+            return report(error, error_size, "XR_SEM_0016",
+                          "block control definition does not dominate the terminator");
+        }
+    }
+    xr_free(definitions);
     return true;
 }
 
@@ -363,14 +436,17 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
         xr_free(operation_edge_mask);
         return report(error, error_size, "XR_EXEC_5003", "edge verifier budget exhausted");
     }
+    XrSemanticGraph graph = {0};
     bool verified = xr_semantic_plan_verify_identity_set(plan, error, error_size) &&
                     verify_types(plan, error, error_size) &&
                     verify_functions(plan, error, error_size) &&
                     verify_edges(plan, block_edge_mask, operation_edge_mask, error, error_size) &&
                     verify_blocks(plan, block_edge_mask, error, error_size) &&
-                    verify_operations(plan, operation_edge_mask, error, error_size) &&
+                    xr_semantic_graph_build(plan, &graph, error, error_size) &&
+                    verify_operations(plan, operation_edge_mask, &graph, error, error_size) &&
                     verify_constants(plan, error, error_size) &&
                     xr_ownership_certificate_check(plan, error, error_size);
+    xr_semantic_graph_dispose(&graph);
     xr_free(block_edge_mask);
     xr_free(operation_edge_mask);
     if (!verified)

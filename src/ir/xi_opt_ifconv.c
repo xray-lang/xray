@@ -26,6 +26,7 @@
 #include "xi_opt_ifconv.h"
 #include "../base/xchecks.h"
 #include "xi_effect.h"
+#include "xi_own.h"
 
 #define IFCONV_MAX_INS 2
 #define IFCONV_MAX_PHIS 2
@@ -69,6 +70,11 @@ static bool ifconv_ok_join(const XiBlock *blk) {
         return false;
     uint32_t n = 0;
     for (const XiPhi *p = blk->phis; p; p = p->next) {
+        /* If-conversion runs after ARC. Replacing a path-sensitive owning PHI
+         * with SELECT would require rebuilding transfer/disposition evidence
+         * for the two arms, which this local CFG pass cannot prove. */
+        if (xi_own_type_is_rc(p->value.type))
+            return false;
         n++;
         if (n > IFCONV_MAX_PHIS)
             return false;
@@ -164,6 +170,10 @@ XR_FUNC XiPassChange xi_opt_ifconv(XiFunc *f) {
 
             /* === Conversion === */
             XiValue *cond = ifblk->control;
+            /* A reference-capable condition may have edge-specific releases.
+             * Flattening the branch would invalidate that lifetime frontier. */
+            if (xi_own_type_is_rc(cond ? cond->type : NULL))
+                continue;
 
             /* Move then-block values to ifblk. */
             for (uint32_t i = 0; i < then_blk->nvalues; i++) {

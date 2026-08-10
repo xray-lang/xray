@@ -1183,7 +1183,13 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         }
         if (xaot_value_storage_rep(slot_rep) == XR_REP_TAGGED &&
             cg_value_rep_is_adt_aggregate(arg_plan->rep)) {
-            fprintf(out, "xrt_enum_aggregate_box(");
+            /* READ keeps the caller's inline payload owners alive after the
+             * call.  The temporary tagged box therefore needs independent
+             * owners for every payload lane.  Move/ref boundaries have their
+             * own transfer contract and keep the zero-retain box path. */
+            fprintf(out, xi_func_param_passing_mode(target, arg_index) == XR_PARAM_READ
+                             ? "xrt_enum_aggregate_box_from_borrowed("
+                             : "xrt_enum_aggregate_box(");
             emit_adt_aggregate_as_base_expr(ctx, out, arg);
             fprintf(out, ")");
             return;

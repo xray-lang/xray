@@ -5594,6 +5594,15 @@ static void xa_constrain_weak_target_exec_local(XaInferContext *ctx, AstNode *st
                                &loc);
 }
 
+static XrType *xa_select_receive_element_type(XaAnalyzer *analyzer, XrType *channel_type) {
+    if (!channel_type)
+        return NULL;
+    channel_type = xr_type_non_nullable(analyzer ? analyzer->isolate : NULL, channel_type);
+    if (channel_type && channel_type->kind == XR_KIND_CHANNEL)
+        return channel_type->container.element_type;
+    return NULL;
+}
+
 void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return;
@@ -7086,8 +7095,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         }
         case AST_SELECT_CASE: {
             SelectCaseNode *sc = &node->as.select_case;
-            if (sc->channel)
-                xa_visit_infer_expr(ctx, sc->channel);
+            XrType *channel_type = sc->channel ? xa_visit_infer_expr(ctx, sc->channel) : NULL;
             if (sc->value) {
                 xa_visit_infer_expr(ctx, sc->value);
                 /* Send arms cross a coroutine boundary just like ch.send / go,
@@ -7104,6 +7112,19 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             /* Recv cases have a block scope from pass 1 for the variable. */
             if (sc->var_name && !sc->is_send && !sc->is_default) {
                 xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
+                XaSymbol *binding =
+                    sc->var_symbol_id
+                        ? xa_scope_lookup_by_id(ctx->analyzer->global_scope, sc->var_symbol_id)
+                        : xa_scope_lookup_local(ctx->analyzer->current_scope, sc->var_name);
+                XaSymbolLinks *binding_links =
+                    binding ? xa_analyzer_get_links(ctx->analyzer, binding) : NULL;
+                XrType *element_type = xa_select_receive_element_type(ctx->analyzer, channel_type);
+                if (binding_links) {
+                    binding_links->type =
+                        element_type ? element_type : xr_type_new_unknown(ctx->analyzer->isolate);
+                    binding_links->binding_use = XA_BINDING_LIVE;
+                    binding_links->is_definitely_assigned = true;
+                }
                 if (sc->body) {
                     if (sc->body->type == AST_BLOCK) {
                         BlockNode *blk = &sc->body->as.block;

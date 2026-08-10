@@ -695,6 +695,27 @@ static bool build_function_records(XrSemanticBuildContext *ctx) {
         record->capability_mask = source->requires_unsafe_at_call ? 1u : 0u;
         record->return_parameter = source->arc_return_ownership.param_index;
         record->return_provenance = source->arc_return_ownership.kind;
+        if (source->return_type && source->return_type->kind == XR_KIND_SLICE) {
+            record->return_parameter = -1;
+            record->return_provenance = XR_SEM_RETURN_NONE;
+            if (source->view_return_complete) {
+                if (source->view_return_source == XR_VIEW_RETURN_PARAM) {
+                    record->return_provenance = XR_SEM_RETURN_BORROWED_PARAM;
+                    record->return_parameter = source->view_return_param;
+                } else if (source->view_return_source == XR_VIEW_RETURN_RECEIVER) {
+                    record->return_provenance = XR_SEM_RETURN_BORROWED_PARAM;
+                    record->return_parameter = 0;
+                } else if (source->view_return_source == XR_VIEW_RETURN_STATIC) {
+                    record->return_provenance = XR_SEM_RETURN_BORROWED_STATIC;
+                }
+            }
+        } else if (source->entry_type == 2 && xi_own_type_is_rc(source->return_type)) {
+            /* A generator body completes with a control-only RET: its owned
+             * Iterator handle is materialized by GEN_CALL in the caller, not
+             * by a value-returning terminator in this resumable body. */
+            record->return_provenance = XR_SEM_RETURN_OWNED;
+            record->return_parameter = -1;
+        }
         record->flags =
             (uint8_t) ((source->error_effect_nothrow ? 1u : 0u) |
                        (source->contains_unsafe_op ? 2u : 0u) |

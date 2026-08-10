@@ -401,9 +401,10 @@ static double compare_protos(const XrProto *legacy, const XrProto *xi, bool verb
 typedef struct {
     const char *source;
     const char *label;
-    bool expect_xi_success; /* true = Xi pipeline must succeed */
-    double min_similarity;  /* minimum opcode histogram similarity */
-    bool check_exec;        /* compare VM execution output */
+    bool expect_xi_success;      /* true = Xi pipeline must succeed */
+    double min_similarity;       /* minimum opcode histogram similarity */
+    bool check_exec;             /* compare VM execution output */
+    bool expect_runtime_failure; /* both compiled programs must fail execution */
 } CompareSpec;
 
 static void run_compare(CompareSpec spec) {
@@ -472,12 +473,19 @@ static void run_compare(CompareSpec spec) {
                   out_l, out_x);
         }
 
-        /* Equal output is only meaningful if the code actually ran: two
-         * failed runs both produce "".  Require success from both paths, so
-         * a regression that stops execution entirely cannot masquerade as a
-         * match. */
-        CHECK(rc_l == 0, "legacy execution failed (rc=%d) for '%s'", rc_l, spec.label);
-        CHECK(rc_x == 0, "xi execution failed (rc=%d) for '%s'", rc_x, spec.label);
+        CHECK(rc_l == rc_x, "execution status differs for '%s': legacy=%d xi=%d", spec.label, rc_l,
+              rc_x);
+        if (spec.expect_runtime_failure) {
+            CHECK(rc_l != 0, "legacy execution unexpectedly succeeded for '%s'", spec.label);
+            CHECK(rc_x != 0, "xi execution unexpectedly succeeded for '%s'", spec.label);
+        } else {
+            /* Equal output is only meaningful if the code actually ran: two
+             * failed runs both produce "".  Require success from both paths,
+             * so a regression that stops execution cannot masquerade as a
+             * match. */
+            CHECK(rc_l == 0, "legacy execution failed (rc=%d) for '%s'", rc_l, spec.label);
+            CHECK(rc_x == 0, "xi execution failed (rc=%d) for '%s'", rc_x, spec.label);
+        }
 
         if (out_l)
             xr_free(out_l);
@@ -1358,6 +1366,7 @@ TEST(cmp_as_unsafe_mismatch) {
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
+        .expect_runtime_failure = true,
     });
 }
 

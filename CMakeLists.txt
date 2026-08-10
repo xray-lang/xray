@@ -1173,6 +1173,7 @@ add_library(xray_aot_core STATIC
     ${AOT_TIME_SRC}
     src/base/xarena.c
     src/base/xlog.c
+    src/base/xsha256.c
     src/base/xunicode.c
     stdlib/compress/compress.c
     stdlib/crypto/crypto.c

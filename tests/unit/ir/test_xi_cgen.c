@@ -1661,6 +1661,9 @@ TEST(cgen_trivial_span_value_clone_shares_immutable_c_local) {
     TEST_REQUIRE(source != NULL, "manual C-span-clone source allocated");
     ir->params[0] = source;
     set_single_param_ownership_contract(ir, XI_OWN_BORROWED, XI_RETURN_OWNERSHIP_BORROWED_PARAM, 0);
+    ir->view_return_source = XR_VIEW_RETURN_PARAM;
+    ir->view_return_param = 0;
+    ir->view_return_complete = true;
     XiValue *clone = xi_value_new(ir, entry, XI_COPY, &span_type, 1);
     TEST_REQUIRE(clone != NULL, "manual C-span-clone boundary allocated");
     clone->args[0] = source;
@@ -1703,6 +1706,9 @@ TEST(cgen_rep_identical_span_box_shares_immutable_c_local) {
     TEST_REQUIRE(source != NULL, "manual C-span-box source allocated");
     ir->params[0] = source;
     set_single_param_ownership_contract(ir, XI_OWN_BORROWED, XI_RETURN_OWNERSHIP_BORROWED_PARAM, 0);
+    ir->view_return_source = XR_VIEW_RETURN_PARAM;
+    ir->view_return_param = 0;
+    ir->view_return_complete = true;
     XiValue *box = xi_value_new(ir, entry, XI_BOX, &span_type, 1);
     TEST_REQUIRE(box != NULL, "manual C-span-box boundary allocated");
     box->args[0] = source;
@@ -5040,6 +5046,35 @@ TEST(cgen_zero_byte_rawptr_copy_accepts_null_without_memcpy) {
                  "zero-byte raw-pointer copy must not establish a false non-null proof");
 
     printf("  Generated zero-byte raw pointer copy %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_cfn_local_coercion_uses_native_function_address) {
+    const char *src = "type Op = CFn<fn(int) -> int>\n"
+                      "fn inc(value: int) -> int { return value + 1 }\n"
+                      "fn run() -> int {\n"
+                      "    var operation: Op = inc\n"
+                      "    return operation(41)\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "CFn local coercion IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "CFn local coercion C generation failed");
+    TEST_REQUIRE(!had_error, "verified top-level function must materialize as a CFn");
+    const char *run = find_static_function_definition(code, "static int64_t test_run_");
+    TEST_REQUIRE(run != NULL, "run definition should exist");
+    const char *run_end = next_static_after(run);
+    TEST_REQUIRE(run_end != NULL, "run function body should be bounded");
+    TEST_REQUIRE(contains_between(run, run_end, "(void *)test_inc_") &&
+                     !contains_between(run, run_end, "XR_TO_INT("),
+                 "CFn coercion must use the verified native entry, not a tagged integer cast");
+
+    printf("  Generated native CFn local coercion in %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -12189,6 +12224,7 @@ int main(void) {
     run_cgen_boxed_adapter_converts_byte_slice_arg();
     run_cgen_array_data_ptr_unchecked_uses_raw_pointer_path();
     run_cgen_zero_byte_rawptr_copy_accepts_null_without_memcpy();
+    run_cgen_cfn_local_coercion_uses_native_function_address();
     run_cgen_rawptr_copy_forwarded_constant_has_no_release_local();
     run_cgen_rawptr_parallel_for_each_capture_is_rejected();
     run_cgen_span_index_get_elides_dead_err_check();

@@ -7832,6 +7832,9 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
     cfg.global_evidence = &ev;
     cfg.global_evidence_module_id = 1;
     XiPipelineResult res = xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
+    if (res.status != XI_PIPE_OK)
+        fprintf(stderr, "  pipeline failed at stage %d: %s\n", (int) res.error.stage,
+                res.error.detail);
     ASSERT_EQ_UINT(res.status, XI_PIPE_OK);
     ASSERT_NOT_NULL(res.ir);
 

@@ -116,12 +116,25 @@ static bool check_owner_dataflow(const XrSemanticPlan *plan, uint32_t owner_inde
             if (!terminal) {
                 const XrOwnershipEdgeStateRecord *next =
                     find_block_state(certificate, owner_index, successor);
-                if (!next ||
-                    ((next->flags & 1u) == 0 && next->entry_balance != edge->exit_balance)) {
+                /* Ownership dataflow begins at the owner's defining
+                 * operation, not at function entry.  CFG edges that precede
+                 * that definition are intentionally marked out-of-scope and
+                 * do not constrain the definition block's seeded state. */
+                if ((edge->flags & 1u) == 0 &&
+                    (!next ||
+                     ((next->flags & 1u) == 0 && next->entry_balance != edge->exit_balance))) {
+                    if (error && error_size) {
+                        snprintf(error, error_size,
+                                 "XR_OWN_3001: certificate balance is inconsistent across a "
+                                 "CFG edge (owner=%s from=%u to=%u exit=%d next-entry=%d "
+                                 "next-flags=%u)",
+                                 owner->canonical_key, block_index, successor, edge->exit_balance,
+                                 next ? next->entry_balance : INT32_MIN,
+                                 next ? next->flags : UINT32_MAX);
+                    }
                     xr_free(delta);
                     xr_free(edge_delta);
-                    return report(error, error_size, "XR_OWN_3001",
-                                  "certificate balance is inconsistent across a CFG edge");
+                    return false;
                 }
             }
             if (terminal)

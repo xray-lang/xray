@@ -14,7 +14,10 @@ For every RC-managed value, including registered identity aliases:
   transfer, and move-out; double release is invalid. An `XI_COPY` tagged
   `VALUE_CLONE` realizes source-level value semantics by allocating independent
   storage, so its result is a fresh +1 owner rather than the borrowed alias
-  described by the ordinary `XI_COPY` opcode contract.
+  described by the ordinary `XI_COPY` opcode contract. A branch-control owner
+  dies on its outgoing edges, after the terminator read. A distinct PHI owner
+  transfer retains the PHI owner and drops the predecessor owner on that exact
+  edge; a self-PHI loop edge carries the same owner and must not drop it.
 - C2a: every reference-capable function return publishes a complete ownership
   summary. `OWNED` is a fresh +1 result and may be consumed or dropped by the
   caller; `BORROWED_PARAM(n)` aliases parameter `n`; `BORROWED_STATIC` has
@@ -23,18 +26,24 @@ For every RC-managed value, including registered identity aliases:
   explicitly. Missing, mixed, dynamic, or foreign evidence is `UNKNOWN`: ARC
   may preserve such a result conservatively, but must never release it as an
   owned result merely because its runtime representation is reference-counted.
+  A source-defined function may not publish `UNKNOWN`: when no stable borrowed
+  provenance is proved, its ABI is exactly `OWNED` and the return edge retains
+  a borrowed value or moves an existing local owner.
 - C2b: a payload-enum constructor returns a fresh owned inline aggregate. The
   aggregate has no object header, but every active payload lane is an ordinary
   owner: aggregate retain/release visits those lanes, a consuming box transfers
   them into the box, a borrowed box retains them, and consuming unbox clears the
-  wrapper lanes before releasing the wrapper. A statically resolved local call
+  wrapper lanes before releasing the wrapper. In particular, an aggregate sent
+  through a tagged `READ` call slot uses a borrowed box with independent payload
+  owners; transfer slots use the consuming box. A statically resolved local call
   reads the callee's fixed-point return summary before falling back to callsite
   metadata; a backend may not discard aggregate ARC operations merely because
   the aggregate itself is unboxed.
 - C3: a borrowed view's owner remains live through every view use, including
-  uses flowing through PHI edges. BOX, UNBOX, and CONVERT representation
-  adapters preserve borrow provenance; an implicit error edge must never
-  release such an adapter as a callee-owned cleanup.
+  uses flowing through PHI edges. BOX, UNBOX, CHECKTYPE, and reference-to-
+  reference CONVERT representation adapters preserve borrow provenance;
+  semantic conversions that allocate a new reference do not. An implicit
+  error edge must never release a borrowed adapter as a callee-owned cleanup.
 - C4: release placement is dominated by the owner definition; a non-dominating
   join cannot assign one predecessor's owner to all paths.
 - C5: ownership metadata is explicit and consistent, and SSA users reference
@@ -65,6 +74,11 @@ For every RC-managed value, including registered identity aliases:
   bodies only after root finalization is complete. Each stage is idempotent,
   allocation is closed as soon as fixed finalization begins, and no combined
   finalize-and-free shortcut may reintroduce order-dependent destruction.
+- C8: a stack allocation is a function-frame extent, not an RC heap owner.
+  Its logical ownership path starts at `ALLOC`, ends exactly once in `DESTROY`
+  on every reachable function terminal, and cannot return, publish, move, or
+  cross its function. A stack closure's physical capture cleanup is normalized
+  to that same logical `DESTROY`; it is not an ordinary heap `RELEASE`.
 
 The independent verifier must not reuse ARC closure/alias implementation logic.
 It runs after ARC insertion in every build and reports violations as ICEs with
@@ -90,9 +104,9 @@ this one. A contract names what it proves; this line names what it does not.
 ## Digest anchors
 
 anchor-sha256: src/ir/xi_arc_verify.c 58d5224154e99dc36587c68c1a3250dbdb11b17e817ece51ce127bdcdd24af63
-anchor-sha256: src/ir/xi_arc.c b3dde3afc427308cdc80dcb93feb371acbf76edecee91acef27b75fd3f0e77c8
-anchor-sha256: src/ir/xi_lower_expr.c 60ab5b5afe44118d4d66b7c582373c24dc21ced1745d1b509eeadae0313210f1
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c e1272f72c47bd66a1abd8aff438939460f10afb0ddb4a237a8a2f3e00fb9137b
+anchor-sha256: src/ir/xi_arc.c 6690aab32d0f9cb5bcdc6c061e1cf9f1e57562df55143b144f166594a4f68ad5
+anchor-sha256: src/ir/xi_lower_expr.c 1a9f13223c163c76acd543568ff707e93c72b285c76d0d79ed2abb36747bbeaa
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c c8045438d6550b85d724b59c92cad150b1130a3bcb821088ac8ef6ce470d52d2
 anchor-sha256: src/aot/xrt_coll.h 203ac6f1a46b9c96a6d1f942e7aaa6a1cbf16c43e5f6ff7d1c7f39e4bbb3b6a5
 anchor-sha256: src/runtime/mem/xfixed_heap.c 46e45573a71b10592f12f5215f374c6dd896b4cf0e16bfc85f04b586a33fb5c3
 anchor-sha256: src/runtime/core/xr_runtime_core.c cbd57898ab2362dcd2c3676b0762037c93d85b3a9ddcff5bd8ce18f8a78c5b82

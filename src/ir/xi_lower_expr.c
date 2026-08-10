@@ -584,7 +584,11 @@ XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, AstNode *node, XiValue 
                                              struct XrType *target_type) {
     if (!l || !l->func || !node || !val || !target_type || XR_TYPE_IS_UNKNOWN(target_type))
         return val;
-    if (val->type && xr_type_assignable(target_type, val->type))
+    /* Unknown is a tagged dynamic value, not proof that the payload already
+     * has the target representation.  It is assignment-compatible for source
+     * recovery, but every dynamic-to-concrete boundary still needs an
+     * explicit CHECKTYPE before SemanticPlan is frozen. */
+    if (val->type && !XR_TYPE_IS_UNKNOWN(val->type) && xr_type_assignable(target_type, val->type))
         return xi_lower_apply_primitive_type_view(l, node, val, target_type);
 
     /* `T?` reaching a `T` target is a narrowing the analyzer already proved:
@@ -1390,7 +1394,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
             xi_lower_apply_numeric_conversion_witness(l, node->as.assignment.value, val, var_type);
         if (!val)
             return NULL;
-        val = xi_lower_apply_primitive_type_view(l, node, val, var_type);
+        val = xi_lower_checktype_for_type(l, node, val, var_type);
         /* When assigning from a different variable (e.g. x = i), insert
          * an explicit copy so the target gets its own SSA value.  Without
          * this, braun_write stores the source variable's value directly,
@@ -1445,7 +1449,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
         val = xi_lower_apply_numeric_conversion_witness(l, node->as.assignment.value, val, tb.type);
         if (!val)
             return NULL;
-        val = xi_lower_apply_primitive_type_view(l, node, val, tb.type);
+        val = xi_lower_checktype_for_type(l, node, val, tb.type);
         xi_lower_emit_top_store(l, tb, val);
         return val;
     }
@@ -1466,7 +1470,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
                 }
             }
         }
-        val = xi_lower_apply_primitive_type_view(l, node, val, upval_type);
+        val = xi_lower_checktype_for_type(l, node, val, upval_type);
         /* Mark the capture as needing cell indirection because the child
          * mutates the captured variable. xi_pass_close uses this to materialize
          * CELL_NEW in the parent and CELL_GET/CELL_SET in the child. */

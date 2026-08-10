@@ -95,6 +95,13 @@ static bool type_is_ownership_root(const XrSemanticPlan *plan, uint32_t type_ind
            (plan->types[type_index].flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0;
 }
 
+static bool operation_has_ownership_result(const XrSemanticPlan *plan,
+                                           const XrSemanticOperationRecord *operation) {
+    return operation && type_is_ownership_root(plan, operation->result_type) &&
+           xi_generated_op_result_kind(operation->opcode) != XI_GEN_RESULT_VOID &&
+           operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_NONE;
+}
+
 static uint32_t aliased_call_operand(const XrSemanticPlan *plan,
                                      const XrSemanticOperationRecord *operation) {
     if (operation->result_alias_operand < 0 ||
@@ -106,11 +113,10 @@ static uint32_t aliased_call_operand(const XrSemanticPlan *plan,
 static bool build_equivalence_classes(XrOwnershipBuildContext *ctx) {
     for (uint32_t i = 0; i < ctx->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &ctx->plan->operations[i];
-        if (!type_is_ownership_root(ctx->plan, operation->result_type) ||
+        if (!operation_has_ownership_result(ctx->plan, operation) ||
             operation->result_value >= ctx->value_count)
             continue;
-        if ((operation->ownership_use == XI_GEN_OWN_USE_PASS && operation->opcode != XI_PHI) ||
-            operation->opcode == XI_RETAIN || operation->opcode == XI_RELEASE) {
+        if (operation->ownership_use == XI_GEN_OWN_USE_PASS && operation->opcode != XI_PHI) {
             for (uint16_t a = 0; a < operation->operand_count; a++) {
                 uint32_t operand = ctx->plan->operands[operation->operand_begin + a];
                 if (operand < ctx->value_count)
@@ -242,7 +248,7 @@ static uint32_t owner_for_value(XrOwnershipBuildContext *ctx, uint32_t value) {
 static bool ensure_owners(XrOwnershipBuildContext *ctx) {
     for (uint32_t i = 0; i < ctx->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &ctx->plan->operations[i];
-        if (!type_is_ownership_root(ctx->plan, operation->result_type) ||
+        if (!operation_has_ownership_result(ctx->plan, operation) ||
             operation->result_value >= ctx->value_count)
             continue;
         uint32_t root = find_root(ctx, operation->result_value);
@@ -257,7 +263,7 @@ static bool ensure_owners(XrOwnershipBuildContext *ctx) {
 
 static bool classify_definition(XrOwnershipBuildContext *ctx, uint32_t operation_index) {
     const XrSemanticOperationRecord *operation = &ctx->plan->operations[operation_index];
-    if (!type_is_ownership_root(ctx->plan, operation->result_type))
+    if (!operation_has_ownership_result(ctx->plan, operation))
         return true;
     uint32_t owner_index = owner_for_value(ctx, operation->result_value);
     if (owner_index == XR_SEMANTIC_INDEX_NONE)
@@ -281,6 +287,11 @@ static bool classify_definition(XrOwnershipBuildContext *ctx, uint32_t operation
         owner->initial_state = XR_OWN_IMMORTAL;
         owner->exit_state = XR_OWN_IMMORTAL;
         return true;
+    }
+    if (operation->opcode == XI_STACK_ALLOC) {
+        owner->initial_state = XR_OWN_OWNED_UNIQUE;
+        return add_event(ctx, owner_index, operation_index, XR_OWN_EVENT_ALLOC, 1,
+                         XR_OWN_OWNED_UNIQUE);
     }
     if (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
         operation->result_alias_operand < 0) {
@@ -310,7 +321,8 @@ static bool classify_definition(XrOwnershipBuildContext *ctx, uint32_t operation
 
 static uint32_t operation_for_value(const XrSemanticPlan *plan, uint32_t function, uint32_t value) {
     for (uint32_t i = 0; i < plan->operation_count; i++) {
-        if (plan->operations[i].function == function && plan->operations[i].result_value == value)
+        if (plan->operations[i].function == function && plan->operations[i].result_value == value &&
+            xi_generated_op_result_kind(plan->operations[i].opcode) != XI_GEN_RESULT_VOID)
             return i;
     }
     return XR_SEMANTIC_INDEX_NONE;
@@ -368,7 +380,17 @@ static bool add_operand_events(XrOwnershipBuildContext *ctx, uint32_t operation_
             if (!add_event(ctx, owner, operation_index, XR_OWN_EVENT_RETAIN, 1, XR_OWN_OWNED_LOCAL))
                 return false;
         } else if (operation->opcode == XI_RELEASE) {
-            if (!add_event(ctx, owner, operation_index, XR_OWN_EVENT_RELEASE, -1, XR_OWN_RELEASED))
+            uint32_t producer = operation_for_value(ctx->plan, operation->function, value);
+            bool destroys_stack_closure =
+                producer != XR_SEMANTIC_INDEX_NONE &&
+                ctx->plan->operations[producer].opcode == XI_STACK_ALLOC &&
+                ctx->plan->operations[producer].semantic_immediate == XI_CLOSURE_NEW;
+            /* A stack closure's physical RELEASE runs its capture destructor;
+             * it does not release frame storage.  Preserve that distinction in
+             * the logical certificate as an extent DESTROY. */
+            if (!add_event(ctx, owner, operation_index,
+                           destroys_stack_closure ? XR_OWN_EVENT_DESTROY : XR_OWN_EVENT_RELEASE, -1,
+                           XR_OWN_RELEASED))
                 return false;
         } else if (operation->opcode == XI_SOURCE_MOVE) {
             if (!add_event(ctx, owner, operation_index, XR_OWN_EVENT_MOVE, 0, XR_OWN_MOVED))
@@ -514,7 +536,8 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
             owner->return_provenance = provenance;
             owner->exit_state = provenance == XR_SEM_RETURN_OWNED ? XR_OWN_MOVED : XR_OWN_BORROWED;
             owner->flags |= 2u;
-            if (disposition_provenance == XR_SEM_RETURN_OWNED ||
+            if ((disposition_provenance == XR_SEM_RETURN_OWNED &&
+                 owner->initial_state != XR_OWN_IMMORTAL) ||
                 (disposition_provenance == XR_SEM_RETURN_BORROWED_STATIC && balance > 0)) {
                 uint32_t operation = operation_for_value(ctx->plan, f, block->control_value);
                 if (operation == XR_SEMANTIC_INDEX_NONE ||
@@ -527,6 +550,12 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
             }
         }
         if (type_is_ownership_root(ctx->plan, function->return_type)) {
+            if ((function->flags & 4u) != 0) {
+                if (function->return_provenance != XR_SEM_RETURN_OWNED)
+                    return fail(ctx, "XR_OWN_3000",
+                                "generator handle has no owned return disposition");
+                continue;
+            }
             if (inferred_provenance == XR_SEM_RETURN_NONE)
                 return fail(ctx, "XR_OWN_3000",
                             "reference-capable function has no proven return disposition");
@@ -547,6 +576,336 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
                 }
             }
         }
+    }
+    return true;
+}
+
+static bool stack_extent_has_destroy(const XrOwnershipBuildContext *ctx, uint32_t owner,
+                                     uint32_t block, uint32_t successor) {
+    for (uint32_t e = 0; e < ctx->certificate->event_count; e++) {
+        const XrOwnershipEventRecord *event = &ctx->certificate->events[e];
+        if (event->owner == owner && event->block == block && event->successor == successor &&
+            event->kind == XR_OWN_EVENT_DESTROY && event->logical_delta < 0)
+            return true;
+    }
+    return false;
+}
+
+/* XI_STACK_ALLOC is physically reclaimed by the function frame, so ARC must
+ * not manufacture a runtime release for it.  The ownership certificate still
+ * needs an exact logical extent.  Record DESTROY at each reachable terminal
+ * while rejecting any attempt to move, publish, return, or otherwise dispose
+ * the stack identity through an ordinary RC operation. */
+static bool classify_stack_extents(XrOwnershipBuildContext *ctx) {
+    bool *processed = (bool *) xr_calloc(ctx->certificate->owner_count, sizeof(*processed));
+    if (ctx->certificate->owner_count && !processed)
+        return fail(ctx, "XR_EXEC_5003", "stack extent worklist allocation failed");
+    for (uint32_t operation_index = 0; operation_index < ctx->plan->operation_count;
+         operation_index++) {
+        const XrSemanticOperationRecord *operation = &ctx->plan->operations[operation_index];
+        if (operation->opcode != XI_STACK_ALLOC)
+            continue;
+        uint32_t owner = owner_for_value(ctx, operation->result_value);
+        if (owner == XR_SEMANTIC_INDEX_NONE || processed[owner]) {
+            if (owner == XR_SEMANTIC_INDEX_NONE) {
+                xr_free(processed);
+                return fail(ctx, "XR_OWN_3002", "stack allocation has no owner identity");
+            }
+            continue;
+        }
+        processed[owner] = true;
+        for (uint32_t e = 0; e < ctx->certificate->event_count; e++) {
+            const XrOwnershipEventRecord *event = &ctx->certificate->events[e];
+            if (event->owner != owner || event->logical_delta >= 0)
+                continue;
+            if (event->kind != XR_OWN_EVENT_DESTROY) {
+                xr_free(processed);
+                return fail(ctx, "XR_OWN_3001", "stack allocation escapes its proven frame extent");
+            }
+        }
+
+        uint32_t function_index = operation->function;
+        if (function_index >= ctx->plan->function_count) {
+            xr_free(processed);
+            return fail(ctx, "XR_OWN_3002", "stack allocation function is invalid");
+        }
+        const XrSemanticFunctionRecord *function = &ctx->plan->functions[function_index];
+        if (operation->block < function->block_begin ||
+            operation->block >= function->block_begin + function->block_count) {
+            xr_free(processed);
+            return fail(ctx, "XR_OWN_3002", "stack allocation block crosses its function");
+        }
+        bool *visited = (bool *) xr_calloc((size_t) function->block_count * 2u, sizeof(*visited));
+        bool *terminal_live = (bool *) xr_calloc(function->block_count, sizeof(*terminal_live));
+        bool *terminal_dead = (bool *) xr_calloc(function->block_count, sizeof(*terminal_dead));
+        uint32_t *queue =
+            (uint32_t *) xr_malloc((size_t) function->block_count * 2u * sizeof(*queue));
+        if (function->block_count && (!visited || !terminal_live || !terminal_dead || !queue)) {
+            xr_free(visited);
+            xr_free(terminal_live);
+            xr_free(terminal_dead);
+            xr_free(queue);
+            xr_free(processed);
+            return fail(ctx, "XR_EXEC_5003", "stack extent worklist allocation failed");
+        }
+        uint32_t head = 0, tail = 0;
+        uint32_t origin_local = operation->block - function->block_begin;
+        queue[tail++] = origin_local * 2u + 1u;
+        visited[origin_local * 2u + 1u] = true;
+        while (head < tail) {
+            uint32_t state = queue[head++];
+            uint32_t local = state / 2u;
+            bool live = (state & 1u) != 0;
+            uint32_t block_index = function->block_begin + local;
+            const XrSemanticBlockRecord *block = &ctx->plan->blocks[block_index];
+            if (live && stack_extent_has_destroy(ctx, owner, block_index, XR_SEMANTIC_INDEX_NONE))
+                live = false;
+            bool terminal = block->successors[0] == XR_SEMANTIC_INDEX_NONE &&
+                            block->successors[1] == XR_SEMANTIC_INDEX_NONE;
+            if (terminal) {
+                if (live)
+                    terminal_live[local] = true;
+                else
+                    terminal_dead[local] = true;
+                continue;
+            }
+            for (unsigned s = 0; s < 2; s++) {
+                uint32_t successor = block->successors[s];
+                if (successor == XR_SEMANTIC_INDEX_NONE)
+                    continue;
+                if (successor < function->block_begin ||
+                    successor >= function->block_begin + function->block_count) {
+                    xr_free(visited);
+                    xr_free(terminal_live);
+                    xr_free(terminal_dead);
+                    xr_free(queue);
+                    xr_free(processed);
+                    return fail(ctx, "XR_OWN_3002", "stack extent edge crosses its function");
+                }
+                bool edge_live = live;
+                if (edge_live && stack_extent_has_destroy(ctx, owner, block_index, successor))
+                    edge_live = false;
+                uint32_t next = (successor - function->block_begin) * 2u + (edge_live ? 1u : 0u);
+                if (!visited[next]) {
+                    visited[next] = true;
+                    queue[tail++] = next;
+                }
+            }
+        }
+        for (uint32_t local = 0; local < function->block_count; local++) {
+            if (terminal_live[local] && terminal_dead[local]) {
+                xr_free(visited);
+                xr_free(terminal_live);
+                xr_free(terminal_dead);
+                xr_free(queue);
+                xr_free(processed);
+                return fail(ctx, "XR_OWN_3001",
+                            "stack extent reaches an exit in conflicting states");
+            }
+            if (terminal_live[local] &&
+                !add_event_in_block(ctx, owner, operation_index, function->block_begin + local,
+                                    XR_OWN_EVENT_DESTROY, -1, XR_OWN_RELEASED)) {
+                xr_free(visited);
+                xr_free(terminal_live);
+                xr_free(terminal_dead);
+                xr_free(queue);
+                xr_free(processed);
+                return false;
+            }
+        }
+        ctx->certificate->owners[owner].exit_state = XR_OWN_RELEASED;
+        xr_free(visited);
+        xr_free(terminal_live);
+        xr_free(terminal_dead);
+        xr_free(queue);
+    }
+    xr_free(processed);
+    return true;
+}
+
+static uint32_t terminal_disposition_operation(const XrOwnershipBuildContext *ctx,
+                                               uint32_t function, uint32_t block,
+                                               uint32_t fallback) {
+    const XrSemanticBlockRecord *record = &ctx->plan->blocks[block];
+    if (record->control_value != XR_SEMANTIC_INDEX_NONE) {
+        uint32_t control = operation_for_value(ctx->plan, function, record->control_value);
+        if (control != XR_SEMANTIC_INDEX_NONE)
+            return control;
+    }
+    for (uint32_t operation = 0; operation < ctx->plan->operation_count; operation++) {
+        const XrSemanticOperationRecord *candidate = &ctx->plan->operations[operation];
+        if (candidate->function == function && candidate->block == block)
+            fallback = operation;
+    }
+    return fallback;
+}
+
+/* Close every still-owned logical token at a reachable function exit.  This
+ * makes exit disposition explicit even when a diagnostic/check-only pipeline
+ * does not run physical ARC insertion.  Target planning later chooses the
+ * concrete last-use/edge cleanup that realizes these obligations. */
+static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
+    for (uint32_t owner = 0; owner < ctx->certificate->owner_count; owner++) {
+        XrOwnershipOwnerRecord *owner_record = &ctx->certificate->owners[owner];
+        if (owner_record->initial_state == XR_OWN_IMMORTAL ||
+            owner_record->initial_state == XR_OWN_BORROWED ||
+            owner_record->initial_state == XR_OWN_FOREIGN_BORROWED)
+            continue;
+        uint32_t function = owner_record->function;
+        if (function >= ctx->plan->function_count)
+            return fail(ctx, "XR_OWN_3002", "owner references an invalid function");
+        const XrSemanticFunctionRecord *fn = &ctx->plan->functions[function];
+        int32_t *entry = (int32_t *) xr_malloc((size_t) fn->block_count * sizeof(*entry));
+        int32_t *delta = (int32_t *) xr_calloc(fn->block_count, sizeof(*delta));
+        int32_t *edge_delta =
+            (int32_t *) xr_calloc((size_t) fn->block_count * 2u, sizeof(*edge_delta));
+        uint32_t *queue = (uint32_t *) xr_malloc((size_t) fn->block_count * sizeof(*queue));
+        if (fn->block_count && (!entry || !delta || !edge_delta || !queue)) {
+            xr_free(entry);
+            xr_free(delta);
+            xr_free(edge_delta);
+            xr_free(queue);
+            return fail(ctx, "XR_EXEC_5003", "ownership disposition allocation failed");
+        }
+        for (uint32_t i = 0; i < fn->block_count; i++)
+            entry[i] = INT32_MIN;
+        for (uint32_t e = 0; e < ctx->certificate->event_count; e++) {
+            const XrOwnershipEventRecord *event = &ctx->certificate->events[e];
+            if (event->owner != owner || event->block < fn->block_begin ||
+                event->block >= fn->block_begin + fn->block_count)
+                continue;
+            uint32_t local = event->block - fn->block_begin;
+            if (event->successor == XR_SEMANTIC_INDEX_NONE) {
+                delta[local] += event->logical_delta;
+            } else {
+                const XrSemanticBlockRecord *block = &ctx->plan->blocks[event->block];
+                if (block->successors[0] == event->successor)
+                    edge_delta[local * 2u] += event->logical_delta;
+                else if (block->successors[1] == event->successor)
+                    edge_delta[local * 2u + 1u] += event->logical_delta;
+                else {
+                    xr_free(entry);
+                    xr_free(delta);
+                    xr_free(edge_delta);
+                    xr_free(queue);
+                    return fail(ctx, "XR_OWN_3002", "ownership event names a non-CFG edge");
+                }
+            }
+        }
+        uint32_t origin_operation =
+            operation_for_value(ctx->plan, function, owner_record->origin_value);
+        if (origin_operation == XR_SEMANTIC_INDEX_NONE) {
+            xr_free(entry);
+            xr_free(delta);
+            xr_free(edge_delta);
+            xr_free(queue);
+            return fail(ctx, "XR_OWN_3002", "ownership origin has no value-producing operation");
+        }
+        uint32_t origin_block = ctx->plan->operations[origin_operation].block;
+        if (origin_block < fn->block_begin || origin_block >= fn->block_begin + fn->block_count) {
+            xr_free(entry);
+            xr_free(delta);
+            xr_free(edge_delta);
+            xr_free(queue);
+            return fail(ctx, "XR_OWN_3002", "ownership origin crosses a function boundary");
+        }
+        uint32_t head = 0, tail = 0;
+        uint32_t origin_local = origin_block - fn->block_begin;
+        entry[origin_local] = ctx->plan->operations[origin_operation].opcode == XI_PHI ? 1 : 0;
+        queue[tail++] = origin_local;
+        while (head < tail) {
+            uint32_t local = queue[head++];
+            int32_t exit_balance = entry[local] + delta[local];
+            if (exit_balance < 0) {
+                if (ctx->error && ctx->error_size)
+                    snprintf(ctx->error, ctx->error_size,
+                             "XR_OWN_3001: logical ownership balance becomes negative "
+                             "(owner=%s origin=%s func=%s block=%u entry=%d delta=%d initial=%u)",
+                             owner_record->canonical_key,
+                             xi_generated_op_name(ctx->plan->operations[origin_operation].opcode),
+                             fn->name, fn->block_begin + local, entry[local], delta[local],
+                             owner_record->initial_state);
+                xr_free(entry);
+                xr_free(delta);
+                xr_free(edge_delta);
+                xr_free(queue);
+                return false;
+            }
+            const XrSemanticBlockRecord *block = &ctx->plan->blocks[fn->block_begin + local];
+            for (unsigned s = 0; s < 2; s++) {
+                uint32_t successor = block->successors[s];
+                if (successor == XR_SEMANTIC_INDEX_NONE)
+                    continue;
+                if (successor < fn->block_begin || successor >= fn->block_begin + fn->block_count) {
+                    xr_free(entry);
+                    xr_free(delta);
+                    xr_free(edge_delta);
+                    xr_free(queue);
+                    return fail(ctx, "XR_OWN_3002", "ownership edge crosses function boundary");
+                }
+                int32_t incoming = exit_balance + edge_delta[local * 2u + s];
+                if (incoming < 0) {
+                    if (ctx->error && ctx->error_size)
+                        snprintf(ctx->error, ctx->error_size,
+                                 "XR_OWN_3001: logical ownership balance becomes negative on "
+                                 "an edge (owner=%s func=%s from=%u to=%u balance=%d initial=%u)",
+                                 owner_record->canonical_key, fn->name, fn->block_begin + local,
+                                 successor, incoming, owner_record->initial_state);
+                    xr_free(entry);
+                    xr_free(delta);
+                    xr_free(edge_delta);
+                    xr_free(queue);
+                    return false;
+                }
+                uint32_t next = successor - fn->block_begin;
+                if (entry[next] == INT32_MIN) {
+                    entry[next] = incoming;
+                    queue[tail++] = next;
+                } else if (entry[next] != incoming) {
+                    xr_free(entry);
+                    xr_free(delta);
+                    xr_free(edge_delta);
+                    xr_free(queue);
+                    return fail(ctx, "XR_OWN_3001",
+                                "ownership balance differs across a CFG join or loop");
+                }
+            }
+        }
+        for (uint32_t local = 0; local < fn->block_count; local++) {
+            if (entry[local] == INT32_MIN)
+                continue;
+            uint32_t block_index = fn->block_begin + local;
+            const XrSemanticBlockRecord *block = &ctx->plan->blocks[block_index];
+            if (block->successors[0] != XR_SEMANTIC_INDEX_NONE ||
+                block->successors[1] != XR_SEMANTIC_INDEX_NONE)
+                continue;
+            int32_t balance = entry[local] + delta[local];
+            if (balance <= 0)
+                continue;
+            if (balance > INT16_MAX) {
+                xr_free(entry);
+                xr_free(delta);
+                xr_free(edge_delta);
+                xr_free(queue);
+                return fail(ctx, "XR_EXEC_5003", "ownership exit disposition exceeds schema");
+            }
+            uint32_t operation =
+                terminal_disposition_operation(ctx, function, block_index, origin_operation);
+            if (!add_event_in_block(ctx, owner, operation, block_index, XR_OWN_EVENT_RELEASE,
+                                    (int16_t) -balance, XR_OWN_RELEASED)) {
+                xr_free(entry);
+                xr_free(delta);
+                xr_free(edge_delta);
+                xr_free(queue);
+                return false;
+            }
+        }
+        if ((owner_record->flags & 3u) == 0)
+            owner_record->exit_state = XR_OWN_RELEASED;
+        xr_free(entry);
+        xr_free(delta);
+        xr_free(edge_delta);
+        xr_free(queue);
     }
     return true;
 }
@@ -594,11 +953,27 @@ static bool build_edge_states(XrOwnershipBuildContext *ctx) {
                 return fail(ctx, "XR_OWN_3002", "ownership event names a non-CFG edge");
             }
         }
-        uint32_t head = 0, tail = 0;
-        if (fn->block_count) {
-            entry[0] = 0;
-            queue[tail++] = 0;
+        uint32_t origin_operation =
+            operation_for_value(ctx->plan, function, ctx->certificate->owners[owner].origin_value);
+        if (origin_operation == XR_SEMANTIC_INDEX_NONE) {
+            xr_free(entry);
+            xr_free(delta);
+            xr_free(edge_delta);
+            xr_free(queue);
+            return fail(ctx, "XR_OWN_3002", "ownership origin has no value-producing operation");
         }
+        uint32_t origin_block = ctx->plan->operations[origin_operation].block;
+        if (origin_block < fn->block_begin || origin_block >= fn->block_begin + fn->block_count) {
+            xr_free(entry);
+            xr_free(delta);
+            xr_free(edge_delta);
+            xr_free(queue);
+            return fail(ctx, "XR_OWN_3002", "ownership origin crosses a function boundary");
+        }
+        uint32_t head = 0, tail = 0;
+        uint32_t origin_local = origin_block - fn->block_begin;
+        entry[origin_local] = ctx->plan->operations[origin_operation].opcode == XI_PHI ? 1 : 0;
+        queue[tail++] = origin_local;
         while (head < tail) {
             uint32_t local = queue[head++];
             int32_t exit_balance = entry[local] + delta[local];
@@ -612,12 +987,29 @@ static bool build_edge_states(XrOwnershipBuildContext *ctx) {
                         break;
                     }
                 }
+                char event_summary[192] = {0};
+                size_t event_used = 0;
+                for (uint32_t e = 0; e < ctx->certificate->event_count; e++) {
+                    const XrOwnershipEventRecord *event = &ctx->certificate->events[e];
+                    if (event->owner != owner)
+                        continue;
+                    const XrSemanticOperationRecord *event_operation =
+                        &ctx->plan->operations[event->operation];
+                    int n = snprintf(event_summary + event_used, sizeof(event_summary) - event_used,
+                                     "%s%s@%u:%d", event_used ? "," : "",
+                                     xi_generated_op_name(event_operation->opcode), event->block,
+                                     event->logical_delta);
+                    if (n < 0 || (size_t) n >= sizeof(event_summary) - event_used)
+                        break;
+                    event_used += (size_t) n;
+                }
                 if (ctx->error && ctx->error_size)
                     snprintf(ctx->error, ctx->error_size,
                              "XR_OWN_3001: ownership balance becomes negative "
-                             "(owner=%s origin=%s func=%s block=%u entry=%d delta=%d)",
+                             "(owner=%s origin=%s func=%s block=%u entry=%d delta=%d "
+                             "events=[%s])",
                              ctx->certificate->owners[owner].canonical_key, origin_op, fn->name,
-                             fn->block_begin + local, entry[local], delta[local]);
+                             fn->block_begin + local, entry[local], delta[local], event_summary);
                 xr_free(entry);
                 xr_free(delta);
                 xr_free(edge_delta);
@@ -829,7 +1221,8 @@ bool xr_ownership_certificate_build(XrSemanticPlan *plan, XrOwnershipCertificate
         if (!add_operand_events(&ctx, i))
             goto failure;
     }
-    if (!classify_returns(&ctx) || !build_edge_states(&ctx))
+    if (!classify_returns(&ctx) || !classify_stack_extents(&ctx) ||
+        !classify_implicit_exit_dispositions(&ctx) || !build_edge_states(&ctx))
         goto failure;
     xr_free(ctx.parent);
     xr_free(ctx.rank);
