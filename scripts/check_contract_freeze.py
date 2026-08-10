@@ -213,6 +213,7 @@ CONTRACT_SPECS = (
             "contracts/target-machine/diagnostic-codes.toml",
             "contracts/target-machine/id-and-fingerprint-policy.toml",
             "scripts/target_machine_phase0.py",
+            "tests/target-machine/phase0/run_baseline.py",
         ),
     ),
 )

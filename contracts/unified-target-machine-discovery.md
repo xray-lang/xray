@@ -26,3 +26,4 @@ anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc6
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 2176ddb5780096bae163750240ca4fe539b90b90b281c952ddac80b6ee8fc372
 anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
 anchor-sha256: scripts/target_machine_phase0.py 5b2cf4451fecc523d5ba3ad8b0eabfc336d9d0b195ea0d829512662b8fd6f8d9
+anchor-sha256: tests/target-machine/phase0/run_baseline.py 695e58da8de8b2a5d76d21f9d58e02f08a8fb7c65663152a80511b2dce11915f
