@@ -1,0 +1,5 @@
+import http
+
+var server = http.Server()
+var running = Atomic(false)
+print(server.listen(0, running))

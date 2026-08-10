@@ -1,0 +1,4 @@
+c_syntax=pass
+c_regex=static const XrAotEnumBox _xenum_box_net_[0-9a-f]+_unit_[0-9]+_0
+c_regex=static const XrAotEnumBox _xenum_box_http_[0-9a-f]+_unit_[0-9]+_0
+c_not_regex=static const XrAotEnumBox _xenum_[0-9]+_[0-9]+

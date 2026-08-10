@@ -204,14 +204,44 @@ static const char *cg_intern_enum_member_box(XiCgenCtx *ctx, const char *symbol,
     return e->symbol;
 }
 
-static void emit_enum_member_box_value_expr(XiCgenCtx *ctx, FILE *out, const char *symbol,
-                                            const char *enum_name, const char *member_name,
-                                            uint32_t member_index, uint32_t layout_id) {
-    if (!cg_intern_enum_member_box(ctx, symbol, enum_name, member_name, member_index, layout_id)) {
+static char *cg_enum_member_box_symbol(XiCgenCtx *ctx, const char *family, uint32_t domain_id,
+                                       uint32_t member_index) {
+    if (!ctx || !family) {
+        if (ctx)
+            ctx->error = true;
+        return NULL;
+    }
+    const char *module_prefix =
+        ctx->module && ctx->module->name && ctx->module->name[0] ? ctx->module->name : "mod";
+    size_t cap = strlen(module_prefix) + strlen(family) + 64;
+    char *symbol = (char *) xr_malloc(cap);
+    if (!symbol) {
+        ctx->error = true;
+        return NULL;
+    }
+    int written = snprintf(symbol, cap, "_xenum_box_%s_%s_%u_%u", module_prefix, family,
+                           (unsigned) domain_id, (unsigned) member_index);
+    if (written < 0 || (size_t) written >= cap) {
+        xr_free(symbol);
+        ctx->error = true;
+        return NULL;
+    }
+    return symbol;
+}
+
+static void emit_enum_member_box_value_expr(XiCgenCtx *ctx, FILE *out, const char *symbol_family,
+                                            uint32_t symbol_domain_id, const char *enum_name,
+                                            const char *member_name, uint32_t member_index,
+                                            uint32_t layout_id) {
+    char *symbol = cg_enum_member_box_symbol(ctx, symbol_family, symbol_domain_id, member_index);
+    if (!symbol ||
+        !cg_intern_enum_member_box(ctx, symbol, enum_name, member_name, member_index, layout_id)) {
+        xr_free(symbol);
         fprintf(out, "XR_NULL_VAL");
         return;
     }
     fprintf(out, "xrt_enum_box_from_static(&%s)", symbol);
+    xr_free(symbol);
 }
 
 static void emit_enum_member_box_defs(XiCgenCtx *ctx, FILE *out) {
@@ -262,11 +292,8 @@ static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed)
         if (ed->is_adt)
             fprintf(out, "XR_FROM_INT(%u)", (unsigned) i);
         else {
-            char symbol[64];
-            snprintf(symbol, sizeof(symbol), "_xenum_%u_%u", (unsigned) ed->layout_id,
-                     (unsigned) i);
-            emit_enum_member_box_value_expr(ctx, out, symbol, ed->name ? ed->name : "", name, i,
-                                            ed->layout_id);
+            emit_enum_member_box_value_expr(ctx, out, "unit", ed->layout_id,
+                                            ed->name ? ed->name : "", name, i, ed->layout_id);
         }
         fprintf(out, "); ");
     }
@@ -305,11 +332,8 @@ static bool emit_enum_namespace_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFu
         if (ed->is_adt) {
             fprintf(out, "XR_FROM_INT(%u)", (unsigned) i);
         } else {
-            char symbol[64];
-            snprintf(symbol, sizeof(symbol), "_xenum_%u_%u", (unsigned) ed->layout_id,
-                     (unsigned) i);
-            emit_enum_member_box_value_expr(ctx, out, symbol, ed->name ? ed->name : "", name, i,
-                                            ed->layout_id);
+            emit_enum_member_box_value_expr(ctx, out, "unit", ed->layout_id,
+                                            ed->name ? ed->name : "", name, i, ed->layout_id);
         }
         fprintf(out, ");\n");
     }
@@ -548,16 +572,8 @@ static void emit_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out,
         fprintf(out, "XR_FROM_INT(%u)", (unsigned) member_index);
         return;
     }
-    char symbol[256];
-    int written = snprintf(symbol, sizeof(symbol), "_ev_%s_%s", ed->enum_name ? ed->enum_name : "E",
-                           member->name ? member->name : "M");
-    if (written < 0 || (size_t) written >= sizeof(symbol)) {
-        if (ctx)
-            ctx->error = true;
-        fprintf(out, "XR_NULL_VAL");
-        return;
-    }
-    emit_enum_member_box_value_expr(ctx, out, symbol, ed->enum_name ? ed->enum_name : "",
+    emit_enum_member_box_value_expr(ctx, out, "prelude", (uint32_t) ed->builtin_index,
+                                    ed->enum_name ? ed->enum_name : "",
                                     member->name ? member->name : "", member_index, 0);
 }
 
@@ -615,10 +631,7 @@ static bool emit_static_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const 
          * Preserve nominal identity in the static immortal box; fully typed
          * scalar enum values still take the allocation-free sidecar path
          * above. */
-        char symbol[64];
-        snprintf(symbol, sizeof(symbol), "_xenum_%u_%u", (unsigned) ed->layout_id,
-                 (unsigned) member_index);
-        emit_enum_member_box_value_expr(ctx, out, symbol, ed->name ? ed->name : "",
+        emit_enum_member_box_value_expr(ctx, out, "unit", ed->layout_id, ed->name ? ed->name : "",
                                         member->name ? member->name : "", member_index,
                                         ed->layout_id);
     }
@@ -654,12 +667,9 @@ static bool emit_static_builtin_enum_member_value_expr(XiCgenCtx *ctx, FILE *out
         fprintf(out, "INT64_C(%u)", (unsigned) member_index);
     } else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, decl->name, NULL,
                                                             member_index)) {
-        char symbol[64];
-        snprintf(symbol, sizeof(symbol), "_xbuiltin_enum_%u_%u", (unsigned) decl->layout_id,
-                 (unsigned) member_index);
-        emit_enum_member_box_value_expr(ctx, out, symbol, decl->name ? decl->name : "",
-                                        member->name ? member->name : "", member_index,
-                                        decl->layout_id);
+        emit_enum_member_box_value_expr(
+            ctx, out, "builtin", decl->layout_id, decl->name ? decl->name : "",
+            member->name ? member->name : "", member_index, decl->layout_id);
     }
     emit_conversion_suffix(out, conv_suffix);
     return true;
