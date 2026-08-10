@@ -68,6 +68,13 @@ typedef struct TestAotPlan {
         }                                                                                          \
     } while (0)
 
+/* Generated-C contracts remain mandatory in Release builds. The standard
+ * assert macro must not erase either checks or helper calls under NDEBUG. */
+#ifdef NDEBUG
+#undef assert
+#define assert(condition) TEST_REQUIRE((condition), #condition)
+#endif
+
 #define TEST(name)                                                                                 \
     static void test_##name(void);                                                                 \
     static void run_##name(void) {                                                                 \
@@ -79,6 +86,20 @@ typedef struct TestAotPlan {
         printf("  PASS\n");                                                                        \
     }                                                                                              \
     static void test_##name(void)
+
+static void set_single_param_ownership_contract(XiFunc *function, uint8_t parameter_ownership,
+                                                uint8_t return_ownership,
+                                                int16_t return_parameter) {
+    function->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    TEST_REQUIRE(function->arc_borrow_sig != NULL, "manual ownership signature allocated");
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = parameter_ownership;
+    function->arc_borrow_sig->valid = true;
+    function->arc_return_ownership.kind = return_ownership;
+    function->arc_return_ownership.param_index = return_parameter;
+    function->arc_return_ownership.complete = true;
+}
 
 static void setup(void) {
     if (!g_iso) {
@@ -986,10 +1007,15 @@ static bool test_prepare_backend_ir(XiFunc *ir) {
         XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
         if (!owned)
             goto fail;
-        XiLoweredProgram *lowered = xi_program_lower_semantics(owned, error, sizeof(error));
-        if (!lowered)
+        XiSemanticLoweredProgram *semantic_lowered =
+            xi_program_lower_semantics(owned, error, sizeof(error));
+        if (!semantic_lowered)
             goto fail;
-        optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
+        XiCoroLoweredProgram *coro_lowered =
+            xi_program_lower_coroutines(semantic_lowered, error, sizeof(error));
+        if (!coro_lowered)
+            goto fail;
+        optimized = xi_program_finish_optimization(coro_lowered, error, sizeof(error));
     } else if (ir->stage == XI_STAGE_OPTIMIZED) {
         optimized = xi_stage_adopt_optimized(ir, error, sizeof(error));
     }
@@ -1634,6 +1660,7 @@ TEST(cgen_trivial_span_value_clone_shares_immutable_c_local) {
     XiValue *source = xi_param(ir, entry, 0, &span_type);
     TEST_REQUIRE(source != NULL, "manual C-span-clone source allocated");
     ir->params[0] = source;
+    set_single_param_ownership_contract(ir, XI_OWN_BORROWED, XI_RETURN_OWNERSHIP_BORROWED_PARAM, 0);
     XiValue *clone = xi_value_new(ir, entry, XI_COPY, &span_type, 1);
     TEST_REQUIRE(clone != NULL, "manual C-span-clone boundary allocated");
     clone->args[0] = source;
@@ -1675,6 +1702,7 @@ TEST(cgen_rep_identical_span_box_shares_immutable_c_local) {
     XiValue *source = xi_param(ir, entry, 0, &span_type);
     TEST_REQUIRE(source != NULL, "manual C-span-box source allocated");
     ir->params[0] = source;
+    set_single_param_ownership_contract(ir, XI_OWN_BORROWED, XI_RETURN_OWNERSHIP_BORROWED_PARAM, 0);
     XiValue *box = xi_value_new(ir, entry, XI_BOX, &span_type, 1);
     TEST_REQUIRE(box != NULL, "manual C-span-box boundary allocated");
     box->args[0] = source;
@@ -1932,6 +1960,9 @@ TEST(cgen_shared_string_constant_emits_immediate_without_local) {
 TEST(cgen_unused_call_result_emits_effect_statement_without_local) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 156, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 157, .frozen = true};
+    func_type.function.return_type = &int_type;
+    func_type.function.param_count = 0;
+    func_type.function.min_params = 0;
 
     XiFunc *ir = xi_func_new("unused_call_result", &int_type);
     assert(ir != NULL);
@@ -1959,24 +1990,28 @@ TEST(cgen_unused_call_result_emits_effect_statement_without_local) {
     assert(callee != NULL);
     callee->aux = (void *) child;
     XiValue *unused = xi_value_new(ir, entry, XI_CALL, &int_type, 1);
-    assert(unused != NULL);
+    TEST_REQUIRE(unused != NULL, "unused call allocated");
     unused->args[0] = callee;
     /* Model the conservative/stale use metadata that can remain after DCE. */
     unused->uses = 1;
     unused->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_CALL_EFFECTS;
+    XiValue *release = xi_value_new(ir, entry, XI_RELEASE, &func_type, 1);
+    TEST_REQUIRE(release != NULL, "callee release allocated");
+    release->args[0] = callee;
+    release->flags = XI_FLAG_SIDE_EFFECT;
     XiValue *ret = xi_const_int(ir, entry, 1, &int_type);
-    assert(ret != NULL);
+    TEST_REQUIRE(ret != NULL, "unused call return allocated");
     xi_block_set_return(entry, ret);
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && !had_error && "unused call result should generate");
+    TEST_REQUIRE(code != NULL && !had_error, "unused call result should generate");
 
     char dead_decl[64];
     snprintf(dead_decl, sizeof(dead_decl), "int64_t v%u =", (unsigned) unused->id);
-    assert(!contains(code, dead_decl) && "unused call result must not create a C local");
-    assert(contains(code, "    (void)(") &&
-           "unused call must remain as an effect-preserving expression statement");
+    TEST_REQUIRE(!contains(code, dead_decl), "unused call result must not create a C local");
+    TEST_REQUIRE(contains(code, "    (void)("),
+                 "unused call must remain as an effect-preserving expression statement");
 
     printf("  Generated unused call-result statement %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -2129,6 +2164,11 @@ TEST(cgen_direct_stdlib_import_call_emits_no_function_token_local) {
     XrType bool_type = {.kind = XR_KIND_BOOL, .id = 159, .frozen = true};
     XrType int_type = {.kind = XR_KIND_INT, .id = 160, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 161, .frozen = true};
+    XrFunctionParam func_params[1] = {{.type = &int_type, .mode = XR_PARAM_READ}};
+    func_type.function.params = func_params;
+    func_type.function.param_count = 1;
+    func_type.function.min_params = 1;
+    func_type.function.return_type = &bool_type;
     XiFunc *ir = xi_func_new("direct_stdlib_import", &bool_type);
     TEST_REQUIRE(ir != NULL, "direct stdlib import function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2728,8 +2768,12 @@ TEST(cgen_standalone_prelude_enum_globals_generate_static_members) {
            "a payload-free prelude enum lowers to the scalar layout");
     assert(!contains(code, "_ev_SendResult_") &&
            "a scalar-lowered enum must not also emit boxed member globals");
-    assert(contains(code, "xrt_enum_box_new(0, \"Recv\", \"Empty\", 1)") &&
-           "no-payload Recv members must retain boxed nominal identity");
+    assert(contains(code, "static const XrAotEnumBox _xenum_box_test_prelude_") &&
+           "no-payload Recv members must have a module-scoped static box");
+    assert(contains(code, "NULL, \"Recv\", \"Empty\", 1u, 0u,") &&
+           "the static box must retain the Recv.Empty nominal identity");
+    assert(contains(code, "xrt_enum_box_from_static(&_xenum_box_test_prelude_") &&
+           "Recv.Empty uses must reference the immortal static box");
     assert(!contains(code, "xr_aot_load_builtin_field(ctx,") &&
            "standalone AOT must not require a coroutine isolate for prelude enum fields");
 
@@ -3906,34 +3950,37 @@ TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
                       "    var result = await task\n"
                       "    ch.send(result)\n"
                       "    var received = ch.recv()\n"
-                      "    return received + 1\n"
+                      "    return match (received) {\n"
+                      "        Recv.Value(value) -> value + 1\n"
+                      "        _ -> 0\n"
+                      "    }\n"
                       "}\n"
                       "const ch: Channel<int> = Channel(1)\n"
                       "var task = go worker(ch)\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-    assert(ir->module != NULL && "pipeline should produce module metadata");
+    TEST_REQUIRE(ir != NULL, "IR compilation failed");
+    TEST_REQUIRE(ir->module != NULL, "pipeline should produce module metadata");
     ir->module->path = "debug_coro_helper_results.xr";
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "coroutine helper debug source-var test should generate");
-    assert(contains(code, "_aot_resume") && "test source should emit coroutine resume bodies");
-    assert(contains(code, "xr_aot_await_task") &&
-           "test should exercise the await helper result path");
-    assert(contains(code, "xr_aot_chan_recv_slot") &&
-           "test should exercise the channel recv helper result path");
-    assert(contains(code, "XrValue result = XR_NULL_VAL;") &&
-           "await result source variable should get a debug local");
-    assert(contains(code, "XrValue received = XR_NULL_VAL;") &&
-           "recv result source variable should get a debug local");
-    assert(contains(code, "\n    result = v") &&
-           "await helper result should be synchronized into the source debug local");
-    assert(contains(code, "\n    received = v") &&
-           "recv helper result should be synchronized into the source debug local");
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "coroutine helper debug source-var test should generate");
+    TEST_REQUIRE(contains(code, "_aot_resume"), "test source should emit coroutine resume bodies");
+    TEST_REQUIRE(contains(code, "xr_aot_await_task"),
+                 "test should exercise the await helper result path");
+    TEST_REQUIRE(contains(code, "xr_aot_chan_recv_slot"),
+                 "test should exercise the channel recv helper result path");
+    TEST_REQUIRE(contains(code, "XrValue result = XR_NULL_VAL;"),
+                 "await result source variable should get a debug local");
+    TEST_REQUIRE(contains(code, "XrValue received = XR_NULL_VAL;"),
+                 "recv result source variable should get a debug local");
+    TEST_REQUIRE(contains(code, "\n    result = v"),
+                 "await helper result should be synchronized into the source debug local");
+    TEST_REQUIRE(contains(code, "\n    received = v"),
+                 "recv helper result should be synchronized into the source debug local");
 
     printf("  Generated coroutine helper debug source-var mapped C %zu bytes\n", strlen(code));
     xr_free(code);
@@ -4271,6 +4318,14 @@ TEST(cgen_parallel_for_body_closure_stack_allocates) {
     XrType unit_type = {.kind = XR_KIND_UNIT, .id = 906, .frozen = true};
     XrType int_type = {.kind = XR_KIND_INT, .id = 907, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 908, .frozen = true};
+    XrFunctionParam func_params[2] = {
+        {.type = &int_type, .mode = XR_PARAM_READ},
+        {.type = &int_type, .mode = XR_PARAM_READ},
+    };
+    func_type.function.params = func_params;
+    func_type.function.param_count = 2;
+    func_type.function.min_params = 2;
+    func_type.function.return_type = &unit_type;
 
     XiFunc *ir = xi_func_new("manual_parfor_stack_closure", &unit_type);
     assert(ir != NULL);
@@ -4343,8 +4398,8 @@ TEST(cgen_parallel_for_body_closure_stack_allocates) {
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "XI_PAR_FOR stack closure should generate");
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "XI_PAR_FOR stack closure should generate");
     assert(contains(code, "xr_parallel_for_range_i64(") &&
            "XI_PAR_FOR should still use the AOT runtime executor");
     assert(contains(code, "_xr_par_closure_storage_") &&
@@ -6090,8 +6145,8 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     assert(count_between(fn_body, fn_end, ")->a") > 0 &&
            count_between(fn_body, fn_end, ")->b") > 0 &&
            "mutable local struct copy should still use native field storage");
-    assert(count_between(fn_body, fn_end, "xrt_release(") == 0 &&
-           "elided shared struct alias should not emit a dead release");
+    assert(count_between(fn_body, fn_end, "xrt_release(") == 1 &&
+           "the mutable clone must be released exactly once without releasing the shared borrow");
     assert(count_between(fn_body, fn_end, "xrt_map_get") == 0 &&
            count_between(fn_body, fn_end, "xrt_map_set") == 0 &&
            "shared struct hot path must not cross the map boundary");
@@ -6210,7 +6265,7 @@ TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
     xi_func_free(ir);
 }
 
-TEST(cgen_native_receiver_closure_capture_preserves_arc) {
+TEST(cgen_native_receiver_static_cleanup_borrows_without_closure_arc) {
     const char *src = "class Box {\n"
                       "    n: int\n"
                       "    constructor(n: int) { this.n = n }\n"
@@ -6231,25 +6286,29 @@ TEST(cgen_native_receiver_closure_capture_preserves_arc) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "native receiver closure capture should generate");
+    assert(!had_error && "native receiver static cleanup should generate");
 
     const char *bump = find_static_function_definition(code, "test_bump_");
     assert(bump != NULL && "bump method definition should be present");
     const char *bump_end = next_static_after(bump);
-    const char *retain = strstr(bump, "xrt_retain(xrt_box_obj(");
-    const char *capture = strstr(bump, "_c->upvals[0] = xrt_box_obj(");
-    assert(retain != NULL && retain < bump_end && capture != NULL && capture < bump_end &&
-           retain < capture &&
-           "borrowed native receiver must be retained before an owning closure capture");
+    assert(bump_end != NULL && "bump method body should be bounded");
+    assert(count_between(bump, bump_end, "xrt_cleanup_enter()") == 2 &&
+           "the defer body must execute on normal and exceptional exits");
+    assert(count_between(bump, bump_end, "(p0)->f0") >= 4 &&
+           "both static cleanup paths must access the borrowed native receiver directly");
+    assert(count_between(bump, bump_end, "xrt_closure_new(") == 0 &&
+           count_between(bump, bump_end, "_c->upvals[") == 0 &&
+           count_between(bump, bump_end, "xrt_retain(xrt_box_obj(") == 0 &&
+           "a non-escaping static defer must not allocate or retain a receiver closure");
 
     const char *run = find_static_function_definition(code, "test_run_");
     assert(run != NULL && "run function definition should be present");
     const char *run_end = next_static_after(run);
-    assert(count_between(run, run_end, "xrt_obj_alloc(") == 1 &&
-           count_between(run, run_end, "xrt_native_test_Box _ci") == 0 &&
-           "a receiver retained by its method must have a heap object header");
+    assert(count_between(run, run_end, "xrt_obj_alloc(") == 0 &&
+           count_between(run, run_end, "xrt_native_test_Box _ci") == 1 &&
+           "a receiver used only by a synchronous static defer must remain stack allocated");
 
-    printf("  Generated native receiver capture ARC path %zu bytes of C code\n", strlen(code));
+    printf("  Generated native receiver static cleanup path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -7520,6 +7579,9 @@ TEST(cgen_dynamic_uncaptured_callback_keeps_boxed_adapter) {
 TEST(cgen_closure_cell_var_id_above_255) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 900, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 901, .frozen = true};
+    func_type.function.param_count = 0;
+    func_type.function.min_params = 0;
+    func_type.function.return_type = &int_type;
 
     XiFunc *ir = xi_func_new("manual_high_cell", &func_type);
     assert(ir != NULL);
@@ -7564,8 +7626,8 @@ TEST(cgen_closure_cell_var_id_above_255) {
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "high var_id closure cell should generate");
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "high var_id closure cell should generate");
     assert(contains(code, "xrt_cell_new(") && "mutable capture should allocate a cell");
     /* The 8-bit wall this case guards lives in the IR, not in a name. Cells
      * stopped being spelled `cell_<var_id>` in generated C once they became
@@ -7586,6 +7648,9 @@ TEST(cgen_closure_cell_var_id_above_255) {
 TEST(cgen_stack_alloc_direct_closure_uses_stack_runtime) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 910, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 911, .frozen = true};
+    func_type.function.param_count = 0;
+    func_type.function.min_params = 0;
+    func_type.function.return_type = &int_type;
 
     XiFunc *ir = xi_func_new("manual_stack_closure", &int_type);
     assert(ir != NULL);
@@ -7641,8 +7706,8 @@ TEST(cgen_stack_alloc_direct_closure_uses_stack_runtime) {
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "stack closure should generate");
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "stack closure should generate");
     assert(contains(code, "xrt_closure_stack_new(&_xr_callable_") &&
            "direct no-escape closure should use stack closure runtime");
     assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
@@ -7684,6 +7749,9 @@ static bool upvalue_receives_cell(const char *code) {
 TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 912, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 913, .frozen = true};
+    func_type.function.param_count = 0;
+    func_type.function.min_params = 0;
+    func_type.function.return_type = &int_type;
 
     XiFunc *ir = xi_func_new("manual_stack_cell_closure", &int_type);
     assert(ir != NULL);
@@ -7739,8 +7807,8 @@ TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "stack closure cell capture should generate");
+    TEST_REQUIRE(code != NULL, "C code generation failed");
+    TEST_REQUIRE(!had_error, "stack closure cell capture should generate");
     assert(contains(code, "xrt_closure_stack_new(&_xr_callable_") &&
            "direct no-escape closure should use stack closure runtime");
     assert(contains(code, "xrt_cell_new(") &&
@@ -8415,10 +8483,11 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL);
+    TEST_REQUIRE(code != NULL, "rejected C generation should return an empty owned buffer");
 
-    assert(had_error && "AOT cgen must reject unsupported coroutine Xi ops");
-    assert(code[0] == '\0' && "failed C generation must not publish a partial translation unit");
+    TEST_REQUIRE(had_error, "unsupported coroutine Xi ops must be rejected before publication");
+    TEST_REQUIRE(code[0] == '\0',
+                 "failed C generation must not publish a partial translation unit");
     printf("  Generated rejected %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
@@ -10412,14 +10481,19 @@ TEST(cgen_coro_native_class_await_uses_tagged_boundary_slot) {
            "native-class await result must retain its typed pointer local");
     assert(contains_between(await_call, trace, bridge) &&
            "native-class await result should bridge from the boundary temporary exactly once");
-    char physical_clear[64];
     char tagged_clear[64];
-    snprintf(physical_clear, sizeof(physical_clear), "v%u = 0;", slot_id);
     snprintf(tagged_clear, sizeof(tagged_clear), "v%u = XR_NULL_VAL;", slot_id);
-    assert(contains_between(await_call, trace, physical_clear) &&
-           "native-class coroutine frame slot must clear through its physical pointer rep");
     assert(!contains_between(await_call, trace, tagged_clear) &&
-           "native-class coroutine frame slot must never receive a tagged null");
+           "the native pointer local must never receive a tagged null");
+    char physical_release[96];
+    snprintf(physical_release, sizeof(physical_release), "xrt_release(xrt_box_obj(v%u))", slot_id);
+    assert(contains_between(await_call, trace, physical_release) &&
+           "the bridged native-class owner must be released through its physical pointer rep");
+    char boundary_release[128];
+    snprintf(boundary_release, sizeof(boundary_release), "xrt_release(_xr_await_boundary_v%u)",
+             slot_id);
+    assert(!contains_between(await_call, trace, boundary_release) &&
+           "the tagged boundary alias must not release the transferred owner a second time");
     /* Match the promotion by its shape, not by the instance local's name: the
      * portable lowering binds the instance to a `_portable_inst_N` pointer
      * where the older statement-expression form used `_inst`. */
@@ -11340,10 +11414,31 @@ TEST(cgen_coro_top_level_await_all_into_keeps_result_array_alive) {
            "top-level await all into should not emit a second post-await collect helper");
     assert(contains(code, "XR_ELEM_I64, true") &&
            "top-level await all into Array<int> should keep typed one-shot collection");
-    assert(contains(code, "xr_aot_trace_frame_value(visitor, f->v33);") &&
-           "top-level await all into result array must survive the suspend in the frame");
-    assert(!contains(code, "XrValue v33 = XR_NULL_VAL;") &&
-           "top-level await all into result array must not be a transient local after resume");
+    const char *await_into = strstr(code, "xr_aot_await_all_tasks_into_array(ctx,");
+    unsigned task_slot = 0;
+    unsigned result_slot = 0;
+    assert(await_into != NULL &&
+           sscanf(await_into, "xr_aot_await_all_tasks_into_array(ctx, v%u, v%u,", &task_slot,
+                  &result_slot) == 2 &&
+           task_slot != result_slot && "await-all frame operand slots should be readable");
+    const char *frame = strstr(code, "typedef struct test___main__");
+    const char *frame_end = frame ? strstr(frame, "} test___main__") : NULL;
+    assert(frame != NULL && frame_end != NULL && "top-level coroutine frame should be bounded");
+    char result_field[48];
+    char result_macro[64];
+    char transient_local[64];
+    char duplicate_trace[80];
+    snprintf(result_field, sizeof(result_field), "XrValue v%u;", result_slot);
+    snprintf(result_macro, sizeof(result_macro), "#define v%u (f->v%u)", result_slot, result_slot);
+    snprintf(transient_local, sizeof(transient_local), "XrValue v%u = XR_NULL_VAL;", result_slot);
+    snprintf(duplicate_trace, sizeof(duplicate_trace), "xr_aot_trace_frame_value(visitor, f->v%u);",
+             result_slot);
+    assert(contains_between(frame, frame_end, result_field) && contains(code, result_macro) &&
+           "the await-all result alias must survive suspension in one stable frame slot");
+    assert(!contains(code, transient_local) &&
+           "the await-all result alias must not be reconstructed as a transient local");
+    assert(!contains(code, duplicate_trace) &&
+           "a borrowed alias of the globally rooted result array must not become a second root");
 
     printf("  Generated top-level await all into frame-root path %zu bytes of C code\n",
            strlen(code));
@@ -12123,7 +12218,7 @@ int main(void) {
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
-    run_cgen_native_receiver_closure_capture_preserves_arc();
+    run_cgen_native_receiver_static_cleanup_borrows_without_closure_arc();
     run_cgen_class_constructor_returns_heap_native_instance();
     run_cgen_native_class_ref_field_constructor_result_uses_ptr_storage();
     run_cgen_native_class_collection_ref_fields_use_arc();

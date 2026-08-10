@@ -43,6 +43,15 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
             return report(error, error_size, "XR_SEM_0002", "type stable identity is invalid");
         if (type->kind >= XR_KIND_COUNT)
             return report(error, error_size, "XR_SEM_0005", "plan contains an invalid type kind");
+        if ((type->flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0 &&
+            (type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0)
+            return report(error, error_size, "XR_OWN_3000",
+                          "ownership-root type is not reference-capable");
+        if ((type->flags & XR_SEM_TYPE_BORROW_VIEW) != 0 &&
+            ((type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 ||
+             (type->flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0))
+            return report(error, error_size, "XR_OWN_3000",
+                          "borrow-view type has an invalid ownership class");
         if (!range_valid(type->child_begin, type->child_count, plan->type_child_count))
             return report(error, error_size, "XR_SEM_0012", "type child range is invalid");
         for (uint16_t c = 0; c < type->child_count; c++) {
@@ -63,7 +72,7 @@ static bool verify_functions(const XrSemanticPlan *plan, char *error, size_t err
                          plan->parameter_count) ||
             !range_valid(function->block_begin, function->block_count, plan->block_count))
             return report(error, error_size, "XR_SEM_0013", "function table range is invalid");
-        if ((plan->types[function->return_type].flags & 16u) != 0 &&
+        if ((plan->types[function->return_type].flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 &&
             (function->return_provenance == XR_SEM_RETURN_NONE ||
              function->return_provenance > XR_SEM_RETURN_BORROWED_STATIC))
             return report(error, error_size, "XR_OWN_3000",

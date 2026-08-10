@@ -50,6 +50,16 @@ typedef enum XrSemanticOperandOwnershipAction {
     XR_SEM_OPERAND_CONSUME = 1,
 } XrSemanticOperandOwnershipAction;
 
+typedef enum XrSemanticTypeFlag {
+    XR_SEM_TYPE_NULLABLE = 1u << 0,
+    XR_SEM_TYPE_CONST = 1u << 1,
+    XR_SEM_TYPE_VALUE = 1u << 2,
+    XR_SEM_TYPE_LITERAL = 1u << 3,
+    XR_SEM_TYPE_REFERENCE_CAPABLE = 1u << 4,
+    XR_SEM_TYPE_BORROW_VIEW = 1u << 5,
+    XR_SEM_TYPE_OWNERSHIP_ROOT = 1u << 6,
+} XrSemanticTypeFlag;
+
 typedef struct XrSemanticTypeRecord {
     XrStableId id;
     const char *canonical_key;

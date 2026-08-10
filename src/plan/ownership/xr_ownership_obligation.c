@@ -90,8 +90,9 @@ static void union_values(XrOwnershipBuildContext *ctx, uint32_t left, uint32_t r
         ctx->rank[a]++;
 }
 
-static bool type_is_reference(const XrSemanticPlan *plan, uint32_t type_index) {
-    return type_index < plan->type_count && (plan->types[type_index].flags & 16u) != 0;
+static bool type_is_ownership_root(const XrSemanticPlan *plan, uint32_t type_index) {
+    return type_index < plan->type_count &&
+           (plan->types[type_index].flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0;
 }
 
 static uint32_t aliased_call_operand(const XrSemanticPlan *plan,
@@ -105,7 +106,7 @@ static uint32_t aliased_call_operand(const XrSemanticPlan *plan,
 static bool build_equivalence_classes(XrOwnershipBuildContext *ctx) {
     for (uint32_t i = 0; i < ctx->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &ctx->plan->operations[i];
-        if (!type_is_reference(ctx->plan, operation->result_type) ||
+        if (!type_is_ownership_root(ctx->plan, operation->result_type) ||
             operation->result_value >= ctx->value_count)
             continue;
         if ((operation->ownership_use == XI_GEN_OWN_USE_PASS && operation->opcode != XI_PHI) ||
@@ -235,7 +236,7 @@ static uint32_t owner_for_value(XrOwnershipBuildContext *ctx, uint32_t value) {
 static bool ensure_owners(XrOwnershipBuildContext *ctx) {
     for (uint32_t i = 0; i < ctx->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &ctx->plan->operations[i];
-        if (!type_is_reference(ctx->plan, operation->result_type) ||
+        if (!type_is_ownership_root(ctx->plan, operation->result_type) ||
             operation->result_value >= ctx->value_count)
             continue;
         uint32_t root = find_root(ctx, operation->result_value);
@@ -250,7 +251,7 @@ static bool ensure_owners(XrOwnershipBuildContext *ctx) {
 
 static bool classify_definition(XrOwnershipBuildContext *ctx, uint32_t operation_index) {
     const XrSemanticOperationRecord *operation = &ctx->plan->operations[operation_index];
-    if (!type_is_reference(ctx->plan, operation->result_type))
+    if (!type_is_ownership_root(ctx->plan, operation->result_type))
         return true;
     uint32_t owner_index = owner_for_value(ctx, operation->result_value);
     if (owner_index == XR_SEMANTIC_INDEX_NONE)
@@ -301,10 +302,18 @@ static bool classify_definition(XrOwnershipBuildContext *ctx, uint32_t operation
     return add_event(ctx, owner_index, operation_index, XR_OWN_EVENT_ALLOC, 1, XR_OWN_OWNED_LOCAL);
 }
 
+static uint32_t operation_for_value(const XrSemanticPlan *plan, uint32_t function, uint32_t value) {
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        if (plan->operations[i].function == function && plan->operations[i].result_value == value)
+            return i;
+    }
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
 static bool add_operand_events(XrOwnershipBuildContext *ctx, uint32_t operation_index) {
     const XrSemanticOperationRecord *operation = &ctx->plan->operations[operation_index];
     if (operation->opcode == XI_PHI) {
-        if (!type_is_reference(ctx->plan, operation->result_type))
+        if (!type_is_ownership_root(ctx->plan, operation->result_type))
             return true;
         const XrSemanticBlockRecord *block = &ctx->plan->blocks[operation->block];
         if (operation->operand_count != block->predecessor_count)
@@ -373,10 +382,22 @@ static bool add_operand_events(XrOwnershipBuildContext *ctx, uint32_t operation_
             bool published = stored || operation->opcode == XI_SET_SHARED ||
                              operation->opcode == XI_SET_GLOBAL ||
                              operation->opcode == XI_STORE_UPVAL;
-            if (consumed && !add_event(ctx, owner, operation_index,
-                                       published ? XR_OWN_EVENT_PUBLISH : XR_OWN_EVENT_MOVE, -1,
-                                       published ? XR_OWN_PUBLISHED_SHARED : XR_OWN_MOVED))
-                return false;
+            if (consumed) {
+                uint32_t producer = operation_for_value(ctx->plan, operation->function, value);
+                bool destroys_scoped_stack_closure =
+                    producer != XR_SEMANTIC_INDEX_NONE &&
+                    ctx->plan->operations[producer].opcode == XI_STACK_ALLOC &&
+                    (operation->opcode == XI_PAR_FOR || operation->opcode == XI_PAR_MAP ||
+                     operation->opcode == XI_PAR_REDUCE);
+                XrOwnershipEventKind kind = published                       ? XR_OWN_EVENT_PUBLISH
+                                            : destroys_scoped_stack_closure ? XR_OWN_EVENT_DESTROY
+                                                                            : XR_OWN_EVENT_MOVE;
+                XrOwnershipState state = published                       ? XR_OWN_PUBLISHED_SHARED
+                                         : destroys_scoped_stack_closure ? XR_OWN_RELEASED
+                                                                         : XR_OWN_MOVED;
+                if (!add_event(ctx, owner, operation_index, kind, -1, state))
+                    return false;
+            }
             if (published)
                 ctx->certificate->owners[owner].flags |= 1u;
         }
@@ -385,14 +406,6 @@ static bool add_operand_events(XrOwnershipBuildContext *ctx, uint32_t operation_
             return false;
     }
     return true;
-}
-
-static uint32_t operation_for_value(const XrSemanticPlan *plan, uint32_t function, uint32_t value) {
-    for (uint32_t i = 0; i < plan->operation_count; i++) {
-        if (plan->operations[i].function == function && plan->operations[i].result_value == value)
-            return i;
-    }
-    return XR_SEMANTIC_INDEX_NONE;
 }
 
 static bool classify_returns(XrOwnershipBuildContext *ctx) {
@@ -411,7 +424,7 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
                  * such as int or null. It carries no RC owner, but it is a
                  * valid inert token: callers may apply the common owned ABI's
                  * release and the runtime operation is a no-op. */
-                if (type_is_reference(ctx->plan, function->return_type)) {
+                if (type_is_ownership_root(ctx->plan, function->return_type)) {
                     if (inferred_provenance == XR_SEM_RETURN_NONE ||
                         inferred_provenance == XR_SEM_RETURN_BORROWED_STATIC) {
                         inferred_provenance = XR_SEM_RETURN_BORROWED_STATIC;
@@ -433,7 +446,7 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
                 if (ctx->certificate->events[e].owner == owner_index)
                     balance += ctx->certificate->events[e].logical_delta;
             }
-            if (type_is_reference(ctx->plan, function->return_type) &&
+            if (type_is_ownership_root(ctx->plan, function->return_type) &&
                 provenance == XR_SEM_RETURN_NONE) {
                 if (owner->initial_state == XR_OWN_IMMORTAL) {
                     provenance = XR_SEM_RETURN_BORROWED_STATIC;
@@ -452,7 +465,7 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
                     }
                 }
             }
-            if (type_is_reference(ctx->plan, function->return_type) &&
+            if (type_is_ownership_root(ctx->plan, function->return_type) &&
                 (provenance == XR_SEM_RETURN_NONE || provenance > XR_SEM_RETURN_BORROWED_STATIC)) {
                 if (ctx->error && ctx->error_size) {
                     const XrSemanticTypeRecord *return_type =
@@ -507,7 +520,7 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
                                 "returned reference has no semantic producer operation");
             }
         }
-        if (type_is_reference(ctx->plan, function->return_type)) {
+        if (type_is_ownership_root(ctx->plan, function->return_type)) {
             if (inferred_provenance == XR_SEM_RETURN_NONE)
                 return fail(ctx, "XR_OWN_3000",
                             "reference-capable function has no proven return disposition");

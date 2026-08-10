@@ -23,7 +23,7 @@ anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 30d7
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json c2b700923df4081aabfd9554aea992e7451f63c40cf958bac4440c5a1b97c321
 anchor-sha256: contracts/target-machine/object-extent-inventory.json e62c7ab4f82bfd1ccba2a11641ef31a237ab380f9c1d83a299e578c3808e0798
 anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc66576441dcdfa3b8b52ee606fb6256abefefa2e848310aed
-anchor-sha256: contracts/target-machine/diagnostic-codes.toml 2176ddb5780096bae163750240ca4fe539b90b90b281c952ddac80b6ee8fc372
+anchor-sha256: contracts/target-machine/diagnostic-codes.toml 17cca3dcffa272a844d56726d970f4ccce57870ff6a5cd292be58705e75d6d97
 anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
 anchor-sha256: scripts/target_machine_phase0.py 542845a45dae152fb811ea7df52e3e8b8ccb760df29c33c0bed255867f99a310
 anchor-sha256: tests/target-machine/phase0/run_baseline.py 695e58da8de8b2a5d76d21f9d58e02f08a8fb7c65663152a80511b2dce11915f

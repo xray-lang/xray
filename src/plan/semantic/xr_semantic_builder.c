@@ -332,9 +332,16 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
         return fail(ctx, "XR_EXEC_5003", "semantic type identity allocation failed");
     record->kind = (uint32_t) type->kind;
     record->scalar_rep = type->scalar_rep;
-    record->flags = (uint8_t) ((type->is_nullable ? 1u : 0u) | (type->is_const ? 2u : 0u) |
-                               (type->is_value_type ? 4u : 0u) | (type->is_literal ? 8u : 0u) |
-                               (xi_own_type_is_rc(type) ? 16u : 0u));
+    bool reference_capable = xi_own_type_is_rc(type);
+    bool borrow_view = type->kind == XR_KIND_SLICE;
+    record->flags =
+        (uint8_t) ((type->is_nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
+                   (type->is_const ? XR_SEM_TYPE_CONST : 0u) |
+                   (type->is_value_type ? XR_SEM_TYPE_VALUE : 0u) |
+                   (type->is_literal ? XR_SEM_TYPE_LITERAL : 0u) |
+                   (reference_capable ? XR_SEM_TYPE_REFERENCE_CAPABLE : 0u) |
+                   (borrow_view ? XR_SEM_TYPE_BORROW_VIEW : 0u) |
+                   (reference_capable && !borrow_view ? XR_SEM_TYPE_OWNERSHIP_ROOT : 0u));
     ctx->types[ctx->type_count++] = (XrTypeMapEntry) {type, index};
     if (!add_type_children(ctx, type, index))
         return false;
@@ -490,8 +497,18 @@ static bool collect_semantic_types(XrSemanticBuildContext *ctx) {
             }
             for (uint32_t v = 0; v < block->nvalues; v++) {
                 const XiValue *value = block->values[v];
-                if (!value || !add_type(ctx, value->type, &ignored))
-                    return fail(ctx, "XR_SEM_0015", "semantic operation has no result type");
+                if (!value || !value->type) {
+                    if (ctx->error && ctx->error_size)
+                        snprintf(ctx->error, ctx->error_size,
+                                 "XR_SEM_0015: semantic operation has no result type "
+                                 "(func=%s block=%u row=%u op=%s value=%u)",
+                                 function->name ? function->name : "<anonymous>", b, v,
+                                 value ? xi_generated_op_name(value->op) : "<null>",
+                                 value ? value->id : UINT32_MAX);
+                    return false;
+                }
+                if (!add_type(ctx, value->type, &ignored))
+                    return false;
                 if (value->op != XI_CONST || value->aux_kind != XI_AUX_KIND_ENUM_NAMESPACE)
                     continue;
                 const XiEnumData *data = (const XiEnumData *) value->aux;
@@ -870,9 +887,15 @@ static bool append_operand(XrSemanticBuildContext *ctx, const XiFunc *function,
     else if ((value->op == XI_CHAN_SEND || value->op == XI_CHAN_TRY_SEND) && index > 0)
         transfer_mode = xi_chan_send_transfer_mode(value);
     ctx->plan->operand_transfer_modes[cursor] = transfer_mode;
-    ctx->plan->operand_ownership_actions[cursor] = xi_arc_operand_consumes(function, value, index)
-                                                       ? XR_SEM_OPERAND_CONSUME
-                                                       : XR_SEM_OPERAND_BORROW;
+    const XiValue *operand = value->args[index];
+    bool destroys_scoped_stack_closure =
+        operand && operand->op == XI_STACK_ALLOC && operand->aux_int == XI_CLOSURE_NEW &&
+        ((value->op == XI_PAR_FOR && index == 3) || (value->op == XI_PAR_MAP && index == 3) ||
+         (value->op == XI_PAR_REDUCE && (index == 4 || index == 5)));
+    ctx->plan->operand_ownership_actions[cursor] =
+        destroys_scoped_stack_closure || xi_arc_operand_consumes(function, value, index)
+            ? XR_SEM_OPERAND_CONSUME
+            : XR_SEM_OPERAND_BORROW;
     ctx->plan->operand_contracts[cursor] = pack_call_contract(value, index);
     return true;
 }
