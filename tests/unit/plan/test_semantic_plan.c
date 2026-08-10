@@ -5,6 +5,8 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xsha256.h"
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_arc.h"
+#include "../../../src/ir/xi_effect.h"
 #include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
@@ -30,6 +32,7 @@ static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 4, .frozen = true};
+static XrType stub_null = {.kind = XR_KIND_NULL, .id = 6, .frozen = true};
 static XrType stub_array = {
     .kind = XR_KIND_ARRAY,
     .id = 5,
@@ -627,6 +630,98 @@ static void test_stack_extent_is_logical_and_fail_closed(void) {
     xi_func_free(function);
 }
 
+static void test_loop_redefinition_closes_previous_owner(void) {
+    XiFunc *function = xi_func_new("loop_redefinition_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    XiBlock *header = xi_block_new(function);
+    XiBlock *body = xi_block_new(function);
+    XiBlock *latch = xi_block_new(function);
+    XiBlock *exit = xi_block_new(function);
+    REQUIRE(entry != NULL && header != NULL && body != NULL && latch != NULL && exit != NULL);
+
+    xi_block_set_jump(entry, header);
+    XiValue *condition = xi_const_bool(function, header, true, &stub_bool);
+    REQUIRE(condition != NULL);
+    xi_block_set_if(header, condition, body, exit);
+    XiValue *capacity = xi_const_int(function, body, 1, &stub_int);
+    REQUIRE(capacity != NULL);
+    XiValue *array = xi_value_new(function, body, XI_ARRAY_NEW, &stub_array, 1);
+    REQUIRE(array != NULL);
+    array->args[0] = capacity;
+    array->flags = xi_op_default_effects(XI_ARRAY_NEW);
+    xi_block_set_jump(body, latch);
+    xi_block_set_jump(latch, header);
+    XiValue *result = xi_const_int(function, exit, 0, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(exit, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "loop-redefinition plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL && plan->ownership != NULL);
+
+    uint32_t origin_block = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        if (plan->operations[i].opcode == XI_ARRAY_NEW) {
+            origin_block = plan->operations[i].block;
+            break;
+        }
+    }
+    REQUIRE(origin_block != XR_SEMANTIC_INDEX_NONE);
+    bool saw_redefinition_release = false;
+    for (uint32_t i = 0; i < plan->ownership->event_count; i++) {
+        const XrOwnershipEventRecord *event = &plan->ownership->events[i];
+        saw_redefinition_release |= event->kind == XR_OWN_EVENT_RELEASE &&
+                                    event->logical_delta == -1 && event->successor == origin_block;
+    }
+    REQUIRE(saw_redefinition_release);
+    xr_semantic_plan_free(plan);
+    xi_func_free(function);
+}
+
+static void test_nullable_borrowed_parameter_keeps_sealed_provenance(void) {
+    XiFunc *function = xi_func_new("nullable_borrowed_parameter_probe", &stub_array);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    XiBlock *null_return = xi_block_new(function);
+    XiBlock *parameter_return = xi_block_new(function);
+    REQUIRE(entry != NULL && null_return != NULL && parameter_return != NULL);
+    XiValue *parameter = xi_param(function, entry, 0, &stub_array);
+    REQUIRE(parameter != NULL);
+    function->nparams = 1;
+    function->params = (XiValue **) xr_malloc(sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = parameter;
+    function->arc_return_ownership.kind = XI_RETURN_OWNERSHIP_BORROWED_PARAM;
+    function->arc_return_ownership.param_index = 0;
+    function->arc_return_ownership.complete = true;
+
+    XiValue *condition = xi_const_bool(function, entry, true, &stub_bool);
+    REQUIRE(condition != NULL);
+    xi_block_set_if(entry, condition, null_return, parameter_return);
+    XiValue *null_value = xi_const_null(function, null_return, &stub_null);
+    REQUIRE(null_value != NULL);
+    xi_block_set_return(null_return, null_value);
+    xi_block_set_return(parameter_return, parameter);
+    xi_arc_analyze_contracts(function);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "nullable-borrow plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    REQUIRE(plan->functions[0].return_provenance == XR_SEM_RETURN_BORROWED_PARAM);
+    REQUIRE(plan->functions[0].return_parameter == 0);
+    xr_semantic_plan_free(plan);
+    xi_func_free(function);
+}
+
 int main(void) {
     test_stable_ids();
     test_operation_registry();
@@ -637,6 +732,8 @@ int main(void) {
     test_xsm_fail_closed_mutations();
     test_semantic_and_ownership_mutations();
     test_stack_extent_is_logical_and_fail_closed();
+    test_loop_redefinition_closes_previous_owner();
+    test_nullable_borrowed_parameter_keeps_sealed_provenance();
     printf("SemanticPlan/XSM tests passed\n");
     return 0;
 }

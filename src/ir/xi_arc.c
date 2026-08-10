@@ -285,6 +285,12 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {
  * consumed. Copies whose result is only borrowed stay copies. Run before
  * borrow-signature precompute so signatures see the move. */
 
+static bool arc_function_returns_borrow(const XiFunc *f) {
+    return f && f->arc_return_ownership.complete &&
+           (f->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_BORROWED_PARAM ||
+            f->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_BORROWED_STATIC);
+}
+
 /* Does `v` have at least one consuming use anywhere in `f` (an owned-store /
  * return / forward / phi / consuming call argument)? */
 static bool value_has_consuming_use(const XiFunc *f, const XiValue *v) {
@@ -307,7 +313,7 @@ static bool value_has_consuming_use(const XiFunc *f, const XiValue *v) {
                     return true; /* a phi merge consumes its incoming value */
             }
         }
-        if (blk->control == v && blk->kind == XI_BLOCK_RETURN)
+        if (blk->control == v && blk->kind == XI_BLOCK_RETURN && !arc_function_returns_borrow(f))
             return true;
     }
     return false;
@@ -1116,9 +1122,18 @@ static bool arc_call_arg_is_callee_borrowed(XiFunc *f, const XiValue *user, uint
         callee = arc_resolve_callee(f, user->args[0]);
     else if (user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT)
         callee = arc_resolve_namespace_method_callee(f, user);
+    uint16_t parameter = (uint16_t) (a - 1);
+    /* The call-site return contract is analyzer-sealed even when a relative
+     * module function has no live XiFunc pointer in this compilation. A
+     * BORROWED_PARAM result proves that exact actual is inspected/forwarded
+     * at +0, so treating it as moved-in would manufacture an unmatched retain
+     * before the call. */
+    if (user->call_return_ownership.complete &&
+        user->call_return_ownership.kind == XI_RETURN_OWNERSHIP_BORROWED_PARAM &&
+        user->call_return_ownership.param_index == (int16_t) parameter)
+        return true;
     if (!callee)
         return false;
-    uint16_t parameter = (uint16_t) (a - 1);
     if (callee->is_vararg && parameter >= callee->nparams)
         parameter = callee->nparams;
     return arc_callee_borrows_param(callee, parameter);
@@ -2225,7 +2240,7 @@ static bool param_has_consuming_use(XiFunc *f, XiValue *p) {
                     return true; /* phi merge consumes its incoming value */
             }
         }
-        if (blk->control == p && blk->kind == XI_BLOCK_RETURN)
+        if (blk->control == p && blk->kind == XI_BLOCK_RETURN && !arc_function_returns_borrow(f))
             return true;
     }
     return false;
@@ -2280,6 +2295,14 @@ XR_FUNC void xi_arc_analyze_contracts(XiFunc *f) {
     arc_copy_to_move(f);
     XiFuncVec vec = {0};
     arc_init_sigs_collect(f, &vec);
+    uint8_t *fixed_return = (uint8_t *) xr_calloc(vec.count, sizeof(*fixed_return));
+    if (vec.count > 0 && !fixed_return) {
+        xr_free(vec.items);
+        XR_CHECK(false, "xi_arc: out of memory sealing return contracts");
+        return;
+    }
+    for (uint32_t i = 0; i < vec.count; i++)
+        fixed_return[i] = vec.items[i]->arc_return_ownership.complete ? 1u : 0u;
     bool changed = true;
     while (changed) {
         changed = false;
@@ -2308,6 +2331,8 @@ XR_FUNC void xi_arc_analyze_contracts(XiFunc *f) {
      * the SCC to UNKNOWN; a non-converging equation set is reset fail-closed. */
     for (uint32_t i = 0; i < vec.count; i++) {
         XiFunc *fn = vec.items[i];
+        if (fixed_return[i])
+            continue;
         fn->arc_return_ownership = xi_own_type_is_rc(fn->return_type)
                                        ? arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true)
                                        : arc_return_unknown();
@@ -2318,6 +2343,8 @@ XR_FUNC void xi_arc_analyze_contracts(XiFunc *f) {
     while (changed && rounds++ < max_rounds) {
         changed = false;
         for (uint32_t i = 0; i < vec.count; i++) {
+            if (fixed_return[i])
+                continue;
             XiFunc *fn = vec.items[i];
             XiReturnOwnership next = arc_infer_return_ownership(fn);
             if (arc_return_ownership_equal(fn->arc_return_ownership, next))
@@ -2327,8 +2354,10 @@ XR_FUNC void xi_arc_analyze_contracts(XiFunc *f) {
         }
     }
     if (changed) {
-        for (uint32_t i = 0; i < vec.count; i++)
-            vec.items[i]->arc_return_ownership = arc_return_unknown();
+        for (uint32_t i = 0; i < vec.count; i++) {
+            if (!fixed_return[i])
+                vec.items[i]->arc_return_ownership = arc_return_unknown();
+        }
     }
 
     /* Every source-defined function must publish an exact reference-return
@@ -2340,11 +2369,12 @@ XR_FUNC void xi_arc_analyze_contracts(XiFunc *f) {
      * name and leak. */
     for (uint32_t i = 0; i < vec.count; i++) {
         XiFunc *fn = vec.items[i];
-        if (!fn || fn->is_extern || !xi_own_type_is_rc(fn->return_type) ||
+        if (!fn || fixed_return[i] || fn->is_extern || !xi_own_type_is_rc(fn->return_type) ||
             fn->arc_return_ownership.complete)
             continue;
         fn->arc_return_ownership = arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
     }
+    xr_free(fixed_return);
     xr_free(vec.items);
 }
 

@@ -450,18 +450,27 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
             if (owner_index == XR_SEMANTIC_INDEX_NONE) {
                 /* A dynamic/reference-capable ABI may return an inline scalar
                  * such as int or null. It carries no RC owner, but it is a
-                 * valid inert token: callers may apply the common owned ABI's
-                 * release and the runtime operation is a no-op. */
+                 * valid inert token: callers may apply the function's exact
+                 * return convention and every retain/release remains a no-op.
+                 * A nullable BORROWED_PARAM return must therefore keep that
+                 * sealed convention on its null path rather than inventing a
+                 * conflicting BORROWED_STATIC provenance. */
                 if (type_is_ownership_root(ctx->plan, function->return_type)) {
+                    uint8_t inline_provenance = function->return_provenance != XR_SEM_RETURN_NONE
+                                                    ? function->return_provenance
+                                                    : XR_SEM_RETURN_BORROWED_STATIC;
+                    int16_t inline_parameter = inline_provenance == XR_SEM_RETURN_BORROWED_PARAM
+                                                   ? function->return_parameter
+                                                   : -1;
                     if (inferred_provenance == XR_SEM_RETURN_NONE ||
-                        inferred_provenance == XR_SEM_RETURN_BORROWED_STATIC) {
-                        inferred_provenance = XR_SEM_RETURN_BORROWED_STATIC;
-                        inferred_parameter = -1;
-                    } else if (inferred_provenance == XR_SEM_RETURN_OWNED) {
-                        inferred_parameter = -1;
-                    } else {
+                        (inferred_provenance == inline_provenance &&
+                         inferred_parameter == inline_parameter)) {
+                        inferred_provenance = inline_provenance;
+                        inferred_parameter = inline_parameter;
+                    } else if (!(inferred_provenance == XR_SEM_RETURN_OWNED &&
+                                 inline_provenance == XR_SEM_RETURN_BORROWED_STATIC)) {
                         return fail(ctx, "XR_OWN_3000",
-                                    "inline and borrowed-parameter return paths disagree");
+                                    "inline return path disagrees with sealed provenance");
                     }
                 }
                 continue;
@@ -811,7 +820,8 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
         }
         uint32_t head = 0, tail = 0;
         uint32_t origin_local = origin_block - fn->block_begin;
-        entry[origin_local] = ctx->plan->operations[origin_operation].opcode == XI_PHI ? 1 : 0;
+        bool origin_is_phi = ctx->plan->operations[origin_operation].opcode == XI_PHI;
+        entry[origin_local] = origin_is_phi ? 1 : 0;
         queue[tail++] = origin_local;
         while (head < tail) {
             uint32_t local = queue[head++];
@@ -856,6 +866,35 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
                     xr_free(edge_delta);
                     xr_free(queue);
                     return false;
+                }
+                /* Re-entering a non-PHI SSA definition creates a new dynamic
+                 * owner instance. Close the previous iteration on the edge;
+                 * otherwise its token is incorrectly joined with the next
+                 * allocation at the definition block. A PHI is different: it
+                 * explicitly models loop-carried identity and must preserve
+                 * the incoming balance. */
+                if (!origin_is_phi && successor == origin_block && incoming > 0) {
+                    if (incoming > INT16_MAX) {
+                        xr_free(entry);
+                        xr_free(delta);
+                        xr_free(edge_delta);
+                        xr_free(queue);
+                        return fail(ctx, "XR_EXEC_5003",
+                                    "ownership redefinition disposition exceeds schema");
+                    }
+                    uint32_t operation = terminal_disposition_operation(
+                        ctx, function, fn->block_begin + local, origin_operation);
+                    if (!add_event_on_edge(ctx, owner, operation, fn->block_begin + local,
+                                           successor, XR_OWN_EVENT_RELEASE, (int16_t) -incoming,
+                                           XR_OWN_RELEASED)) {
+                        xr_free(entry);
+                        xr_free(delta);
+                        xr_free(edge_delta);
+                        xr_free(queue);
+                        return false;
+                    }
+                    edge_delta[local * 2u + s] -= incoming;
+                    incoming = 0;
                 }
                 uint32_t next = successor - fn->block_begin;
                 if (entry[next] == INT32_MIN) {
