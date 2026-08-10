@@ -523,6 +523,7 @@ def load_def_module_methods():
             'effect': getattr(entry, 'effect', ''),
             'allocation': getattr(entry, 'allocation', ''),
             'return_ownership': getattr(entry, 'return_ownership', ''),
+            'semantic_intrinsic': getattr(entry, 'semantic_intrinsic', False),
         })
     return modules
 
@@ -1132,7 +1133,8 @@ def generate_header(type_results, module_results):
                     lines.append(
                         f'    {{"{c_string(m["name"])}", "{c_string(m["signature"])}", '
                         f'"{c_string(m["doc"])}", {is_method}, false, '
-                        f'{"true" if m.get("is_internal") else "false"}, false, '
+                        f'{"true" if m.get("is_internal") else "false"}, '
+                        f'{"true" if m.get("semantic_intrinsic") else "false"}, '
                         f'{is_yieldable}, {effect_init}, {allocation}, false, '
                         f'{return_ownership}}},')
                 if constant_entries:

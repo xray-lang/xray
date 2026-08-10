@@ -38,7 +38,8 @@ class ReturnOwnershipManifestTests(unittest.TestCase):
         for entry in parse_defs(ROOT):
             _, result = parse_function_signature_shape(entry.signature)
             if return_type_requires_ownership_contract(result):
-                self.assertTrue(entry.return_ownership, entry.symbol)
+                self.assertTrue(entry.return_ownership or entry.semantic_intrinsic, entry.symbol)
+            self.assertNotEqual("unknown", entry.return_ownership, entry.symbol)
 
     def test_missing_contract_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="xray-return-ownership.") as tmp:
@@ -80,6 +81,72 @@ class ReturnOwnershipManifestTests(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(SystemExit, "references missing parameter 1"):
+                parse_def_metadata(root)
+
+    def test_unknown_reference_contract_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-return-ownership.") as tmp:
+            root = Path(tmp)
+            defs = root / "stdlib" / "defs"
+            defs.mkdir(parents=True)
+            (defs / "core.def").write_text(
+                """module sample {
+  fn make {
+    signature: "(): string"
+    doc: "make"
+    vm: "sample_make"
+    argc: 0
+    return_ownership: "unknown"
+  }
+}
+""",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SystemExit, "unsupported return ownership"):
+                parse_def_metadata(root)
+
+    def test_semantic_intrinsic_must_not_declare_generic_ownership(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-return-ownership.") as tmp:
+            root = Path(tmp)
+            defs = root / "stdlib" / "defs"
+            defs.mkdir(parents=True)
+            (defs / "core.def").write_text(
+                """module sample {
+  fn invoke {
+    signature: "(callback: any): any"
+    doc: "invoke"
+    vm: "sample_invoke"
+    argc: 1
+    arg_spec: "v"
+    semantic_intrinsic: true
+    return_ownership: "fresh"
+  }
+}
+""",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SystemExit, "must specialize return ownership"):
+                parse_def_metadata(root)
+
+    def test_semantic_intrinsic_must_be_boolean(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="xray-return-ownership.") as tmp:
+            root = Path(tmp)
+            defs = root / "stdlib" / "defs"
+            defs.mkdir(parents=True)
+            (defs / "core.def").write_text(
+                """module sample {
+  fn invoke {
+    signature: "(callback: any): any"
+    doc: "invoke"
+    vm: "sample_invoke"
+    argc: 1
+    arg_spec: "v"
+    semantic_intrinsic: "false"
+  }
+}
+""",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(SystemExit, "semantic_intrinsic must be a boolean"):
                 parse_def_metadata(root)
 
 

@@ -2902,7 +2902,7 @@ module mem {
     link_object: false
     layer: "core"
     allocation: "no_heap"
-    return_ownership: "unknown"
+    semantic_intrinsic: true
   }
 
   const PROT_NONE {
@@ -3060,7 +3060,7 @@ module mem {
     link_object: false
     layer: "core"
     allocation: "no_heap"
-    return_ownership: "unknown"
+    semantic_intrinsic: true
   }
 
   fn mutPtr {
@@ -3458,7 +3458,7 @@ module net {
     layer: "runtime"
     caps: "coro,netpoll"
     effect: "NetError.Timeout, NetError.Closed, NetError.Reset, NetError.Refused, NetError.Dns, NetError.Tls, NetError.Io, NetError.Invalid, NetError.Cancelled, NetError.OutOfMemory"
-    return_ownership: "unknown"
+    return_ownership: "fresh"
   }
 
   fn __shutdownRead {

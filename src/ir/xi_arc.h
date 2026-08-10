@@ -22,6 +22,12 @@
  * Stores the original op in aux_int for codegen dispatch. */
 XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f);
 
+/* Normalize owner forwarding and seal target-neutral parameter/return
+ * ownership contracts on the pre-ARC graph. Callers that skip physical
+ * retain/release insertion must still run this semantic stage before
+ * constructing SemanticPlan. */
+XR_FUNC void xi_arc_analyze_contracts(XiFunc *f);
+
 /* Insert ARC retain/release ops into f.
  * Must be called after xi_escape_analyze() and before xi_backend_lower().
  * Modifies the IR in place. */

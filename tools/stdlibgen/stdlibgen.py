@@ -110,6 +110,7 @@ class StdlibEntry:
     effect: str
     allocation: str
     return_ownership: str
+    semantic_intrinsic: bool
     caps: tuple[str, ...]
 
     @property
@@ -609,7 +610,7 @@ def parse_def_metadata(
             except ValueError as exc:
                 raise SystemExit(f"{path}:{line_no}: {current_module}.{current_name}: {exc}") from exc
             return_ownership = str(props.get("return_ownership", ""))
-            ownership_values = {"unknown", "fresh", "borrowed_static"}
+            ownership_values = {"fresh", "borrowed_static"}
             borrowed_param = re.fullmatch(r"borrowed_param:([0-9]+)", return_ownership)
             if return_ownership and return_ownership not in ownership_values and not borrowed_param:
                 raise SystemExit(
@@ -621,7 +622,20 @@ def parse_def_metadata(
                     f"{path}:{line_no}: return ownership for {current_module}.{current_name} "
                     f"references missing parameter {borrowed_param.group(1)}"
                 )
-            if return_type_requires_ownership_contract(signature_return) and not return_ownership:
+            semantic_intrinsic_value = props.get("semantic_intrinsic", False)
+            if not isinstance(semantic_intrinsic_value, bool):
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} semantic_intrinsic "
+                    "must be a boolean"
+                )
+            semantic_intrinsic = semantic_intrinsic_value
+            if semantic_intrinsic and return_ownership:
+                raise SystemExit(
+                    f"{path}:{line_no}: {current_module}.{current_name} semantic intrinsic "
+                    "must specialize return ownership during lowering, not declare a generic contract"
+                )
+            if (return_type_requires_ownership_contract(signature_return) and
+                    not return_ownership and not semantic_intrinsic):
                 raise SystemExit(
                     f"{path}:{line_no}: {current_module}.{current_name} returns reference-capable "
                     f"type {signature_return!r} and requires explicit return_ownership"
@@ -650,6 +664,7 @@ def parse_def_metadata(
                     effect=str(props.get("effect", "")),
                     allocation=allocation,
                     return_ownership=return_ownership,
+                    semantic_intrinsic=semantic_intrinsic,
                     caps=caps,
                 )
             )

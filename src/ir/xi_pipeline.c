@@ -371,6 +371,15 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         xi_stack_alloc_rewrite(ir);
     }
 
+    /* Dependency resolution and ownership summaries are semantic inputs to
+     * SemanticPlan even when a diagnostic/prototype pipeline skips physical
+     * retain/release insertion. */
+    if (cfg->module_graph && cfg->graph_modules && cfg->graph_module_count > 0) {
+        xi_resolve_imports(ir, cfg->module_graph, cfg->source_file, cfg->graph_modules,
+                           cfg->graph_module_count);
+    }
+    xi_arc_analyze_contracts(ir);
+
     /* Precise dup/drop insertion (consumes ownership analysis).
      * MUST run BEFORE backend lowering, while ops are still semantic
      * (STORE_FIELD/ARRAY_NEW/...) — the owned/borrow split is keyed on
@@ -378,17 +387,11 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
      * VM can get dup/drop without stack_alloc_rewrite. */
     if (cfg->run_escape && cfg->run_arc) {
         /* Multi-module drivers compile in topological order, so every
-         * dependency of this module is already fully compiled and its borrow
-         * signatures are frozen. Resolving imports now (instead of after all
-         * modules compile) lets ARC read a cross-module callee's signature:
-         * the caller then keeps ownership of arguments the callee only
-         * borrows and releases them at their death point. The callee never
-         * releases a borrowed parameter, so skipping this resolution would
-         * move the argument in and leak it. */
-        if (cfg->module_graph && cfg->graph_modules && cfg->graph_module_count > 0) {
-            xi_resolve_imports(ir, cfg->module_graph, cfg->source_file, cfg->graph_modules,
-                               cfg->graph_module_count);
-        }
+         * dependency is already compiled and the semantic stage above has
+         * resolved its frozen borrow signatures. ARC can therefore keep
+         * ownership of arguments a callee only borrows and release them at
+         * their death point; skipping resolution would move the argument into
+         * a callee that never releases it. */
         xi_arc_insert(ir);
         if (getenv("XRAY_XI_ARC_DUMP")) {
             fprintf(stderr, "=== Xi IR after xi_arc_insert ===\n");

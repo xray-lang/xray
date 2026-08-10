@@ -2272,7 +2272,12 @@ static void arc_init_sigs_collect(XiFunc *f, XiFuncVec *vec) {
  * parameter dups at each consume, an owned one moves — so a less-precise result
  * only costs extra dup/drop, never RC balance. Signatures must be final before
  * any RETAIN/RELEASE is inserted, since callers read callee signatures. */
-static void arc_precompute_sigs(XiFunc *f) {
+XR_FUNC void xi_arc_analyze_contracts(XiFunc *f) {
+    /* OWNER_FORWARD is a semantic ownership relation, not a physical RC
+     * instruction. Normalize escaping borrow-copies before computing any
+     * signature so every consumer, including a no-ARC pipeline, sees the same
+     * contract graph. */
+    arc_copy_to_move(f);
     XiFuncVec vec = {0};
     arc_init_sigs_collect(f, &vec);
     bool changed = true;
@@ -2386,7 +2391,7 @@ static void arc_insert_rec(XiFunc *f) {
     /* Borrow signature: which parameters does this function only borrow (never
      * store/return/forward)? A borrowed parameter must NOT be dropped by the
      * callee — the caller retains ownership (Perceus borrowed-parameter rule).
-     * Cached on the pre-ARC IR (arc_precompute_sigs) and shared with callers,
+     * Cached on the pre-ARC IR (xi_arc_analyze_contracts) and shared with callers,
      * which use it to keep ownership of a borrowed argument rather than moving
      * it into a callee that never releases it. */
     const XiBorrowSig *own_sig = arc_get_borrow_sig(f);
@@ -2660,13 +2665,11 @@ static void arc_order_adjacent_rc_runs(XiFunc *f) {
 
 XR_FUNC void xi_arc_insert(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_arc_insert: NULL func");
-    /* Promote escaping borrow-copies to moves BEFORE computing borrow
-     * signatures, so a parameter forwarded through `var b = a; return b` is
-     * seen as consumed (owned), not borrowed. */
-    arc_copy_to_move(f);
-    /* Cache all callee borrow signatures on the pre-ARC IR before any function
-     * is mutated, then insert dup/drop bottom-up. */
-    arc_precompute_sigs(f);
+    /* Production runs contract analysis as its own pipeline stage. Standalone
+     * IR clients may request insertion directly, so enforce the prerequisite
+     * without making physical ARC the source of the contracts. */
+    if (!f->arc_borrow_sig)
+        xi_arc_analyze_contracts(f);
     arc_insert_rec(f);
     arc_order_release_before_var_redef(f);
     arc_order_adjacent_rc_runs(f);

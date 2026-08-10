@@ -18,7 +18,9 @@
 #include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/parser/xtype_ref.h"
+#include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_module.h"
+#include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/shared/xr_derive_flags.h"
@@ -7844,6 +7846,10 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
     ASSERT_NOT_NULL(push_func);
     ASSERT_EQ_UINT(use_func->xg_body_func_id, use_body->func_id);
     ASSERT_EQ_UINT(push_func->xg_body_func_id, push_body->func_id);
+    ASSERT_NOT_NULL(use_func->arc_borrow_sig);
+    ASSERT_NOT_NULL(push_func->arc_borrow_sig);
+    ASSERT_TRUE(xi_func_semantic_param_count(use_func) > 0);
+    ASSERT_EQ_UINT(xi_arc_parameter_ownership(use_func, use_func->params[0]), XI_OWN_BORROWED);
 
     XiValue *xi_call = evidence_find_xi_method_call(use_func);
     ASSERT_NOT_NULL(xi_call);
