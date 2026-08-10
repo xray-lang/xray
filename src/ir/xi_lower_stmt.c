@@ -1016,6 +1016,16 @@ static void lower_select_park(XiLower *l, bool has_default, bool has_send, bool 
     xi_block_set_jump(l->cur_block, try_head ? try_head : merge);
 }
 
+static void lower_select_classify_cases(const SelectStmtNode *select, bool *has_default,
+                                        bool *has_timeout, bool *has_send) {
+    for (int i = 0; i < select->case_count; i++) {
+        const SelectCaseNode *current = &select->cases[i]->as.select_case;
+        *has_default |= current->is_default;
+        *has_timeout |= current->is_timeout;
+        *has_send |= current->is_send;
+    }
+}
+
 XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
     SelectStmtNode *sel = &node->as.select_stmt;
     int n = sel->case_count;
@@ -1037,15 +1047,7 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
     if (!lower_select_lists_init(l, &lists, n, stack_case_channels, stack_case_send_values,
                                  stack_case_send_modes, stack_block_channels))
         return;
-    for (int i = 0; i < n; i++) {
-        SelectCaseNode *sc = &sel->cases[i]->as.select_case;
-        if (sc->is_default)
-            has_default_case = true;
-        if (sc->is_timeout)
-            has_timeout_case = true;
-        if (sc->is_send)
-            has_send_case = true;
-    }
+    lower_select_classify_cases(sel, &has_default_case, &has_timeout_case, &has_send_case);
 
     blocking_select = !has_default_case;
     if (blocking_select) {
