@@ -530,6 +530,91 @@ def validate_policies(root: Path) -> list[str]:
     return errors
 
 
+def validate_phase0_evidence(root: Path) -> list[str]:
+    errors: list[str] = []
+    retained = (
+        "tests/target-machine/phase0/coroutine_vertical/manifest.toml",
+        "tests/target-machine/phase0/coroutine_vertical/report.json",
+        "tests/target-machine/phase0/coroutine_vertical/loop_suspend_try_catch.xr",
+        "tests/target-machine/phase0/typed_slot_calibration/manifest.toml",
+        "tests/target-machine/phase0/typed_slot_calibration/report.json",
+        "tests/target-machine/phase0/typed_slot_calibration/workload.xr",
+        "tests/target-machine/phase0/typed_slot_calibration/mailbox.xr",
+        "tests/target-machine/phase0/negative/manifest.toml",
+    )
+    for relative in retained:
+        if not (root / relative).is_file():
+            errors.append(f"missing retained Phase 0 evidence: {relative}")
+
+    disposed = (
+        "tests/target-machine/phase0/coroutine_vertical/run.py",
+        "tests/target-machine/phase0/typed_slot_calibration/run.py",
+        "tests/target-machine/phase0/typed_slot_calibration/calibrate.c",
+    )
+    for relative in disposed:
+        if (root / relative).exists():
+            errors.append(f"disposed spike implementation remains: {relative}")
+    cmake = read(root / "CMakeLists.txt")
+    for token in (
+        "target_machine_coroutine_vertical",
+        "target_machine_typed_slot_calibration",
+    ):
+        if token in cmake:
+            errors.append(f"disposed spike build/test selector remains: {token}")
+
+    reports = []
+    for relative in (
+        "tests/target-machine/phase0/coroutine_vertical/report.json",
+        "tests/target-machine/phase0/typed_slot_calibration/report.json",
+    ):
+        path = root / relative
+        if not path.is_file():
+            continue
+        report = json.loads(read(path))
+        reports.append(report)
+        if report.get("schema") != SCHEMA or report.get("result") != "passed":
+            errors.append(f"invalid Phase 0 report result/schema: {relative}")
+        source = report.get("measured_source", {})
+        if source.get("git_dirty") is not False:
+            errors.append(f"Phase 0 report was not measured from clean source: {relative}")
+        if not re.fullmatch(r"[0-9a-f]{40}", source.get("git_commit", "")):
+            errors.append(f"Phase 0 report lacks exact source commit: {relative}")
+    if len(reports) == 2:
+        commits = {report["measured_source"]["git_commit"] for report in reports}
+        if len(commits) != 1:
+            errors.append("Phase 0 spike reports were measured from different commits")
+
+    typed_path = root / "tests/target-machine/phase0/typed_slot_calibration/report.json"
+    if typed_path.is_file():
+        typed = json.loads(read(typed_path))
+        decision = typed.get("decision", {})
+        if decision.get("universal_tagged_frame_exception") is not False:
+            errors.append("typed-slot calibration created a universal tagged frame exception")
+        mutations = typed.get("typed_plan_calibration", {}).get("negative_mutations", {})
+        if not mutations or set(mutations.values()) != {"detected"}:
+            errors.append("typed-slot calibration has incomplete negative mutation evidence")
+
+    negative_path = root / "tests/target-machine/phase0/negative/manifest.toml"
+    diagnostic_path = root / "contracts/target-machine/diagnostic-codes.toml"
+    if negative_path.is_file() and diagnostic_path.is_file():
+        negative = tomllib.loads(read(negative_path))
+        diagnostics = tomllib.loads(read(diagnostic_path))
+        registered = {row["id"] for row in diagnostics.get("code", [])}
+        ids: set[str] = set()
+        for row in negative.get("case", []):
+            case_id = row.get("id", "")
+            if not case_id or case_id in ids:
+                errors.append(f"duplicate or empty Phase 0 negative case: {case_id!r}")
+            ids.add(case_id)
+            if row.get("expected_diagnostic") not in registered:
+                errors.append(f"negative case uses unregistered diagnostic: {case_id}")
+            if not isinstance(row.get("production_owner_task"), int):
+                errors.append(f"negative case has no production owner task: {case_id}")
+        if len(ids) != 10:
+            errors.append(f"expected 10 Phase 0 negative cases, found {len(ids)}")
+    return errors
+
+
 def run(root: Path, write: bool) -> int:
     target = root / "contracts/target-machine"
     target.mkdir(parents=True, exist_ok=True)
@@ -549,6 +634,8 @@ def run(root: Path, write: bool) -> int:
         summaries.append(f"{name}={len(data.get('operations', data.get('rows', data.get('opcodes', data.get('families', [])))))}")
     errors.extend(validate_policies(root))
     summaries.append("stable-policies=2")
+    errors.extend(validate_phase0_evidence(root))
+    summaries.append("disposed-spike-evidence=2")
     if errors:
         print("target-machine Phase 0 inventory: FAIL", file=sys.stderr)
         for error in errors:

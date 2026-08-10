@@ -1,0 +1,128 @@
+{
+  "schema": 1,
+  "kind": "disposed-coroutine-vertical-calibration-evidence",
+  "result": "passed",
+  "measured_source": {
+    "git_commit": "b5047bed2eb7e322f996d51f1ec6d6370ef82fd2",
+    "git_dirty": false,
+    "compiler_sha256": "ffa3c4370f20022f2e0fd28d1c766790fe81b3202767264ef97bc0bd1b24d5b8",
+    "target": "macos-arm64",
+    "build_profile": "Release"
+  },
+  "oracle": "exact VM and AOT stdout plus generated state, root, drop, cleanup and control shape",
+  "cases": [
+    {
+      "id": "loop-suspend-try-catch",
+      "source": "tests/target-machine/phase0/coroutine_vertical/loop_suspend_try_catch.xr",
+      "source_sha256": "40a77086074f6b47b0ea132b1700c62296b8341208c347066cc6e596082eb920",
+      "state_tables": [[0, 1, 2, 3, 4], [0, 1, 2]],
+      "frames": 2,
+      "root_tables": 2,
+      "drop_tables": 2,
+      "required_facts": ["state", "root", "drop", "cleanup"],
+      "generated_c_sha256": "d488ce8bc99ac9e56b69cdc23a356c4545157ec186e208bc36b2a0cccdc159c1",
+      "status": "passed"
+    },
+    {
+      "id": "cleanup-cancel",
+      "source": "tests/diff/cases/semantics/coro/defer_runs_on_cancel.xr",
+      "source_sha256": "65238798941e77594b68f58fb0a17774d8615ddaaeb0feca34c07e41b78fea61",
+      "state_tables": [[0, 1, 2, 3], [0, 1, 2, 3]],
+      "frames": 2,
+      "root_tables": 2,
+      "drop_tables": 2,
+      "required_facts": ["state", "root", "drop", "cleanup", "cancel"],
+      "generated_c_sha256": "54bcf8fdef8a472d956afddee6f6496e5c705a14eb8863fe9fda39a38cab0f4d",
+      "status": "passed"
+    },
+    {
+      "id": "nested-suspendable-child",
+      "source": "tests/aot/coro/direct_suspend_call.xr",
+      "source_sha256": "6b2c3536457f5ce8bc66efde06ec162adccc4b638e592adf126d1308e7210b17",
+      "state_tables": [[0, 1], [0, 1, 2, 3]],
+      "frames": 2,
+      "root_tables": 2,
+      "drop_tables": 2,
+      "required_facts": ["state", "root", "drop", "child"],
+      "generated_c_sha256": "6b96f9af0e43829d33a218a3836c896edb5ee9f49d6f97e9a248ab76a3d92422",
+      "status": "passed"
+    },
+    {
+      "id": "scope-exit-child-cleanup",
+      "source": "tests/aot/coro/scope.xr",
+      "source_sha256": "93ac6e8c95d154ba1fa9e40f86cd4540a48959642f8b435a692accbfad96ce91",
+      "state_tables": [[0, 1, 2], [0, 1], [0, 1], [0, 1], [0, 1, 2], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]],
+      "frames": 6,
+      "root_tables": 6,
+      "drop_tables": 6,
+      "required_facts": ["state", "root", "drop", "cleanup", "child"],
+      "generated_c_sha256": "522b414fe1be8e52c545a442bb505ad0f05a1e216883ea805ead78793a524247",
+      "status": "passed"
+    },
+    {
+      "id": "select-virtual-time",
+      "source": "tests/aot/coro/select_timeout.xr",
+      "source_sha256": "ec3813666c089e5510c0fbc73784a433b67fbfa8d2a938be0c8871f6d711d435",
+      "state_tables": [[0, 1, 2], [0, 1, 2]],
+      "frames": 2,
+      "root_tables": 2,
+      "drop_tables": 2,
+      "required_facts": ["state", "root", "drop", "select"],
+      "generated_c_sha256": "34a61f42b95662c6953fc955cbe085612148dc145831acf00de978d75b71eed4",
+      "status": "passed"
+    },
+    {
+      "id": "buffer-slice-across-suspend",
+      "source": "tests/aot/coro/await_byte_array_fill_loop_result.xr",
+      "source_sha256": "b47e86d58cf5d9493c2452e24b87ed75a559edc1315a76354d2d228a0cfdb2fe",
+      "state_tables": [[0, 1, 2]],
+      "frames": 2,
+      "root_tables": 2,
+      "drop_tables": 2,
+      "required_facts": ["state", "root", "drop", "typed-slot"],
+      "generated_c_sha256": "d135067f187f18fa7b26742b80c1ce39526d71c111534e11ab0b46ec70ec237d",
+      "status": "passed"
+    },
+    {
+      "id": "error-exit",
+      "source": "tests/diff/cases/semantics/coro/task_result_failed_error_value.xr",
+      "source_sha256": "7bcf31c59deab779038ca16330466ba8f71651425886bf89cabef3f56eea667d",
+      "state_tables": [[0, 1, 2]],
+      "frames": 2,
+      "root_tables": 2,
+      "drop_tables": 2,
+      "required_facts": ["state", "root", "drop", "error"],
+      "generated_c_sha256": "82deaa11cedae2d7b2420a0fa81e04aba7fdd3bbbb60a02a878e7366baa0452c",
+      "status": "passed"
+    },
+    {
+      "id": "module-root-coroutine",
+      "source": "tests/aot/coro/await_all_into_top_level.xr",
+      "source_sha256": "8aca6976382bbfe4ce99fed5c0430a5c2834fac229c8cc59526c5c3eb3338296",
+      "state_tables": [[0, 1], [0, 1, 2, 3]],
+      "frames": 2,
+      "root_tables": 2,
+      "drop_tables": 2,
+      "required_facts": ["state", "root", "drop", "module-root"],
+      "generated_c_sha256": "1bf01681d1ecbba598bcc9507e6ae7cd0b6b4f119a991bc7dc2e4c11678a8fac",
+      "status": "passed"
+    }
+  ],
+  "negative_mutations": [
+    {"name": "sparse-state", "diagnostic": "XR_CORO_4000", "detected": true},
+    {"name": "missing-spill", "diagnostic": "XR_CORO_4001", "detected": true},
+    {"name": "missing-root", "diagnostic": "XR_CORO_4002", "detected": true},
+    {"name": "missing-drop", "diagnostic": "XR_CORO_4002", "detected": true},
+    {"name": "invalid-child", "diagnostic": "XR_CORO_4003", "detected": true}
+  ],
+  "architecture_finding": {
+    "current_shared_xi_coro_rewrite": "absent; src/ir/xi_coro_lower.c is an analysis-only scaffold",
+    "measured_lowering_owner": "current AOT CGen stackless lowering",
+    "decision": "retain these cases as schema oracles; canonical shared coroutine lowering must be realized by SemanticPlan and TargetPlan, not by extending the CGen-only owner"
+  },
+  "limits": [
+    "The generated shape proves the current AOT route can realize the required facts; it does not prove a shared Xi coroutine rewrite already exists.",
+    "Negative mutations exercised the draft verifier model and must be replaced by production verifier negatives when TargetPlan lands.",
+    "VM and AOT exact output are checked independently against the manifest; parity alone is not the oracle."
+  ]
+}

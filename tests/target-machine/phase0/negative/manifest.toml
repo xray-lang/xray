@@ -1,0 +1,73 @@
+schema = 1
+kind = "phase0-disposed-spike-negative-evidence"
+policy = "Every calibration mutation becomes a production verifier negative before its owning task closes."
+
+[[case]]
+id = "coroutine-sparse-state"
+family = "coroutine-machine"
+expected_diagnostic = "XR_CORO_4000"
+calibration_report = "tests/target-machine/phase0/coroutine_vertical/report.json"
+production_owner_task = 275
+
+[[case]]
+id = "coroutine-missing-spill"
+family = "coroutine-machine"
+expected_diagnostic = "XR_CORO_4001"
+calibration_report = "tests/target-machine/phase0/coroutine_vertical/report.json"
+production_owner_task = 275
+
+[[case]]
+id = "coroutine-missing-root-or-drop"
+family = "coroutine-machine"
+expected_diagnostic = "XR_CORO_4002"
+calibration_report = "tests/target-machine/phase0/coroutine_vertical/report.json"
+production_owner_task = 275
+
+[[case]]
+id = "coroutine-invalid-child"
+family = "coroutine-machine"
+expected_diagnostic = "XR_CORO_4003"
+calibration_report = "tests/target-machine/phase0/coroutine_vertical/report.json"
+production_owner_task = 275
+
+[[case]]
+id = "target-unaligned-slot"
+family = "target-plan"
+expected_diagnostic = "XR_TARGET_1002"
+calibration_report = "tests/target-machine/phase0/typed_slot_calibration/report.json"
+production_owner_task = 272
+
+[[case]]
+id = "target-wrong-representation"
+family = "target-plan"
+expected_diagnostic = "XR_TARGET_1001"
+calibration_report = "tests/target-machine/phase0/typed_slot_calibration/report.json"
+production_owner_task = 272
+
+[[case]]
+id = "target-missing-initialization"
+family = "target-plan"
+expected_diagnostic = "XR_TARGET_1002"
+calibration_report = "tests/target-machine/phase0/typed_slot_calibration/report.json"
+production_owner_task = 272
+
+[[case]]
+id = "target-missing-root"
+family = "target-plan"
+expected_diagnostic = "XR_TARGET_1002"
+calibration_report = "tests/target-machine/phase0/typed_slot_calibration/report.json"
+production_owner_task = 272
+
+[[case]]
+id = "target-wrong-call-fingerprint"
+family = "target-plan"
+expected_diagnostic = "XR_TARGET_1003"
+calibration_report = "tests/target-machine/phase0/typed_slot_calibration/report.json"
+production_owner_task = 272
+
+[[case]]
+id = "target-bad-dynamic-adapter"
+family = "target-plan"
+expected_diagnostic = "XR_EXEC_5002"
+calibration_report = "tests/target-machine/phase0/typed_slot_calibration/report.json"
+production_owner_task = 272

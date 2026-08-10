@@ -1,0 +1,116 @@
+{
+  "schema": 1,
+  "kind": "disposed-architecture-calibration-evidence",
+  "result": "passed",
+  "measured_source": {
+    "git_commit": "b5047bed2eb7e322f996d51f1ec6d6370ef82fd2",
+    "git_tree": "79b2662914ba0656cf3765742c6c172d5046a3b3",
+    "git_dirty": false,
+    "compiler_sha256": "ffa3c4370f20022f2e0fd28d1c766790fe81b3202767264ef97bc0bd1b24d5b8",
+    "target": "macos-arm64",
+    "build_profile": "Release",
+    "python": "3.14.4",
+    "c_compiler": "/usr/bin/cc"
+  },
+  "protocol": {
+    "warmup_runs": 1,
+    "measurement_runs": 5,
+    "c_flags": ["-std=c11", "-O3", "-Wall", "-Wextra", "-Werror"],
+    "manifest_sha256": "135954b1e3d0e8fec591f04add8f52de869de2c06cba60e0832d2e006391c9ab",
+    "disposed_spike_source_sha256": "1be188f04983dc24d450745de2d7063d9af3b4742bd1b889a0c8536e94453a35",
+    "disposed_spike_binary_sha256": "79036b598a12aa8720b5c6ca9e6908d5c84877e42971865e0672644d15a36d91"
+  },
+  "typed_plan_calibration": {
+    "representations": ["I32", "I64", "F32", "F64", "OBJECT_REF", "DYNAMIC_ISLAND"],
+    "frame_bytes": {"typed": 64, "modeled_legacy_tagged": 112},
+    "exact_result": 89,
+    "lifecycle_oracle": {
+      "alloc": 1,
+      "retain": 1,
+      "release": 2,
+      "drop": 1,
+      "suspend": 1,
+      "resume": 1
+    },
+    "negative_mutations": {
+      "unaligned_slot": "detected",
+      "wrong_representation": "detected",
+      "missing_initialization": "detected",
+      "missing_root": "detected",
+      "wrong_call_fingerprint": "detected",
+      "bad_dynamic_adapter": "detected"
+    },
+    "typed_plan_ns": {
+      "samples": [19794000, 16684000, 15398000, 15176000, 15233000],
+      "p50": 15398000,
+      "p95": 19172000.0,
+      "cv": 0.10680620077182931
+    },
+    "synthetic_tagged_loop_ns": {
+      "samples": [887000, 844000, 745000, 781000, 787000],
+      "p50": 787000,
+      "p95": 878400.0,
+      "cv": 0.062245813293030305
+    },
+    "synthetic_mailbox_ns": {
+      "samples": [312000, 301000, 268000, 265000, 277000],
+      "p50": 277000,
+      "p95": 309800.0,
+      "cv": 0.0654945273629361
+    }
+  },
+  "real_xray_cross_checks": {
+    "scalar_container_call_rc": {
+      "source": "tests/target-machine/phase0/typed_slot_calibration/workload.xr",
+      "source_sha256": "29826802ad6370e69849e55576c68d1d4f90c9f485deca7fcc9615133116f987",
+      "expected_stdout": "1780000\n",
+      "legacy_vm_ns": {
+        "samples": [9079125, 9122583, 9146000, 8977958, 9176500],
+        "p50": 9122583,
+        "p95": 9170400.0,
+        "cv": 0.007582425937658063
+      },
+      "aot_native_ns": {
+        "samples": [6422125, 4790750, 4057875, 4015208, 3937417],
+        "p50": 4057875,
+        "p95": 6095850.0,
+        "cv": 0.20246114740081908
+      },
+      "aot_binary_bytes": 71592,
+      "aot_binary_sha256": "b3fc2ffe306b4d7d62a83ffe8be0d4bce01a74af57dbd8da76b8390009d83349"
+    },
+    "local_mailbox": {
+      "source": "tests/target-machine/phase0/typed_slot_calibration/mailbox.xr",
+      "source_sha256": "84d14ec039196012c241ea9083ca86025e5b9e493c049f8a948c4a92f32a25cb",
+      "messages": 10000,
+      "capacity": 256,
+      "expected_stdout": "49995000\n",
+      "legacy_vm_ns": {
+        "samples": [4875208, 4646916, 4751125, 4706250, 5079750],
+        "p50": 4751125,
+        "p95": 5038841.6,
+        "cv": 0.03190251312304576
+      },
+      "aot_native_ns": {
+        "samples": [3213917, 3001250, 3099708, 2770750, 3237542],
+        "p50": 3099708,
+        "p95": 3232817.0,
+        "cv": 0.0553366750710572
+      },
+      "aot_binary_bytes": 309976,
+      "aot_binary_sha256": "95255671739ef140f5874208df92cd2d581fc6430daeff8e99d029f1bc5da244"
+    }
+  },
+  "decision": {
+    "typed_slot_mechanics": "no architectural blocker found",
+    "universal_tagged_frame_exception": false,
+    "dispatch_policy": "switch, computed-goto, and superinstructions remain executor policy",
+    "production_go_no_go": "not decided by this calibration; governed TargetPlan validation is authoritative"
+  },
+  "limits": [
+    "The disposed C executor was a calibration, not a product VM.",
+    "Synthetic tagged-loop timing is not legacy VM throughput and cannot be used as a speed ratio.",
+    "External VM/AOT timing includes process startup and is only a cross-check.",
+    "Correctness is established by exact output and lifecycle oracles, not backend parity alone."
+  ]
+}
