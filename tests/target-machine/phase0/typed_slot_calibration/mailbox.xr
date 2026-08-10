@@ -1,0 +1,28 @@
+// Fixed local mailbox workload for the disposable typed-slot calibration.
+fn receive(ch: Channel<int>) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> -1
+    }
+}
+
+fn produce(ch: Channel<int>, count: int) {
+    var i = 0
+    while (i < count) {
+        ch.send(i)
+        i = i + 1
+    }
+    ch.close()
+}
+
+const messages = 10000
+const mailbox = Channel<int>(256)
+var producer = go produce(mailbox, messages)
+var checksum = 0
+var received = 0
+while (received < messages) {
+    checksum = checksum + receive(mailbox)
+    received = received + 1
+}
+await producer
+print(checksum)

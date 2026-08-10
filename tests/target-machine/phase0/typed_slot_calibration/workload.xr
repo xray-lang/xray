@@ -1,0 +1,39 @@
+// Independent Xray oracle for the disposable typed-slot calibration.
+class Cell {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+fn addOne(value: int) -> int {
+    return value + 1
+}
+
+fn run(iterations: int) -> int {
+    var array: Array<int> = [1, 2, 3, 4]
+    var table: Map<int, int> = #{}
+    table.set(3, 30)
+    table.set(5, 50)
+    table.set(7, 70)
+
+    var total = 0
+    var iteration = 0
+    while (iteration < iterations) {
+        var counter = 0
+        var sum = 0
+        while (counter < 8) {
+            sum = sum + counter
+            counter = counter + 1
+        }
+        sum = sum + array[0] + array[1] + array[2] + array[3]
+        sum = sum + (table.get(5) ?? 0)
+        var cell = Cell(sum)
+        total = total + addOne(cell.value)
+        iteration = iteration + 1
+    }
+    return total
+}
+
+print(run(20000))

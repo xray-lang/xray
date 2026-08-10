@@ -1,0 +1,50 @@
+schema = 1
+oracle = "exact-exit-stdout-plus-generated-state-root-drop-shape"
+
+[[case]]
+id = "loop-suspend-try-catch"
+source = "tests/target-machine/phase0/coroutine_vertical/loop_suspend_try_catch.xr"
+expected_stdout = "caught-cleanup-panic\n3\n"
+required_facts = ["state", "root", "drop", "cleanup"]
+
+[[case]]
+id = "cleanup-cancel"
+source = "tests/diff/cases/semantics/coro/defer_runs_on_cancel.xr"
+expected_stdout = "defer: cleanup ran\ncancelled\n"
+required_facts = ["state", "root", "drop", "cleanup", "cancel"]
+
+[[case]]
+id = "nested-suspendable-child"
+source = "tests/aot/coro/direct_suspend_call.xr"
+expected_stdout = "42\n"
+required_facts = ["state", "root", "drop", "child"]
+
+[[case]]
+id = "scope-exit-child-cleanup"
+source = "tests/aot/coro/scope.xr"
+expected_stdout = "3\n42\n11\n"
+required_facts = ["state", "root", "drop", "cleanup", "child"]
+
+[[case]]
+id = "select-virtual-time"
+source = "tests/aot/coro/select_timeout.xr"
+expected_stdout = "7\n"
+required_facts = ["state", "root", "drop", "select"]
+
+[[case]]
+id = "buffer-slice-across-suspend"
+source = "tests/aot/coro/await_byte_array_fill_loop_result.xr"
+expected_stdout = "1024\n21\n"
+required_facts = ["state", "root", "drop", "typed-slot"]
+
+[[case]]
+id = "error-exit"
+source = "tests/diff/cases/semantics/coro/task_result_failed_error_value.xr"
+expected_stdout = "TaskResultErr\ntask-error\n"
+required_facts = ["state", "root", "drop", "error"]
+
+[[case]]
+id = "module-root-coroutine"
+source = "tests/aot/coro/await_all_into_top_level.xr"
+expected_stdout = "14\n"
+required_facts = ["state", "root", "drop", "module-root"]

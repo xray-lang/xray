@@ -1,0 +1,42 @@
+schema = 1
+kind = "disposable-typed-slot-calibration"
+language = "c11"
+optimization = "O3"
+warmup_runs = 1
+measurement_runs = 5
+typed_representations = ["I32", "I64", "F32", "F64", "OBJECT_REF", "DYNAMIC_ISLAND"]
+required_operations = [
+  "branch-loop",
+  "typed-call-frame",
+  "field-load-store",
+  "typed-array-kernel",
+  "typed-map-kernel",
+  "alloc-retain-release-drop",
+  "suspend-resume",
+  "box-unbox-dynamic",
+  "bounded-decode-verify",
+]
+required_mutations = [
+  "unaligned-slot",
+  "wrong-representation",
+  "missing-initialization",
+  "missing-root",
+  "wrong-call-fingerprint",
+  "bad-dynamic-adapter",
+]
+
+[mailbox]
+messages = 10000
+queue_capacity = 256
+payload = "u64-sequence"
+deadline_seconds = 5
+
+[xray_workload]
+source = "tests/target-machine/phase0/typed_slot_calibration/workload.xr"
+expected_stdout = "1780000\n"
+deadline_seconds = 30
+
+[xray_mailbox]
+source = "tests/target-machine/phase0/typed_slot_calibration/mailbox.xr"
+expected_stdout = "49995000\n"
+deadline_seconds = 30

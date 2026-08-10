@@ -3822,6 +3822,35 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME target_machine_coroutine_vertical
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/phase0/coroutine_vertical/run.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --xray $<TARGET_FILE:xray>
+                --output-dir ${CMAKE_CURRENT_BINARY_DIR}/target-machine/phase0/coroutine-vertical
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_machine_coroutine_vertical PROPERTIES
+        LABELS "ir;aot;coroutine;target-machine"
+        PROCESSORS 2
+        COST 30
+        TIMEOUT 600
+    )
+
+    add_test(
+        NAME target_machine_typed_slot_calibration_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/phase0/typed_slot_calibration/run.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_machine_typed_slot_calibration_self_test PROPERTIES
+        LABELS "meta;target-machine;calibration"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME semantic_performance_evidence
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_performance_evidence.py
