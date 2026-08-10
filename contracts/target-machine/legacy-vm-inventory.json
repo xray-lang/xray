@@ -1,0 +1,4184 @@
+{
+  "artifact": {
+    "constant_unknown_behavior": "must-audit-and-delete-default-to-null",
+    "deletion_task": 277,
+    "extension": ".xrc",
+    "reader": "src/module/xbytecode_io.c",
+    "replacement": ".xtp exact-version verified target plan",
+    "writer": "src/module/xbytecode_io.c"
+  },
+  "generated_from": [
+    "include/xray_vm.h",
+    "src/module/xbytecode_io.h",
+    "src/runtime/value/xchunk.h",
+    "src/runtime/value/xopcode_def.h",
+    "src/runtime/value/xvalue.h",
+    "src/vm/xvm.c",
+    "src/vm/xvm_coro_backend.c"
+  ],
+  "generator": "target-machine-phase0/1",
+  "legacy_artifact_symbols": [
+    "xr_bytecode_error_string",
+    "xr_bytecode_read",
+    "xr_bytecode_write",
+    "xr_bytecode_write_stdlib",
+    "xr_detect_output_format",
+    "xr_eval_bytecode",
+    "xr_output_c_source",
+    "xr_run_bytecode_file"
+  ],
+  "opcode_count": 296,
+  "opcodes": [
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NAME",
+      "operand_format": "FMT_TAG",
+      "operand_roles": "KOP_TAG",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MOVE",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOADI",
+      "operand_format": "FMT_AsBx",
+      "operand_roles": "KOP_AsBx_LITS",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOADF",
+      "operand_format": "FMT_AsBx",
+      "operand_roles": "KOP_AsBx_LITS",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOADK",
+      "operand_format": "FMT_ABx",
+      "operand_roles": "KOP_ABx_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOADNULL",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LOAD",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOADTRUE",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LOAD",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOADFALSE",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LOAD",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ADD",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ADDI",
+      "operand_format": "FMT_AB_sC",
+      "operand_roles": "KOP_ABC_BIN_S",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ADDK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SUB",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SUBI",
+      "operand_format": "FMT_AB_sC",
+      "operand_roles": "KOP_ABC_BIN_S",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SUBK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MUL",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MULI",
+      "operand_format": "FMT_AB_sC",
+      "operand_roles": "KOP_ABC_BIN_S",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MULK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_DIV",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_DIVK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MOD",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MODK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ADD_F32",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SUB_F32",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MUL_F32",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_DIV_F32",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_UNM",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NOT",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_STRBUF_NEW",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LOAD",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_STRBUF_APPEND",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_STRBUF_FINISH",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BAND",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BOR",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BXOR",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BNOT",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SHL",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SHR",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SHR_U",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BIT_ROTL",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_OUT_BASE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BIT_ROTR",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_OUT_BASE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BIT_BSWAP",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BIT_POPCOUNT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BIT_CLZ",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BIT_CTZ",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BIT_MUL_HIGH",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_OUT_BASE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_EQ",
+      "operand_format": "FMT_AB_IMM",
+      "operand_roles": "KOP_AB_TEST",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_EQK",
+      "operand_format": "FMT_AB_IMM",
+      "operand_roles": "KOP_AB_TEST_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_EQI",
+      "operand_format": "FMT_AsB_C",
+      "operand_roles": "KOP_AB_TEST_S",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LT",
+      "operand_format": "FMT_AB_IMM",
+      "operand_roles": "KOP_AB_TEST",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LTI",
+      "operand_format": "FMT_AsB_C",
+      "operand_roles": "KOP_AB_TEST_S",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LE",
+      "operand_format": "FMT_AB_IMM",
+      "operand_roles": "KOP_AB_TEST",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LEI",
+      "operand_format": "FMT_AsB_C",
+      "operand_roles": "KOP_AB_TEST_S",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LTU",
+      "operand_format": "FMT_AB_IMM",
+      "operand_roles": "KOP_AB_TEST",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LEU",
+      "operand_format": "FMT_AB_IMM",
+      "operand_roles": "KOP_AB_TEST",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CMP_EQ",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CMP_NE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CMP_LT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CMP_LE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CMP_LTU",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CMP_LEU",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_IS",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHECKTYPE",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ISNULL",
+      "operand_format": "FMT_AB_IMM",
+      "operand_roles": "KOP_AB_FLAG",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ISNULL_SET",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_JMP",
+      "operand_format": "FMT_sJ",
+      "operand_roles": "KOP_NONE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TEST",
+      "operand_format": "FMT_AB_IMM",
+      "operand_roles": "KOP_A_TEST",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TESTSET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "call-frame",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CALL",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_CALL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCallPlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "call-frame",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CALL_STATIC",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_CALL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCallPlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "call-frame",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CALLSELF",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_CALL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCallPlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "call-frame",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TAILCALL",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_CALL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCallPlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "call-frame",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_RETURN",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_RETURN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCallPlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "call-frame",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_RETURN0",
+      "operand_format": "FMT_NONE",
+      "operand_roles": "KOP_NONE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCallPlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "call-frame",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_RETURN1",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCallPlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NEWARRAY",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_NEW_CONTAINER",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_NEW_CAP",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_NEW_LEN",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NEWMAP",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_NEW_CONTAINER",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NEWTUPLE",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_NEW_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TUPLE_GET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NEWSET",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_NEW_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NEWSTRINGBUILDER",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_NEW_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NEWRANGE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NEWRANGE_INCLUSIVE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_RANGE_UNPACK",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_RECV",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_GET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_GETC",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_SET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_SETC",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_PUSH",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_LEN",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LEN",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_CLEAR",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_RESERVE",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_RESIZE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_LOAD_U16",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_LOAD_U32",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_LOAD_U64",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_LOAD_F32",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_LOAD_F64",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_STORE_U16",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_STORE_U32",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_STORE_U64",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_STORE_F32",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_STORE_F64",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_FILL",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_COPY",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_COMPARE",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_COMMON_PREFIX",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_SLICE_REPEAT",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SLICE_AS_BYTES",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SLICE_FILL",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SLICE_COPY",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SLICE_COMPARE",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SLICE_REINTERPRET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_DATA_PTR",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOCAL_ADDR",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 277,
+      "error_suspend_edges": "handler-specific",
+      "family": "vm-only-place",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_PLACE_LOAD",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "delete-use-explicit-address-slot-plan"
+    },
+    {
+      "deletion_task": 277,
+      "error_suspend_edges": "handler-specific",
+      "family": "vm-only-place",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_PLACE_STORE",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_STORE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "delete-use-explicit-address-slot-plan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_STRING_BYTES_SLICE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_ARRAY_COPY_WITHIN",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_ARRAY_COPY_FROM",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_ARRAY_APPEND_FROM",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BYTE_ARRAY_REPEAT_FROM",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_INOUT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_INIT",
+      "operand_format": "FMT_AB_IMM",
+      "operand_roles": "KOP_AB_BASE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MAP_GET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MAP_GETK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MAP_SET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MAP_SETK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_INDEX_GET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_INDEX_SET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SLICE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CLOSURE",
+      "operand_format": "FMT_PROTO",
+      "operand_roles": "KOP_PROTO",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_UPVAL_GET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CELL_NEW",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CELL_GET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CELL_SET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CLASS_CREATE_FROM_DESCRIPTOR",
+      "operand_format": "FMT_ABx",
+      "operand_roles": "KOP_ABx_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CLINIT_CALL",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GETPROP",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_SYM",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SETPROP",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE_SYM",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GETSUPER",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_SYM",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "call-frame",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_INVOKE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_INVOKE_SYM",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCallPlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "call-frame",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_INVOKE_TAIL",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_INVOKE_SYM",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCallPlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SUPERINVOKE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_INVOKE_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "call-frame",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_INVOKE_DIRECT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_INVOKE_DIRECT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCallPlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SET_STORAGE_CTX",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MAP_SETKS",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_BASE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GETFIELD",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SETFIELD",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GETFIELD_IC",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NEWOBJECT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_OBJECT_GET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_OBJECT_SET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_OBJECT_GETK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_OBJECT_SETK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_OBJECT_INIT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_OBJECT_INIT_I",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_OBJECT_INIT_N",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_JSON_DECODE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_JSON_DECODE_IGNORE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_JSON_DECODE_REQUIRE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_JSON_PARSE_TYPED",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_JSON_PARSE_TYPED_IGNORE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_JSON_PARSE_WITH_REST",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_JSON_PARSE_WITH_REST_IGNORE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GETBUILTIN",
+      "operand_format": "FMT_GLOBAL",
+      "operand_roles": "KOP_GLOBAL_GET",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_PRINT",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_PRINT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TYPEOF",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY_HINT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TYPENAME",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY_HINT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_DUMP",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_DUMP",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TOINT",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY_HINT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TOFLOAT",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY_HINT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TOSTRING",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY_HINT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TOBOOL",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_COPY",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_AB_UNARY_HINT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHR",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ENUM_ACCESS",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ENUM_NAME",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ENUM_VARIANT_AT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ENUM_PAYLOAD_AT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ENUM_VARIANT_NAME",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ENUM_VARIANT_PAYLOAD_COUNT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ENUM_PAYLOAD_FIELD_NAME",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ENUM_PAYLOAD_FIELD_TYPE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TRY",
+      "operand_format": "FMT_SPECIAL",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CATCH",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LOAD",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_END_TRY",
+      "operand_format": "FMT_NONE",
+      "operand_roles": "KOP_NONE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_THROW",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ERR_SET",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ERR_RETURN",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ERR_CHECK",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LOAD",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ERR_HAS",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LOAD",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ERR_CATCH",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LOAD",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CLEANUP_ENTER",
+      "operand_format": "FMT_NONE",
+      "operand_roles": "KOP_NONE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CLEANUP_LEAVE",
+      "operand_format": "FMT_NONE",
+      "operand_roles": "KOP_NONE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CLEANUP_ERR_CHECK",
+      "operand_format": "FMT_NONE",
+      "operand_roles": "KOP_NONE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BOX_I64",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BOX_F64",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_UNBOX_I64",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_UNBOX_F64",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ENUM_DESCRIPTOR_BOX",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ENUM_DESCRIPTOR_UNBOX",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_IS_ENUM_DESCRIPTOR",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NARROW_I8",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NARROW_U8",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NARROW_I16",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NARROW_U16",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NARROW_I32",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NARROW_U32",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NARROW_F32",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_WIDEN_I8",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_WIDEN_U8",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_WIDEN_I16",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_WIDEN_U16",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_WIDEN_I32",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_WIDEN_U32",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_WIDEN_F32",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_GET_NOCHECK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MAP_INCREMENT",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SUBSTRING",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_STR_REPEAT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_IMPORT",
+      "operand_format": "FMT_ABx",
+      "operand_roles": "KOP_ABx_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOAD_MODULE_SLOT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_NEW_CONTAINER",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOAD_MODULE",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_NEW_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SET_EXPORT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ASSERT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ASSERT_EQ",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ASSERT_NE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_REGEX_COMPILE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GO",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_THREAD_SPAWN",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_AWAIT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_AWAIT_TIMEOUT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_AWAIT_ALL",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_AWAIT_ALL_INTO",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INOUT_IN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_AWAIT_ANY",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_YIELD",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CANCELLED",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LOAD",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOCK_THREAD",
+      "operand_format": "FMT_NONE",
+      "operand_roles": "KOP_NONE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_UNLOCK_THREAD",
+      "operand_format": "FMT_NONE",
+      "operand_roles": "KOP_NONE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SET_LOCAL",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_INOUT_IN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GET_LOCAL",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CORO_CTRL",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_NEW",
+      "operand_format": "FMT_ABx",
+      "operand_roles": "KOP_ABx_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_NEW_CAP",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_SEND",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_RECV",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_RECV",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_TRY_SEND",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_TRY_RECV",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_RECV",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_SEND_TIMEOUT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_RECV_TIMEOUT",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_CLOSE",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_IS_CLOSED",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_COPY_NEW",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SCOPE_ENTER",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SCOPE_EXIT",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SLEEP",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TIME_AFTER",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SELECT_BLOCK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "retained-coroutine-stack",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_CHAN_TIMER_DISPOSE",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-XrCoroutineMachinePlan"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GETSHARED",
+      "operand_format": "FMT_GLOBAL",
+      "operand_roles": "KOP_GLOBAL_GET",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_DUP",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_DROP",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SETSHARED",
+      "operand_format": "FMT_GLOBAL",
+      "operand_roles": "KOP_GLOBAL_SET",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "name-or-index-dispatch",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GETGLOBAL",
+      "operand_format": "FMT_ABx",
+      "operand_roles": "KOP_ABx_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-stable-declaration-id"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "name-or-index-dispatch",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SETGLOBAL",
+      "operand_format": "FMT_ABx",
+      "operand_roles": "KOP_ABx_K_IN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-stable-declaration-id"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TARRAY_GET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TARRAY_GETC",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TARRAY_SET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TARRAY_PUSH",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TFIELD_GET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TFIELD_SET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_LOOP_BACK",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_AGG_NEW",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_AGG_GET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_AGG_SET",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_AGG_COPY",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_FIXED_ARRAY_NEW",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_OUT_LIT_K",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_FIXED_BYTES_CONST",
+      "operand_format": "FMT_ABx",
+      "operand_roles": "KOP_ABx_INOUT_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_PTR_LOAD",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_PTR_STORE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_PTR_COPY_NONOVERLAP",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_ARRAY_EXTEND",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_OBJECT_MERGE",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_INPLACE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_TORUNE",
+      "operand_format": "FMT_AB",
+      "operand_roles": "KOP_AB_UNARY",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GEN_YIELD",
+      "operand_format": "FMT_A",
+      "operand_roles": "KOP_A_USE",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_GEN_START",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_PAR_FOR",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_PAR_MAP",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_PAR_REDUCE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN_LIT",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SLICE_WINDOW",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_SLICE_FROM_PTR",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_BUFFER_MATERIALIZE",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_DIV_U",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_MOD_U",
+      "operand_format": "FMT_ABC",
+      "operand_roles": "KOP_ABC_BIN",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xopcode_def",
+      "opcode": "OP_NOP",
+      "operand_format": "FMT_SPECIAL",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    }
+  ],
+  "policy": {
+    "default_tagged_frame": "delete",
+    "legacy_translation": "forbidden"
+  },
+  "schema": 1,
+  "source_tree_fingerprint": "cf74b53a3fa2b3f51073d0aa53f1467e5ea4c46259977502c7706c8e68841a67",
+  "tagged_frame_sites": [
+    {
+      "path": "src/vm/xvm_coro_api.h",
+      "pointer_names": [
+        "args",
+        "out",
+        "out_error"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_parallel_ops.c",
+      "pointer_names": [
+        "args",
+        "base",
+        "batch_slot",
+        "body_slot",
+        "closure_slot",
+        "combine_slot",
+        "end_slot",
+        "handled_slot",
+        "initial_slot",
+        "materialized_output_slot",
+        "output_slot",
+        "partials_slot",
+        "result",
+        "start_slot",
+        "states_slot",
+        "workers_slot"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_dispatch_collection.inc.c",
+      "pointer_names": [
+        "elements",
+        "elems",
+        "src"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_ffi.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/vm/xvm.c",
+      "pointer_names": [
+        "_base",
+        "_new_top",
+        "_old_stack",
+        "_stack_end",
+        "base",
+        "destination",
+        "k",
+        "slot"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_coro_state.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_coro_backend.c",
+      "pointer_names": [
+        "args",
+        "base",
+        "closure_base",
+        "dst",
+        "func_base",
+        "new_stack",
+        "out",
+        "result",
+        "saved_stack",
+        "stack_base"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_dispatch_convert.inc.c",
+      "pointer_names": [
+        "items"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_api.c",
+      "pointer_names": [
+        "args",
+        "frame_end",
+        "func_base",
+        "module_base",
+        "prev_stack_top",
+        "result_slot",
+        "saved_stack_top"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_dispatch_call.inc.c",
+      "pointer_names": [
+        "arg_base",
+        "return_slot",
+        "stack_base_check"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_dispatch_helpers.h",
+      "pointer_names": [
+        "args",
+        "base",
+        "destination"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_dispatch_invoke.inc.c",
+      "pointer_names": [
+        "arg_base"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_ffi.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_helpers.c",
+      "pointer_names": [
+        "out"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_props.c",
+      "pointer_names": [
+        "base"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_coro_ops.c",
+      "pointer_names": [
+        "args",
+        "base",
+        "result_slot"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_chan_ops.c",
+      "pointer_names": [
+        "base"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_invoke.c",
+      "pointer_names": [
+        "args",
+        "base"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_internal.h",
+      "pointer_names": [
+        "_frame_end",
+        "args",
+        "out"
+      ]
+    },
+    {
+      "path": "src/api/xruntime.h",
+      "pointer_names": [
+        "last",
+        "slot"
+      ]
+    },
+    {
+      "path": "src/api/xvm_exec.c",
+      "pointer_names": [
+        "args",
+        "out_error"
+      ]
+    },
+    {
+      "path": "src/api/xrepl.c",
+      "pointer_names": [
+        "value"
+      ]
+    },
+    {
+      "path": "src/module/xpkg_client.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/module/xmodule.h",
+      "pointer_names": [
+        "export_values"
+      ]
+    },
+    {
+      "path": "src/runtime/xvm_call.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/xexec_frame.h",
+      "pointer_names": [
+        "args",
+        "result",
+        "stack",
+        "stack_top"
+      ]
+    },
+    {
+      "path": "src/runtime/xglobal_dict.h",
+      "pointer_names": [
+        "value"
+      ]
+    },
+    {
+      "path": "src/runtime/xglobals_table.c",
+      "pointer_names": [
+        "new_values"
+      ]
+    },
+    {
+      "path": "src/runtime/xexec_state.h",
+      "pointer_names": [
+        "data",
+        "new_data",
+        "stack_top"
+      ]
+    },
+    {
+      "path": "src/runtime/xglobals_table.h",
+      "pointer_names": [
+        "values"
+      ]
+    },
+    {
+      "path": "src/runtime/closure/xbound_method.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/closure/xbound_method.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xfloat_methods.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xvalue.h",
+      "pointer_names": [
+        "v"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xbool_methods.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xvalue_string_ops.c",
+      "pointer_names": [
+        "v"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xint_methods.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xmap_methods.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xjson_serde.h",
+      "pointer_names": [
+        "args",
+        "out"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xpanic_info.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xjson.h",
+      "pointer_names": [
+        "decoded_values",
+        "out",
+        "values"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xstring_methods.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xarray_vm.c",
+      "pointer_names": [
+        "boxed"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xarray_methods.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xatomic.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xarray.c",
+      "pointer_names": [
+        "data",
+        "elements",
+        "items",
+        "src"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xtuple.c",
+      "pointer_names": [
+        "values"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xset_methods.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xbigint_methods.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xjson_serde.c",
+      "pointer_names": [
+        "args",
+        "out",
+        "values"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xiterator.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xrange.c",
+      "pointer_names": [
+        "args",
+        "data"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xtuple.h",
+      "pointer_names": [
+        "values"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xarray.h",
+      "pointer_names": [
+        "elements"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xenum.c",
+      "pointer_names": [
+        "args",
+        "payloads"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xclass_system.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xenum_builtins.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xclass_from_descriptor.c",
+      "pointer_names": [
+        "base"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xmethod.h",
+      "pointer_names": [
+        "args",
+        "result"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xinstance.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xinstance_destroy.c",
+      "pointer_names": [
+        "overflow"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xinstance_dynamic.c",
+      "pointer_names": [
+        "new_overflow",
+        "overflow"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xenum.h",
+      "pointer_names": [
+        "args",
+        "payloads"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xenum_builtins.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xclass.h",
+      "pointer_names": [
+        "field_default_values",
+        "static_field_values"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xclass_descriptor.h",
+      "pointer_names": [
+        "base"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xinstance.c",
+      "pointer_names": [
+        "args",
+        "full_args"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xinstance_core.c",
+      "pointer_names": [
+        "src_overflow"
+      ]
+    },
+    {
+      "path": "src/runtime/mem/xobj_graph.h",
+      "pointer_names": [
+        "data"
+      ]
+    },
+    {
+      "path": "src/runtime/mem/xweak_handle.h",
+      "pointer_names": [
+        "out"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xmap_builtins.c",
+      "pointer_names": [
+        "args",
+        "edata",
+        "pdata"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xjson_builtins.c",
+      "pointer_names": [
+        "args",
+        "out",
+        "out_last",
+        "out_parent"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xset_builtins.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xarray_builtins.c",
+      "pointer_names": [
+        "adata",
+        "args",
+        "dst",
+        "srcd"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xstringbuilder_builtins.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xstring_builtins.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xmap_builtins.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xarray_builtins.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xset_builtins.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xstringbuilder_builtins.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xstring_builtins.c",
+      "pointer_names": [
+        "args"
+      ]
+    }
+  ],
+  "vm_public_api_symbols": [
+    "xray_vm_config_init",
+    "xray_vm_coro_monitor_start",
+    "xray_vm_delete",
+    "xray_vm_dofile",
+    "xray_vm_dofile_debug",
+    "xray_vm_dostring",
+    "xray_vm_eval_bundle",
+    "xray_vm_get_backend",
+    "xray_vm_get_stats",
+    "xray_vm_get_userdata",
+    "xray_vm_multicore_destroy",
+    "xray_vm_multicore_init",
+    "xray_vm_new",
+    "xray_vm_new_full",
+    "xray_vm_new_runtime",
+    "xray_vm_set_deadline_ms",
+    "xray_vm_set_dump_bytecode",
+    "xray_vm_set_module_allowlist",
+    "xray_vm_set_script_info",
+    "xray_vm_set_stdout",
+    "xray_vm_set_trace",
+    "xray_vm_set_userdata",
+    "xray_vm_timed_out"
+  ]
+}

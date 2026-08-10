@@ -1,0 +1,56 @@
+schema = 1
+policy = "xray-stable-identity-v1"
+
+[canonical_key]
+encoding = "utf-8"
+unicode_normalization = "language-canonical-identifier"
+component_framing = "u32-byte-length-then-bytes"
+integer_encoding = "fixed-width-little-endian"
+table_order = "unsigned-lexicographic-canonical-key-bytes"
+includes = [
+  "schema-version",
+  "canonical-package-module-declaration-identity",
+  "generic-arguments",
+  "relevant-language-configuration",
+]
+forbids = [
+  "pointer-or-address",
+  "insertion-or-worker-completion-order",
+  "thread-id-or-process-id",
+  "provider-or-C-spelling-in-semantic-identity",
+]
+
+[entity_id]
+algorithm = "sha256"
+domain_prefix = "xray-entity-id-v1\\0"
+serialized_width_bits = 128
+collision_key_digest_bits = 256
+collision_rule = "compare-full-canonical-key-and-fail-XR_SEM_0003-if-different"
+
+[plan_fingerprint]
+algorithm = "sha256"
+semantic_domain_prefix = "xray-semantic-plan-v1\\0"
+target_domain_prefix = "xray-target-plan-v1\\0"
+runtime_domain_prefix = "xray-runtime-abi-v1\\0"
+provider_domain_prefix = "xray-provider-plan-v1\\0"
+serialized_width_bits = 256
+coverage = "every-canonical-field-in-table-order"
+
+[artifact]
+file_endianness = "little"
+integer_encoding = "u8-u16-u32-u64-fixed-width-little-endian"
+signed_encoding = "twos-complement-same-width"
+offset_width_bits = 64
+count_width_bits = 64
+digest_bytes = 32
+unknown_field_policy = "exact-schema-reject"
+
+[determinism]
+required_equivalence = [
+  "clean-vs-cache-build",
+  "serial-vs-parallel-planning",
+  "different-process-address-layout",
+  "dirty-vs-clean-inventory-generation",
+]
+byte_identical_artifacts = true
+diagnostic_order = "canonical-key-order"

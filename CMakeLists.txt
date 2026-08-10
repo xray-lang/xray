@@ -3797,6 +3797,18 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME target_machine_inventory
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/target_machine_phase0.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_machine_inventory PROPERTIES
+        LABELS "meta;target-machine;contracts"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME semantic_performance_evidence
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_semantic_performance_evidence.py

@@ -35,3 +35,4 @@ Initial frozen contracts:
 - `semantic-performance-budget.toml`
 - `semantic-performance-baseline.json`
 - `semantic-runtime-benchmark.json`
+- `unified-target-machine-discovery.md`

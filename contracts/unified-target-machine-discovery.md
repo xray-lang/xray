@@ -1,0 +1,28 @@
+# Unified target-machine discovery contract
+
+The discovery inventory is the fail-closed migration surface for replacing the
+legacy VM and mixed AOT planning model.  It records current implementation
+facts; it does not bless those facts as the final architecture.
+
+The generator must derive every Xi operation, every `XaotBundle` plan row, and
+every legacy opcode from their current source-of-truth registries.  A new item
+that is not classified, assigned a unique future owner, given an independent
+oracle, and assigned a migration or deletion task is a contract failure.
+
+Object allocation formulas converge on `XrExtentPlan`.  A universal object-size
+field and a dynamic-shape or Json plan family are forbidden.  Diagnostic codes,
+entity identifiers, table ordering, fingerprints, integer encodings, and
+endianness are stable inputs to later executable schemas.
+
+The support matrix distinguishes supported, CI-only, unqualified, and
+unsupported configurations.  A failed row cannot be relabelled as a skipped
+configuration.
+
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 09898ff7ba5f345b52e7d501f4f5c31ca2187dd8e8e1dbea40887ec7a060ce45
+anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 30d79df402954c0fe4afe482524d5b831d5865d3637ae08ff9fbe8eb6e4cb38e
+anchor-sha256: contracts/target-machine/legacy-vm-inventory.json c2b700923df4081aabfd9554aea992e7451f63c40cf958bac4440c5a1b97c321
+anchor-sha256: contracts/target-machine/object-extent-inventory.json e62c7ab4f82bfd1ccba2a11641ef31a237ab380f9c1d83a299e578c3808e0798
+anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc66576441dcdfa3b8b52ee606fb6256abefefa2e848310aed
+anchor-sha256: contracts/target-machine/diagnostic-codes.toml 2176ddb5780096bae163750240ca4fe539b90b90b281c952ddac80b6ee8fc372
+anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
+anchor-sha256: scripts/target_machine_phase0.py 5b2cf4451fecc523d5ba3ad8b0eabfc336d9d0b195ea0d829512662b8fd6f8d9

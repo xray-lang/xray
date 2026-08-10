@@ -202,6 +202,19 @@ CONTRACT_SPECS = (
             "scripts/check_semantic_owners.py",
         ),
     ),
+    ContractSpec(
+        "unified-target-machine-discovery.md",
+        (
+            "contracts/target-machine/semantic-owner-inventory.json",
+            "contracts/target-machine/aot-plan-destination-inventory.json",
+            "contracts/target-machine/legacy-vm-inventory.json",
+            "contracts/target-machine/object-extent-inventory.json",
+            "contracts/target-machine/validation-matrix.json",
+            "contracts/target-machine/diagnostic-codes.toml",
+            "contracts/target-machine/id-and-fingerprint-policy.toml",
+            "scripts/target_machine_phase0.py",
+        ),
+    ),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")

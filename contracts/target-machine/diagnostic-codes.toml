@@ -1,0 +1,170 @@
+schema = 1
+registry = "xray-target-machine-diagnostics"
+
+[policy]
+unknown_code = "error"
+duplicate_code = "error"
+renumbering = "forbidden"
+pointer_in_diagnostic_identity = false
+required_context = ["plan_fingerprint", "function_or_module_id", "source_span"]
+optional_context = ["operation_id", "layout_id", "owner_id", "state_id", "generation_id"]
+
+[[family]]
+prefix = "XR_SEM_"
+range = "0001-0999"
+owner = "semantic-plan-verifier"
+
+[[family]]
+prefix = "XR_TARGET_"
+range = "1000-1999"
+owner = "target-plan-verifier"
+
+[[family]]
+prefix = "XR_ARTIFACT_"
+range = "2000-2999"
+owner = "artifact-decoder-verifier"
+
+[[family]]
+prefix = "XR_OWN_"
+range = "3000-3999"
+owner = "ownership-certificate-checker"
+
+[[family]]
+prefix = "XR_CORO_"
+range = "4000-4999"
+owner = "coroutine-machine-verifier"
+
+[[family]]
+prefix = "XR_EXEC_"
+range = "5000-5999"
+owner = "typed-executor"
+
+[[code]]
+id = "XR_SEM_0001"
+name = "unknown-operation-owner"
+message = "semantic operation has no unique registered owner"
+
+[[code]]
+id = "XR_SEM_0002"
+name = "unstable-identity-input"
+message = "semantic identity contains a process-local or order-dependent input"
+
+[[code]]
+id = "XR_SEM_0003"
+name = "stable-id-collision"
+message = "stable identifiers collide but their canonical keys differ"
+
+[[code]]
+id = "XR_SEM_0004"
+name = "frozen-plan-mutation"
+message = "immutable semantic plan was mutated after freeze"
+
+[[code]]
+id = "XR_TARGET_1000"
+name = "profile-fingerprint-mismatch"
+message = "target profile fingerprint does not match the requested executor or emitter"
+
+[[code]]
+id = "XR_TARGET_1001"
+name = "missing-representation"
+message = "target plan has no legal register or memory representation for a value"
+
+[[code]]
+id = "XR_TARGET_1002"
+name = "invalid-slot-layout"
+message = "slot offset, extent, alignment, root, or ownership facts are inconsistent"
+
+[[code]]
+id = "XR_TARGET_1003"
+name = "invalid-call-fingerprint"
+message = "call site and callee plans have different call fingerprints"
+
+[[code]]
+id = "XR_TARGET_1004"
+name = "missing-capability-provider"
+message = "target plan requires a capability for which no provider is selected"
+
+[[code]]
+id = "XR_ARTIFACT_2000"
+name = "schema-mismatch"
+message = "artifact schema is not exactly supported"
+
+[[code]]
+id = "XR_ARTIFACT_2001"
+name = "section-bounds"
+message = "artifact section offset, length, alignment, or count is invalid"
+
+[[code]]
+id = "XR_ARTIFACT_2002"
+name = "digest-mismatch"
+message = "artifact content digest does not match its canonical payload"
+
+[[code]]
+id = "XR_ARTIFACT_2003"
+name = "unknown-record-kind"
+message = "artifact contains an unknown constant, operation, section, or tag"
+
+[[code]]
+id = "XR_ARTIFACT_2004"
+name = "activation-before-verification"
+message = "artifact activation was attempted before mandatory verification"
+
+[[code]]
+id = "XR_OWN_3000"
+name = "unknown-return-provenance"
+message = "reference-capable return value has no exact provenance"
+
+[[code]]
+id = "XR_OWN_3001"
+name = "path-balance-mismatch"
+message = "ownership obligations do not balance on every function exit"
+
+[[code]]
+id = "XR_OWN_3002"
+name = "owner-identity-loss"
+message = "owner identity was lost across PHI, adapter, capture, spill, or view"
+
+[[code]]
+id = "XR_OWN_3003"
+name = "invalid-generation-pin"
+message = "callback, destructor, or release path has no valid generation pin"
+
+[[code]]
+id = "XR_CORO_4000"
+name = "invalid-state-table"
+message = "coroutine suspend state identifiers are sparse, duplicated, or inconsistent"
+
+[[code]]
+id = "XR_CORO_4001"
+name = "missing-spill-slot"
+message = "value live across suspension has no typed frame slot"
+
+[[code]]
+id = "XR_CORO_4002"
+name = "missing-root-or-drop"
+message = "coroutine frame root or cleanup table is incomplete"
+
+[[code]]
+id = "XR_CORO_4003"
+name = "invalid-child-edge"
+message = "suspendable child frame or continuation edge is invalid"
+
+[[code]]
+id = "XR_EXEC_5000"
+name = "unverified-plan"
+message = "executor refused a target plan that has not passed mandatory verification"
+
+[[code]]
+id = "XR_EXEC_5001"
+name = "slot-representation-mismatch"
+message = "executor slot representation does not match the verified operation"
+
+[[code]]
+id = "XR_EXEC_5002"
+name = "dynamic-adapter-mismatch"
+message = "dynamic island adapter has an incompatible type, layout, null, or ownership contract"
+
+[[code]]
+id = "XR_EXEC_5003"
+name = "resource-budget-exhausted"
+message = "verified execution or decoding exceeded a declared hard resource budget"

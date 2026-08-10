@@ -1,0 +1,1219 @@
+{
+  "generated_from": [
+    "src/aot/xaot_abi.h",
+    "src/aot/xaot_bundle.c",
+    "src/aot/xaot_bundle.h",
+    "src/aot/xaot_prepare.c",
+    "src/aot/xaot_rep.h",
+    "src/aot/xaot_verify.c"
+  ],
+  "generator": "target-machine-phase0/1",
+  "mixed_representation_types": {
+    "XaotFuncAbi": {
+      "c_spelling": "XrCEmissionPlan",
+      "delete_fields": [
+        "c_name",
+        "c_symbol",
+        "boxed_symbol"
+      ],
+      "logical_call": "XrCallPlan",
+      "native_abi": "XrTargetAbiPlan"
+    },
+    "XaotValueRep": {
+      "c_spelling": "XrCEmissionPlan",
+      "delete_fields": [
+        "XrType pointer",
+        "c_type"
+      ],
+      "machine_rep": "XrMachineRep",
+      "memory_layout": "XrLayoutPlan"
+    }
+  },
+  "policy": {
+    "unclassified_row": "error",
+    "unresolved_destination": "error"
+  },
+  "row_count": 51,
+  "rows": [
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotAddressPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_storage_plan.c",
+        "src/aot/xaot_storage_plan.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "refinement",
+      "consumers": [
+        "src/aot/xi_cgen_array_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotAliasPlan",
+      "deletion_task": 279,
+      "destination": "XrRefinementPlan",
+      "pointer_lifetime_fields": [
+        "func",
+        "value"
+      ],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xrt_value.h"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotAllocationPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "func",
+        "value"
+      ],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "refinement",
+      "consumers": [
+        "src/aot/xi_cgen_array_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotArrayCachePlan",
+      "deletion_task": 279,
+      "destination": "XrRefinementPlan",
+      "pointer_lifetime_fields": [
+        "func",
+        "storage_value",
+        "value"
+      ],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_prepare.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_array_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen_array_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotArrayClassFieldAllocPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "func",
+        "origin",
+        "store"
+      ],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_array_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen_array_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotArrayStoragePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "func",
+        "origin",
+        "value"
+      ],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_array_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "refinement",
+      "consumers": [
+        "src/aot/xi_cgen_array_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotBoundsPlan",
+      "deletion_task": 279,
+      "destination": "XrRefinementPlan",
+      "pointer_lifetime_fields": [
+        "access",
+        "func"
+      ],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_array_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotBulkPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_coro.inc.c"
+      ],
+      "current_fallback": "backend-reconstruction-risk",
+      "current_type": "XaotCallableInvokePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "call",
+        "owner"
+      ],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_callable.c",
+        "src/aot/xaot_entry_plan.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_coro.inc.c"
+      ],
+      "verifier": "none-current-gap"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotCapabilityPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_driver.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_backend_plan_contract.h"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotCapacityPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen_coro.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotCapturePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_storage_plan.c",
+        "src/aot/xaot_storage_plan.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_coro.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen_class_native_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotClassFieldPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotClassHierarchyPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [
+        "c_type_name"
+      ],
+      "category": "target",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotClassLayoutPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "c_type_name"
+      ],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotClosurePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "func",
+        "target_func",
+        "value"
+      ],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_prepare.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_type_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotContainerTypePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_type_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "semantic",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotDerivePlan",
+      "deletion_task": 271,
+      "destination": "XrSemanticPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "semantic",
+      "consumers": [
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotDerivedClonePlan",
+      "deletion_task": 271,
+      "destination": "XrSemanticPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "semantic",
+      "consumers": [
+        "src/aot/xi_cgen_class_native_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotDerivedEqHashPlan",
+      "deletion_task": 271,
+      "destination": "XrSemanticPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "semantic",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotEncodingPlan",
+      "deletion_task": 271,
+      "destination": "XrSemanticPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [
+        "c_type"
+      ],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_abi_helpers.inc.c",
+        "src/aot/xi_cgen_coro.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_value_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotEnumPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "c_type",
+        "concrete_type",
+        "type_args"
+      ],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_abi.c",
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_abi_helpers.inc.c",
+        "src/aot/xi_cgen_coro.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_value_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotFixedBytesPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "func",
+        "value"
+      ],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotFuncAttrPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "func"
+      ],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xrt_value.h"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_abi_helpers.inc.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_coro_resolver.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_value_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotFuncPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "func"
+      ],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_boundary.c",
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_callable.c",
+        "src/aot/xaot_driver.c",
+        "src/aot/xaot_entry_plan.c",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_abi_helpers.inc.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_coro_resolver.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_value_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "semantic",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotGenericBodyPlan",
+      "deletion_task": 271,
+      "destination": "XrSemanticPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_callable.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_backend_plan_contract.h",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "refinement",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotGenericCodeSizePlan",
+      "deletion_task": 279,
+      "destination": "XrRefinementPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "semantic",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotGenericInstantiationPlan",
+      "deletion_task": 271,
+      "destination": "XrSemanticPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "refinement",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotGenericSpecializationPlan",
+      "deletion_task": 279,
+      "destination": "XrRefinementPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "semantic",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotGenericStoragePlan",
+      "deletion_task": 271,
+      "destination": "XrSemanticPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "semantic",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotHashEqPlan",
+      "deletion_task": 271,
+      "destination": "XrSemanticPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotInterfaceAbiPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_backend_plan_contract.h",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotInterfaceUsePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "obsolete",
+      "consumers": [
+        "src/aot/xi_cgen.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotJsonCodecPlan",
+      "deletion_task": 272,
+      "destination": "delete-without-replacement",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_backend_plan_contract.h",
+        "src/aot/xi_cgen.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_type_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotKeyAccessPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_type_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "emission-link",
+      "consumers": [
+        "src/aot/xi_cgen.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotLinkDependencyPlan",
+      "deletion_task": 272,
+      "destination": "XrEmissionLinkPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_driver.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_type_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotMapShapePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_type_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "emission-link",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotMetadataReachabilityPlan",
+      "deletion_task": 272,
+      "destination": "XrEmissionLinkPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_driver.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_backend_plan_contract.h"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_coro.inc.c",
+        "src/aot/xi_cgen_coro_resolver.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotMethodDispatchPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_boundary.c",
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_backend_plan_contract.h",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_class_native_helpers.inc.c",
+        "src/aot/xi_cgen_coro.inc.c",
+        "src/aot/xi_cgen_coro_resolver.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "backend-reconstruction-risk",
+      "current_type": "XaotModuleInitPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_storage_plan.c",
+        "src/aot/xaot_storage_plan.h"
+      ],
+      "verifier": "none-current-gap"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotObjectAccessCasePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotObjectAccessPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotObjectMergePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_backend_plan_contract.h",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "semantic",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotObjectShapePlan",
+      "deletion_task": 271,
+      "destination": "XrSemanticPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "semantic",
+      "consumers": [
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotOptionsPlan",
+      "deletion_task": 271,
+      "destination": "XrSemanticPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotSequenceAccessPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_verify.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotSliceAccessPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "func",
+        "value"
+      ],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_prepare.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "emission-link",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotStaticDataPlan",
+      "deletion_task": 272,
+      "destination": "XrEmissionLinkPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_driver.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_backend_plan_contract.h"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "none-current-gap"
+      ],
+      "current_fallback": "backend-reconstruction-risk",
+      "current_type": "XaotStoragePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [],
+      "producer": "src/aot/xaot_bundle.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_storage_plan.c",
+        "src/aot/xaot_storage_plan.h"
+      ],
+      "verifier": "none-current-gap"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_coro.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotTransferPlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "func",
+        "site",
+        "value",
+        "value_type"
+      ],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_prepare.h",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_coro.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    },
+    {
+      "c_coupling_fields": [],
+      "category": "target",
+      "consumers": [
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_abi_helpers.inc.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_coro.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_stdlib_helpers.inc.c",
+        "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_struct_helpers.inc.c",
+        "src/aot/xi_cgen_value_helpers.inc.c"
+      ],
+      "current_fallback": "none-declared",
+      "current_type": "XaotValuePlan",
+      "deletion_task": 272,
+      "destination": "XrTargetPlan",
+      "pointer_lifetime_fields": [
+        "func",
+        "value"
+      ],
+      "producer": "src/aot/xaot_prepare.c",
+      "reference_files": [
+        "src/aot/xaot_bundle.c",
+        "src/aot/xaot_bundle.h",
+        "src/aot/xaot_prepare.c",
+        "src/aot/xaot_verify.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_abi_helpers.inc.c",
+        "src/aot/xi_cgen_array_helpers.inc.c",
+        "src/aot/xi_cgen_coro.inc.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_stdlib_helpers.inc.c",
+        "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_struct_helpers.inc.c",
+        "src/aot/xi_cgen_value_helpers.inc.c"
+      ],
+      "verifier": "src/aot/xaot_verify.c"
+    }
+  ],
+  "schema": 1,
+  "source_tree_fingerprint": "97c1a1b0cfd7998cdfdefb77bfb8e1d64ebf8b3cd52bdf9faaf855ce14951bb2"
+}
