@@ -23,6 +23,7 @@ static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->function_count);
     xr_xsm_put_u32(writer, plan->block_count);
     xr_xsm_put_u32(writer, plan->operation_count);
+    xr_xsm_put_u32(writer, plan->edge_count);
     xr_xsm_put_u32(writer, plan->constant_count);
     xr_xsm_put_u32(writer, plan->type_child_count);
     xr_xsm_put_u32(writer, plan->parameter_count);
@@ -149,6 +150,21 @@ static void encode_constants(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     }
 }
 
+static void encode_edges(XrXsmWriter *writer, const XrSemanticPlan *plan) {
+    for (uint32_t i = 0; i < plan->edge_count; i++) {
+        const XrSemanticEdgeRecord *record = &plan->edges[i];
+        xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
+        xr_xsm_put_string(writer, record->canonical_key);
+        xr_xsm_put_u32(writer, record->function);
+        xr_xsm_put_u32(writer, record->from_block);
+        xr_xsm_put_u32(writer, record->to_block);
+        xr_xsm_put_u32(writer, record->operation);
+        xr_xsm_put_u8(writer, record->kind);
+        xr_xsm_put_u8(writer, record->flags);
+        xr_xsm_put_u16(writer, 0);
+    }
+}
+
 static void encode_ownership(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     const XrOwnershipCertificate *certificate = plan->ownership;
     for (uint32_t i = 0; i < certificate->owner_count; i++) {
@@ -165,6 +181,7 @@ static void encode_ownership(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     for (uint32_t i = 0; i < certificate->event_count; i++) {
         const XrOwnershipEventRecord *record = &certificate->events[i];
         xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
+        xr_xsm_put_string(writer, record->canonical_key);
         xr_xsm_put_u32(writer, record->owner);
         xr_xsm_put_u32(writer, record->operation);
         xr_xsm_put_u32(writer, record->block);
@@ -204,6 +221,7 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
     encode_functions(&payload, plan);
     encode_blocks(&payload, plan);
     encode_operations(&payload, plan);
+    encode_edges(&payload, plan);
     encode_constants(&payload, plan);
     encode_ownership(&payload, plan);
     if (payload.failed) {

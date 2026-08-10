@@ -16,6 +16,8 @@ void xr_ownership_certificate_free(XrOwnershipCertificate *certificate) {
         return;
     for (uint32_t i = 0; i < certificate->owner_count; i++)
         xr_free((void *) certificate->owners[i].canonical_key);
+    for (uint32_t i = 0; i < certificate->event_count; i++)
+        xr_free((void *) certificate->events[i].canonical_key);
     xr_free(certificate->owners);
     xr_free(certificate->events);
     xr_free(certificate->edge_states);

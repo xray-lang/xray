@@ -24,6 +24,7 @@ typedef struct XrXsmCounts {
     uint32_t functions;
     uint32_t blocks;
     uint32_t operations;
+    uint32_t edges;
     uint32_t constants;
     uint32_t type_children;
     uint32_t parameters;
@@ -89,6 +90,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     XR_ALLOC_TABLE(functions, count.functions, XrSemanticFunctionRecord);
     XR_ALLOC_TABLE(blocks, count.blocks, XrSemanticBlockRecord);
     XR_ALLOC_TABLE(operations, count.operations, XrSemanticOperationRecord);
+    XR_ALLOC_TABLE(edges, count.edges, XrSemanticEdgeRecord);
     XR_ALLOC_TABLE(constants, count.constants, XrSemanticConstantRecord);
     XR_ALLOC_TABLE(type_children, count.type_children, uint32_t);
     XR_ALLOC_TABLE(parameters, count.parameters, uint32_t);
@@ -115,6 +117,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     plan->function_count = plan->function_capacity = count.functions;
     plan->block_count = plan->block_capacity = count.blocks;
     plan->operation_count = plan->operation_capacity = count.operations;
+    plan->edge_count = plan->edge_capacity = count.edges;
     plan->constant_count = plan->constant_capacity = count.constants;
     plan->type_child_count = plan->type_child_capacity = count.type_children;
     plan->parameter_count = plan->parameter_capacity = count.parameters;
@@ -134,6 +137,7 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->functions = xr_xsm_take_u32(reader);
     count->blocks = xr_xsm_take_u32(reader);
     count->operations = xr_xsm_take_u32(reader);
+    count->edges = xr_xsm_take_u32(reader);
     count->constants = xr_xsm_take_u32(reader);
     count->type_children = xr_xsm_take_u32(reader);
     count->parameters = xr_xsm_take_u32(reader);
@@ -145,11 +149,11 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->edge_states = xr_xsm_take_u32(reader);
     return !reader->failed && count->types <= 1000000u && count->functions <= 100000u &&
            count->blocks <= 2000000u && count->operations <= 10000000u &&
-           count->constants <= 10000000u && count->type_children <= 8000000u &&
-           count->parameters <= 25600000u && count->predecessors <= 16000000u &&
-           count->operands <= 40000000u && count->metadata <= 80000000u &&
-           count->owners <= 2000000u && count->events <= 20000000u &&
-           count->edge_states <= 40000000u;
+           count->edges <= 40000000u && count->constants <= 10000000u &&
+           count->type_children <= 8000000u && count->parameters <= 25600000u &&
+           count->predecessors <= 16000000u && count->operands <= 40000000u &&
+           count->metadata <= 80000000u && count->owners <= 2000000u &&
+           count->events <= 20000000u && count->edge_states <= 40000000u;
 }
 
 static void decode_types(XrXsmReader *reader, XrSemanticPlan *plan) {
@@ -269,6 +273,21 @@ static void decode_constants(XrXsmReader *reader, XrSemanticPlan *plan) {
     }
 }
 
+static void decode_edges(XrXsmReader *reader, XrSemanticPlan *plan) {
+    for (uint32_t i = 0; i < plan->edge_count; i++) {
+        XrSemanticEdgeRecord *record = &plan->edges[i];
+        xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
+        record->canonical_key = take_plan_string(reader, plan, false);
+        record->function = xr_xsm_take_u32(reader);
+        record->from_block = xr_xsm_take_u32(reader);
+        record->to_block = xr_xsm_take_u32(reader);
+        record->operation = xr_xsm_take_u32(reader);
+        record->kind = xr_xsm_take_u8(reader);
+        record->flags = xr_xsm_take_u8(reader);
+        record->reserved = xr_xsm_take_u16(reader);
+    }
+}
+
 static void decode_ownership(XrXsmReader *reader, XrOwnershipCertificate *certificate) {
     for (uint32_t i = 0; i < certificate->owner_count; i++) {
         XrOwnershipOwnerRecord *record = &certificate->owners[i];
@@ -284,6 +303,7 @@ static void decode_ownership(XrXsmReader *reader, XrOwnershipCertificate *certif
     for (uint32_t i = 0; i < certificate->event_count; i++) {
         XrOwnershipEventRecord *record = &certificate->events[i];
         xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
+        record->canonical_key = take_string(reader, 1048576u);
         record->owner = xr_xsm_take_u32(reader);
         record->operation = xr_xsm_take_u32(reader);
         record->block = xr_xsm_take_u32(reader);
@@ -350,6 +370,7 @@ bool xr_xsm_decode(const uint8_t *bytes, size_t size, XrSemanticPlan **out, char
     decode_functions(&reader, plan);
     decode_blocks(&reader, plan);
     decode_operations(&reader, plan);
+    decode_edges(&reader, plan);
     decode_constants(&reader, plan);
     decode_ownership(&reader, certificate);
     if (reader.failed || reader.offset != reader.size) {

@@ -27,6 +27,7 @@
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
+static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 4, .frozen = true};
 
 static XrSemanticPlan *build_probe_plan(void) {
     XiFunc *function = xi_func_new("artifact_probe", &stub_int);
@@ -81,6 +82,70 @@ static XrSemanticPlan *build_owned_parameter_plan(void) {
     return plan;
 }
 
+static XrSemanticPlan *build_panic_edge_plan(void) {
+    XiFunc *function = xi_func_new("panic_edge_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *registration = xi_block_new(function);
+    XiBlock *body = xi_block_new(function);
+    XiBlock *handler = xi_block_new(function);
+    REQUIRE(registration != NULL && body != NULL && handler != NULL);
+
+    XiValue *try_operation = xi_value_new(function, registration, XI_TRY, &stub_unit, 0);
+    REQUIRE(try_operation != NULL);
+    try_operation->aux = handler;
+    try_operation->aux_int = -1;
+    try_operation->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_jump(registration, body);
+
+    XiValue *normal = xi_const_int(function, body, 1, &stub_int);
+    XiValue *caught = xi_const_int(function, handler, 2, &stub_int);
+    REQUIRE(normal != NULL && caught != NULL);
+    xi_block_set_return(body, normal);
+    xi_block_set_return(handler, caught);
+    /* This is the same SSA-only predecessor shape produced by panic lowering:
+     * it is deliberately not the block containing XI_TRY. */
+    xi_block_add_pred(handler, body);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "panic-edge plan build failed: %s\n", error);
+    REQUIRE(built);
+    xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticPlan *build_error_edge_plan(void) {
+    XiFunc *function = xi_func_new("error_edge_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *check_block = xi_block_new(function);
+    XiBlock *error_block = xi_block_new(function);
+    XiBlock *normal_block = xi_block_new(function);
+    REQUIRE(check_block != NULL && error_block != NULL && normal_block != NULL);
+
+    XiValue *check = xi_value_new(function, check_block, XI_ERR_CHECK, &stub_bool, 0);
+    REQUIRE(check != NULL);
+    check->flags = XI_FLAG_SIDE_EFFECT;
+    xi_block_set_if(check_block, check, error_block, normal_block);
+    XiValue *error_result = xi_const_int(function, error_block, -1, &stub_int);
+    XiValue *normal_result = xi_const_int(function, normal_block, 1, &stub_int);
+    REQUIRE(error_result != NULL && normal_result != NULL);
+    xi_block_set_return(error_block, error_result);
+    xi_block_set_return(normal_block, normal_result);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "error-edge plan build failed: %s\n", error);
+    REQUIRE(built);
+    xi_func_free(function);
+    return plan;
+}
+
 static uint8_t *copy_bytes(const uint8_t *bytes, size_t size) {
     uint8_t *copy = (uint8_t *) xr_malloc(size);
     REQUIRE(copy != NULL);
@@ -102,13 +167,13 @@ static void test_stable_ids(void) {
     char hex[XR_STABLE_ID_BYTES * 2 + 1];
     REQUIRE(xr_stable_id_from_key("alpha", &id, &digest));
     xr_stable_id_hex(id, hex);
-    REQUIRE(strcmp(hex, "55f12371da235f267b602fea95156383") == 0);
+    REQUIRE(strcmp(hex, "9bf6af74f9708ff32171293971b35071") == 0);
 
     XrSemanticPlan *plan = build_probe_plan();
     const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, 0);
     REQUIRE(function != NULL);
     xr_stable_id_hex(function->id, hex);
-    REQUIRE(strcmp(hex, "e10b14c3c809c4f4c2bd4a0f694ef998") == 0);
+    REQUIRE(strcmp(hex, "cf96f5ef90be2fedbf7f7f632cfd5fb6") == 0);
     xr_semantic_plan_free(plan);
 }
 
@@ -181,6 +246,61 @@ static void test_xsm_roundtrip_and_determinism(void) {
     xr_semantic_plan_free(first);
 }
 
+static void test_explicit_panic_edge_and_roundtrip(void) {
+    XrSemanticPlan *plan = build_panic_edge_plan();
+    REQUIRE(xr_semantic_plan_edge_count(plan) == 2);
+    const XrSemanticEdgeRecord *normal = NULL;
+    const XrSemanticEdgeRecord *panic = NULL;
+    for (uint32_t i = 0; i < xr_semantic_plan_edge_count(plan); i++) {
+        const XrSemanticEdgeRecord *edge = xr_semantic_plan_edge(plan, i);
+        REQUIRE(edge != NULL);
+        if (edge->kind == XR_SEM_EDGE_NORMAL)
+            normal = edge;
+        if (edge->kind == XR_SEM_EDGE_PANIC)
+            panic = edge;
+    }
+    REQUIRE(normal != NULL && panic != NULL);
+    REQUIRE(normal->from_block == 0 && normal->to_block == 1);
+    REQUIRE(normal->operation == XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(panic->from_block == 0 && panic->to_block == 2);
+    REQUIRE(panic->operation < xr_semantic_plan_operation_count(plan));
+    REQUIRE(xr_semantic_plan_operation(plan, panic->operation)->opcode == XI_TRY);
+
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    char error[512] = {0};
+    REQUIRE(xr_xsm_encode(plan, &bytes, &size, error, sizeof(error)));
+    XrSemanticPlan *decoded = NULL;
+    REQUIRE(xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)));
+    REQUIRE(xr_semantic_plan_edge_count(decoded) == 2);
+    REQUIRE(xr_fingerprint_equal(xr_semantic_plan_fingerprint(plan),
+                                 xr_semantic_plan_fingerprint(decoded)));
+    xr_semantic_plan_free(decoded);
+    xr_free(bytes);
+    xr_semantic_plan_free(plan);
+}
+
+static void test_explicit_error_edge(void) {
+    XrSemanticPlan *plan = build_error_edge_plan();
+    REQUIRE(xr_semantic_plan_edge_count(plan) == 2);
+    const XrSemanticEdgeRecord *error_edge = NULL;
+    const XrSemanticEdgeRecord *normal_edge = NULL;
+    for (uint32_t i = 0; i < xr_semantic_plan_edge_count(plan); i++) {
+        const XrSemanticEdgeRecord *edge = xr_semantic_plan_edge(plan, i);
+        REQUIRE(edge != NULL);
+        if (edge->kind == XR_SEM_EDGE_ERROR)
+            error_edge = edge;
+        if (edge->kind == XR_SEM_EDGE_NORMAL)
+            normal_edge = edge;
+    }
+    REQUIRE(error_edge != NULL && normal_edge != NULL);
+    REQUIRE(error_edge->from_block == 0 && error_edge->to_block == 1);
+    REQUIRE(error_edge->operation < xr_semantic_plan_operation_count(plan));
+    REQUIRE(xr_semantic_plan_operation(plan, error_edge->operation)->opcode == XI_ERR_CHECK);
+    REQUIRE(normal_edge->from_block == 0 && normal_edge->to_block == 2);
+    xr_semantic_plan_free(plan);
+}
+
 static void test_xsm_fail_closed_mutations(void) {
     XrSemanticPlan *plan = build_probe_plan();
     uint8_t *bytes = NULL;
@@ -232,6 +352,14 @@ static void test_semantic_and_ownership_mutations(void) {
     expect_verify_failure(plan, "XR_SEM_0015");
     plan->operations[0].opcode = saved_opcode;
 
+    XrStableId saved_id = plan->operations[1].id;
+    const char *saved_key = plan->operations[1].canonical_key;
+    plan->operations[1].id = plan->operations[0].id;
+    plan->operations[1].canonical_key = plan->operations[0].canonical_key;
+    expect_verify_failure(plan, "XR_SEM_0003");
+    plan->operations[1].id = saved_id;
+    plan->operations[1].canonical_key = saved_key;
+
     XrOwnershipEventRecord *release_event = NULL;
     for (uint32_t i = 0; i < plan->ownership->event_count; i++) {
         if (plan->ownership->events[i].kind == XR_OWN_EVENT_RELEASE) {
@@ -251,8 +379,35 @@ static void test_semantic_and_ownership_mutations(void) {
     expect_verify_failure(plan, "XR_OWN_3001");
     edge->exit_balance = saved_exit;
 
+    uint32_t saved_line = plan->operations[0].source_line;
+    plan->operations[0].source_line = saved_line + 1;
+    expect_verify_failure(plan, "XR_SEM_0004");
+    plan->operations[0].source_line = saved_line;
+
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+
+    plan = build_probe_plan();
+    XrSemanticConstantRecord *boolean = NULL;
+    for (uint32_t i = 0; i < plan->constant_count; i++) {
+        if (plan->constants[i].kind == XR_SEM_CONST_BOOL)
+            boolean = &plan->constants[i];
+    }
+    REQUIRE(boolean != NULL);
+    boolean->integer = 2;
+    expect_verify_failure(plan, "XR_SEM_0009");
+    xr_semantic_plan_free(plan);
+
+    plan = build_panic_edge_plan();
+    XrSemanticEdgeRecord *panic = NULL;
+    for (uint32_t i = 0; i < plan->edge_count; i++) {
+        if (plan->edges[i].kind == XR_SEM_EDGE_PANIC)
+            panic = &plan->edges[i];
+    }
+    REQUIRE(panic != NULL);
+    panic->operation = XR_SEMANTIC_INDEX_NONE;
+    expect_verify_failure(plan, "XR_SEM_0010");
     xr_semantic_plan_free(plan);
 }
 
@@ -260,6 +415,8 @@ int main(void) {
     test_stable_ids();
     test_immutable_owned_snapshot();
     test_xsm_roundtrip_and_determinism();
+    test_explicit_panic_edge_and_roundtrip();
+    test_explicit_error_edge();
     test_xsm_fail_closed_mutations();
     test_semantic_and_ownership_mutations();
     printf("SemanticPlan/XSM tests passed\n");

@@ -37,9 +37,13 @@ static int compare_id_key_ref(const void *left, const void *right) {
     return order != 0 ? order : strcmp(a->key, b->key);
 }
 
-static bool verify_id_collisions(const XrSemanticPlan *plan, char *error, size_t error_size) {
-    size_t count = (size_t) plan->type_count + plan->function_count + plan->block_count +
-                   plan->operation_count * 2u;
+bool xr_semantic_plan_verify_identity_set(const XrSemanticPlan *plan, char *error,
+                                          size_t error_size) {
+    size_t count =
+        (size_t) plan->type_count + plan->function_count + plan->block_count +
+        plan->operation_count * 2u + plan->edge_count +
+        (plan->ownership ? (size_t) plan->ownership->owner_count + plan->ownership->event_count
+                         : 0u);
     XrSemanticIdKeyRef *refs = (XrSemanticIdKeyRef *) xr_calloc(count, sizeof(*refs));
     if (!refs) {
         set_error(error, error_size, "XR_EXEC_5003", "identity collision table allocation failed");
@@ -63,17 +67,25 @@ static bool verify_id_collisions(const XrSemanticPlan *plan, char *error, size_t
         XR_ADD_ID_KEY(plan->operations[i].id, plan->operations[i].canonical_key);
         XR_ADD_ID_KEY(plan->operations[i].allocation_id, plan->operations[i].allocation_key);
     }
+    for (uint32_t i = 0; i < plan->edge_count; i++)
+        XR_ADD_ID_KEY(plan->edges[i].id, plan->edges[i].canonical_key);
+    if (plan->ownership) {
+        for (uint32_t i = 0; i < plan->ownership->owner_count; i++)
+            XR_ADD_ID_KEY(plan->ownership->owners[i].id, plan->ownership->owners[i].canonical_key);
+        for (uint32_t i = 0; i < plan->ownership->event_count; i++)
+            XR_ADD_ID_KEY(plan->ownership->events[i].id, plan->ownership->events[i].canonical_key);
+    }
 #undef XR_ADD_ID_KEY
     qsort(refs, n, sizeof(*refs), compare_id_key_ref);
     for (size_t i = 1; i < n; i++) {
         if (!xr_stable_id_equal(refs[i - 1].id, refs[i].id))
             continue;
-        if (strcmp(refs[i - 1].key, refs[i].key) != 0) {
-            xr_free(refs);
-            set_error(error, error_size, "XR_SEM_0003",
-                      "stable identifiers map to different canonical keys");
-            return false;
-        }
+        bool different_keys = strcmp(refs[i - 1].key, refs[i].key) != 0;
+        xr_free(refs);
+        set_error(error, error_size, "XR_SEM_0003",
+                  different_keys ? "stable identifiers map to different canonical keys"
+                                 : "stable identifier and canonical key are duplicated");
+        return false;
     }
     xr_free(refs);
     return true;
@@ -100,8 +112,8 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
     hash_bytes(ctx, value, strlen(value));
 }
 
-static void hash_plan(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v1\0";
+void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
+    static const uint8_t domain[] = "xray-semantic-plan-v2\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -110,6 +122,7 @@ static void hash_plan(const XrSemanticPlan *plan, XrFingerprint *out) {
     hash_u64(&ctx, plan->function_count);
     hash_u64(&ctx, plan->block_count);
     hash_u64(&ctx, plan->operation_count);
+    hash_u64(&ctx, plan->edge_count);
     hash_u64(&ctx, plan->constant_count);
     for (uint32_t i = 0; i < plan->type_count; i++) {
         const XrSemanticTypeRecord *type = &plan->types[i];
@@ -202,6 +215,17 @@ static void hash_plan(const XrSemanticPlan *plan, XrFingerprint *out) {
     }
     for (uint32_t i = 0; i < plan->metadata_count; i++)
         hash_string(&ctx, plan->metadata[i]);
+    for (uint32_t i = 0; i < plan->edge_count; i++) {
+        const XrSemanticEdgeRecord *edge = &plan->edges[i];
+        hash_bytes(&ctx, edge->id.bytes, sizeof(edge->id.bytes));
+        hash_string(&ctx, edge->canonical_key);
+        hash_u64(&ctx, edge->function);
+        hash_u64(&ctx, edge->from_block);
+        hash_u64(&ctx, edge->to_block);
+        hash_u64(&ctx, edge->operation);
+        hash_u64(&ctx, edge->kind);
+        hash_u64(&ctx, edge->flags);
+    }
     for (uint32_t i = 0; i < plan->constant_count; i++) {
         const XrSemanticConstantRecord *constant = &plan->constants[i];
         hash_u64(&ctx, constant->type);
@@ -228,6 +252,7 @@ static void hash_plan(const XrSemanticPlan *plan, XrFingerprint *out) {
         for (uint32_t i = 0; i < plan->ownership->event_count; i++) {
             const XrOwnershipEventRecord *event = &plan->ownership->events[i];
             hash_bytes(&ctx, event->id.bytes, sizeof(event->id.bytes));
+            hash_string(&ctx, event->canonical_key);
             hash_u64(&ctx, event->owner);
             hash_u64(&ctx, event->operation);
             hash_u64(&ctx, event->block);
@@ -300,9 +325,9 @@ bool xr_semantic_plan_freeze(XrSemanticPlan *plan, char *error, size_t error_siz
         set_error(error, error_size, "XR_OWN_3001", "semantic plan has no ownership certificate");
         return false;
     }
-    if (!verify_id_collisions(plan, error, error_size))
+    if (!xr_semantic_plan_verify_identity_set(plan, error, error_size))
         return false;
-    hash_plan(plan, &plan->fingerprint);
+    xr_semantic_plan_compute_fingerprint(plan, &plan->fingerprint);
     plan->ownership->semantic_fingerprint = plan->fingerprint;
     plan->ownership->fingerprint = plan->fingerprint;
     plan->ownership->frozen = true;
@@ -328,6 +353,7 @@ void xr_semantic_plan_free(XrSemanticPlan *plan) {
     xr_free(plan->functions);
     xr_free(plan->blocks);
     xr_free(plan->operations);
+    xr_free(plan->edges);
     xr_free(plan->constants);
     xr_free(plan->type_children);
     xr_free(plan->parameters);
@@ -366,6 +392,7 @@ XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_type_count, type_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_function_count, function_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_block_count, block_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_operation_count, operation_count)
+XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_edge_count, edge_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_constant_count, constant_count)
 #undef XR_PLAN_COUNT_ACCESSOR
 
@@ -379,6 +406,7 @@ XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_function, XrSemanticFunctionRecord, fun
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_block, XrSemanticBlockRecord, blocks, block_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_operation, XrSemanticOperationRecord, operations,
                         operation_count)
+XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_edge, XrSemanticEdgeRecord, edges, edge_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_constant, XrSemanticConstantRecord, constants,
                         constant_count)
 #undef XR_PLAN_RECORD_ACCESSOR
@@ -427,13 +455,21 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
     xr_fingerprint_hex(plan->fingerprint, fingerprint);
     fprintf(out, "semantic-plan schema=%u frozen=%u fingerprint=%s\n", plan->schema,
             plan->frozen ? 1u : 0u, fingerprint);
-    fprintf(out, "  types=%u functions=%u blocks=%u operations=%u constants=%u\n", plan->type_count,
-            plan->function_count, plan->block_count, plan->operation_count, plan->constant_count);
+    fprintf(out, "  types=%u functions=%u blocks=%u operations=%u edges=%u constants=%u\n",
+            plan->type_count, plan->function_count, plan->block_count, plan->operation_count,
+            plan->edge_count, plan->constant_count);
     for (uint32_t i = 0; i < plan->function_count; i++) {
         char id[XR_STABLE_ID_BYTES * 2 + 1];
         xr_stable_id_hex(plan->functions[i].id, id);
         fprintf(out, "  fn[%u] id=%s name=%s blocks=%u values=%u\n", i, id, plan->functions[i].name,
                 plan->functions[i].block_count, plan->functions[i].value_count);
+    }
+    for (uint32_t i = 0; i < plan->edge_count; i++) {
+        char id[XR_STABLE_ID_BYTES * 2 + 1];
+        xr_stable_id_hex(plan->edges[i].id, id);
+        fprintf(out, "  edge[%u] id=%s kind=%u from=%u to=%u operation=%u key=%s\n", i, id,
+                plan->edges[i].kind, plan->edges[i].from_block, plan->edges[i].to_block,
+                plan->edges[i].operation, plan->edges[i].canonical_key);
     }
     return !ferror(out);
 }

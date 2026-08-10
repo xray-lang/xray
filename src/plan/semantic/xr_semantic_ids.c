@@ -12,8 +12,8 @@
 #include "../../base/xsha256.h"
 #include <string.h>
 
-static const uint8_t xr_entity_domain[] = "xray-entity-id-v1\0";
-static const uint8_t xr_semantic_domain[] = "xray-semantic-plan-v1\0";
+static const uint8_t xr_entity_domain[] = "xray-entity-id-v2\0";
+static const uint8_t xr_semantic_domain[] = "xray-semantic-plan-v2\0";
 
 static void hash_framed(const uint8_t *domain, size_t domain_size, const uint8_t *bytes,
                         size_t size, uint8_t digest[XR_FINGERPRINT_BYTES]) {

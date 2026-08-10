@@ -38,6 +38,9 @@ struct XrSemanticPlan {
     XrSemanticOperationRecord *operations;
     uint32_t operation_count;
     uint32_t operation_capacity;
+    XrSemanticEdgeRecord *edges;
+    uint32_t edge_count;
+    uint32_t edge_capacity;
     XrSemanticConstantRecord *constants;
     uint32_t constant_count;
     uint32_t constant_capacity;
@@ -68,6 +71,9 @@ struct XrSemanticPlan {
 
 XR_FUNC XrSemanticPlan *xr_semantic_plan_create(void);
 XR_FUNC char *xr_semantic_plan_copy_string(XrSemanticPlan *plan, const char *text);
+XR_FUNC bool xr_semantic_plan_verify_identity_set(const XrSemanticPlan *plan, char *error,
+                                                  size_t error_size);
+XR_FUNC void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out);
 XR_FUNC bool xr_semantic_plan_freeze(XrSemanticPlan *plan, char *error, size_t error_size);
 XR_FUNC void xr_semantic_plan_set_ownership(XrSemanticPlan *plan,
                                             XrOwnershipCertificate *ownership);

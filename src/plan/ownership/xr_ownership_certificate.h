@@ -65,6 +65,7 @@ typedef struct XrOwnershipOwnerRecord {
 
 typedef struct XrOwnershipEventRecord {
     XrStableId id;
+    const char *canonical_key;
     uint32_t owner;
     uint32_t operation;
     uint32_t block;

@@ -60,6 +60,19 @@ typedef enum XrSemanticTypeFlag {
     XR_SEM_TYPE_OWNERSHIP_ROOT = 1u << 6,
 } XrSemanticTypeFlag;
 
+typedef enum XrSemanticEdgeKind {
+    XR_SEM_EDGE_NORMAL = 0,
+    XR_SEM_EDGE_ERROR,
+    XR_SEM_EDGE_PANIC,
+    XR_SEM_EDGE_CANCEL,
+    XR_SEM_EDGE_SUSPEND,
+    XR_SEM_EDGE_RESUME,
+} XrSemanticEdgeKind;
+
+typedef enum XrSemanticEdgeFlag {
+    XR_SEM_EDGE_HANDLER_SCOPE = 1u << 0,
+} XrSemanticEdgeFlag;
+
 typedef struct XrSemanticTypeRecord {
     XrStableId id;
     const char *canonical_key;
@@ -136,6 +149,18 @@ typedef struct XrSemanticOperationRecord {
     uint8_t return_complete;
 } XrSemanticOperationRecord;
 
+typedef struct XrSemanticEdgeRecord {
+    XrStableId id;
+    const char *canonical_key;
+    uint32_t function;
+    uint32_t from_block;
+    uint32_t to_block;
+    uint32_t operation;
+    uint8_t kind;
+    uint8_t flags;
+    uint16_t reserved;
+} XrSemanticEdgeRecord;
+
 typedef struct XrSemanticConstantRecord {
     uint32_t type;
     uint8_t kind;
@@ -155,6 +180,7 @@ XR_FUNC size_t xr_semantic_plan_type_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_function_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_block_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_operation_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_edge_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_constant_count(const XrSemanticPlan *plan);
 XR_FUNC const XrSemanticTypeRecord *xr_semantic_plan_type(const XrSemanticPlan *plan,
                                                           uint32_t index);
@@ -164,6 +190,8 @@ XR_FUNC const XrSemanticBlockRecord *xr_semantic_plan_block(const XrSemanticPlan
                                                             uint32_t index);
 XR_FUNC const XrSemanticOperationRecord *xr_semantic_plan_operation(const XrSemanticPlan *plan,
                                                                     uint32_t index);
+XR_FUNC const XrSemanticEdgeRecord *xr_semantic_plan_edge(const XrSemanticPlan *plan,
+                                                          uint32_t index);
 XR_FUNC const XrSemanticConstantRecord *xr_semantic_plan_constant(const XrSemanticPlan *plan,
                                                                   uint32_t index);
 XR_FUNC const uint32_t *xr_semantic_plan_type_children(const XrSemanticPlan *plan, uint32_t *count);

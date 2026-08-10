@@ -144,9 +144,13 @@ bool xr_ownership_certificate_check(const XrSemanticPlan *plan, char *error, siz
                       "ownership certificate premise fingerprint does not match the plan");
     for (uint32_t i = 0; i < certificate->event_count; i++) {
         const XrOwnershipEventRecord *event = &certificate->events[i];
-        if (event->owner >= certificate->owner_count || event->operation >= plan->operation_count ||
-            event->block >= plan->block_count || event->kind > XR_OWN_EVENT_RETURN ||
-            event->state_after > XR_OWN_IMMORTAL ||
+        XrStableId expected;
+        XrFingerprint digest;
+        if (!event->canonical_key ||
+            !xr_stable_id_from_key(event->canonical_key, &expected, &digest) ||
+            !xr_stable_id_equal(expected, event->id) || event->owner >= certificate->owner_count ||
+            event->operation >= plan->operation_count || event->block >= plan->block_count ||
+            event->kind > XR_OWN_EVENT_RETURN || event->state_after > XR_OWN_IMMORTAL ||
             (event->successor != XR_SEMANTIC_INDEX_NONE &&
              plan->blocks[event->block].successors[0] != event->successor &&
              plan->blocks[event->block].successors[1] != event->successor))

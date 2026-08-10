@@ -29,6 +29,7 @@
 #define XR_SEMANTIC_MAX_BLOCKS UINT32_C(2000000)
 #define XR_SEMANTIC_MAX_OPERATIONS UINT32_C(10000000)
 #define XR_SEMANTIC_MAX_OPERANDS UINT32_C(40000000)
+#define XR_SEMANTIC_MAX_EDGES UINT32_C(40000000)
 #define XR_SEMANTIC_MAX_KEY_BYTES UINT32_C(1048576)
 
 typedef struct XrTextBuilder {
@@ -219,7 +220,7 @@ static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stac
         return text_append_format(key, "cycle:%u", type->semantic_type_id);
     }
     stack[depth] = type;
-    if (!text_append_format(key, "type-v1:%u:%u:%u:%u:%u:%u:%u:%u:%u:", (unsigned) type->kind,
+    if (!text_append_format(key, "type-v2:%u:%u:%u:%u:%u:%u:%u:%u:%u:", (unsigned) type->kind,
                             type->semantic_type_id, type->is_nullable ? 1u : 0u,
                             type->is_const ? 1u : 0u, type->is_value_type ? 1u : 0u,
                             type->is_literal ? 1u : 0u, type->is_cycle_candidate ? 1u : 0u,
@@ -653,7 +654,7 @@ static bool build_function_records(XrSemanticBuildContext *ctx) {
         uint16_t lexical_ordinal = 0;
         XrTextBuilder key = {0};
         if (!function_lexical_ordinal(source, &lexical_ordinal) ||
-            !text_append(&key, "function-v1:parent=") ||
+            !text_append(&key, "function-v2:parent=") ||
             (parent >= 0 && !text_append_stable_id(&key, ctx->plan->functions[parent].id)) ||
             (parent < 0 && !text_append(&key, "module-root")) ||
             !text_append_format(&key, ":ordinal=%u:name=", lexical_ordinal) ||
@@ -752,7 +753,7 @@ static bool add_enum_metadata(XrSemanticBuildContext *ctx, const XiEnumData *dat
                               XrSemanticOperationRecord *record) {
     if (!data || !data->name || (data->member_count && !data->members))
         return fail(ctx, "XR_SEM_0007", "enum namespace has incomplete semantic metadata");
-    if (!add_metadata(ctx, record, "enum-v1") || !add_metadata(ctx, record, data->name) ||
+    if (!add_metadata(ctx, record, "enum-v2") || !add_metadata(ctx, record, data->name) ||
         !add_metadata_u32(ctx, record, data->layout_id) ||
         !add_metadata_u32(ctx, record, data->is_adt ? 1u : 0u) ||
         !add_metadata_u32(ctx, record, data->type_param_count))
@@ -982,6 +983,7 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     uint32_t index = ctx->plan->operation_count++;
     XrSemanticOperationRecord *record = &ctx->plan->operations[index];
     memset(record, 0, sizeof(*record));
+    record->evidence[7] = XR_SEMANTIC_INDEX_NONE;
     XrTextBuilder key = {0};
     if (!text_append_format(&key, "%s/op:%u:%s",
                             ctx->plan->functions[function_index_value].canonical_key, value->id,
@@ -1122,6 +1124,112 @@ static bool build_blocks_and_operations(XrSemanticBuildContext *ctx) {
     return true;
 }
 
+static bool append_semantic_edge(XrSemanticBuildContext *ctx, uint32_t function,
+                                 uint32_t from_block, uint32_t to_block, uint32_t operation,
+                                 XrSemanticEdgeKind kind, uint8_t flags) {
+    if (function >= ctx->plan->function_count || from_block >= ctx->plan->block_count ||
+        to_block >= ctx->plan->block_count ||
+        (operation != XR_SEMANTIC_INDEX_NONE && operation >= ctx->plan->operation_count) ||
+        !reserve_array((void **) &ctx->plan->edges, &ctx->plan->edge_capacity,
+                       ctx->plan->edge_count + 1, sizeof(*ctx->plan->edges), XR_SEMANTIC_MAX_EDGES))
+        return fail(ctx, "XR_EXEC_5003", "semantic control-edge budget exhausted");
+    XrSemanticEdgeRecord *record = &ctx->plan->edges[ctx->plan->edge_count];
+    memset(record, 0, sizeof(*record));
+    XrTextBuilder key = {0};
+    if (!text_append_format(&key, "edge-v2:function=") ||
+        !text_append_stable_id(&key, ctx->plan->functions[function].id) ||
+        !text_append(&key, ":from=") ||
+        !text_append_stable_id(&key, ctx->plan->blocks[from_block].id) ||
+        !text_append(&key, ":to=") ||
+        !text_append_stable_id(&key, ctx->plan->blocks[to_block].id) ||
+        !text_append_format(&key, ":kind=%u:operation=", (unsigned) kind) ||
+        (operation == XR_SEMANTIC_INDEX_NONE
+             ? !text_append(&key, "block-control")
+             : !text_append_stable_id(&key, ctx->plan->operations[operation].id))) {
+        text_dispose(&key);
+        return fail(ctx, "XR_EXEC_5003", "semantic control-edge key allocation failed");
+    }
+    record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+    text_dispose(&key);
+    XrFingerprint digest;
+    if (!record->canonical_key ||
+        !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+        return fail(ctx, "XR_EXEC_5003", "semantic control-edge identity allocation failed");
+    record->function = function;
+    record->from_block = from_block;
+    record->to_block = to_block;
+    record->operation = operation;
+    record->kind = (uint8_t) kind;
+    record->flags = flags;
+    ctx->plan->edge_count++;
+    return true;
+}
+
+static uint32_t operation_for_result_in_block(const XrSemanticPlan *plan,
+                                              const XrSemanticBlockRecord *block, uint32_t value) {
+    if (value == XR_SEMANTIC_INDEX_NONE)
+        return XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t o = block->operation_begin; o < block->operation_begin + block->operation_count;
+         o++) {
+        if (plan->operations[o].result_value == value)
+            return o;
+    }
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
+static uint32_t block_error_source(const XrSemanticPlan *plan, const XrSemanticBlockRecord *block) {
+    uint32_t source = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t o = block->operation_begin; o < block->operation_begin + block->operation_count;
+         o++) {
+        if (plan->operations[o].opcode == XI_ERR_CATCH)
+            source = XR_SEMANTIC_INDEX_NONE;
+        else if (plan->operations[o].opcode == XI_ERR_SET)
+            source = o;
+    }
+    return source;
+}
+
+static bool build_semantic_edges(XrSemanticBuildContext *ctx) {
+    for (uint32_t from = 0; from < ctx->plan->block_count; from++) {
+        const XrSemanticBlockRecord *block = &ctx->plan->blocks[from];
+        uint32_t control = operation_for_result_in_block(ctx->plan, block, block->control_value);
+        uint32_t error_source = block_error_source(ctx->plan, block);
+        for (unsigned s = 0; s < 2; s++) {
+            uint32_t to = block->successors[s];
+            if (to == XR_SEMANTIC_INDEX_NONE || (s == 1 && to == block->successors[0]))
+                continue;
+            bool checked_error = control != XR_SEMANTIC_INDEX_NONE && s == 0 &&
+                                 ctx->plan->operations[control].opcode == XI_ERR_CHECK;
+            XrSemanticEdgeKind kind = checked_error || error_source != XR_SEMANTIC_INDEX_NONE
+                                          ? XR_SEM_EDGE_ERROR
+                                          : XR_SEM_EDGE_NORMAL;
+            uint32_t operation = checked_error               ? control
+                                 : kind == XR_SEM_EDGE_ERROR ? error_source
+                                                             : XR_SEMANTIC_INDEX_NONE;
+            if (!append_semantic_edge(ctx, block->function, from, to, operation, kind, 0))
+                return false;
+        }
+    }
+    /* Xi predecessor slots are an SSA construction relation, not an executable
+     * edge authority.  In particular, lowering may add a synthetic predecessor
+     * to an otherwise unreachable error/panic handler so Braun SSA can seal the
+     * block.  The real panic relation is the XI_TRY operation and its explicit
+     * handler target; derive it directly instead of guessing from a predecessor
+     * that has no matching normal successor. */
+    for (uint32_t o = 0; o < ctx->plan->operation_count; o++) {
+        const XrSemanticOperationRecord *operation = &ctx->plan->operations[o];
+        if (operation->opcode != XI_TRY)
+            continue;
+        uint32_t to = operation->evidence[7];
+        if (to == XR_SEMANTIC_INDEX_NONE || to >= ctx->plan->block_count)
+            return fail(ctx, "XR_SEM_0010", "try operation has no valid panic handler target");
+        if (!append_semantic_edge(ctx, operation->function, operation->block, to, o,
+                                  XR_SEM_EDGE_PANIC, XR_SEM_EDGE_HANDLER_SCOPE))
+            return false;
+    }
+    return true;
+}
+
 bool xr_semantic_plan_build(const XiFunc *root, XrSemanticPlan **out, char *error,
                             size_t error_size) {
     if (out)
@@ -1138,7 +1246,7 @@ bool xr_semantic_plan_build(const XiFunc *root, XrSemanticPlan **out, char *erro
     ctx.plan = xr_semantic_plan_create();
     if (!ctx.plan || !collect_functions(&ctx, root) || !collect_semantic_types(&ctx) ||
         !canonicalize_type_table(&ctx) || !build_function_records(&ctx) ||
-        !build_blocks_and_operations(&ctx))
+        !build_blocks_and_operations(&ctx) || !build_semantic_edges(&ctx))
         goto failure;
     XrOwnershipCertificate *ownership = NULL;
     if (!xr_ownership_certificate_build(ctx.plan, &ownership, error, error_size))

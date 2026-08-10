@@ -150,7 +150,7 @@ static bool add_owner(XrOwnershipBuildContext *ctx, uint32_t root,
     char key[256];
     char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(origin->id, operation_id);
-    int written = snprintf(key, sizeof(key), "owner-v1:%s:value=%u", operation_id, root);
+    int written = snprintf(key, sizeof(key), "owner-v2:%s:value=%u", operation_id, root);
     if (written < 0 || (size_t) written >= sizeof(key))
         return fail(ctx, "XR_EXEC_5003", "ownership key exceeds its hard bound");
     owner->canonical_key = copy_text(key);
@@ -197,12 +197,18 @@ static bool add_event_at(XrOwnershipBuildContext *ctx, uint32_t owner_index,
     }
     xr_stable_id_hex(certificate->owners[owner_index].id, owner_id);
     xr_stable_id_hex(ctx->plan->operations[operation_index].id, operation_id);
-    int written = snprintf(key, sizeof(key), "ownership-event-v1:%s:%s:%u:%u:%u:%u", owner_id,
+    int written = snprintf(key, sizeof(key), "ownership-event-v2:%s:%s:%u:%u:%u:%u", owner_id,
                            operation_id, block, successor, (unsigned) kind, occurrence);
-    XrFingerprint digest;
-    if (written < 0 || (size_t) written >= sizeof(key) ||
-        !xr_stable_id_from_key(key, &event->id, &digest))
+    if (written < 0 || (size_t) written >= sizeof(key))
         return fail(ctx, "XR_EXEC_5003", "ownership event identity failed");
+    event->canonical_key = copy_text(key);
+    XrFingerprint digest;
+    if (!event->canonical_key ||
+        !xr_stable_id_from_key(event->canonical_key, &event->id, &digest)) {
+        xr_free((void *) event->canonical_key);
+        event->canonical_key = NULL;
+        return fail(ctx, "XR_EXEC_5003", "ownership event identity failed");
+    }
     certificate->event_count++;
     return true;
 }
