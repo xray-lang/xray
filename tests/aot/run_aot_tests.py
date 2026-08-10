@@ -60,6 +60,7 @@ NEGATIVE_REJECTION_PATTERNS = (
     "semantic analysis failed",
     "derived Clone .* no consumable verified plan",
     "open AOT callable target set",
+    "native compilation cannot prove the target of an indirect call",
     ": error: ",
 )
 

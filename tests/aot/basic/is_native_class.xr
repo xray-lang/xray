@@ -45,14 +45,9 @@ fn main() {
     var kept = small as i16?
     print(kept == null)
 
-    var maybeLst = net.listen(0, 8)
-    if (maybeLst == null) {
-        print("no-listen")
-    } else {
-        var lst = maybeLst!
-        print(isListener(lst))
-        net.close(lst)
-    }
+    var lst = net.listen(0, 8)
+    print(isListener(lst))
+    net.close(lst)
 }
 
 main()
