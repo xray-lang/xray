@@ -95,7 +95,7 @@
 
 #undef XVM_TEMPLATE_BITWISE_UNARY_CASE
 
-#define XVM_TEMPLATE_SHIFT_CASE(op, int_fn, bigint_fn)                                             \
+#define XVM_TEMPLATE_SHIFT_CASE(op, shift_kind)                                                    \
     vmcase(op) {                                                                                   \
         int a = GETARG_A(i);                                                                       \
         int b = GETARG_B(i);                                                                       \
@@ -103,17 +103,22 @@
         XrValue vb = R(b);                                                                         \
         XrValue vc = R(c);                                                                         \
         if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
-            XR_SET_INT(R(a), int_fn(XR_TO_INT(vb), XR_TO_INT(vc)));                                \
+            XR_SET_INT(R(a),                                                                       \
+                       XR_SHIFT_OWNER_APPLY(                                                       \
+                           XR_SEM_OWNER_ID_SHARED_SHIFT_HI,                                       \
+                           XR_SEM_OWNER_ID_SHARED_SHIFT_LO, XR_SEM_CONSUMER_VM, shift_kind,        \
+                           XR_TO_INT(vb), XR_TO_INT(vc)));                                        \
             vmbreak;                                                                               \
         }                                                                                          \
         if (XR_IS_BIGINT(vb) && XR_IS_INT(vc)) {                                                   \
-            xr_Integer count = XR_TO_INT(vc);                                                      \
-            if (count < 0 || count > UINT32_MAX) {                                                 \
+            XrShiftStatus shift_status = XR_SHIFT_STATUS_OK;                                       \
+            XrBigInt *ba = (XrBigInt *) XR_TO_PTR(vb);                                             \
+            XrBigInt *result =                                                                    \
+                xr_bigint_shift(VM_CURRENT_CORO, ba, XR_TO_INT(vc), shift_kind, &shift_status);    \
+            if (shift_status == XR_SHIFT_STATUS_COUNT_RANGE) {                                     \
                 VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "bigint shift count out of range");         \
             }                                                                                      \
-            XrBigInt *ba = (XrBigInt *) XR_TO_PTR(vb);                                             \
-            XrBigInt *result = bigint_fn(VM_CURRENT_CORO, ba, (uint32_t) count);                   \
-            if (XR_UNLIKELY(result == NULL)) {                                                     \
+            if (shift_status == XR_SHIFT_STATUS_CAPACITY_OVERFLOW || XR_UNLIKELY(result == NULL)) {\
                 VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "bigint shift allocation failed");          \
             }                                                                                      \
             R(a) = XR_FROM_PTR(result);                                                            \
@@ -129,7 +134,7 @@
  * occupy all 64 bits, so the arithmetic OP_SHR would sign-extend and diverge
  * from AOT/C. Not part of the generated shift template because there is no
  * distinct xi op: the split happens at bytecode emission on the static type. */
-XVM_TEMPLATE_SHIFT_CASE(OP_SHR_U, xr_int_shr_u_wrap, xr_bigint_shr)
+XVM_TEMPLATE_SHIFT_CASE(OP_SHR_U, XR_SHIFT_RIGHT_UNSIGNED)
 
 #undef XVM_TEMPLATE_SHIFT_CASE
 

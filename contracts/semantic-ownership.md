@@ -38,6 +38,14 @@ machine-readable fingerprint are all derived from the same `ops.def` row.
 Restoring a source-name/literal adapter guess, borrowing another consumer bit,
 or losing any of the six production bindings fails the owner ratchet.
 
+`shared.shift` owns `xi.shl` and `xi.shr` for scalar and BigInt values. Scalar
+counts use modulo 64, left shift wraps, and right shift is explicitly signed or
+unsigned. BigInt counts are validated without modulo reduction and limb
+planning/application remains in the same owner. VM, optimizer, hosted and
+freestanding AOT, CGen, and runtime code may only adapt representation,
+allocation, and errors; reviving private shift helpers or raw CGen shift
+emission fails the owner ratchet.
+
 Higher-order array operations retain the existing native typed fast path for
 pure uncaptured callbacks. Captured, dynamic, generic, cross-module, and tagged
 forms follow the explicit matrix in `hof-shape-matrix.toml`; unknown target or
@@ -45,9 +53,9 @@ effect evidence cannot be guessed inside CGen.
 
 ## Digest anchors
 
-anchor-sha256: contracts/semantic-owners.toml d576b91d08e9fad86cc48e86fe5905a13be981cc986a1b38e2ac51ab1e13bc20
-anchor-sha256: contracts/semantic-owner-registry.json d340395e4add2fe9951151d7a8a866d32fd77e2c4e86c3128f25671a942fabd2
+anchor-sha256: contracts/semantic-owners.toml ee36fa14229545d778af0a960b70c3f1b3aa9a532478485252cf02c741dc632a
+anchor-sha256: contracts/semantic-owner-registry.json be8ca33562196c57b386fe2f9e3c081f545040bcc74e6109493f3c80c75c46fa
 anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
-anchor-sha256: contracts/shared-core-inventory.json f9661455c6c0d1f062b4a53d049a855b83ef10a6580718d6d259d34bc461097b
-anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h 3a90cfcfc6e9f8c6f65fbe5967607a9084f1fc1aad8194096e9fd74b558c2b6d
-anchor-sha256: scripts/check_semantic_owners.py 92a876f4c80e748f2ba528ef4727fc8d9335fad495204b074ab5d01a84844aa0
+anchor-sha256: contracts/shared-core-inventory.json 384d48850c860bf70b688fc35ff743c0d6361551b7626c28c759ce4cf995eb11
+anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h fe0b9d47f5f4e26de9ac0c55c91cf4a45e1405d5fd1b903403c50a4d5aec2db0
+anchor-sha256: scripts/check_semantic_owners.py 319ebc6eb783d6972df45575ec508d8d44dc67f81419678b9de6d88e1bc55a46

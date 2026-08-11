@@ -1,7 +1,5 @@
 contains=xaot-plan v0
-c_contains=((uint32_t)(
-c_contains=<< UINT64_C(13)
-c_contains=>> UINT64_C(19)
-c_not_contains=((uint64_t)(
-c_not_contains=xrt_i64_shl(
-c_not_contains=xrt_i64_shr(
+c_contains=xrt_shift_eval(XR_SHIFT_LEFT
+c_contains=xrt_shift_eval(XR_SHIFT_RIGHT_UNSIGNED
+c_not_contains=<< UINT64_C(13)
+c_not_contains=>> UINT64_C(19)

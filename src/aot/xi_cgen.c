@@ -4246,15 +4246,6 @@ static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, 
         fprintf(out, ")");
 }
 
-static bool cg_shift_const_int_value(const XiValue *value, int64_t *out) {
-    const XiValue *unwrapped = cg_unwrap_identity_value(value);
-    if (!unwrapped || unwrapped->op != XI_CONST || !unwrapped->type ||
-        unwrapped->type->kind != XR_KIND_INT || !out)
-        return false;
-    *out = unwrapped->aux_int;
-    return true;
-}
-
 static bool cg_type_is_unsigned_int(const XrType *type) {
     if (!type || type->kind != XR_KIND_INT || type->is_nullable)
         return false;
@@ -4270,173 +4261,49 @@ static bool cg_type_is_unsigned_int(const XrType *type) {
     }
 }
 
-static bool emit_native_unsigned_const_shift_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
-                                                  const char *op) {
-    if (!v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
-        cg_rep(v->args[1]) != XR_REP_I64 || !cg_type_is_unsigned_int(v->args[0]->type))
-        return false;
-
-    int64_t shift = 0;
-    if (!cg_shift_const_int_value(v->args[1], &shift) || shift < 0 || shift >= 64)
-        return false;
-
-    const char *ctype = NULL;
-    int width = 64;
-    switch (v->args[0]->type->scalar_rep) {
-        case XR_NATIVE_U8:
-        case XR_NATIVE_U16:
-        case XR_NATIVE_U32:
-            ctype = "uint32_t";
-            width = 32;
-            break;
-        case XR_NATIVE_U64:
-        case XR_NATIVE_USIZE:
-            ctype = "uint64_t";
-            width = 64;
-            break;
-        default:
-            return false;
+static const char *cg_shift_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_SHIFT_HI,
+                                        XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: shift owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
     }
-    if (shift >= width)
-        ctype = "uint64_t";
-
-    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
-    if (boxed)
-        fprintf(out, "XR_FROM_INT((int64_t)(");
-    fprintf(out, "(((%s)(", ctype);
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, ")) %s UINT64_C(%" PRIu64 "))", op, (uint64_t) shift);
-    if (boxed)
-        fprintf(out, "))");
-    return true;
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: shift owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
 }
 
-static bool emit_native_nonnegative_const_shr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                   const XiValue *v) {
-    if (!v || v->op != XI_SHR || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
-        return false;
-
-    int64_t shift = 0;
-    if (!cg_shift_const_int_value(v->args[1], &shift) || shift < 0 || shift >= 64)
-        return false;
-    if (!xi_value_known_nonnegative_at(f, v->args[0], v->block))
-        return false;
-
-    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
-    if (boxed)
-        fprintf(out, "XR_FROM_INT(");
-    fprintf(out, "(");
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, " >> INT64_C(%" PRId64 "))", shift);
-    if (boxed)
-        fprintf(out, ")");
-    return true;
-}
-
-static bool emit_native_const_shr_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (!v || v->op != XI_SHR || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
-        return false;
-
-    int64_t shift = 0;
-    if (!cg_shift_const_int_value(v->args[1], &shift) || shift < 0 || shift >= 64)
-        return false;
-
-    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
-    if (boxed)
-        fprintf(out, "XR_FROM_INT(");
-    fprintf(out, "(");
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, " >> INT64_C(%" PRId64 "))", shift);
-    if (boxed)
-        fprintf(out, ")");
-    return true;
-}
-
-static bool emit_native_range_safe_const_shl_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (!v || v->op != XI_SHL || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
-        return false;
-
-    int64_t shift = 0;
-    if (!cg_shift_const_int_value(v->args[1], &shift) || shift < 0 || shift >= 64)
-        return false;
-
-    XiRange lhs_range = xi_range_of(v->args[0]);
-    if (lhs_range.is_top || lhs_range.is_bot || lhs_range.lo < 0)
-        return false;
-    if (lhs_range.hi > (INT64_MAX >> shift))
-        return false;
-
-    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
-    if (boxed)
-        fprintf(out, "XR_FROM_INT(");
-    fprintf(out, "(");
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, " << INT64_C(%" PRId64 "))", shift);
-    if (boxed)
-        fprintf(out, ")");
-    return true;
-}
-
-static bool emit_native_wrapping_const_shl_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (!v || v->op != XI_SHL || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
-        return false;
-
-    int64_t shift = 0;
-    if (!cg_shift_const_int_value(v->args[1], &shift) || shift < 0 || shift >= 64)
-        return false;
-
-    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
-    if (boxed)
-        fprintf(out, "XR_FROM_INT(");
-    fprintf(out, "((int64_t)((uint64_t)(");
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, ") << UINT64_C(%" PRIu64 ")))", (uint64_t) shift);
-    if (boxed)
-        fprintf(out, ")");
-    return true;
-}
-
-/* Shifts cannot generally use raw C << / >> because dynamic counts are taken
- * mod 64 in Xray. Const-count arithmetic right shifts use the same C operation
- * as xr_i64_shr_wrap after the mask is folded away. Const left shifts use the
- * same unsigned-cast wrapping expression as the runtime helper. */
 static void emit_shift_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                 const char *fn) {
-    /* BigInt shift: a tagged BigInt shifted by an int count. Emit the tagged
-     * runtime rather than unboxing the BigInt pointer as an int64. The count
-     * stays an int64 (the language shifts a BigInt only by an int). */
+                                 const char *kind) {
+    (void) f;
+    const char *adapter = cg_shift_adapter_name(ctx);
+    if (!adapter || !kind || !kind[0] || !v || v->nargs != 2 || !v->args[0] || !v->args[1] ||
+        (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (v->nargs >= 2 && v->args[0] && xr_type_is_builtin_named_class(v->args[0]->type, "BigInt")) {
-        fprintf(out, "%s(", v->op == XI_SHL ? "xrt_bigint_shl_val" : "xrt_bigint_shr_val");
+        fprintf(out, "xrt_bigint_shift_val(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ")");
+        fprintf(out, ", %s)", kind);
         return;
     }
-    if (emit_native_unsigned_const_shift_expr(ctx, out, v, v->op == XI_SHL ? "<<" : ">>"))
-        return;
-    if (emit_native_nonnegative_const_shr_expr(ctx, out, f, v))
-        return;
-    if (emit_native_const_shr_expr(ctx, out, v))
-        return;
-    if (emit_native_range_safe_const_shl_expr(ctx, out, v))
-        return;
-    if (emit_native_wrapping_const_shl_expr(ctx, out, v))
-        return;
-
-    /* Unsigned lhs with a non-constant count: logical shift (matches the
-     * VM's OP_SHR_U; the const-count case was handled above). */
     if (v->op == XI_SHR && v->nargs >= 1 && v->args[0] && cg_type_is_unsigned_int(v->args[0]->type))
-        fn = "xrt_i64_shr_u";
+        kind = "XR_SHIFT_RIGHT_UNSIGNED";
 
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "XR_FROM_INT(");
-    fprintf(out, "%s(", fn);
+    fprintf(out, "%s(%s, ", adapter, kind);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
@@ -7097,7 +6964,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
     if (template_op && *template_op)
         return arg_index < 2;
 
-    template_fn = xi_to_c_template_shift_fn(user->op);
+    template_fn = xi_to_c_template_shift_kind(user->op);
     if (template_fn && *template_fn)
         return arg_index < 2;
 
@@ -9915,11 +9782,8 @@ static bool cg_r1_call_is_whitelisted(const char *s, size_t n) {
         "xrt_shl",
         "xrt_shr",
         "xrt_sar",
-        /* canonical signed-width shift helpers are header-inline native
-         * operations (the source semantics mask the dynamic shift count) */
-        "xrt_i64_shl",
-        "xrt_i64_shr",
-        "xrt_i64_shr_u",
+        /* Stable shared shift owner adapter is header-inline. */
+        "xrt_shift_eval",
         "xrt_rotl",
         "xrt_rotr",
         "xrt_min",

@@ -86,12 +86,41 @@ TEST(numeric_core_integer_div_mod_edges_match_language) {
 }
 
 TEST(numeric_core_shift_counts_are_mod64) {
-    ASSERT_EQ_INT(xr_numeric_core_i64_shl_wrap(12345, 64), 12345);
-    ASSERT_EQ_INT(xr_numeric_core_i64_shl_wrap(12345, 65), 24690);
-    ASSERT_EQ_INT(xr_numeric_core_i64_shr_wrap(12345, 70), 192);
-    ASSERT_EQ_INT(xr_numeric_core_i64_shl_wrap(1, -1), INT64_MIN);
-    ASSERT_EQ_INT(xr_numeric_core_i64_shr_wrap(-8, 1), -4);
-    ASSERT_EQ_INT(xr_numeric_core_i64_shr_wrap(INT64_MIN, 63), -1);
+    ASSERT_EQ_INT(xr_shift_i64(XR_SHIFT_LEFT, 12345, 64), 12345);
+    ASSERT_EQ_INT(xr_shift_i64(XR_SHIFT_LEFT, 12345, 65), 24690);
+    ASSERT_EQ_INT(xr_shift_i64(XR_SHIFT_RIGHT_SIGNED, 12345, 70), 192);
+    ASSERT_EQ_INT(xr_shift_i64(XR_SHIFT_LEFT, 1, -1), INT64_MIN);
+    ASSERT_EQ_INT(xr_shift_i64(XR_SHIFT_RIGHT_SIGNED, -8, 1), -4);
+    ASSERT_EQ_INT(xr_shift_i64(XR_SHIFT_RIGHT_SIGNED, INT64_MIN, 63), -1);
+    ASSERT_EQ_INT(xr_shift_i64(XR_SHIFT_RIGHT_UNSIGNED, INT64_MIN, 1),
+                  INT64_C(4611686018427387904));
+    ASSERT_EQ_INT(XR_SHIFT_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
+                      XR_SEM_CONSUMER_VM, XR_SHIFT_LEFT, 1, 63),
+                  INT64_MIN);
+}
+
+TEST(shift_owner_bigint_plan_and_limb_kernel) {
+    uint32_t one[1] = {1};
+    uint32_t wide[4] = {0};
+    int8_t sign = 0;
+    XrBigIntShiftPlan left = xr_shift_bigint_plan(XR_SHIFT_LEFT, 1, false, 64);
+    ASSERT_EQ_INT(left.status, XR_SHIFT_STATUS_OK);
+    ASSERT_EQ_INT(left.capacity, 4);
+    ASSERT_EQ_INT(xr_shift_bigint_apply(&left, one, 1, 1, wide, &sign), 3);
+    ASSERT_EQ_UINT(wide[0], 0);
+    ASSERT_EQ_UINT(wide[1], 0);
+    ASSERT_EQ_UINT(wide[2], 1);
+    ASSERT_EQ_INT(sign, 1);
+
+    uint32_t narrowed[3] = {0};
+    XrBigIntShiftPlan right = xr_shift_bigint_plan(XR_SHIFT_RIGHT_SIGNED, 3, false, 64);
+    ASSERT_EQ_INT(xr_shift_bigint_apply(&right, wide, 3, 1, narrowed, &sign), 1);
+    ASSERT_EQ_UINT(narrowed[0], 1);
+    ASSERT_EQ_INT(sign, 1);
+
+    XrBigIntShiftPlan negative = xr_shift_bigint_plan(XR_SHIFT_LEFT, 1, false, -1);
+    ASSERT_EQ_INT(negative.status, XR_SHIFT_STATUS_COUNT_RANGE);
 }
 
 TEST(numeric_conversion_integer_matrix_is_bit_defined) {

@@ -494,7 +494,7 @@ TEST(const_fold_bitwise_ops) {
 }
 
 TEST(const_fold_shift) {
-    /* 1 << 4 -> 16; 32 >> 2 -> 8 */
+    /* Shared owner freezes mod-64 counts and signed/unsigned right shift. */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
@@ -505,11 +505,23 @@ TEST(const_fold_shift) {
     XiValue *c32 = xi_const_int(f, blk, 32, &stub_int);
     XiValue *c2 = xi_const_int(f, blk, 2, &stub_int);
     XiValue *shr = xi_binary(f, blk, XI_SHR, &stub_int, c32, c2);
+    XiValue *cneg1 = xi_const_int(f, blk, -1, &stub_int);
+    XiValue *shl_neg_count = xi_binary(f, blk, XI_SHL, &stub_int, c1, cneg1);
+    XiValue *cmin = xi_const_int(f, blk, INT64_MIN, &stub_int);
+    XiValue *c63 = xi_const_int(f, blk, 63, &stub_int);
+    XiValue *shr_signed = xi_binary(f, blk, XI_SHR, &stub_int, cmin, c63);
+    XiValue *umin = xi_const_int(f, blk, INT64_MIN, &stub_uint64);
+    XiValue *uone = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *shr_unsigned = xi_binary(f, blk, XI_SHR, &stub_uint64, umin, uone);
 
     xi_opt_const_fold(f);
 
     assert(shl->op == XI_CONST && shl->aux_int == 16);
     assert(shr->op == XI_CONST && shr->aux_int == 8);
+    assert(shl_neg_count->op == XI_CONST && shl_neg_count->aux_int == INT64_MIN);
+    assert(shr_signed->op == XI_CONST && shr_signed->aux_int == -1);
+    assert(shr_unsigned->op == XI_CONST &&
+           shr_unsigned->aux_int == INT64_C(4611686018427387904));
     xi_func_free(f);
 }
 

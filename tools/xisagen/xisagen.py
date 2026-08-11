@@ -1858,8 +1858,8 @@ XI_VM_TEMPLATE_ARITH_BINARY = {
 }
 
 XI_VM_TEMPLATE_SHIFT = {
-    'xi.shl': ('xr_int_shl_wrap', 'xr_bigint_shl'),
-    'xi.shr': ('xr_int_shr_wrap', 'xr_bigint_shr'),
+    'xi.shl': 'XR_SHIFT_LEFT',
+    'xi.shr': 'XR_SHIFT_RIGHT_SIGNED',
 }
 
 XI_VM_TEMPLATE_COMPARE_DEEP = {
@@ -1898,8 +1898,8 @@ XI_AOT_C_TEMPLATE_BITWISE_BINARY = {
 XI_AOT_C_TEMPLATE_BITWISE_UNARY = {'xi.bnot'}
 
 XI_AOT_C_TEMPLATE_SHIFT = {
-    'xi.shl': 'xrt_i64_shl',
-    'xi.shr': 'xrt_i64_shr',
+    'xi.shl': 'XR_SHIFT_LEFT',
+    'xi.shr': 'XR_SHIFT_RIGHT_SIGNED',
 }
 
 XI_AOT_C_TEMPLATE_COMPARE = {
@@ -2462,8 +2462,8 @@ def generate_xi_vm_template_shift_dispatch(entries: list[XiLoweringDef]) -> str:
     lines.append('')
     for entry in shift_entries:
         opcode = XI_VM_TEMPLATE_OPCODES[entry.op_name]
-        int_fn, bigint_fn = XI_VM_TEMPLATE_SHIFT[entry.op_name]
-        lines.append(f'XVM_TEMPLATE_SHIFT_CASE({opcode}, {int_fn}, {bigint_fn})')
+        kind = XI_VM_TEMPLATE_SHIFT[entry.op_name]
+        lines.append(f'XVM_TEMPLATE_SHIFT_CASE({opcode}, {kind})')
     lines.append('')
     return '\n'.join(lines)
 
@@ -2704,7 +2704,7 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('    return "";')
     lines.append('}')
     lines.append('')
-    lines.append('static inline const char *xi_to_c_template_shift_fn(uint16_t op) {')
+    lines.append('static inline const char *xi_to_c_template_shift_kind(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for entry in shift_entries:
         fn = XI_AOT_C_TEMPLATE_SHIFT[entry.op_name]
@@ -2850,7 +2850,7 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
         if 'aot-c' in entry.target_drivers and entry.op_name in XI_AOT_C_TEMPLATE_SHIFT:
             fn = XI_AOT_C_TEMPLATE_SHIFT[entry.op_name]
             lines.append(
-                f'    assert(strcmp(xi_to_c_template_shift_fn(XI_{entry.ident}), "{fn}") == 0);')
+                f'    assert(strcmp(xi_to_c_template_shift_kind(XI_{entry.ident}), "{fn}") == 0);')
         if 'aot-c' in entry.target_drivers and entry.op_name in XI_AOT_C_TEMPLATE_COMPARE:
             runtime_fn, native_op, swaps = XI_AOT_C_TEMPLATE_COMPARE[entry.op_name]
             swaps_c = 'true' if swaps else 'false'
@@ -4373,8 +4373,8 @@ def _test_xi_lowering_parser():
                       {'vm-bytecode': 'xi_emit_arith'}, {}, {},
                       template='value-binary'),
     ])
-    assert 'XVM_TEMPLATE_SHIFT_CASE(OP_SHL, xr_int_shl_wrap, xr_bigint_shl)' in vm_shift
-    assert 'XVM_TEMPLATE_SHIFT_CASE(OP_SHR, xr_int_shr_wrap, xr_bigint_shr)' in vm_shift
+    assert 'XVM_TEMPLATE_SHIFT_CASE(OP_SHL, XR_SHIFT_LEFT)' in vm_shift
+    assert 'XVM_TEMPLATE_SHIFT_CASE(OP_SHR, XR_SHIFT_RIGHT_SIGNED)' in vm_shift
     vm_compare = generate_xi_vm_template_compare_dispatch([
         XiLoweringDef('xi.eq', 'EQ', ['vm-bytecode'], ['vm-bytecode'],
                       {'vm-bytecode': 'xi_emit_cmp'}, {}, {},

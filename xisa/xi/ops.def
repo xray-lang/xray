@@ -2652,8 +2652,6 @@
     xi.band
     xi.bor
     xi.bxor
-    xi.shl
-    xi.shr
     xi.codegen.opaque
     xi.codegen.compiler-fence
     xi.eq
@@ -2801,6 +2799,8 @@
   :operations (
     xi.not
     xi.bnot
+    xi.shl
+    xi.shr
     xi.narrow.i8
     xi.narrow.u8
     xi.narrow.i16
@@ -2941,6 +2941,30 @@
     (aot-hosted "src/aot/xrt.h" "xrt_bits_not_eval")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_bits_not_eval")
     (cgen "src/aot/xi_cgen.c" "cg_bits_not_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.shift
+  :category shared-semantic-kernel
+  :operations (
+    xi.shl
+    xi.shr
+  )
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+    runtime
+  )
+  :cgen-adapter xrt_shift_eval
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_bitwise.inc.c" "XR_SHIFT_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_shift_eval")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_shift_eval")
+    (cgen "src/aot/xi_cgen.c" "cg_shift_adapter_name")
+    (runtime "src/runtime/object/xbigint.c" "XR_SHIFT_BIGINT_OWNER_APPLY")
   ))
 
 (define-xi-observable-owner shared.numeric-conversion

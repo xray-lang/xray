@@ -1364,74 +1364,25 @@ XrBigInt *xr_bigint_xor(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b) {
     return bigint_bitwise(coro, a, b, op_xor, neg);
 }
 
-XrBigInt *xr_bigint_shl(struct XrCoroutine *coro, XrBigInt *a, uint32_t n) {
-    XR_DCHECK(a != NULL, "bigint_shl: NULL a");
-    if (xr_bigint_is_zero(a) || n == 0) {
-        return xr_bigint_copy(coro, a);
-    }
-
-    uint32_t limb_shift = n / 32;
-    uint32_t bit_shift = n % 32;
-
-    uint32_t new_len = a->len + limb_shift + 1;
-    XrBigInt *result = bigint_alloc(coro, new_len);
-    if (!result)
+XrBigInt *xr_bigint_shift(struct XrCoroutine *coro, XrBigInt *a, int64_t count,
+                          XrShiftKind kind, XrShiftStatus *status) {
+    XR_DCHECK(a != NULL, "bigint_shift: NULL a");
+    XrBigIntShiftPlan plan = XR_SHIFT_BIGINT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
+        XR_SEM_CONSUMER_RUNTIME, kind, a->len, xr_bigint_is_zero(a), count);
+    if (status)
+        *status = plan.status;
+    if (plan.status != XR_SHIFT_STATUS_OK)
         return NULL;
 
-    // Zero out low limbs
-    for (uint32_t i = 0; i < limb_shift; i++) {
-        result->limbs[i] = 0;
-    }
-
-    // Shift bits
-    uint32_t carry = 0;
-    for (uint32_t i = 0; i < a->len; i++) {
-        uint64_t val = ((uint64_t) a->limbs[i] << bit_shift) | carry;
-        result->limbs[i + limb_shift] = (uint32_t) (val & 0xFFFFFFFFULL);
-        carry = (uint32_t) (val >> 32);
-    }
-    if (carry) {
-        result->limbs[a->len + limb_shift] = carry;
-        result->len = a->len + limb_shift + 1;
-    } else {
-        result->len = a->len + limb_shift;
-    }
-
-    result->sign = a->sign;
-    bigint_normalize(result);
-    return result;
-}
-
-XrBigInt *xr_bigint_shr(struct XrCoroutine *coro, XrBigInt *a, uint32_t n) {
-    XR_DCHECK(a != NULL, "bigint_shr: NULL a");
-    if (xr_bigint_is_zero(a) || n == 0) {
-        return xr_bigint_copy(coro, a);
-    }
-
-    uint32_t limb_shift = n / 32;
-    uint32_t bit_shift = n % 32;
-
-    // Shift too far: result is 0 (or -1 for negative, but we simplify to 0)
-    if (limb_shift >= a->len) {
-        return xr_bigint_new(coro, 0);
-    }
-
-    uint32_t new_len = a->len - limb_shift;
-    XrBigInt *result = bigint_alloc(coro, new_len);
+    XrBigInt *result = bigint_alloc(coro, plan.capacity);
     if (!result)
         return NULL;
-
-    // Shift bits
-    uint32_t carry = 0;
-    for (int i = (int) new_len - 1; i >= 0; i--) {
-        uint64_t val = ((uint64_t) carry << 32) | a->limbs[i + limb_shift];
-        result->limbs[i] = (uint32_t) (val >> bit_shift);
-        carry = a->limbs[i + limb_shift] & ((1U << bit_shift) - 1);
-    }
-
-    result->len = new_len;
-    result->sign = a->sign;
-    bigint_normalize(result);
+    result->len = XR_SHIFT_BIGINT_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
+        XR_SEM_CONSUMER_RUNTIME, &plan, a->limbs, a->len, a->sign, result->limbs,
+        &result->sign);
+    XR_DCHECK(result->len != 0, "bigint_shift: validated owner plan failed");
     return result;
 }
 

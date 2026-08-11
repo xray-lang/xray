@@ -385,18 +385,12 @@ static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, bool shr_unsigned
             *result = a ^ b;
             return true;
         case XI_SHL:
-            /* Left shift of a negative or shift that overflows the sign bit
-             * is UB on signed; do it on uint64_t and cast back. Shift amount
-             * is masked to 6 bits to match runtime semantics. */
-            *result = xr_i64_shl_wrap(a, b);
+            *result = xr_shift_i64(XR_SHIFT_LEFT, a, b);
             return true;
         case XI_SHR:
-            /* Arithmetic right shift on negative values is
-             * implementation-defined in C99/C11 but well-defined on every
-             * compiler xray supports (GCC, Clang, MSVC all sign-extend).
-             * Statically-unsigned lhs folds with the logical shift instead,
-             * matching OP_SHR_U / xrt_i64_shr_u. */
-            *result = shr_unsigned ? xr_i64_shr_u_wrap(a, b) : xr_i64_shr_wrap(a, b);
+            *result = xr_shift_i64(shr_unsigned ? XR_SHIFT_RIGHT_UNSIGNED
+                                                : XR_SHIFT_RIGHT_SIGNED,
+                                   a, b);
             return true;
         default:
             return false;

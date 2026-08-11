@@ -640,7 +640,7 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_SHL) == true);
     assert(xi_emit_vm_template_opcode(XI_SHL) == OP_SHL);
     assert(xi_emit_vm_template_swaps_args(XI_SHL) == false);
-    assert(strcmp(xi_to_c_template_shift_fn(XI_SHL), "xrt_i64_shl") == 0);
+    assert(strcmp(xi_to_c_template_shift_kind(XI_SHL), "XR_SHIFT_LEFT") == 0);
     assert(xi_emit_vm_requires_fresh_dst(XI_SHL) == false);
     assert(xi_lowering_generated_targets(XI_SHR) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_SHR) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));
@@ -649,7 +649,7 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_SHR) == true);
     assert(xi_emit_vm_template_opcode(XI_SHR) == OP_SHR);
     assert(xi_emit_vm_template_swaps_args(XI_SHR) == false);
-    assert(strcmp(xi_to_c_template_shift_fn(XI_SHR), "xrt_i64_shr") == 0);
+    assert(strcmp(xi_to_c_template_shift_kind(XI_SHR), "XR_SHIFT_RIGHT_SIGNED") == 0);
     assert(xi_emit_vm_requires_fresh_dst(XI_SHR) == false);
     assert(xi_lowering_generated_targets(XI_EQ) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_EQ) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));

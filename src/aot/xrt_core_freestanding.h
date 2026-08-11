@@ -62,6 +62,10 @@ int memcmp(const void *a, const void *b, size_t n);
     XR_BITS_NOT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,                                  \
                             XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO,                                  \
                             XR_SEM_CONSUMER_AOT_FREESTANDING, value)
+#define xrt_shift_eval(kind, value, count)                                                        \
+    XR_SHIFT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_SHIFT_HI,                                        \
+                         XR_SEM_OWNER_ID_SHARED_SHIFT_LO,                                        \
+                         XR_SEM_CONSUMER_AOT_FREESTANDING, kind, value, count)
 #define xrt_numeric_width_eval(kernel, value)                                                      \
     XR_NUMERIC_WIDTH_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,                    \
                                  XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,                    \
@@ -1553,18 +1557,6 @@ static inline int64_t xrt_uint_mod(int64_t a, int64_t b) {
     if (XR_UNLIKELY(b == 0))
         xrt_freestanding_trap("modulo by zero");
     return (int64_t) ((uint64_t) a % (uint64_t) b);
-}
-
-static inline int64_t xrt_i64_shl(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a << ((uint64_t) b & 63));
-}
-
-static inline int64_t xrt_i64_shr(int64_t a, int64_t b) {
-    return a >> ((uint64_t) b & 63);
-}
-
-static inline int64_t xrt_i64_shr_u(int64_t a, int64_t b) {
-    return (int64_t) ((uint64_t) a >> ((uint64_t) b & 63));
 }
 
 static inline double xrt_math_number(XrValue v) {

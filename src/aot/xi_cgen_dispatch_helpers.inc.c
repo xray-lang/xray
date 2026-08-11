@@ -12113,7 +12113,7 @@ static void xicgen_fixed_bytes_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
 static void xicgen_template_shift(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     (void) prefix;
-    emit_shift_binop_ctx(ctx, out, f, v, xi_to_c_template_shift_fn(v->op));
+    emit_shift_binop_ctx(ctx, out, f, v, xi_to_c_template_shift_kind(v->op));
 }
 
 #define XICGEN_DEFINE_TEMPLATE_SHIFT_DRIVER(ident, driver)                                         \

@@ -437,18 +437,11 @@ static SccpCell eval_bitwise(uint16_t op, SccpCell a, SccpCell b, bool shr_unsig
         case XI_BXOR:
             return sccp_int(a.ival ^ b.ival);
         case XI_SHL:
-            if (b.ival >= 0 && b.ival < 64)
-                return sccp_int((int64_t) ((uint64_t) a.ival << b.ival));
-            return sccp_bot();
+            return sccp_int(xr_shift_i64(XR_SHIFT_LEFT, a.ival, b.ival));
         case XI_SHR:
-            /* Arithmetic shift (sign-extending), matching xi_opt fold and
-             * codegen (SAR/ASR/SRA); a logical shift here would fold
-             * negative operands to the wrong value. Statically-unsigned lhs
-             * folds logically instead (OP_SHR_U / xrt_i64_shr_u). */
-            if (b.ival >= 0 && b.ival < 64)
-                return sccp_int(shr_unsigned ? (int64_t) ((uint64_t) a.ival >> b.ival)
-                                             : (a.ival >> b.ival));
-            return sccp_bot();
+            return sccp_int(xr_shift_i64(shr_unsigned ? XR_SHIFT_RIGHT_UNSIGNED
+                                                       : XR_SHIFT_RIGHT_SIGNED,
+                                          a.ival, b.ival));
         default:
             return sccp_bot();
     }

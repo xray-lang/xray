@@ -32,6 +32,7 @@
 
 #include "../mem/xobj_header.h"
 #include "../../base/xdefs.h"
+#include "../../shared/xr_bits_core.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -95,9 +96,8 @@ XR_FUNC XrBigInt *xr_bigint_pow(struct XrCoroutine *coro, XrBigInt *a, uint32_t 
 XR_FUNC XrBigInt *xr_bigint_and(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b);  // a & b
 XR_FUNC XrBigInt *xr_bigint_or(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b);   // a | b
 XR_FUNC XrBigInt *xr_bigint_xor(struct XrCoroutine *coro, XrBigInt *a, XrBigInt *b);  // a ^ b
-XR_FUNC XrBigInt *xr_bigint_shl(struct XrCoroutine *coro, XrBigInt *a, uint32_t n);   // a << n
-XR_FUNC XrBigInt *xr_bigint_shr(struct XrCoroutine *coro, XrBigInt *a,
-                                uint32_t n);  // a >> n (arithmetic)
+XR_FUNC XrBigInt *xr_bigint_shift(struct XrCoroutine *coro, XrBigInt *a, int64_t count,
+                                  XrShiftKind kind, XrShiftStatus *status);
 
 /* ========== Comparison ========== */
 

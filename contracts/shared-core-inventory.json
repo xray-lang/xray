@@ -115,9 +115,12 @@
       "production_callers": [
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
         "src/aot/xrt.h",
+        "src/aot/xrt_arith.h",
         "src/aot/xrt_core_freestanding.h",
         "src/ir/xi_opt.c",
         "src/ir/xi_opt_sccp.c",
+        "src/runtime/object/xbigint.h",
+        "src/runtime/value/xvalue.h",
         "src/vm/xvm.c",
         "src/vm/xvm_dispatch_bitwise.inc.c"
       ],
@@ -159,7 +162,11 @@
         "xr_bits_exact_width",
         "xr_bits_not_i64",
         "xr_bits_smulh64",
-        "xr_bits_umulh64"
+        "xr_bits_umulh64",
+        "xr_shift_bigint_apply",
+        "xr_shift_bigint_plan",
+        "xr_shift_i64",
+        "xr_shift_i64_from_bits"
       ],
       "status": "production",
       "test_callers": [
@@ -646,8 +653,6 @@
         "xr_numeric_core_i64_mod_wrap",
         "xr_numeric_core_i64_mul_wrap",
         "xr_numeric_core_i64_neg_wrap",
-        "xr_numeric_core_i64_shl_wrap",
-        "xr_numeric_core_i64_shr_wrap",
         "xr_numeric_core_i64_sub_wrap",
         "xr_numeric_core_to_fixed_decimals"
       ],

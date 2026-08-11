@@ -8624,7 +8624,7 @@ TEST(cgen_int_const_div_mod_uses_native_ops) {
     xi_func_free(ir);
 }
 
-TEST(cgen_nonnegative_const_shr_uses_native_op) {
+TEST(cgen_shift_uses_stable_owner_adapter) {
     const char *src = "fn fast(b: u8) -> int {\n"
                       "    var x = int(b)\n"
                       "    return x >> 4\n"
@@ -8658,60 +8658,55 @@ TEST(cgen_nonnegative_const_shr_uses_native_op) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "integer shift fast path should generate");
+    assert(!had_error && "integer shift owner adapter should generate");
 
     const char *fast = find_static_function_definition(code, "test_fast_");
     assert(fast != NULL && "fast function should be generated");
     const char *fast_end = next_static_after(fast);
-    assert(count_between(fast, fast_end, " >> INT64_C(4)") == 1 &&
-           "nonnegative constant right shift should use native C >>");
-    assert(count_between(fast, fast_end, "xrt_i64_shr(") == 0 &&
-           "proven nonnegative constant right shift must not call the runtime helper");
+    assert(count_between(fast, fast_end,
+                         "xrt_shift_eval(XR_SHIFT_RIGHT_SIGNED") == 1 &&
+           "constant right shift must use the stable owner adapter");
 
     const char *widen = find_static_function_definition(code, "test_widen_");
     assert(widen != NULL && "widen function should be generated");
     const char *widen_end = next_static_after(widen);
-    assert((contains_between(widen, widen_end, " << INT64_C(8)") ||
-            contains_between(widen, widen_end, "<< UINT64_C(8)")) &&
-           "constant left shift should use native C <<");
-    assert(count_between(widen, widen_end, "xrt_i64_shl(") == 0 &&
-           "range-safe constant left shift must not call the runtime helper");
+    assert(count_between(widen, widen_end, "xrt_shift_eval(XR_SHIFT_LEFT") == 1 &&
+           "constant left shift must use the stable owner adapter");
 
     const char *checked = find_static_function_definition(code, "test_checked_");
     assert(checked != NULL && "checked function should be generated");
     const char *checked_end = next_static_after(checked);
-    assert(count_between(checked, checked_end, "xrt_i64_shr(") == 1 &&
-           "unproven shift must keep the runtime helper semantics");
+    assert(count_between(checked, checked_end,
+                         "xrt_shift_eval(XR_SHIFT_RIGHT_SIGNED") == 1 &&
+           "dynamic right shift must use the stable owner adapter");
 
     const char *checked_left = find_static_function_definition(code, "test_checkedLeft_");
     assert(checked_left != NULL && "checkedLeft function should be generated");
     const char *checked_left_end = next_static_after(checked_left);
-    assert(count_between(checked_left, checked_left_end, "xrt_i64_shl(") == 1 &&
-           "unproven left shift must keep the runtime helper semantics");
+    assert(count_between(checked_left, checked_left_end, "xrt_shift_eval(XR_SHIFT_LEFT") == 1 &&
+           "dynamic left shift must use the stable owner adapter");
 
     const char *wrap_left = find_static_function_definition(code, "test_wrapLeft_");
     assert(wrap_left != NULL && "wrapLeft function should be generated");
     const char *wrap_left_end = next_static_after(wrap_left);
-    assert(count_between(wrap_left, wrap_left_end, "((int64_t)((uint64_t)(") == 1 &&
-           count_between(wrap_left, wrap_left_end, "<< UINT64_C(8)") == 1 &&
-           "constant signed left shift should use wrapping unsigned C expression");
-    assert(count_between(wrap_left, wrap_left_end, "xrt_i64_shl(") == 0 &&
-           "constant signed left shift must not call the runtime helper");
+    assert(count_between(wrap_left, wrap_left_end, "xrt_shift_eval(XR_SHIFT_LEFT") == 1 &&
+           count_between(wrap_left, wrap_left_end, " << ") == 0 &&
+           "constant signed left shift must not revive raw C semantics");
 
     const char *wrap_right = find_static_function_definition(code, "test_wrapRight_");
     assert(wrap_right != NULL && "wrapRight function should be generated");
     const char *wrap_right_end = next_static_after(wrap_right);
-    assert(count_between(wrap_right, wrap_right_end, " >> INT64_C(8)") == 1 &&
-           "constant signed right shift should use native arithmetic C shift");
-    assert(count_between(wrap_right, wrap_right_end, "xrt_i64_shr(") == 0 &&
-           "constant signed right shift must not call the runtime helper");
+    assert(count_between(wrap_right, wrap_right_end,
+                         "xrt_shift_eval(XR_SHIFT_RIGHT_SIGNED") == 1 &&
+           count_between(wrap_right, wrap_right_end, " >> ") == 0 &&
+           "constant signed right shift must not revive raw C semantics");
 
     printf("  Generated integer shift fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_unsigned_const_shift_uses_native_op) {
+TEST(cgen_unsigned_shift_uses_stable_owner_adapter) {
     const char *src = "fn unsignedShift(x: u64) -> u64 {\n"
                       "    var shifted = x << 24\n"
                       "    return shifted >> 52\n"
@@ -8728,31 +8723,26 @@ TEST(cgen_unsigned_const_shift_uses_native_op) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "unsigned integer shift fast path should generate");
+    assert(!had_error && "unsigned integer shift owner adapter should generate");
 
     const char *fast = find_static_function_definition(code, "test_unsignedShift_");
     assert(fast != NULL && "unsignedShift function should be generated");
     const char *fast_end = next_static_after(fast);
-    assert(count_between(fast, fast_end, "<< UINT64_C(24)") == 1 &&
-           "u64 constant left shift should use native C <<");
-    assert(count_between(fast, fast_end, ">> UINT64_C(52)") == 1 &&
-           "u64 constant right shift should use native C >>");
-    assert(count_between(fast, fast_end, "UINT64_C(24)))") == 0 &&
-           "u64 constant left shift expression must be balanced C");
-    assert(count_between(fast, fast_end, "UINT64_C(52)))") == 0 &&
-           "u64 constant right shift expression must be balanced C");
-    assert(count_between(fast, fast_end, "(int64_t)(((uint64_t)") == 0 &&
-           "unboxed u64 constant shifts should stay unsigned in generated C");
-    assert(count_between(fast, fast_end, "xrt_i64_shl(") == 0 &&
-           "u64 constant left shift must not call the runtime helper");
-    assert(count_between(fast, fast_end, "xrt_i64_shr(") == 0 &&
-           "u64 constant right shift must not call the runtime helper");
+    assert(count_between(fast, fast_end, "xrt_shift_eval(XR_SHIFT_LEFT") == 1 &&
+           "u64 constant left shift must use the stable owner adapter");
+    assert(count_between(fast, fast_end,
+                         "xrt_shift_eval(XR_SHIFT_RIGHT_UNSIGNED") == 1 &&
+           "u64 constant right shift must use the unsigned owner mode");
+    assert(count_between(fast, fast_end, " << ") == 0 &&
+           count_between(fast, fast_end, " >> ") == 0 &&
+           "u64 constant shifts must not revive raw C semantics");
 
     const char *dynamic = find_static_function_definition(code, "test_dynamicShift_");
     assert(dynamic != NULL && "dynamicShift function should be generated");
     const char *dynamic_end = next_static_after(dynamic);
-    assert(count_between(dynamic, dynamic_end, "xrt_i64_shr_u(") == 1 &&
-           "dynamic unsigned shift must keep unsigned mod-64 runtime helper semantics");
+    assert(count_between(dynamic, dynamic_end,
+                         "xrt_shift_eval(XR_SHIFT_RIGHT_UNSIGNED") == 1 &&
+           "dynamic unsigned shift must use the unsigned owner mode");
 
     printf("  Generated unsigned integer shift fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -8848,15 +8838,13 @@ TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
     const char *pack_parts_end = next_static_after(pack_parts);
     assert(count_between(combine, combine_end, "xrt_has_pending_error") == 0 &&
            "inlined no-throw scalar helper chain must not keep dead error-channel checks");
-    assert((count_between(combine, combine_end, " >> ") > 0 ||
-            count_between(combine, combine_end, "xrt_i64_shr(") > 0 ||
-            count_between(high_part, high_part_end, " >> ") > 0 ||
-            count_between(high_part, high_part_end, "xrt_i64_shr(") > 0) &&
+    assert((count_between(combine, combine_end, "xrt_shift_eval(") > 0 ||
+            count_between(high_part, high_part_end, "xrt_shift_eval(") > 0) &&
            "generated helper chain should still contain the right-shift scalar work under test");
     assert((count_between(combine, combine_end, " | ") > 0 ||
-            count_between(combine, combine_end, "xrt_i64_shl(") > 0 ||
+            count_between(combine, combine_end, "xrt_shift_eval(") > 0 ||
             count_between(pack_parts, pack_parts_end, " | ") > 0 ||
-            count_between(pack_parts, pack_parts_end, "xrt_i64_shl(") > 0) &&
+            count_between(pack_parts, pack_parts_end, "xrt_shift_eval(") > 0) &&
            "generated helper chain should still contain the pack scalar work under test");
 
     printf("  Generated no-throw scalar helper chain %zu bytes of C code\n", strlen(code));
@@ -12926,8 +12914,8 @@ int main(void) {
     run_cgen_typed_array_reduce_uses_native_accumulator_fast_path();
     run_cgen_typed_array_reduce_captured_callback_uses_runtime_helper();
     run_cgen_int_const_div_mod_uses_native_ops();
-    run_cgen_nonnegative_const_shr_uses_native_op();
-    run_cgen_unsigned_const_shift_uses_native_op();
+    run_cgen_shift_uses_stable_owner_adapter();
+    run_cgen_unsigned_shift_uses_stable_owner_adapter();
     run_cgen_unsigned_arith_uses_native_unsigned_expr();
     run_cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain();
     run_cgen_codegen_controls_emit_provider_constructs_without_runtime_calls();

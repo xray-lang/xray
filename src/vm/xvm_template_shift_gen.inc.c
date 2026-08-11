@@ -6,5 +6,5 @@
 #error "XVM_TEMPLATE_SHIFT_CASE must be defined before including this file"
 #endif
 
-XVM_TEMPLATE_SHIFT_CASE(OP_SHL, xr_int_shl_wrap, xr_bigint_shl)
-XVM_TEMPLATE_SHIFT_CASE(OP_SHR, xr_int_shr_wrap, xr_bigint_shr)
+XVM_TEMPLATE_SHIFT_CASE(OP_SHL, XR_SHIFT_LEFT)
+XVM_TEMPLATE_SHIFT_CASE(OP_SHR, XR_SHIFT_RIGHT_SIGNED)

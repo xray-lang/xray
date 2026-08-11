@@ -1,7 +1,7 @@
 schema = 1
 
 [policy]
-observable_owner_count = 2
+observable_owner_count = 3
 unknown_plan = "fail_closed"
 native_kernel_forbids_tagged_value = true
 tagged_and_descriptor_kernels_are_explicit = true
@@ -237,6 +237,21 @@ fixtures = [
   "tests/unit/stdlib/test_numeric_core.c",
   "tests/unit/ir/test_xi_cgen.c",
   "tests/regression/03_operators/0396_bnot_owner_edges.xr",
+]
+
+[[operation]]
+id = "shift"
+observable_contract = "src/shared/xr_bits_core.h"
+semantic_kernel = "src/shared/xr_bits_core.h"
+vm_adapter = "src/vm/xvm_dispatch_bitwise.inc.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "shared.shift"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_numeric_core.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/regression/03_operators/0331_shift_mod64.xr",
+  "tests/aot/basic/int_wrap_shift.xr",
 ]
 
 [[operation_family]]

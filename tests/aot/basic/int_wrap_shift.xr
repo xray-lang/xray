@@ -48,3 +48,10 @@ print(x << n65)       // 24690
 print(x >> n64)       // 12345
 print(one << nneg)    // INT64_MIN
 print(neg >> (n65 - n64))  // -4
+
+// BigInt shifts use the same owner but retain unmasked arbitrary-precision counts.
+var big = 1.toBigInt()
+print((big << 64).toString())                 // 18446744073709551616
+print((((big << 96) >> 64)).toString())       // 4294967296
+var bigNeg = (-8).toBigInt()
+print((bigNeg >> 1).toString())               // -4

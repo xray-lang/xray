@@ -46,6 +46,10 @@
     XR_BITS_NOT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,                                  \
                             XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO,                                  \
                             XR_SEM_CONSUMER_AOT_HOSTED, value)
+#define xrt_shift_eval(kind, value, count)                                                        \
+    XR_SHIFT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_SHIFT_HI,                                        \
+                         XR_SEM_OWNER_ID_SHARED_SHIFT_LO, XR_SEM_CONSUMER_AOT_HOSTED, kind,       \
+                         value, count)
 #define xrt_numeric_width_eval(kernel, value)                                                      \
     XR_NUMERIC_WIDTH_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,                    \
                                  XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,                    \

@@ -99,6 +99,11 @@ BITS_NOT_AOT_BINDINGS = (
     "src/aot/xrt.h",
     "src/aot/xrt_core_freestanding.h",
 )
+SHIFT_OPERATIONS = {"xi.shl", "xi.shr"}
+SHIFT_AOT_BINDINGS = (
+    "src/aot/xrt.h",
+    "src/aot/xrt_core_freestanding.h",
+)
 NUMERIC_WIDTH_OPERATIONS = {
     "xi.narrow.i8",
     "xi.narrow.u8",
@@ -742,6 +747,111 @@ def verify_bits_not_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_shift_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.shift")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.shift"), None)
+    if owner is None or set(owner.get("operations", [])) != SHIFT_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.shift operation family")
+
+    core_text = (root / "src/shared/xr_bits_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SHIFT_OWNER_APPLY",
+                  "XR_SHIFT_BIGINT_OWNER_PLAN", "XR_SHIFT_BIGINT_OWNER_APPLY",
+                  "xr_shift_i64", "xr_shift_bigint_plan", "xr_shift_bigint_apply"):
+        if token not in core_text:
+            errors.append(f"src/shared/xr_bits_core.h: shared shift owner lacks {token}")
+
+    vm_text = (root / "src/vm/xvm_dispatch_bitwise.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    vm_start = vm_text.find("#define XVM_TEMPLATE_SHIFT_CASE")
+    vm_end = vm_text.find("#undef XVM_TEMPLATE_SHIFT_CASE", vm_start)
+    vm_body = vm_text[vm_start:vm_end] if vm_start >= 0 and vm_end > vm_start else ""
+    if "XR_SHIFT_OWNER_APPLY" not in vm_body or "xr_bigint_shift" not in vm_body:
+        errors.append("src/vm/xvm_dispatch_bitwise.inc.c: VM shift bypasses shared owner adapters")
+    for retired in ("xr_int_shl_wrap", "xr_int_shr_wrap", "xr_int_shr_u_wrap",
+                    "xr_bigint_shl", "xr_bigint_shr"):
+        if retired in vm_body:
+            errors.append(f"src/vm/xvm_dispatch_bitwise.inc.c: retired shift path revived: {retired}")
+
+    runtime_text = (root / "src/runtime/object/xbigint.c").read_text(
+        encoding="utf-8", errors="strict")
+    runtime_body = extract_c_function(runtime_text, "xr_bigint_shift")
+    if (runtime_body is None or "XR_SHIFT_BIGINT_OWNER_PLAN" not in runtime_body or
+            "XR_SHIFT_BIGINT_OWNER_APPLY" not in runtime_body):
+        errors.append("src/runtime/object/xbigint.c: BigInt representation adapter bypasses owner")
+    if runtime_body and ("<<" in runtime_body or ">>" in runtime_body):
+        errors.append("src/runtime/object/xbigint.c: raw BigInt shift semantics revived")
+
+    for rel in SHIFT_AOT_BINDINGS:
+        text = (root / rel).read_text(encoding="utf-8", errors="strict")
+        if ("xrt_shift_eval" not in text or f"{marker}_HI" not in text or
+                f"{marker}_LO" not in text or "XR_SHIFT_OWNER_APPLY" not in text):
+            errors.append(f"{rel}: AOT shift adapter bypasses shared owner")
+        for retired in ("xrt_i64_shl", "xrt_i64_shr", "xrt_i64_shr_u"):
+            if retired in text:
+                errors.append(f"{rel}: retired scalar shift adapter revived: {retired}")
+
+    hosted_text = (root / "src/aot/xrt_arith.h").read_text(encoding="utf-8", errors="strict")
+    hosted_body = extract_c_function(hosted_text, "xrt_bigint_shift_val")
+    if (hosted_body is None or "XR_SHIFT_BIGINT_OWNER_PLAN" not in hosted_body or
+            "XR_SHIFT_BIGINT_OWNER_APPLY" not in hosted_body):
+        errors.append("src/aot/xrt_arith.h: hosted BigInt shift bypasses shared owner")
+    if hosted_body and ("<<" in hosted_body or ">>" in hosted_body):
+        errors.append("src/aot/xrt_arith.h: raw BigInt shift semantics revived")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_shift_adapter_name")
+    emitter_body = extract_c_function(cgen_text, "emit_shift_binop_ctx")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append("src/aot/xi_cgen.c: CGen shift does not resolve by stable owner ID")
+    if (emitter_body is None or "cg_shift_adapter_name" not in emitter_body or
+            "xrt_bigint_shift_val" not in emitter_body):
+        errors.append("src/aot/xi_cgen.c: CGen shift bypasses mechanical owner adapters")
+    if emitter_body and ("<<" in emitter_body or ">>" in emitter_body):
+        errors.append("src/aot/xi_cgen.c: raw C shift semantics revived in shift emitter")
+    if re.search(r"emit_native_[A-Za-z0-9_]*shift", cgen_text):
+        errors.append("src/aot/xi_cgen.c: retired native shift fastpath revived")
+
+    optimizer_text = (root / "src/ir/xi_opt.c").read_text(encoding="utf-8", errors="strict")
+    optimizer_body = extract_c_function(optimizer_text, "fold_int_binary")
+    sccp_text = (root / "src/ir/xi_opt_sccp.c").read_text(encoding="utf-8", errors="strict")
+    sccp_body = extract_c_function(sccp_text, "eval_bitwise")
+    if optimizer_body is None or optimizer_body.count("xr_shift_i64") < 2:
+        errors.append("src/ir/xi_opt.c: shift constant folding bypasses shared kernel")
+    if sccp_body is None or sccp_body.count("xr_shift_i64") < 2:
+        errors.append("src/ir/xi_opt_sccp.c: SCCP shift folding bypasses shared kernel")
+
+    retired_sources = (
+        "src/shared/xr_int_arith.h",
+        "src/shared/xr_numeric_core.h",
+        "src/runtime/value/xvalue.h",
+        "src/runtime/object/xbigint.h",
+        "src/runtime/object/xbigint.c",
+        "src/aot/xrt_arith.h",
+        "src/aot/xrt_core_freestanding.h",
+        "tools/xisagen/xisagen.py",
+        "src/vm/xvm_template_shift_gen.inc.c",
+        "src/aot/xi_to_c_dispatch_gen.h",
+    )
+    retired_tokens = (
+        "xr_i64_shl_wrap", "xr_i64_shr_wrap", "xr_i64_shr_u_wrap",
+        "xr_int_shl_wrap", "xr_int_shr_wrap", "xr_int_shr_u_wrap",
+        "xr_numeric_core_i64_shl_wrap", "xr_numeric_core_i64_shr_wrap",
+        "xr_bigint_shl", "xr_bigint_shr", "xrt_bigint_shl_val", "xrt_bigint_shr_val",
+        "xrt_i64_shl", "xrt_i64_shr", "xrt_i64_shr_u",
+    )
+    for rel in retired_sources:
+        text = (root / rel).read_text(encoding="utf-8", errors="strict")
+        for token in retired_tokens:
+            if token in text:
+                errors.append(f"{rel}: retired shift semantic source remains: {token}")
+    return errors
+
+
 def verify_numeric_width_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     marker = owner_macro_prefix("shared.numeric-conversion")
@@ -1030,6 +1140,7 @@ def verify(root: Path, write: bool) -> list[str]:
         registry = json.loads(registry_path.read_text(encoding="utf-8", errors="strict"))
         errors.extend(verify_exact_bits_ratchet(root, registry))
         errors.extend(verify_bits_not_ratchet(root, registry))
+        errors.extend(verify_shift_ratchet(root, registry))
         errors.extend(verify_numeric_width_ratchet(root, registry))
         errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)
@@ -1038,6 +1149,8 @@ def verify(root: Path, write: bool) -> list[str]:
 
 
 def self_test() -> int:
+    assert re.search(r"emit_native_[A-Za-z0-9_]*shift", "emit_native_const_shift")
+    assert not re.search(r"emit_native_[A-Za-z0-9_]*shift", "emit_shift_binop_ctx")
     assert re.search(r"rewrite_to_const_int\s*\(\s*v\s*,\s*~",
                      "rewrite_to_const_int(v, ~unary_i);")
     assert not re.search(r"rewrite_to_const_int\s*\(\s*v\s*,\s*~",

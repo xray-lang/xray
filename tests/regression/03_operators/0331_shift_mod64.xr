@@ -127,14 +127,14 @@ fn test_compound_shift_mod64() {
 
 @test
 fn test_bigint_shift_positive_count_unmasked() {
-    var a = 1n
-    // 1n << 64 is a true 64-bit shift (arbitrary precision, no mod-64)
+    var a = 1.toBigInt()
+    // BigInt << 64 is a true 64-bit shift (arbitrary precision, no mod-64)
     assert_eq((a << 64).toString(), "18446744073709551616")
 }
 
 @test
 fn test_bigint_negative_shift_count_panics() {
-    var a = 1n
+    var a = 1.toBigInt()
     var caught = false
     // An out-of-range bigint shift count is a runtime fault on the panic
     // channel; a plain `catch` only sees user-thrown enum errors.
@@ -145,4 +145,10 @@ fn test_bigint_negative_shift_count_panics() {
         caught = true
     }
     assert(caught)
+}
+
+@test
+fn test_bigint_right_shift_past_magnitude_is_zero() {
+    assert_eq((1.toBigInt() >> 4096).toString(), "0")
+    assert_eq((((-8).toBigInt()) >> 1).toString(), "-4")
 }

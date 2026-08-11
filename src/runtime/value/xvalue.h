@@ -40,6 +40,7 @@
 #include "../../base/xdefs.h"
 #include "../../base/xchecks.h"
 #include "../../shared/xr_int_arith.h"
+#include "../../shared/xr_bits_core.h"
 #include "../abi/xr_runtime_string_object.h"
 
 // Internal base types
@@ -440,25 +441,6 @@ static inline xr_Integer xr_int_div_u_wrap(xr_Integer a, xr_Integer b) {
 }
 static inline xr_Integer xr_int_mod_u_wrap(xr_Integer a, xr_Integer b) {
     return xr_i64_mod_u_wrap(a, b);
-}
-
-/* Shift helpers: the language defines the shift count as taken mod 64
- * (spec "Expressions": unlike C, xray shifts are always defined). This is
- * also what the host C compiler produces (hardware shift instructions mask
- * the count) and what xi_opt constant folding implements, so the VM must
- * match. Left shift goes
- * through uint64_t because shifting into/past the sign bit is UB on signed
- * in C; right shift is arithmetic (sign-extending — implementation-defined
- * in C but guaranteed on every compiler xray supports). */
-static inline xr_Integer xr_int_shl_wrap(xr_Integer a, xr_Integer b) {
-    return xr_i64_shl_wrap(a, b);
-}
-static inline xr_Integer xr_int_shr_wrap(xr_Integer a, xr_Integer b) {
-    return xr_i64_shr_wrap(a, b);
-}
-/* Logical right shift for statically-unsigned operands (OP_SHR_U). */
-static inline xr_Integer xr_int_shr_u_wrap(xr_Integer a, xr_Integer b) {
-    return xr_i64_shr_u_wrap(a, b);
 }
 
 /* ========== Type Query ========== */

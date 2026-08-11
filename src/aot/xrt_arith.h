@@ -20,6 +20,7 @@
                        // xrt.h build and by the host TU in standalone unit tests
 #include "xrt_class.h"
 #include "../shared/xr_int_arith.h"
+#include "../shared/xr_bits_core.h"
 #include "../shared/xr_type_identity_core.h"
 
 /* =========================================================================
@@ -542,58 +543,24 @@ static inline XrValue xrt_bigint_xor_val(XrValue a, XrValue b) {
     return xrt_bigint_bitwise(a, b, 2);
 }
 
-/* Shift a BigInt left/right by an int bit count (mirrors the VM: the shift
- * amount is an int, the shifted value and result are BigInts; a negative or
- * zero count returns a copy, and shifting right past the value yields zero). */
-static inline XrValue xrt_bigint_shl_val(XrValue av, int64_t count) {
+/* Adapt BigInt storage/allocation to the shared shift owner. Negative and
+ * oversized counts are rejected; zero copies and right-past-end yields zero. */
+static inline XrValue xrt_bigint_shift_val(XrValue av, int64_t count, XrShiftKind kind) {
     const xrt_bigint_view_t *a = xrt_bigint_view(av);
     XrValue rv;
-    if (!a || xrt_bigint_is_zero_v(a) || count <= 0)
-        return xrt_bigint_copy_val(a);
-    uint32_t n = (uint32_t) count;
-    uint32_t limb_shift = n / 32, bit_shift = n % 32;
-    xrt_bigint_view_t *r = xrt_bigint_new(a->len + limb_shift + 1, &rv);
-    for (uint32_t i = 0; i < limb_shift; i++)
-        r->limbs[i] = 0;
-    uint32_t carry = 0;
-    for (uint32_t i = 0; i < a->len; i++) {
-        uint64_t val = ((uint64_t) a->limbs[i] << bit_shift) | carry;
-        r->limbs[i + limb_shift] = (uint32_t) val;
-        carry = (uint32_t) (val >> 32);
-    }
-    if (carry) {
-        r->limbs[a->len + limb_shift] = carry;
-        r->len = a->len + limb_shift + 1;
-    } else {
-        r->len = a->len + limb_shift;
-    }
-    r->sign = a->sign;
-    xrt_bigint_norm(r);
-    return rv;
-}
-
-static inline XrValue xrt_bigint_shr_val(XrValue av, int64_t count) {
-    const xrt_bigint_view_t *a = xrt_bigint_view(av);
-    XrValue rv;
-    if (!a || xrt_bigint_is_zero_v(a) || count <= 0)
-        return xrt_bigint_copy_val(a);
-    uint32_t n = (uint32_t) count;
-    uint32_t limb_shift = n / 32, bit_shift = n % 32;
-    if (limb_shift >= a->len) {
-        xrt_bigint_new(1, &rv);
-        return rv;
-    }
-    uint32_t new_len = a->len - limb_shift;
-    xrt_bigint_view_t *r = xrt_bigint_new(new_len, &rv);
-    uint32_t carry = 0;
-    for (int i = (int) new_len - 1; i >= 0; i--) {
-        uint64_t val = ((uint64_t) carry << 32) | a->limbs[i + limb_shift];
-        r->limbs[i] = (uint32_t) (val >> bit_shift);
-        carry = a->limbs[i + limb_shift] & ((1U << bit_shift) - 1u);
-    }
-    r->len = new_len;
-    r->sign = a->sign;
-    xrt_bigint_norm(r);
+    if (!a)
+        xrt_throw_exc(xr_box_str("E0404: shift operation requires integer types"));
+    XrBigIntShiftPlan plan = XR_SHIFT_BIGINT_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, kind, a->len, xrt_bigint_is_zero_v(a), count);
+    if (plan.status == XR_SHIFT_STATUS_COUNT_RANGE)
+        xrt_throw_exc(xr_box_str("E0404: bigint shift count out of range"));
+    if (plan.status == XR_SHIFT_STATUS_CAPACITY_OVERFLOW)
+        xrt_throw_exc(xr_box_str("E0601: bigint shift allocation failed"));
+    xrt_bigint_view_t *r = xrt_bigint_new(plan.capacity, &rv);
+    r->len = XR_SHIFT_BIGINT_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_SHIFT_HI, XR_SEM_OWNER_ID_SHARED_SHIFT_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, &plan, a->limbs, a->len, a->sign, r->limbs, &r->sign);
     return rv;
 }
 
@@ -669,17 +636,6 @@ static inline int64_t xrt_uint_mod(int64_t a, int64_t b) {
  * xi_opt constant folding and AOT hardware behavior (x64 SHL/SAR with CL,
  * ARM64 LSL/ASR, RISC-V SLL/SRA all mask to 6 bits). Left shift goes through
  * uint64_t because shifting into/past the sign bit is UB on signed in C. */
-static inline int64_t xrt_i64_shl(int64_t a, int64_t b) {
-    return xr_i64_shl_wrap(a, b);
-}
-static inline int64_t xrt_i64_shr(int64_t a, int64_t b) {
-    return xr_i64_shr_wrap(a, b);
-}
-/* Logical right shift for statically-unsigned lhs (mirrors OP_SHR_U). */
-static inline int64_t xrt_i64_shr_u(int64_t a, int64_t b) {
-    return xr_i64_shr_u_wrap(a, b);
-}
-
 static inline XrValue xrt_div(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
         return XR_FROM_INT(xrt_int_div(a.i, b.i));

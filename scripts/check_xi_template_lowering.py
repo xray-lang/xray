@@ -515,7 +515,7 @@ def run_self_test() -> None:
     vm_shift_opcodes = {"OP_SHL"}
     vm_shift_coverage = check_vm_generated_body_coverage(
         vm_shift_opcodes,
-        "XVM_TEMPLATE_SHIFT_CASE(OP_SHL, xr_int_shl_wrap, xr_bigint_shl)\n",
+        "XVM_TEMPLATE_SHIFT_CASE(OP_SHL, XR_SHIFT_LEFT)\n",
         VM_GENERATED_SHIFT_FILE,
         r"\bXVM_TEMPLATE_SHIFT_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
         "shift")

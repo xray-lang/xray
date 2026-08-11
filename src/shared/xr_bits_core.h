@@ -201,6 +201,134 @@ static inline int64_t xr_bits_not_i64(int64_t value) {
     return INT64_MIN + (int64_t) (bits & (uint64_t) INT64_MAX);
 }
 
+typedef enum XrShiftKind {
+    XR_SHIFT_LEFT = 0,
+    XR_SHIFT_RIGHT_SIGNED = 1,
+    XR_SHIFT_RIGHT_UNSIGNED = 2,
+} XrShiftKind;
+
+typedef enum XrShiftStatus {
+    XR_SHIFT_STATUS_OK = 0,
+    XR_SHIFT_STATUS_COUNT_RANGE = 1,
+    XR_SHIFT_STATUS_CAPACITY_OVERFLOW = 2,
+} XrShiftStatus;
+
+typedef struct XrBigIntShiftPlan {
+    XrShiftStatus status;
+    XrShiftKind kind;
+    uint32_t limb_shift;
+    uint32_t bit_shift;
+    uint32_t capacity;
+    uint8_t copy_input;
+    uint8_t zero_result;
+} XrBigIntShiftPlan;
+
+static inline int64_t xr_shift_i64_from_bits(uint64_t bits) {
+    if ((bits & (UINT64_C(1) << 63)) == 0)
+        return (int64_t) bits;
+    return INT64_MIN + (int64_t) (bits & (uint64_t) INT64_MAX);
+}
+
+/* Canonical scalar shift semantics. Counts are modulo 64, left shift wraps,
+ * and signed right shift is explicitly sign-extending on every C compiler. */
+static inline int64_t xr_shift_i64(XrShiftKind kind, int64_t value, int64_t count) {
+    uint32_t n = (uint32_t) ((uint64_t) count & UINT64_C(63));
+    uint64_t bits = (uint64_t) value;
+    if (kind == XR_SHIFT_LEFT)
+        return xr_shift_i64_from_bits(bits << n);
+    if (kind == XR_SHIFT_RIGHT_UNSIGNED)
+        return xr_shift_i64_from_bits(bits >> n);
+    if (n == 0 || value >= 0)
+        return xr_shift_i64_from_bits(bits >> n);
+    return xr_shift_i64_from_bits((bits >> n) | (UINT64_MAX << (64u - n)));
+}
+
+/* Canonical BigInt planning. Unlike scalar shifts, BigInt counts are not
+ * masked: they must fit uint32_t and must not be negative. */
+static inline XrBigIntShiftPlan xr_shift_bigint_plan(XrShiftKind kind, uint32_t source_len,
+                                                     int source_is_zero, int64_t count) {
+    XrBigIntShiftPlan plan = {XR_SHIFT_STATUS_OK, kind, 0, 0, 1, 0, 0};
+    if (kind != XR_SHIFT_LEFT && kind != XR_SHIFT_RIGHT_SIGNED &&
+        kind != XR_SHIFT_RIGHT_UNSIGNED) {
+        plan.status = XR_SHIFT_STATUS_COUNT_RANGE;
+        return plan;
+    }
+    if (count < 0 || (uint64_t) count > UINT32_MAX) {
+        plan.status = XR_SHIFT_STATUS_COUNT_RANGE;
+        return plan;
+    }
+    if (source_len == 0)
+        source_len = 1;
+    if (source_is_zero || count == 0) {
+        plan.capacity = source_len;
+        plan.copy_input = 1;
+        return plan;
+    }
+    plan.limb_shift = (uint32_t) count / 32u;
+    plan.bit_shift = (uint32_t) count % 32u;
+    if (kind == XR_SHIFT_LEFT) {
+        if (source_len == UINT32_MAX ||
+            plan.limb_shift > UINT32_MAX - source_len - 1u) {
+            plan.status = XR_SHIFT_STATUS_CAPACITY_OVERFLOW;
+            return plan;
+        }
+        plan.capacity = source_len + plan.limb_shift + 1u;
+        return plan;
+    }
+    if (plan.limb_shift >= source_len) {
+        plan.zero_result = 1;
+        return plan;
+    }
+    plan.capacity = source_len - plan.limb_shift;
+    return plan;
+}
+
+/* Apply a validated plan to little-endian base-2^32 magnitude limbs. The
+ * returned length and sign are normalized; adapters only allocate storage. */
+static inline uint32_t xr_shift_bigint_apply(const XrBigIntShiftPlan *plan,
+                                             const uint32_t *source, uint32_t source_len,
+                                             int8_t source_sign, uint32_t *result,
+                                             int8_t *result_sign) {
+    uint32_t result_len = 1;
+    if (!plan || plan->status != XR_SHIFT_STATUS_OK || !source || !result || !result_sign)
+        return 0;
+    for (uint32_t i = 0; i < plan->capacity; i++)
+        result[i] = 0;
+    if (plan->copy_input) {
+        result_len = source_len ? source_len : 1;
+        for (uint32_t i = 0; i < source_len; i++)
+            result[i] = source[i];
+    } else if (plan->zero_result) {
+        result[0] = 0;
+    } else if (plan->kind == XR_SHIFT_LEFT) {
+        uint32_t carry = 0;
+        for (uint32_t i = 0; i < source_len; i++) {
+            uint64_t shifted = ((uint64_t) source[i] << plan->bit_shift) | carry;
+            result[i + plan->limb_shift] = (uint32_t) shifted;
+            carry = (uint32_t) (shifted >> 32);
+        }
+        result_len = source_len + plan->limb_shift;
+        if (carry != 0)
+            result[result_len++] = carry;
+    } else {
+        uint32_t carry = 0;
+        uint32_t carry_mask = plan->bit_shift == 0
+                                  ? 0
+                                  : UINT32_MAX >> (32u - plan->bit_shift);
+        result_len = source_len - plan->limb_shift;
+        for (uint32_t i = result_len; i-- > 0;) {
+            uint32_t limb = source[i + plan->limb_shift];
+            uint64_t joined = ((uint64_t) carry << 32) | limb;
+            result[i] = (uint32_t) (joined >> plan->bit_shift);
+            carry = limb & carry_mask;
+        }
+    }
+    while (result_len > 1 && result[result_len - 1] == 0)
+        result_len--;
+    *result_sign = (result_len == 1 && result[0] == 0) ? 1 : (source_sign < 0 ? -1 : 1);
+    return result_len;
+}
+
 /* Number of set bits in the receiver's exact-width bit pattern. */
 static inline int64_t xr_bits_exact_popcount(int64_t x, uint8_t native_type) {
     uint64_t u = xr_bits_exact_pattern(x, native_type);
@@ -407,5 +535,43 @@ static inline int64_t xr_bits_exact_kernel_mul_high(int64_t lhs, int64_t rhs,
 #define XR_BITS_NOT_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, value)                           \
     (XR_BITS_NOT_OWNER_GUARD((owner_hi), (owner_lo)),                                              \
      XR_BITS_NOT_CONSUMER_GUARD((consumer_bit)), xr_bits_not_i64((int64_t) (value)))
+
+#define XR_SHIFT_OWNER_GUARD(owner_hi, owner_lo)                                                   \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_shift                                                \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_SHIFT_HI &&                       \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_SHIFT_LO)                         \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_SHIFT_CONSUMER_GUARD(consumer_bit)                                                     \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_shift                                   \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&           \
+                (XR_SEM_OWNER_ID_SHARED_SHIFT_CONSUMERS & (uint32_t) (consumer_bit)) != 0)        \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_SHIFT_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, kind, value, count)                 \
+    (XR_SHIFT_OWNER_GUARD((owner_hi), (owner_lo)),                                                 \
+     XR_SHIFT_CONSUMER_GUARD((consumer_bit)),                                                      \
+     xr_shift_i64((XrShiftKind) (kind), (int64_t) (value), (int64_t) (count)))
+
+#define XR_SHIFT_BIGINT_OWNER_PLAN(owner_hi, owner_lo, consumer_bit, kind, source_len,             \
+                                   source_is_zero, count)                                          \
+    (XR_SHIFT_OWNER_GUARD((owner_hi), (owner_lo)),                                                 \
+     XR_SHIFT_CONSUMER_GUARD((consumer_bit)),                                                      \
+     xr_shift_bigint_plan((XrShiftKind) (kind), (uint32_t) (source_len),                           \
+                          (source_is_zero), (int64_t) (count)))
+
+#define XR_SHIFT_BIGINT_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, plan, source, source_len,    \
+                                    source_sign, result, result_sign)                              \
+    (XR_SHIFT_OWNER_GUARD((owner_hi), (owner_lo)),                                                 \
+     XR_SHIFT_CONSUMER_GUARD((consumer_bit)),                                                      \
+     xr_shift_bigint_apply((plan), (source), (uint32_t) (source_len), (int8_t) (source_sign),      \
+                           (result), (result_sign)))
 
 #endif  // XRAY_SHARED_XR_BITS_CORE_H
