@@ -27,6 +27,9 @@ struct XrOwnershipCertificate {
     XrOwnershipEdgeStateRecord *edge_states;
     uint32_t edge_state_count;
     uint32_t edge_state_capacity;
+    XrOwnershipLoopInvariantRecord *loop_invariants;
+    uint32_t loop_invariant_count;
+    uint32_t loop_invariant_capacity;
 };
 
 #endif  // XR_OWNERSHIP_CERTIFICATE_INTERNAL_H

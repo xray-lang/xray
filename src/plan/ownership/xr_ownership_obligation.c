@@ -10,6 +10,7 @@
 
 #include "xr_ownership_obligation.h"
 #include "xr_ownership_certificate_internal.h"
+#include "../semantic/xr_semantic_graph.h"
 #include "../semantic/xr_semantic_plan_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../ir/xi.h"
@@ -18,11 +19,13 @@
 #include "../../shared/xr_param_mode.h"
 #include <stdio.h>
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define XR_OWNERSHIP_MAX_OWNERS UINT32_C(2000000)
 #define XR_OWNERSHIP_MAX_EVENTS UINT32_C(20000000)
 #define XR_OWNERSHIP_MAX_EDGE_STATES UINT32_C(40000000)
+#define XR_OWNERSHIP_MAX_LOOP_INVARIANTS UINT32_C(40000000)
 
 typedef struct XrOwnershipBuildContext {
     XrSemanticPlan *plan;
@@ -30,10 +33,17 @@ typedef struct XrOwnershipBuildContext {
     uint32_t *parent;
     uint8_t *rank;
     uint32_t *owner_by_root;
+    uint8_t *loan_status;
+    int16_t *loan_parameter;
     uint32_t value_count;
     char *error;
     size_t error_size;
 } XrOwnershipBuildContext;
+
+static bool add_i32_checked(int32_t left, int32_t right, int32_t *out);
+static bool add_i32_three_checked(int32_t first, int32_t second, int32_t third,
+                                  int32_t *out);
+static bool subtract_i32_checked(int32_t left, int32_t right, int32_t *out);
 
 static bool fail(XrOwnershipBuildContext *ctx, const char *code, const char *detail) {
     if (ctx->error && ctx->error_size)
@@ -199,18 +209,12 @@ static bool add_event_at(XrOwnershipBuildContext *ctx, uint32_t owner_index,
     char owner_id[XR_STABLE_ID_BYTES * 2 + 1];
     char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
     char key[224];
-    uint32_t occurrence = 0;
-    for (uint32_t i = 0; i < certificate->event_count; i++) {
-        const XrOwnershipEventRecord *prior = &certificate->events[i];
-        if (prior->owner == owner_index && prior->operation == operation_index &&
-            prior->block == block && prior->successor == successor && prior->kind == (uint8_t) kind)
-            occurrence++;
-    }
+    uint32_t ordinal = certificate->event_count;
     xr_stable_id_hex(certificate->owners[owner_index].id, owner_id);
     xr_stable_id_hex(ctx->plan->operations[operation_index].id, operation_id);
-    int written = snprintf(key, sizeof(key), "ownership-event-v3:%s:%s:%u:%u:%u:%u:%u", owner_id,
+    int written = snprintf(key, sizeof(key), "ownership-event-v4:%s:%s:%u:%u:%u:%u:%u", owner_id,
                            operation_id, block, successor, (unsigned) kind,
-                           (unsigned) program_point, occurrence);
+                           (unsigned) program_point, ordinal);
     if (written < 0 || (size_t) written >= sizeof(key))
         return fail(ctx, "XR_EXEC_5003", "ownership event identity failed");
     event->canonical_key = copy_text(key);
@@ -346,6 +350,151 @@ static uint32_t operation_for_value(const XrSemanticPlan *plan, uint32_t functio
     return XR_SEMANTIC_INDEX_NONE;
 }
 
+enum {
+    XR_OWN_LOAN_STATIC = -1,
+    XR_OWN_LOAN_MULTIPLE = -2,
+    XR_OWN_LOAN_CYCLE = -3,
+};
+
+static bool owner_has_function_loan(XrOwnershipBuildContext *ctx, uint32_t owner_index,
+                                    uint32_t function, int16_t *parameter) {
+    *parameter = -1;
+    if (owner_index == XR_SEMANTIC_INDEX_NONE)
+        return true;
+    const XrOwnershipOwnerRecord *owner = &ctx->certificate->owners[owner_index];
+    if (owner->function != function)
+        return false;
+    if (ctx->loan_status[owner_index] == 2) {
+        *parameter = ctx->loan_parameter[owner_index];
+        return true;
+    }
+    if (ctx->loan_status[owner_index] == 3)
+        return false;
+    if (ctx->loan_status[owner_index] == 1) {
+        *parameter = XR_OWN_LOAN_CYCLE;
+        return true;
+    }
+    ctx->loan_status[owner_index] = 1;
+    uint32_t origin = operation_for_value(ctx->plan, function, owner->origin_value);
+    if (origin == XR_SEMANTIC_INDEX_NONE) {
+        ctx->loan_status[owner_index] = 3;
+        return false;
+    }
+    const XrSemanticOperationRecord *operation = &ctx->plan->operations[origin];
+    int16_t derived = XR_OWN_LOAN_STATIC;
+    bool valid = false;
+    if (owner->initial_state == XR_OWN_IMMORTAL ||
+        operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC) {
+        valid = true;
+    } else if (operation->opcode == XI_PARAM &&
+               operation->parameter_ownership == XI_OWN_BORROWED &&
+               operation->semantic_immediate >= 0 &&
+               operation->semantic_immediate <= INT16_MAX) {
+        derived = (int16_t) operation->semantic_immediate;
+        valid = true;
+    } else if (operation->opcode == XI_PHI) {
+        bool saw_seed = false;
+        for (uint16_t a = 0; a < operation->operand_count; a++) {
+            uint32_t source = owner_for_value(
+                ctx, ctx->plan->operands[operation->operand_begin + a].value);
+            if (source == owner_index)
+                continue;
+            int16_t candidate = XR_OWN_LOAN_STATIC;
+            if (!owner_has_function_loan(ctx, source, function, &candidate)) {
+                valid = false;
+                saw_seed = true;
+                break;
+            }
+            if (candidate == XR_OWN_LOAN_CYCLE)
+                continue;
+            saw_seed = true;
+            valid = true;
+            if (candidate >= 0) {
+                if (derived == XR_OWN_LOAN_STATIC)
+                    derived = candidate;
+                else if (derived != candidate)
+                    derived = XR_OWN_LOAN_MULTIPLE;
+            } else if (candidate == XR_OWN_LOAN_MULTIPLE) {
+                derived = XR_OWN_LOAN_MULTIPLE;
+            }
+        }
+        valid = valid && saw_seed;
+    } else if ((owner->initial_state == XR_OWN_BORROWED ||
+                owner->initial_state == XR_OWN_FOREIGN_BORROWED) &&
+               operation->result_alias_operand >= 0 &&
+               (uint16_t) operation->result_alias_operand < operation->operand_count) {
+        uint32_t source = owner_for_value(
+            ctx, ctx->plan
+                     ->operands[operation->operand_begin +
+                                (uint16_t) operation->result_alias_operand]
+                     .value);
+        if (source != owner_index)
+            valid = owner_has_function_loan(ctx, source, function, &derived);
+    }
+    ctx->loan_status[owner_index] = valid ? 2 : 3;
+    ctx->loan_parameter[owner_index] = derived;
+    *parameter = derived;
+    if (!valid)
+        return false;
+    return true;
+}
+
+static bool owner_is_returned(XrOwnershipBuildContext *ctx, uint32_t owner_index) {
+    uint32_t function = ctx->certificate->owners[owner_index].function;
+    const XrSemanticFunctionRecord *record = &ctx->plan->functions[function];
+    for (uint32_t block = record->block_begin; block < record->block_begin + record->block_count;
+         block++) {
+        if (ctx->plan->blocks[block].kind == XI_BLOCK_RETURN &&
+            owner_for_value(ctx, ctx->plan->blocks[block].control_value) == owner_index)
+            return true;
+    }
+    return false;
+}
+
+static bool owner_is_retained_in_block(XrOwnershipBuildContext *ctx, uint32_t owner_index,
+                                       uint32_t block_index) {
+    const XrSemanticBlockRecord *block = &ctx->plan->blocks[block_index];
+    for (uint32_t i = 0; i < block->operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            &ctx->plan->operations[block->operation_begin + i];
+        if (operation->opcode != XI_RETAIN)
+            continue;
+        for (uint16_t a = 0; a < operation->operand_count; a++) {
+            uint32_t value = ctx->plan->operands[operation->operand_begin + a].value;
+            if (owner_for_value(ctx, value) == owner_index)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool borrowed_phi_parameter(XrOwnershipBuildContext *ctx, uint32_t owner_index,
+                                   int16_t *parameter) {
+    *parameter = -1;
+    const XrOwnershipOwnerRecord *owner = &ctx->certificate->owners[owner_index];
+    uint32_t origin = operation_for_value(ctx->plan, owner->function, owner->origin_value);
+    if (origin == XR_SEMANTIC_INDEX_NONE || ctx->plan->operations[origin].opcode != XI_PHI)
+        return false;
+    const XrSemanticOperationRecord *phi = &ctx->plan->operations[origin];
+    bool saw_parameter = false;
+    for (uint16_t a = 0; a < phi->operand_count; a++) {
+        uint32_t source = owner_for_value(
+            ctx, ctx->plan->operands[phi->operand_begin + a].value);
+        if (source == owner_index || source == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        int16_t candidate = -1;
+        if (!owner_has_function_loan(ctx, source, owner->function, &candidate))
+            return false;
+        if (candidate < 0)
+            continue;
+        if (saw_parameter && *parameter != candidate)
+            return false;
+        *parameter = candidate;
+        saw_parameter = true;
+    }
+    return saw_parameter;
+}
+
 static bool add_operand_events(XrOwnershipBuildContext *ctx, uint32_t operation_index) {
     const XrSemanticOperationRecord *operation = &ctx->plan->operations[operation_index];
     if (operation->opcode == XI_PHI) {
@@ -357,14 +506,119 @@ static bool add_operand_events(XrOwnershipBuildContext *ctx, uint32_t operation_
         uint32_t result_owner = owner_for_value(ctx, operation->result_value);
         if (result_owner == XR_SEMANTIC_INDEX_NONE)
             return fail(ctx, "XR_OWN_3002", "reference PHI has no result owner");
-        if (ctx->certificate->owners[result_owner].initial_state == XR_OWN_UNINITIALIZED)
-            ctx->certificate->owners[result_owner].initial_state = XR_OWN_OWNED_LOCAL;
+        bool saw_borrowed_source = false;
+        bool saw_owned_source = false;
+        bool borrowed_sources_are_function_loans = true;
+        bool borrowed_sources_promoted = true;
+        bool have_unpromoted_source = false;
+        uint16_t unpromoted_operand = 0;
+        uint32_t unpromoted_value = XR_SEMANTIC_INDEX_NONE;
+        uint32_t unpromoted_owner = XR_SEMANTIC_INDEX_NONE;
+        uint32_t unpromoted_predecessor = XR_SEMANTIC_INDEX_NONE;
+        int16_t unique_parameter = -1;
         for (uint16_t a = 0; a < operation->operand_count; a++) {
             uint32_t source_value = ctx->plan->operands[operation->operand_begin + a].value;
             uint32_t source_owner = owner_for_value(ctx, source_value);
             if (source_owner == result_owner)
                 continue;
+            XrOwnershipState source_state = XR_OWN_IMMORTAL;
+            if (source_owner != XR_SEMANTIC_INDEX_NONE)
+                source_state =
+                    (XrOwnershipState) ctx->certificate->owners[source_owner].initial_state;
+            int16_t parameter = XR_OWN_LOAN_STATIC;
+            bool borrowed_source = source_state == XR_OWN_BORROWED ||
+                                   source_state == XR_OWN_FOREIGN_BORROWED;
+            bool function_loan = borrowed_source &&
+                                 owner_has_function_loan(ctx, source_owner,
+                                                         operation->function, &parameter);
+            if (borrowed_source) {
+                saw_borrowed_source = true;
+                if (!function_loan)
+                    borrowed_sources_are_function_loans = false;
+                uint32_t predecessor =
+                    ctx->plan->predecessors[block->predecessor_begin + a];
+                if (!owner_is_retained_in_block(ctx, source_owner, predecessor)) {
+                    borrowed_sources_promoted = false;
+                    if (!have_unpromoted_source) {
+                        have_unpromoted_source = true;
+                        unpromoted_operand = a;
+                        unpromoted_value = source_value;
+                        unpromoted_owner = source_owner;
+                        unpromoted_predecessor = predecessor;
+                    }
+                }
+                if (function_loan && parameter == XR_OWN_LOAN_MULTIPLE &&
+                    owner_is_returned(ctx, result_owner))
+                    return fail(ctx, "XR_OWN_3004",
+                                "returned borrowed PHI has multiple parameter loan roots");
+                if (function_loan && parameter >= 0 && unique_parameter < 0)
+                    unique_parameter = parameter;
+                else if (function_loan && parameter >= 0 && unique_parameter != parameter &&
+                         owner_is_returned(ctx, result_owner))
+                    return fail(ctx, "XR_OWN_3004",
+                                "returned borrowed PHI joins different parameter loans");
+            } else if (source_state != XR_OWN_IMMORTAL) {
+                saw_owned_source = true;
+            }
+        }
+        bool borrowed_phi = saw_borrowed_source && !saw_owned_source &&
+                            borrowed_sources_are_function_loans;
+        if (saw_borrowed_source && !borrowed_phi && !borrowed_sources_promoted) {
+            if (ctx->error && ctx->error_size) {
+                uint32_t origin_value = XR_SEMANTIC_INDEX_NONE;
+                uint32_t origin_operation = XR_SEMANTIC_INDEX_NONE;
+                uint8_t source_state = XR_OWN_IMMORTAL;
+                uint16_t origin_opcode = 0;
+                uint8_t origin_result_ownership = XI_GEN_RESULT_OWNERSHIP_NONE;
+                int16_t origin_alias = -1;
+                uint8_t origin_return_provenance = XR_SEM_RETURN_NONE;
+                int16_t origin_return_parameter = -1;
+                if (unpromoted_owner != XR_SEMANTIC_INDEX_NONE) {
+                    const XrOwnershipOwnerRecord *source =
+                        &ctx->certificate->owners[unpromoted_owner];
+                    origin_value = source->origin_value;
+                    source_state = source->initial_state;
+                    origin_operation = operation_for_value(ctx->plan, operation->function,
+                                                           source->origin_value);
+                    if (origin_operation != XR_SEMANTIC_INDEX_NONE) {
+                        const XrSemanticOperationRecord *origin =
+                            &ctx->plan->operations[origin_operation];
+                        origin_opcode = origin->opcode;
+                        origin_result_ownership = origin->result_ownership;
+                        origin_alias = origin->result_alias_operand;
+                        origin_return_provenance = origin->return_provenance;
+                        origin_return_parameter = origin->return_parameter;
+                    }
+                }
+                snprintf(ctx->error, ctx->error_size,
+                         "XR_OWN_3004: PHI non-function loan has no explicit predecessor "
+                         "retain (func=%s op=%u operand=%u value=%u source-owner=%u "
+                         "source-state=%u origin-value=%u origin-op=%u origin-opcode=%u "
+                         "result-own=%u alias=%d return-prov=%u return-param=%d "
+                         "predecessor=%u matching-retain=none)",
+                         ctx->plan->functions[operation->function].name, operation_index,
+                         unpromoted_operand, unpromoted_value, unpromoted_owner, source_state,
+                         origin_value, origin_operation, origin_opcode, origin_result_ownership,
+                         origin_alias, origin_return_provenance, origin_return_parameter,
+                         unpromoted_predecessor);
+            }
+            return false;
+        }
+        ctx->certificate->owners[result_owner].initial_state =
+            borrowed_phi ? XR_OWN_BORROWED : XR_OWN_OWNED_LOCAL;
+        for (uint16_t a = 0; a < operation->operand_count; a++) {
+            uint32_t source_value = ctx->plan->operands[operation->operand_begin + a].value;
+            uint32_t source_owner = owner_for_value(ctx, source_value);
             uint32_t predecessor = ctx->plan->predecessors[block->predecessor_begin + a];
+            if (borrowed_phi) {
+                if (!add_event_on_edge(ctx, result_owner, operation_index, predecessor,
+                                       operation->block, XR_OWN_EVENT_BORROW, 0,
+                                       XR_OWN_BORROWED))
+                    return false;
+                continue;
+            }
+            if (source_owner == result_owner)
+                continue;
             XrOwnershipState source_state = XR_OWN_IMMORTAL;
             if (source_owner != XR_SEMANTIC_INDEX_NONE)
                 source_state =
@@ -381,8 +635,7 @@ static bool add_operand_events(XrOwnershipBuildContext *ctx, uint32_t operation_
                 return false;
             if (!add_event_on_edge(ctx, result_owner, operation_index, predecessor,
                                    operation->block, XR_OWN_EVENT_MOVE, 1,
-                                   source_state == XR_OWN_IMMORTAL ? XR_OWN_IMMORTAL
-                                                                   : XR_OWN_OWNED_LOCAL))
+                                   XR_OWN_OWNED_LOCAL))
                 return false;
         }
         return true;
@@ -498,8 +751,11 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
             int16_t parameter = function->return_parameter;
             int32_t balance = 0;
             for (uint32_t e = 0; e < ctx->certificate->event_count; e++) {
-                if (ctx->certificate->events[e].owner == owner_index)
-                    balance += ctx->certificate->events[e].logical_delta;
+                if (ctx->certificate->events[e].owner == owner_index &&
+                    !add_i32_checked(balance, ctx->certificate->events[e].logical_delta,
+                                     &balance))
+                    return fail(ctx, "XR_EXEC_5003",
+                                "ownership return balance exceeds schema");
             }
             if (type_is_ownership_root(ctx->plan, function->return_type) &&
                 provenance == XR_SEM_RETURN_NONE) {
@@ -518,6 +774,9 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
                             break;
                         }
                     }
+                    if (provenance == XR_SEM_RETURN_NONE &&
+                        borrowed_phi_parameter(ctx, owner_index, &parameter))
+                        provenance = XR_SEM_RETURN_BORROWED_PARAM;
                 }
             }
             if (type_is_ownership_root(ctx->plan, function->return_type) &&
@@ -698,7 +957,8 @@ static bool classify_stack_extents(XrOwnershipBuildContext *ctx) {
             }
             for (unsigned s = 0; s < 2; s++) {
                 uint32_t successor = block->successors[s];
-                if (successor == XR_SEMANTIC_INDEX_NONE)
+                if (successor == XR_SEMANTIC_INDEX_NONE ||
+                    (s == 1 && successor == block->successors[0]))
                     continue;
                 if (successor < function->block_begin ||
                     successor >= function->block_begin + function->block_count) {
@@ -803,19 +1063,36 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
                 continue;
             uint32_t local = event->block - fn->block_begin;
             if (event->successor == XR_SEMANTIC_INDEX_NONE) {
-                delta[local] += event->logical_delta;
+                if (!add_i32_checked(delta[local], event->logical_delta, &delta[local])) {
+                    xr_free(entry);
+                    xr_free(delta);
+                    xr_free(edge_delta);
+                    xr_free(queue);
+                    return fail(ctx, "XR_EXEC_5003",
+                                "ownership disposition balance exceeds schema");
+                }
             } else {
                 const XrSemanticBlockRecord *block = &ctx->plan->blocks[event->block];
+                uint32_t edge_index = UINT32_MAX;
                 if (block->successors[0] == event->successor)
-                    edge_delta[local * 2u] += event->logical_delta;
+                    edge_index = local * 2u;
                 else if (block->successors[1] == event->successor)
-                    edge_delta[local * 2u + 1u] += event->logical_delta;
-                else {
+                    edge_index = local * 2u + 1u;
+                if (edge_index == UINT32_MAX) {
                     xr_free(entry);
                     xr_free(delta);
                     xr_free(edge_delta);
                     xr_free(queue);
                     return fail(ctx, "XR_OWN_3002", "ownership event names a non-CFG edge");
+                }
+                if (!add_i32_checked(edge_delta[edge_index], event->logical_delta,
+                                     &edge_delta[edge_index])) {
+                    xr_free(entry);
+                    xr_free(delta);
+                    xr_free(edge_delta);
+                    xr_free(queue);
+                    return fail(ctx, "XR_EXEC_5003",
+                                "ownership edge disposition exceeds schema");
                 }
             }
         }
@@ -839,11 +1116,19 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
         uint32_t head = 0, tail = 0;
         uint32_t origin_local = origin_block - fn->block_begin;
         bool origin_is_phi = ctx->plan->operations[origin_operation].opcode == XI_PHI;
-        entry[origin_local] = origin_is_phi ? 1 : 0;
+        entry[origin_local] =
+            origin_is_phi && owner_record->initial_state != XR_OWN_BORROWED ? 1 : 0;
         queue[tail++] = origin_local;
         while (head < tail) {
             uint32_t local = queue[head++];
-            int32_t exit_balance = entry[local] + delta[local];
+            int32_t exit_balance = 0;
+            if (!add_i32_checked(entry[local], delta[local], &exit_balance)) {
+                xr_free(entry);
+                xr_free(delta);
+                xr_free(edge_delta);
+                xr_free(queue);
+                return fail(ctx, "XR_EXEC_5003", "ownership balance exceeds schema");
+            }
             if (exit_balance < 0) {
                 if (ctx->error && ctx->error_size)
                     snprintf(ctx->error, ctx->error_size,
@@ -862,7 +1147,8 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
             const XrSemanticBlockRecord *block = &ctx->plan->blocks[fn->block_begin + local];
             for (unsigned s = 0; s < 2; s++) {
                 uint32_t successor = block->successors[s];
-                if (successor == XR_SEMANTIC_INDEX_NONE)
+                if (successor == XR_SEMANTIC_INDEX_NONE ||
+                    (s == 1 && successor == block->successors[0]))
                     continue;
                 if (successor < fn->block_begin || successor >= fn->block_begin + fn->block_count) {
                     xr_free(entry);
@@ -871,7 +1157,14 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
                     xr_free(queue);
                     return fail(ctx, "XR_OWN_3002", "ownership edge crosses function boundary");
                 }
-                int32_t incoming = exit_balance + edge_delta[local * 2u + s];
+                int32_t incoming = 0;
+                if (!add_i32_checked(exit_balance, edge_delta[local * 2u + s], &incoming)) {
+                    xr_free(entry);
+                    xr_free(delta);
+                    xr_free(edge_delta);
+                    xr_free(queue);
+                    return fail(ctx, "XR_EXEC_5003", "ownership edge balance exceeds schema");
+                }
                 if (incoming < 0) {
                     if (ctx->error && ctx->error_size)
                         snprintf(ctx->error, ctx->error_size,
@@ -911,7 +1204,15 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
                         xr_free(queue);
                         return false;
                     }
-                    edge_delta[local * 2u + s] -= incoming;
+                    if (!subtract_i32_checked(edge_delta[local * 2u + s], incoming,
+                                              &edge_delta[local * 2u + s])) {
+                        xr_free(entry);
+                        xr_free(delta);
+                        xr_free(edge_delta);
+                        xr_free(queue);
+                        return fail(ctx, "XR_EXEC_5003",
+                                    "ownership redefinition balance exceeds schema");
+                    }
                     incoming = 0;
                 }
                 uint32_t next = successor - fn->block_begin;
@@ -936,7 +1237,14 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
             if (block->successors[0] != XR_SEMANTIC_INDEX_NONE ||
                 block->successors[1] != XR_SEMANTIC_INDEX_NONE)
                 continue;
-            int32_t balance = entry[local] + delta[local];
+            int32_t balance = 0;
+            if (!add_i32_checked(entry[local], delta[local], &balance)) {
+                xr_free(entry);
+                xr_free(delta);
+                xr_free(edge_delta);
+                xr_free(queue);
+                return fail(ctx, "XR_EXEC_5003", "ownership exit balance exceeds schema");
+            }
             if (balance <= 0)
                 continue;
             if (balance > INT16_MAX) {
@@ -967,6 +1275,10 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
     return true;
 }
 
+static int compare_edge_state(const void *left, const void *right);
+static uint8_t ownership_state_for_balance(const XrOwnershipOwnerRecord *owner,
+                                           int32_t balance);
+
 static bool build_edge_states(XrOwnershipBuildContext *ctx) {
     for (uint32_t owner = 0; owner < ctx->certificate->owner_count; owner++) {
         uint32_t function = ctx->certificate->owners[owner].function;
@@ -994,20 +1306,35 @@ static bool build_edge_states(XrOwnershipBuildContext *ctx) {
                 continue;
             uint32_t local = event->block - fn->block_begin;
             if (event->successor == XR_SEMANTIC_INDEX_NONE) {
-                delta[local] += event->logical_delta;
+                if (!add_i32_checked(delta[local], event->logical_delta, &delta[local])) {
+                    xr_free(entry);
+                    xr_free(delta);
+                    xr_free(edge_delta);
+                    xr_free(queue);
+                    return fail(ctx, "XR_EXEC_5003", "ownership event balance exceeds schema");
+                }
                 continue;
             }
             const XrSemanticBlockRecord *event_block = &ctx->plan->blocks[event->block];
+            uint32_t edge_index = UINT32_MAX;
             if (event_block->successors[0] == event->successor)
-                edge_delta[local * 2u] += event->logical_delta;
+                edge_index = local * 2u;
             else if (event_block->successors[1] == event->successor)
-                edge_delta[local * 2u + 1u] += event->logical_delta;
-            else {
+                edge_index = local * 2u + 1u;
+            if (edge_index == UINT32_MAX) {
                 xr_free(entry);
                 xr_free(delta);
                 xr_free(edge_delta);
                 xr_free(queue);
                 return fail(ctx, "XR_OWN_3002", "ownership event names a non-CFG edge");
+            }
+            if (!add_i32_checked(edge_delta[edge_index], event->logical_delta,
+                                 &edge_delta[edge_index])) {
+                xr_free(entry);
+                xr_free(delta);
+                xr_free(edge_delta);
+                xr_free(queue);
+                return fail(ctx, "XR_EXEC_5003", "ownership edge balance exceeds schema");
             }
         }
         uint32_t origin_operation =
@@ -1029,11 +1356,22 @@ static bool build_edge_states(XrOwnershipBuildContext *ctx) {
         }
         uint32_t head = 0, tail = 0;
         uint32_t origin_local = origin_block - fn->block_begin;
-        entry[origin_local] = ctx->plan->operations[origin_operation].opcode == XI_PHI ? 1 : 0;
+        entry[origin_local] =
+            ctx->plan->operations[origin_operation].opcode == XI_PHI &&
+                    ctx->certificate->owners[owner].initial_state != XR_OWN_BORROWED
+                ? 1
+                : 0;
         queue[tail++] = origin_local;
         while (head < tail) {
             uint32_t local = queue[head++];
-            int32_t exit_balance = entry[local] + delta[local];
+            int32_t exit_balance = 0;
+            if (!add_i32_checked(entry[local], delta[local], &exit_balance)) {
+                xr_free(entry);
+                xr_free(delta);
+                xr_free(edge_delta);
+                xr_free(queue);
+                return fail(ctx, "XR_EXEC_5003", "ownership balance exceeds schema");
+            }
             if (exit_balance < 0) {
                 const char *origin_op = "unknown";
                 for (uint32_t i = 0; i < ctx->plan->operation_count; i++) {
@@ -1076,7 +1414,8 @@ static bool build_edge_states(XrOwnershipBuildContext *ctx) {
             const XrSemanticBlockRecord *block = &ctx->plan->blocks[fn->block_begin + local];
             for (unsigned s = 0; s < 2; s++) {
                 uint32_t successor = block->successors[s];
-                if (successor == XR_SEMANTIC_INDEX_NONE)
+                if (successor == XR_SEMANTIC_INDEX_NONE ||
+                    (s == 1 && successor == block->successors[0]))
                     continue;
                 if (successor < fn->block_begin || successor >= fn->block_begin + fn->block_count) {
                     xr_free(entry);
@@ -1085,7 +1424,15 @@ static bool build_edge_states(XrOwnershipBuildContext *ctx) {
                     xr_free(queue);
                     return fail(ctx, "XR_OWN_3002", "ownership edge crosses function boundary");
                 }
-                int32_t edge_exit_balance = exit_balance + edge_delta[local * 2u + s];
+                int32_t edge_exit_balance = 0;
+                if (!add_i32_checked(exit_balance, edge_delta[local * 2u + s],
+                                     &edge_exit_balance)) {
+                    xr_free(entry);
+                    xr_free(delta);
+                    xr_free(edge_delta);
+                    xr_free(queue);
+                    return fail(ctx, "XR_EXEC_5003", "ownership edge balance exceeds schema");
+                }
                 if (edge_exit_balance < 0) {
                     xr_free(entry);
                     xr_free(delta);
@@ -1156,7 +1503,14 @@ static bool build_edge_states(XrOwnershipBuildContext *ctx) {
             if (block->successors[0] != XR_SEMANTIC_INDEX_NONE ||
                 block->successors[1] != XR_SEMANTIC_INDEX_NONE)
                 continue;
-            int32_t balance = entry[local] + delta[local];
+            int32_t balance = 0;
+            if (!add_i32_checked(entry[local], delta[local], &balance)) {
+                xr_free(entry);
+                xr_free(delta);
+                xr_free(edge_delta);
+                xr_free(queue);
+                return fail(ctx, "XR_EXEC_5003", "ownership exit balance exceeds schema");
+            }
             if (balance != 0) {
                 char event_summary[192] = {0};
                 size_t event_used = 0;
@@ -1199,6 +1553,8 @@ static bool build_edge_states(XrOwnershipBuildContext *ctx) {
                 uint32_t successor = terminal ? XR_SEMANTIC_INDEX_NONE : block->successors[s];
                 if (!terminal && successor == XR_SEMANTIC_INDEX_NONE)
                     continue;
+                if (!terminal && s == 1 && successor == block->successors[0])
+                    continue;
                 if (!reserve_array((void **) &ctx->certificate->edge_states,
                                    &ctx->certificate->edge_state_capacity,
                                    ctx->certificate->edge_state_count + 1,
@@ -1215,12 +1571,49 @@ static bool build_edge_states(XrOwnershipBuildContext *ctx) {
                 edge->owner = owner;
                 edge->block = b;
                 edge->successor = successor;
-                edge->entry_balance = entry_balance;
-                edge->exit_balance =
-                    entry_balance + delta[local] + (terminal ? 0 : edge_delta[local * 2u + s]);
-                edge->entry_state = ctx->certificate->owners[owner].initial_state;
-                edge->exit_state = edge->exit_balance == 0 ? XR_OWN_RELEASED : edge->entry_state;
-                edge->flags = entry[local] == INT32_MIN ? 1u : 0u;
+                bool owner_frontier =
+                    entry[local] == INT32_MIN && !terminal &&
+                    ctx->plan->operations[origin_operation].opcode == XI_PHI &&
+                    successor == origin_block &&
+                    (ctx->certificate->owners[owner].initial_state == XR_OWN_BORROWED
+                         ? edge_delta[local * 2u + s] == 0
+                         : edge_delta[local * 2u + s] == 1);
+                edge->flags = owner_frontier
+                                  ? XR_OWN_EDGE_OWNER_FRONTIER
+                                  : (entry[local] == INT32_MIN ? XR_OWN_EDGE_OUT_OF_SCOPE : 0u);
+                if (edge->flags == XR_OWN_EDGE_OUT_OF_SCOPE) {
+                    edge->entry_balance = 0;
+                    edge->exit_balance = 0;
+                    edge->entry_state = XR_OWN_UNINITIALIZED;
+                    edge->exit_state = XR_OWN_UNINITIALIZED;
+                } else if (edge->flags == XR_OWN_EDGE_OWNER_FRONTIER) {
+                    edge->entry_balance = 0;
+                    edge->exit_balance =
+                        ctx->certificate->owners[owner].initial_state == XR_OWN_BORROWED ? 0 : 1;
+                    edge->entry_state = XR_OWN_UNINITIALIZED;
+                    edge->exit_state =
+                        ctx->certificate->owners[owner].initial_state == XR_OWN_BORROWED
+                            ? XR_OWN_BORROWED
+                            : XR_OWN_OWNED_LOCAL;
+                } else {
+                    edge->entry_balance = entry_balance;
+                    if (!add_i32_three_checked(entry_balance, delta[local],
+                                               terminal ? 0 : edge_delta[local * 2u + s],
+                                               &edge->exit_balance)) {
+                        xr_free(entry);
+                        xr_free(delta);
+                        xr_free(edge_delta);
+                        xr_free(queue);
+                        return fail(ctx, "XR_EXEC_5003",
+                                    "ownership edge state exceeds schema");
+                    }
+                    const XrOwnershipOwnerRecord *owner_record =
+                        &ctx->certificate->owners[owner];
+                    edge->entry_state =
+                        ownership_state_for_balance(owner_record, edge->entry_balance);
+                    edge->exit_state =
+                        ownership_state_for_balance(owner_record, edge->exit_balance);
+                }
                 if (terminal)
                     break;
             }
@@ -1229,6 +1622,247 @@ static bool build_edge_states(XrOwnershipBuildContext *ctx) {
         xr_free(delta);
         xr_free(edge_delta);
         xr_free(queue);
+    }
+    if (ctx->certificate->edge_state_count)
+        qsort(ctx->certificate->edge_states, ctx->certificate->edge_state_count,
+              sizeof(*ctx->certificate->edge_states), compare_edge_state);
+    return true;
+}
+
+static bool add_i32_checked(int32_t left, int32_t right, int32_t *out) {
+    int64_t value = (int64_t) left + (int64_t) right;
+    if (value < INT32_MIN || value > INT32_MAX)
+        return false;
+    *out = (int32_t) value;
+    return true;
+}
+
+static bool add_i32_three_checked(int32_t first, int32_t second, int32_t third,
+                                  int32_t *out) {
+    int64_t value = (int64_t) first + (int64_t) second + (int64_t) third;
+    if (value < INT32_MIN || value > INT32_MAX)
+        return false;
+    *out = (int32_t) value;
+    return true;
+}
+
+static bool subtract_i32_checked(int32_t left, int32_t right, int32_t *out) {
+    int64_t value = (int64_t) left - (int64_t) right;
+    if (value < INT32_MIN || value > INT32_MAX)
+        return false;
+    *out = (int32_t) value;
+    return true;
+}
+
+static int compare_edge_state(const void *left, const void *right) {
+    const XrOwnershipEdgeStateRecord *a = (const XrOwnershipEdgeStateRecord *) left;
+    const XrOwnershipEdgeStateRecord *b = (const XrOwnershipEdgeStateRecord *) right;
+    if (a->owner != b->owner)
+        return a->owner < b->owner ? -1 : 1;
+    if (a->block != b->block)
+        return a->block < b->block ? -1 : 1;
+    if (a->successor != b->successor)
+        return a->successor < b->successor ? -1 : 1;
+    return 0;
+}
+
+static const XrOwnershipEdgeStateRecord *edge_state_for(
+    const XrOwnershipCertificate *certificate, uint32_t owner, uint32_t block,
+    uint32_t successor) {
+    uint32_t low = 0;
+    uint32_t high = certificate->edge_state_count;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2u;
+        const XrOwnershipEdgeStateRecord *edge = &certificate->edge_states[middle];
+        if (edge->owner < owner ||
+            (edge->owner == owner &&
+             (edge->block < block || (edge->block == block && edge->successor < successor))))
+            low = middle + 1;
+        else
+            high = middle;
+    }
+    if (low == certificate->edge_state_count)
+        return NULL;
+    const XrOwnershipEdgeStateRecord *edge = &certificate->edge_states[low];
+    return edge->owner == owner && edge->block == block && edge->successor == successor ? edge
+                                                                                           : NULL;
+}
+
+static const XrOwnershipEdgeStateRecord *block_state_for(
+    const XrOwnershipCertificate *certificate, uint32_t owner, uint32_t block) {
+    uint32_t low = 0;
+    uint32_t high = certificate->edge_state_count;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2u;
+        const XrOwnershipEdgeStateRecord *edge = &certificate->edge_states[middle];
+        if (edge->owner < owner || (edge->owner == owner && edge->block < block))
+            low = middle + 1;
+        else
+            high = middle;
+    }
+    if (low == certificate->edge_state_count)
+        return NULL;
+    const XrOwnershipEdgeStateRecord *edge = &certificate->edge_states[low];
+    return edge->owner == owner && edge->block == block ? edge : NULL;
+}
+
+static uint8_t ownership_state_for_balance(const XrOwnershipOwnerRecord *owner,
+                                           int32_t balance) {
+    if (balance > 0)
+        return XR_OWN_OWNED_LOCAL;
+    if (owner->initial_state == XR_OWN_BORROWED ||
+        owner->initial_state == XR_OWN_FOREIGN_BORROWED ||
+        owner->initial_state == XR_OWN_IMMORTAL)
+        return owner->initial_state;
+    return XR_OWN_RELEASED;
+}
+
+static int compare_loop_invariant(const void *left, const void *right) {
+    const XrOwnershipLoopInvariantRecord *a =
+        (const XrOwnershipLoopInvariantRecord *) left;
+    const XrOwnershipLoopInvariantRecord *b =
+        (const XrOwnershipLoopInvariantRecord *) right;
+    int order = xr_stable_id_compare(a->id, b->id);
+    return order != 0 ? order : strcmp(a->canonical_key, b->canonical_key);
+}
+
+typedef struct XrOwnershipOwnerFunctionRef {
+    uint32_t function;
+    uint32_t owner;
+} XrOwnershipOwnerFunctionRef;
+
+static int compare_owner_function_ref(const void *left, const void *right) {
+    const XrOwnershipOwnerFunctionRef *a = (const XrOwnershipOwnerFunctionRef *) left;
+    const XrOwnershipOwnerFunctionRef *b = (const XrOwnershipOwnerFunctionRef *) right;
+    if (a->function != b->function)
+        return a->function < b->function ? -1 : 1;
+    return a->owner == b->owner ? 0 : (a->owner < b->owner ? -1 : 1);
+}
+
+static uint32_t owner_function_lower_bound(const XrOwnershipOwnerFunctionRef *owners,
+                                           uint32_t count, uint32_t function) {
+    uint32_t low = 0;
+    uint32_t high = count;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2u;
+        if (owners[middle].function < function)
+            low = middle + 1;
+        else
+            high = middle;
+    }
+    return low;
+}
+
+static bool add_loop_invariant(XrOwnershipBuildContext *ctx, uint32_t owner, uint32_t header,
+                               uint32_t backedge, int32_t balance, uint8_t state) {
+    XrOwnershipCertificate *certificate = ctx->certificate;
+    if (!reserve_array((void **) &certificate->loop_invariants,
+                       &certificate->loop_invariant_capacity,
+                       certificate->loop_invariant_count + 1,
+                       sizeof(*certificate->loop_invariants),
+                       XR_OWNERSHIP_MAX_LOOP_INVARIANTS))
+        return fail(ctx, "XR_EXEC_5003", "ownership loop-invariant budget exhausted");
+    XrOwnershipLoopInvariantRecord *record =
+        &certificate->loop_invariants[certificate->loop_invariant_count];
+    memset(record, 0, sizeof(*record));
+    char owner_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char header_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char backedge_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[192];
+    xr_stable_id_hex(certificate->owners[owner].id, owner_id);
+    xr_stable_id_hex(ctx->plan->blocks[header].id, header_id);
+    xr_stable_id_hex(ctx->plan->blocks[backedge].id, backedge_id);
+    int written = snprintf(key, sizeof(key),
+                           "ownership-loop-v1:owner=%s:header=%s:backedge=%s", owner_id,
+                           header_id, backedge_id);
+    if (written < 0 || (size_t) written >= sizeof(key))
+        return fail(ctx, "XR_EXEC_5003", "ownership loop-invariant identity exceeds schema");
+    record->canonical_key = copy_text(key);
+    XrFingerprint digest;
+    if (!record->canonical_key ||
+        !xr_stable_id_from_key(record->canonical_key, &record->id, &digest)) {
+        xr_free((void *) record->canonical_key);
+        record->canonical_key = NULL;
+        return fail(ctx, "XR_EXEC_5003", "ownership loop-invariant identity allocation failed");
+    }
+    record->owner = owner;
+    record->header = header;
+    record->backedge = backedge;
+    record->balance = balance;
+    record->state = state;
+    certificate->loop_invariant_count++;
+    return true;
+}
+
+static bool build_loop_invariants(XrOwnershipBuildContext *ctx) {
+    XrSemanticGraph graph = {0};
+    if (!xr_semantic_graph_build(ctx->plan, &graph, ctx->error, ctx->error_size))
+        return false;
+    XrOwnershipOwnerFunctionRef *owners = NULL;
+    if (ctx->certificate->owner_count) {
+        owners = (XrOwnershipOwnerFunctionRef *) xr_malloc(
+            (size_t) ctx->certificate->owner_count * sizeof(*owners));
+        if (!owners) {
+            xr_semantic_graph_dispose(&graph);
+            return fail(ctx, "XR_EXEC_5003", "ownership loop-invariant index allocation failed");
+        }
+    }
+    for (uint32_t owner = 0; owner < ctx->certificate->owner_count; owner++) {
+        owners[owner].function = ctx->certificate->owners[owner].function;
+        owners[owner].owner = owner;
+    }
+    if (ctx->certificate->owner_count)
+        qsort(owners, ctx->certificate->owner_count, sizeof(*owners), compare_owner_function_ref);
+    bool valid = true;
+    for (uint32_t backedge = 0; valid && backedge < ctx->plan->block_count; backedge++) {
+        const XrSemanticBlockRecord *block = &ctx->plan->blocks[backedge];
+        uint32_t owner_begin = owner_function_lower_bound(owners, ctx->certificate->owner_count,
+                                                           block->function);
+        for (unsigned successor_index = 0; valid && successor_index < 2; successor_index++) {
+            uint32_t header = block->successors[successor_index];
+            if (header == XR_SEMANTIC_INDEX_NONE ||
+                (successor_index == 1 && header == block->successors[0]) ||
+                !xr_semantic_graph_dominates(&graph, header, backedge))
+                continue;
+            for (uint32_t position = owner_begin;
+                 valid && position < ctx->certificate->owner_count &&
+                 owners[position].function == block->function;
+                 position++) {
+                uint32_t owner = owners[position].owner;
+                const XrOwnershipOwnerRecord *owner_record = &ctx->certificate->owners[owner];
+                const XrOwnershipEdgeStateRecord *edge =
+                    edge_state_for(ctx->certificate, owner, backedge, header);
+                const XrOwnershipEdgeStateRecord *entry =
+                    block_state_for(ctx->certificate, owner, header);
+                if (!edge || !entry) {
+                    valid = fail(ctx, "XR_OWN_3006",
+                                 "natural backedge has no ownership dataflow state");
+                    break;
+                }
+                if ((edge->flags & 1u) != 0 || (entry->flags & 1u) != 0)
+                    continue;
+                if (edge->exit_balance != entry->entry_balance) {
+                    valid = fail(ctx, "XR_OWN_3006",
+                                 "natural backedge does not preserve its ownership fixed point");
+                    break;
+                }
+                uint8_t state = ownership_state_for_balance(owner_record, entry->entry_balance);
+                valid = add_loop_invariant(ctx, owner, header, backedge, entry->entry_balance,
+                                           state);
+            }
+        }
+    }
+    xr_semantic_graph_dispose(&graph);
+    xr_free(owners);
+    if (!valid)
+        return false;
+    if (ctx->certificate->loop_invariant_count)
+        qsort(ctx->certificate->loop_invariants, ctx->certificate->loop_invariant_count,
+              sizeof(*ctx->certificate->loop_invariants), compare_loop_invariant);
+    for (uint32_t i = 1; i < ctx->certificate->loop_invariant_count; i++) {
+        if (xr_stable_id_equal(ctx->certificate->loop_invariants[i - 1].id,
+                               ctx->certificate->loop_invariants[i].id))
+            return fail(ctx, "XR_SEM_0003", "ownership loop-invariant identity is duplicated");
     }
     return true;
 }
@@ -1270,6 +1904,16 @@ bool xr_ownership_certificate_build(XrSemanticPlan *plan, XrOwnershipCertificate
     }
     if (!build_equivalence_classes(&ctx) || !ensure_owners(&ctx))
         goto failure;
+    ctx.loan_status =
+        (uint8_t *) xr_calloc(ctx.certificate->owner_count, sizeof(*ctx.loan_status));
+    ctx.loan_parameter =
+        (int16_t *) xr_malloc((size_t) ctx.certificate->owner_count * sizeof(*ctx.loan_parameter));
+    if (ctx.certificate->owner_count && (!ctx.loan_status || !ctx.loan_parameter)) {
+        fail(&ctx, "XR_EXEC_5003", "ownership loan-source audit allocation failed");
+        goto failure;
+    }
+    for (uint32_t owner = 0; owner < ctx.certificate->owner_count; owner++)
+        ctx.loan_parameter[owner] = XR_OWN_LOAN_STATIC;
     for (uint32_t i = 0; i < plan->operation_count; i++) {
         if (!classify_definition(&ctx, i))
             goto failure;
@@ -1279,11 +1923,14 @@ bool xr_ownership_certificate_build(XrSemanticPlan *plan, XrOwnershipCertificate
             goto failure;
     }
     if (!classify_returns(&ctx) || !classify_stack_extents(&ctx) ||
-        !classify_implicit_exit_dispositions(&ctx) || !build_edge_states(&ctx))
+        !classify_implicit_exit_dispositions(&ctx) || !build_edge_states(&ctx) ||
+        !build_loop_invariants(&ctx))
         goto failure;
     xr_free(ctx.parent);
     xr_free(ctx.rank);
     xr_free(ctx.owner_by_root);
+    xr_free(ctx.loan_status);
+    xr_free(ctx.loan_parameter);
     *out = ctx.certificate;
     return true;
 
@@ -1291,6 +1938,8 @@ failure:
     xr_free(ctx.parent);
     xr_free(ctx.rank);
     xr_free(ctx.owner_by_root);
+    xr_free(ctx.loan_status);
+    xr_free(ctx.loan_parameter);
     xr_ownership_certificate_free(ctx.certificate);
     return false;
 }

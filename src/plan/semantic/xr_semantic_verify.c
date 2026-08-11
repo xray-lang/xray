@@ -358,6 +358,7 @@ static bool verify_entities(const XrSemanticPlan *plan, char *error, size_t erro
 }
 
 static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_size) {
+    uint32_t child_cursor = 0;
     for (uint32_t i = 0; i < plan->type_count; i++) {
         const XrSemanticTypeRecord *type = &plan->types[i];
         if (!verify_id(type->canonical_key, type->id))
@@ -373,7 +374,8 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
              (type->flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0))
             return report(error, error_size, "XR_OWN_3000",
                           "borrow-view type has an invalid ownership class");
-        if (!range_valid(type->child_begin, type->child_count, plan->type_child_count))
+        if (type->child_begin != child_cursor ||
+            !range_valid(type->child_begin, type->child_count, plan->type_child_count))
             return report(error, error_size, "XR_SEM_0012", "type child range is invalid");
         for (uint16_t c = 0; c < type->child_count; c++) {
             if (plan->type_children[type->child_begin + c] >= plan->type_count)
@@ -382,8 +384,11 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
         if (i > 0 && xr_stable_id_compare(plan->types[i - 1].id, type->id) >= 0)
             return report(error, error_size, "XR_SEM_0012",
                           "type table is not in strict stable-identity order");
+        child_cursor += type->child_count;
     }
-    return true;
+    return child_cursor == plan->type_child_count ||
+           report(error, error_size, "XR_SEM_0012",
+                  "type child table is not exactly partitioned");
 }
 
 static bool verify_functions(const XrSemanticPlan *plan, char *error, size_t error_size) {
@@ -766,6 +771,8 @@ static bool build_definition_map(const XrSemanticPlan *plan, uint32_t **out,
 static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *edge_mask,
                                      uint32_t *definitions, uint32_t value_count, char *error,
                                      size_t error_size) {
+    uint32_t operand_cursor = 0;
+    uint32_t metadata_cursor = 0;
     for (uint32_t i = 0; i < plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &plan->operations[i];
         const XrSemanticFunctionRecord *function = operation->function < plan->function_count
@@ -799,7 +806,10 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
             operation->result_alias_operand < -1 ||
             (operation->result_alias_operand >= 0 &&
              (uint16_t) operation->result_alias_operand >= operation->operand_count) ||
-            !range_valid(operation->operand_begin, operation->operand_count, plan->operand_count) ||
+            operation->operand_begin != operand_cursor ||
+            operation->metadata_begin != metadata_cursor ||
+            !range_valid(operation->operand_begin, operation->operand_count,
+                         plan->operand_count) ||
             !range_valid(operation->metadata_begin, operation->metadata_count,
                          plan->metadata_count) ||
             (operation->constant != XR_SEMANTIC_INDEX_NONE &&
@@ -843,8 +853,12 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
             return report(error, error_size, "XR_SEM_0010",
                           "error check is missing its explicit error edge");
         }
+        operand_cursor += operation->operand_count;
+        metadata_cursor += operation->metadata_count;
     }
-    return true;
+    return (operand_cursor == plan->operand_count && metadata_cursor == plan->metadata_count) ||
+           report(error, error_size, "XR_SEM_0015",
+                  "operation side tables are not exactly partitioned");
 }
 
 static bool verify_parameter_and_capture_definitions(const XrSemanticPlan *plan,

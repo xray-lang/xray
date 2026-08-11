@@ -31,6 +31,7 @@ typedef struct XrXsmReader {
     size_t offset;
     bool failed;
     size_t string_bytes;
+    size_t allocation_bytes;
 } XrXsmReader;
 
 static inline bool xr_xsm_writer_reserve(XrXsmWriter *writer, size_t extra) {

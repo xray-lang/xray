@@ -37,6 +37,22 @@ static bool fail(XrOwnershipReplay *replay, const char *code, const char *detail
     return false;
 }
 
+static bool add_i64_checked(int64_t left, int64_t right, int64_t *out) {
+    if ((right > 0 && left > INT64_MAX - right) ||
+        (right < 0 && left < INT64_MIN - right))
+        return false;
+    *out = left + right;
+    return true;
+}
+
+static bool subtract_i64_checked(int64_t left, int64_t right, int64_t *out) {
+    if ((right > 0 && left < INT64_MIN + right) ||
+        (right < 0 && left > INT64_MAX + right))
+        return false;
+    *out = left - right;
+    return true;
+}
+
 static uint32_t find_root(XrOwnershipReplay *replay, uint32_t value) {
     uint32_t root = value;
     while (replay->parent[root] != root)
@@ -168,7 +184,7 @@ static bool state_can_be_used(uint8_t state) {
            state == XR_OWN_FOREIGN_BORROWED || state == XR_OWN_IMMORTAL;
 }
 
-static uint8_t entry_state(const XrOwnershipOwnerRecord *owner, int32_t balance) {
+static uint8_t entry_state(const XrOwnershipOwnerRecord *owner, int64_t balance) {
     if (balance > 0)
         return XR_OWN_OWNED_LOCAL;
     if (owner->initial_state == XR_OWN_BORROWED ||
@@ -178,7 +194,7 @@ static uint8_t entry_state(const XrOwnershipOwnerRecord *owner, int32_t balance)
 }
 
 static bool verify_operand_uses(XrOwnershipReplay *replay, uint32_t owner_index,
-                                const XrSemanticOperationRecord *operation, int32_t balance,
+                                const XrSemanticOperationRecord *operation, int64_t balance,
                                 uint8_t state) {
     for (uint16_t a = 0; a < operation->operand_count; a++) {
         const XrSemanticOperandRecord *operand =
@@ -207,12 +223,13 @@ static bool verify_operand_uses(XrOwnershipReplay *replay, uint32_t owner_index,
                     replay->error, replay->error_size,
                     "XR_OWN_3003: ownership use occurs after move or release "
                     "(func=%s owner=%s initial=%u operand=%u operation=%u opcode=%s "
-                    "block=%u line=%u balance=%d state=%u origin=%u definition=%u "
+                    "block=%u line=%u balance=%lld state=%u origin=%u definition=%u "
                     "definition-opcode=%s definition-line=%u definition-immediate=%lld)",
                     function_name, owner->canonical_key, owner->initial_state, operand->value,
                     (uint32_t) (operation - replay->plan->operations),
                     xi_generated_op_name(operation->opcode), operation->block,
-                    operation->source_line, balance, state, owner->origin_value, definition,
+                    operation->source_line, (long long) balance, state, owner->origin_value,
+                    definition,
                     definition_name, definition_record ? definition_record->source_line : 0,
                     (long long) (definition_record ? definition_record->semantic_immediate : 0));
             }
@@ -236,14 +253,16 @@ static bool verify_phi_edge_uses(XrOwnershipReplay *replay, uint32_t owner_index
         uint32_t predecessor = replay->plan->predecessors[block->predecessor_begin + a];
         const XrOwnershipEdgeStateRecord *edge =
             find_edge_state(replay, owner_index, predecessor, operation->block);
-        if (!edge || (edge->flags & 1u) != 0)
+        if (!edge || edge->flags == XR_OWN_EDGE_OUT_OF_SCOPE)
             return fail(replay, "XR_OWN_3003", "PHI use has no in-scope predecessor state");
-        int32_t balance = edge->exit_balance;
+        int64_t balance = edge->exit_balance;
         for (uint32_t e = 0; e < replay->certificate->event_count; e++) {
             const XrOwnershipEventRecord *event = &replay->certificate->events[e];
             if (event->owner == owner_index && event->block == predecessor &&
                 event->successor == operation->block && event->program_point == XR_OWN_POINT_EDGE)
-                balance -= event->logical_delta;
+                if (!subtract_i64_checked(balance, event->logical_delta, &balance))
+                    return fail(replay, "XR_EXEC_5003",
+                                "PHI ownership balance exceeds replay schema");
         }
         uint8_t state = entry_state(&replay->certificate->owners[owner_index], balance);
         if (!state_can_be_used(state) ||
@@ -256,7 +275,7 @@ static bool verify_phi_edge_uses(XrOwnershipReplay *replay, uint32_t owner_index
 
 static bool apply_events_at_point(XrOwnershipReplay *replay, uint32_t owner_index,
                                   uint32_t operation, uint32_t block, uint8_t program_point,
-                                  int32_t *balance, uint8_t *state) {
+                                  int64_t *balance, uint8_t *state) {
     const XrOwnershipOwnerRecord *owner = &replay->certificate->owners[owner_index];
     for (uint32_t e = 0; e < replay->certificate->event_count; e++) {
         const XrOwnershipEventRecord *event = &replay->certificate->events[e];
@@ -264,7 +283,9 @@ static bool apply_events_at_point(XrOwnershipReplay *replay, uint32_t owner_inde
             (operation != XR_SEMANTIC_INDEX_NONE && event->operation != operation) ||
             event->block != block || event->program_point != program_point)
             continue;
-        *balance += event->logical_delta;
+        if (!add_i64_checked(*balance, event->logical_delta, balance))
+            return fail(replay, "XR_EXEC_5003",
+                        "ordered ownership balance exceeds replay schema");
         if (*balance < 0)
             return fail(replay, "XR_OWN_3003", "ordered ownership balance becomes negative");
         if (event->kind != XR_OWN_EVENT_MOVE || event->logical_delta != 0)
@@ -274,7 +295,7 @@ static bool apply_events_at_point(XrOwnershipReplay *replay, uint32_t owner_inde
 }
 
 static bool verify_control_use(XrOwnershipReplay *replay, uint32_t owner_index,
-                               const XrSemanticBlockRecord *block, int32_t balance, uint8_t state) {
+                               const XrSemanticBlockRecord *block, int64_t balance, uint8_t state) {
     if (block->control_value == XR_SEMANTIC_INDEX_NONE || block->kind == XI_BLOCK_UNREACHABLE ||
         owner_for_value(replay, block->control_value) != owner_index)
         return true;
@@ -284,22 +305,24 @@ static bool verify_control_use(XrOwnershipReplay *replay, uint32_t owner_index,
         if (replay->error && replay->error_size)
             snprintf(replay->error, replay->error_size,
                      "XR_OWN_3003: terminator uses ownership after disposition "
-                     "(owner=%s block=%u balance=%d state=%u)",
+                     "(owner=%s block=%u balance=%lld state=%u)",
                      replay->certificate->owners[owner_index].canonical_key,
-                     (uint32_t) (block - replay->plan->blocks), balance, state);
+                     (uint32_t) (block - replay->plan->blocks), (long long) balance, state);
         return false;
     }
     return true;
 }
 
 static bool verify_edge_exit(XrOwnershipReplay *replay, uint32_t owner_index,
-                             const XrOwnershipEdgeStateRecord *edge, int32_t block_balance) {
-    int32_t balance = block_balance;
+                             const XrOwnershipEdgeStateRecord *edge, int64_t block_balance) {
+    int64_t balance = block_balance;
     for (uint32_t e = 0; e < replay->certificate->event_count; e++) {
         const XrOwnershipEventRecord *event = &replay->certificate->events[e];
         if (event->owner == owner_index && event->block == edge->block &&
             event->successor == edge->successor && event->program_point == XR_OWN_POINT_EDGE)
-            balance += event->logical_delta;
+            if (!add_i64_checked(balance, event->logical_delta, &balance))
+                return fail(replay, "XR_EXEC_5003",
+                            "ownership edge replay balance exceeds schema");
     }
     if (balance != edge->exit_balance)
         return fail(replay, "XR_OWN_3003",
@@ -314,9 +337,9 @@ static bool replay_owner_block(XrOwnershipReplay *replay, uint32_t owner_index,
     const XrOwnershipEdgeStateRecord *entry = find_block_entry(replay, owner_index, block_index);
     if (!entry)
         return fail(replay, "XR_OWN_3002", "owner has no block edge-state record");
-    if ((entry->flags & 1u) != 0)
+    if (entry->flags == XR_OWN_EDGE_OUT_OF_SCOPE)
         return true;
-    int32_t balance = entry->entry_balance;
+    int64_t balance = entry->entry_balance;
     uint8_t state = entry_state(owner, balance);
     for (uint32_t i = 0; i < block->operation_count; i++) {
         uint32_t operation_index = block->operation_begin + i;
@@ -348,6 +371,18 @@ static bool replay_ordered_liveness(XrOwnershipReplay *replay) {
         if (function >= replay->plan->function_count)
             return fail(replay, "XR_OWN_3002", "owner function is outside the plan");
         const XrSemanticFunctionRecord *record = &replay->plan->functions[function];
+        for (uint32_t e = 0; e < replay->certificate->edge_state_count; e++) {
+            const XrOwnershipEdgeStateRecord *edge = &replay->certificate->edge_states[e];
+            if (edge->owner != owner || edge->flags != XR_OWN_EDGE_OWNER_FRONTIER)
+                continue;
+            const XrOwnershipEdgeStateRecord *entry =
+                find_block_entry(replay, owner, edge->successor);
+            if (!verify_edge_exit(replay, owner, edge, 0) || !entry ||
+                entry->flags == XR_OWN_EDGE_OUT_OF_SCOPE ||
+                entry->entry_balance != edge->exit_balance)
+                return fail(replay, "XR_OWN_3003",
+                            "PHI owner frontier disagrees with its destination entry");
+        }
         for (uint32_t local = 0; local < record->block_count; local++) {
             uint32_t block = record->block_begin + local;
             if (!replay_owner_block(replay, owner, block))

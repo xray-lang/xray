@@ -36,6 +36,7 @@ static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->ownership->owner_count);
     xr_xsm_put_u32(writer, plan->ownership->event_count);
     xr_xsm_put_u32(writer, plan->ownership->edge_state_count);
+    xr_xsm_put_u32(writer, plan->ownership->loop_invariant_count);
 }
 
 static void encode_entities(XrXsmWriter *writer, const XrSemanticPlan *plan) {
@@ -264,6 +265,19 @@ static void encode_ownership(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u8(writer, record->entry_state);
         xr_xsm_put_u8(writer, record->exit_state);
         xr_xsm_put_u16(writer, record->flags);
+    }
+    for (uint32_t i = 0; i < certificate->loop_invariant_count; i++) {
+        const XrOwnershipLoopInvariantRecord *record = &certificate->loop_invariants[i];
+        xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
+        xr_xsm_put_string(writer, record->canonical_key);
+        xr_xsm_put_u32(writer, record->owner);
+        xr_xsm_put_u32(writer, record->header);
+        xr_xsm_put_u32(writer, record->backedge);
+        xr_xsm_put_u32(writer, (uint32_t) record->balance);
+        xr_xsm_put_u8(writer, record->state);
+        xr_xsm_put_u8(writer, 0);
+        xr_xsm_put_u8(writer, 0);
+        xr_xsm_put_u8(writer, 0);
     }
 }
 

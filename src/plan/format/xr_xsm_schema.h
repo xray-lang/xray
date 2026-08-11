@@ -22,6 +22,7 @@
 #define XR_XSM_MAX_TABLE_STORAGE ((size_t) 192u * 1024u * 1024u)
 #define XR_XSM_MAX_STRING_SIZE ((size_t) 1024u * 1024u)
 #define XR_XSM_MAX_STRING_STORAGE ((size_t) 64u * 1024u * 1024u)
+#define XR_XSM_MAX_DECODE_STORAGE ((size_t) 256u * 1024u * 1024u)
 
 XR_FUNC bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, char *error,
                            size_t error_size);

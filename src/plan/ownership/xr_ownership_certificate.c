@@ -18,9 +18,12 @@ void xr_ownership_certificate_free(XrOwnershipCertificate *certificate) {
         xr_free((void *) certificate->owners[i].canonical_key);
     for (uint32_t i = 0; i < certificate->event_count; i++)
         xr_free((void *) certificate->events[i].canonical_key);
+    for (uint32_t i = 0; i < certificate->loop_invariant_count; i++)
+        xr_free((void *) certificate->loop_invariants[i].canonical_key);
     xr_free(certificate->owners);
     xr_free(certificate->events);
     xr_free(certificate->edge_states);
+    xr_free(certificate->loop_invariants);
     xr_free(certificate);
 }
 
@@ -41,6 +44,11 @@ size_t xr_ownership_certificate_edge_state_count(const XrOwnershipCertificate *c
     return certificate ? certificate->edge_state_count : 0;
 }
 
+size_t xr_ownership_certificate_loop_invariant_count(
+    const XrOwnershipCertificate *certificate) {
+    return certificate ? certificate->loop_invariant_count : 0;
+}
+
 const XrOwnershipOwnerRecord *
 xr_ownership_certificate_owner(const XrOwnershipCertificate *certificate, uint32_t index) {
     return certificate && index < certificate->owner_count ? &certificate->owners[index] : NULL;
@@ -55,4 +63,12 @@ const XrOwnershipEdgeStateRecord *
 xr_ownership_certificate_edge_state(const XrOwnershipCertificate *certificate, uint32_t index) {
     return certificate && index < certificate->edge_state_count ? &certificate->edge_states[index]
                                                                 : NULL;
+}
+
+const XrOwnershipLoopInvariantRecord *
+xr_ownership_certificate_loop_invariant(const XrOwnershipCertificate *certificate,
+                                        uint32_t index) {
+    return certificate && index < certificate->loop_invariant_count
+               ? &certificate->loop_invariants[index]
+               : NULL;
 }

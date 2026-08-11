@@ -44,7 +44,8 @@ bool xr_semantic_plan_verify_identity_set(const XrSemanticPlan *plan, char *erro
         (size_t) plan->entity_count + plan->type_count + plan->function_count + plan->block_count +
         plan->parameter_count + plan->capture_count + plan->operation_count * 2u +
         plan->edge_count +
-        (plan->ownership ? (size_t) plan->ownership->owner_count + plan->ownership->event_count
+        (plan->ownership ? (size_t) plan->ownership->owner_count + plan->ownership->event_count +
+                               plan->ownership->loop_invariant_count
                          : 0u);
     XrSemanticIdKeyRef *refs = (XrSemanticIdKeyRef *) xr_calloc(count, sizeof(*refs));
     if (!refs) {
@@ -82,6 +83,9 @@ bool xr_semantic_plan_verify_identity_set(const XrSemanticPlan *plan, char *erro
             XR_ADD_ID_KEY(plan->ownership->owners[i].id, plan->ownership->owners[i].canonical_key);
         for (uint32_t i = 0; i < plan->ownership->event_count; i++)
             XR_ADD_ID_KEY(plan->ownership->events[i].id, plan->ownership->events[i].canonical_key);
+        for (uint32_t i = 0; i < plan->ownership->loop_invariant_count; i++)
+            XR_ADD_ID_KEY(plan->ownership->loop_invariants[i].id,
+                          plan->ownership->loop_invariants[i].canonical_key);
     }
 #undef XR_ADD_ID_KEY
     qsort(refs, n, sizeof(*refs), compare_id_key_ref);
@@ -117,11 +121,13 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 
 static void hash_string(XrSHA256Context *ctx, const char *text) {
     const char *value = text ? text : "";
-    hash_bytes(ctx, value, strlen(value));
+    size_t length = strlen(value);
+    hash_u64(ctx, (uint64_t) length);
+    hash_bytes(ctx, value, length);
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v7\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v8\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -304,6 +310,7 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, plan->ownership->owner_count);
         hash_u64(&ctx, plan->ownership->event_count);
         hash_u64(&ctx, plan->ownership->edge_state_count);
+        hash_u64(&ctx, plan->ownership->loop_invariant_count);
         for (uint32_t i = 0; i < plan->ownership->owner_count; i++) {
             const XrOwnershipOwnerRecord *owner = &plan->ownership->owners[i];
             hash_bytes(&ctx, owner->id.bytes, sizeof(owner->id.bytes));
@@ -338,6 +345,17 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
             hash_u64(&ctx, edge->entry_state);
             hash_u64(&ctx, edge->exit_state);
             hash_u64(&ctx, edge->flags);
+        }
+        for (uint32_t i = 0; i < plan->ownership->loop_invariant_count; i++) {
+            const XrOwnershipLoopInvariantRecord *invariant =
+                &plan->ownership->loop_invariants[i];
+            hash_bytes(&ctx, invariant->id.bytes, sizeof(invariant->id.bytes));
+            hash_string(&ctx, invariant->canonical_key);
+            hash_u64(&ctx, invariant->owner);
+            hash_u64(&ctx, invariant->header);
+            hash_u64(&ctx, invariant->backedge);
+            hash_u64(&ctx, (uint32_t) invariant->balance);
+            hash_u64(&ctx, invariant->state);
         }
     } else {
         hash_u64(&ctx, 0);
@@ -700,8 +718,10 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
     }
     if (plan->ownership) {
         const XrOwnershipCertificate *certificate = plan->ownership;
-        fprintf(out, "  ownership owners=%u events=%u edge-states=%u\n", certificate->owner_count,
-                certificate->event_count, certificate->edge_state_count);
+        fprintf(out,
+                "  ownership owners=%u events=%u edge-states=%u loop-invariants=%u\n",
+                certificate->owner_count, certificate->event_count, certificate->edge_state_count,
+                certificate->loop_invariant_count);
         for (uint32_t i = 0; i < certificate->owner_count; i++) {
             const XrOwnershipOwnerRecord *record = &certificate->owners[i];
             fprintf(out, "  owner[%u] id=", i);
@@ -732,6 +752,15 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
                     "state=%u:%u flags=%u\n",
                     i, record->owner, record->block, record->successor, record->entry_balance,
                     record->exit_balance, record->entry_state, record->exit_state, record->flags);
+        }
+        for (uint32_t i = 0; i < certificate->loop_invariant_count; i++) {
+            const XrOwnershipLoopInvariantRecord *record = &certificate->loop_invariants[i];
+            fprintf(out, "  owner-loop[%u] id=", i);
+            dump_id(out, record->id);
+            fputs(" key=", out);
+            dump_text(out, record->canonical_key);
+            fprintf(out, " owner=%u header=%u backedge=%u balance=%d state=%u\n", record->owner,
+                    record->header, record->backedge, record->balance, record->state);
         }
     }
     return !ferror(out);

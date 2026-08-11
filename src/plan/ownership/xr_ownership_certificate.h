@@ -94,17 +94,37 @@ typedef struct XrOwnershipEdgeStateRecord {
     uint16_t flags;
 } XrOwnershipEdgeStateRecord;
 
+enum {
+    XR_OWN_EDGE_OUT_OF_SCOPE = UINT16_C(1),
+    XR_OWN_EDGE_OWNER_FRONTIER = UINT16_C(2),
+};
+
+typedef struct XrOwnershipLoopInvariantRecord {
+    XrStableId id;
+    const char *canonical_key;
+    uint32_t owner;
+    uint32_t header;
+    uint32_t backedge;
+    int32_t balance;
+    uint8_t state;
+    uint8_t reserved[3];
+} XrOwnershipLoopInvariantRecord;
+
 XR_FUNC void xr_ownership_certificate_free(XrOwnershipCertificate *certificate);
 XR_FUNC XrFingerprint
 xr_ownership_certificate_fingerprint(const XrOwnershipCertificate *certificate);
 XR_FUNC size_t xr_ownership_certificate_owner_count(const XrOwnershipCertificate *certificate);
 XR_FUNC size_t xr_ownership_certificate_event_count(const XrOwnershipCertificate *certificate);
 XR_FUNC size_t xr_ownership_certificate_edge_state_count(const XrOwnershipCertificate *certificate);
+XR_FUNC size_t
+xr_ownership_certificate_loop_invariant_count(const XrOwnershipCertificate *certificate);
 XR_FUNC const XrOwnershipOwnerRecord *
 xr_ownership_certificate_owner(const XrOwnershipCertificate *certificate, uint32_t index);
 XR_FUNC const XrOwnershipEventRecord *
 xr_ownership_certificate_event(const XrOwnershipCertificate *certificate, uint32_t index);
 XR_FUNC const XrOwnershipEdgeStateRecord *
 xr_ownership_certificate_edge_state(const XrOwnershipCertificate *certificate, uint32_t index);
+XR_FUNC const XrOwnershipLoopInvariantRecord *
+xr_ownership_certificate_loop_invariant(const XrOwnershipCertificate *certificate, uint32_t index);
 
 #endif  // XR_OWNERSHIP_CERTIFICATE_H
