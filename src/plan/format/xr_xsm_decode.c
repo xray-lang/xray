@@ -29,6 +29,7 @@ typedef struct XrXsmCounts {
     uint32_t constants;
     uint32_t type_children;
     uint32_t parameters;
+    uint32_t captures;
     uint32_t predecessors;
     uint32_t operands;
     uint32_t metadata;
@@ -110,7 +111,8 @@ static bool counts_fit_storage_budget(XrXsmCounts count) {
     XR_COUNT_STORAGE(edges, XrSemanticEdgeRecord);
     XR_COUNT_STORAGE(constants, XrSemanticConstantRecord);
     XR_COUNT_STORAGE(type_children, uint32_t);
-    XR_COUNT_STORAGE(parameters, uint32_t);
+    XR_COUNT_STORAGE(parameters, XrSemanticParameterRecord);
+    XR_COUNT_STORAGE(captures, XrSemanticCaptureRecord);
     XR_COUNT_STORAGE(predecessors, uint32_t);
     XR_COUNT_STORAGE(operands, XrSemanticOperandRecord);
     XR_COUNT_STORAGE(metadata, const char *);
@@ -140,7 +142,8 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     XR_ALLOC_TABLE(edges, count.edges, XrSemanticEdgeRecord);
     XR_ALLOC_TABLE(constants, count.constants, XrSemanticConstantRecord);
     XR_ALLOC_TABLE(type_children, count.type_children, uint32_t);
-    XR_ALLOC_TABLE(parameters, count.parameters, uint32_t);
+    XR_ALLOC_TABLE(parameters, count.parameters, XrSemanticParameterRecord);
+    XR_ALLOC_TABLE(captures, count.captures, XrSemanticCaptureRecord);
     XR_ALLOC_TABLE(predecessors, count.predecessors, uint32_t);
     XR_ALLOC_TABLE(operands, count.operands, XrSemanticOperandRecord);
     XR_ALLOC_TABLE(metadata, count.metadata, const char *);
@@ -165,6 +168,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     plan->constant_count = plan->constant_capacity = count.constants;
     plan->type_child_count = plan->type_child_capacity = count.type_children;
     plan->parameter_count = plan->parameter_capacity = count.parameters;
+    plan->capture_count = plan->capture_capacity = count.captures;
     plan->predecessor_count = plan->predecessor_capacity = count.predecessors;
     plan->operand_count = plan->operand_capacity = count.operands;
     plan->metadata_count = plan->metadata_capacity = count.metadata;
@@ -183,6 +187,7 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->constants = xr_xsm_take_u32(reader);
     count->type_children = xr_xsm_take_u32(reader);
     count->parameters = xr_xsm_take_u32(reader);
+    count->captures = xr_xsm_take_u32(reader);
     count->predecessors = xr_xsm_take_u32(reader);
     count->operands = xr_xsm_take_u32(reader);
     count->metadata = xr_xsm_take_u32(reader);
@@ -193,9 +198,10 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
            count->blocks <= 2000000u && count->operations <= 10000000u &&
            count->edges <= 40000000u && count->constants <= 10000000u &&
            count->type_children <= 8000000u && count->parameters <= 25600000u &&
-           count->predecessors <= 16000000u && count->operands <= 40000000u &&
-           count->metadata <= 80000000u && count->owners <= 2000000u &&
-           count->events <= 20000000u && count->edge_states <= 40000000u;
+           count->captures <= 6400000u && count->predecessors <= 16000000u &&
+           count->operands <= 40000000u && count->metadata <= 80000000u &&
+           count->owners <= 2000000u && count->events <= 20000000u &&
+           count->edge_states <= 40000000u;
 }
 
 static void decode_types(XrXsmReader *reader, XrSemanticPlan *plan) {
@@ -220,9 +226,13 @@ static void decode_functions(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->canonical_key = take_plan_string(reader, plan, false);
         record->name = take_plan_string(reader, plan, false);
         record->return_type = xr_xsm_take_u32(reader);
+        record->parent = xr_xsm_take_u32(reader);
         record->parameter_begin = xr_xsm_take_u32(reader);
         record->parameter_count = xr_xsm_take_u16(reader);
         record->child_count = xr_xsm_take_u16(reader);
+        record->capture_begin = xr_xsm_take_u32(reader);
+        record->capture_count = xr_xsm_take_u16(reader);
+        record->reserved = xr_xsm_take_u16(reader);
         record->block_begin = xr_xsm_take_u32(reader);
         record->block_count = xr_xsm_take_u32(reader);
         record->value_begin = xr_xsm_take_u32(reader);
@@ -233,8 +243,40 @@ static void decode_functions(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->return_provenance = xr_xsm_take_u8(reader);
         record->flags = xr_xsm_take_u8(reader);
     }
-    for (uint32_t i = 0; i < plan->parameter_count; i++)
-        plan->parameters[i] = xr_xsm_take_u32(reader);
+    for (uint32_t i = 0; i < plan->parameter_count; i++) {
+        XrSemanticParameterRecord *record = &plan->parameters[i];
+        xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
+        record->canonical_key = take_plan_string(reader, plan, false);
+        record->function = xr_xsm_take_u32(reader);
+        record->type = xr_xsm_take_u32(reader);
+        record->value = xr_xsm_take_u32(reader);
+        record->ordinal = xr_xsm_take_u16(reader);
+        record->mode = xr_xsm_take_u8(reader);
+        record->ownership = xr_xsm_take_u8(reader);
+        record->transfer_mode = xr_xsm_take_u8(reader);
+        record->flags = xr_xsm_take_u8(reader);
+        record->reserved = xr_xsm_take_u16(reader);
+    }
+    for (uint32_t i = 0; i < plan->capture_count; i++) {
+        XrSemanticCaptureRecord *record = &plan->captures[i];
+        xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
+        record->canonical_key = take_plan_string(reader, plan, false);
+        record->name = take_plan_string(reader, plan, false);
+        record->function = xr_xsm_take_u32(reader);
+        record->source_function = xr_xsm_take_u32(reader);
+        record->source_value = xr_xsm_take_u32(reader);
+        record->source_capture = xr_xsm_take_u32(reader);
+        record->type = xr_xsm_take_u32(reader);
+        record->source_type = xr_xsm_take_u32(reader);
+        record->source_index = xr_xsm_take_u32(reader);
+        record->ordinal = xr_xsm_take_u16(reader);
+        record->source = xr_xsm_take_u8(reader);
+        record->kind = xr_xsm_take_u8(reader);
+        record->storage_domain = xr_xsm_take_u8(reader);
+        record->value_capability = xr_xsm_take_u8(reader);
+        record->flags = xr_xsm_take_u8(reader);
+        record->reserved[0] = xr_xsm_take_u8(reader);
+    }
 }
 
 static void decode_blocks(XrXsmReader *reader, XrSemanticPlan *plan) {

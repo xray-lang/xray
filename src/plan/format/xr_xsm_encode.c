@@ -28,6 +28,7 @@ static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->constant_count);
     xr_xsm_put_u32(writer, plan->type_child_count);
     xr_xsm_put_u32(writer, plan->parameter_count);
+    xr_xsm_put_u32(writer, plan->capture_count);
     xr_xsm_put_u32(writer, plan->predecessor_count);
     xr_xsm_put_u32(writer, plan->operand_count);
     xr_xsm_put_u32(writer, plan->metadata_count);
@@ -58,9 +59,13 @@ static void encode_functions(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_string(writer, record->canonical_key);
         xr_xsm_put_string(writer, record->name);
         xr_xsm_put_u32(writer, record->return_type);
+        xr_xsm_put_u32(writer, record->parent);
         xr_xsm_put_u32(writer, record->parameter_begin);
         xr_xsm_put_u16(writer, record->parameter_count);
         xr_xsm_put_u16(writer, record->child_count);
+        xr_xsm_put_u32(writer, record->capture_begin);
+        xr_xsm_put_u16(writer, record->capture_count);
+        xr_xsm_put_u16(writer, 0);
         xr_xsm_put_u32(writer, record->block_begin);
         xr_xsm_put_u32(writer, record->block_count);
         xr_xsm_put_u32(writer, record->value_begin);
@@ -71,8 +76,40 @@ static void encode_functions(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u8(writer, record->return_provenance);
         xr_xsm_put_u8(writer, record->flags);
     }
-    for (uint32_t i = 0; i < plan->parameter_count; i++)
-        xr_xsm_put_u32(writer, plan->parameters[i]);
+    for (uint32_t i = 0; i < plan->parameter_count; i++) {
+        const XrSemanticParameterRecord *record = &plan->parameters[i];
+        xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
+        xr_xsm_put_string(writer, record->canonical_key);
+        xr_xsm_put_u32(writer, record->function);
+        xr_xsm_put_u32(writer, record->type);
+        xr_xsm_put_u32(writer, record->value);
+        xr_xsm_put_u16(writer, record->ordinal);
+        xr_xsm_put_u8(writer, record->mode);
+        xr_xsm_put_u8(writer, record->ownership);
+        xr_xsm_put_u8(writer, record->transfer_mode);
+        xr_xsm_put_u8(writer, record->flags);
+        xr_xsm_put_u16(writer, 0);
+    }
+    for (uint32_t i = 0; i < plan->capture_count; i++) {
+        const XrSemanticCaptureRecord *record = &plan->captures[i];
+        xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
+        xr_xsm_put_string(writer, record->canonical_key);
+        xr_xsm_put_string(writer, record->name);
+        xr_xsm_put_u32(writer, record->function);
+        xr_xsm_put_u32(writer, record->source_function);
+        xr_xsm_put_u32(writer, record->source_value);
+        xr_xsm_put_u32(writer, record->source_capture);
+        xr_xsm_put_u32(writer, record->type);
+        xr_xsm_put_u32(writer, record->source_type);
+        xr_xsm_put_u32(writer, record->source_index);
+        xr_xsm_put_u16(writer, record->ordinal);
+        xr_xsm_put_u8(writer, record->source);
+        xr_xsm_put_u8(writer, record->kind);
+        xr_xsm_put_u8(writer, record->storage_domain);
+        xr_xsm_put_u8(writer, record->value_capability);
+        xr_xsm_put_u8(writer, record->flags);
+        xr_xsm_put_u8(writer, 0);
+    }
 }
 
 static void encode_blocks(XrXsmWriter *writer, const XrSemanticPlan *plan) {

@@ -9,6 +9,10 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
+Function declarations publish their immutable binding capability and lexical
+storage domain with the rest of analyzer ownership evidence. Closure lowering
+may copy those facts into SemanticPlan capture records but may not infer them
+from a function value or declaration name.
 
 1. Every function-like entity publishes one canonical `XaEffectSummary`
    product. Its source-semantic dimensions are typed errors, semantic
@@ -153,10 +157,10 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b5447f9c3826852dea8fd79
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 19585145d88b00d1c1e4fad9fe23ac841e75c941eeaf7c18be3779befc872367
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c dc666a71819aa81f3573754e55626d8bec56766e16eed6191cbcfa293914b723
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 47c711827b9cb65225516cb2c772b0338f20f690b6ff92b0edf531505faabe82
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 8ec71a54f4f166a7140b798e823116ee869888d7b8736d01fd94a39ae4c7e05c
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 266c952fd177c41a2b288a44f3b9b699e3eb5821bb9cc3359a5638f1aeb99cd3
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c d1c602049d8f71ea6aa61d676c959975658ff2798d51afca27b9fd11854cfe0e
 anchor-sha256: src/runtime/value/xtype.h e0f9c44c615d8a91f501d3952b1804c793abe68e3eba39744c9a000ae00f10cf
-anchor-sha256: src/ir/xi.h d7e798b84ba7816efaeed184dbd5fb53af502f87e51e2beca946a8fe1a8f0cec
+anchor-sha256: src/ir/xi.h de4270cf805e9d953fa268779ed84d71e064f5f1c680333198461319c9e9ed1b
 anchor-sha256: src/ir/xi_lower.c cc8f7e74a0e86c576f4797f5757a55281c3e772134e301214760b08f768181e5
 anchor-sha256: src/app/cli/xcmd_verify.c ca122153d89cbc4fa2b2fcffe08604c109729941a5a9b34ff0d72b1d0226e8a8
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18

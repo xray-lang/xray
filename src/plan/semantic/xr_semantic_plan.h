@@ -73,6 +73,39 @@ typedef enum XrSemanticTypeFlag {
     XR_SEM_TYPE_OWNERSHIP_ROOT = 1u << 6,
 } XrSemanticTypeFlag;
 
+typedef enum XrSemanticParameterFlag {
+    XR_SEM_PARAMETER_REQUIRED = 1u << 0,
+    XR_SEM_PARAMETER_VARIADIC = 1u << 1,
+    XR_SEM_PARAMETER_RECEIVER_BORROWED = 1u << 2,
+    XR_SEM_PARAMETER_READ_PLACE = 1u << 3,
+} XrSemanticParameterFlag;
+
+typedef enum XrSemanticCaptureSource {
+    XR_SEM_CAPTURE_LOCAL_VALUE = 0,
+    XR_SEM_CAPTURE_PARENT_CAPTURE,
+} XrSemanticCaptureSource;
+
+typedef enum XrSemanticCaptureKind {
+    XR_SEM_CAPTURE_BY_COPY = 0,
+    XR_SEM_CAPTURE_BY_IMM_REF,
+    XR_SEM_CAPTURE_BY_MUT_CELL,
+    XR_SEM_CAPTURE_MODULE_LIVE,
+    XR_SEM_CAPTURE_SHARED,
+} XrSemanticCaptureKind;
+
+typedef enum XrSemanticCaptureFlag {
+    XR_SEM_CAPTURE_NEEDS_CELL = 1u << 0,
+    XR_SEM_CAPTURE_MUTABLE = 1u << 1,
+    XR_SEM_CAPTURE_REASSIGNED = 1u << 2,
+} XrSemanticCaptureFlag;
+
+typedef enum XrSemanticValueCapability {
+    XR_SEM_VALUE_MUTABLE = 0,
+    XR_SEM_VALUE_CONST,
+    XR_SEM_VALUE_SYNC_INTERIOR_MUTABLE,
+    XR_SEM_VALUE_CAPABILITY_UNKNOWN,
+} XrSemanticValueCapability;
+
 typedef enum XrSemanticEdgeKind {
     XR_SEM_EDGE_NORMAL = 0,
     XR_SEM_EDGE_ERROR,
@@ -101,9 +134,13 @@ typedef struct XrSemanticFunctionRecord {
     const char *canonical_key;
     const char *name;
     uint32_t return_type;
+    uint32_t parent;
     uint32_t parameter_begin;
     uint16_t parameter_count;
     uint16_t child_count;
+    uint32_t capture_begin;
+    uint16_t capture_count;
+    uint16_t reserved;
     uint32_t block_begin;
     uint32_t block_count;
     uint32_t value_begin;
@@ -114,6 +151,40 @@ typedef struct XrSemanticFunctionRecord {
     uint8_t return_provenance;
     uint8_t flags;
 } XrSemanticFunctionRecord;
+
+typedef struct XrSemanticParameterRecord {
+    XrStableId id;
+    const char *canonical_key;
+    uint32_t function;
+    uint32_t type;
+    uint32_t value;
+    uint16_t ordinal;
+    uint8_t mode;
+    uint8_t ownership;
+    uint8_t transfer_mode;
+    uint8_t flags;
+    uint16_t reserved;
+} XrSemanticParameterRecord;
+
+typedef struct XrSemanticCaptureRecord {
+    XrStableId id;
+    const char *canonical_key;
+    const char *name;
+    uint32_t function;
+    uint32_t source_function;
+    uint32_t source_value;
+    uint32_t source_capture;
+    uint32_t type;
+    uint32_t source_type;
+    uint32_t source_index;
+    uint16_t ordinal;
+    uint8_t source;
+    uint8_t kind;
+    uint8_t storage_domain;
+    uint8_t value_capability;
+    uint8_t flags;
+    uint8_t reserved[1];
+} XrSemanticCaptureRecord;
 
 typedef struct XrSemanticBlockRecord {
     XrStableId id;
@@ -207,6 +278,8 @@ XR_FUNC XrFingerprint xr_semantic_plan_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC XrFingerprint xr_semantic_plan_operation_registry_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_type_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_function_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_parameter_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_capture_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_block_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_operation_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_edge_count(const XrSemanticPlan *plan);
@@ -215,6 +288,10 @@ XR_FUNC const XrSemanticTypeRecord *xr_semantic_plan_type(const XrSemanticPlan *
                                                           uint32_t index);
 XR_FUNC const XrSemanticFunctionRecord *xr_semantic_plan_function(const XrSemanticPlan *plan,
                                                                   uint32_t index);
+XR_FUNC const XrSemanticParameterRecord *xr_semantic_plan_parameter(const XrSemanticPlan *plan,
+                                                                    uint32_t index);
+XR_FUNC const XrSemanticCaptureRecord *xr_semantic_plan_capture(const XrSemanticPlan *plan,
+                                                                uint32_t index);
 XR_FUNC const XrSemanticBlockRecord *xr_semantic_plan_block(const XrSemanticPlan *plan,
                                                             uint32_t index);
 XR_FUNC const XrSemanticOperationRecord *xr_semantic_plan_operation(const XrSemanticPlan *plan,
@@ -224,7 +301,6 @@ XR_FUNC const XrSemanticEdgeRecord *xr_semantic_plan_edge(const XrSemanticPlan *
 XR_FUNC const XrSemanticConstantRecord *xr_semantic_plan_constant(const XrSemanticPlan *plan,
                                                                   uint32_t index);
 XR_FUNC const uint32_t *xr_semantic_plan_type_children(const XrSemanticPlan *plan, uint32_t *count);
-XR_FUNC const uint32_t *xr_semantic_plan_parameters(const XrSemanticPlan *plan, uint32_t *count);
 XR_FUNC const uint32_t *xr_semantic_plan_predecessors(const XrSemanticPlan *plan, uint32_t *count);
 XR_FUNC const XrSemanticOperandRecord *xr_semantic_plan_operands(const XrSemanticPlan *plan,
                                                                  uint32_t *count);

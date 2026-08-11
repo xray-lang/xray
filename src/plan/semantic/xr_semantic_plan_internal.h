@@ -48,9 +48,12 @@ struct XrSemanticPlan {
     uint32_t *type_children;
     uint32_t type_child_count;
     uint32_t type_child_capacity;
-    uint32_t *parameters;
+    XrSemanticParameterRecord *parameters;
     uint32_t parameter_count;
     uint32_t parameter_capacity;
+    XrSemanticCaptureRecord *captures;
+    uint32_t capture_count;
+    uint32_t capture_capacity;
     uint32_t *predecessors;
     uint32_t predecessor_count;
     uint32_t predecessor_capacity;

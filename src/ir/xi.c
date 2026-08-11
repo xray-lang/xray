@@ -215,6 +215,7 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
     f->return_type = return_type;
     f->view_return_param = -1;
     f->arc_return_ownership.param_index = -1;
+    f->semantic_plan_function_index = XR_SEMANTIC_INDEX_NONE;
     f->stage = XI_STAGE_RAW;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
     /* Start cfg_version at 1 so the calloc-zeroed rpo/dom versions
@@ -259,6 +260,7 @@ void xi_func_free(XiFunc *f) {
 
     xr_semantic_plan_free(f->semantic_plan);
     f->semantic_plan = NULL;
+    f->semantic_plan_function_index = XR_SEMANTIC_INDEX_NONE;
 
     /* Free nested children recursively */
     for (uint16_t i = 0; i < f->nchildren; i++) {

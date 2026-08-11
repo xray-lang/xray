@@ -38,6 +38,7 @@
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_ops_gen.h"
 #include "../ir/xi_opt.h"
+#include "../plan/semantic/xr_semantic_plan.h"
 #include "../ir/xi_own.h"
 #include "../ir/xi_escape.h"
 #include "../ir/xi_range.h"
@@ -11296,6 +11297,15 @@ static bool hosted_vm_param_is_borrowed(const XiFunc *f, uint16_t index) {
            f->arc_borrow_sig->param_own[index] == XI_OWN_BORROWED;
 }
 
+static bool hosted_vm_return_is_borrowed_reference(const XiFunc *f) {
+    if (!f || !xi_own_type_is_rc(f->return_type) || !f->semantic_plan)
+        return false;
+    const XrSemanticFunctionRecord *contract =
+        xr_semantic_plan_function(f->semantic_plan, f->semantic_plan_function_index);
+    return contract && (contract->return_provenance == XR_SEM_RETURN_BORROWED_PARAM ||
+                        contract->return_provenance == XR_SEM_RETURN_BORROWED_STATIC);
+}
+
 static bool hosted_vm_string_param_needs_owned_copy(XiCgenCtx *ctx, const XiFunc *f, uint16_t index,
                                                     bool coroutine_export) {
     return coroutine_export || !cg_direct_ref_param_noescape(ctx, f, index, 0);
@@ -11796,6 +11806,8 @@ static void emit_hosted_vm_export_stub_definition(XiCgenCtx *ctx, FILE *out, con
         fprintf(out, ";\n");
         if (needs_runtime_context)
             emit_hosted_vm_runtime_scope_leave(out);
+        if (hosted_vm_return_is_borrowed_reference(f))
+            fprintf(out, "    if (!XR_IS_NULL(_hosted_result)) xrt_retain(_hosted_result);\n");
         emit_hosted_vm_argument_cleanup(ctx, out, f, false, true);
         if (may_error)
             emit_hosted_vm_pending_error_bridge(out);

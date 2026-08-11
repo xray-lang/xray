@@ -65,6 +65,11 @@ length, readonly)` from the host operation table and never reinterpret a VM
 container header. A mutable `ref` parameter rejects readonly provenance before
 entry; this explicit ABI revision changes no Xray value tag or native Slice
 layout.
+Each Xi function now carries its exact immutable SemanticPlan function index.
+Hosted adapters use that record to promote a borrowed reference result before
+releasing adapter-owned arguments. The index is compiler-internal and the
+balanced retain changes no public value representation, calling convention,
+parameter list, or native return ABI.
 Task 260 carries recursive typed-Json schemas across VM bytecode and generated
 C. Decoding a derived value struct writes its existing native aggregate layout;
 heap materialization uses the registered type destructor and storage promoter.
@@ -256,7 +261,7 @@ anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 11e99944b4cf4a3cddad28
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c c8045438d6550b85d724b59c92cad150b1130a3bcb821088ac8ef6ce470d52d2
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c b4201c02fc214411accff3be9a6f92b394c9116f86b79fc2b41a5e576a4a7d65
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 3c98ed54b97f8d42835f155f9189177a2df4f21ebc72b990f764b275ad55e2a2
-anchor-sha256: src/aot/xi_cgen.c 0ff582ac33b891f07f64e3f5c71e1f21af77a6a2c296e28190562d6a53c3443d
+anchor-sha256: src/aot/xi_cgen.c 4af7c5edc2bffbdb26bfd5b589e10310506f769ec7f3fa3142dee73dfc251138
 anchor-sha256: src/aot/xrt_coll.h 203ac6f1a46b9c96a6d1f942e7aaa6a1cbf16c43e5f6ff7d1c7f39e4bbb3b6a5
 anchor-sha256: src/aot/xrt_core_freestanding.h cb4d3bae6aaa27bf63a7a33c58cadabf19043691bc6f43f6573b1d89461bf796
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
@@ -264,7 +269,7 @@ anchor-sha256: include/xray_hosted_fragment_abi.h bcf50466f8320c265a49c6776f6699
 anchor-sha256: src/app/cli/xcmd_build.c 3d2c8d70f9858e26ce1cbdc9d40451cb052ab2628417e6a556e00cfa2ed886c9
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 4e59251373523665674da4c863fac624fadef9cf077ebf8b6e9301768573490d
-anchor-sha256: src/ir/xi.h d7e798b84ba7816efaeed184dbd5fb53af502f87e51e2beca946a8fe1a8f0cec
+anchor-sha256: src/ir/xi.h de4270cf805e9d953fa268779ed84d71e064f5f1c680333198461319c9e9ed1b
 anchor-sha256: stdlib/simd/simd.xr 0eb9b7955449743c09f7ba122cce51f8a772bb426413cde53c991b0ec664af24
 anchor-sha256: src/aot/xaot_coro.h fc2fcdeafe8e1a5f0978f1e9696f41c9eb76d2aaf7ab7f000c49522bde7b5957
 anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 495a6b15c1a963c95bc26d98f4791adf0b6d16c1b33660900587a07bf738d7a1

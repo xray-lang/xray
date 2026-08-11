@@ -2507,6 +2507,13 @@ void xa_visit_collect_function_decl_only(XaInferContext *ctx, AstNode *node) {
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
     links->type = fn_type;
     links->declared_type = fn_type;
+    links->binding_use = XA_BINDING_LIVE;
+    links->binding_mutability = XA_BINDING_STABLE;
+    links->value_capability = XA_CAP_CONST;
+    links->storage_domain =
+        ctx->analyzer->current_scope && ctx->analyzer->current_scope->kind == XA_SCOPE_GLOBAL
+            ? XR_STORAGE_MODULE_STATIC
+            : XR_STORAGE_EXEC_LOCAL;
     links->file_path = ctx->file_path;
     links->function_decl_node = node;
     xa_publish_deprecated_attrs(links, fn->attributes, fn->attr_count);

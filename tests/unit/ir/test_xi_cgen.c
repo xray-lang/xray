@@ -23,6 +23,7 @@
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_plan.h"
 #include "../../../src/ir/xi_backend_lower.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/module/xnative_package.h"
@@ -4359,10 +4360,13 @@ TEST(cgen_parallel_for_body_closure_stack_allocates) {
     assert(child->params[0] != NULL && child->params[1] != NULL);
     child->captures[0] = (XiCapture) {
         .source = XI_CAPTURE_SRC_REG,
+        .capture_kind = XI_CAPTURE_BY_COPY,
         .needs_cell = false,
         .type = &int_type,
         .value = captured,
         .name = "captured",
+        .storage_domain = XR_STORAGE_EXEC_LOCAL,
+        .value_capability = XA_CAP_CONST,
     };
     child->ncaptures = 1;
     xi_block_set_return(child_entry, NULL);
@@ -7635,10 +7639,14 @@ TEST(cgen_closure_cell_var_id_above_255) {
     xi_block_set_return(child_entry, child_ret);
     child->captures[0] = (XiCapture) {
         .source = XI_CAPTURE_SRC_REG,
+        .capture_kind = XI_CAPTURE_BY_MUT_CELL,
         .needs_cell = true,
+        .is_mutable = true,
         .type = &int_type,
         .value = captured,
         .name = "captured",
+        .storage_domain = XR_STORAGE_EXEC_LOCAL,
+        .value_capability = XA_CAP_MUTABLE,
     };
     child->ncaptures = 1;
 
@@ -7707,11 +7715,14 @@ TEST(cgen_stack_alloc_direct_closure_uses_stack_runtime) {
      * close pass materializes a cell only when the capture asks for one. */
     child->captures[0] = (XiCapture) {
         .source = XI_CAPTURE_SRC_REG,
+        .capture_kind = XI_CAPTURE_BY_MUT_CELL,
         .needs_cell = true,
         .is_mutable = true,
         .type = &int_type,
         .value = captured,
         .name = "captured",
+        .storage_domain = XR_STORAGE_EXEC_LOCAL,
+        .value_capability = XA_CAP_MUTABLE,
     };
     child->ncaptures = 1;
 
@@ -7805,10 +7816,14 @@ TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
     xi_block_set_return(child_entry, ret);
     child->captures[0] = (XiCapture) {
         .source = XI_CAPTURE_SRC_REG,
+        .capture_kind = XI_CAPTURE_BY_MUT_CELL,
         .needs_cell = true,
+        .is_mutable = true,
         .type = &int_type,
         .value = captured,
         .name = "captured",
+        .storage_domain = XR_STORAGE_EXEC_LOCAL,
+        .value_capability = XA_CAP_MUTABLE,
     };
     child->ncaptures = 1;
 
@@ -10093,6 +10108,11 @@ TEST(cgen_hosted_string_array_boundary_uses_deep_value_bridge) {
     char *code = generate_c_with_status_and_stats_for_artifact(ir, "test", &had_error, NULL,
                                                                XAOT_ARTIFACT_HOSTED_FRAGMENT);
     TEST_REQUIRE(code != NULL && !had_error, "hosted string-array C bridge generated");
+    const XrSemanticFunctionRecord *contract =
+        xr_semantic_plan_function(bridge->semantic_plan, bridge->semantic_plan_function_index);
+    TEST_REQUIRE(contract && contract->return_provenance == XR_SEM_RETURN_BORROWED_PARAM &&
+                     contract->return_parameter == 0,
+                 "hosted adapter consumes the frozen borrowed-result contract");
     TEST_REQUIRE(contains(code, "XrHostedFragmentArrayView _hosted_array_view_0"),
                  "VM array is inspected through the hosted container ABI");
     TEST_REQUIRE(contains(code, "context->ops->array_get"),
@@ -10103,15 +10123,16 @@ TEST(cgen_hosted_string_array_boundary_uses_deep_value_bridge) {
                  "AOT result materializes a VM-owned array");
     TEST_REQUIRE(contains(code, "context->ops->array_set"),
                  "AOT string results populate through host ownership operations");
-    /* `bridge` returns its own parameter and the ARC borrow signature marks
-     * that parameter OWNED, so the call consumes the adapter's reference and
-     * hands the same graph back as the result. Exactly one release is correct
-     * and it is the one on the result; releasing _hosted_arg_0 as well frees
-     * live memory. Both halves are asserted so neither can drift back. */
-    TEST_REQUIRE(!contains(code, "xrt_release(_hosted_arg_0)"),
-                 "an owned argument consumed by the call is not released again by the adapter");
+    /* `bridge` returns a borrowed view of its parameter. The adapter promotes
+     * that view to an owned result before releasing its materialized argument,
+     * so conversion can use the result without a use-after-free and both owned
+     * references have one matching release. */
+    const char *retain_result = strstr(code, "xrt_retain(_hosted_result)");
+    const char *release_argument = strstr(code, "xrt_release(_hosted_arg_0)");
+    TEST_REQUIRE(retain_result && release_argument && retain_result < release_argument,
+                 "a borrowed result is promoted before its parameter owner is released");
     TEST_REQUIRE(contains(code, "xrt_release(_hosted_result)"),
-                 "the AOT result graph is released once the VM copy exists");
+                 "the promoted AOT result is released once the VM copy exists");
     const char *hosted_entry = strstr(code, "xr_hosted_string_array_bridge(");
     const char *hosted_initializer = strstr(code, "bool xr_hosted_fragment_initialize(");
     const char *runtime_scope =

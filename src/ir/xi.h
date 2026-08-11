@@ -1680,8 +1680,11 @@ typedef struct XiFunc {
 
     /* Immutable semantic authority shared by all target planners and
      * executors. Every function in a tree retains the same plan so a detached
-     * child can never outlive the authority that describes it. */
+     * child can never outlive the authority that describes it. The function
+     * index is the exact preorder record selected while the plan is attached;
+     * consumers must not recover that identity from names or pointers. */
     struct XrSemanticPlan *semantic_plan;
+    uint32_t semantic_plan_function_index;
 
     /* Target-feature dispatch builds preserve source function boundaries that
      * own wide vector intrinsics.  The inline pass consumes this policy before

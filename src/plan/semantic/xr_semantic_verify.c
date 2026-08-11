@@ -68,39 +68,113 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
 
 static bool verify_functions(const XrSemanticPlan *plan, char *error, size_t error_size) {
     uint32_t parameter_cursor = 0;
+    uint32_t capture_cursor = 0;
     uint32_t block_cursor = 0;
     uint32_t value_cursor = 0;
+    uint32_t *child_counts = (uint32_t *) xr_calloc(plan->function_count, sizeof(*child_counts));
+    if (plan->function_count && !child_counts)
+        return report(error, error_size, "XR_EXEC_5003",
+                      "function relation verifier budget exhausted");
+#define XR_FUNCTION_FAIL(code, detail)                                                             \
+    do {                                                                                           \
+        xr_free(child_counts);                                                                     \
+        return report(error, error_size, (code), (detail));                                        \
+    } while (0)
     for (uint32_t i = 0; i < plan->function_count; i++) {
         const XrSemanticFunctionRecord *function = &plan->functions[i];
         if (!verify_id(function->canonical_key, function->id) || !function->name)
-            return report(error, error_size, "XR_SEM_0002", "function identity is invalid");
+            XR_FUNCTION_FAIL("XR_SEM_0002", "function identity is invalid");
+        if ((i == 0 && function->parent != XR_SEMANTIC_INDEX_NONE) ||
+            (i > 0 && function->parent >= i) || function->reserved != 0)
+            XR_FUNCTION_FAIL("XR_SEM_0013", "function lexical parent is invalid");
+        if (function->parent != XR_SEMANTIC_INDEX_NONE)
+            child_counts[function->parent]++;
         if (function->return_type >= plan->type_count ||
             !range_valid(function->parameter_begin, function->parameter_count,
                          plan->parameter_count) ||
+            !range_valid(function->capture_begin, function->capture_count, plan->capture_count) ||
             !range_valid(function->block_begin, function->block_count, plan->block_count) ||
             function->parameter_begin != parameter_cursor ||
-            function->block_begin != block_cursor || function->value_begin != value_cursor)
-            return report(error, error_size, "XR_SEM_0013", "function table range is invalid");
+            function->capture_begin != capture_cursor || function->block_begin != block_cursor ||
+            function->value_begin != value_cursor)
+            XR_FUNCTION_FAIL("XR_SEM_0013", "function table range is invalid");
         if ((plan->types[function->return_type].flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 &&
             (function->return_provenance == XR_SEM_RETURN_NONE ||
              function->return_provenance > XR_SEM_RETURN_BORROWED_STATIC))
-            return report(error, error_size, "XR_OWN_3000",
-                          "reference-capable return has unknown provenance");
+            XR_FUNCTION_FAIL("XR_OWN_3000", "reference-capable return has unknown provenance");
         for (uint16_t p = 0; p < function->parameter_count; p++) {
-            if (plan->parameters[function->parameter_begin + p] >= plan->type_count)
-                return report(error, error_size, "XR_SEM_0013", "parameter type is invalid");
+            const XrSemanticParameterRecord *parameter =
+                &plan->parameters[function->parameter_begin + p];
+            uint8_t allowed_flags = XR_SEM_PARAMETER_REQUIRED | XR_SEM_PARAMETER_VARIADIC |
+                                    XR_SEM_PARAMETER_RECEIVER_BORROWED |
+                                    XR_SEM_PARAMETER_READ_PLACE;
+            if (!verify_id(parameter->canonical_key, parameter->id) || parameter->function != i ||
+                parameter->ordinal != p || parameter->type >= plan->type_count ||
+                parameter->value < function->value_begin ||
+                parameter->value >= function->value_begin + function->value_count ||
+                !xr_param_mode_is_valid((XrParamMode) parameter->mode) ||
+                parameter->ownership > XI_OWN_BORROWED || parameter->reserved != 0 ||
+                (parameter->flags & (uint8_t) ~allowed_flags) != 0 ||
+                ((parameter->flags & XR_SEM_PARAMETER_VARIADIC) != 0 &&
+                 p + 1u != function->parameter_count))
+                XR_FUNCTION_FAIL("XR_SEM_0013", "parameter contract is invalid");
+        }
+        for (uint16_t c = 0; c < function->capture_count; c++) {
+            const XrSemanticCaptureRecord *capture = &plan->captures[function->capture_begin + c];
+            uint8_t allowed_flags =
+                XR_SEM_CAPTURE_NEEDS_CELL | XR_SEM_CAPTURE_MUTABLE | XR_SEM_CAPTURE_REASSIGNED;
+            if (!verify_id(capture->canonical_key, capture->id) || !capture->name ||
+                capture->function != i || capture->ordinal != c ||
+                capture->source_function != function->parent || capture->type >= plan->type_count ||
+                capture->source_type >= plan->type_count ||
+                capture->source > XR_SEM_CAPTURE_PARENT_CAPTURE ||
+                capture->kind > XR_SEM_CAPTURE_SHARED ||
+                capture->storage_domain == XR_STORAGE_DOMAIN_UNKNOWN ||
+                capture->storage_domain > XR_STORAGE_FOREIGN ||
+                capture->value_capability >= XR_SEM_VALUE_CAPABILITY_UNKNOWN ||
+                capture->reserved[0] != 0 || (capture->flags & (uint8_t) ~allowed_flags) != 0)
+                XR_FUNCTION_FAIL("XR_SEM_0018", "capture contract is invalid");
+            if (capture->source == XR_SEM_CAPTURE_LOCAL_VALUE) {
+                if (capture->source_capture != XR_SEMANTIC_INDEX_NONE ||
+                    function->parent == XR_SEMANTIC_INDEX_NONE)
+                    XR_FUNCTION_FAIL("XR_SEM_0018", "capture local source is invalid");
+                const XrSemanticFunctionRecord *parent = &plan->functions[function->parent];
+                if (capture->source_value < parent->value_begin ||
+                    capture->source_value >= parent->value_begin + parent->value_count ||
+                    capture->source_index != capture->source_value - parent->value_begin)
+                    XR_FUNCTION_FAIL("XR_SEM_0018", "capture local value is invalid");
+            } else {
+                if (capture->source_value != XR_SEMANTIC_INDEX_NONE ||
+                    function->parent == XR_SEMANTIC_INDEX_NONE)
+                    XR_FUNCTION_FAIL("XR_SEM_0018", "capture parent link is invalid");
+                const XrSemanticFunctionRecord *parent = &plan->functions[function->parent];
+                if (capture->source_index >= parent->capture_count ||
+                    capture->source_capture != parent->capture_begin + capture->source_index ||
+                    plan->captures[capture->source_capture].type != capture->type ||
+                    plan->captures[capture->source_capture].source_type != capture->source_type)
+                    XR_FUNCTION_FAIL("XR_SEM_0018", "capture parent contract is invalid");
+            }
         }
         if (UINT32_MAX - parameter_cursor < function->parameter_count ||
+            UINT32_MAX - capture_cursor < function->capture_count ||
             UINT32_MAX - block_cursor < function->block_count ||
             UINT32_MAX - value_cursor < function->value_count)
-            return report(error, error_size, "XR_EXEC_5003", "function index budget exhausted");
+            XR_FUNCTION_FAIL("XR_EXEC_5003", "function index budget exhausted");
         parameter_cursor += function->parameter_count;
+        capture_cursor += function->capture_count;
         block_cursor += function->block_count;
         value_cursor += function->value_count;
     }
-    if (parameter_cursor != plan->parameter_count || block_cursor != plan->block_count)
+    for (uint32_t i = 0; i < plan->function_count; i++) {
+        if (child_counts[i] != plan->functions[i].child_count)
+            XR_FUNCTION_FAIL("XR_SEM_0013", "function child relation is invalid");
+    }
+    xr_free(child_counts);
+    if (parameter_cursor != plan->parameter_count || capture_cursor != plan->capture_count ||
+        block_cursor != plan->block_count)
         return report(error, error_size, "XR_SEM_0013",
-                      "function table does not exactly partition parameter and block tables");
+                      "function tables are not exactly partitioned");
+#undef XR_FUNCTION_FAIL
     return true;
 }
 
@@ -245,6 +319,14 @@ static bool verify_ssa_use(const XrSemanticPlan *plan, const XrSemanticGraph *gr
     const XrSemanticOperationRecord *operation = &plan->operations[operation_index];
     uint32_t value = plan->operands[operation->operand_begin + operand_index].value;
     uint32_t definition_index = definitions[value];
+    if (definition_index >= plan->operation_count) {
+        uint32_t parameter_index = definition_index - plan->operation_count;
+        if (parameter_index >= plan->parameter_count ||
+            plan->parameters[parameter_index].function != operation->function)
+            return report(error, error_size, "XR_SEM_0016",
+                          "SSA parameter use crosses a function boundary");
+        return true;
+    }
     const XrSemanticOperationRecord *definition = &plan->operations[definition_index];
     if (definition->function != operation->function)
         return report(error, error_size, "XR_SEM_0016", "SSA use crosses a function boundary");
@@ -326,8 +408,8 @@ static bool verify_operand_contract(const XrSemanticOperationRecord *operation,
     return true;
 }
 
-static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_mask,
-                              const XrSemanticGraph *graph, char *error, size_t error_size) {
+static bool build_definition_map(const XrSemanticPlan *plan, uint32_t **out,
+                                 uint32_t *out_value_count, char *error, size_t error_size) {
     uint32_t value_count = 0;
     for (uint32_t f = 0; f < plan->function_count; f++) {
         uint64_t end = (uint64_t) plan->functions[f].value_begin + plan->functions[f].value_count;
@@ -341,6 +423,29 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
         return report(error, error_size, "XR_EXEC_5003", "SSA verifier budget exhausted");
     for (uint32_t value = 0; value < value_count; value++)
         definitions[value] = XR_SEMANTIC_INDEX_NONE;
+    if (plan->operation_count > UINT32_MAX - plan->parameter_count) {
+        xr_free(definitions);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "SSA parameter definition index budget exhausted");
+    }
+    for (uint32_t i = 0; i < plan->parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter = &plan->parameters[i];
+        if (parameter->value >= value_count ||
+            definitions[parameter->value] != XR_SEMANTIC_INDEX_NONE) {
+            xr_free(definitions);
+            return report(error, error_size, "XR_SEM_0013",
+                          "parameter SSA definition is duplicated");
+        }
+        definitions[parameter->value] = plan->operation_count + i;
+    }
+    *out = definitions;
+    *out_value_count = value_count;
+    return true;
+}
+
+static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *edge_mask,
+                                     uint32_t *definitions, uint32_t value_count, char *error,
+                                     size_t error_size) {
     for (uint32_t i = 0; i < plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &plan->operations[i];
         const XrSemanticFunctionRecord *function = operation->function < plan->function_count
@@ -379,22 +484,35 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
                          plan->metadata_count) ||
             (operation->constant != XR_SEMANTIC_INDEX_NONE &&
              operation->constant >= plan->constant_count)) {
-            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0015", "operation record is invalid");
         }
-        if (definitions[operation->result_value] != XR_SEMANTIC_INDEX_NONE) {
-            xr_free(definitions);
-            return report(error, error_size, "XR_SEM_0015", "SSA value is defined twice");
+        uint32_t existing_definition = definitions[operation->result_value];
+        if (existing_definition != XR_SEMANTIC_INDEX_NONE) {
+            bool matching_parameter = false;
+            if (existing_definition >= plan->operation_count) {
+                uint32_t parameter_index = existing_definition - plan->operation_count;
+                const XrSemanticParameterRecord *parameter =
+                    parameter_index < plan->parameter_count ? &plan->parameters[parameter_index]
+                                                            : NULL;
+                matching_parameter = parameter && operation->opcode == XI_PARAM &&
+                                     operation->function == parameter->function &&
+                                     operation->result_type == parameter->type &&
+                                     operation->semantic_immediate == parameter->ordinal &&
+                                     operation->parameter_mode == parameter->mode &&
+                                     operation->parameter_ownership == parameter->ownership &&
+                                     operation->transfer_mode == parameter->transfer_mode;
+            }
+            if (!matching_parameter) {
+                return report(error, error_size, "XR_SEM_0015", "SSA value is defined twice");
+            }
         }
         definitions[operation->result_value] = i;
         if (operation->allocation_key &&
             !verify_id(operation->allocation_key, operation->allocation_id)) {
-            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0002", "allocation identity is invalid");
         }
         if (operation->opcode == XI_TRY && (operation->evidence[7] >= plan->block_count ||
                                             (edge_mask[i] & XR_SEM_OPERATION_EDGE_PANIC) == 0)) {
-            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0010",
                           "try operation is missing its explicit panic edge");
         }
@@ -402,11 +520,72 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
             plan->blocks[operation->block].control_value == operation->result_value &&
             plan->blocks[operation->block].successors[0] != XR_SEMANTIC_INDEX_NONE &&
             (edge_mask[i] & XR_SEM_OPERATION_EDGE_ERROR) == 0) {
-            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0010",
                           "error check is missing its explicit error edge");
         }
     }
+    return true;
+}
+
+static bool verify_parameter_and_capture_definitions(const XrSemanticPlan *plan,
+                                                     const uint32_t *definitions,
+                                                     uint32_t value_count, char *error,
+                                                     size_t error_size) {
+    for (uint32_t i = 0; i < plan->parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter = &plan->parameters[i];
+        if (parameter->value >= value_count ||
+            definitions[parameter->value] == XR_SEMANTIC_INDEX_NONE) {
+            return report(error, error_size, "XR_SEM_0013", "parameter has no SSA definition");
+        }
+        uint32_t definition_index = definitions[parameter->value];
+        if (definition_index >= plan->operation_count)
+            continue;
+        const XrSemanticOperationRecord *definition = &plan->operations[definition_index];
+        if (definition->function != parameter->function || definition->opcode != XI_PARAM ||
+            definition->result_type != parameter->type ||
+            definition->semantic_immediate != parameter->ordinal ||
+            definition->parameter_mode != parameter->mode ||
+            definition->parameter_ownership != parameter->ownership ||
+            definition->transfer_mode != parameter->transfer_mode) {
+            return report(error, error_size, "XR_SEM_0013",
+                          "parameter disagrees with its SSA definition");
+        }
+    }
+    for (uint32_t i = 0; i < plan->capture_count; i++) {
+        const XrSemanticCaptureRecord *capture = &plan->captures[i];
+        if (capture->source != XR_SEM_CAPTURE_LOCAL_VALUE)
+            continue;
+        if (capture->source_value >= value_count ||
+            definitions[capture->source_value] == XR_SEMANTIC_INDEX_NONE) {
+            return report(error, error_size, "XR_SEM_0018",
+                          "capture disagrees with its typed SSA source");
+        }
+        uint32_t definition_index = definitions[capture->source_value];
+        uint32_t source_function;
+        uint32_t source_type;
+        if (definition_index < plan->operation_count) {
+            source_function = plan->operations[definition_index].function;
+            source_type = plan->operations[definition_index].result_type;
+        } else {
+            uint32_t parameter_index = definition_index - plan->operation_count;
+            if (parameter_index >= plan->parameter_count) {
+                return report(error, error_size, "XR_SEM_0018",
+                              "capture parameter source is invalid");
+            }
+            source_function = plan->parameters[parameter_index].function;
+            source_type = plan->parameters[parameter_index].type;
+        }
+        if (source_function != capture->source_function || source_type != capture->source_type) {
+            return report(error, error_size, "XR_SEM_0018",
+                          "capture disagrees with its typed SSA source");
+        }
+    }
+    return true;
+}
+
+static bool verify_operation_uses(const XrSemanticPlan *plan, const XrSemanticGraph *graph,
+                                  const uint32_t *definitions, uint32_t value_count, char *error,
+                                  size_t error_size) {
     for (uint32_t i = 0; i < plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &plan->operations[i];
         for (uint16_t operand = 0; operand < operation->operand_count; operand++) {
@@ -414,44 +593,70 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
             const XrSemanticOperandRecord *record = &plan->operands[cursor];
             if (record->value >= value_count ||
                 definitions[record->value] == XR_SEMANTIC_INDEX_NONE ||
-                record->type >= plan->type_count ||
-                plan->operations[definitions[record->value]].result_type != record->type) {
-                xr_free(definitions);
+                record->type >= plan->type_count) {
                 return report(error, error_size, "XR_SEM_0015",
                               "operand has no matching typed SSA definition");
             }
-            if (!verify_operand_contract(operation, record, operand, error, error_size)) {
-                xr_free(definitions);
-                return false;
+            uint32_t definition_index = definitions[record->value];
+            uint32_t definition_type =
+                definition_index < plan->operation_count
+                    ? plan->operations[definition_index].result_type
+                    : plan->parameters[definition_index - plan->operation_count].type;
+            if (definition_type != record->type) {
+                return report(error, error_size, "XR_SEM_0015",
+                              "operand has no matching typed SSA definition");
             }
-            if (!verify_ssa_use(plan, graph, definitions, i, operand, error, error_size)) {
-                xr_free(definitions);
+            if (!verify_operand_contract(operation, record, operand, error, error_size))
                 return false;
-            }
+            if (!verify_ssa_use(plan, graph, definitions, i, operand, error, error_size))
+                return false;
         }
     }
+    return true;
+}
+
+static bool verify_block_controls(const XrSemanticPlan *plan, const XrSemanticGraph *graph,
+                                  const uint32_t *definitions, uint32_t value_count, char *error,
+                                  size_t error_size) {
     for (uint32_t b = 0; b < plan->block_count; b++) {
         const XrSemanticBlockRecord *block = &plan->blocks[b];
         if (block->control_value == XR_SEMANTIC_INDEX_NONE)
             continue;
         if (block->control_value >= value_count ||
             definitions[block->control_value] == XR_SEMANTIC_INDEX_NONE) {
-            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0016",
                           "block control value has no SSA definition");
         }
+        uint32_t definition_index = definitions[block->control_value];
         const XrSemanticOperationRecord *definition =
-            &plan->operations[definitions[block->control_value]];
-        if (definition->function != block->function ||
-            (xr_semantic_graph_is_reachable(graph, b) &&
+            definition_index < plan->operation_count ? &plan->operations[definition_index] : NULL;
+        uint32_t definition_function =
+            definition ? definition->function
+                       : plan->parameters[definition_index - plan->operation_count].function;
+        if (definition_function != block->function ||
+            (definition && xr_semantic_graph_is_reachable(graph, b) &&
              !xr_semantic_graph_dominates(graph, definition->block, b))) {
-            xr_free(definitions);
             return report(error, error_size, "XR_SEM_0016",
                           "block control definition does not dominate the terminator");
         }
     }
-    xr_free(definitions);
     return true;
+}
+
+static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_mask,
+                              const XrSemanticGraph *graph, char *error, size_t error_size) {
+    uint32_t *definitions = NULL;
+    uint32_t value_count = 0;
+    if (!build_definition_map(plan, &definitions, &value_count, error, error_size))
+        return false;
+    bool valid =
+        verify_operation_records(plan, edge_mask, definitions, value_count, error, error_size) &&
+        verify_parameter_and_capture_definitions(plan, definitions, value_count, error,
+                                                 error_size) &&
+        verify_operation_uses(plan, graph, definitions, value_count, error, error_size) &&
+        verify_block_controls(plan, graph, definitions, value_count, error, error_size);
+    xr_free(definitions);
+    return valid;
 }
 
 static bool verify_constants(const XrSemanticPlan *plan, char *error, size_t error_size) {
@@ -490,6 +695,7 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
                       "SemanticPlan operation registry is missing or incompatible");
     if (plan->type_count > 1000000u || plan->function_count > 100000u ||
         plan->block_count > 2000000u || plan->operation_count > 10000000u ||
+        plan->parameter_count > 25600000u || plan->capture_count > 6400000u ||
         plan->edge_count > 40000000u || plan->operand_count > 40000000u)
         return report(error, error_size, "XR_EXEC_5003", "SemanticPlan exceeds hard budgets");
     uint8_t *block_edge_mask = (uint8_t *) xr_calloc(plan->block_count, sizeof(*block_edge_mask));

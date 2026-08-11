@@ -4,6 +4,7 @@
 
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xsha256.h"
+#include "../../../src/base/xstorage.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_effect.h"
@@ -240,6 +241,67 @@ static XrSemanticPlan *build_typed_call_operand_plan(void) {
         fprintf(stderr, "typed-call-operand plan build failed: %s\n", error);
     REQUIRE(built && plan != NULL);
     xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticPlan *build_capture_contract_plan(void) {
+    XiFunc *root = xi_func_new("capture_contract_root", &stub_int);
+    XiFunc *child = xi_func_new("capture_contract_child", &stub_int);
+    XiFunc *grandchild = xi_func_new("capture_contract_grandchild", &stub_int);
+    REQUIRE(root != NULL && child != NULL && grandchild != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    XiBlock *grandchild_entry = xi_block_new(grandchild);
+    REQUIRE(root_entry != NULL && child_entry != NULL && grandchild_entry != NULL);
+    XiValue *captured = xi_const_str(root, root_entry, "captured", &stub_string);
+    XiValue *root_result = xi_const_int(root, root_entry, 1, &stub_int);
+    XiValue *child_result = xi_const_int(child, child_entry, 2, &stub_int);
+    XiValue *grandchild_result = xi_const_int(grandchild, grandchild_entry, 3, &stub_int);
+    REQUIRE(captured != NULL && root_result != NULL && child_result != NULL &&
+            grandchild_result != NULL);
+    xi_block_set_return(root_entry, root_result);
+    xi_block_set_return(child_entry, child_result);
+    xi_block_set_return(grandchild_entry, grandchild_result);
+
+    root->children = (XiFunc **) xr_malloc(sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = 1;
+    root->children_cap = 1;
+    child->parent_func = root;
+    child->children = (XiFunc **) xr_malloc(sizeof(*child->children));
+    REQUIRE(child->children != NULL);
+    child->children[0] = grandchild;
+    child->nchildren = 1;
+    child->children_cap = 1;
+    grandchild->parent_func = child;
+    child->ncaptures = 1;
+    child->captures[0].source = XI_CAPTURE_SRC_REG;
+    child->captures[0].capture_kind = XI_CAPTURE_BY_COPY;
+    child->captures[0].name = "captured";
+    child->captures[0].type = &stub_string;
+    child->captures[0].value = captured;
+    child->captures[0].storage_domain = XR_STORAGE_EXEC_LOCAL;
+    child->captures[0].value_capability = XR_SEM_VALUE_CONST;
+    grandchild->ncaptures = 1;
+    grandchild->captures[0].source = XI_CAPTURE_SRC_UPVAL;
+    grandchild->captures[0].index = 0;
+    grandchild->captures[0].capture_kind = XI_CAPTURE_BY_COPY;
+    grandchild->captures[0].name = "captured";
+    grandchild->captures[0].type = &stub_string;
+    grandchild->captures[0].storage_domain = XR_STORAGE_EXEC_LOCAL;
+    grandchild->captures[0].value_capability = XR_SEM_VALUE_CONST;
+    root->stage = XI_STAGE_OPTIMIZED;
+    child->stage = XI_STAGE_OPTIMIZED;
+    grandchild->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "capture-contract plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(root);
     return plan;
 }
 
@@ -520,6 +582,136 @@ static void test_typed_call_operand_contract(void) {
     xr_semantic_plan_free(decoded);
     xr_free(bytes);
     xr_semantic_plan_free(plan);
+}
+
+static void test_parameter_and_capture_contracts(void) {
+    XrSemanticPlan *parameters = build_owned_parameter_plan();
+    REQUIRE(xr_semantic_plan_parameter_count(parameters) == 1);
+    const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(parameters, 0);
+    REQUIRE(parameter != NULL && parameter->function == 0 && parameter->ordinal == 0);
+    REQUIRE(parameter->type < xr_semantic_plan_type_count(parameters));
+    REQUIRE(parameter->value < parameters->functions[0].value_count);
+    REQUIRE(parameter->canonical_key != NULL);
+    uint16_t saved_ordinal = parameters->parameters[0].ordinal;
+    parameters->parameters[0].ordinal = 1;
+    expect_verify_failure(parameters, "XR_SEM_0013");
+    parameters->parameters[0].ordinal = saved_ordinal;
+    xr_semantic_plan_free(parameters);
+
+    XrSemanticPlan *captures = build_capture_contract_plan();
+    REQUIRE(xr_semantic_plan_function_count(captures) == 3);
+    REQUIRE(xr_semantic_plan_capture_count(captures) == 2);
+    const XrSemanticFunctionRecord *child = xr_semantic_plan_function(captures, 1);
+    const XrSemanticCaptureRecord *capture = xr_semantic_plan_capture(captures, 0);
+    REQUIRE(child != NULL && child->parent == 0 && child->capture_begin == 0 &&
+            child->capture_count == 1);
+    REQUIRE(capture != NULL && capture->function == 1 && capture->source_function == 0);
+    REQUIRE(capture->source == XR_SEM_CAPTURE_LOCAL_VALUE &&
+            capture->source_capture == XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(capture->source_value == capture->source_index);
+    REQUIRE(capture->kind == XR_SEM_CAPTURE_BY_COPY && capture->source_type == capture->type &&
+            capture->storage_domain == XR_STORAGE_EXEC_LOCAL &&
+            capture->value_capability == XR_SEM_VALUE_CONST);
+    const XrSemanticCaptureRecord *transitive = xr_semantic_plan_capture(captures, 1);
+    REQUIRE(transitive != NULL && transitive->function == 2 && transitive->source_function == 1);
+    REQUIRE(transitive->source == XR_SEM_CAPTURE_PARENT_CAPTURE &&
+            transitive->source_value == XR_SEMANTIC_INDEX_NONE && transitive->source_capture == 0 &&
+            transitive->source_index == 0 && transitive->source_type == capture->source_type);
+
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    char error[512] = {0};
+    REQUIRE(xr_xsm_encode(captures, &bytes, &size, error, sizeof(error)));
+    XrSemanticPlan *decoded = NULL;
+    REQUIRE(xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)));
+    REQUIRE(xr_semantic_plan_capture_count(decoded) == 2);
+    REQUIRE(strcmp(xr_semantic_plan_capture(decoded, 0)->name, "captured") == 0);
+    xr_semantic_plan_free(decoded);
+    xr_free(bytes);
+
+    XrSemanticCaptureRecord *mutable_capture = &captures->captures[0];
+    uint32_t saved_source = mutable_capture->source_value;
+    mutable_capture->source_value = XR_SEMANTIC_INDEX_NONE;
+    expect_verify_failure(captures, "XR_SEM_0018");
+    mutable_capture->source_value = saved_source;
+    xr_semantic_plan_free(captures);
+}
+
+static void test_attachment_freezes_exact_function_identity(void) {
+    XiFunc *root = xi_func_new("attachment_root", &stub_int);
+    XiFunc *child = xi_func_new("attachment_child", &stub_int);
+    XiFunc *grandchild = xi_func_new("attachment_grandchild", &stub_int);
+    REQUIRE(root != NULL && child != NULL && grandchild != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    XiBlock *grandchild_entry = xi_block_new(grandchild);
+    REQUIRE(root_entry != NULL && child_entry != NULL && grandchild_entry != NULL);
+    xi_block_set_return(root_entry, xi_const_int(root, root_entry, 1, &stub_int));
+    xi_block_set_return(child_entry, xi_const_int(child, child_entry, 2, &stub_int));
+    xi_block_set_return(grandchild_entry, xi_const_int(grandchild, grandchild_entry, 3, &stub_int));
+    root->children = (XiFunc **) xr_malloc(sizeof(*root->children));
+    child->children = (XiFunc **) xr_malloc(sizeof(*child->children));
+    REQUIRE(root->children != NULL && child->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->children[0] = grandchild;
+    child->nchildren = child->children_cap = 1;
+    child->parent_func = root;
+    grandchild->parent_func = child;
+    root->stage = child->stage = grandchild->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(root->semantic_plan == child->semantic_plan &&
+            child->semantic_plan == grandchild->semantic_plan);
+    REQUIRE(root->semantic_plan_function_index == 0);
+    REQUIRE(child->semantic_plan_function_index == 1);
+    REQUIRE(grandchild->semantic_plan_function_index == 2);
+    REQUIRE(strcmp(xr_semantic_plan_function(root->semantic_plan, 0)->name, "attachment_root") ==
+            0);
+    REQUIRE(strcmp(xr_semantic_plan_function(child->semantic_plan, 1)->name, "attachment_child") ==
+            0);
+    REQUIRE(strcmp(xr_semantic_plan_function(grandchild->semantic_plan, 2)->name,
+                   "attachment_grandchild") == 0);
+    xi_func_free(root);
+}
+
+static void test_unknown_capture_contract_fails_closed(void) {
+    XiFunc *root = xi_func_new("unknown_capture_root", &stub_int);
+    XiFunc *child = xi_func_new("unknown_capture_child", &stub_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+    XiValue *captured = xi_const_str(root, root_entry, "unknown", &stub_string);
+    XiValue *root_result = xi_const_int(root, root_entry, 1, &stub_int);
+    XiValue *child_result = xi_const_int(child, child_entry, 2, &stub_int);
+    REQUIRE(captured != NULL && root_result != NULL && child_result != NULL);
+    xi_block_set_return(root_entry, root_result);
+    xi_block_set_return(child_entry, child_result);
+    root->children = (XiFunc **) xr_malloc(sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = 1;
+    root->children_cap = 1;
+    child->parent_func = root;
+    child->ncaptures = 1;
+    child->captures[0].source = XI_CAPTURE_SRC_REG;
+    child->captures[0].capture_kind = XI_CAPTURE_BY_COPY;
+    child->captures[0].name = "unknown";
+    child->captures[0].type = &stub_string;
+    child->captures[0].value = captured;
+    child->captures[0].storage_domain = XR_STORAGE_DOMAIN_UNKNOWN;
+    child->captures[0].value_capability = XR_SEM_VALUE_CAPABILITY_UNKNOWN;
+    root->stage = XI_STAGE_OPTIMIZED;
+    child->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(!xr_semantic_plan_build(root, &plan, error, sizeof(error)));
+    REQUIRE(plan == NULL);
+    REQUIRE(strncmp(error, "XR_SEM_0018", strlen("XR_SEM_0018")) == 0);
+    xi_func_free(root);
 }
 
 static void test_xsm_fail_closed_mutations(void) {
@@ -845,6 +1037,9 @@ int main(void) {
     test_explicit_panic_edge_and_roundtrip();
     test_explicit_error_edge();
     test_typed_call_operand_contract();
+    test_parameter_and_capture_contracts();
+    test_attachment_freezes_exact_function_identity();
+    test_unknown_capture_contract_fails_closed();
     test_xsm_fail_closed_mutations();
     test_semantic_and_ownership_mutations();
     test_stack_extent_is_logical_and_fail_closed();

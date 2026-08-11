@@ -30,6 +30,8 @@
 #define XR_SEMANTIC_MAX_OPERATIONS UINT32_C(10000000)
 #define XR_SEMANTIC_MAX_OPERANDS UINT32_C(40000000)
 #define XR_SEMANTIC_MAX_EDGES UINT32_C(40000000)
+#define XR_SEMANTIC_MAX_PARAMETERS (XR_SEMANTIC_MAX_FUNCTIONS * UINT32_C(256))
+#define XR_SEMANTIC_MAX_CAPTURES (XR_SEMANTIC_MAX_FUNCTIONS * (uint32_t) XI_MAX_CAPTURES)
 #define XR_SEMANTIC_MAX_KEY_BYTES UINT32_C(1048576)
 
 typedef struct XrTextBuilder {
@@ -48,6 +50,8 @@ typedef struct XrFunctionMapEntry {
     uint32_t index;
     uint32_t value_begin;
     uint32_t block_begin;
+    uint32_t parent;
+    uint16_t lexical_ordinal;
 } XrFunctionMapEntry;
 
 typedef struct XrSemanticBuildContext {
@@ -450,15 +454,17 @@ static bool add_type_children(XrSemanticBuildContext *ctx, const XrType *type,
     return true;
 }
 
-static bool collect_functions(XrSemanticBuildContext *ctx, const XiFunc *function) {
+static bool collect_functions(XrSemanticBuildContext *ctx, const XiFunc *function, uint32_t parent,
+                              uint16_t lexical_ordinal) {
     if (!function || ctx->function_count >= XR_SEMANTIC_MAX_FUNCTIONS ||
         !reserve_array((void **) &ctx->functions, &ctx->function_capacity, ctx->function_count + 1,
                        sizeof(*ctx->functions), XR_SEMANTIC_MAX_FUNCTIONS))
         return fail(ctx, "XR_EXEC_5003", "semantic function budget exhausted");
     uint32_t index = ctx->function_count;
-    ctx->functions[ctx->function_count++] = (XrFunctionMapEntry) {function, index, 0, 0};
+    ctx->functions[ctx->function_count++] =
+        (XrFunctionMapEntry) {function, index, 0, 0, parent, lexical_ordinal};
     for (uint16_t i = 0; i < function->nchildren; i++) {
-        if (!collect_functions(ctx, function->children[i]))
+        if (!collect_functions(ctx, function->children[i], index, i))
             return false;
     }
     return true;
@@ -487,6 +493,10 @@ static bool collect_semantic_types(XrSemanticBuildContext *ctx) {
         for (uint16_t p = 0; p < xi_func_semantic_param_count(function); p++) {
             if (!function->params[p] || !add_type(ctx, function->params[p]->type, &ignored))
                 return fail(ctx, "XR_SEM_0013", "semantic function has a missing parameter");
+        }
+        for (uint16_t c = 0; c < function->ncaptures; c++) {
+            if (!function->captures[c].type || !add_type(ctx, function->captures[c].type, &ignored))
+                return fail(ctx, "XR_SEM_0018", "semantic function has an untyped capture");
         }
         for (uint32_t b = 0; b < function->nblocks; b++) {
             const XiBlock *block = function->blocks[b];
@@ -600,20 +610,113 @@ static int function_index(const XrSemanticBuildContext *ctx, const XiFunc *funct
     return -1;
 }
 
-static bool function_lexical_ordinal(const XiFunc *function, uint16_t *out) {
-    if (!function || !out)
+static bool build_function_identity(XrSemanticBuildContext *ctx, uint32_t index,
+                                    const XiFunc *source, XrSemanticFunctionRecord *record) {
+    record->name = xr_semantic_plan_copy_string(ctx->plan, source->name ? source->name : "");
+    if (!record->name || !add_type(ctx, source->return_type, &record->return_type))
         return false;
-    if (!function->parent_func) {
-        *out = 0;
-        return true;
+    record->parameter_count = xi_func_semantic_param_count(source);
+    XrTextBuilder key = {0};
+    uint32_t parent = ctx->functions[index].parent;
+    bool valid =
+        text_append(&key, "function-v2:parent=") &&
+        (parent == XR_SEMANTIC_INDEX_NONE
+             ? text_append(&key, "module-root")
+             : text_append_stable_id(&key, ctx->plan->functions[parent].id)) &&
+        text_append_format(&key, ":ordinal=%u:name=", ctx->functions[index].lexical_ordinal) &&
+        text_append_component(&key, source->name) &&
+        text_append_format(&key, ":body=%u:return=", source->xg_body_func_id) &&
+        text_append_stable_id(&key, ctx->plan->types[record->return_type].id) &&
+        text_append_format(&key, ":params=%u", record->parameter_count);
+    for (uint16_t p = 0; valid && p < record->parameter_count; p++) {
+        uint32_t type_index;
+        valid = source->params[p] && add_type(ctx, source->params[p]->type, &type_index) &&
+                text_append_format(&key, ":p%u:mode=%u:type=", p,
+                                   (unsigned) source->params[p]->param_mode) &&
+                text_append_stable_id(&key, ctx->plan->types[type_index].id);
     }
-    for (uint16_t i = 0; i < function->parent_func->nchildren; i++) {
-        if (function->parent_func->children[i] == function) {
-            *out = i;
-            return true;
+    valid = valid &&
+            text_append_format(&key, ":effects=%u:unsafe=%u:entry=%u:extern=%u",
+                               source->semantic_effects, source->requires_unsafe_at_call ? 1u : 0u,
+                               (unsigned) source->entry_type, source->is_extern ? 1u : 0u);
+    if (valid)
+        record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+    text_dispose(&key);
+    XrFingerprint digest;
+    if (!valid || !record->canonical_key ||
+        !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+        return fail(ctx, "XR_SEM_0013", "semantic function identity is incomplete");
+    return true;
+}
+
+static void set_function_return_contract(const XiFunc *source, XrSemanticFunctionRecord *record) {
+    record->return_parameter = source->arc_return_ownership.param_index;
+    record->return_provenance = source->arc_return_ownership.kind;
+    if (source->return_type && source->return_type->kind == XR_KIND_SLICE) {
+        record->return_parameter = -1;
+        record->return_provenance = XR_SEM_RETURN_NONE;
+        if (source->view_return_complete && source->view_return_source == XR_VIEW_RETURN_PARAM) {
+            record->return_provenance = XR_SEM_RETURN_BORROWED_PARAM;
+            record->return_parameter = source->view_return_param;
+        } else if (source->view_return_complete &&
+                   source->view_return_source == XR_VIEW_RETURN_RECEIVER) {
+            record->return_provenance = XR_SEM_RETURN_BORROWED_PARAM;
+            record->return_parameter = 0;
+        } else if (source->view_return_complete &&
+                   source->view_return_source == XR_VIEW_RETURN_STATIC) {
+            record->return_provenance = XR_SEM_RETURN_BORROWED_STATIC;
         }
+    } else if (source->entry_type == 2 && xi_own_type_is_rc(source->return_type)) {
+        record->return_provenance = XR_SEM_RETURN_OWNED;
+        record->return_parameter = -1;
     }
-    return false;
+}
+
+static bool append_parameter_records(XrSemanticBuildContext *ctx, uint32_t function_index_value,
+                                     const XiFunc *source,
+                                     const XrSemanticFunctionRecord *function) {
+    XrFingerprint digest;
+    for (uint16_t p = 0; p < function->parameter_count; p++) {
+        if (!reserve_array((void **) &ctx->plan->parameters, &ctx->plan->parameter_capacity,
+                           ctx->plan->parameter_count + 1, sizeof(*ctx->plan->parameters),
+                           XR_SEMANTIC_MAX_PARAMETERS))
+            return fail(ctx, "XR_EXEC_5003", "semantic parameter budget exhausted");
+        XrSemanticParameterRecord *record = &ctx->plan->parameters[ctx->plan->parameter_count];
+        memset(record, 0, sizeof(*record));
+        uint32_t type_index;
+        if (!source->params[p] || !add_type(ctx, source->params[p]->type, &type_index))
+            return fail(ctx, "XR_SEM_0013", "semantic function has a missing parameter");
+        XrTextBuilder key = {0};
+        bool valid = text_append(&key, "parameter-v1:function=") &&
+                     text_append_stable_id(&key, function->id) &&
+                     text_append_format(&key, ":ordinal=%u:type=", p) &&
+                     text_append_stable_id(&key, ctx->plan->types[type_index].id) &&
+                     text_append_format(&key, ":mode=%u", source->params[p]->param_mode);
+        if (valid)
+            record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+        text_dispose(&key);
+        if (!valid || !record->canonical_key ||
+            !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+            return fail(ctx, "XR_EXEC_5003", "semantic parameter identity allocation failed");
+        record->function = function_index_value;
+        record->type = type_index;
+        record->value = function->value_begin + source->params[p]->id;
+        record->ordinal = p;
+        record->mode = source->params[p]->param_mode;
+        record->ownership = xi_arc_parameter_ownership(source, source->params[p]);
+        record->transfer_mode = source->params[p]->transfer_mode;
+        record->flags =
+            (uint8_t) ((p < source->min_params ? XR_SEM_PARAMETER_REQUIRED : 0u) |
+                       (source->is_vararg && p == source->nparams ? XR_SEM_PARAMETER_VARIADIC
+                                                                  : 0u) |
+                       (source->receiver_borrowed && p == 0 ? XR_SEM_PARAMETER_RECEIVER_BORROWED
+                                                            : 0u) |
+                       ((source->params[p]->lowering_flags & XI_LOWERING_FLAG_PARAM_READ_PLACE) != 0
+                            ? XR_SEM_PARAMETER_READ_PLACE
+                            : 0u));
+        ctx->plan->parameter_count++;
+    }
+    return true;
 }
 
 static bool build_function_records(XrSemanticBuildContext *ctx) {
@@ -627,108 +730,135 @@ static bool build_function_records(XrSemanticBuildContext *ctx) {
         const XiFunc *source = ctx->functions[i].source;
         XrSemanticFunctionRecord *record = &ctx->plan->functions[i];
         memset(record, 0, sizeof(*record));
-        int parent = function_index(ctx, source->parent_func);
-        record->name = xr_semantic_plan_copy_string(ctx->plan, source->name ? source->name : "");
-        if (!record->name || !add_type(ctx, source->return_type, &record->return_type))
+        record->parent = ctx->functions[i].parent;
+        if (!build_function_identity(ctx, i, source, record))
             return false;
         record->parameter_begin = ctx->plan->parameter_count;
-        record->parameter_count = xi_func_semantic_param_count(source);
-        for (uint16_t p = 0; p < record->parameter_count; p++) {
-            uint32_t type_index;
-            if (!source->params[p])
-                return fail(ctx, "XR_SEM_0013", "semantic function has a missing parameter");
-            if (!add_type(ctx, source->params[p]->type, &type_index))
-                return false;
-            if (!append_u32(&ctx->plan->parameters, &ctx->plan->parameter_count,
-                            &ctx->plan->parameter_capacity, type_index,
-                            XR_SEMANTIC_MAX_FUNCTIONS * 256u)) {
-                if (ctx->error && ctx->error_size)
-                    snprintf(ctx->error, ctx->error_size,
-                             "XR_EXEC_5003: semantic parameter budget exhausted "
-                             "(func=%s parameter=%u count=%u capacity=%u)",
-                             source->name ? source->name : "<anonymous>", p,
-                             ctx->plan->parameter_count, ctx->plan->parameter_capacity);
-                return false;
-            }
-        }
-        uint16_t lexical_ordinal = 0;
-        XrTextBuilder key = {0};
-        if (!function_lexical_ordinal(source, &lexical_ordinal) ||
-            !text_append(&key, "function-v2:parent=") ||
-            (parent >= 0 && !text_append_stable_id(&key, ctx->plan->functions[parent].id)) ||
-            (parent < 0 && !text_append(&key, "module-root")) ||
-            !text_append_format(&key, ":ordinal=%u:name=", lexical_ordinal) ||
-            !text_append_component(&key, source->name) ||
-            !text_append_format(&key, ":body=%u:return=", source->xg_body_func_id) ||
-            !text_append_stable_id(&key, ctx->plan->types[record->return_type].id) ||
-            !text_append_format(&key, ":params=%u", record->parameter_count)) {
-            text_dispose(&key);
-            return fail(ctx, "XR_EXEC_5003", "semantic function key allocation failed");
-        }
-        for (uint16_t p = 0; p < record->parameter_count; p++) {
-            uint32_t type_index = ctx->plan->parameters[record->parameter_begin + p];
-            if (!text_append_format(&key, ":p%u:mode=%u:type=", p,
-                                    (unsigned) source->params[p]->param_mode) ||
-                !text_append_stable_id(&key, ctx->plan->types[type_index].id)) {
-                text_dispose(&key);
-                return fail(ctx, "XR_EXEC_5003", "semantic function key allocation failed");
-            }
-        }
-        if (!text_append_format(&key, ":effects=%u:unsafe=%u:entry=%u:extern=%u",
-                                source->semantic_effects, source->requires_unsafe_at_call ? 1u : 0u,
-                                (unsigned) source->entry_type, source->is_extern ? 1u : 0u)) {
-            text_dispose(&key);
-            return fail(ctx, "XR_EXEC_5003", "semantic function key allocation failed");
-        }
-        record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
-        text_dispose(&key);
-        XrFingerprint digest;
-        if (!record->canonical_key ||
-            !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
-            return fail(ctx, "XR_EXEC_5003", "semantic function identity allocation failed");
         record->child_count = source->nchildren;
+        record->capture_begin = ctx->plan->capture_count;
         record->block_begin = block_cursor;
         record->block_count = source->nblocks;
         record->value_begin = value_cursor;
         record->value_count = source->next_value_id;
         record->semantic_effects = source->semantic_effects;
         record->capability_mask = source->requires_unsafe_at_call ? 1u : 0u;
-        record->return_parameter = source->arc_return_ownership.param_index;
-        record->return_provenance = source->arc_return_ownership.kind;
-        if (source->return_type && source->return_type->kind == XR_KIND_SLICE) {
-            record->return_parameter = -1;
-            record->return_provenance = XR_SEM_RETURN_NONE;
-            if (source->view_return_complete) {
-                if (source->view_return_source == XR_VIEW_RETURN_PARAM) {
-                    record->return_provenance = XR_SEM_RETURN_BORROWED_PARAM;
-                    record->return_parameter = source->view_return_param;
-                } else if (source->view_return_source == XR_VIEW_RETURN_RECEIVER) {
-                    record->return_provenance = XR_SEM_RETURN_BORROWED_PARAM;
-                    record->return_parameter = 0;
-                } else if (source->view_return_source == XR_VIEW_RETURN_STATIC) {
-                    record->return_provenance = XR_SEM_RETURN_BORROWED_STATIC;
-                }
-            }
-        } else if (source->entry_type == 2 && xi_own_type_is_rc(source->return_type)) {
-            /* A generator body completes with a control-only RET: its owned
-             * Iterator handle is materialized by GEN_CALL in the caller, not
-             * by a value-returning terminator in this resumable body. */
-            record->return_provenance = XR_SEM_RETURN_OWNED;
-            record->return_parameter = -1;
-        }
+        set_function_return_contract(source, record);
         record->flags =
             (uint8_t) ((source->error_effect_nothrow ? 1u : 0u) |
                        (source->contains_unsafe_op ? 2u : 0u) |
                        (source->entry_type == 2 ? 4u : 0u) | (source->is_extern ? 8u : 0u));
         ctx->functions[i].value_begin = value_cursor;
         ctx->functions[i].block_begin = block_cursor;
+        if (!append_parameter_records(ctx, i, source, record))
+            return false;
         if (UINT32_MAX - value_cursor < source->next_value_id ||
             UINT32_MAX - block_cursor < source->nblocks)
-            return fail(ctx, "XR_EXEC_5003", "semantic index space exhausted");
+            return fail(ctx, "XR_EXEC_5003", "semantic function index space exhausted");
         value_cursor += source->next_value_id;
         block_cursor += source->nblocks;
     }
     ctx->plan->function_count = ctx->function_count;
+    return true;
+}
+
+static bool build_capture_records(XrSemanticBuildContext *ctx) {
+    for (uint32_t i = 0; i < ctx->function_count; i++) {
+        const XiFunc *source = ctx->functions[i].source;
+        XrSemanticFunctionRecord *function = &ctx->plan->functions[i];
+        function->capture_begin = ctx->plan->capture_count;
+        function->capture_count = source->ncaptures;
+        if (source->ncaptures > 0 && function->parent == XR_SEMANTIC_INDEX_NONE)
+            return fail(ctx, "XR_SEM_0018", "root function cannot capture a lexical value");
+        for (uint16_t ordinal = 0; ordinal < source->ncaptures; ordinal++) {
+            const XiCapture *capture = &source->captures[ordinal];
+            if (!capture->type || capture->capture_kind > XI_CAPTURE_SHARED ||
+                (capture->source != XI_CAPTURE_SRC_REG &&
+                 capture->source != XI_CAPTURE_SRC_UPVAL) ||
+                capture->storage_domain == XR_STORAGE_DOMAIN_UNKNOWN ||
+                capture->value_capability == XR_SEM_VALUE_CAPABILITY_UNKNOWN ||
+                !reserve_array((void **) &ctx->plan->captures, &ctx->plan->capture_capacity,
+                               ctx->plan->capture_count + 1, sizeof(*ctx->plan->captures),
+                               XR_SEMANTIC_MAX_CAPTURES))
+                return fail(ctx, "XR_SEM_0018", "semantic capture contract is incomplete");
+            uint32_t type_index;
+            if (!add_type(ctx, capture->type, &type_index))
+                return false;
+            uint32_t source_type_index;
+            if (capture->source == XI_CAPTURE_SRC_REG) {
+                if (!capture->value || !capture->value->type ||
+                    !add_type(ctx, capture->value->type, &source_type_index))
+                    return fail(ctx, "XR_SEM_0018", "capture has no typed local source value");
+            } else {
+                const XrSemanticFunctionRecord *parent = &ctx->plan->functions[function->parent];
+                if (capture->index >= parent->capture_count)
+                    return fail(ctx, "XR_SEM_0018", "capture source link is out of range");
+                source_type_index =
+                    ctx->plan->captures[parent->capture_begin + capture->index].source_type;
+            }
+            XrSemanticCaptureRecord *record = &ctx->plan->captures[ctx->plan->capture_count];
+            memset(record, 0, sizeof(*record));
+            record->name =
+                xr_semantic_plan_copy_string(ctx->plan, capture->name ? capture->name : "");
+            XrTextBuilder key = {0};
+            if (!record->name || !text_append(&key, "capture-v1:function=") ||
+                !text_append_stable_id(&key, function->id) ||
+                !text_append_format(&key, ":ordinal=%u:name=", ordinal) ||
+                !text_append_component(&key, capture->name) ||
+                !text_append_format(
+                    &key, ":source=%u:index=%u:kind=%u:type=",
+                    capture->source == XI_CAPTURE_SRC_REG ? XR_SEM_CAPTURE_LOCAL_VALUE
+                                                          : XR_SEM_CAPTURE_PARENT_CAPTURE,
+                    capture->source == XI_CAPTURE_SRC_REG && capture->value ? capture->value->id
+                                                                            : capture->index,
+                    capture->capture_kind) ||
+                !text_append_stable_id(&key, ctx->plan->types[type_index].id) ||
+                !text_append(&key, ":source-type=") ||
+                !text_append_stable_id(&key, ctx->plan->types[source_type_index].id) ||
+                !text_append_format(&key, ":domain=%u:capability=%u", capture->storage_domain,
+                                    capture->value_capability)) {
+                text_dispose(&key);
+                return fail(ctx, "XR_EXEC_5003", "semantic capture key allocation failed");
+            }
+            record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+            text_dispose(&key);
+            XrFingerprint digest;
+            if (!record->canonical_key ||
+                !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+                return fail(ctx, "XR_EXEC_5003", "semantic capture identity allocation failed");
+            record->function = i;
+            record->source_function = function->parent;
+            record->source_value = XR_SEMANTIC_INDEX_NONE;
+            record->source_capture = XR_SEMANTIC_INDEX_NONE;
+            record->type = type_index;
+            record->source_type = source_type_index;
+            record->ordinal = ordinal;
+            record->source_index = capture->source == XI_CAPTURE_SRC_REG && capture->value
+                                       ? capture->value->id
+                                       : capture->index;
+            record->source = capture->source == XI_CAPTURE_SRC_REG ? XR_SEM_CAPTURE_LOCAL_VALUE
+                                                                   : XR_SEM_CAPTURE_PARENT_CAPTURE;
+            record->kind = capture->capture_kind;
+            record->storage_domain = capture->storage_domain;
+            record->value_capability = capture->value_capability;
+            record->flags = (uint8_t) ((capture->needs_cell ? XR_SEM_CAPTURE_NEEDS_CELL : 0u) |
+                                       (capture->is_mutable ? XR_SEM_CAPTURE_MUTABLE : 0u) |
+                                       (capture->is_reassigned ? XR_SEM_CAPTURE_REASSIGNED : 0u));
+            if (record->source == XR_SEM_CAPTURE_LOCAL_VALUE) {
+                if (function->parent == XR_SEMANTIC_INDEX_NONE)
+                    return fail(ctx, "XR_SEM_0018", "capture has no local source value");
+                record->source_value =
+                    ctx->functions[function->parent].value_begin + capture->value->id;
+                const XrSemanticFunctionRecord *parent = &ctx->plan->functions[function->parent];
+                if (record->source_value < parent->value_begin ||
+                    record->source_value >= parent->value_begin + parent->value_count)
+                    return fail(ctx, "XR_SEM_0018", "capture source value is out of range");
+            } else {
+                const XrSemanticFunctionRecord *parent = &ctx->plan->functions[function->parent];
+                record->source_capture = parent->capture_begin + capture->index;
+            }
+            ctx->plan->capture_count++;
+        }
+    }
     return true;
 }
 
@@ -1299,8 +1429,9 @@ bool xr_semantic_plan_build(const XiFunc *root, XrSemanticPlan **out, char *erro
     ctx.error = error;
     ctx.error_size = error_size;
     ctx.plan = xr_semantic_plan_create();
-    if (!ctx.plan || !collect_functions(&ctx, root) || !collect_semantic_types(&ctx) ||
-        !canonicalize_type_table(&ctx) || !build_function_records(&ctx) ||
+    if (!ctx.plan || !collect_functions(&ctx, root, XR_SEMANTIC_INDEX_NONE, 0) ||
+        !collect_semantic_types(&ctx) || !canonicalize_type_table(&ctx) ||
+        !build_function_records(&ctx) || !build_capture_records(&ctx) ||
         !build_blocks_and_operations(&ctx) || !build_semantic_edges(&ctx))
         goto failure;
     XrOwnershipCertificate *ownership = NULL;
@@ -1325,7 +1456,8 @@ failure:
 }
 
 static bool plan_tree_is_unattached(const XiFunc *function) {
-    if (!function || function->semantic_plan)
+    if (!function || function->semantic_plan ||
+        function->semantic_plan_function_index != XR_SEMANTIC_INDEX_NONE)
         return false;
     for (uint16_t i = 0; i < function->nchildren; i++) {
         if (function->children[i] && !plan_tree_is_unattached(function->children[i]))
@@ -1334,12 +1466,26 @@ static bool plan_tree_is_unattached(const XiFunc *function) {
     return true;
 }
 
-static void attach_plan_tree(XiFunc *function, XrSemanticPlan *plan, bool transfer_reference) {
+static bool plan_tree_has_function_count(const XiFunc *function, uint32_t expected,
+                                         uint32_t *count) {
+    if (!function || *count >= expected)
+        return false;
+    (*count)++;
+    for (uint16_t i = 0; i < function->nchildren; i++) {
+        if (!plan_tree_has_function_count(function->children[i], expected, count))
+            return false;
+    }
+    return true;
+}
+
+static void attach_plan_tree(XiFunc *function, XrSemanticPlan *plan, uint32_t *cursor,
+                             bool transfer_reference) {
     if (!function)
         return;
     function->semantic_plan = transfer_reference ? plan : xr_semantic_plan_retain(plan);
+    function->semantic_plan_function_index = (*cursor)++;
     for (uint16_t i = 0; i < function->nchildren; i++)
-        attach_plan_tree(function->children[i], plan, false);
+        attach_plan_tree(function->children[i], plan, cursor, false);
 }
 
 bool xr_semantic_plan_build_and_attach(XiFunc *root, char *error, size_t error_size) {
@@ -1352,6 +1498,16 @@ bool xr_semantic_plan_build_and_attach(XiFunc *root, char *error, size_t error_s
     XrSemanticPlan *plan = NULL;
     if (!xr_semantic_plan_build(root, &plan, error, error_size))
         return false;
-    attach_plan_tree(root, plan, true);
+    uint32_t expected = xr_semantic_plan_function_count(plan);
+    uint32_t cursor = 0;
+    if (!plan_tree_has_function_count(root, expected, &cursor) || cursor != expected) {
+        if (error && error_size)
+            snprintf(error, error_size,
+                     "XR_SEM_0011: Xi tree and SemanticPlan function tables diverged");
+        xr_semantic_plan_free(plan);
+        return false;
+    }
+    cursor = 0;
+    attach_plan_tree(root, plan, &cursor, true);
     return true;
 }
