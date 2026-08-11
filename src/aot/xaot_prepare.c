@@ -20,6 +20,7 @@
 #include "../frontend/analyzer/xa_selection.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_coro_analyze.h"
+#include "../ir/xi_coro_lower.h"
 #include "../ir/xi_escape.h"
 #include "../ir/xi_effect.h"
 #include "../ir/xi_range.h"
@@ -3228,7 +3229,9 @@ static bool prepare_func_allocation_plans(XaotBundle *bundle, const XiFunc *func
 }
 
 static bool xaot_closure_target_can_be_direct_symbol(const XiFunc *target) {
-    return target && target->ncaptures == 0 && !xi_coro_func_is_suspendable(target, NULL);
+    const XiCoroPlan *plan = target ? target->coro_plan : NULL;
+    return target && target->ncaptures == 0 && plan && xi_coro_plan_is_current(target, plan) &&
+           !plan->is_coroutine;
 }
 
 static bool xaot_closure_value_uses_direct_symbol(const XiFunc *owner, const XiValue *value,

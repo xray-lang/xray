@@ -21,6 +21,7 @@
 #include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_escape.h"
 #include "../../../src/ir/xi_coro_analyze.h"
+#include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
@@ -8046,6 +8047,75 @@ TEST(cgen_dynamic_uncaptured_callback_keeps_boxed_adapter) {
     xi_func_free(ir);
 }
 
+TEST(aot_closure_direct_symbol_requires_frozen_coroutine_plan) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 920, .frozen = true};
+    XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 921, .frozen = true};
+    func_type.function.param_count = 0;
+    func_type.function.min_params = 0;
+    func_type.function.return_type = &int_type;
+
+    XiFunc *owner = xi_func_new("closure_plan_owner", &int_type);
+    XiBlock *owner_entry = xi_block_new(owner);
+    XiFunc *sync_target = xi_func_new("closure_plan_sync", &int_type);
+    XiBlock *sync_entry = xi_block_new(sync_target);
+    XiValue *sync_result = xi_const_int(sync_target, sync_entry, 7, &int_type);
+    TEST_REQUIRE(owner && owner_entry && sync_target && sync_entry && sync_result,
+                 "closure plan fixtures allocated");
+    owner_entry->sealed = true;
+    sync_entry->sealed = true;
+    xi_block_set_return(sync_entry, sync_result);
+
+    XiValue *closure = xi_value_new(owner, owner_entry, XI_CLOSURE_NEW, &func_type, 0);
+    XiValue *call = xi_value_new(owner, owner_entry, XI_CALL, &int_type, 1);
+    TEST_REQUIRE(closure && call, "closure plan values allocated");
+    closure->aux = sync_target;
+    call->args[0] = closure;
+    xi_block_set_return(owner_entry, call);
+
+    XaotClosurePlan plan = {0};
+    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(owner, closure, &plan),
+                 "closure plan rederived without coroutine proof");
+    TEST_REQUIRE(plan.representation == XAOT_CLOSURE_RUNTIME,
+                 "missing coroutine plan must reject direct symbol lowering");
+
+    sync_target->stage = XI_STAGE_SEMANTIC_LOWERED;
+    sync_target->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    TEST_REQUIRE(xi_coro_lower(sync_target, NULL), "synchronous coroutine plan frozen");
+    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(owner, closure, &plan),
+                 "closure plan rederived from synchronous coroutine proof");
+    TEST_REQUIRE(plan.representation == XAOT_CLOSURE_DIRECT_SYMBOL,
+                 "fresh non-coroutine plan must permit direct symbol lowering");
+
+    xi_cfg_invalidate(sync_target);
+    TEST_REQUIRE(!xi_coro_plan_is_current(sync_target, sync_target->coro_plan),
+                 "CFG mutation invalidates the synchronous coroutine plan");
+    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(owner, closure, &plan),
+                 "closure plan rederived after coroutine proof becomes stale");
+    TEST_REQUIRE(plan.representation == XAOT_CLOSURE_RUNTIME,
+                 "stale coroutine plan must reject direct symbol lowering");
+
+    XiFunc *coro_target = xi_func_new("closure_plan_coro", &int_type);
+    XiBlock *coro_entry = xi_block_new(coro_target);
+    XiValue *yield = xi_value_new(coro_target, coro_entry, XI_YIELD, &int_type, 0);
+    XiValue *coro_result = xi_const_int(coro_target, coro_entry, 9, &int_type);
+    TEST_REQUIRE(coro_target && coro_entry && yield && coro_result,
+                 "coroutine closure target allocated");
+    coro_entry->sealed = true;
+    xi_block_set_return(coro_entry, coro_result);
+    coro_target->stage = XI_STAGE_SEMANTIC_LOWERED;
+    coro_target->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    TEST_REQUIRE(xi_coro_lower(coro_target, NULL), "suspendable coroutine plan frozen");
+    closure->aux = coro_target;
+    TEST_REQUIRE(xaot_prepare_closure_plan_for_value(owner, closure, &plan),
+                 "closure plan rederived from suspendable coroutine proof");
+    TEST_REQUIRE(plan.representation == XAOT_CLOSURE_RUNTIME,
+                 "suspendable coroutine plan must reject direct symbol lowering");
+
+    xi_func_free(owner);
+    xi_func_free(sync_target);
+    xi_func_free(coro_target);
+}
+
 TEST(cgen_closure_cell_var_id_above_255) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 900, .frozen = true};
     XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 901, .frozen = true};
@@ -12779,6 +12849,7 @@ int main(void) {
     run_cgen_typed_array_map_captured_callback_uses_runtime_helper();
     run_cgen_typed_array_rune_uses_scalar_storage_with_rune_boxing();
     run_cgen_dynamic_uncaptured_callback_keeps_boxed_adapter();
+    run_aot_closure_direct_symbol_requires_frozen_coroutine_plan();
     run_cgen_closure_cell_var_id_above_255();
     run_cgen_stack_alloc_direct_closure_uses_stack_runtime();
     run_cgen_stack_alloc_closure_preserves_cell_capture();
