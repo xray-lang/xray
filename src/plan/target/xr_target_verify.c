@@ -209,8 +209,9 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
         facts->operating_system >= XR_TARGET_OS_COUNT ||
         facts->environment <= XR_TARGET_ENV_NONE || facts->environment >= XR_TARGET_ENV_COUNT ||
         facts->native_abi <= XR_TARGET_ABI_NONE || facts->native_abi >= XR_TARGET_ABI_COUNT ||
-        facts->runtime_profile < XR_TARGET_RUNTIME_HOSTED ||
-        facts->runtime_profile > XR_TARGET_RUNTIME_FREESTANDING || facts->reserved8[0] != 0 ||
+        facts->runtime_profile < XR_TARGET_RUNTIME_PROFILE_HOSTED ||
+        facts->runtime_profile > XR_TARGET_RUNTIME_PROFILE_FREESTANDING ||
+        facts->reserved8[0] != 0 ||
         facts->reserved8[1] != 0 || facts->reserved8[2] != 0 || facts->reserved16 != 0)
         return report(error, error_size, "XR_TARGET_1000",
                       "target profile contains an unsupported exact identity");
@@ -229,15 +230,14 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
                                  XR_TARGET_VECTOR_AVX512 | XR_TARGET_VECTOR_NEON |
                                  XR_TARGET_VECTOR_SVE | XR_TARGET_VECTOR_VSX |
                                  XR_TARGET_VECTOR_LSX | XR_TARGET_VECTOR_WASM128;
-    const uint64_t provider_mask =
-        ((UINT64_C(1) << XR_TARGET_PROVIDER_COUNT) - 1u) & ~UINT64_C(1);
+    const uint64_t provider_mask = XR_TARGET_PROVIDER_MASK_ALL;
     if ((facts->atomic_width_mask & ~atomic_width_mask) != 0 ||
         (facts->atomic_order_mask & ~atomic_order_mask) != 0 ||
         (facts->float_feature_mask & ~float_mask) != 0 ||
         (facts->vector_feature_mask & ~vector_mask) != 0 ||
         (facts->provider_mask & ~provider_mask) != 0 ||
-        (facts->provider_mask & (UINT64_C(1) << XR_TARGET_PROVIDER_ALLOCATOR)) == 0 ||
-        (facts->provider_mask & (UINT64_C(1) << XR_TARGET_PROVIDER_PANIC)) == 0 ||
+        (facts->provider_mask & XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR)) == 0 ||
+        (facts->provider_mask & XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC)) == 0 ||
         (facts->float_feature_mask & XR_TARGET_FLOAT_IEEE754) == 0 ||
         ((facts->float_feature_mask & XR_TARGET_FLOAT_STRICT) != 0 &&
          (facts->float_feature_mask & XR_TARGET_FLOAT_FAST) != 0) ||
@@ -250,7 +250,8 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
         fingerprint_is_zero(facts->runtime_abi_fingerprint))
         return report(error, error_size, "XR_TARGET_1000",
                       "target profile runtime facts are incomplete");
-    bool freestanding = facts->runtime_profile == XR_TARGET_RUNTIME_FREESTANDING;
+    bool freestanding =
+        facts->runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING;
     if (freestanding != (facts->operating_system == XR_TARGET_OS_FREESTANDING) ||
         freestanding != (facts->environment == XR_TARGET_ENV_FREESTANDING) ||
         !profile_identity_is_consistent(facts) ||

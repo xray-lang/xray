@@ -18,6 +18,7 @@
 
 #include "../semantic/xr_semantic_ids.h"
 #include "../../base/xtarget_data_layout.h"
+#include "../../runtime/abi/xr_target_runtime_profile.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -71,24 +72,6 @@ typedef enum XrTargetNativeAbi {
     XR_TARGET_ABI_WASM,
     XR_TARGET_ABI_COUNT,
 } XrTargetNativeAbi;
-
-typedef enum XrTargetRuntimeProfile {
-    XR_TARGET_RUNTIME_NONE = 0,
-    XR_TARGET_RUNTIME_HOSTED,
-    XR_TARGET_RUNTIME_FREESTANDING,
-} XrTargetRuntimeProfile;
-
-typedef enum XrTargetProvider {
-    XR_TARGET_PROVIDER_NONE = 0,
-    XR_TARGET_PROVIDER_ALLOCATOR = 1,
-    XR_TARGET_PROVIDER_PANIC = 2,
-    XR_TARGET_PROVIDER_CLOCK = 3,
-    XR_TARGET_PROVIDER_SCHEDULER = 4,
-    XR_TARGET_PROVIDER_IO = 5,
-    XR_TARGET_PROVIDER_TLS = 6,
-    XR_TARGET_PROVIDER_FFI = 7,
-    XR_TARGET_PROVIDER_COUNT,
-} XrTargetProvider;
 
 typedef enum XrTargetAtomicWidth {
     XR_TARGET_ATOMIC_WIDTH_8 = 1u << 0,

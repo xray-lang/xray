@@ -98,7 +98,7 @@ static XrTargetProfile *build_profile(uint64_t extra_atomic_width) {
     draft.operating_system = XR_TARGET_OS_WINDOWS;
     draft.environment = XR_TARGET_ENV_MSVC;
     draft.native_abi = XR_TARGET_ABI_WIN64_X86_64;
-    draft.runtime_profile = XR_TARGET_RUNTIME_HOSTED;
+    draft.runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED;
     REQUIRE(xr_target_data_layout_init_lp64(&draft.data_layout));
     draft.atomic_width_mask = XR_TARGET_ATOMIC_WIDTH_8 | XR_TARGET_ATOMIC_WIDTH_16 |
                               XR_TARGET_ATOMIC_WIDTH_32 | XR_TARGET_ATOMIC_WIDTH_64 |
@@ -109,8 +109,8 @@ static XrTargetProfile *build_profile(uint64_t extra_atomic_width) {
     draft.float_feature_mask = XR_TARGET_FLOAT_IEEE754 | XR_TARGET_FLOAT_STRICT;
     draft.vector_feature_mask = XR_TARGET_VECTOR_SSE2;
     draft.maximum_vector_bits = 128;
-    draft.provider_mask = (UINT64_C(1) << XR_TARGET_PROVIDER_ALLOCATOR) |
-                          (UINT64_C(1) << XR_TARGET_PROVIDER_PANIC);
+    draft.provider_mask = XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
+                          XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
     draft.provider_set_fingerprint.bytes[0] = 0x3c;
     draft.object_header_fingerprint.bytes[0] = 0xa5;
     draft.runtime_abi_fingerprint.bytes[0] = 0x5a;
@@ -504,12 +504,12 @@ static void test_profile_freeze_and_determinism(void) {
     first->facts.maximum_vector_bits = 128;
     first->facts.operating_system = XR_TARGET_OS_FREESTANDING;
     first->facts.environment = XR_TARGET_ENV_FREESTANDING;
-    first->facts.runtime_profile = XR_TARGET_RUNTIME_FREESTANDING;
+    first->facts.runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING;
     xr_target_profile_compute_fingerprint(&first->facts, &first->fingerprint);
     REQUIRE(!xr_target_profile_verify(first, error, sizeof(error)));
     first->facts.operating_system = XR_TARGET_OS_WINDOWS;
     first->facts.environment = XR_TARGET_ENV_MSVC;
-    first->facts.runtime_profile = XR_TARGET_RUNTIME_HOSTED;
+    first->facts.runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED;
     first->fingerprint = saved_profile_fingerprint;
     first->facts.provider_mask |= UINT64_C(1) << 63;
     xr_target_profile_compute_fingerprint(&first->facts, &first->fingerprint);

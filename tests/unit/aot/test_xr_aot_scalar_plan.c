@@ -79,7 +79,7 @@ static XrTargetProfile *build_profile(bool ilp32, uint8_t fingerprint_seed) {
     draft.operating_system = ilp32 ? XR_TARGET_OS_WASI : XR_TARGET_OS_WINDOWS;
     draft.environment = ilp32 ? XR_TARGET_ENV_WASI : XR_TARGET_ENV_MSVC;
     draft.native_abi = ilp32 ? XR_TARGET_ABI_WASM : XR_TARGET_ABI_WIN64_X86_64;
-    draft.runtime_profile = XR_TARGET_RUNTIME_HOSTED;
+    draft.runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED;
     REQUIRE(ilp32 ? xr_target_data_layout_init_ilp32(&draft.data_layout)
                   : xr_target_data_layout_init_lp64(&draft.data_layout));
     draft.atomic_width_mask = XR_TARGET_ATOMIC_WIDTH_8 | XR_TARGET_ATOMIC_WIDTH_16 |
@@ -90,8 +90,8 @@ static XrTargetProfile *build_profile(bool ilp32, uint8_t fingerprint_seed) {
     draft.float_feature_mask = XR_TARGET_FLOAT_IEEE754 | XR_TARGET_FLOAT_STRICT;
     draft.vector_feature_mask = ilp32 ? XR_TARGET_VECTOR_WASM128 : XR_TARGET_VECTOR_SSE2;
     draft.maximum_vector_bits = 128;
-    draft.provider_mask = (UINT64_C(1) << XR_TARGET_PROVIDER_ALLOCATOR) |
-                          (UINT64_C(1) << XR_TARGET_PROVIDER_PANIC);
+    draft.provider_mask = XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
+                          XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
     draft.provider_set_fingerprint.bytes[0] = fingerprint_seed;
     draft.object_header_fingerprint.bytes[0] = (uint8_t) (fingerprint_seed + 1u);
     draft.runtime_abi_fingerprint.bytes[0] = (uint8_t) (fingerprint_seed + 2u);
