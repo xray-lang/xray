@@ -1146,6 +1146,17 @@ set(XRAY_STDLIB_FINAL_BYTECODE_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/generated/final")
 set(XRAY_STDLIB_FINAL_BYTECODE_INC
     "${XRAY_STDLIB_FINAL_BYTECODE_DIR}/stdlib_embedded_bytecodes.inc")
+if(XR_STDLIB_FROM_FILE)
+    # Development builds compile stdlib source from disk and never read the
+    # embedded bytecode table.  Reuse the generated empty bootstrap table so
+    # focused compiler tests do not depend on successfully self-hosting every
+    # stdlib module before the compiler under test can be linked.
+    set(XRAY_STDLIB_RUNTIME_BYTECODE_DIR
+        "${XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR}")
+else()
+    set(XRAY_STDLIB_RUNTIME_BYTECODE_DIR
+        "${XRAY_STDLIB_FINAL_BYTECODE_DIR}")
+endif()
 set(XRAY_STDLIB_XRC_DIR
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib-bytecode")
 add_custom_command(
@@ -1440,7 +1451,7 @@ target_include_directories(xray_core PUBLIC
 
 target_include_directories(xray_core PRIVATE
     ${XRAY_COMMON_INCLUDES}
-    ${XRAY_STDLIB_FINAL_BYTECODE_DIR}
+    ${XRAY_STDLIB_RUNTIME_BYTECODE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
@@ -1458,7 +1469,7 @@ target_include_directories(xray_vm_runtime PUBLIC
 
 target_include_directories(xray_vm_runtime PRIVATE
     ${XRAY_COMMON_INCLUDES}
-    ${XRAY_STDLIB_FINAL_BYTECODE_DIR}
+    ${XRAY_STDLIB_RUNTIME_BYTECODE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
@@ -1703,8 +1714,13 @@ add_custom_command(
 add_custom_target(gen-stdlib-embedded-bytecodes DEPENDS ${XRAY_STDLIB_FINAL_BYTECODE_INC})
 add_custom_target(gen-stdlib-embedded
     DEPENDS gen-stdlib-embedded-sources gen-stdlib-embedded-bytecodes)
-add_dependencies(xray_core gen-stdlib-embedded-bytecodes)
-add_dependencies(xray_vm_runtime gen-stdlib-embedded-bytecodes)
+if(XR_STDLIB_FROM_FILE)
+    add_dependencies(xray_core gen-stdlib-embedded-sources)
+    add_dependencies(xray_vm_runtime gen-stdlib-embedded-sources)
+else()
+    add_dependencies(xray_core gen-stdlib-embedded-bytecodes)
+    add_dependencies(xray_vm_runtime gen-stdlib-embedded-bytecodes)
+endif()
 
 # ============================================================================
 # Build Target - Main Executable (optional LSP and DAP)
