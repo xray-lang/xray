@@ -432,6 +432,21 @@ static inline uint8_t xi_to_c_template_width_native_type(uint16_t op) {
     return UINT8_MAX;
 }
 
+static inline const char *xi_to_c_template_width_narrow_kernel(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_NARROW_I8: return "xr_numeric_narrow_i8";
+        case XI_NARROW_U8: return "xr_numeric_narrow_u8";
+        case XI_NARROW_I16: return "xr_numeric_narrow_i16";
+        case XI_NARROW_U16: return "xr_numeric_narrow_u16";
+        case XI_NARROW_I32: return "xr_numeric_narrow_i32";
+        case XI_NARROW_U32: return "xr_numeric_narrow_u32";
+        case XI_NARROW_F32: return "xr_numeric_narrow_f32";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
 static inline bool xi_to_c_template_width_preserves_loaded_f32(uint16_t op) {
     switch ((XiOp) op) {
         case XI_WIDEN_F32: return true;

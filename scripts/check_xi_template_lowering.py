@@ -351,7 +351,7 @@ def run_check(root: Path) -> list[Violation]:
         vm_width_opcodes,
         vm_width_generated_text,
         VM_GENERATED_WIDTH_FILE,
-        r"\bXVM_TEMPLATE_WIDTH_(?:INT|F32)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        r"\bXVM_TEMPLATE_(?:NARROW|WIDTH)_(?:INT|F32)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
         "width"))
     violations.extend(check_vm_generated_body_coverage(
         vm_bitwise_opcodes,
@@ -440,9 +440,9 @@ def run_self_test() -> None:
     vm_opcodes = {"OP_NARROW_I8"}
     vm_coverage = check_vm_generated_body_coverage(
         vm_opcodes,
-        "XVM_TEMPLATE_WIDTH_INT_CASE(OP_NARROW_I8, XR_NATIVE_I8)\n",
+        "XVM_TEMPLATE_NARROW_INT_CASE(OP_NARROW_I8, xr_numeric_narrow_i8)\n",
         VM_GENERATED_WIDTH_FILE,
-        r"\bXVM_TEMPLATE_WIDTH_(?:INT|F32)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        r"\bXVM_TEMPLATE_(?:NARROW|WIDTH)_(?:INT|F32)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
         "width")
     assert not vm_coverage
     vm_missing = check_vm_generated_body_coverage(

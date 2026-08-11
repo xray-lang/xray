@@ -37,10 +37,15 @@
 
 #include "../shared/xr_raw_scalar_core.h"  // L0: unsafe raw scalar load/store
 #include "../shared/xr_bits_core.h"        // L0: exact-width compiler bit intrinsics
+#include "../shared/xr_numeric_conversion_core.h"  // L0: deterministic scalar narrowing
 #define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
                               XR_SEM_OWNER_ID_SHARED_BITS_LO,                                     \
                               XR_SEM_CONSUMER_AOT_HOSTED, kernel, lhs, rhs, native_type)
+#define xrt_numeric_narrow_eval(kernel, value)                                                     \
+    XR_NUMERIC_NARROW_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,                   \
+                                  XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,                   \
+                                  XR_SEM_CONSUMER_AOT_HOSTED, kernel, value)
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
 #include "xrt_arc.h"        // L1: execution arena, xrt_str_alloc, xrt_str_concat
 #include "xrt_net.h"        // L1: hosted TCP handle helpers

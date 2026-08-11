@@ -57,6 +57,10 @@ int memcmp(const void *a, const void *b, size_t n);
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
                               XR_SEM_OWNER_ID_SHARED_BITS_LO,                                     \
                               XR_SEM_CONSUMER_AOT_FREESTANDING, kernel, lhs, rhs, native_type)
+#define xrt_numeric_narrow_eval(kernel, value)                                                     \
+    XR_NUMERIC_NARROW_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,                   \
+                                  XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,                   \
+                                  XR_SEM_CONSUMER_AOT_FREESTANDING, kernel, value)
 #include "../shared/xr_sync_core.h"
 #include "../shared/xr_truthy_core.h"
 #include "../shared/xr_type_identity_core.h"

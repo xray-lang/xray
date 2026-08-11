@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "f535555a820d53d3f02a8dd6d40bac324d6c7faf9822673f5fe980b1fddb18f7",
+  "canonical_fingerprint": "7e0b1e00cb8def1bbab8bfa25e555b15c7c6426ec72639ec938b5d3ad7406a70",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -112,6 +112,58 @@
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
           "symbol": "cg_exact_bits_adapter_name"
+        }
+      ]
+    },
+    {
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.narrow.i8",
+        "xi.narrow.u8",
+        "xi.narrow.i16",
+        "xi.narrow.u16",
+        "xi.narrow.i32",
+        "xi.narrow.u32",
+        "xi.narrow.f32"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
+      ],
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_narrow_eval",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_narrow_adapter_name"
         }
       ]
     },
@@ -2661,160 +2713,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.multi.ret"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.narrow.f32",
-      "owner_id": "7b141d041feb34663e47515f4f168f1a",
-      "owner_id_hi": "0x7b141d041feb3466",
-      "owner_id_lo": "0x3e47515f4f168f1a",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.narrow.f32"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.narrow.i16",
-      "owner_id": "1fe310c9c7fc314407f2d187f160c258",
-      "owner_id_hi": "0x1fe310c9c7fc3144",
-      "owner_id_lo": "0x07f2d187f160c258",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.narrow.i16"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.narrow.i32",
-      "owner_id": "b3299120429def64f480b8c55a7f339c",
-      "owner_id_hi": "0xb3299120429def64",
-      "owner_id_lo": "0xf480b8c55a7f339c",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.narrow.i32"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.narrow.i8",
-      "owner_id": "2bcd9e362313c451f345b63c3a8720b8",
-      "owner_id_hi": "0x2bcd9e362313c451",
-      "owner_id_lo": "0xf345b63c3a8720b8",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.narrow.i8"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.narrow.u16",
-      "owner_id": "cc51e121ac3bee9574b1615ea61ae825",
-      "owner_id_hi": "0xcc51e121ac3bee95",
-      "owner_id_lo": "0x74b1615ea61ae825",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.narrow.u16"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.narrow.u32",
-      "owner_id": "7e86c89ef476bf1ae02f548f6bf713f6",
-      "owner_id_hi": "0x7e86c89ef476bf1a",
-      "owner_id_lo": "0xe02f548f6bf713f6",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.narrow.u32"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.narrow.u8",
-      "owner_id": "3a8a1a9605b962143b34f1f1272351a0",
-      "owner_id_hi": "0x3a8a1a9605b96214",
-      "owner_id_lo": "0x3b34f1f1272351a0",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.narrow.u8"
       ],
       "consumers": [
         "semantic-plan"
@@ -6066,21 +5964,45 @@
       "operation_id": "2bcd9e362313c451f345b63c3a8720b8",
       "operation_id_hi": "0x2bcd9e362313c451",
       "operation_id_lo": "0xf345b63c3a8720b8",
-      "owner": "xi.narrow.i8",
-      "owner_id": "2bcd9e362313c451f345b63c3a8720b8",
-      "owner_id_hi": "0x2bcd9e362313c451",
-      "owner_id_lo": "0xf345b63c3a8720b8",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_narrow_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_narrow_adapter_name"
         }
       ]
     },
@@ -6089,21 +6011,45 @@
       "operation_id": "3a8a1a9605b962143b34f1f1272351a0",
       "operation_id_hi": "0x3a8a1a9605b96214",
       "operation_id_lo": "0x3b34f1f1272351a0",
-      "owner": "xi.narrow.u8",
-      "owner_id": "3a8a1a9605b962143b34f1f1272351a0",
-      "owner_id_hi": "0x3a8a1a9605b96214",
-      "owner_id_lo": "0x3b34f1f1272351a0",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_narrow_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_narrow_adapter_name"
         }
       ]
     },
@@ -6112,21 +6058,45 @@
       "operation_id": "1fe310c9c7fc314407f2d187f160c258",
       "operation_id_hi": "0x1fe310c9c7fc3144",
       "operation_id_lo": "0x07f2d187f160c258",
-      "owner": "xi.narrow.i16",
-      "owner_id": "1fe310c9c7fc314407f2d187f160c258",
-      "owner_id_hi": "0x1fe310c9c7fc3144",
-      "owner_id_lo": "0x07f2d187f160c258",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_narrow_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_narrow_adapter_name"
         }
       ]
     },
@@ -6135,21 +6105,45 @@
       "operation_id": "cc51e121ac3bee9574b1615ea61ae825",
       "operation_id_hi": "0xcc51e121ac3bee95",
       "operation_id_lo": "0x74b1615ea61ae825",
-      "owner": "xi.narrow.u16",
-      "owner_id": "cc51e121ac3bee9574b1615ea61ae825",
-      "owner_id_hi": "0xcc51e121ac3bee95",
-      "owner_id_lo": "0x74b1615ea61ae825",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_narrow_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_narrow_adapter_name"
         }
       ]
     },
@@ -6158,21 +6152,45 @@
       "operation_id": "b3299120429def64f480b8c55a7f339c",
       "operation_id_hi": "0xb3299120429def64",
       "operation_id_lo": "0xf480b8c55a7f339c",
-      "owner": "xi.narrow.i32",
-      "owner_id": "b3299120429def64f480b8c55a7f339c",
-      "owner_id_hi": "0xb3299120429def64",
-      "owner_id_lo": "0xf480b8c55a7f339c",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_narrow_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_narrow_adapter_name"
         }
       ]
     },
@@ -6181,21 +6199,45 @@
       "operation_id": "7e86c89ef476bf1ae02f548f6bf713f6",
       "operation_id_hi": "0x7e86c89ef476bf1a",
       "operation_id_lo": "0xe02f548f6bf713f6",
-      "owner": "xi.narrow.u32",
-      "owner_id": "7e86c89ef476bf1ae02f548f6bf713f6",
-      "owner_id_hi": "0x7e86c89ef476bf1a",
-      "owner_id_lo": "0xe02f548f6bf713f6",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_narrow_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_narrow_adapter_name"
         }
       ]
     },
@@ -6204,21 +6246,45 @@
       "operation_id": "7b141d041feb34663e47515f4f168f1a",
       "operation_id_hi": "0x7b141d041feb3466",
       "operation_id_lo": "0x3e47515f4f168f1a",
-      "owner": "xi.narrow.f32",
-      "owner_id": "7b141d041feb34663e47515f4f168f1a",
-      "owner_id_hi": "0x7b141d041feb3466",
-      "owner_id_lo": "0x3e47515f4f168f1a",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_narrow_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_narrow_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_narrow_adapter_name"
         }
       ]
     },

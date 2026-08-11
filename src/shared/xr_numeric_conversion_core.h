@@ -9,6 +9,7 @@
 #ifndef XR_NUMERIC_CONVERSION_CORE_H
 #define XR_NUMERIC_CONVERSION_CORE_H
 
+#include "xr_semantic_owner_ids_gen.h"
 #include "xr_native_type_core.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -295,6 +296,62 @@ static inline double xr_numeric_f64_to_f32(double source) {
     }
     return (double) xr_numeric_float_from_bits(result_bits);
 }
+
+/* xi.narrow.* has exactly one language-semantic implementation.  These
+ * kernels deliberately avoid native narrowing casts: integer results are
+ * defined by low-bit truncation plus explicit two's-complement restoration,
+ * while f32 uses the deterministic IEEE conversion above. */
+static inline int64_t xr_numeric_narrow_i8(int64_t value) {
+    return xr_numeric_int_convert_i64(value, XR_NATIVE_I8, XR_NATIVE_I8, 64);
+}
+
+static inline int64_t xr_numeric_narrow_u8(int64_t value) {
+    return xr_numeric_int_convert_i64(value, XR_NATIVE_U8, XR_NATIVE_U8, 64);
+}
+
+static inline int64_t xr_numeric_narrow_i16(int64_t value) {
+    return xr_numeric_int_convert_i64(value, XR_NATIVE_I16, XR_NATIVE_I16, 64);
+}
+
+static inline int64_t xr_numeric_narrow_u16(int64_t value) {
+    return xr_numeric_int_convert_i64(value, XR_NATIVE_U16, XR_NATIVE_U16, 64);
+}
+
+static inline int64_t xr_numeric_narrow_i32(int64_t value) {
+    return xr_numeric_int_convert_i64(value, XR_NATIVE_I32, XR_NATIVE_I32, 64);
+}
+
+static inline int64_t xr_numeric_narrow_u32(int64_t value) {
+    return xr_numeric_int_convert_i64(value, XR_NATIVE_U32, XR_NATIVE_U32, 64);
+}
+
+static inline double xr_numeric_narrow_f32(double value) {
+    return xr_numeric_f64_to_f32(value);
+}
+
+#define XR_NUMERIC_NARROW_OWNER_GUARD(owner_hi, owner_lo)                                         \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_numeric_conversion                                  \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI &&         \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO)           \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_NUMERIC_NARROW_CONSUMER_GUARD(consumer_bit)                                            \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_numeric_conversion                     \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&           \
+                (XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_CONSUMERS &                            \
+                 (uint32_t) (consumer_bit)) != 0)                                                 \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_NUMERIC_NARROW_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, kernel, value)            \
+    (XR_NUMERIC_NARROW_OWNER_GUARD((owner_hi), (owner_lo)),                                       \
+     XR_NUMERIC_NARROW_CONSUMER_GUARD((consumer_bit)), (kernel)(value))
 
 static inline double xr_numeric_float_convert(double source, uint8_t target_rep) {
     return target_rep == XR_NATIVE_F32 ? xr_numeric_f64_to_f32(source) : source;

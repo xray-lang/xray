@@ -195,32 +195,6 @@ static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
     return v;
 }
 
-static const char *cg_unsigned_narrow_cast_ctype(uint16_t op) {
-    const char *ctype = xi_to_c_template_width_cast_type(op);
-    if (!ctype || !*ctype)
-        return NULL;
-    return (op == XI_NARROW_U8 || op == XI_NARROW_U16 || op == XI_NARROW_U32) ? ctype : NULL;
-}
-
-static bool cg_op_is_lowbits_binop(uint16_t op) {
-    const char *arith = xi_to_c_template_arith_native_op(op);
-    if (arith && *arith)
-        return true;
-    const char *bitwise = xi_to_c_template_bitwise_binary_op(op);
-    return bitwise && *bitwise;
-}
-
-static const XiValue *cg_unsigned_narrow_lowbits_binop_arg(const XiValue *v) {
-    if (!v || v->nargs < 1 || !v->args[0] || !cg_unsigned_narrow_cast_ctype(v->op))
-        return NULL;
-
-    const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
-    if (!arg || !cg_op_is_lowbits_binop(arg->op) || arg->nargs < 2 || cg_rep(arg) != XR_REP_I64 ||
-        cg_rep(arg->args[0]) != XR_REP_I64 || cg_rep(arg->args[1]) != XR_REP_I64)
-        return NULL;
-    return arg;
-}
-
 static bool cg_value_is_null_const(const XiValue *v) {
     return v && v->op == XI_CONST && v->type && v->type->kind == XR_KIND_NULL;
 }
@@ -4243,40 +4217,6 @@ static void cg_emit_narrow_arith_operand(XiCgenCtx *ctx, const XiFunc *f, FILE *
     emit_vref(out, src ? src : o);
 }
 
-static bool cg_lowbits_binop_elided_into_unsigned_narrow(const XiFunc *f, const XiValue *v) {
-    if (!f || !v || !cg_op_is_lowbits_binop(v->op) || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
-        return false;
-
-    bool any_user = false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        if (blk->control == v)
-            return false;
-        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            for (uint16_t k = 0; k < phi->value.nargs; k++) {
-                if (phi->value.args[k] == v)
-                    return false;
-            }
-        }
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *user = blk->values[vi];
-            if (!user || user == v)
-                continue;
-            for (uint16_t ai = 0; ai < user->nargs; ai++) {
-                if (user->args[ai] != v)
-                    continue;
-                any_user = true;
-                if (cg_unsigned_narrow_lowbits_binop_arg(user) != v)
-                    return false;
-            }
-        }
-    }
-    return any_user;
-}
-
 static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *op) {
     /* BigInt bitwise: the operands are tagged BigInts, so unboxing them as
      * int64 would read the pointer as an integer. Emit the tagged runtime that
@@ -4565,6 +4505,25 @@ static const char *cg_exact_bits_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: exact-width bits owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_numeric_narrow_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
+                                        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: numeric narrow owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
+        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: numeric narrow owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
@@ -6787,9 +6746,6 @@ static bool cg_int_widen_use_consumes_inner(XiCgenCtx *ctx, const XiFunc *f, con
         return false;
     if (cg_direct_call_arg_consumes_int_widen_inner(ctx, f, user, arg_index, widen))
         return true;
-    if (cg_lowbits_binop_elided_into_unsigned_narrow(f, user) &&
-        cg_arith_narrow_src(ctx, f, widen, NULL, NULL) == inner)
-        return true;
     return false;
 }
 
@@ -7124,8 +7080,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
         }
         return arg_index < 2 && user->nargs >= 2 && cg_rep(user) == XR_REP_I64 &&
                cg_rep(user->args[0]) == XR_REP_I64 && cg_rep(user->args[1]) == XR_REP_I64 &&
-               !cg_arith_is_clean_narrow(ctx, f, user) &&
-               !cg_lowbits_binop_elided_into_unsigned_narrow(f, user);
+               !cg_arith_is_clean_narrow(ctx, f, user);
     }
 
     const char *template_fn = xi_to_c_template_div_mod_runtime_fn(user->op);
@@ -7141,7 +7096,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
 
     template_op = xi_to_c_template_bitwise_binary_op(user->op);
     if (template_op && *template_op)
-        return arg_index < 2 && !cg_lowbits_binop_elided_into_unsigned_narrow(f, user);
+        return arg_index < 2;
 
     template_fn = xi_to_c_template_shift_fn(user->op);
     if (template_fn && *template_fn)
@@ -8128,8 +8083,6 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     XR_DCHECK(v != NULL, "emit_value_stmt: NULL value");
     emit_value_source_line(ctx, out, v);
 
-    if (cg_lowbits_binop_elided_into_unsigned_narrow(f, v))
-        return;
     if (xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v))
         return;
     if (cg_await_all_inline_literal_value_is_elided(f, v))
@@ -9338,8 +9291,6 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     if (cg_is_void_like(v) || v->op == XI_TRY || v->op == XI_END_TRY)
         return true;
     if (xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v))
-        return true;
-    if (cg_lowbits_binop_elided_into_unsigned_narrow(f, v))
         return true;
     if (cg_await_all_inline_literal_value_is_elided(f, v))
         return true;

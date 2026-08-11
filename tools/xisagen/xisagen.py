@@ -2288,6 +2288,26 @@ def generate_xi_vm_template_width_dispatch(entries: list[XiLoweringDef]) -> str:
     lines.append('/* Source: xisa/xi/lowering.def */')
     lines.append('/* Included inside xvm.c dispatch switch; relies on i, R, vmcase, vmbreak. */')
     lines.append('')
+    lines.append('#define XVM_TEMPLATE_NARROW_INT_CASE(op, kernel) \\')
+    lines.append('    vmcase(op) { \\')
+    lines.append('        int a = GETARG_A(i), b = GETARG_B(i); \\')
+    lines.append('        R(a) = XR_FROM_INT(XR_NUMERIC_NARROW_OWNER_APPLY( \\')
+    lines.append('            XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI, \\')
+    lines.append('            XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, \\')
+    lines.append('            XR_SEM_CONSUMER_VM, kernel, XR_TO_INT(R(b)))); \\')
+    lines.append('        vmbreak; \\')
+    lines.append('    }')
+    lines.append('')
+    lines.append('#define XVM_TEMPLATE_NARROW_F32_CASE(op, kernel) \\')
+    lines.append('    vmcase(op) { \\')
+    lines.append('        int a = GETARG_A(i), b = GETARG_B(i); \\')
+    lines.append('        R(a) = XR_FROM_FLOAT(XR_NUMERIC_NARROW_OWNER_APPLY( \\')
+    lines.append('            XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI, \\')
+    lines.append('            XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, \\')
+    lines.append('            XR_SEM_CONSUMER_VM, kernel, XR_TO_FLOAT(R(b)))); \\')
+    lines.append('        vmbreak; \\')
+    lines.append('    }')
+    lines.append('')
     lines.append('#define XVM_TEMPLATE_WIDTH_INT_CASE(op, scalar_rep) \\')
     lines.append('    vmcase(op) { \\')
     lines.append('        int a = GETARG_A(i), b = GETARG_B(i); \\')
@@ -2306,11 +2326,19 @@ def generate_xi_vm_template_width_dispatch(entries: list[XiLoweringDef]) -> str:
     for entry in width_entries:
         opcode = XI_VM_TEMPLATE_OPCODES[entry.op_name]
         scalar_rep = XI_VM_TEMPLATE_WIDTH[entry.op_name]
-        if scalar_rep:
+        if entry.template == 'narrow':
+            kernel = 'xr_numeric_' + entry.op_name.removeprefix('xi.').replace('.', '_')
+            if scalar_rep:
+                lines.append(f'XVM_TEMPLATE_NARROW_INT_CASE({opcode}, {kernel})')
+            else:
+                lines.append(f'XVM_TEMPLATE_NARROW_F32_CASE({opcode}, {kernel})')
+        elif scalar_rep:
             lines.append(f'XVM_TEMPLATE_WIDTH_INT_CASE({opcode}, {scalar_rep})')
         else:
             lines.append(f'XVM_TEMPLATE_WIDTH_F32_CASE({opcode})')
     lines.append('')
+    lines.append('#undef XVM_TEMPLATE_NARROW_INT_CASE')
+    lines.append('#undef XVM_TEMPLATE_NARROW_F32_CASE')
     lines.append('#undef XVM_TEMPLATE_WIDTH_INT_CASE')
     lines.append('#undef XVM_TEMPLATE_WIDTH_F32_CASE')
     lines.append('')
@@ -2823,6 +2851,18 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('    return UINT8_MAX;')
     lines.append('}')
     lines.append('')
+    lines.append('static inline const char *xi_to_c_template_width_narrow_kernel(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in width_entries:
+        if entry.template == 'narrow':
+            kernel = 'xr_numeric_' + entry.op_name.removeprefix('xi.').replace('.', '_')
+            lines.append(f'        case XI_{entry.ident}: return "{kernel}";')
+    lines.append('        case XI_OP_COUNT: return "";')
+    lines.append('        default: return "";')
+    lines.append('    }')
+    lines.append('    return "";')
+    lines.append('}')
+    lines.append('')
     lines.append('static inline bool xi_to_c_template_width_preserves_loaded_f32(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for entry in width_entries:
@@ -2939,6 +2979,13 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
             lines.append(
                 f'    assert(xi_to_c_template_width_native_type(XI_{entry.ident}) == '
                 f'{expected_native_type});')
+            expected_kernel = (
+                'xr_numeric_' + entry.op_name.removeprefix('xi.').replace('.', '_')
+                if entry.template == 'narrow' else ''
+            )
+            lines.append(
+                f'    assert(strcmp(xi_to_c_template_width_narrow_kernel(XI_{entry.ident}), '
+                f'"{expected_kernel}") == 0);')
             lines.append(
                 f'    assert(xi_to_c_template_width_preserves_loaded_f32(XI_{entry.ident}) == {preserve_c});')
         fresh_dst = 'true' if entry.target_attrs.get('vm-bytecode', {}).get('fresh-dst',
@@ -4478,6 +4525,7 @@ def _test_xi_lowering_parser():
     assert 'xi_to_c_template_width_kind' in aot_header
     assert 'xi_to_c_template_width_cast_type' in aot_header
     assert 'xi_to_c_template_width_native_type' in aot_header
+    assert 'xi_to_c_template_width_narrow_kernel' in aot_header
     stmt_header = generate_xi_target_dispatch_header(entries, 'aot-c-stmt', 'TEST_STMT_H',
                                                      'TEST_STMT')
     assert 'X(COPY, "xi.copy", xicgen_stmt_copy)' in stmt_header

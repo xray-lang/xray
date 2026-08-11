@@ -512,6 +512,8 @@
       "owner": "shared-kernel",
       "production_callers": [
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_to_c_dispatch_gen.h",
+        "src/aot/xrt.h",
         "src/aot/xrt_arith.h",
         "src/aot/xrt_coll.h",
         "src/aot/xrt_core_freestanding.h",
@@ -544,6 +546,13 @@
         "xr_numeric_int_convert_i64",
         "xr_numeric_int_to_float",
         "xr_numeric_mask_for_bits",
+        "xr_numeric_narrow_f32",
+        "xr_numeric_narrow_i16",
+        "xr_numeric_narrow_i32",
+        "xr_numeric_narrow_i8",
+        "xr_numeric_narrow_u16",
+        "xr_numeric_narrow_u32",
+        "xr_numeric_narrow_u8",
         "xr_numeric_power_of_two",
         "xr_numeric_round_shift_even_u64",
         "xr_numeric_scalar_bit_width",
@@ -557,6 +566,8 @@
       "status": "production",
       "test_callers": [
         "tests/aot/provider/freestanding_numeric_core.c",
+        "tests/unit/aot/test_xrt_type_identity_freestanding.c",
+        "tests/unit/ir/test_xi_lowering_gen.c",
         "tests/unit/stdlib/test_numeric_core.c"
       ]
     },

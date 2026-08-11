@@ -12186,32 +12186,25 @@ static void xicgen_convert_i64_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
             (unsigned) scalar_rep);
 }
 
-static bool xicgen_unsigned_narrow_lowbits_binop(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                 const XiValue *v) {
-    if (!ctx || !out || !v)
-        return false;
-
-    const char *cast_ctype = cg_unsigned_narrow_cast_ctype(v->op);
-    if (!cast_ctype)
-        return false;
-
-    const char *op_ctype = "uint32_t";
-    const XiValue *arg = cg_unsigned_narrow_lowbits_binop_arg(v);
-    if (!arg)
-        return false;
-
-    const char *op = xi_to_c_template_arith_native_op(arg->op);
-    if (!op || !*op)
-        op = xi_to_c_template_bitwise_binary_op(arg->op);
-    if (!op || !*op)
-        return false;
-
-    fprintf(out, "(%s)((%s)(", cast_ctype, op_ctype);
-    cg_emit_narrow_arith_operand(ctx, f, out, arg->args[0]);
-    fprintf(out, ") %s (%s)(", op, op_ctype);
-    cg_emit_narrow_arith_operand(ctx, f, out, arg->args[1]);
-    fprintf(out, "))");
-    return true;
+static void xicgen_numeric_narrow(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                  const XiValue *v) {
+    (void) f;
+    const char *adapter = cg_numeric_narrow_adapter_name(ctx);
+    const char *kernel = v ? xi_to_c_template_width_narrow_kernel(v->op) : NULL;
+    if (!adapter || !kernel || !kernel[0] || !v || v->nargs != 1 || !v->args[0] ||
+        (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)) {
+        if (ctx)
+            ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "%s(%s, ", adapter, kernel);
+    emit_value_as_rep_ctx(ctx, out, v->args[0],
+                          xi_to_c_template_width_kind(v->op) ==
+                                  AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP
+                              ? XR_REP_F64
+                              : XR_REP_I64);
+    fprintf(out, ")");
 }
 
 static void xicgen_f32_roundtrip(FILE *out, const XiValue *v, bool preserve_loaded_float32) {
@@ -12225,10 +12218,12 @@ static void xicgen_f32_roundtrip(FILE *out, const XiValue *v, bool preserve_load
 static void xicgen_template_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     (void) prefix;
+    if (xi_to_c_template_width_narrow_kernel(v->op)[0]) {
+        xicgen_numeric_narrow(ctx, out, f, v);
+        return;
+    }
     switch (xi_to_c_template_width_kind(v->op)) {
         case AOT_WIDTH_TEMPLATE_CAST_I64:
-            if (xicgen_unsigned_narrow_lowbits_binop(ctx, out, f, v))
-                return;
             xicgen_convert_i64_width(ctx, out, f, v);
             return;
         case AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP:

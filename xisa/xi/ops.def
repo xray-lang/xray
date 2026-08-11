@@ -2668,13 +2668,6 @@
     xi.unbox
     xi.enum.descriptor.box
     xi.enum.descriptor.unbox
-    xi.narrow.i8
-    xi.narrow.u8
-    xi.narrow.i16
-    xi.narrow.u16
-    xi.narrow.i32
-    xi.narrow.u32
-    xi.narrow.f32
     xi.widen.i8
     xi.widen.u8
     xi.widen.i16
@@ -2825,6 +2818,13 @@
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
     xi.not
+    xi.narrow.i8
+    xi.narrow.u8
+    xi.narrow.i16
+    xi.narrow.u16
+    xi.narrow.i32
+    xi.narrow.u32
+    xi.narrow.f32
     xi.bit.rotl
     xi.bit.rotr
     xi.bit.bswap
@@ -2922,6 +2922,33 @@
     (aot-hosted "src/aot/xrt.h" "xrt_bits_exact_eval")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_bits_exact_eval")
     (cgen "src/aot/xi_cgen.c" "cg_exact_bits_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.numeric-conversion
+  :category shared-semantic-kernel
+  :operations (
+    xi.narrow.i8
+    xi.narrow.u8
+    xi.narrow.i16
+    xi.narrow.u16
+    xi.narrow.i32
+    xi.narrow.u32
+    xi.narrow.f32
+  )
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_numeric_narrow_eval
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_template_width_gen.inc.c" "XR_NUMERIC_NARROW_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_numeric_narrow_eval")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_numeric_narrow_eval")
+    (cgen "src/aot/xi_cgen.c" "cg_numeric_narrow_adapter_name")
   ))
 
 (define-xi-observable-owner primitive.type-identity

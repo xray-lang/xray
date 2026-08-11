@@ -55,5 +55,32 @@ int main(void) {
     if (xrt_bits_exact_eval(xr_bits_exact_kernel_mul_high, -INT64_C(1), INT64_C(2),
                             XR_NATIVE_U64) != INT64_C(1))
         return 17;
+    if (xrt_numeric_narrow_eval(xr_numeric_narrow_i8, INT64_C(0x1ff)) != -INT64_C(1))
+        return 18;
+    if (xrt_numeric_narrow_eval(xr_numeric_narrow_u8, INT64_C(0x1ff)) != INT64_C(0xff))
+        return 19;
+    if (xrt_numeric_narrow_eval(xr_numeric_narrow_i16, INT64_C(0x18000)) !=
+        -INT64_C(0x8000))
+        return 20;
+    if (xrt_numeric_narrow_eval(xr_numeric_narrow_u16, INT64_C(0x18000)) !=
+        INT64_C(0x8000))
+        return 21;
+    if (xrt_numeric_narrow_eval(xr_numeric_narrow_i32, INT64_C(0x180000000)) != INT32_MIN)
+        return 22;
+    if (xrt_numeric_narrow_eval(xr_numeric_narrow_u32, INT64_C(0x180000000)) !=
+        INT64_C(0x80000000))
+        return 23;
+    if (xrt_numeric_narrow_eval(xr_numeric_narrow_f32, 16777217.0) != 16777216.0)
+        return 24;
+    if (xr_numeric_double_to_bits(xrt_numeric_narrow_eval(
+            xr_numeric_narrow_f32,
+            xr_numeric_double_from_bits(UINT64_C(0x7ff123456789abcd)))) !=
+        xr_numeric_double_to_bits(
+            (double) xr_numeric_float_from_bits(XR_NUMERIC_CANONICAL_F32_NAN)))
+        return 25;
+    if (xr_numeric_double_to_bits(xrt_numeric_narrow_eval(
+            xr_numeric_narrow_f32, xr_numeric_power_of_two(128))) !=
+        UINT64_C(0x7ff0000000000000))
+        return 26;
     return 0;
 }
