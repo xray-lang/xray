@@ -8,16 +8,15 @@
  * xi_coro_lower.h - Shared coroutine CFG lowering for Xi IR
  *
  * KEY CONCEPT:
- *   Consumes the backend-neutral XiCoroPlan (xi_coro_analyze) and rewrites a
- *   suspendable function's control-flow graph into an explicit stackless state
- *   machine: an entry dispatch that jumps to the active suspend state, each
- *   suspend point split into "spill live set -> store state -> suspend", and an
- *   explicit coroutine frame carrying the values that survive a suspend.
+ *   Consumes the backend-neutral XiCoroPlan (xi_coro_analyze), partitions each
+ *   suspension point into pre/suspend/resume CFG blocks, and records dense
+ *   logical dispatch, spill, root, drop, and child-continuation obligations.
+ *   TargetPlan must later select executable frame operations, scheduler exits,
+ *   and entry dispatch; this pass deliberately does not freeze physical ABI.
  *
- *   Both the AOT compiler and (later) the VM consume the lowered IR, so the
- *   state machine is identical by construction.  The pass runs after ownership
- *   (xi_arc) and before representation selection so the frame slot operations it
- *   introduces are assigned representations by the normal select_rep pass.
+ *   The plan is target-neutral so AOT and VM TargetPlans can consume the same
+ *   logical machine.  The pass runs after ownership (xi_arc) and before
+ *   representation selection.
  *
  *   The two genuinely context-dependent queries -- interprocedural callee
  *   resolution and stdlib module-import recognition -- are supplied through the
@@ -37,7 +36,9 @@
  * it may be NULL for intraprocedural-only lowering.
  *
  * Requires ownership-explicit semantic IR; the consuming stage API owns stage
- * advancement. Returns true on success, false on a NULL function or allocation
+ * advancement. Exception regions are rejected until their handler/defer
+ * continuation contract is represented explicitly. Returns true on success,
+ * false on a NULL function, unsupported exception region, or allocation
  * failure. */
 XR_FUNC bool xi_coro_lower(XiFunc *f, const XiCoroResolver *resolver);
 

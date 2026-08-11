@@ -8,6 +8,7 @@
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_backend.h"
 #include "../../../src/ir/xi_coro_analyze.h"
+#include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xffi_sig.h"
@@ -80,7 +81,10 @@ static XiFunc *make_func(const char *name) {
 
 static bool verify_ok(const XiFunc *f) {
     char err[256] = {0};
-    return xi_verify(f, err, sizeof(err));
+    bool ok = xi_verify(f, err, sizeof(err));
+    if (!ok)
+        printf("  verifier error: %s\n", err);
+    return ok;
 }
 
 static bool verify_fail(const XiFunc *f) {
@@ -91,12 +95,23 @@ static bool verify_fail(const XiFunc *f) {
     return err[0] != '\0';
 }
 
+static bool verify_error_prefix(const XiFunc *f, const char *prefix) {
+    char err[256] = {0};
+    bool ok = xi_verify(f, err, sizeof(err));
+    return !ok && prefix && strncmp(err, prefix, strlen(prefix)) == 0;
+}
+
 static bool verify_stage_fail(const XiFunc *f, XiStage stage) {
     char err[256] = {0};
     bool ok = xi_verify_stage(f, stage, err, sizeof(err));
     if (ok)
         return false;
     return err[0] != '\0';
+}
+
+static void mark_coro_lower_input(XiFunc *f) {
+    f->stage = XI_STAGE_SEMANTIC_LOWERED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
 }
 
 static void make_if_returning_ints(XiFunc *f, XiValue *cond) {
@@ -1524,6 +1539,295 @@ TEST(coro_plan_does_not_own_borrowed_place_load) {
     xi_func_free(f);
 }
 
+static XiFunc *make_lowered_two_state_coro(void) {
+    XiFunc *f = xi_func_new("coro_lower_two_state", &stub_array_i8);
+    if (!f)
+        return NULL;
+    XiBlock *entry = xi_block_new(f);
+    if (!entry) {
+        xi_func_free(f);
+        return NULL;
+    }
+    entry->sealed = true;
+    XiValue *owner = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_array_i8, 0);
+    XiValue *later_owner = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_array_i8, 0);
+    XiValue *first = xi_value_new(f, entry, XI_YIELD, &stub_unit, 0);
+    XiValue *consume = xi_value_new(f, entry, XI_PRINT, &stub_unit, 1);
+    XiValue *second = xi_value_new(f, entry, XI_YIELD, &stub_unit, 0);
+    if (!owner || !first || !consume || !later_owner || !second) {
+        xi_func_free(f);
+        return NULL;
+    }
+    consume->args[0] = owner;
+    xi_block_set_return(entry, later_owner);
+    mark_coro_lower_input(f);
+    if (!xi_coro_lower(f, NULL)) {
+        xi_func_free(f);
+        return NULL;
+    }
+    return f;
+}
+
+TEST(coro_lower_splits_cfg_and_records_cleanup_obligations) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    XiCoroPlan *plan = f->coro_plan;
+    ASSERT(plan != NULL);
+    ASSERT(plan->cfg_rewritten);
+    ASSERT(plan->nstates == 2);
+    ASSERT(plan->ndispatch == 3);
+    ASSERT(plan->dispatch[0].target == f->entry);
+    ASSERT(f->nblocks == 5);
+
+    for (uint32_t i = 0; i < plan->nstates; i++) {
+        XiCoroSuspendPoint *point = &plan->points[i];
+        ASSERT(point->state_id == i + 1);
+        ASSERT(point->pre_block->succs[0] == point->suspend_block);
+        ASSERT(point->suspend_block->nvalues == 1);
+        ASSERT(point->suspend_block->values[0] == point->op);
+        ASSERT(point->suspend_block->succs[0] == point->resume_block);
+        ASSERT(plan->dispatch[i + 1].target == point->resume_block);
+        uint32_t expected_live = i == 0 ? 2u : 1u;
+        ASSERT(point->nlive == expected_live);
+        ASSERT(point->nroots == expected_live);
+        ASSERT(point->ndrops == expected_live);
+        ASSERT(xi_coro_point_find_edge(point, XI_CORO_EDGE_RESUME) != NULL);
+        ASSERT(xi_coro_point_find_edge(point, XI_CORO_EDGE_ERROR) != NULL);
+        ASSERT(xi_coro_point_find_edge(point, XI_CORO_EDGE_PANIC) != NULL);
+        ASSERT(xi_coro_point_find_edge(point, XI_CORO_EDGE_CANCEL) != NULL);
+        ASSERT(xi_coro_point_find_edge(point, XI_CORO_EDGE_DROP) != NULL);
+    }
+    ASSERT(plan->spill_count == 3);
+    ASSERT(plan->edge_count == 10);
+    ASSERT(plan->fingerprint != 0);
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_is_deterministic_and_idempotent) {
+    XiFunc *a = make_lowered_two_state_coro();
+    XiFunc *b = make_lowered_two_state_coro();
+    ASSERT(a != NULL && b != NULL);
+    ASSERT(a->coro_plan->fingerprint == b->coro_plan->fingerprint);
+    uint32_t blocks = a->nblocks;
+    uint64_t fingerprint = a->coro_plan->fingerprint;
+    ASSERT(xi_coro_lower(a, NULL));
+    ASSERT(a->nblocks == blocks);
+    ASSERT(a->coro_plan->fingerprint == fingerprint);
+    ASSERT(verify_ok(a));
+    xi_func_free(a);
+    xi_func_free(b);
+}
+
+TEST(coro_lower_mutation_rejects_missing_spill) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    ASSERT(f->coro_plan->points[1].nlive == 1);
+    f->coro_plan->points[1].nlive = 0;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4001"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_mutation_rejects_missing_drop) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    ASSERT(f->coro_plan->points[1].ndrops == 1);
+    f->coro_plan->points[1].ndrops = 0;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4002"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_mutation_rejects_missing_root) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    ASSERT(f->coro_plan->points[1].nroots == 1);
+    f->coro_plan->points[1].nroots = 0;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4002"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_mutation_rejects_extra_spill) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    XiCoroPlan *plan = f->coro_plan;
+    XiCoroSuspendPoint *point = &plan->points[1];
+    XiValue *extra = NULL;
+    for (uint32_t i = 0; i < plan->nslots; i++) {
+        if (plan->slots[i].value != point->live[0]) {
+            extra = plan->slots[i].value;
+            break;
+        }
+    }
+    ASSERT(extra != NULL);
+    point->live[point->nlive++] = extra;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4001"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_mutation_rejects_duplicate_root) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    XiCoroSuspendPoint *point = &f->coro_plan->points[1];
+    ASSERT(point->nroots == 1);
+    point->roots[1] = point->roots[0];
+    point->nroots = 2;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4002"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_mutation_rejects_duplicate_drop) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    XiCoroSuspendPoint *point = &f->coro_plan->points[1];
+    ASSERT(point->ndrops == 1);
+    point->drops[1] = point->drops[0];
+    point->ndrops = 2;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4002"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_mutation_rejects_foreign_root) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    XiCoroPlan *plan = f->coro_plan;
+    XiCoroSuspendPoint *point = &plan->points[1];
+    ASSERT(point->nroots == 1);
+    XiValue *foreign = NULL;
+    for (uint32_t i = 0; i < plan->nslots; i++) {
+        if (plan->slots[i].frame_root && plan->slots[i].value != point->roots[0]) {
+            foreign = plan->slots[i].value;
+            break;
+        }
+    }
+    ASSERT(foreign != NULL);
+    point->roots[0] = foreign;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4002"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_mutation_rejects_sparse_state) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    f->coro_plan->points[0].state_id = 7;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4000"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_mutation_rejects_invalid_dispatch_target) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    f->coro_plan->dispatch[1].target = f->entry;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4000"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_mutation_rejects_stale_revision) {
+    XiFunc *f = make_lowered_two_state_coro();
+    ASSERT(f != NULL);
+    f->cfg_version++;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4000"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_mutation_rejects_invalid_child_edge) {
+    XiFunc *f = make_func("coro_child_edge");
+    ASSERT(f != NULL);
+    XiValue *callee = xi_value_new(f, f->entry, XI_CONST, &stub_func, 0);
+    XiValue *call = xi_value_new(f, f->entry, XI_CALL, &stub_int, 1);
+    ASSERT(callee != NULL && call != NULL);
+    call->args[0] = callee;
+    call->flags |= XI_FLAG_MAY_SUSPEND;
+    xi_block_set_return(f->entry, call);
+    mark_coro_lower_input(f);
+    ASSERT(xi_coro_lower(f, NULL));
+    ASSERT(f->coro_plan->nstates == 1);
+    ASSERT(f->coro_plan->points[0].nlive == 1);
+    ASSERT(f->coro_plan->points[0].live[0] == call);
+    XiCoroEdge *child = (XiCoroEdge *) xi_coro_point_find_edge(
+        &f->coro_plan->points[0], XI_CORO_EDGE_CHILD);
+    ASSERT(child != NULL);
+    ASSERT(child->child == callee);
+    ASSERT(verify_ok(f));
+    child->child = NULL;
+    ASSERT(verify_error_prefix(f, "XR_CORO_4003"));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_rejects_exception_region_before_cfg_mutation) {
+    XiFunc *f = make_func("coro_try_region");
+    ASSERT(f != NULL);
+    XiValue *try_op = xi_value_new(f, f->entry, XI_TRY, &stub_unit, 0);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *end_try = xi_value_new(f, f->entry, XI_END_TRY, &stub_unit, 0);
+    XiValue *result = xi_const_int(f, f->entry, 1, &stub_int);
+    ASSERT(try_op && yield && end_try && result);
+    xi_block_set_return(f->entry, result);
+    mark_coro_lower_input(f);
+    uint32_t blocks = f->nblocks;
+    ASSERT(!xi_coro_lower(f, NULL));
+    ASSERT(f->nblocks == blocks);
+    ASSERT(f->coro_plan != NULL);
+    ASSERT(!f->coro_plan->cfg_rewritten);
+    xi_func_free(f);
+}
+
+TEST(coro_lower_rejects_raw_stage_before_analysis) {
+    XiFunc *f = make_func("coro_raw_stage");
+    ASSERT(f != NULL);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *result = xi_const_int(f, f->entry, 1, &stub_int);
+    ASSERT(yield && result);
+    xi_block_set_return(f->entry, result);
+    uint32_t blocks = f->nblocks;
+    ASSERT(!xi_coro_lower(f, NULL));
+    ASSERT(f->nblocks == blocks);
+    ASSERT(f->coro_plan == NULL);
+    xi_func_free(f);
+}
+
+TEST(coro_lower_preserves_successor_phi_pred_position) {
+    XiFunc *f = make_func("coro_successor_phi");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+    XiBlock *merge = xi_block_new(f);
+    ASSERT(merge != NULL);
+    merge->sealed = true;
+    XiValue *value = xi_const_int(f, entry, 7, &stub_int);
+    XiValue *yield = xi_value_new(f, entry, XI_YIELD, &stub_unit, 0);
+    ASSERT(value && yield);
+    xi_block_set_jump(entry, merge);
+    XiPhi *phi = xi_phi_new(f, merge, &stub_int, 1);
+    ASSERT(phi != NULL);
+    phi->value.args[0] = value;
+    xi_block_set_return(merge, &phi->value);
+
+    mark_coro_lower_input(f);
+    ASSERT(xi_coro_lower(f, NULL));
+    XiCoroSuspendPoint *point = &f->coro_plan->points[0];
+    ASSERT(merge->npreds == 1);
+    ASSERT(merge->preds[0] == point->resume_block);
+    ASSERT(phi->value.args[0] == value);
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(coro_lower_rejects_stale_cached_analysis) {
+    XiFunc *f = make_func("coro_stale_analysis");
+    ASSERT(f != NULL);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_unit, 0);
+    XiValue *result = xi_const_int(f, f->entry, 1, &stub_int);
+    ASSERT(yield && result);
+    xi_block_set_return(f->entry, result);
+    mark_coro_lower_input(f);
+    ASSERT(xi_coro_analyze(f, NULL) != NULL);
+    uint32_t blocks = f->nblocks;
+    xi_cfg_invalidate(f);
+    ASSERT(!xi_coro_lower(f, NULL));
+    ASSERT(f->nblocks == blocks);
+    ASSERT(!f->coro_plan->cfg_rewritten);
+    xi_func_free(f);
+}
+
 /* ========== Backend legality ========== */
 
 TEST(backend_rejects_unlowered_iter_op) {
@@ -1941,6 +2245,23 @@ int main(void) {
     run_coro_plan_rejects_stale_point_op();
     run_coro_plan_rejects_root_count_mismatch();
     run_coro_plan_does_not_own_borrowed_place_load();
+    run_coro_lower_splits_cfg_and_records_cleanup_obligations();
+    run_coro_lower_is_deterministic_and_idempotent();
+    run_coro_lower_mutation_rejects_missing_spill();
+    run_coro_lower_mutation_rejects_missing_drop();
+    run_coro_lower_mutation_rejects_missing_root();
+    run_coro_lower_mutation_rejects_extra_spill();
+    run_coro_lower_mutation_rejects_duplicate_root();
+    run_coro_lower_mutation_rejects_duplicate_drop();
+    run_coro_lower_mutation_rejects_foreign_root();
+    run_coro_lower_mutation_rejects_sparse_state();
+    run_coro_lower_mutation_rejects_invalid_dispatch_target();
+    run_coro_lower_mutation_rejects_stale_revision();
+    run_coro_lower_mutation_rejects_invalid_child_edge();
+    run_coro_lower_rejects_exception_region_before_cfg_mutation();
+    run_coro_lower_rejects_raw_stage_before_analysis();
+    run_coro_lower_preserves_successor_phi_pred_position();
+    run_coro_lower_rejects_stale_cached_analysis();
     run_backend_rejects_unlowered_iter_op();
     run_backend_rejects_malformed_call_method();
 

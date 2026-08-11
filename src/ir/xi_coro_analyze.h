@@ -43,6 +43,41 @@ typedef enum {
     XI_CORO_SUSP_CALL,
 } XiCoroSuspendKind;
 
+/* State zero always enters the ordinary function entry.  Suspended states are
+ * dense and one-based; UINT32_MAX denotes a terminal continuation. */
+#define XI_CORO_STATE_ENTRY 0u
+#define XI_CORO_STATE_TERMINAL UINT32_MAX
+
+/* Explicit continuation dispositions owned by the logical coroutine plan.
+ * The fixed ordering makes plan construction deterministic.  TargetPlan later
+ * turns these dispositions into executable scheduler and cleanup control flow. */
+typedef enum {
+    XI_CORO_EDGE_RESUME,
+    XI_CORO_EDGE_ERROR,
+    XI_CORO_EDGE_PANIC,
+    XI_CORO_EDGE_CANCEL,
+    XI_CORO_EDGE_DROP,
+    XI_CORO_EDGE_CHILD,
+    XI_CORO_EDGE_KIND_COUNT,
+} XiCoroEdgeKind;
+
+/* One logical state-machine edge.  Root and drop sets use Xi values here; the
+ * target planner later maps those identities to typed physical slots. */
+typedef struct XiCoroEdge {
+    uint8_t kind; /* XiCoroEdgeKind */
+    bool terminal;
+    bool indirect_child;
+    uint8_t _pad;
+    uint32_t source_state_id;
+    uint32_t target_state_id;
+    XiBlock *target_block;
+    XiValue *child;
+    XiValue **roots;
+    uint32_t nroots;
+    XiValue **drops;
+    uint32_t ndrops;
+} XiCoroEdge;
+
 /* One suspension site and the values that stay live across it. */
 typedef struct XiCoroSuspendPoint {
     uint32_t state_id; /* dense, 1-based, stable across backends */
@@ -50,7 +85,24 @@ typedef struct XiCoroSuspendPoint {
     XiCoroSuspendKind kind;
     XiValue **live; /* live-across-suspend set (arena array) */
     uint32_t nlive;
+    XiValue **roots; /* point-specific live roots */
+    uint32_t nroots;
+    XiValue **drops; /* owned live values discharged on terminal exits */
+    uint32_t ndrops;
+    XiBlock *pre_block;
+    XiBlock *suspend_block;
+    XiBlock *resume_block;
+    XiCoroEdge *edges;
+    uint8_t nedges;
 } XiCoroSuspendPoint;
+
+/* Dense logical dispatch row.  State zero targets the original entry; every
+ * suspended state names the resume block produced by CFG partitioning.  This
+ * is not an executable entry dispatch until TargetPlan selects frame ops. */
+typedef struct XiCoroDispatchEntry {
+    uint32_t state_id;
+    XiBlock *target;
+} XiCoroDispatchEntry;
 
 /* Where a logical slot originates: parameters and phis are always part of the
  * frame, whereas a block value additionally has to pass the backend's physical
@@ -74,7 +126,7 @@ typedef struct XiCoroSlot {
     struct XrType *type;
     uint8_t logical_rep; /* XrRep value (xtype.h), via xr_type_rep() */
     uint8_t kind;        /* XiCoroSlotKind */
-    bool is_root;
+    bool is_root; /* logical reference root; physical root kind is target-planned */
     bool needs_release;
     bool needs_runtime_slot;
     bool needs_boundary_clone;
@@ -92,6 +144,17 @@ typedef struct XiCoroPlan {
     uint32_t nslots;
     uint32_t root_count;
     uint32_t release_count;
+    XiCoroDispatchEntry *dispatch;
+    uint32_t ndispatch;
+    uint32_t edge_count;
+    uint32_t spill_count;
+    XiBlock *entry_block;
+    uint64_t fingerprint;
+    uint64_t analyzed_ir_revision;
+    uint64_t analyzed_cfg_revision;
+    uint64_t lowered_ir_revision;
+    uint64_t lowered_cfg_revision;
+    bool cfg_rewritten;
     bool needs_cl;     /* frame carries a closure environment pointer */
     uint8_t ctx_depth; /* interprocedural resolution depth bound */
 } XiCoroPlan;
@@ -226,6 +289,11 @@ XR_FUNC bool xi_coro_plan_is_logical_member(const XiCoroPlan *plan, const XiValu
  * Lets a backend read the shared slot attributes (live_across, frame_root,
  * frame_release, ...) instead of recomputing liveness. */
 XR_FUNC const XiCoroSlot *xi_coro_plan_find_slot(const XiCoroPlan *plan, const XiValue *v);
+
+/* The edge of 'kind' leaving 'point', or NULL when that continuation is not
+ * part of the logical machine (only CHILD is optional). */
+XR_FUNC const XiCoroEdge *xi_coro_point_find_edge(const XiCoroSuspendPoint *point,
+                                                  XiCoroEdgeKind kind);
 
 /* ========== Plan + suspendability ========== */
 
