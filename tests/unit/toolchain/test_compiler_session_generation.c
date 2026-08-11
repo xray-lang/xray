@@ -142,10 +142,32 @@ TEST(session_owns_configuration_paths) {
     xr_compiler_session_delete(session);
 }
 
+TEST(target_and_provider_updates_advance_only_their_generation) {
+    XrCompilerSession *session = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(session);
+    XrCompilerSessionGenerationSnapshot before =
+        xr_compiler_session_generation_snapshot(session);
+    XrTargetDataLayout layout;
+    ASSERT_TRUE(xr_target_data_layout_init_native(&layout));
+    ASSERT_TRUE(xr_compiler_session_set_target_data_layout(session, &layout));
+    XrCompilerSessionGenerationSnapshot target =
+        xr_compiler_session_generation_snapshot(session);
+    ASSERT_EQ_UINT(target.target_generation, before.target_generation + 1);
+    ASSERT_EQ_UINT(target.provider_generation, before.provider_generation);
+    xr_compiler_session_set_native_package_plan(
+        session, (const struct XrNativePackagePlan *) (uintptr_t) 1);
+    XrCompilerSessionGenerationSnapshot provider =
+        xr_compiler_session_generation_snapshot(session);
+    ASSERT_EQ_UINT(provider.target_generation, target.target_generation);
+    ASSERT_EQ_UINT(provider.provider_generation, target.provider_generation + 1);
+    xr_compiler_session_delete(session);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Compiler session generations");
 RUN_TEST(generation_replay_is_deterministic);
 RUN_TEST(generation_changes_are_domain_specific_and_transactional);
 RUN_TEST(incremental_reset_advances_identity_and_clears_transient_state);
 RUN_TEST(session_owns_configuration_paths);
+RUN_TEST(target_and_provider_updates_advance_only_their_generation);
 TEST_MAIN_END()

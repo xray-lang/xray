@@ -222,6 +222,30 @@ TEST(body_only_change_is_precise_and_reason_chain_is_traversable) {
     xr_dependency_graph_finalize(&graph);
 }
 
+TEST(summary_change_rejects_caller_mask_that_omits_a_changed_facet) {
+    XrDependencyGraph graph;
+    TestGraphIds ids;
+    ASSERT_TRUE(build_facet_graph(&graph, &ids, false));
+    const XrModuleSummary *stored = xr_dependency_graph_find_node(&graph, ids.root);
+    ASSERT_NOT_NULL(stored);
+    XrModuleSummary replacement;
+    ASSERT_TRUE(xr_module_summary_copy(&replacement, stored));
+    ASSERT_TRUE(xr_module_summary_set_fingerprint(&replacement, XR_MODULE_FACET_BODY_EVIDENCE,
+                                                  test_fingerprint(240)));
+    ASSERT_TRUE(xr_module_summary_set_fingerprint(&replacement, XR_MODULE_FACET_PUBLIC_SIGNATURE,
+                                                  test_fingerprint(241)));
+    XrInvalidationEvent event = {
+        .reason = XR_INVALIDATION_SUMMARY_CHANGED,
+        .root_id = ids.root,
+        .changed_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+        .replacement_summary = &replacement,
+    };
+    XrInvalidationResult result;
+    ASSERT_FALSE(xr_cache_invalidate_apply(&graph, &event, &result));
+    xr_module_summary_finalize(&replacement);
+    xr_dependency_graph_finalize(&graph);
+}
+
 TEST(public_and_layout_changes_do_not_reuse_body_closure) {
     XrDependencyGraph graph;
     TestGraphIds ids;
@@ -370,6 +394,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Module summary and invalidation graph");
 RUN_TEST(module_summary_owns_key_and_distinguishes_facets);
 RUN_TEST(body_only_change_is_precise_and_reason_chain_is_traversable);
+RUN_TEST(summary_change_rejects_caller_mask_that_omits_a_changed_facet);
 RUN_TEST(public_and_layout_changes_do_not_reuse_body_closure);
 RUN_TEST(edge_insertion_order_does_not_change_records);
 RUN_TEST(delete_rename_add_and_graph_change_leave_no_ghost_nodes);

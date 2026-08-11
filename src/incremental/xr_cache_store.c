@@ -460,6 +460,8 @@ static bool scan_directory(XrCacheStore *store, XrCacheArtifactKind kind,
         } else if (is_temp_name(entry.name)) {
             if (should_remove_stale_temp(store, &stat, now_ns) && xr_fs_remove(path) == 0)
                 stats->stale_temps_removed++;
+            else if (!append_disk_entry(entries, count, capacity, path, &stat))
+                ok = false;
         } else if (!is_entry_name(entry.name)) {
             if (xr_fs_remove(path) == 0)
                 stats->corrupt_entries_removed++;

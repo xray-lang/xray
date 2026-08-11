@@ -54,9 +54,14 @@ static bool event_is_valid(const XrDependencyGraph *graph, const XrInvalidationE
 
     const XrModuleSummary *root = xr_dependency_graph_find_node(graph, event->root_id);
     switch (event->reason) {
-    case XR_INVALIDATION_SUMMARY_CHANGED:
-        return root && xr_module_summary_validate(event->replacement_summary) &&
-               xr_stable_id_equal(event->root_id, event->replacement_summary->module_id);
+    case XR_INVALIDATION_SUMMARY_CHANGED: {
+        if (!root || !xr_module_summary_validate(event->replacement_summary) ||
+            !xr_stable_id_equal(event->root_id, event->replacement_summary->module_id))
+            return false;
+        XrModuleFacetMask derived =
+            xr_module_summary_changed_facets(root, event->replacement_summary);
+        return event->changed_facets == 0 || event->changed_facets == derived;
+    }
     case XR_INVALIDATION_MODULE_ADDED:
         return !root && xr_module_summary_validate(event->replacement_summary) &&
                xr_stable_id_equal(event->root_id, event->replacement_summary->module_id);
@@ -76,11 +81,11 @@ static bool event_is_valid(const XrDependencyGraph *graph, const XrInvalidationE
 
 static XrModuleFacetMask event_changed_facets(const XrDependencyGraph *graph,
                                               const XrInvalidationEvent *event) {
-    if (event->changed_facets)
-        return event->changed_facets;
     const XrModuleSummary *root = xr_dependency_graph_find_node(graph, event->root_id);
     if (event->reason == XR_INVALIDATION_SUMMARY_CHANGED)
         return xr_module_summary_changed_facets(root, event->replacement_summary);
+    if (event->changed_facets)
+        return event->changed_facets;
     if (event->reason == XR_INVALIDATION_MODULE_ADDED) {
         XrModuleFacetMask present = event->replacement_summary->present_facets;
         return present ? present : XR_MODULE_FACET_ALL;
