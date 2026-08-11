@@ -2541,6 +2541,45 @@ TEST(cgen_runtime_string_slice_constant_emits_immediate_without_local) {
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "runtime string-slice constant IR compilation failed");
 
+    XiFunc *tail = NULL;
+    for (uint16_t i = 0; i < ir->nchildren; i++) {
+        if (ir->children[i] && ir->children[i]->name &&
+            strcmp(ir->children[i]->name, "firstArgumentTail") == 0) {
+            tail = ir->children[i];
+            break;
+        }
+    }
+    TEST_REQUIRE(tail != NULL, "runtime string-slice function IR exists");
+    XiValue *dynamic_slice = NULL;
+    XiValue *checked_slice = NULL;
+    XiValue *promotion = NULL;
+    uint32_t promotion_count = 0;
+    for (uint32_t b = 0; b < tail->nblocks; b++) {
+        XiBlock *block = tail->blocks[b];
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            if (value && value->op == XI_CALL_METHOD && value->aux &&
+                strcmp((const char *) value->aux, "slice") == 0)
+                dynamic_slice = value;
+            else if (value && value->op == XI_CHECKTYPE)
+                checked_slice = value;
+            else if (value && value->op == XI_RETAIN && checked_slice && value->nargs == 1 &&
+                     value->args[0] == checked_slice) {
+                promotion = value;
+                promotion_count++;
+            }
+        }
+    }
+    TEST_REQUIRE(dynamic_slice && !dynamic_slice->call_return_ownership.complete,
+                 "dynamic string-slice result remains alias-uncertain");
+    TEST_REQUIRE(checked_slice && checked_slice->nargs == 1 &&
+                     checked_slice->args[0] == dynamic_slice,
+                 "CHECKTYPE borrows the unresolved call result before promotion");
+    TEST_REQUIRE(promotion && promotion->nargs == 1 && promotion->args[0] == checked_slice,
+                 "return transfer promotes the checked unresolved result exactly once");
+    TEST_REQUIRE(promotion_count == 1,
+                 "return transfer has exactly one checked-result promotion");
+
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     TEST_REQUIRE(code != NULL, "runtime string-slice constant C generation failed");

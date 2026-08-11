@@ -314,10 +314,20 @@ static bool classify_definition(XrOwnershipBuildContext *ctx, uint32_t operation
         return add_event(ctx, owner_index, operation_index, XR_OWN_EVENT_BORROW, 0,
                          XR_OWN_BORROWED);
     }
+    if (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+        operation->return_provenance != XI_RETURN_OWNERSHIP_OWNED) {
+        /* An unresolved call result is usable at +0 but cannot be dropped as
+         * an owned local. ARC preserves exactly that contract by retaining it
+         * before every consuming use. Model the incoming token as a foreign
+         * borrow so ordered replay accepts intervening reads while still
+         * rejecting a consume that lacks the explicit promotion. */
+        if (owner->initial_state == XR_OWN_UNINITIALIZED)
+            owner->initial_state = XR_OWN_FOREIGN_BORROWED;
+        return add_event(ctx, owner_index, operation_index, XR_OWN_EVENT_BORROW, 0,
+                         XR_OWN_FOREIGN_BORROWED);
+    }
     if (operation->ownership_use == XI_GEN_OWN_USE_PASS || operation->opcode == XI_RETAIN ||
-        operation->opcode == XI_RELEASE || operation->result_alias_operand >= 0 ||
-        (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
-         operation->return_provenance != XI_RETURN_OWNERSHIP_OWNED))
+        operation->opcode == XI_RELEASE || operation->result_alias_operand >= 0)
         return true;
     if (operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED &&
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT)
