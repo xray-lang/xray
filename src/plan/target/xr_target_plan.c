@@ -230,25 +230,49 @@ static void hash_slot(XrSHA256Context *ctx, const XrTargetSlotRecord *record) {
 
 static void hash_call_argument(XrSHA256Context *ctx,
                                const XrTargetCallArgumentRecord *record) {
+    hash_id(ctx, record->identity);
+    hash_u64(ctx, record->call);
+    hash_u64(ctx, record->semantic_operand);
+    hash_u64(ctx, record->semantic_value);
+    hash_u64(ctx, record->callee_parameter);
+    hash_u64(ctx, record->caller_slot);
+    hash_u64(ctx, record->callee_slot);
     hash_u64(ctx, record->register_rep);
     hash_u64(ctx, record->memory_rep);
+    hash_u64(ctx, record->ordinal);
     hash_u64(ctx, record->mode);
     hash_u64(ctx, record->ownership);
+    hash_u64(ctx, record->transfer_mode);
     hash_u64(ctx, record->flags);
 }
 
 static void hash_call_base(XrSHA256Context *ctx, const XrTargetCallRecord *record) {
+    hash_id(ctx, record->identity);
     hash_u64(ctx, record->id);
+    hash_u64(ctx, record->semantic_call_target);
     hash_u64(ctx, record->semantic_operation);
+    hash_u64(ctx, record->caller_function);
     hash_u64(ctx, record->callee_function);
+    hash_u64(ctx, record->result_value);
+    hash_u64(ctx, record->result_slot);
+    hash_u64(ctx, record->caller_storage_slot);
+    hash_u64(ctx, record->error_slot);
+    hash_u64(ctx, record->argument_begin);
+    hash_u64(ctx, record->adapter_begin);
     hash_u64(ctx, record->result_register_rep);
     hash_u64(ctx, record->result_memory_rep);
+    hash_u64(ctx, record->error_register_rep);
+    hash_u64(ctx, record->error_memory_rep);
+    hash_u64(ctx, record->argument_count);
+    hash_u64(ctx, record->adapter_count);
+    hash_u64(ctx, record->native_abi);
+    hash_u64(ctx, record->flags);
+    hash_u64(ctx, record->calling_convention);
+    hash_u64(ctx, record->target_kind);
     hash_u64(ctx, record->result_mode);
     hash_u64(ctx, record->result_ownership);
-    hash_u64(ctx, record->flags);
-    hash_u64(ctx, record->argument_begin);
-    hash_u64(ctx, record->argument_count);
-    hash_u64(ctx, record->adapter);
+    hash_u64(ctx, record->error_mode);
+    hash_u64(ctx, record->reserved8);
 }
 
 static void hash_root_map(XrSHA256Context *ctx, const XrTargetRootMapRecord *record) {
@@ -271,13 +295,17 @@ static void hash_cleanup(XrSHA256Context *ctx, const XrTargetCleanupRecord *reco
 }
 
 static void hash_adapter(XrSHA256Context *ctx, const XrTargetAdapterRecord *record) {
+    hash_id(ctx, record->identity);
     hash_u64(ctx, record->id);
-    hash_u64(ctx, record->kind);
-    hash_u64(ctx, record->ownership);
-    hash_u64(ctx, record->flags);
+    hash_u64(ctx, record->call);
     hash_u64(ctx, record->input_rep);
     hash_u64(ctx, record->output_rep);
     hash_u64(ctx, record->layout);
+    hash_u64(ctx, record->ordinal);
+    hash_u64(ctx, record->flags);
+    hash_u64(ctx, record->role);
+    hash_u64(ctx, record->kind);
+    hash_u64(ctx, record->ownership);
 }
 
 static void hash_capability(XrSHA256Context *ctx, const XrTargetCapabilityRecord *record) {
@@ -331,7 +359,7 @@ void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t lay
 
 void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_index,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-call-v1\0";
+    static const uint8_t domain[] = "xray-target-call-v2\0";
     const XrTargetCallRecord *call = &plan->calls[call_index];
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
@@ -358,13 +386,13 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
         hash_machine_rep(&ctx, &plan->machine_reps[argument->register_rep]);
         hash_machine_rep(&ctx, &plan->machine_reps[argument->memory_rep]);
     }
-    if (call->adapter != XR_SEMANTIC_INDEX_NONE)
-        hash_adapter(&ctx, &plan->adapters[call->adapter]);
+    for (uint32_t i = 0; i < call->adapter_count; i++)
+        hash_adapter(&ctx, &plan->adapters[call->adapter_begin + i]);
     xr_sha256_final(&ctx, out->bytes);
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v3\0";
+    static const uint8_t domain[] = "xray-target-plan-v4\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -500,13 +528,18 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
     for (uint32_t i = 0; i < plan->calls_count; i++) {
         if (plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
+            plan->calls[i].semantic_call_target >=
+                xr_semantic_plan_call_target_count(plan->semantic_plan) ||
             plan->calls[i].result_register_rep >= plan->machine_reps_count ||
             plan->calls[i].result_memory_rep >= plan->machine_reps_count ||
-            (plan->calls[i].adapter != XR_SEMANTIC_INDEX_NONE &&
-             plan->calls[i].adapter >= plan->adapters_count) ||
+            plan->calls[i].error_register_rep >= plan->machine_reps_count ||
+            plan->calls[i].error_memory_rep >= plan->machine_reps_count ||
             !((plan->calls[i].argument_begin <= plan->call_arguments_count) &&
               (plan->calls[i].argument_count <=
-               plan->call_arguments_count - plan->calls[i].argument_begin)))
+               plan->call_arguments_count - plan->calls[i].argument_begin)) ||
+            !((plan->calls[i].adapter_begin <= plan->adapters_count) &&
+              (plan->calls[i].adapter_count <=
+               plan->adapters_count - plan->calls[i].adapter_begin)))
             goto invalid_call;
         for (uint32_t a = 0; a < plan->calls[i].argument_count; a++) {
             const XrTargetCallArgumentRecord *argument =

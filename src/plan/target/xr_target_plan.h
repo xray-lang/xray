@@ -26,10 +26,12 @@ typedef struct XrTargetPlan XrTargetPlan;
 typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_SCALAR = UINT64_C(1) << 0,
     XR_TARGET_FAMILY_AGGREGATE = UINT64_C(1) << 1,
+    XR_TARGET_FAMILY_CALL_ADAPTER = UINT64_C(1) << 2,
 } XrTargetPlanFamily;
 
 #define XR_TARGET_REQUIRED_FAMILIES                                                         \
-    ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE))
+    ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                  \
+                 XR_TARGET_FAMILY_CALL_ADAPTER))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -121,18 +123,32 @@ typedef enum XrTargetStorageKind {
 } XrTargetStorageKind;
 
 typedef enum XrTargetCallMode {
-    XR_TARGET_CALL_VALUE = 0,
+    XR_TARGET_CALL_MODE_INVALID = 0,
+    XR_TARGET_CALL_VALUE,
     XR_TARGET_CALL_REFERENCE,
     XR_TARGET_CALL_CALLER_STORAGE,
 } XrTargetCallMode;
 
 typedef enum XrTargetCallOwnership {
-    XR_TARGET_CALL_READ = 0,
+    XR_TARGET_CALL_OWNERSHIP_INVALID = 0,
+    XR_TARGET_CALL_NONE,
+    XR_TARGET_CALL_READ,
     XR_TARGET_CALL_BORROW,
     XR_TARGET_CALL_MOVE,
     XR_TARGET_CALL_CONSUME,
     XR_TARGET_CALL_WRITEBACK,
+    XR_TARGET_CALL_RETURN_OWNED,
 } XrTargetCallOwnership;
+
+typedef enum XrTargetCallConvention {
+    XR_TARGET_CALL_CONVENTION_INVALID = 0,
+    XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
+} XrTargetCallConvention;
+
+typedef enum XrTargetCallErrorMode {
+    XR_TARGET_CALL_ERROR_MODE_INVALID = 0,
+    XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL,
+} XrTargetCallErrorMode;
 
 typedef enum XrTargetCleanupAction {
     XR_TARGET_CLEANUP_RELEASE = 0,
@@ -142,11 +158,20 @@ typedef enum XrTargetCleanupAction {
 } XrTargetCleanupAction;
 
 typedef enum XrTargetAdapterKind {
-    XR_TARGET_ADAPTER_BOX_DYNAMIC = 0,
+    XR_TARGET_ADAPTER_INVALID = 0,
+    XR_TARGET_ADAPTER_BOX_DYNAMIC,
     XR_TARGET_ADAPTER_UNBOX_DYNAMIC,
     XR_TARGET_ADAPTER_FFI,
     XR_TARGET_ADAPTER_HOSTED,
 } XrTargetAdapterKind;
+
+typedef enum XrTargetAdapterRole {
+    XR_TARGET_ADAPTER_ROLE_INVALID = 0,
+    XR_TARGET_ADAPTER_ARGUMENT,
+    XR_TARGET_ADAPTER_RESULT,
+    XR_TARGET_ADAPTER_ERROR,
+    XR_TARGET_ADAPTER_CALLER_STORAGE,
+} XrTargetAdapterRole;
 
 typedef enum XrTargetExtentFlag {
     XR_TARGET_EXTENT_ZERO = 1u << 0,
@@ -171,6 +196,10 @@ typedef enum XrTargetCallFlag {
     XR_TARGET_CALL_ENVIRONMENT = 1u << 2,
     XR_TARGET_CALL_GENERATION = 1u << 3,
 } XrTargetCallFlag;
+
+typedef enum XrTargetCallArgumentFlag {
+    XR_TARGET_CALL_ARGUMENT_ADDRESSABLE = 1u << 0,
+} XrTargetCallArgumentFlag;
 
 typedef enum XrTargetRootMapFlag {
     XR_TARGET_ROOT_SAFEPOINT = 1u << 0,
@@ -331,25 +360,49 @@ typedef struct XrTargetSlotRecord {
 } XrTargetSlotRecord;
 
 typedef struct XrTargetCallArgumentRecord {
+    XrStableId identity;
+    uint32_t call;
+    uint32_t semantic_operand;
+    uint32_t semantic_value;
+    uint32_t callee_parameter;
+    uint32_t caller_slot;
+    uint32_t callee_slot;
     uint16_t register_rep;
     uint16_t memory_rep;
+    uint16_t ordinal;
     uint8_t mode;
     uint8_t ownership;
-    uint16_t flags;
+    uint8_t transfer_mode;
+    uint8_t flags;
 } XrTargetCallArgumentRecord;
 
 typedef struct XrTargetCallRecord {
+    XrStableId identity;
     uint32_t id;
+    uint32_t semantic_call_target;
     uint32_t semantic_operation;
+    uint32_t caller_function;
     uint32_t callee_function;
+    uint32_t result_value;
+    uint32_t result_slot;
+    uint32_t caller_storage_slot;
+    uint32_t error_slot;
+    uint32_t argument_begin;
+    uint32_t adapter_begin;
     uint16_t result_register_rep;
     uint16_t result_memory_rep;
+    uint16_t error_register_rep;
+    uint16_t error_memory_rep;
+    uint16_t argument_count;
+    uint16_t adapter_count;
+    uint16_t native_abi;
+    uint16_t flags;
+    uint8_t calling_convention;
+    uint8_t target_kind;
     uint8_t result_mode;
     uint8_t result_ownership;
-    uint16_t flags;
-    uint32_t argument_begin;
-    uint16_t argument_count;
-    uint32_t adapter;
+    uint8_t error_mode;
+    uint8_t reserved8;
     XrFingerprint fingerprint;
 } XrTargetCallRecord;
 
@@ -373,13 +426,18 @@ typedef struct XrTargetCleanupRecord {
 } XrTargetCleanupRecord;
 
 typedef struct XrTargetAdapterRecord {
+    XrStableId identity;
     uint32_t id;
-    uint8_t kind;
-    uint8_t ownership;
-    uint16_t flags;
+    uint32_t call;
     uint32_t input_rep;
     uint32_t output_rep;
     uint32_t layout;
+    uint16_t ordinal;
+    uint16_t flags;
+    uint8_t role;
+    uint8_t kind;
+    uint8_t ownership;
+    uint8_t reserved;
 } XrTargetAdapterRecord;
 
 typedef struct XrTargetCapabilityRecord {

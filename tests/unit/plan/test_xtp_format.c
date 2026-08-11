@@ -36,6 +36,12 @@ typedef struct XtpFixture {
 } XtpFixture;
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_function = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 2,
+    .frozen = true,
+    .function = {.return_type = &stub_int, .throw_effect = XR_FN_EFFECT_NO_THROW},
+};
 
 static XrSemanticPlan *build_semantic_plan(void) {
     XiFunc *function = xi_func_new("xtp_probe", &stub_int);
@@ -52,6 +58,47 @@ static XrSemanticPlan *build_semantic_plan(void) {
     REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
     REQUIRE(semantic != NULL);
     xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_direct_call_semantic_plan(void) {
+    XiFunc *root = xi_func_new("xtp_direct_call_root", &stub_int);
+    XiFunc *child = xi_func_new("xtp_direct_call_child", &stub_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+    child->nparams = child->min_params = 1;
+    child->params = (XiValue **) xr_calloc(1, sizeof(*child->params));
+    REQUIRE(child->params != NULL);
+    child->params[0] = xi_param(child, child_entry, 0, &stub_int);
+    REQUIRE(child->params[0] != NULL);
+    xi_block_set_return(child_entry, child->params[0]);
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+    XiValue *closure = xi_value_new(root, root_entry, XI_STACK_ALLOC, &stub_function, 0);
+    REQUIRE(closure != NULL);
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = child;
+    XiValue *alias = xi_value_new(root, root_entry, XI_COPY, &stub_function, 1);
+    REQUIRE(alias != NULL);
+    alias->args[0] = closure;
+    alias->aux_int = XI_COPY_KIND_IDENTITY;
+    XiValue *argument = xi_const_int(root, root_entry, 9, &stub_int);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 2);
+    REQUIRE(argument != NULL && call != NULL);
+    call->args[0] = alias;
+    call->args[1] = argument;
+    xi_block_set_return(root_entry, call);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(root, &semantic, error, sizeof(error)));
+    REQUIRE(semantic != NULL && xr_semantic_plan_call_target_count(semantic) == 1);
+    xi_func_free(root);
     return semantic;
 }
 
@@ -248,9 +295,9 @@ static XrTargetProfile *build_foreign_profile(
     return foreign;
 }
 
-static XtpFixture make_fixture(void) {
+static XtpFixture make_fixture_from_semantic(XrSemanticPlan *semantic) {
     XtpFixture fixture = {0};
-    fixture.semantic = build_semantic_plan();
+    fixture.semantic = semantic;
     fixture.profile = build_profile();
     char error[512] = {0};
     REQUIRE(xr_target_plan_build(fixture.semantic, fixture.profile, &fixture.plan, error,
@@ -260,6 +307,15 @@ static XtpFixture make_fixture(void) {
                                sizeof(error)));
     REQUIRE(fixture.bytes != NULL && fixture.size >= XR_XTP_HEADER_SIZE);
     return fixture;
+}
+
+
+static XtpFixture make_fixture(void) {
+    return make_fixture_from_semantic(build_semantic_plan());
+}
+
+static XtpFixture make_direct_call_fixture(void) {
+    return make_fixture_from_semantic(build_direct_call_semantic_plan());
 }
 
 static void dispose_fixture(XtpFixture *fixture) {
@@ -366,6 +422,47 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     xr_xtp_encoded_free(encoded);
     xr_target_plan_free(decoded_plan);
     xr_xtp_candidate_release(candidate);
+    dispose_fixture(&fixture);
+}
+
+static void test_direct_call_rows_roundtrip_and_mutate(void) {
+    XtpFixture fixture = make_direct_call_fixture();
+    uint32_t count = 0;
+    REQUIRE(xr_target_plan_calls(fixture.plan, &count) != NULL && count == 1);
+    REQUIRE(xr_target_plan_call_arguments(fixture.plan, &count) != NULL && count == 1);
+    REQUIRE(xr_target_plan_adapters(fixture.plan, &count) == NULL && count == 0);
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *decoded = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
+                                    error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
+                                            fixture.profile, &decoded,
+                                            error, sizeof(error)));
+    REQUIRE(xr_target_plan_calls(decoded, &count) != NULL && count == 1);
+    REQUIRE(xr_target_plan_call_arguments(decoded, &count) != NULL && count == 1);
+    REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
+                                 xr_target_plan_fingerprint(fixture.plan)));
+    xr_target_plan_free(decoded);
+    xr_xtp_candidate_release(candidate);
+
+    uint8_t *copy = copy_artifact(&fixture);
+    uint8_t *call_entry = directory_entry(copy, XR_XTP_SECTION_CALLS);
+    size_t call_offset = (size_t) xr_xtp_take_u64(call_entry + 8);
+    copy[call_offset + 20] ^= 1; /* semantic_call_target */
+    resign_section(copy, XR_XTP_SECTION_CALLS);
+    resign_artifact(copy, fixture.size);
+    expect_materialize_failure(&fixture, copy);
+    xr_free(copy);
+
+    copy = copy_artifact(&fixture);
+    uint8_t *argument_entry = directory_entry(copy, XR_XTP_SECTION_CALL_ARGUMENTS);
+    size_t argument_offset = (size_t) xr_xtp_take_u64(argument_entry + 8);
+    copy[argument_offset + 20] ^= 1; /* semantic_operand */
+    resign_section(copy, XR_XTP_SECTION_CALL_ARGUMENTS);
+    resign_artifact(copy, fixture.size);
+    expect_materialize_failure(&fixture, copy);
+    xr_free(copy);
     dispose_fixture(&fixture);
 }
 
@@ -589,7 +686,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0, 292, 58, 12, 24, 108, 24, 40, 24, 12,
-        40, 58, 62, 8, 20, 4, 20, 20, 12, 40,
+        40, 58, 114, 50, 20, 4, 20, 44, 12, 40,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {
@@ -829,6 +926,7 @@ int main(int argc, char **argv) {
     test_wire_row_inventory();
     test_every_typed_row_codec();
     test_exact_roundtrip_and_owned_candidate();
+    test_direct_call_rows_roundtrip_and_mutate();
     test_header_and_directory_mutations();
     test_identity_and_typed_mutations();
     test_runtime_machine_authority_is_exact_and_scalar_only();

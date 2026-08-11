@@ -128,12 +128,18 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U16, align) F(U16, register_rep) F(U16, memory_rep) F(U8, role) F(U8, root_kind)           \
     F(U8, ownership) F(U8, reserved) F(U32, debug_variable)
 #define XR_XTP_CALL_FIELDS(F)                                                                      \
-    F(U32, id) F(U32, semantic_operation) F(U32, callee_function)                                \
-    F(U16, result_register_rep) F(U16, result_memory_rep) F(U8, result_mode)                      \
-    F(U8, result_ownership) F(U16, flags) F(U32, argument_begin) F(U16, argument_count)          \
-    F(U32, adapter) F(FP, fingerprint)
+    F(ID, identity) F(U32, id) F(U32, semantic_call_target) F(U32, semantic_operation)           \
+    F(U32, caller_function) F(U32, callee_function) F(U32, result_value) F(U32, result_slot)     \
+    F(U32, caller_storage_slot) F(U32, error_slot) F(U32, argument_begin) F(U32, adapter_begin)  \
+    F(U16, result_register_rep) F(U16, result_memory_rep) F(U16, error_register_rep)             \
+    F(U16, error_memory_rep) F(U16, argument_count) F(U16, adapter_count) F(U16, native_abi)     \
+    F(U16, flags) F(U8, calling_convention) F(U8, target_kind) F(U8, result_mode)                \
+    F(U8, result_ownership) F(U8, error_mode) F(U8, reserved8) F(FP, fingerprint)
 #define XR_XTP_CALL_ARGUMENT_FIELDS(F)                                                             \
-    F(U16, register_rep) F(U16, memory_rep) F(U8, mode) F(U8, ownership) F(U16, flags)
+    F(ID, identity) F(U32, call) F(U32, semantic_operand) F(U32, semantic_value)                  \
+    F(U32, callee_parameter) F(U32, caller_slot) F(U32, callee_slot) F(U16, register_rep)        \
+    F(U16, memory_rep) F(U16, ordinal) F(U8, mode) F(U8, ownership) F(U8, transfer_mode)         \
+    F(U8, flags)
 #define XR_XTP_ROOT_MAP_FIELDS(F)                                                                  \
     F(U32, id) F(U32, function) F(U32, semantic_operation) F(U32, slot_begin)                    \
     F(U16, slot_count) F(U16, flags)
@@ -141,8 +147,9 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U32, id) F(U32, function) F(U32, semantic_operation) F(U32, slot) F(U8, action)            \
     F(U8, flags) F(U16, provider)
 #define XR_XTP_ADAPTER_FIELDS(F)                                                                   \
-    F(U32, id) F(U8, kind) F(U8, ownership) F(U16, flags) F(U32, input_rep)                      \
-    F(U32, output_rep) F(U32, layout)
+    F(ID, identity) F(U32, id) F(U32, call) F(U32, input_rep) F(U32, output_rep)                 \
+    F(U32, layout) F(U16, ordinal) F(U16, flags) F(U8, role) F(U8, kind)                         \
+    F(U8, ownership) F(U8, reserved)
 #define XR_XTP_CAPABILITY_FIELDS(F)                                                                \
     F(U32, id) F(U32, capability) F(U16, provider) F(U16, flags)
 #define XR_XTP_COROUTINE_FIELDS(F)                                                                 \

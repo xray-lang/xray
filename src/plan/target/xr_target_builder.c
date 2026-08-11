@@ -18,6 +18,7 @@
 #include "xr_target_profile_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../ir/xi.h"
+#include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../../runtime/value/xtype.h"
@@ -69,6 +70,32 @@ typedef struct XrTargetSlotIntent {
     bool resolve_type_rep;
 } XrTargetSlotIntent;
 
+typedef struct XrTargetCallIntent {
+    XrStableId identity;
+    uint32_t semantic_call_target;
+    uint32_t semantic_operation;
+    uint32_t caller_function;
+    uint32_t callee_function;
+    uint32_t result_value;
+    uint32_t argument_begin;
+    uint16_t argument_count;
+    uint8_t result_mode;
+    uint8_t result_ownership;
+} XrTargetCallIntent;
+
+typedef struct XrTargetCallArgumentIntent {
+    XrStableId identity;
+    uint32_t call_intent;
+    uint32_t semantic_operand;
+    uint32_t semantic_value;
+    uint32_t callee_parameter;
+    uint16_t ordinal;
+    uint8_t mode;
+    uint8_t ownership;
+    uint8_t transfer_mode;
+    uint8_t flags;
+} XrTargetCallArgumentIntent;
+
 typedef struct XrTargetScalarAnalysis {
     uint8_t *defined_values;
     uint8_t *used_types;
@@ -95,6 +122,12 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t function_count;
     XrTargetSlotRecord *slots;
     uint32_t slot_count;
+    XrTargetCallRecord *calls;
+    uint32_t call_count;
+    XrTargetCallArgumentRecord *call_arguments;
+    uint32_t call_argument_count;
+    XrTargetAdapterRecord *adapters;
+    uint32_t adapter_count;
     XrTargetCapabilityRecord *capabilities;
     uint32_t capability_count;
 } XrTargetMaterializedPlan;
@@ -116,6 +149,12 @@ struct XrTargetPlanBuilder {
     XrTargetSlotIntent *slot_intents;
     uint32_t slot_intent_count;
     uint32_t slot_intent_capacity;
+    XrTargetCallIntent *call_intents;
+    uint32_t call_intent_count;
+    uint32_t call_intent_capacity;
+    XrTargetCallArgumentIntent *call_argument_intents;
+    uint32_t call_argument_intent_count;
+    uint32_t call_argument_intent_capacity;
     uint64_t started_family_mask;
     uint64_t completed_family_mask;
     bool materialized;
@@ -184,6 +223,9 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     xr_free(materialized->fields);
     xr_free(materialized->functions);
     xr_free(materialized->slots);
+    xr_free(materialized->calls);
+    xr_free(materialized->call_arguments);
+    xr_free(materialized->adapters);
     xr_free(materialized->capabilities);
     memset(materialized, 0, sizeof(*materialized));
 }
@@ -447,6 +489,46 @@ static bool append_slot_intent(XrTargetPlanBuilder *builder, const XrTargetSlotI
         return fail(error, error_size, "XR_EXEC_5003", "slot intent budget exhausted");
     builder->slot_intents[builder->slot_intent_count++] = *intent;
     return true;
+}
+
+static bool append_call_intent(XrTargetPlanBuilder *builder,
+                               const XrTargetCallIntent *intent, char *error,
+                               size_t error_size) {
+    if (!reserve_records((void **) &builder->call_intents,
+                         &builder->call_intent_capacity,
+                         builder->call_intent_count + 1u, 10000000u,
+                         sizeof(*builder->call_intents)))
+        return fail(error, error_size, "XR_EXEC_5003", "call intent budget exhausted");
+    builder->call_intents[builder->call_intent_count++] = *intent;
+    return true;
+}
+
+static bool append_call_argument_intent(
+    XrTargetPlanBuilder *builder, const XrTargetCallArgumentIntent *intent,
+    char *error, size_t error_size) {
+    if (!reserve_records((void **) &builder->call_argument_intents,
+                         &builder->call_argument_intent_capacity,
+                         builder->call_argument_intent_count + 1u, 40000000u,
+                         sizeof(*builder->call_argument_intents)))
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "call argument intent budget exhausted");
+    builder->call_argument_intents[builder->call_argument_intent_count++] = *intent;
+    return true;
+}
+
+static bool stable_identity_from_pair(const char *domain, XrStableId first,
+                                      XrStableId second, uint32_t ordinal,
+                                      XrStableId *out) {
+    char first_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char second_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[192];
+    XrFingerprint digest;
+    xr_stable_id_hex(first, first_hex);
+    xr_stable_id_hex(second, second_hex);
+    int written = snprintf(key, sizeof(key), "%s:first=%s:second=%s:ordinal=%u",
+                           domain, first_hex, second_hex, ordinal);
+    return out && written > 0 && (size_t) written < sizeof(key) &&
+           xr_stable_id_from_key(key, out, &digest);
 }
 
 static bool make_slot_identity(const XrSemanticPlan *plan, uint32_t function, uint8_t role,
@@ -1050,6 +1132,199 @@ static bool builder_add_aggregates(XrTargetPlanBuilder *builder, char *error,
     return true;
 }
 
+static bool semantic_operation_is_call_shaped(const XrSemanticPlan *plan,
+                                              const XrSemanticOperationRecord *operation) {
+    if (operation) {
+        /* Numeric SemanticPlan operation identity is explicit authority here;
+         * do not reclassify from effects, names, or a generated backend class. */
+        switch (operation->opcode) {
+            case XI_CALL:
+            case XI_CALL_METHOD:
+            case XI_CALL_METHOD_DIRECT:
+            case XI_TAIL_CALL:
+            case XI_CALL_BUILTIN:
+            case XI_ATOMIC_TO_STRING:
+            case XI_EXTRACT:
+            case XI_GEN_CALL:
+            case XI_MULTI_RET: return true;
+            default: break;
+        }
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    if (!operation || operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin)
+        return false;
+    for (uint32_t i = 0; i < operation->operand_count; i++) {
+        const XrSemanticOperandRecord *operand = &operands[operation->operand_begin + i];
+        if (operand->role == XR_SEM_OPERAND_CALLEE ||
+            operand->role == XR_SEM_OPERAND_RECEIVER ||
+            (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0)
+            return true;
+    }
+    return false;
+}
+
+static bool semantic_function_has_coroutine_state(const XrSemanticPlan *plan,
+                                                  uint32_t function) {
+    size_t entity_count = xr_semantic_plan_entity_count(plan);
+    size_t operation_count = xr_semantic_plan_operation_count(plan);
+    for (size_t i = 0; i < entity_count; i++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, (uint32_t) i);
+        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
+            entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION ||
+            entity->subject >= operation_count)
+            continue;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan, entity->subject);
+        if (operation && operation->function == function)
+            return true;
+    }
+    return false;
+}
+
+static bool call_type_is_exact_scalar(const XrSemanticPlan *plan, uint32_t type_index) {
+    uint16_t kind = XR_MACHINE_REP_COUNT;
+    return type_index < xr_semantic_plan_type_count(plan) &&
+           classify_scalar_type(xr_semantic_plan_type(plan, type_index), &kind) ==
+               XR_TARGET_SCALAR_VALUE;
+}
+
+static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
+                                             uint32_t target_index,
+                                             const XrSemanticCallTargetRecord *target,
+                                             char *error, size_t error_size) {
+    const XrSemanticPlan *plan = builder->semantic_plan;
+    uint32_t operand_table_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan, &operand_table_count);
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(plan, target->operation);
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(plan, target->function);
+    if (!operation || !callee || target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+        operation->opcode != XI_CALL || operation->function >=
+            xr_semantic_plan_function_count(plan) ||
+        operation->operand_count == 0 || operation->operand_begin > operand_table_count ||
+        operation->operand_count > operand_table_count - operation->operand_begin)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "only exact non-tail DIRECT_LOCAL call operations are supported");
+    if (semantic_function_has_coroutine_state(plan, operation->function) ||
+        semantic_function_has_coroutine_state(plan, target->function))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "coroutine call storage requires the future coroutine family");
+    if (callee->parameter_count == UINT16_MAX ||
+        operation->operand_count != (uint32_t) callee->parameter_count + 1u ||
+        callee->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
+        callee->parameter_count >
+            xr_semantic_plan_parameter_count(plan) - callee->parameter_begin ||
+        operation->result_type != callee->return_type ||
+        !call_type_is_exact_scalar(plan, operation->result_type))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "direct-local signature or scalar result storage is incomplete");
+    const XrSemanticOperandRecord *callee_operand = &operands[operation->operand_begin];
+    if (callee_operand->role != XR_SEM_OPERAND_CALLEE ||
+        callee_operand->parameter != -1 ||
+        (callee_operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "direct-local callee operand is not exact");
+
+    XrTargetCallIntent call = {
+        .semantic_call_target = target_index,
+        .semantic_operation = target->operation,
+        .caller_function = operation->function,
+        .callee_function = target->function,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = callee->parameter_count,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+    };
+    if (!stable_identity_from_pair("xray-target-call-v2", target->id, operation->id,
+                                   0, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "direct-local call identity is incomplete");
+    uint32_t call_intent = builder->call_intent_count;
+    for (uint32_t ordinal = 0; ordinal < callee->parameter_count; ordinal++) {
+        uint32_t parameter_index = callee->parameter_begin + ordinal;
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan, parameter_index);
+        uint32_t semantic_operand = operation->operand_begin + ordinal + 1u;
+        const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+        if (!parameter || operand->role != XR_SEM_OPERAND_ARGUMENT ||
+            operand->parameter != (int16_t) ordinal || operand->type != parameter->type ||
+            operand->parameter_mode != parameter->mode ||
+            operand->transfer_mode != parameter->transfer_mode ||
+            (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
+            !call_type_is_exact_scalar(plan, operand->type) ||
+            parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
+            (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0 ||
+            parameter->ownership != XI_OWN_NONE)
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "direct-local argument contract needs unsupported storage or ownership");
+        XrTargetCallArgumentIntent argument = {
+            .call_intent = call_intent,
+            .semantic_operand = semantic_operand,
+            .semantic_value = operand->value,
+            .callee_parameter = parameter_index,
+            .ordinal = (uint16_t) ordinal,
+            .mode = XR_TARGET_CALL_VALUE,
+            .ownership = operand->ownership_action == XR_SEM_OPERAND_CONSUME
+                             ? XR_TARGET_CALL_CONSUME
+                             : XR_TARGET_CALL_READ,
+            .transfer_mode = operand->transfer_mode,
+        };
+        if (!stable_identity_from_pair("xray-target-call-argument-v1", target->id,
+                                       parameter->id, ordinal, &argument.identity) ||
+            !append_call_argument_intent(builder, &argument, error, error_size))
+            return false;
+    }
+    return append_call_intent(builder, &call, error, error_size);
+}
+
+static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *error,
+                                           size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_CALL_ADAPTER, error, error_size))
+        return false;
+    const XrSemanticPlan *plan = builder->semantic_plan;
+    size_t operation_count = xr_semantic_plan_operation_count(plan);
+    size_t call_target_count = xr_semantic_plan_call_target_count(plan);
+    if (operation_count > 10000000u || call_target_count > operation_count) {
+        builder->poisoned = true;
+        return fail(error, error_size, "XR_EXEC_5003", "call target budget exhausted");
+    }
+    uint8_t *covered = (uint8_t *) allocate_records((uint32_t) operation_count,
+                                                    sizeof(*covered));
+    if (operation_count && !covered) {
+        builder->poisoned = true;
+        return fail(error, error_size, "XR_EXEC_5003", "call coverage allocation failed");
+    }
+    bool valid = true;
+    for (uint32_t i = 0; i < (uint32_t) call_target_count && valid; i++) {
+        const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
+        if (!target || target->operation >= operation_count || covered[target->operation]) {
+            valid = fail(error, error_size, "XR_TARGET_1003",
+                         "call-target coverage is missing or duplicated");
+            break;
+        }
+        covered[target->operation] = 1;
+        valid = collect_direct_local_call_intent(builder, i, target, error, error_size);
+    }
+    for (uint32_t i = 0; i < (uint32_t) operation_count && valid; i++) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, i);
+        if (semantic_operation_is_call_shaped(plan, operation) && !covered[i])
+            valid = fail(error, error_size, "XR_TARGET_1003",
+                         "call-shaped operation has no exact DIRECT_LOCAL authority");
+    }
+    xr_free(covered);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_CALL_ADAPTER;
+    return true;
+}
+
 static int find_rep_id(const XrTargetMaterializedPlan *materialized,
                        const XrTargetMachineRepRecord *record) {
     uint32_t low = 0;
@@ -1465,6 +1740,129 @@ static bool materialize_values(XrTargetPlanBuilder *builder,
     return true;
 }
 
+static const XrTargetValueRepRecord *find_materialized_value(
+    const XrTargetMaterializedPlan *materialized, uint32_t semantic_value) {
+    uint32_t low = 0;
+    uint32_t high = materialized->value_rep_count;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2u;
+        if (materialized->value_reps[middle].semantic_value < semantic_value)
+            low = middle + 1u;
+        else
+            high = middle;
+    }
+    return low < materialized->value_rep_count &&
+                   materialized->value_reps[low].semantic_value == semantic_value
+               ? &materialized->value_reps[low]
+               : NULL;
+}
+
+static int find_rep_kind(const XrTargetMaterializedPlan *materialized, uint16_t kind) {
+    for (uint32_t i = 0; i < materialized->machine_rep_count; i++)
+        if (materialized->machine_reps[i].kind == kind)
+            return (int) i;
+    return -1;
+}
+
+static bool materialize_calls_and_adapters(
+    const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
+    char *error, size_t error_size) {
+    materialized->call_count = builder->call_intent_count;
+    materialized->call_argument_count = builder->call_argument_intent_count;
+    materialized->adapter_count = 0;
+    materialized->calls = (XrTargetCallRecord *) allocate_records(
+        materialized->call_count, sizeof(*materialized->calls));
+    materialized->call_arguments = (XrTargetCallArgumentRecord *) allocate_records(
+        materialized->call_argument_count, sizeof(*materialized->call_arguments));
+    if ((materialized->call_count && !materialized->calls) ||
+        (materialized->call_argument_count && !materialized->call_arguments))
+        return fail(error, error_size, "XR_EXEC_5003", "call materialization failed");
+    int void_rep = find_rep_kind(materialized, XR_MACHINE_REP_VOID);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(builder->profile);
+    if (void_rep < 0 || !machine)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "call error-channel representation is missing");
+    uint32_t next_argument = 0;
+    for (uint32_t i = 0; i < materialized->call_count; i++) {
+        const XrTargetCallIntent *intent = &builder->call_intents[i];
+        const XrTargetValueRepRecord *result =
+            find_materialized_value(materialized, intent->result_value);
+        if (!result || intent->argument_begin != next_argument ||
+            intent->argument_count > materialized->call_argument_count - next_argument)
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "call result or argument partition cannot bind canonical storage");
+        XrTargetCallRecord *call = &materialized->calls[i];
+        *call = (XrTargetCallRecord) {
+            .identity = intent->identity,
+            .id = i,
+            .semantic_call_target = intent->semantic_call_target,
+            .semantic_operation = intent->semantic_operation,
+            .caller_function = intent->caller_function,
+            .callee_function = intent->callee_function,
+            .result_value = intent->result_value,
+            .result_slot = result->slot,
+            .caller_storage_slot = XR_SEMANTIC_INDEX_NONE,
+            .error_slot = XR_SEMANTIC_INDEX_NONE,
+            .argument_begin = next_argument,
+            .adapter_begin = 0,
+            .result_register_rep = result->register_rep,
+            .result_memory_rep = result->memory_rep,
+            .error_register_rep = (uint16_t) void_rep,
+            .error_memory_rep = (uint16_t) void_rep,
+            .argument_count = intent->argument_count,
+            .adapter_count = 0,
+            .native_abi = machine->native_abi,
+            .calling_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
+            .target_kind = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
+            .result_mode = intent->result_mode,
+            .result_ownership = intent->result_ownership,
+            .error_mode = XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL,
+        };
+        for (uint32_t ordinal = 0; ordinal < intent->argument_count; ordinal++) {
+            const XrTargetCallArgumentIntent *argument_intent =
+                &builder->call_argument_intents[next_argument];
+            const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(
+                builder->semantic_plan, argument_intent->callee_parameter);
+            const XrTargetValueRepRecord *caller = find_materialized_value(
+                materialized, argument_intent->semantic_value);
+            const XrTargetValueRepRecord *callee = parameter
+                                                       ? find_materialized_value(
+                                                             materialized, parameter->value)
+                                                       : NULL;
+            if (argument_intent->call_intent != i ||
+                argument_intent->ordinal != ordinal || !caller || !callee ||
+                caller->slot == XR_SEMANTIC_INDEX_NONE ||
+                callee->slot == XR_SEMANTIC_INDEX_NONE ||
+                caller->register_rep != callee->register_rep ||
+                caller->memory_rep != callee->memory_rep)
+                return fail(error, error_size, "XR_TARGET_1003",
+                            "direct-local argument lacks identical caller/callee storage");
+            materialized->call_arguments[next_argument] =
+                (XrTargetCallArgumentRecord) {
+                    .identity = argument_intent->identity,
+                    .call = i,
+                    .semantic_operand = argument_intent->semantic_operand,
+                    .semantic_value = argument_intent->semantic_value,
+                    .callee_parameter = argument_intent->callee_parameter,
+                    .caller_slot = caller->slot,
+                    .callee_slot = callee->slot,
+                    .register_rep = caller->register_rep,
+                    .memory_rep = caller->memory_rep,
+                    .ordinal = argument_intent->ordinal,
+                    .mode = argument_intent->mode,
+                    .ownership = argument_intent->ownership,
+                    .transfer_mode = argument_intent->transfer_mode,
+                    .flags = argument_intent->flags,
+                };
+            next_argument++;
+        }
+    }
+    if (next_argument != materialized->call_argument_count)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "call arguments do not exactly partition their table");
+    return true;
+}
+
 static bool materialize_foundation_capabilities(
     const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
     char *error, size_t error_size) {
@@ -1507,6 +1905,7 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_field_representations(builder, materialized, error, error_size) ||
         !materialize_functions_and_slots(builder, materialized, error, error_size) ||
         !materialize_values(builder, materialized, error, error_size) ||
+        !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
         !materialize_foundation_capabilities(builder, materialized, error,
                                              error_size)) {
         builder->poisoned = true;
@@ -1570,6 +1969,12 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out,
         .functions_count = materialized.function_count,
         .slots = materialized.slots,
         .slots_count = materialized.slot_count,
+        .calls = materialized.calls,
+        .calls_count = materialized.call_count,
+        .call_arguments = materialized.call_arguments,
+        .call_arguments_count = materialized.call_argument_count,
+        .adapters = materialized.adapters,
+        .adapters_count = materialized.adapter_count,
         .capabilities = materialized.capabilities,
         .capabilities_count = materialized.capability_count,
     };
@@ -1585,6 +1990,8 @@ static void builder_free(XrTargetPlanBuilder *builder) {
     xr_free(builder->layout_intents);
     xr_free(builder->value_intents);
     xr_free(builder->slot_intents);
+    xr_free(builder->call_intents);
+    xr_free(builder->call_argument_intents);
     xr_semantic_plan_free(builder->semantic_plan);
     xr_target_profile_free(builder->profile);
     xr_free(builder);
@@ -1598,7 +2005,8 @@ bool xr_target_plan_build(const XrSemanticPlan *semantic_plan, XrTargetProfile *
     if (!builder_new(semantic_plan, profile, &builder, error, error_size))
         return false;
     if (!builder_add_scalars(builder, error, error_size) ||
-        !builder_add_aggregates(builder, error, error_size)) {
+        !builder_add_aggregates(builder, error, error_size) ||
+        !builder_add_calls_and_adapters(builder, error, error_size)) {
         builder_free(builder);
         return false;
     }
