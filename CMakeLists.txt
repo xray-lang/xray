@@ -943,8 +943,10 @@ else()
 endif()
 file(GLOB RUNTIME_TOP_SRC CONFIGURE_DEPENDS "src/runtime/*.c")
 file(GLOB RUNTIME_ABI_SRC CONFIGURE_DEPENDS "src/runtime/abi/*.c")
-file(GLOB RUNTIME_OWNERSHIP_SRC CONFIGURE_DEPENDS "src/runtime/ownership/*.c")
-list(APPEND RUNTIME_TOP_SRC ${RUNTIME_ABI_SRC} ${RUNTIME_OWNERSHIP_SRC})
+set(RUNTIME_OWNERSHIP_AUDIT_SRC
+    "src/runtime/ownership/xr_ownership_audit.c"
+)
+list(APPEND RUNTIME_TOP_SRC ${RUNTIME_ABI_SRC})
 file(GLOB RUNTIME_CORE_SRC CONFIGURE_DEPENDS "src/runtime/core/*.c")
 file(GLOB RUNTIME_VALUE_SRC CONFIGURE_DEPENDS "src/runtime/value/*.c")
 file(GLOB RUNTIME_MEM_SRC CONFIGURE_DEPENDS "src/runtime/mem/*.c")
@@ -1348,6 +1350,12 @@ list(REMOVE_DUPLICATES XRAY_VM_RUNTIME_SOURCES)
 
 add_library(xray_vm_runtime STATIC ${XRAY_VM_RUNTIME_SOURCES})
 add_dependencies(xray_vm_runtime gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
+
+# The ownership audit heap is diagnostic instrumentation, not release runtime
+# behavior. Keep it out of core, coroutine, and VM archives; developers and
+# audit runners opt in by naming this excluded target or its focused test.
+add_library(xray_ownership_audit STATIC EXCLUDE_FROM_ALL ${RUNTIME_OWNERSHIP_AUDIT_SRC})
+target_include_directories(xray_ownership_audit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(
@@ -2737,16 +2745,17 @@ if(BUILD_TESTS)
             COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_asan_focused.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
-        # The focused TSan lane exercises the work-stealing scheduler and two-band RC under
-        # ThreadSanitizer, on the CURRENT canonical concurrency assets (the
-        # legacy hand-run directories are documented pre-clean-slate drafts).
+        # The focused TSan lane exercises the work-stealing scheduler, two-band
+        # RC, and diagnostic ownership-audit gate under ThreadSanitizer, on the
+        # CURRENT canonical concurrency assets (the legacy hand-run directories
+        # are documented pre-clean-slate drafts).
         add_test(
             NAME tsan_focused
             COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_tsan_focused.py
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
         set_tests_properties(tsan_focused PROPERTIES
-            LABELS "sanitizer;tsan;coro;task-260"
+            LABELS "sanitizer;tsan;coro;ownership;task-260"
             RUN_SERIAL TRUE
             COST 1200
             TIMEOUT 3600

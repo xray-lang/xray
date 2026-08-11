@@ -48,10 +48,14 @@ typedef enum XrOwnershipAuditStatus {
     XR_OWN_AUDIT_GENERATION_PIN_MISSING = 20,
     XR_OWN_AUDIT_GENERATION_PIN_MISMATCH = 21,
     XR_OWN_AUDIT_INCOMPLETE = 22,
+    XR_OWN_AUDIT_TEARDOWN_MISMATCH = 23,
+    XR_OWN_AUDIT_FINALIZE_MISMATCH = 24,
+    XR_OWN_AUDIT_RECLAIM_MISMATCH = 25,
 } XrOwnershipAuditStatus;
 
 typedef enum XrOwnershipAuditExpectationFlags {
     XR_OWN_AUDIT_REQUIRE_GENERATION_PIN = UINT32_C(1) << 0,
+    XR_OWN_AUDIT_TRACK_ALLOCATION_LIFECYCLE = UINT32_C(1) << 1,
 } XrOwnershipAuditExpectationFlags;
 
 typedef enum XrOwnershipAuditTransitionFlags {
@@ -71,6 +75,24 @@ typedef enum XrOwnershipAuditPhysicalRcMode {
     XR_OWN_AUDIT_RC_STICKY,
 } XrOwnershipAuditPhysicalRcMode;
 
+typedef enum XrOwnershipAuditLifecycleKind {
+    XR_OWN_AUDIT_LIFECYCLE_BEGIN_TEARDOWN = 0,
+    XR_OWN_AUDIT_LIFECYCLE_BEGIN_FINALIZE = 1,
+    XR_OWN_AUDIT_LIFECYCLE_END_FINALIZE = 2,
+    XR_OWN_AUDIT_LIFECYCLE_RECLAIM = 3,
+    XR_OWN_AUDIT_LIFECYCLE_END_TEARDOWN = 4,
+    XR_OWN_AUDIT_LIFECYCLE_KIND_COUNT = 5,
+} XrOwnershipAuditLifecycleKind;
+
+typedef enum XrOwnershipAuditAllocationState {
+    XR_OWN_AUDIT_ALLOCATION_UNKNOWN = 0,
+    XR_OWN_AUDIT_ALLOCATION_UNTRACKED = 1,
+    XR_OWN_AUDIT_ALLOCATION_LIVE = 2,
+    XR_OWN_AUDIT_ALLOCATION_FINALIZING = 3,
+    XR_OWN_AUDIT_ALLOCATION_FINALIZED = 4,
+    XR_OWN_AUDIT_ALLOCATION_RECLAIMED = 5,
+} XrOwnershipAuditAllocationState;
+
 typedef struct XrOwnershipAuditConfig {
     size_t max_owner_manifests;
     size_t max_transition_manifests;
@@ -78,6 +100,9 @@ typedef struct XrOwnershipAuditConfig {
     size_t max_events;
     size_t max_loans;
     size_t max_generations;
+    size_t max_lifecycle_manifests;
+    size_t max_lifecycle_events;
+    size_t max_teardown_domains;
 } XrOwnershipAuditConfig;
 
 /* A static owner can activate repeatedly across invocations and loop
@@ -120,6 +145,7 @@ typedef struct XrOwnershipAuditTransitionManifest {
     uint8_t program_point;
     uint8_t next_semantic_domain;
     uint8_t next_materialization;
+    uint8_t physical_rc_mode;
 } XrOwnershipAuditTransitionManifest;
 
 typedef struct XrOwnershipAuditEvent {
@@ -144,6 +170,29 @@ typedef struct XrOwnershipAuditEvent {
     uint8_t physical_rc_mode;
 } XrOwnershipAuditEvent;
 
+/* Lifecycle manifests are independent static obligations. Domain-level
+ * manifests use a zero owner/destructor; object-level manifests use zero
+ * domain class fields and bind the static owner plus destructor identity. */
+typedef struct XrOwnershipAuditLifecycleManifest {
+    XrStableId transition_id;
+    XrStableId owner_id;
+    XrStableId operation_id;
+    XrStableId destructor_id;
+    XrStableId domain_contract_id;
+    uint8_t kind;
+    uint8_t semantic_domain;
+    uint8_t materialization;
+} XrOwnershipAuditLifecycleManifest;
+
+typedef struct XrOwnershipAuditLifecycleEvent {
+    XrOwnershipAuditObjectKey object;
+    XrStableId transition_id;
+    XrStableId operation_id;
+    XrStableId destructor_id;
+    XrRuntimeDomainIdentity domain;
+    uint8_t kind;
+} XrOwnershipAuditLifecycleEvent;
+
 XR_FUNC XrOwnershipAudit *xr_ownership_audit_create(XrOwnershipAuditConfig config,
                                                     XrOwnershipAuditStatus *status);
 XR_FUNC void xr_ownership_audit_destroy(XrOwnershipAudit *audit);
@@ -151,8 +200,12 @@ XR_FUNC XrOwnershipAuditStatus xr_ownership_audit_register_owner(
     XrOwnershipAudit *audit, const XrOwnershipAuditOwnerManifest *manifest);
 XR_FUNC XrOwnershipAuditStatus xr_ownership_audit_register_transition(
     XrOwnershipAudit *audit, const XrOwnershipAuditTransitionManifest *manifest);
+XR_FUNC XrOwnershipAuditStatus xr_ownership_audit_register_lifecycle(
+    XrOwnershipAudit *audit, const XrOwnershipAuditLifecycleManifest *manifest);
 XR_FUNC XrOwnershipAuditStatus xr_ownership_audit_record(XrOwnershipAudit *audit,
                                                         const XrOwnershipAuditEvent *event);
+XR_FUNC XrOwnershipAuditStatus xr_ownership_audit_record_lifecycle(
+    XrOwnershipAudit *audit, const XrOwnershipAuditLifecycleEvent *event);
 XR_FUNC XrOwnershipAuditStatus xr_ownership_audit_finish(XrOwnershipAudit *audit);
 
 /* Registration copies every descriptor fact used by recording. All accessors
@@ -165,6 +218,14 @@ XR_FUNC const XrOwnershipAuditEvent *xr_ownership_audit_event(const XrOwnershipA
                                                              size_t index);
 XR_FUNC const XrOwnershipAuditEvent *xr_ownership_audit_failed_event(
     const XrOwnershipAudit *audit);
+XR_FUNC size_t xr_ownership_audit_lifecycle_event_count(const XrOwnershipAudit *audit);
+XR_FUNC const XrOwnershipAuditLifecycleEvent *xr_ownership_audit_lifecycle_event(
+    const XrOwnershipAudit *audit, size_t index);
+XR_FUNC const XrOwnershipAuditLifecycleEvent *xr_ownership_audit_failed_lifecycle_event(
+    const XrOwnershipAudit *audit);
+XR_FUNC XrOwnershipAuditAllocationState xr_ownership_audit_allocation_state(
+    const XrOwnershipAudit *audit, XrOwnershipAuditObjectKey object);
+XR_FUNC size_t xr_ownership_audit_allocation_count(const XrOwnershipAudit *audit);
 XR_FUNC const char *xr_ownership_audit_evidence_scope(void);
 
 #endif  // XR_OWNERSHIP_AUDIT_H

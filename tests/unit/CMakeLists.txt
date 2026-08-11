@@ -59,8 +59,8 @@ if(XR_ENABLE_CYCLE_DETECTOR)
 endif()
 
 # These contract tests build only the low-level runtime modules. The focused
-# validation loop stays independent of the full compiler archive while the
-# same sources remain part of every runtime product library.
+# validation loop stays independent of the full compiler archive. Ownership
+# audit instrumentation is intentionally absent from release product archives.
 add_executable(test_runtime_descriptor
     runtime/test_runtime_descriptor.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_descriptor.c
@@ -81,9 +81,25 @@ add_executable(test_ownership_audit
 target_include_directories(test_ownership_audit PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
+target_compile_definitions(test_ownership_audit PRIVATE
+    XR_OWNERSHIP_AUDIT_TESTING=1
+)
+if(NOT WIN32)
+    target_link_libraries(test_ownership_audit PRIVATE pthread)
+endif()
 add_test(NAME test_ownership_audit COMMAND $<TARGET_FILE:test_ownership_audit>)
 set_tests_properties(test_ownership_audit PROPERTIES
-    LABELS "runtime;ownership;target-machine")
+    LABELS "runtime;ownership;concurrency;target-machine")
+
+add_test(
+    NAME check_ownership_audit_record_no_alloc
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_ownership_audit_record_no_alloc.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(check_ownership_audit_record_no_alloc PROPERTIES
+    LABELS "runtime;ownership;static-analysis;target-machine"
+)
 
 # ============================================================================
 # object/ — Runtime objects (string, array, utf8)

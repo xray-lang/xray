@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Focused ThreadSanitizer lane: the scheduler and the two-band refcount.
+"""Focused ThreadSanitizer lane for runtime concurrency primitives.
 
 The work-stealing scheduler and the two-band reference counter are exactly the
-code TSan exists for, and until this lane nothing ran them under it.
+code TSan exists for, and until this lane nothing ran them under it. The
+ownership audit's fail-closed record gate is also built and exercised here,
+because diagnostic-only sources are intentionally absent from release archives.
 
 Scope is the CURRENT canonical concurrency assets, not the three legacy
 directories an earlier analysis pointed at (tests/coroutine_safety,
@@ -81,16 +83,24 @@ def main(argv: list[str]) -> int:
             'CMAKE_C_FLAGS=-fsanitize=thread -fno-omit-frame-pointer',
             'CMAKE_EXE_LINKER_FLAGS=-fsanitize=thread',
         ),
-        targets=("xray",),
+        targets=("xray", "test_ownership_audit"),
         # No ENABLE_* BOOL exists here, so reuse is verified by looking for the
         # instrumentation flag itself in the cache.
         verify_cache_contains=("-fsanitize=thread",),
     )
 
     xray = build_dir / platform.exe_name("xray")
-    reason = sanitizer.rebuild_reason(xray, PROJECT_DIR)
+    audit_test = build_dir / "tests" / "unit" / platform.exe_name("test_ownership_audit")
+    reason = next(
+        (
+            f"{name}: {candidate}"
+            for name, binary in (("xray", xray), ("ownership audit", audit_test))
+            if (candidate := sanitizer.rebuild_reason(binary, PROJECT_DIR))
+        ),
+        None,
+    )
     if reason:
-        log(f"building xray (TSan, jobs={jobs}): {reason}")
+        log(f"building xray and ownership audit (TSan, jobs={jobs}): {reason}")
         if not sanitizer.configure(spec, PROJECT_DIR, jobs, timeout, log):
             return 1
         if not sanitizer.build(spec, jobs, timeout, log):
@@ -98,9 +108,10 @@ def main(argv: list[str]) -> int:
     else:
         log("reusing the up-to-date TSan build")
 
-    if not (xray.is_file() and os.access(xray, os.X_OK)):
-        log(f"TSan xray binary not found at {xray}", error=True)
-        return 1
+    for name, binary in (("xray", xray), ("ownership audit", audit_test)):
+        if not (binary.is_file() and os.access(binary, os.X_OK)):
+            log(f"TSan {name} binary not found at {binary}", error=True)
+            return 1
 
     problem = next((p for p in (sanitizer.verify_configured(build_dir, f)
                                 for f in spec.verification_targets()) if p), None)
@@ -118,6 +129,17 @@ def main(argv: list[str]) -> int:
         # not hide the others.
         env["TSAN_OPTIONS"] = f"halt_on_error=0 exitcode=0 log_path={log_prefix}"
         env["XRAY_WORKERS"] = WORKERS
+
+        sys.stdout.write("  ownership_audit_concurrency             ")
+        sys.stdout.flush()
+        audit_result = proc.run([audit_test], env=env, timeout=CASE_TIMEOUT)
+        audit_failed = audit_result.timed_out or not audit_result.ok
+        if audit_result.timed_out:
+            print(f"failed (timed out after {CASE_TIMEOUT}s)")
+        elif audit_result.ok:
+            print("passed")
+        else:
+            print(f"failed (nonzero exit {audit_result.returncode})")
 
         for mode, case in CASES:
             name = Path(case).stem
@@ -155,8 +177,16 @@ def main(argv: list[str]) -> int:
             print(f"VERDICT: FAIL ({count} TSan warnings)")
             return 1
 
+    if audit_failed:
+        print("")
+        print("VERDICT: FAIL (ownership audit concurrency test failed)")
+        return 1
+
     print("")
-    print(f"VERDICT: PASS (no ThreadSanitizer warnings across {len(CASES)} cases)")
+    print(
+        "VERDICT: PASS (no ThreadSanitizer warnings across "
+        f"ownership audit plus {len(CASES)} VM cases)"
+    )
     return 0
 
 

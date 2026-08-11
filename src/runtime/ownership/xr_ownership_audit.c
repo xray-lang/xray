@@ -18,6 +18,9 @@
     (XR_OWN_AUDIT_TRANSITION_TERMINAL | XR_OWN_AUDIT_TRANSITION_OPENS_INSTANCE |             \
      XR_OWN_AUDIT_TRANSITION_CHANGES_DOMAIN)
 
+#define XR_AUDIT_OWNER_FLAGS_ALL                                                             \
+    (XR_OWN_AUDIT_REQUIRE_GENERATION_PIN | XR_OWN_AUDIT_TRACK_ALLOCATION_LIFECYCLE)
+
 typedef struct XrAuditOwnerManifest {
     XrStableId owner_id;
     XrStableId layout_id;
@@ -53,6 +56,8 @@ typedef struct XrAuditObject {
     uint32_t active_loans;
     uint8_t logical_state;
     uint8_t last_physical_mode;
+    uint8_t allocation_state;
+    uint8_t terminal_event_kind;
     bool physical_seen;
     bool terminal;
 } XrAuditObject;
@@ -68,31 +73,63 @@ typedef struct XrAuditGeneration {
     uint32_t pin_count;
 } XrAuditGeneration;
 
+typedef enum XrAuditTeardownState {
+    XR_AUDIT_TEARDOWN_DRAINING = 1,
+    XR_AUDIT_TEARDOWN_ENDED = 2,
+} XrAuditTeardownState;
+
+typedef struct XrAuditTeardownDomain {
+    XrRuntimeDomainIdentity domain;
+    uint8_t state;
+} XrAuditTeardownDomain;
+
 struct XrOwnershipAudit {
     XrAuditOwnerManifest *owners;
     XrOwnershipAuditTransitionManifest *transitions;
+    XrOwnershipAuditLifecycleManifest *lifecycle_manifests;
     XrAuditObject *objects;
     XrAuditLoan *loans;
     XrAuditGeneration *generations;
+    XrAuditTeardownDomain *teardown_domains;
     XrOwnershipAuditEvent *events;
+    XrOwnershipAuditLifecycleEvent *lifecycle_events;
     size_t owner_count;
     size_t transition_count;
+    size_t lifecycle_manifest_count;
     size_t object_count;
     size_t loan_count;
     size_t generation_count;
+    size_t teardown_domain_count;
     size_t event_count;
+    size_t lifecycle_event_count;
     size_t owner_capacity;
     size_t transition_capacity;
+    size_t lifecycle_manifest_capacity;
     size_t object_capacity;
     size_t loan_capacity;
     size_t generation_capacity;
+    size_t teardown_domain_capacity;
     size_t event_capacity;
+    size_t lifecycle_event_capacity;
+    size_t allocation_count;
     atomic_int status;
     XrOwnershipAuditEvent failed_event;
+    XrOwnershipAuditLifecycleEvent failed_lifecycle_event;
     atomic_flag gate;
     bool has_failed_event;
+    bool has_failed_lifecycle_event;
     bool finished;
 };
+
+#if defined(XR_OWNERSHIP_AUDIT_TESTING)
+void xr_ownership_audit_test_after_enter(XrOwnershipAudit *audit);
+void xr_ownership_audit_test_on_contention(XrOwnershipAudit *audit);
+#define XR_AUDIT_TEST_AFTER_ENTER(audit) xr_ownership_audit_test_after_enter(audit)
+#define XR_AUDIT_TEST_ON_CONTENTION(audit) xr_ownership_audit_test_on_contention(audit)
+#else
+#define XR_AUDIT_TEST_AFTER_ENTER(audit) ((void) (audit))
+#define XR_AUDIT_TEST_ON_CONTENTION(audit) ((void) (audit))
+#endif
 
 static bool id_is_zero(XrStableId id) {
     static const XrStableId zero = {{0}};
@@ -153,9 +190,13 @@ static bool checked_bytes(size_t count, size_t element_size) {
     return element_size != 0 && count <= SIZE_MAX / element_size;
 }
 
-static void *allocate_table(size_t count, size_t element_size) {
-    return count != 0 && checked_bytes(count, element_size) ? xr_calloc(count, element_size)
-                                                            : NULL;
+static void *allocate_table(size_t count, size_t element_size, size_t *allocation_count) {
+    if (count == 0 || !checked_bytes(count, element_size))
+        return NULL;
+    void *table = xr_calloc(count, element_size);
+    if (table)
+        (*allocation_count)++;
+    return table;
 }
 
 static XrOwnershipAuditStatus status_load(const XrOwnershipAudit *audit) {
@@ -164,12 +205,15 @@ static XrOwnershipAuditStatus status_load(const XrOwnershipAudit *audit) {
 }
 
 static bool enter_audit(XrOwnershipAudit *audit) {
-    if (!atomic_flag_test_and_set_explicit(&audit->gate, memory_order_acquire))
+    if (!atomic_flag_test_and_set_explicit(&audit->gate, memory_order_acquire)) {
+        XR_AUDIT_TEST_AFTER_ENTER(audit);
         return true;
+    }
     int expected = XR_OWN_AUDIT_OK;
     atomic_compare_exchange_strong_explicit(&audit->status, &expected,
                                             XR_OWN_AUDIT_REENTRANT,
                                             memory_order_acq_rel, memory_order_acquire);
+    XR_AUDIT_TEST_ON_CONTENTION(audit);
     return false;
 }
 
@@ -189,6 +233,19 @@ static XrOwnershipAuditStatus fail(XrOwnershipAudit *audit, XrOwnershipAuditStat
     return status_load(audit);
 }
 
+static XrOwnershipAuditStatus fail_lifecycle(
+    XrOwnershipAudit *audit, XrOwnershipAuditStatus status,
+    const XrOwnershipAuditLifecycleEvent *event) {
+    int expected = XR_OWN_AUDIT_OK;
+    atomic_compare_exchange_strong_explicit(&audit->status, &expected, status,
+                                            memory_order_acq_rel, memory_order_acquire);
+    if (event && !audit->has_failed_lifecycle_event) {
+        audit->failed_lifecycle_event = *event;
+        audit->has_failed_lifecycle_event = true;
+    }
+    return status_load(audit);
+}
+
 static XrAuditOwnerManifest *find_owner(XrOwnershipAudit *audit, XrStableId owner_id) {
     for (size_t i = 0; i < audit->owner_count; i++) {
         if (id_equal(audit->owners[i].owner_id, owner_id))
@@ -202,6 +259,15 @@ static XrOwnershipAuditTransitionManifest *find_transition(XrOwnershipAudit *aud
     for (size_t i = 0; i < audit->transition_count; i++) {
         if (id_equal(audit->transitions[i].transition_id, transition_id))
             return &audit->transitions[i];
+    }
+    return NULL;
+}
+
+static XrOwnershipAuditLifecycleManifest *find_lifecycle_manifest(
+    XrOwnershipAudit *audit, XrStableId transition_id) {
+    for (size_t i = 0; i < audit->lifecycle_manifest_count; i++) {
+        if (id_equal(audit->lifecycle_manifests[i].transition_id, transition_id))
+            return &audit->lifecycle_manifests[i];
     }
     return NULL;
 }
@@ -234,14 +300,24 @@ static XrAuditGeneration *find_generation(XrOwnershipAudit *audit,
     return NULL;
 }
 
+static XrAuditTeardownDomain *find_teardown_domain(
+    XrOwnershipAudit *audit, XrRuntimeDomainIdentity domain) {
+    for (size_t i = 0; i < audit->teardown_domain_count; i++) {
+        if (domain_equal(audit->teardown_domains[i].domain, domain))
+            return &audit->teardown_domains[i];
+    }
+    return NULL;
+}
+
 XrOwnershipAudit *xr_ownership_audit_create(XrOwnershipAuditConfig config,
                                             XrOwnershipAuditStatus *status) {
     if (status)
         *status = XR_OWN_AUDIT_INVALID_ARGUMENT;
     if (config.max_owner_manifests == 0 || config.max_transition_manifests == 0 ||
         config.max_dynamic_instances == 0 || config.max_events == 0 ||
-        config.max_loans == 0 ||
-        config.max_generations == 0)
+        config.max_loans == 0 || config.max_generations == 0 ||
+        config.max_lifecycle_manifests == 0 || config.max_lifecycle_events == 0 ||
+        config.max_teardown_domains == 0)
         return NULL;
 
     XrOwnershipAudit *audit = (XrOwnershipAudit *) xr_calloc(1, sizeof(*audit));
@@ -250,20 +326,37 @@ XrOwnershipAudit *xr_ownership_audit_create(XrOwnershipAuditConfig config,
             *status = XR_OWN_AUDIT_OUT_OF_MEMORY;
         return NULL;
     }
+    audit->allocation_count = 1;
     audit->owners =
         (XrAuditOwnerManifest *) allocate_table(config.max_owner_manifests,
-                                                sizeof(*audit->owners));
+                                                sizeof(*audit->owners),
+                                                &audit->allocation_count);
     audit->transitions = (XrOwnershipAuditTransitionManifest *) allocate_table(
-        config.max_transition_manifests, sizeof(*audit->transitions));
+        config.max_transition_manifests, sizeof(*audit->transitions),
+        &audit->allocation_count);
+    audit->lifecycle_manifests = (XrOwnershipAuditLifecycleManifest *) allocate_table(
+        config.max_lifecycle_manifests, sizeof(*audit->lifecycle_manifests),
+        &audit->allocation_count);
     audit->objects = (XrAuditObject *) allocate_table(config.max_dynamic_instances,
-                                                      sizeof(*audit->objects));
+                                                      sizeof(*audit->objects),
+                                                      &audit->allocation_count);
     audit->events =
-        (XrOwnershipAuditEvent *) allocate_table(config.max_events, sizeof(*audit->events));
-    audit->loans = (XrAuditLoan *) allocate_table(config.max_loans, sizeof(*audit->loans));
+        (XrOwnershipAuditEvent *) allocate_table(config.max_events, sizeof(*audit->events),
+                                                 &audit->allocation_count);
+    audit->lifecycle_events = (XrOwnershipAuditLifecycleEvent *) allocate_table(
+        config.max_lifecycle_events, sizeof(*audit->lifecycle_events),
+        &audit->allocation_count);
+    audit->loans = (XrAuditLoan *) allocate_table(config.max_loans, sizeof(*audit->loans),
+                                                  &audit->allocation_count);
     audit->generations = (XrAuditGeneration *) allocate_table(config.max_generations,
-                                                              sizeof(*audit->generations));
-    if (!audit->owners || !audit->transitions || !audit->objects || !audit->events ||
-        !audit->loans || !audit->generations) {
+                                                              sizeof(*audit->generations),
+                                                              &audit->allocation_count);
+    audit->teardown_domains = (XrAuditTeardownDomain *) allocate_table(
+        config.max_teardown_domains, sizeof(*audit->teardown_domains),
+        &audit->allocation_count);
+    if (!audit->owners || !audit->transitions || !audit->lifecycle_manifests ||
+        !audit->objects || !audit->events || !audit->lifecycle_events || !audit->loans ||
+        !audit->generations || !audit->teardown_domains) {
         xr_ownership_audit_destroy(audit);
         if (status)
             *status = XR_OWN_AUDIT_OUT_OF_MEMORY;
@@ -271,10 +364,13 @@ XrOwnershipAudit *xr_ownership_audit_create(XrOwnershipAuditConfig config,
     }
     audit->owner_capacity = config.max_owner_manifests;
     audit->transition_capacity = config.max_transition_manifests;
+    audit->lifecycle_manifest_capacity = config.max_lifecycle_manifests;
     audit->object_capacity = config.max_dynamic_instances;
     audit->event_capacity = config.max_events;
+    audit->lifecycle_event_capacity = config.max_lifecycle_events;
     audit->loan_capacity = config.max_loans;
     audit->generation_capacity = config.max_generations;
+    audit->teardown_domain_capacity = config.max_teardown_domains;
     atomic_init(&audit->status, XR_OWN_AUDIT_OK);
     atomic_flag_clear(&audit->gate);
     if (status)
@@ -287,10 +383,13 @@ void xr_ownership_audit_destroy(XrOwnershipAudit *audit) {
         return;
     xr_free(audit->owners);
     xr_free(audit->transitions);
+    xr_free(audit->lifecycle_manifests);
     xr_free(audit->objects);
     xr_free(audit->events);
+    xr_free(audit->lifecycle_events);
     xr_free(audit->loans);
     xr_free(audit->generations);
+    xr_free(audit->teardown_domains);
     xr_free(audit);
 }
 
@@ -301,7 +400,7 @@ static XrOwnershipAuditStatus validate_owner_manifest(
         id_is_zero(manifest->frame_id) || id_is_zero(manifest->initial_domain_contract_id) ||
         fingerprint_is_zero(manifest->premise_fingerprint) ||
         manifest->initial_state >= XR_OWN_STATE_COUNT || manifest->initial_logical_balance < 0 ||
-        (manifest->flags & ~XR_OWN_AUDIT_REQUIRE_GENERATION_PIN) != 0)
+        (manifest->flags & ~XR_AUDIT_OWNER_FLAGS_ALL) != 0)
         return XR_OWN_AUDIT_INVALID_ARGUMENT;
     XrRuntimeDomainIdentity domain = {
         .contract_id = manifest->initial_domain_contract_id,
@@ -329,7 +428,7 @@ XrOwnershipAuditStatus xr_ownership_audit_register_owner(
     XrOwnershipAuditStatus result = status_load(audit);
     if (result != XR_OWN_AUDIT_OK)
         goto done;
-    if (audit->finished || audit->event_count != 0) {
+    if (audit->finished || audit->event_count != 0 || audit->lifecycle_event_count != 0) {
         result = fail(audit, XR_OWN_AUDIT_INVALID_TRANSITION, NULL);
         goto done;
     }
@@ -385,14 +484,20 @@ static XrOwnershipAuditStatus validate_transition_manifest(
             !id_is_zero(manifest->exit_id) || manifest->flags != 0 ||
             manifest->state_before_mask != 0 || manifest->logical_delta != 0 ||
             manifest->state_after != 0 || !id_is_zero(manifest->next_domain_contract_id) ||
-            manifest->next_semantic_domain != 0 || manifest->next_materialization != 0)
+            manifest->next_semantic_domain != 0 || manifest->next_materialization != 0 ||
+            manifest->physical_rc_mode != XR_OWN_AUDIT_RC_NONE)
             return XR_OWN_AUDIT_INVALID_ARGUMENT;
         return XR_OWN_AUDIT_OK;
     }
     if (id_is_zero(manifest->owner_id) || !id_is_zero(manifest->generation_id) ||
         manifest->state_before_mask == 0 ||
         (manifest->state_before_mask & ~XR_OWN_STATE_MASK_ALL) != 0 ||
-        manifest->state_after >= XR_OWN_STATE_COUNT)
+        manifest->state_after >= XR_OWN_STATE_COUNT ||
+        manifest->physical_rc_mode > XR_OWN_AUDIT_RC_STICKY)
+        return XR_OWN_AUDIT_INVALID_ARGUMENT;
+    bool rc_event = manifest->kind == XR_OWN_EVENT_RETAIN ||
+                    manifest->kind == XR_OWN_EVENT_RELEASE;
+    if (!rc_event && manifest->physical_rc_mode != XR_OWN_AUDIT_RC_NONE)
         return XR_OWN_AUDIT_INVALID_ARGUMENT;
     if ((manifest->flags & XR_OWN_AUDIT_TRANSITION_TERMINAL) != 0 &&
         id_is_zero(manifest->exit_id))
@@ -422,7 +527,7 @@ XrOwnershipAuditStatus xr_ownership_audit_register_transition(
     XrOwnershipAuditStatus result = status_load(audit);
     if (result != XR_OWN_AUDIT_OK)
         goto done;
-    if (audit->finished || audit->event_count != 0) {
+    if (audit->finished || audit->event_count != 0 || audit->lifecycle_event_count != 0) {
         result = fail(audit, XR_OWN_AUDIT_INVALID_TRANSITION, NULL);
         goto done;
     }
@@ -431,7 +536,8 @@ XrOwnershipAuditStatus xr_ownership_audit_register_transition(
         result = fail(audit, result, NULL);
         goto done;
     }
-    if (find_transition(audit, manifest->transition_id)) {
+    if (find_transition(audit, manifest->transition_id) ||
+        find_lifecycle_manifest(audit, manifest->transition_id)) {
         result = fail(audit, XR_OWN_AUDIT_DUPLICATE_TRANSITION, NULL);
         goto done;
     }
@@ -440,6 +546,76 @@ XrOwnershipAuditStatus xr_ownership_audit_register_transition(
         goto done;
     }
     audit->transitions[audit->transition_count++] = *manifest;
+done:
+    leave_audit(audit);
+    return result;
+}
+
+static bool lifecycle_kind_is_domain(uint8_t kind) {
+    return kind == XR_OWN_AUDIT_LIFECYCLE_BEGIN_TEARDOWN ||
+           kind == XR_OWN_AUDIT_LIFECYCLE_END_TEARDOWN;
+}
+
+static XrOwnershipAuditStatus validate_lifecycle_manifest(
+    XrOwnershipAudit *audit, const XrOwnershipAuditLifecycleManifest *manifest) {
+    if (!manifest || id_is_zero(manifest->transition_id) ||
+        id_is_zero(manifest->operation_id) ||
+        manifest->kind >= XR_OWN_AUDIT_LIFECYCLE_KIND_COUNT)
+        return XR_OWN_AUDIT_INVALID_ARGUMENT;
+    if (lifecycle_kind_is_domain(manifest->kind)) {
+        XrRuntimeDomainIdentity domain = {
+            .contract_id = manifest->domain_contract_id,
+            .instance_id = UINT32_C(1),
+            .semantic_domain = manifest->semantic_domain,
+            .materialization = manifest->materialization,
+        };
+        if (!id_is_zero(manifest->owner_id) || !id_is_zero(manifest->destructor_id) ||
+            !xr_runtime_domain_identity_valid(domain))
+            return XR_OWN_AUDIT_INVALID_ARGUMENT;
+        return XR_OWN_AUDIT_OK;
+    }
+    if (id_is_zero(manifest->owner_id) ||
+        !id_is_zero(manifest->domain_contract_id) || manifest->semantic_domain != 0 ||
+        manifest->materialization != 0)
+        return XR_OWN_AUDIT_INVALID_ARGUMENT;
+    XrAuditOwnerManifest *owner = find_owner(audit, manifest->owner_id);
+    if (!owner)
+        return XR_OWN_AUDIT_UNKNOWN_OWNER;
+    if ((owner->flags & XR_OWN_AUDIT_TRACK_ALLOCATION_LIFECYCLE) == 0)
+        return XR_OWN_AUDIT_INVALID_ARGUMENT;
+    return id_equal(owner->destructor_id, manifest->destructor_id)
+               ? XR_OWN_AUDIT_OK
+               : XR_OWN_AUDIT_DESTRUCTOR_MISMATCH;
+}
+
+XrOwnershipAuditStatus xr_ownership_audit_register_lifecycle(
+    XrOwnershipAudit *audit, const XrOwnershipAuditLifecycleManifest *manifest) {
+    if (!audit)
+        return XR_OWN_AUDIT_INVALID_ARGUMENT;
+    if (!enter_audit(audit))
+        return status_load(audit);
+    XrOwnershipAuditStatus result = status_load(audit);
+    if (result != XR_OWN_AUDIT_OK)
+        goto done;
+    if (audit->finished || audit->event_count != 0 || audit->lifecycle_event_count != 0) {
+        result = fail(audit, XR_OWN_AUDIT_INVALID_TRANSITION, NULL);
+        goto done;
+    }
+    result = validate_lifecycle_manifest(audit, manifest);
+    if (result != XR_OWN_AUDIT_OK) {
+        result = fail(audit, result, NULL);
+        goto done;
+    }
+    if (find_transition(audit, manifest->transition_id) ||
+        find_lifecycle_manifest(audit, manifest->transition_id)) {
+        result = fail(audit, XR_OWN_AUDIT_DUPLICATE_TRANSITION, NULL);
+        goto done;
+    }
+    if (audit->lifecycle_manifest_count == audit->lifecycle_manifest_capacity) {
+        result = fail(audit, XR_OWN_AUDIT_CAPACITY_EXCEEDED, NULL);
+        goto done;
+    }
+    audit->lifecycle_manifests[audit->lifecycle_manifest_count++] = *manifest;
 done:
     leave_audit(audit);
     return result;
@@ -488,6 +664,16 @@ static XrOwnershipAuditStatus record_pin(
     }
     if (!generation || generation->pin_count == 0)
         return XR_OWN_AUDIT_GENERATION_PIN_MISMATCH;
+    if (generation->pin_count == 1) {
+        for (size_t i = 0; i < audit->object_count; i++) {
+            const XrAuditObject *object = &audit->objects[i];
+            if ((object->flags & XR_OWN_AUDIT_REQUIRE_GENERATION_PIN) != 0 &&
+                (!object->terminal ||
+                 object->allocation_state == XR_OWN_AUDIT_ALLOCATION_FINALIZING) &&
+                id_equal(object->generation_id, event->generation_id))
+                return XR_OWN_AUDIT_GENERATION_PIN_MISMATCH;
+        }
+    }
     generation->pin_count--;
     return XR_OWN_AUDIT_OK;
 }
@@ -517,6 +703,10 @@ static void initialize_object(XrAuditObject *object,
         .flags = owner->flags,
         .logical_balance = owner->initial_logical_balance,
         .logical_state = owner->initial_state,
+        .allocation_state =
+            (owner->flags & XR_OWN_AUDIT_TRACK_ALLOCATION_LIFECYCLE) != 0
+                ? XR_OWN_AUDIT_ALLOCATION_LIVE
+                : XR_OWN_AUDIT_ALLOCATION_UNTRACKED,
     };
 }
 
@@ -582,6 +772,10 @@ static XrOwnershipAuditStatus validate_event_fields(
     if (!physical && (event->physical_rc_before != 0 || event->physical_rc_after != 0 ||
                       event->physical_rc_mode != XR_OWN_AUDIT_RC_NONE))
         return XR_OWN_AUDIT_INVALID_ARGUMENT;
+    if ((transition->physical_rc_mode == XR_OWN_AUDIT_RC_NONE && physical) ||
+        (transition->physical_rc_mode != XR_OWN_AUDIT_RC_NONE &&
+         (!physical || event->physical_rc_mode != transition->physical_rc_mode)))
+        return XR_OWN_AUDIT_PHYSICAL_RC_MISMATCH;
     return XR_OWN_AUDIT_OK;
 }
 
@@ -604,7 +798,9 @@ static XrOwnershipAuditStatus update_physical_rc(XrAuditObject *object,
         event->physical_rc_mode != XR_OWN_AUDIT_RC_SHARED &&
         event->physical_rc_mode != XR_OWN_AUDIT_RC_STICKY)
         return XR_OWN_AUDIT_PHYSICAL_RC_MISMATCH;
-    if (object->physical_seen && event->physical_rc_before != object->last_physical_rc)
+    if (object->physical_seen &&
+        (event->physical_rc_before != object->last_physical_rc ||
+         event->physical_rc_mode != object->last_physical_mode))
         return XR_OWN_AUDIT_PHYSICAL_RC_MISMATCH;
     if (event->physical_rc_mode == XR_OWN_AUDIT_RC_STICKY) {
         if (event->physical_rc_before != event->physical_rc_after)
@@ -648,6 +844,8 @@ static XrOwnershipAuditStatus record_owner_event(
         if (audit->object_count == audit->object_capacity)
             return XR_OWN_AUDIT_CAPACITY_EXCEEDED;
         initialize_object(&candidate, owner, event);
+        if (find_teardown_domain(audit, candidate.domain))
+            return XR_OWN_AUDIT_TEARDOWN_MISMATCH;
         XrOwnershipAuditStatus status = check_generation_pin(audit, &candidate);
         if (status != XR_OWN_AUDIT_OK)
             return status;
@@ -661,6 +859,32 @@ static XrOwnershipAuditStatus record_owner_event(
         if (status != XR_OWN_AUDIT_OK)
             return status;
     }
+
+    XrAuditTeardownDomain *source_teardown =
+        find_teardown_domain(audit, candidate.domain);
+    XrAuditTeardownDomain *target_teardown =
+        transition_has_domain_change(transition)
+            ? find_teardown_domain(audit, event->next_domain)
+            : NULL;
+    if (transition_has_domain_change(transition) &&
+        (source_teardown || target_teardown))
+        return XR_OWN_AUDIT_TEARDOWN_MISMATCH;
+    if (source_teardown && source_teardown->state == XR_AUDIT_TEARDOWN_ENDED)
+        return XR_OWN_AUDIT_TEARDOWN_MISMATCH;
+    if (source_teardown && source_teardown->state == XR_AUDIT_TEARDOWN_DRAINING &&
+        event->kind == XR_OWN_EVENT_BORROW)
+        return XR_OWN_AUDIT_TEARDOWN_MISMATCH;
+    if (source_teardown && source_teardown->state == XR_AUDIT_TEARDOWN_DRAINING &&
+        transition->logical_delta > 0)
+        return XR_OWN_AUDIT_TEARDOWN_MISMATCH;
+    bool terminal_transition =
+        (transition->flags & XR_OWN_AUDIT_TRANSITION_TERMINAL) != 0;
+    if (candidate.allocation_state != XR_OWN_AUDIT_ALLOCATION_UNTRACKED &&
+        (candidate.allocation_state == XR_OWN_AUDIT_ALLOCATION_FINALIZING ||
+         terminal_transition || event->kind == XR_OWN_EVENT_DESTROY) &&
+        (candidate.allocation_state != XR_OWN_AUDIT_ALLOCATION_FINALIZING ||
+         !terminal_transition || event->kind != XR_OWN_EVENT_DESTROY))
+        return XR_OWN_AUDIT_FINALIZE_MISMATCH;
 
     XrOwnershipAuditStatus status = validate_observation(transition, &candidate, event);
     if (status != XR_OWN_AUDIT_OK)
@@ -704,7 +928,7 @@ static XrOwnershipAuditStatus record_owner_event(
     }
     if (transition_has_domain_change(transition))
         candidate.domain = event->next_domain;
-    if ((transition->flags & XR_OWN_AUDIT_TRANSITION_TERMINAL) != 0) {
+    if (terminal_transition) {
         if (candidate.active_loans != 0)
             return XR_OWN_AUDIT_LOAN_MISMATCH;
         if (candidate.logical_balance != 0)
@@ -714,6 +938,7 @@ static XrOwnershipAuditStatus record_owner_event(
             candidate.last_physical_rc != 0)
             return XR_OWN_AUDIT_PHYSICAL_RC_MISMATCH;
         candidate.terminal = true;
+        candidate.terminal_event_kind = event->kind;
     }
 
     if (event->kind == XR_OWN_EVENT_BORROW) {
@@ -776,6 +1001,162 @@ done:
     return result;
 }
 
+static bool lifecycle_event_matches_manifest(
+    const XrOwnershipAuditLifecycleManifest *manifest,
+    const XrOwnershipAuditLifecycleEvent *event) {
+    return manifest->kind == event->kind &&
+           id_equal(manifest->operation_id, event->operation_id);
+}
+
+static XrOwnershipAuditStatus validate_domain_lifecycle_event(
+    const XrOwnershipAuditLifecycleManifest *manifest,
+    const XrOwnershipAuditLifecycleEvent *event) {
+    if (!object_key_is_zero(event->object) || !id_is_zero(event->destructor_id) ||
+        !domain_matches_manifest(event->domain, manifest->domain_contract_id,
+                                 manifest->semantic_domain, manifest->materialization))
+        return XR_OWN_AUDIT_IDENTITY_MISMATCH;
+    return XR_OWN_AUDIT_OK;
+}
+
+static XrOwnershipAuditStatus begin_teardown(
+    XrOwnershipAudit *audit, const XrOwnershipAuditLifecycleManifest *manifest,
+    const XrOwnershipAuditLifecycleEvent *event) {
+    XrOwnershipAuditStatus status = validate_domain_lifecycle_event(manifest, event);
+    if (status != XR_OWN_AUDIT_OK)
+        return status;
+    if (find_teardown_domain(audit, event->domain))
+        return XR_OWN_AUDIT_TEARDOWN_MISMATCH;
+    if (audit->teardown_domain_count == audit->teardown_domain_capacity)
+        return XR_OWN_AUDIT_CAPACITY_EXCEEDED;
+    audit->teardown_domains[audit->teardown_domain_count++] =
+        (XrAuditTeardownDomain) {.domain = event->domain,
+                                 .state = XR_AUDIT_TEARDOWN_DRAINING};
+    return XR_OWN_AUDIT_OK;
+}
+
+static XrOwnershipAuditStatus end_teardown(
+    XrOwnershipAudit *audit, const XrOwnershipAuditLifecycleManifest *manifest,
+    const XrOwnershipAuditLifecycleEvent *event) {
+    XrOwnershipAuditStatus status = validate_domain_lifecycle_event(manifest, event);
+    if (status != XR_OWN_AUDIT_OK)
+        return status;
+    XrAuditTeardownDomain *teardown = find_teardown_domain(audit, event->domain);
+    if (!teardown || teardown->state != XR_AUDIT_TEARDOWN_DRAINING)
+        return XR_OWN_AUDIT_TEARDOWN_MISMATCH;
+    for (size_t i = 0; i < audit->object_count; i++) {
+        XrAuditObject *object = &audit->objects[i];
+        if (!domain_equal(object->domain, event->domain))
+            continue;
+        if (!object->terminal || object->active_loans != 0 ||
+            (object->allocation_state != XR_OWN_AUDIT_ALLOCATION_UNTRACKED &&
+             object->allocation_state != XR_OWN_AUDIT_ALLOCATION_RECLAIMED))
+            return XR_OWN_AUDIT_TEARDOWN_MISMATCH;
+    }
+    teardown->state = XR_AUDIT_TEARDOWN_ENDED;
+    return XR_OWN_AUDIT_OK;
+}
+
+static XrOwnershipAuditStatus record_object_lifecycle(
+    XrOwnershipAudit *audit, const XrOwnershipAuditLifecycleManifest *manifest,
+    const XrOwnershipAuditLifecycleEvent *event) {
+    if (!object_key_valid(event->object) ||
+        !id_equal(manifest->owner_id, event->object.owner_id))
+        return XR_OWN_AUDIT_IDENTITY_MISMATCH;
+    if (!id_equal(manifest->destructor_id, event->destructor_id))
+        return XR_OWN_AUDIT_DESTRUCTOR_MISMATCH;
+    XrAuditObject *object = find_object(audit, event->object);
+    if (!object)
+        return XR_OWN_AUDIT_UNKNOWN_OWNER;
+    if (!domain_equal(object->domain, event->domain))
+        return XR_OWN_AUDIT_DOMAIN_MISMATCH;
+    if (!id_equal(object->destructor_id, event->destructor_id))
+        return XR_OWN_AUDIT_DESTRUCTOR_MISMATCH;
+    XrAuditTeardownDomain *teardown = find_teardown_domain(audit, event->domain);
+    if (teardown && teardown->state != XR_AUDIT_TEARDOWN_DRAINING)
+        return XR_OWN_AUDIT_TEARDOWN_MISMATCH;
+    if (object->allocation_state == XR_OWN_AUDIT_ALLOCATION_UNTRACKED)
+        return XR_OWN_AUDIT_FINALIZE_MISMATCH;
+
+    switch ((XrOwnershipAuditLifecycleKind) event->kind) {
+        case XR_OWN_AUDIT_LIFECYCLE_BEGIN_FINALIZE:
+            if (object->allocation_state != XR_OWN_AUDIT_ALLOCATION_LIVE ||
+                object->terminal || object->logical_balance != 0 ||
+                object->logical_state != XR_OWN_RELEASED || object->active_loans != 0 ||
+                (object->physical_seen &&
+                 object->last_physical_mode != XR_OWN_AUDIT_RC_STICKY &&
+                 object->last_physical_rc != 0))
+                return XR_OWN_AUDIT_FINALIZE_MISMATCH;
+            if (check_generation_pin(audit, object) != XR_OWN_AUDIT_OK)
+                return XR_OWN_AUDIT_GENERATION_PIN_MISSING;
+            object->allocation_state = XR_OWN_AUDIT_ALLOCATION_FINALIZING;
+            return XR_OWN_AUDIT_OK;
+        case XR_OWN_AUDIT_LIFECYCLE_END_FINALIZE:
+            if (object->allocation_state != XR_OWN_AUDIT_ALLOCATION_FINALIZING ||
+                !object->terminal || object->terminal_event_kind != XR_OWN_EVENT_DESTROY)
+                return XR_OWN_AUDIT_FINALIZE_MISMATCH;
+            if (check_generation_pin(audit, object) != XR_OWN_AUDIT_OK)
+                return XR_OWN_AUDIT_GENERATION_PIN_MISSING;
+            object->allocation_state = XR_OWN_AUDIT_ALLOCATION_FINALIZED;
+            return XR_OWN_AUDIT_OK;
+        case XR_OWN_AUDIT_LIFECYCLE_RECLAIM:
+            if (object->allocation_state != XR_OWN_AUDIT_ALLOCATION_FINALIZED)
+                return XR_OWN_AUDIT_RECLAIM_MISMATCH;
+            object->allocation_state = XR_OWN_AUDIT_ALLOCATION_RECLAIMED;
+            return XR_OWN_AUDIT_OK;
+        default:
+            return XR_OWN_AUDIT_INVALID_ARGUMENT;
+    }
+}
+
+XrOwnershipAuditStatus xr_ownership_audit_record_lifecycle(
+    XrOwnershipAudit *audit, const XrOwnershipAuditLifecycleEvent *event) {
+    if (!audit)
+        return XR_OWN_AUDIT_INVALID_ARGUMENT;
+    if (!enter_audit(audit))
+        return status_load(audit);
+    XrOwnershipAuditStatus result = status_load(audit);
+    if (result != XR_OWN_AUDIT_OK)
+        goto done;
+    if (!event || event->kind >= XR_OWN_AUDIT_LIFECYCLE_KIND_COUNT ||
+        id_is_zero(event->transition_id) || id_is_zero(event->operation_id)) {
+        result = fail_lifecycle(audit, XR_OWN_AUDIT_INVALID_ARGUMENT, event);
+        goto done;
+    }
+    if (audit->finished) {
+        result = fail_lifecycle(audit, XR_OWN_AUDIT_ALREADY_FINISHED, event);
+        goto done;
+    }
+    if (audit->lifecycle_event_count == audit->lifecycle_event_capacity) {
+        result = fail_lifecycle(audit, XR_OWN_AUDIT_CAPACITY_EXCEEDED, event);
+        goto done;
+    }
+    XrOwnershipAuditLifecycleManifest *manifest =
+        find_lifecycle_manifest(audit, event->transition_id);
+    if (!manifest) {
+        result = fail_lifecycle(audit, XR_OWN_AUDIT_UNKNOWN_TRANSITION, event);
+        goto done;
+    }
+    if (!lifecycle_event_matches_manifest(manifest, event)) {
+        result = fail_lifecycle(audit, XR_OWN_AUDIT_IDENTITY_MISMATCH, event);
+        goto done;
+    }
+    if (event->kind == XR_OWN_AUDIT_LIFECYCLE_BEGIN_TEARDOWN)
+        result = begin_teardown(audit, manifest, event);
+    else if (event->kind == XR_OWN_AUDIT_LIFECYCLE_END_TEARDOWN)
+        result = end_teardown(audit, manifest, event);
+    else
+        result = record_object_lifecycle(audit, manifest, event);
+    if (result != XR_OWN_AUDIT_OK) {
+        result = fail_lifecycle(audit, result, event);
+        goto done;
+    }
+    audit->lifecycle_events[audit->lifecycle_event_count++] = *event;
+    result = status_load(audit);
+done:
+    leave_audit(audit);
+    return result;
+}
+
 XrOwnershipAuditStatus xr_ownership_audit_finish(XrOwnershipAudit *audit) {
     if (!audit)
         return XR_OWN_AUDIT_INVALID_ARGUMENT;
@@ -789,7 +1170,15 @@ XrOwnershipAuditStatus xr_ownership_audit_finish(XrOwnershipAudit *audit) {
         goto done;
     }
     for (size_t i = 0; i < audit->object_count; i++) {
-        if (!audit->objects[i].terminal || audit->objects[i].active_loans != 0) {
+        if (!audit->objects[i].terminal || audit->objects[i].active_loans != 0 ||
+            (audit->objects[i].allocation_state != XR_OWN_AUDIT_ALLOCATION_UNTRACKED &&
+             audit->objects[i].allocation_state != XR_OWN_AUDIT_ALLOCATION_RECLAIMED)) {
+            result = fail(audit, XR_OWN_AUDIT_INCOMPLETE, NULL);
+            goto done;
+        }
+    }
+    for (size_t i = 0; i < audit->teardown_domain_count; i++) {
+        if (audit->teardown_domains[i].state != XR_AUDIT_TEARDOWN_ENDED) {
             result = fail(audit, XR_OWN_AUDIT_INCOMPLETE, NULL);
             goto done;
         }
@@ -819,9 +1208,10 @@ const char *xr_ownership_audit_status_name(XrOwnershipAuditStatus status) {
         "origin-mismatch",
         "domain-mismatch", "invalid-transition", "loan-mismatch", "physical-rc-mismatch",
         "exit-mismatch", "destructor-mismatch", "generation-pin-missing",
-        "generation-pin-mismatch", "incomplete",
+        "generation-pin-mismatch", "incomplete", "teardown-mismatch",
+        "finalize-mismatch", "reclaim-mismatch",
     };
-    return status >= XR_OWN_AUDIT_OK && status <= XR_OWN_AUDIT_INCOMPLETE
+    return status >= XR_OWN_AUDIT_OK && status <= XR_OWN_AUDIT_RECLAIM_MISMATCH
                ? names[status]
                : "unknown-status";
 }
@@ -837,6 +1227,36 @@ const XrOwnershipAuditEvent *xr_ownership_audit_event(const XrOwnershipAudit *au
 
 const XrOwnershipAuditEvent *xr_ownership_audit_failed_event(const XrOwnershipAudit *audit) {
     return audit && audit->has_failed_event ? &audit->failed_event : NULL;
+}
+
+size_t xr_ownership_audit_lifecycle_event_count(const XrOwnershipAudit *audit) {
+    return audit ? audit->lifecycle_event_count : 0;
+}
+
+const XrOwnershipAuditLifecycleEvent *xr_ownership_audit_lifecycle_event(
+    const XrOwnershipAudit *audit, size_t index) {
+    return audit && index < audit->lifecycle_event_count ? &audit->lifecycle_events[index]
+                                                         : NULL;
+}
+
+const XrOwnershipAuditLifecycleEvent *xr_ownership_audit_failed_lifecycle_event(
+    const XrOwnershipAudit *audit) {
+    return audit && audit->has_failed_lifecycle_event ? &audit->failed_lifecycle_event : NULL;
+}
+
+XrOwnershipAuditAllocationState xr_ownership_audit_allocation_state(
+    const XrOwnershipAudit *audit, XrOwnershipAuditObjectKey object) {
+    if (!audit)
+        return XR_OWN_AUDIT_ALLOCATION_UNKNOWN;
+    for (size_t i = 0; i < audit->object_count; i++) {
+        if (object_key_equal(audit->objects[i].key, object))
+            return (XrOwnershipAuditAllocationState) audit->objects[i].allocation_state;
+    }
+    return XR_OWN_AUDIT_ALLOCATION_UNKNOWN;
+}
+
+size_t xr_ownership_audit_allocation_count(const XrOwnershipAudit *audit) {
+    return audit ? audit->allocation_count : 0;
 }
 
 const char *xr_ownership_audit_evidence_scope(void) {
