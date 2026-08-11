@@ -319,6 +319,16 @@ target_link_libraries(test_runtime_target_plan_load_archive PRIVATE
     xray_vm_runtime)
 add_test(NAME test_runtime_target_plan_load_archive
     COMMAND $<TARGET_FILE:test_runtime_target_plan_load_archive>)
+add_xray_unit_test(test_typed_frame vm/test_typed_frame.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_executable(test_typed_frame_runtime_archive
+    runtime/test_typed_frame_runtime_archive.c)
+target_include_directories(test_typed_frame_runtime_archive PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(test_typed_frame_runtime_archive PRIVATE
+    xray_vm_runtime)
+add_test(NAME test_typed_frame_runtime_archive
+    COMMAND $<TARGET_FILE:test_typed_frame_runtime_archive>)
 add_executable(test_xtp_fuzz_entry ../fuzz/fuzz_xtp_decode.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 target_compile_definitions(test_xtp_fuzz_entry PRIVATE FUZZ_STANDALONE)
