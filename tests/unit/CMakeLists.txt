@@ -205,6 +205,10 @@ add_xray_unit_test(test_xi_source_move_verify ir/test_xi_source_move_verify.c)
 add_xray_unit_test(test_semantic_plan plan/test_semantic_plan.c)
 add_xray_unit_test(test_target_plan plan/test_target_plan.c)
 add_xray_unit_test(test_xr_aot_scalar_plan aot/test_xr_aot_scalar_plan.c)
+add_xray_unit_test(test_xr_aot_refinement aot/test_xr_aot_refinement.c)
+set_tests_properties(test_xr_aot_refinement PROPERTIES
+    LABELS "aot;refinement;backend;task-279"
+)
 
 # Keep the dumb-emitter contract self-contained even though the behavioral
 # test later includes compiler-only fixtures. This compile probe has only the
