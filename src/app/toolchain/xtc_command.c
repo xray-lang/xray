@@ -423,6 +423,19 @@ XR_FUNC bool xtc_command_emit_link_output(XrToolchainProviderId provider, const 
     return add(sink, "-o", err, err_size) && add(sink, output, err, err_size);
 }
 
+XR_FUNC bool xtc_command_emit_intermediate_object_output(XrToolchainProviderId provider,
+                                                         const char *object,
+                                                         XrToolchainArgSink *sink, char *err,
+                                                         size_t err_size) {
+    if (!object || !object[0])
+        return command_error(err, err_size, "missing intermediate object output path");
+    /* GNU-style drivers keep a combined compile-and-link object private.  MSVC
+     * writes it into the process working directory unless /Fo owns the path. */
+    if (provider == XR_TOOLCHAIN_PROVIDER_MSVC)
+        return joined(sink, "/Fo", object, err, err_size);
+    return true;
+}
+
 XR_FUNC bool xtc_command_emit_include(XrToolchainProviderId provider, const char *path,
                                       XrToolchainArgSink *sink, char *err, size_t err_size) {
     return joined(sink, provider == XR_TOOLCHAIN_PROVIDER_MSVC ? "/I" : "-I", path, err, err_size);

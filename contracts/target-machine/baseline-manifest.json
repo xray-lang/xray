@@ -1,0 +1,168 @@
+{
+  "correctness": {
+    "lanes": [
+      {
+        "ctest_args": [
+          "-R",
+          "^(backend_diff|aot_filetests|aot_manifest_sweep|aot_standalone_suite|aot_isolate_symbol_gate|compile_error_tests|http_static_route_full_parse|test_xrt_execution_arena)$"
+        ],
+        "name": "startup-debt",
+        "repeat": true,
+        "scopes": [
+          "core",
+          "full"
+        ],
+        "timeout_seconds": 1200
+      },
+      {
+        "ctest_args": [
+          "-R",
+          "^(backend_diff_optimized|backend_diff_deterministic)$"
+        ],
+        "name": "differential-modes",
+        "repeat": true,
+        "scopes": [
+          "core",
+          "full"
+        ],
+        "timeout_seconds": 1200
+      },
+      {
+        "ctest_args": [
+          "-R",
+          "^(meta_ownership_inventory|contract_freeze|target_machine_inventory)$"
+        ],
+        "name": "architecture-contracts",
+        "repeat": true,
+        "scopes": [
+          "core",
+          "full"
+        ],
+        "timeout_seconds": 120
+      },
+      {
+        "ctest_args": [
+          "-LE",
+          "sanitizer"
+        ],
+        "name": "non-sanitizer-suite",
+        "repeat": false,
+        "scopes": [
+          "full"
+        ],
+        "timeout_seconds": 3600
+      },
+      {
+        "ctest_args": [
+          "-R",
+          "^asan_focused$"
+        ],
+        "name": "asan-ubsan",
+        "repeat": false,
+        "scopes": [
+          "full"
+        ],
+        "timeout_seconds": 1800
+      },
+      {
+        "ctest_args": [
+          "-R",
+          "^tsan_focused$"
+        ],
+        "name": "tsan",
+        "repeat": false,
+        "scopes": [
+          "full"
+        ],
+        "timeout_seconds": 2400
+      }
+    ],
+    "minimum_repeat": 3
+  },
+  "governance": {
+    "failure_semantics": "Any failed, timed-out, unparsable, residue-producing, or high-variance lane makes the evidence result failed; failed is never rewritten as skipped.",
+    "generation_protocol": "Measure a clean source commit with a freshly configured matching binary into an ignored or external evidence directory. Commit reviewed evidence later; the measured source commit is intentionally recorded instead of attempting a self-referential evidence commit.",
+    "qualifying_scope": "full",
+    "verification_protocol": "Validate policy identity, clean source/binary/build/toolchain identity, raw sample/log digests, lane statistics, residue assertions, and aggregate result before qualification."
+  },
+  "identity": {
+    "build_directory": "build",
+    "build_parallelism": 8,
+    "build_preset": "default",
+    "build_timeout_seconds": 3600,
+    "build_type": "Release",
+    "configure_preset": "default",
+    "configure_timeout_seconds": 600,
+    "generator": "Ninja",
+    "require_binary_commit_match": true,
+    "require_binary_dirty_match": true,
+    "require_cmake_home_match": true,
+    "require_clean_worktree": true,
+    "require_native_toolchain_probe": true
+  },
+  "performance": {
+    "logical_cpu": 0,
+    "fixture": {
+      "base_stdout": "42\n",
+      "directory": "tests/benchmarks/target-machine/source_run",
+      "edit_file": "helper.xr",
+      "edited_source": "helper.edited.txt",
+      "edited_stdout": "43\n",
+      "entry": "main.xr",
+      "files": [
+        {
+          "path": "main.xr",
+          "sha256": "766f115bc2b67f5f29c3049e3117c255ea4f3e714d3646c6c2a49a8e06e26e3d"
+        },
+        {
+          "path": "helper.xr",
+          "sha256": "b58a381ae7f36b1533178d9debc359d6386a179cacf828445bd7feaa03824995"
+        },
+        {
+          "path": "helper.edited.txt",
+          "sha256": "5e8b2152e52314bf013be19e4c6ebf39051b3dd254301a6df793e9a867d33359"
+        }
+      ]
+    },
+    "lanes": [
+      {
+        "mode": "cold",
+        "name": "clean-cold-source-run",
+        "warmups": 0
+      },
+      {
+        "mode": "warm",
+        "name": "warm-no-change-source-run",
+        "warmups": 2
+      },
+      {
+        "mode": "edit",
+        "name": "one-module-edit-source-run",
+        "warmups": 2
+      }
+    ],
+    "max_coefficient_of_variation": 0.2,
+    "rss_sample_interval_seconds": 0.01,
+    "sample_count": 7,
+    "timeout_seconds": 30
+  },
+  "qualification": {
+    "evidence": null,
+    "evidence_sha256": null,
+    "reason": "No clean-HEAD evidence has yet passed every correctness, sanitizer, performance, variance, and residue lane governed by this policy.",
+    "result": "failed"
+  },
+  "residue": {
+    "source_root_globs": [
+      "*.fast-test.obj",
+      "*.fast-test.o",
+      "*.fast-test.c"
+    ]
+  },
+  "runner": "target-machine-baseline/2",
+  "schema": 1,
+  "status_values": [
+    "passed",
+    "failed"
+  ]
+}

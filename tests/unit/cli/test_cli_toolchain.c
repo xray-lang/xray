@@ -200,6 +200,16 @@ TEST(assembly_oracle_io_maps_provider_dialects) {
     ASSERT_TRUE(command_capture_has(&capture, "/Fagenerated.asm"));
     ASSERT_TRUE(command_capture_has(&capture, "/Fogenerated.obj"));
     ASSERT_TRUE(command_capture_has(&capture, "generated.c"));
+
+    memset(&capture, 0, sizeof(capture));
+    ASSERT_TRUE(xtc_command_emit_intermediate_object_output(
+        XR_TOOLCHAIN_PROVIDER_MSVC, "cache/generated.fast-test.obj", &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "/Focache/generated.fast-test.obj"));
+
+    memset(&capture, 0, sizeof(capture));
+    ASSERT_TRUE(xtc_command_emit_intermediate_object_output(
+        XR_TOOLCHAIN_PROVIDER_GCC, "cache/generated.fast-test.o", &sink, err, sizeof(err)));
+    ASSERT_EQ_INT((int) capture.count, 0);
 }
 
 TEST(semantic_simd_intent_maps_provider_dialects) {

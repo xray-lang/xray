@@ -1199,8 +1199,8 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
                                         const XaotLinkManifest *manifest, const char *opt_flag,
                                         const char *output_file, const char *const *inputs,
                                         int n_inputs, bool strip_symbols, bool shared_library,
-                                        const char *sysroot, XaotCliLinkCommand *cmd, char *err,
-                                        size_t err_size) {
+                                        const char *sysroot, const char *intermediate_object,
+                                        XaotCliLinkCommand *cmd, char *err, size_t err_size) {
     char aot_include[600];
     char runtime_include[600];
     bool needs_runtime;
@@ -1248,6 +1248,10 @@ static bool xaot_cli_build_link_command(const XrToolchainSelection *plan,
     xaot_cli_semantic_specs(manifest, plan, &compile_spec, &link_spec);
     if (!xtc_command_emit_compile(plan, &compile_spec, &sink, err, err_size) ||
         !xtc_command_emit_link_output(plan->provider, output_file, &sink, err, err_size))
+        return false;
+    if (intermediate_object &&
+        !xtc_command_emit_intermediate_object_output(plan->provider, intermediate_object, &sink,
+                                                     err, err_size))
         return false;
     for (in = 0; in < n_inputs; in++) {
         if (!xaot_cli_link_add_arg(cmd, inputs[in], err, err_size))
@@ -1325,13 +1329,13 @@ static int invoke_aot_manifest_link(const XrToolchainSelection *plan,
                                     const char *output_file, const char *const *inputs,
                                     int n_inputs, bool strip_symbols, bool shared_library,
                                     const char *sysroot, bool dump_link_command,
-                                    bool dry_run_link) {
+                                    bool dry_run_link, const char *intermediate_object) {
     char err[512];
     XaotCliLinkCommand cmd;
 
     if (!xaot_cli_build_link_command(plan, target, manifest, opt_flag, output_file, inputs,
-                                     n_inputs, strip_symbols, shared_library, sysroot, &cmd, err,
-                                     sizeof(err))) {
+                                     n_inputs, strip_symbols, shared_library, sysroot,
+                                     intermediate_object, &cmd, err, sizeof(err))) {
         fprintf(stderr, "Error: %s\n", err);
         return 1;
     }
@@ -3656,7 +3660,9 @@ static int cmd_build_native(
         xaot_cli_fast_test_direct_link_allowed(&aot_result.link_manifest) && !rebuild &&
         !dry_run_link && !debug_symbols && !library_artifact) {
         char c_file[XR_PATH_MAX];
+        char object_file[XR_PATH_MAX];
         const char *inputs[1];
+        int object_n;
         int ret;
         uint64_t key =
             link_output_cache_key
@@ -3668,10 +3674,20 @@ static int cmd_build_native(
             xaot_build_result_free(&aot_result);
             return 1;
         }
+        object_n = snprintf(object_file, sizeof(object_file), "%s/%016llx.%d.fast-test%s",
+                            cache_dir, (unsigned long long) key, (int) xr_proc_self_pid(),
+                            xaot_cli_object_suffix(toolchain_plan));
+        if (object_n < 0 || (size_t) object_n >= sizeof(object_file)) {
+            fprintf(stderr, "Error: fast-test object cache path is too long\n");
+            xr_fs_remove(c_file);
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
         inputs[0] = c_file;
         ret = invoke_aot_manifest_link(toolchain_plan, target, &aot_result.link_manifest, opt_flag,
                                        output, inputs, 1, strip, library_artifact, sysroot,
-                                       dump_link_command || verbose, false);
+                                       dump_link_command || verbose, false, object_file);
+        xr_fs_remove(object_file);
         if (keep_c)
             printf("Kept C source: %s\n", c_file);
         else
@@ -3716,7 +3732,8 @@ static int cmd_build_native(
         ret =
             invoke_aot_manifest_link(toolchain_plan, target, &aot_result.link_manifest, opt_flag,
                                      output, obj_ptrs, n_sources, strip, library_artifact, sysroot,
-                                     dump_link_command || verbose || dry_run_link, dry_run_link);
+                                     dump_link_command || verbose || dry_run_link, dry_run_link,
+                                     NULL);
 #ifdef XR_OS_MACOS
     if (ret == 0 && build_dsym && !dry_run_link)
         ret = invoke_dsymutil(output, dump_link_command || verbose);

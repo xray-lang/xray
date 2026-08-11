@@ -135,6 +135,10 @@ XR_FUNC bool xtc_command_emit_assembly_io(XrToolchainProviderId provider, const 
                                           XrToolchainArgSink *sink, char *err, size_t err_size);
 XR_FUNC bool xtc_command_emit_link_output(XrToolchainProviderId provider, const char *output,
                                           XrToolchainArgSink *sink, char *err, size_t err_size);
+XR_FUNC bool xtc_command_emit_intermediate_object_output(XrToolchainProviderId provider,
+                                                         const char *object,
+                                                         XrToolchainArgSink *sink, char *err,
+                                                         size_t err_size);
 XR_FUNC bool xtc_command_emit_include(XrToolchainProviderId provider, const char *path,
                                       XrToolchainArgSink *sink, char *err, size_t err_size);
 XR_FUNC bool xtc_command_emit_define(XrToolchainProviderId provider, const char *value,
