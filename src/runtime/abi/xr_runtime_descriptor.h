@@ -41,6 +41,7 @@ typedef enum XrRuntimeAbiStatus {
     XR_RUNTIME_ABI_LIMIT_EXCEEDED,
     XR_RUNTIME_ABI_PROVIDER_REQUIRED,
     XR_RUNTIME_ABI_PROVIDER_REJECTED,
+    XR_RUNTIME_ABI_INVALID_GROUP,
 } XrRuntimeAbiStatus;
 
 #define XR_SEMANTIC_DOMAIN_MASK(domain) (UINT32_C(1) << (uint32_t) (domain))
@@ -131,6 +132,19 @@ typedef struct XrRuntimeEvaluatedExtent {
     uint16_t part_count;
 } XrRuntimeEvaluatedExtent;
 
+/* Ephemeral verifier view. The pointed-to records remain the canonical,
+ * pointer-free ABI; this view is never fingerprinted or persisted. */
+typedef struct XrRuntimeExtentGroupEntry {
+    const XrRuntimeExtentDescriptor *extent;
+    const XrRuntimeLayoutDescriptor *layout;
+} XrRuntimeExtentGroupEntry;
+
+typedef struct XrRuntimeExtentGroupSummary {
+    XrStableId group_id;
+    uint16_t part_count;
+    XrFingerprint fingerprint;
+} XrRuntimeExtentGroupSummary;
+
 typedef XrRuntimeAbiStatus (*XrRuntimeExtentProviderEvaluateFn)(
     XrStableId provider_id, const uint64_t *operands, size_t operand_count,
     uint64_t *out_bytes, void *context);
@@ -144,6 +158,9 @@ XR_FUNC XrRuntimeAbiStatus xr_runtime_extent_evaluate(
     const uint64_t *operands, size_t operand_count, XrRuntimeExtentLimits limits,
     XrRuntimeExtentProviderEvaluateFn provider, void *provider_context,
     XrRuntimeEvaluatedExtent *out);
+XR_FUNC XrRuntimeAbiStatus xr_runtime_extent_group_verify(
+    const XrRuntimeExtentGroupEntry *entries, size_t entry_count,
+    XrRuntimeExtentGroupSummary *out);
 
 XR_FUNC XrRuntimeAbiStatus xr_runtime_layout_descriptor_fingerprint(
     const XrRuntimeLayoutDescriptor *layout, XrFingerprint *out);

@@ -355,12 +355,132 @@ static void test_fingerprint_known_answer(void) {
           "layout fingerprint matches the frozen known answer");
 }
 
+static void test_multi_buffer_group_verifier(void) {
+    XrStableId group_id = make_id(200);
+    XrStableId layout_zero_id = make_id(201);
+    XrRuntimeExtentDescriptor extent_zero =
+        make_extent(XR_RUNTIME_EXTENT_MULTI_BUFFER, 202, layout_zero_id);
+    extent_zero.group_id = group_id;
+    extent_zero.tail_offset = 8;
+    extent_zero.stride = 4;
+    extent_zero.operand_index = 0;
+    extent_zero.part_index = 0;
+    extent_zero.part_count = 2;
+    seal_extent(&extent_zero);
+    XrRuntimeLayoutDescriptor layout_zero = make_layout(203, &extent_zero, 8, 8);
+
+    XrStableId layout_one_id = make_id(211);
+    XrRuntimeExtentDescriptor extent_one =
+        make_extent(XR_RUNTIME_EXTENT_MULTI_BUFFER, 212, layout_one_id);
+    extent_one.group_id = group_id;
+    extent_one.tail_offset = 16;
+    extent_one.stride = 8;
+    extent_one.operand_index = 1;
+    extent_one.part_index = 1;
+    extent_one.part_count = 2;
+    seal_extent(&extent_one);
+    XrRuntimeLayoutDescriptor layout_one = make_layout(213, &extent_one, 16, 16);
+
+    XrRuntimeExtentGroupEntry reversed[] = {
+        {.extent = &extent_one, .layout = &layout_one},
+        {.extent = &extent_zero, .layout = &layout_zero},
+    };
+    XrRuntimeExtentGroupSummary summary;
+    CHECK(xr_runtime_extent_group_verify(reversed, 2, &summary) == XR_RUNTIME_ABI_OK,
+          "complete multi-buffer group verifies independent of input order");
+    CHECK(memcmp(summary.group_id.bytes, group_id.bytes, sizeof(group_id.bytes)) == 0 &&
+              summary.part_count == 2,
+          "group summary preserves canonical identity and part count");
+    static const uint8_t expected_group[XR_FINGERPRINT_BYTES] = {
+        0xbb, 0x8f, 0x42, 0xce, 0x23, 0x59, 0x7d, 0x44,
+        0x3a, 0x7c, 0x22, 0x93, 0x08, 0xe1, 0xc6, 0xa8,
+        0x73, 0x43, 0x4b, 0x15, 0xd5, 0x7b, 0xed, 0x10,
+        0xd9, 0x68, 0xe9, 0xd8, 0xaa, 0xed, 0x8e, 0x6c,
+    };
+    CHECK(memcmp(summary.fingerprint.bytes, expected_group, sizeof(expected_group)) == 0,
+          "group summary fingerprint matches the frozen known answer");
+
+    XrRuntimeExtentGroupEntry ordered[] = {
+        {.extent = &extent_zero, .layout = &layout_zero},
+        {.extent = &extent_one, .layout = &layout_one},
+    };
+    XrRuntimeExtentGroupSummary ordered_summary;
+    CHECK(xr_runtime_extent_group_verify(ordered, 2, &ordered_summary) == XR_RUNTIME_ABI_OK &&
+              fingerprint_equal(summary.fingerprint, ordered_summary.fingerprint),
+          "group fingerprint is canonical across entry permutations");
+
+    XrRuntimeExtentDescriptor mutated_extent = extent_one;
+    XrRuntimeLayoutDescriptor mutated_layout = layout_one;
+    XrRuntimeExtentGroupEntry mutated[] = {
+        {.extent = &extent_zero, .layout = &layout_zero},
+        {.extent = &mutated_extent, .layout = &mutated_layout},
+    };
+    mutated_extent.part_index = 0;
+    bind_extent(&mutated_layout, &mutated_extent);
+    CHECK(xr_runtime_extent_group_verify(mutated, 2, &ordered_summary) ==
+              XR_RUNTIME_ABI_INVALID_GROUP,
+          "duplicate group part index is rejected");
+
+    mutated_extent = extent_one;
+    mutated_layout = layout_one;
+    mutated_extent.part_count = 3;
+    mutated_extent.part_index = 2;
+    bind_extent(&mutated_layout, &mutated_extent);
+    CHECK(xr_runtime_extent_group_verify(mutated, 2, &ordered_summary) ==
+              XR_RUNTIME_ABI_INVALID_GROUP,
+          "missing dense group part is rejected");
+
+    mutated_extent = extent_one;
+    mutated_layout = layout_one;
+    mutated_extent.group_id = make_id(220);
+    bind_extent(&mutated_layout, &mutated_extent);
+    CHECK(xr_runtime_extent_group_verify(mutated, 2, &ordered_summary) ==
+              XR_RUNTIME_ABI_INVALID_GROUP,
+          "foreign group identity is rejected");
+
+    mutated_extent = extent_one;
+    mutated_layout = layout_one;
+    mutated_extent.id = extent_zero.id;
+    mutated_layout.extent_id = mutated_extent.id;
+    bind_extent(&mutated_layout, &mutated_extent);
+    CHECK(xr_runtime_extent_group_verify(mutated, 2, &ordered_summary) ==
+              XR_RUNTIME_ABI_INVALID_GROUP,
+          "duplicate physical extent identity is rejected");
+
+    mutated_extent = extent_one;
+    mutated_layout = layout_one;
+    mutated_layout.descriptor_id = layout_zero.descriptor_id;
+    seal_layout(&mutated_layout);
+    CHECK(xr_runtime_extent_group_verify(mutated, 2, &ordered_summary) ==
+              XR_RUNTIME_ABI_INVALID_GROUP,
+          "duplicate runtime descriptor identity is rejected");
+
+    mutated_extent = extent_one;
+    mutated_layout = layout_one;
+    mutated_extent.stride++;
+    CHECK(xr_runtime_extent_group_verify(mutated, 2, &ordered_summary) ==
+              XR_RUNTIME_ABI_FINGERPRINT_MISMATCH,
+          "stale member fingerprint poisons group verification");
+
+    memset(&ordered_summary, 0x5a, sizeof(ordered_summary));
+    CHECK(xr_runtime_extent_group_verify(ordered, 1, &ordered_summary) ==
+              XR_RUNTIME_ABI_INVALID_GROUP,
+          "partial single-entry group is rejected");
+    CHECK(ordered_summary.fingerprint.bytes[0] == 0x5a,
+          "failed group verification does not publish a partial summary");
+    mutated[1].extent = NULL;
+    CHECK(xr_runtime_extent_group_verify(mutated, 2, &ordered_summary) ==
+              XR_RUNTIME_ABI_INVALID_ARGUMENT,
+          "null group member is rejected");
+}
+
 int main(void) {
     test_all_extent_kinds();
     test_descriptor_mutations_fail_closed();
     test_extent_arithmetic_fail_closed();
     test_provider_and_domain_checks();
     test_fingerprint_known_answer();
+    test_multi_buffer_group_verifier();
     if (failures != 0) {
         fprintf(stderr, "%d runtime descriptor test(s) failed\n", failures);
         return 1;

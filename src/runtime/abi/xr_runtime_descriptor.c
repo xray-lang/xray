@@ -18,6 +18,7 @@ static const uint8_t xr_runtime_abi_domain[] = "xray-runtime-abi-v1\0";
 typedef enum XrRuntimeAbiRecordKind {
     XR_RUNTIME_ABI_RECORD_EXTENT = 1,
     XR_RUNTIME_ABI_RECORD_LAYOUT = 2,
+    XR_RUNTIME_ABI_RECORD_EXTENT_GROUP = 3,
 } XrRuntimeAbiRecordKind;
 
 static bool id_is_zero(XrStableId id) {
@@ -271,6 +272,81 @@ XrRuntimeAbiStatus xr_runtime_layout_descriptor_fingerprint(
     return XR_RUNTIME_ABI_OK;
 }
 
+static const XrRuntimeExtentGroupEntry *find_group_part(
+    const XrRuntimeExtentGroupEntry *entries, size_t entry_count, uint16_t part_index,
+    size_t *match_count) {
+    const XrRuntimeExtentGroupEntry *match = NULL;
+    *match_count = 0;
+    for (size_t i = 0; i < entry_count; i++) {
+        if (entries[i].extent && entries[i].extent->part_index == part_index) {
+            match = &entries[i];
+            (*match_count)++;
+        }
+    }
+    return match;
+}
+
+static bool group_identities_unique(const XrRuntimeExtentGroupEntry *entries,
+                                    size_t entry_count) {
+    for (size_t i = 0; i < entry_count; i++) {
+        for (size_t j = i + 1; j < entry_count; j++) {
+            if (id_equal(entries[i].extent->id, entries[j].extent->id) ||
+                id_equal(entries[i].layout->descriptor_id,
+                         entries[j].layout->descriptor_id))
+                return false;
+        }
+    }
+    return true;
+}
+
+XrRuntimeAbiStatus xr_runtime_extent_group_verify(
+    const XrRuntimeExtentGroupEntry *entries, size_t entry_count,
+    XrRuntimeExtentGroupSummary *out) {
+    if (!entries || !out)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+    if (entry_count < 2 || entry_count > UINT16_MAX)
+        return XR_RUNTIME_ABI_INVALID_GROUP;
+    for (size_t i = 0; i < entry_count; i++) {
+        if (!entries[i].extent || !entries[i].layout)
+            return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+        XrRuntimeAbiStatus status =
+            xr_runtime_layout_descriptor_verify(entries[i].layout, entries[i].extent);
+        if (status != XR_RUNTIME_ABI_OK)
+            return status;
+        if (entries[i].extent->kind != XR_RUNTIME_EXTENT_MULTI_BUFFER ||
+            entries[i].extent->part_count != entry_count ||
+            !id_equal(entries[i].extent->group_id, entries[0].extent->group_id))
+            return XR_RUNTIME_ABI_INVALID_GROUP;
+    }
+    if (!group_identities_unique(entries, entry_count))
+        return XR_RUNTIME_ABI_INVALID_GROUP;
+
+    XrSHA256Context ctx;
+    hash_begin(&ctx, XR_RUNTIME_ABI_RECORD_EXTENT_GROUP);
+    hash_id(&ctx, entries[0].extent->group_id);
+    hash_u16(&ctx, (uint16_t) entry_count);
+    for (uint16_t part_index = 0; part_index < entry_count; part_index++) {
+        size_t match_count = 0;
+        const XrRuntimeExtentGroupEntry *part =
+            find_group_part(entries, entry_count, part_index, &match_count);
+        if (!part || match_count != 1)
+            return XR_RUNTIME_ABI_INVALID_GROUP;
+        hash_u16(&ctx, part_index);
+        hash_id(&ctx, part->extent->id);
+        xr_sha256_update(&ctx, part->extent->fingerprint.bytes,
+                         sizeof(part->extent->fingerprint.bytes));
+        hash_id(&ctx, part->layout->descriptor_id);
+        xr_sha256_update(&ctx, part->layout->fingerprint.bytes,
+                         sizeof(part->layout->fingerprint.bytes));
+    }
+
+    XrRuntimeExtentGroupSummary summary = {.group_id = entries[0].extent->group_id,
+                                           .part_count = (uint16_t) entry_count};
+    xr_sha256_final(&ctx, summary.fingerprint.bytes);
+    *out = summary;
+    return XR_RUNTIME_ABI_OK;
+}
+
 static bool flag_identity_valid(uint32_t flags, uint32_t flag, XrStableId id) {
     return ((flags & flag) != 0) != id_is_zero(id);
 }
@@ -347,9 +423,9 @@ const char *xr_runtime_abi_status_name(XrRuntimeAbiStatus status) {
         "ok",          "invalid-argument", "invalid-schema",   "invalid-identity",
         "invalid-kind", "invalid-alignment", "invalid-domain", "invalid-extent",
         "fingerprint-mismatch", "overflow", "limit-exceeded", "provider-required",
-        "provider-rejected",
+        "provider-rejected", "invalid-group",
     };
-    return status >= XR_RUNTIME_ABI_OK && status <= XR_RUNTIME_ABI_PROVIDER_REJECTED
+    return status >= XR_RUNTIME_ABI_OK && status <= XR_RUNTIME_ABI_INVALID_GROUP
                ? names[status]
                : "unknown-status";
 }

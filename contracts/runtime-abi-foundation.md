@@ -10,9 +10,10 @@ value families, VM, or AOT materialization have already switched.
    compiler, plan, runtime, and audit layers. Runtime code does not depend on
    analyzer, Xi, planner, or C generator data structures.
 2. One layout/extent pair describes one physical allocation. Every external or
-   multi-buffer backing allocation therefore has its own pair. Group density,
-   uniqueness, and completeness are table-level task 272 verification, not a
-   property proven by a single runtime descriptor.
+   multi-buffer backing allocation therefore has its own pair. A single
+   descriptor cannot prove group completeness; the runtime group verifier
+   validates a complete set for dense part indexes, unique extent/descriptor
+   identities, one group identity, and a canonical order-independent summary.
 3. Layout uniquely owns fixed prefix size and memory alignment. Extent uniquely
    owns tail offset, stride, operand, provider, and group/part facts. Evaluated
    bytes are derived data and retain the source extent ID and fingerprint.
@@ -37,6 +38,6 @@ value families, VM, or AOT materialization have already switched.
 
 anchor-sha256: src/base/xstable_id.h 3a7abe4d53ba0771a8b064e5d7c395d883253a1a9c65cc46a284872f7119c3b1
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 7ec819570b47e2a3f01132fc729eb73f91dda65cf2d343cb9bee34ad229b4284
-anchor-sha256: src/runtime/abi/xr_runtime_descriptor.h 0bd12086f14ea6f8be88cd3b456182eab0b23c27b37c48cbf20fe17c9656dc22
-anchor-sha256: src/runtime/abi/xr_runtime_descriptor.c ef736096f541cbf77f689d5aff02debac23bbc36af1397d1f122e812824265a2
-anchor-sha256: tests/unit/runtime/test_runtime_descriptor.c 37bd83ec25810475a572e67c98598eb008996437a64cac23341c953cd6d9a79c
+anchor-sha256: src/runtime/abi/xr_runtime_descriptor.h 19744b87e3b564ebec4938a3fa4906bf8884b3524af65d89f30c5cc1cfa2a7e4
+anchor-sha256: src/runtime/abi/xr_runtime_descriptor.c 769caf23dd04e87d8100182db30936e47a13f4d5e56f3f63bec1b4132ac90fb5
+anchor-sha256: tests/unit/runtime/test_runtime_descriptor.c a4c40fbdd8d1725e30fbe513f6c7a571cebd45ab4f50ef59b8f620e18ec18219
