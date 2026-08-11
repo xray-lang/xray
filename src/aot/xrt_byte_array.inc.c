@@ -2,6 +2,13 @@
 
 #include "../shared/xr_raw_scalar_core.h"
 
+#ifndef xrt_byte_slice_scalar_eval
+#define xrt_byte_slice_scalar_eval(expression)                                                     \
+    XR_BYTE_SLICE_SCALAR_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                 \
+                                     XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO,                 \
+                                     XR_SEM_CONSUMER_AOT_HOSTED, expression)
+#endif
+
 static inline XrValue xrt_array_new_typed_exact(int64_t cap, uint8_t etype) {
     if (cap < 0)
         cap = 0;
@@ -155,8 +162,8 @@ static inline int xrt_byte_array_range_ok(xrt_array_t *a, int64_t offset, int64_
 }
 
 static inline int64_t xrt_byte_array_load_u16_le_unchecked_raw(xrt_array_t *a, int64_t off) {
-    const uint8_t *p = (const uint8_t *) a->data + off;
-    return (int64_t) xr_raw_u16_from_le(xr_raw_load_u16_unaligned(p));
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u16_unchecked(a->data, off, XR_ENDIAN_LE));
 }
 
 static inline uint16_t xrt_byte_array_load_u16_le_raw(xrt_array_t *a, int64_t off) {
@@ -174,8 +181,8 @@ static inline int64_t xrt_byte_array_load_u16_le_checked_raw(xrt_array_t *a, int
 }
 
 static inline int64_t xrt_byte_array_load_u32_le_unchecked_raw(xrt_array_t *a, int64_t off) {
-    const uint8_t *p = (const uint8_t *) a->data + off;
-    return (int64_t) xr_raw_u32_from_le(xr_raw_load_u32_unaligned(p));
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u32_unchecked(a->data, off, XR_ENDIAN_LE));
 }
 
 static inline uint32_t xrt_byte_array_load_u32_le_raw(xrt_array_t *a, int64_t off) {
@@ -193,8 +200,8 @@ static inline int64_t xrt_byte_array_load_u32_le_checked_raw(xrt_array_t *a, int
 }
 
 static inline int64_t xrt_byte_array_load_u64_le_unchecked_raw(xrt_array_t *a, int64_t off) {
-    const uint8_t *p = (const uint8_t *) a->data + off;
-    return (int64_t) xr_raw_u64_from_le(xr_raw_load_u64_unaligned(p));
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u64_unchecked(a->data, off, XR_ENDIAN_LE));
 }
 
 static inline uint64_t xrt_byte_array_load_u64_le_raw(xrt_array_t *a, int64_t off) {
@@ -234,8 +241,8 @@ static inline int64_t xrt_endian_arg(XrValue value) {
 static inline int64_t xrt_byte_slice_load_u16_checked_raw(xr_span_t span, int64_t off,
                                                           int64_t endian) {
     bool ok = false;
-    uint16_t value =
-        xr_array_core_bytes_load_u16(span.data, span.length, XR_ELEM_U8, off, endian, &ok);
+    uint16_t value = xrt_byte_slice_scalar_eval(
+        xr_array_core_bytes_load_u16(span.data, span.length, XR_ELEM_U8, off, endian, &ok));
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U16_OOB_MSG);
     return (int64_t) value;
@@ -244,8 +251,8 @@ static inline int64_t xrt_byte_slice_load_u16_checked_raw(xr_span_t span, int64_
 static inline int64_t xrt_byte_slice_load_u32_checked_raw(xr_span_t span, int64_t off,
                                                           int64_t endian) {
     bool ok = false;
-    uint32_t value =
-        xr_array_core_bytes_load_u32(span.data, span.length, XR_ELEM_U8, off, endian, &ok);
+    uint32_t value = xrt_byte_slice_scalar_eval(
+        xr_array_core_bytes_load_u32(span.data, span.length, XR_ELEM_U8, off, endian, &ok));
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U32_OOB_MSG);
     return (int64_t) value;
@@ -254,8 +261,8 @@ static inline int64_t xrt_byte_slice_load_u32_checked_raw(xr_span_t span, int64_
 static inline int64_t xrt_byte_slice_load_u64_checked_raw(xr_span_t span, int64_t off,
                                                           int64_t endian) {
     bool ok = false;
-    uint64_t value =
-        xr_array_core_bytes_load_u64(span.data, span.length, XR_ELEM_U8, off, endian, &ok);
+    uint64_t value = xrt_byte_slice_scalar_eval(
+        xr_array_core_bytes_load_u64(span.data, span.length, XR_ELEM_U8, off, endian, &ok));
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_U64_OOB_MSG);
     return (int64_t) value;
@@ -264,8 +271,8 @@ static inline int64_t xrt_byte_slice_load_u64_checked_raw(xr_span_t span, int64_
 static inline double xrt_byte_slice_load_f32_checked_raw(xr_span_t span, int64_t off,
                                                          int64_t endian) {
     bool ok = false;
-    float value =
-        xr_array_core_bytes_load_f32(span.data, span.length, XR_ELEM_U8, off, endian, &ok);
+    float value = xrt_byte_slice_scalar_eval(
+        xr_array_core_bytes_load_f32(span.data, span.length, XR_ELEM_U8, off, endian, &ok));
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_F32_OOB_MSG);
     return (double) value;
@@ -274,8 +281,8 @@ static inline double xrt_byte_slice_load_f32_checked_raw(xr_span_t span, int64_t
 static inline double xrt_byte_slice_load_f64_checked_raw(xr_span_t span, int64_t off,
                                                          int64_t endian) {
     bool ok = false;
-    double value =
-        xr_array_core_bytes_load_f64(span.data, span.length, XR_ELEM_U8, off, endian, &ok);
+    double value = xrt_byte_slice_scalar_eval(
+        xr_array_core_bytes_load_f64(span.data, span.length, XR_ELEM_U8, off, endian, &ok));
     if (!ok)
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_LOAD_F64_OOB_MSG);
     return value;
@@ -283,35 +290,36 @@ static inline double xrt_byte_slice_load_f64_checked_raw(xr_span_t span, int64_t
 
 static inline void xrt_byte_slice_store_u16_checked_raw(xr_span_t span, int64_t off, int64_t value,
                                                         int64_t endian) {
-    if (!xr_array_core_bytes_store_u16(span.data, span.length, XR_ELEM_U8, off, (uint16_t) value,
-                                       endian))
+    if (!xrt_byte_slice_scalar_eval(xr_array_core_bytes_store_u16(
+            span.data, span.length, XR_ELEM_U8, off, (uint16_t) value, endian)))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_STORE_U16_OOB_MSG);
 }
 
 static inline void xrt_byte_slice_store_u32_checked_raw(xr_span_t span, int64_t off, int64_t value,
                                                         int64_t endian) {
-    if (!xr_array_core_bytes_store_u32(span.data, span.length, XR_ELEM_U8, off, (uint32_t) value,
-                                       endian))
+    if (!xrt_byte_slice_scalar_eval(xr_array_core_bytes_store_u32(
+            span.data, span.length, XR_ELEM_U8, off, (uint32_t) value, endian)))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_STORE_U32_OOB_MSG);
 }
 
 static inline void xrt_byte_slice_store_u64_checked_raw(xr_span_t span, int64_t off, int64_t value,
                                                         int64_t endian) {
-    if (!xr_array_core_bytes_store_u64(span.data, span.length, XR_ELEM_U8, off, (uint64_t) value,
-                                       endian))
+    if (!xrt_byte_slice_scalar_eval(xr_array_core_bytes_store_u64(
+            span.data, span.length, XR_ELEM_U8, off, (uint64_t) value, endian)))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_STORE_U64_OOB_MSG);
 }
 
 static inline void xrt_byte_slice_store_f32_checked_raw(xr_span_t span, int64_t off, double value,
                                                         int64_t endian) {
-    if (!xr_array_core_bytes_store_f32(span.data, span.length, XR_ELEM_U8, off, (float) value,
-                                       endian))
+    if (!xrt_byte_slice_scalar_eval(xr_array_core_bytes_store_f32(
+            span.data, span.length, XR_ELEM_U8, off, (float) value, endian)))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_STORE_F32_OOB_MSG);
 }
 
 static inline void xrt_byte_slice_store_f64_checked_raw(xr_span_t span, int64_t off, double value,
                                                         int64_t endian) {
-    if (!xr_array_core_bytes_store_f64(span.data, span.length, XR_ELEM_U8, off, value, endian))
+    if (!xrt_byte_slice_scalar_eval(xr_array_core_bytes_store_f64(
+            span.data, span.length, XR_ELEM_U8, off, value, endian)))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_STORE_F64_OOB_MSG);
 }
 
@@ -489,55 +497,43 @@ static inline void xrt_byte_slice_store_f64_value(XrValue recv, XrValue off_valu
 
 static inline int64_t xrt_byte_slice_load_u16_unchecked_raw(xr_span_t span, int64_t off,
                                                             int64_t endian) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    uint16_t value = xr_raw_load_u16_unaligned(ptr);
-    if (!xr_array_core_endian_matches_host(endian))
-        value = xr_array_core_bswap16(value);
-    return (int64_t) value;
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u16_unchecked(span.data, off, endian));
 }
 
 static inline int64_t xrt_byte_slice_load_u32_unchecked_raw(xr_span_t span, int64_t off,
                                                             int64_t endian) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    uint32_t value = xr_raw_load_u32_unaligned(ptr);
-    if (!xr_array_core_endian_matches_host(endian))
-        value = xr_array_core_bswap32(value);
-    return (int64_t) value;
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u32_unchecked(span.data, off, endian));
 }
 
 static inline int64_t xrt_byte_slice_load_u64_unchecked_raw(xr_span_t span, int64_t off,
                                                             int64_t endian) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    uint64_t value = xr_raw_load_u64_unaligned(ptr);
-    if (!xr_array_core_endian_matches_host(endian))
-        value = xr_array_core_bswap64(value);
-    return (int64_t) value;
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u64_unchecked(span.data, off, endian));
 }
 
 static inline void xrt_byte_slice_store_u16_unchecked_raw(xr_span_t span, int64_t off,
                                                           uint16_t value, int64_t endian) {
-    if (!xr_array_core_endian_matches_host(endian))
-        value = xr_array_core_bswap16(value);
-    xr_raw_store_u16_unaligned((uint8_t *) span.data + off, value);
+    xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_store_u16_unchecked(span.data, off, value, endian));
 }
 
 static inline void xrt_byte_slice_store_u32_unchecked_raw(xr_span_t span, int64_t off,
                                                           uint32_t value, int64_t endian) {
-    if (!xr_array_core_endian_matches_host(endian))
-        value = xr_array_core_bswap32(value);
-    xr_raw_store_u32_unaligned((uint8_t *) span.data + off, value);
+    xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_store_u32_unchecked(span.data, off, value, endian));
 }
 
 static inline void xrt_byte_slice_store_u64_unchecked_raw(xr_span_t span, int64_t off,
                                                           uint64_t value, int64_t endian) {
-    if (!xr_array_core_endian_matches_host(endian))
-        value = xr_array_core_bswap64(value);
-    xr_raw_store_u64_unaligned((uint8_t *) span.data + off, value);
+    xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_store_u64_unchecked(span.data, off, value, endian));
 }
 
 static inline int64_t xrt_byte_slice_load_u16_le_unchecked_raw(xr_span_t span, int64_t off) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    return (int64_t) xr_raw_u16_from_le(xr_raw_load_u16_unaligned(ptr));
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u16_unchecked(span.data, off, XR_ENDIAN_LE));
 }
 
 static inline int64_t xrt_byte_slice_load_u16_le_checked_raw(xr_span_t span, int64_t off) {
@@ -547,8 +543,8 @@ static inline int64_t xrt_byte_slice_load_u16_le_checked_raw(xr_span_t span, int
 }
 
 static inline int64_t xrt_byte_slice_load_u32_le_unchecked_raw(xr_span_t span, int64_t off) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    return (int64_t) xr_raw_u32_from_le(xr_raw_load_u32_unaligned(ptr));
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u32_unchecked(span.data, off, XR_ENDIAN_LE));
 }
 
 static inline int64_t xrt_byte_slice_load_u32_le_checked_raw(xr_span_t span, int64_t off) {
@@ -558,8 +554,8 @@ static inline int64_t xrt_byte_slice_load_u32_le_checked_raw(xr_span_t span, int
 }
 
 static inline int64_t xrt_byte_slice_load_u64_le_unchecked_raw(xr_span_t span, int64_t off) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    return (int64_t) xr_raw_u64_from_le(xr_raw_load_u64_unaligned(ptr));
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u64_unchecked(span.data, off, XR_ENDIAN_LE));
 }
 
 static inline int64_t xrt_byte_slice_load_u64_le_checked_raw(xr_span_t span, int64_t off) {

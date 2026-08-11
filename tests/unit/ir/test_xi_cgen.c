@@ -7591,6 +7591,18 @@ TEST(cgen_numeric_width_uses_stable_owner_adapter) {
            "CGen must resolve the stable numeric width owner adapter");
 }
 
+TEST(cgen_byte_slice_scalar_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_CGEN) &&
+           "byte-slice scalar owner must publish CGen as a mechanical consumer");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO);
+    assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_scalar_eval") == 0 &&
+           "CGen must resolve the stable byte-slice scalar owner adapter");
+}
+
 TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
     const char *src = "fn forceUtf8(data: Array<byte>) -> string {\n"
                       "    return string.fromUtf8(data[:])!\n"
@@ -12863,6 +12875,7 @@ int main(void) {
     run_cgen_typeid_uses_stable_owner_adapter();
     run_cgen_exact_bits_use_stable_owner_adapter();
     run_cgen_numeric_width_uses_stable_owner_adapter();
+    run_cgen_byte_slice_scalar_uses_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();

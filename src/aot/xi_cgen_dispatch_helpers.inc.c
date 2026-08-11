@@ -13766,6 +13766,11 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
         return false;
     if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_LOAD, XAOT_SLICE_DROP_HELPER))
         return false;
+    const char *owner_adapter = cg_byte_slice_scalar_adapter_name(ctx);
+    if (!owner_adapter) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
     (void) info;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
@@ -13841,11 +13846,11 @@ static bool xicgen_emit_byte_slice_load(XiCgenCtx *ctx, FILE *out, const XiValue
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _off = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    fprintf(out, "; bool _ok = false; %s _v = %s(_s.data, _s.length, XR_ELEM_U8, _off, ", ctype,
-            core_helper);
+    fprintf(out, "; bool _ok = false; %s _v = %s(%s(_s.data, _s.length, XR_ELEM_U8, _off, ",
+            ctype, owner_adapter, core_helper);
     xicgen_emit_endian_arg_i64(ctx, out, v->args[2]);
     fprintf(out,
-            ", &_ok); if (!_ok) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); "
+            ", &_ok)); if (!_ok) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); "
             "(int64_t)_v; })",
             bounds_message_expr);
     emit_conversion_suffix(out, conv_suffix);
@@ -13860,6 +13865,11 @@ static bool xicgen_emit_byte_slice_float_load(XiCgenCtx *ctx, FILE *out, const X
         return false;
     if (!cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_LOAD, XAOT_SLICE_DROP_HELPER))
         return false;
+    const char *owner_adapter = cg_byte_slice_scalar_adapter_name(ctx);
+    if (!owner_adapter) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
     (void) info;
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
@@ -13867,11 +13877,11 @@ static bool xicgen_emit_byte_slice_float_load(XiCgenCtx *ctx, FILE *out, const X
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, "; int64_t _off = ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-    fprintf(out, "; bool _ok = false; %s _v = %s(_s.data, _s.length, XR_ELEM_U8, _off, ", ctype,
-            core_helper);
+    fprintf(out, "; bool _ok = false; %s _v = %s(%s(_s.data, _s.length, XR_ELEM_U8, _off, ",
+            ctype, owner_adapter, core_helper);
     xicgen_emit_endian_arg_i64(ctx, out, v->args[2]);
     fprintf(out,
-            ", &_ok); if (!_ok) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); "
+            ", &_ok)); if (!_ok) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); "
             "(double)_v; })",
             bounds_message_expr);
     emit_conversion_suffix(out, conv_suffix);
@@ -13889,6 +13899,11 @@ static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValu
         return true;
     (void) info;
     if (cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_HELPER)) {
+        const char *owner_adapter = cg_byte_slice_scalar_adapter_name(ctx);
+        if (!owner_adapter) {
+            emit_codegen_abort_expr(out);
+            return true;
+        }
         bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
         bool drop_bounds =
             unchecked_access ||
@@ -13930,12 +13945,12 @@ static bool xicgen_emit_byte_slice_store(XiCgenCtx *ctx, FILE *out, const XiValu
             return true;
         }
         fprintf(out, "; ");
-        fprintf(out, "if (XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)", core_helper,
-                value_ctype);
+        fprintf(out, "if (XR_UNLIKELY(!%s(%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)",
+                owner_adapter, core_helper, value_ctype);
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
         fprintf(out, ", ");
         xicgen_emit_endian_arg_i64(ctx, out, v->args[3]);
-        fprintf(out, "))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); XR_NULL_VAL; })",
+        fprintf(out, ")))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); XR_NULL_VAL; })",
                 bounds_message_expr);
         return true;
     }
@@ -13962,17 +13977,22 @@ static bool xicgen_emit_byte_slice_float_store(XiCgenCtx *ctx, FILE *out, const 
         return true;
     (void) info;
     if (cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_STORE, XAOT_SLICE_DROP_HELPER)) {
+        const char *owner_adapter = cg_byte_slice_scalar_adapter_name(ctx);
+        if (!owner_adapter) {
+            emit_codegen_abort_expr(out);
+            return true;
+        }
         fprintf(out, "({ xr_span_t _s = ");
         emit_span_ref_expr(out, v->args[0]);
         fprintf(out, "; int64_t _off = ");
         emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
         fprintf(out, "; ");
-        fprintf(out, "if (XR_UNLIKELY(!%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)", core_helper,
-                value_ctype);
+        fprintf(out, "if (XR_UNLIKELY(!%s(%s(_s.data, _s.length, XR_ELEM_U8, _off, (%s)",
+                owner_adapter, core_helper, value_ctype);
         emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_F64);
         fprintf(out, ", ");
         xicgen_emit_endian_arg_i64(ctx, out, v->args[3]);
-        fprintf(out, "))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); XR_NULL_VAL; })",
+        fprintf(out, ")))) xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, %s); XR_NULL_VAL; })",
                 bounds_message_expr);
         return true;
     }

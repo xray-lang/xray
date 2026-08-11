@@ -1,0 +1,16 @@
+c_contains=xrt_byte_slice_scalar_eval(
+c_contains=xr_array_core_bytes_store_u16(
+c_contains=xr_array_core_bytes_store_u32(
+c_contains=xr_array_core_bytes_store_u64(
+c_contains=xr_array_core_bytes_store_f32(
+c_contains=xr_array_core_bytes_store_f64(
+c_contains=xrt_byte_slice_load_u32_le_unchecked_raw(
+c_contains=xr_array_core_bytes_load_f32(
+c_contains=xr_array_core_bytes_load_f64(
+c_not_contains=xr_raw_load_u16_unaligned(
+c_not_contains=xr_raw_load_u32_unaligned(
+c_not_contains=xr_raw_load_u64_unaligned(
+c_not_contains=xr_raw_store_u16_unaligned(
+c_not_contains=xr_raw_store_u32_unaligned(
+c_not_contains=xr_raw_store_u64_unaligned(
+c_syntax=pass

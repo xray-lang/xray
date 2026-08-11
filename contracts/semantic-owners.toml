@@ -28,6 +28,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
+id = "byte-slice-scalar"
+header = "src/shared/xr_byte_slice_scalar_core.h"
+representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "compression"
 header = "src/shared/xr_compress_core.h"
 representation = "native"
@@ -238,7 +245,7 @@ disposition = "single-owner"
 
 [[operation_family]]
 id = "container-primitives"
-canonical_cores = ["array", "array-sort", "range"]
+canonical_cores = ["array", "array-sort", "byte-slice-scalar", "range"]
 duplicate_sources = [
   "src/runtime/object/xarray_vm.c:retired-private-sort",
   "src/aot/xrt_sort.inc.c:retired-private-sort",

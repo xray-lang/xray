@@ -22,7 +22,9 @@ from xisagen import parse_xi_ops_def, parse_xi_semantic_owners  # noqa: E402
 
 
 SOURCE_SUFFIXES = (".c", ".h")
-SIGNATURE_RE = re.compile(r"\b(?:static\s+)?inline\s+[^;{}]*?\b(xr_[A-Za-z0-9_]+)\s*\(")
+SIGNATURE_RE = re.compile(
+    r"\b(?:(?:static\s+)?inline|XR_BYTE_SLICE_SCALAR_INLINE)\s+[^;{}]*?"
+    r"\b(xr_[A-Za-z0-9_]+)\s*\(")
 SORT_OLD_SYMBOLS = (
     "xr_array_hybrid_sort",
     "xr_sort_merge",
@@ -123,6 +125,16 @@ NUMERIC_WIDTH_KERNELS = {
     "xr_numeric_widen_i32",
     "xr_numeric_widen_u32",
     "xr_numeric_widen_f32",
+}
+BYTE_SLICE_SCALAR_OPERATIONS = {
+    f"xi.byte.slice.{direction}.{scalar}"
+    for direction in ("load", "store")
+    for scalar in ("u16", "u32", "u64", "f32", "f64")
+}
+BYTE_SLICE_SCALAR_KERNELS = {
+    f"xr_array_core_bytes_{direction}_{scalar}"
+    for direction in ("load", "store")
+    for scalar in ("u16", "u32", "u64", "f32", "f64")
 }
 OWNER_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 OWNER_HALF_RE = re.compile(r"^0x[0-9a-f]{16}$")
@@ -738,6 +750,115 @@ def verify_numeric_width_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_byte_slice_scalar_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.byte-slice-scalar")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.byte-slice-scalar"), None)
+    if owner is None or set(owner.get("operations", [])) != BYTE_SLICE_SCALAR_OPERATIONS:
+        errors.append(
+            "semantic owner registry has no exact shared.byte-slice-scalar operation family")
+
+    core_text = (root / "src/shared/xr_byte_slice_scalar_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    if (f"{marker}_HI" not in core_text or f"{marker}_LO" not in core_text or
+            "XR_BYTE_SLICE_SCALAR_OWNER_APPLY" not in core_text or
+            not BYTE_SLICE_SCALAR_KERNELS.issubset(set(SIGNATURE_RE.findall(core_text)))):
+        errors.append(
+            "src/shared/xr_byte_slice_scalar_core.h: scalar I/O family lacks stable owner kernels")
+
+    array_text = (root / "src/shared/xr_array_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    freestanding_text = (root / "src/aot/xrt_core_freestanding.h").read_text(
+        encoding="utf-8", errors="strict")
+    for relative, text in (("src/shared/xr_array_core.h", array_text),
+                           ("src/aot/xrt_core_freestanding.h", freestanding_text)):
+        duplicate_kernels = BYTE_SLICE_SCALAR_KERNELS.intersection(set(SIGNATURE_RE.findall(text)))
+        if duplicate_kernels:
+            errors.append(
+                f"{relative}: revived private byte-slice scalar kernels: " +
+                ", ".join(sorted(duplicate_kernels)))
+
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    vm_start = vm_text.find("#define VM_BYTE_SLICE_LOAD_CASE")
+    vm_end = vm_text.find("#undef VM_BYTE_SLICE_LOAD_CASE", vm_start)
+    vm_body = vm_text[vm_start:vm_end] if vm_start >= 0 and vm_end >= 0 else ""
+    if (f"{marker}_HI" not in vm_body or f"{marker}_LO" not in vm_body or
+            "XR_BYTE_SLICE_SCALAR_OWNER_APPLY" not in vm_body or
+            not BYTE_SLICE_SCALAR_KERNELS.issubset(set(re.findall(
+                r"\b(xr_array_core_bytes_(?:load|store)_(?:u16|u32|u64|f32|f64))\b",
+                vm_body)))):
+        errors.append(
+            "src/vm/xvm_dispatch_collection.inc.c: VM byte-slice scalar I/O bypasses stable owner")
+
+    hosted_header = (root / "src/aot/xrt.h").read_text(encoding="utf-8", errors="strict")
+    hosted_runtime = (root / "src/aot/xrt_byte_array.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    c90_runtime = (root / "src/aot/xrt_c90.h").read_text(
+        encoding="utf-8", errors="strict")
+    for relative, text in (("src/aot/xrt.h", hosted_header),
+                           ("src/aot/xrt_core_freestanding.h", freestanding_text)):
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "XR_BYTE_SLICE_SCALAR_OWNER_APPLY" not in text or
+                "xrt_byte_slice_scalar_eval" not in text):
+            errors.append(f"{relative}: AOT byte-slice scalar adapter bypasses stable owner")
+    if "xrt_byte_slice_scalar_eval" not in hosted_runtime:
+        errors.append(
+            "src/aot/xrt_byte_array.inc.c: hosted byte-slice scalar runtime bypasses stable owner")
+    if ("../shared/xr_byte_slice_scalar_core.h" not in c90_runtime or
+            "xrt_byte_slice_scalar_eval" not in c90_runtime or
+            "xr_byte_slice_scalar_load_u32_unchecked" not in c90_runtime or
+            "xr_byte_slice_scalar_load_u64_unchecked" not in c90_runtime or
+            "xr_byte_slice_scalar_store_u32_unchecked" not in c90_runtime or
+            "xr_byte_slice_scalar_store_u64_unchecked" not in c90_runtime):
+        errors.append(
+            "src/aot/xrt_c90.h: restricted C90 byte-slice adapters bypass shared owner")
+
+    retired_semantics = (
+        "xrt_freestanding_endian_matches_host",
+        "xrt_freestanding_bytes_range_ok",
+        "xrt_freestanding_bswap16",
+        "xrt_freestanding_bswap32",
+        "xrt_freestanding_bswap64",
+        "xr_raw_load_u16_unaligned",
+        "xr_raw_load_u32_unaligned",
+        "xr_raw_load_u64_unaligned",
+        "xr_raw_store_u16_unaligned",
+        "xr_raw_store_u32_unaligned",
+        "xr_raw_store_u64_unaligned",
+        "xr_raw_u16_from_le",
+        "xr_raw_u32_from_le",
+        "xr_raw_u64_from_le",
+    )
+    for symbol in retired_semantics:
+        if symbol in hosted_runtime or symbol in freestanding_text or symbol in c90_runtime:
+            errors.append(f"retired private byte-slice scalar path remains: {symbol}")
+    for symbol in ("xrt_c90_load_u32", "xrt_c90_load_u64", "xrt_c90_store_u32",
+                   "xrt_c90_store_u64", "xrt_c90_host_is_little_endian",
+                   "xrt_c90_bswap32", "xrt_c90_bswap64", "xrt_c90_endian_matches_host"):
+        if symbol in c90_runtime:
+            errors.append(f"retired restricted-C90 byte-slice semantic path remains: {symbol}")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_byte_slice_scalar_adapter_name")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append(
+            "src/aot/xi_cgen.c: CGen byte-slice scalar I/O does not resolve by stable owner ID")
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for emitter in ("xicgen_emit_byte_slice_load", "xicgen_emit_byte_slice_float_load",
+                    "xicgen_emit_byte_slice_store", "xicgen_emit_byte_slice_float_store"):
+        body = extract_c_function(dispatch_text, emitter)
+        if body is None or "cg_byte_slice_scalar_adapter_name" not in body:
+            errors.append(
+                f"src/aot/xi_cgen_dispatch_helpers.inc.c: {emitter} bypasses owner adapter")
+    return errors
+
+
 def verify_operation_registry(root: Path) -> tuple[list[str], int]:
     errors: list[str] = []
     source_path = root / "xisa/xi/ops.def"
@@ -806,8 +927,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 26:
-        errors.append(f"shared-core inventory must contain exactly 26 headers, found {len(actual)}")
+    if len(actual) != 27:
+        errors.append(f"shared-core inventory must contain exactly 27 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -833,6 +954,7 @@ def verify(root: Path, write: bool) -> list[str]:
         registry = json.loads(registry_path.read_text(encoding="utf-8", errors="strict"))
         errors.extend(verify_exact_bits_ratchet(root, registry))
         errors.extend(verify_numeric_width_ratchet(root, registry))
+        errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)
     errors.extend(registry_errors)
     return errors
@@ -840,6 +962,8 @@ def verify(root: Path, write: bool) -> list[str]:
 
 def self_test() -> int:
     assert SIGNATURE_RE.findall("static inline int xr_demo_core(int x) {") == ["xr_demo_core"]
+    assert SIGNATURE_RE.findall(
+        "XR_BYTE_SLICE_SCALAR_INLINE int xr_demo_c90_core(int x) {") == ["xr_demo_c90_core"]
     assert "xrt_introsort_foo".startswith(SORT_OLD_SYMBOLS[3])
     assert extract_c_function("static int owner(int x) { return x != 0; }", "owner") == \
         "{ return x != 0; }"

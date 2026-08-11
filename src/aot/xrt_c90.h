@@ -84,6 +84,13 @@ typedef struct xr_span {
     int64_t length;
 } xr_span_t;
 
+/* The restricted runtime is a mechanical adapter over the same byte-slice
+ * scalar owner as hosted and freestanding AOT. */
+#define XR_BYTE_SLICE_SCALAR_C90 1
+#include "../shared/xr_byte_slice_scalar_core.h"
+#undef XR_BYTE_SLICE_SCALAR_C90
+#define xrt_byte_slice_scalar_eval(expression) (expression)
+
 /* Restricted generated kernels do not use dynamic values at their public ABI.
  * The compact compatibility record remains available for fixed-array address
  * projections that the current Xi lowering represents through `.ptr`. */
@@ -157,54 +164,10 @@ static void xr_raw_store_u8_unaligned(void *ptr, uint8_t value) {
     memcpy(ptr, &value, sizeof(value));
 }
 
-static uint32_t xrt_c90_load_u32(const void *ptr) {
-    uint32_t value;
-    memcpy(&value, ptr, sizeof(value));
-    return value;
-}
-
-static uint64_t xrt_c90_load_u64(const void *ptr) {
-    uint64_t value;
-    memcpy(&value, ptr, sizeof(value));
-    return value;
-}
-
-static void xrt_c90_store_u32(void *ptr, uint32_t value) {
-    memcpy(ptr, &value, sizeof(value));
-}
-
-static void xrt_c90_store_u64(void *ptr, uint64_t value) {
-    memcpy(ptr, &value, sizeof(value));
-}
-
-static int xrt_c90_host_is_little_endian(void) {
-    const uint16_t one = 1;
-    return *((const uint8_t *) &one) == 1;
-}
-
-static uint32_t xrt_c90_bswap32(uint32_t value) {
-    return ((value & UINT32_C(0x000000ff)) << 24) | ((value & UINT32_C(0x0000ff00)) << 8) |
-           ((value & UINT32_C(0x00ff0000)) >> 8) | ((value & UINT32_C(0xff000000)) >> 24);
-}
-
-static uint64_t xrt_c90_bswap64(uint64_t value) {
-    uint32_t low = (uint32_t) value;
-    uint32_t high = (uint32_t) (value >> 32);
-    return ((uint64_t) xrt_c90_bswap32(low) << 32) | (uint64_t) xrt_c90_bswap32(high);
-}
-
-static int xrt_c90_endian_matches_host(int64_t endian) {
-    if (endian == XR_ENDIAN_NATIVE)
-        return 1;
-    return (endian == XR_ENDIAN_LE) == xrt_c90_host_is_little_endian();
-}
-
 static int64_t xrt_byte_slice_load_u32_unchecked_raw(xr_span_t span, int64_t offset,
                                                      int64_t endian) {
-    uint32_t value = xrt_c90_load_u32((const uint8_t *) span.data + offset);
-    if (!xrt_c90_endian_matches_host(endian))
-        value = xrt_c90_bswap32(value);
-    return (int64_t) value;
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u32_unchecked(span.data, offset, endian));
 }
 
 static int64_t xrt_byte_slice_load_u32_le_unchecked_raw(xr_span_t span, int64_t offset) {
@@ -213,24 +176,20 @@ static int64_t xrt_byte_slice_load_u32_le_unchecked_raw(xr_span_t span, int64_t 
 
 static int64_t xrt_byte_slice_load_u64_unchecked_raw(xr_span_t span, int64_t offset,
                                                      int64_t endian) {
-    uint64_t value = xrt_c90_load_u64((const uint8_t *) span.data + offset);
-    if (!xrt_c90_endian_matches_host(endian))
-        value = xrt_c90_bswap64(value);
-    return (int64_t) value;
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u64_unchecked(span.data, offset, endian));
 }
 
 static void xrt_byte_slice_store_u32_unchecked_raw(xr_span_t span, int64_t offset, uint32_t value,
                                                    int64_t endian) {
-    if (!xrt_c90_endian_matches_host(endian))
-        value = xrt_c90_bswap32(value);
-    xrt_c90_store_u32((uint8_t *) span.data + offset, value);
+    xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_store_u32_unchecked(span.data, offset, value, endian));
 }
 
 static void xrt_byte_slice_store_u64_unchecked_raw(xr_span_t span, int64_t offset, uint64_t value,
                                                    int64_t endian) {
-    if (!xrt_c90_endian_matches_host(endian))
-        value = xrt_c90_bswap64(value);
-    xrt_c90_store_u64((uint8_t *) span.data + offset, value);
+    xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_store_u64_unchecked(span.data, offset, value, endian));
 }
 
 static void xrt_freestanding_trap(const char *message) {

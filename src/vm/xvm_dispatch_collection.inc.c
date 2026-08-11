@@ -1503,8 +1503,10 @@ vmcase(OP_ARRAY_RESIZE) {
         VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type, receiver_msg);            \
         (void) _readonly;                                                                          \
         bool _ok = false;                                                                          \
-        uint64_t _value =                                                                          \
-            (uint64_t) load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok);     \
+        uint64_t _value = (uint64_t) XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                            \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                          \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                      \
+            load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok));              \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
@@ -1532,8 +1534,11 @@ vmcase(OP_ARRAY_RESIZE) {
         if (_readonly) {                                                                           \
             VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);      \
         }                                                                                          \
-        bool _ok = store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                        \
-                            (value_type) XR_TO_INT(_value), _endian);                              \
+        bool _ok = XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                                              \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                          \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                      \
+            store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                              \
+                     (value_type) XR_TO_INT(_value), _endian));                                   \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
@@ -1559,8 +1564,10 @@ vmcase(OP_ARRAY_RESIZE) {
         VM_BYTE_SLICE_VIEW(_recv, _data, _length, _readonly, _elem_type, receiver_msg);            \
         (void) _readonly;                                                                          \
         bool _ok = false;                                                                          \
-        double _value =                                                                            \
-            (double) load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok);       \
+        double _value = (double) XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                                \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                          \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                      \
+            load_fn(_data, _length, _elem_type, XR_TO_INT(_offset), _endian, &_ok));              \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \
@@ -1588,8 +1595,11 @@ vmcase(OP_ARRAY_RESIZE) {
         if (_readonly) {                                                                           \
             VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);      \
         }                                                                                          \
-        bool _ok = store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                        \
-                            (value_type) XR_TO_FLOAT(_value), _endian);                            \
+        bool _ok = XR_BYTE_SLICE_SCALAR_OWNER_APPLY(                                              \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                                          \
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,                      \
+            store_fn(_data, _length, _elem_type, XR_TO_INT(_offset),                              \
+                     (value_type) XR_TO_FLOAT(_value), _endian));                                 \
         if (!_ok) {                                                                                \
             VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, oob_msg);                                 \
         }                                                                                          \

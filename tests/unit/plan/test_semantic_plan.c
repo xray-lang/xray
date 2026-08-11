@@ -1341,11 +1341,11 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "27639e128700c3a88f3e050d07ef35145476a2ad80bae7a809f581b887332417") == 0);
+                   "4c84060d2a480ebb0ce421bf925602f81469e064e281485cff20803ed0c11cec") == 0);
     REQUIRE(strcmp(registry_hex,
-                   "a6255fe3f602e022202982c374d80d4fbc06600e78262503d70241fe10bcf046") == 0);
+                   "cfaed5b75649c207c8eb65447a4042a01d39900fe4f0c1bfb47d0a4b9e2126ff") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "a7c1bf50c21ff0c2d83ef2bf24bf239500989ad439371afb0ee3248b5f9cd260") == 0);
+                   "3617edddf26ff9bc5430348a88b21339c8f202c0de03c6b64a693237f3bf4a8d") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -1385,6 +1385,12 @@ static void test_operation_registry(void) {
     const XrSemanticOpContract *generated = xr_semantic_op_contract(XI_GEN_CALL);
     const XrSemanticOpContract *logical_not = xr_semantic_op_contract(XI_NOT);
     const XrSemanticOpContract *type_id = xr_semantic_op_contract(XI_TYPEID);
+    const XiOp byte_slice_scalar_ops[] = {
+        XI_BYTE_SLICE_LOAD_U16,  XI_BYTE_SLICE_LOAD_U32,  XI_BYTE_SLICE_LOAD_U64,
+        XI_BYTE_SLICE_LOAD_F32,  XI_BYTE_SLICE_LOAD_F64,  XI_BYTE_SLICE_STORE_U16,
+        XI_BYTE_SLICE_STORE_U32, XI_BYTE_SLICE_STORE_U64, XI_BYTE_SLICE_STORE_F32,
+        XI_BYTE_SLICE_STORE_F64,
+    };
     REQUIRE(add != NULL && strcmp(add->canonical_name, "xi.add") == 0);
     REQUIRE(strcmp(add->canonical_owner, "xi.add") == 0);
     REQUIRE(add->operation_id_hi == add->owner_id_hi);
@@ -1412,6 +1418,27 @@ static void test_operation_registry(void) {
             (XR_SEM_CONSUMER_SEMANTIC_PLAN | XR_SEM_CONSUMER_VM |
              XR_SEM_CONSUMER_AOT_HOSTED | XR_SEM_CONSUMER_AOT_FREESTANDING |
              XR_SEM_CONSUMER_CGEN | XR_SEM_CONSUMER_RUNTIME));
+    for (size_t i = 0; i < sizeof(byte_slice_scalar_ops) / sizeof(byte_slice_scalar_ops[0]); i++) {
+        const XrSemanticOpContract *scalar =
+            xr_semantic_op_contract(byte_slice_scalar_ops[i]);
+        REQUIRE(scalar != NULL);
+        REQUIRE(scalar->owner == XR_SEM_OWNER_SHARED_SEMANTIC_KERNEL);
+        REQUIRE(strcmp(scalar->canonical_owner, "shared.byte-slice-scalar") == 0);
+        REQUIRE(scalar->owner_id_hi == XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI);
+        REQUIRE(scalar->owner_id_lo == XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO);
+        REQUIRE(scalar->operation_id_hi != scalar->owner_id_hi ||
+                scalar->operation_id_lo != scalar->owner_id_lo);
+    }
+    REQUIRE(xr_semantic_owner_consumer_bits(
+                XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
+                XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO) ==
+            (XR_SEM_CONSUMER_SEMANTIC_PLAN | XR_SEM_CONSUMER_VM |
+             XR_SEM_CONSUMER_AOT_HOSTED | XR_SEM_CONSUMER_AOT_FREESTANDING |
+             XR_SEM_CONSUMER_CGEN));
+    REQUIRE(strcmp(xr_semantic_owner_cgen_adapter(
+                       XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
+                       XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO),
+                   "xrt_byte_slice_scalar_eval") == 0);
     REQUIRE(xr_semantic_owner_consumer_bits(0, 0) == 0);
     REQUIRE(xr_semantic_owner_cgen_adapter(0, 0) == NULL);
     REQUIRE(xr_semantic_op_contract(XI_OP_COUNT) == NULL);

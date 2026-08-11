@@ -48,6 +48,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_raw_scalar_core.h"
 #include "../shared/xr_obj_header.h"
 #include "../shared/xr_elem_type.h"
+#include "../shared/xr_byte_slice_scalar_core.h"
 #include "../shared/xr_arith_core.h"
 #include "../shared/xr_error_messages.h"
 #include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
@@ -61,6 +62,10 @@ int memcmp(const void *a, const void *b, size_t n);
     XR_NUMERIC_WIDTH_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,                    \
                                  XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,                    \
                                  XR_SEM_CONSUMER_AOT_FREESTANDING, kernel, value)
+#define xrt_byte_slice_scalar_eval(expression)                                                     \
+    XR_BYTE_SLICE_SCALAR_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                 \
+                                     XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO,                 \
+                                     XR_SEM_CONSUMER_AOT_FREESTANDING, expression)
 #include "../shared/xr_sync_core.h"
 #include "../shared/xr_truthy_core.h"
 #include "../shared/xr_type_identity_core.h"
@@ -1221,249 +1226,55 @@ static inline void xr_array_core_bytes_repeat_copy(void *data, int64_t dst_offse
     }
 }
 
-enum {
-    XR_ENDIAN_NATIVE = 0,
-    XR_ENDIAN_LE = 1,
-    XR_ENDIAN_BE = 2,
-};
-
-#ifndef XRT_TARGET_NATIVE_ENDIAN
-#if defined(XR_AOT_TARGET_LITTLE_ENDIAN)
-#if XR_AOT_TARGET_LITTLE_ENDIAN
-#define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_LE
-#else
-#define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_BE
-#endif
-#else
-#define XRT_TARGET_NATIVE_ENDIAN XR_ENDIAN_NATIVE
-#endif
-#endif
-
-static inline bool xrt_freestanding_host_is_little_endian(void) {
-    const uint16_t one = 1;
-    return *((const uint8_t *) &one) == 1;
-}
-
-static inline bool xrt_freestanding_endian_matches_host(int64_t endian) {
-    if (endian == XR_ENDIAN_NATIVE)
-        return true;
-    return (endian == XR_ENDIAN_LE) == xrt_freestanding_host_is_little_endian();
-}
-
-static inline bool xrt_freestanding_bytes_range_ok(int64_t length, uint8_t elem_type,
-                                                   int64_t offset, int64_t width) {
-    return elem_type == XR_ELEM_U8 && length >= 0 && offset >= 0 && width >= 0 &&
-           offset <= length && width <= length - offset;
-}
-
-static inline uint16_t xrt_freestanding_bswap16(uint16_t value) {
-    return (uint16_t) ((value >> 8) | (value << 8));
-}
-
-static inline uint32_t xrt_freestanding_bswap32(uint32_t value) {
-#if defined(__GNUC__) || defined(__clang__)
-    return __builtin_bswap32(value);
-#else
-    return ((value & UINT32_C(0x000000ff)) << 24) | ((value & UINT32_C(0x0000ff00)) << 8) |
-           ((value & UINT32_C(0x00ff0000)) >> 8) | ((value & UINT32_C(0xff000000)) >> 24);
-#endif
-}
-
-static inline uint64_t xrt_freestanding_bswap64(uint64_t value) {
-#if defined(__GNUC__) || defined(__clang__)
-    return __builtin_bswap64(value);
-#else
-    return ((value & UINT64_C(0x00000000000000ff)) << 56) |
-           ((value & UINT64_C(0x000000000000ff00)) << 40) |
-           ((value & UINT64_C(0x0000000000ff0000)) << 24) |
-           ((value & UINT64_C(0x00000000ff000000)) << 8) |
-           ((value & UINT64_C(0x000000ff00000000)) >> 8) |
-           ((value & UINT64_C(0x0000ff0000000000)) >> 24) |
-           ((value & UINT64_C(0x00ff000000000000)) >> 40) |
-           ((value & UINT64_C(0xff00000000000000)) >> 56);
-#endif
-}
-
-static inline uint16_t xr_array_core_bytes_load_u16(const void *data, int64_t length,
-                                                    uint8_t elem_type, int64_t offset,
-                                                    int64_t endian, bool *ok) {
-    bool valid = data && xrt_freestanding_bytes_range_ok(length, elem_type, offset, 2);
-    if (ok)
-        *ok = valid;
-    if (!valid)
-        return 0;
-    uint16_t value = 0;
-    memcpy(&value, (const uint8_t *) data + offset, sizeof(value));
-    return xrt_freestanding_endian_matches_host(endian) ? value : xrt_freestanding_bswap16(value);
-}
-
-static inline uint32_t xr_array_core_bytes_load_u32(const void *data, int64_t length,
-                                                    uint8_t elem_type, int64_t offset,
-                                                    int64_t endian, bool *ok) {
-    bool valid = data && xrt_freestanding_bytes_range_ok(length, elem_type, offset, 4);
-    if (ok)
-        *ok = valid;
-    if (!valid)
-        return 0;
-    uint32_t value = 0;
-    memcpy(&value, (const uint8_t *) data + offset, sizeof(value));
-    return xrt_freestanding_endian_matches_host(endian) ? value : xrt_freestanding_bswap32(value);
-}
-
-static inline uint64_t xr_array_core_bytes_load_u64(const void *data, int64_t length,
-                                                    uint8_t elem_type, int64_t offset,
-                                                    int64_t endian, bool *ok) {
-    bool valid = data && xrt_freestanding_bytes_range_ok(length, elem_type, offset, 8);
-    if (ok)
-        *ok = valid;
-    if (!valid)
-        return 0;
-    uint64_t value = 0;
-    memcpy(&value, (const uint8_t *) data + offset, sizeof(value));
-    return xrt_freestanding_endian_matches_host(endian) ? value : xrt_freestanding_bswap64(value);
-}
-
-static inline float xr_array_core_bytes_load_f32(const void *data, int64_t length,
-                                                 uint8_t elem_type, int64_t offset, int64_t endian,
-                                                 bool *ok) {
-    uint32_t bits = xr_array_core_bytes_load_u32(data, length, elem_type, offset, endian, ok);
-    float value = 0.0f;
-    memcpy(&value, &bits, sizeof(value));
-    return value;
-}
-
-static inline double xr_array_core_bytes_load_f64(const void *data, int64_t length,
-                                                  uint8_t elem_type, int64_t offset, int64_t endian,
-                                                  bool *ok) {
-    uint64_t bits = xr_array_core_bytes_load_u64(data, length, elem_type, offset, endian, ok);
-    double value = 0.0;
-    memcpy(&value, &bits, sizeof(value));
-    return value;
-}
-
-static inline uint16_t xr_array_core_bytes_load_u16_le(const void *data, int64_t length,
-                                                       uint8_t elem_type, int64_t offset,
-                                                       bool *ok) {
-    return xr_array_core_bytes_load_u16(data, length, elem_type, offset, XR_ENDIAN_LE, ok);
-}
-
-static inline uint32_t xr_array_core_bytes_load_u32_le(const void *data, int64_t length,
-                                                       uint8_t elem_type, int64_t offset,
-                                                       bool *ok) {
-    return xr_array_core_bytes_load_u32(data, length, elem_type, offset, XR_ENDIAN_LE, ok);
-}
-
-static inline uint64_t xr_array_core_bytes_load_u64_le(const void *data, int64_t length,
-                                                       uint8_t elem_type, int64_t offset,
-                                                       bool *ok) {
-    return xr_array_core_bytes_load_u64(data, length, elem_type, offset, XR_ENDIAN_LE, ok);
-}
-
-static inline bool xr_array_core_bytes_store_u16(void *data, int64_t length, uint8_t elem_type,
-                                                 int64_t offset, uint16_t value, int64_t endian) {
-    if (!data || !xrt_freestanding_bytes_range_ok(length, elem_type, offset, 2))
-        return false;
-    if (!xrt_freestanding_endian_matches_host(endian))
-        value = xrt_freestanding_bswap16(value);
-    memcpy((uint8_t *) data + offset, &value, sizeof(value));
-    return true;
-}
-
-static inline bool xr_array_core_bytes_store_u32(void *data, int64_t length, uint8_t elem_type,
-                                                 int64_t offset, uint32_t value, int64_t endian) {
-    if (!data || !xrt_freestanding_bytes_range_ok(length, elem_type, offset, 4))
-        return false;
-    if (!xrt_freestanding_endian_matches_host(endian))
-        value = xrt_freestanding_bswap32(value);
-    memcpy((uint8_t *) data + offset, &value, sizeof(value));
-    return true;
-}
-
-static inline bool xr_array_core_bytes_store_u64(void *data, int64_t length, uint8_t elem_type,
-                                                 int64_t offset, uint64_t value, int64_t endian) {
-    if (!data || !xrt_freestanding_bytes_range_ok(length, elem_type, offset, 8))
-        return false;
-    if (!xrt_freestanding_endian_matches_host(endian))
-        value = xrt_freestanding_bswap64(value);
-    memcpy((uint8_t *) data + offset, &value, sizeof(value));
-    return true;
-}
-
-static inline bool xr_array_core_bytes_store_f32(void *data, int64_t length, uint8_t elem_type,
-                                                 int64_t offset, float value, int64_t endian) {
-    uint32_t bits = 0;
-    memcpy(&bits, &value, sizeof(bits));
-    return xr_array_core_bytes_store_u32(data, length, elem_type, offset, bits, endian);
-}
-
-static inline bool xr_array_core_bytes_store_f64(void *data, int64_t length, uint8_t elem_type,
-                                                 int64_t offset, double value, int64_t endian) {
-    uint64_t bits = 0;
-    memcpy(&bits, &value, sizeof(bits));
-    return xr_array_core_bytes_store_u64(data, length, elem_type, offset, bits, endian);
-}
-
 static inline int64_t xrt_byte_slice_load_u16_unchecked_raw(xr_span_t span, int64_t off,
                                                             int64_t endian) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    uint16_t value = xr_raw_load_u16_unaligned(ptr);
-    if (!xrt_freestanding_endian_matches_host(endian))
-        value = xrt_freestanding_bswap16(value);
-    return (int64_t) value;
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u16_unchecked(span.data, off, endian));
 }
 
 static inline int64_t xrt_byte_slice_load_u32_unchecked_raw(xr_span_t span, int64_t off,
                                                             int64_t endian) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    uint32_t value = xr_raw_load_u32_unaligned(ptr);
-    if (!xrt_freestanding_endian_matches_host(endian))
-        value = xrt_freestanding_bswap32(value);
-    return (int64_t) value;
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u32_unchecked(span.data, off, endian));
 }
 
 static inline int64_t xrt_byte_slice_load_u64_unchecked_raw(xr_span_t span, int64_t off,
                                                             int64_t endian) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    uint64_t value = xr_raw_load_u64_unaligned(ptr);
-    if (!xrt_freestanding_endian_matches_host(endian))
-        value = xrt_freestanding_bswap64(value);
-    return (int64_t) value;
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u64_unchecked(span.data, off, endian));
 }
 
 static inline void xrt_byte_slice_store_u16_unchecked_raw(xr_span_t span, int64_t off,
                                                           uint16_t value, int64_t endian) {
-    if (!xrt_freestanding_endian_matches_host(endian))
-        value = xrt_freestanding_bswap16(value);
-    xr_raw_store_u16_unaligned((uint8_t *) span.data + off, value);
+    xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_store_u16_unchecked(span.data, off, value, endian));
 }
 
 static inline void xrt_byte_slice_store_u32_unchecked_raw(xr_span_t span, int64_t off,
                                                           uint32_t value, int64_t endian) {
-    if (!xrt_freestanding_endian_matches_host(endian))
-        value = xrt_freestanding_bswap32(value);
-    xr_raw_store_u32_unaligned((uint8_t *) span.data + off, value);
+    xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_store_u32_unchecked(span.data, off, value, endian));
 }
 
 static inline void xrt_byte_slice_store_u64_unchecked_raw(xr_span_t span, int64_t off,
                                                           uint64_t value, int64_t endian) {
-    if (!xrt_freestanding_endian_matches_host(endian))
-        value = xrt_freestanding_bswap64(value);
-    xr_raw_store_u64_unaligned((uint8_t *) span.data + off, value);
+    xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_store_u64_unchecked(span.data, off, value, endian));
 }
 
 static inline int64_t xrt_byte_slice_load_u16_le_unchecked_raw(xr_span_t span, int64_t off) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    return (int64_t) xr_raw_u16_from_le(xr_raw_load_u16_unaligned(ptr));
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u16_unchecked(span.data, off, XR_ENDIAN_LE));
 }
 
 static inline int64_t xrt_byte_slice_load_u32_le_unchecked_raw(xr_span_t span, int64_t off) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    return (int64_t) xr_raw_u32_from_le(xr_raw_load_u32_unaligned(ptr));
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u32_unchecked(span.data, off, XR_ENDIAN_LE));
 }
 
 static inline int64_t xrt_byte_slice_load_u64_le_unchecked_raw(xr_span_t span, int64_t off) {
-    const uint8_t *ptr = (const uint8_t *) span.data + off;
-    return (int64_t) xr_raw_u64_from_le(xr_raw_load_u64_unaligned(ptr));
+    return (int64_t) xrt_byte_slice_scalar_eval(
+        xr_byte_slice_scalar_load_u64_unchecked(span.data, off, XR_ENDIAN_LE));
 }
 
 static inline int64_t xr_value_to_int64_coerce(XrValue v) {

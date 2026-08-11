@@ -1,0 +1,20 @@
+fn byteSliceScalarOwner() -> f64 {
+    var storage: [byte; 32] = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+    ]
+    var view: Slice<byte> = storage[:]
+    view.store<u16>(0, 0x1234, Endian.BE)
+    view.store<u32>(2, 0x89abcdef, Endian.LE)
+    view.store<u64>(8, 0x12345678, Endian.BE)
+    view.store<f32>(16, 1.5, Endian.LE)
+    view.store<f64>(24, -2.25, Endian.BE)
+    var a = view.load<u16>(0, Endian.BE)
+    var b = view.load<u32>(2, Endian.LE)
+    var c = view.load<u64>(8, Endian.BE)
+    var d = view.load<f32>(16, Endian.LE)
+    var e = view.load<f64>(24, Endian.BE)
+    return (a as f64) + (b as f64) + (c as f64) + (d as f64) + e
+}

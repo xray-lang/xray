@@ -568,6 +568,58 @@ TEST(array_core_bytes_loads_little_endian_and_rejects_invalid_ranges) {
     ASSERT_FALSE(ok);
     ASSERT_EQ_UINT(xr_array_core_bytes_load_u32_le(NULL, 8, XR_ELEM_U8, 0, &ok), 0u);
     ASSERT_FALSE(ok);
+
+    ASSERT_TRUE(xr_semantic_owner_has_consumer(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO),
+                  "xrt_byte_slice_scalar_eval");
+
+    uint8_t roundtrip[24] = {0};
+    ASSERT_TRUE(XR_BYTE_SLICE_SCALAR_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,
+        xr_array_core_bytes_store_u16(roundtrip, 24, XR_ELEM_U8, 0, UINT16_C(0x1234),
+                                      XR_ENDIAN_BE)));
+    ASSERT_TRUE(XR_BYTE_SLICE_SCALAR_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,
+        xr_array_core_bytes_store_u32(roundtrip, 24, XR_ELEM_U8, 2, UINT32_C(0x89abcdef),
+                                      XR_ENDIAN_LE)));
+    ASSERT_TRUE(XR_BYTE_SLICE_SCALAR_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO, XR_SEM_CONSUMER_VM,
+        xr_array_core_bytes_store_u64(roundtrip, 24, XR_ELEM_U8, 6,
+                                      UINT64_C(0xfedcba9876543210), XR_ENDIAN_BE)));
+    ASSERT_EQ_INT(roundtrip[0], 0x12);
+    ASSERT_EQ_INT(roundtrip[1], 0x34);
+    ASSERT_EQ_UINT(xr_array_core_bytes_load_u16(roundtrip, 24, XR_ELEM_U8, 0, XR_ENDIAN_BE, &ok),
+                   UINT16_C(0x1234));
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_UINT(xr_array_core_bytes_load_u32(roundtrip, 24, XR_ELEM_U8, 2, XR_ENDIAN_LE, &ok),
+                   UINT32_C(0x89abcdef));
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_UINT(xr_array_core_bytes_load_u64(roundtrip, 24, XR_ELEM_U8, 6, XR_ENDIAN_BE, &ok),
+                   UINT64_C(0xfedcba9876543210));
+    ASSERT_TRUE(ok);
+
+    const uint32_t f32_nan_bits = UINT32_C(0x7fc12345);
+    const uint64_t f64_nan_bits = UINT64_C(0x7ff8123456789abc);
+    ASSERT_TRUE(xr_array_core_bytes_store_f32(
+        roundtrip, 24, XR_ELEM_U8, 0, xr_array_core_f32_from_bits(f32_nan_bits), XR_ENDIAN_BE));
+    ASSERT_TRUE(xr_array_core_bytes_store_f64(
+        roundtrip, 24, XR_ELEM_U8, 8, xr_array_core_f64_from_bits(f64_nan_bits), XR_ENDIAN_LE));
+    ASSERT_EQ_UINT(xr_array_core_f32_to_bits(xr_array_core_bytes_load_f32(
+                       roundtrip, 24, XR_ELEM_U8, 0, XR_ENDIAN_BE, &ok)),
+                   f32_nan_bits);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_UINT(xr_array_core_f64_to_bits(xr_array_core_bytes_load_f64(
+                       roundtrip, 24, XR_ELEM_U8, 8, XR_ENDIAN_LE, &ok)),
+                   f64_nan_bits);
+    ASSERT_TRUE(ok);
+    ASSERT_FALSE(xr_array_core_bytes_store_u64(roundtrip, 24, XR_ELEM_U8, 17, 0, XR_ENDIAN_LE));
 }
 
 TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules) {
