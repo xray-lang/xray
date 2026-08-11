@@ -1,3 +1,13 @@
 import { baselineValue } from "./helper"
 
-print(baselineValue(41))
+fn workload(iterations: int) -> int {
+    var result = 0
+    var index = 0
+    while (index < iterations) {
+        result = result + 1
+        index = index + 1
+    }
+    return result
+}
+
+print(baselineValue(workload(1000000)))

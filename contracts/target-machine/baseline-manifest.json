@@ -103,16 +103,16 @@
   "performance": {
     "logical_cpu": 0,
     "fixture": {
-      "base_stdout": "42\n",
+      "base_stdout": "1000001\n",
       "directory": "tests/benchmarks/target-machine/source_run",
       "edit_file": "helper.xr",
       "edited_source": "helper.edited.txt",
-      "edited_stdout": "43\n",
+      "edited_stdout": "1000002\n",
       "entry": "main.xr",
       "files": [
         {
           "path": "main.xr",
-          "sha256": "766f115bc2b67f5f29c3049e3117c255ea4f3e714d3646c6c2a49a8e06e26e3d"
+          "sha256": "ab5ebc43d7c39edc5e2d3c6cee282e4f103e411b52006d21eef8f4e65e4e1b52"
         },
         {
           "path": "helper.xr",
