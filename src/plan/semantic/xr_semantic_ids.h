@@ -12,21 +12,12 @@
 #define XR_SEMANTIC_IDS_H
 
 #include "../../base/xdefs.h"
+#include "../../base/xstable_id.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #define XR_SEMANTIC_SCHEMA_VERSION UINT32_C(8)
-#define XR_STABLE_ID_BYTES 16
-#define XR_FINGERPRINT_BYTES 32
-
-typedef struct XrStableId {
-    uint8_t bytes[XR_STABLE_ID_BYTES];
-} XrStableId;
-
-typedef struct XrFingerprint {
-    uint8_t bytes[XR_FINGERPRINT_BYTES];
-} XrFingerprint;
 
 XR_FUNC bool xr_stable_id_from_key(const char *canonical_key, XrStableId *id,
                                    XrFingerprint *key_digest);

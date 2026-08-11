@@ -224,6 +224,16 @@ CONTRACT_SPECS = (
             "tests/target-machine/phase0/negative/manifest.toml",
         ),
     ),
+    ContractSpec(
+        "runtime-abi-foundation.md",
+        (
+            "src/base/xstable_id.h",
+            "src/plan/semantic/xr_semantic_ids.h",
+            "src/runtime/abi/xr_runtime_descriptor.h",
+            "src/runtime/abi/xr_runtime_descriptor.c",
+            "tests/unit/runtime/test_runtime_descriptor.c",
+        ),
+    ),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")
