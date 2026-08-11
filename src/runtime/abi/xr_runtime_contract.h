@@ -17,6 +17,7 @@
 #define XR_RUNTIME_CONTRACT_H
 
 #include "xr_runtime_descriptor.h"
+#include "xr_target_runtime_profile.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -28,6 +29,7 @@
 #define XR_RUNTIME_ABI_MAX_ENUM_VALUES 32
 #define XR_RUNTIME_ABI_MAX_PROVIDER_OPERATIONS 32
 #define XR_RUNTIME_ABI_MAX_PROVIDERS 16
+#define XR_TARGET_PROVIDER_CALL_ABI_MAX_PARAMETERS 8
 
 typedef enum XrRuntimeEndian {
     XR_RUNTIME_ENDIAN_INVALID = 0,
@@ -396,29 +398,6 @@ typedef struct XrRuntimeAbiContract {
     uint64_t reserved[2];
 } XrRuntimeAbiContract;
 
-typedef enum XrTargetRuntimeProfile {
-    XR_TARGET_RUNTIME_PROFILE_INVALID = 0,
-    XR_TARGET_RUNTIME_PROFILE_HOSTED = 1,
-    XR_TARGET_RUNTIME_PROFILE_FREESTANDING = 2,
-} XrTargetRuntimeProfile;
-
-typedef enum XrTargetProviderKind {
-    XR_TARGET_PROVIDER_INVALID = 0,
-    XR_TARGET_PROVIDER_ALLOCATOR = 1,
-    XR_TARGET_PROVIDER_PANIC = 2,
-    XR_TARGET_PROVIDER_CLOCK = 3,
-    XR_TARGET_PROVIDER_RANDOM = 4,
-    XR_TARGET_PROVIDER_SCHEDULER = 5,
-    XR_TARGET_PROVIDER_IO = 6,
-    XR_TARGET_PROVIDER_TLS = 7,
-    XR_TARGET_PROVIDER_FFI = 8,
-    XR_TARGET_PROVIDER_KIND_COUNT = 9,
-} XrTargetProviderKind;
-
-#define XR_TARGET_PROVIDER_MASK(kind) (UINT64_C(1) << (uint8_t) (kind))
-#define XR_TARGET_PROVIDER_MASK_ALL                                                     \
-    ((UINT64_C(1) << (uint8_t) XR_TARGET_PROVIDER_KIND_COUNT) - UINT64_C(2))
-
 typedef enum XrTargetProviderFlags {
     XR_TARGET_PROVIDER_AVAILABLE_HOSTED = UINT32_C(1) << 0,
     XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING = UINT32_C(1) << 1,
@@ -463,9 +442,65 @@ typedef enum XrTargetProviderFailureFlags {
     (XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS | XR_TARGET_PROVIDER_FAILURE_PANICS |     \
      XR_TARGET_PROVIDER_FAILURE_NO_RETURN)
 
+typedef enum XrTargetProviderCallingConvention {
+    XR_TARGET_PROVIDER_CALLING_CONVENTION_INVALID = 0,
+    XR_TARGET_PROVIDER_CALLING_CONVENTION_C = 1,
+} XrTargetProviderCallingConvention;
+
+typedef enum XrTargetProviderCallValueKind {
+    XR_TARGET_PROVIDER_CALL_VALUE_INVALID = 0,
+    XR_TARGET_PROVIDER_CALL_VALUE_VOID = 1,
+    XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER = 2,
+    XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER = 3,
+    XR_TARGET_PROVIDER_CALL_VALUE_IEEE_FLOAT = 4,
+    XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS = 5,
+    XR_TARGET_PROVIDER_CALL_VALUE_CODE_ADDRESS = 6,
+} XrTargetProviderCallValueKind;
+
+typedef enum XrTargetProviderCallOwnership {
+    XR_TARGET_PROVIDER_CALL_OWNERSHIP_INVALID = 0,
+    XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE = 1,
+    XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED = 2,
+    XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED = 3,
+    XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED = 4,
+} XrTargetProviderCallOwnership;
+
+typedef enum XrTargetProviderCallSlotFlags {
+    XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE = UINT8_C(1) << 0,
+    XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE = UINT8_C(1) << 1,
+} XrTargetProviderCallSlotFlags;
+
+#define XR_TARGET_PROVIDER_CALL_SLOT_FLAGS_ALL                                          \
+    (XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE | XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE)
+
+typedef struct XrTargetProviderCallSlotAbi {
+    uint8_t value_kind;
+    uint8_t width;
+    uint8_t alignment;
+    uint8_t ownership;
+    uint8_t flags;
+    uint8_t reserved8[3];
+    uint64_t reserved64;
+} XrTargetProviderCallSlotAbi;
+
+typedef struct XrTargetProviderCallAbiContract {
+    uint32_t schema_version;
+    uint16_t parameter_count;
+    uint8_t calling_convention;
+    uint8_t target_endian;
+    uint8_t pointer_width;
+    uint8_t pointer_alignment;
+    uint8_t variadic;
+    uint8_t reserved8;
+    uint32_t reserved32;
+    XrTargetProviderCallSlotAbi result;
+    XrTargetProviderCallSlotAbi parameters[XR_TARGET_PROVIDER_CALL_ABI_MAX_PARAMETERS];
+    uint64_t reserved[2];
+} XrTargetProviderCallAbiContract;
+
 typedef struct XrTargetProviderOperationContract {
     XrStableId stable_id;
-    XrFingerprint call_abi_fingerprint;
+    XrTargetProviderCallAbiContract call_abi;
     uint32_t effect_flags;
     uint32_t lifetime_flags;
     uint32_t failure_flags;
@@ -501,6 +536,8 @@ XR_FUNC XrRuntimeAbiStatus xr_runtime_object_header_abi_fingerprint(
     const XrRuntimeObjectHeaderAbi *abi, XrFingerprint *out);
 XR_FUNC XrRuntimeAbiStatus xr_runtime_abi_contract_fingerprint(
     const XrRuntimeAbiContract *abi, XrFingerprint *out);
+XR_FUNC XrRuntimeAbiStatus xr_target_provider_call_abi_fingerprint(
+    const XrTargetProviderCallAbiContract *abi, XrFingerprint *out);
 XR_FUNC XrRuntimeAbiStatus xr_target_provider_set_fingerprint(
     const XrTargetProviderContract *providers, size_t provider_count,
     uint64_t *out_provider_mask, XrFingerprint *out);

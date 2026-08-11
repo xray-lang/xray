@@ -151,6 +151,10 @@ members.
 Provider selection remains a separate fingerprint boundary:
 
 ```c
+XrRuntimeAbiStatus xr_target_provider_call_abi_fingerprint(
+    const XrTargetProviderCallAbiContract *abi,
+    XrFingerprint *out);
+
 XrRuntimeAbiStatus xr_target_provider_set_fingerprint(
     const XrTargetProviderContract *providers,
     size_t provider_count,
@@ -158,18 +162,38 @@ XrRuntimeAbiStatus xr_target_provider_set_fingerprint(
     XrFingerprint *out);
 ```
 
+`XrTargetProviderCallAbiContract` is a pointer-free canonical physical call
+schema, not a digest supplied by a manifest author. It records the exact C
+calling convention, target endian, pointer width/alignment, a non-variadic
+result slot, and at most eight parameter slots. Every slot records its value
+kind, width, alignment, ownership direction, nullability, and pointee
+constness. Version one accepts void results, fixed signed/unsigned integers,
+IEEE binary32/binary64, data addresses, and code addresses. Unsupported
+aggregate or variadic provider calls fail closed until a later schema owns
+their exact classification. Unused slots and all reserved fields are zero.
+The builder validates the complete schema before publishing a derived digest;
+failure leaves the output unchanged.
+
 Each pointer-free provider contract contains the runtime profile, provider
 kind, stable provider-contract ID, ABI schema, flags, and a stable-ID-sorted
-operation table. Each operation
-contains its stable ID, call-ABI fingerprint, effects/lifetime/failure flags,
+operation table. Each operation contains its stable ID, the complete canonical
+call-ABI structure, and effects/lifetime/failure flags,
 and kind-specific facts such as allocator alignment/sized-free/zeroing/thread
 safety or panic unwind/no-return behavior. Provider kinds are strictly
 increasing and unique; the mask is derived from the records, never supplied as
 an independent assertion. Freeze rejects unknown kinds, zero identities,
-duplicate operations, zero call ABI, and missing hosted/freestanding mandatory
-providers. Function addresses, vtables, discovery order, library paths, link
-symbols, compiler objects, target strings, and file-content hashes are
-forbidden.
+duplicate operations, invalid call slots, lifetime summaries that disagree
+with slot ownership, and missing hosted/freestanding mandatory providers. The
+provider-set fingerprint serializes only verified structured call facts; it
+never accepts a caller-authored operation digest. Function addresses, vtables,
+discovery order, library paths, link symbols, compiler objects, target strings,
+and file-content hashes are forbidden.
+
+`XrTargetRuntimeProfile` and `XrTargetProviderKind` are owned only by
+`xr_target_runtime_profile.h`. Their numeric values are the artifact/runtime
+namespace itself: the random provider is kind 4, scheduler is 5, I/O is 6, TLS
+is 7, and FFI is 8. Planner or artifact headers include this owner and must not
+redeclare, alias, or numerically remap the enums.
 
 `xr_target_profile_freeze` must invoke these structured builders internally and
 store their results. It must not accept caller-authored raw
@@ -185,12 +209,13 @@ anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 7ec819570b47e2a3f01132fc729eb73f91dda65cf2d343cb9bee34ad229b4284
 anchor-sha256: src/runtime/abi/xr_runtime_descriptor.h ce4f02055de60da60e1e36e04f522508fc0259ada826b29bc39c4bcb9ee0478b
 anchor-sha256: src/runtime/abi/xr_runtime_descriptor.c 1d755ca9d0bf8d830273dbaad86c2390ed74c35464913aba6127e0a1c9b4e423
-anchor-sha256: src/runtime/abi/xr_runtime_contract.h aae1d9df44c1635c09cd2db86583a9695f5d324ce697cd45d483f7546505ba1a
-anchor-sha256: src/runtime/abi/xr_runtime_contract.c 0cd355ffce40eb306a92d5575b5c3b1bd35ab892a8dbd55c7bb95f3604bd1fd3
+anchor-sha256: src/runtime/abi/xr_target_runtime_profile.h 34fd79b0f080f8f7a6b988dd9205875cbdf224c2a6c506a925c9b9d291cf4e6f
+anchor-sha256: src/runtime/abi/xr_runtime_contract.h c8198d61a6bd930acfa65ff0da095083b8aa9d33d1f07f518e31a6d8c79e24a0
+anchor-sha256: src/runtime/abi/xr_runtime_contract.c 380df67221fc7bcc168c2ff1acf599b7fb9f065a7f2d128223ef8b114fd158f0
 anchor-sha256: src/runtime/abi/xr_runtime_object_header.h e2bcd9cfcbb3cc9d06d0ee83bc112a2cde2813f8e899268aecba6c5fe4aad41f
 anchor-sha256: src/runtime/abi/xr_runtime_object_header.c 59fbac2c2fd4a195f2be2980217036636db1fdeadcd05993e5f6e528bfbbf307
 anchor-sha256: tests/unit/runtime/test_runtime_descriptor.c 76e3c93da9b9acc28d14fd83bc9d31504e54082ebf9349c517f3fac897487e46
-anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 13ec8fedc019e19a893ccbf779dd45800fb859165dae8afde0a1777a70415a28
+anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c cf888c65411caf538761f2ef7b0c1220feb5accf96a54d000860f65870c9dabc
 anchor-sha256: tests/unit/runtime/test_runtime_object_header.c 05f3c1bd1e157e010cdddac4fb827294c49ca08599f7b8d52f2490cc0efaea95
 anchor-sha256: tests/unit/CMakeLists.txt b5862348fc3f536cb247125739a3a07b73f96f15d799916c73b6c2ab92360325
 anchor-sha256: scripts/check_runtime_object_header_boundary.py 66e28cadaf5c456eca44528ae8ccb0926089d4ef603e6c06ca77113ddd0a7282

@@ -14,6 +14,17 @@
 #include <stdio.h>
 #include <string.h>
 
+_Static_assert(XR_TARGET_RUNTIME_PROFILE_HOSTED == 1,
+               "hosted runtime profile encoding is canonical");
+_Static_assert(XR_TARGET_RUNTIME_PROFILE_FREESTANDING == 2,
+               "freestanding runtime profile encoding is canonical");
+_Static_assert(XR_TARGET_PROVIDER_RANDOM == 4,
+               "random provider owns its canonical numeric slot");
+_Static_assert(XR_TARGET_PROVIDER_SCHEDULER == 5,
+               "scheduler provider follows random without remapping");
+_Static_assert(XR_TARGET_PROVIDER_FFI == 8,
+               "FFI provider encoding is canonical");
+
 static int failures;
 
 #define CHECK(condition, message)                                                         \
@@ -32,7 +43,7 @@ static XrStableId make_id(uint8_t seed) {
     return id;
 }
 
-static XrFingerprint make_fingerprint(uint8_t seed) {
+static XrFingerprint sentinel_fingerprint(uint8_t seed) {
     XrFingerprint fingerprint = {{0}};
     for (size_t i = 0; i < sizeof(fingerprint.bytes); i++)
         fingerprint.bytes[i] = (uint8_t) (seed + i);
@@ -426,23 +437,75 @@ static XrRuntimeAbiContract make_runtime_abi(void) {
     return abi;
 }
 
-static XrTargetProviderOperationContract make_operation(uint8_t id_seed, uint8_t fp_seed,
-                                                        uint32_t effects,
-                                                        uint32_t lifetime,
-                                                        uint32_t failures) {
+static XrTargetProviderCallSlotAbi make_call_slot(uint8_t value_kind, uint8_t width,
+                                                  uint8_t alignment,
+                                                  uint8_t ownership, uint8_t flags) {
+    XrTargetProviderCallSlotAbi slot = {
+        .value_kind = value_kind,
+        .width = width,
+        .alignment = alignment,
+        .ownership = ownership,
+        .flags = flags,
+    };
+    return slot;
+}
+
+static XrTargetProviderCallAbiContract make_call_abi(
+    XrTargetProviderCallSlotAbi result,
+    const XrTargetProviderCallSlotAbi *parameters, uint16_t parameter_count) {
+    XrTargetProviderCallAbiContract abi = {
+        .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .parameter_count = parameter_count,
+        .calling_convention = XR_TARGET_PROVIDER_CALLING_CONVENTION_C,
+        .target_endian = XR_RUNTIME_ENDIAN_LITTLE,
+        .pointer_width = 8,
+        .pointer_alignment = 8,
+        .result = result,
+    };
+    for (size_t i = 0; i < parameter_count; i++)
+        abi.parameters[i] = parameters[i];
+    return abi;
+}
+
+static XrTargetProviderOperationContract make_operation(
+    uint8_t id_seed, XrTargetProviderCallAbiContract call_abi, uint32_t effects,
+    uint32_t lifetime, uint32_t failures) {
     XrTargetProviderOperationContract operation = {
         .stable_id = {{0}},
-        .call_abi_fingerprint = {{0}},
+        .call_abi = call_abi,
         .effect_flags = effects,
         .lifetime_flags = lifetime,
         .failure_flags = failures,
     };
     operation.stable_id = make_id(id_seed);
-    operation.call_abi_fingerprint = make_fingerprint(fp_seed);
     return operation;
 }
 
 static void make_providers(XrTargetProviderContract providers[2]) {
+    XrTargetProviderCallSlotAbi void_result = make_call_slot(
+        XR_TARGET_PROVIDER_CALL_VALUE_VOID, 0, 0,
+        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+    XrTargetProviderCallSlotAbi usize_slot = make_call_slot(
+        XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, 8, 8,
+        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+    XrTargetProviderCallSlotAbi allocated_result = make_call_slot(
+        XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, 8, 8,
+        XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED,
+        XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE);
+    XrTargetProviderCallSlotAbi allocate_parameters[2] = {usize_slot, usize_slot};
+    XrTargetProviderCallSlotAbi free_parameters[3] = {
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, 8, 8,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED,
+                       XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE),
+        usize_slot,
+        usize_slot,
+    };
+    XrTargetProviderCallSlotAbi panic_parameters[2] = {
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, 8, 8,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+                       XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE),
+        usize_slot,
+    };
     memset(providers, 0, 2 * sizeof(providers[0]));
     providers[0] = (XrTargetProviderContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
@@ -459,11 +522,13 @@ static void make_providers(XrTargetProviderContract providers[2]) {
     };
     providers[0].contract_id = make_id(200);
     providers[0].operations[0] = make_operation(
-        10, 1, XR_TARGET_PROVIDER_EFFECT_ALLOCATES,
+        10, make_call_abi(allocated_result, allocate_parameters, 2),
+        XR_TARGET_PROVIDER_EFFECT_ALLOCATES,
         XR_TARGET_PROVIDER_LIFETIME_RETURNS_OWNED,
         XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS);
     providers[0].operations[1] = make_operation(
-        11, 2, XR_TARGET_PROVIDER_EFFECT_DEALLOCATES,
+        11, make_call_abi(void_result, free_parameters, 3),
+        XR_TARGET_PROVIDER_EFFECT_DEALLOCATES,
         XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED, 0);
 
     providers[1] = (XrTargetProviderContract) {
@@ -478,7 +543,8 @@ static void make_providers(XrTargetProviderContract providers[2]) {
     };
     providers[1].contract_id = make_id(201);
     providers[1].operations[0] = make_operation(
-        20, 3, XR_TARGET_PROVIDER_EFFECT_PANICS, 0,
+        20, make_call_abi(void_result, panic_parameters, 2),
+        XR_TARGET_PROVIDER_EFFECT_PANICS, XR_TARGET_PROVIDER_LIFETIME_BORROWS,
         XR_TARGET_PROVIDER_FAILURE_NO_RETURN);
 }
 
@@ -507,7 +573,7 @@ static void test_object_header_known_answer_and_mutation(void) {
               !fingerprint_equal(fingerprint, changed),
           "valid object-kind registry mutation changes the fingerprint");
 
-    XrFingerprint untouched = make_fingerprint(230);
+    XrFingerprint untouched = sentinel_fingerprint(230);
     changed = untouched;
     mutated = abi;
     mutated.fields[2].offset = 4;
@@ -624,7 +690,7 @@ static void test_runtime_known_answer_and_mutation(void) {
               !fingerprint_equal(fingerprint, changed),
           "valid dynamic-tag mutation changes the whole-runtime fingerprint");
 
-    XrFingerprint untouched = make_fingerprint(231);
+    XrFingerprint untouched = sentinel_fingerprint(231);
     changed = untouched;
     mutated = abi;
     mutated.dynamic_value.fields[1].offset = 0;
@@ -723,6 +789,74 @@ static void test_runtime_known_answer_and_mutation(void) {
           "unknown checked-arithmetic policy is rejected");
 }
 
+static void test_provider_call_abi_known_answer_and_mutation(void) {
+    XrTargetProviderContract providers[2];
+    make_providers(providers);
+    XrTargetProviderCallAbiContract abi = providers[0].operations[0].call_abi;
+    XrFingerprint fingerprint;
+    CHECK(xr_target_provider_call_abi_fingerprint(&abi, &fingerprint) ==
+              XR_RUNTIME_ABI_OK,
+          "structured provider call ABI fingerprints");
+    static const uint8_t expected[XR_FINGERPRINT_BYTES] = {
+        0x9f, 0x49, 0xf6, 0x68, 0x04, 0xb1, 0x62, 0x8e,
+        0xfb, 0xd5, 0x5a, 0x4b, 0xcb, 0x68, 0x6b, 0xb9,
+        0x26, 0x8a, 0x33, 0xe3, 0x7e, 0xe7, 0xc1, 0xc8,
+        0x94, 0x7c, 0x25, 0xac, 0x28, 0xd3, 0x40, 0x70,
+    };
+    if (memcmp(fingerprint.bytes, expected, sizeof(expected)) != 0)
+        print_fingerprint("provider call ABI fingerprint", fingerprint);
+    CHECK(memcmp(fingerprint.bytes, expected, sizeof(expected)) == 0,
+          "provider call ABI fingerprint matches the frozen known answer");
+
+    XrTargetProviderCallAbiContract mutated = abi;
+    mutated.parameters[0].value_kind = XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER;
+    XrFingerprint changed;
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
+                  XR_RUNTIME_ABI_OK &&
+              !fingerprint_equal(fingerprint, changed),
+          "valid structured call ABI mutation changes its fingerprint");
+
+    XrFingerprint untouched = sentinel_fingerprint(232);
+    changed = untouched;
+    mutated = abi;
+    mutated.result.alignment = 4;
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
+                  XR_RUNTIME_ABI_INVALID_SHAPE &&
+              fingerprint_equal(changed, untouched),
+          "pointer layout mismatch fails without publishing a call ABI digest");
+    mutated = abi;
+    mutated.parameter_count = XR_TARGET_PROVIDER_CALL_ABI_MAX_PARAMETERS + 1;
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_BUDGET_EXCEEDED,
+          "call ABI parameter budget is checked before reading slots");
+    mutated = abi;
+    mutated.parameters[abi.parameter_count] = mutated.parameters[0];
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_POLICY,
+          "unused call ABI parameter slots must be zero");
+    mutated = abi;
+    mutated.parameters[0].ownership =
+        XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED;
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_SHAPE,
+          "parameter ownership direction is fail closed");
+    mutated = abi;
+    mutated.calling_convention = XR_TARGET_PROVIDER_CALLING_CONVENTION_INVALID;
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_SHAPE,
+          "unknown provider calling convention is rejected");
+    mutated = abi;
+    mutated.variadic = 1;
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_SHAPE,
+          "variadic provider calls are outside the canonical ABI");
+    mutated = abi;
+    mutated.result.reserved64 = 1;
+    CHECK(xr_target_provider_call_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_POLICY,
+          "call ABI reserved fields must be zero");
+}
+
 static void test_provider_set_known_answer_and_mutation(void) {
     XrTargetProviderContract providers[2];
     make_providers(providers);
@@ -736,10 +870,10 @@ static void test_provider_set_known_answer_and_mutation(void) {
     CHECK(provider_mask == expected_mask,
           "provider mask is derived exactly from verified provider kinds");
     static const uint8_t expected[XR_FINGERPRINT_BYTES] = {
-        0x13, 0xe0, 0x62, 0xa1, 0x30, 0xd9, 0x65, 0x70,
-        0xc5, 0xa6, 0x46, 0x68, 0x63, 0xa7, 0x0f, 0x4a,
-        0xe3, 0x4e, 0x89, 0x0d, 0xfd, 0xad, 0x20, 0x0b,
-        0x98, 0xfc, 0xb4, 0xa4, 0xac, 0x89, 0x42, 0x71,
+        0x31, 0x42, 0xfb, 0xdb, 0x71, 0x05, 0xd9, 0xda,
+        0x10, 0x29, 0xf2, 0x5f, 0x02, 0xcb, 0xd4, 0xc7,
+        0x1c, 0x79, 0xa3, 0xce, 0x2f, 0x0c, 0x9e, 0x87,
+        0x0e, 0xba, 0xff, 0x90, 0xf7, 0x55, 0x81, 0x2f,
     };
     if (memcmp(fingerprint.bytes, expected, sizeof(expected)) != 0)
         print_fingerprint("provider-set fingerprint", fingerprint);
@@ -763,15 +897,16 @@ static void test_provider_set_known_answer_and_mutation(void) {
 
     XrTargetProviderContract mutated[2];
     memcpy(mutated, providers, sizeof(mutated));
-    mutated[0].operations[0].call_abi_fingerprint = make_fingerprint(9);
+    mutated[0].operations[0].call_abi.parameters[0].value_kind =
+        XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER;
     XrFingerprint changed;
     uint64_t changed_mask = 0;
     CHECK(xr_target_provider_set_fingerprint(mutated, 2, &changed_mask, &changed) ==
                   XR_RUNTIME_ABI_OK &&
               changed_mask == expected_mask && !fingerprint_equal(fingerprint, changed),
-          "valid operation ABI mutation changes only the provider-set fingerprint");
+          "valid operation call ABI mutation changes the provider-set fingerprint");
 
-    XrFingerprint untouched = make_fingerprint(232);
+    XrFingerprint untouched = sentinel_fingerprint(233);
     uint64_t untouched_mask = UINT64_C(0xfeed);
     changed = untouched;
     changed_mask = untouched_mask;
@@ -802,11 +937,16 @@ static void test_provider_set_known_answer_and_mutation(void) {
               XR_RUNTIME_ABI_INVALID_ORDER,
           "provider operations are stable-ID sorted");
     memcpy(mutated, providers, sizeof(mutated));
-    memset(&mutated[0].operations[0].call_abi_fingerprint, 0,
-           sizeof(mutated[0].operations[0].call_abi_fingerprint));
+    memset(&mutated[0].operations[0].call_abi, 0,
+           sizeof(mutated[0].operations[0].call_abi));
+    CHECK(xr_target_provider_set_fingerprint(mutated, 2, &changed_mask, &changed) ==
+              XR_RUNTIME_ABI_INVALID_SCHEMA,
+          "missing structured operation call ABI is rejected");
+    memcpy(mutated, providers, sizeof(mutated));
+    mutated[0].operations[0].lifetime_flags = XR_TARGET_PROVIDER_LIFETIME_BORROWS;
     CHECK(xr_target_provider_set_fingerprint(mutated, 2, &changed_mask, &changed) ==
               XR_RUNTIME_ABI_INVALID_PROVIDER_SET,
-          "zero operation call ABI is rejected");
+          "operation lifetime summary must equal its structured call ABI");
     memcpy(mutated, providers, sizeof(mutated));
     mutated[0].operations[2].reserved64 = 1;
     CHECK(xr_target_provider_set_fingerprint(mutated, 2, &changed_mask, &changed) ==
@@ -847,6 +987,7 @@ static void test_provider_set_known_answer_and_mutation(void) {
 int main(void) {
     test_object_header_known_answer_and_mutation();
     test_runtime_known_answer_and_mutation();
+    test_provider_call_abi_known_answer_and_mutation();
     test_provider_set_known_answer_and_mutation();
     if (failures != 0) {
         fprintf(stderr, "%d runtime ABI contract test(s) failed\n", failures);

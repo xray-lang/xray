@@ -19,7 +19,8 @@ static const uint8_t xr_runtime_contract_domain[] = "xray-runtime-abi-v1\0";
 typedef enum XrRuntimeContractRecordKind {
     XR_RUNTIME_CONTRACT_OBJECT_HEADER = 4,
     XR_RUNTIME_CONTRACT_WHOLE_RUNTIME = 5,
-    XR_RUNTIME_CONTRACT_PROVIDER_SET = 6,
+    XR_RUNTIME_CONTRACT_PROVIDER_CALL_ABI = 6,
+    XR_RUNTIME_CONTRACT_PROVIDER_SET = 7,
 } XrRuntimeContractRecordKind;
 
 static bool bytes_are_zero(const uint8_t *bytes, size_t count) {
@@ -32,10 +33,6 @@ static bool bytes_are_zero(const uint8_t *bytes, size_t count) {
 
 static bool id_is_zero(XrStableId id) {
     return bytes_are_zero(id.bytes, sizeof(id.bytes));
-}
-
-static bool fingerprint_is_zero(XrFingerprint fingerprint) {
-    return bytes_are_zero(fingerprint.bytes, sizeof(fingerprint.bytes));
 }
 
 static int id_compare(XrStableId left, XrStableId right) {
@@ -1068,10 +1065,176 @@ XrRuntimeAbiStatus xr_runtime_abi_contract_fingerprint(
     return XR_RUNTIME_ABI_OK;
 }
 
+static bool provider_call_slot_is_zero(const XrTargetProviderCallSlotAbi *slot) {
+    return slot->value_kind == 0 && slot->width == 0 && slot->alignment == 0 &&
+           slot->ownership == 0 && slot->flags == 0 &&
+           bytes_are_zero(slot->reserved8, sizeof(slot->reserved8)) &&
+           slot->reserved64 == 0;
+}
+
+static bool provider_call_abi_is_zero(const XrTargetProviderCallAbiContract *abi) {
+    if (abi->schema_version != 0 || abi->parameter_count != 0 ||
+        abi->calling_convention != 0 || abi->target_endian != 0 ||
+        abi->pointer_width != 0 || abi->pointer_alignment != 0 || abi->variadic != 0 ||
+        abi->reserved8 != 0 || abi->reserved32 != 0 ||
+        !provider_call_slot_is_zero(&abi->result) || abi->reserved[0] != 0 ||
+        abi->reserved[1] != 0)
+        return false;
+    for (size_t i = 0; i < XR_TARGET_PROVIDER_CALL_ABI_MAX_PARAMETERS; i++) {
+        if (!provider_call_slot_is_zero(&abi->parameters[i]))
+            return false;
+    }
+    return true;
+}
+
+static XrRuntimeAbiStatus verify_provider_call_slot(
+    const XrTargetProviderCallAbiContract *abi,
+    const XrTargetProviderCallSlotAbi *slot, bool is_result,
+    uint32_t *derived_lifetime_flags) {
+    if (!bytes_are_zero(slot->reserved8, sizeof(slot->reserved8)) ||
+        slot->reserved64 != 0)
+        return XR_RUNTIME_ABI_INVALID_POLICY;
+    if ((slot->flags & ~XR_TARGET_PROVIDER_CALL_SLOT_FLAGS_ALL) != 0)
+        return XR_RUNTIME_ABI_INVALID_MASK;
+
+    switch ((XrTargetProviderCallValueKind) slot->value_kind) {
+        case XR_TARGET_PROVIDER_CALL_VALUE_VOID:
+            if (!is_result || slot->width != 0 || slot->alignment != 0 ||
+                slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE ||
+                slot->flags != 0)
+                return XR_RUNTIME_ABI_INVALID_SHAPE;
+            return XR_RUNTIME_ABI_OK;
+        case XR_TARGET_PROVIDER_CALL_VALUE_SIGNED_INTEGER:
+        case XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER:
+        case XR_TARGET_PROVIDER_CALL_VALUE_IEEE_FLOAT:
+            if (!scalar_width_valid(slot->width) ||
+                !is_power_of_two_u64(slot->alignment) ||
+                slot->alignment > slot->width ||
+                slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE ||
+                slot->flags != 0 ||
+                (slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_IEEE_FLOAT &&
+                 slot->width != 4 && slot->width != 8))
+                return XR_RUNTIME_ABI_INVALID_SHAPE;
+            return XR_RUNTIME_ABI_OK;
+        case XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS:
+        case XR_TARGET_PROVIDER_CALL_VALUE_CODE_ADDRESS:
+            if (slot->width != abi->pointer_width ||
+                slot->alignment != abi->pointer_alignment ||
+                (slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_CODE_ADDRESS &&
+                 (slot->flags & XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE) != 0))
+                return XR_RUNTIME_ABI_INVALID_SHAPE;
+            if (is_result) {
+                if (slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE &&
+                    !(slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS &&
+                      slot->ownership ==
+                          XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED))
+                    return XR_RUNTIME_ABI_INVALID_SHAPE;
+                if (slot->ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED)
+                    *derived_lifetime_flags |=
+                        XR_TARGET_PROVIDER_LIFETIME_RETURNS_OWNED;
+            } else {
+                if (slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE &&
+                    slot->ownership != XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED &&
+                    !(slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS &&
+                      slot->ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED))
+                    return XR_RUNTIME_ABI_INVALID_SHAPE;
+                if (slot->ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED)
+                    *derived_lifetime_flags |= XR_TARGET_PROVIDER_LIFETIME_BORROWS;
+                if (slot->ownership == XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED)
+                    *derived_lifetime_flags |=
+                        XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED;
+                if (slot->value_kind == XR_TARGET_PROVIDER_CALL_VALUE_CODE_ADDRESS)
+                    *derived_lifetime_flags |= XR_TARGET_PROVIDER_LIFETIME_CALLBACK;
+            }
+            return XR_RUNTIME_ABI_OK;
+        default:
+            return XR_RUNTIME_ABI_INVALID_SHAPE;
+    }
+}
+
+static XrRuntimeAbiStatus verify_provider_call_abi(
+    const XrTargetProviderCallAbiContract *abi, uint32_t *derived_lifetime_flags) {
+    if (!abi)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+    if (abi->schema_version != XR_RUNTIME_ABI_SCHEMA_VERSION)
+        return XR_RUNTIME_ABI_INVALID_SCHEMA;
+    if (abi->parameter_count > XR_TARGET_PROVIDER_CALL_ABI_MAX_PARAMETERS)
+        return XR_RUNTIME_ABI_BUDGET_EXCEEDED;
+    if (abi->calling_convention != XR_TARGET_PROVIDER_CALLING_CONVENTION_C ||
+        (abi->target_endian != XR_RUNTIME_ENDIAN_LITTLE &&
+         abi->target_endian != XR_RUNTIME_ENDIAN_BIG) ||
+        (abi->pointer_width != 4 && abi->pointer_width != 8) ||
+        !is_power_of_two_u64(abi->pointer_alignment) ||
+        abi->pointer_alignment > abi->pointer_width || abi->variadic != 0)
+        return XR_RUNTIME_ABI_INVALID_SHAPE;
+    if (abi->reserved8 != 0 || abi->reserved32 != 0 || abi->reserved[0] != 0 ||
+        abi->reserved[1] != 0)
+        return XR_RUNTIME_ABI_INVALID_POLICY;
+
+    uint32_t lifetime_flags = 0;
+    XrRuntimeAbiStatus status =
+        verify_provider_call_slot(abi, &abi->result, true, &lifetime_flags);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
+    for (size_t i = 0; i < abi->parameter_count; i++) {
+        status = verify_provider_call_slot(abi, &abi->parameters[i], false,
+                                           &lifetime_flags);
+        if (status != XR_RUNTIME_ABI_OK)
+            return status;
+    }
+    for (size_t i = abi->parameter_count;
+         i < XR_TARGET_PROVIDER_CALL_ABI_MAX_PARAMETERS; i++) {
+        if (!provider_call_slot_is_zero(&abi->parameters[i]))
+            return XR_RUNTIME_ABI_INVALID_POLICY;
+    }
+    if (derived_lifetime_flags)
+        *derived_lifetime_flags = lifetime_flags;
+    return XR_RUNTIME_ABI_OK;
+}
+
+static void hash_provider_call_slot(XrSHA256Context *ctx,
+                                    const XrTargetProviderCallSlotAbi *slot) {
+    hash_u8(ctx, slot->value_kind);
+    hash_u8(ctx, slot->width);
+    hash_u8(ctx, slot->alignment);
+    hash_u8(ctx, slot->ownership);
+    hash_u8(ctx, slot->flags);
+}
+
+static void hash_provider_call_abi(
+    XrSHA256Context *ctx, const XrTargetProviderCallAbiContract *abi) {
+    hash_u32(ctx, abi->schema_version);
+    hash_u8(ctx, abi->calling_convention);
+    hash_u8(ctx, abi->target_endian);
+    hash_u8(ctx, abi->pointer_width);
+    hash_u8(ctx, abi->pointer_alignment);
+    hash_u8(ctx, abi->variadic);
+    hash_provider_call_slot(ctx, &abi->result);
+    hash_u16(ctx, abi->parameter_count);
+    for (size_t i = 0; i < abi->parameter_count; i++)
+        hash_provider_call_slot(ctx, &abi->parameters[i]);
+}
+
+XrRuntimeAbiStatus xr_target_provider_call_abi_fingerprint(
+    const XrTargetProviderCallAbiContract *abi, XrFingerprint *out) {
+    if (!out)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+    XrRuntimeAbiStatus status = verify_provider_call_abi(abi, NULL);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
+    XrSHA256Context ctx;
+    hash_begin(&ctx, XR_RUNTIME_CONTRACT_PROVIDER_CALL_ABI);
+    hash_provider_call_abi(&ctx, abi);
+    XrFingerprint fingerprint;
+    xr_sha256_final(&ctx, fingerprint.bytes);
+    *out = fingerprint;
+    return XR_RUNTIME_ABI_OK;
+}
+
 static bool provider_operation_is_zero(
     const XrTargetProviderOperationContract *operation) {
     return id_is_zero(operation->stable_id) &&
-           fingerprint_is_zero(operation->call_abi_fingerprint) &&
+           provider_call_abi_is_zero(&operation->call_abi) &&
            operation->effect_flags == 0 && operation->lifetime_flags == 0 &&
            operation->failure_flags == 0 && operation->reserved32 == 0 &&
            operation->reserved64 == 0;
@@ -1088,12 +1251,16 @@ static XrRuntimeAbiStatus verify_provider_operations(
     uint32_t failures = 0;
     for (size_t i = 0; i < provider->operation_count; i++) {
         const XrTargetProviderOperationContract *operation = &provider->operations[i];
-        if (id_is_zero(operation->stable_id) ||
-            fingerprint_is_zero(operation->call_abi_fingerprint) ||
-            operation->effect_flags == 0 ||
+        uint32_t call_lifetime_flags = 0;
+        XrRuntimeAbiStatus call_status =
+            verify_provider_call_abi(&operation->call_abi, &call_lifetime_flags);
+        if (call_status != XR_RUNTIME_ABI_OK)
+            return call_status;
+        if (id_is_zero(operation->stable_id) || operation->effect_flags == 0 ||
             (operation->effect_flags & ~XR_TARGET_PROVIDER_EFFECT_FLAGS_ALL) != 0 ||
             (operation->lifetime_flags & ~XR_TARGET_PROVIDER_LIFETIME_FLAGS_ALL) != 0 ||
             (operation->failure_flags & ~XR_TARGET_PROVIDER_FAILURE_FLAGS_ALL) != 0 ||
+            operation->lifetime_flags != call_lifetime_flags ||
             operation->reserved32 != 0 || operation->reserved64 != 0)
             return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
         if (i != 0 && id_compare(provider->operations[i - 1].stable_id,
@@ -1222,7 +1389,7 @@ static XrRuntimeAbiStatus verify_provider_set(
 static void hash_provider_operation(
     XrSHA256Context *ctx, const XrTargetProviderOperationContract *operation) {
     hash_id(ctx, operation->stable_id);
-    hash_fingerprint(ctx, operation->call_abi_fingerprint);
+    hash_provider_call_abi(ctx, &operation->call_abi);
     hash_u32(ctx, operation->effect_flags);
     hash_u32(ctx, operation->lifetime_flags);
     hash_u32(ctx, operation->failure_flags);
