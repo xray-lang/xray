@@ -9,13 +9,32 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 10 adds a pointer-free direct-local call-target authority.
-It is emitted only when the frozen SSA callee chain independently resolves
-through exact identity copies to a closure/function binding. The record names
-the call operation and callee function by stable identity and index; it never
-copies caller-authored effects, provider spellings, symbols, pointers, or raw
-digests. Unknown, shared-slot, imported, method, and native targets remain
-absent and therefore fail closed until their own authority families exist.
+SemanticPlan schema 13 extends the pointer-free `DIRECT_LOCAL` call-target
+authority to lexical shared slots. Direct SSA callees still resolve only
+through exact identity copies to a closure/function binding. A shared callee
+must be a `GET_SHARED(slot)` whose first lexical owner, found by walking the
+frozen function-parent chain, contains exactly one `SET_SHARED(slot, value)`;
+that value must independently resolve through exact identity copies to a local
+closure binding. Multiple writes are ambiguous even when they store the same
+value, and a sibling's same-numbered slot is never evidence. In the caller's
+own function the store block must dominate the load block, with strict store
+before load order when both are in one block. A lexical-parent store is accepted
+only from canonical function index zero with no parent, in that function's
+entry block, and before every call, method call, builtin call, tail call, or
+`XI_GO` activation boundary in the block. This is the exact module-initializer
+prefix known to run before a nested function can execute. Conditional root
+stores, late root stores, and stores in any other lexical parent remain
+unavailable rather than assuming closure-creation order. The verifier rebuilds
+this relation from frozen operation, operand, function-parent, CFG-dominance,
+slot, and callable-function facts rather than trusting the builder's target row.
+When the independently proven target reaches a function with a canonical
+static suspend operation (or `XI_GO`), the same row also authorizes exactly one
+coroutine-state entity for an ordinary call. A direct tail-call edge propagates
+the target's suspendability to its caller but has no resume state of its own.
+The record never copies caller-authored
+effects, provider spellings, symbols, pointers, or raw digests. Unknown,
+multi-write, imported, method, native, and unresolved targets remain absent and
+therefore fail closed until their own authority families exist.
 Function declarations publish their immutable binding capability and lexical
 storage domain with the rest of analyzer ownership evidence. Closure lowering
 may copy those facts into SemanticPlan capture records but may not infer them

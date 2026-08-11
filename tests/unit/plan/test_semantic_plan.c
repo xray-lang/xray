@@ -280,8 +280,9 @@ static XrSemanticPlan *build_direct_local_call_target_plan(void) {
     XiBlock *root_entry = xi_block_new(root);
     XiBlock *child_entry = xi_block_new(child);
     REQUIRE(root_entry != NULL && child_entry != NULL);
+    XiValue *yield = xi_value_new(child, child_entry, XI_YIELD, &stub_int, 0);
     XiValue *child_result = xi_const_int(child, child_entry, 73, &stub_int);
-    REQUIRE(child_result != NULL);
+    REQUIRE(yield != NULL && child_result != NULL);
     xi_block_set_return(child_entry, child_result);
 
     root->children = (XiFunc **) xr_malloc(sizeof(*root->children));
@@ -302,6 +303,30 @@ static XrSemanticPlan *build_direct_local_call_target_plan(void) {
     REQUIRE(call != NULL);
     call->args[0] = alias;
     xi_block_set_return(root_entry, call);
+
+    XiCoroSuspendPoint root_point = {
+        .state_id = 1,
+        .op = call,
+        .kind = XI_CORO_SUSP_CALL,
+        .resolved_callee = child,
+    };
+    XiCoroPlan root_coro = {
+        .is_coroutine = true,
+        .nstates = 1,
+        .points = &root_point,
+    };
+    XiCoroSuspendPoint child_point = {
+        .state_id = 1,
+        .op = yield,
+        .kind = XI_CORO_SUSP_YIELD,
+    };
+    XiCoroPlan child_coro = {
+        .is_coroutine = true,
+        .nstates = 1,
+        .points = &child_point,
+    };
+    root->coro_plan = &root_coro;
+    child->coro_plan = &child_coro;
     root->stage = child->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
@@ -311,6 +336,448 @@ static XrSemanticPlan *build_direct_local_call_target_plan(void) {
         fprintf(stderr, "direct-call-target plan build failed: %s\n", error);
     REQUIRE(built && plan != NULL);
     xi_func_free(root);
+    return plan;
+}
+
+static XrSemanticPlan *build_shared_direct_call_target_plan(void) {
+    XiFunc *root = xi_func_new("shared_direct_root", &stub_int);
+    XiFunc *target = xi_func_new("shared_direct_target", &stub_int);
+    XiFunc *caller = xi_func_new("shared_direct_caller", &stub_int);
+    REQUIRE(root != NULL && target != NULL && caller != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *target_entry = xi_block_new(target);
+    XiBlock *caller_entry = xi_block_new(caller);
+    REQUIRE(root_entry != NULL && target_entry != NULL && caller_entry != NULL);
+
+    XiValue *yield = xi_value_new(target, target_entry, XI_YIELD, &stub_int, 0);
+    XiValue *target_result = xi_const_int(target, target_entry, 73, &stub_int);
+    REQUIRE(yield != NULL && target_result != NULL);
+    xi_block_set_return(target_entry, target_result);
+
+    root->children = (XiFunc **) xr_malloc(2 * sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = target;
+    root->children[1] = caller;
+    root->nchildren = root->children_cap = 2;
+    target->parent_func = root;
+    caller->parent_func = root;
+
+    XiValue *closure = xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *alias = xi_value_new(root, root_entry, XI_COPY, &stub_function, 1);
+    XiValue *store = xi_value_new(root, root_entry, XI_SET_SHARED, &stub_unit, 1);
+    XiValue *root_result = xi_const_int(root, root_entry, 1, &stub_int);
+    REQUIRE(closure != NULL && alias != NULL && store != NULL && root_result != NULL);
+    closure->aux = target;
+    alias->args[0] = closure;
+    alias->aux_int = XI_COPY_KIND_IDENTITY;
+    store->args[0] = alias;
+    store->aux_int = 7;
+    xi_block_set_return(root_entry, root_result);
+
+    XiValue *load = xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_function, 0);
+    XiValue *call = xi_value_new(caller, caller_entry, XI_CALL, &stub_int, 1);
+    REQUIRE(load != NULL && call != NULL);
+    load->aux_int = 7;
+    call->args[0] = load;
+    xi_block_set_return(caller_entry, call);
+
+    XiCoroSuspendPoint caller_point = {
+        .state_id = 1,
+        .op = call,
+        .kind = XI_CORO_SUSP_CALL,
+        .resolved_callee = target,
+    };
+    XiCoroPlan caller_coro = {
+        .is_coroutine = true,
+        .nstates = 1,
+        .points = &caller_point,
+    };
+    XiCoroSuspendPoint target_point = {
+        .state_id = 1,
+        .op = yield,
+        .kind = XI_CORO_SUSP_YIELD,
+    };
+    XiCoroPlan target_coro = {
+        .is_coroutine = true,
+        .nstates = 1,
+        .points = &target_point,
+    };
+    caller->coro_plan = &caller_coro;
+    target->coro_plan = &target_coro;
+    root->stage = target->stage = caller->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "shared direct plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(root);
+    return plan;
+}
+
+static XrSemanticPlan *build_ambiguous_shared_call_target_plan(bool sibling_store) {
+    XiFunc *root = xi_func_new("ambiguous_shared_root", &stub_int);
+    XiFunc *caller = xi_func_new("ambiguous_shared_caller", &stub_int);
+    XiFunc *owner = sibling_store ? xi_func_new("ambiguous_shared_sibling", &stub_int) : root;
+    XiFunc *target = xi_func_new("ambiguous_shared_target", &stub_int);
+    REQUIRE(root != NULL && caller != NULL && owner != NULL && target != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *caller_entry = xi_block_new(caller);
+    XiBlock *owner_entry = sibling_store ? xi_block_new(owner) : root_entry;
+    XiBlock *target_entry = xi_block_new(target);
+    REQUIRE(root_entry != NULL && caller_entry != NULL && owner_entry != NULL &&
+            target_entry != NULL);
+
+    root->children = (XiFunc **) xr_malloc(2 * sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = caller;
+    root->children[1] = sibling_store ? owner : target;
+    root->nchildren = root->children_cap = 2;
+    caller->parent_func = root;
+    if (sibling_store) {
+        owner->parent_func = root;
+        owner->children = (XiFunc **) xr_malloc(sizeof(*owner->children));
+        REQUIRE(owner->children != NULL);
+        owner->children[0] = target;
+        owner->nchildren = owner->children_cap = 1;
+        target->parent_func = owner;
+    } else {
+        target->parent_func = root;
+    }
+
+    XiValue *closure = xi_value_new(owner, owner_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *store = xi_value_new(owner, owner_entry, XI_SET_SHARED, &stub_unit, 1);
+    REQUIRE(closure != NULL && store != NULL);
+    closure->aux = target;
+    store->args[0] = closure;
+    store->aux_int = 9;
+    if (!sibling_store) {
+        XiValue *duplicate_closure =
+            xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 0);
+        XiValue *duplicate = xi_value_new(root, root_entry, XI_SET_SHARED, &stub_unit, 1);
+        REQUIRE(duplicate_closure != NULL && duplicate != NULL);
+        duplicate_closure->aux = target;
+        duplicate->args[0] = duplicate_closure;
+        duplicate->aux_int = 9;
+    }
+
+    XiValue *load = xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_function, 0);
+    XiValue *call = xi_value_new(caller, caller_entry, XI_CALL, &stub_int, 1);
+    XiValue *root_result = xi_const_int(root, root_entry, 1, &stub_int);
+    XiValue *owner_result = sibling_store ? xi_const_int(owner, owner_entry, 2, &stub_int) : NULL;
+    XiValue *target_result = xi_const_int(target, target_entry, 3, &stub_int);
+    REQUIRE(load != NULL && call != NULL && root_result != NULL && target_result != NULL &&
+            (!sibling_store || owner_result != NULL));
+    load->aux_int = 9;
+    call->args[0] = load;
+    xi_block_set_return(caller_entry, call);
+    xi_block_set_return(root_entry, root_result);
+    if (sibling_store)
+        xi_block_set_return(owner_entry, owner_result);
+    xi_block_set_return(target_entry, target_result);
+    root->stage = caller->stage = owner->stage = target->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "ambiguous shared plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(root);
+    return plan;
+}
+
+static XrSemanticPlan *build_unordered_shared_call_target_plan(bool conditional_store) {
+    XiFunc *root = xi_func_new(conditional_store ? "conditional_shared_root"
+                                                   : "late_shared_root",
+                               &stub_int);
+    XiFunc *target = xi_func_new("unordered_shared_target", &stub_int);
+    REQUIRE(root != NULL && target != NULL);
+    XiBlock *entry = xi_block_new(root);
+    XiBlock *target_entry = xi_block_new(target);
+    REQUIRE(entry != NULL && target_entry != NULL);
+    root->children = (XiFunc **) xr_malloc(sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = target;
+    root->nchildren = root->children_cap = 1;
+    target->parent_func = root;
+
+    XiValue *load = NULL;
+    XiValue *call = NULL;
+    if (!conditional_store) {
+        load = xi_value_new(root, entry, XI_GET_SHARED, &stub_function, 0);
+        XiValue *closure = xi_value_new(root, entry, XI_CLOSURE_NEW, &stub_function, 0);
+        XiValue *store = xi_value_new(root, entry, XI_SET_SHARED, &stub_unit, 1);
+        call = xi_value_new(root, entry, XI_CALL, &stub_int, 1);
+        REQUIRE(load != NULL && closure != NULL && store != NULL && call != NULL);
+        load->aux_int = 11;
+        closure->aux = target;
+        store->args[0] = closure;
+        store->aux_int = 11;
+        call->args[0] = load;
+        xi_block_set_return(entry, call);
+    } else {
+        XiBlock *store_block = xi_block_new(root);
+        XiBlock *skip_block = xi_block_new(root);
+        XiBlock *merge = xi_block_new(root);
+        REQUIRE(store_block != NULL && skip_block != NULL && merge != NULL);
+        XiValue *condition = xi_const_bool(root, entry, true, &stub_bool);
+        REQUIRE(condition != NULL);
+        xi_block_set_if(entry, condition, store_block, skip_block);
+        XiValue *closure =
+            xi_value_new(root, store_block, XI_CLOSURE_NEW, &stub_function, 0);
+        XiValue *store = xi_value_new(root, store_block, XI_SET_SHARED, &stub_unit, 1);
+        REQUIRE(closure != NULL && store != NULL);
+        closure->aux = target;
+        store->args[0] = closure;
+        store->aux_int = 11;
+        xi_block_set_jump(store_block, merge);
+        xi_block_set_jump(skip_block, merge);
+        load = xi_value_new(root, merge, XI_GET_SHARED, &stub_function, 0);
+        call = xi_value_new(root, merge, XI_CALL, &stub_int, 1);
+        REQUIRE(load != NULL && call != NULL);
+        load->aux_int = 11;
+        call->args[0] = load;
+        xi_block_set_return(merge, call);
+        store_block->idom = entry;
+        skip_block->idom = entry;
+        merge->idom = entry;
+    }
+    XiValue *target_result = xi_const_int(target, target_entry, 3, &stub_int);
+    REQUIRE(target_result != NULL);
+    xi_block_set_return(target_entry, target_result);
+    root->stage = target->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "unordered shared plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(root);
+    return plan;
+}
+
+static XrSemanticPlan *build_nonroot_shared_call_target_plan(void) {
+    XiFunc *root = xi_func_new("nonroot_shared_root", &stub_int);
+    XiFunc *owner = xi_func_new("nonroot_shared_owner", &stub_int);
+    XiFunc *target = xi_func_new("nonroot_shared_target", &stub_int);
+    XiFunc *caller = xi_func_new("nonroot_shared_caller", &stub_int);
+    REQUIRE(root != NULL && owner != NULL && target != NULL && caller != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *owner_entry = xi_block_new(owner);
+    XiBlock *target_entry = xi_block_new(target);
+    XiBlock *caller_entry = xi_block_new(caller);
+    REQUIRE(root_entry != NULL && owner_entry != NULL && target_entry != NULL &&
+            caller_entry != NULL);
+    root->children = (XiFunc **) xr_malloc(sizeof(*root->children));
+    owner->children = (XiFunc **) xr_malloc(2 * sizeof(*owner->children));
+    REQUIRE(root->children != NULL && owner->children != NULL);
+    root->children[0] = owner;
+    root->nchildren = root->children_cap = 1;
+    owner->parent_func = root;
+    owner->children[0] = target;
+    owner->children[1] = caller;
+    owner->nchildren = owner->children_cap = 2;
+    target->parent_func = owner;
+    caller->parent_func = owner;
+
+    XiValue *closure = xi_value_new(owner, owner_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *store = xi_value_new(owner, owner_entry, XI_SET_SHARED, &stub_unit, 1);
+    XiValue *owner_result = xi_const_int(owner, owner_entry, 2, &stub_int);
+    REQUIRE(closure != NULL && store != NULL && owner_result != NULL);
+    closure->aux = target;
+    store->args[0] = closure;
+    store->aux_int = 13;
+    xi_block_set_return(owner_entry, owner_result);
+    XiValue *load = xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_function, 0);
+    XiValue *call = xi_value_new(caller, caller_entry, XI_CALL, &stub_int, 1);
+    REQUIRE(load != NULL && call != NULL);
+    load->aux_int = 13;
+    call->args[0] = load;
+    xi_block_set_return(caller_entry, call);
+    XiValue *root_result = xi_const_int(root, root_entry, 1, &stub_int);
+    XiValue *target_result = xi_const_int(target, target_entry, 3, &stub_int);
+    REQUIRE(root_result != NULL && target_result != NULL);
+    xi_block_set_return(root_entry, root_result);
+    xi_block_set_return(target_entry, target_result);
+    root->stage = owner->stage = target->stage = caller->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "nonroot shared plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(root);
+    return plan;
+}
+
+static XrSemanticPlan *build_unproven_root_parent_shared_plan(bool conditional_store) {
+    XiFunc *root = xi_func_new(conditional_store ? "conditional_root_init"
+                                                   : "late_root_init",
+                               &stub_int);
+    XiFunc *target = xi_func_new("root_init_target", &stub_int);
+    XiFunc *caller = xi_func_new("root_init_caller", &stub_int);
+    REQUIRE(root != NULL && target != NULL && caller != NULL);
+    XiBlock *entry = xi_block_new(root);
+    XiBlock *target_entry = xi_block_new(target);
+    XiBlock *caller_entry = xi_block_new(caller);
+    REQUIRE(entry != NULL && target_entry != NULL && caller_entry != NULL);
+    root->children = (XiFunc **) xr_malloc(2 * sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = target;
+    root->children[1] = caller;
+    root->nchildren = root->children_cap = 2;
+    target->parent_func = root;
+    caller->parent_func = root;
+
+    if (!conditional_store) {
+        XiImportRef import_ref = {
+            .module_path = "./root_init_barrier",
+            .member_name = "barrier",
+            .resolved_mod_index = -1,
+            .resolved_shared_slot = -1,
+            .resolved_export_slot = -1,
+        };
+        XiValue *callee = xi_value_new(root, entry, XI_IMPORT_REF, &stub_function, 0);
+        XiValue *barrier = xi_value_new(root, entry, XI_CALL, &stub_int, 1);
+        REQUIRE(callee != NULL && barrier != NULL);
+        callee->aux = &import_ref;
+        barrier->args[0] = callee;
+        XiValue *closure = xi_value_new(root, entry, XI_CLOSURE_NEW, &stub_function, 0);
+        XiValue *store = xi_value_new(root, entry, XI_SET_SHARED, &stub_unit, 1);
+        REQUIRE(closure != NULL && store != NULL);
+        closure->aux = target;
+        store->args[0] = closure;
+        store->aux_int = 17;
+        xi_block_set_return(entry, barrier);
+    } else {
+        XiBlock *store_block = xi_block_new(root);
+        XiBlock *skip_block = xi_block_new(root);
+        XiBlock *merge = xi_block_new(root);
+        REQUIRE(store_block != NULL && skip_block != NULL && merge != NULL);
+        XiValue *condition = xi_const_bool(root, entry, true, &stub_bool);
+        REQUIRE(condition != NULL);
+        xi_block_set_if(entry, condition, store_block, skip_block);
+        XiValue *closure =
+            xi_value_new(root, store_block, XI_CLOSURE_NEW, &stub_function, 0);
+        XiValue *store = xi_value_new(root, store_block, XI_SET_SHARED, &stub_unit, 1);
+        REQUIRE(closure != NULL && store != NULL);
+        closure->aux = target;
+        store->args[0] = closure;
+        store->aux_int = 17;
+        xi_block_set_jump(store_block, merge);
+        xi_block_set_jump(skip_block, merge);
+        XiValue *root_result = xi_const_int(root, merge, 1, &stub_int);
+        REQUIRE(root_result != NULL);
+        xi_block_set_return(merge, root_result);
+        store_block->idom = entry;
+        skip_block->idom = entry;
+        merge->idom = entry;
+    }
+    XiValue *load = xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_function, 0);
+    XiValue *call = xi_value_new(caller, caller_entry, XI_CALL, &stub_int, 1);
+    XiValue *target_result = xi_const_int(target, target_entry, 3, &stub_int);
+    REQUIRE(load != NULL && call != NULL && target_result != NULL);
+    load->aux_int = 17;
+    call->args[0] = load;
+    xi_block_set_return(caller_entry, call);
+    xi_block_set_return(target_entry, target_result);
+    root->stage = target->stage = caller->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "unproven root parent plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(root);
+    return plan;
+}
+
+static XrSemanticPlan *build_long_suspend_call_chain(void) {
+    enum { CHAIN_LENGTH = 128 };
+    XiFunc **functions = (XiFunc **) xr_calloc(CHAIN_LENGTH, sizeof(*functions));
+    XiCoroPlan *coroutines =
+        (XiCoroPlan *) xr_calloc(CHAIN_LENGTH, sizeof(*coroutines));
+    XiCoroSuspendPoint *points =
+        (XiCoroSuspendPoint *) xr_calloc(CHAIN_LENGTH, sizeof(*points));
+    REQUIRE(functions != NULL && coroutines != NULL && points != NULL);
+    for (uint32_t index = 0; index < CHAIN_LENGTH; index++) {
+        char name[48];
+        REQUIRE(snprintf(name, sizeof(name), "suspend_chain_%u", index) > 0);
+        functions[index] = xi_func_new(name, &stub_int);
+        REQUIRE(functions[index] != NULL && xi_block_new(functions[index]) != NULL);
+        functions[index]->stage = XI_STAGE_OPTIMIZED;
+        if (index == 0)
+            continue;
+        functions[index - 1]->children =
+            (XiFunc **) xr_malloc(sizeof(*functions[index - 1]->children));
+        REQUIRE(functions[index - 1]->children != NULL);
+        functions[index - 1]->children[0] = functions[index];
+        functions[index - 1]->nchildren = functions[index - 1]->children_cap = 1;
+        functions[index]->parent_func = functions[index - 1];
+    }
+    for (uint32_t index = 0; index + 1 < CHAIN_LENGTH; index++) {
+        XiBlock *entry = functions[index]->entry;
+        bool tail = index + 2 == CHAIN_LENGTH;
+        XiValue *closure =
+            xi_value_new(functions[index], entry,
+                         tail ? XI_CLOSURE_NEW : XI_STACK_ALLOC, &stub_function, 0);
+        XiValue *call = xi_value_new(functions[index], entry,
+                                     tail ? XI_TAIL_CALL : XI_CALL, &stub_int, 1);
+        REQUIRE(closure != NULL && call != NULL);
+        if (!tail)
+            closure->aux_int = XI_CLOSURE_NEW;
+        closure->aux = functions[index + 1];
+        call->args[0] = closure;
+        xi_block_set_return(entry, call);
+        if (tail)
+            continue;
+        points[index] = (XiCoroSuspendPoint) {
+            .state_id = 1,
+            .op = call,
+            .kind = XI_CORO_SUSP_CALL,
+            .resolved_callee = functions[index + 1],
+        };
+        coroutines[index] = (XiCoroPlan) {
+            .is_coroutine = true,
+            .nstates = 1,
+            .points = &points[index],
+        };
+        functions[index]->coro_plan = &coroutines[index];
+    }
+    XiBlock *last_entry = functions[CHAIN_LENGTH - 1]->entry;
+    XiValue *yield =
+        xi_value_new(functions[CHAIN_LENGTH - 1], last_entry, XI_YIELD, &stub_int, 0);
+    XiValue *result =
+        xi_const_int(functions[CHAIN_LENGTH - 1], last_entry, 1, &stub_int);
+    REQUIRE(yield != NULL && result != NULL);
+    xi_block_set_return(last_entry, result);
+    points[CHAIN_LENGTH - 1] = (XiCoroSuspendPoint) {
+        .state_id = 1,
+        .op = yield,
+        .kind = XI_CORO_SUSP_YIELD,
+    };
+    coroutines[CHAIN_LENGTH - 1] = (XiCoroPlan) {
+        .is_coroutine = true,
+        .nstates = 1,
+        .points = &points[CHAIN_LENGTH - 1],
+    };
+    functions[CHAIN_LENGTH - 1]->coro_plan = &coroutines[CHAIN_LENGTH - 1];
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(functions[0], &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "long suspend chain build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(functions[0]);
+    xr_free(points);
+    xr_free(coroutines);
+    xr_free(functions);
     return plan;
 }
 
@@ -661,6 +1128,42 @@ static void expect_decode_failure(const uint8_t *bytes, size_t size, const char 
 static void expect_verify_failure_at(XrSemanticPlan *plan, const char *code, int line);
 #define expect_verify_failure(plan, code) expect_verify_failure_at((plan), (code), __LINE__)
 
+static void forge_direct_call_target(XrSemanticPlan *plan, uint32_t caller,
+                                     uint32_t function) {
+    REQUIRE(plan != NULL && plan->call_target_count == 0 && plan->call_targets == NULL);
+    uint32_t operation = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t index = 0; index < plan->operation_count; index++) {
+        if (plan->operations[index].function == caller &&
+            plan->operations[index].opcode == XI_CALL) {
+            operation = index;
+        }
+    }
+    REQUIRE(operation != XR_SEMANTIC_INDEX_NONE && function < plan->function_count);
+    plan->call_targets =
+        (XrSemanticCallTargetRecord *) xr_calloc(1, sizeof(*plan->call_targets));
+    REQUIRE(plan->call_targets != NULL);
+    plan->call_target_count = plan->call_target_capacity = 1;
+    XrSemanticCallTargetRecord *target = &plan->call_targets[0];
+    target->operation = operation;
+    target->function = function;
+    target->kind = XR_SEM_CALL_TARGET_DIRECT_LOCAL;
+    char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char function_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[192];
+    xr_stable_id_hex(plan->operations[operation].id, operation_id);
+    xr_stable_id_hex(plan->functions[function].id, function_id);
+    REQUIRE(snprintf(key, sizeof(key),
+                     "call-target-v2:schema=13:operation=%s:function=%s:kind=1",
+                     operation_id, function_id) > 0);
+    bool frozen = plan->frozen;
+    plan->frozen = false;
+    target->canonical_key = xr_semantic_plan_copy_string(plan, key);
+    plan->frozen = frozen;
+    REQUIRE(target->canonical_key != NULL &&
+            xr_stable_id_from_key(target->canonical_key, &target->id,
+                                  &(XrFingerprint) {{0}}));
+}
+
 static void test_stable_ids(void) {
     XrStableId id;
     XrFingerprint digest;
@@ -765,7 +1268,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(second_debug->canonical_key, "discriminator=2:operation=") != NULL);
     char first_debug_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(first_debug->id, first_debug_id_hex);
-    REQUIRE(strcmp(first_debug_id_hex, "800a3a65cb6976f99ef1282789a2beb6") == 0);
+    REQUIRE(strcmp(first_debug_id_hex, "a7f8c6d788c798308cd6d3f4c745b9d6") == 0);
     const XrSemanticOperationRecord *decoded_debug_operation =
         &decoded->operations[first_debug->subject];
     REQUIRE(decoded_debug_operation->source_file != NULL &&
@@ -791,7 +1294,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
     char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(loan_entity->id, loan_id_hex);
-    REQUIRE(strcmp(loan_id_hex, "d14919fde06e32d32b2d7a1c7bf16e84") == 0);
+    REQUIRE(strcmp(loan_id_hex, "4af76da2fd53200e2ef5c00c8818a212") == 0);
     size_t entity_dump_size = 0;
     char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
     REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&
@@ -842,7 +1345,7 @@ static void test_immutable_owned_snapshot(void) {
     REQUIRE(strcmp(registry_hex,
                    "a6255fe3f602e022202982c374d80d4fbc06600e78262503d70241fe10bcf046") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "0d19765875c09ddf93e0ad3d1726c038585bae8fbcd617bb58a1eaeb45244619") == 0);
+                   "a7c1bf50c21ff0c2d83ef2bf24bf239500989ad439371afb0ee3248b5f9cd260") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -1149,12 +1652,24 @@ static void test_direct_local_call_target_authority(void) {
     REQUIRE(target->function == 1 && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL);
     REQUIRE(plan->operations[target->operation].opcode == XI_CALL);
     REQUIRE(plan->operations[target->operation].effects == xi_generated_op_effects(XI_CALL));
-    REQUIRE(strstr(target->canonical_key, "call-target-v1:schema=12:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, "call-target-v2:schema=13:operation=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":function=") != NULL);
     REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
     char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(target->id, target_id_hex);
-    REQUIRE(strcmp(target_id_hex, "8bdadf072400b0708e72689a9e2117ca") == 0);
+    REQUIRE(strcmp(target_id_hex, "4ebf48ea1e998f89fec2350f0ab431ea") == 0);
+
+    uint32_t coroutine_states = 0;
+    bool call_has_state = false;
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        if (entity->kind != XR_SEM_ENTITY_COROUTINE_STATE)
+            continue;
+        coroutine_states++;
+        call_has_state |= entity->subject == target->operation;
+    }
+    /* A frozen direct target takes priority and can independently ground a state. */
+    REQUIRE(coroutine_states == 2 && call_has_state);
 
     bool saw_binding = false;
     for (uint32_t i = 0; i < plan->operation_count; i++) {
@@ -1212,6 +1727,110 @@ static void test_direct_local_call_target_authority(void) {
     XrSemanticPlan *unknown = build_typed_call_operand_plan();
     REQUIRE(xr_semantic_plan_call_target_count(unknown) == 0);
     xr_semantic_plan_free(unknown);
+}
+
+static void test_shared_direct_call_target_authority(void) {
+    XrSemanticPlan *plan = build_shared_direct_call_target_plan();
+    REQUIRE(xr_semantic_plan_call_target_count(plan) == 1);
+    XrSemanticCallTargetRecord *target = &plan->call_targets[0];
+    const XrSemanticOperationRecord *call = &plan->operations[target->operation];
+    REQUIRE(target->function == 1 && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL);
+    REQUIRE(call->function == 2 && call->opcode == XI_CALL);
+    REQUIRE((call->effects & XI_EFFECT_MAY_SUSPEND) == 0);
+    REQUIRE((call->flags & XI_FLAG_MAY_SUSPEND) == 0);
+    REQUIRE(strstr(target->canonical_key, "call-target-v2:schema=13:operation=") != NULL);
+    REQUIRE(strstr(target->canonical_key, ":kind=1") != NULL);
+    char target_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(target->id, target_id_hex);
+    REQUIRE(strcmp(target_id_hex, "79b5f2687217c1181264696b4409c5f1") == 0);
+
+    uint32_t coroutine_states = 0;
+    bool call_has_state = false;
+    bool static_seed_has_state = false;
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        if (entity->kind != XR_SEM_ENTITY_COROUTINE_STATE)
+            continue;
+        coroutine_states++;
+        call_has_state |= entity->subject == target->operation;
+        static_seed_has_state |= plan->operations[entity->subject].opcode == XI_YIELD;
+    }
+    REQUIRE(coroutine_states == 2 && call_has_state && static_seed_has_state);
+
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    char error[512] = {0};
+    REQUIRE(xr_xsm_encode(plan, &bytes, &size, error, sizeof(error)));
+    XrSemanticPlan *decoded = NULL;
+    REQUIRE(xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)));
+    const XrSemanticCallTargetRecord *decoded_target =
+        xr_semantic_plan_call_target(decoded, 0);
+    REQUIRE(decoded_target != NULL &&
+            decoded_target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+            decoded_target->operation == target->operation &&
+            decoded_target->function == target->function &&
+            strcmp(decoded_target->canonical_key, target->canonical_key) == 0 &&
+            xr_stable_id_equal(decoded_target->id, target->id));
+    uint8_t *roundtrip = NULL;
+    size_t roundtrip_size = 0;
+    REQUIRE(xr_xsm_encode(decoded, &roundtrip, &roundtrip_size, error, sizeof(error)));
+    REQUIRE(roundtrip_size == size && memcmp(roundtrip, bytes, size) == 0);
+    xr_free(roundtrip);
+    xr_semantic_plan_free(decoded);
+    xr_free(bytes);
+
+    uint32_t saved_function = target->function;
+    target->function = 0;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    target->function = saved_function;
+    uint32_t saved_count = plan->call_target_count;
+    plan->call_target_count = 0;
+    expect_verify_failure(plan, "XR_SEM_0019");
+    plan->call_target_count = saved_count;
+    xr_semantic_plan_free(plan);
+
+    XrSemanticPlan *duplicate = build_ambiguous_shared_call_target_plan(false);
+    REQUIRE(xr_semantic_plan_call_target_count(duplicate) == 0);
+    forge_direct_call_target(duplicate, 1, 2);
+    expect_verify_failure(duplicate, "XR_SEM_0019");
+    xr_semantic_plan_free(duplicate);
+    XrSemanticPlan *sibling = build_ambiguous_shared_call_target_plan(true);
+    REQUIRE(xr_semantic_plan_call_target_count(sibling) == 0);
+    forge_direct_call_target(sibling, 1, 3);
+    expect_verify_failure(sibling, "XR_SEM_0019");
+    xr_semantic_plan_free(sibling);
+    XrSemanticPlan *late = build_unordered_shared_call_target_plan(false);
+    REQUIRE(xr_semantic_plan_call_target_count(late) == 0);
+    forge_direct_call_target(late, 0, 1);
+    expect_verify_failure(late, "XR_SEM_0019");
+    xr_semantic_plan_free(late);
+    XrSemanticPlan *conditional = build_unordered_shared_call_target_plan(true);
+    REQUIRE(xr_semantic_plan_call_target_count(conditional) == 0);
+    forge_direct_call_target(conditional, 0, 1);
+    expect_verify_failure(conditional, "XR_SEM_0019");
+    xr_semantic_plan_free(conditional);
+    XrSemanticPlan *nonroot = build_nonroot_shared_call_target_plan();
+    REQUIRE(xr_semantic_plan_call_target_count(nonroot) == 0);
+    forge_direct_call_target(nonroot, 3, 2);
+    expect_verify_failure(nonroot, "XR_SEM_0019");
+    xr_semantic_plan_free(nonroot);
+    XrSemanticPlan *late_root = build_unproven_root_parent_shared_plan(false);
+    REQUIRE(xr_semantic_plan_call_target_count(late_root) == 0);
+    forge_direct_call_target(late_root, 2, 1);
+    expect_verify_failure(late_root, "XR_SEM_0019");
+    xr_semantic_plan_free(late_root);
+    XrSemanticPlan *conditional_root = build_unproven_root_parent_shared_plan(true);
+    REQUIRE(xr_semantic_plan_call_target_count(conditional_root) == 0);
+    forge_direct_call_target(conditional_root, 2, 1);
+    expect_verify_failure(conditional_root, "XR_SEM_0019");
+    xr_semantic_plan_free(conditional_root);
+    XrSemanticPlan *chain = build_long_suspend_call_chain();
+    REQUIRE(xr_semantic_plan_call_target_count(chain) == 127);
+    uint32_t chain_states = 0;
+    for (uint32_t i = 0; i < chain->entity_count; i++)
+        chain_states += chain->entities[i].kind == XR_SEM_ENTITY_COROUTINE_STATE;
+    REQUIRE(chain_states == 127);
+    xr_semantic_plan_free(chain);
 }
 
 static void test_parameter_and_capture_contracts(void) {
@@ -2426,6 +3045,7 @@ int main(void) {
     test_explicit_error_edge();
     test_typed_call_operand_contract();
     test_direct_local_call_target_authority();
+    test_shared_direct_call_target_authority();
     test_parameter_and_capture_contracts();
     test_attachment_freezes_exact_function_identity();
     test_unknown_capture_contract_fails_closed();

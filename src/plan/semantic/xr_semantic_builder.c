@@ -1340,24 +1340,133 @@ static bool append_constant(XrSemanticBuildContext *ctx, const XiValue *value,
     return true;
 }
 
-static int resolve_direct_local_callee(const XrSemanticBuildContext *ctx,
-                                       const XiValue *callee) {
+static const XiValue *strip_identity_copies(const XiFunc *owner, const XiValue *value) {
     uint32_t depth = 0;
-    while (callee && xi_copy_is_identity_alias(callee) && callee->nargs == 1 &&
+    while (value && xi_copy_is_identity_alias(value) && value->nargs == 1 &&
+           value->block && value->block->func == owner &&
            depth++ < XR_SEMANTIC_MAX_OPERATIONS)
-        callee = callee->args[0];
-    if (!callee || depth >= XR_SEMANTIC_MAX_OPERATIONS || !callee->aux ||
-        (callee->op != XI_CLOSURE_NEW &&
-         !(callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW)))
+        value = value->args[0];
+    return depth < XR_SEMANTIC_MAX_OPERATIONS ? value : NULL;
+}
+
+static const XiValue *find_unique_shared_store(const XiFunc *owner, int64_t slot,
+                                               bool *ambiguous) {
+    const XiValue *found = NULL;
+    *ambiguous = false;
+    for (uint32_t block_index = 0; owner && block_index < owner->nblocks; block_index++) {
+        const XiBlock *block = owner->blocks[block_index];
+        for (uint32_t value_index = 0; block && value_index < block->nvalues; value_index++) {
+            const XiValue *value = block->values[value_index];
+            if (!value || value->op != XI_SET_SHARED || value->aux_int != slot)
+                continue;
+            if (found) {
+                *ambiguous = true;
+                return NULL;
+            }
+            found = value;
+        }
+    }
+    return found;
+}
+
+static bool value_precedes_in_block(const XiBlock *block, const XiValue *before,
+                                    const XiValue *after) {
+    bool saw_before = false;
+    for (uint32_t index = 0; block && index < block->nvalues; index++) {
+        if (block->values[index] == before)
+            saw_before = true;
+        if (block->values[index] == after)
+            return saw_before;
+    }
+    return false;
+}
+
+static bool block_dominates(const XiBlock *dominator, const XiBlock *block) {
+    uint32_t limit = block && block->func ? block->func->nblocks : 0;
+    uint32_t depth = 0;
+    for (const XiBlock *cursor = block; cursor && depth++ <= limit; cursor = cursor->idom) {
+        if (cursor == dominator)
+            return true;
+    }
+    return false;
+}
+
+static bool value_can_cross_activation_boundary(const XiValue *value) {
+    return value && (value->op == XI_CALL || value->op == XI_TAIL_CALL ||
+                     value->op == XI_CALL_METHOD ||
+                     value->op == XI_CALL_METHOD_DIRECT ||
+                     value->op == XI_CALL_BUILTIN || value->op == XI_GO);
+}
+
+static bool root_store_precedes_activation(const XiFunc *owner, const XiValue *store) {
+    if (!owner || !owner->entry || store->block != owner->entry)
+        return false;
+    for (uint32_t index = 0; index < owner->entry->nvalues; index++) {
+        const XiValue *value = owner->entry->values[index];
+        if (value == store)
+            return true;
+        if (value_can_cross_activation_boundary(value))
+            return false;
+    }
+    return false;
+}
+
+static bool shared_store_initializes_load(const XrSemanticBuildContext *ctx,
+                                          const XiFunc *caller, const XiFunc *owner,
+                                          const XiValue *store, const XiValue *load) {
+    if (!store || !load || !store->block || !load->block)
+        return false;
+    if (owner != caller)
+        return owner->parent_func == NULL && function_index(ctx, owner) == 0 &&
+               root_store_precedes_activation(owner, store);
+    if (store->block == load->block)
+        return value_precedes_in_block(store->block, store, load);
+    return block_dominates(store->block, load->block);
+}
+
+static int resolve_closure_binding(const XrSemanticBuildContext *ctx, const XiFunc *owner,
+                                   const XiValue *value) {
+    value = strip_identity_copies(owner, value);
+    if (!value || !value->block || value->block->func != owner || !value->aux ||
+        (value->op != XI_CLOSURE_NEW &&
+         !(value->op == XI_STACK_ALLOC && value->aux_int == XI_CLOSURE_NEW)))
         return -1;
-    return function_index(ctx, (const XiFunc *) callee->aux);
+    return function_index(ctx, (const XiFunc *) value->aux);
+}
+
+static int resolve_direct_local_callee(const XrSemanticBuildContext *ctx,
+                                       const XiFunc *caller, const XiValue *callee) {
+    callee = strip_identity_copies(caller, callee);
+    int direct = resolve_closure_binding(ctx, caller, callee);
+    if (direct >= 0)
+        return direct;
+    if (!callee || !callee->block || callee->block->func != caller ||
+        callee->op != XI_GET_SHARED || callee->aux_int < 0)
+        return -1;
+    for (const XiFunc *owner = caller; owner; owner = owner->parent_func) {
+        bool ambiguous = false;
+        const XiValue *store = find_unique_shared_store(owner, callee->aux_int, &ambiguous);
+        if (ambiguous)
+            return -1;
+        if (!store)
+            continue;
+        if (store->nargs != 1 ||
+            !shared_store_initializes_load(ctx, caller, owner, store, callee))
+            return -1;
+        return resolve_closure_binding(ctx, owner, store->args[0]);
+    }
+    return -1;
 }
 
 static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value,
                                uint32_t operation) {
-    if (!value || (value->op != XI_CALL && value->op != XI_TAIL_CALL) || value->nargs == 0)
+    if (!value || operation >= ctx->plan->operation_count || value->nargs == 0)
         return true;
-    int function = resolve_direct_local_callee(ctx, value->args[0]);
+    if (value->op != XI_CALL && value->op != XI_TAIL_CALL)
+        return true;
+    uint32_t caller = ctx->plan->operations[operation].function;
+    int function = resolve_direct_local_callee(ctx, ctx->functions[caller].source,
+                                               value->args[0]);
     if (function < 0)
         return true;
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
@@ -1372,7 +1481,7 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     record->function = (uint32_t) function;
     record->kind = XR_SEM_CALL_TARGET_DIRECT_LOCAL;
     XrTextBuilder key = {0};
-    bool valid = text_append_format(&key, "call-target-v1:schema=%u:operation=",
+    bool valid = text_append_format(&key, "call-target-v2:schema=%u:operation=",
                                     XR_SEMANTIC_SCHEMA_VERSION) &&
                  text_append_stable_id(&key, ctx->plan->operations[operation].id) &&
                  text_append(&key, ":function=") &&

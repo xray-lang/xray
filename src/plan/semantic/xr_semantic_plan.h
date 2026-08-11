@@ -326,7 +326,11 @@ typedef struct XrSemanticOperandRecord {
     uint8_t flags;
 } XrSemanticOperandRecord;
 
-/* Exact call-site authority.  The target function owns signature and effect facts. */
+/*
+ * Exact call-site authority. DIRECT_LOCAL is rebuilt from frozen SSA or from a
+ * unique lexical SET_SHARED/GET_SHARED slot chain. The target's canonical
+ * static suspend facts can independently authorize a coroutine state.
+ */
 typedef struct XrSemanticCallTargetRecord {
     XrStableId id;
     const char *canonical_key;
