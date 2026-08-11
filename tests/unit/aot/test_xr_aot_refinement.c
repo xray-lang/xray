@@ -126,7 +126,7 @@ static RefinementFixture fixture_create(void) {
                                  &fixture.target_plan, error, sizeof(error)));
     REQUIRE(xr_target_plan_is_verified(fixture.target_plan));
     REQUIRE(xr_target_plan_completed_family_mask(fixture.target_plan) ==
-            XR_TARGET_FAMILY_SCALAR);
+            XR_TARGET_REQUIRED_FAMILIES);
     uint32_t call_count = UINT32_MAX;
     REQUIRE(xr_target_plan_calls(fixture.target_plan, &call_count) == NULL);
     REQUIRE(call_count == 0);
@@ -148,15 +148,17 @@ static RepresentationFixture representation_fixture_create(void) {
     REQUIRE(fixture.entry != NULL);
     fixture.native_constant =
         xi_const_int(fixture.function, fixture.entry, 40, &scalar_int);
+    fixture.rhs = xi_value_new(fixture.function, fixture.entry, XI_UNBOX,
+                               &scalar_int, 1);
+    REQUIRE(fixture.native_constant != NULL && fixture.rhs != NULL);
+    fixture.rhs->args[0] = fixture.native_constant;
     fixture.tagged_call = xi_value_new(fixture.function, fixture.entry,
-                                       XI_CALL_BUILTIN, &scalar_int, 1);
-    REQUIRE(fixture.native_constant != NULL && fixture.tagged_call != NULL);
-    fixture.tagged_call->aux = (void *) "refinement_dynamic_int";
-    fixture.tagged_call->args[0] = fixture.native_constant;
-    fixture.rhs = xi_const_int(fixture.function, fixture.entry, 2, &scalar_int);
+                                       XI_BOX, &scalar_int, 1);
+    REQUIRE(fixture.tagged_call != NULL);
+    fixture.tagged_call->args[0] = fixture.rhs;
     fixture.sum = xi_value_new(fixture.function, fixture.entry, XI_ADD,
                                &scalar_int, 2);
-    REQUIRE(fixture.rhs != NULL && fixture.sum != NULL);
+    REQUIRE(fixture.sum != NULL);
     fixture.sum->args[0] = fixture.tagged_call;
     fixture.sum->args[1] = fixture.rhs;
     xi_block_set_return(fixture.entry, fixture.sum);
@@ -210,7 +212,7 @@ static void test_scalar_direct_call_refuses_without_baseline_change(void) {
     XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
     REQUIRE(view.frozen && view.verified);
     REQUIRE(view.record_count == 1);
-    REQUIRE(view.baseline.completed_family_mask == XR_TARGET_FAMILY_SCALAR);
+    REQUIRE(view.baseline.completed_family_mask == XR_TARGET_REQUIRED_FAMILIES);
     REQUIRE(xr_fingerprint_equal(view.baseline.semantic_fingerprint,
                                  semantic_before));
     REQUIRE(xr_fingerprint_equal(view.baseline.target_plan_fingerprint,
@@ -330,7 +332,7 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(xr_aot_backend_run(&view, fixture.target_plan,
                                xr_aot_test_backend_interface(), &test_backend,
                                &stats, &diag));
-    REQUIRE(strstr(emission, "families=0000000000000001") != NULL);
+    REQUIRE(strstr(emission, "families=0000000000000007") != NULL);
     REQUIRE(strstr(emission, "transform=direct-call decision=refused") != NULL);
     REQUIRE(strstr(emission,
                    "issue=XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE") != NULL);
@@ -487,6 +489,16 @@ static void test_representation_record_mutations_fail_closed(void) {
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_STALE_EVIDENCE);
 
     memcpy(records, original.records, sizeof(records));
+    records[0].protocol.pass_id++;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_RECORD_FINGERPRINT);
+
+    memcpy(records, original.records, sizeof(records));
+    records[0].decision = XR_AOT_REFINEMENT_REFUSED;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
+
+    memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.source_operation_id.bytes[0] ^= 1u;
     REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
@@ -574,6 +586,13 @@ static void test_independent_verifier_requires_exact_coverage(void) {
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *full = build_representation_plan(&fixture, &diag);
     XrAotRefinementPlanView full_view = xr_aot_refinement_plan_view(full);
+    XrAotRefinementPlan *repeat = build_representation_plan(&fixture, &diag);
+    XrAotRefinementPlanView repeat_view = xr_aot_refinement_plan_view(repeat);
+    REQUIRE(full_view.record_count == repeat_view.record_count);
+    REQUIRE(xr_fingerprint_equal(full_view.fingerprint,
+                                 repeat_view.fingerprint));
+    REQUIRE(memcmp(full_view.records, repeat_view.records,
+                   full_view.record_count * sizeof(*full_view.records)) == 0);
     const XrAotRepresentationAdapterRecord *record =
         &full_view.records[0].representation_adapter;
     XrAotRefinementBuilder *builder =
@@ -607,13 +626,87 @@ static void test_independent_verifier_requires_exact_coverage(void) {
         &partial_view, fixture.function, fixture.target_plan, &policy, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE);
 
+    XrAotRefinementBuilder *extra_builder =
+        xr_aot_refinement_builder_create(fixture.target_plan, &diag);
+    REQUIRE(extra_builder != NULL);
+    for (uint32_t i = 0; i < full_view.record_count; i++) {
+        const XrAotRepresentationAdapterRecord *adapter =
+            &full_view.records[i].representation_adapter;
+        XrAotRepresentationAdapterRequest exact = {
+            .source_value = adapter->source_value,
+            .use_operation = adapter->use_operation,
+            .use_block = adapter->use_block,
+            .use_operand = adapter->use_operand,
+            .use_kind = adapter->use_kind,
+            .adapter_kind = adapter->adapter_kind,
+            .input_rep_kind = adapter->input_rep_kind,
+            .output_rep_kind = adapter->output_rep_kind,
+            .layout = adapter->layout,
+            .policy_fingerprint = adapter->policy_fingerprint,
+        };
+        REQUIRE(xr_aot_refinement_try_representation_adapter(
+            extra_builder, &protocol, fixture.target_plan, &exact, &decision,
+            &diag));
+    }
+    const XrSemanticPlan *semantic = fixture.function->semantic_plan;
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(
+            semantic, fixture.function->semantic_plan_function_index);
+    REQUIRE(semantic_function != NULL);
+    uint32_t rhs_value = semantic_function->value_begin + fixture.rhs->id;
+    uint32_t sum_value = semantic_function->value_begin + fixture.sum->id;
+    uint32_t sum_operation = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (operation && operation->result_value == sum_value)
+            sum_operation = i;
+    }
+    const XrSemanticOperationRecord *sum =
+        xr_semantic_plan_operation(semantic, sum_operation);
+    const XrTargetValueRepRecord *rhs_binding =
+        xr_target_plan_value_rep(fixture.target_plan, rhs_value);
+    const XrTargetMachineRepRecord *rhs_machine =
+        rhs_binding ? xr_target_plan_machine_rep(
+                          fixture.target_plan, rhs_binding->register_rep)
+                    : NULL;
+    REQUIRE(sum && rhs_machine);
+    XrAotRepresentationAdapterRequest extra = {
+        .source_value = rhs_value,
+        .use_operation = sum_operation,
+        .use_block = sum->block,
+        .use_operand = 1,
+        .use_kind = XR_AOT_REP_USE_OPERATION,
+        .adapter_kind = XR_AOT_REP_ADAPTER_BOX,
+        .input_rep_kind = rhs_machine->kind,
+        .output_rep_kind = XR_MACHINE_REP_DYN_VALUE,
+        .layout = record->layout,
+        .policy_fingerprint = record->policy_fingerprint,
+    };
+    REQUIRE(xr_aot_refinement_try_representation_adapter(
+        extra_builder, &protocol, fixture.target_plan, &extra, &decision,
+        &diag));
+    REQUIRE(decision == XR_AOT_REFINEMENT_APPLIED);
+    XrAotRefinementPlan *extra_plan = NULL;
+    REQUIRE(xr_aot_refinement_builder_freeze(
+        extra_builder, fixture.target_plan, &extra_plan, &diag));
+    XrAotRefinementPlanView extra_view =
+        xr_aot_refinement_plan_view(extra_plan);
+    REQUIRE(xr_aot_refinement_verify(&extra_view, fixture.target_plan, &diag));
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &extra_view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE);
+
     policy.force_phi_tagged = true;
     REQUIRE(!xr_aot_representation_refinement_verify(
         &full_view, fixture.function, fixture.target_plan, &policy, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_STALE_EVIDENCE);
 
+    xr_aot_refinement_plan_free(extra_plan);
+    xr_aot_refinement_builder_free(extra_builder);
     xr_aot_refinement_plan_free(partial);
     xr_aot_refinement_builder_free(builder);
+    xr_aot_refinement_plan_free(repeat);
     xr_aot_refinement_plan_free(full);
     representation_fixture_free(&fixture);
 }
@@ -688,10 +781,9 @@ static void test_parameter_without_operation_uses_stable_identity(void) {
     function->params = (XiValue **) xr_malloc(sizeof(*function->params));
     REQUIRE(function->params != NULL);
     function->params[0] = parameter;
-    XiValue *use = xi_value_new(function, entry, XI_CALL_BUILTIN,
+    XiValue *use = xi_value_new(function, entry, XI_UNBOX,
                                 &scalar_int, 1);
     REQUIRE(use != NULL);
-    use->aux = (void *) "rep_parameter_stable_use";
     use->args[0] = parameter;
     xi_block_set_return(entry, use);
 
@@ -704,6 +796,7 @@ static void test_parameter_without_operation_uses_stable_identity(void) {
             semantic_parameter->value == parameter->id);
 
     XiRepPolicy policy = xi_rep_policy_native_boundary();
+    policy.force_return_tagged = true;
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
     REQUIRE(xr_aot_representation_refinement_build(
@@ -833,9 +926,8 @@ static void test_parameter_phi_and_return_use_domains_are_exact(void) {
     REQUIRE(parameter_function->params != NULL);
     parameter_function->params[0] = parameter;
     XiValue *parameter_use = xi_value_new(parameter_function, parameter_entry,
-                                           XI_CALL_BUILTIN, &scalar_int, 1);
+                                           XI_UNBOX, &scalar_int, 1);
     REQUIRE(parameter_use != NULL);
-    parameter_use->aux = (void *) "rep_parameter_use";
     parameter_use->args[0] = parameter;
     xi_block_set_return(parameter_entry, parameter_use);
     XrTargetProfile *parameter_profile = NULL;
@@ -843,6 +935,7 @@ static void test_parameter_phi_and_return_use_domains_are_exact(void) {
         parameter_function, &parameter_profile);
     uint32_t parameter_values = parameter_function->next_value_id;
     XiRepPolicy native = xi_rep_policy_native_boundary();
+    native.force_return_tagged = true;
     XrAotRefinementPlan *parameter_plan = NULL;
     REQUIRE(xr_aot_representation_refinement_build(
         parameter_function, parameter_target, &native, &parameter_plan,
@@ -1040,7 +1133,7 @@ static void test_live_source_use_and_type_mutations_are_rederived(void) {
     RepresentationFixture use = representation_fixture_create();
     XrAotRefinementPlan *use_plan = build_representation_plan(&use, &diag);
     XrAotRefinementPlanView use_view = xr_aot_refinement_plan_view(use_plan);
-    use.tagged_call->op = XI_CONST;
+    use.sum->op = XI_CONST;
     REQUIRE(!xr_aot_representation_refinement_verify(
         &use_view, use.function, use.target_plan, &policy, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
@@ -1052,7 +1145,7 @@ static void test_live_source_use_and_type_mutations_are_rederived(void) {
                                                                   &diag);
     XrAotRefinementPlanView use_aux_view =
         xr_aot_refinement_plan_view(use_aux_plan);
-    use_aux.tagged_call->aux_int++;
+    use_aux.sum->aux_int++;
     REQUIRE(!xr_aot_representation_refinement_verify(
         &use_aux_view, use_aux.function, use_aux.target_plan, &policy, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
@@ -1087,6 +1180,35 @@ static void test_live_source_use_and_type_mutations_are_rederived(void) {
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
     xr_aot_refinement_plan_free(type_plan);
     representation_fixture_free(&type);
+
+    RepresentationFixture type_flags = representation_fixture_create();
+    XrAotRefinementPlan *type_flags_plan =
+        build_representation_plan(&type_flags, &diag);
+    XrAotRefinementPlanView type_flags_view =
+        xr_aot_refinement_plan_view(type_flags_plan);
+    type_flags.native_constant->type->is_const = true;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &type_flags_view, type_flags.function, type_flags.target_plan,
+        &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    type_flags.native_constant->type->is_const = false;
+    uint32_t semantic_type_id =
+        type_flags.native_constant->type->semantic_type_id;
+    type_flags.native_constant->type->semantic_type_id = semantic_type_id + 1u;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &type_flags_view, type_flags.function, type_flags.target_plan,
+        &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    type_flags.native_constant->type->semantic_type_id = semantic_type_id;
+    const char *alias_name = type_flags.native_constant->type->alias_name;
+    type_flags.native_constant->type->alias_name = "mutated-authority";
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &type_flags_view, type_flags.function, type_flags.target_plan,
+        &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    type_flags.native_constant->type->alias_name = alias_name;
+    xr_aot_refinement_plan_free(type_flags_plan);
+    representation_fixture_free(&type_flags);
 }
 
 int main(void) {
