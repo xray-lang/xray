@@ -13,6 +13,7 @@
 
 #include "xr_runtime_contract.h"
 #include "xr_runtime_object_header.h"
+#include "xr_target_machine_facts.h"
 
 #define XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT 2
 
@@ -20,6 +21,7 @@
  * concrete C layouts and canonical registries; consumers may copy the value
  * but must not synthesize or patch individual fingerprints. */
 typedef struct XrRuntimeTargetAuthority {
+    XrTargetMachineFacts machine;
     XrRuntimeObjectHeaderMaterializationFacts object_header_materialization;
     XrRuntimeAbiContract runtime_abi;
     XrTargetProviderContract
@@ -32,5 +34,12 @@ typedef struct XrRuntimeTargetAuthority {
  * deliberately not inferred from the host. */
 XR_FUNC XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
     XrRuntimeTargetAuthority *out);
+
+/* Exact comparison is field-wise so C padding can never become authority.
+ * The current native authority deliberately supports only scalar execution;
+ * a nonzero vector feature or width therefore never matches. */
+XR_FUNC bool xr_runtime_target_authority_machine_matches(
+    const XrRuntimeTargetAuthority *authority,
+    const XrTargetMachineFacts *candidate);
 
 #endif  // XR_RUNTIME_TARGET_AUTHORITY_H

@@ -41,20 +41,20 @@ static bool fingerprint_equal_bytes(
 }
 
 static bool current_runtime_identity(
-    uint64_t *provider_mask, XrFingerprint *runtime_fingerprint,
+    XrRuntimeTargetAuthority *runtime, uint64_t *provider_mask,
+    XrFingerprint *runtime_fingerprint,
     XrFingerprint *provider_fingerprint, XrFingerprint *object_fingerprint) {
-    XrRuntimeTargetAuthority runtime;
     XrRuntimeObjectHeaderAbi object_header;
-    return xr_runtime_target_authority_native_hosted(&runtime) ==
+    return xr_runtime_target_authority_native_hosted(runtime) ==
                XR_RUNTIME_ABI_OK &&
-           xr_runtime_abi_contract_fingerprint(&runtime.runtime_abi,
+           xr_runtime_abi_contract_fingerprint(&runtime->runtime_abi,
                                                runtime_fingerprint) ==
                XR_RUNTIME_ABI_OK &&
            xr_target_provider_set_fingerprint(
-               runtime.providers, runtime.provider_count, provider_mask,
+               runtime->providers, runtime->provider_count, provider_mask,
                provider_fingerprint) == XR_RUNTIME_ABI_OK &&
            xr_runtime_object_header_abi_materialize(
-               &runtime.object_header_materialization, &object_header) ==
+               &runtime->object_header_materialization, &object_header) ==
                XR_RUNTIME_ABI_OK &&
            xr_runtime_object_header_abi_fingerprint(
                &object_header, object_fingerprint) == XR_RUNTIME_ABI_OK;
@@ -100,18 +100,24 @@ XRAY_API bool xr_runtime_artifact_authority_verify(
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "artifact authority semantic or target fingerprint changed");
 
+    XrRuntimeTargetAuthority runtime;
     uint64_t provider_mask = 0;
     XrFingerprint runtime_fingerprint;
     XrFingerprint provider_fingerprint;
     XrFingerprint object_fingerprint;
-    if (!current_runtime_identity(&provider_mask, &runtime_fingerprint,
+    if (!current_runtime_identity(&runtime, &provider_mask,
+                                  &runtime_fingerprint,
                                   &provider_fingerprint,
                                   &object_fingerprint))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "canonical native runtime authority is invalid");
     const XrTargetProfileDraft *facts =
         xr_target_profile_facts(authority->target_profile);
-    if (!facts || identity->provider_mask != provider_mask ||
+    if (!facts || !xr_runtime_target_authority_machine_matches(
+                      &runtime, &facts->machine))
+        return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
+                    "artifact authority does not bind the canonical native machine facts");
+    if (identity->provider_mask != provider_mask ||
         facts->provider_mask != provider_mask ||
         (identity->required_capability_mask & ~provider_mask) != 0 ||
         !fingerprint_equal_bytes(runtime_fingerprint,

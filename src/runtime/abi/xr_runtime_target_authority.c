@@ -11,7 +11,9 @@
 #include "xr_runtime_target_authority.h"
 #include "../value/xvalue.h"
 
+#include <float.h>
 #include <stddef.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,6 +30,154 @@ typedef struct XrCanonicalField {
     uint16_t alignment;
     uint8_t encoding;
 } XrCanonicalField;
+
+static bool type_layout_equal(XrTargetTypeLayout left,
+                              XrTargetTypeLayout right) {
+    return left.size == right.size && left.align == right.align;
+}
+
+static bool data_layout_equal(const XrTargetDataLayout *left,
+                              const XrTargetDataLayout *right) {
+#define XR_MACHINE_LAYOUT_EQUAL(name) \
+    type_layout_equal(left->name, right->name)
+    return XR_MACHINE_LAYOUT_EQUAL(i8) && XR_MACHINE_LAYOUT_EQUAL(u8) &&
+           XR_MACHINE_LAYOUT_EQUAL(i16) && XR_MACHINE_LAYOUT_EQUAL(u16) &&
+           XR_MACHINE_LAYOUT_EQUAL(i32) && XR_MACHINE_LAYOUT_EQUAL(u32) &&
+           XR_MACHINE_LAYOUT_EQUAL(i64) && XR_MACHINE_LAYOUT_EQUAL(u64) &&
+           XR_MACHINE_LAYOUT_EQUAL(f32) && XR_MACHINE_LAYOUT_EQUAL(f64) &&
+           XR_MACHINE_LAYOUT_EQUAL(boolean) &&
+           XR_MACHINE_LAYOUT_EQUAL(pointer) &&
+           XR_MACHINE_LAYOUT_EQUAL(isize) &&
+           XR_MACHINE_LAYOUT_EQUAL(usize) &&
+           XR_MACHINE_LAYOUT_EQUAL(xr_value) &&
+           left->endian == right->endian && left->abi_id == right->abi_id &&
+           left->stable_hash == right->stable_hash;
+#undef XR_MACHINE_LAYOUT_EQUAL
+}
+
+XR_FUNCDEF bool xr_runtime_target_authority_machine_matches(
+    const XrRuntimeTargetAuthority *authority,
+    const XrTargetMachineFacts *candidate) {
+    if (!authority || !candidate)
+        return false;
+    const XrTargetMachineFacts *native = &authority->machine;
+    return native->architecture == candidate->architecture &&
+           native->operating_system == candidate->operating_system &&
+           native->environment == candidate->environment &&
+           native->native_abi == candidate->native_abi &&
+           native->runtime_profile == candidate->runtime_profile &&
+           memcmp(native->reserved8, candidate->reserved8,
+                  sizeof(native->reserved8)) == 0 &&
+           data_layout_equal(&native->data_layout, &candidate->data_layout) &&
+           native->atomic_width_mask == candidate->atomic_width_mask &&
+           native->atomic_order_mask == candidate->atomic_order_mask &&
+           native->float_feature_mask == candidate->float_feature_mask &&
+           native->vector_feature_mask == candidate->vector_feature_mask &&
+           native->maximum_vector_bits == candidate->maximum_vector_bits &&
+           native->reserved16 == candidate->reserved16;
+}
+
+static void fill_native_atomic_facts(XrTargetMachineFacts *machine) {
+    _Atomic uint8_t atomic8;
+    _Atomic uint16_t atomic16;
+    _Atomic uint32_t atomic32;
+    _Atomic uint64_t atomic64;
+    atomic_init(&atomic8, 0);
+    atomic_init(&atomic16, 0);
+    atomic_init(&atomic32, 0);
+    atomic_init(&atomic64, 0);
+    if (atomic_is_lock_free(&atomic8))
+        machine->atomic_width_mask |= XR_TARGET_ATOMIC_WIDTH_8;
+    if (atomic_is_lock_free(&atomic16))
+        machine->atomic_width_mask |= XR_TARGET_ATOMIC_WIDTH_16;
+    if (atomic_is_lock_free(&atomic32))
+        machine->atomic_width_mask |= XR_TARGET_ATOMIC_WIDTH_32;
+    if (atomic_is_lock_free(&atomic64))
+        machine->atomic_width_mask |= XR_TARGET_ATOMIC_WIDTH_64;
+    machine->atomic_order_mask = XR_TARGET_ATOMIC_RELAXED |
+                                 XR_TARGET_ATOMIC_ACQUIRE |
+                                 XR_TARGET_ATOMIC_RELEASE |
+                                 XR_TARGET_ATOMIC_ACQ_REL |
+                                 XR_TARGET_ATOMIC_SEQ_CST;
+}
+
+static bool set_native_architecture(XrTargetMachineFacts *machine) {
+#if defined(XR_ARCH_X86_64)
+    machine->architecture = XR_TARGET_ARCH_X86_64;
+#elif defined(XR_ARCH_ARM64)
+    machine->architecture = XR_TARGET_ARCH_AARCH64;
+#elif defined(XR_ARCH_POWERPC64)
+    machine->architecture = XR_TARGET_ARCH_POWERPC64;
+#elif defined(XR_ARCH_LOONGARCH64)
+    machine->architecture = XR_TARGET_ARCH_LOONGARCH64;
+#else
+    return false;
+#endif
+    return true;
+}
+
+static bool set_native_platform_identity(XrTargetMachineFacts *machine) {
+#if defined(XR_OS_WINDOWS)
+    machine->operating_system = XR_TARGET_OS_WINDOWS;
+    machine->environment = XR_TARGET_ENV_MSVC;
+    if (machine->architecture == XR_TARGET_ARCH_X86_64)
+        machine->native_abi = XR_TARGET_ABI_WIN64_X86_64;
+    else if (machine->architecture == XR_TARGET_ARCH_AARCH64)
+        machine->native_abi = XR_TARGET_ABI_WIN64_AARCH64;
+    else
+        return false;
+#elif defined(XR_OS_LINUX)
+    machine->operating_system = XR_TARGET_OS_LINUX;
+    machine->environment = XR_TARGET_ENV_GNU;
+    if (machine->architecture == XR_TARGET_ARCH_X86_64)
+        machine->native_abi = XR_TARGET_ABI_SYSV_X86_64;
+    else if (machine->architecture == XR_TARGET_ARCH_AARCH64)
+        machine->native_abi = XR_TARGET_ABI_AAPCS64;
+    else if (machine->architecture == XR_TARGET_ARCH_POWERPC64)
+        machine->native_abi = XR_TARGET_ABI_PPC64_ELFV2;
+    else if (machine->architecture == XR_TARGET_ARCH_LOONGARCH64)
+        machine->native_abi = XR_TARGET_ABI_LOONGARCH_LP64D;
+    else
+        return false;
+#elif defined(XR_OS_MACOS)
+    machine->operating_system = XR_TARGET_OS_MACOS;
+    machine->environment = XR_TARGET_ENV_DARWIN;
+    if (machine->architecture == XR_TARGET_ARCH_X86_64)
+        machine->native_abi = XR_TARGET_ABI_DARWIN_X86_64;
+    else if (machine->architecture == XR_TARGET_ARCH_AARCH64)
+        machine->native_abi = XR_TARGET_ABI_DARWIN_AARCH64;
+    else
+        return false;
+#else
+    return false;
+#endif
+    return true;
+}
+
+static bool make_native_machine_facts(XrTargetMachineFacts *out) {
+    if (!out || FLT_RADIX != 2 || FLT_MANT_DIG != 24 ||
+        DBL_MANT_DIG != 53 || sizeof(float) != 4 || sizeof(double) != 8)
+        return false;
+    XrTargetMachineFacts machine;
+    memset(&machine, 0, sizeof(machine));
+    const XrTargetDataLayout *layout = xr_target_data_layout_host();
+    if (!layout || !set_native_architecture(&machine) ||
+        !set_native_platform_identity(&machine))
+        return false;
+    machine.runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED;
+    machine.data_layout = *layout;
+    fill_native_atomic_facts(&machine);
+    if ((machine.atomic_width_mask & XR_TARGET_ATOMIC_WIDTH_32) == 0)
+        return false;
+    machine.float_feature_mask = XR_TARGET_FLOAT_IEEE754 |
+                                 XR_TARGET_FLOAT_STRICT;
+    /* No runtime-owned SIMD probe or installed SIMD manifest exists. The
+     * native execution authority is scalar-only until one is governed. */
+    machine.vector_feature_mask = 0;
+    machine.maximum_vector_bits = 0;
+    *out = machine;
+    return true;
+}
 
 static bool canonical_id(const char *key, XrStableId *out) {
     XrFingerprint digest;
@@ -556,12 +706,16 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
     XrRuntimeTargetAuthority authority;
     memset(&authority, 0, sizeof(authority));
+    if (!make_native_machine_facts(&authority.machine))
+        return XR_RUNTIME_ABI_INVALID_IDENTITY;
     XrRuntimeAbiStatus status =
         xr_runtime_object_header_native_materialization_facts(
             &authority.object_header_materialization);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
     uint8_t target_endian = authority.object_header_materialization.target_endian;
+    if (target_endian != (uint8_t) authority.machine.data_layout.endian)
+        return XR_RUNTIME_ABI_INVALID_SHAPE;
     XrRuntimeAbiContract *abi = &authority.runtime_abi;
     *abi = (XrRuntimeAbiContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
@@ -586,6 +740,11 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
             &abi->extent_provider_callback) ||
         !make_hosted_providers(authority.providers, target_endian))
         return XR_RUNTIME_ABI_INVALID_IDENTITY;
+    if (abi->pointer_width != authority.machine.data_layout.pointer.size ||
+        abi->dynamic_value.size != authority.machine.data_layout.xr_value.size ||
+        abi->dynamic_value.alignment !=
+            authority.machine.data_layout.xr_value.align)
+        return XR_RUNTIME_ABI_INVALID_SHAPE;
     make_leaf_records(abi);
     XrFingerprint fingerprint;
     status = xr_runtime_abi_contract_fingerprint(abi, &fingerprint);

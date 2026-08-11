@@ -7,6 +7,7 @@
 #include "../../../src/plan/format/xr_artifact_kind.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
 #include "../../../src/runtime/xr_runtime_artifact_authority_internal.h"
 #include "../../../include/xray_target_plan_load.h"
@@ -55,14 +56,11 @@ static XrSemanticPlan *build_semantic_plan(void) {
 }
 
 static XrTargetProfile *build_profile(void) {
-    XrTargetProfile *selection = xr_test_target_profile_build(
-        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
-    REQUIRE(selection != NULL);
     XrRuntimeTargetAuthority authority;
     REQUIRE(xr_runtime_target_authority_native_hosted(&authority) ==
             XR_RUNTIME_ABI_OK);
     XrTargetProfileBuildInput input = {
-        .machine = *xr_target_profile_machine_facts(selection),
+        .machine = authority.machine,
         .runtime_abi = &authority.runtime_abi,
         .object_header_materialization =
             &authority.object_header_materialization,
@@ -72,8 +70,182 @@ static XrTargetProfile *build_profile(void) {
     XrTargetProfile *profile = NULL;
     char error[512] = {0};
     REQUIRE(xr_target_profile_build(&input, &profile, error, sizeof(error)));
-    xr_target_profile_free(selection);
     return profile;
+}
+
+typedef enum NativeMachineMutation {
+    NATIVE_MACHINE_ARCHITECTURE,
+    NATIVE_MACHINE_OPERATING_SYSTEM,
+    NATIVE_MACHINE_ENVIRONMENT,
+    NATIVE_MACHINE_ABI,
+    NATIVE_MACHINE_DATA_LAYOUT,
+    NATIVE_MACHINE_ATOMIC_WIDTHS,
+    NATIVE_MACHINE_ATOMIC_ORDERS,
+    NATIVE_MACHINE_FLOAT_FEATURES,
+    NATIVE_MACHINE_VECTOR_FEATURES,
+    NATIVE_MACHINE_VECTOR_WIDTH,
+    NATIVE_MACHINE_RUNTIME_PROFILE,
+    NATIVE_MACHINE_MUTATION_COUNT,
+} NativeMachineMutation;
+
+typedef enum ForeignProfileMutation {
+    FOREIGN_PROFILE_ARCHITECTURE_ABI,
+    FOREIGN_PROFILE_PLATFORM_IDENTITY,
+    FOREIGN_PROFILE_DATA_LAYOUT,
+    FOREIGN_PROFILE_ATOMIC_WIDTHS,
+    FOREIGN_PROFILE_ATOMIC_ORDERS,
+    FOREIGN_PROFILE_FLOAT_FEATURES,
+    FOREIGN_PROFILE_VECTOR_FEATURES,
+    FOREIGN_PROFILE_RUNTIME_PROFILE,
+    FOREIGN_PROFILE_MUTATION_COUNT,
+} ForeignProfileMutation;
+
+static void mutate_exact_machine_field(XrTargetMachineFacts *machine,
+                                       NativeMachineMutation mutation) {
+    switch (mutation) {
+        case NATIVE_MACHINE_ARCHITECTURE:
+            machine->architecture = machine->architecture == XR_TARGET_ARCH_X86_64
+                                        ? XR_TARGET_ARCH_AARCH64
+                                        : XR_TARGET_ARCH_X86_64;
+            break;
+        case NATIVE_MACHINE_OPERATING_SYSTEM:
+            machine->operating_system = machine->operating_system == XR_TARGET_OS_WINDOWS
+                                            ? XR_TARGET_OS_LINUX
+                                            : XR_TARGET_OS_WINDOWS;
+            break;
+        case NATIVE_MACHINE_ENVIRONMENT:
+            machine->environment = machine->environment == XR_TARGET_ENV_MSVC
+                                       ? XR_TARGET_ENV_GNU
+                                       : XR_TARGET_ENV_MSVC;
+            break;
+        case NATIVE_MACHINE_ABI:
+            machine->native_abi = machine->native_abi == XR_TARGET_ABI_WIN64_X86_64
+                                      ? XR_TARGET_ABI_SYSV_X86_64
+                                      : XR_TARGET_ABI_WIN64_X86_64;
+            break;
+        case NATIVE_MACHINE_DATA_LAYOUT:
+            machine->data_layout.stable_hash ^= UINT64_C(1);
+            break;
+        case NATIVE_MACHINE_ATOMIC_WIDTHS:
+            machine->atomic_width_mask ^= XR_TARGET_ATOMIC_WIDTH_128;
+            break;
+        case NATIVE_MACHINE_ATOMIC_ORDERS:
+            machine->atomic_order_mask ^= XR_TARGET_ATOMIC_SEQ_CST;
+            break;
+        case NATIVE_MACHINE_FLOAT_FEATURES:
+            machine->float_feature_mask ^= XR_TARGET_FLOAT_FMA;
+            break;
+        case NATIVE_MACHINE_VECTOR_FEATURES:
+            machine->vector_feature_mask ^= XR_TARGET_VECTOR_SSE2;
+            break;
+        case NATIVE_MACHINE_VECTOR_WIDTH:
+            machine->maximum_vector_bits ^= 128u;
+            break;
+        case NATIVE_MACHINE_RUNTIME_PROFILE:
+            machine->runtime_profile =
+                machine->runtime_profile == XR_TARGET_RUNTIME_PROFILE_HOSTED
+                    ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+                    : XR_TARGET_RUNTIME_PROFILE_HOSTED;
+            break;
+        case NATIVE_MACHINE_MUTATION_COUNT:
+            abort();
+    }
+}
+
+static void set_native_abi_for_platform(XrTargetMachineFacts *machine) {
+    if (machine->operating_system == XR_TARGET_OS_WINDOWS) {
+        machine->native_abi = machine->architecture == XR_TARGET_ARCH_AARCH64
+                                  ? XR_TARGET_ABI_WIN64_AARCH64
+                                  : XR_TARGET_ABI_WIN64_X86_64;
+    } else if (machine->operating_system == XR_TARGET_OS_MACOS) {
+        machine->native_abi = machine->architecture == XR_TARGET_ARCH_AARCH64
+                                  ? XR_TARGET_ABI_DARWIN_AARCH64
+                                  : XR_TARGET_ABI_DARWIN_X86_64;
+    } else {
+        machine->native_abi = machine->architecture == XR_TARGET_ARCH_AARCH64
+                                  ? XR_TARGET_ABI_AAPCS64
+                                  : XR_TARGET_ABI_SYSV_X86_64;
+    }
+}
+
+static void set_supported_vector_profile(XrTargetMachineFacts *machine) {
+    switch (machine->architecture) {
+        case XR_TARGET_ARCH_X86_64:
+            machine->vector_feature_mask = XR_TARGET_VECTOR_SSE2;
+            break;
+        case XR_TARGET_ARCH_AARCH64:
+            machine->vector_feature_mask = XR_TARGET_VECTOR_NEON;
+            break;
+        case XR_TARGET_ARCH_POWERPC64:
+            machine->vector_feature_mask = XR_TARGET_VECTOR_VSX;
+            break;
+        case XR_TARGET_ARCH_LOONGARCH64:
+            machine->vector_feature_mask = XR_TARGET_VECTOR_LSX;
+            break;
+        default:
+            abort();
+    }
+    machine->maximum_vector_bits = 128;
+}
+
+static void mutate_foreign_profile(XrTargetMachineFacts *machine,
+                                   ForeignProfileMutation mutation) {
+    switch (mutation) {
+        case FOREIGN_PROFILE_ARCHITECTURE_ABI:
+            machine->architecture = machine->architecture == XR_TARGET_ARCH_X86_64
+                                        ? XR_TARGET_ARCH_AARCH64
+                                        : XR_TARGET_ARCH_X86_64;
+            set_native_abi_for_platform(machine);
+            break;
+        case FOREIGN_PROFILE_PLATFORM_IDENTITY:
+            if (machine->operating_system == XR_TARGET_OS_WINDOWS) {
+                machine->operating_system = XR_TARGET_OS_LINUX;
+                machine->environment = XR_TARGET_ENV_GNU;
+            } else {
+                machine->operating_system = XR_TARGET_OS_WINDOWS;
+                machine->environment = XR_TARGET_ENV_MSVC;
+            }
+            if (machine->architecture != XR_TARGET_ARCH_X86_64 &&
+                machine->architecture != XR_TARGET_ARCH_AARCH64)
+                machine->architecture = XR_TARGET_ARCH_X86_64;
+            set_native_abi_for_platform(machine);
+            break;
+        case FOREIGN_PROFILE_DATA_LAYOUT:
+            machine->data_layout.i16.align =
+                machine->data_layout.i16.align == 1 ? 2 : 1;
+            machine->data_layout.stable_hash =
+                xr_target_data_layout_hash(&machine->data_layout);
+            break;
+        case FOREIGN_PROFILE_ATOMIC_WIDTHS:
+            machine->atomic_width_mask ^= XR_TARGET_ATOMIC_WIDTH_128;
+            break;
+        case FOREIGN_PROFILE_ATOMIC_ORDERS:
+            machine->atomic_order_mask ^= XR_TARGET_ATOMIC_SEQ_CST;
+            break;
+        case FOREIGN_PROFILE_FLOAT_FEATURES:
+            machine->float_feature_mask ^= XR_TARGET_FLOAT_FMA;
+            break;
+        case FOREIGN_PROFILE_VECTOR_FEATURES:
+            set_supported_vector_profile(machine);
+            break;
+        case FOREIGN_PROFILE_RUNTIME_PROFILE:
+            machine->runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING;
+            break;
+        case FOREIGN_PROFILE_MUTATION_COUNT:
+            abort();
+    }
+}
+
+static XrTargetProfile *build_foreign_profile(
+    const XrTargetProfile *native_profile, ForeignProfileMutation mutation) {
+    XrTargetProfileDraft draft = *xr_target_profile_facts(native_profile);
+    mutate_foreign_profile(&draft.machine, mutation);
+    XrTargetProfile *foreign = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_profile_freeze(&draft, &foreign, error, sizeof(error)));
+    REQUIRE(foreign != NULL);
+    REQUIRE(xr_target_profile_verify(foreign, error, sizeof(error)));
+    return foreign;
 }
 
 static XtpFixture make_fixture(void) {
@@ -247,6 +419,82 @@ static void test_artifact_classifier(void) {
         REQUIRE(xr_artifact_probe("renamed.bin", xr_xsm_artifact_magic,
                                   size).status ==
                 XR_ARTIFACT_PROBE_NEED_MORE);
+}
+
+static void test_runtime_machine_authority_is_exact_and_scalar_only(void) {
+    XrRuntimeTargetAuthority authority;
+    REQUIRE(xr_runtime_target_authority_native_hosted(&authority) ==
+            XR_RUNTIME_ABI_OK);
+    REQUIRE(authority.machine.runtime_profile ==
+            XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(authority.machine.vector_feature_mask == 0);
+    REQUIRE(authority.machine.maximum_vector_bits == 0);
+    REQUIRE(xr_runtime_target_authority_machine_matches(
+        &authority, &authority.machine));
+    for (NativeMachineMutation mutation = 0;
+         mutation < NATIVE_MACHINE_MUTATION_COUNT; mutation++) {
+        XrTargetMachineFacts candidate = authority.machine;
+        mutate_exact_machine_field(&candidate, mutation);
+        REQUIRE(!xr_runtime_target_authority_machine_matches(&authority,
+                                                              &candidate));
+    }
+}
+
+static void test_runtime_machine_authority_rejects_foreign_profiles(void) {
+    XtpFixture fixture = make_fixture();
+    char diagnostic[512] = {0};
+    for (ForeignProfileMutation mutation = 0;
+         mutation < FOREIGN_PROFILE_MUTATION_COUNT; mutation++) {
+        XrTargetProfile *foreign =
+            build_foreign_profile(fixture.profile, mutation);
+        XrRuntimeArtifactAuthority *authority =
+            (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
+        memset(diagnostic, 0, sizeof(diagnostic));
+        REQUIRE(!xr_runtime_artifact_authority_create_internal(
+            fixture.semantic, foreign, &authority, diagnostic,
+            sizeof(diagnostic)));
+        REQUIRE(authority == NULL);
+        REQUIRE(strstr(diagnostic, "canonical native machine") != NULL);
+        xr_target_profile_free(foreign);
+    }
+    dispose_fixture(&fixture);
+}
+
+static void test_independent_verifier_rejects_forged_machine_profiles(void) {
+    XtpFixture fixture = make_fixture();
+    char diagnostic[512] = {0};
+    XrRuntimeArtifactAuthority *authority = NULL;
+    REQUIRE(xr_runtime_artifact_authority_create_internal(
+        fixture.semantic, fixture.profile, &authority, diagnostic,
+        sizeof(diagnostic)));
+    XrTargetProfile *native_profile = authority->target_profile;
+    XrRuntimeArtifactAuthorityIdentity native_identity = authority->identity;
+
+    for (ForeignProfileMutation mutation = 0;
+         mutation < FOREIGN_PROFILE_MUTATION_COUNT; mutation++) {
+        XrTargetProfile *foreign =
+            build_foreign_profile(fixture.profile, mutation);
+        authority->target_profile = foreign;
+        XrFingerprint foreign_fingerprint =
+            xr_target_profile_fingerprint(foreign);
+        memcpy(authority->identity.target_profile_fingerprint,
+               foreign_fingerprint.bytes,
+               XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE);
+        xr_runtime_artifact_authority_compute_fingerprint(
+            &authority->identity, authority->identity.authority_fingerprint);
+        memset(diagnostic, 0, sizeof(diagnostic));
+        REQUIRE(!xr_runtime_artifact_authority_verify(
+            authority, diagnostic, sizeof(diagnostic)));
+        REQUIRE(strstr(diagnostic, "canonical native machine") != NULL);
+        authority->target_profile = native_profile;
+        authority->identity = native_identity;
+        xr_target_profile_free(foreign);
+    }
+
+    REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic,
+                                                 sizeof(diagnostic)));
+    xr_runtime_artifact_authority_free(authority);
+    dispose_fixture(&fixture);
 }
 
 static void test_runtime_load_materializes_only_verified_plan(void) {
@@ -583,6 +831,9 @@ int main(int argc, char **argv) {
     test_exact_roundtrip_and_owned_candidate();
     test_header_and_directory_mutations();
     test_identity_and_typed_mutations();
+    test_runtime_machine_authority_is_exact_and_scalar_only();
+    test_runtime_machine_authority_rejects_foreign_profiles();
+    test_independent_verifier_rejects_forged_machine_profiles();
     test_runtime_load_materializes_only_verified_plan();
     puts("typed XTP format tests passed");
     return 0;

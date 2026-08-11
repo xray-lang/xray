@@ -99,13 +99,18 @@ static bool populate_identity(
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "native runtime target authority is invalid");
 
-    const XrTargetProfileDraft *facts = xr_target_profile_facts(target_profile);
-    if (!facts || facts->provider_mask != provider_mask ||
-        !xr_fingerprint_equal(facts->runtime_abi_fingerprint,
+    const XrTargetProfileDraft *profile_facts =
+        xr_target_profile_facts(target_profile);
+    if (!profile_facts || !xr_runtime_target_authority_machine_matches(
+                              &runtime, &profile_facts->machine))
+        return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
+                    "TargetProfile does not match the canonical native machine authority");
+    if (profile_facts->provider_mask != provider_mask ||
+        !xr_fingerprint_equal(profile_facts->runtime_abi_fingerprint,
                               runtime_fingerprint) ||
-        !xr_fingerprint_equal(facts->provider_set_fingerprint,
+        !xr_fingerprint_equal(profile_facts->provider_set_fingerprint,
                               provider_fingerprint) ||
-        !xr_fingerprint_equal(facts->object_header_fingerprint,
+        !xr_fingerprint_equal(profile_facts->object_header_fingerprint,
                               object_fingerprint))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "TargetProfile does not match the native runtime authority");
