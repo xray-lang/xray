@@ -68,6 +68,17 @@ static void test_structured_build_kat_and_exact_gate(void) {
                    expected_object_header, sizeof(expected_object_header)) == 0);
     REQUIRE(memcmp(first->facts.provider_set_fingerprint.bytes,
                    expected_provider_set, sizeof(expected_provider_set)) == 0);
+    REQUIRE(first->facts.schema_version == 2);
+    REQUIRE(first->facts.string_literal.dynamic_tag ==
+            XR_RUNTIME_STRING_LITERAL_DYNAMIC_TAG);
+    REQUIRE(first->facts.string_literal.view_size ==
+            sizeof(XrRuntimeStringLiteralView));
+    REQUIRE(first->facts.string_literal.semantic_domain ==
+            XR_STORAGE_CONST_SHARED);
+    REQUIRE(first->facts.string_literal.backend_materialization ==
+            XR_MATERIALIZE_STATIC_DATA);
+    REQUIRE(xr_runtime_string_literal_materialization_contract_verify(
+                &first->facts.string_literal) == XR_RUNTIME_ABI_OK);
     char error[512] = {0};
     REQUIRE(xr_target_profile_require_exact(first, same, error, sizeof(error)));
     REQUIRE(xr_fingerprint_equal(xr_target_profile_fingerprint(first),
@@ -134,6 +145,26 @@ static void test_object_and_provider_mismatches_fail_atomically(void) {
     REQUIRE(xr_test_target_profile_fixture_init(
         &fixture, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
     fixture.input.provider_count = XR_RUNTIME_ABI_MAX_PROVIDERS + 1u;
+    require_build_rejected(&fixture);
+
+    REQUIRE(xr_test_target_profile_fixture_init(
+        &fixture, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    fixture.input.string_contract = NULL;
+    require_build_rejected(&fixture);
+
+    REQUIRE(xr_test_target_profile_fixture_init(
+        &fixture, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    fixture.string_contract.literal_view.dynamic_tag++;
+    require_build_rejected(&fixture);
+
+    REQUIRE(xr_test_target_profile_fixture_init(
+        &fixture, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    fixture.string_contract.literal_view.fields[4].offset++;
+    require_build_rejected(&fixture);
+
+    REQUIRE(xr_test_target_profile_fixture_init(
+        &fixture, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    fixture.string_contract.literal_view.fingerprint.bytes[3] ^= 1;
     require_build_rejected(&fixture);
 }
 

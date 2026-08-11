@@ -175,7 +175,7 @@ static void test_scalar_plan_and_emission_view(void) {
     REQUIRE(xr_c_emission_plan_build(same, profile_fingerprint, &same_emission, error,
                                      sizeof(error)));
     REQUIRE(xr_c_emission_plan_is_verified(emission));
-    REQUIRE(xr_c_emission_plan_value_count(emission) == 3);
+    REQUIRE(xr_c_emission_plan_value_count(emission) == 4);
     REQUIRE(xr_fingerprint_equal(xr_c_emission_plan_target_fingerprint(emission),
                                  xr_target_plan_fingerprint(first)));
     REQUIRE(xr_fingerprint_equal(xr_c_emission_plan_profile_fingerprint(emission),
@@ -184,9 +184,9 @@ static void test_scalar_plan_and_emission_view(void) {
                                  xr_c_emission_plan_fingerprint(same_emission)));
 
     uint32_t count = 0;
-    REQUIRE(xr_target_plan_value_reps(first, &count) != NULL && count == 3);
+    REQUIRE(xr_target_plan_value_reps(first, &count) != NULL && count == 4);
     const XrTargetSlotRecord *slots = xr_target_plan_slots(first, &count);
-    REQUIRE(slots != NULL && count == 2);
+    REQUIRE(slots != NULL && count == 3);
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t integer_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t boolean_value = XR_SEMANTIC_INDEX_NONE;
@@ -217,9 +217,9 @@ static void test_scalar_plan_and_emission_view(void) {
     REQUIRE(integer_end <= boolean_slot->offset || boolean_end <= integer_slot->offset);
     const XrTargetFunctionRecord *functions = xr_target_plan_functions(first, &count);
     REQUIRE(functions != NULL && semantic_function < count);
-    REQUIRE(functions[semantic_function].frame_size == 16);
+    REQUIRE(functions[semantic_function].frame_size == 32);
     REQUIRE(functions[semantic_function].frame_align == 8);
-    REQUIRE(xr_target_plan_layouts(first, &count) != NULL && count == 2);
+    REQUIRE(xr_target_plan_layouts(first, &count) != NULL && count == 3);
     require_ready(first, emission, &fixture, fixture.integer, XR_C_VALUE_REP_I64, "int64_t");
     require_ready(first, emission, &fixture, fixture.boolean, XR_C_VALUE_REP_BOOL, "uint8_t");
     require_ready(first, emission, &fixture, fixture.release, XR_C_VALUE_REP_VOID, "void");
@@ -229,10 +229,45 @@ static void test_scalar_plan_and_emission_view(void) {
     REQUIRE(xr_aot_scalar_semantic_value_id(first, fixture.function, fixture.string,
                                             &semantic_function, &semantic_value, error,
                                             sizeof(error)));
-    REQUIRE(!xr_c_emission_plan_value_view(emission, semantic_value, &view, error,
-                                            sizeof(error)));
-    REQUIRE(view.c_type == NULL);
-    REQUIRE(strncmp(error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0);
+    REQUIRE(xr_c_emission_plan_value_view(emission, semantic_value, &view,
+                                          error, sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_TAGGED &&
+            view.target_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+            view.target_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
+            view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW &&
+            view.literal_byte_length == strlen("not scalar") &&
+            view.literal_bytes &&
+            strcmp(view.literal_bytes, "not scalar") == 0 &&
+            strcmp(view.c_type, "XrValue") == 0);
+
+    XrCValueEmissionView *string_row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == semantic_value)
+            string_row = &emission->values[i];
+    REQUIRE(string_row != NULL);
+    uint8_t saved_materialization = string_row->materialization;
+    string_row->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, first, profile_fingerprint,
+                                       error, sizeof(error)));
+    string_row->materialization = saved_materialization;
+    const char *saved_literal = string_row->literal_bytes;
+    string_row->literal_bytes = "not scalAr";
+    REQUIRE(!xr_c_emission_plan_verify(emission, first, profile_fingerprint,
+                                       error, sizeof(error)));
+    string_row->literal_bytes = saved_literal;
+    uint32_t saved_length = string_row->literal_byte_length;
+    string_row->literal_byte_length--;
+    REQUIRE(!xr_c_emission_plan_verify(emission, first, profile_fingerprint,
+                                       error, sizeof(error)));
+    string_row->literal_byte_length = saved_length;
+    const char *saved_spelling = string_row->c_type;
+    string_row->c_type = "void *";
+    REQUIRE(!xr_c_emission_plan_verify(emission, first, profile_fingerprint,
+                                       error, sizeof(error)));
+    string_row->c_type = saved_spelling;
+    REQUIRE(xr_c_emission_plan_verify(emission, first, profile_fingerprint,
+                                      error, sizeof(error)));
     REQUIRE(!xr_c_emission_plan_value_view(NULL, semantic_value, &view, error, sizeof(error)));
     REQUIRE(strncmp(error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0);
 
@@ -477,7 +512,7 @@ static void test_all_scalar_c_spelling_known_answers(bool ilp32) {
                                      sizeof(error)));
     uint32_t expected_count =
         (uint32_t) (sizeof(scalar_known_answers) / sizeof(scalar_known_answers[0]));
-    REQUIRE(xr_c_emission_plan_value_count(emission) == expected_count);
+    REQUIRE(xr_c_emission_plan_value_count(emission) == expected_count + 1u);
     REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(first),
                                  xr_target_plan_fingerprint(same)));
     REQUIRE(xr_fingerprint_equal(xr_c_emission_plan_fingerprint(emission),

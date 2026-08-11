@@ -86,6 +86,12 @@ materialization. AOT prepare runs only after every required BOX or UNBOX is
 present at its recorded source and use, and rejects a missing, extra, reordered,
 or stale adapter before ABI planning. This adds no public value representation,
 layout, or calling-convention change.
+The C emission projection schema 5 additionally owns an exact materialization
+recipe and immutable byte payload for every verified String literal row. CGen
+mechanically consumes that row and cannot recover literal bytes, a dynamic
+tag, field spelling, or ownership from mutable Xi values. Missing, extra,
+reordered, stale, or incorrectly spelled rows fail before emission; this does
+not authorize general owned Strings, tuples, or object bodies.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -275,10 +281,10 @@ anchor-sha256: src/aot/xaot_prepare.c 14065b3961b50a4fee75ddfb5ca9ede64d2fb4c351
 anchor-sha256: src/aot/xaot_verify.c 9ccf50201d136e3d395ff13923671cc4dbedd0ac0901bb335fa84d700dc211fb
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 591cd0f4e85d5b95aa667ba815a4fc7f166e96d5df1fc35d60fa4c1f56bacae5
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 11e99944b4cf4a3cddad2830bb60f364731489d6ec6b8be4e8df584312e852da
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ad99b050353e730396aecd0d324cad470eb8db80e1e97d8da5fca5e0f24d8b40
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 1b617c60df47f42d9a0cbd81f93f71a89d1b0759fd814aa5e3e709820fcdbed3
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c b4201c02fc214411accff3be9a6f92b394c9116f86b79fc2b41a5e576a4a7d65
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 9011332cab0c4cff0952d954c9dd04a6bd45160df9d9549b08828dc13d7af422
-anchor-sha256: src/aot/xi_cgen.c 36d2eb305a086e894e6b21147c260775667ce32febb1bd3346ebb6e84e6eb366
+anchor-sha256: src/aot/xi_cgen.c 635d2a73a90798da5ae602b7de7299ef20b89f7f0622b31abef31dcb0572202a
 anchor-sha256: src/aot/xrt_coll.h 4c7c24ef6ec1a568a894bd593f77b2f31c5af97514c5f2cdf7f5b3bd0ae28fa6
 anchor-sha256: src/aot/xrt_core_freestanding.h 853df70e630c3e0bf3c142499e344dbc53fbde3043f08881047b23c488dc466d
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7

@@ -92,12 +92,14 @@ static bool profile_facts_equal(const XrTargetProfileDraft *left,
            xr_fingerprint_equal(left->object_header_fingerprint,
                                 right->object_header_fingerprint) &&
            xr_fingerprint_equal(left->runtime_abi_fingerprint,
-                                right->runtime_abi_fingerprint);
+                                right->runtime_abi_fingerprint) &&
+           xr_fingerprint_equal(left->string_literal.fingerprint,
+                                right->string_literal.fingerprint);
 }
 
 void xr_target_profile_compute_fingerprint(const XrTargetProfileDraft *facts,
                                            XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-profile-v1\0";
+    static const uint8_t domain[] = "xray-target-profile-v2\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -138,6 +140,29 @@ void xr_target_profile_compute_fingerprint(const XrTargetProfileDraft *facts,
     hash_fingerprint(&ctx, facts->provider_set_fingerprint);
     hash_fingerprint(&ctx, facts->object_header_fingerprint);
     hash_fingerprint(&ctx, facts->runtime_abi_fingerprint);
+    const XrRuntimeStringLiteralMaterializationContract *literal =
+        &facts->string_literal;
+    hash_u64(&ctx, literal->schema_version);
+    hash_u64(&ctx, literal->dynamic_tag);
+    hash_u64(&ctx, literal->has_object_header);
+    hash_u64(&ctx, literal->owns_utf8_bytes);
+    hash_u64(&ctx, literal->nul_terminated);
+    hash_u64(&ctx, literal->literal_flag);
+    hash_u64(&ctx, literal->semantic_domain);
+    hash_u64(&ctx, literal->backend_materialization);
+    hash_u64(&ctx, literal->view_size);
+    hash_u64(&ctx, literal->view_alignment);
+    hash_u64(&ctx, literal->field_count);
+    for (uint32_t i = 0; i < XR_RUNTIME_STRING_LITERAL_FIELD_COUNT; i++) {
+        hash_u64(&ctx, literal->fields[i].role);
+        hash_u64(&ctx, literal->fields[i].flags);
+        hash_u64(&ctx, literal->fields[i].offset);
+        hash_u64(&ctx, literal->fields[i].width);
+        hash_u64(&ctx, literal->fields[i].reserved);
+    }
+    hash_fingerprint(&ctx, literal->fingerprint);
+    for (uint32_t i = 0; i < 2; i++)
+        hash_u64(&ctx, literal->reserved[i]);
     xr_sha256_final(&ctx, out->bytes);
 }
 
@@ -147,7 +172,8 @@ bool xr_target_profile_build(const XrTargetProfileBuildInput *input,
     if (out)
         *out = NULL;
     if (!input || !out || !input->runtime_abi ||
-        !input->object_header_materialization || !input->providers) {
+        !input->object_header_materialization || !input->string_contract ||
+        !input->providers) {
         set_error(error, error_size, "XR_TARGET_1000",
                   "structured target profile input is missing");
         return false;
@@ -212,6 +238,13 @@ bool xr_target_profile_build(const XrTargetProfileBuildInput *input,
                           "runtime ABI contract is invalid", status);
         return false;
     }
+    status = xr_runtime_string_object_contract_verify(input->string_contract);
+    if (status != XR_RUNTIME_ABI_OK) {
+        set_runtime_error(error, error_size,
+                          "runtime String materialization contract is invalid",
+                          status);
+        return false;
+    }
     uint64_t provider_mask = 0;
     XrFingerprint provider_set_fingerprint;
     status = xr_target_provider_set_fingerprint(
@@ -229,6 +262,7 @@ bool xr_target_profile_build(const XrTargetProfileBuildInput *input,
         .provider_set_fingerprint = provider_set_fingerprint,
         .object_header_fingerprint = object_header_fingerprint,
         .runtime_abi_fingerprint = runtime_abi_fingerprint,
+        .string_literal = input->string_contract->literal_view,
     };
     return xr_target_profile_freeze(&draft, out, error, error_size);
 }

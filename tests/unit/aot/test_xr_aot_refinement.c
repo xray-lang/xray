@@ -580,7 +580,7 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(xr_aot_backend_run(&view, fixture.target_plan,
                                xr_aot_test_backend_interface(), &test_backend,
                                &stats, &diag));
-    REQUIRE(strstr(emission, "families=000000000000001f") != NULL);
+    REQUIRE(strstr(emission, "families=000000000000003f") != NULL);
     REQUIRE(strstr(emission, "transform=direct-call decision=refused") != NULL);
     REQUIRE(strstr(emission,
                    "issue=XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE") != NULL);
@@ -820,34 +820,46 @@ static void test_scalar_shared_boundary_is_exact_and_fail_closed(void) {
     xr_aot_refinement_plan_free(plan);
     shared_scalar_fixture_free(&fixture);
 
-    XiFunc *unsupported = xi_func_new("shared_string_representation",
-                                      &scalar_unit);
-    REQUIRE(unsupported != NULL);
-    XiBlock *entry = xi_block_new(unsupported);
-    XiValue *text = xi_const_str(unsupported, entry, "not-scalar",
+    XiFunc *string_function = xi_func_new("shared_string_representation",
+                                          &scalar_unit);
+    REQUIRE(string_function != NULL);
+    XiBlock *entry = xi_block_new(string_function);
+    XiValue *text = xi_const_str(string_function, entry, "not-scalar",
                                  &scalar_string);
-    XiValue *store = xi_value_new(unsupported, entry, XI_SET_SHARED,
+    XiValue *store = xi_value_new(string_function, entry, XI_SET_SHARED,
                                   &scalar_unit, 1);
     REQUIRE(entry && text && store);
     store->args[0] = text;
     xi_block_set_return(entry, NULL);
-    unsupported->stage = XI_STAGE_OPTIMIZED;
+    string_function->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(unsupported, error,
+    REQUIRE(xr_semantic_plan_build_and_attach(string_function, error,
                                               sizeof(error)));
     XrTargetProfile *profile = build_target_profile();
     XrTargetPlan *target_plan = NULL;
-    REQUIRE(xr_target_plan_build(unsupported->semantic_plan, profile,
+    REQUIRE(xr_target_plan_build(string_function->semantic_plan, profile,
                                  &target_plan, error, sizeof(error)));
     plan = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
         target_plan, &policy, &plan, &diag));
-    REQUIRE(plan == NULL);
-    REQUIRE(diag.issue ==
-            XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
+    view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count == 0);
+    xi_opt_refresh_representations_with_policy(string_function, &policy);
+    REQUIRE(store->args[0] == text && text->rep == XR_REP_TAGGED);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, string_function, target_plan, &policy, &diag));
+    const char *saved_literal = (const char *) text->aux;
+    text->aux = "forged";
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &view, string_function, target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    text->aux = (void *) saved_literal;
+    REQUIRE(xr_aot_representation_refinement_verify(
+        &view, string_function, target_plan, &policy, &diag));
+    xr_aot_refinement_plan_free(plan);
     xr_target_plan_free(target_plan);
     xr_target_profile_free(profile);
-    xi_func_free(unsupported);
+    xi_func_free(string_function);
 }
 
 static void test_exact_heap_closure_storage_is_tagged_and_fail_closed(void) {
@@ -935,16 +947,21 @@ static void test_exact_heap_closure_storage_is_tagged_and_fail_closed(void) {
     closure_storage_fixture_free(&fixture);
 }
 
-static void test_authority_rejects_string_without_machine_layout(void) {
+static void test_exact_string_literal_storage_is_tagged_and_fail_closed(void) {
     XiFunc *function = xi_func_new("representation_string_authority",
-                                   &scalar_string);
+                                   &scalar_unit);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
     XiValue *text = xi_const_str(function, entry, "not-a-machine-layout",
                                  &scalar_string);
-    REQUIRE(text != NULL);
-    xi_block_set_return(entry, text);
+    XiValue *print = xi_value_new(function, entry, XI_PRINT, &scalar_unit, 1);
+    XiValue *release =
+        xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
+    REQUIRE(text != NULL && print != NULL && release != NULL);
+    print->args[0] = text;
+    release->args[0] = text;
+    xi_block_set_return(entry, NULL);
     function->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_build_and_attach(function, error,
@@ -957,12 +974,58 @@ static void test_authority_rejects_string_without_machine_layout(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic diag = {0};
     XrAotRefinementPlan *plan = NULL;
-    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
         target_plan, &policy, &plan, &diag));
-    REQUIRE(plan == NULL);
-    REQUIRE(diag.issue ==
-            XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count == 0);
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target_plan, function, text, &semantic_function, &semantic_value,
+        error, sizeof(error)));
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(target_plan,
+                                              binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(target_plan,
+                                              binding->memory_rep)
+                : NULL;
+    REQUIRE(binding && register_rep && memory_rep &&
+            register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            register_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            register_rep->ownership == XR_TARGET_OWNERSHIP_OWNED);
+    xi_opt_refresh_representations_with_policy(function, &policy);
+    REQUIRE(text->rep == XR_REP_TAGGED);
+    bool materialized = xr_aot_representation_materialization_verify(
+        &view, function, target_plan, &policy, &diag);
+    if (!materialized)
+        fprintf(stderr,
+                "String literal materialization issue=%s record=%u value=%u operation=%u\n",
+                xr_aot_refinement_issue_name(diag.issue), diag.record_index,
+                diag.semantic_value, diag.semantic_operation);
+    REQUIRE(materialized);
 
+    const char *saved_literal = (const char *) text->aux;
+    text->aux = "self-signed";
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &view, function, target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    text->aux = (void *) saved_literal;
+    XrType detached = *text->type;
+    detached.is_nullable = true;
+    text->type = &detached;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &view, function, target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    text->type = &scalar_string;
+    REQUIRE(xr_aot_representation_refinement_verify(
+        &view, function, target_plan, &policy, &diag));
+
+    xr_aot_refinement_plan_free(plan);
     xr_target_plan_free(target_plan);
     xr_target_profile_free(profile);
     xi_func_free(function);
@@ -1859,7 +1922,7 @@ int main(void) {
     test_immutable_authority_matches_backend_materialization();
     test_scalar_shared_boundary_is_exact_and_fail_closed();
     test_exact_heap_closure_storage_is_tagged_and_fail_closed();
-    test_authority_rejects_string_without_machine_layout();
+    test_exact_string_literal_storage_is_tagged_and_fail_closed();
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();
     test_independent_verifier_requires_exact_coverage();

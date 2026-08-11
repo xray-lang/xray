@@ -17,7 +17,11 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
-#define XR_RUNTIME_STRING_CONTRACT_SCHEMA_VERSION UINT32_C(1)
+#define XR_RUNTIME_STRING_CONTRACT_SCHEMA_VERSION UINT32_C(2)
+#define XR_RUNTIME_STRING_LITERAL_CONTRACT_SCHEMA_VERSION UINT32_C(1)
+#define XR_RUNTIME_STRING_LITERAL_DYNAMIC_TAG UINT8_C(14)
+#define XR_RUNTIME_STRING_LITERAL_FLAG UINT32_C(1)
+#define XR_RUNTIME_STRING_LITERAL_FIELD_COUNT UINT32_C(5)
 #define XR_RUNTIME_STRING_FIXED_PREFIX_SIZE UINT32_C(32)
 #define XR_RUNTIME_STRING_LAYOUT_INDEX UINT32_C(0)
 #define XR_RUNTIME_STRING_DOMAIN_COUNT UINT32_C(4)
@@ -49,6 +53,11 @@ typedef enum XrRuntimeStringFieldRole {
     XR_RUNTIME_STRING_FIELD_RUNE_LENGTH = 4,
     XR_RUNTIME_STRING_FIELD_HASH = 5,
     XR_RUNTIME_STRING_FIELD_UTF8_TAIL = 6,
+    XR_RUNTIME_STRING_LITERAL_FIELD_BYTE_LENGTH = 7,
+    XR_RUNTIME_STRING_LITERAL_FIELD_RUNE_LENGTH = 8,
+    XR_RUNTIME_STRING_LITERAL_FIELD_HASH = 9,
+    XR_RUNTIME_STRING_LITERAL_FIELD_FLAGS = 10,
+    XR_RUNTIME_STRING_LITERAL_FIELD_UTF8_POINTER = 11,
 } XrRuntimeStringFieldRole;
 
 typedef enum XrRuntimeStringFieldFlags {
@@ -78,6 +87,35 @@ typedef struct XrRuntimeStringMaterializationDescriptor {
     uint32_t backend_materialization_mask;
     uint32_t reserved;
 } XrRuntimeStringMaterializationDescriptor;
+
+/* Canonical headerless view used only for compiler-owned static UTF-8
+ * literals. This is deliberately distinct from the header-bearing XrString
+ * object and owns neither the view nor the bytes it references. */
+typedef struct XrRuntimeStringLiteralView {
+    int64_t len;
+    int64_t rune_len;
+    uint32_t hash;
+    uint32_t flags;
+    char *data;
+} XrRuntimeStringLiteralView;
+
+typedef struct XrRuntimeStringLiteralMaterializationContract {
+    uint32_t schema_version;
+    uint8_t dynamic_tag;
+    uint8_t has_object_header;
+    uint8_t owns_utf8_bytes;
+    uint8_t nul_terminated;
+    uint32_t literal_flag;
+    uint32_t semantic_domain;
+    uint32_t backend_materialization;
+    uint32_t view_size;
+    uint16_t view_alignment;
+    uint16_t field_count;
+    XrRuntimeStringFieldDescriptor
+        fields[XR_RUNTIME_STRING_LITERAL_FIELD_COUNT];
+    XrFingerprint fingerprint;
+    uint64_t reserved[2];
+} XrRuntimeStringLiteralMaterializationContract;
 
 #define XR_RUNTIME_STRING_TRAIT_VALID_MASK                                           \
     (XR_RUNTIME_STRING_TRAIT_LONG | XR_RUNTIME_STRING_TRAIT_INTERNED |              \
@@ -179,12 +217,24 @@ typedef struct XrRuntimeStringObjectContract {
     XrRuntimeStringFieldDescriptor fields[XR_RUNTIME_STRING_FIELD_COUNT];
     XrRuntimeStringMaterializationDescriptor
         materializations[XR_RUNTIME_STRING_MATERIALIZATION_COUNT];
+    XrRuntimeStringLiteralMaterializationContract literal_view;
     XrRuntimeExtentDescriptor extent;
     XrRuntimeLayoutDescriptor layout;
     XrRuntimeDomainIdentity domains[XR_RUNTIME_STRING_DOMAIN_COUNT];
     XrFingerprint fingerprint;
     uint64_t reserved[4];
 } XrRuntimeStringObjectContract;
+
+XR_FUNC XrRuntimeAbiStatus
+xr_runtime_string_literal_materialization_contract_build(
+    XrRuntimeStringLiteralMaterializationContract *out);
+XR_FUNC XrRuntimeAbiStatus
+xr_runtime_string_literal_materialization_contract_fingerprint(
+    const XrRuntimeStringLiteralMaterializationContract *contract,
+    XrFingerprint *out);
+XR_FUNC XrRuntimeAbiStatus
+xr_runtime_string_literal_materialization_contract_verify(
+    const XrRuntimeStringLiteralMaterializationContract *contract);
 
 XR_FUNC XrRuntimeAbiStatus xr_runtime_string_object_contract_build(
     XrRuntimeStringObjectContract *out);

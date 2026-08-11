@@ -288,7 +288,7 @@ static void require_target_value_row(const char *dump, const CutoverModule *modu
     REQUIRE(memory_rep != NULL);
     snprintf(expected, sizeof(expected),
              "  value v%u op=%s semantic=%u authority=target "
-             "family=target-scalar "
+             "family=target-plan "
              "register=%u(kind=%u,bits=%u) memory=%u(kind=%u,size=%u,align=%u) slot=%u\n",
              value->id, xi_op_name(value->op), semantic_value, binding->register_rep,
              (unsigned) register_rep->kind, (unsigned) register_rep->register_bits,
@@ -325,7 +325,7 @@ static void test_multi_module_prepare_has_no_scalar_legacy_rows(void) {
     cutover_bundle_bind_all(&fixture);
 
     REQUIRE(xaot_prepare_bundle(&fixture.bundle, NULL));
-    REQUIRE(fixture.bundle.nvalue_plans == 4);
+    REQUIRE(fixture.bundle.nvalue_plans == 2);
     REQUIRE(fixture.bundle.stats.values_total == 8);
     REQUIRE(fixture.bundle.stats.values_scalar == 2);
     REQUIRE(fixture.bundle.stats.values_void == 2);
@@ -337,10 +337,7 @@ static void test_multi_module_prepare_has_no_scalar_legacy_rows(void) {
                 module->target_plan);
         REQUIRE(xaot_bundle_find_value_plan(&fixture.bundle, module->integer) == NULL);
         REQUIRE(xaot_bundle_find_value_plan(&fixture.bundle, module->release) == NULL);
-        const XaotValuePlan *text_plan =
-            xaot_bundle_find_value_plan(&fixture.bundle, module->text);
-        REQUIRE(text_plan != NULL);
-        REQUIRE(text_plan->rep.kind == XAOT_VALUE_TAGGED);
+        REQUIRE(xaot_bundle_find_value_plan(&fixture.bundle, module->text) == NULL);
         const XaotValuePlan *enum_plan =
             xaot_bundle_find_value_plan(&fixture.bundle,
                                         module->enum_ordinal);
@@ -399,21 +396,18 @@ static void test_plan_dump_records_exact_value_authority(void) {
     fixture.bundle.func_plans[0] = fixture.bundle.func_plans[1];
     fixture.bundle.func_plans[1] = saved_first;
     REQUIRE(substring_count(first,
-                            "target_values=2 legacy_values=2 "
+                            "target_values=3 legacy_values=1 "
                             "backend_adapters=0\n") == 2);
-    REQUIRE(substring_count(first, " authority=target ") == 4);
-    REQUIRE(substring_count(first, " authority=legacy\n") == 4);
+    REQUIRE(substring_count(first, " authority=target ") == 6);
+    REQUIRE(substring_count(first, " authority=legacy\n") == 2);
     for (uint32_t module_index = 0; module_index < 2; module_index++) {
         const CutoverModule *module = &fixture.modules[module_index];
         require_target_plan_summary(first, module_index, module->target_plan);
         require_target_value_row(first, module, module->integer);
         require_target_value_row(first, module, module->release);
+        require_target_value_row(first, module, module->text);
     }
-    REQUIRE(substring_count(
-                first,
-                "op=CONST kind=tagged rep=tagged c_type=XrValue family=legacy semantic=1 "
-                "authority=legacy\n") ==
-            2);
+    REQUIRE(substring_count(first, "family=legacy-enum-ordinal") == 2);
 
     xr_free(permuted);
     xr_free(second);
@@ -426,7 +420,7 @@ static void test_plan_dump_rejects_missing_duplicate_and_residue_authority(void)
     cutover_bundle_create(&missing);
     cutover_bundle_bind_all(&missing);
     REQUIRE(xaot_prepare_bundle(&missing.bundle, NULL));
-    REQUIRE(missing.bundle.nvalue_plans == 4);
+    REQUIRE(missing.bundle.nvalue_plans == 2);
     missing.bundle.nvalue_plans--;
     REQUIRE(xaot_bundle_dump_plan(&missing.bundle) == NULL);
     missing.bundle.nvalue_plans++;
@@ -612,30 +606,22 @@ static void test_exact_rep_adapter_family_and_mutations(void) {
     cutover_bundle_create(&fixture);
     CutoverModule *module = &fixture.modules[0];
     module->integer->rep = XR_REP_I64;
-    module->text->rep = XR_REP_PTR;
     XiValue *scalar_box = append_rep_adapter(
         module, module->integer, XI_BOX, XI_BACKEND_VALUE_REP_BOX,
         XR_REP_TAGGED);
-    XiValue *string_box = append_rep_adapter(
-        module, module->text, XI_BOX, XI_BACKEND_VALUE_REP_BOX,
-        XR_REP_TAGGED);
     cutover_bundle_bind_all(&fixture);
     REQUIRE(xaot_prepare_bundle(&fixture.bundle, NULL));
-    REQUIRE(fixture.bundle.stats.values_rep_adapter == 2);
+    REQUIRE(fixture.bundle.stats.values_rep_adapter == 1);
     XaotValuePlan *scalar_plan = xaot_bundle_find_value_plan_mut(
         &fixture.bundle, scalar_box);
-    XaotValuePlan *string_plan = xaot_bundle_find_value_plan_mut(
-        &fixture.bundle, string_box);
-    REQUIRE(scalar_plan && string_plan);
+    REQUIRE(scalar_plan != NULL);
     REQUIRE(xaot_value_plan_is_exact_rep_adapter(&fixture.bundle,
                                                  scalar_plan));
-    REQUIRE(xaot_value_plan_is_exact_rep_adapter(&fixture.bundle,
-                                                 string_plan));
     REQUIRE(xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
                                error, sizeof(error)));
     char *adapter_dump = xaot_bundle_dump_plan(&fixture.bundle);
     REQUIRE(adapter_dump != NULL);
-    REQUIRE(strstr(adapter_dump, "backend_adapters=2") != NULL);
+    REQUIRE(strstr(adapter_dump, "backend_adapters=1") != NULL);
     REQUIRE(strstr(adapter_dump,
                    "authority=backend-adapter "
                    "family=backend-representation-adapter") != NULL);
@@ -727,25 +713,28 @@ static void test_exact_rep_adapter_family_and_mutations(void) {
     CutoverBundle unbox;
     cutover_bundle_create(&unbox);
     unbox.modules[0].integer->rep = XR_REP_TAGGED;
-    unbox.modules[0].text->rep = XR_REP_TAGGED;
     XiValue *scalar_unbox = append_rep_adapter(
         &unbox.modules[0], unbox.modules[0].integer, XI_UNBOX,
         XI_BACKEND_VALUE_REP_UNBOX, XR_REP_I64);
-    XiValue *string_unbox = append_rep_adapter(
-        &unbox.modules[0], unbox.modules[0].text, XI_UNBOX,
-        XI_BACKEND_VALUE_REP_UNBOX, XR_REP_PTR);
     cutover_bundle_bind_all(&unbox);
     REQUIRE(xaot_prepare_bundle(&unbox.bundle, NULL));
-    REQUIRE(unbox.bundle.stats.values_rep_adapter == 2);
+    REQUIRE(unbox.bundle.stats.values_rep_adapter == 1);
     REQUIRE(xaot_value_plan_is_exact_rep_adapter(
         &unbox.bundle,
         xaot_bundle_find_value_plan(&unbox.bundle, scalar_unbox)));
-    REQUIRE(xaot_value_plan_is_exact_rep_adapter(
-        &unbox.bundle,
-        xaot_bundle_find_value_plan(&unbox.bundle, string_unbox)));
     REQUIRE(xaot_verify_bundle(&unbox.bundle, XAOT_VERIFY_AOT_READY,
                                error, sizeof(error)));
     cutover_bundle_free(&unbox);
+
+    CutoverBundle string_adapter;
+    cutover_bundle_create(&string_adapter);
+    string_adapter.modules[0].text->rep = XR_REP_PTR;
+    (void) append_rep_adapter(
+        &string_adapter.modules[0], string_adapter.modules[0].text, XI_BOX,
+        XI_BACKEND_VALUE_REP_BOX, XR_REP_TAGGED);
+    cutover_bundle_bind_all(&string_adapter);
+    REQUIRE(!xaot_prepare_bundle(&string_adapter.bundle, NULL));
+    cutover_bundle_free(&string_adapter);
 
     CutoverBundle void_source;
     cutover_bundle_create(&void_source);

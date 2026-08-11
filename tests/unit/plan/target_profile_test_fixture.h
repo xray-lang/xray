@@ -16,6 +16,7 @@
 typedef struct XrTestTargetProfileFixture {
     XrRuntimeAbiContract runtime_abi;
     XrRuntimeObjectHeaderMaterializationFacts object_header_materialization;
+    XrRuntimeStringObjectContract string_contract;
     XrTargetProviderContract providers[2];
     XrTargetProfileBuildInput input;
 } XrTestTargetProfileFixture;

@@ -208,6 +208,7 @@ bool xtc_target_profile_build_native_hosted(
         .runtime_abi = &runtime.runtime_abi,
         .object_header_materialization =
             &runtime.object_header_materialization,
+        .string_contract = &runtime.string_contract,
         .providers = runtime.providers,
         .provider_count = runtime.provider_count,
     };

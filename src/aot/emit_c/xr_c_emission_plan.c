@@ -12,10 +12,13 @@
 #include "../../plan/target/xr_target_plan.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
+#include "../../ir/xi.h"
+#include "../../ir/xi_ops_gen.h"
+#include "../../runtime/value/xtype.h"
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(4)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(5)
 
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
@@ -106,6 +109,108 @@ static bool machine_kind_to_c_rep(uint16_t kind, XrCValueRep *out, const char **
     }
 }
 
+static bool emission_stable_id_is_zero(XrStableId id) {
+    for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++) {
+        if (id.bytes[i] != 0)
+            return false;
+    }
+    return true;
+}
+
+static const XrSemanticOperationRecord *binding_operation(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding) {
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(target_plan, &slot_count);
+    if (!binding || binding->slot >= slot_count || !slots)
+        return NULL;
+    uint32_t operation = slots[binding->slot].semantic_operation;
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    return operation < xr_semantic_plan_operation_count(semantic)
+               ? xr_semantic_plan_operation(semantic, operation)
+               : NULL;
+}
+
+/* Builder-side recipe collector. It reconstructs the literal authority from
+ * frozen SemanticPlan rows; it never reads Xi values or source types. */
+static const char *build_exact_string_literal(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding) {
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    if (!semantic || !operation || operation->opcode != XI_CONST ||
+        operation->operand_count != 0 ||
+        operation->result_value != binding->semantic_value ||
+        operation->constant >= xr_semantic_plan_constant_count(semantic) ||
+        operation->allocation_key ||
+        !emission_stable_id_is_zero(operation->allocation_id) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        operation->return_complete != 1)
+        return NULL;
+    const XrSemanticConstantRecord *constant =
+        xr_semantic_plan_constant(semantic, operation->constant);
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                        XR_SEM_TYPE_BORROW_VIEW |
+                        XR_SEM_TYPE_AGGREGATE_EXACT;
+    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE |
+                       XR_SEM_TYPE_OWNERSHIP_ROOT;
+    return constant && constant->kind == XR_SEM_CONST_STRING &&
+                   constant->type == operation->result_type &&
+                   constant->string && type && type->kind == XR_KIND_STRING &&
+                   type->child_count == 0 &&
+                   type->scalar_rep == XR_SCALAR_REP_NONE &&
+                   type->aggregate_extent == 0 &&
+                   type->aggregate_align == 0 &&
+                   (type->flags & forbidden) == 0 &&
+                   (type->flags & required) == required
+               ? constant->string
+               : NULL;
+}
+
+/* Verifier-side predicate is intentionally independent of the collector
+ * above. It proves the emitted recipe from the immutable rows again. */
+static const char *verify_expected_string_literal(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding) {
+    const XrSemanticPlan *plan = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *op =
+        binding_operation(target_plan, binding);
+    if (!plan || !op || op->opcode != XI_CONST || op->operand_count != 0 ||
+        op->result_value != binding->semantic_value || op->allocation_key != NULL ||
+        !emission_stable_id_is_zero(op->allocation_id) ||
+        op->return_complete != 1 ||
+        op->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        op->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        op->constant >= xr_semantic_plan_constant_count(plan))
+        return NULL;
+    const XrSemanticConstantRecord *literal =
+        xr_semantic_plan_constant(plan, op->constant);
+    const XrSemanticTypeRecord *string_type =
+        xr_semantic_plan_type(plan, op->result_type);
+    if (!literal || literal->kind != XR_SEM_CONST_STRING ||
+        literal->type != op->result_type || !literal->string || !string_type ||
+        string_type->kind != XR_KIND_STRING || string_type->child_count != 0 ||
+        string_type->scalar_rep != XR_SCALAR_REP_NONE ||
+        string_type->aggregate_extent != 0 || string_type->aggregate_align != 0)
+        return NULL;
+    const uint8_t disallowed = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                               XR_SEM_TYPE_BORROW_VIEW |
+                               XR_SEM_TYPE_AGGREGATE_EXACT;
+    const uint8_t mandatory = XR_SEM_TYPE_REFERENCE_CAPABLE |
+                              XR_SEM_TYPE_OWNERSHIP_ROOT;
+    return (string_type->flags & disallowed) == 0 &&
+                   (string_type->flags & mandatory) == mandatory
+               ? literal->string
+               : NULL;
+}
+
 static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
     uint8_t encoded[8];
     for (uint32_t i = 0; i < sizeof(encoded); i++)
@@ -114,7 +219,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v4\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v5\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -135,9 +240,15 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
         hash_u64(&ctx, value->memory_align);
         hash_u64(&ctx, value->memory_size);
         hash_u64(&ctx, value->rep);
+        hash_u64(&ctx, value->materialization);
+        hash_u64(&ctx, value->reserved);
+        hash_u64(&ctx, value->literal_byte_length);
         size_t c_type_length = strlen(value->c_type);
         hash_u64(&ctx, c_type_length);
         xr_sha256_update(&ctx, (const uint8_t *) value->c_type, c_type_length);
+        if (value->literal_byte_length)
+            xr_sha256_update(&ctx, (const uint8_t *) value->literal_bytes,
+                             value->literal_byte_length);
     }
     xr_sha256_final(&ctx, out->bytes);
 }
@@ -214,7 +325,18 @@ static bool verify_value(const XrCValueEmissionView *value) {
             break;
         default: return false;
     }
+    bool recipe_valid = value->materialization ==
+                                XR_C_VALUE_MATERIALIZATION_NONE
+                            ? value->literal_byte_length == 0 &&
+                                  value->literal_bytes == NULL
+                            : value->materialization ==
+                                      XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW &&
+                                  value->rep == XR_C_VALUE_REP_TAGGED &&
+                                  value->literal_bytes != NULL &&
+                                  strlen(value->literal_bytes) ==
+                                      value->literal_byte_length;
     return expected_rep == (XrCValueRep) value->rep && value->c_type &&
+           value->reserved == 0 && recipe_valid &&
            strcmp(value->c_type, expected_c_type) == 0 &&
            (value->rep == XR_C_VALUE_REP_VOID
                 ? value->register_bits == 0 && value->memory_size == 0 &&
@@ -392,6 +514,21 @@ bool xr_c_emission_plan_verify(
             strcmp(row->c_type, register_c_type) != 0)
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "C emission row disagrees with TargetPlan authority");
+        const char *expected_literal =
+            verify_expected_string_literal(target_plan, binding);
+        uint8_t expected_recipe = expected_literal
+                                      ? XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW
+                                      : XR_C_VALUE_MATERIALIZATION_NONE;
+        size_t expected_length = expected_literal ? strlen(expected_literal) : 0;
+        if (row->materialization != expected_recipe || row->reserved != 0 ||
+            row->literal_byte_length != expected_length ||
+            (expected_literal
+                 ? (!row->literal_bytes ||
+                    memcmp(row->literal_bytes, expected_literal,
+                           expected_length + 1u) != 0)
+                 : row->literal_bytes != NULL))
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "C emission materialization recipe is not exact");
     }
     if (projected != plan->value_count)
         return emission_error(error, error_size, "XR_TARGET_1001",
@@ -414,7 +551,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission plan requires a verified TargetPlan");
     const uint64_t required_value_families =
-        XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_CLOSURE_STORAGE;
+        XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_CLOSURE_STORAGE |
+        XR_TARGET_FAMILY_STRING_LITERAL_STORAGE;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",
@@ -501,6 +639,26 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         value->memory_size = memory_rep->memory_size;
         value->rep = (uint8_t) c_rep;
         value->c_type = c_type;
+        const char *literal = build_exact_string_literal(target_plan, binding);
+        if (literal) {
+            size_t length = strlen(literal);
+            if (length > UINT32_MAX) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(error, error_size, "XR_EXEC_5003",
+                                      "String literal exceeds C emission budget");
+            }
+            char *owned = (char *) xr_malloc(length + 1u);
+            if (!owned) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(error, error_size, "XR_EXEC_5003",
+                                      "String literal C emission allocation failed");
+            }
+            memcpy(owned, literal, length + 1u);
+            value->materialization =
+                XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW;
+            value->literal_byte_length = (uint32_t) length;
+            value->literal_bytes = owned;
+        }
     }
     if (value_index != emission_value_count) {
         xr_c_emission_plan_free(plan);
@@ -522,6 +680,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
 void xr_c_emission_plan_free(XrCEmissionPlan *plan) {
     if (!plan)
         return;
+    for (uint32_t i = 0; i < plan->value_count; i++)
+        xr_free((void *) plan->values[i].literal_bytes);
     xr_free(plan->values);
     xr_free(plan);
 }

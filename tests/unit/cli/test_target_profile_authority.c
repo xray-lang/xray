@@ -77,6 +77,15 @@ static void test_runtime_owner_publishes_validated_structures(void) {
     CHECK(provider_mask ==
           (XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC)));
+    CHECK(xr_runtime_string_object_contract_verify(
+              &authority.string_contract) == XR_RUNTIME_ABI_OK);
+    CHECK(xr_runtime_string_literal_materialization_contract_verify(
+              &authority.string_contract.literal_view) == XR_RUNTIME_ABI_OK);
+    CHECK(authority.string_contract.literal_view.dynamic_tag ==
+          XR_RUNTIME_STRING_LITERAL_DYNAMIC_TAG);
+    authority.string_contract.literal_view.dynamic_tag++;
+    CHECK(xr_runtime_string_object_contract_verify(
+              &authority.string_contract) != XR_RUNTIME_ABI_OK);
 }
 
 static void test_cross_target_and_reserved_facts_fail_closed(void) {

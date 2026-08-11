@@ -39,6 +39,12 @@ typedef enum XrCValueRep {
     XR_C_VALUE_REP_COUNT,
 } XrCValueRep;
 
+typedef enum XrCValueMaterializationRecipe {
+    XR_C_VALUE_MATERIALIZATION_NONE = 0,
+    XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW = 1,
+    XR_C_VALUE_MATERIALIZATION_COUNT,
+} XrCValueMaterializationRecipe;
+
 typedef struct XrCValueEmissionView {
     uint32_t semantic_value;
     uint16_t target_register_rep;
@@ -49,7 +55,11 @@ typedef struct XrCValueEmissionView {
     uint16_t memory_align;
     uint32_t memory_size;
     uint8_t rep;
+    uint8_t materialization;
+    uint16_t reserved;
+    uint32_t literal_byte_length;
     const char *c_type;
+    const char *literal_bytes;
 } XrCValueEmissionView;
 
 #endif  // XR_C_EMISSION_SCHEMA_H

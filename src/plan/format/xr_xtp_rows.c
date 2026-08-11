@@ -91,7 +91,35 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U64, provider_mask)                                                                          \
     F(FP, provider_set_fingerprint)                                                                \
     F(FP, object_header_fingerprint)                                                               \
-    F(FP, runtime_abi_fingerprint)
+    F(FP, runtime_abi_fingerprint)                                                               \
+    F(U32, string_literal.schema_version)                                                        \
+    F(U8, string_literal.dynamic_tag)                                                            \
+    F(U8, string_literal.has_object_header)                                                      \
+    F(U8, string_literal.owns_utf8_bytes)                                                        \
+    F(U8, string_literal.nul_terminated)                                                         \
+    F(U32, string_literal.literal_flag)                                                          \
+    F(U32, string_literal.semantic_domain)                                                       \
+    F(U32, string_literal.backend_materialization)                                               \
+    F(U32, string_literal.view_size)                                                             \
+    F(U16, string_literal.view_alignment)                                                        \
+    F(U16, string_literal.field_count)                                                           \
+    F(U16, string_literal.fields[0].role) F(U16, string_literal.fields[0].flags)                 \
+    F(U32, string_literal.fields[0].offset) F(U32, string_literal.fields[0].width)               \
+    F(U32, string_literal.fields[0].reserved)                                                    \
+    F(U16, string_literal.fields[1].role) F(U16, string_literal.fields[1].flags)                 \
+    F(U32, string_literal.fields[1].offset) F(U32, string_literal.fields[1].width)               \
+    F(U32, string_literal.fields[1].reserved)                                                    \
+    F(U16, string_literal.fields[2].role) F(U16, string_literal.fields[2].flags)                 \
+    F(U32, string_literal.fields[2].offset) F(U32, string_literal.fields[2].width)               \
+    F(U32, string_literal.fields[2].reserved)                                                    \
+    F(U16, string_literal.fields[3].role) F(U16, string_literal.fields[3].flags)                 \
+    F(U32, string_literal.fields[3].offset) F(U32, string_literal.fields[3].width)               \
+    F(U32, string_literal.fields[3].reserved)                                                    \
+    F(U16, string_literal.fields[4].role) F(U16, string_literal.fields[4].flags)                 \
+    F(U32, string_literal.fields[4].offset) F(U32, string_literal.fields[4].width)               \
+    F(U32, string_literal.fields[4].reserved)                                                    \
+    F(FP, string_literal.fingerprint)                                                            \
+    F(U64, string_literal.reserved[0]) F(U64, string_literal.reserved[1])
 
 #define XR_XTP_MACHINE_REP_FIELDS(F)                                                              \
     F(U32, id) F(U16, kind) F(U16, register_bits) F(U32, memory_size) F(U16, memory_align)         \

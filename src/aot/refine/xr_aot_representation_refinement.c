@@ -773,6 +773,84 @@ static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
                callee->return_type;
 }
 
+static bool semantic_string_literal_is_exact(
+    const XrSemanticPlan *semantic,
+    const XrSemanticOperationRecord *operation) {
+    if (!semantic || !operation || operation->opcode != XI_CONST ||
+        operation->operand_count != 0 || operation->allocation_key ||
+        operation->constant >= xr_semantic_plan_constant_count(semantic) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED ||
+        operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        operation->return_complete != 1)
+        return false;
+    for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++) {
+        if (operation->allocation_id.bytes[i] != 0)
+            return false;
+    }
+    const XrSemanticConstantRecord *constant =
+        xr_semantic_plan_constant(semantic, operation->constant);
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    uint8_t forbidden = XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                        XR_SEM_TYPE_BORROW_VIEW |
+                        XR_SEM_TYPE_AGGREGATE_EXACT;
+    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE |
+                       XR_SEM_TYPE_OWNERSHIP_ROOT;
+    return constant && constant->kind == XR_SEM_CONST_STRING &&
+           constant->string && constant->type == operation->result_type &&
+           type && type->kind == XR_KIND_STRING && type->child_count == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           (type->flags & forbidden) == 0 &&
+           (type->flags & required) == required;
+}
+
+static bool verify_string_literal_type_authority(
+    VerifyAuthority *ctx, const XrSemanticOperationRecord *operation,
+    const XiValue *live) {
+    const XrSemanticTypeRecord *type =
+        ctx && operation
+            ? xr_semantic_plan_type(ctx->semantic, operation->result_type)
+            : NULL;
+    const XrSemanticConstantRecord *constant =
+        ctx && operation &&
+                operation->constant <
+                    xr_semantic_plan_constant_count(ctx->semantic)
+            ? xr_semantic_plan_constant(ctx->semantic, operation->constant)
+            : NULL;
+    if (!ctx || !live || !live->type ||
+        !semantic_string_literal_is_exact(ctx->semantic, operation) ||
+        !type || !constant || !source_type_matches(live->type, type) ||
+        live->type->kind != XR_KIND_STRING)
+        return false;
+    const char *live_bytes = live->aux ? (const char *) live->aux : "";
+    if (strcmp(live_bytes, constant->string) != 0)
+        return false;
+    const char *alias = live->type->alias_name ? live->type->alias_name : "";
+    size_t alias_length = 0;
+    size_t canonical_length = 0;
+    if (!verify_bounded_string_length(ctx, alias, &alias_length) ||
+        !verify_bounded_string_length(ctx, type->canonical_key,
+                                      &canonical_length))
+        return false;
+    char prefix[256];
+    int prefix_length = snprintf(
+        prefix, sizeof(prefix),
+        "type-v2:%u:%u:%u:%u:%u:%u:%u:%u:%u:%zu:",
+        (unsigned) live->type->kind, live->type->semantic_type_id,
+        live->type->is_nullable ? 1u : 0u,
+        live->type->is_const ? 1u : 0u,
+        live->type->is_value_type ? 1u : 0u,
+        live->type->is_literal ? 1u : 0u,
+        live->type->is_cycle_candidate ? 1u : 0u,
+        live->type->ptr_is_mut ? 1u : 0u,
+        (unsigned) live->type->scalar_rep, alias_length);
+    return prefix_length > 0 && (size_t) prefix_length < sizeof(prefix) &&
+           canonical_length == (size_t) prefix_length + alias_length &&
+           memcmp(type->canonical_key, prefix, (size_t) prefix_length) == 0 &&
+           memcmp(type->canonical_key + prefix_length, alias, alias_length) == 0;
+}
+
 static bool verify_heap_closure_type_authority(
     VerifyAuthority *ctx, const XrSemanticOperationRecord *operation,
     const XiFunc *owner, const XiValue *live) {
@@ -1101,6 +1179,10 @@ static bool verify_live_operation(VerifyAuthority *ctx,
         bool type_authority = semantic_heap_closure_is_exact(ctx->semantic, operation)
                                   ? verify_heap_closure_type_authority(
                                         ctx, operation, function, value)
+                              : semantic_string_literal_is_exact(ctx->semantic,
+                                                                 operation)
+                                  ? verify_string_literal_type_authority(
+                                        ctx, operation, value)
                                   : verify_scalar_type_authority(
                                         ctx, operation->result_type, value->type);
         exact = exact && operation->function == function_index &&
@@ -1151,6 +1233,12 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                                   ctx, source_operation, function,
                                   value->args[a]) &&
                                   operand->type == source_operation->result_type
+                        : source_operation &&
+                                  semantic_string_literal_is_exact(
+                                      ctx->semantic, source_operation)
+                            ? verify_string_literal_type_authority(
+                                  ctx, source_operation, value->args[a]) &&
+                                  operand->type == source_operation->result_type
                             : verify_scalar_type_authority(
                                   ctx, operand->type, value->args[a]->type);
             }
@@ -1167,6 +1255,11 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                                                                  operation)
                               ? verify_heap_closure_type_authority(
                                     ctx, operation, function, value)
+                          : operation &&
+                                    semantic_string_literal_is_exact(
+                                        ctx->semantic, operation)
+                              ? verify_string_literal_type_authority(
+                                    ctx, operation, value)
                               : verify_scalar_type_authority(ctx, type_index,
                                                              value->type);
         set_diag(ctx->diag,
@@ -1392,6 +1485,75 @@ static bool oracle_dynamic_closure_storage(const VerifyAuthority *ctx,
     return true;
 }
 
+static bool oracle_dynamic_string_literal_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !semantic_string_literal_is_exact(ctx->semantic, operation))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static uint16_t oracle_representation_recipe(uint16_t adapter,
                                              uint16_t machine_kind) {
     bool box = adapter == XR_AOT_REP_ADAPTER_BOX;
@@ -1472,6 +1634,11 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
             return true;
         case XI_CONST:
+            if (semantic_string_literal_is_exact(ctx->semantic, operation))
+                return oracle_dynamic_string_literal_storage(
+                    ctx, semantic_value, out_storage, out_machine_kind);
+            return oracle_machine_storage(ctx, semantic_value, out_storage,
+                                          out_machine_kind);
         case XI_ADD:
         case XI_SUB:
         case XI_MUL:
@@ -1547,6 +1714,14 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         case XI_CALL_BUILTIN:
             *out_storage = XR_REP_TAGGED;
             return true;
+        case XI_RELEASE: {
+            XrRep literal_storage = XR_REP_TAGGED;
+            if (!oracle_dynamic_string_literal_storage(
+                    ctx, source_value, &literal_storage, &ignored_kind))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
+        }
         case XI_SET_SHARED:
         case XI_PRINT: {
             XrRep machine_storage = XR_REP_TAGGED;
@@ -1554,7 +1729,9 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
                                         &ignored_kind) &&
                 !oracle_dynamic_closure_storage(ctx, source_value,
                                                 &machine_storage,
-                                                &ignored_kind))
+                                                &ignored_kind) &&
+                !oracle_dynamic_string_literal_storage(
+                    ctx, source_value, &machine_storage, &ignored_kind))
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
@@ -1807,11 +1984,15 @@ static bool authority_collect_obligations(CollectContext *ctx) {
         if (!ctx->policy->force_return_tagged &&
             !oracle_machine_storage(&oracle, block->control_value,
                                     &output_storage, &machine_kind)) {
-            set_diag(ctx->diag,
-                     XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
-                     ctx->record_count, block->control_value,
-                     XR_SEMANTIC_INDEX_NONE);
-            return false;
+            if (!oracle_dynamic_closure_storage(
+                    &oracle, block->control_value, &output_storage,
+                    &machine_kind)) {
+                set_diag(ctx->diag,
+                         XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+                         ctx->record_count, block->control_value,
+                         XR_SEMANTIC_INDEX_NONE);
+                return false;
+            }
         }
         if (!authority_add_obligation(
                 ctx, &oracle, block->control_value,
@@ -2507,7 +2688,10 @@ static bool verify_exact_semantic_coverage(VerifyAuthority *ctx) {
         if (!ctx->policy->force_return_tagged) {
             uint16_t machine_kind = 0;
             if (!oracle_machine_storage(ctx, block->control_value,
-                                        &output_storage, &machine_kind)) {
+                                        &output_storage, &machine_kind) &&
+                !oracle_dynamic_closure_storage(
+                    ctx, block->control_value, &output_storage,
+                    &machine_kind)) {
                 set_diag(ctx->diag,
                          XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                          i, block->control_value, XR_SEMANTIC_INDEX_NONE);

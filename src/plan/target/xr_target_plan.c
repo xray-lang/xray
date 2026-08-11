@@ -350,7 +350,7 @@ static void hash_coroutine(XrSHA256Context *ctx,
 
 void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t layout_index,
                                           XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-layout-v3\0";
+    static const uint8_t domain[] = "xray-target-layout-v4\0";
     const XrTargetLayoutRecord *layout = &plan->layouts[layout_index];
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
@@ -411,7 +411,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v7\0";
+    static const uint8_t domain[] = "xray-target-plan-v8\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);

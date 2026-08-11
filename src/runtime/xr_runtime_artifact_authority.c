@@ -81,6 +81,7 @@ static bool build_native_target_profile(XrTargetProfile **profile,
         .runtime_abi = &runtime.runtime_abi,
         .object_header_materialization =
             &runtime.object_header_materialization,
+        .string_contract = &runtime.string_contract,
         .providers = runtime.providers,
         .provider_count = runtime.provider_count,
     };

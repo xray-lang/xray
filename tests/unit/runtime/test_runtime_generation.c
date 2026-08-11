@@ -51,6 +51,7 @@ static XrTargetPlan *build_plan(XrSemanticPlan **semantic_out,
         .runtime_abi = &native.runtime_abi,
         .object_header_materialization =
             &native.object_header_materialization,
+        .string_contract = &native.string_contract,
         .providers = native.providers,
         .provider_count = native.provider_count,
     };

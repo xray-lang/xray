@@ -156,6 +156,7 @@ static XrTargetProfile *build_profile(void) {
         .runtime_abi = &authority.runtime_abi,
         .object_header_materialization =
             &authority.object_header_materialization,
+        .string_contract = &authority.string_contract,
         .providers = authority.providers,
         .provider_count = authority.provider_count,
     };
@@ -471,6 +472,25 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     xr_xtp_encoded_free(encoded);
     xr_target_plan_free(decoded_plan);
     xr_xtp_candidate_release(candidate);
+
+    uint8_t *old_v6 = copy_artifact(&fixture);
+    xr_xtp_put_u32(old_v6 + 4, UINT32_C(6));
+    resign_artifact(old_v6, fixture.size);
+    expect_decode_failure(old_v6, fixture.size);
+    xr_free(old_v6);
+
+    uint8_t *mutated_profile = copy_artifact(&fixture);
+    uint8_t *profile_entry =
+        directory_entry(mutated_profile, XR_XTP_SECTION_TARGET_PROFILE);
+    size_t profile_offset =
+        (size_t) xr_xtp_take_u64(profile_entry + 8);
+    /* Profile v2: dynamic_tag immediately follows the 292-byte v1 prefix
+     * and the new literal contract schema. */
+    mutated_profile[profile_offset + 296] ^= 1;
+    resign_section(mutated_profile, XR_XTP_SECTION_TARGET_PROFILE);
+    resign_artifact(mutated_profile, fixture.size);
+    expect_materialize_failure(&fixture, mutated_profile);
+    xr_free(mutated_profile);
     dispose_fixture(&fixture);
 }
 
@@ -809,7 +829,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
-        0, 292, 58, 12, 24, 108, 24, 40, 24, 12,
+        0, 448, 58, 12, 24, 108, 24, 40, 24, 12,
         48, 58, 32, 114, 50, 20, 4, 20, 44, 12, 44,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);

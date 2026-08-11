@@ -112,6 +112,9 @@ bool xr_test_target_profile_fixture_init(XrTestTargetProfileFixture *fixture,
     uint8_t pointer_width = (uint8_t) machine->data_layout.pointer.size;
     uint8_t endian = (uint8_t) machine->data_layout.endian;
     fixture->object_header_materialization = make_header_facts(endian);
+    if (xr_runtime_string_object_contract_build(&fixture->string_contract) !=
+        XR_RUNTIME_ABI_OK)
+        return false;
     fixture->runtime_abi = make_runtime_abi();
     fixture->runtime_abi.pointer_width = pointer_width;
     fixture->runtime_abi.target_endian = endian;
@@ -129,6 +132,7 @@ bool xr_test_target_profile_fixture_init(XrTestTargetProfileFixture *fixture,
     fixture->input.runtime_abi = &fixture->runtime_abi;
     fixture->input.object_header_materialization =
         &fixture->object_header_materialization;
+    fixture->input.string_contract = &fixture->string_contract;
     fixture->input.providers = fixture->providers;
     fixture->input.provider_count = 2;
     return true;

@@ -2653,7 +2653,14 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
            left->register_bits == right->register_bits &&
            left->memory_align == right->memory_align &&
            left->memory_size == right->memory_size && left->rep == right->rep &&
-           left->c_type && right->c_type && strcmp(left->c_type, right->c_type) == 0;
+           left->materialization == right->materialization &&
+           left->literal_byte_length == right->literal_byte_length &&
+           left->reserved == right->reserved && left->c_type && right->c_type &&
+           strcmp(left->c_type, right->c_type) == 0 &&
+           (left->literal_byte_length == 0 ||
+            (left->literal_bytes && right->literal_bytes &&
+             memcmp(left->literal_bytes, right->literal_bytes,
+                    left->literal_byte_length) == 0));
 }
 
 static bool cg_value_emission_storage_rep(XiCgenCtx *ctx,

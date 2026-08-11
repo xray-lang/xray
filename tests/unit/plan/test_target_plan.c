@@ -54,6 +54,12 @@ typedef struct TargetFixture {
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 2, .frozen = true};
+static XrType stub_exact_string = {
+    .kind = XR_KIND_STRING,
+    .id = 8,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 static XrType stub_unit = {
     .kind = XR_KIND_UNIT,
     .id = 3,
@@ -101,14 +107,15 @@ static void fill_foundation_capabilities(XrTargetCapabilityRecord capabilities[2
     };
 }
 
-static XrSemanticPlan *build_semantic_plan(void) {
+static XrSemanticPlan *build_semantic_plan_with_string_type(
+    XrType *string_type) {
     XiFunc *function = xi_func_new("target_plan_probe", &stub_int);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
     XiValue *result = xi_const_int(function, entry, 42, &stub_int);
     REQUIRE(result != NULL);
-    XiValue *string = xi_const_str(function, entry, "target", &stub_string);
+    XiValue *string = xi_const_str(function, entry, "target", string_type);
     REQUIRE(string != NULL);
     XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
     REQUIRE(release != NULL);
@@ -127,6 +134,14 @@ static XrSemanticPlan *build_semantic_plan(void) {
     REQUIRE(xr_semantic_plan_operation_count(plan) >= 1);
     xi_func_free(function);
     return plan;
+}
+
+static XrSemanticPlan *build_semantic_plan(void) {
+    return build_semantic_plan_with_string_type(&stub_string);
+}
+
+static XrSemanticPlan *build_exact_string_semantic_plan(void) {
+    return build_semantic_plan_with_string_type(&stub_exact_string);
 }
 
 static XrTargetProfile *build_profile(uint64_t extra_atomic_width) {
@@ -830,7 +845,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "f42ca47259751cb7b45befac6ba2399ef7c5e7c58d08516f64263d4c1e93cc84") == 0);
+                    "7a6268274b58a4f5bcf2cb3cfab62ea2f76817898d9a94d39bce578e9b3981c7") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -886,7 +901,7 @@ static void test_plan_snapshot_and_determinism(void) {
 }
 
 static void test_builder_materializes_canonical_scalar_intents(void) {
-    XrSemanticPlan *semantic = build_semantic_plan();
+    XrSemanticPlan *semantic = build_exact_string_semantic_plan();
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *first = NULL;
     XrTargetPlan *second = NULL;
@@ -896,11 +911,12 @@ static void test_builder_materializes_canonical_scalar_intents(void) {
     REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(first),
                                  xr_target_plan_fingerprint(second)));
     REQUIRE(first->completed_family_mask == XR_TARGET_REQUIRED_FAMILIES);
-    REQUIRE(first->functions_count == 1 && first->slots_count == 2);
+    REQUIRE(first->functions_count == 1 && first->slots_count == 3);
     REQUIRE(first->instructions_count == 0);
-    REQUIRE(first->functions[0].slot_begin == 0 && first->functions[0].slot_count == 2);
-    REQUIRE(first->functions[0].frame_size == 16 && first->functions[0].frame_align == 8);
+    REQUIRE(first->functions[0].slot_begin == 0 && first->functions[0].slot_count == 3);
+    REQUIRE(first->functions[0].frame_size == 32 && first->functions[0].frame_align == 8);
     REQUIRE(xr_stable_id_compare(first->slots[0].identity, first->slots[1].identity) < 0);
+    REQUIRE(xr_stable_id_compare(first->slots[1].identity, first->slots[2].identity) < 0);
     for (uint32_t i = 0; i < first->slots_count; i++) {
         const XrTargetSlotRecord *slot = &first->slots[i];
         REQUIRE(slot->id == i && slot->function == 0);
@@ -909,9 +925,91 @@ static void test_builder_materializes_canonical_scalar_intents(void) {
         REQUIRE(slot->semantic_operation == operation_for_value(semantic,
                                                                  slot->semantic_value));
     }
-    REQUIRE(first->value_reps_count == 3);
-    REQUIRE(first->value_reps[0].semantic_value < first->value_reps[1].semantic_value);
-    REQUIRE(first->value_reps[1].semantic_value < first->value_reps[2].semantic_value);
+    REQUIRE(first->value_reps_count == 4);
+    for (uint32_t i = 1; i < first->value_reps_count; i++)
+        REQUIRE(first->value_reps[i - 1u].semantic_value <
+                first->value_reps[i].semantic_value);
+    const XrSemanticOperationRecord *string_operation = NULL;
+    uint32_t string_operation_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        const XrSemanticConstantRecord *constant =
+            operation && operation->constant <
+                             xr_semantic_plan_constant_count(semantic)
+                ? xr_semantic_plan_constant(semantic, operation->constant)
+                : NULL;
+        if (operation && constant && constant->kind == XR_SEM_CONST_STRING) {
+            REQUIRE(string_operation == NULL);
+            string_operation = operation;
+            string_operation_index = i;
+        }
+    }
+    REQUIRE(string_operation != NULL &&
+            string_operation->return_provenance ==
+                XR_SEM_RETURN_BORROWED_STATIC &&
+            string_operation->return_complete == 1 &&
+            string_operation->allocation_key == NULL);
+    const XrTargetValueRepRecord *string_binding =
+        xr_target_plan_value_rep(first, string_operation->result_value);
+    REQUIRE(string_binding != NULL && string_binding->slot < first->slots_count);
+    const XrTargetMachineRepRecord *string_rep =
+        &first->machine_reps[string_binding->memory_rep];
+    REQUIRE(string_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            string_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            string_rep->ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            string_rep->null_encoding == XR_TARGET_NULL_TAGGED);
+    REQUIRE(first->slots[string_binding->slot].semantic_operation ==
+            string_operation_index);
+    uint32_t string_layout_count = 0;
+    for (uint32_t i = 0; i < first->layouts_count; i++)
+        string_layout_count +=
+            first->layouts[i].semantic_type == string_operation->result_type &&
+            first->layouts[i].kind == XR_TARGET_LAYOUT_DYNAMIC;
+    REQUIRE(string_layout_count == 1);
+    REQUIRE(first->allocations_count == 0 && first->root_maps_count == 0 &&
+            first->root_slots_count == 0 && first->cleanups_count == 0);
+
+    uint32_t string_binding_index =
+        (uint32_t) (string_binding - first->value_reps);
+    XrTargetValueRepRecord saved_string_rows[4];
+    memcpy(saved_string_rows, first->value_reps, sizeof(saved_string_rows));
+    memmove(&first->value_reps[string_binding_index],
+            &first->value_reps[string_binding_index + 1u],
+            (first->value_reps_count - string_binding_index - 1u) *
+                sizeof(*first->value_reps));
+    first->value_reps_count--;
+    expect_verify_failure(first, "XR_TARGET_1001");
+    first->value_reps_count++;
+    memcpy(first->value_reps, saved_string_rows, sizeof(saved_string_rows));
+
+    XrTargetValueRepRecord *original_rows = first->value_reps;
+    XrTargetValueRepRecord *extra_rows = (XrTargetValueRepRecord *) xr_malloc(
+        5u * sizeof(*extra_rows));
+    REQUIRE(extra_rows != NULL);
+    memcpy(extra_rows, original_rows,
+           first->value_reps_count * sizeof(*extra_rows));
+    extra_rows[4] = saved_string_rows[string_binding_index];
+    first->value_reps = extra_rows;
+    first->value_reps_count++;
+    expect_verify_failure(first, "XR_TARGET_1001");
+    first->value_reps_count--;
+    first->value_reps = original_rows;
+    xr_free(extra_rows);
+
+    uint64_t saved_family_mask = first->completed_family_mask;
+    first->completed_family_mask &=
+        ~XR_TARGET_FAMILY_STRING_LITERAL_STORAGE;
+    expect_verify_failure(first, "XR_TARGET_1001");
+    first->completed_family_mask = saved_family_mask;
+    uint32_t saved_string_operation =
+        first->slots[string_binding->slot].semantic_operation;
+    first->slots[string_binding->slot].semantic_operation =
+        saved_string_operation + 1u;
+    expect_verify_failure(first, "XR_TARGET_1001");
+    first->slots[string_binding->slot].semantic_operation =
+        saved_string_operation;
+    REQUIRE(xr_target_plan_verify(first, error, sizeof(error)));
     uint32_t release_operation = XR_SEMANTIC_INDEX_NONE;
     uint32_t release_value = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
@@ -943,14 +1041,14 @@ static void test_builder_materializes_canonical_scalar_intents(void) {
     first->value_reps[release_binding].slot = 0;
     expect_verify_failure(first, "XR_TARGET_1001");
     first->value_reps[release_binding] = saved_release;
-    XrTargetValueRepRecord saved_values[3];
+    XrTargetValueRepRecord saved_values[4];
     memcpy(saved_values, first->value_reps, sizeof(saved_values));
     for (uint32_t i = release_binding + 1; i < first->value_reps_count; i++)
         first->value_reps[i - 1] = first->value_reps[i];
     first->value_reps_count--;
     expect_verify_failure(first, "XR_TARGET_1001");
     memcpy(first->value_reps, saved_values, sizeof(saved_values));
-    first->value_reps_count = 3;
+    first->value_reps_count = 4;
 
     first->slots[0].identity.bytes[0] ^= 1;
     expect_verify_failure(first, "XR_TARGET_1001");
@@ -1740,7 +1838,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "db1e0da0f9185fa41c8cf28b7d40c26bf1668dfa0809f50d2cc67ce5156f81d4") == 0);
+                    "4d0522688d3292dd5a1ad3fea544b98023c2307e706034186d6c87b97cf933cf") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -1962,7 +2060,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "5f8d53d92f739fb63228a179747b907ea7de6363c790bb5d5d539649e20e2880") == 0);
+                   "b58c7d01206c21000cbb408b5b9cbb845755d8829bd7164802dba8f28da91584") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");

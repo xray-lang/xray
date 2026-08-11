@@ -140,8 +140,28 @@ static void xicgen_emit_bigint_literal_value(XiCgenCtx *ctx, FILE *out, const Xi
 
 static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
-    (void) f;
     (void) prefix;
+    XrCValueEmissionView emission = {0};
+    CgValueEmissionStatus emission_status =
+        cg_value_emission_view(ctx, f, v, &emission);
+    if (emission_status == CG_VALUE_EMISSION_FOUND &&
+        emission.materialization ==
+            XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW) {
+        if (emission.rep != XR_C_VALUE_REP_TAGGED ||
+            !emission.literal_bytes ||
+            strlen(emission.literal_bytes) != emission.literal_byte_length) {
+            (void) cg_value_emission_fail(
+                ctx, "String literal C emission recipe is invalid");
+            fprintf(out, "XR_NULL_VAL");
+            return;
+        }
+        cg_emit_str_value(ctx, out, emission.literal_bytes);
+        return;
+    }
+    if (emission_status == CG_VALUE_EMISSION_ERROR) {
+        fprintf(out, "XR_NULL_VAL");
+        return;
+    }
     // A scalar const whose storage rep is TAGGED (e.g. an int/float/bool value
     // typed as a nullable primitive) must be boxed to match its XrValue C slot.
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
@@ -188,7 +208,12 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     } else if (v->type->kind == XR_KIND_NULL)
         fprintf(out, "XR_NULL_VAL");
     else if (v->type->kind == XR_KIND_STRING) {
-        cg_emit_str_value(ctx, out, (const char *) v->aux);
+        (void) cg_value_emission_fail(
+            ctx, emission_status == CG_VALUE_EMISSION_FOUND
+                     ? "String literal lacks its immutable materialization recipe"
+                     : "String literal lacks immutable C emission authority");
+        fprintf(out, "XR_NULL_VAL");
+        return;
     } else if (xr_type_is_builtin_named_class(v->type, "BigInt") && v->aux) {
         xicgen_emit_bigint_literal_value(ctx, out, v, false);
     } else if (v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE && v->aux) {

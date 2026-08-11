@@ -13,7 +13,9 @@
 #include <string.h>
 
 static const uint8_t string_contract_domain[] =
-    "xray-runtime-string-contract-v1\0";
+    "xray-runtime-string-contract-v2\0";
+static const uint8_t string_literal_contract_domain[] =
+    "xray-runtime-string-literal-materialization-v1\0";
 
 /* Stable ID canonical key: runtime.extent.string.inline-utf8.v1 */
 static const XrStableId string_extent_id = {{
@@ -82,6 +84,155 @@ static bool reserved_zero(const XrRuntimeStringObjectContract *contract) {
             return false;
     }
     return true;
+}
+
+static bool literal_reserved_zero(
+    const XrRuntimeStringLiteralMaterializationContract *contract) {
+    for (size_t i = 0;
+         i < sizeof(contract->reserved) / sizeof(contract->reserved[0]); i++) {
+        if (contract->reserved[i] != 0)
+            return false;
+    }
+    return true;
+}
+
+static void build_literal_fields(XrRuntimeStringFieldDescriptor *fields) {
+    fields[0] = (XrRuntimeStringFieldDescriptor) {
+        .role = XR_RUNTIME_STRING_LITERAL_FIELD_BYTE_LENGTH,
+        .offset = (uint32_t) offsetof(XrRuntimeStringLiteralView, len),
+        .width = (uint32_t) sizeof(((XrRuntimeStringLiteralView *) 0)->len),
+    };
+    fields[1] = (XrRuntimeStringFieldDescriptor) {
+        .role = XR_RUNTIME_STRING_LITERAL_FIELD_RUNE_LENGTH,
+        .offset = (uint32_t) offsetof(XrRuntimeStringLiteralView, rune_len),
+        .width = (uint32_t) sizeof(((XrRuntimeStringLiteralView *) 0)->rune_len),
+    };
+    fields[2] = (XrRuntimeStringFieldDescriptor) {
+        .role = XR_RUNTIME_STRING_LITERAL_FIELD_HASH,
+        .offset = (uint32_t) offsetof(XrRuntimeStringLiteralView, hash),
+        .width = (uint32_t) sizeof(((XrRuntimeStringLiteralView *) 0)->hash),
+    };
+    fields[3] = (XrRuntimeStringFieldDescriptor) {
+        .role = XR_RUNTIME_STRING_LITERAL_FIELD_FLAGS,
+        .offset = (uint32_t) offsetof(XrRuntimeStringLiteralView, flags),
+        .width = (uint32_t) sizeof(((XrRuntimeStringLiteralView *) 0)->flags),
+    };
+    fields[4] = (XrRuntimeStringFieldDescriptor) {
+        .role = XR_RUNTIME_STRING_LITERAL_FIELD_UTF8_POINTER,
+        .offset = (uint32_t) offsetof(XrRuntimeStringLiteralView, data),
+        .width = (uint32_t) sizeof(((XrRuntimeStringLiteralView *) 0)->data),
+    };
+}
+
+static XrRuntimeAbiStatus verify_literal_shape(
+    const XrRuntimeStringLiteralMaterializationContract *contract) {
+    static const uint16_t roles[XR_RUNTIME_STRING_LITERAL_FIELD_COUNT] = {
+        XR_RUNTIME_STRING_LITERAL_FIELD_BYTE_LENGTH,
+        XR_RUNTIME_STRING_LITERAL_FIELD_RUNE_LENGTH,
+        XR_RUNTIME_STRING_LITERAL_FIELD_HASH,
+        XR_RUNTIME_STRING_LITERAL_FIELD_FLAGS,
+        XR_RUNTIME_STRING_LITERAL_FIELD_UTF8_POINTER,
+    };
+    if (!contract)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+    if (contract->schema_version !=
+        XR_RUNTIME_STRING_LITERAL_CONTRACT_SCHEMA_VERSION)
+        return XR_RUNTIME_ABI_INVALID_SCHEMA;
+    if (contract->dynamic_tag != XR_RUNTIME_STRING_LITERAL_DYNAMIC_TAG ||
+        contract->has_object_header != 0 || contract->owns_utf8_bytes != 0 ||
+        contract->nul_terminated != 1 ||
+        contract->literal_flag != XR_RUNTIME_STRING_LITERAL_FLAG ||
+        contract->semantic_domain != XR_STORAGE_CONST_SHARED ||
+        contract->backend_materialization != XR_MATERIALIZE_STATIC_DATA ||
+        contract->view_size != sizeof(XrRuntimeStringLiteralView) ||
+        contract->view_alignment != _Alignof(XrRuntimeStringLiteralView) ||
+        contract->field_count != XR_RUNTIME_STRING_LITERAL_FIELD_COUNT ||
+        !literal_reserved_zero(contract))
+        return XR_RUNTIME_ABI_INVALID_POLICY;
+    XrRuntimeStringFieldDescriptor expected[XR_RUNTIME_STRING_LITERAL_FIELD_COUNT] = {0};
+    build_literal_fields(expected);
+    for (uint32_t i = 0; i < XR_RUNTIME_STRING_LITERAL_FIELD_COUNT; i++) {
+        const XrRuntimeStringFieldDescriptor *field = &contract->fields[i];
+        if (field->role != roles[i] || field->role != expected[i].role ||
+            field->flags != 0 || field->offset != expected[i].offset ||
+            field->width != expected[i].width || field->reserved != 0)
+            return XR_RUNTIME_ABI_INVALID_SHAPE;
+    }
+    return XR_RUNTIME_ABI_OK;
+}
+
+XrRuntimeAbiStatus xr_runtime_string_literal_materialization_contract_fingerprint(
+    const XrRuntimeStringLiteralMaterializationContract *contract,
+    XrFingerprint *out) {
+    if (!out)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+    XrRuntimeAbiStatus status = verify_literal_shape(contract);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
+    XrSHA256Context ctx;
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, string_literal_contract_domain,
+                     sizeof(string_literal_contract_domain) - 1u);
+    hash_u32(&ctx, contract->schema_version);
+    xr_sha256_update(&ctx, &contract->dynamic_tag, 1);
+    xr_sha256_update(&ctx, &contract->has_object_header, 1);
+    xr_sha256_update(&ctx, &contract->owns_utf8_bytes, 1);
+    xr_sha256_update(&ctx, &contract->nul_terminated, 1);
+    hash_u32(&ctx, contract->literal_flag);
+    hash_u32(&ctx, contract->semantic_domain);
+    hash_u32(&ctx, contract->backend_materialization);
+    hash_u32(&ctx, contract->view_size);
+    hash_u16(&ctx, contract->view_alignment);
+    hash_u16(&ctx, contract->field_count);
+    for (uint32_t i = 0; i < XR_RUNTIME_STRING_LITERAL_FIELD_COUNT; i++) {
+        hash_u16(&ctx, contract->fields[i].role);
+        hash_u16(&ctx, contract->fields[i].flags);
+        hash_u32(&ctx, contract->fields[i].offset);
+        hash_u32(&ctx, contract->fields[i].width);
+    }
+    xr_sha256_final(&ctx, out->bytes);
+    return XR_RUNTIME_ABI_OK;
+}
+
+XrRuntimeAbiStatus xr_runtime_string_literal_materialization_contract_build(
+    XrRuntimeStringLiteralMaterializationContract *out) {
+    if (!out)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+    XrRuntimeStringLiteralMaterializationContract candidate = {
+        .schema_version = XR_RUNTIME_STRING_LITERAL_CONTRACT_SCHEMA_VERSION,
+        .dynamic_tag = XR_RUNTIME_STRING_LITERAL_DYNAMIC_TAG,
+        .nul_terminated = 1,
+        .literal_flag = XR_RUNTIME_STRING_LITERAL_FLAG,
+        .semantic_domain = XR_STORAGE_CONST_SHARED,
+        .backend_materialization = XR_MATERIALIZE_STATIC_DATA,
+        .view_size = (uint32_t) sizeof(XrRuntimeStringLiteralView),
+        .view_alignment = (uint16_t) _Alignof(XrRuntimeStringLiteralView),
+        .field_count = XR_RUNTIME_STRING_LITERAL_FIELD_COUNT,
+    };
+    build_literal_fields(candidate.fields);
+    XrRuntimeAbiStatus status =
+        xr_runtime_string_literal_materialization_contract_fingerprint(
+            &candidate, &candidate.fingerprint);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
+    *out = candidate;
+    return XR_RUNTIME_ABI_OK;
+}
+
+XrRuntimeAbiStatus xr_runtime_string_literal_materialization_contract_verify(
+    const XrRuntimeStringLiteralMaterializationContract *contract) {
+    XrRuntimeAbiStatus status = verify_literal_shape(contract);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
+    XrFingerprint actual;
+    status = xr_runtime_string_literal_materialization_contract_fingerprint(
+        contract, &actual);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
+    return bytes_equal(actual.bytes, contract->fingerprint.bytes,
+                       sizeof(actual.bytes))
+               ? XR_RUNTIME_ABI_OK
+               : XR_RUNTIME_ABI_FINGERPRINT_MISMATCH;
 }
 
 static void build_domains(XrRuntimeDomainIdentity *domains) {
@@ -187,6 +338,11 @@ static XrRuntimeAbiStatus build_unfingerprinted(
     contract->trait_valid_mask = XR_RUNTIME_STRING_TRAIT_VALID_MASK;
     build_fields(contract->fields);
     build_materializations(contract->materializations);
+    XrRuntimeAbiStatus status =
+        xr_runtime_string_literal_materialization_contract_build(
+            &contract->literal_view);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
 
     contract->extent.schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION;
     contract->extent.id = string_extent_id;
@@ -197,7 +353,7 @@ static XrRuntimeAbiStatus build_unfingerprinted(
     contract->extent.part_index = 0;
     contract->extent.part_count = 1;
     contract->extent.kind = XR_RUNTIME_EXTENT_INLINE_TAIL;
-    XrRuntimeAbiStatus status = xr_runtime_extent_descriptor_fingerprint(
+    status = xr_runtime_extent_descriptor_fingerprint(
         &contract->extent, &contract->extent.fingerprint);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
@@ -310,6 +466,11 @@ static XrRuntimeAbiStatus verify_shape(
             (XR_MATERIALIZATION_MASK(XR_MATERIALIZE_EXEC_HEAP) |
              XR_MATERIALIZATION_MASK(XR_MATERIALIZE_SYSTEM_HEAP)))
         return XR_RUNTIME_ABI_INVALID_POLICY;
+    XrRuntimeAbiStatus literal_status =
+        xr_runtime_string_literal_materialization_contract_verify(
+            &contract->literal_view);
+    if (literal_status != XR_RUNTIME_ABI_OK)
+        return literal_status;
     if (!reserved_zero(contract))
         return XR_RUNTIME_ABI_INVALID_POLICY;
     XrRuntimeAbiStatus status = xr_runtime_layout_descriptor_verify(
@@ -364,6 +525,8 @@ XrRuntimeAbiStatus xr_runtime_string_object_contract_fingerprint(
         hash_u32(&ctx, materialization->semantic_domain_mask);
         hash_u32(&ctx, materialization->backend_materialization_mask);
     }
+    xr_sha256_update(&ctx, contract->literal_view.fingerprint.bytes,
+                     sizeof(contract->literal_view.fingerprint.bytes));
     xr_sha256_update(&ctx, contract->extent.fingerprint.bytes,
                      sizeof(contract->extent.fingerprint.bytes));
     xr_sha256_update(&ctx, contract->layout.fingerprint.bytes,

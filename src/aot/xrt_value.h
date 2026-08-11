@@ -226,7 +226,8 @@ baseline:
 #define XR_TAG_NOTFOUND 7 /* sentinel: map lookup miss */
 
 /* AOT extensions — object type encoded in tag (no object header available) */
-#define XR_TAG_STR 14          /* static / literal string (const char*) */
+#define XR_TAG_STR XR_RUNTIME_STRING_LITERAL_DYNAMIC_TAG
+                              /* static / literal string view */
 #define XR_TAG_ARRAY 15        /* AOT array */
 #define XR_TAG_MAP 16          /* AOT map */
 #define XR_TAG_STRBUF 17       /* AOT string builder */
@@ -473,15 +474,9 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
  * UTF-8 payloads stay NUL-terminated so C interop (`xr_str_data`) remains free.
  * ========================================================================= */
 
-#define XRT_STR_LITERAL 0x1u
+#define XRT_STR_LITERAL XR_RUNTIME_STRING_LITERAL_FLAG
 
-typedef struct {
-    int64_t len;      /* byte length, excluding NUL */
-    int64_t rune_len; /* Unicode scalar count; -1 until first finalized query */
-    uint32_t hash;    /* cached content hash, 0 = unset (literals: precomputed) */
-    uint32_t flags;
-    char *data; /* NUL-terminated bytes (trailing block for heap strings) */
-} xrt_str_t;
+typedef XrRuntimeStringLiteralView xrt_str_t;
 
 static inline xrt_str_t *xr_str_literal_header(XrValue v) {
     return v.tag == XR_TAG_STR ? (xrt_str_t *) v.ptr : NULL;

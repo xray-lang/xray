@@ -38,12 +38,15 @@ switched to it yet.
 
 ## TargetProfile fingerprint handoff
 
-The three TargetProfile runtime fingerprints are derived from structured
-contracts. A nonzero byte string is not evidence. The builders in this leaf
-validate pointer-free candidate schemas without treating the current legacy
-object header as an input. Production profile freeze remains blocked until the
-canonical dynamic-value and provider registries are materialized and the
-TargetProfile freeze API consumes structured schemas rather than raw digests.
+TargetProfile runtime fingerprints and String-literal materialization facts
+are derived from structured contracts. A nonzero byte string is not evidence.
+String contract schema 2 embeds a headerless literal-view contract with the
+exact dynamic tag, literal flag, five ordered fields, static-borrow semantic
+ownership, and static-data backend ownership. The runtime canonical builder
+and independent verifier both prove that structure before TargetProfile schema
+2 copies it. This authority covers only immutable String literals; it grants no
+general owned-String object body, allocation, root map, or cleanup path. Raw
+digests and caller-authored field layouts are never accepted as substitutes.
 
 The required object-header entry point is:
 
@@ -215,12 +218,12 @@ anchor-sha256: src/runtime/abi/xr_runtime_contract.c a0c06a8465f57f8bcb19ef387c4
 anchor-sha256: src/runtime/abi/xr_runtime_object_header.h fd04f1ca2c71e3b3b9682bf1a7b1e6ff6fe1af4bacea8f49e3f5b4087d6ee51e
 anchor-sha256: src/runtime/abi/xr_runtime_object_header.c 59fbac2c2fd4a195f2be2980217036636db1fdeadcd05993e5f6e528bfbbf307
 anchor-sha256: contracts/target-machine/runtime-string-object-contract.toml d3304d0e964364eac065c67b3eb373e3267bb42eab9c1003d558a2e27d9adee6
-anchor-sha256: src/runtime/abi/xr_runtime_string_object.h bec64e4390e9c3411d7b986cbdf609a387aa36bed06bb75f9099752ed0dd519e
-anchor-sha256: src/runtime/abi/xr_runtime_string_object.c a2d546109e2eba7e23347f72029ed6b70fdd4f1b37a6b50a14629e8a49adf4b0
+anchor-sha256: src/runtime/abi/xr_runtime_string_object.h 449864cf27dde72d9e063ceb824684e1089e241742f1ccba1677b34b9726f2a1
+anchor-sha256: src/runtime/abi/xr_runtime_string_object.c 5b5b658ea9afe0abede35c8ac4779d09e79f5fe1a1dfefba01a7dd6ec6730f54
 anchor-sha256: tests/unit/runtime/test_runtime_descriptor.c 76e3c93da9b9acc28d14fd83bc9d31504e54082ebf9349c517f3fac897487e46
 anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c cf888c65411caf538761f2ef7b0c1220feb5accf96a54d000860f65870c9dabc
 anchor-sha256: tests/unit/runtime/test_runtime_object_header.c 05f3c1bd1e157e010cdddac4fb827294c49ca08599f7b8d52f2490cc0efaea95
-anchor-sha256: tests/unit/runtime/test_runtime_string_object.c 06270f79cbfa28a6418cfc0de4cbee2db54aaed2c24c24d428615ee971989a72
+anchor-sha256: tests/unit/runtime/test_runtime_string_object.c 99d46076417b73f92632ec138e1bf9c57664d7d9bbd5564a3e7458cd34ecd632
 anchor-sha256: tests/unit/CMakeLists.txt 0d2e25678d6bc63f670bfa04c8b3a292e17ad27c31f04c1ba024514763283f4f
 anchor-sha256: scripts/check_runtime_object_header_boundary.py 66e28cadaf5c456eca44528ae8ccb0926089d4ef603e6c06ca77113ddd0a7282
 anchor-sha256: scripts/check_runtime_string_object_boundary.py 81921b6f6b1118f99fc9d107b6c77d7611aec6f9fb11a11c5d80e8bf06c1de1d

@@ -8790,7 +8790,7 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                     xr_target_plan_machine_rep(target_plan, authority.target->memory_rep);
                 fprintf(out,
                         "  value %s%u op=%s semantic=%u authority=target "
-                        "family=target-scalar "
+                        "family=target-plan "
                         "register=%u(kind=%u,bits=%u) "
                         "memory=%u(kind=%u,size=%u,align=%u) slot=%u",
                         value->op == XI_PHI ? "phi" : "v", value->id, xi_op_name(value->op),

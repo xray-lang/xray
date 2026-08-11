@@ -13,6 +13,7 @@
 
 #include "xr_runtime_contract.h"
 #include "xr_runtime_object_header.h"
+#include "xr_runtime_string_object.h"
 #include "xr_target_machine_facts.h"
 
 #define XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT 2
@@ -23,6 +24,7 @@
 typedef struct XrRuntimeTargetAuthority {
     XrTargetMachineFacts machine;
     XrRuntimeObjectHeaderMaterializationFacts object_header_materialization;
+    XrRuntimeStringObjectContract string_contract;
     XrRuntimeAbiContract runtime_abi;
     XrTargetProviderContract
         providers[XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT];

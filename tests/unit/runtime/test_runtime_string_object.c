@@ -72,6 +72,24 @@ static void test_contract_shape_and_extent(void) {
     REQUIRE(contract.materializations[1].kind ==
             XR_RUNTIME_STRING_MATERIALIZATION_OWNED_OBJECT);
     REQUIRE(contract.materializations[1].has_object_header == 1);
+    REQUIRE(contract.literal_view.schema_version ==
+            XR_RUNTIME_STRING_LITERAL_CONTRACT_SCHEMA_VERSION);
+    REQUIRE(contract.literal_view.dynamic_tag ==
+            XR_RUNTIME_STRING_LITERAL_DYNAMIC_TAG);
+    REQUIRE(contract.literal_view.literal_flag ==
+            XR_RUNTIME_STRING_LITERAL_FLAG);
+    REQUIRE(contract.literal_view.semantic_domain ==
+            XR_STORAGE_CONST_SHARED);
+    REQUIRE(contract.literal_view.backend_materialization ==
+            XR_MATERIALIZE_STATIC_DATA);
+    REQUIRE(contract.literal_view.view_size ==
+            sizeof(XrRuntimeStringLiteralView));
+    REQUIRE(contract.literal_view.view_alignment ==
+            _Alignof(XrRuntimeStringLiteralView));
+    REQUIRE(contract.literal_view.fields[4].offset ==
+            offsetof(XrRuntimeStringLiteralView, data));
+    REQUIRE(xr_runtime_string_literal_materialization_contract_verify(
+                &contract.literal_view) == XR_RUNTIME_ABI_OK);
 
     XrRuntimeEvaluatedExtent extent;
     XrRuntimeExtentLimits limits = {
@@ -155,6 +173,18 @@ static void test_contract_mutations(void) {
     REQUIRE(xr_runtime_string_object_contract_verify(&mutated) ==
             XR_RUNTIME_ABI_INVALID_POLICY);
     mutated = contract;
+    mutated.literal_view.dynamic_tag++;
+    REQUIRE(xr_runtime_string_object_contract_verify(&mutated) !=
+            XR_RUNTIME_ABI_OK);
+    mutated = contract;
+    mutated.literal_view.fields[4].offset++;
+    REQUIRE(xr_runtime_string_object_contract_verify(&mutated) !=
+            XR_RUNTIME_ABI_OK);
+    mutated = contract;
+    mutated.literal_view.fingerprint.bytes[0] ^= 1;
+    REQUIRE(xr_runtime_string_object_contract_verify(&mutated) ==
+            XR_RUNTIME_ABI_FINGERPRINT_MISMATCH);
+    mutated = contract;
     mutated.reserved[1] = 1;
     REQUIRE(xr_runtime_string_object_contract_verify(&mutated) ==
             XR_RUNTIME_ABI_INVALID_POLICY);
@@ -231,10 +261,10 @@ static void test_object_validation_and_rc(void) {
 
 static void test_fingerprint_is_stable(void) {
     static const uint8_t expected[XR_FINGERPRINT_BYTES] = {
-        0xa8, 0x7e, 0xf4, 0xc6, 0x11, 0xb5, 0x4f, 0x7b,
-        0xce, 0xe9, 0x39, 0x6d, 0x82, 0x26, 0xee, 0x1d,
-        0xc3, 0x1c, 0x80, 0xe9, 0xb9, 0x07, 0xff, 0xb0,
-        0xc4, 0xd8, 0xb5, 0x18, 0x11, 0xba, 0x65, 0x96,
+        0xf6, 0xbc, 0xfa, 0x2a, 0x70, 0xd8, 0x0d, 0xf3,
+        0xff, 0xb7, 0x0a, 0x3a, 0x2d, 0xbe, 0xfa, 0x79,
+        0x5c, 0x46, 0x3a, 0xfd, 0xf6, 0xb0, 0x38, 0x89,
+        0x13, 0xe2, 0x7a, 0xd1, 0x35, 0xe2, 0x8a, 0x28,
     };
     XrRuntimeStringObjectContract contract = canonical_contract();
     if (memcmp(contract.fingerprint.bytes, expected, sizeof(expected)) != 0) {

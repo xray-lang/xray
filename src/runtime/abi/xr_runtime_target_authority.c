@@ -713,6 +713,10 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
             &authority.object_header_materialization);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
+    status = xr_runtime_string_object_contract_build(
+        &authority.string_contract);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
     uint8_t target_endian = authority.object_header_materialization.target_endian;
     if (target_endian != (uint8_t) authority.machine.data_layout.endian)
         return XR_RUNTIME_ABI_INVALID_SHAPE;

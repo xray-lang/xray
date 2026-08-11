@@ -19,13 +19,14 @@
 #include "../semantic/xr_semantic_ids.h"
 #include "../../runtime/abi/xr_runtime_contract.h"
 #include "../../runtime/abi/xr_runtime_object_header.h"
+#include "../../runtime/abi/xr_runtime_string_object.h"
 #include "../../runtime/abi/xr_target_machine_facts.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_TARGET_PROFILE_SCHEMA_VERSION UINT32_C(1)
-#define XR_TARGET_PLAN_SCHEMA_VERSION UINT32_C(7)
+#define XR_TARGET_PROFILE_SCHEMA_VERSION UINT32_C(2)
+#define XR_TARGET_PLAN_SCHEMA_VERSION UINT32_C(8)
 
 typedef struct XrTargetProfile XrTargetProfile;
 
@@ -43,6 +44,7 @@ typedef struct XrTargetProfileBuildInput {
     XrTargetMachineFacts machine;
     const XrRuntimeAbiContract *runtime_abi;
     const XrRuntimeObjectHeaderMaterializationFacts *object_header_materialization;
+    const XrRuntimeStringObjectContract *string_contract;
     const XrTargetProviderContract *providers;
     size_t provider_count;
 } XrTargetProfileBuildInput;

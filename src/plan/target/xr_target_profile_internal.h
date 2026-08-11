@@ -23,6 +23,7 @@ typedef struct XrTargetProfileDraft {
     XrFingerprint provider_set_fingerprint;
     XrFingerprint object_header_fingerprint;
     XrFingerprint runtime_abi_fingerprint;
+    XrRuntimeStringLiteralMaterializationContract string_literal;
 } XrTargetProfileDraft;
 
 struct XrTargetProfile {

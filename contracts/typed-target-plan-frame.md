@@ -1,12 +1,13 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 7 with the complete
-scalar, aggregate, direct-local call, closure-storage, and minimal coroutine
-state-call family mask. Schema 7 is a breaking hard cutover: schema 6 and a
-plan missing either new family fact are rejected rather than reinterpreted. A
-schema or required family change must update this boundary atomically; an
-older or partial plan is never interpreted through compatibility logic.
+verified TargetPlan. It accepts exactly TargetPlan schema 8 with the complete
+scalar, aggregate, direct-local call, closure-storage, minimal coroutine
+state-call, and String-literal-storage family mask. Schema 8 is a breaking hard
+cutover: schema 7 and a plan missing any required family fact are rejected
+rather than reinterpreted. A schema or required family change must update this
+boundary atomically; an older or partial plan is never interpreted through
+compatibility logic.
 
 The frame allocator is deliberately narrower than the accepted plan. It
 allocates and accesses only the selected function's packed, trivial scalar
@@ -17,6 +18,11 @@ slot for an exact no-capture heap closure, but it does not describe the closure
 object body, allocation, root map, root slot, or cleanup. Such a slot remains
 outside this trivial frame allocator; Semantic ownership and the existing AOT
 closure lifetime path retain those responsibilities.
+The String-literal-storage family likewise describes only a dynamic/owned/
+tagged outer value backed by the separate runtime String-literal
+materialization contract. It adds no object body, allocation, root-map,
+root-slot, cleanup, tuple, or general owned-String authority and remains
+outside the trivial frame allocator.
 
 The separate scalar dispatcher may use this frame only when an independently
 verified, non-empty function instruction group grants its exact execution
@@ -41,8 +47,8 @@ Evidence:
   from the runtime-only archive without compiler or AOT ownership, and proves
   that the internal scalar dispatcher is present without activating it.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 8f8b9ffd674a9d087e2c27389127e8b2b45aa3e41421f2a1f5babfc98a0b7937
-anchor-sha256: src/vm/xr_typed_frame.h 4d73a8fe22467d24629f954a109aa333ca027e0fd56d516bf854994af450361e
+anchor-sha256: src/plan/target/xr_target_plan.h 10adcaa8f644a39abf670d5367b611758524afe0b313a0d484a824fa7360505d
+anchor-sha256: src/vm/xr_typed_frame.h 968aa3ddce733983cc13ecdb94cf58dd35b35627a2a5d3db85545035baefc759
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c f323162dff476e2782c8f522e35d0911cf9c07ba58b050d20890b80cad9b7319
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 1df1c5d8130a740d9737e735477467501bb0e095289f061bc886ae9dc6dd9dc9

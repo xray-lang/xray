@@ -2779,6 +2779,10 @@ TEST(cgen_clean_narrow_arithmetic_keeps_required_constant_local) {
 TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     XrType u32_type = {
         .kind = XR_KIND_INT, .id = 961, .scalar_rep = XR_NATIVE_U32, .frozen = true};
+    XrType string_type = {
+        .kind = XR_KIND_STRING, .id = 964, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType unit_type = {
+        .kind = XR_KIND_UNIT, .id = 965, .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
     XiFunc *ir = xi_func_new("scalar_emission_consumer", &u32_type);
     TEST_REQUIRE(ir != NULL, "scalar emission consumer function allocated");
     XiBlock *entry = xi_block_new(ir);
@@ -2791,10 +2795,15 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     XiValue *parameter = xi_param(ir, entry, 0, &u32_type);
     XiValue *one = xi_const_int(ir, entry, 1, &u32_type);
     XiValue *sum = xi_value_new(ir, entry, XI_ADD, &u32_type, 2);
-    TEST_REQUIRE(parameter && one && sum, "scalar emission consumer values allocated");
+    XiValue *literal = xi_const_str(ir, entry, "immutable-authority",
+                                    &string_type);
+    XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
+    TEST_REQUIRE(parameter && one && sum && literal && print,
+                 "value emission consumer values allocated");
     ir->params[0] = parameter;
     sum->args[0] = parameter;
     sum->args[1] = one;
+    print->args[0] = literal;
     xi_block_set_return(entry, sum);
     TEST_REQUIRE(test_prepare_backend_ir(ir), "scalar emission consumer backend prepared");
 
@@ -2890,6 +2899,8 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     legacy_value->rep.flags = 0;
     uint8_t saved_xi_rep = sum->rep;
     sum->rep = XR_REP_TAGGED;
+    const char *saved_literal = (const char *) literal->aux;
+    literal->aux = "forged-live-xi";
 
     char *buf = NULL;
     size_t bufsz = 0;
@@ -2900,6 +2911,7 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     TEST_REQUIRE(xr_close_memstream(mem, &buf, &bufsz) == 0,
                  "scalar emission consumer stream closed");
     sum->rep = saved_xi_rep;
+    literal->aux = (void *) saved_literal;
 
     TEST_REQUIRE(!xi_cgen_has_error(ctx), "scalar emission consumer generated without error");
     const char *fn = find_static_function_definition(buf, "scalar_emission_consumer");
@@ -2915,6 +2927,9 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
                  "immutable C emission plan owns scalar local spelling");
     TEST_REQUIRE(!contains_between(fn, fn_end, poisoned_scalar_decl),
                  "poisoned legacy scalar spelling is unreachable");
+    TEST_REQUIRE(contains(buf, "immutable-authority") &&
+                     !contains(buf, "forged-live-xi"),
+                 "String literal CGen mechanically consumes immutable plan-owned bytes");
     const char *second_fn = find_static_function_definition(
         buf, "scalar_emission_consumer_second");
     TEST_REQUIRE(second_fn != NULL,
