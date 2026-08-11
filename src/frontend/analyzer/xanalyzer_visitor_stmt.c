@@ -6998,7 +6998,13 @@ bool xa_expr_creates_fresh_root(XaInferContext *ctx, AstNode *value) {
         case AST_FUNCTION_EXPR:
         case AST_NEW_EXPR:
         case AST_GO_EXPR:
+        case AST_TEMPLATE_STRING:
             return true;
+        case AST_BINARY_ADD: {
+            XrType *result =
+                ctx && ctx->analyzer ? xa_analyzer_get_node_type(ctx->analyzer, value) : NULL;
+            return result && result->kind == XR_KIND_STRING;
+        }
         case AST_CALL_EXPR:
             return xa_call_is_fresh_constructor(ctx, value);
         default:
@@ -7509,6 +7515,19 @@ static XaReturnOwnershipSummary xa_return_ownership_call_summary(XaInferContext 
             if (native_signature)
                 return xa_return_ownership_unknown();
         }
+
+        XrType *receiver_type =
+            member->object ? xa_analyzer_get_node_type(ctx->analyzer, member->object) : NULL;
+        XaBuiltinReturnOwnership native =
+            xa_builtin_get_type_member_return_ownership(receiver_type, member->name, false);
+        if (native == XA_BUILTIN_RETURN_FRESH)
+            return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
+        if (native == XA_BUILTIN_RETURN_BORROWED_STATIC)
+            return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
+        int parameter = xa_builtin_return_ownership_param_index(native);
+        if (parameter >= 0 && parameter < call->arg_count && call->arguments)
+            return xa_return_ownership_expr_summary(ctx, function_links, call->arguments[parameter],
+                                                    (uint8_t) (depth + 1));
     }
     if (xa_expr_creates_fresh_root(ctx, expr))
         return xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
@@ -7750,6 +7769,13 @@ void xa_ensure_function_return_ownership_prepass(XaInferContext *ctx, XaSymbolLi
     if (links->return_ownership.kind == XA_RETURN_OWNERSHIP_NULL_JOIN)
         links->return_ownership =
             xa_return_ownership_summary(XA_RETURN_OWNERSHIP_BORROWED_STATIC, -1, true);
+    /* A body-backed reference return never crosses lowering with UNKNOWN
+     * provenance. Stable aliases keep their exact borrowed contract; every
+     * unresolved or mixed path uses the owned ABI, and ARC establishes +1 at
+     * each return edge. This makes the callee boundary authoritative instead
+     * of forcing every caller to retain an ambiguous result defensively. */
+    if (!links->return_ownership.complete)
+        links->return_ownership = xa_return_ownership_summary(XA_RETURN_OWNERSHIP_OWNED, -1, true);
     links->return_ownership_scanned = true;
     links->return_ownership_scan_in_progress = false;
 }
@@ -7761,8 +7787,8 @@ void xa_ensure_function_return_ownership_prepass(XaInferContext *ctx, XaSymbolLi
  * their initializers.  Recompute every source function after Pass 2, when the
  * whole scope tree is typed.  Resetting the complete source set first makes
  * the recursive on-demand walk source-order independent for acyclic call
- * graphs; recursive ownership cycles remain UNKNOWN, which is the safe
- * contract until a dedicated SCC meet proves them.
+ * graphs. Recursive or mixed equations converge to the owned ABI at their
+ * body-backed boundary, where ARC materializes the required +1 result.
  *
  * This is a semantic finalization pass shared by VM and AOT.  Fixing the gap
  * only in CGen would leave bytecode ARC and generated C with different owner

@@ -151,10 +151,12 @@ XR_FUNC XrIterator *xr_iterator_new_from_generator(struct XrCoroutine *owner,
 // Check if more elements available
 XR_FUNC bool xr_iterator_has_next(XrIterator *iter);
 
-// Get next element ([key, value] array). This is the raw pull: it must be
-// guarded by xr_iterator_has_next(), and returns null when it is not. The
-// user-visible Iterator.next() / nth() raise E0432 on that unguarded pull
-// instead of handing the null back through a non-nullable T.
+// Get the next element as an OWNED result. Collection-backed references are
+// retained, pair tuples are freshly allocated, and generator yields transfer
+// or duplicate their root. The pull must be guarded by xr_iterator_has_next(),
+// and returns null when it is not. The user-visible Iterator.next() / nth()
+// raise E0432 on that unguarded pull instead of handing the null back through a
+// non-nullable T.
 XR_FUNC XrValue xr_iterator_next(XrIterator *iter);
 
 /* ========== XrValue Operations ========== */

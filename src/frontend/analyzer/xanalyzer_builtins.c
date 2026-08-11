@@ -80,6 +80,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_EVENTCOUNT;
     if (xr_type_is_builtin_named_class(type, "Thread"))
         return XR_TID_THREAD;
+    if (xr_type_is_builtin_named_type(type, "Iterator"))
+        return XR_TID_ITERATOR;
     if (xr_type_is_builtin_named_class(type, "Buffer"))
         return XR_TID_BUFFER;
     return XR_TID_NULL;
@@ -212,6 +214,21 @@ XaAllocationContractKind xa_builtin_get_type_member_allocation_contract(XrType *
     return m ? m->allocation_contract : XA_ALLOCATION_CONTRACT_MISSING;
 }
 
+XaBuiltinReturnOwnership
+xa_builtin_get_type_member_return_ownership(XrType *type, const char *member_name, bool is_static) {
+    const XaBuiltinType *bt = xa_builtin_get_type_info(type);
+    if (!member_name)
+        return XA_BUILTIN_RETURN_UNKNOWN;
+    if (!bt && xr_type_is_builtin_named_class(type, "Range"))
+        return xa_builtin_get_named_type_member_return_ownership("Range", member_name, is_static);
+    if (!bt)
+        return XA_BUILTIN_RETURN_UNKNOWN;
+    if (!is_static && !xa_builtin_member_available_for_type(type, member_name))
+        return XA_BUILTIN_RETURN_UNKNOWN;
+    const XaBuiltinMember *member = xa_builtin_find_named_type_member(bt, member_name, is_static);
+    return member ? member->return_ownership : XA_BUILTIN_RETURN_UNKNOWN;
+}
+
 const XaEffectContract *xa_builtin_get_named_type_member_effect_contract(const char *type_name,
                                                                          const char *member_name,
                                                                          bool is_static) {
@@ -255,6 +272,20 @@ xa_builtin_get_named_type_member_allocation_contract(const char *type_name, cons
             return contract->allocation;
     }
     return XA_ALLOCATION_CONTRACT_MISSING;
+}
+
+XaBuiltinReturnOwnership xa_builtin_get_named_type_member_return_ownership(const char *type_name,
+                                                                           const char *member_name,
+                                                                           bool is_static) {
+    const XaBuiltinType *bt = xa_builtin_get_by_name(type_name);
+    const XaBuiltinMember *member = xa_builtin_find_named_type_member(bt, member_name, is_static);
+    if (member)
+        return member->return_ownership;
+    if (!is_static && type_name && member_name && strcmp(type_name, "Range") == 0 &&
+        (strcmp(member_name, "toArray") == 0 || strcmp(member_name, "toString") == 0 ||
+         strcmp(member_name, "iterator") == 0))
+        return XA_BUILTIN_RETURN_FRESH;
+    return XA_BUILTIN_RETURN_UNKNOWN;
 }
 
 // Get member documentation
@@ -338,6 +369,21 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
 
     // Convert method name to Symbol ID once
     SymbolId sym = xr_builtin_symbol_from_name(method_name);
+
+    if (xr_type_is_builtin_named_class(container_type, "Range")) {
+        if (strcmp(method_name, "count") == 0)
+            return xr_type_new_int(NULL);
+        if (strcmp(method_name, "contains") == 0)
+            return xr_type_new_bool(NULL);
+        if (strcmp(method_name, "toArray") == 0)
+            return xr_type_new_array(X, xr_type_new_int(NULL));
+        if (strcmp(method_name, "toString") == 0)
+            return xr_type_new_string(NULL);
+        if (strcmp(method_name, "iterator") == 0) {
+            XrType *arguments[1] = {xr_type_new_int(NULL)};
+            return xr_type_new_generic_instance(X, "Iterator", NULL, arguments, 1);
+        }
+    }
 
     // Get element type for generic substitution
     XrType *elem_type = NULL;

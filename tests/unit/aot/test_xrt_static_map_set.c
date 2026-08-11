@@ -174,6 +174,43 @@ static void test_tagged_map_preserves_declared_scalar_key_lane(void) {
     xrt_map_destroy(map);
 }
 
+static void test_collection_materialization_promotes_reference_elements(void) {
+    XrValue map_value = xrt_map_new(0);
+    xrt_map_t *map = (xrt_map_t *) map_value.ptr;
+    XrValue map_key = xr_box_str("owned-key");
+    XrValue map_value_item = xr_box_str("owned-value");
+    xrt_map_set(map, map_key, map_value_item);
+
+    XrValue keys = xrt_map_keys(map);
+    XrValue values = xrt_map_values(map);
+    ASSERT_EQ_INT(
+        atomic_load_explicit(&xrt_arc_value_header(map_key)->refcount, memory_order_relaxed), 1,
+        "Map.keys promotes a reference element");
+    ASSERT_EQ_INT(
+        atomic_load_explicit(&xrt_arc_value_header(map_value_item)->refcount, memory_order_relaxed),
+        1, "Map.values promotes a reference element");
+    xrt_release(keys);
+    xrt_release(values);
+    ASSERT_TRUE(strcmp(xr_str_data(map_key), "owned-key") == 0,
+                "releasing Map.keys preserves the map's key owner");
+    ASSERT_TRUE(strcmp(xr_str_data(map_value_item), "owned-value") == 0,
+                "releasing Map.values preserves the map's value owner");
+    xrt_map_destroy(map);
+
+    XrValue set_value = xrt_set_new(0);
+    xrt_set_t *set = (xrt_set_t *) set_value.ptr;
+    XrValue set_item = xr_box_str("owned-set-value");
+    ASSERT_TRUE(xrt_set_add(set, set_item) == 1, "Set accepts the reference element");
+    XrValue set_values = xrt_set_values(set);
+    ASSERT_EQ_INT(
+        atomic_load_explicit(&xrt_arc_value_header(set_item)->refcount, memory_order_relaxed), 1,
+        "Set.values promotes a reference element");
+    xrt_release(set_values);
+    ASSERT_TRUE(strcmp(xr_str_data(set_item), "owned-set-value") == 0,
+                "releasing Set.values preserves the set's element owner");
+    xrt_set_destroy(set);
+}
+
 static void test_shared_promotion_preserves_all_existing_owners(void) {
     XrValue value = xrt_str_from_cstr("abc");
     XrObjHeader *header = xrt_arc_value_header(value);
@@ -205,6 +242,7 @@ int main(void) {
     test_tagged_set_clear_releases_owned_values();
     test_tagged_map_nan_key_has_canonical_identity();
     test_tagged_map_preserves_declared_scalar_key_lane();
+    test_collection_materialization_promotes_reference_elements();
     test_shared_promotion_preserves_all_existing_owners();
     printf("test_xrt_static_map_set: %d passed, %d failed\n", g_passed, g_failed);
     return g_failed == 0 ? 0 : 1;

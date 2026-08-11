@@ -57,6 +57,10 @@ static inline bool xrt_array_hof_write(void *ctx_ptr, int64_t index, XrValue val
     return true;
 }
 
+static inline bool xrt_array_hof_write_borrowed(void *ctx_ptr, int64_t index, XrValue value) {
+    return xrt_array_hof_write(ctx_ptr, index, xrt_value_to_owned(value));
+}
+
 static inline bool xrt_array_hof_filter_predicate(void *ctx_ptr, XrValue value) {
     XrtArrayHofCtx *ctx = (XrtArrayHofCtx *) ctx_ptr;
     return xr_truthy(ctx->fn1(ctx->closure, value));
@@ -95,7 +99,7 @@ static inline XrValue xrt_array_filter_typed(XrValue recv, XrValue callback) {
     XrtArrayHofCtx ctx = {a, out, cl, (xrt_array_hof_fn1_t) cl->callable->sync_entry, NULL};
     int64_t kept = 0;
     (void) xr_array_core_hof_filter(a->length, xrt_array_hof_read, xrt_array_hof_filter_predicate,
-                                    xrt_array_hof_write, &ctx, &kept);
+                                    xrt_array_hof_write_borrowed, &ctx, &kept);
     out->length = kept;
     return arr;
 }
@@ -157,7 +161,7 @@ static inline XrValue xrt_array_filter_indexed_typed(XrValue recv, XrValue callb
     for (int64_t i = 0; i < a->length; i++) {
         XrValue value = xr_typed_get(a->data, (int32_t) i, a->elem_type);
         if (xr_truthy(fn2(cl, value, XR_FROM_INT(i)))) {
-            xrt_array_write_preallocated(out, kept, value);
+            xrt_array_write_preallocated(out, kept, xrt_value_to_owned(value));
             kept++;
         }
     }

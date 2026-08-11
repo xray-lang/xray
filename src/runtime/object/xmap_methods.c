@@ -52,6 +52,8 @@ static XrValue xr_map_method_get(XrVMRuntime *iso, XrValue self, XrValue *args, 
         return xr_null();
     bool found = false;
     XrValue result = xr_map_get(map_self(self), args[0], &found);
+    if (found)
+        xr_rc_retain_value(result);
     return found ? result : xr_null();
 }
 

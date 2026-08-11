@@ -41,6 +41,13 @@ static inline XrString *str_self(XrValue self) {
     return XR_TO_STRING(self);
 }
 
+static XrValue string_method_owned_result(XrString *source, XrString *result) {
+    XrValue value = result ? xr_string_value(result) : xr_null();
+    if (result && result == source)
+        xr_rc_retain_value(value);
+    return value;
+}
+
 static void string_set_builtin_enum_error(XrVMRuntime *iso, int builtin_index,
                                           uint32_t member_index, const char *fallback_message) {
     if (iso && builtin_index >= 0 && builtin_index < XR_USER_GLOBALS_START) {
@@ -64,7 +71,7 @@ static void string_set_builtin_enum_error(XrVMRuntime *iso, int builtin_index,
 static XrValue m_slice(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1)
-        return xr_string_value(str);
+        return string_method_owned_result(str, str);
     xr_Integer start = XR_TO_INT(args[0]);
     xr_Integer count = (xr_Integer) xr_string_rune_length(str);
     xr_Integer end = (argc >= 2) ? XR_TO_INT(args[1]) : count;
@@ -75,7 +82,7 @@ static XrValue m_slice(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) 
         return xr_null();
     }
     XrString *result = xr_string_slice(iso, str, start, end);
-    return result ? xr_string_value(result) : xr_null();
+    return string_method_owned_result(str, result);
 }
 
 static XrValue m_slice_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
@@ -158,35 +165,33 @@ static XrValue m_split(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) 
 
 static XrValue m_replace(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
-    if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1])) {
-        return xr_string_value(str);
-    }
+    if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
+        return string_method_owned_result(str, str);
     XrString *old_str = xr_value_to_string(iso, args[0]);
     XrString *new_str = xr_value_to_string(iso, args[1]);
     XrString *result = xr_string_replace(iso, str, old_str, new_str);
-    return result ? xr_string_value(result) : xr_string_value(str);
+    return string_method_owned_result(str, result ? result : str);
 }
 
 static XrValue m_replace_all(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
-    if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1])) {
-        return xr_string_value(str);
-    }
+    if (argc < 2 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]))
+        return string_method_owned_result(str, str);
     XrString *old_str = xr_value_to_string(iso, args[0]);
     XrString *new_str = xr_value_to_string(iso, args[1]);
     XrString *result = xr_string_replace_all(iso, str, old_str, new_str);
-    return result ? xr_string_value(result) : xr_string_value(str);
+    return string_method_owned_result(str, result ? result : str);
 }
 
 static XrValue m_repeat(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     XrString *str = str_self(self);
     if (argc < 1)
-        return xr_string_value(str);
+        return string_method_owned_result(str, str);
     xr_Integer count = XR_TO_INT(args[0]);
     if (count <= 0)
         return xr_string_value(xr_string_intern(iso, "", 0, 0));
     XrString *result = xr_string_repeat(iso, str, count);
-    return result ? xr_string_value(result) : xr_null();
+    return string_method_owned_result(str, result);
 }
 
 /* str.copyBytes() -> Array<byte>. The receiver remains immutable; the result
@@ -212,7 +217,8 @@ static XrValue m_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, int ar
     (void) iso;
     (void) args;
     (void) argc;
-    return xr_string_value(str_self(self));
+    XrString *str = str_self(self);
+    return string_method_owned_result(str, str);
 }
 
 static bool string_materialize_bytes(const void *storage, int64_t length, uint8_t elem_type,

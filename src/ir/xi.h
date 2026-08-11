@@ -1670,6 +1670,11 @@ typedef struct XiFunc {
      * unconsumed drop that could free a borrowed alias. */
     XiReturnOwnership arc_return_ownership;
 
+    /* A closure that crosses an indirect-call boundary uses the language's
+     * owned reference-return ABI. Static calls may still consume a proven
+     * BORROWED_PARAM/BORROWED_STATIC result without this normalization. */
+    bool requires_owned_indirect_return;
+
     /* Re-export table populated during lowering and emitted by emit_reexports. */
     XiReexportEntry *reexports; /* arena-allocated array */
     uint16_t reexport_count;

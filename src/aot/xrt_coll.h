@@ -3358,14 +3358,14 @@ static inline XrValue xrt_set_values(xrt_set_t *s) {
     if (!xrt_set_is_typed(s)) {
         for (uint32_t i = 0; i < s->nentries; i++) {
             if (s->entries[i].val_tt != XR_SET_ENTRY_NIL)
-                xrt_array_push(arr, s->entries[i].value);
+                xrt_array_push(arr, xrt_value_to_owned(s->entries[i].value));
         }
         return arr;
     }
     for (int64_t oi = 0; oi < s->order_len; oi++) {
         int64_t slot = s->order[oi];
         if (xrt_set_slot_is_full(s, slot))
-            xrt_array_push(arr, xrt_set_slot_item(s, slot));
+            xrt_array_push(arr, xrt_value_to_owned(xrt_set_slot_item(s, slot)));
     }
     return arr;
 }
@@ -3385,7 +3385,7 @@ static inline XrValue xrt_map_keys(xrt_map_t *m) {
         XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, m->key_type), XR_TAG_ARRAY);
         for (uint32_t i = 0; i < m->nentries; i++) {
             if (m->entries[i].key_tt != XR_MAP_ENTRY_NIL_KEY)
-                xrt_array_push(arr, m->entries[i].key);
+                xrt_array_push(arr, xrt_value_to_owned(m->entries[i].key));
         }
         return arr;
     }
@@ -3393,7 +3393,7 @@ static inline XrValue xrt_map_keys(xrt_map_t *m) {
     for (int64_t oi = 0; oi < m->order_len; oi++) {
         int64_t slot = m->order[oi];
         if (xrt_map_slot_is_full(m, slot))
-            xrt_array_push(arr, xrt_map_slot_key(m, slot));
+            xrt_array_push(arr, xrt_value_to_owned(xrt_map_slot_key(m, slot)));
     }
     return arr;
 }
@@ -3408,7 +3408,7 @@ static inline XrValue xrt_map_values(xrt_map_t *m) {
         XrValue arr = xr_mkptr(xrt_array_new_typed_ptr(0, m->value_type), XR_TAG_ARRAY);
         for (uint32_t i = 0; i < m->nentries; i++) {
             if (m->entries[i].key_tt != XR_MAP_ENTRY_NIL_KEY)
-                xrt_array_push(arr, m->entries[i].value);
+                xrt_array_push(arr, xrt_value_to_owned(m->entries[i].value));
         }
         return arr;
     }
@@ -3416,7 +3416,7 @@ static inline XrValue xrt_map_values(xrt_map_t *m) {
     for (int64_t oi = 0; oi < m->order_len; oi++) {
         int64_t slot = m->order[oi];
         if (xrt_map_slot_is_full(m, slot))
-            xrt_array_push(arr, xrt_map_slot_value(m, slot));
+            xrt_array_push(arr, xrt_value_to_owned(xrt_map_slot_value(m, slot)));
     }
     return arr;
 }
@@ -3718,8 +3718,8 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
                 return xrt_tuple_make_from_borrowed(2, kv);
             }
             if (it->kind == XRT_ITER_VALUES)
-                return xrt_boolmap_iter_value(b, cursor);
-            return xrt_boolmap_iter_key(b, cursor);
+                return xrt_value_to_owned(xrt_boolmap_iter_value(b, cursor));
+            return xrt_value_to_owned(xrt_boolmap_iter_key(b, cursor));
         }
         int64_t slot = xrt_map_is_typed(m) ? m->order[it->cursor++] : it->cursor++;
         if (it->kind == XRT_ITER_PAIRS) {
@@ -3727,13 +3727,13 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
             return xrt_tuple_make_from_borrowed(2, kv);
         }
         if (it->kind == XRT_ITER_VALUES)
-            return xrt_map_slot_value(m, slot);
-        return xrt_map_slot_key(m, slot);
+            return xrt_value_to_owned(xrt_map_slot_value(m, slot));
+        return xrt_value_to_owned(xrt_map_slot_key(m, slot));
     }
     if (XR_IS_SET(it->coll)) {
         xrt_set_t *s = (xrt_set_t *) it->coll.ptr;
         int64_t slot = xrt_set_is_typed(s) ? s->order[it->cursor++] : it->cursor++;
-        return xrt_set_slot_item(s, slot);
+        return xrt_value_to_owned(xrt_set_slot_item(s, slot));
     }
     if (XR_IS_ARRAY(it->coll)) {
         xrt_array_t *a = (xrt_array_t *) it->coll.ptr;
@@ -3745,7 +3745,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
             XrValue kv[2] = {XR_FROM_INT(idx), elem};
             return xrt_tuple_make_from_borrowed(2, kv);
         }
-        return elem;
+        return xrt_value_to_owned(elem);
     }
     if (XR_IS_STR(it->coll)) {
         int64_t char_index = it->index++;

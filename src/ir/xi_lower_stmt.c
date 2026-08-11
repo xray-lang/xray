@@ -26,6 +26,7 @@
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_ast_visitor.h"
+#include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
@@ -1739,6 +1740,7 @@ static void lower_match_no_match_throw(XiLower *l, int line) {
     exc->args[1] = msg;
     exc->aux = (void *) "constructor";
     exc->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    exc->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     exc->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     exc->line = (uint32_t) line;
 
@@ -2349,6 +2351,8 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     iter->args[0] = coll;
     iter->aux = (void *) "entriesIterator";
     iter->aux_int = (int64_t) xi_lower_method_symbol(l, "entriesIterator") << 1;
+    iter->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
     iter->flags |= XI_FLAG_SIDE_EFFECT;
     iter->line = line;
 
@@ -2392,6 +2396,8 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     entry->args[0] = iter_body;
     entry->aux = (void *) "next";
     entry->aux_int = (int64_t) xi_lower_method_symbol(l, "next") << 1;
+    entry->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
     entry->flags |= XI_FLAG_SIDE_EFFECT;
     entry->line = line;
 
@@ -2459,6 +2465,16 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     iter->args[0] = coll;
     iter->aux = (void *) "iterator";
     iter->aux_int = (int64_t) xi_lower_method_symbol(l, "iterator") << 1;
+    XaBuiltinReturnOwnership iterator_ownership =
+        xa_builtin_get_type_member_return_ownership(coll->type, "iterator", false);
+    if (iterator_ownership == XA_BUILTIN_RETURN_RECEIVER) {
+        iter->result_alias_operand = 0;
+        iter->call_return_ownership = (XiReturnOwnership) {
+            .kind = XI_RETURN_OWNERSHIP_BORROWED_PARAM, .param_index = 0, .complete = true};
+    } else {
+        iter->call_return_ownership = (XiReturnOwnership) {
+            .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
+    }
     iter->flags |= XI_FLAG_SIDE_EFFECT;
     iter->line = line;
     xi_lower_insert_err_check(l, node, true);
@@ -2510,6 +2526,8 @@ static void lower_for_in_custom_iterator(XiLower *l, AstNode *node, XiValue *col
     next_val->args[0] = iter_body;
     next_val->aux = (void *) "next";
     next_val->aux_int = (int64_t) xi_lower_method_symbol(l, "next") << 1;
+    next_val->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
     next_val->flags |= XI_FLAG_SIDE_EFFECT;
     next_val->line = line;
     xi_lower_insert_err_check(l, node, true);

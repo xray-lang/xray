@@ -224,11 +224,10 @@ static bool builtin_call_arg_is_borrowed(const XiValue *user, uint16_t arg_idx) 
         return arg_idx == 0;
     }
 
-    /* Array<T>(src) copy/convert construction reads the source array and
-     * copies its elements into a fresh container; neither backend releases
-     * the source. Keeping the source with the caller lets ARC drop it at its
-     * death point instead of moving it into a call that never frees it. */
-    if (strcmp(name, "array_copy_new") == 0)
+    /* Value copy and Array<T>(src) construction read their source and build an
+     * independent result; neither backend consumes the input. Keeping it with
+     * the caller lets ARC drop it at its actual death point. */
+    if (strcmp(name, "copy") == 0 || strcmp(name, "array_copy_new") == 0)
         return arg_idx == 0;
 
     return false;

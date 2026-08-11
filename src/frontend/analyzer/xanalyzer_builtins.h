@@ -159,12 +159,16 @@ XR_FUNC const XaEffectContract *
 xa_builtin_get_type_member_effect_contract(XrType *type, const char *member_name, bool is_static);
 XR_FUNC XaAllocationContractKind xa_builtin_get_type_member_allocation_contract(
     XrType *type, const char *member_name, bool is_static);
+XR_FUNC XaBuiltinReturnOwnership
+xa_builtin_get_type_member_return_ownership(XrType *type, const char *member_name, bool is_static);
 
 // Same as above, but starts from a built-in type namespace name.
 XR_FUNC const XaEffectContract *
 xa_builtin_get_named_type_member_effect_contract(const char *type_name, const char *member_name,
                                                  bool is_static);
 XR_FUNC XaAllocationContractKind xa_builtin_get_named_type_member_allocation_contract(
+    const char *type_name, const char *member_name, bool is_static);
+XR_FUNC XaBuiltinReturnOwnership xa_builtin_get_named_type_member_return_ownership(
     const char *type_name, const char *member_name, bool is_static);
 
 // Get member documentation

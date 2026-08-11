@@ -321,9 +321,11 @@ XrValue xr_iterator_next(XrIterator *iter) {
             // Skip tombstoned entries
             if (!XR_MAP_ENTRY_EMPTY(node)) {
                 if (iter->mode == XR_ITER_MODE_KEYS) {
+                    xr_rc_retain_value(node->key);
                     return node->key;
                 }
                 if (iter->mode == XR_ITER_MODE_VALUES) {
+                    xr_rc_retain_value(node->value);
                     return node->value;
                 }
                 /* PAIRS: build a (key, value) tuple on demand. Used by
@@ -354,7 +356,9 @@ XrValue xr_iterator_next(XrIterator *iter) {
 
             // Skip tombstoned entries
             if (!XR_SET_ENTRY_EMPTY(entry)) {
-                // Found valid entry, return value directly
+                // The set retains its slot; the result needs an independent
+                // owning reference.
+                xr_rc_retain_value(entry->value);
                 return entry->value;
             }
         }
@@ -383,9 +387,11 @@ XrValue xr_iterator_next(XrIterator *iter) {
                 key_str = xr_string_value(xr_string_intern(X, name, strlen(name), 0));
             }
             if (iter->mode == XR_ITER_MODE_KEYS) {
+                xr_rc_retain_value(key_str);
                 return key_str;
             }
             if (iter->mode == XR_ITER_MODE_VALUES) {
+                xr_rc_retain_value(value);
                 return value;
             }
             XrTuple *pair = xr_tuple_new(iter->coro, 2);
@@ -404,6 +410,7 @@ XrValue xr_iterator_next(XrIterator *iter) {
         uint32_t idx = iter->scan_index++;
         XrValue elem = xr_array_get_element(arr, (int32_t) idx);
         if (iter->mode == XR_ITER_MODE_VALUES) {
+            xr_rc_retain_value(elem);
             return elem;
         }
         if (iter->mode == XR_ITER_MODE_KEYS) {

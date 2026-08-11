@@ -361,6 +361,17 @@ static inline int xrt_method_result_is_owned(int sym) {
         /* Map.get() answers through xrt_map_get_owned, which promotes the
          * stored value to an owned reference. */
         case XRT_SYM_GET:
+        /* Fresh collection shells whose element owners are promoted or
+         * transferred into the result. */
+        case XRT_SYM_KEYS:
+        case XRT_SYM_VALUES:
+        case XRT_SYM_ENTRIES:
+        case XRT_SYM_MAP:
+        case XRT_SYM_FILTER:
+        /* Iterator pulls promote collection slots while preserving fresh pair
+         * tuples and transferred generator yields. */
+        case XRT_SYM_NEXT:
+        case XRT_SYM_NTH:
         /* Retained receiver.  reverse() and StringBuilder.clear() answer with
          * it directly; the in-place array mutators answer through a helper
          * that returns its own argument, wrapped at the arm.  The Map, Set and
@@ -377,7 +388,6 @@ static inline int xrt_method_result_is_owned(int sym) {
             return 1;
         /* Deliberately absent, even where one reading looks owned:
          *
-         *   XRT_SYM_NEXT, XRT_SYM_NTH  — a slot of the underlying collection.
          *   XRT_SYM_JOIN               — Array.join and String.join build a
          *                                fresh string, but Thread.join answers
          *                                with thread->retval, which the thread
@@ -387,24 +397,6 @@ static inline int xrt_method_result_is_owned(int sym) {
          *   XRT_SYM_REDUCE             — the accumulator comes back out of a
          *                                user closure, whose convention this
          *                                layer cannot see.
-         *   XRT_SYM_KEYS, VALUES,      — SHALLOW COLLECTIONS.  xrt_map_keys,
-         *   ENTRIES, MAP, FILTER         xrt_map_values, xrt_set_values,
-         *                                xrt_json_collect and the typed
-         *                                array HOFs allocate a fresh array
-         *                                and fill it with xrt_array_push,
-         *                                which stores WITHOUT retaining.  The
-         *                                shell is the caller's but the
-         *                                elements still belong to the source,
-         *                                so releasing the shell walks them and
-         *                                frees objects the source still
-         *                                references — ASan catches this as a
-         *                                use-after-free in xrt_map_destroy the
-         *                                moment the values are managed rather
-         *                                than integers.  Listing these needs
-         *                                the producers to retain what they
-         *                                push, which in turn needs every other
-         *                                caller of those helpers to release
-         *                                the result.
          */
         default:
             return 0;
@@ -448,12 +440,10 @@ static inline XrValue xrt_str_to_bytes(XrValue s) {
  * that convention: it leaves one refcount with two owners, which is how
  * nested_generator.xr came to read a freed iterator.
  *
- * Three arms still answer borrowed.  Iterator.next() and Iterator.nth() hand
- * back a slot of the underlying collection, because the pull protocol has no
- * other value to give; Thread.join() hands back thread->retval, which the
- * thread object still owns.  None of them is listed in
- * xrt_method_result_is_owned(), which is what keeps the discard path
- * (xrt_method_discard_N) from releasing a borrow.
+ * Thread.join() still answers borrowed because the thread object owns
+ * thread->retval. Iterator.next() and Iterator.nth() instead normalize every
+ * source to an owned language result: collection slots are retained, pair
+ * tuples are fresh, and generator yields transfer ownership.
  *
  * The in-place array mutators — sort(), reserve(), fill(), resize(),
  * appendFrom(), repeatFrom() — answer through a helper that returns its own

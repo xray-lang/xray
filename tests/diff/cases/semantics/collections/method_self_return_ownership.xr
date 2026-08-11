@@ -82,7 +82,9 @@ fn discarded_owned_results() {
     var rows = [[1, 2], [3, 4], [5, 6]]
     rows.pop()
     rows.shift()
+    rows.filter(fn(row: Array<int>) -> bool { return len(row) > 0 })
     print("rows " + string(len(rows)))
+    print("rows0-after-filter " + string(rows[0][0]))
 
     var a = [3, 1, 2]
     a.map(fn(x: int) -> int { return x * 2 })
@@ -97,11 +99,13 @@ fn discarded_owned_results() {
     m.values()
     (255).toHex()
     print("s " + s + " " + string(len(m)))
+    print("map-value " + string(m.get("k")![0]))
 }
 
-// The other half of the convention: next() answers with an element the
-// collection still owns, so a discarded next() must NOT be released.
-fn discarded_element_borrow() {
+// Iterator pulls normalize to owned results. A collection slot is retained,
+// while a generator yield transfers its owner, so discarding next() is safe
+// and does not invalidate the collection's copy.
+fn discarded_owned_iterator_result() {
     var rows = [[1, 2], [3, 4]]
     var it = rows.iterator()
     it.next()
@@ -135,7 +139,7 @@ aliased_string_passthrough()
 aliased_mutators()
 allocating_helper()
 discarded_owned_results()
-discarded_element_borrow()
+discarded_owned_iterator_result()
 for (y in frames(2)) {
     print("y " + string(y))
 }

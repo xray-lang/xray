@@ -759,7 +759,8 @@ static bool call_returns_intrinsic_fresh(const XiFunc *f, const XiValue *v) {
      * the result aliases no argument, so it is a fresh +1 the caller owns
      * (and must drop at its death point when never consumed). */
     if (v->op == XI_CALL_BUILTIN && v->aux &&
-        (strcmp((const char *) v->aux, "array_copy_new") == 0 ||
+        (strcmp((const char *) v->aux, "copy") == 0 ||
+         strcmp((const char *) v->aux, "array_copy_new") == 0 ||
          strcmp((const char *) v->aux, "array_filled_new") == 0 ||
          strcmp((const char *) v->aux, "array_with_capacity") == 0))
         return true;
@@ -2275,6 +2276,24 @@ static void arc_init_sigs_collect(XiFunc *f, XiFuncVec *vec) {
         arc_init_sigs_collect(f->shared_slot_funcs[i], vec);
 }
 
+static void arc_mark_closure_return_abis(XiFunc *function) {
+    if (!function)
+        return;
+    for (uint16_t i = 0; i < function->nchildren; i++)
+        arc_mark_closure_return_abis(function->children[i]);
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        XiBlock *block = function->blocks[b];
+        for (uint32_t v = 0; block && v < block->nvalues; v++) {
+            XiValue *closure = block->values[v];
+            if (!closure || closure->op != XI_CLOSURE_NEW || !closure->aux)
+                continue;
+            XiFunc *body = (XiFunc *) closure->aux;
+            if (body->return_type && xi_own_type_is_rc(body->return_type))
+                body->requires_owned_indirect_return = true;
+        }
+    }
+}
+
 /* Compute every reachable function's borrow signature to a fixpoint on the
  * PRE-ARC IR (Roc crate::borrow model). Each parameter starts borrowed and is
  * demoted to owned only when proven to have a consuming use given the current
@@ -2293,6 +2312,7 @@ XR_FUNC void xi_arc_analyze_contracts(XiFunc *f) {
      * signature so every consumer, including a no-ARC pipeline, sees the same
      * contract graph. */
     arc_copy_to_move(f);
+    arc_mark_closure_return_abis(f);
     XiFuncVec vec = {0};
     arc_init_sigs_collect(f, &vec);
     uint8_t *fixed_return = (uint8_t *) xr_calloc(vec.count, sizeof(*fixed_return));
@@ -2301,8 +2321,15 @@ XR_FUNC void xi_arc_analyze_contracts(XiFunc *f) {
         XR_CHECK(false, "xi_arc: out of memory sealing return contracts");
         return;
     }
-    for (uint32_t i = 0; i < vec.count; i++)
-        fixed_return[i] = vec.items[i]->arc_return_ownership.complete ? 1u : 0u;
+    for (uint32_t i = 0; i < vec.count; i++) {
+        XiFunc *fn = vec.items[i];
+        if (fn->requires_owned_indirect_return) {
+            fn->arc_return_ownership = arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);
+            fixed_return[i] = 1u;
+        } else {
+            fixed_return[i] = fn->arc_return_ownership.complete ? 1u : 0u;
+        }
+    }
     bool changed = true;
     while (changed) {
         changed = false;

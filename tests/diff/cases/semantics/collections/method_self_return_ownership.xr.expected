@@ -12,7 +12,9 @@ f 5 5
 r0 3
 b 104 105
 rows 1
+rows0-after-filter 3
 s a,b,c 1
+map-value 1
 kept 3
 rows0 1
 y 6

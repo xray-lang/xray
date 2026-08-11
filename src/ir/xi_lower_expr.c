@@ -303,10 +303,10 @@ static bool xi_lower_call_constructs_instance(XiLower *l, const CallExprNode *ca
     } else if (callee->name) {
         class_sym = xi_lower_lookup_class_symbol(l, callee->name);
     }
-    if (!class_sym)
-        return false;
-    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, class_sym);
-    return links && links->class_info != NULL;
+    if (class_sym)
+        return true;
+    return callee->symbol_id == 0 && callee->name &&
+           xi_lower_builtin_class_global_index(callee->name) >= 0;
 }
 
 static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
@@ -5254,6 +5254,35 @@ static const char *lower_call_namespace_module_name(XiLower *l, CallExprNode *ca
     return links ? links->module_name : NULL;
 }
 
+static const char *lower_call_builtin_type_namespace(CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    AstNode *object = call->callee->as.member_access.object;
+    if (!object || object->type != AST_VARIABLE || !object->as.variable.name)
+        return NULL;
+    return xa_builtin_get_by_name(object->as.variable.name) ? object->as.variable.name : NULL;
+}
+
+static bool lower_call_uses_indirect_function_value(XiLower *l, CallExprNode *call,
+                                                    XiValue *callee_value) {
+    if (!l || !call || !call->callee || !callee_value || !callee_value->type ||
+        callee_value->type->kind != XR_KIND_FUNCTION ||
+        lower_resolve_static_callee_func(l, callee_value))
+        return false;
+    XaSymbol *symbol = NULL;
+    if (call->callee->type == AST_VARIABLE) {
+        uint32_t id = call->callee->as.variable.symbol_id;
+        symbol = id ? xa_scope_lookup_by_id(l->analyzer->global_scope, id) : NULL;
+    } else if (call->callee->type == AST_MEMBER_ACCESS) {
+        const XaSelection *selection = xa_analyzer_get_selection(l->analyzer, call->callee);
+        symbol = selection ? selection->target_symbol : NULL;
+    } else {
+        return true;
+    }
+    return symbol && (symbol->kind == XA_SYM_VARIABLE || symbol->kind == XA_SYM_PARAMETER ||
+                      symbol->kind == XA_SYM_FIELD || symbol->kind == XA_SYM_PROPERTY);
+}
+
 /* A payload-enum variant call constructs a new inline aggregate whose active
  * lanes own the values moved into them.  It is therefore a fresh +1 result even
  * though, unlike a class constructor, it allocates no object header.  Publish
@@ -5306,12 +5335,41 @@ static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *c
             return result;
     }
 
+    if (call->callee->type == AST_MEMBER_ACCESS && callee_value) {
+        const char *member_name = call->callee->as.member_access.name;
+        const char *namespace_name = lower_call_builtin_type_namespace(call);
+        XaBuiltinReturnOwnership native =
+            namespace_name ? xa_builtin_get_named_type_member_return_ownership(namespace_name,
+                                                                               member_name, true)
+                           : XA_BUILTIN_RETURN_UNKNOWN;
+        if (native == XA_BUILTIN_RETURN_UNKNOWN)
+            native =
+                xa_builtin_get_type_member_return_ownership(callee_value->type, member_name, false);
+        if (native == XA_BUILTIN_RETURN_FRESH) {
+            result.kind = XI_RETURN_OWNERSHIP_OWNED;
+            result.complete = true;
+            return result;
+        }
+        if (native == XA_BUILTIN_RETURN_BORROWED_STATIC) {
+            result.kind = XI_RETURN_OWNERSHIP_BORROWED_STATIC;
+            result.complete = true;
+            return result;
+        }
+        int native_parameter = xa_builtin_return_ownership_param_index(native);
+        if (native_parameter >= 0) {
+            result.kind = XI_RETURN_OWNERSHIP_BORROWED_PARAM;
+            result.param_index = (int16_t) native_parameter;
+            result.complete = true;
+            return result;
+        }
+    }
+
     const XiImportRef *import_ref = lower_import_ref_from_value(l, callee_value);
     const char *module_path = import_ref ? import_ref->module_path : NULL;
     if (!module_path)
         module_path = lower_call_namespace_module_name(l, call);
     if (!module_path)
-        return result;
+        goto indirect_function_value;
     const char *member_name = import_ref ? import_ref->member_name : NULL;
     if (!member_name && call->callee->type == AST_MEMBER_ACCESS)
         member_name = call->callee->as.member_access.name;
@@ -5332,6 +5390,16 @@ static XiReturnOwnership lower_call_return_ownership(XiLower *l, CallExprNode *c
             result.param_index = (int16_t) param_index;
             result.complete = true;
         }
+    }
+    if (result.complete)
+        return result;
+
+indirect_function_value:
+    if (lower_call_uses_indirect_function_value(l, call, callee_value) &&
+        xi_own_type_is_rc(callee_value->type->function.return_type)) {
+        result.kind = XI_RETURN_OWNERSHIP_OWNED;
+        result.param_index = -1;
+        result.complete = true;
     }
     return result;
 }
@@ -6741,6 +6809,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                     v->args[i + 1] = arg_vals[i];
                 v->aux = (void *) arena_strdup(l->func, static_ma->name);
                 v->aux_int = (int64_t) xi_lower_method_symbol(l, static_ma->name) << 1;
+                v->call_return_ownership = (XiReturnOwnership) {
+                    .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
                 v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
                 v->line = (uint32_t) node->line;
                 xi_lower_apply_sequence_evidence_ids(v, &sequence_ids);
@@ -6940,6 +7010,12 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return chan_send;
 
         struct XrType *result_type = xi_lower_node_type(l, node);
+        if (xi_lower_type_is_unknown(result_type)) {
+            XrType *builtin_result =
+                xa_builtin_get_method_return_type(l->isolate, method_receiver_type, ma->name);
+            if (builtin_result && !xi_lower_type_is_unknown(builtin_result))
+                result_type = builtin_result;
+        }
         bool json_path_decode =
             ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
             strcmp(ma->object->as.variable.name, "JSON") == 0 && ma->name &&
@@ -9328,7 +9404,8 @@ generic_constructor:;
      * allocates its instance here.  A builtin class reaches this path too and
      * stays unmarked, since its `call` static method may return an existing
      * object. */
-    if (has_user_class_info && result_type && result_type->kind == XR_KIND_INSTANCE)
+    if ((has_user_class_info && result_type && result_type->kind == XR_KIND_INSTANCE) ||
+        (cname && strcmp(cname, "PanicInfo") == 0))
         call->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     call->call_plan = call_plan;
     call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
@@ -10325,6 +10402,7 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
         call->args[0] = cls;
         call->aux = (void *) "constructor";
         call->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+        call->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
         call->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         call->line = (uint32_t) node->line;
 
@@ -10491,6 +10569,7 @@ static XiValue *lower_null_guard_or_throw(XiLower *l, XiValue *val, struct XrTyp
     exc->args[1] = msg;
     exc->aux = (void *) "constructor";
     exc->aux_int = (int64_t) xi_lower_method_symbol(l, "constructor") << 1;
+    exc->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
     exc->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     exc->line = (uint32_t) line;
 
