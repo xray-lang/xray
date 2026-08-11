@@ -430,6 +430,28 @@ TEST(simple_arithmetic) {
     xi_func_free(f);
 }
 
+TEST(source_spans_reach_xi_values) {
+    XiFunc *f = lower_source("var total = 1 + 2\nprint(total)\n");
+    assert(f != NULL);
+    bool saw_add_span = false;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *block = f->blocks[b];
+        for (uint32_t i = 0; i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            assert(xi_source_span_is_empty(value->source_span) ||
+                   xi_source_span_is_complete(value->source_span));
+            if (value->op == XI_ADD && xi_source_span_is_complete(value->source_span)) {
+                saw_add_span = value->source_span.start_line == 1 &&
+                               value->source_span.end_line == 1 &&
+                               value->source_span.end_column >= value->source_span.start_column;
+            }
+        }
+    }
+    assert(saw_add_span && "lowered arithmetic must retain its exact AST source range");
+    assert(xi_source_span_is_empty(f->lowering_source_span));
+    xi_func_free(f);
+}
+
 TEST(variable_assignment) {
     XiFunc *f = lower_source("var x = 10\nx = x + 5\nprint(x)");
     assert(f != NULL);
@@ -3094,6 +3116,7 @@ int main(void) {
     setup();
 
     run_simple_arithmetic();
+    run_source_spans_reach_xi_values();
     run_variable_assignment();
     run_if_else();
     run_while_loop();

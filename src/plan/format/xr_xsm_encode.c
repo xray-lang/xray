@@ -167,6 +167,12 @@ static void encode_operations(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u8(writer, 0);
         xr_xsm_put_u32(writer, record->effects);
         xr_xsm_put_u32(writer, record->source_line);
+        xr_xsm_put_string(writer, record->source_file);
+        xr_xsm_put_u32(writer, record->source_start_line);
+        xr_xsm_put_u32(writer, record->source_start_column);
+        xr_xsm_put_u32(writer, record->source_end_line);
+        xr_xsm_put_u32(writer, record->source_end_column);
+        xr_xsm_put_u32(writer, record->source_discriminator);
         xr_xsm_put_u64(writer, (uint64_t) record->semantic_immediate);
         xr_xsm_put_u32(writer, record->constant);
         for (unsigned e = 0; e < 8; e++)

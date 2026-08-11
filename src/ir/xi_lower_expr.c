@@ -10804,7 +10804,7 @@ static XiValue *lower_super_call(XiLower *l, AstNode *node) {
  * are now in xi_lower_misc.c */
 
 /* Main expression dispatcher */
-XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
+static XiValue *xi_lower_expr_impl(XiLower *l, AstNode *node) {
     if (!node)
         return NULL;
     if (!l->cur_block)
@@ -11047,6 +11047,13 @@ XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
             l->had_error = true;
             return xi_const_null(l->func, l->cur_block, l->type_null);
     }
+}
+
+XR_FUNC XiValue *xi_lower_expr(XiLower *l, AstNode *node) {
+    XiSourceSpan previous = xi_lower_push_source_span(l, node);
+    XiValue *value = xi_lower_expr_impl(l, node);
+    xi_lower_pop_source_span(l, previous);
+    return value;
 }
 
 /* Class declaration lowering (method compilation + XI_CLASS_CREATE).

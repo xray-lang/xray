@@ -839,6 +839,30 @@ static bool xi_lower_evidence_module_matches(const XiLower *l, XgModuleId module
     return l && l->xg_module_id != 0 && module_id == l->xg_module_id;
 }
 
+XR_FUNC XiSourceSpan xi_lower_push_source_span(XiLower *l, const AstNode *node) {
+    XiSourceSpan previous = {0};
+    if (!l || !l->func)
+        return previous;
+    previous = l->func->lowering_source_span;
+    XiSourceSpan current = {0};
+    if (node && node->line > 0 && node->column > 0 && node->end_line > 0 &&
+        node->end_column > 0) {
+        current.start_line = (uint32_t) node->line;
+        current.start_column = (uint32_t) node->column;
+        current.end_line = (uint32_t) node->end_line;
+        current.end_column = (uint32_t) node->end_column;
+        if (!xi_source_span_is_complete(current))
+            memset(&current, 0, sizeof(current));
+    }
+    l->func->lowering_source_span = current;
+    return previous;
+}
+
+XR_FUNC void xi_lower_pop_source_span(XiLower *l, XiSourceSpan previous) {
+    if (l && l->func)
+        l->func->lowering_source_span = previous;
+}
+
 XR_FUNC uint32_t xi_lower_source_node_id(const XiLower *l, const AstNode *node) {
     const AstNode *loc;
     uint32_t line;

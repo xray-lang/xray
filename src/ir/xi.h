@@ -141,6 +141,24 @@ static inline bool xi_var_id_is_valid(XiVarId var_id) {
 
 struct XiValue;
 
+typedef struct XiSourceSpan {
+    uint32_t start_line;
+    uint32_t start_column;
+    uint32_t end_line;
+    uint32_t end_column;
+} XiSourceSpan;
+
+static inline bool xi_source_span_is_empty(XiSourceSpan span) {
+    return span.start_line == 0 && span.start_column == 0 && span.end_line == 0 &&
+           span.end_column == 0;
+}
+
+static inline bool xi_source_span_is_complete(XiSourceSpan span) {
+    return span.start_line != 0 && span.start_column != 0 && span.end_line != 0 &&
+           span.end_column != 0 && span.end_line >= span.start_line &&
+           (span.end_line != span.start_line || span.end_column >= span.start_column);
+}
+
 typedef enum XiPlaceOrigin {
     XI_PLACE_ORIGIN_NONE = 0,
     XI_PLACE_ORIGIN_STACK_LOCAL = 1,
@@ -1109,6 +1127,7 @@ typedef struct XiValue {
     uint16_t nargs;           /* number of args */
     int16_t uses;             /* use count (for DCE; -1 = not computed) */
     uint32_t line;            /* source line number (0 = unknown) */
+    XiSourceSpan source_span; /* exact source range; all zero when unavailable */
     uint32_t xg_callsite_id;  /* stable XgCallsiteId for evidence-backed calls (0 = none) */
     uint32_t xa_intrinsic_id; /* stable XaIntrinsicId for canonical semantic operations */
     uint32_t xg_method_id;    /* XgMethodId or XgInterfaceMethodId for evidence-backed calls */
@@ -1206,6 +1225,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->call_return_ownership = src->call_return_ownership;
     dst->result_alias_operand = src->result_alias_operand;
     dst->line = src->line;
+    dst->source_span = src->source_span;
     dst->xg_callsite_id = src->xg_callsite_id;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
     dst->xg_method_id = src->xg_method_id;
@@ -1590,6 +1610,7 @@ typedef enum XiInlinePolicy {
 typedef struct XiFunc {
     const char *name;           /* function name (debug, not owned) */
     const char *source_file;    /* source path for VM/DAP debug hooks (not owned) */
+    XiSourceSpan lowering_source_span; /* temporary AST range inherited by new Xi values */
     struct XrType *return_type; /* return type (from analyzer) */
     uint32_t xg_body_func_id;   /* stable global-evidence XgFuncId for this body (0 = none) */
     uint8_t view_return_source; /* XrViewReturnSourceKind symbolic return template */

@@ -260,6 +260,12 @@ typedef struct XrSemanticOperationRecord {
     uint8_t reserved;
     uint32_t effects;
     uint32_t source_line;
+    const char *source_file;
+    uint32_t source_start_line;
+    uint32_t source_start_column;
+    uint32_t source_end_line;
+    uint32_t source_end_column;
+    uint32_t source_discriminator;
     int64_t semantic_immediate;
     uint32_t constant;
     uint32_t evidence[8];

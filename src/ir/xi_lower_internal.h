@@ -158,7 +158,9 @@ XR_FUNC void xi_lower_publish_effect_sidecars(XiFunc *func, struct XaAnalyzer *a
 XR_FUNC bool xi_lower_reject_error_type(XiLower *l, const struct XrType *type, const char *context,
                                         int line);
 XR_FUNC struct XrType *xi_lower_type_or_any(XiLower *l, struct XrType *type, const char *context,
-                                            int line);
+                                             int line);
+XR_FUNC XiSourceSpan xi_lower_push_source_span(XiLower *l, const struct AstNode *node);
+XR_FUNC void xi_lower_pop_source_span(XiLower *l, XiSourceSpan previous);
 XR_FUNC uint32_t xi_lower_source_node_id(const XiLower *l, const struct AstNode *node);
 XR_FUNC void xi_lower_bind_module_body_id(XiLower *l);
 XR_FUNC void xi_lower_bind_function_body_id(XiLower *l, uint32_t source_node_id,

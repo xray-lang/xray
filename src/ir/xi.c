@@ -371,7 +371,7 @@ void xi_block_add_pred(XiBlock *blk, XiBlock *pred) {
  * variable #0's register in reg_of(), clobbering that live local. The caller
  * assigns args[] (sized differently for phis vs. regular values). */
 static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, struct XrType *type,
-                                        uint16_t nargs, XiBlock *blk) {
+                                         uint16_t nargs, XiBlock *blk, XiSourceSpan source_span) {
     v->id = id;
     v->op = op;
     v->flags = xi_op_default_effects(op);
@@ -393,6 +393,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->nargs = nargs;
     v->uses = -1; /* not yet computed */
     v->line = 0;
+    v->source_span = source_span;
     v->xg_callsite_id = 0;
     v->xa_intrinsic_id = 0;
     v->xg_method_id = 0;
@@ -420,7 +421,7 @@ static XiValue *value_alloc(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType 
     if (!v)
         return NULL;
 
-    xi_value_init_fields(v, f->next_value_id++, op, type, nargs, blk);
+    xi_value_init_fields(v, f->next_value_id++, op, type, nargs, blk, f->lowering_source_span);
 
     if (nargs > 0) {
         v->args = (XiValue **) arena_alloc(f, nargs * sizeof(XiValue *));
@@ -642,7 +643,8 @@ XiPhi *xi_phi_new(XiFunc *f, XiBlock *blk, struct XrType *type, uint16_t npreds)
 
     /* Shared field init (var_id=XI_NO_VAR_ID etc.); a real variable phi's var_id is
      * overwritten by the Braun SSA construction after this call. */
-    xi_value_init_fields(&phi->value, f->next_value_id++, XI_PHI, type, npreds, blk);
+    xi_value_init_fields(&phi->value, f->next_value_id++, XI_PHI, type, npreds, blk,
+                         f->lowering_source_span);
 
     if (npreds > 0) {
         phi->value.args = (XiValue **) arena_alloc(f, npreds * sizeof(XiValue *));

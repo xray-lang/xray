@@ -65,6 +65,14 @@ static XrType stub_shape = {
     },
 };
 
+static void set_source_span(XiValue *value, uint32_t start_line, uint32_t start_column,
+                            uint32_t end_line, uint32_t end_column) {
+    REQUIRE(value != NULL);
+    value->source_span =
+        (XiSourceSpan) {start_line, start_column, end_line, end_column};
+    REQUIRE(xi_source_span_is_complete(value->source_span));
+}
+
 static XrSemanticPlan *build_probe_plan(void) {
     XiFunc *function = xi_func_new("artifact_probe", &stub_int);
     REQUIRE(function != NULL);
@@ -91,16 +99,19 @@ static XrSemanticPlan *build_probe_plan(void) {
 static XrSemanticPlan *build_owned_parameter_plan(void) {
     XiFunc *function = xi_func_new("owned_parameter_probe", &stub_int);
     REQUIRE(function != NULL);
+    function->source_file = "pkg/owned_parameter_probe.xr";
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
     XiValue *parameter = xi_param(function, entry, 0, &stub_string);
     REQUIRE(parameter != NULL);
+    set_source_span(parameter, 1, 27, 1, 32);
     function->nparams = 1;
     function->params = (XiValue **) xr_malloc(sizeof(*function->params));
     REQUIRE(function->params != NULL);
     function->params[0] = parameter;
     XiValue *result = xi_const_int(function, entry, 7, &stub_int);
     REQUIRE(result != NULL);
+    set_source_span(result, 2, 12, 2, 13);
     xi_block_set_return(entry, result);
     function->stage = XI_STAGE_OPTIMIZED;
 
@@ -349,19 +360,24 @@ static XrSemanticPlan *build_entity_identity_plan_with_source(uintptr_t *source_
     REQUIRE(capacity != NULL && borrowed_result != NULL && allocation != NULL);
     borrowed_result->args[0] = loan;
     borrowed_result->line = 15;
+    set_source_span(borrowed_result, 15, 3, 15, 12);
     allocation->args[0] = capacity;
     allocation->flags = xi_op_default_effects(XI_ARRAY_NEW);
     allocation->line = 16;
+    set_source_span(allocation, 15, 3, 15, 12);
     XiValue *suspend = xi_value_new(root, root_entry, XI_YIELD, &stub_int, 0);
     REQUIRE(suspend != NULL);
     suspend->line = 17;
+    set_source_span(suspend, 17, 5, 17, 10);
     XiValue *result = xi_const_int(root, root_entry, 9, &stub_int);
     REQUIRE(result != NULL);
     result->line = 18;
+    set_source_span(result, 18, 1, 18, 2);
     xi_block_set_return(root_entry, result);
     XiValue *native_result = xi_const_int(native, native_entry, 4, &stub_int);
     REQUIRE(native_result != NULL);
     native_result->line = 21;
+    set_source_span(native_result, 21, 1, 21, 2);
     xi_block_set_return(native_entry, native_result);
     native->is_extern = true;
     native->extern_symbol = "identity_native";
@@ -395,6 +411,25 @@ static XrSemanticPlan *build_entity_identity_plan_with_source(uintptr_t *source_
 
 static XrSemanticPlan *build_entity_identity_plan(void) {
     return build_entity_identity_plan_with_source(NULL);
+}
+
+static void test_incomplete_debug_span_fails_closed(void) {
+    XiFunc *function = xi_func_new("incomplete_debug_span", &stub_int);
+    REQUIRE(function != NULL);
+    function->source_file = "pkg/incomplete.xr";
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *result = xi_const_int(function, entry, 1, &stub_int);
+    REQUIRE(result != NULL);
+    result->line = 7;
+    result->source_span = (XiSourceSpan) {7, 2, 0, 0};
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    REQUIRE(!xr_semantic_plan_build(function, &plan, error, sizeof(error)));
+    REQUIRE(plan == NULL && strncmp(error, "XR_SEM_0019", strlen("XR_SEM_0019")) == 0);
+    xi_func_free(function);
 }
 
 static XrSemanticPlan *build_signed_extreme_plan(void) {
@@ -644,6 +679,8 @@ static void test_typed_entity_identity_table(void) {
     uint32_t module = XR_SEMANTIC_INDEX_NONE;
     uint32_t field = XR_SEMANTIC_INDEX_NONE;
     uint32_t operation_loan = XR_SEMANTIC_INDEX_NONE;
+    uint32_t first_shared_span = XR_SEMANTIC_INDEX_NONE;
+    uint32_t second_shared_span = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < first->entity_count; i++) {
         if (first->entities[i].kind == XR_SEM_ENTITY_MODULE)
             module = i;
@@ -652,9 +689,58 @@ static void test_typed_entity_identity_table(void) {
         if (first->entities[i].kind == XR_SEM_ENTITY_LOAN &&
             first->entities[i].subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION)
             operation_loan = i;
+        if (first->entities[i].kind == XR_SEM_ENTITY_DEBUG_SPAN) {
+            const XrSemanticOperationRecord *operation =
+                &first->operations[first->entities[i].subject];
+            if (operation->source_start_line == 15 && operation->source_discriminator == 1)
+                first_shared_span = i;
+            if (operation->source_start_line == 15 && operation->source_discriminator == 2)
+                second_shared_span = i;
+        }
     }
     REQUIRE(module != XR_SEMANTIC_INDEX_NONE && field != XR_SEMANTIC_INDEX_NONE &&
-            operation_loan != XR_SEMANTIC_INDEX_NONE);
+            operation_loan != XR_SEMANTIC_INDEX_NONE &&
+            first_shared_span != XR_SEMANTIC_INDEX_NONE &&
+            second_shared_span != XR_SEMANTIC_INDEX_NONE);
+    const XrSemanticEntityRecord *first_debug = &first->entities[first_shared_span];
+    const XrSemanticEntityRecord *second_debug = &first->entities[second_shared_span];
+    const XrSemanticOperationRecord *first_debug_operation =
+        &first->operations[first_debug->subject];
+    const XrSemanticOperationRecord *second_debug_operation =
+        &first->operations[second_debug->subject];
+    REQUIRE(strcmp(first_debug_operation->source_file, "pkg/identity_probe.xr") == 0);
+    REQUIRE(strcmp(second_debug_operation->source_file, "pkg/identity_probe.xr") == 0);
+    REQUIRE(first_debug_operation->source_start_column == 3 &&
+            first_debug_operation->source_end_line == 15 &&
+            first_debug_operation->source_end_column == 12 && first_debug->ordinal == 1);
+    REQUIRE(second_debug_operation->source_start_column == 3 &&
+            second_debug_operation->source_end_line == 15 &&
+            second_debug_operation->source_end_column == 12 && second_debug->ordinal == 2);
+    REQUIRE(strstr(first_debug->canonical_key,
+                   ":file=21:pkg/identity_probe.xr:start=15:3:end=15:12:"
+                   "discriminator=1:operation=") != NULL);
+    REQUIRE(strstr(second_debug->canonical_key, "discriminator=2:operation=") != NULL);
+    char first_debug_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(first_debug->id, first_debug_id_hex);
+    REQUIRE(strcmp(first_debug_id_hex, "0df8c5f58a359cda362140f40f76a4a4") == 0);
+    const XrSemanticOperationRecord *decoded_debug_operation =
+        &decoded->operations[first_debug->subject];
+    REQUIRE(decoded_debug_operation->source_file != NULL &&
+            strcmp(decoded_debug_operation->source_file, first_debug_operation->source_file) == 0 &&
+            decoded_debug_operation->source_start_line ==
+                first_debug_operation->source_start_line &&
+            decoded_debug_operation->source_start_column ==
+                first_debug_operation->source_start_column &&
+            decoded_debug_operation->source_end_line == first_debug_operation->source_end_line &&
+            decoded_debug_operation->source_end_column ==
+                first_debug_operation->source_end_column &&
+            decoded_debug_operation->source_discriminator ==
+                first_debug_operation->source_discriminator);
+    size_t debug_dump_size = 0;
+    char *debug_dump = dump_entity(first, first_debug->id, &debug_dump_size);
+    REQUIRE(debug_dump_size != 0 && strstr(debug_dump, "source-file=21:") != NULL &&
+            strstr(debug_dump, "source-span=15:3-15:12 discriminator=1") != NULL);
+    xr_free(debug_dump);
     const XrSemanticEntityRecord *loan_entity = &first->entities[operation_loan];
     REQUIRE(strstr(loan_entity->canonical_key, ":declaration=") != NULL);
     REQUIRE(strstr(loan_entity->canonical_key, ":function=") != NULL);
@@ -662,7 +748,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
     char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(loan_entity->id, loan_id_hex);
-    REQUIRE(strcmp(loan_id_hex, "5203da032be679cc80ef16860f26be4f") == 0);
+    REQUIRE(strcmp(loan_id_hex, "b04a9e5ec95d18eb273921d1757257c4") == 0);
     size_t entity_dump_size = 0;
     char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
     REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&
@@ -713,7 +799,7 @@ static void test_immutable_owned_snapshot(void) {
     REQUIRE(strcmp(registry_hex,
                    "d01b95f7569b8b26118288bd11800bdfc5266165682b74d00b53b76510648d85") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "e99fc6d06b89045ac6b2391cb032d6e3132e0ea6aa5dab9dc2a3ef263e3673a9") == 0);
+                   "e3e2bc067e28c27da21d4bf83998931cad17e4dd8c6cf7541ab99d21ee8097ea") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -1560,8 +1646,16 @@ static void test_semantic_and_ownership_mutations(void) {
     expect_verify_failure(plan, "XR_OWN_3001");
     edge->exit_balance = saved_exit;
 
-    uint32_t saved_line = plan->operations[0].source_line;
-    plan->operations[0].source_line = saved_line + 1;
+    XrSemanticOperationRecord *debug_operation = NULL;
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        if (plan->operations[i].source_file) {
+            debug_operation = &plan->operations[i];
+            break;
+        }
+    }
+    REQUIRE(debug_operation != NULL);
+    uint32_t saved_start_line = debug_operation->source_start_line;
+    debug_operation->source_start_line = saved_start_line + 1;
     expect_verify_failure(plan, "XR_SEM_0019");
     uint8_t *invalid_artifact = NULL;
     size_t invalid_artifact_size = 0;
@@ -1570,7 +1664,7 @@ static void test_semantic_and_ownership_mutations(void) {
                            sizeof(encode_error)));
     REQUIRE(invalid_artifact == NULL && invalid_artifact_size == 0);
     REQUIRE(strncmp(encode_error, "XR_SEM_0019", strlen("XR_SEM_0019")) == 0);
-    plan->operations[0].source_line = saved_line;
+    debug_operation->source_start_line = saved_start_line;
 
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify(plan, error, sizeof(error)));
@@ -2185,6 +2279,7 @@ static void test_nullable_borrowed_parameter_keeps_sealed_provenance(void) {
 int main(void) {
     test_stable_ids();
     test_typed_entity_identity_table();
+    test_incomplete_debug_span_fails_closed();
     test_operation_registry();
     test_immutable_owned_snapshot();
     test_xsm_roundtrip_and_determinism();

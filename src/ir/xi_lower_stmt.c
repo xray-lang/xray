@@ -4380,7 +4380,7 @@ static bool lower_module_or_type_decl_stmt(XiLower *l, AstNode *node) {
     }
 }
 
-XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
+static void xi_lower_stmt_impl(XiLower *l, AstNode *node) {
     if (!node)
         return;
     if (!l->cur_block)
@@ -4510,6 +4510,12 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             l->had_error = true;
             break;
     }
+}
+
+XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
+    XiSourceSpan previous = xi_lower_push_source_span(l, node);
+    xi_lower_stmt_impl(l, node);
+    xi_lower_pop_source_span(l, previous);
 }
 
 static void prescan_block_decls(XiLower *l, AstNode **stmts, int count) {

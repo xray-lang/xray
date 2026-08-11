@@ -173,6 +173,24 @@ static bool text_append_path_component(XrTextBuilder *text, const char *value) {
     return true;
 }
 
+static const char *copy_canonical_source_file(XrSemanticBuildContext *ctx, const char *value) {
+    const char *path = value ? value : "";
+    while (path[0] == '.' && (path[1] == '/' || path[1] == '\\'))
+        path += 2;
+    size_t length = strlen(path);
+    if (length == 0)
+        return NULL;
+    XrTextBuilder canonical = {0};
+    if (!text_reserve(&canonical, length))
+        return NULL;
+    for (size_t i = 0; i < length; i++)
+        canonical.data[canonical.size++] = path[i] == '\\' ? '/' : path[i];
+    canonical.data[canonical.size] = '\0';
+    const char *result = xr_semantic_plan_copy_string(ctx->plan, canonical.data);
+    text_dispose(&canonical);
+    return result;
+}
+
 static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stack, uint32_t depth,
                      XrSemanticBuildContext *ctx);
 
@@ -1209,6 +1227,20 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->auxiliary_kind = value->aux_kind;
     record->effects = xi_generated_op_effects(value->op);
     record->source_line = value->line;
+    if (!xi_source_span_is_empty(value->source_span)) {
+        const char *source_file = function->source_file
+                                      ? function->source_file
+                                      : (function->module ? function->module->path : NULL);
+        if (!xi_source_span_is_complete(value->source_span) || !source_file || !source_file[0])
+            return fail(ctx, "XR_SEM_0019", "operation debug span is incomplete");
+        record->source_file = copy_canonical_source_file(ctx, source_file);
+        if (!record->source_file)
+            return fail(ctx, "XR_EXEC_5003", "operation debug file allocation failed");
+        record->source_start_line = value->source_span.start_line;
+        record->source_start_column = value->source_span.start_column;
+        record->source_end_line = value->source_span.end_line;
+        record->source_end_column = value->source_span.end_column;
+    }
     record->semantic_immediate = value->aux_int;
     record->evidence[0] = value->xg_callsite_id;
     record->evidence[1] = value->xa_intrinsic_id;
@@ -1647,7 +1679,7 @@ static bool build_function_entities(XrSemanticBuildContext *ctx, uint32_t module
 
 static bool build_operation_entities(XrSemanticBuildContext *ctx) {
     for (uint32_t i = 0; i < ctx->plan->operation_count; i++) {
-        const XrSemanticOperationRecord *operation = &ctx->plan->operations[i];
+        XrSemanticOperationRecord *operation = &ctx->plan->operations[i];
         uint32_t parent = find_entity(ctx->plan, XR_SEM_ENTITY_FUNCTION,
                                      XR_SEM_ENTITY_SUBJECT_FUNCTION, operation->function);
         if (parent == XR_SEMANTIC_INDEX_NONE)
@@ -1676,18 +1708,31 @@ static bool build_operation_entities(XrSemanticBuildContext *ctx) {
             }
             text_dispose(&key);
         }
-        if (operation->source_line != 0) {
-            const XiFunc *source = ctx->functions[operation->function].source;
-            const char *file = source->source_file
-                                   ? source->source_file
-                                   : (source->module ? source->module->path : "");
+        if (operation->source_file) {
+            uint32_t discriminator = 1;
+            for (uint32_t previous = 0; previous < i; previous++) {
+                const XrSemanticOperationRecord *candidate = &ctx->plan->operations[previous];
+                if (candidate->source_file &&
+                    strcmp(candidate->source_file, operation->source_file) == 0 &&
+                    candidate->source_start_line == operation->source_start_line &&
+                    candidate->source_start_column == operation->source_start_column &&
+                    candidate->source_end_line == operation->source_end_line &&
+                    candidate->source_end_column == operation->source_end_column)
+                    discriminator++;
+            }
+            operation->source_discriminator = discriminator;
             valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_DEBUG_SPAN, operation_entity) &&
-                    text_append(&key, ":file=") && text_append_path_component(&key, file) &&
-                    text_append_format(&key, ":line=%u:operation=", operation->source_line) &&
+                    text_append(&key, ":file=") &&
+                    text_append_component(&key, operation->source_file) &&
+                    text_append_format(&key,
+                                       ":start=%u:%u:end=%u:%u:discriminator=%u:operation=",
+                                       operation->source_start_line,
+                                       operation->source_start_column, operation->source_end_line,
+                                       operation->source_end_column, discriminator) &&
                     text_append_stable_id(&key, operation->id);
             if (!valid || !append_entity(ctx, XR_SEM_ENTITY_DEBUG_SPAN,
-                                         XR_SEM_ENTITY_SUBJECT_OPERATION, i,
-                                         operation->source_line, operation_entity, &key, NULL)) {
+                                          XR_SEM_ENTITY_SUBJECT_OPERATION, i,
+                                          discriminator, operation_entity, &key, NULL)) {
                 text_dispose(&key);
                 return fail(ctx, "XR_SEM_0019", "debug-span identity is incomplete");
             }

@@ -127,7 +127,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v8\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v9\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -255,6 +255,12 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, op->auxiliary_kind);
         hash_u64(&ctx, op->effects);
         hash_u64(&ctx, op->source_line);
+        hash_string(&ctx, op->source_file);
+        hash_u64(&ctx, op->source_start_line);
+        hash_u64(&ctx, op->source_start_column);
+        hash_u64(&ctx, op->source_end_line);
+        hash_u64(&ctx, op->source_end_column);
+        hash_u64(&ctx, op->source_discriminator);
         hash_u64(&ctx, (uint64_t) op->semantic_immediate);
         hash_u64(&ctx, op->constant);
         for (unsigned e = 0; e < 8; e++)
@@ -585,8 +591,18 @@ bool xr_semantic_plan_dump_entity(const XrSemanticPlan *plan, XrStableId id, FIL
             record->kind, record->parent, record->subject_kind, record->subject,
             record->ordinal, record->flags);
     if (record->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
-        record->subject < plan->operation_count)
-        fprintf(out, " source-line=%u", plan->operations[record->subject].source_line);
+        record->subject < plan->operation_count) {
+        const XrSemanticOperationRecord *operation = &plan->operations[record->subject];
+        fprintf(out, " source-line=%u", operation->source_line);
+        if (operation->source_file) {
+            fputs(" source-file=", out);
+            dump_text(out, operation->source_file);
+            fprintf(out, " source-span=%u:%u-%u:%u discriminator=%u",
+                    operation->source_start_line, operation->source_start_column,
+                    operation->source_end_line, operation->source_end_column,
+                    operation->source_discriminator);
+        }
+    }
     fputc('\n', out);
     return !ferror(out);
 }
@@ -703,13 +719,18 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
         fprintf(out,
                 " fn=%u block=%u result=%u:%u opcode=%u aux=%u immediate=%lld effects=%u "
                 "line=%u constant=%u own=%u:%u transfer=%u param=%u:%u flags=%u "
-                "alias=%d return=%u:%d:%u evidence=[",
+                "alias=%d return=%u:%d:%u",
                 record->function, record->block, record->result_value, record->result_type,
                 record->opcode, record->auxiliary_kind, (long long) record->semantic_immediate,
                 record->effects, record->source_line, record->constant, record->ownership_use,
                 record->result_ownership, record->transfer_mode, record->parameter_mode,
                 record->parameter_ownership, record->flags, record->result_alias_operand,
                 record->return_provenance, record->return_parameter, record->return_complete);
+        fputs(" source-file=", out);
+        dump_text(out, record->source_file);
+        fprintf(out, " source-span=%u:%u-%u:%u:%u evidence=[", record->source_start_line,
+                record->source_start_column, record->source_end_line, record->source_end_column,
+                record->source_discriminator);
         for (unsigned e = 0; e < 8; e++)
             fprintf(out, "%s%u", e ? "," : "", record->evidence[e]);
         fputs("] operands=[", out);

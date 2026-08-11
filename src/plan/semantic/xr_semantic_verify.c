@@ -127,6 +127,85 @@ static bool borrowed_result_has_loan(const XrSemanticPlan *plan, uint32_t operat
            (plan->types[record->result_type].flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0;
 }
 
+static bool source_file_is_canonical(const char *file) {
+    return file && file[0] != '\0' && !(file[0] == '.' && file[1] == '/') &&
+           strchr(file, '\\') == NULL;
+}
+
+static bool same_debug_source_span(const XrSemanticOperationRecord *left,
+                                   const XrSemanticOperationRecord *right) {
+    return left->source_file && right->source_file &&
+           strcmp(left->source_file, right->source_file) == 0 &&
+           left->source_start_line == right->source_start_line &&
+           left->source_start_column == right->source_start_column &&
+           left->source_end_line == right->source_end_line &&
+           left->source_end_column == right->source_end_column;
+}
+
+static uint32_t expected_debug_discriminator(const XrSemanticPlan *plan, uint32_t operation) {
+    uint32_t discriminator = 1;
+    for (uint32_t i = 0; i < operation; i++) {
+        if (same_debug_source_span(&plan->operations[i], &plan->operations[operation]))
+            discriminator++;
+    }
+    return discriminator;
+}
+
+static bool operation_debug_span_valid(const XrSemanticPlan *plan, uint32_t operation) {
+    const XrSemanticOperationRecord *record = &plan->operations[operation];
+    if (!record->source_file)
+        return record->source_start_line == 0 && record->source_start_column == 0 &&
+               record->source_end_line == 0 && record->source_end_column == 0 &&
+               record->source_discriminator == 0;
+    return source_file_is_canonical(record->source_file) && record->source_start_line != 0 &&
+           record->source_start_column != 0 && record->source_end_line != 0 &&
+           record->source_end_column != 0 && record->source_end_line >= record->source_start_line &&
+           (record->source_end_line != record->source_start_line ||
+            record->source_end_column >= record->source_start_column) &&
+           record->source_discriminator == expected_debug_discriminator(plan, operation);
+}
+
+static bool verify_debug_span_entity_key(const XrSemanticPlan *plan,
+                                         const XrSemanticEntityRecord *entity) {
+    if (!entity || entity->subject >= plan->operation_count ||
+        entity->parent >= plan->entity_count || !operation_debug_span_valid(plan, entity->subject))
+        return false;
+    const XrSemanticOperationRecord *operation = &plan->operations[entity->subject];
+    const XrSemanticEntityRecord *operation_entity = &plan->entities[entity->parent];
+    if (!operation->source_file || operation_entity->kind != XR_SEM_ENTITY_OPERATION ||
+        operation_entity->subject != entity->subject ||
+        entity->ordinal != operation->source_discriminator)
+        return false;
+    char parent_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(operation_entity->id, parent_id);
+    xr_stable_id_hex(operation->id, operation_id);
+    int required = snprintf(NULL, 0,
+                            "entity-v1:schema=%u:kind=%u:parent=%s:file=%zu:%s:"
+                            "start=%u:%u:end=%u:%u:discriminator=%u:operation=%s",
+                            XR_SEMANTIC_SCHEMA_VERSION, (unsigned) XR_SEM_ENTITY_DEBUG_SPAN,
+                            parent_id, strlen(operation->source_file), operation->source_file,
+                            operation->source_start_line, operation->source_start_column,
+                            operation->source_end_line, operation->source_end_column,
+                            operation->source_discriminator, operation_id);
+    if (required < 0 || (size_t) required > 1048576u)
+        return false;
+    char *expected = (char *) xr_malloc((size_t) required + 1u);
+    if (!expected)
+        return false;
+    int written = snprintf(expected, (size_t) required + 1u,
+                           "entity-v1:schema=%u:kind=%u:parent=%s:file=%zu:%s:"
+                           "start=%u:%u:end=%u:%u:discriminator=%u:operation=%s",
+                           XR_SEMANTIC_SCHEMA_VERSION, (unsigned) XR_SEM_ENTITY_DEBUG_SPAN,
+                           parent_id, strlen(operation->source_file), operation->source_file,
+                           operation->source_start_line, operation->source_start_column,
+                           operation->source_end_line, operation->source_end_column,
+                           operation->source_discriminator, operation_id);
+    bool valid = written == required && strcmp(entity->canonical_key, expected) == 0;
+    xr_free(expected);
+    return valid;
+}
+
 static bool verify_borrowed_result_loan_key(const XrSemanticPlan *plan,
                                             const XrSemanticEntityRecord *entity) {
     if (!entity || entity->parent >= plan->entity_count ||
@@ -283,8 +362,7 @@ static bool verify_entity_record(const XrSemanticPlan *plan, const XrSemanticEnt
             return parent && parent->kind == XR_SEM_ENTITY_OPERATION &&
                    entity->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
                    entity->subject < plan->operation_count && parent->subject == entity->subject &&
-                   entity->ordinal == plan->operations[entity->subject].source_line &&
-                   entity->ordinal != 0 &&
+                   verify_debug_span_entity_key(plan, entity) &&
                    mark_entity(coverage->debug_spans, plan->operation_count, entity->subject);
         default:
             return false;
@@ -315,7 +393,7 @@ static bool verify_entity_coverage(const XrSemanticPlan *plan, const XrEntityCov
     }
     for (uint32_t i = 0; i < plan->operation_count; i++) {
         bool allocation = plan->operations[i].allocation_key != NULL;
-        bool debug_span = plan->operations[i].source_line != 0;
+        bool debug_span = plan->operations[i].source_file != NULL;
         bool operation_loan = borrowed_result_has_loan(plan, i);
         if (coverage->operations[i] != 1 ||
             coverage->allocations[i] != (uint8_t) allocation ||
@@ -874,10 +952,12 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
                          plan->operand_count) ||
             !range_valid(operation->metadata_begin, operation->metadata_count,
                          plan->metadata_count) ||
-            (operation->constant != XR_SEMANTIC_INDEX_NONE &&
-             operation->constant >= plan->constant_count)) {
+             (operation->constant != XR_SEMANTIC_INDEX_NONE &&
+              operation->constant >= plan->constant_count)) {
             return report(error, error_size, "XR_SEM_0015", "operation record is invalid");
         }
+        if (!operation_debug_span_valid(plan, i))
+            return report(error, error_size, "XR_SEM_0019", "operation debug span is invalid");
         uint32_t existing_definition = definitions[operation->result_value];
         if (existing_definition != XR_SEMANTIC_INDEX_NONE) {
             bool matching_parameter = false;

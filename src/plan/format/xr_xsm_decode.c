@@ -213,7 +213,7 @@ static bool counts_fit_payload_minimum(XrXsmCounts count, size_t remaining) {
     XR_MINIMUM_PAYLOAD(captures, 60u);
     XR_MINIMUM_PAYLOAD(blocks, 56u);
     XR_MINIMUM_PAYLOAD(predecessors, 4u);
-    XR_MINIMUM_PAYLOAD(operations, 136u);
+    XR_MINIMUM_PAYLOAD(operations, 160u);
     XR_MINIMUM_PAYLOAD(operands, 19u);
     XR_MINIMUM_PAYLOAD(metadata, 4u);
     XR_MINIMUM_PAYLOAD(edges, 40u);
@@ -462,6 +462,12 @@ static void decode_operations(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->reserved = xr_xsm_take_u8(reader);
         record->effects = xr_xsm_take_u32(reader);
         record->source_line = xr_xsm_take_u32(reader);
+        record->source_file = take_plan_string(reader, plan, true);
+        record->source_start_line = xr_xsm_take_u32(reader);
+        record->source_start_column = xr_xsm_take_u32(reader);
+        record->source_end_line = xr_xsm_take_u32(reader);
+        record->source_end_column = xr_xsm_take_u32(reader);
+        record->source_discriminator = xr_xsm_take_u32(reader);
         record->semantic_immediate = decode_twos_complement_i64(xr_xsm_take_u64(reader));
         record->constant = xr_xsm_take_u32(reader);
         for (unsigned e = 0; e < 8; e++)
