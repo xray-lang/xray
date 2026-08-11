@@ -184,6 +184,21 @@ TEST(value_type_exclusivity) {
     ASSERT_TRUE(XR_IS_NULL(null_val));
 }
 
+TEST(value_type_identity_uses_shared_owner_for_runtime_and_vm) {
+    const XrValue values[] = {
+        xr_null(), xr_bool(true), xr_int(-7), xr_float(2.5), xr_rune('X'),
+        xr_make_typed_ptr_val((void *) (uintptr_t) 1, XR_TSTRING),
+    };
+    const XrTypeId expected[] = {
+        XR_TID_NULL, XR_TID_BOOL, XR_TID_INT, XR_TID_FLOAT, XR_TID_RUNE,
+        XR_TID_STRING,
+    };
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {
+        ASSERT_EQ_INT((int) xr_value_typeid(values[i]), (int) expected[i]);
+        ASSERT_EQ_INT((int) xr_value_typeid_vm(values[i]), (int) expected[i]);
+    }
+}
+
 /* ========== Number Conversion Tests ========== */
 
 TEST(value_is_number) {
@@ -407,6 +422,7 @@ static void run_all_tests(void) {
 
     RUN_TEST_SUITE("Type Checking");
     RUN_TEST(value_type_exclusivity);
+    RUN_TEST(value_type_identity_uses_shared_owner_for_runtime_and_vm);
 
     RUN_TEST_SUITE("Number Conversion");
     RUN_TEST(value_is_number);

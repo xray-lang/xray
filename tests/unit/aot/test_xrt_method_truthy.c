@@ -165,6 +165,27 @@ static void test_xrt_to_bool_reuses_truthy_core_for_sized_containers(void) {
     ASSERT_BOOL(xrt_to_bool(set), true, "nonempty set is truthy");
 }
 
+static void test_xrt_type_identity_uses_stable_owner_adapter(void) {
+    ASSERT_TRUE_MSG(xrt_typeof_id(XR_NULL_VAL) == XR_TID_NULL, "null type id");
+    ASSERT_TRUE_MSG(xrt_typeof_id(XR_TRUE_VAL) == XR_TID_BOOL, "bool type id");
+    ASSERT_TRUE_MSG(xrt_typeof_id(XR_FROM_INT(7)) == XR_TID_INT, "int type id");
+    ASSERT_TRUE_MSG(xrt_typeof_id(XR_FROM_FLOAT(1.5)) == XR_TID_FLOAT, "float type id");
+    ASSERT_TRUE_MSG(xrt_typeof_id(XR_FROM_RUNE('X')) == XR_TID_RUNE, "rune type id");
+
+    XrValue string = xrt_str_alloc(0);
+    XrValue array = xrt_array_new(0);
+    XrValue map = xrt_map_new(0);
+    XrValue set = xrt_set_new(0);
+    ASSERT_TRUE_MSG(xrt_typeof_id(string) == XR_TID_STRING, "string type id");
+    ASSERT_TRUE_MSG(xrt_typeof_id(array) == XR_TID_ARRAY, "array type id");
+    ASSERT_TRUE_MSG(xrt_typeof_id(map) == XR_TID_MAP, "map type id");
+    ASSERT_TRUE_MSG(xrt_typeof_id(set) == XR_TID_SET, "set type id");
+    xrt_release(string);
+    xrt_release(array);
+    xrt_release(map);
+    xrt_release(set);
+}
+
 static void test_map_entries_dispatch_returns_tuple_array(void) {
     XrValue map = xrt_map_new(0);
     xrt_map_set((xrt_map_t *) map.ptr, xr_box_str("name"), XR_FROM_INT(7));
@@ -275,6 +296,7 @@ static void test_xrt_threadlocal_live_registry(void) {
 int main(void) {
     test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings();
     test_xrt_to_bool_reuses_truthy_core_for_sized_containers();
+    test_xrt_type_identity_uses_stable_owner_adapter();
     test_map_entries_dispatch_returns_tuple_array();
     test_xrt_type_metadata_uses_hot_name_and_derive_tables();
     test_xrt_thread_handle_methods();

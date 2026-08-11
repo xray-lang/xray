@@ -838,11 +838,11 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "e316e1122af4cbe1d6ac2c924a78d4de2ac08eb42fb892f42f22150c6a0eb536") == 0);
+                   "9d360d5b841562ce96f4e44203450bc6e39084e3f06a8f38ec848decd5990da9") == 0);
     REQUIRE(strcmp(registry_hex,
-                   "d01b95f7569b8b26118288bd11800bdfc5266165682b74d00b53b76510648d85") == 0);
+                   "0a3a56c4015844fb95c10e7b5e33dace48788b54049e6c234cf5efe530105910") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "7eb76271caed8fdef687ad6facb427c76e09d4cf5d9440c12d0a96cbc5b84ad3") == 0);
+                   "009ccb2c657557c1cd7b65202e2eb2ffbba02f70de7895acc47a59b07ba42525") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -881,6 +881,7 @@ static void test_operation_registry(void) {
     const XrSemanticOpContract *print = xr_semantic_op_contract(XI_PRINT);
     const XrSemanticOpContract *generated = xr_semantic_op_contract(XI_GEN_CALL);
     const XrSemanticOpContract *logical_not = xr_semantic_op_contract(XI_NOT);
+    const XrSemanticOpContract *type_id = xr_semantic_op_contract(XI_TYPEID);
     REQUIRE(add != NULL && strcmp(add->canonical_name, "xi.add") == 0);
     REQUIRE(strcmp(add->canonical_owner, "xi.add") == 0);
     REQUIRE(add->operation_id_hi == add->owner_id_hi);
@@ -898,6 +899,16 @@ static void test_operation_registry(void) {
     REQUIRE(xr_semantic_owner_has_consumer(logical_not->owner_id_hi,
                                            logical_not->owner_id_lo,
                                            XR_SEM_CONSUMER_SEMANTIC_PLAN));
+    REQUIRE(type_id != NULL && type_id->owner == XR_SEM_OWNER_DECLARATIVE_PRIMITIVE);
+    REQUIRE(strcmp(type_id->canonical_owner, "primitive.type-identity") == 0);
+    REQUIRE(type_id->owner_id_hi == XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI);
+    REQUIRE(type_id->owner_id_lo == XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO);
+    REQUIRE(type_id->operation_id_hi != type_id->owner_id_hi ||
+            type_id->operation_id_lo != type_id->owner_id_lo);
+    REQUIRE(xr_semantic_owner_consumer_bits(type_id->owner_id_hi, type_id->owner_id_lo) ==
+            (XR_SEM_CONSUMER_SEMANTIC_PLAN | XR_SEM_CONSUMER_VM |
+             XR_SEM_CONSUMER_AOT_HOSTED | XR_SEM_CONSUMER_AOT_FREESTANDING |
+             XR_SEM_CONSUMER_CGEN | XR_SEM_CONSUMER_RUNTIME));
     REQUIRE(xr_semantic_owner_consumer_bits(0, 0) == 0);
     REQUIRE(xr_semantic_owner_cgen_adapter(0, 0) == NULL);
     REQUIRE(xr_semantic_op_contract(XI_OP_COUNT) == NULL);

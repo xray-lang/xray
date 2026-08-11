@@ -120,6 +120,9 @@ vmcase(OP_PRINT) {
 
 vmcase(OP_TYPEOF) {
     // Returns int (XrTypeId) for fast comparison
+    XR_TYPE_IDENTITY_CORE_OWNER_GUARD(XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
+                                      XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO);
+    XR_TYPE_IDENTITY_CORE_CONSUMER_GUARD(XR_SEM_CONSUMER_VM);
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     int slot_hint = GETARG_C(i);
@@ -132,7 +135,7 @@ vmcase(OP_TYPEOF) {
     } else {
         val = R(b);
     }
-    R(a) = XR_FROM_INT((int64_t) xr_value_typeid(val));
+    R(a) = XR_FROM_INT((int64_t) xr_value_typeid_vm(val));
     vmbreak;
 }
 

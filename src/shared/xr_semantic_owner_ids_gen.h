@@ -15,17 +15,23 @@
 #define XR_SEM_CONSUMER_CGEN UINT32_C(0x00000010)
 #define XR_SEM_CONSUMER_RUNTIME UINT32_C(0x00000020)
 
-#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "e316e1122af4cbe1d6ac2c924a78d4de2ac08eb42fb892f42f22150c6a0eb536"
+#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "9d360d5b841562ce96f4e44203450bc6e39084e3f06a8f38ec848decd5990da9"
 
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI UINT64_C(0x7ec352d0136c63f9)
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO UINT64_C(0x9f71c69f3e6c2b2d)
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_CONSUMERS UINT32_C(0x0000003f)
+#define XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI UINT64_C(0xe99ec68201c8d458)
+#define XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO UINT64_C(0xc8cd54a90f6bdba8)
+#define XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_CONSUMERS UINT32_C(0x0000003f)
 
 static inline uint32_t xr_semantic_owner_consumer_bits(uint64_t owner_id_hi,
                                                         uint64_t owner_id_lo) {
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO)
         return XR_SEM_OWNER_ID_SHARED_TRUTHINESS_CONSUMERS;
+    if (owner_id_hi == XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI &&
+        owner_id_lo == XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO)
+        return XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_CONSUMERS;
     return 0;
 }
 
@@ -41,6 +47,9 @@ static inline const char *xr_semantic_owner_cgen_adapter(uint64_t owner_id_hi,
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO)
         return "xr_truthy";
+    if (owner_id_hi == XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI &&
+        owner_id_lo == XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO)
+        return "xrt_typeof_id";
     return NULL;
 }
 

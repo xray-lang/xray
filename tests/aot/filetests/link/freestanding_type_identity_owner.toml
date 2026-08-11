@@ -1,0 +1,9 @@
+[package]
+name = "filetest-freestanding-type-identity-owner"
+version = "1.0.0"
+license = "MIT"
+main = "freestanding_type_identity_owner.xr"
+
+[[export.c]]
+xray = "xray_type_identity_owner"
+symbol = "xray_type_identity_owner"

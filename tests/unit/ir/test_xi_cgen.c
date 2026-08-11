@@ -7548,6 +7548,23 @@ TEST(cgen_typename_as_and_slice_use_direct_drivers) {
     xi_func_free(ir);
 }
 
+TEST(cgen_typeid_uses_stable_owner_adapter) {
+    const char *src = "var stableType = Type.int\n"
+                      "stableType = typeOf(42)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "typeOf IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "stable-owner typeOf C generation failed");
+    assert(contains(code, "xrt_typeof_id(") &&
+           "XI_TYPEID must consume the generated stable-owner CGen adapter");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
     const char *src = "fn forceUtf8(data: Array<byte>) -> string {\n"
                       "    return string.fromUtf8(data[:])!\n"
@@ -12748,6 +12765,7 @@ int main(void) {
     run_cgen_inherited_class_uses_native_base_layout();
     run_cgen_typed_array_slice_preserves_raw_storage_fast_path();
     run_cgen_typename_as_and_slice_use_direct_drivers();
+    run_cgen_typeid_uses_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();

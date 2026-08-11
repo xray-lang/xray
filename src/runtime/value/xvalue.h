@@ -464,6 +464,9 @@ static inline xr_Integer xr_int_shr_u_wrap(xr_Integer a, xr_Integer b) {
 /* ========== Type Query ========== */
 
 XR_FUNC XrTypeId xr_value_typeid(XrValue v);
+/* VM dispatch uses its own declared semantic-owner consumer bit instead of
+ * borrowing the runtime adapter identity. */
+XR_FUNC XrTypeId xr_value_typeid_vm(XrValue v);
 /* The `is T` predicate. For fixed-width numeric ids the erased value carries no
  * width, so the test is exact representability in T rather than a tag compare;
  * xr_value_typeid alone would answer `int` for every integer. */

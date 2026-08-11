@@ -1,0 +1,8 @@
+args=--profile freestanding
+contains=xaot-plan v0
+contains="runtime_objects": []
+c_contains=#include "xrt_core_freestanding.h"
+c_contains=xrt_typeof_id(
+c_not_contains=#include "xrt.h"
+c_syntax=pass
+not_contains=xray_core

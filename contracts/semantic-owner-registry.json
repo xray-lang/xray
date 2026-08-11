@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "e316e1122af4cbe1d6ac2c924a78d4de2ac08eb42fb892f42f22150c6a0eb536",
+  "canonical_fingerprint": "9d360d5b841562ce96f4e44203450bc6e39084e3f06a8f38ec848decd5990da9",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -11,6 +11,58 @@
     "runtime": "0x00000020"
   },
   "owners": [
+    {
+      "owner": "primitive.type-identity",
+      "owner_id": "e99ec68201c8d458c8cd54a90f6bdba8",
+      "owner_id_hi": "0xe99ec68201c8d458",
+      "owner_id_lo": "0xc8cd54a90f6bdba8",
+      "category": "declarative-primitive",
+      "operations": [
+        "xi.typeid"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen",
+        "runtime"
+      ],
+      "consumer_bits": "0x0000003f",
+      "cgen_adapter": "xrt_typeof_id",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_convert.inc.c",
+          "symbol": "OP_TYPEOF"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_arith.h",
+          "symbol": "xrt_typeof_id"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_typeof_id"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_type_identity_adapter_name"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/value/xvalue_typeid.c",
+          "symbol": "xr_value_typeid"
+        }
+      ]
+    },
     {
       "owner": "shared.truthiness",
       "owner_id": "7ec352d0136c63f99f71c69f3e6c2b2d",
@@ -4273,28 +4325,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.tuple.new"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.typeid",
-      "owner_id": "8a4d8bd02a3d3da6717c802fce0e0aa9",
-      "owner_id_hi": "0x8a4d8bd02a3d3da6",
-      "owner_id_lo": "0x717c802fce0e0aa9",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.typeid"
       ],
       "consumers": [
         "semantic-plan"
@@ -9489,21 +9519,51 @@
       "operation_id": "8a4d8bd02a3d3da6717c802fce0e0aa9",
       "operation_id_hi": "0x8a4d8bd02a3d3da6",
       "operation_id_lo": "0x717c802fce0e0aa9",
-      "owner": "xi.typeid",
-      "owner_id": "8a4d8bd02a3d3da6717c802fce0e0aa9",
-      "owner_id_hi": "0x8a4d8bd02a3d3da6",
-      "owner_id_lo": "0x717c802fce0e0aa9",
+      "owner": "primitive.type-identity",
+      "owner_id": "e99ec68201c8d458c8cd54a90f6bdba8",
+      "owner_id_hi": "0xe99ec68201c8d458",
+      "owner_id_lo": "0xc8cd54a90f6bdba8",
       "category": "declarative-primitive",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen",
+        "runtime"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000003f",
+      "cgen_adapter": "xrt_typeof_id",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_convert.inc.c",
+          "symbol": "OP_TYPEOF"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_arith.h",
+          "symbol": "xrt_typeof_id"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_typeof_id"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_type_identity_adapter_name"
+        },
+        {
+          "consumer": "runtime",
+          "path": "src/runtime/value/xvalue_typeid.c",
+          "symbol": "xr_value_typeid"
         }
       ]
     },

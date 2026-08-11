@@ -923,6 +923,32 @@
     },
     {
       "contains_tagged_value": false,
+      "header": "src/shared/xr_type_identity_core.h",
+      "id": "type-identity",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_arith.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/runtime/value/xvalue_typeid.c",
+        "src/vm/xvm_internal.h"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "descriptor",
+      "signatures": [
+        "xr_type_identity_core_eval_impl"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_type_identity_core.c"
+      ]
+    },
+    {
+      "contains_tagged_value": false,
       "header": "src/shared/xr_type_names_core.h",
       "id": "type-names",
       "owner": "shared-kernel",

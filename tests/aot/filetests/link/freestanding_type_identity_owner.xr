@@ -1,0 +1,4 @@
+@c_export
+fn xray_type_identity_owner(value: int) -> int {
+    return typeOf(value)
+}

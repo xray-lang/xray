@@ -437,6 +437,16 @@ add_xray_unit_test(test_xrt_json_decode aot/test_xrt_json_decode.c)
 add_xray_unit_test(test_xrt_static_map_set aot/test_xrt_static_map_set.c)
 add_xray_unit_test(test_xrt_exception_tls aot/test_xrt_exception_tls.c)
 add_xray_unit_test(test_xrt_method_truthy aot/test_xrt_method_truthy.c)
+add_executable(test_xrt_type_identity_freestanding aot/test_xrt_type_identity_freestanding.c)
+target_compile_definitions(test_xrt_type_identity_freestanding PRIVATE
+    XRAY_PROFILE_FREESTANDING=1)
+target_include_directories(test_xrt_type_identity_freestanding PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+add_test(NAME test_xrt_type_identity_freestanding
+    COMMAND $<TARGET_FILE:test_xrt_type_identity_freestanding>)
 # This test deliberately compiles the header-only AOT runtime with XRT_IMPL and
 # custom allocators.  Linking xray_core would give it a second runtime-global
 # owner and fails deterministically under sanitizer linkers.
@@ -576,6 +586,7 @@ add_xray_unit_test(test_range_core stdlib/test_range_core.c)
 add_xray_unit_test(test_string_core stdlib/test_string_core.c)
 add_xray_unit_test(test_strbuf_core stdlib/test_strbuf_core.c)
 add_xray_unit_test(test_truthy_core stdlib/test_truthy_core.c)
+add_xray_unit_test(test_type_identity_core stdlib/test_type_identity_core.c)
 add_xray_unit_test(test_io_core stdlib/test_io_core.c)
 add_xray_unit_test(test_os_core stdlib/test_os_core.c)
 add_xray_unit_test(test_crypto stdlib/test_crypto.c)

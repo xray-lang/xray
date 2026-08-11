@@ -231,7 +231,8 @@
       "category": "target",
       "consumers": [
         "src/aot/xi_cgen.c",
-        "src/aot/xi_cgen_coro.inc.c"
+        "src/aot/xi_cgen_coro.inc.c",
+        "src/aot/xi_cgen_coro_resolver.inc.c"
       ],
       "current_fallback": "backend-reconstruction-risk",
       "current_type": "XaotCallableInvokePlan",
@@ -248,7 +249,8 @@
         "src/aot/xaot_callable.c",
         "src/aot/xaot_entry_plan.c",
         "src/aot/xi_cgen.c",
-        "src/aot/xi_cgen_coro.inc.c"
+        "src/aot/xi_cgen_coro.inc.c",
+        "src/aot/xi_cgen_coro_resolver.inc.c"
       ],
       "verifier": "none-current-gap"
     },

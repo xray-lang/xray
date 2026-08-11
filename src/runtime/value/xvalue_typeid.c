@@ -12,96 +12,133 @@
 #include "xtype.h"
 #include "xtype_names.h"
 #include "../../shared/xr_numeric_conversion_core.h"
+#include "../../shared/xr_type_identity_core.h"
 #include "../../base/xchecks.h"
 #include "../class/xenum.h"
 #include "../class/xinstance.h"
 #include "../object/xarray.h" /* elem_tid carries a Json array's domain */
 
-static const XrTypeId tag_to_typeid[8] = {
-    [XR_TAG_NULL] = XR_TID_NULL,    [XR_TAG_BOOL] = XR_TID_BOOL,     [XR_TAG_RUNE] = XR_TID_RUNE,
-    [XR_TAG_I64] = XR_TID_INT,      [XR_TAG_F64] = XR_TID_FLOAT,     [XR_TAG_PTR] = XR_TID_NULL,
-    [XR_TAG_AGG_REF] = XR_TID_NULL, [XR_TAG_NOTFOUND] = XR_TID_NULL,
+#define XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(core_id, public_id, numeric_id)          \
+    _Static_assert((unsigned) (core_id) == (numeric_id),                           \
+                   "type identity core id drifted");                              \
+    _Static_assert((unsigned) (public_id) == (numeric_id),                         \
+                   "public type id drifted")
+
+XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_NULL, XR_TID_NULL, 0u);
+XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_BOOL, XR_TID_BOOL, 1u);
+XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_INT, XR_TID_INT, 8u);
+XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_FLOAT, XR_TID_FLOAT, 11u);
+XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_BUFFER, XR_TID_BUFFER, 42u);
+XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_RUNE, XR_TID_RUNE, 43u);
+
+#undef XR_TYPE_IDENTITY_ASSERT_PUBLIC_ID
+
+static const XrTypeIdentityCoreKind tag_to_type_identity[8] = {
+    [XR_TAG_NULL] = XR_TYPE_IDENTITY_CORE_NULL,
+    [XR_TAG_BOOL] = XR_TYPE_IDENTITY_CORE_BOOL,
+    [XR_TAG_RUNE] = XR_TYPE_IDENTITY_CORE_RUNE,
+    [XR_TAG_I64] = XR_TYPE_IDENTITY_CORE_INT,
+    [XR_TAG_F64] = XR_TYPE_IDENTITY_CORE_FLOAT,
+    [XR_TAG_PTR] = XR_TYPE_IDENTITY_CORE_NULL,
+    [XR_TAG_AGG_REF] = XR_TYPE_IDENTITY_CORE_NULL,
+    [XR_TAG_NOTFOUND] = XR_TYPE_IDENTITY_CORE_NULL,
 };
 
-static const XrTypeId gctype_to_typeid[XR_TENUM_SCALAR_LAYOUT + 1] = {
-    [XR_TNULL] = XR_TID_NULL,
-    [XR_TBOOL] = XR_TID_BOOL,
-    [XR_TINT] = XR_TID_INT,
-    [XR_TFLOAT] = XR_TID_FLOAT,
-    [XR_TSTRING] = XR_TID_STRING,
-    [XR_TFUNCTION] = XR_TID_FUNCTION,
-    [XR_TCFUNCTION] = XR_TID_FUNCTION,
-    [XR_TARRAY] = XR_TID_ARRAY,
-    [XR_TSET] = XR_TID_SET,
-    [XR_TMAP] = XR_TID_MAP,
-    [XR_TCLASS] = XR_TID_FUNCTION,
-    [XR_TINSTANCE] = XR_TID_INSTANCE,
-    [XR_TBOUND_METHOD] = XR_TID_BOUND_METHOD,
-    [XR_TERROR] = XR_TID_PANIC_INFO,
-    [XR_TMODULE] = XR_TID_MODULE,
-    [XR_TCOROUTINE] = XR_TID_COROUTINE,
-    [XR_TCHANNEL] = XR_TID_CHANNEL,
-    [XR_TCOROPOOL] = XR_TID_NULL,
-    [XR_TTASK] = XR_TID_TASK,
-    [XR_TATOMIC] = XR_TID_ATOMIC,
-    [XR_TWORKQUEUE] = XR_TID_WORKQUEUE,
-    [XR_TRESULTGROUP] = XR_TID_RESULTGROUP,
-    [XR_TBOOLMAP] = XR_TID_MAP,
-    [XR_TCOUNTDOWNLATCH] = XR_TID_COUNTDOWNLATCH,
-    [XR_TSEMAPHORE] = XR_TID_SEMAPHORE,
-    [XR_TEVENTCOUNT] = XR_TID_EVENTCOUNT,
-    [XR_TTHREAD] = XR_TID_THREAD,
-    [XR_TENUM_TYPE] = XR_TID_ENUM_TYPE,
-    [XR_TENUM_CTOR] = XR_TID_FUNCTION,
-    [XR_TENUM_DESCRIPTOR] = XR_TID_INSTANCE,
-    [XR_TENUM_SCALAR_LAYOUT] = XR_TID_ENUM_VALUE,
+static const XrTypeIdentityCoreKind gctype_to_type_identity[XR_TENUM_SCALAR_LAYOUT + 1] = {
+    [XR_TNULL] = XR_TYPE_IDENTITY_CORE_NULL,
+    [XR_TBOOL] = XR_TYPE_IDENTITY_CORE_BOOL,
+    [XR_TINT] = XR_TYPE_IDENTITY_CORE_INT,
+    [XR_TFLOAT] = XR_TYPE_IDENTITY_CORE_FLOAT,
+    [XR_TSTRING] = XR_TYPE_IDENTITY_CORE_STRING,
+    [XR_TFUNCTION] = XR_TYPE_IDENTITY_CORE_FUNCTION,
+    [XR_TCFUNCTION] = XR_TYPE_IDENTITY_CORE_FUNCTION,
+    [XR_TARRAY] = XR_TYPE_IDENTITY_CORE_ARRAY,
+    [XR_TSET] = XR_TYPE_IDENTITY_CORE_SET,
+    [XR_TMAP] = XR_TYPE_IDENTITY_CORE_MAP,
+    [XR_TCLASS] = XR_TYPE_IDENTITY_CORE_FUNCTION,
+    [XR_TINSTANCE] = XR_TYPE_IDENTITY_CORE_INSTANCE,
+    [XR_TBOUND_METHOD] = XR_TYPE_IDENTITY_CORE_BOUND_METHOD,
+    [XR_TERROR] = XR_TYPE_IDENTITY_CORE_PANIC_INFO,
+    [XR_TMODULE] = XR_TYPE_IDENTITY_CORE_MODULE,
+    [XR_TCOROUTINE] = XR_TYPE_IDENTITY_CORE_COROUTINE,
+    [XR_TCHANNEL] = XR_TYPE_IDENTITY_CORE_CHANNEL,
+    [XR_TCOROPOOL] = XR_TYPE_IDENTITY_CORE_NULL,
+    [XR_TTASK] = XR_TYPE_IDENTITY_CORE_TASK,
+    [XR_TATOMIC] = XR_TYPE_IDENTITY_CORE_ATOMIC,
+    [XR_TWORKQUEUE] = XR_TYPE_IDENTITY_CORE_WORKQUEUE,
+    [XR_TRESULTGROUP] = XR_TYPE_IDENTITY_CORE_RESULTGROUP,
+    [XR_TBOOLMAP] = XR_TYPE_IDENTITY_CORE_MAP,
+    [XR_TCOUNTDOWNLATCH] = XR_TYPE_IDENTITY_CORE_COUNTDOWNLATCH,
+    [XR_TSEMAPHORE] = XR_TYPE_IDENTITY_CORE_SEMAPHORE,
+    [XR_TEVENTCOUNT] = XR_TYPE_IDENTITY_CORE_EVENTCOUNT,
+    [XR_TTHREAD] = XR_TYPE_IDENTITY_CORE_THREAD,
+    [XR_TENUM_TYPE] = XR_TYPE_IDENTITY_CORE_ENUM_TYPE,
+    [XR_TENUM_CTOR] = XR_TYPE_IDENTITY_CORE_FUNCTION,
+    [XR_TENUM_DESCRIPTOR] = XR_TYPE_IDENTITY_CORE_INSTANCE,
+    [XR_TENUM_SCALAR_LAYOUT] = XR_TYPE_IDENTITY_CORE_ENUM_VALUE,
 };
 
-XrTypeId xr_value_typeid(XrValue v) {
+static XrTypeIdentityCoreKind xr_value_type_identity_kind(XrValue v) {
     XR_DCHECK(v.tag <= XR_TAG_NOTFOUND, "value_typeid: invalid tag");
     if (v.tag <= XR_TAG_F64)
-        return tag_to_typeid[v.tag];
+        return tag_to_type_identity[v.tag];
     if (v.tag == XR_TAG_PTR && v.ptr) {
+        /* Canonical String objects carry the heap type in XrValue; consulting
+         * that representation field is adapter work, not a semantic fallback. */
         if (v.heap_type == XR_TSTRING)
-            return XR_TID_STRING;
+            return XR_TYPE_IDENTITY_CORE_STRING;
         uint8_t gctype = XR_OBJ_GET_TYPE((XrObjHeader *) v.ptr);
-        if (gctype < sizeof(gctype_to_typeid) / sizeof(gctype_to_typeid[0])) {
-            XrTypeId tid = gctype_to_typeid[gctype];
-            if (tid == XR_TID_INSTANCE) {
+        if (gctype < sizeof(gctype_to_type_identity) / sizeof(gctype_to_type_identity[0])) {
+            XrTypeIdentityCoreKind kind = gctype_to_type_identity[gctype];
+            if (kind == XR_TYPE_IDENTITY_CORE_INSTANCE) {
                 XrInstance *inst = (XrInstance *) v.ptr;
                 if (inst->klass) {
                     switch (inst->klass->builtin_kind) {
                         case XR_BK_STRUCT_OBJECT:
-                            return XR_TID_OBJECT;
+                            return XR_TYPE_IDENTITY_CORE_OBJECT;
                         case XR_BK_STRINGBUILDER:
-                            return XR_TID_STRINGBUILDER;
+                            return XR_TYPE_IDENTITY_CORE_STRINGBUILDER;
                         case XR_BK_ADT_ENUM:
-                            return XR_TID_ENUM_VALUE;
+                            return XR_TYPE_IDENTITY_CORE_ENUM_VALUE;
                         case XR_BK_ITERATOR:
-                            return XR_TID_ITERATOR;
+                            return XR_TYPE_IDENTITY_CORE_ITERATOR;
                         case XR_BK_REGEX:
-                            return XR_TID_REGEX;
+                            return XR_TYPE_IDENTITY_CORE_REGEX;
                         case XR_BK_NETCONN:
-                            return XR_TID_NETCONN;
+                            return XR_TYPE_IDENTITY_CORE_NETCONN;
                         case XR_BK_NETLISTENER:
-                            return XR_TID_NETLISTENER;
+                            return XR_TYPE_IDENTITY_CORE_NETLISTENER;
                         case XR_BK_BIGINT:
-                            return XR_TID_BIGINT;
+                            return XR_TYPE_IDENTITY_CORE_BIGINT;
                         case XR_BK_PANIC_INFO:
-                            return XR_TID_PANIC_INFO;
+                            return XR_TYPE_IDENTITY_CORE_PANIC_INFO;
                         case XR_BK_RANGE:
-                            return XR_TID_RANGE;
+                            return XR_TYPE_IDENTITY_CORE_RANGE;
                         case XR_BK_BUFFER:
-                            return XR_TID_BUFFER;
+                            return XR_TYPE_IDENTITY_CORE_BUFFER;
                         default:
                             break;
                     }
                 }
             }
-            return tid;
+            return kind;
         }
     }
-    return XR_TID_NULL;
+    return XR_TYPE_IDENTITY_CORE_NULL;
+}
+
+XrTypeId xr_value_typeid(XrValue v) {
+    return (XrTypeId) xr_type_identity_core_eval(
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO, XR_SEM_CONSUMER_RUNTIME,
+        xr_value_type_identity_kind(v));
+}
+
+XrTypeId xr_value_typeid_vm(XrValue v) {
+    return (XrTypeId) xr_type_identity_core_eval(
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO, XR_SEM_CONSUMER_VM,
+        xr_value_type_identity_kind(v));
 }
 
 /* Membership in JSON.Value is a constant-time tag/provenance read. Objects use

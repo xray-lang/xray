@@ -55,6 +55,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
 #include "../shared/xr_sync_core.h"
 #include "../shared/xr_truthy_core.h"
+#include "../shared/xr_type_identity_core.h"
 /* Code-shape controls are pure compiler barriers over <stdint.h>: no runtime,
  * no libc, no allocation.  A freestanding target is exactly where an opaque
  * value and a compiler fence are needed most, so they belong in this core
@@ -1798,6 +1799,69 @@ static inline int xr_truthy(XrValue v) {
                                XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO);
     XR_TRUTHY_CORE_CONSUMER_GUARD(XR_SEM_CONSUMER_AOT_FREESTANDING);
     return XR_TO_INT(xrt_to_bool(v)) != 0;
+}
+
+static inline uint8_t xrt_freestanding_value_kind(XrValue v) {
+    if (v.tag == XR_TAG_PTR) {
+        switch (v.heap_type) {
+            case XR_TARRAY:
+                return XR_TAG_ARRAY;
+            case XR_TMAP:
+                return XR_TAG_MAP;
+            case XR_TSET:
+                return XR_TAG_SET;
+            default:
+                return XR_TAG_PTR;
+        }
+    }
+    return v.tag;
+}
+
+static inline XrTypeIdentityCoreKind xrt_freestanding_type_identity_kind(XrValue v) {
+    switch (xrt_freestanding_value_kind(v)) {
+        case XR_TAG_I64:
+            return XR_TYPE_IDENTITY_CORE_INT;
+        case XR_TAG_F64:
+            return XR_TYPE_IDENTITY_CORE_FLOAT;
+        case XR_TAG_BOOL:
+            return XR_TYPE_IDENTITY_CORE_BOOL;
+        case XR_TAG_RUNE:
+            return XR_TYPE_IDENTITY_CORE_RUNE;
+        case XR_TAG_NULL:
+            return XR_TYPE_IDENTITY_CORE_NULL;
+        case XR_TAG_STR:
+        case XR_TAG_STR_ARC:
+            return XR_TYPE_IDENTITY_CORE_STRING;
+        case XR_TAG_ARRAY:
+            return XR_TYPE_IDENTITY_CORE_ARRAY;
+        case XR_TAG_SET:
+            return XR_TYPE_IDENTITY_CORE_SET;
+        case XR_TAG_MAP:
+            return XR_TYPE_IDENTITY_CORE_MAP;
+        case XR_TAG_PTR:
+            if (v.ptr && v.heap_type == 0)
+                return XR_TYPE_IDENTITY_CORE_OBJECT;
+            return XR_TYPE_IDENTITY_CORE_INSTANCE;
+        case XR_TAG_CLOSURE:
+            return XR_TYPE_IDENTITY_CORE_FUNCTION;
+        case XR_TAG_STRBUF:
+            return XR_TYPE_IDENTITY_CORE_STRINGBUILDER;
+        case XR_TAG_RANGE:
+            return XR_TYPE_IDENTITY_CORE_RANGE;
+        case XR_TAG_ENUM:
+            return XR_TYPE_IDENTITY_CORE_ENUM_VALUE;
+        case XR_TAG_BIGINT:
+            return XR_TYPE_IDENTITY_CORE_BIGINT;
+        default:
+            return XR_TYPE_IDENTITY_CORE_INSTANCE;
+    }
+}
+
+static inline int64_t xrt_typeof_id(XrValue v) {
+    return (int64_t) xr_type_identity_core_eval(
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,
+        xrt_freestanding_type_identity_kind(v));
 }
 
 static inline int64_t xrt_eq(XrValue a, XrValue b) {

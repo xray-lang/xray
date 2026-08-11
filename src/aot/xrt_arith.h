@@ -20,6 +20,7 @@
                        // xrt.h build and by the host TU in standalone unit tests
 #include "xrt_class.h"
 #include "../shared/xr_int_arith.h"
+#include "../shared/xr_type_identity_core.h"
 
 /* =========================================================================
  * Tagged arithmetic — all inline, no extern dependency
@@ -1260,48 +1261,69 @@ static inline void xrt_println(XrValue v) {
  * XR_TID_INT=8, XR_TID_FLOAT=11, XR_TID_BOOL=1, XR_TID_NULL=0,
  * XR_TID_STRING=12, XR_TID_FUNCTION=13, XR_TID_ARRAY=14, XR_TID_SET=15,
  * XR_TID_MAP=16. */
-static inline int64_t xrt_typeof_id(XrValue v) {
+#define XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(core_id, public_id, numeric_id)         \
+    _Static_assert((unsigned) (core_id) == (numeric_id),                           \
+                   "AOT type identity core id drifted");                          \
+    _Static_assert((unsigned) (public_id) == (numeric_id),                         \
+                   "AOT public type id drifted")
+
+XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_NULL, XR_TID_NULL, 0u);
+XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_INT, XR_TID_INT, 8u);
+XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_FLOAT, XR_TID_FLOAT, 11u);
+XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_BUFFER, XR_TID_BUFFER, 42u);
+XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_RUNE, XR_TID_RUNE, 43u);
+
+#undef XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID
+
+static inline XrTypeIdentityCoreKind xrt_type_identity_kind(XrValue v) {
     switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
-            return XR_TID_INT;
+            return XR_TYPE_IDENTITY_CORE_INT;
         case XR_TAG_F64:
-            return XR_TID_FLOAT;
+            return XR_TYPE_IDENTITY_CORE_FLOAT;
         case XR_TAG_BOOL:
-            return XR_TID_BOOL;
+            return XR_TYPE_IDENTITY_CORE_BOOL;
         case XR_TAG_RUNE:
-            return XR_TID_RUNE;
+            return XR_TYPE_IDENTITY_CORE_RUNE;
         case XR_TAG_NULL:
-            return XR_TID_NULL;
+            return XR_TYPE_IDENTITY_CORE_NULL;
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
-            return XR_TID_STRING;
+            return XR_TYPE_IDENTITY_CORE_STRING;
         case XR_TAG_ARRAY:
-            return XR_TID_ARRAY;
+            return XR_TYPE_IDENTITY_CORE_ARRAY;
         case XR_TAG_SET:
-            return XR_TID_SET;
+            return XR_TYPE_IDENTITY_CORE_SET;
         case XR_TAG_MAP:
-            return XR_TID_MAP;
+            return XR_TYPE_IDENTITY_CORE_MAP;
         case XR_TAG_PTR:
             if (v.ptr && v.heap_type == 0)
-                return XR_TID_OBJECT;
-            return XR_TID_INSTANCE;
+                return XR_TYPE_IDENTITY_CORE_OBJECT;
+            return XR_TYPE_IDENTITY_CORE_INSTANCE;
         case XR_TAG_CLOSURE:
-            return XR_TID_FUNCTION;
+            return XR_TYPE_IDENTITY_CORE_FUNCTION;
         case XR_TAG_STRBUF:
-            return XR_TID_STRINGBUILDER;
+            return XR_TYPE_IDENTITY_CORE_STRINGBUILDER;
         case XR_TAG_RANGE:
-            return XR_TID_RANGE;
+            return XR_TYPE_IDENTITY_CORE_RANGE;
         case XR_TAG_ENUM:
-            return XR_TID_ENUM_VALUE;
+            return XR_TYPE_IDENTITY_CORE_ENUM_VALUE;
         case XR_TAG_BIGINT:
-            return XR_TID_BIGINT;
+            return XR_TYPE_IDENTITY_CORE_BIGINT;
         case XR_TAG_NET_CONN:
-            return XR_TID_NETCONN;
+            return XR_TYPE_IDENTITY_CORE_NETCONN;
         case XR_TAG_NET_LISTENER:
-            return XR_TID_NETLISTENER;
+            return XR_TYPE_IDENTITY_CORE_NETLISTENER;
         default:
-            return XR_TID_INSTANCE;
+            return XR_TYPE_IDENTITY_CORE_INSTANCE;
     }
+}
+
+static inline int64_t xrt_typeof_id(XrValue v) {
+    return (int64_t) xr_type_identity_core_eval(
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
+        XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO, XR_SEM_CONSUMER_AOT_HOSTED,
+        xrt_type_identity_kind(v));
 }
 
 /* The `is T` / checked-cast predicate, matching the VM's xr_value_is_type_id.

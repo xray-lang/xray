@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify shared semantic-core ownership, callers, and the Array.sort ratchet."""
+"""Verify shared semantic-core ownership and production semantic-owner ratchets."""
 
 from __future__ import annotations
 
@@ -65,6 +65,19 @@ TRUTHINESS_SURROGATE_OWNER_TOKENS = (
 CGEN_TRUTHINESS_CONSUMERS = (
     ("src/aot/xi_cgen.c", "emit_condition_expr_ctx"),
     ("src/aot/xi_cgen_dispatch_helpers.inc.c", "xicgen_emit_assert_condition"),
+)
+TYPE_IDENTITY_CORE_CONSUMERS = (
+    ("src/runtime/value/xvalue_typeid.c", "xr_value_typeid"),
+    ("src/runtime/value/xvalue_typeid.c", "xr_value_typeid_vm"),
+    ("src/aot/xrt_arith.h", "xrt_typeof_id"),
+    ("src/aot/xrt_core_freestanding.h", "xrt_typeof_id"),
+)
+TYPE_IDENTITY_SURROGATE_OWNER_TOKENS = (
+    "xg_global_evidence",
+    "global_evidence_plan",
+    "canonical_name",
+    '"xi.typeid"',
+    '"primitive.type-identity"',
 )
 OWNER_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 OWNER_HALF_RE = re.compile(r"^0x[0-9a-f]{16}$")
@@ -321,7 +334,9 @@ def verify_generated_owner_header(root: Path, registry: dict) -> list[str]:
     if fingerprint_line not in text:
         errors.append("generated owner header fingerprint differs from machine-readable registry")
     for owner in registry.get("owners", []):
-        if owner.get("owner") != "shared.truthiness":
+        operations = owner.get("operations")
+        if not isinstance(operations, list) or \
+                (len(operations) == 1 and operations[0] == owner.get("owner")):
             continue
         prefix = owner_macro_prefix(owner["owner"])
         expected = (
@@ -422,6 +437,13 @@ def truthiness_surrogate_owner(body: str) -> str | None:
     return None
 
 
+def type_identity_surrogate_owner(body: str) -> str | None:
+    for token in TYPE_IDENTITY_SURROGATE_OWNER_TOKENS:
+        if token in body:
+            return token
+    return None
+
+
 def verify_truthiness_ratchet(root: Path) -> list[str]:
     errors: list[str] = []
     marker = owner_macro_prefix("shared.truthiness")
@@ -474,6 +496,66 @@ def verify_truthiness_ratchet(root: Path) -> list[str]:
         text = (root / relative).read_text(encoding="utf-8", errors="strict")
         if '"xr_truthy(' in text:
             errors.append(f"{relative}: CGen revived a source-name truthiness binding")
+    return errors
+
+
+def verify_type_identity_ratchet(root: Path) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("primitive.type-identity")
+    for relative, symbol in TYPE_IDENTITY_CORE_CONSUMERS:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        body = extract_c_function(text, symbol)
+        if body is None:
+            errors.append(f"{relative}: type-identity consumer {symbol} is missing")
+            continue
+        if f"{marker}_HI" not in body or f"{marker}_LO" not in body:
+            errors.append(f"{relative}: {symbol} no longer consumes the stable type-identity owner ID")
+        if "xr_type_identity_core_eval" not in body:
+            errors.append(f"{relative}: {symbol} no longer delegates to the type-identity owner")
+        if "xr_semantic_owner_has_consumer" in body:
+            errors.append(f"{relative}: {symbol} revived a runtime consumer fallback")
+        surrogate = type_identity_surrogate_owner(body)
+        if surrogate:
+            errors.append(f"{relative}: {symbol} revived surrogate type-identity owner: {surrogate}")
+
+    vm_path = root / "src/vm/xvm_dispatch_convert.inc.c"
+    vm_text = vm_path.read_text(encoding="utf-8", errors="strict")
+    vm_start = vm_text.find("vmcase(OP_TYPEOF)")
+    vm_end = vm_text.find("vmcase(", vm_start + 1) if vm_start >= 0 else -1
+    vm_body = vm_text[vm_start:vm_end if vm_end >= 0 else len(vm_text)] if vm_start >= 0 else ""
+    if f"{marker}_HI" not in vm_body or f"{marker}_LO" not in vm_body or \
+            "xr_value_typeid_vm" not in vm_body:
+        errors.append("src/vm/xvm_dispatch_convert.inc.c: OP_TYPEOF bypasses its stable owner binding")
+    if "xr_value_typeid(val)" in vm_body:
+        errors.append("src/vm/xvm_dispatch_convert.inc.c: OP_TYPEOF revived the runtime-consumer fallback")
+    surrogate = type_identity_surrogate_owner(vm_body)
+    if surrogate:
+        errors.append(f"src/vm/xvm_dispatch_convert.inc.c: OP_TYPEOF revived surrogate owner: {surrogate}")
+
+    cgen_path = root / "src/aot/xi_cgen.c"
+    cgen_text = cgen_path.read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_type_identity_adapter_name")
+    if adapter_body is None:
+        errors.append("src/aot/xi_cgen.c: stable-ID type-identity adapter resolver is missing")
+    else:
+        if f"{marker}_HI" not in adapter_body or f"{marker}_LO" not in adapter_body or \
+                "xr_semantic_owner_cgen_adapter" not in adapter_body:
+            errors.append("src/aot/xi_cgen.c: CGen no longer resolves type identity by stable owner ID")
+        surrogate = type_identity_surrogate_owner(adapter_body)
+        if surrogate:
+            errors.append(f"src/aot/xi_cgen.c: CGen revived surrogate type-identity owner: {surrogate}")
+
+    dispatch_path = root / "src/aot/xi_cgen_dispatch_helpers.inc.c"
+    dispatch_text = dispatch_path.read_text(encoding="utf-8", errors="strict")
+    typeid_body = extract_c_function(dispatch_text, "xicgen_typeid")
+    if typeid_body is None or "cg_type_identity_adapter_name" not in typeid_body:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: XI_TYPEID bypasses the stable owner adapter")
+    if 'strcmp(bn, "typeOf")' in dispatch_text:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: source-name typeOf fallback revived")
+    for relative, text in (("src/aot/xi_cgen.c", cgen_text),
+                           ("src/aot/xi_cgen_dispatch_helpers.inc.c", dispatch_text)):
+        if '"xrt_typeof_id(' in text:
+            errors.append(f"{relative}: CGen revived a literal type-identity adapter binding")
     return errors
 
 
@@ -536,8 +618,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 25:
-        errors.append(f"shared-core inventory must contain exactly 25 headers, found {len(actual)}")
+    if len(actual) != 26:
+        errors.append(f"shared-core inventory must contain exactly 26 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -558,6 +640,7 @@ def verify(root: Path, write: bool) -> list[str]:
 
     errors.extend(verify_sort_ratchet(root))
     errors.extend(verify_truthiness_ratchet(root))
+    errors.extend(verify_type_identity_ratchet(root))
     registry_errors, _ = verify_operation_registry(root)
     errors.extend(registry_errors)
     return errors
@@ -575,6 +658,11 @@ def self_test() -> int:
     assert truthiness_surrogate_owner(
         'bool owner(void) { return lookup("xi.not"); }') == '"xi.not"'
     assert truthiness_surrogate_owner("bool owner(void) { return true; }") is None
+    assert type_identity_surrogate_owner(
+        "int owner(void) { return xg_global_evidence != NULL; }") == "xg_global_evidence"
+    assert type_identity_surrogate_owner(
+        'int owner(void) { return lookup("xi.typeid"); }') == '"xi.typeid"'
+    assert type_identity_surrogate_owner("int owner(void) { return 8; }") is None
 
     def stable_fields(name: str, key: str) -> dict[str, str]:
         stable_id = semantic_stable_id(name)
@@ -741,8 +829,9 @@ def main() -> int:
             print(f"  - {error}", file=sys.stderr)
         return 1
     _, operation_count = verify_operation_registry(root)
-    print(f"semantic-owner gate: PASS (25 cores, {operation_count} Xi ops, "
-          "stable owner IDs, production consumer bindings, Array.sort ratchet)")
+    manifest = tomllib.loads((root / "contracts/semantic-owners.toml").read_text(encoding="utf-8"))
+    print(f"semantic-owner gate: PASS ({len(manifest['core'])} cores, {operation_count} Xi ops, "
+          "stable owner IDs, production consumer bindings, owner ratchets)")
     return 0
 
 

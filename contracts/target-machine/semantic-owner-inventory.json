@@ -6,7 +6,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 251,
+  "operation_count": 252,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -600,6 +600,34 @@
         "vm",
         "aot",
         "hosted"
+      ]
+    },
+    {
+      "benchmark_anchor": "shared-core/type-identity",
+      "capabilities": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_type_identity_core.h",
+      "current_vm_owner": "representation adapter",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "shared-kernel",
+      "future_semantic_owner": "SemanticOwnerRegistry/type-identity",
+      "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_type_identity_core.h",
+      "observable_edges": [],
+      "operation_id": "shared.type-identity",
+      "ownership": "descriptor",
+      "targets": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
       ]
     },
     {
@@ -6441,5 +6469,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "bb82bc5e9e37869e162ea5b0f6f3dc68f844ecc9f1697976537db53bc5918ddb"
+  "source_tree_fingerprint": "93fb943a0fca4ca39722a8c2ba9cb09ea4a3cc6eb206c0d9a72937d751c6b3c2"
 }

@@ -1,7 +1,7 @@
 schema = 1
 
 [policy]
-observable_owner_count = 1
+observable_owner_count = 2
 unknown_plan = "fail_closed"
 native_kernel_forbids_tagged_value = true
 tagged_and_descriptor_kernels_are_explicit = true
@@ -161,6 +161,13 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted"]
 
 [[core]]
+id = "type-identity"
+header = "src/shared/xr_type_identity_core.h"
+representation = "descriptor"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
 id = "type-names"
 header = "src/shared/xr_type_names_core.h"
 representation = "descriptor"
@@ -197,6 +204,20 @@ performance_evidence = "contracts/semantic-performance-baseline.json"
 runtime_benchmark = "contracts/semantic-runtime-benchmark.json"
 performance_budget = "contracts/semantic-performance-budget.toml"
 
+[[operation]]
+id = "typeOf"
+observable_contract = "src/shared/xr_type_identity_core.h"
+semantic_kernel = "src/shared/xr_type_identity_core.h"
+vm_adapter = "src/runtime/value/xvalue_typeid.c"
+aot_adapter = "src/aot/xrt_arith.h"
+typed_plan = "primitive.type-identity"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_type_identity_core.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/regression/09_advanced/0912_typeof_builtin.xr",
+]
+
 [[operation_family]]
 id = "arithmetic-conversion"
 canonical_cores = ["arithmetic", "bits", "numeric-conversion", "numeric", "raw-scalar"]
@@ -226,7 +247,7 @@ disposition = "migrated"
 
 [[operation_family]]
 id = "enum-aggregate"
-canonical_cores = ["native-type", "type-names", "truthiness"]
+canonical_cores = ["native-type", "type-identity", "type-names", "truthiness"]
 duplicate_sources = []
 disposition = "single-owner"
 

@@ -2896,3 +2896,24 @@
     (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")
     (runtime "src/runtime/value/xvalue_truthy.c" "xr_value_is_truthy")
   ))
+
+(define-xi-observable-owner primitive.type-identity
+  :category declarative-primitive
+  :operations (xi.typeid)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+    runtime
+  )
+  :cgen-adapter xrt_typeof_id
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_convert.inc.c" "OP_TYPEOF")
+    (aot-hosted "src/aot/xrt_arith.h" "xrt_typeof_id")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_typeof_id")
+    (cgen "src/aot/xi_cgen.c" "cg_type_identity_adapter_name")
+    (runtime "src/runtime/value/xvalue_typeid.c" "xr_value_typeid")
+  ))

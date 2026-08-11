@@ -4259,12 +4259,16 @@ static void xicgen_assert_ne(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
 
 static void xicgen_typeid(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                           const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_typeid: need arg");
-    fprintf(out, "XR_FROM_INT(xrt_typeof_id(");
-    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    const char *adapter = cg_type_identity_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "XR_FROM_INT(%s(", adapter);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, "))");
 }
 
@@ -7449,8 +7453,6 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         xicgen_slice(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "range") == 0) {
         xicgen_range(ctx, out, f, v, prefix);
-    } else if (strcmp(bn, "typeOf") == 0) {
-        xicgen_typeid(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "typeName") == 0) {
         xicgen_typename(ctx, out, f, v, prefix);
     } else if (xicgen_emit_math_builtin_expr(ctx, out, f, v, bn)) {
