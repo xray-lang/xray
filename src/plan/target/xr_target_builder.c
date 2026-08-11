@@ -122,6 +122,8 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t function_count;
     XrTargetSlotRecord *slots;
     uint32_t slot_count;
+    XrTargetInstructionRecord *instructions;
+    uint32_t instruction_count;
     XrTargetCallRecord *calls;
     uint32_t call_count;
     XrTargetCallArgumentRecord *call_arguments;
@@ -223,6 +225,7 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     xr_free(materialized->fields);
     xr_free(materialized->functions);
     xr_free(materialized->slots);
+    xr_free(materialized->instructions);
     xr_free(materialized->calls);
     xr_free(materialized->call_arguments);
     xr_free(materialized->adapters);
@@ -1757,6 +1760,236 @@ static const XrTargetValueRepRecord *find_materialized_value(
                : NULL;
 }
 
+static bool semantic_type_is_exact_i64(const XrSemanticPlan *plan,
+                                       uint32_t type_index) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, type_index);
+    return type && type->kind == XR_KIND_INT &&
+           type->scalar_rep == XR_NATIVE_I64 &&
+           (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
+}
+
+static bool materialized_rep_is_exact_i64(
+    const XrTargetMachineRepRecord *rep) {
+    return rep && rep->kind == XR_MACHINE_REP_I64 &&
+           rep->register_bits == 64 && rep->memory_size == 8 &&
+           rep->memory_align == 8 &&
+           rep->signedness == XR_TARGET_SIGN_SIGNED &&
+           rep->root_kind == XR_TARGET_ROOT_NONE &&
+           rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+}
+
+static bool materialized_i64_slot(const XrTargetMaterializedPlan *materialized,
+                                  uint32_t function, uint32_t semantic_value,
+                                  uint32_t *out_slot) {
+    const XrTargetValueRepRecord *value =
+        find_materialized_value(materialized, semantic_value);
+    if (!value || value->slot == XR_SEMANTIC_INDEX_NONE ||
+        value->slot >= materialized->slot_count ||
+        value->register_rep >= materialized->machine_rep_count ||
+        value->memory_rep >= materialized->machine_rep_count)
+        return false;
+    const XrTargetSlotRecord *slot = &materialized->slots[value->slot];
+    if (slot->id != value->slot || slot->function != function ||
+        slot->semantic_value != semantic_value ||
+        slot->register_rep != value->register_rep ||
+        slot->memory_rep != value->memory_rep || slot->size != 8 ||
+        slot->align != 8 || slot->root_kind != XR_TARGET_ROOT_NONE ||
+        slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        !materialized_rep_is_exact_i64(
+            &materialized->machine_reps[value->register_rep]) ||
+        !materialized_rep_is_exact_i64(
+            &materialized->machine_reps[value->memory_rep]))
+        return false;
+    if (out_slot)
+        *out_slot = value->slot;
+    return true;
+}
+
+static uint8_t scalar_instruction_opcode(uint16_t semantic_opcode) {
+    switch (semantic_opcode) {
+        case XI_CONST: return XR_TARGET_INSTRUCTION_CONST_I64;
+        case XI_COPY: return XR_TARGET_INSTRUCTION_COPY_I64;
+        case XI_ADD: return XR_TARGET_INSTRUCTION_ADD_WRAP_I64;
+        case XI_SUB: return XR_TARGET_INSTRUCTION_SUB_WRAP_I64;
+        case XI_MUL: return XR_TARGET_INSTRUCTION_MUL_WRAP_I64;
+        default: return XR_TARGET_INSTRUCTION_INVALID;
+    }
+}
+
+/*
+ * A function is committed only as one complete instruction group. Structural
+ * or semantic facts outside this deliberately small closed family make the
+ * function unavailable; they never produce a partial executable program.
+ */
+static bool materialize_scalar_instruction_function(
+    const XrTargetPlanBuilder *builder,
+    const XrTargetMaterializedPlan *materialized, uint32_t function_index,
+    XrTargetInstructionRecord *rows, uint32_t row_begin,
+    uint32_t *out_row_count) {
+    if (out_row_count)
+        *out_row_count = 0;
+    const XrSemanticPlan *semantic = builder->semantic_plan;
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(semantic, function_index);
+    if (!function || function_index >= materialized->function_count ||
+        materialized->functions[function_index].id != function_index ||
+        materialized->functions[function_index].semantic_function != function_index ||
+        function->parameter_count != 0 || function->capture_count != 0 ||
+        function->block_count != 1 || function->semantic_effects != 0 ||
+        !semantic_type_is_exact_i64(semantic, function->return_type))
+        return false;
+
+    const XrSemanticBlockRecord *block =
+        xr_semantic_plan_block(semantic, function->block_begin);
+    uint32_t operation_total =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    uint32_t operand_total = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_total);
+    if (!block || block->function != function_index ||
+        block->kind != XI_BLOCK_RETURN || block->predecessor_count != 0 ||
+        block->successors[0] != XR_SEMANTIC_INDEX_NONE ||
+        block->successors[1] != XR_SEMANTIC_INDEX_NONE ||
+        block->control_value == XR_SEMANTIC_INDEX_NONE ||
+        block->operation_count == 0 ||
+        block->operation_begin > operation_total ||
+        block->operation_count > operation_total - block->operation_begin ||
+        block->operation_count >= 40000000u)
+        return false;
+
+    bool return_defined = false;
+    for (uint32_t ordinal = 0; ordinal < block->operation_count; ordinal++) {
+        uint32_t operation_index = block->operation_begin + ordinal;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, operation_index);
+        uint8_t opcode = operation
+                             ? scalar_instruction_opcode(operation->opcode)
+                             : XR_TARGET_INSTRUCTION_INVALID;
+        uint16_t expected_operands =
+            opcode == XR_TARGET_INSTRUCTION_CONST_I64
+                ? 0
+                : opcode == XR_TARGET_INSTRUCTION_COPY_I64
+                      ? 1
+                      : opcode >= XR_TARGET_INSTRUCTION_ADD_WRAP_I64 &&
+                                opcode <= XR_TARGET_INSTRUCTION_MUL_WRAP_I64
+                            ? 2
+                            : UINT16_MAX;
+        uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+        if (!operation || opcode == XR_TARGET_INSTRUCTION_INVALID ||
+            operation->function != function_index ||
+            operation->block != function->block_begin ||
+            operation->effects != 0 ||
+            operation->operand_count != expected_operands ||
+            operation->operand_begin > operand_total ||
+            operation->operand_count > operand_total - operation->operand_begin ||
+            !semantic_type_is_exact_i64(semantic, operation->result_type) ||
+            !materialized_i64_slot(materialized, function_index,
+                                   operation->result_value, &result_slot))
+            return false;
+        if ((operation->opcode == XI_COPY &&
+             operation->semantic_immediate != XI_COPY_KIND_IDENTITY) ||
+            (operation->opcode != XI_CONST && operation->opcode != XI_COPY &&
+             operation->semantic_immediate != 0))
+            return false;
+
+        uint64_t immediate_bits = 0;
+        if (operation->opcode == XI_CONST) {
+            const XrSemanticConstantRecord *constant =
+                xr_semantic_plan_constant(semantic, operation->constant);
+            if (!constant || constant->kind != XR_SEM_CONST_INT ||
+                constant->type != operation->result_type)
+                return false;
+            immediate_bits = (uint64_t) constant->integer;
+        } else if (operation->constant != XR_SEMANTIC_INDEX_NONE) {
+            return false;
+        }
+
+        uint32_t operand_slots[2] = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                                     XR_TARGET_INSTRUCTION_SLOT_NONE};
+        for (uint16_t operand = 0; operand < operation->operand_count;
+             operand++) {
+            const XrSemanticOperandRecord *semantic_operand =
+                &operands[operation->operand_begin + operand];
+            if (!semantic_type_is_exact_i64(semantic, semantic_operand->type) ||
+                !materialized_i64_slot(materialized, function_index,
+                                       semantic_operand->value,
+                                       &operand_slots[operand]))
+                return false;
+        }
+        if (rows) {
+            rows[row_begin + ordinal] = (XrTargetInstructionRecord) {
+                .id = row_begin + ordinal,
+                .function = function_index,
+                .result_slot = result_slot,
+                .operand_slots = {operand_slots[0], operand_slots[1]},
+                .immediate_bits = immediate_bits,
+                .opcode = opcode,
+                .operand_count = (uint8_t) operation->operand_count,
+            };
+        }
+        return_defined = return_defined ||
+                         operation->result_value == block->control_value;
+    }
+
+    uint32_t return_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    if (!return_defined ||
+        !materialized_i64_slot(materialized, function_index,
+                               block->control_value, &return_slot))
+        return false;
+    if (rows) {
+        uint32_t return_row = row_begin + block->operation_count;
+        rows[return_row] = (XrTargetInstructionRecord) {
+            .id = return_row,
+            .function = function_index,
+            .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+            .operand_slots = {return_slot, XR_TARGET_INSTRUCTION_SLOT_NONE},
+            .opcode = XR_TARGET_INSTRUCTION_RETURN_I64,
+            .operand_count = 1,
+        };
+    }
+    if (out_row_count)
+        *out_row_count = block->operation_count + 1u;
+    return true;
+}
+
+static bool materialize_scalar_instructions(
+    const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
+    char *error, size_t error_size) {
+    uint32_t instruction_count = 0;
+    for (uint32_t function = 0; function < materialized->function_count;
+         function++) {
+        uint32_t function_rows = 0;
+        if (!materialize_scalar_instruction_function(
+                builder, materialized, function, NULL, 0, &function_rows))
+            continue;
+        if (function_rows > 40000000u - instruction_count)
+            return fail(error, error_size, "XR_EXEC_5003",
+                        "scalar instruction budget exhausted");
+        instruction_count += function_rows;
+    }
+    materialized->instruction_count = instruction_count;
+    materialized->instructions = (XrTargetInstructionRecord *) allocate_records(
+        instruction_count, sizeof(*materialized->instructions));
+    if (instruction_count && !materialized->instructions)
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "scalar instruction materialization failed");
+
+    uint32_t next_instruction = 0;
+    for (uint32_t function = 0; function < materialized->function_count;
+         function++) {
+        uint32_t function_rows = 0;
+        if (!materialize_scalar_instruction_function(
+                builder, materialized, function, materialized->instructions,
+                next_instruction, &function_rows))
+            continue;
+        next_instruction += function_rows;
+    }
+    if (next_instruction != materialized->instruction_count)
+        return fail(error, error_size, "XR_TARGET_1005",
+                    "scalar instruction eligibility changed during materialization");
+    return true;
+}
+
 static int find_rep_kind(const XrTargetMaterializedPlan *materialized, uint16_t kind) {
     for (uint32_t i = 0; i < materialized->machine_rep_count; i++)
         if (materialized->machine_reps[i].kind == kind)
@@ -1905,6 +2138,8 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_field_representations(builder, materialized, error, error_size) ||
         !materialize_functions_and_slots(builder, materialized, error, error_size) ||
         !materialize_values(builder, materialized, error, error_size) ||
+        !materialize_scalar_instructions(builder, materialized, error,
+                                         error_size) ||
         !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
         !materialize_foundation_capabilities(builder, materialized, error,
                                              error_size)) {
@@ -1969,6 +2204,8 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out,
         .functions_count = materialized.function_count,
         .slots = materialized.slots,
         .slots_count = materialized.slot_count,
+        .instructions = materialized.instructions,
+        .instructions_count = materialized.instruction_count,
         .calls = materialized.calls,
         .calls_count = materialized.call_count,
         .call_arguments = materialized.call_arguments,

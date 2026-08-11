@@ -62,82 +62,24 @@ static XrSemanticPlan *build_semantic(void) {
     return semantic;
 }
 
-static uint32_t slot_for_value(const XrTargetPlan *plan, uint32_t value) {
-    const XrTargetValueRepRecord *record = xr_target_plan_value_rep(plan, value);
-    REQUIRE(record != NULL && record->slot != XR_SEMANTIC_INDEX_NONE);
-    return record->slot;
-}
-
-static uint8_t target_opcode(uint16_t semantic_opcode) {
-    switch (semantic_opcode) {
-        case XI_CONST: return XR_TARGET_INSTRUCTION_CONST_I64;
-        case XI_COPY: return XR_TARGET_INSTRUCTION_COPY_I64;
-        case XI_ADD: return XR_TARGET_INSTRUCTION_ADD_WRAP_I64;
-        case XI_SUB: return XR_TARGET_INSTRUCTION_SUB_WRAP_I64;
-        case XI_MUL: return XR_TARGET_INSTRUCTION_MUL_WRAP_I64;
-        default: return XR_TARGET_INSTRUCTION_INVALID;
-    }
-}
-
-static void assemble_rows(TypedDispatchFixture *fixture) {
-    uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands =
-        xr_semantic_plan_operands(fixture->semantic, &operand_count);
-    uint32_t operations =
-        (uint32_t) xr_semantic_plan_operation_count(fixture->semantic);
-    REQUIRE(operations + 1u <= sizeof(fixture->rows) / sizeof(fixture->rows[0]));
-    uint32_t seen = 0;
-    for (uint32_t i = 0; i < operations; i++) {
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(fixture->semantic, i);
-        REQUIRE(operation != NULL && operation->function == 0 &&
-                operation->operand_begin <= operand_count &&
-                operation->operand_count <= operand_count - operation->operand_begin);
-        uint8_t opcode = target_opcode(operation->opcode);
-        REQUIRE(opcode != XR_TARGET_INSTRUCTION_INVALID && operation->operand_count <= 2);
-        XrTargetInstructionRecord *row = &fixture->rows[fixture->row_count];
-        *row = (XrTargetInstructionRecord) {
-            .id = fixture->row_count,
-            .function = 0,
-            .result_slot = slot_for_value(fixture->base_plan,
-                                          operation->result_value),
-            .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
-                              XR_TARGET_INSTRUCTION_SLOT_NONE},
-            .immediate_bits = opcode == XR_TARGET_INSTRUCTION_CONST_I64
-                                  ? (uint64_t) operation->semantic_immediate
-                                  : 0,
-            .opcode = opcode,
-            .operand_count = (uint8_t) operation->operand_count,
-        };
-        for (uint16_t operand = 0; operand < operation->operand_count; operand++)
-            row->operand_slots[operand] = slot_for_value(
-                fixture->base_plan,
-                operands[operation->operand_begin + operand].value);
-        seen |= UINT32_C(1) << opcode;
-        fixture->row_count++;
-    }
-    const XrSemanticFunctionRecord *function =
-        xr_semantic_plan_function(fixture->semantic, 0);
-    REQUIRE(function != NULL && function->block_count == 1);
-    const XrSemanticBlockRecord *block =
-        xr_semantic_plan_block(fixture->semantic, function->block_begin);
-    REQUIRE(block != NULL && block->control_value != XR_SEMANTIC_INDEX_NONE);
-    fixture->rows[fixture->row_count] = (XrTargetInstructionRecord) {
-        .id = fixture->row_count,
-        .function = 0,
-        .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
-        .operand_slots = {slot_for_value(fixture->base_plan, block->control_value),
-                          XR_TARGET_INSTRUCTION_SLOT_NONE},
-        .opcode = XR_TARGET_INSTRUCTION_RETURN_I64,
-        .operand_count = 1,
-    };
-    fixture->row_count++;
-    uint32_t required = (UINT32_C(1) << XR_TARGET_INSTRUCTION_CONST_I64) |
-                        (UINT32_C(1) << XR_TARGET_INSTRUCTION_COPY_I64) |
-                        (UINT32_C(1) << XR_TARGET_INSTRUCTION_ADD_WRAP_I64) |
-                        (UINT32_C(1) << XR_TARGET_INSTRUCTION_SUB_WRAP_I64) |
-                        (UINT32_C(1) << XR_TARGET_INSTRUCTION_MUL_WRAP_I64);
-    REQUIRE((seen & required) == required);
+static XrSemanticPlan *build_unsupported_semantic(void) {
+    XiFunc *function = xi_func_new("typed_dispatch_unsupported", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *left = xi_const_int(function, entry, 8, &stub_int);
+    XiValue *right = xi_const_int(function, entry, 2, &stub_int);
+    XiValue *divide = xi_value_new(function, entry, XI_DIV, &stub_int, 2);
+    REQUIRE(left && right && divide);
+    divide->args[0] = left;
+    divide->args[1] = right;
+    xi_block_set_return(entry, divide);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    xi_func_free(function);
+    return semantic;
 }
 
 static bool freeze_with_rows(const TypedDispatchFixture *fixture,
@@ -149,7 +91,8 @@ static bool freeze_with_rows(const TypedDispatchFixture *fixture,
         .profile = fixture->profile,
         .completed_family_mask = XR_TARGET_REQUIRED_FAMILIES,
     };
-#define COPY_TABLE(name) draft.name = xr_target_plan_##name(fixture->base_plan, &draft.name##_count)
+#define COPY_TABLE(name)                                                                            \
+    draft.name = xr_target_plan_##name(fixture->program_plan, &draft.name##_count)
     COPY_TABLE(machine_reps);
     COPY_TABLE(value_reps);
     COPY_TABLE(extents);
@@ -182,10 +125,25 @@ static TypedDispatchFixture make_fixture(void) {
     REQUIRE(fixture.profile != NULL);
     char error[512] = {0};
     REQUIRE(xr_target_plan_build(fixture.semantic, fixture.profile,
-                                 &fixture.base_plan, error, sizeof(error)));
-    assemble_rows(&fixture);
-    REQUIRE(freeze_with_rows(&fixture, fixture.rows, fixture.row_count,
-                             &fixture.program_plan, error, sizeof(error)));
+                                 &fixture.program_plan, error, sizeof(error)));
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_instructions(fixture.program_plan, &fixture.row_count);
+    REQUIRE(rows != NULL && fixture.row_count ==
+                                xr_semantic_plan_operation_count(fixture.semantic) + 1u);
+    REQUIRE(fixture.row_count <= sizeof(fixture.rows) / sizeof(fixture.rows[0]));
+    memcpy(fixture.rows, rows,
+           (size_t) fixture.row_count * sizeof(*fixture.rows));
+    uint32_t seen = 0;
+    for (uint32_t i = 0; i + 1u < fixture.row_count; i++)
+        seen |= UINT32_C(1) << fixture.rows[i].opcode;
+    uint32_t required = (UINT32_C(1) << XR_TARGET_INSTRUCTION_CONST_I64) |
+                        (UINT32_C(1) << XR_TARGET_INSTRUCTION_COPY_I64) |
+                        (UINT32_C(1) << XR_TARGET_INSTRUCTION_ADD_WRAP_I64) |
+                        (UINT32_C(1) << XR_TARGET_INSTRUCTION_SUB_WRAP_I64) |
+                        (UINT32_C(1) << XR_TARGET_INSTRUCTION_MUL_WRAP_I64);
+    REQUIRE((seen & required) == required);
+    REQUIRE(freeze_with_rows(&fixture, NULL, 0, &fixture.base_plan, error,
+                             sizeof(error)));
     return fixture;
 }
 
@@ -234,6 +192,29 @@ static void test_closed_program_and_unavailable_boundary(void) {
                                           0, &result) ==
             XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH);
     dispose_fixture(&fixture);
+}
+
+static void test_production_builder_keeps_unsupported_function_unavailable(void) {
+    XrSemanticPlan *semantic = build_unsupported_semantic();
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    uint32_t instruction_count = UINT32_MAX;
+    REQUIRE(xr_target_plan_instructions(plan, &instruction_count) == NULL);
+    REQUIRE(instruction_count == 0);
+    REQUIRE(xr_target_plan_function_execution_family_mask(plan, 0) == 0);
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    int64_t result = 7;
+    REQUIRE(xr_typed_dispatch_execute_i64(plan, &fingerprint, 0, &result) ==
+            XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
+    REQUIRE(result == 0);
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
 }
 
 static void test_xtp_exact_roundtrip_executes_same_program(void) {
@@ -313,6 +294,7 @@ static void test_instruction_mutations_fail_closed(void) {
 
 int main(void) {
     test_closed_program_and_unavailable_boundary();
+    test_production_builder_keeps_unsupported_function_unavailable();
     test_xtp_exact_roundtrip_executes_same_program();
     test_instruction_mutations_fail_closed();
     puts("typed dispatch tests passed");

@@ -824,6 +824,7 @@ static void test_builder_materializes_canonical_scalar_intents(void) {
                                  xr_target_plan_fingerprint(second)));
     REQUIRE(first->completed_family_mask == XR_TARGET_REQUIRED_FAMILIES);
     REQUIRE(first->functions_count == 1 && first->slots_count == 2);
+    REQUIRE(first->instructions_count == 0);
     REQUIRE(first->functions[0].slot_begin == 0 && first->functions[0].slot_count == 2);
     REQUIRE(first->functions[0].frame_size == 16 && first->functions[0].frame_align == 8);
     REQUIRE(xr_stable_id_compare(first->slots[0].identity, first->slots[1].identity) < 0);

@@ -308,6 +308,7 @@ CONTRACT_SPECS = (
         (
             "src/plan/target/xr_target_plan.h",
             "src/plan/target/xr_target_plan.c",
+            "src/plan/target/xr_target_builder.c",
             "src/plan/target/xr_target_instruction_verify.h",
             "src/plan/target/xr_target_instruction_verify.c",
             "src/plan/target/xr_target_verify.c",
