@@ -929,6 +929,7 @@ static XiFunc *compile_to_ir_with_config(const char *source, XiPipelineConfig cf
     xa_analyzer_analyze(analyzer, analyzer_file, program);
 
     cfg.run_emit = false; /* cgen tests need the IR tree, not bytecode */
+    cfg.source_file = analyzer_file;
 
     XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, &cfg);
 
