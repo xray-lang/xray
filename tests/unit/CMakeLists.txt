@@ -341,6 +341,8 @@ add_test(NAME test_runtime_generation_archive
     COMMAND $<TARGET_FILE:test_runtime_generation_archive>)
 add_xray_unit_test(test_typed_frame vm/test_typed_frame.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_xray_unit_test(test_typed_dispatch vm/test_typed_dispatch.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_executable(test_typed_frame_runtime_archive
     runtime/test_typed_frame_runtime_archive.c)
 target_include_directories(test_typed_frame_runtime_archive PRIVATE

@@ -14,6 +14,7 @@
  */
 
 #include "xr_target_verify.h"
+#include "xr_target_instruction_verify.h"
 #include "xr_target_plan_internal.h"
 #include "xr_target_profile_internal.h"
 #include "../../ir/xi.h"
@@ -275,7 +276,8 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
         plan->layouts_count > 1000000u || plan->fields_count > 16000000u ||
         plan->storage_count > 4000000u || plan->allocations_count > 10000000u ||
         plan->extent_operands_count > 40000000u || plan->functions_count > 100000u ||
-        plan->slots_count > 16000000u || plan->calls_count > 10000000u ||
+        plan->slots_count > 16000000u || plan->instructions_count > 40000000u ||
+        plan->calls_count > 10000000u ||
         plan->call_arguments_count > 40000000u || plan->root_maps_count > 10000000u ||
         plan->root_slots_count > 40000000u || plan->cleanups_count > 40000000u ||
         plan->adapters_count > 1000000u || plan->capabilities_count > 65536u ||
@@ -298,6 +300,7 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
     XR_ADD_TARGET_BYTES(extent_operands);
     XR_ADD_TARGET_BYTES(functions);
     XR_ADD_TARGET_BYTES(slots);
+    XR_ADD_TARGET_BYTES(instructions);
     XR_ADD_TARGET_BYTES(calls);
     XR_ADD_TARGET_BYTES(call_arguments);
     XR_ADD_TARGET_BYTES(root_maps);
@@ -322,6 +325,7 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
     XR_REQUIRE_TARGET_TABLE(extent_operands);
     XR_REQUIRE_TARGET_TABLE(functions);
     XR_REQUIRE_TARGET_TABLE(slots);
+    XR_REQUIRE_TARGET_TABLE(instructions);
     XR_REQUIRE_TARGET_TABLE(calls);
     XR_REQUIRE_TARGET_TABLE(call_arguments);
     XR_REQUIRE_TARGET_TABLE(root_maps);
@@ -1623,6 +1627,7 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
         !verify_extent_references(plan, error, error_size) ||
         !verify_storage_and_allocations(plan, error, error_size) ||
         !verify_functions_and_slots(plan, error, error_size) ||
+        !xr_target_instruction_program_verify(plan, error, error_size) ||
         !verify_calls(plan, error, error_size) ||
         !verify_roots_and_cleanups(plan, error, error_size) ||
         !verify_adapters_and_capabilities(plan, error, error_size) ||

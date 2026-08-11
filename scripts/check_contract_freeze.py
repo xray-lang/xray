@@ -304,6 +304,26 @@ CONTRACT_SPECS = (
         ),
     ),
     ContractSpec(
+        "typed-target-plan-execution.md",
+        (
+            "src/plan/target/xr_target_plan.h",
+            "src/plan/target/xr_target_plan.c",
+            "src/plan/target/xr_target_instruction_verify.h",
+            "src/plan/target/xr_target_instruction_verify.c",
+            "src/plan/target/xr_target_verify.c",
+            "src/plan/format/xr_xtp_schema.h",
+            "src/plan/format/xr_xtp_rows.c",
+            "src/plan/format/xr_xtp_encode.c",
+            "src/plan/target/xr_xtp_materialize.c",
+            "src/vm/xr_typed_dispatch.h",
+            "src/vm/xr_typed_dispatch.c",
+            "src/vm/xr_typed_frame.c",
+            "tests/unit/vm/test_typed_dispatch.c",
+            "tests/unit/plan/test_xtp_format.c",
+            "tests/unit/runtime/test_typed_frame_runtime_archive.c",
+        ),
+    ),
+    ContractSpec(
         "incremental-cache-store.md",
         (
             "src/incremental/xr_cache_store.h",

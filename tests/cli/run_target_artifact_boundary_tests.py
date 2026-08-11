@@ -64,7 +64,7 @@ def main() -> int:
         valid_xtp = root / "verified-target-plan.bin"
         write = run([str(writer), "--write", str(valid_xtp)])
         require(write.returncode == 0 and valid_xtp.is_file(),
-                "fixture writer produced a verified XTP v4 artifact", write.stdout)
+                "fixture writer produced a verified XTP v5 artifact", write.stdout)
         require_rejection(run([str(binary), "run", str(valid_xtp)]),
                           "XR_ARTIFACT_2007",
                           "XTP candidate stops before authority-bound materialization")

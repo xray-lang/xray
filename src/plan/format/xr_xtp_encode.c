@@ -63,14 +63,15 @@ static bool fill_section_inputs(const XrTargetPlan *plan, XrXtpSectionInput sect
     XR_XTP_FILL_SECTION(8, EXTENT_OPERANDS, extent_operands);
     XR_XTP_FILL_SECTION(9, FUNCTIONS, functions);
     XR_XTP_FILL_SECTION(10, SLOTS, slots);
-    XR_XTP_FILL_SECTION(11, CALLS, calls);
-    XR_XTP_FILL_SECTION(12, CALL_ARGUMENTS, call_arguments);
-    XR_XTP_FILL_SECTION(13, ROOT_MAPS, root_maps);
-    XR_XTP_FILL_SECTION(14, ROOT_SLOTS, root_slots);
-    XR_XTP_FILL_SECTION(15, CLEANUPS, cleanups);
-    XR_XTP_FILL_SECTION(16, ADAPTERS, adapters);
-    XR_XTP_FILL_SECTION(17, CAPABILITIES, capabilities);
-    XR_XTP_FILL_SECTION(18, COROUTINES, coroutines);
+    XR_XTP_FILL_SECTION(11, INSTRUCTIONS, instructions);
+    XR_XTP_FILL_SECTION(12, CALLS, calls);
+    XR_XTP_FILL_SECTION(13, CALL_ARGUMENTS, call_arguments);
+    XR_XTP_FILL_SECTION(14, ROOT_MAPS, root_maps);
+    XR_XTP_FILL_SECTION(15, ROOT_SLOTS, root_slots);
+    XR_XTP_FILL_SECTION(16, CLEANUPS, cleanups);
+    XR_XTP_FILL_SECTION(17, ADAPTERS, adapters);
+    XR_XTP_FILL_SECTION(18, CAPABILITIES, capabilities);
+    XR_XTP_FILL_SECTION(19, COROUTINES, coroutines);
 #undef XR_XTP_FILL_SECTION
     return true;
 }

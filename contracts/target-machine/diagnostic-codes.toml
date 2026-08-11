@@ -140,6 +140,11 @@ name = "missing-capability-provider"
 message = "target plan requires a capability for which no provider is selected"
 
 [[code]]
+id = "XR_TARGET_1005"
+name = "invalid-instruction-program"
+message = "typed instruction rows are not a canonical closed function-local program"
+
+[[code]]
 id = "XR_ARTIFACT_2000"
 name = "schema-mismatch"
 message = "artifact schema is not exactly supported"

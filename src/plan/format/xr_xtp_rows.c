@@ -127,6 +127,10 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U32, semantic_operation) F(U32, logical_slot) F(U32, offset) F(U32, size)                  \
     F(U16, align) F(U16, register_rep) F(U16, memory_rep) F(U8, role) F(U8, root_kind)           \
     F(U8, ownership) F(U8, reserved) F(U32, debug_variable)
+#define XR_XTP_INSTRUCTION_FIELDS(F)                                                               \
+    F(U32, id) F(U32, function) F(U32, result_slot) F(U32, operand_slots[0])                      \
+    F(U32, operand_slots[1]) F(U64, immediate_bits) F(U8, opcode) F(U8, operand_count)            \
+    F(U16, reserved)
 #define XR_XTP_CALL_FIELDS(F)                                                                      \
     F(ID, identity) F(U32, id) F(U32, semantic_call_target) F(U32, semantic_operation)           \
     F(U32, caller_function) F(U32, callee_function) F(U32, result_value) F(U32, result_slot)     \
@@ -169,6 +173,7 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(EXTENT_OPERANDS, XrTargetExtentOperandRecord, XR_XTP_EXTENT_OPERAND_FIELDS)                 \
     F(FUNCTIONS, XrTargetFunctionRecord, XR_XTP_FUNCTION_FIELDS)                                 \
     F(SLOTS, XrTargetSlotRecord, XR_XTP_SLOT_FIELDS)                                             \
+    F(INSTRUCTIONS, XrTargetInstructionRecord, XR_XTP_INSTRUCTION_FIELDS)                         \
     F(CALLS, XrTargetCallRecord, XR_XTP_CALL_FIELDS)                                             \
     F(CALL_ARGUMENTS, XrTargetCallArgumentRecord, XR_XTP_CALL_ARGUMENT_FIELDS)                   \
     F(ROOT_MAPS, XrTargetRootMapRecord, XR_XTP_ROOT_MAP_FIELDS)                                  \
@@ -243,6 +248,7 @@ XR_FUNC uint64_t xr_xtp_table_count_limit(XrXtpSectionKind kind) {
         case XR_XTP_SECTION_EXTENT_OPERANDS: return 40000000;
         case XR_XTP_SECTION_FUNCTIONS: return 100000;
         case XR_XTP_SECTION_SLOTS: return 16000000;
+        case XR_XTP_SECTION_INSTRUCTIONS: return 40000000;
         case XR_XTP_SECTION_CALLS: return 10000000;
         case XR_XTP_SECTION_CALL_ARGUMENTS: return 40000000;
         case XR_XTP_SECTION_ROOT_MAPS: return 10000000;

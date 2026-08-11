@@ -32,6 +32,7 @@ typedef struct XrXtpDecodedTables {
     XR_XTP_TABLE_FIELD(extent_operands, XrTargetExtentOperandRecord);
     XR_XTP_TABLE_FIELD(functions, XrTargetFunctionRecord);
     XR_XTP_TABLE_FIELD(slots, XrTargetSlotRecord);
+    XR_XTP_TABLE_FIELD(instructions, XrTargetInstructionRecord);
     XR_XTP_TABLE_FIELD(calls, XrTargetCallRecord);
     XR_XTP_TABLE_FIELD(call_arguments, XrTargetCallArgumentRecord);
     XR_XTP_TABLE_FIELD(root_maps, XrTargetRootMapRecord);
@@ -55,6 +56,7 @@ static void dispose_tables(XrXtpDecodedTables *tables) {
     XR_XTP_FREE_TABLE(extent_operands);
     XR_XTP_FREE_TABLE(functions);
     XR_XTP_FREE_TABLE(slots);
+    XR_XTP_FREE_TABLE(instructions);
     XR_XTP_FREE_TABLE(calls);
     XR_XTP_FREE_TABLE(call_arguments);
     XR_XTP_FREE_TABLE(root_maps);
@@ -153,6 +155,7 @@ static bool decoded_storage_within_budget(const XrXtpCandidate *candidate,
     XR_XTP_ADD_DECODED_BYTES(EXTENT_OPERANDS, XrTargetExtentOperandRecord);
     XR_XTP_ADD_DECODED_BYTES(FUNCTIONS, XrTargetFunctionRecord);
     XR_XTP_ADD_DECODED_BYTES(SLOTS, XrTargetSlotRecord);
+    XR_XTP_ADD_DECODED_BYTES(INSTRUCTIONS, XrTargetInstructionRecord);
     XR_XTP_ADD_DECODED_BYTES(CALLS, XrTargetCallRecord);
     XR_XTP_ADD_DECODED_BYTES(CALL_ARGUMENTS, XrTargetCallArgumentRecord);
     XR_XTP_ADD_DECODED_BYTES(ROOT_MAPS, XrTargetRootMapRecord);
@@ -215,6 +218,7 @@ static bool decode_tables(const XrXtpCandidate *candidate, XrXtpDecodedTables *t
     XR_XTP_DECODE_TABLE(extent_operands, XrTargetExtentOperandRecord, EXTENT_OPERANDS);
     XR_XTP_DECODE_TABLE(functions, XrTargetFunctionRecord, FUNCTIONS);
     XR_XTP_DECODE_TABLE(slots, XrTargetSlotRecord, SLOTS);
+    XR_XTP_DECODE_TABLE(instructions, XrTargetInstructionRecord, INSTRUCTIONS);
     XR_XTP_DECODE_TABLE(calls, XrTargetCallRecord, CALLS);
     XR_XTP_DECODE_TABLE(call_arguments, XrTargetCallArgumentRecord, CALL_ARGUMENTS);
     XR_XTP_DECODE_TABLE(root_maps, XrTargetRootMapRecord, ROOT_MAPS);
@@ -255,6 +259,7 @@ static XrTargetPlanDraft make_draft(const XrXtpDecodedTables *tables,
         XR_XTP_DRAFT_TABLE(extent_operands),
         XR_XTP_DRAFT_TABLE(functions),
         XR_XTP_DRAFT_TABLE(slots),
+        XR_XTP_DRAFT_TABLE(instructions),
         XR_XTP_DRAFT_TABLE(calls),
         XR_XTP_DRAFT_TABLE(call_arguments),
         XR_XTP_DRAFT_TABLE(root_maps),

@@ -61,7 +61,8 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
            draft->layouts_count <= 1000000u && draft->fields_count <= 16000000u &&
            draft->storage_count <= 4000000u && draft->allocations_count <= 10000000u &&
            draft->extent_operands_count <= 40000000u && draft->functions_count <= 100000u &&
-           draft->slots_count <= 16000000u && draft->calls_count <= 10000000u &&
+           draft->slots_count <= 16000000u && draft->instructions_count <= 40000000u &&
+           draft->calls_count <= 10000000u &&
            draft->call_arguments_count <= 40000000u && draft->root_maps_count <= 10000000u &&
            draft->root_slots_count <= 40000000u && draft->cleanups_count <= 40000000u &&
            draft->adapters_count <= 1000000u && draft->capabilities_count <= 65536u &&
@@ -84,6 +85,7 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
     XR_ADD_DRAFT_BYTES(extent_operands);
     XR_ADD_DRAFT_BYTES(functions);
     XR_ADD_DRAFT_BYTES(slots);
+    XR_ADD_DRAFT_BYTES(instructions);
     XR_ADD_DRAFT_BYTES(calls);
     XR_ADD_DRAFT_BYTES(call_arguments);
     XR_ADD_DRAFT_BYTES(root_maps);
@@ -226,6 +228,19 @@ static void hash_slot(XrSHA256Context *ctx, const XrTargetSlotRecord *record) {
     hash_u64(ctx, record->ownership);
     hash_u64(ctx, record->reserved);
     hash_u64(ctx, record->debug_variable);
+}
+
+static void hash_instruction(XrSHA256Context *ctx,
+                             const XrTargetInstructionRecord *record) {
+    hash_u64(ctx, record->id);
+    hash_u64(ctx, record->function);
+    hash_u64(ctx, record->result_slot);
+    hash_u64(ctx, record->operand_slots[0]);
+    hash_u64(ctx, record->operand_slots[1]);
+    hash_u64(ctx, record->immediate_bits);
+    hash_u64(ctx, record->opcode);
+    hash_u64(ctx, record->operand_count);
+    hash_u64(ctx, record->reserved);
 }
 
 static void hash_call_argument(XrSHA256Context *ctx,
@@ -392,7 +407,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v4\0";
+    static const uint8_t domain[] = "xray-target-plan-v5\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -411,6 +426,7 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
     XR_HASH_TABLE_COUNT(extent_operands);
     XR_HASH_TABLE_COUNT(functions);
     XR_HASH_TABLE_COUNT(slots);
+    XR_HASH_TABLE_COUNT(instructions);
     XR_HASH_TABLE_COUNT(calls);
     XR_HASH_TABLE_COUNT(call_arguments);
     XR_HASH_TABLE_COUNT(root_maps);
@@ -442,6 +458,8 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
         hash_function(&ctx, &plan->functions[i]);
     for (uint32_t i = 0; i < plan->slots_count; i++)
         hash_slot(&ctx, &plan->slots[i]);
+    for (uint32_t i = 0; i < plan->instructions_count; i++)
+        hash_instruction(&ctx, &plan->instructions[i]);
     for (uint32_t i = 0; i < plan->calls_count; i++) {
         hash_call_base(&ctx, &plan->calls[i]);
         hash_fingerprint(&ctx, plan->calls[i].fingerprint);
@@ -503,6 +521,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
     XR_COPY_DRAFT_TABLE(extent_operands, XrTargetExtentOperandRecord);
     XR_COPY_DRAFT_TABLE(functions, XrTargetFunctionRecord);
     XR_COPY_DRAFT_TABLE(slots, XrTargetSlotRecord);
+    XR_COPY_DRAFT_TABLE(instructions, XrTargetInstructionRecord);
     XR_COPY_DRAFT_TABLE(calls, XrTargetCallRecord);
     XR_COPY_DRAFT_TABLE(call_arguments, XrTargetCallArgumentRecord);
     XR_COPY_DRAFT_TABLE(root_maps, XrTargetRootMapRecord);
@@ -593,6 +612,7 @@ void xr_target_plan_free(XrTargetPlan *plan) {
     XR_FREE_TARGET_TABLE(extent_operands);
     XR_FREE_TARGET_TABLE(functions);
     XR_FREE_TARGET_TABLE(slots);
+    XR_FREE_TARGET_TABLE(instructions);
     XR_FREE_TARGET_TABLE(calls);
     XR_FREE_TARGET_TABLE(call_arguments);
     XR_FREE_TARGET_TABLE(root_maps);
@@ -625,6 +645,14 @@ XrFingerprint xr_target_plan_fingerprint(const XrTargetPlan *plan) {
 XrFingerprint xr_target_plan_semantic_fingerprint(const XrTargetPlan *plan) {
     XrFingerprint zero = {{0}};
     return plan ? plan->semantic_fingerprint : zero;
+}
+
+bool xr_target_plan_fingerprint_is_intact(const XrTargetPlan *plan) {
+    if (!xr_target_plan_is_verified(plan) || !plan->profile)
+        return false;
+    XrFingerprint actual;
+    xr_target_plan_compute_fingerprint(plan, &actual);
+    return xr_fingerprint_equal(actual, plan->fingerprint);
 }
 
 uint64_t xr_target_plan_completed_family_mask(const XrTargetPlan *plan) {
@@ -665,6 +693,35 @@ const XrTargetValueRepRecord *xr_target_plan_value_rep(const XrTargetPlan *plan,
     return NULL;
 }
 
+const XrTargetInstructionRecord *xr_target_plan_function_instructions(
+    const XrTargetPlan *plan, uint32_t function, uint32_t *count) {
+    if (count)
+        *count = 0;
+    if (!xr_target_plan_is_verified(plan) || function >= plan->functions_count)
+        return NULL;
+    uint32_t begin = 0;
+    while (begin < plan->instructions_count &&
+           plan->instructions[begin].function < function)
+        begin++;
+    uint32_t end = begin;
+    while (end < plan->instructions_count &&
+           plan->instructions[end].function == function)
+        end++;
+    if (begin == end)
+        return NULL;
+    if (count)
+        *count = end - begin;
+    return &plan->instructions[begin];
+}
+
+uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
+                                                       uint32_t function) {
+    uint32_t count = 0;
+    return xr_target_plan_function_instructions(plan, function, &count) && count
+               ? (uint64_t) XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE
+               : 0;
+}
+
 #define XR_TARGET_TABLE_ACCESSOR(name, type)                                                       \
     const type *xr_target_plan_##name(const XrTargetPlan *plan, uint32_t *count) {                  \
         if (count)                                                                                 \
@@ -681,6 +738,7 @@ XR_TARGET_TABLE_ACCESSOR(allocations, XrTargetAllocationRecord)
 XR_TARGET_TABLE_ACCESSOR(extent_operands, XrTargetExtentOperandRecord)
 XR_TARGET_TABLE_ACCESSOR(functions, XrTargetFunctionRecord)
 XR_TARGET_TABLE_ACCESSOR(slots, XrTargetSlotRecord)
+XR_TARGET_TABLE_ACCESSOR(instructions, XrTargetInstructionRecord)
 XR_TARGET_TABLE_ACCESSOR(calls, XrTargetCallRecord)
 XR_TARGET_TABLE_ACCESSOR(call_arguments, XrTargetCallArgumentRecord)
 XR_TARGET_TABLE_ACCESSOR(root_maps, XrTargetRootMapRecord)

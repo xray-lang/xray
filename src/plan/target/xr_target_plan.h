@@ -29,6 +29,23 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_CALL_ADAPTER = UINT64_C(1) << 2,
 } XrTargetPlanFamily;
 
+typedef enum XrTargetExecutionFamily {
+    XR_TARGET_EXECUTION_SCALAR_I64_STRAIGHT_LINE = UINT64_C(1) << 0,
+} XrTargetExecutionFamily;
+
+typedef enum XrTargetInstructionOpcode {
+    XR_TARGET_INSTRUCTION_INVALID = 0,
+    XR_TARGET_INSTRUCTION_CONST_I64,
+    XR_TARGET_INSTRUCTION_COPY_I64,
+    XR_TARGET_INSTRUCTION_ADD_WRAP_I64,
+    XR_TARGET_INSTRUCTION_SUB_WRAP_I64,
+    XR_TARGET_INSTRUCTION_MUL_WRAP_I64,
+    XR_TARGET_INSTRUCTION_RETURN_I64,
+    XR_TARGET_INSTRUCTION_COUNT,
+} XrTargetInstructionOpcode;
+
+#define XR_TARGET_INSTRUCTION_SLOT_NONE UINT32_MAX
+
 #define XR_TARGET_REQUIRED_FAMILIES                                                         \
     ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                  \
                  XR_TARGET_FAMILY_CALL_ADAPTER))
@@ -359,6 +376,17 @@ typedef struct XrTargetSlotRecord {
     uint32_t debug_variable;
 } XrTargetSlotRecord;
 
+typedef struct XrTargetInstructionRecord {
+    uint32_t id;
+    uint32_t function;
+    uint32_t result_slot;
+    uint32_t operand_slots[2];
+    uint64_t immediate_bits;
+    uint8_t opcode;
+    uint8_t operand_count;
+    uint16_t reserved;
+} XrTargetInstructionRecord;
+
 typedef struct XrTargetCallArgumentRecord {
     XrStableId identity;
     uint32_t call;
@@ -467,6 +495,7 @@ XR_FUNC bool xr_target_plan_is_verified(const XrTargetPlan *plan);
 XR_FUNC uint32_t xr_target_plan_schema_version(const XrTargetPlan *plan);
 XR_FUNC XrFingerprint xr_target_plan_fingerprint(const XrTargetPlan *plan);
 XR_FUNC XrFingerprint xr_target_plan_semantic_fingerprint(const XrTargetPlan *plan);
+XR_FUNC bool xr_target_plan_fingerprint_is_intact(const XrTargetPlan *plan);
 XR_FUNC uint64_t xr_target_plan_completed_family_mask(const XrTargetPlan *plan);
 XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_plan(const XrTargetPlan *plan);
 XR_FUNC const XrTargetProfile *xr_target_plan_profile(const XrTargetPlan *plan);
@@ -474,6 +503,10 @@ XR_FUNC const XrTargetMachineRepRecord *xr_target_plan_machine_rep(const XrTarge
                                                                     uint16_t rep);
 XR_FUNC const XrTargetValueRepRecord *xr_target_plan_value_rep(const XrTargetPlan *plan,
                                                                  uint32_t semantic_value);
+XR_FUNC uint64_t xr_target_plan_function_execution_family_mask(
+    const XrTargetPlan *plan, uint32_t function);
+XR_FUNC const XrTargetInstructionRecord *xr_target_plan_function_instructions(
+    const XrTargetPlan *plan, uint32_t function, uint32_t *count);
 
 #define XR_TARGET_TABLE_ACCESSOR(name, type)                                                       \
     XR_FUNC const type *xr_target_plan_##name(const XrTargetPlan *plan, uint32_t *count)
@@ -487,6 +520,7 @@ XR_TARGET_TABLE_ACCESSOR(allocations, XrTargetAllocationRecord);
 XR_TARGET_TABLE_ACCESSOR(extent_operands, XrTargetExtentOperandRecord);
 XR_TARGET_TABLE_ACCESSOR(functions, XrTargetFunctionRecord);
 XR_TARGET_TABLE_ACCESSOR(slots, XrTargetSlotRecord);
+XR_TARGET_TABLE_ACCESSOR(instructions, XrTargetInstructionRecord);
 XR_TARGET_TABLE_ACCESSOR(calls, XrTargetCallRecord);
 XR_TARGET_TABLE_ACCESSOR(call_arguments, XrTargetCallArgumentRecord);
 XR_TARGET_TABLE_ACCESSOR(root_maps, XrTargetRootMapRecord);

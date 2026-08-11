@@ -717,7 +717,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0, 292, 58, 12, 24, 108, 24, 40, 24, 12,
-        40, 58, 114, 50, 20, 4, 20, 44, 12, 40,
+        40, 58, 32, 114, 50, 20, 4, 20, 44, 12, 40,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {
@@ -763,6 +763,7 @@ static void test_every_typed_row_codec(void) {
     XR_XTP_ROW_ROUNDTRIP(EXTENT_OPERANDS, XrTargetExtentOperandRecord);
     XR_XTP_ROW_ROUNDTRIP(FUNCTIONS, XrTargetFunctionRecord);
     XR_XTP_ROW_ROUNDTRIP(SLOTS, XrTargetSlotRecord);
+    XR_XTP_ROW_ROUNDTRIP(INSTRUCTIONS, XrTargetInstructionRecord);
     XR_XTP_ROW_ROUNDTRIP(CALLS, XrTargetCallRecord);
     XR_XTP_ROW_ROUNDTRIP(CALL_ARGUMENTS, XrTargetCallArgumentRecord);
     XR_XTP_ROW_ROUNDTRIP(ROOT_MAPS, XrTargetRootMapRecord);

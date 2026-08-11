@@ -14,7 +14,6 @@
 
 #include "xr_typed_frame.h"
 #include "../base/xmalloc.h"
-#include "../plan/target/xr_target_verify.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -80,8 +79,7 @@ static XrTypedFrameStatus validate_plan_identity(
     if (!xr_fingerprint_equal(xr_target_plan_fingerprint(plan),
                               *required_fingerprint))
         return XR_TYPED_FRAME_PLAN_IDENTITY_MISMATCH;
-    char verifier_error[512] = {0};
-    if (!xr_target_plan_verify(plan, verifier_error, sizeof(verifier_error)))
+    if (!xr_target_plan_fingerprint_is_intact(plan))
         return XR_TYPED_FRAME_PLAN_NOT_VERIFIED;
     uint32_t rep_count = 0;
     const XrTargetMachineRepRecord *reps =
