@@ -31,13 +31,14 @@ value families, VM, or AOT materialization have already switched.
    fingerprints bind the referenced extent fingerprint, not only its ID.
 7. Fixed, inline-tail, external, multi-buffer, and provider-defined formulas
    reject malformed shapes, missing operands/providers, overflow, alignment
-   overflow, and configured allocation/alignment limits. There is no legacy
-   formula fallback.
+   overflow, and configured allocation/alignment limits. A null operand vector
+   with a nonzero count is rejected before provider dispatch. There is no
+   legacy formula fallback.
 
 ## Digest anchors
 
 anchor-sha256: src/base/xstable_id.h 3a7abe4d53ba0771a8b064e5d7c395d883253a1a9c65cc46a284872f7119c3b1
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 7ec819570b47e2a3f01132fc729eb73f91dda65cf2d343cb9bee34ad229b4284
 anchor-sha256: src/runtime/abi/xr_runtime_descriptor.h 19744b87e3b564ebec4938a3fa4906bf8884b3524af65d89f30c5cc1cfa2a7e4
-anchor-sha256: src/runtime/abi/xr_runtime_descriptor.c 769caf23dd04e87d8100182db30936e47a13f4d5e56f3f63bec1b4132ac90fb5
-anchor-sha256: tests/unit/runtime/test_runtime_descriptor.c a4c40fbdd8d1725e30fbe513f6c7a571cebd45ab4f50ef59b8f620e18ec18219
+anchor-sha256: src/runtime/abi/xr_runtime_descriptor.c d0fc3c48b1273fbb355f4e03204a96995faa853fe4c56147c3d8dc7967e7bb91
+anchor-sha256: tests/unit/runtime/test_runtime_descriptor.c 76e3c93da9b9acc28d14fd83bc9d31504e54082ebf9349c517f3fac897487e46

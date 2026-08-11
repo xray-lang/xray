@@ -216,7 +216,8 @@ XrRuntimeAbiStatus xr_runtime_extent_evaluate(
     const uint64_t *operands, size_t operand_count, XrRuntimeExtentLimits limits,
     XrRuntimeExtentProviderEvaluateFn provider, void *provider_context,
     XrRuntimeEvaluatedExtent *out) {
-    if (!out || limits.max_allocation_bytes == 0 || limits.max_alignment == 0)
+    if (!out || limits.max_allocation_bytes == 0 || limits.max_alignment == 0 ||
+        (operand_count != 0 && !operands))
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
     XrRuntimeAbiStatus status = xr_runtime_layout_descriptor_verify(layout, extent);
     if (status != XR_RUNTIME_ABI_OK)

@@ -114,6 +114,16 @@ static XrRuntimeAbiStatus provider_reject(XrStableId provider_id,
     return XR_RUNTIME_ABI_INVALID_EXTENT;
 }
 
+static int provider_call_count;
+
+static XrRuntimeAbiStatus provider_counting(XrStableId provider_id,
+                                            const uint64_t *operands,
+                                            size_t operand_count, uint64_t *out_bytes,
+                                            void *context) {
+    provider_call_count++;
+    return provider_ok(provider_id, operands, operand_count, out_bytes, context);
+}
+
 static void expect_bytes(const XrRuntimeExtentDescriptor *extent,
                          const XrRuntimeLayoutDescriptor *layout, const uint64_t *operands,
                          size_t operand_count, XrRuntimeExtentProviderEvaluateFn provider,
@@ -301,6 +311,12 @@ static void test_provider_and_domain_checks(void) {
     CHECK(xr_runtime_extent_evaluate(&extent, &layout, NULL, 0, limits, provider_reject,
                                      NULL, &evaluated) == XR_RUNTIME_ABI_PROVIDER_REJECTED,
           "provider rejection is normalized");
+    uint64_t provided = 32;
+    provider_call_count = 0;
+    CHECK(xr_runtime_extent_evaluate(&extent, &layout, NULL, 1, limits,
+                                     provider_counting, &provided, &evaluated) ==
+              XR_RUNTIME_ABI_INVALID_ARGUMENT && provider_call_count == 0,
+          "null nonempty operand vector is rejected before provider dispatch");
     uint64_t too_small = 8;
     CHECK(xr_runtime_extent_evaluate(&extent, &layout, NULL, 0, limits, provider_ok,
                                      &too_small, &evaluated) == XR_RUNTIME_ABI_INVALID_EXTENT,
