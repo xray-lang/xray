@@ -71,6 +71,7 @@ typedef enum XrSemanticTypeFlag {
     XR_SEM_TYPE_REFERENCE_CAPABLE = 1u << 4,
     XR_SEM_TYPE_BORROW_VIEW = 1u << 5,
     XR_SEM_TYPE_OWNERSHIP_ROOT = 1u << 6,
+    XR_SEM_TYPE_AGGREGATE_EXACT = 1u << 7,
 } XrSemanticTypeFlag;
 
 typedef enum XrSemanticParameterFlag {
@@ -166,6 +167,8 @@ typedef struct XrSemanticTypeRecord {
     const char *canonical_key;
     uint32_t kind;
     uint32_t child_begin;
+    uint32_t aggregate_extent;
+    uint32_t aggregate_align;
     uint16_t child_count;
     uint8_t scalar_rep;
     uint8_t flags;

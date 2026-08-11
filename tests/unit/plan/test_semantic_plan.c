@@ -722,7 +722,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(second_debug->canonical_key, "discriminator=2:operation=") != NULL);
     char first_debug_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(first_debug->id, first_debug_id_hex);
-    REQUIRE(strcmp(first_debug_id_hex, "0df8c5f58a359cda362140f40f76a4a4") == 0);
+    REQUIRE(strcmp(first_debug_id_hex, "1dcd94a8c6d2a71e5c11bb34a9b3a165") == 0);
     const XrSemanticOperationRecord *decoded_debug_operation =
         &decoded->operations[first_debug->subject];
     REQUIRE(decoded_debug_operation->source_file != NULL &&
@@ -748,7 +748,7 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
     char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
     xr_stable_id_hex(loan_entity->id, loan_id_hex);
-    REQUIRE(strcmp(loan_id_hex, "b04a9e5ec95d18eb273921d1757257c4") == 0);
+    REQUIRE(strcmp(loan_id_hex, "ed5ffcbf6dfbbc334706da511811c910") == 0);
     size_t entity_dump_size = 0;
     char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
     REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&
@@ -799,7 +799,7 @@ static void test_immutable_owned_snapshot(void) {
     REQUIRE(strcmp(registry_hex,
                    "d01b95f7569b8b26118288bd11800bdfc5266165682b74d00b53b76510648d85") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "e3e2bc067e28c27da21d4bf83998931cad17e4dd8c6cf7541ab99d21ee8097ea") == 0);
+                   "3443f78a8fad43aa67e68e8b33dcbd2869445a7ccf99bbf7f19e8b4231addb38") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);

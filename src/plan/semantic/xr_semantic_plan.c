@@ -127,7 +127,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v9\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v10\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -160,6 +160,8 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_string(&ctx, type->canonical_key);
         hash_u64(&ctx, type->kind);
         hash_u64(&ctx, type->child_begin);
+        hash_u64(&ctx, type->aggregate_extent);
+        hash_u64(&ctx, type->aggregate_align);
         hash_u64(&ctx, type->child_count);
         hash_u64(&ctx, type->scalar_rep);
         hash_u64(&ctx, type->flags);
@@ -638,8 +640,9 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
         dump_id(out, record->id);
         fputs(" key=", out);
         dump_text(out, record->canonical_key);
-        fprintf(out, " kind=%u scalar=%u flags=%u children=[", record->kind, record->scalar_rep,
-                record->flags);
+        fprintf(out, " kind=%u scalar=%u flags=%u aggregate=%u:%u children=[", record->kind,
+                record->scalar_rep, record->flags, record->aggregate_extent,
+                record->aggregate_align);
         for (uint16_t c = 0; c < record->child_count; c++)
             fprintf(out, "%s%u", c ? "," : "", plan->type_children[record->child_begin + c]);
         fputs("]\n", out);

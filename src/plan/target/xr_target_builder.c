@@ -38,15 +38,19 @@ typedef struct XrTargetRepIntent {
 typedef struct XrTargetLayoutIntent {
     uint32_t semantic_type;
     XrTargetMachineRepRecord memory_rep;
+    uint32_t element_count;
+    uint8_t kind;
 } XrTargetLayoutIntent;
 
 typedef struct XrTargetValueIntent {
     uint32_t semantic_value;
     uint32_t semantic_function;
+    uint32_t semantic_type;
     XrTargetMachineRepRecord register_rep;
     XrTargetMachineRepRecord memory_rep;
     XrStableId slot_identity;
     bool has_slot;
+    bool resolve_type_rep;
 } XrTargetValueIntent;
 
 typedef struct XrTargetSlotIntent {
@@ -61,6 +65,8 @@ typedef struct XrTargetSlotIntent {
     uint8_t root_kind;
     uint8_t ownership;
     uint32_t debug_variable;
+    uint32_t semantic_type;
+    bool resolve_type_rep;
 } XrTargetSlotIntent;
 
 typedef struct XrTargetScalarAnalysis {
@@ -83,6 +89,8 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t extent_count;
     XrTargetLayoutRecord *layouts;
     uint32_t layout_count;
+    XrTargetFieldRecord *fields;
+    uint32_t field_count;
     XrTargetFunctionRecord *functions;
     uint32_t function_count;
     XrTargetSlotRecord *slots;
@@ -173,6 +181,7 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     xr_free(materialized->value_reps);
     xr_free(materialized->extents);
     xr_free(materialized->layouts);
+    xr_free(materialized->fields);
     xr_free(materialized->functions);
     xr_free(materialized->slots);
     xr_free(materialized->capabilities);
@@ -360,7 +369,7 @@ static int compare_layout_intent(const void *left, const void *right) {
     const XrTargetLayoutIntent *b = (const XrTargetLayoutIntent *) right;
     if (a->semantic_type < b->semantic_type) return -1;
     if (a->semantic_type > b->semantic_type) return 1;
-    return compare_rep_record(&a->memory_rep, &b->memory_rep);
+    return 0;
 }
 
 static int compare_value_intent(const void *left, const void *right) {
@@ -394,8 +403,19 @@ static bool append_rep_intent(XrTargetPlanBuilder *builder,
 }
 
 static bool append_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic_type,
+                                 uint8_t kind, uint32_t element_count,
                                  const XrTargetMachineRepRecord *memory_rep, char *error,
                                  size_t error_size) {
+    for (uint32_t i = 0; i < builder->layout_intent_count; i++) {
+        XrTargetLayoutIntent *existing = &builder->layout_intents[i];
+        if (existing->semantic_type != semantic_type)
+            continue;
+        if (existing->kind == kind && existing->element_count == element_count &&
+            compare_rep_record(&existing->memory_rep, memory_rep) == 0)
+            return true;
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "semantic type has conflicting layout intents");
+    }
     if (!reserve_records((void **) &builder->layout_intents, &builder->layout_intent_capacity,
                          builder->layout_intent_count + 1u, 1000000u,
                          sizeof(*builder->layout_intents)))
@@ -403,6 +423,8 @@ static bool append_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic
     XrTargetLayoutIntent *intent = &builder->layout_intents[builder->layout_intent_count++];
     intent->semantic_type = semantic_type;
     intent->memory_rep = *memory_rep;
+    intent->element_count = element_count;
+    intent->kind = kind;
     return true;
 }
 
@@ -563,6 +585,7 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
     XrTargetValueIntent value = {
         .semantic_value = semantic_value,
         .semantic_function = semantic_function,
+        .semantic_type = semantic_type,
         .register_rep = rep,
         .memory_rep = rep,
     };
@@ -595,7 +618,8 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
         value.slot_identity = slot_identity;
         if (!analysis->used_types[semantic_type]) {
             analysis->used_types[semantic_type] = 1;
-            if (!append_layout_intent(builder, semantic_type, &rep, error, error_size))
+            if (!append_layout_intent(builder, semantic_type, XR_TARGET_LAYOUT_SCALAR, 0,
+                                      &rep, error, error_size))
                 return false;
         }
     }
@@ -692,6 +716,340 @@ static bool builder_add_scalars(XrTargetPlanBuilder *builder, char *error,
     return true;
 }
 
+static int classify_aggregate_type(const XrSemanticTypeRecord *type) {
+    if (!type)
+        return -1;
+    if ((type->flags & XR_SEM_TYPE_NULLABLE) != 0)
+        return 0;
+    if (type->kind == XR_KIND_TUPLE || type->kind == XR_KIND_FIXED_ARRAY)
+        return type->scalar_rep == XR_SCALAR_REP_NONE ? 1 : -1;
+    if (type->kind == XR_KIND_STRUCT_OBJECT)
+        return (type->flags & XR_SEM_TYPE_VALUE) == 0
+                   ? 0
+                   : (type->scalar_rep == XR_SCALAR_REP_NONE ? 1 : -1);
+    if (type->kind == XR_KIND_INSTANCE)
+        return (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) == 0
+                   ? 0
+                   : (type->scalar_rep == XR_SCALAR_REP_NONE ? 1 : -1);
+    return 0;
+}
+
+static bool fixed_array_element_count(const XrSemanticPlan *plan, uint32_t semantic_type,
+                                      uint32_t *out, char *error, size_t error_size) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    if (!type || type->kind != XR_KIND_FIXED_ARRAY || type->child_count != 1 ||
+        type->aggregate_extent == 0 || type->aggregate_extent > UINT16_MAX)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "fixed-array extent is outside the exact semantic field budget");
+    *out = type->aggregate_extent;
+    return true;
+}
+
+static int find_layout_intent(const XrTargetPlanBuilder *builder, uint32_t semantic_type) {
+    for (uint32_t i = 0; i < builder->layout_intent_count; i++)
+        if (builder->layout_intents[i].semantic_type == semantic_type)
+            return (int) i;
+    return -1;
+}
+
+static int aggregate_layout_eligibility(const XrSemanticPlan *plan, uint32_t semantic_type,
+                                        int8_t *states) {
+    if (semantic_type >= xr_semantic_plan_type_count(plan))
+        return -1;
+    if (states[semantic_type] != 0)
+        return states[semantic_type] == -2 ? -1 : states[semantic_type];
+    states[semantic_type] = -2;
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    uint16_t scalar_kind = XR_MACHINE_REP_COUNT;
+    XrTargetScalarEligibility scalar = classify_scalar_type(type, &scalar_kind);
+    if (scalar == XR_TARGET_SCALAR_INVALID)
+        return states[semantic_type] = -1;
+    if (scalar == XR_TARGET_SCALAR_VALUE)
+        return states[semantic_type] =
+                   scalar_kind == XR_MACHINE_REP_VOID ? 2 : 1;
+    int aggregate = classify_aggregate_type(type);
+    if (aggregate < 0)
+        return states[semantic_type] = -1;
+    if (aggregate == 0)
+        return states[semantic_type] = 2;
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    if (!type || type->child_begin > child_count ||
+        type->child_count > child_count - type->child_begin ||
+        (type->kind == XR_KIND_FIXED_ARRAY
+             ? (type->child_count != 1 || type->aggregate_extent == 0 ||
+                type->aggregate_extent > UINT16_MAX)
+             : type->aggregate_extent != type->child_count))
+        return states[semantic_type] = -1;
+    uint32_t dependencies =
+        type->kind == XR_KIND_FIXED_ARRAY ? 1u : type->child_count;
+    for (uint32_t i = 0; i < dependencies; i++) {
+        int child = aggregate_layout_eligibility(
+            plan, children[type->child_begin + i], states);
+        if (child < 0)
+            return states[semantic_type] = -1;
+        if (child == 2)
+            return states[semantic_type] = 2;
+    }
+    return states[semantic_type] = 1;
+}
+
+static bool collect_layout_dependency(XrTargetPlanBuilder *builder, uint32_t semantic_type,
+                                      uint8_t *states, char *error, size_t error_size) {
+    if (semantic_type >= xr_semantic_plan_type_count(builder->semantic_plan))
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "aggregate field type is outside the semantic type table");
+    if (find_layout_intent(builder, semantic_type) >= 0)
+        return true;
+    if (states[semantic_type] == 1)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "aggregate layout contains an inline recursive cycle");
+    if (states[semantic_type] == 2)
+        return true;
+    states[semantic_type] = 1;
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(builder->semantic_plan, semantic_type);
+    uint16_t scalar_kind = XR_MACHINE_REP_COUNT;
+    XrTargetScalarEligibility scalar = classify_scalar_type(type, &scalar_kind);
+    if (scalar == XR_TARGET_SCALAR_INVALID)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "aggregate field has an invalid scalar type fact");
+    if (scalar == XR_TARGET_SCALAR_VALUE && scalar_kind != XR_MACHINE_REP_VOID) {
+        XrTargetMachineRepRecord rep;
+        if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile), scalar_kind,
+                              &rep) ||
+            !append_rep_intent(builder, &rep, error, error_size) ||
+            !append_layout_intent(builder, semantic_type, XR_TARGET_LAYOUT_SCALAR, 0,
+                                  &rep, error, error_size))
+            return false;
+        states[semantic_type] = 2;
+        return true;
+    }
+    int aggregate = classify_aggregate_type(type);
+    if (aggregate <= 0)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "aggregate field lacks an exact supported value layout");
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(builder->semantic_plan,
+                                                               &child_count);
+    uint32_t element_count = type->aggregate_extent;
+    if (type->kind == XR_KIND_FIXED_ARRAY) {
+        if (type->child_count != 1 ||
+            !fixed_array_element_count(builder->semantic_plan, semantic_type,
+                                       &element_count, error, error_size))
+            return false;
+    } else if (element_count != type->child_count)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "aggregate extent disagrees with exact semantic fields");
+    if (type->child_begin > child_count || type->child_count > child_count - type->child_begin)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "aggregate semantic child range is invalid");
+    uint32_t dependencies = type->kind == XR_KIND_FIXED_ARRAY ? 1u : type->child_count;
+    for (uint32_t i = 0; i < dependencies; i++)
+        if (!collect_layout_dependency(builder, children[type->child_begin + i], states,
+                                       error, error_size))
+            return false;
+    XrTargetMachineRepRecord unresolved = {0};
+    if (!append_layout_intent(builder, semantic_type, XR_TARGET_LAYOUT_AGGREGATE,
+                              element_count, &unresolved, error, error_size))
+        return false;
+    states[semantic_type] = 2;
+    return true;
+}
+
+static bool note_aggregate_value(XrTargetPlanBuilder *builder,
+                                 XrTargetScalarAnalysis *analysis,
+                                 uint32_t semantic_value, uint32_t semantic_type,
+                                 uint32_t semantic_function, uint32_t semantic_operation,
+                                 uint8_t role, XrStableId source_identity, uint8_t *states,
+                                 int8_t *eligibility,
+                                 char *error, size_t error_size) {
+    if (semantic_value >= analysis->total_values || semantic_type >= analysis->type_count ||
+        semantic_function >= xr_semantic_plan_function_count(builder->semantic_plan))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "semantic aggregate value identity is out of range");
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(builder->semantic_plan, semantic_type);
+    if (semantic_operation < xr_semantic_plan_operation_count(builder->semantic_plan)) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
+        if (operation && operation->opcode < XI_OP_COUNT &&
+            xi_generated_op_result_kind(operation->opcode) == XI_GEN_RESULT_VOID)
+            return true;
+    }
+    int aggregate = classify_aggregate_type(type);
+    if (aggregate < 0) {
+        if (error && error_size)
+            snprintf(error, error_size,
+                     "XR_TARGET_1002: value aggregate lacks exact semantic field facts "
+                     "(type=%s)",
+                     type && type->canonical_key ? type->canonical_key : "<unknown>");
+        return false;
+    }
+    if (aggregate == 0)
+        return true;
+    int eligible = aggregate_layout_eligibility(builder->semantic_plan, semantic_type,
+                                                eligibility);
+    if (eligible < 0)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "aggregate layout has invalid or recursive exact type facts");
+    if (eligible == 2)
+        return true;
+    if (analysis->defined_values[semantic_value]) {
+        if (analysis->value_types[semantic_value] != semantic_type ||
+            analysis->value_functions[semantic_value] != semantic_function)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "semantic aggregate value identity is ambiguous");
+        return true;
+    }
+    analysis->defined_values[semantic_value] = 1;
+    analysis->value_types[semantic_value] = semantic_type;
+    analysis->value_functions[semantic_value] = semantic_function;
+    if (!collect_layout_dependency(builder, semantic_type, states, error, error_size))
+        return false;
+    XrStableId slot_identity;
+    bool parameter_slot = role == XR_TARGET_SLOT_PARAMETER;
+    if ((!parameter_slot &&
+         semantic_operation >= xr_semantic_plan_operation_count(builder->semantic_plan)) ||
+        !make_slot_identity(builder->semantic_plan, semantic_function, role, source_identity,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "aggregate slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = semantic_function,
+        .semantic_value = semantic_value,
+        .semantic_operation = parameter_slot ? XR_SEMANTIC_INDEX_NONE : semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .role = role,
+        .root_kind = XR_TARGET_ROOT_NONE,
+        .ownership = XR_TARGET_OWNERSHIP_TRIVIAL,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+        .semantic_type = semantic_type,
+        .resolve_type_rep = true,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = semantic_value,
+        .semantic_function = semantic_function,
+        .semantic_type = semantic_type,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+        .resolve_type_rep = true,
+    };
+    return append_slot_intent(builder, &slot, error, error_size) &&
+           append_value_intent(builder, &value, error, error_size);
+}
+
+static bool mark_coroutine_functions(const XrSemanticPlan *plan, uint8_t *deferred,
+                                     uint32_t function_count, char *error,
+                                     size_t error_size) {
+    size_t entity_count = xr_semantic_plan_entity_count(plan);
+    size_t operation_count = xr_semantic_plan_operation_count(plan);
+    for (size_t i = 0; i < entity_count; i++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
+        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
+            entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION)
+            continue;
+        if (entity->subject >= operation_count)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "coroutine state operation identity is out of range");
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan, entity->subject);
+        if (!operation || operation->function >= function_count)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "coroutine state function identity is out of range");
+        deferred[operation->function] = 1;
+    }
+    return true;
+}
+
+static bool collect_aggregate_intents(XrTargetPlanBuilder *builder,
+                                      XrTargetScalarAnalysis *analysis, uint8_t *states,
+                                      int8_t *eligibility, const uint8_t *deferred_functions,
+                                      char *error, size_t error_size) {
+    if (!index_value_operations(builder->semantic_plan, analysis, error, error_size))
+        return false;
+    uint32_t function_count =
+        (uint32_t) xr_semantic_plan_function_count(builder->semantic_plan);
+    uint32_t parameters = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
+    for (uint32_t i = 0; i < parameters; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(builder->semantic_plan, i);
+        if (!parameter)
+            return false;
+        if (parameter->function >= function_count)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "aggregate parameter function identity is out of range");
+        if (deferred_functions[parameter->function])
+            continue;
+        if (!note_aggregate_value(builder, analysis, parameter->value,
+                                  parameter->type, parameter->function,
+                                  XR_SEMANTIC_INDEX_NONE, XR_TARGET_SLOT_PARAMETER,
+                                  parameter->id, states, eligibility, error, error_size))
+            return false;
+    }
+    uint32_t operations = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; i < operations; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation)
+            return fail(error, error_size, "XR_TARGET_1001", "semantic operation is missing");
+        if (operation->function >= function_count)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "aggregate operation function identity is out of range");
+        if (operation->result_value == XR_SEMANTIC_INDEX_NONE || operation->opcode == XI_PARAM)
+            continue;
+        /* Later CALL/COROUTINE families own caller-storage and suspend-frame placement. */
+        if (deferred_functions[operation->function] ||
+            (operation->opcode < XI_OP_COUNT &&
+             (xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_CALL ||
+              xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_COROUTINE)))
+            continue;
+        uint8_t role = operation->opcode == XI_PHI ? XR_TARGET_SLOT_PHI
+                                                   : XR_TARGET_SLOT_TEMPORARY;
+        if (!note_aggregate_value(builder, analysis, operation->result_value,
+                                  operation->result_type, operation->function, i, role,
+                                  operation->id, states, eligibility, error, error_size))
+            return false;
+    }
+    return true;
+}
+
+static bool builder_add_aggregates(XrTargetPlanBuilder *builder, char *error,
+                                   size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_AGGREGATE, error, error_size))
+        return false;
+    XrTargetScalarAnalysis analysis = {0};
+    uint32_t type_count = (uint32_t) xr_semantic_plan_type_count(builder->semantic_plan);
+    uint32_t function_count =
+        (uint32_t) xr_semantic_plan_function_count(builder->semantic_plan);
+    uint8_t *states = (uint8_t *) allocate_records(type_count, sizeof(*states));
+    int8_t *eligibility = (int8_t *) allocate_records(type_count, sizeof(*eligibility));
+    uint8_t *deferred_functions =
+        (uint8_t *) allocate_records(function_count, sizeof(*deferred_functions));
+    bool valid = (!type_count || (states && eligibility)) &&
+                 (!function_count || deferred_functions) &&
+                 mark_coroutine_functions(builder->semantic_plan, deferred_functions,
+                                          function_count, error, error_size) &&
+                 scalar_analysis_init(builder->semantic_plan, &analysis, error, error_size) &&
+                 collect_aggregate_intents(builder, &analysis, states, eligibility,
+                                           deferred_functions,
+                                           error, error_size);
+    xr_free(states);
+    xr_free(eligibility);
+    xr_free(deferred_functions);
+    scalar_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        if (!error || !error_size || !error[0])
+            fail(error, error_size, "XR_EXEC_5003",
+                 "aggregate intent collection allocation failed");
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_AGGREGATE;
+    return true;
+}
+
 static int find_rep_id(const XrTargetMaterializedPlan *materialized,
                        const XrTargetMachineRepRecord *record) {
     uint32_t low = 0;
@@ -751,6 +1109,101 @@ static bool materialize_machine_reps(XrTargetPlanBuilder *builder,
     return true;
 }
 
+static int find_sorted_layout_intent(const XrTargetPlanBuilder *builder,
+                                     uint32_t semantic_type) {
+    uint32_t low = 0;
+    uint32_t high = builder->layout_intent_count;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2u;
+        if (builder->layout_intents[middle].semantic_type < semantic_type)
+            low = middle + 1u;
+        else
+            high = middle;
+    }
+    return low < builder->layout_intent_count &&
+                   builder->layout_intents[low].semantic_type == semantic_type
+               ? (int) low
+               : -1;
+}
+
+static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
+                                        XrTargetMaterializedPlan *materialized,
+                                        uint32_t index, uint8_t *states, char *error,
+                                        size_t error_size) {
+    if (states[index] == 2)
+        return true;
+    if (states[index] == 1)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "aggregate layout dependency is recursive");
+    states[index] = 1;
+    XrTargetLayoutIntent *intent = &builder->layout_intents[index];
+    XrTargetLayoutRecord *layout = &materialized->layouts[index];
+    if (intent->kind == XR_TARGET_LAYOUT_SCALAR) {
+        layout->align = intent->memory_rep.memory_align;
+        layout->fixed_prefix_size = intent->memory_rep.memory_size;
+        states[index] = 2;
+        return true;
+    }
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(builder->semantic_plan, intent->semantic_type);
+    uint32_t child_table_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(builder->semantic_plan, &child_table_count);
+    if (!type || type->child_begin > child_table_count ||
+        type->child_count > child_table_count - type->child_begin)
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "aggregate layout has no exact semantic field range");
+    uint32_t offset = 0;
+    uint32_t aggregate_align = 1;
+    for (uint32_t field_index = 0; field_index < intent->element_count; field_index++) {
+        uint32_t child_ordinal = type->kind == XR_KIND_FIXED_ARRAY ? 0u : field_index;
+        if (child_ordinal >= type->child_count)
+            return fail(error, error_size, "XR_TARGET_1002",
+                        "aggregate field ordinal exceeds semantic facts");
+        uint32_t child_type = children[type->child_begin + child_ordinal];
+        int child_layout = find_sorted_layout_intent(builder, child_type);
+        if (child_layout < 0 ||
+            !materialize_layout_geometry(builder, materialized,
+                                         (uint32_t) child_layout, states, error, error_size))
+            return false;
+        const XrTargetLayoutRecord *child = &materialized->layouts[child_layout];
+        uint32_t aligned = 0;
+        if (!checked_align_u32(offset, child->align, &aligned) ||
+            child->fixed_prefix_size > UINT32_MAX - aligned)
+            return fail(error, error_size, "XR_EXEC_5003",
+                        "aggregate field offset or size overflows");
+        XrTargetFieldRecord *field =
+            &materialized->fields[layout->field_begin + field_index];
+        *field = (XrTargetFieldRecord) {
+            .layout = index,
+            .semantic_field = field_index,
+            .offset = aligned,
+            .size = child->fixed_prefix_size,
+            .align = child->align,
+        };
+        offset = aligned + child->fixed_prefix_size;
+        if (child->align > aggregate_align)
+            aggregate_align = child->align;
+    }
+    if (type->aggregate_align != 0) {
+        if (type->aggregate_align > UINT16_MAX ||
+            (type->aggregate_align & (type->aggregate_align - 1u)) != 0)
+            return fail(error, error_size, "XR_TARGET_1002",
+                        "aggregate explicit alignment is invalid");
+        if (type->aggregate_align > aggregate_align)
+            aggregate_align = type->aggregate_align;
+    }
+    if (!offset)
+        offset = 1;
+    if (!checked_align_u32(offset, aggregate_align, &layout->fixed_prefix_size) ||
+        layout->fixed_prefix_size > UINT16_MAX / 8u)
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "aggregate representation exceeds its checked width budget");
+    layout->align = (uint16_t) aggregate_align;
+    states[index] = 2;
+    return true;
+}
+
 static bool materialize_layouts(XrTargetPlanBuilder *builder,
                                 XrTargetMaterializedPlan *materialized, char *error,
                                 size_t error_size) {
@@ -758,34 +1211,133 @@ static bool materialize_layouts(XrTargetPlanBuilder *builder,
         qsort(builder->layout_intents, builder->layout_intent_count,
               sizeof(*builder->layout_intents), compare_layout_intent);
     materialized->layout_count = builder->layout_intent_count;
-    materialized->extent_count = materialized->layout_count ? 1u : 0u;
+    materialized->extent_count = materialized->layout_count;
+    uint32_t field_count = 0;
+    for (uint32_t i = 0; i < materialized->layout_count; i++) {
+        const XrTargetLayoutIntent *intent = &builder->layout_intents[i];
+        if ((i && builder->layout_intents[i - 1u].semantic_type == intent->semantic_type) ||
+            intent->element_count > UINT16_MAX ||
+            intent->element_count > UINT32_MAX - field_count)
+            return fail(error, error_size, "XR_TARGET_1002",
+                        "layout intents are duplicated or exceed field budgets");
+        field_count += intent->element_count;
+    }
+    materialized->field_count = field_count;
     materialized->layouts = (XrTargetLayoutRecord *) allocate_records(
         materialized->layout_count, sizeof(*materialized->layouts));
     materialized->extents = (XrTargetExtentRecord *) allocate_records(
         materialized->extent_count, sizeof(*materialized->extents));
+    materialized->fields = (XrTargetFieldRecord *) allocate_records(
+        materialized->field_count, sizeof(*materialized->fields));
     if ((materialized->layout_count && !materialized->layouts) ||
-        (materialized->extent_count && !materialized->extents))
+        (materialized->extent_count && !materialized->extents) ||
+        (materialized->field_count && !materialized->fields))
         return fail(error, error_size, "XR_EXEC_5003", "layout materialization failed");
-    if (materialized->extent_count) {
-        materialized->extents[0].id = 0;
-        materialized->extents[0].kind = XR_TARGET_EXTENT_FIXED;
-        materialized->extents[0].element_layout = XR_SEMANTIC_INDEX_NONE;
-    }
+    uint32_t field_begin = 0;
     for (uint32_t i = 0; i < materialized->layout_count; i++) {
         const XrTargetLayoutIntent *intent = &builder->layout_intents[i];
-        if ((i && builder->layout_intents[i - 1u].semantic_type == intent->semantic_type) ||
-            find_rep_id(materialized, &intent->memory_rep) < 0)
-            return fail(error, error_size, "XR_TARGET_1002", "layout intents are ambiguous or unrepresented");
         materialized->layouts[i] = (XrTargetLayoutRecord) {
             .id = i,
             .semantic_type = intent->semantic_type,
-            .kind = XR_TARGET_LAYOUT_SCALAR,
-            .align = intent->memory_rep.memory_align,
-            .fixed_prefix_size = intent->memory_rep.memory_size,
-            .extent = 0,
+            .kind = intent->kind,
+            .extent = i,
+            .field_begin = field_begin,
+            .field_count = (uint16_t) intent->element_count,
         };
+        materialized->extents[i] = (XrTargetExtentRecord) {
+            .id = i,
+            .kind = XR_TARGET_EXTENT_FIXED,
+            .element_layout = XR_SEMANTIC_INDEX_NONE,
+        };
+        field_begin += intent->element_count;
+    }
+    uint8_t *states = (uint8_t *) allocate_records(materialized->layout_count,
+                                                    sizeof(*states));
+    if (materialized->layout_count && !states)
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "aggregate layout worklist allocation failed");
+    for (uint32_t i = 0; i < materialized->layout_count; i++) {
+        if (!materialize_layout_geometry(builder, materialized, i, states, error, error_size)) {
+            xr_free(states);
+            return false;
+        }
+    }
+    xr_free(states);
+    for (uint32_t i = 0; i < materialized->layout_count; i++) {
+        XrTargetLayoutIntent *intent = &builder->layout_intents[i];
+        if (intent->kind != XR_TARGET_LAYOUT_AGGREGATE)
+            continue;
+        XrTargetMachineRepRecord rep = {
+            .kind = XR_MACHINE_REP_AGGREGATE,
+            .register_bits = (uint16_t) (materialized->layouts[i].fixed_prefix_size * 8u),
+            .memory_size = materialized->layouts[i].fixed_prefix_size,
+            .memory_align = materialized->layouts[i].align,
+            .ownership = XR_TARGET_OWNERSHIP_TRIVIAL,
+            .detail = i,
+        };
+        intent->memory_rep = rep;
+        if (!append_rep_intent(builder, &rep, error, error_size))
+            return false;
     }
     return true;
+}
+
+static bool materialize_field_representations(const XrTargetPlanBuilder *builder,
+                                              XrTargetMaterializedPlan *materialized,
+                                              char *error, size_t error_size) {
+    uint32_t child_table_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(builder->semantic_plan, &child_table_count);
+    for (uint32_t layout_index = 0; layout_index < materialized->layout_count; layout_index++) {
+        const XrTargetLayoutIntent *intent = &builder->layout_intents[layout_index];
+        if (intent->kind != XR_TARGET_LAYOUT_AGGREGATE)
+            continue;
+        const XrSemanticTypeRecord *type =
+            xr_semantic_plan_type(builder->semantic_plan, intent->semantic_type);
+        if (!type || type->child_begin > child_table_count ||
+            type->child_count > child_table_count - type->child_begin)
+            return fail(error, error_size, "XR_TARGET_1002",
+                        "aggregate field type range is invalid");
+        for (uint32_t field_index = 0; field_index < intent->element_count; field_index++) {
+            uint32_t child_ordinal = type->kind == XR_KIND_FIXED_ARRAY ? 0u : field_index;
+            uint32_t child_type = children[type->child_begin + child_ordinal];
+            int child_layout = find_sorted_layout_intent(builder, child_type);
+            int rep = child_layout < 0
+                          ? -1
+                          : find_rep_id(materialized,
+                                        &builder->layout_intents[child_layout].memory_rep);
+            if (rep < 0)
+                return fail(error, error_size, "XR_TARGET_1002",
+                            "aggregate field representation is missing");
+            XrTargetFieldRecord *field =
+                &materialized->fields[materialized->layouts[layout_index].field_begin +
+                                      field_index];
+            field->memory_rep = (uint16_t) rep;
+            field->root_kind = materialized->machine_reps[rep].root_kind;
+            materialized->layouts[layout_index].root_field_count +=
+                field->root_kind != XR_TARGET_ROOT_NONE;
+        }
+    }
+    return true;
+}
+
+static bool resolve_intent_reps(const XrTargetPlanBuilder *builder,
+                                const XrTargetMaterializedPlan *materialized,
+                                uint32_t semantic_type, bool resolve_type_rep,
+                                const XrTargetMachineRepRecord *register_intent,
+                                const XrTargetMachineRepRecord *memory_intent,
+                                int *register_rep, int *memory_rep) {
+    const XrTargetMachineRepRecord *register_record = register_intent;
+    const XrTargetMachineRepRecord *memory_record = memory_intent;
+    if (resolve_type_rep) {
+        int layout = find_sorted_layout_intent(builder, semantic_type);
+        if (layout < 0)
+            return false;
+        register_record = memory_record = &builder->layout_intents[layout].memory_rep;
+    }
+    *register_rep = find_rep_id(materialized, register_record);
+    *memory_rep = find_rep_id(materialized, memory_record);
+    return *register_rep >= 0 && *memory_rep >= 0;
 }
 
 static bool materialize_functions_and_slots(XrTargetPlanBuilder *builder,
@@ -821,12 +1373,18 @@ static bool materialize_functions_and_slots(XrTargetPlanBuilder *builder,
                 xr_stable_id_equal(builder->slot_intents[next_slot - 1u].identity,
                                    intent->identity))
                 return fail(error, error_size, "XR_TARGET_1002", "slot identity intent is duplicated");
-            int register_rep = find_rep_id(materialized, &intent->register_rep);
-            int memory_rep = find_rep_id(materialized, &intent->memory_rep);
+            int register_rep = -1;
+            int memory_rep = -1;
             uint32_t aligned = 0;
-            if (register_rep < 0 || memory_rep < 0 ||
-                !checked_align_u32(offset, intent->memory_rep.memory_align, &aligned) ||
-                intent->memory_rep.memory_size > UINT32_MAX - aligned)
+            if (!resolve_intent_reps(builder, materialized, intent->semantic_type,
+                                     intent->resolve_type_rep, &intent->register_rep,
+                                     &intent->memory_rep, &register_rep, &memory_rep))
+                return fail(error, error_size, "XR_TARGET_1001",
+                            "slot intent has no exact representation");
+            const XrTargetMachineRepRecord *resolved_memory =
+                &materialized->machine_reps[memory_rep];
+            if (!checked_align_u32(offset, resolved_memory->memory_align, &aligned) ||
+                resolved_memory->memory_size > UINT32_MAX - aligned)
                 return fail(error, error_size, "XR_EXEC_5003", "packed slot frame overflows");
             XrTargetSlotRecord *slot = &materialized->slots[next_slot];
             *slot = (XrTargetSlotRecord) {
@@ -837,8 +1395,8 @@ static bool materialize_functions_and_slots(XrTargetPlanBuilder *builder,
                 .semantic_operation = intent->semantic_operation,
                 .logical_slot = intent->logical_slot,
                 .offset = aligned,
-                .size = intent->memory_rep.memory_size,
-                .align = intent->memory_rep.memory_align,
+                .size = resolved_memory->memory_size,
+                .align = resolved_memory->memory_align,
                 .register_rep = (uint16_t) register_rep,
                 .memory_rep = (uint16_t) memory_rep,
                 .role = intent->role,
@@ -874,15 +1432,28 @@ static bool materialize_values(XrTargetPlanBuilder *builder,
         return fail(error, error_size, "XR_EXEC_5003", "value representation materialization failed");
     for (uint32_t i = 0; i < materialized->value_rep_count; i++) {
         const XrTargetValueIntent *intent = &builder->value_intents[i];
-        if (i && builder->value_intents[i - 1u].semantic_value == intent->semantic_value)
-            return fail(error, error_size, "XR_TARGET_1001", "value representation intent is duplicated");
-        int register_rep = find_rep_id(materialized, &intent->register_rep);
-        int memory_rep = find_rep_id(materialized, &intent->memory_rep);
+        if (i && builder->value_intents[i - 1u].semantic_value == intent->semantic_value) {
+            if (error && error_size)
+                snprintf(error, error_size,
+                         "XR_TARGET_1001: value representation intent is duplicated "
+                         "(value=%u types=%u/%u aggregate=%u/%u)",
+                         intent->semantic_value,
+                         builder->value_intents[i - 1u].semantic_type,
+                         intent->semantic_type,
+                         builder->value_intents[i - 1u].resolve_type_rep ? 1u : 0u,
+                         intent->resolve_type_rep ? 1u : 0u);
+            return false;
+        }
+        int register_rep = -1;
+        int memory_rep = -1;
         int slot = intent->has_slot
                        ? find_slot_id(materialized, intent->semantic_function,
                                       intent->slot_identity)
                        : -1;
-        if (register_rep < 0 || memory_rep < 0 || (intent->has_slot && slot < 0))
+        if ((intent->has_slot && slot < 0) ||
+            !resolve_intent_reps(builder, materialized, intent->semantic_type,
+                                 intent->resolve_type_rep, &intent->register_rep,
+                                 &intent->memory_rep, &register_rep, &memory_rep))
             return fail(error, error_size, "XR_TARGET_1001", "value intent cannot bind its canonical records");
         materialized->value_reps[i] = (XrTargetValueRepRecord) {
             .semantic_value = intent->semantic_value,
@@ -931,8 +1502,9 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         builder->started_family_mask != XR_TARGET_REQUIRED_FAMILIES ||
         builder->completed_family_mask != XR_TARGET_REQUIRED_FAMILIES)
         return fail(error, error_size, "XR_TARGET_1001", "target builder family coverage is incomplete");
-    if (!materialize_machine_reps(builder, materialized, error, error_size) ||
-        !materialize_layouts(builder, materialized, error, error_size) ||
+    if (!materialize_layouts(builder, materialized, error, error_size) ||
+        !materialize_machine_reps(builder, materialized, error, error_size) ||
+        !materialize_field_representations(builder, materialized, error, error_size) ||
         !materialize_functions_and_slots(builder, materialized, error, error_size) ||
         !materialize_values(builder, materialized, error, error_size) ||
         !materialize_foundation_capabilities(builder, materialized, error,
@@ -992,6 +1564,8 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out,
         .extents_count = materialized.extent_count,
         .layouts = materialized.layouts,
         .layouts_count = materialized.layout_count,
+        .fields = materialized.fields,
+        .fields_count = materialized.field_count,
         .functions = materialized.functions,
         .functions_count = materialized.function_count,
         .slots = materialized.slots,
@@ -1023,7 +1597,8 @@ bool xr_target_plan_build(const XrSemanticPlan *semantic_plan, XrTargetProfile *
         *out = NULL;
     if (!builder_new(semantic_plan, profile, &builder, error, error_size))
         return false;
-    if (!builder_add_scalars(builder, error, error_size)) {
+    if (!builder_add_scalars(builder, error, error_size) ||
+        !builder_add_aggregates(builder, error, error_size)) {
         builder_free(builder);
         return false;
     }

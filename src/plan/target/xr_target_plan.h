@@ -25,9 +25,11 @@ typedef struct XrTargetPlan XrTargetPlan;
 
 typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_SCALAR = UINT64_C(1) << 0,
+    XR_TARGET_FAMILY_AGGREGATE = UINT64_C(1) << 1,
 } XrTargetPlanFamily;
 
-#define XR_TARGET_REQUIRED_FAMILIES ((uint64_t) XR_TARGET_FAMILY_SCALAR)
+#define XR_TARGET_REQUIRED_FAMILIES                                                         \
+    ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,

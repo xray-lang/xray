@@ -9,6 +9,8 @@
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/plan/target/xr_target_verify.h"
+#include "../../../src/runtime/class/xclass_info.h"
+#include "../../../src/runtime/value/xstruct_layout.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "target_profile_test_fixture.h"
 #include <stdio.h>
@@ -241,6 +243,153 @@ static XrSemanticPlan *build_scalar_and_effect_void_same_type_semantic(void) {
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_build(function, &plan, error, sizeof(error)));
+    xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticPlan *build_nested_aggregate_semantic(void) {
+    XrType fixed = {
+        .kind = XR_KIND_FIXED_ARRAY,
+        .id = 101,
+        .frozen = true,
+        .is_value_type = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+    };
+    fixed.fixed_array.element_type = &stub_int;
+    fixed.fixed_array.length = 3;
+    XrType *tuple_elements[2] = {&stub_bool, &fixed};
+    XrType tuple = {
+        .kind = XR_KIND_TUPLE,
+        .id = 102,
+        .frozen = true,
+        .is_value_type = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+    };
+    tuple.tuple.element_types = tuple_elements;
+    tuple.tuple.element_count = 2;
+
+    XiFunc *function = xi_func_new("target_nested_aggregate_probe", &tuple);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *array = xi_value_new(function, entry, XI_FIXED_ARRAY_NEW, &fixed, 0);
+    REQUIRE(array != NULL);
+    array->aux_int = 3;
+    XiValue *boolean = xi_const_bool(function, entry, true, &stub_bool);
+    REQUIRE(boolean != NULL);
+    XiValue *result = xi_value_new(function, entry, XI_TUPLE_NEW, &tuple, 2);
+    REQUIRE(result != NULL);
+    result->args[0] = boolean;
+    result->args[1] = array;
+    result->aux_int = xi_tuple_pack_aux(2, 0);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "nested aggregate semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticPlan *build_struct_and_named_aggregate_semantic(void) {
+    const char *struct_names[2] = {"count", "ready"};
+    XrType *struct_fields[2] = {&stub_int, &stub_bool};
+    XrType structural = {
+        .kind = XR_KIND_STRUCT_OBJECT,
+        .id = 103,
+        .frozen = true,
+        .is_value_type = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .object = {
+            .field_names = struct_names,
+            .field_types = struct_fields,
+            .field_count = 2,
+        },
+    };
+    const char *dynamic_names[2] = {"count", "label"};
+    XrType *dynamic_fields[2] = {&stub_int, &stub_string};
+    XrType dynamic_structural = {
+        .kind = XR_KIND_STRUCT_OBJECT,
+        .id = 104,
+        .frozen = true,
+        .is_value_type = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .object = {
+            .field_names = dynamic_names,
+            .field_types = dynamic_fields,
+            .field_count = 2,
+        },
+    };
+    const char *named_fields[2] = {"x", "flag"};
+    XrType *named_field_types[2] = {&stub_int, &stub_bool};
+    XrAggregateLayout native_layout = {
+        .field_count = 2,
+        .kind = XR_AGG_LAYOUT_STRUCT,
+        .explicit_align = 16,
+        .nominal_name = "AlignedPair",
+        .field_names = named_fields,
+    };
+    XrClassInfo class_info = {
+        .name = "AlignedPair",
+        .struct_layout = &native_layout,
+    };
+    XrType named = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 105,
+        .frozen = true,
+        .is_value_type = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+    };
+    named.instance.class_name = "AlignedPair";
+    named.instance.class_ref = &class_info;
+    XiClassData declaration = {
+        .class_info = &class_info,
+        .class_name = "AlignedPair",
+        .instance_field_names = named_fields,
+        .instance_field_types = named_field_types,
+        .instance_field_count = 2,
+        .needs_runtime_type = false,
+        .struct_layout = &native_layout,
+    };
+
+    XiFunc *function = xi_func_new("target_struct_aggregate_probe", &named);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *class_declaration =
+        xi_value_new(function, entry, XI_CLASS_CREATE, &stub_unit, 0);
+    REQUIRE(class_declaration != NULL);
+    class_declaration->aux = &declaration;
+    XiValue *structural_value =
+        xi_value_new(function, entry, XI_OBJECT_NEW, &structural, 0);
+    REQUIRE(structural_value != NULL);
+    structural_value->aux = (void *) struct_names;
+    structural_value->aux_int = xi_object_pack_aux(2, 0);
+    XiValue *dynamic_value =
+        xi_value_new(function, entry, XI_OBJECT_NEW, &dynamic_structural, 0);
+    REQUIRE(dynamic_value != NULL);
+    dynamic_value->aux = (void *) dynamic_names;
+    dynamic_value->aux_int = xi_object_pack_aux(2, 0);
+    XiValue *named_value = xi_value_new(function, entry, XI_AGG_NEW, &named, 1);
+    REQUIRE(named_value != NULL);
+    named_value->args[0] = class_declaration;
+    named_value->aux = &native_layout;
+    XiValue *deferred_call = xi_value_new(function, entry, XI_CALL, &named, 1);
+    REQUIRE(deferred_call != NULL);
+    deferred_call->args[0] = class_declaration;
+    xi_block_set_return(entry, named_value);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "struct aggregate semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
     xi_func_free(function);
     return plan;
 }
@@ -600,7 +749,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "273222bad30fab61cf68fbd6d0fb82a1f870dff08a58c40ce16ef55f716fb14d") == 0);
+                   "d8818e270905ddf21f6b9ac9286bcef61caf3d2e0068e94734de8afbb39db07b") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -792,6 +941,190 @@ static void test_builder_materializes_effect_void_independent_of_type(void) {
             XR_MACHINE_REP_VOID);
     REQUIRE(plan->slots_count == 2);
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_builder_materializes_nested_aggregate_family(void) {
+    XrSemanticPlan *semantic = build_nested_aggregate_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *first = NULL;
+    XrTargetPlan *second = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &first, error, sizeof(error)));
+    REQUIRE(xr_target_plan_build(semantic, profile, &second, error, sizeof(error)));
+    REQUIRE(first->completed_family_mask == XR_TARGET_REQUIRED_FAMILIES);
+    REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(first),
+                                 xr_target_plan_fingerprint(second)));
+
+    uint32_t fixed_layout = XR_SEMANTIC_INDEX_NONE;
+    uint32_t tuple_layout = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < first->layouts_count; i++) {
+        const XrSemanticTypeRecord *type =
+            xr_semantic_plan_type(semantic, first->layouts[i].semantic_type);
+        REQUIRE(type != NULL);
+        if (type->kind == XR_KIND_FIXED_ARRAY)
+            fixed_layout = i;
+        else if (type->kind == XR_KIND_TUPLE)
+            tuple_layout = i;
+    }
+    REQUIRE(fixed_layout != XR_SEMANTIC_INDEX_NONE &&
+            tuple_layout != XR_SEMANTIC_INDEX_NONE);
+    XrTargetLayoutRecord *fixed = &first->layouts[fixed_layout];
+    XrTargetLayoutRecord *tuple = &first->layouts[tuple_layout];
+    REQUIRE(fixed->kind == XR_TARGET_LAYOUT_AGGREGATE && fixed->field_count == 3 &&
+            fixed->fixed_prefix_size == 24 && fixed->align == 8);
+    for (uint32_t i = 0; i < fixed->field_count; i++) {
+        const XrTargetFieldRecord *field = &first->fields[fixed->field_begin + i];
+        REQUIRE(field->semantic_field == i && field->offset == i * 8u &&
+                field->size == 8 && field->align == 8);
+    }
+    REQUIRE(tuple->kind == XR_TARGET_LAYOUT_AGGREGATE && tuple->field_count == 2 &&
+            tuple->fixed_prefix_size == 32 && tuple->align == 8);
+    XrTargetFieldRecord *tuple_first = &first->fields[tuple->field_begin];
+    XrTargetFieldRecord *tuple_nested = &first->fields[tuple->field_begin + 1u];
+    REQUIRE(tuple_first->offset == 0 && tuple_first->size == 1 && tuple_first->align == 1);
+    REQUIRE(tuple_nested->offset == 8 && tuple_nested->size == 24 &&
+            tuple_nested->align == 8);
+    REQUIRE(first->machine_reps[tuple_nested->memory_rep].kind ==
+            XR_MACHINE_REP_AGGREGATE);
+    REQUIRE(first->machine_reps[tuple_nested->memory_rep].detail == fixed_layout);
+
+    uint32_t aggregate_bindings = 0;
+    for (uint32_t i = 0; i < first->value_reps_count; i++) {
+        const XrTargetValueRepRecord *value = &first->value_reps[i];
+        const XrTargetMachineRepRecord *rep = &first->machine_reps[value->memory_rep];
+        if (rep->kind != XR_MACHINE_REP_AGGREGATE)
+            continue;
+        aggregate_bindings++;
+        REQUIRE(value->slot < first->slots_count);
+        const XrTargetSlotRecord *slot = &first->slots[value->slot];
+        REQUIRE(slot->semantic_value == value->semantic_value &&
+                slot->role == XR_TARGET_SLOT_TEMPORARY &&
+                slot->size == first->layouts[rep->detail].fixed_prefix_size &&
+                slot->align == first->layouts[rep->detail].align);
+    }
+    REQUIRE(aggregate_bindings == 2);
+
+    XrFingerprint saved_tuple_fingerprint = tuple->fingerprint;
+    uint32_t saved_offset = tuple_nested->offset;
+    tuple_nested->offset = tuple_first->offset;
+    xr_target_layout_compute_fingerprint(first, tuple_layout, &tuple->fingerprint);
+    expect_verify_failure(first, "XR_TARGET_1002");
+    tuple_nested->offset = saved_offset;
+    tuple->fingerprint = saved_tuple_fingerprint;
+
+    uint16_t saved_rep = tuple_nested->memory_rep;
+    tuple_nested->memory_rep = tuple_first->memory_rep;
+    xr_target_layout_compute_fingerprint(first, tuple_layout, &tuple->fingerprint);
+    expect_verify_failure(first, "XR_TARGET_1002");
+    tuple_nested->memory_rep = saved_rep;
+    tuple->fingerprint = saved_tuple_fingerprint;
+
+    uint16_t saved_field_count = tuple->field_count;
+    tuple->field_count--;
+    expect_verify_failure(first, "XR_TARGET_1002");
+    tuple->field_count = saved_field_count + 1u;
+    expect_verify_failure(first, "XR_TARGET_1002");
+    tuple->field_count = saved_field_count;
+
+    tuple_nested->offset = UINT32_MAX;
+    xr_target_layout_compute_fingerprint(first, tuple_layout, &tuple->fingerprint);
+    expect_verify_failure(first, "XR_TARGET_1002");
+    tuple_nested->offset = saved_offset;
+    tuple->fingerprint = saved_tuple_fingerprint;
+
+    tuple_nested->offset++;
+    expect_verify_failure(first, "XR_TARGET_1002");
+    tuple_nested->offset = saved_offset;
+    REQUIRE(xr_target_plan_verify(first, error, sizeof(error)));
+
+    xr_target_plan_free(second);
+    xr_target_plan_free(first);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_builder_materializes_struct_and_named_aggregates(void) {
+    XrSemanticPlan *semantic = build_struct_and_named_aggregate_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+
+    uint32_t structural_type = XR_SEMANTIC_INDEX_NONE;
+    uint32_t dynamic_type = XR_SEMANTIC_INDEX_NONE;
+    uint32_t named_type = XR_SEMANTIC_INDEX_NONE;
+    uint32_t child_table_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_table_count);
+    for (uint32_t i = 0; i < xr_semantic_plan_type_count(semantic); i++) {
+        const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, i);
+        REQUIRE(type != NULL);
+        if (type->kind == XR_KIND_INSTANCE &&
+            (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0) {
+            named_type = i;
+            REQUIRE(type->aggregate_extent == 2 && type->aggregate_align == 16 &&
+                    type->child_count == 2);
+        } else if (type->kind == XR_KIND_STRUCT_OBJECT) {
+            REQUIRE(type->child_begin <= child_table_count && type->child_count == 2 &&
+                    type->child_count <= child_table_count - type->child_begin &&
+                    type->aggregate_extent == 2);
+            const XrSemanticTypeRecord *second =
+                xr_semantic_plan_type(semantic, children[type->child_begin + 1u]);
+            REQUIRE(second != NULL);
+            if (second->kind == XR_KIND_BOOL)
+                structural_type = i;
+            else if (second->kind == XR_KIND_STRING)
+                dynamic_type = i;
+        }
+    }
+    REQUIRE(structural_type != XR_SEMANTIC_INDEX_NONE &&
+            dynamic_type != XR_SEMANTIC_INDEX_NONE &&
+            named_type != XR_SEMANTIC_INDEX_NONE);
+
+    const XrTargetLayoutRecord *structural_layout = NULL;
+    const XrTargetLayoutRecord *named_layout = NULL;
+    for (uint32_t i = 0; i < plan->layouts_count; i++) {
+        const XrTargetLayoutRecord *layout = &plan->layouts[i];
+        REQUIRE(layout->semantic_type != dynamic_type);
+        if (layout->semantic_type == structural_type)
+            structural_layout = layout;
+        else if (layout->semantic_type == named_type)
+            named_layout = layout;
+    }
+    REQUIRE(structural_layout != NULL && structural_layout->kind == XR_TARGET_LAYOUT_AGGREGATE &&
+            structural_layout->field_count == 2 && structural_layout->fixed_prefix_size == 16 &&
+            structural_layout->align == 8);
+    REQUIRE(named_layout != NULL && named_layout->kind == XR_TARGET_LAYOUT_AGGREGATE &&
+            named_layout->field_count == 2 && named_layout->fixed_prefix_size == 16 &&
+            named_layout->align == 16);
+
+    uint32_t supported_bindings = 0;
+    bool dynamic_binding = false;
+    bool deferred_call_seen = false;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
+        if (!operation || operation->result_value == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        const XrTargetValueRepRecord *binding =
+            xr_target_plan_value_rep(plan, operation->result_value);
+        if (operation->opcode == XI_CALL) {
+            REQUIRE(operation->result_type == named_type && binding == NULL);
+            deferred_call_seen = true;
+        } else if (operation->result_type == dynamic_type)
+            dynamic_binding = binding != NULL;
+        else if (operation->result_type == structural_type ||
+                 operation->result_type == named_type) {
+            REQUIRE(binding != NULL && binding->memory_rep < plan->machine_reps_count &&
+                    plan->machine_reps[binding->memory_rep].kind == XR_MACHINE_REP_AGGREGATE);
+            supported_bindings++;
+        }
+    }
+    REQUIRE(supported_bindings == 2 && !dynamic_binding && deferred_call_seen);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
@@ -1155,6 +1488,8 @@ int main(void) {
     test_builder_materializes_canonical_scalar_intents();
     test_builder_materializes_parameter_without_operation();
     test_builder_materializes_effect_void_independent_of_type();
+    test_builder_materializes_nested_aggregate_family();
+    test_builder_materializes_struct_and_named_aggregates();
     test_structural_mutations_fail_closed();
     test_value_rep_mutations_fail_closed();
     test_freeze_rejects_invalid_draft();

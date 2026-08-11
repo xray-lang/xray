@@ -573,11 +573,12 @@ static bool snapshot_enum_data(XiSemanticSnapshot *snapshot, XiEnumData *data) {
 static bool snapshot_class_data(XiSemanticSnapshot *snapshot, XiClassData *data) {
     if (!data)
         return true;
+    data->class_info = snapshot_class_info(snapshot, data->class_info);
     data->struct_layout = snapshot_aggregate_layout(snapshot, data->struct_layout);
     data->instance_layout = snapshot_aggregate_layout(snapshot, data->instance_layout);
-    /* No backend may recover semantics from frontend objects after this point. */
+    /* No backend may recover semantics from frontend AST objects after this point.
+     * class_info is the analyzer-independent snapshot identity shared with XrType. */
     data->ast = NULL;
-    data->class_info = NULL;
     return !snapshot->failed;
 }
 

@@ -33,6 +33,10 @@ static bool range_valid(uint32_t begin, uint32_t count, uint32_t limit) {
     return begin <= limit && count <= limit - begin;
 }
 
+static bool is_power_of_two_u32(uint32_t value) {
+    return value != 0 && (value & (value - 1u)) == 0;
+}
+
 static bool verify_id(const char *key, XrStableId actual) {
     XrStableId expected;
     XrFingerprint digest;
@@ -277,7 +281,9 @@ static bool verify_entity_record(const XrSemanticPlan *plan, const XrSemanticEnt
             return parent && parent->kind == XR_SEM_ENTITY_TYPE_INSTANTIATION &&
                    entity->subject_kind == XR_SEM_ENTITY_SUBJECT_TYPE &&
                    entity->subject < plan->type_count &&
-                   plan->types[entity->subject].kind == XR_KIND_STRUCT_OBJECT &&
+                   (plan->types[entity->subject].kind == XR_KIND_STRUCT_OBJECT ||
+                    (plan->types[entity->subject].flags &
+                     XR_SEM_TYPE_AGGREGATE_EXACT) != 0) &&
                    parent->subject == entity->subject &&
                    mark_entity(coverage->shapes, plan->type_count, entity->subject);
         case XR_SEM_ENTITY_FIELD:
@@ -373,10 +379,13 @@ static bool verify_entity_coverage(const XrSemanticPlan *plan, const XrEntityCov
     if (coverage->packages != 1 || coverage->modules != 1)
         return false;
     for (uint32_t i = 0; i < plan->type_count; i++) {
+        bool aggregate_shape = plan->types[i].kind == XR_KIND_STRUCT_OBJECT ||
+                               (plan->types[i].flags &
+                                XR_SEM_TYPE_AGGREGATE_EXACT) != 0;
         if (coverage->types[i] != 1 ||
-            (plan->types[i].kind == XR_KIND_STRUCT_OBJECT && coverage->shapes[i] != 1))
+            (aggregate_shape && coverage->shapes[i] != 1))
             return false;
-        if (plan->types[i].kind == XR_KIND_STRUCT_OBJECT) {
+        if (aggregate_shape) {
             for (uint16_t field = 0; field < plan->types[i].child_count; field++) {
                 if (coverage->fields[plan->types[i].child_begin + field] != 1)
                     return false;
@@ -514,6 +523,32 @@ static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_s
              (type->flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0))
             return report(error, error_size, "XR_OWN_3000",
                           "borrow-view type has an invalid ownership class");
+        if ((type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0 &&
+            (type->kind != XR_KIND_INSTANCE ||
+             (type->flags & XR_SEM_TYPE_VALUE) == 0))
+            return report(error, error_size, "XR_SEM_0012",
+                          "exact aggregate flag is invalid");
+        if (type->kind == XR_KIND_FIXED_ARRAY) {
+            if (type->child_count != 1 || type->aggregate_extent == 0 ||
+                type->aggregate_align != 0)
+                return report(error, error_size, "XR_SEM_0012",
+                              "fixed-array aggregate facts are invalid");
+        } else if (type->kind == XR_KIND_TUPLE ||
+                   type->kind == XR_KIND_STRUCT_OBJECT) {
+            if (type->aggregate_extent != type->child_count ||
+                type->aggregate_align != 0)
+                return report(error, error_size, "XR_SEM_0012",
+                              "structural aggregate facts are invalid");
+        } else if ((type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0) {
+            if (type->aggregate_extent != type->child_count ||
+                (type->aggregate_align != 0 &&
+                 !is_power_of_two_u32(type->aggregate_align)))
+                return report(error, error_size, "XR_SEM_0012",
+                              "named aggregate facts are invalid");
+        } else if (type->aggregate_extent != 0 || type->aggregate_align != 0) {
+            return report(error, error_size, "XR_SEM_0012",
+                          "non-aggregate type carries aggregate facts");
+        }
         if (type->child_begin != child_cursor ||
             !range_valid(type->child_begin, type->child_count, plan->type_child_count))
             return report(error, error_size, "XR_SEM_0012", "type child range is invalid");

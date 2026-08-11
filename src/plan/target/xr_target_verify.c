@@ -438,7 +438,11 @@ static bool rep_kind_contract_is_exact(const XrTargetPlan *plan,
         case XR_MACHINE_REP_AGGREGATE:
         case XR_MACHINE_REP_VIEW: {
             if (rep->detail >= plan->layouts_count || rep->lane_count != 0 ||
-                rep->signedness != XR_TARGET_SIGN_NONE)
+                rep->signedness != XR_TARGET_SIGN_NONE ||
+                (rep->kind == XR_MACHINE_REP_AGGREGATE &&
+                 (rep->root_kind != XR_TARGET_ROOT_NONE ||
+                  rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+                  rep->null_encoding != XR_TARGET_NULL_NOT_NULLABLE)))
                 return false;
             const XrTargetLayoutRecord *layout = &plan->layouts[rep->detail];
             uint8_t expected_kind = rep->kind == XR_MACHINE_REP_VIEW ? XR_TARGET_LAYOUT_VIEW
@@ -592,6 +596,93 @@ static int semantic_type_expected_rep(const XrSemanticTypeRecord *type, uint16_t
     }
 }
 
+static int semantic_aggregate_kind(const XrSemanticTypeRecord *type) {
+    if (!type)
+        return -1;
+    if ((type->flags & XR_SEM_TYPE_NULLABLE) != 0)
+        return 0;
+    if (type->kind == XR_KIND_TUPLE || type->kind == XR_KIND_FIXED_ARRAY)
+        return type->scalar_rep == XR_SCALAR_REP_NONE ? 1 : -1;
+    if (type->kind == XR_KIND_STRUCT_OBJECT)
+        return (type->flags & XR_SEM_TYPE_VALUE) == 0
+                   ? 0
+                   : (type->scalar_rep == XR_SCALAR_REP_NONE ? 1 : -1);
+    if (type->kind == XR_KIND_INSTANCE)
+        return (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) == 0
+                   ? 0
+                   : (type->scalar_rep == XR_SCALAR_REP_NONE ? 1 : -1);
+    return 0;
+}
+
+static int semantic_aggregate_eligibility(const XrSemanticPlan *plan,
+                                          uint32_t semantic_type,
+                                          uint32_t *stack, uint32_t depth) {
+    if (semantic_type >= xr_semantic_plan_type_count(plan) || depth >= 64)
+        return -1;
+    for (uint32_t i = 0; i < depth; i++)
+        if (stack[i] == semantic_type)
+            return -1;
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    uint16_t scalar_kind = XR_MACHINE_REP_COUNT;
+    int scalar = type ? semantic_type_expected_rep(type, &scalar_kind) : -1;
+    if (scalar < 0)
+        return -1;
+    if (scalar == 1)
+        return scalar_kind == XR_MACHINE_REP_VOID ? 0 : 1;
+    int aggregate = semantic_aggregate_kind(type);
+    if (aggregate <= 0)
+        return aggregate;
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    if (type->child_begin > child_count ||
+        type->child_count > child_count - type->child_begin ||
+        (type->kind == XR_KIND_FIXED_ARRAY
+             ? (type->child_count != 1 || type->aggregate_extent == 0 ||
+                type->aggregate_extent > UINT16_MAX)
+             : type->aggregate_extent != type->child_count))
+        return -1;
+    stack[depth] = semantic_type;
+    uint32_t dependencies =
+        type->kind == XR_KIND_FIXED_ARRAY ? 1u : type->child_count;
+    for (uint32_t i = 0; i < dependencies; i++) {
+        int child = semantic_aggregate_eligibility(
+            plan, children[type->child_begin + i], stack, depth + 1u);
+        if (child <= 0)
+            return child;
+    }
+    return 1;
+}
+
+static bool semantic_fixed_array_count(const XrSemanticPlan *plan, uint32_t semantic_type,
+                                       uint32_t *out) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    if (!type || type->kind != XR_KIND_FIXED_ARRAY || type->child_count != 1 ||
+        type->aggregate_extent == 0 || type->aggregate_extent > UINT16_MAX)
+        return false;
+    *out = type->aggregate_extent;
+    return true;
+}
+
+static bool mark_coroutine_functions(const XrSemanticPlan *plan, uint8_t *deferred,
+                                     uint32_t function_count) {
+    size_t entity_count = xr_semantic_plan_entity_count(plan);
+    size_t operation_count = xr_semantic_plan_operation_count(plan);
+    for (size_t i = 0; i < entity_count; i++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
+        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
+            entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION)
+            continue;
+        if (entity->subject >= operation_count)
+            return false;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan, entity->subject);
+        if (!operation || operation->function >= function_count)
+            return false;
+        deferred[operation->function] = 1;
+    }
+    return true;
+}
+
 static const XrSemanticParameterRecord *semantic_parameter_for_value(
     const XrSemanticPlan *plan, uint32_t function, uint32_t value) {
     uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(plan);
@@ -603,7 +694,7 @@ static const XrSemanticParameterRecord *semantic_parameter_for_value(
     return NULL;
 }
 
-static bool reconstruct_scalar_slot_identity(const XrTargetPlan *plan,
+static bool reconstruct_value_slot_identity(const XrTargetPlan *plan,
                                              const XrTargetSlotRecord *slot,
                                              uint32_t semantic_value,
                                              uint32_t semantic_function,
@@ -656,7 +747,7 @@ static bool reconstruct_scalar_slot_identity(const XrTargetPlan *plan,
            xr_stable_id_from_key(key, out, &digest);
 }
 
-static bool target_plan_has_layout_for_type(const XrTargetPlan *plan, uint32_t semantic_type) {
+static int target_plan_layout_for_type(const XrTargetPlan *plan, uint32_t semantic_type) {
     uint32_t low = 0;
     uint32_t high = plan->layouts_count;
     while (low < high) {
@@ -667,13 +758,23 @@ static bool target_plan_has_layout_for_type(const XrTargetPlan *plan, uint32_t s
         else
             high = middle;
     }
-    return low < plan->layouts_count && plan->layouts[low].semantic_type == semantic_type;
+    return low < plan->layouts_count && plan->layouts[low].semantic_type == semantic_type
+               ? (int) low
+               : -1;
 }
 
 static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value,
                                  uint32_t semantic_type, uint32_t semantic_function,
                                  const XrSemanticOperationRecord *operation,
-                                 uint8_t *bound_slots) {
+                                 uint8_t *bound_slots,
+                                 const uint8_t *deferred_functions,
+                                 uint32_t *failure_reason) {
+#define XR_VALUE_BINDING_FAIL(reason)                                                            \
+    do {                                                                                          \
+        if (failure_reason)                                                                       \
+            *failure_reason = (reason);                                                           \
+        return false;                                                                             \
+    } while (0)
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(plan->semantic_plan, semantic_type);
     uint16_t expected_kind = XR_MACHINE_REP_COUNT;
@@ -688,28 +789,61 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         operation->result_ownership ==
             xi_generated_op_result_ownership(operation->opcode);
     if (generated_result_void && !operation_result_void)
-        return false;
+        XR_VALUE_BINDING_FAIL(1);
     int eligibility = operation_result_void
                           ? 1
                           : (type ? semantic_type_expected_rep(type,
                                                                &expected_kind)
                                   : -1);
+    /* Aggregate bindings in these domains belong to later exact families. */
+    bool deferred_operation =
+        deferred_functions[semantic_function] ||
+        (operation && operation->opcode < XI_OP_COUNT &&
+         (xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_CALL ||
+          xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_COROUTINE));
+    uint32_t aggregate_stack[64] = {0};
+    int aggregate = eligibility == 0 && !deferred_operation
+                        ? semantic_aggregate_eligibility(plan->semantic_plan,
+                                                         semantic_type,
+                                                         aggregate_stack, 0)
+                        : 0;
+    int expected_layout = -1;
+    if (eligibility == 0 && deferred_operation) {
+        eligibility = 0;
+    } else if (aggregate == 1) {
+        expected_kind = XR_MACHINE_REP_AGGREGATE;
+        expected_layout = target_plan_layout_for_type(plan, semantic_type);
+        eligibility = expected_layout >= 0 ? 1 : -1;
+    } else if (aggregate < 0) {
+        eligibility = -1;
+    } else if (aggregate == 0 && eligibility == 0) {
+        eligibility = 0;
+    }
     if (operation_result_void)
         expected_kind = XR_MACHINE_REP_VOID;
     const XrTargetValueRepRecord *record = xr_target_plan_value_rep(plan, semantic_value);
     if (eligibility < 0)
-        return false;
-    if (eligibility == 0)
-        return record == NULL;
+        XR_VALUE_BINDING_FAIL(2);
+    if (eligibility == 0) {
+        if (record != NULL)
+            XR_VALUE_BINDING_FAIL(7);
+        return true;
+    }
     if (!record || plan->machine_reps[record->register_rep].kind != expected_kind ||
-        plan->machine_reps[record->memory_rep].kind != expected_kind)
-        return false;
-    if (expected_kind == XR_MACHINE_REP_VOID)
-        return record->slot == XR_SEMANTIC_INDEX_NONE;
-    if (!target_plan_has_layout_for_type(plan, semantic_type))
-        return false;
+        plan->machine_reps[record->memory_rep].kind != expected_kind ||
+        (expected_kind == XR_MACHINE_REP_AGGREGATE &&
+         (plan->machine_reps[record->register_rep].detail != (uint32_t) expected_layout ||
+          plan->machine_reps[record->memory_rep].detail != (uint32_t) expected_layout)))
+        XR_VALUE_BINDING_FAIL(3);
+    if (expected_kind == XR_MACHINE_REP_VOID) {
+        if (record->slot != XR_SEMANTIC_INDEX_NONE)
+            XR_VALUE_BINDING_FAIL(8);
+        return true;
+    }
+    if (target_plan_layout_for_type(plan, semantic_type) < 0)
+        XR_VALUE_BINDING_FAIL(4);
     if (semantic_function >= plan->functions_count || record->slot >= plan->slots_count)
-        return false;
+        XR_VALUE_BINDING_FAIL(5);
     const XrTargetFunctionRecord *target_function = &plan->functions[semantic_function];
     const XrTargetSlotRecord *slot = &plan->slots[record->slot];
     const XrTargetMachineRepRecord *memory = &plan->machine_reps[record->memory_rep];
@@ -721,15 +855,16 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         record->slot < target_function->slot_begin ||
         record->slot >= target_function->slot_begin + target_function->slot_count ||
         bound_slots[record->slot] || slot->function != semantic_function ||
-        !reconstruct_scalar_slot_identity(plan, slot, semantic_value, semantic_function,
-                                          &expected_slot_identity) ||
+        !reconstruct_value_slot_identity(plan, slot, semantic_value, semantic_function,
+                                         &expected_slot_identity) ||
         !xr_stable_id_equal(slot->identity, expected_slot_identity) ||
         slot->register_rep != record->register_rep || slot->memory_rep != record->memory_rep ||
         slot->size != memory->memory_size || slot->align != memory->memory_align ||
-        slot->root_kind != XR_TARGET_ROOT_NONE ||
-        slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
-        return false;
+        slot->root_kind != memory->root_kind ||
+        slot->ownership != memory->ownership)
+        XR_VALUE_BINDING_FAIL(6);
     bound_slots[record->slot] = 1;
+#undef XR_VALUE_BINDING_FAIL
     return true;
 }
 
@@ -767,18 +902,30 @@ static bool verify_value_reps(const XrTargetPlan *plan, char *error, size_t erro
     }
     uint8_t *defined = NULL;
     uint8_t *bound_slots = NULL;
+    uint8_t *deferred_functions = NULL;
     if (expected_values) {
         defined = (uint8_t *) xr_calloc(expected_values, sizeof(*defined));
     }
     if (plan->slots_count)
         bound_slots = (uint8_t *) xr_calloc(plan->slots_count, sizeof(*bound_slots));
+    if (semantic_functions)
+        deferred_functions =
+            (uint8_t *) xr_calloc(semantic_functions, sizeof(*deferred_functions));
     if ((expected_values && !defined) ||
-        (plan->slots_count && !bound_slots)) {
+        (plan->slots_count && !bound_slots) ||
+        (semantic_functions && !deferred_functions) ||
+        !mark_coroutine_functions(plan->semantic_plan, deferred_functions,
+                                  (uint32_t) semantic_functions)) {
         xr_free(defined);
         xr_free(bound_slots);
+        xr_free(deferred_functions);
         return report(error, error_size, "XR_EXEC_5003", "value representation verifier allocation failed");
     }
     bool valid = true;
+    uint32_t failed_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t failed_type = XR_SEMANTIC_INDEX_NONE;
+    uint32_t failed_opcode = XI_OP_COUNT;
+    uint32_t failure_reason = 0;
     uint32_t parameters = (uint32_t) xr_semantic_plan_parameter_count(plan->semantic_plan);
     for (uint32_t index = 0; valid && index < parameters; index++) {
         const XrSemanticParameterRecord *parameter =
@@ -788,7 +935,13 @@ static bool verify_value_reps(const XrTargetPlan *plan, char *error, size_t erro
         else if (!defined[parameter->value]) {
             defined[parameter->value] = 1;
             valid = verify_value_binding(plan, parameter->value, parameter->type,
-                                         parameter->function, NULL, bound_slots);
+                                         parameter->function, NULL, bound_slots,
+                                         deferred_functions,
+                                         &failure_reason);
+            if (!valid) {
+                failed_value = parameter->value;
+                failed_type = parameter->type;
+            }
         }
     }
     uint32_t operations = (uint32_t) xr_semantic_plan_operation_count(plan->semantic_plan);
@@ -804,7 +957,13 @@ static bool verify_value_reps(const XrTargetPlan *plan, char *error, size_t erro
                 defined[operation->result_value] = 1;
                 valid = verify_value_binding(plan, operation->result_value, operation->result_type,
                                              operation->function, operation,
-                                             bound_slots);
+                                             bound_slots, deferred_functions,
+                                             &failure_reason);
+                if (!valid) {
+                    failed_value = operation->result_value;
+                    failed_type = operation->result_type;
+                    failed_opcode = operation->opcode;
+                }
             }
         }
     }
@@ -818,9 +977,27 @@ static bool verify_value_reps(const XrTargetPlan *plan, char *error, size_t erro
             valid = false;
     xr_free(defined);
     xr_free(bound_slots);
-    if (!valid)
-        return report(error, error_size, "XR_TARGET_1001",
-                      "value representation binding is incomplete, incompatible, or unlocated");
+    xr_free(deferred_functions);
+    if (!valid) {
+        const XrSemanticTypeRecord *failed_semantic_type =
+            failed_type == XR_SEMANTIC_INDEX_NONE
+                ? NULL
+                : xr_semantic_plan_type(plan->semantic_plan, failed_type);
+        if (error && error_size)
+            snprintf(error, error_size,
+                     "XR_TARGET_1001: value representation binding is incomplete, "
+                     "incompatible, or unlocated "
+                     "(value=%u type=%u:%s opcode=%u:%s reason=%u)",
+                     failed_value, failed_type,
+                     failed_semantic_type && failed_semantic_type->canonical_key
+                         ? failed_semantic_type->canonical_key
+                         : "<unknown>",
+                     failed_opcode,
+                     failed_opcode < XI_OP_COUNT
+                         ? xi_generated_op_name((XiOp) failed_opcode)
+                         : "<parameter>", failure_reason);
+        return false;
+    }
     return true;
 }
 
@@ -868,15 +1045,42 @@ static bool verify_extent_references(const XrTargetPlan *plan, char *error,
     return true;
 }
 
+static bool verify_aggregate_layout_acyclic(const XrTargetPlan *plan, uint32_t layout,
+                                            uint8_t *states, uint32_t depth) {
+    if (depth > 64 || states[layout] == 1)
+        return false;
+    if (states[layout] == 2)
+        return true;
+    states[layout] = 1;
+    const XrTargetLayoutRecord *record = &plan->layouts[layout];
+    for (uint32_t i = 0; i < record->field_count; i++) {
+        const XrTargetFieldRecord *field = &plan->fields[record->field_begin + i];
+        if (field->memory_rep >= plan->machine_reps_count)
+            return false;
+        const XrTargetMachineRepRecord *rep = &plan->machine_reps[field->memory_rep];
+        if (rep->kind == XR_MACHINE_REP_AGGREGATE &&
+            (rep->detail >= plan->layouts_count ||
+             !verify_aggregate_layout_acyclic(plan, rep->detail, states, depth + 1u)))
+            return false;
+    }
+    states[layout] = 2;
+    return true;
+}
+
 static bool verify_layouts(const XrTargetPlan *plan, char *error, size_t error_size) {
     size_t semantic_types = xr_semantic_plan_type_count(plan->semantic_plan);
+    uint32_t child_table_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(plan->semantic_plan, &child_table_count);
     uint32_t previous_type = XR_SEMANTIC_INDEX_NONE;
     uint32_t next_field = 0;
     for (uint32_t i = 0; i < plan->layouts_count; i++) {
         const XrTargetLayoutRecord *layout = &plan->layouts[i];
         if (layout->id != i || layout->semantic_type >= semantic_types ||
             (previous_type != XR_SEMANTIC_INDEX_NONE && layout->semantic_type <= previous_type) ||
-            layout->kind != XR_TARGET_LAYOUT_SCALAR || layout->reserved != 0 ||
+            (layout->kind != XR_TARGET_LAYOUT_SCALAR &&
+             layout->kind != XR_TARGET_LAYOUT_AGGREGATE) ||
+            layout->reserved != 0 ||
             !is_power_of_two(layout->align) || layout->fixed_prefix_size % layout->align != 0 ||
             layout->extent >= plan->extents_count ||
             layout->field_begin != next_field ||
@@ -885,29 +1089,63 @@ static bool verify_layouts(const XrTargetPlan *plan, char *error, size_t error_s
         const XrSemanticTypeRecord *semantic_type =
             xr_semantic_plan_type(plan->semantic_plan, layout->semantic_type);
         uint16_t expected_rep = XR_MACHINE_REP_COUNT;
-        if (!semantic_type || semantic_type_expected_rep(semantic_type, &expected_rep) != 1 ||
-            expected_rep == XR_MACHINE_REP_VOID || layout->field_count != 0 ||
-            layout->root_field_count != 0 || !stable_id_is_zero(layout->destructor) ||
+        int scalar = semantic_type ? semantic_type_expected_rep(semantic_type, &expected_rep) : -1;
+        if (!semantic_type || !stable_id_is_zero(layout->destructor) ||
             !stable_id_is_zero(layout->clone) || !stable_id_is_zero(layout->equality_hash) ||
             plan->extents[layout->extent].kind != XR_TARGET_EXTENT_FIXED)
             return report(error, error_size, "XR_TARGET_1002",
-                          "layout lacks an independently provable scalar semantic contract");
-        bool physical_match = false;
-        for (uint32_t r = 0; r < plan->machine_reps_count; r++)
-            if (plan->machine_reps[r].kind == expected_rep &&
-                plan->machine_reps[r].memory_size == layout->fixed_prefix_size &&
-                plan->machine_reps[r].memory_align == layout->align)
-                physical_match = true;
-        if (!physical_match)
-            return report(error, error_size, "XR_TARGET_1002",
-                          "scalar layout disagrees with its canonical machine representation");
+                          "layout lacks an independently provable semantic contract");
+        if (layout->kind == XR_TARGET_LAYOUT_SCALAR) {
+            if (scalar != 1 || expected_rep == XR_MACHINE_REP_VOID || layout->field_count != 0 ||
+                layout->root_field_count != 0)
+                return report(error, error_size, "XR_TARGET_1002",
+                              "scalar layout semantic contract is incomplete");
+            bool physical_match = false;
+            for (uint32_t r = 0; r < plan->machine_reps_count; r++)
+                if (plan->machine_reps[r].kind == expected_rep &&
+                    plan->machine_reps[r].memory_size == layout->fixed_prefix_size &&
+                    plan->machine_reps[r].memory_align == layout->align)
+                    physical_match = true;
+            if (!physical_match)
+                return report(error, error_size, "XR_TARGET_1002",
+                              "scalar layout disagrees with its canonical machine representation");
+        } else {
+            uint32_t expected_fields = semantic_type->aggregate_extent;
+            if (scalar != 0 || semantic_aggregate_kind(semantic_type) != 1 ||
+                semantic_type->child_begin > child_table_count ||
+                semantic_type->child_count > child_table_count - semantic_type->child_begin ||
+                semantic_type->aggregate_align > UINT16_MAX ||
+                (semantic_type->kind == XR_KIND_FIXED_ARRAY &&
+                 (semantic_type->child_count != 1 ||
+                  !semantic_fixed_array_count(plan->semantic_plan, layout->semantic_type,
+                                              &expected_fields))) ||
+                (semantic_type->kind != XR_KIND_FIXED_ARRAY &&
+                 semantic_type->aggregate_extent != semantic_type->child_count) ||
+                layout->field_count != expected_fields)
+                return report(error, error_size, "XR_TARGET_1002",
+                              "aggregate layout semantic field facts are incomplete");
+            uint32_t representation_count = 0;
+            for (uint32_t r = 0; r < plan->machine_reps_count; r++)
+                representation_count += plan->machine_reps[r].kind == XR_MACHINE_REP_AGGREGATE &&
+                                        plan->machine_reps[r].detail == i;
+            if (representation_count != 1)
+                return report(error, error_size, "XR_TARGET_1002",
+                              "aggregate layout has no unique machine representation");
+        }
         previous_type = layout->semantic_type;
         uint32_t previous_end = 0;
+        uint32_t expected_align = 1;
         uint32_t roots = 0;
         for (uint32_t f = 0; f < layout->field_count; f++) {
             const XrTargetFieldRecord *field = &plan->fields[layout->field_begin + f];
+            uint32_t child_ordinal = semantic_type->kind == XR_KIND_FIXED_ARRAY ? 0u : f;
+            uint32_t child_type = children[semantic_type->child_begin + child_ordinal];
+            int child_layout_index = target_plan_layout_for_type(plan, child_type);
+            uint32_t expected_offset = 0;
             if (field->layout != i || !field->size || !is_power_of_two(field->align) ||
-                field->offset % field->align != 0 || field->offset < previous_end ||
+                field->semantic_field != f || child_layout_index < 0 ||
+                !checked_align_u32(previous_end, field->align, &expected_offset) ||
+                field->offset != expected_offset ||
                 field->offset > layout->fixed_prefix_size ||
                 field->size > layout->fixed_prefix_size - field->offset ||
                 field->memory_rep >= plan->machine_reps_count ||
@@ -916,18 +1154,41 @@ static bool verify_layouts(const XrTargetPlan *plan, char *error, size_t error_s
                 return report(error, error_size, "XR_TARGET_1002",
                               "field layout is misaligned, overlapping, or out of range");
             const XrTargetMachineRepRecord *rep = &plan->machine_reps[field->memory_rep];
+            const XrTargetLayoutRecord *child_layout = &plan->layouts[child_layout_index];
             if (field->size != rep->memory_size || field->align != rep->memory_align ||
-                field->root_kind != rep->root_kind)
+                field->root_kind != rep->root_kind ||
+                field->size != child_layout->fixed_prefix_size ||
+                field->align != child_layout->align ||
+                (child_layout->kind == XR_TARGET_LAYOUT_AGGREGATE &&
+                 (rep->kind != XR_MACHINE_REP_AGGREGATE ||
+                  rep->detail != (uint32_t) child_layout_index)))
                 return report(error, error_size, "XR_TARGET_1002",
                               "field representation disagrees with its layout");
+            if (child_layout->kind == XR_TARGET_LAYOUT_SCALAR) {
+                const XrSemanticTypeRecord *child_semantic =
+                    xr_semantic_plan_type(plan->semantic_plan, child_type);
+                uint16_t child_rep = XR_MACHINE_REP_COUNT;
+                if (!child_semantic || semantic_type_expected_rep(child_semantic, &child_rep) != 1 ||
+                    rep->kind != child_rep)
+                    return report(error, error_size, "XR_TARGET_1002",
+                                  "field scalar representation disagrees with SemanticPlan");
+            }
             if (!checked_u32_add(field->offset, field->size, &previous_end))
                 return report(error, error_size, "XR_TARGET_1002",
                               "field layout offset overflows");
             roots += field->root_kind != XR_TARGET_ROOT_NONE;
+            if (field->align > expected_align)
+                expected_align = field->align;
         }
-        if (roots != layout->root_field_count)
+        uint32_t expected_size = previous_end ? previous_end : 1u;
+        if (semantic_type->aggregate_align > expected_align)
+            expected_align = semantic_type->aggregate_align;
+        if (!checked_align_u32(expected_size, expected_align, &expected_size) ||
+            roots != layout->root_field_count ||
+            (layout->kind == XR_TARGET_LAYOUT_AGGREGATE &&
+             (layout->align != expected_align || layout->fixed_prefix_size != expected_size)))
             return report(error, error_size, "XR_TARGET_1002",
-                          "layout root bitmap cardinality is inconsistent");
+                          "layout padding, alignment, size, or root cardinality is inconsistent");
         XrFingerprint actual;
         xr_target_layout_compute_fingerprint(plan, i, &actual);
         if (!xr_fingerprint_equal(actual, layout->fingerprint))
@@ -938,6 +1199,20 @@ static bool verify_layouts(const XrTargetPlan *plan, char *error, size_t error_s
     if (next_field != plan->fields_count)
         return report(error, error_size, "XR_TARGET_1002",
                       "layout field ranges do not exactly partition the field table");
+    uint8_t *states = plan->layouts_count
+                          ? (uint8_t *) xr_calloc(plan->layouts_count, sizeof(*states))
+                          : NULL;
+    if (plan->layouts_count && !states)
+        return report(error, error_size, "XR_EXEC_5003",
+                      "aggregate recursion verifier allocation failed");
+    bool acyclic = true;
+    for (uint32_t i = 0; acyclic && i < plan->layouts_count; i++)
+        if (plan->layouts[i].kind == XR_TARGET_LAYOUT_AGGREGATE)
+            acyclic = verify_aggregate_layout_acyclic(plan, i, states, 0);
+    xr_free(states);
+    if (!acyclic)
+        return report(error, error_size, "XR_TARGET_1002",
+                      "aggregate layout contains a recursive inline cycle");
     return true;
 }
 

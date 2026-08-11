@@ -21,6 +21,7 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
+#include "../../runtime/class/xclass_info.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -329,6 +330,134 @@ static bool append_u32(uint32_t **items, uint32_t *count, uint32_t *capacity, ui
 
 static bool add_type_children(XrSemanticBuildContext *ctx, const XrType *type,
                               uint32_t record_index);
+static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *out);
+
+static const XiClassData *value_aggregate_class_data(const XrSemanticBuildContext *ctx,
+                                                     const XrType *type) {
+    if (!ctx || !type || type->kind != XR_KIND_INSTANCE || !type->is_value_type ||
+        !type->instance.class_ref || !type->instance.class_ref->struct_layout)
+        return NULL;
+    const XrAggregateLayout *layout = type->instance.class_ref->struct_layout;
+    uint32_t class_id = type->instance.class_ref->xg_class_id;
+    const XiClassData *match = NULL;
+    for (uint32_t f = 0; f < ctx->function_count; f++) {
+        const XiFunc *function = ctx->functions[f].source;
+        for (uint32_t b = 0; b < function->nblocks; b++) {
+            const XiBlock *block = function->blocks[b];
+            if (!block)
+                continue;
+            for (uint32_t v = 0; v < block->nvalues; v++) {
+                const XiValue *value = block->values[v];
+                if (!value || value->op != XI_CLASS_CREATE)
+                    continue;
+                const XiClassData *data = (const XiClassData *) value->aux;
+                if (!data ||
+                    (data->class_info != type->instance.class_ref &&
+                     data->struct_layout != layout &&
+                     (class_id == 0 || data->xg_class_id != class_id)))
+                    continue;
+                if (match && match != data)
+                    return NULL;
+                match = data;
+            }
+        }
+    }
+    if (!match || match->needs_runtime_type || !match->struct_layout ||
+        match->struct_layout->kind != XR_AGG_LAYOUT_STRUCT ||
+        match->instance_field_count != match->struct_layout->field_count ||
+        (match->instance_field_count &&
+         (!match->instance_field_types || !match->instance_field_names)))
+        return NULL;
+    for (uint16_t i = 0; i < match->instance_field_count; i++)
+        if (!match->instance_field_types[i] || !match->instance_field_names[i] ||
+            match->struct_layout->fields[i].is_flexible)
+            return NULL;
+    return match;
+}
+
+static const XiClassData *value_aggregate_data_for_type(
+    const XrSemanticBuildContext *ctx, uint32_t semantic_type, const XrType **source_out) {
+    const XiClassData *match = NULL;
+    const XrType *source = NULL;
+    for (uint32_t i = 0; i < ctx->type_count; i++) {
+        if (ctx->types[i].index != semantic_type)
+            continue;
+        const XiClassData *candidate = value_aggregate_class_data(ctx, ctx->types[i].source);
+        if (!candidate)
+            continue;
+        if (match && match != candidate)
+            return NULL;
+        match = candidate;
+        source = ctx->types[i].source;
+    }
+    if (source_out)
+        *source_out = source;
+    return match;
+}
+
+static bool refine_value_aggregate_types(XrSemanticBuildContext *ctx) {
+    for (uint32_t semantic_type = 0; semantic_type < ctx->plan->type_count;
+         semantic_type++) {
+        XrSemanticTypeRecord *record = &ctx->plan->types[semantic_type];
+        if (record->kind != XR_KIND_INSTANCE ||
+            (record->flags & XR_SEM_TYPE_VALUE) == 0)
+            continue;
+        bool declared_aggregate = false;
+        for (uint32_t i = 0; i < ctx->type_count; i++) {
+            const XrType *source = ctx->types[i].source;
+            if (ctx->types[i].index == semantic_type && source &&
+                source->kind == XR_KIND_INSTANCE && source->is_value_type &&
+                source->instance.class_ref && source->instance.class_ref->struct_layout) {
+                declared_aggregate = true;
+                break;
+            }
+        }
+        const XiClassData *aggregate =
+            value_aggregate_data_for_type(ctx, semantic_type, NULL);
+        if (!aggregate) {
+            if (declared_aggregate) {
+                if (ctx->error && ctx->error_size)
+                    snprintf(ctx->error, ctx->error_size,
+                             "XR_SEM_0019: value aggregate declaration facts are unavailable "
+                             "(type=%s)",
+                             record->canonical_key ? record->canonical_key : "<unknown>");
+                return false;
+            }
+            continue;
+        }
+        uint32_t *indices =
+            aggregate->instance_field_count
+                ? (uint32_t *) xr_malloc((size_t) aggregate->instance_field_count *
+                                         sizeof(*indices))
+                : NULL;
+        if (aggregate->instance_field_count && !indices)
+            return fail(ctx, "XR_EXEC_5003",
+                        "value aggregate child allocation failed");
+        for (uint16_t field = 0; field < aggregate->instance_field_count; field++) {
+            if (!add_type(ctx, aggregate->instance_field_types[field], &indices[field])) {
+                xr_free(indices);
+                return false;
+            }
+        }
+        record = &ctx->plan->types[semantic_type];
+        record->child_begin = ctx->plan->type_child_count;
+        record->child_count = aggregate->instance_field_count;
+        record->aggregate_extent = aggregate->instance_field_count;
+        record->aggregate_align = aggregate->struct_layout->explicit_align;
+        record->flags |= XR_SEM_TYPE_AGGREGATE_EXACT;
+        for (uint16_t field = 0; field < aggregate->instance_field_count; field++) {
+            if (!append_u32(&ctx->plan->type_children, &ctx->plan->type_child_count,
+                            &ctx->plan->type_child_capacity, indices[field],
+                            XR_SEMANTIC_MAX_TYPES * 8u)) {
+                xr_free(indices);
+                return fail(ctx, "XR_EXEC_5003",
+                            "value aggregate child budget exhausted");
+            }
+        }
+        xr_free(indices);
+    }
+    return true;
+}
 
 static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *out) {
     uint32_t existing = find_type(ctx, type);
@@ -406,10 +535,15 @@ static bool add_type_children(XrSemanticBuildContext *ctx, const XrType *type,
             count = (uint32_t) type->object.field_count;
             break;
         case XR_KIND_CLASS:
-        case XR_KIND_INSTANCE:
         case XR_KIND_INTERFACE:
             count = (uint32_t) type->instance.type_arg_count;
             break;
+        case XR_KIND_INSTANCE: {
+            const XiClassData *data = value_aggregate_class_data(ctx, type);
+            count = data ? data->instance_field_count
+                         : (uint32_t) type->instance.type_arg_count;
+            break;
+        }
         case XR_KIND_FUNCTION:
             count = (uint32_t) type->function.param_count + 1u;
             break;
@@ -449,10 +583,14 @@ static bool add_type_children(XrSemanticBuildContext *ctx, const XrType *type,
                 child = type->object.field_types[i];
                 break;
             case XR_KIND_CLASS:
-            case XR_KIND_INSTANCE:
             case XR_KIND_INTERFACE:
                 child = type->instance.type_args[i];
                 break;
+            case XR_KIND_INSTANCE: {
+                const XiClassData *data = value_aggregate_class_data(ctx, type);
+                child = data ? data->instance_field_types[i] : type->instance.type_args[i];
+                break;
+            }
             case XR_KIND_FUNCTION:
                 child = i < (uint32_t) type->function.param_count ? type->function.params[i].type
                                                                   : type->function.return_type;
@@ -477,6 +615,21 @@ static bool add_type_children(XrSemanticBuildContext *ctx, const XrType *type,
     XrSemanticTypeRecord *record = &ctx->plan->types[record_index];
     record->child_begin = ctx->plan->type_child_count;
     record->child_count = (uint16_t) count;
+    if (type->kind == XR_KIND_TUPLE || type->kind == XR_KIND_STRUCT_OBJECT)
+        record->aggregate_extent = count;
+    else if (type->kind == XR_KIND_FIXED_ARRAY) {
+        if (type->fixed_array.length <= 0)
+            return fail(ctx, "XR_SEM_0012",
+                        "fixed-array type has an invalid exact extent");
+        record->aggregate_extent = (uint32_t) type->fixed_array.length;
+    } else if (type->kind == XR_KIND_INSTANCE) {
+        const XiClassData *aggregate = value_aggregate_class_data(ctx, type);
+        if (aggregate) {
+            record->aggregate_extent = aggregate->instance_field_count;
+            record->aggregate_align = aggregate->struct_layout->explicit_align;
+            record->flags |= XR_SEM_TYPE_AGGREGATE_EXACT;
+        }
+    }
     for (uint32_t i = 0; i < count; i++) {
         if (!append_u32(&ctx->plan->type_children, &ctx->plan->type_child_count,
                         &ctx->plan->type_child_capacity, indices[i], XR_SEMANTIC_MAX_TYPES * 8u)) {
@@ -1582,7 +1735,8 @@ static bool build_type_entities(XrSemanticBuildContext *ctx, uint32_t module) {
             return fail(ctx, "XR_SEM_0019", "type-instantiation identity is incomplete");
         }
         text_dispose(&key);
-        if (type->kind != XR_KIND_STRUCT_OBJECT)
+        if (type->kind != XR_KIND_STRUCT_OBJECT &&
+            (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) == 0)
             continue;
         valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_SHAPE, type_entity) &&
                 text_append(&key, ":type=") && text_append_stable_id(&key, type->id);
@@ -1594,14 +1748,24 @@ static bool build_type_entities(XrSemanticBuildContext *ctx, uint32_t module) {
         }
         text_dispose(&key);
         const XrType *source = source_type_for_index(ctx, i);
-        if (!source || source->kind != XR_KIND_STRUCT_OBJECT || source->object.field_count < 0 ||
-            (source->object.field_count > 0 && !source->object.field_names))
+        const XiClassData *aggregate =
+            (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0
+                ? value_aggregate_data_for_type(ctx, i, &source)
+                : NULL;
+        if (!source ||
+            (source->kind == XR_KIND_STRUCT_OBJECT &&
+             (source->object.field_count < 0 ||
+              (source->object.field_count > 0 && !source->object.field_names))) ||
+            (source->kind == XR_KIND_INSTANCE && !aggregate))
             return fail(ctx, "XR_SEM_0019", "structural-shape field facts are unavailable");
         for (uint16_t field = 0; field < type->child_count; field++) {
             uint32_t child = ctx->plan->type_children[type->child_begin + field];
+            const char *field_name = source->kind == XR_KIND_STRUCT_OBJECT
+                                         ? source->object.field_names[field]
+                                         : aggregate->instance_field_names[field];
             valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_FIELD, shape) &&
                     text_append_format(&key, ":ordinal=%u:name=", field) &&
-                    text_append_component(&key, source->object.field_names[field]) &&
+                    text_append_component(&key, field_name) &&
                     text_append(&key, ":type=") &&
                     text_append_stable_id(&key, ctx->plan->types[child].id);
             if (!valid || !append_entity(ctx, XR_SEM_ENTITY_FIELD, XR_SEM_ENTITY_SUBJECT_TYPE, i,
@@ -1979,7 +2143,8 @@ bool xr_semantic_plan_build(const XiFunc *root, XrSemanticPlan **out, char *erro
     ctx.error_size = error_size;
     ctx.plan = xr_semantic_plan_create();
     if (!ctx.plan || !collect_functions(&ctx, root, XR_SEMANTIC_INDEX_NONE, 0) ||
-        !collect_semantic_types(&ctx) || !canonicalize_type_table(&ctx) ||
+        !collect_semantic_types(&ctx) || !refine_value_aggregate_types(&ctx) ||
+        !canonicalize_type_table(&ctx) ||
         !build_function_records(&ctx) || !build_capture_records(&ctx) ||
         !build_blocks_and_operations(&ctx) || !build_semantic_edges(&ctx))
         goto failure;
