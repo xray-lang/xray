@@ -165,6 +165,21 @@ name = "activation-before-verification"
 message = "artifact activation was attempted before mandatory verification"
 
 [[code]]
+id = "XR_ARTIFACT_2005"
+name = "semantic-module-not-executable"
+message = "semantic module artifacts are planning inputs and cannot be executed"
+
+[[code]]
+id = "XR_ARTIFACT_2006"
+name = "artifact-kind-conflict"
+message = "artifact extension conflicts with the canonical byte identity"
+
+[[code]]
+id = "XR_ARTIFACT_2007"
+name = "materialization-authority-unavailable"
+message = "TargetPlan materialization lacks explicit semantic or target authority"
+
+[[code]]
 id = "XR_OWN_3000"
 name = "unknown-return-provenance"
 message = "reference-capable return value has no exact provenance"
@@ -223,3 +238,8 @@ message = "dynamic island adapter has an incompatible type, layout, null, or own
 id = "XR_EXEC_5003"
 name = "resource-budget-exhausted"
 message = "verified execution or decoding exceeded a declared hard resource budget"
+
+[[code]]
+id = "XR_EXEC_5004"
+name = "target-plan-activation-unavailable"
+message = "a verified TargetPlan has no installed typed activation authority"

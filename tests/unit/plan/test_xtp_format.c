@@ -4,8 +4,11 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
+#include "../../../src/plan/format/xr_artifact_kind.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/runtime/abi/xr_runtime_target_authority.h"
+#include "../../../include/xray_target_plan_load.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/base/xsha256.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -51,9 +54,24 @@ static XrSemanticPlan *build_semantic_plan(void) {
 }
 
 static XrTargetProfile *build_profile(void) {
-    XrTargetProfile *profile = xr_test_target_profile_build(
+    XrTargetProfile *selection = xr_test_target_profile_build(
         false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
-    REQUIRE(profile != NULL);
+    REQUIRE(selection != NULL);
+    XrRuntimeTargetAuthority authority;
+    REQUIRE(xr_runtime_target_authority_native_hosted(&authority) ==
+            XR_RUNTIME_ABI_OK);
+    XrTargetProfileBuildInput input = {
+        .machine = *xr_target_profile_machine_facts(selection),
+        .runtime_abi = &authority.runtime_abi,
+        .object_header_materialization =
+            &authority.object_header_materialization,
+        .providers = authority.providers,
+        .provider_count = authority.provider_count,
+    };
+    XrTargetProfile *profile = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_profile_build(&input, &profile, error, sizeof(error)));
+    xr_target_profile_free(selection);
     return profile;
 }
 
@@ -162,6 +180,60 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     xr_xtp_encoded_free(encoded);
     xr_target_plan_free(decoded_plan);
     xr_xtp_candidate_release(candidate);
+    dispose_fixture(&fixture);
+}
+
+static void test_artifact_classifier(void) {
+    static const uint8_t source[] = "print(1)";
+    static const uint8_t removed_xtp_v1[] = {
+        'X', 'R', 'A', 'Y', 'X', 'T', 'P', 0};
+    REQUIRE(xr_artifact_classify("renamed.bin", xr_xsm_artifact_magic,
+                                 XR_XSM_ARTIFACT_MAGIC_SIZE) ==
+            XR_ARTIFACT_KIND_XSM);
+    REQUIRE(xr_artifact_classify("renamed.bin", xr_xtp_artifact_magic,
+                                 XR_XTP_ARTIFACT_MAGIC_SIZE) ==
+            XR_ARTIFACT_KIND_XTP);
+    REQUIRE(xr_artifact_classify("renamed.bin", xr_legacy_xrc_artifact_magic,
+                                 XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE) ==
+            XR_ARTIFACT_KIND_LEGACY_XRC);
+    REQUIRE(xr_artifact_classify("program.xr", source, sizeof(source) - 1) ==
+            XR_ARTIFACT_KIND_SOURCE);
+    REQUIRE(xr_artifact_classify("program.xtp", source, sizeof(source) - 1) ==
+            XR_ARTIFACT_KIND_CONFLICT);
+    REQUIRE(xr_artifact_classify("program.xsm", xr_xtp_artifact_magic,
+                                 XR_XTP_ARTIFACT_MAGIC_SIZE) ==
+            XR_ARTIFACT_KIND_CONFLICT);
+    REQUIRE(xr_artifact_classify("renamed.bin", removed_xtp_v1,
+                                 sizeof(removed_xtp_v1)) ==
+            XR_ARTIFACT_KIND_UNSUPPORTED);
+}
+
+static void test_runtime_load_materializes_only_verified_plan(void) {
+    XtpFixture fixture = make_fixture();
+    char diagnostic[512] = {0};
+    XrTargetPlan *loaded = NULL;
+    REQUIRE(xr_runtime_target_plan_load(
+        fixture.bytes, fixture.size, fixture.semantic, fixture.profile,
+        &loaded, diagnostic, sizeof(diagnostic)));
+    REQUIRE(loaded != NULL && xr_target_plan_is_verified(loaded));
+    REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(loaded),
+                                 xr_target_plan_fingerprint(fixture.plan)));
+    xr_target_plan_free(loaded);
+
+    loaded = (XrTargetPlan *) (uintptr_t) 1;
+    REQUIRE(!xr_runtime_target_plan_load(
+        fixture.bytes, fixture.size, NULL, fixture.profile, &loaded,
+        diagnostic, sizeof(diagnostic)));
+    REQUIRE(loaded == NULL);
+    REQUIRE(strstr(diagnostic, "XR_ARTIFACT_2004") != NULL);
+
+    static const uint8_t xsm[] = {'X', 'R', 'A', 'Y', 'X', 'S', 'M', 0};
+    loaded = (XrTargetPlan *) (uintptr_t) 1;
+    REQUIRE(!xr_runtime_target_plan_load(
+        xsm, sizeof(xsm), fixture.semantic, fixture.profile, &loaded,
+        diagnostic, sizeof(diagnostic)));
+    REQUIRE(loaded == NULL);
+    REQUIRE(strstr(diagnostic, "XR_ARTIFACT_2000") != NULL);
     dispose_fixture(&fixture);
 }
 
@@ -348,12 +420,29 @@ static void test_identity_and_typed_mutations(void) {
     dispose_fixture(&fixture);
 }
 
-int main(void) {
+static int write_fixture(const char *path) {
+    XtpFixture fixture = make_fixture();
+    FILE *file = fopen(path, "wb");
+    if (!file) {
+        dispose_fixture(&fixture);
+        return 1;
+    }
+    bool written = fwrite(fixture.bytes, 1, fixture.size, file) == fixture.size;
+    bool closed = fclose(file) == 0;
+    dispose_fixture(&fixture);
+    return written && closed ? 0 : 1;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 3 && strcmp(argv[1], "--write") == 0)
+        return write_fixture(argv[2]);
+    test_artifact_classifier();
     test_wire_row_inventory();
     test_every_typed_row_codec();
     test_exact_roundtrip_and_owned_candidate();
     test_header_and_directory_mutations();
     test_identity_and_typed_mutations();
+    test_runtime_load_materializes_only_verified_plan();
     puts("typed XTP format tests passed");
     return 0;
 }

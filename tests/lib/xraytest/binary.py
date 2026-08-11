@@ -46,6 +46,10 @@ def find_nm() -> "str | None":
     return _first_tool(("llvm-nm", "nm"), "LLVM_NM")
 
 
+def find_dumpbin() -> "str | None":
+    return _first_tool(("dumpbin",), "DUMPBIN")
+
+
 def find_disassembler() -> "tuple | None":
     """(path, argv_template_kind) for the best available disassembler."""
     llvm = shutil.which("llvm-objdump")
@@ -75,7 +79,14 @@ def symbols(binary: Path, *, undefined_only: bool = False,
     """
     tool = find_nm()
     if not tool:
-        return None
+        dumpbin = find_dumpbin()
+        if not dumpbin or undefined_only:
+            return None
+        mode = "/linkermember:1" if binary.suffix.lower() in {".a", ".lib"} else "/symbols"
+        result = proc.run([dumpbin, "/nologo", mode, binary], timeout=timeout)
+        if not result.ok:
+            return None
+        return result.stdout.decode("utf-8", "replace").splitlines()
     if undefined_only:
         flags = ["-u"]
     elif global_only:
@@ -89,6 +100,48 @@ def symbols(binary: Path, *, undefined_only: bool = False,
     if not result.ok:
         return None
     return result.stdout.decode("utf-8", "replace").splitlines()
+
+
+_DUMPBIN_LINKER_MEMBER = re.compile(r"^\s*[0-9A-Fa-f]+\s+([^\s]+)\s*$")
+
+
+def parse_defined_symbol_names(text: str, kind: str) -> list[str]:
+    """Parse external definitions from nm or dumpbin linker-member output."""
+    names: set[str] = set()
+    for line in text.splitlines():
+        if kind == "dumpbin":
+            match = _DUMPBIN_LINKER_MEMBER.match(line)
+            if match:
+                names.add(strip_underscore(match.group(1)))
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and parts[-2].upper() != "U":
+            names.add(strip_underscore(parts[-1]))
+    return sorted(names)
+
+
+def defined_symbol_names(binary: Path, timeout: float | None = 120
+                         ) -> "Optional[list[str]]":
+    """Sorted external definitions, or None when no supported inspector works."""
+    nm = find_nm()
+    if nm:
+        result = proc.run([nm, "-g", "--defined-only", binary], timeout=timeout)
+        if not result.ok:
+            result = proc.run([nm, "-g", binary], timeout=timeout)
+        if result.ok:
+            return parse_defined_symbol_names(
+                result.stdout.decode("utf-8", "replace"), "nm"
+            )
+    dumpbin = find_dumpbin()
+    if dumpbin:
+        result = proc.run(
+            [dumpbin, "/nologo", "/linkermember:1", binary], timeout=timeout
+        )
+        if result.ok:
+            return parse_defined_symbol_names(
+                result.stdout.decode("utf-8", "replace"), "dumpbin"
+            )
+    return None
 
 
 def undefined_symbol_names(binary: Path, timeout: float | None = 120

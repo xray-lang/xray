@@ -64,6 +64,9 @@ class Recorder:
 def check_no_symbols(rec: Recorder, path: Path, label: str,
                      timeout: float | None) -> None:
     lines = binary.symbols(path, global_only=True, timeout=timeout)
+    if lines is None:
+        rec.bad(label, "no supported symbol inspector is available")
+        return
     offenders = [line for line in (lines or []) if TOOLCHAIN_SYMBOL.search(line)]
     if offenders:
         rec.bad(f"{label} has compiler/toolchain symbols",

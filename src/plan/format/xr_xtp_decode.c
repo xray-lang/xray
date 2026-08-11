@@ -13,6 +13,7 @@
  */
 
 #include "xr_xtp_internal.h"
+#include "xr_artifact_kind.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include <limits.h>
@@ -87,7 +88,6 @@ static bool parse_identity(const uint8_t *bytes, XrXtpIdentity *identity) {
 static bool parse_header(const uint8_t *bytes, size_t size, XrXtpIdentity *identity,
                          XrXtpResourceManifest *resources, size_t *directory_length,
                          char *error, size_t error_size) {
-    static const uint8_t magic[4] = {'X', 'T', 'P', 'F'};
     if (!bytes || size < XR_XTP_HEADER_SIZE || size > XR_XTP_MAX_ARTIFACT_SIZE) {
         xr_xtp_set_error(error, error_size, "artifact byte budget is invalid");
         return false;
@@ -101,7 +101,9 @@ static bool parse_header(const uint8_t *bytes, size_t size, XrXtpIdentity *ident
     uint64_t raw_directory_length = xr_xtp_take_u64(bytes + 40);
     uint64_t exact_directory_length =
         (uint64_t) XR_XTP_TABLE_SECTION_COUNT * XR_XTP_DIRECTORY_ENTRY_SIZE;
-    if (memcmp(bytes, magic, sizeof(magic)) != 0 || schema != XR_XTP_SCHEMA_VERSION ||
+    if (memcmp(bytes, xr_xtp_artifact_magic,
+               XR_XTP_ARTIFACT_MAGIC_SIZE) != 0 ||
+        schema != XR_XTP_SCHEMA_VERSION ||
         header_size != XR_XTP_HEADER_SIZE ||
         directory_entry_size != XR_XTP_DIRECTORY_ENTRY_SIZE ||
         section_count != XR_XTP_TABLE_SECTION_COUNT || artifact_size != size ||

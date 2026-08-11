@@ -71,8 +71,8 @@ def is_executable(path: Path) -> bool:
     return path.is_file() and os.access(path, os.X_OK)
 
 
-def install(build: Path, prefix: Path, config: str, component: str | None = None) -> subprocess.CompletedProcess[str]:
-    command = ["cmake", "--install", str(build), "--config", config, "--prefix", str(prefix)]
+def install(build: Path, prefix: Path, component: str | None = None) -> subprocess.CompletedProcess[str]:
+    command = ["cmake", "--install", str(build), "--prefix", str(prefix)]
     if component:
         command.extend(["--component", component])
     return run(command)
@@ -83,12 +83,10 @@ def main() -> int:
     parser.add_argument("--project-root", type=Path, required=True)
     parser.add_argument("--build-dir", type=Path, required=True)
     parser.add_argument("--binary", type=Path, required=True)
-    parser.add_argument("--config", default="Release")
     args = parser.parse_args()
     root = args.project_root.resolve(strict=True)
     build = args.build_dir.resolve(strict=True)
     binary = args.binary.resolve(strict=True)
-    config = args.config or "Release"
     gate = Gate()
 
     target_process = run([str(binary), "toolchain", "list", "--target", "native", "--json"])
@@ -109,7 +107,7 @@ def main() -> int:
         print(f"Build:  {build}")
         print(f"Prefix: {full}\n")
 
-        core_install = install(build, core, config, "XrayCore")
+        core_install = install(build, core, "XrayCore")
         gate.record(core_install.returncode == 0, "Core component install", core_install.stdout[-4000:])
         core_xray = core / "bin" / executable_name
         gate.record(is_executable(core_xray), "Core installed xray executable")
@@ -120,6 +118,8 @@ def main() -> int:
         gate.record((core / "lib/xray/stdlib/path/path.xr").is_file(), "Core installed stdlib")
         gate.record((core / "share/xray/install/install-marker.json").is_file(), "Core installed marker")
         gate.record((core / "share/xray/install/payload-manifest.json").is_file(), "Core payload manifest")
+        gate.record((core / "include/xray/xray_target_plan_load.h").is_file(),
+                    "Core installs opaque TargetPlan load header")
         gate.record(not (core / "include/xray/xray.h").exists(), "Core excludes SDK headers")
         gate.record(
             not (core / f"lib/xray/aot/{host_target}/{static_prefix}xray_aot_core{static_suffix}").exists(),
@@ -151,7 +151,7 @@ def main() -> int:
         compile_result = run([str(core_xray), "compile", str(smoke), "-o", str(bytecode)])
         gate.record(compile_result.returncode == 0 and bytecode.is_file(), "Core compile smoke", compile_result.stdout)
 
-        full_install = install(build, full, config)
+        full_install = install(build, full)
         gate.record(full_install.returncode == 0, "cmake install", full_install.stdout[-4000:])
         full_xray = full / "bin" / executable_name
         gate.record(is_executable(full_xray), "installed xray executable")
@@ -161,6 +161,7 @@ def main() -> int:
             (full / f"lib/xray/aot/{host_target}/manifest.json", "installed runtime manifest"),
             (full / f"lib/xray/vm/{host_target}/{static_prefix}xray_vm_runtime{static_suffix}", "installed xray_vm_runtime archive"),
             (full / "lib/xray/sdk/src/aot/xrt.h", "installed private AOT SDK"),
+            (full / "include/xray/xray_target_plan_load.h", "installed TargetPlan load header"),
             (full / "lib/xray/stdlib/path/path.xr", "installed stdlib source"),
             (full / "share/xray/install/install-marker.json", "installed payload marker"),
             (full / "share/xray/install/payload-manifest.json", "installed payload manifest"),

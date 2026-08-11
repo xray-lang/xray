@@ -1319,6 +1319,28 @@ set(XRAY_VM_RUNTIME_CORO_SOURCES ${CORO_SRC})
 # The test-yield hook remains test-only and must not enter the installed runtime.
 list(FILTER XRAY_VM_RUNTIME_CORO_SOURCES EXCLUDE REGEX "xaot_test_yield\\.c$")
 
+# Runtime loading owns a deliberately narrow verifier closure. Encoders and
+# compiler-side builders stay in xray_core; the installed VM archive can only
+# decode an XTP v2 candidate and materialize it against explicit authorities.
+set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
+    src/plan/format/xr_artifact_kind.c
+    src/plan/format/xr_xtp_artifact.c
+    src/plan/format/xr_xtp_decode.c
+    src/plan/format/xr_xtp_rows.c
+    src/plan/semantic/xr_semantic_graph.c
+    src/plan/semantic/xr_semantic_ids.c
+    src/plan/semantic/xr_semantic_ops.c
+    src/plan/semantic/xr_semantic_plan.c
+    src/plan/semantic/xr_semantic_verify.c
+    src/plan/ownership/xr_ownership_certificate.c
+    src/plan/ownership/xr_ownership_check.c
+    src/plan/ownership/xr_ownership_replay.c
+    src/plan/target/xr_target_plan.c
+    src/plan/target/xr_target_profile.c
+    src/plan/target/xr_target_verify.c
+    src/plan/target/xr_xtp_materialize.c
+)
+
 set(XRAY_VM_RUNTIME_SOURCES
     ${BASE_SRC}
     ${OS_SRC}
@@ -1333,6 +1355,7 @@ set(XRAY_VM_RUNTIME_SOURCES
     ${XRAY_VM_RUNTIME_CORO_SOURCES}
     ${IO_SRC}
     ${VM_SRC}
+    ${XRAY_VM_TARGET_PLAN_LOAD_SOURCES}
     src/aot/xrt_runtime_globals.c
     src/api/xisolate.c
     src/api/xisolate_params.c
@@ -3291,12 +3314,27 @@ if(BUILD_TESTS)
                 --project-root ${CMAKE_CURRENT_SOURCE_DIR}
                 --build-dir ${CMAKE_BINARY_DIR}
                 --binary $<TARGET_FILE:xray>
-                --config $<CONFIG>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(install_public_surface PROPERTIES
         LABELS "install;aot;link;smoke"
         PROCESSORS 2
+        TIMEOUT 120
+    )
+
+    add_test(
+        NAME installed_runtime_symbol_inventory
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/install/run_installed_runtime_symbol_tests.py
+                --project-root ${CMAKE_CURRENT_SOURCE_DIR}
+                --build-dir ${CMAKE_BINARY_DIR}
+                --binary $<TARGET_FILE:xray>
+                --cc ${CMAKE_C_COMPILER}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(installed_runtime_symbol_inventory PROPERTIES
+        LABELS "install;runtime;symbols;target-machine"
+        PROCESSORS 1
         TIMEOUT 120
     )
 
@@ -3401,6 +3439,19 @@ if(BUILD_TESTS)
     )
     set_tests_properties(verify_contract_cli PROPERTIES
         LABELS "cli;effects;frontend;regression"
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME target_artifact_cli_boundary
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_target_artifact_boundary_tests.py
+                --binary $<TARGET_FILE:xray>
+                --xtp-writer $<TARGET_FILE:test_xtp_format>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_artifact_cli_boundary PROPERTIES
+        LABELS "cli;artifact;target-machine"
         TIMEOUT 60
     )
 
@@ -3950,6 +4001,58 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME runtime_header_dependency_lint
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_header_dependencies.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(runtime_header_dependency_lint PROPERTIES
+        LABELS "meta;runtime;headers;target-machine"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME runtime_header_dependency_lint_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_header_dependencies.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(runtime_header_dependency_lint_self_test PROPERTIES
+        LABELS "meta;runtime;headers;target-machine"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME legacy_product_residue_inventory
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_legacy_product_residue.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(legacy_product_residue_inventory PROPERTIES
+        LABELS "meta;artifact;legacy;target-machine"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME legacy_product_residue_inventory_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_legacy_product_residue.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(legacy_product_residue_inventory_self_test PROPERTIES
+        LABELS "meta;artifact;legacy;target-machine"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME target_machine_inventory_self_test
         COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/target_machine_phase0.py
                 --self-test
@@ -4136,6 +4239,15 @@ install(TARGETS xray_vm_runtime
     ARCHIVE DESTINATION lib/xray/vm/${XRAY_HOST_TARGET_ABI}
     COMPONENT XrayCore
 )
+
+# TargetPlan loading is a Core runtime capability. Its header is intentionally
+# standalone and opaque; no compiler or SDK-private header is exposed.
+install(FILES
+    ${CMAKE_SOURCE_DIR}/include/xray_export.h
+    ${CMAKE_SOURCE_DIR}/include/xray_target_plan_load.h
+    DESTINATION include/xray
+    COMPONENT XrayCore
+)
 install(TARGETS xray_aot_core xray_rt_coro
     ARCHIVE DESTINATION lib/xray/aot/${XRAY_HOST_TARGET_ABI}
     COMPONENT XraySDK
@@ -4150,6 +4262,8 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
     DESTINATION include/xray
     COMPONENT XraySDK
     FILES_MATCHING PATTERN "*.h"
+    PATTERN "xray_export.h" EXCLUDE
+    PATTERN "xray_target_plan_load.h" EXCLUDE
 )
 
 # Generated AOT C includes xrt headers whose relative includes reach into the

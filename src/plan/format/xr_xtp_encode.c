@@ -9,6 +9,7 @@
  */
 
 #include "xr_xtp_internal.h"
+#include "xr_artifact_kind.h"
 #include "../target/xr_target_verify.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
@@ -143,7 +144,7 @@ static void write_header(uint8_t *artifact, size_t artifact_size, const XrTarget
     const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(plan);
     const XrTargetProfile *profile = xr_target_plan_profile(plan);
     const XrTargetProfileDraft *facts = xr_target_profile_facts(profile);
-    memcpy(artifact, "XTPF", 4);
+    memcpy(artifact, xr_xtp_artifact_magic, XR_XTP_ARTIFACT_MAGIC_SIZE);
     xr_xtp_put_u32(artifact + 4, XR_XTP_SCHEMA_VERSION);
     xr_xtp_put_u32(artifact + 8, XR_XTP_HEADER_SIZE);
     xr_xtp_put_u32(artifact + 12, XR_XTP_DIRECTORY_ENTRY_SIZE);

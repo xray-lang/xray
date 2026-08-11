@@ -89,5 +89,20 @@ class ControlFlowTest(unittest.TestCase):
         self.assertFalse(binary.has_control_flow("    1008: ret"))
 
 
+class DefinedSymbolParsingTest(unittest.TestCase):
+    def test_nm_definitions_exclude_undefined(self):
+        text = "00000000 T _defined\n         U _missing\n00000008 D data\n"
+        self.assertEqual(
+            binary.parse_defined_symbol_names(text, "nm"), ["data", "defined"]
+        )
+
+    def test_dumpbin_linker_members(self):
+        text = "      21A xray_vm_new\n      31F _xr_artifact_classify\n"
+        self.assertEqual(
+            binary.parse_defined_symbol_names(text, "dumpbin"),
+            ["xr_artifact_classify", "xray_vm_new"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

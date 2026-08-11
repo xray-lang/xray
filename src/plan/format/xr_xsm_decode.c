@@ -10,6 +10,7 @@
 
 #include "xr_xsm_schema.h"
 #include "xr_xsm_io.h"
+#include "xr_artifact_kind.h"
 #include "../semantic/xr_semantic_plan_internal.h"
 #include "../semantic/xr_semantic_ops.h"
 #include "../semantic/xr_semantic_verify.h"
@@ -17,8 +18,6 @@
 #include "../../base/xsha256.h"
 #include <stdio.h>
 #include <string.h>
-
-static const uint8_t xr_xsm_magic[8] = {'X', 'R', 'A', 'Y', 'X', 'S', 'M', 0};
 
 typedef struct XrXsmCounts {
     uint32_t types;
@@ -596,7 +595,9 @@ bool xr_xsm_decode(const uint8_t *bytes, size_t size, XrSemanticPlan **out, char
     xr_xsm_take_bytes(&header, expected_registry_fingerprint.bytes,
                       sizeof(expected_registry_fingerprint.bytes));
     xr_xsm_take_bytes(&header, expected_fingerprint.bytes, sizeof(expected_fingerprint.bytes));
-    if (header.failed || memcmp(magic, xr_xsm_magic, sizeof(magic)) != 0 ||
+    if (header.failed ||
+        memcmp(magic, xr_xsm_artifact_magic,
+               XR_XSM_ARTIFACT_MAGIC_SIZE) != 0 ||
         schema != XR_SEMANTIC_SCHEMA_VERSION || header_size != XR_XSM_HEADER_SIZE)
         return report(error, error_size, "XR_ARTIFACT_2000", "XSM schema is not exactly supported");
     if (payload_size != size - XR_XSM_HEADER_SIZE)

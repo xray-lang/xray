@@ -10,14 +10,13 @@
 
 #include "xr_xsm_schema.h"
 #include "xr_xsm_io.h"
+#include "xr_artifact_kind.h"
 #include "../semantic/xr_semantic_plan_internal.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xsha256.h"
 #include <stdio.h>
 #include <string.h>
-
-static const uint8_t xr_xsm_magic[8] = {'X', 'R', 'A', 'Y', 'X', 'S', 'M', 0};
 
 static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->type_count);
@@ -314,7 +313,8 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
     uint8_t digest[32];
     xr_sha256(payload.data, payload.size, digest);
     XrXsmWriter artifact = {.limit = XR_XSM_MAX_ARTIFACT_SIZE};
-    xr_xsm_put_bytes(&artifact, xr_xsm_magic, sizeof(xr_xsm_magic));
+    xr_xsm_put_bytes(&artifact, xr_xsm_artifact_magic,
+                     XR_XSM_ARTIFACT_MAGIC_SIZE);
     xr_xsm_put_u32(&artifact, XR_SEMANTIC_SCHEMA_VERSION);
     xr_xsm_put_u32(&artifact, XR_XSM_HEADER_SIZE);
     xr_xsm_put_u64(&artifact, payload.size);

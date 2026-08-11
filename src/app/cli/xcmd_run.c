@@ -28,22 +28,96 @@
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../plan/format/xr_artifact_kind.h"
+#include "../../plan/format/xr_xtp_schema.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 
-static bool file_is_xray_bytecode(const char *path) {
+static XrArtifactKind classify_file_artifact(const char *path) {
+    FILE *file = fopen(path, "rb");
+    if (!file)
+        return XR_ARTIFACT_KIND_SOURCE;
+    uint8_t header[XR_ARTIFACT_PROBE_SIZE] = {0};
+    size_t header_size = fread(header, 1, sizeof(header), file);
+    fclose(file);
+    return xr_artifact_classify(path, header, header_size);
+}
+
+static bool read_file_bytes(const char *path, uint8_t **bytes, size_t *size) {
+    *bytes = NULL;
+    *size = 0;
     FILE *file = fopen(path, "rb");
     if (!file)
         return false;
-    uint8_t header[4];
-    bool read_header = fread(header, 1, sizeof(header), file) == sizeof(header);
-    fclose(file);
-    if (!read_header)
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
         return false;
-    uint32_t magic = (uint32_t) header[0] | ((uint32_t) header[1] << 8) |
-                     ((uint32_t) header[2] << 16) | ((uint32_t) header[3] << 24);
-    return magic == XR_BC_MAGIC;
+    }
+    long end = ftell(file);
+    if (end < 0 || (uint64_t) end > XR_XTP_MAX_ARTIFACT_SIZE ||
+        fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return false;
+    }
+    size_t length = (size_t) end;
+    uint8_t *storage = (uint8_t *) xr_malloc(length ? length : 1);
+    if (!storage) {
+        fclose(file);
+        return false;
+    }
+    bool complete = length == 0 || fread(storage, 1, length, file) == length;
+    fclose(file);
+    if (!complete) {
+        xr_free(storage);
+        return false;
+    }
+    *bytes = storage;
+    *size = length;
+    return true;
+}
+
+static int reject_non_executable_artifact(const char *path,
+                                          XrArtifactKind kind) {
+    if (kind == XR_ARTIFACT_KIND_CONFLICT) {
+        fprintf(stderr,
+                "XR_ARTIFACT_2006: artifact extension conflicts with its canonical magic\n");
+        return XR_CLI_EXIT_FAIL;
+    }
+    if (kind == XR_ARTIFACT_KIND_UNSUPPORTED) {
+        fprintf(stderr,
+                "XR_ARTIFACT_2000: removed TargetPlan artifact schema is unsupported\n");
+        return XR_CLI_EXIT_FAIL;
+    }
+    if (kind == XR_ARTIFACT_KIND_XSM) {
+        fprintf(stderr,
+                "XR_ARTIFACT_2005: semantic module artifacts are planning inputs and are not executable\n");
+        return XR_CLI_EXIT_FAIL;
+    }
+    if (kind != XR_ARTIFACT_KIND_XTP)
+        return -1;
+
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    if (!read_file_bytes(path, &bytes, &size)) {
+        fprintf(stderr,
+                "XR_ARTIFACT_2001: TargetPlan artifact cannot be read within its byte budget\n");
+        return XR_CLI_EXIT_FAIL;
+    }
+    XrXtpCandidate *candidate = NULL;
+    char detail[512] = {0};
+    bool decoded = xr_xtp_decode_candidate(bytes, size, &candidate, detail,
+                                           sizeof(detail));
+    xr_free(bytes);
+    if (!decoded) {
+        fprintf(stderr, "XR_ARTIFACT_2000: XTP v2 candidate decoding failed: %s\n",
+                detail[0] ? detail : "unspecified rejection");
+        return XR_CLI_EXIT_FAIL;
+    }
+    xr_xtp_candidate_release(candidate);
+    fprintf(stderr,
+            "XR_ARTIFACT_2007: XTP materialization requires explicit semantic and target authorities\n");
+    return XR_CLI_EXIT_FAIL;
 }
 
 // Run options collected from CLI flags
@@ -123,6 +197,12 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
     }
 
+    XrArtifactKind artifact_kind = classify_file_artifact(file);
+    int artifact_result =
+        reject_non_executable_artifact(file, artifact_kind);
+    if (artifact_result >= 0)
+        return artifact_result;
+
     /* Script arguments: passthrough args after -- */
     int script_argc = inv->passthrough_argc;
     char **script_argv = inv->passthrough_argv;
@@ -138,7 +218,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     /* Bytecode is identified by its stable magic, not by an extension. This
      * keeps renamed artifacts executable and never misclassifies text merely
      * because it happens to end in .xrc. */
-    if (file_is_xray_bytecode(file)) {
+    if (artifact_kind == XR_ARTIFACT_KIND_LEGACY_XRC) {
         xr_module_system_init_with_script(iso, file);
         int result = xr_run_bytecode_file(iso, file);
         xray_vm_multicore_destroy(iso);
