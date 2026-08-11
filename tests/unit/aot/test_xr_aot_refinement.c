@@ -635,6 +635,191 @@ static XrTargetPlan *build_attached_target_plan(XiFunc *function,
     return target_plan;
 }
 
+static uint32_t semantic_operation_for_value(const XrSemanticPlan *semantic,
+                                             uint32_t value) {
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (operation && operation->result_value == value)
+            return i;
+    }
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
+static XrTargetPlan *build_parameter_target_without_operation(
+    XiFunc *function, XiBlock *entry, XiValue *parameter, XiValue *use,
+    XrTargetProfile **out_profile) {
+    REQUIRE(function != NULL && entry != NULL && parameter != NULL &&
+            use != NULL && entry->nvalues == 2 &&
+            entry->values[0] == parameter && entry->values[1] == use);
+    function->stage = XI_STAGE_OPTIMIZED;
+    entry->values[0] = use;
+    entry->nvalues = 1;
+    char error[512] = {0};
+    bool attached = xr_semantic_plan_build_and_attach(
+        function, error, sizeof(error));
+    entry->values[0] = parameter;
+    entry->values[1] = use;
+    entry->nvalues = 2;
+    REQUIRE(attached);
+    REQUIRE(xr_semantic_plan_parameter_count(function->semantic_plan) == 1);
+    const XrSemanticParameterRecord *semantic_parameter =
+        xr_semantic_plan_parameter(function->semantic_plan, 0);
+    REQUIRE(semantic_parameter != NULL);
+    REQUIRE(semantic_operation_for_value(function->semantic_plan,
+                                         semantic_parameter->value) ==
+            XR_SEMANTIC_INDEX_NONE);
+    *out_profile = build_target_profile();
+    XrTargetPlan *target_plan = NULL;
+    REQUIRE(xr_target_plan_build(function->semantic_plan, *out_profile,
+                                 &target_plan, error, sizeof(error)));
+    return target_plan;
+}
+
+static void test_parameter_without_operation_uses_stable_identity(void) {
+    XiFunc *function = xi_func_new("rep_parameter_stable", &scalar_int);
+    XiBlock *entry = xi_block_new(function);
+    XiValue *parameter = xi_param(function, entry, 0, &scalar_int);
+    REQUIRE(function != NULL && entry != NULL && parameter != NULL);
+    function->nparams = 1;
+    function->min_params = 1;
+    function->params = (XiValue **) xr_malloc(sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = parameter;
+    XiValue *use = xi_value_new(function, entry, XI_CALL_BUILTIN,
+                                &scalar_int, 1);
+    REQUIRE(use != NULL);
+    use->aux = (void *) "rep_parameter_stable_use";
+    use->args[0] = parameter;
+    xi_block_set_return(entry, use);
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_parameter_target_without_operation(
+        function, entry, parameter, use, &profile);
+    const XrSemanticParameterRecord *semantic_parameter =
+        xr_semantic_plan_parameter(function->semantic_plan, 0);
+    REQUIRE(semantic_parameter != NULL &&
+            semantic_parameter->value == parameter->id);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build(
+        function, target, &policy, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.record_count == 2);
+    uint32_t parameter_record = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < view.record_count; i++) {
+        const XrAotRepresentationAdapterRecord *adapter =
+            &view.records[i].representation_adapter;
+        if (adapter->source_kind == XR_AOT_REP_SOURCE_PARAMETER) {
+            REQUIRE(parameter_record == XR_SEMANTIC_INDEX_NONE);
+            parameter_record = i;
+        }
+    }
+    REQUIRE(parameter_record != XR_SEMANTIC_INDEX_NONE);
+    const XrAotRepresentationAdapterRecord *adapter =
+        &view.records[parameter_record].representation_adapter;
+    REQUIRE(adapter->source_value == semantic_parameter->value);
+    REQUIRE(adapter->source_operation == XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(xr_stable_id_equal(adapter->source_operation_id,
+                               semantic_parameter->id));
+    REQUIRE(xr_aot_representation_refinement_verify(
+        &view, function, target, &policy, &diag));
+
+    XrAotTransformationRecord records[2];
+    memcpy(records, view.records, sizeof(records));
+    XrAotRefinementPlanView mutated = view;
+    mutated.records = records;
+    records[parameter_record].representation_adapter.source_operation =
+        adapter->use_operation;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, target, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+
+    memcpy(records, view.records, sizeof(records));
+    records[parameter_record]
+        .representation_adapter.source_operation_id.bytes[0] ^= 1u;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, target, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+
+    memcpy(records, view.records, sizeof(records));
+    XrAotTransformationRecord swap = records[0];
+    records[0] = records[1];
+    records[1] = swap;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, target, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_NONCANONICAL_ORDER);
+
+    mutated = view;
+    mutated.record_count = XR_AOT_REFINEMENT_MAX_RECORDS + 1u;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, target, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_RESOURCE_BUDGET);
+
+    XrAotRefinementBuilder *builder =
+        xr_aot_refinement_builder_create(target, &diag);
+    REQUIRE(builder != NULL);
+    XrAotPassProtocol protocol =
+        xr_aot_refinement_representation_protocol(27904);
+    XrAotRepresentationAdapterRequest request = {
+        .source_value = adapter->source_value,
+        .use_operation = adapter->use_operation,
+        .use_block = adapter->use_block,
+        .use_operand = adapter->use_operand,
+        .use_kind = adapter->use_kind,
+        .adapter_kind = adapter->adapter_kind,
+        .input_rep_kind = adapter->input_rep_kind,
+        .output_rep_kind = adapter->output_rep_kind,
+        .layout = adapter->layout,
+        .policy_fingerprint = adapter->policy_fingerprint,
+    };
+    uint32_t decision = 0;
+    REQUIRE(xr_aot_refinement_try_representation_adapter(
+        builder, &protocol, target, &request, &decision, &diag));
+    REQUIRE(decision == XR_AOT_REFINEMENT_APPLIED);
+    XrAotRefinementPlan *partial = NULL;
+    REQUIRE(xr_aot_refinement_builder_freeze(builder, target, &partial,
+                                              &diag));
+    XrAotRefinementPlanView partial_view =
+        xr_aot_refinement_plan_view(partial);
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &partial_view, function, target, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE);
+
+    parameter->param_mode = XR_PARAM_REF;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &view, function, target, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+    XrAotRefinementPlan *rejected = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build(
+        function, target, &policy, &rejected, &diag));
+    REQUIRE(rejected == NULL &&
+            diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+    parameter->param_mode = XR_PARAM_READ;
+    parameter->op = XI_CONST;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &view, function, target, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+    parameter->op = XI_PARAM;
+    static XrType scalar_float_mutation = {
+        .kind = XR_KIND_FLOAT,
+        .id = 2,
+        .scalar_rep = XR_NATIVE_F64,
+        .frozen = true,
+    };
+    parameter->type = &scalar_float_mutation;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &view, function, target, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+
+    xr_aot_refinement_plan_free(partial);
+    xr_aot_refinement_builder_free(builder);
+    xr_aot_refinement_plan_free(plan);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_parameter_phi_and_return_use_domains_are_exact(void) {
     XrAotRefinementDiagnostic diag = {0};
 
@@ -681,6 +866,38 @@ static void test_parameter_phi_and_return_use_domains_are_exact(void) {
     REQUIRE(xr_aot_representation_refinement_verify(
         &parameter_view, parameter_function, parameter_target, &native,
         &diag));
+    const XrSemanticParameterRecord *parameter_semantic =
+        xr_semantic_plan_parameter(parameter_function->semantic_plan, 0);
+    REQUIRE(parameter_semantic != NULL);
+    uint32_t parameter_operation = semantic_operation_for_value(
+        parameter_function->semantic_plan, parameter_semantic->value);
+    REQUIRE(parameter_operation != XR_SEMANTIC_INDEX_NONE);
+    const XrSemanticOperationRecord *parameter_operation_record =
+        xr_semantic_plan_operation(parameter_function->semantic_plan,
+                                   parameter_operation);
+    REQUIRE(parameter_operation_record != NULL &&
+            parameter_operation_record->opcode == XI_PARAM);
+    bool exact_parameter_record = false;
+    for (uint32_t i = 0; i < parameter_view.record_count; i++) {
+        const XrAotRepresentationAdapterRecord *record =
+            &parameter_view.records[i].representation_adapter;
+        if (record->source_kind == XR_AOT_REP_SOURCE_PARAMETER) {
+            REQUIRE(record->source_operation == parameter_operation);
+            exact_parameter_record = true;
+        }
+    }
+    REQUIRE(exact_parameter_record);
+    parameter->param_mode = XR_PARAM_REF;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &parameter_view, parameter_function, parameter_target, &native,
+        &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+    XrAotRefinementPlan *inexact_parameter_plan = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build(
+        parameter_function, parameter_target, &native,
+        &inexact_parameter_plan, &diag));
+    REQUIRE(inexact_parameter_plan == NULL &&
+            diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
     xr_aot_refinement_plan_free(parameter_plan);
     xr_target_plan_free(parameter_target);
     xr_target_profile_free(parameter_profile);
@@ -880,6 +1097,7 @@ int main(void) {
     test_representation_adapters_are_immutable_and_consumable();
     test_representation_record_mutations_fail_closed();
     test_independent_verifier_requires_exact_coverage();
+    test_parameter_without_operation_uses_stable_identity();
     test_parameter_phi_and_return_use_domains_are_exact();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     test_live_source_use_and_type_mutations_are_rederived();

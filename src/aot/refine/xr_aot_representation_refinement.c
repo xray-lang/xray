@@ -244,9 +244,29 @@ static bool add_obligation(CollectContext *ctx, const XiFunc *function,
                                ? xr_semantic_plan_operation(
                                      ctx->semantic, source_operation_index)
                                : NULL;
-        if (!source_parameter || source_parameter->function != source_function ||
-            source->op != XI_PARAM || !source_operation ||
-            source_operation->opcode != XI_PARAM) {
+        if (!source_parameter || source_parameter->value != source_value ||
+            source_parameter->function != source_function ||
+            source->op != XI_PARAM ||
+            source->aux_int != source_parameter->ordinal ||
+            source->param_mode != source_parameter->mode ||
+            source->transfer_mode != source_parameter->transfer_mode) {
+            set_diag(ctx->diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY,
+                     ctx->record_count, source_value, source_operation_index);
+            return false;
+        }
+        if (source_operation_index != XR_SEMANTIC_INDEX_NONE &&
+            (!source_operation || source_operation->opcode != XI_PARAM ||
+             source_operation->function != source_function ||
+             source_operation->result_value != source_value ||
+             source_operation->result_type != source_type_index ||
+             source_operation->auxiliary_kind != source->aux_kind ||
+             source_operation->semantic_immediate != source->aux_int ||
+             source_operation->flags != source->flags ||
+             source_operation->parameter_mode != source_parameter->mode ||
+             source_operation->parameter_ownership !=
+                 source_parameter->ownership ||
+             source_operation->transfer_mode !=
+                 source_parameter->transfer_mode)) {
             set_diag(ctx->diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY,
                      ctx->record_count, source_value, source_operation_index);
             return false;
@@ -259,14 +279,16 @@ static bool add_obligation(CollectContext *ctx, const XiFunc *function,
                                : NULL;
         source_type_index = source_operation ? source_operation->result_type
                                              : XR_SEMANTIC_INDEX_NONE;
-    }
-    if (!source_operation || source_operation->opcode != source->op ||
-        source_operation->auxiliary_kind != source->aux_kind ||
-        source_operation->semantic_immediate != source->aux_int ||
-        source_operation->flags != source->flags) {
-        set_diag(ctx->diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY,
-                 ctx->record_count, source_value, source_operation_index);
-        return false;
+        if (!source_operation || source_operation->function != source_function ||
+            source_operation->result_value != source_value ||
+            source_operation->opcode != source->op ||
+            source_operation->auxiliary_kind != source->aux_kind ||
+            source_operation->semantic_immediate != source->aux_int ||
+            source_operation->flags != source->flags) {
+            set_diag(ctx->diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY,
+                     ctx->record_count, source_value, source_operation_index);
+            return false;
+        }
     }
     const XrSemanticTypeRecord *semantic_type =
         xr_semantic_plan_type(ctx->semantic, source_type_index);
@@ -522,6 +544,60 @@ typedef struct VerifyContext {
     uint32_t visits;
 } VerifyContext;
 
+static bool verify_block_membership(const XiFunc *function,
+                                    const XiBlock *block) {
+    if (!function || !block || block->func != function)
+        return false;
+    uint32_t matches = 0;
+    for (uint32_t i = 0; i < function->nblocks; i++) {
+        if (function->blocks[i] == block)
+            matches++;
+    }
+    return matches == 1;
+}
+
+static bool verify_value_membership(const XiBlock *block,
+                                    const XiValue *value) {
+    if (!block || !value || value->block != block)
+        return false;
+    uint32_t matches = 0;
+    for (uint32_t i = 0; i < block->nvalues; i++) {
+        if (block->values[i] == value)
+            matches++;
+    }
+    for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+        if (&phi->value == value)
+            matches++;
+    }
+    return matches == 1;
+}
+
+static bool verify_semantic_value_id(const XrSemanticPlan *semantic,
+                                     const XiFunc *function,
+                                     const XiValue *value,
+                                     uint32_t *out_function,
+                                     uint32_t *out_value) {
+    if (out_function)
+        *out_function = XR_SEMANTIC_INDEX_NONE;
+    if (out_value)
+        *out_value = XR_SEMANTIC_INDEX_NONE;
+    if (!semantic || !function || !value || !out_function || !out_value ||
+        function->semantic_plan != semantic ||
+        function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE ||
+        !verify_block_membership(function, value->block) ||
+        !verify_value_membership(value->block, value))
+        return false;
+    uint32_t function_index = function->semantic_plan_function_index;
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(semantic, function_index);
+    if (!semantic_function || value->id >= semantic_function->value_count ||
+        semantic_function->value_begin > UINT32_MAX - value->id)
+        return false;
+    *out_function = function_index;
+    *out_value = semantic_function->value_begin + value->id;
+    return true;
+}
+
 static int compare_live_key(const XrAotTransformationRecord *record,
                             uint32_t source_function, uint32_t source_value,
                             uint32_t use_operation, uint32_t use_block,
@@ -596,13 +672,41 @@ static bool verify_live_source(VerifyContext *ctx, const XiFunc *function,
                                           : XR_SEMANTIC_INDEX_NONE;
     uint16_t source_kind = parameter ? XR_AOT_REP_SOURCE_PARAMETER
                                      : XR_AOT_REP_SOURCE_OPERATION;
-    if (!operation || operation->function != record->source_function ||
-        operation->opcode != source->op ||
-        operation->auxiliary_kind != source->aux_kind ||
-        operation->semantic_immediate != source->aux_int ||
-        operation->flags != source->flags ||
-        operation_index != record->source_operation ||
-        source_kind != record->source_kind) {
+    bool source_exact = source_kind == record->source_kind &&
+                        operation_index == record->source_operation;
+    if (parameter) {
+        source_exact = source_exact &&
+                       parameter->value == source_value &&
+                       parameter->function == record->source_function &&
+                       source->op == XI_PARAM &&
+                       source->aux_int == parameter->ordinal &&
+                       source->param_mode == parameter->mode &&
+                       source->transfer_mode == parameter->transfer_mode;
+        if (operation_index != XR_SEMANTIC_INDEX_NONE) {
+            source_exact = source_exact && operation &&
+                           operation->opcode == XI_PARAM &&
+                           operation->function == parameter->function &&
+                           operation->result_value == source_value &&
+                           operation->result_type == parameter->type &&
+                           operation->auxiliary_kind == source->aux_kind &&
+                           operation->semantic_immediate == source->aux_int &&
+                           operation->flags == source->flags &&
+                           operation->parameter_mode == parameter->mode &&
+                           operation->parameter_ownership ==
+                               parameter->ownership &&
+                           operation->transfer_mode ==
+                               parameter->transfer_mode;
+        }
+    } else {
+        source_exact = source_exact && operation &&
+                       operation->function == record->source_function &&
+                       operation->result_value == source_value &&
+                       operation->opcode == source->op &&
+                       operation->auxiliary_kind == source->aux_kind &&
+                       operation->semantic_immediate == source->aux_int &&
+                       operation->flags == source->flags;
+    }
+    if (!source_exact) {
         set_diag(ctx->index.diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY,
                  record_index, source_value, operation_index);
         return false;
@@ -612,13 +716,6 @@ static bool verify_live_source(VerifyContext *ctx, const XiFunc *function,
     if (type != record->source_type ||
         !source_type_matches(source->type, semantic_type)) {
         set_diag(ctx->index.diag, XR_AOT_REFINEMENT_SOURCE_TYPE,
-                 record_index, source_value, operation_index);
-        return false;
-    }
-    if (parameter &&
-        (source->op != XI_PARAM || source->aux_int != parameter->ordinal ||
-         parameter->function != record->source_function)) {
-        set_diag(ctx->index.diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY,
                  record_index, source_value, operation_index);
         return false;
     }
@@ -634,11 +731,8 @@ static bool verify_obligation(VerifyContext *ctx, const XiFunc *function,
                               uint16_t output_storage) {
     uint32_t source_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
-    char error[256] = {0};
-    if (!xr_aot_scalar_semantic_value_id(ctx->index.target_plan, function,
-                                         source, &source_function,
-                                         &source_value, error,
-                                         sizeof(error))) {
+    if (!verify_semantic_value_id(ctx->index.semantic, function, source,
+                                  &source_function, &source_value)) {
         set_diag(ctx->index.diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY,
                  ctx->visits, source_value, use_operation);
         return false;
@@ -673,9 +767,9 @@ static bool verify_obligation(VerifyContext *ctx, const XiFunc *function,
     if (use_kind == XR_AOT_REP_USE_OPERATION) {
         uint32_t user_function = XR_SEMANTIC_INDEX_NONE;
         uint32_t user_value = XR_SEMANTIC_INDEX_NONE;
-        if (!user || !xr_aot_scalar_semantic_value_id(
-                         ctx->index.target_plan, function, user,
-                         &user_function, &user_value, error, sizeof(error)) ||
+        if (!user || !verify_semantic_value_id(
+                         ctx->index.semantic, function, user,
+                         &user_function, &user_value) ||
             user_function != source_function ||
             user_value >= ctx->index.semantic_value_count ||
             ctx->index.operation_by_value[user_value] != use_operation) {
@@ -773,10 +867,9 @@ static bool verify_function(VerifyContext *ctx, const XiFunc *function) {
                     continue;
                 uint32_t user_function = XR_SEMANTIC_INDEX_NONE;
                 uint32_t user_value = XR_SEMANTIC_INDEX_NONE;
-                char error[256] = {0};
-                if (!xr_aot_scalar_semantic_value_id(
-                        ctx->index.target_plan, function, user,
-                        &user_function, &user_value, error, sizeof(error)) ||
+                if (!verify_semantic_value_id(
+                        ctx->index.semantic, function, user,
+                        &user_function, &user_value) ||
                     user_value >= ctx->index.semantic_value_count ||
                     ctx->index.operation_by_value[user_value] ==
                         XR_SEMANTIC_INDEX_NONE) {
@@ -816,10 +909,9 @@ static bool verify_function(VerifyContext *ctx, const XiFunc *function) {
                     continue;
                 uint32_t user_function = XR_SEMANTIC_INDEX_NONE;
                 uint32_t user_value = XR_SEMANTIC_INDEX_NONE;
-                char error[256] = {0};
-                if (!xr_aot_scalar_semantic_value_id(
-                        ctx->index.target_plan, function, &phi->value,
-                        &user_function, &user_value, error, sizeof(error)) ||
+                if (!verify_semantic_value_id(
+                        ctx->index.semantic, function, &phi->value,
+                        &user_function, &user_value) ||
                     user_value >= ctx->index.semantic_value_count ||
                     ctx->index.operation_by_value[user_value] ==
                         XR_SEMANTIC_INDEX_NONE) {
