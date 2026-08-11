@@ -240,12 +240,9 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
     if (!xr_target_plan_is_verified(target_plan))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission plan requires a verified TargetPlan");
-    /* Value-representation rows do not yet carry a family discriminator. An
-     * exact mask keeps future non-scalar rows out until they have a dedicated
-     * accessor and projection contract. */
-    if (xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_FAMILY_SCALAR)
+    if ((xr_target_plan_completed_family_mask(target_plan) & XR_TARGET_FAMILY_SCALAR) == 0)
         return emission_error(error, error_size, "XR_TARGET_1001",
-                              "C emission plan requires the exact scalar-family partition");
+                              "C emission plan requires the completed scalar family");
     const XrTargetProfile *profile = xr_target_plan_profile(target_plan);
     XrFingerprint actual_profile_fingerprint = xr_target_profile_fingerprint(profile);
     if (!profile || !xr_fingerprint_equal(actual_profile_fingerprint,
@@ -257,27 +254,54 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         xr_target_plan_value_reps(target_plan, &value_count);
     if (value_count && !values)
         return emission_error(error, error_size, "XR_TARGET_1001",
-                              "completed scalar family has no value-representation rows");
-    if (value_count > SIZE_MAX / sizeof(XrCScalarEmissionView))
+                              "TargetPlan value-representation table is missing");
+    uint32_t scalar_count = 0;
+    for (uint32_t i = 0; i < value_count; i++) {
+        const XrTargetValueRepRecord *binding = &values[i];
+        const XrTargetMachineRepRecord *register_rep =
+            xr_target_plan_machine_rep(target_plan, binding->register_rep);
+        const XrTargetMachineRepRecord *memory_rep =
+            xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+        XrCScalarRep register_c_rep = XR_C_SCALAR_REP_COUNT;
+        XrCScalarRep memory_c_rep = XR_C_SCALAR_REP_COUNT;
+        const char *register_c_type = NULL;
+        const char *memory_c_type = NULL;
+        bool register_is_scalar =
+            register_rep && machine_kind_to_c_rep(register_rep->kind, &register_c_rep,
+                                                   &register_c_type);
+        bool memory_is_scalar =
+            memory_rep && machine_kind_to_c_rep(memory_rep->kind, &memory_c_rep,
+                                                 &memory_c_type);
+        if (!register_is_scalar && !memory_is_scalar)
+            continue;
+        if (!register_is_scalar || !memory_is_scalar || register_rep->kind != memory_rep->kind ||
+            register_c_rep != memory_c_rep || strcmp(register_c_type, memory_c_type) != 0) {
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "TargetPlan scalar binding has no exact C projection");
+        }
+        scalar_count++;
+    }
+    if (scalar_count > SIZE_MAX / sizeof(XrCScalarEmissionView))
         return emission_error(error, error_size, "XR_EXEC_5003",
                               "C emission scalar record budget overflow");
     XrCEmissionPlan *plan = (XrCEmissionPlan *) xr_calloc(1, sizeof(*plan));
     if (!plan)
         return emission_error(error, error_size, "XR_EXEC_5003",
                               "C emission plan allocation failed");
-    if (value_count) {
+    if (scalar_count) {
         plan->scalars =
-            (XrCScalarEmissionView *) xr_calloc(value_count, sizeof(*plan->scalars));
+            (XrCScalarEmissionView *) xr_calloc(scalar_count, sizeof(*plan->scalars));
         if (!plan->scalars) {
             xr_c_emission_plan_free(plan);
             return emission_error(error, error_size, "XR_EXEC_5003",
                                   "C emission scalar record allocation failed");
         }
     }
-    plan->scalar_count = value_count;
+    plan->scalar_count = scalar_count;
     plan->schema_version = XR_C_EMISSION_PLAN_SCHEMA_VERSION;
     plan->target_fingerprint = xr_target_plan_fingerprint(target_plan);
     plan->profile_fingerprint = actual_profile_fingerprint;
+    uint32_t scalar_index = 0;
     for (uint32_t i = 0; i < value_count; i++) {
         const XrTargetValueRepRecord *binding = &values[i];
         const XrTargetMachineRepRecord *register_rep =
@@ -286,16 +310,10 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             xr_target_plan_machine_rep(target_plan, binding->memory_rep);
         XrCScalarRep c_rep = XR_C_SCALAR_REP_COUNT;
         const char *c_type = NULL;
-        /* This scalar foundation freezes exact register/memory kind identity.
-         * A future non-scalar or conversion family must partition its own
-         * records instead of weakening this contract. */
         if (!register_rep || !memory_rep || register_rep->kind != memory_rep->kind ||
-            !machine_kind_to_c_rep(register_rep->kind, &c_rep, &c_type)) {
-            xr_c_emission_plan_free(plan);
-            return emission_error(error, error_size, "XR_TARGET_1001",
-                                  "TargetPlan value binding has no scalar C projection");
-        }
-        XrCScalarEmissionView *scalar = &plan->scalars[i];
+            !machine_kind_to_c_rep(register_rep->kind, &c_rep, &c_type))
+            continue;
+        XrCScalarEmissionView *scalar = &plan->scalars[scalar_index++];
         scalar->semantic_value = binding->semantic_value;
         scalar->target_register_rep = binding->register_rep;
         scalar->target_memory_rep = binding->memory_rep;
@@ -306,6 +324,11 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         scalar->memory_size = memory_rep->memory_size;
         scalar->rep = (uint8_t) c_rep;
         scalar->c_type = c_type;
+    }
+    if (scalar_index != scalar_count) {
+        xr_c_emission_plan_free(plan);
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "C emission scalar partition is not exact");
     }
     compute_fingerprint(plan, &plan->fingerprint);
     if (!verify_plan(plan)) {

@@ -525,6 +525,57 @@ static void test_nullable_scalar_binding_is_rejected(void) {
     xi_func_free(function);
 }
 
+static void test_aggregate_bindings_are_excluded_from_scalar_projection(void) {
+    XrType *elements[2] = {&scalar_int, &scalar_bool};
+    XrType tuple = {
+        .kind = XR_KIND_TUPLE,
+        .id = 300,
+        .frozen = true,
+        .is_value_type = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+    };
+    tuple.tuple.element_types = elements;
+    tuple.tuple.element_count = 2;
+
+    XiFunc *function = xi_func_new("aggregate_scalar_projection", &tuple);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *integer = xi_const_int(function, entry, 7, &scalar_int);
+    XiValue *boolean = xi_const_bool(function, entry, true, &scalar_bool);
+    XiValue *result = xi_value_new(function, entry, XI_TUPLE_NEW, &tuple, 2);
+    REQUIRE(integer && boolean && result);
+    result->args[0] = integer;
+    result->args[1] = boolean;
+    result->aux_int = xi_tuple_pack_aux(2, 0);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(function, error, sizeof(error)));
+    XrTargetProfile *profile = build_exact_profile();
+    XrTargetPlan *target_plan = build_target_plan(function->semantic_plan, profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target_plan, xr_target_profile_fingerprint(profile),
+                                     &emission, error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_scalar_count(emission) == 2);
+
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(target_plan, function, result,
+                                            &semantic_function, &semantic_value, error,
+                                            sizeof(error)));
+    XrCScalarEmissionView view = {0};
+    REQUIRE(!xr_c_emission_plan_scalar_view(emission, semantic_value, &view, error,
+                                            sizeof(error)));
+    REQUIRE(strncmp(error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0);
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target_plan);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_profile_mismatch_fails_before_projection(void) {
     ScalarFixture fixture = build_scalar_fixture();
     XrTargetProfile *profile = build_exact_profile();
@@ -555,6 +606,7 @@ int main(void) {
     test_all_scalar_c_spelling_known_answers(false);
     test_all_scalar_c_spelling_known_answers(true);
     test_nullable_scalar_binding_is_rejected();
+    test_aggregate_bindings_are_excluded_from_scalar_projection();
     test_profile_mismatch_fails_before_projection();
     printf("AOT scalar TargetPlan tests passed\n");
     return 0;
