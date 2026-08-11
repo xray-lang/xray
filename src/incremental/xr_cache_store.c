@@ -249,13 +249,6 @@ static XrCacheLoadStatus load_locked(XrCacheStore *store, XrCacheArtifactKind ki
         xr_free(object);
         return XR_CACHE_LOAD_CORRUPT;
     }
-    if (!store->verifier(kind, key, payload, payload_size, store->verifier_context)) {
-        xr_fs_remove(path);
-        xr_free(path);
-        xr_free(object);
-        return XR_CACHE_LOAD_REJECTED;
-    }
-
     uint8_t *owned = (uint8_t *) xr_malloc(payload_size ? payload_size : 1u);
     if (!owned) {
         xr_free(path);
@@ -279,9 +272,24 @@ XrCacheLoadStatus xr_cache_store_load(XrCacheStore *store, XrCacheArtifactKind k
     if (!store || !artifact_kind_valid(kind) || !out)
         return XR_CACHE_LOAD_IO_ERROR;
     memset(out, 0, sizeof(*out));
+    XrFsExclusiveLock root_lock = {0};
+    if (xr_fs_lock_exclusive(store->lock_path, &root_lock) != 0)
+        return XR_CACHE_LOAD_IO_ERROR;
     xr_mutex_lock(&store->lock);
     XrCacheLoadStatus status = load_locked(store, kind, key, out);
     xr_mutex_unlock(&store->lock);
+    if (xr_fs_unlock_exclusive(&root_lock) != 0) {
+        xr_cache_blob_release(out);
+        return XR_CACHE_LOAD_IO_ERROR;
+    }
+    if (status == XR_CACHE_LOAD_HIT &&
+        !store->verifier(kind, key, out->bytes, out->size, store->verifier_context)) {
+        /* A rejected immutable object is a miss for this caller.  It is not
+         * removed here: another process may have replaced the pathname after
+         * the read, and deletion would create an ABA destruction hazard. */
+        xr_cache_blob_release(out);
+        return XR_CACHE_LOAD_REJECTED;
+    }
     return status;
 }
 
@@ -395,6 +403,23 @@ XrCachePublishStatus xr_cache_store_publish(XrCacheStore *store, XrCacheArtifact
         xr_mutex_unlock(&store->lock);
         (void) xr_fs_unlock_exclusive(&root_lock);
         return XR_CACHE_PUBLISH_IO_ERROR;
+    }
+    uint64_t reservation = (uint64_t) size + XR_CACHE_OBJECT_HEADER_SIZE;
+    if (size > SIZE_MAX - XR_CACHE_OBJECT_HEADER_SIZE || reservation > store->quota_bytes) {
+        xr_mutex_unlock(&store->lock);
+        (void) xr_fs_unlock_exclusive(&root_lock);
+        return XR_CACHE_PUBLISH_IO_ERROR;
+    }
+    if (reservation > store->quota_bytes - before.live_bytes) {
+        uint64_t quota = store->quota_bytes;
+        store->quota_bytes -= reservation;
+        bool reserved = collect_locked(store, &before, NULL);
+        store->quota_bytes = quota;
+        if (!reserved) {
+            xr_mutex_unlock(&store->lock);
+            (void) xr_fs_unlock_exclusive(&root_lock);
+            return XR_CACHE_PUBLISH_IO_ERROR;
+        }
     }
     XrCachePublishStatus status = publish_locked(store, kind, key, bytes, size);
     bool collected = true;

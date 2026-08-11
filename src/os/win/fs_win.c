@@ -55,9 +55,10 @@ int xr_fs_unlock_exclusive(XrFsExclusiveLock *lock) {
         return -1;
     HANDLE handle = (HANDLE) lock->handle;
     OVERLAPPED overlapped = {0};
-    bool ok = UnlockFileEx(handle, 0, MAXDWORD, MAXDWORD, &overlapped) && CloseHandle(handle);
+    bool unlocked = UnlockFileEx(handle, 0, MAXDWORD, MAXDWORD, &overlapped) != 0;
+    bool closed = CloseHandle(handle) != 0;
     lock->handle = 0;
-    return ok ? 0 : -1;
+    return unlocked && closed ? 0 : -1;
 }
 
 // Convert FILETIME (100-ns ticks since 1601-01-01) to ns since unix epoch.

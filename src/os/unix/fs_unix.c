@@ -27,7 +27,8 @@ int xr_fs_lock_exclusive(const char *path, XrFsExclusiveLock *out) {
         return -1;
     out->handle = 0;
     int fd = open(path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0600);
-    if (fd < 0 || flock(fd, LOCK_EX) != 0) {
+    struct stat stat;
+    if (fd < 0 || fstat(fd, &stat) != 0 || !S_ISREG(stat.st_mode) || flock(fd, LOCK_EX) != 0) {
         if (fd >= 0)
             close(fd);
         return -1;
@@ -40,9 +41,10 @@ int xr_fs_unlock_exclusive(XrFsExclusiveLock *lock) {
     if (!lock || !lock->handle)
         return -1;
     int fd = (int) (lock->handle - 1);
-    bool ok = flock(fd, LOCK_UN) == 0 && close(fd) == 0;
+    bool unlocked = flock(fd, LOCK_UN) == 0;
+    bool closed = close(fd) == 0;
     lock->handle = 0;
-    return ok ? 0 : -1;
+    return unlocked && closed ? 0 : -1;
 }
 
 static XrFsKind kind_from_mode(mode_t m) {
