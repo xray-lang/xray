@@ -13,6 +13,7 @@
 #include "xaot_class_native.h"
 #include "xaot_callable.h"
 #include "xaot_link.h"
+#include "refine/xr_aot_representation_refinement.h"
 #include "refine/xr_aot_scalar_value.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
@@ -23,6 +24,7 @@
 #include "../ir/xi_coro_lower.h"
 #include "../ir/xi_escape.h"
 #include "../ir/xi_effect.h"
+#include "../ir/xi_opt.h"
 #include "../ir/xi_range.h"
 #include "../ir/xi_value_query.h"
 #include "../plan/target/xr_target_verify.h"
@@ -36,6 +38,7 @@ static bool value_reps_equal(XaotValueRep a, XaotValueRep b) {
 
 static bool prepare_require_target_plans(XaotBundle *bundle) {
     char error[256] = {0};
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
 
     if (!bundle || !bundle->modules || !bundle->target_plans) {
         if (bundle)
@@ -52,6 +55,22 @@ static bool prepare_require_target_plans(XaotBundle *bundle) {
             !xr_target_plan_verify(target_plan, error, sizeof(error))) {
             bundle->error_msg = "AOT prepare rejected a missing or corrupt module TargetPlan";
             return false;
+        }
+        if (bundle->representation_refinements_required) {
+            const XrAotRefinementPlan *refinement =
+                xaot_bundle_representation_refinement_for_module(bundle,
+                                                                  module_index);
+            XrAotRefinementPlanView view =
+                xr_aot_refinement_plan_view(refinement);
+            if (!refinement ||
+                !xaot_bundle_representation_policy_matches(
+                    bundle, module_index, &policy) ||
+                !xr_aot_representation_materialization_verify(
+                    &view, module->init, target_plan, &policy, NULL)) {
+                bundle->error_msg =
+                    "AOT prepare rejected a missing, corrupt, or stale representation refinement";
+                return false;
+            }
         }
     }
     return true;

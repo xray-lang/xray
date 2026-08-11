@@ -16,6 +16,7 @@
 #include "../../ir/xi_own.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static XrFingerprint rep_policy_fingerprint(const XiRepPolicy *policy) {
@@ -32,6 +33,12 @@ static XrFingerprint rep_policy_fingerprint(const XiRepPolicy *policy) {
     xr_sha256_update(&ctx, facts, sizeof(facts));
     xr_sha256_final(&ctx, fingerprint.bytes);
     return fingerprint;
+}
+
+XrFingerprint xr_aot_representation_policy_fingerprint(
+    const XiRepPolicy *policy) {
+    XiRepPolicy default_policy = xi_rep_policy_native_boundary();
+    return rep_policy_fingerprint(policy ? policy : &default_policy);
 }
 
 static void set_diag(XrAotRefinementDiagnostic *diag, uint32_t issue,
@@ -1382,6 +1389,542 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         default:
             return false;
     }
+}
+
+static bool authority_add_obligation(CollectContext *ctx,
+                                     const VerifyAuthority *oracle,
+                                     uint32_t source_value,
+                                     uint32_t use_operation,
+                                     uint32_t use_block,
+                                     uint16_t use_operand,
+                                     uint16_t use_kind,
+                                     XrRep input_storage,
+                                     XrRep output_storage) {
+    if (input_storage == output_storage)
+        return true;
+    XrRep native_storage = XR_REP_TAGGED;
+    uint16_t machine_kind = XR_MACHINE_REP_COUNT;
+    if (!oracle_machine_storage(oracle, source_value, &native_storage,
+                                &machine_kind) ||
+        ((input_storage != XR_REP_TAGGED) &&
+         input_storage != native_storage) ||
+        ((output_storage != XR_REP_TAGGED) &&
+         output_storage != native_storage) ||
+        (input_storage != XR_REP_TAGGED &&
+         output_storage != XR_REP_TAGGED)) {
+        set_diag(ctx->diag,
+                 XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+                 ctx->record_count, source_value, use_operation);
+        return false;
+    }
+    uint32_t operation_index = ctx->operation_by_value[source_value];
+    uint32_t parameter_index = ctx->parameter_by_value[source_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    const XrSemanticParameterRecord *parameter =
+        parameter_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_parameter(ctx->semantic, parameter_index)
+            : NULL;
+    uint32_t type_index = parameter ? parameter->type
+                                    : operation ? operation->result_type
+                                                : XR_SEMANTIC_INDEX_NONE;
+    uint32_t layout = type_index < ctx->type_count
+                          ? ctx->layout_by_type[type_index]
+                          : XR_SEMANTIC_INDEX_NONE;
+    if ((!parameter && !operation) || layout == XR_SEMANTIC_INDEX_NONE) {
+        set_diag(ctx->diag,
+                 XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+                 ctx->record_count, source_value, use_operation);
+        return false;
+    }
+    bool box = input_storage != XR_REP_TAGGED;
+    XrAotRepresentationAdapterRequest request = {
+        .source_value = source_value,
+        .use_operation = use_operation,
+        .use_block = use_block,
+        .use_operand = use_operand,
+        .use_kind = use_kind,
+        .adapter_kind = box ? XR_AOT_REP_ADAPTER_BOX
+                            : XR_AOT_REP_ADAPTER_UNBOX,
+        .input_rep_kind = box ? machine_kind : XR_MACHINE_REP_DYN_VALUE,
+        .output_rep_kind = box ? XR_MACHINE_REP_DYN_VALUE : machine_kind,
+        .layout = layout,
+        .policy_fingerprint = rep_policy_fingerprint(ctx->policy),
+    };
+    uint32_t decision = XR_AOT_REFINEMENT_REFUSED;
+    if (!xr_aot_refinement_try_representation_adapter(
+            ctx->builder, &ctx->protocol, ctx->target_plan, &request,
+            &decision, ctx->diag) ||
+        decision != XR_AOT_REFINEMENT_APPLIED) {
+        if (decision != XR_AOT_REFINEMENT_APPLIED)
+            set_diag(ctx->diag,
+                     XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+                     ctx->record_count, source_value, use_operation);
+        return false;
+    }
+    ctx->record_count++;
+    return true;
+}
+
+static bool authority_collect_obligations(CollectContext *ctx) {
+    VerifyAuthority oracle = {
+        .target_plan = ctx->target_plan,
+        .semantic = ctx->semantic,
+        .policy = ctx->policy,
+        .value_count = ctx->semantic_value_count,
+        .operation_by_value = ctx->operation_by_value,
+        .parameter_by_value = ctx->parameter_by_value,
+    };
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(ctx->semantic, &operand_count);
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(ctx->semantic);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(ctx->semantic, i);
+        if (!operation || operation->operand_begin > operand_count ||
+            operation->operand_count >
+                operand_count - operation->operand_begin) {
+            set_diag(ctx->diag, XR_AOT_REFINEMENT_USE_SITE,
+                     ctx->record_count, 0, i);
+            return false;
+        }
+        for (uint16_t a = 0; a < operation->operand_count; a++) {
+            uint32_t source_value =
+                operands[operation->operand_begin + a].value;
+            XrRep input_storage = XR_REP_TAGGED;
+            XrRep output_storage = XR_REP_TAGGED;
+            uint16_t ignored_machine = XR_MACHINE_REP_COUNT;
+            if (source_value >= ctx->semantic_value_count) {
+                set_diag(ctx->diag, XR_AOT_REFINEMENT_USE_SITE,
+                         ctx->record_count, source_value, i);
+                return false;
+            }
+            if (!oracle_definition_storage(&oracle, source_value,
+                                           &input_storage,
+                                           &ignored_machine) ||
+                !oracle_use_storage(&oracle, i, a, source_value,
+                                    &output_storage)) {
+                set_diag(ctx->diag,
+                         XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+                         ctx->record_count, source_value, i);
+                return false;
+            }
+            if (!authority_add_obligation(
+                    ctx, &oracle, source_value, i, operation->block, a,
+                    XR_AOT_REP_USE_OPERATION, input_storage,
+                    output_storage))
+                return false;
+        }
+    }
+    uint32_t block_count =
+        (uint32_t) xr_semantic_plan_block_count(ctx->semantic);
+    for (uint32_t i = 0; i < block_count; i++) {
+        const XrSemanticBlockRecord *block =
+            xr_semantic_plan_block(ctx->semantic, i);
+        if (!block || block->kind != XI_BLOCK_RETURN ||
+            block->control_value == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        uint32_t source_operation =
+            block->control_value < ctx->semantic_value_count
+                ? ctx->operation_by_value[block->control_value]
+                : XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *operation =
+            source_operation != XR_SEMANTIC_INDEX_NONE
+                ? xr_semantic_plan_operation(ctx->semantic,
+                                             source_operation)
+                : NULL;
+        if (operation && operation->opcode == XI_ERR_RETURN)
+            continue;
+        XrRep input_storage = XR_REP_TAGGED;
+        XrRep output_storage = XR_REP_TAGGED;
+        uint16_t machine_kind = XR_MACHINE_REP_COUNT;
+        if (!oracle_definition_storage(&oracle, block->control_value,
+                                       &input_storage, &machine_kind)) {
+            set_diag(ctx->diag,
+                     XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+                     ctx->record_count, block->control_value,
+                     XR_SEMANTIC_INDEX_NONE);
+            return false;
+        }
+        if (!ctx->policy->force_return_tagged &&
+            !oracle_machine_storage(&oracle, block->control_value,
+                                    &output_storage, &machine_kind)) {
+            set_diag(ctx->diag,
+                     XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+                     ctx->record_count, block->control_value,
+                     XR_SEMANTIC_INDEX_NONE);
+            return false;
+        }
+        if (!authority_add_obligation(
+                ctx, &oracle, block->control_value,
+                XR_SEMANTIC_INDEX_NONE, i, 0,
+                XR_AOT_REP_USE_BLOCK_CONTROL, input_storage,
+                output_storage))
+            return false;
+    }
+    return true;
+}
+
+bool xr_aot_representation_refinement_build_from_authority(
+    const XrTargetPlan *target_plan, const XiRepPolicy *policy,
+    XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag) {
+    if (out_plan)
+        *out_plan = NULL;
+    if (diag)
+        memset(diag, 0, sizeof(*diag));
+    if (!target_plan || !out_plan) {
+        set_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT, 0, 0, 0);
+        return false;
+    }
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    XrAotRefinementBuilder *builder =
+        semantic ? xr_aot_refinement_builder_create(target_plan, diag) : NULL;
+    if (!builder) {
+        if (diag && diag->issue == XR_AOT_REFINEMENT_OK)
+            set_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, 0, 0, 0);
+        return false;
+    }
+    XiRepPolicy default_policy = xi_rep_policy_native_boundary();
+    CollectContext ctx = {
+        .target_plan = target_plan,
+        .semantic = semantic,
+        .policy = policy ? policy : &default_policy,
+        .builder = builder,
+        .protocol = xr_aot_refinement_representation_protocol(27902),
+        .diag = diag,
+    };
+    if (!collect_indices_init(&ctx)) {
+        set_diag(diag, XR_AOT_REFINEMENT_RESOURCE_BUDGET, 0, 0, 0);
+        xr_aot_refinement_builder_free(builder);
+        return false;
+    }
+    bool ok = authority_collect_obligations(&ctx) &&
+              xr_aot_refinement_builder_freeze(builder, target_plan,
+                                                out_plan, diag);
+    collect_indices_dispose(&ctx);
+    xr_aot_refinement_builder_free(builder);
+    return ok;
+}
+
+static const XiFunc *materialized_function_by_index(const XiFunc *function,
+                                                    uint32_t index) {
+    if (!function)
+        return NULL;
+    if (function->semantic_plan_function_index == index)
+        return function;
+    for (uint16_t i = 0; i < function->nchildren; i++) {
+        const XiFunc *match = materialized_function_by_index(
+            function->children[i], index);
+        if (match)
+            return match;
+    }
+    return NULL;
+}
+
+static const XiValue *materialized_value_by_id(const XiFunc *function,
+                                               uint32_t id,
+                                               uint32_t *out_matches) {
+    uint32_t matches = 0;
+    const XiValue *found = NULL;
+    if (!function)
+        return NULL;
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        const XiBlock *block = function->blocks[b];
+        if (!block)
+            continue;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            if (phi->value.id == id) {
+                found = &phi->value;
+                matches++;
+            }
+        }
+        for (uint32_t v = 0; v < block->nvalues; v++) {
+            if (block->values[v] && block->values[v]->id == id) {
+                found = block->values[v];
+                matches++;
+            }
+        }
+    }
+    if (out_matches)
+        *out_matches = matches;
+    return matches == 1 ? found : NULL;
+}
+
+static bool materialized_adapter_kind_matches(
+    const XrAotRepresentationAdapterRecord *record,
+    const XiValue *adapter) {
+    if (!record || !adapter)
+        return false;
+    switch (record->adapter_kind) {
+        case XR_AOT_REP_ADAPTER_BOX:
+            return adapter->op == XI_BOX &&
+                   adapter->backend_origin == XI_BACKEND_VALUE_REP_BOX;
+        case XR_AOT_REP_ADAPTER_UNBOX:
+            return adapter->op == XI_UNBOX &&
+                   adapter->backend_origin == XI_BACKEND_VALUE_REP_UNBOX;
+        default:
+            return false;
+    }
+}
+
+static bool materialized_operation_shape_matches(
+    const XrSemanticOperationRecord *operation, const XiValue *value,
+    uint32_t local_value) {
+    return operation && value && value->backend_origin == XI_BACKEND_VALUE_NONE &&
+           value->id == local_value && operation->opcode == value->op &&
+           operation->operand_count == value->nargs &&
+           operation->auxiliary_kind == value->aux_kind &&
+           operation->semantic_immediate == value->aux_int &&
+           operation->source_line == value->line &&
+           operation->transfer_mode == value->transfer_mode &&
+           operation->parameter_mode == value->param_mode &&
+           operation->flags == value->flags &&
+           operation->result_alias_operand == value->result_alias_operand;
+}
+
+static int compare_adapter_pointer(const void *left, const void *right) {
+    uintptr_t a = (uintptr_t) *(const XiValue *const *) left;
+    uintptr_t b = (uintptr_t) *(const XiValue *const *) right;
+    return a < b ? -1 : a > b ? 1 : 0;
+}
+
+static bool matched_adapter_contains(const XiValue *const *adapters,
+                                     uint32_t count,
+                                     const XiValue *value) {
+    uint32_t low = 0;
+    uint32_t high = count;
+    uintptr_t needle = (uintptr_t) value;
+    while (low < high) {
+        uint32_t middle = low + (high - low) / 2u;
+        uintptr_t current = (uintptr_t) adapters[middle];
+        if (current < needle)
+            low = middle + 1u;
+        else
+            high = middle;
+    }
+    return low < count && adapters[low] == value;
+}
+
+static bool verify_exact_semantic_coverage(VerifyAuthority *ctx);
+
+static bool verify_immutable_authority_coverage(
+    const XrAotRefinementPlanView *view, const XrTargetPlan *target_plan,
+    const XiRepPolicy *policy, XrAotRefinementDiagnostic *diag) {
+    VerifyAuthority ctx = {
+        .target_plan = target_plan,
+        .semantic = xr_target_plan_semantic_plan(target_plan),
+        .policy = policy,
+        .view = view,
+        .diag = diag,
+        .policy_fingerprint = rep_policy_fingerprint(policy),
+    };
+    bool valid = verify_authority_init(&ctx) &&
+                 verify_exact_semantic_coverage(&ctx);
+    verify_authority_dispose(&ctx);
+    return valid;
+}
+
+static bool verify_no_extra_materialized_adapters(
+    const XiFunc *function, const XiValue *const *matched,
+    uint32_t matched_count, XrAotRefinementDiagnostic *diag) {
+    if (!function)
+        return false;
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        const XiBlock *block = function->blocks[b];
+        if (!block)
+            return false;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            if (phi->value.backend_origin != XI_BACKEND_VALUE_NONE &&
+                !matched_adapter_contains(matched, matched_count,
+                                          &phi->value)) {
+                set_diag(diag, XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE, 0,
+                         phi->value.id, XR_SEMANTIC_INDEX_NONE);
+                return false;
+            }
+        }
+        for (uint32_t v = 0; v < block->nvalues; v++) {
+            const XiValue *value = block->values[v];
+            if (value && value->backend_origin != XI_BACKEND_VALUE_NONE &&
+                !matched_adapter_contains(matched, matched_count, value)) {
+                set_diag(diag, XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE, 0,
+                         value->id, XR_SEMANTIC_INDEX_NONE);
+                return false;
+            }
+        }
+    }
+    for (uint16_t i = 0; i < function->nchildren; i++) {
+        if (!verify_no_extra_materialized_adapters(
+                function->children[i], matched, matched_count, diag))
+            return false;
+    }
+    return true;
+}
+
+bool xr_aot_representation_materialization_verify(
+    const XrAotRefinementPlanView *view, const XiFunc *root,
+    const XrTargetPlan *target_plan, const XiRepPolicy *policy,
+    XrAotRefinementDiagnostic *diag) {
+    if (diag)
+        memset(diag, 0, sizeof(*diag));
+    if (!view || !root || !target_plan ||
+        root->semantic_plan != xr_target_plan_semantic_plan(target_plan) ||
+        !xr_aot_refinement_verify(view, target_plan, diag)) {
+        if (diag && diag->issue == XR_AOT_REFINEMENT_OK)
+            set_diag(diag, XR_AOT_REFINEMENT_BASELINE_FINGERPRINT,
+                     0, 0, 0);
+        return false;
+    }
+    XiRepPolicy default_policy = xi_rep_policy_native_boundary();
+    const XiRepPolicy *effective_policy = policy ? policy : &default_policy;
+    if (!verify_immutable_authority_coverage(
+            view, target_plan, effective_policy, diag))
+        return false;
+    XrFingerprint expected_policy =
+        rep_policy_fingerprint(effective_policy);
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    const XiValue **matched = NULL;
+    if (view->record_count) {
+        matched = (const XiValue **) xr_calloc(view->record_count,
+                                               sizeof(*matched));
+        if (!matched) {
+            set_diag(diag, XR_AOT_REFINEMENT_OUT_OF_MEMORY, 0, 0, 0);
+            return false;
+        }
+    }
+    bool valid = true;
+    for (uint32_t i = 0; valid && i < view->record_count; i++) {
+        const XrAotTransformationRecord *transformation =
+            &view->records[i];
+        const XrAotRepresentationAdapterRecord *record =
+            &transformation->representation_adapter;
+        if (transformation->transform_kind !=
+                XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER ||
+            transformation->decision != XR_AOT_REFINEMENT_APPLIED ||
+            !xr_fingerprint_equal(record->policy_fingerprint,
+                                  expected_policy)) {
+            set_diag(diag, XR_AOT_REFINEMENT_STALE_EVIDENCE, i,
+                     record->source_value, record->use_operation);
+            valid = false;
+            break;
+        }
+        const XrSemanticFunctionRecord *semantic_function =
+            xr_semantic_plan_function(semantic, record->source_function);
+        const XiFunc *function = materialized_function_by_index(
+            root, record->source_function);
+        if (!semantic_function || !function ||
+            record->source_value < semantic_function->value_begin ||
+            record->source_value >= semantic_function->value_begin +
+                                        semantic_function->value_count) {
+            set_diag(diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY, i,
+                     record->source_value, record->use_operation);
+            valid = false;
+            break;
+        }
+        uint32_t source_local =
+            record->source_value - semantic_function->value_begin;
+        uint32_t source_matches = 0;
+        const XiValue *source = materialized_value_by_id(
+            function, source_local, &source_matches);
+        uint32_t source_function = XR_SEMANTIC_INDEX_NONE;
+        uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
+        if (!source || source_matches != 1 ||
+            !xr_aot_scalar_semantic_value_id(
+                target_plan, function, source, &source_function,
+                &source_value, NULL, 0) ||
+            source_function != record->source_function ||
+            source_value != record->source_value) {
+            set_diag(diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY, i,
+                     record->source_value, record->use_operation);
+            valid = false;
+            break;
+        }
+        const XiValue *adapter = NULL;
+        if (record->use_kind == XR_AOT_REP_USE_OPERATION) {
+            const XrSemanticOperationRecord *use =
+                xr_semantic_plan_operation(semantic,
+                                           record->use_operation);
+            const XrSemanticFunctionRecord *use_function =
+                use ? xr_semantic_plan_function(semantic, use->function)
+                    : NULL;
+            const XiFunc *live_use_function =
+                use ? materialized_function_by_index(root, use->function)
+                    : NULL;
+            uint32_t use_local =
+                use && use_function &&
+                        use->result_value >= use_function->value_begin
+                    ? use->result_value - use_function->value_begin
+                    : UINT32_MAX;
+            uint32_t use_matches = 0;
+            const XiValue *user = materialized_value_by_id(
+                live_use_function, use_local, &use_matches);
+            if (!use || !use_function || !live_use_function ||
+                use->function != record->source_function ||
+                use->block != record->use_block || use_matches != 1 ||
+                !materialized_operation_shape_matches(use, user,
+                                                      use_local) ||
+                record->use_operand >= user->nargs || !user->args) {
+                set_diag(diag, XR_AOT_REFINEMENT_USE_SITE, i,
+                         record->source_value, record->use_operation);
+                valid = false;
+                break;
+            }
+            adapter = user->args[record->use_operand];
+        } else if (record->use_kind == XR_AOT_REP_USE_BLOCK_CONTROL) {
+            const XrSemanticBlockRecord *block =
+                xr_semantic_plan_block(semantic, record->use_block);
+            if (!block || block->function != record->source_function ||
+                record->use_operation != XR_SEMANTIC_INDEX_NONE ||
+                block->control_value != record->source_value ||
+                block->function >= xr_semantic_plan_function_count(semantic) ||
+                record->use_block < semantic_function->block_begin ||
+                record->use_block >= semantic_function->block_begin +
+                                         semantic_function->block_count) {
+                set_diag(diag, XR_AOT_REFINEMENT_USE_SITE, i,
+                         record->source_value, record->use_operation);
+                valid = false;
+                break;
+            }
+            uint32_t local_block =
+                record->use_block - semantic_function->block_begin;
+            adapter = local_block < function->nblocks &&
+                              function->blocks[local_block]
+                          ? function->blocks[local_block]->control
+                          : NULL;
+        } else {
+            set_diag(diag, XR_AOT_REFINEMENT_USE_SITE, i,
+                     record->source_value, record->use_operation);
+            valid = false;
+            break;
+        }
+        if (!adapter || adapter->nargs != 1 || !adapter->args ||
+            adapter->args[0] != source ||
+            !materialized_adapter_kind_matches(record, adapter) ||
+            !xr_aot_rep_adapter_value_is_exact(
+                target_plan, function, adapter, NULL, 0)) {
+            set_diag(diag, XR_AOT_REFINEMENT_REPRESENTATION, i,
+                     record->source_value, record->use_operation);
+            valid = false;
+            break;
+        }
+        matched[i] = adapter;
+    }
+    if (valid && view->record_count) {
+        qsort(matched, view->record_count, sizeof(*matched),
+              compare_adapter_pointer);
+    }
+    if (valid)
+        valid = verify_no_extra_materialized_adapters(
+            root, matched, view->record_count, diag);
+    xr_free(matched);
+    if (valid && diag)
+        memset(diag, 0, sizeof(*diag));
+    return valid;
 }
 
 static int compare_exact_key(const XrAotTransformationRecord *record,

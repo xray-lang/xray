@@ -44,6 +44,7 @@
 #include "xi_cgen_verify_output.h"
 #include "xi_backend_plan_contract.h"
 #include "emit_c/xr_c_emission_plan.h"
+#include "refine/xr_aot_representation_refinement.h"
 #include "xaot_bundle.h"
 #include "xaot_boundary.h"
 #include "xaot_link.h"
@@ -1681,6 +1682,57 @@ static bool xaot_build_module_target_plans(XaotBundle *bundle,
     return true;
 }
 
+static bool xaot_install_module_representation_refinements(
+    XaotBundle *bundle, const XiRepPolicy *policy) {
+    if (!bundle || !policy || !bundle->modules ||
+        bundle->nmodules == 0)
+        return false;
+    for (uint32_t module_index = 0; module_index < bundle->nmodules;
+         module_index++) {
+        XiModule *module = bundle->modules[module_index];
+        const XrTargetPlan *target_plan =
+            xaot_bundle_target_plan_for_module(bundle, module_index);
+        XrAotRefinementPlan *refinement = NULL;
+        XrAotRefinementDiagnostic diag = {0};
+        if (!module || !module->init || !target_plan ||
+            !xr_aot_representation_refinement_build_from_authority(
+                target_plan, policy, &refinement, &diag)) {
+            fprintf(stderr,
+                    "Error: module representation authority build failed for '%s': "
+                    "%s value=%u operation=%u\n",
+                    module && module->name ? module->name : "?",
+                    xr_aot_refinement_issue_name(diag.issue),
+                    diag.semantic_value, diag.semantic_operation);
+            xr_aot_refinement_plan_free(refinement);
+            return false;
+        }
+        XrAotRefinementPlanView view =
+            xr_aot_refinement_plan_view(refinement);
+        if (!xr_aot_representation_materialization_verify(
+                &view, module->init, target_plan, policy, &diag)) {
+            fprintf(stderr,
+                    "Error: module representation materialization failed for '%s': "
+                    "%s record=%u value=%u operation=%u\n",
+                    module->name ? module->name : "?",
+                    xr_aot_refinement_issue_name(diag.issue),
+                    diag.record_index, diag.semantic_value,
+                    diag.semantic_operation);
+            xr_aot_refinement_plan_free(refinement);
+            return false;
+        }
+        if (!xaot_bundle_install_representation_refinement(
+                bundle, module_index, refinement, policy)) {
+            fprintf(stderr,
+                    "Error: module representation authority install failed for '%s': %s\n",
+                    module->name ? module->name : "?",
+                    bundle->error_msg ? bundle->error_msg : "unknown error");
+            xr_aot_refinement_plan_free(refinement);
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool xaot_build_module_emission_plans(
     const XaotBundle *bundle, const XrTargetProfile *profile,
     XrCEmissionPlan ***out_emission_plans) {
@@ -2209,6 +2261,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     aot_bundle_initialized = true;
+    if (!xaot_bundle_require_representation_refinements(&aot_bundle)) {
+        fprintf(stderr,
+                "Error: failed to require immutable representation authorities\n");
+        goto fail_free_ir;
+    }
     aot_bundle.artifact_kind = artifact_kind;
     if (!xaot_bundle_set_target_data_layout(&aot_bundle,
                                             xr_compiler_session_target_data_layout(session))) {
@@ -2233,6 +2290,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     if (!xaot_build_module_target_plans(&aot_bundle,
                                         options->target_profile))
+        goto fail_free_ir;
+    if (!xaot_install_module_representation_refinements(
+            &aot_bundle, &cfg.rep_policy))
         goto fail_free_ir;
     if (!xaot_prepare_bundle(&aot_bundle, &prepare_stats)) {
         if (emit_global_evidence_dump && global_evidence_dump)

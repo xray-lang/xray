@@ -11,6 +11,7 @@
 #include "xaot_bundle.h"
 #include "../module/xnative_package.h"
 #include "xaot_struct_name.h"
+#include "refine/xr_aot_representation_refinement.h"
 #include "refine/xr_aot_scalar_value.h"
 #include "../base/xmalloc.h"
 #include "../base/xmemstream.h"
@@ -440,8 +441,22 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
     bundle->entry_module = entry_module;
     bundle->target_plans =
         (XrTargetPlan **) xr_calloc(nmodules, sizeof(*bundle->target_plans));
-    if (!bundle->target_plans)
+    bundle->representation_refinements =
+        (XrAotRefinementPlan **) xr_calloc(
+            nmodules, sizeof(*bundle->representation_refinements));
+    bundle->representation_policy_fingerprints =
+        (XrFingerprint *) xr_calloc(
+            nmodules, sizeof(*bundle->representation_policy_fingerprints));
+    if (!bundle->target_plans || !bundle->representation_refinements ||
+        !bundle->representation_policy_fingerprints) {
+        xr_free(bundle->target_plans);
+        xr_free(bundle->representation_refinements);
+        xr_free(bundle->representation_policy_fingerprints);
+        bundle->target_plans = NULL;
+        bundle->representation_refinements = NULL;
+        bundle->representation_policy_fingerprints = NULL;
         return false;
+    }
     for (uint32_t mi = 0; mi < nmodules; mi++) {
         const XiModule *mod = modules[mi];
         if (!mod || !mod->slot_enums)
@@ -475,6 +490,12 @@ XR_FUNC bool xaot_bundle_set_target_plan(XaotBundle *bundle, uint32_t module_ind
     }
     if (bundle->target_plans[module_index] == target_plan)
         return true;
+    if (bundle->representation_refinements &&
+        bundle->representation_refinements[module_index]) {
+        bundle->error_msg =
+            "module TargetPlan cannot change after representation authority installation";
+        return false;
+    }
     xr_target_plan_free(bundle->target_plans[module_index]);
     bundle->target_plans[module_index] = xr_target_plan_retain(target_plan);
     if (!bundle->target_plans[module_index]) {
@@ -501,6 +522,71 @@ XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_func(const XaotBundle *b
             return target_plan;
     }
     return NULL;
+}
+
+XR_FUNC bool xaot_bundle_install_representation_refinement(
+    XaotBundle *bundle, uint32_t module_index,
+    XrAotRefinementPlan *refinement,
+    const struct XiRepPolicy *policy) {
+    if (!bundle || !bundle->representation_refinements ||
+        !bundle->representation_policy_fingerprints ||
+        !bundle->target_plans || module_index >= bundle->nmodules ||
+        !refinement || !policy || !bundle->target_plans[module_index] ||
+        !bundle->modules || !bundle->modules[module_index] ||
+        !bundle->modules[module_index]->init)
+        return false;
+    XrAotRefinementPlanView view =
+        xr_aot_refinement_plan_view(refinement);
+    if (!xr_aot_representation_materialization_verify(
+            &view, bundle->modules[module_index]->init,
+            bundle->target_plans[module_index], policy, NULL)) {
+        bundle->error_msg =
+            "module representation authority is incomplete, stale, or bound to a different materialization";
+        return false;
+    }
+    XrFingerprint policy_fingerprint =
+        xr_aot_representation_policy_fingerprint(policy);
+    if (bundle->representation_refinements[module_index] == refinement)
+        return xr_fingerprint_equal(
+            bundle->representation_policy_fingerprints[module_index],
+            policy_fingerprint);
+    xr_aot_refinement_plan_free(
+        bundle->representation_refinements[module_index]);
+    bundle->representation_refinements[module_index] = refinement;
+    bundle->representation_policy_fingerprints[module_index] =
+        policy_fingerprint;
+    return true;
+}
+
+XR_FUNC const XrAotRefinementPlan *
+xaot_bundle_representation_refinement_for_module(const XaotBundle *bundle,
+                                                  uint32_t module_index) {
+    if (!bundle || !bundle->representation_refinements ||
+        module_index >= bundle->nmodules)
+        return NULL;
+    return bundle->representation_refinements[module_index];
+}
+
+XR_FUNC bool xaot_bundle_representation_policy_matches(
+    const XaotBundle *bundle, uint32_t module_index,
+    const struct XiRepPolicy *policy) {
+    return bundle && bundle->representation_policy_fingerprints && policy &&
+           module_index < bundle->nmodules &&
+           bundle->representation_refinements &&
+           bundle->representation_refinements[module_index] &&
+           xr_fingerprint_equal(
+               bundle->representation_policy_fingerprints[module_index],
+               xr_aot_representation_policy_fingerprint(policy));
+}
+
+XR_FUNC bool xaot_bundle_require_representation_refinements(
+    XaotBundle *bundle) {
+    if (!bundle || !bundle->representation_refinements ||
+        !bundle->representation_policy_fingerprints ||
+        bundle->nfunc_plans != 0 || bundle->nvalue_plans != 0)
+        return false;
+    bundle->representation_refinements_required = true;
+    return true;
 }
 
 static const XgClassSummary *xg_evidence_find_class(const XgGlobalEvidence *ev,
@@ -4144,6 +4230,13 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     for (i = 0; i < bundle->nmodules; i++)
         xr_target_plan_free(bundle->target_plans ? bundle->target_plans[i] : NULL);
     xr_free(bundle->target_plans);
+    for (i = 0; i < bundle->nmodules; i++)
+        xr_aot_refinement_plan_free(
+            bundle->representation_refinements
+                ? bundle->representation_refinements[i]
+                : NULL);
+    xr_free(bundle->representation_refinements);
+    xr_free(bundle->representation_policy_fingerprints);
     for (i = 0; i < bundle->nfunc_plans; i++)
         xaot_abi_free(&bundle->func_plans[i].abi);
     xr_free(bundle->func_plans);

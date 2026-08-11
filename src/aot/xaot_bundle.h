@@ -23,6 +23,9 @@
 #include "../base/xdefs.h"
 #include <stdint.h>
 
+typedef struct XrAotRefinementPlan XrAotRefinementPlan;
+struct XiRepPolicy;
+
 /* Pointer-keyed open-addressing index: maps an XiValue or XiFunc pointer to
  * its row in the corresponding plan array, turning the per-lookup linear
  * scan over the whole-bundle plan tables into O(1).  Stores array indices
@@ -1718,6 +1721,11 @@ typedef struct XaotBundle {
      * Migrated families must resolve through these plans and must not retain
      * parallel Xaot-private rows. */
     XrTargetPlan **target_plans;
+    /* One owned immutable representation-refinement authority per module,
+     * fingerprint-bound to its exact retained TargetPlan and target policy. */
+    XrAotRefinementPlan **representation_refinements;
+    XrFingerprint *representation_policy_fingerprints;
+    bool representation_refinements_required;
     XaotArtifactKind artifact_kind;
     uint32_t target_simd_features;
     XaotTargetCapabilityProvider target_provider;
@@ -1921,6 +1929,19 @@ XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_module(const XaotBundle 
                                                                uint32_t module_index);
 XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_func(const XaotBundle *bundle,
                                                              const XiFunc *func);
+/* Ownership transfers to the bundle only when installation succeeds. */
+XR_FUNC bool xaot_bundle_install_representation_refinement(
+    XaotBundle *bundle, uint32_t module_index,
+    XrAotRefinementPlan *refinement,
+    const struct XiRepPolicy *policy);
+XR_FUNC const XrAotRefinementPlan *
+xaot_bundle_representation_refinement_for_module(const XaotBundle *bundle,
+                                                  uint32_t module_index);
+XR_FUNC bool xaot_bundle_representation_policy_matches(
+    const XaotBundle *bundle, uint32_t module_index,
+    const struct XiRepPolicy *policy);
+XR_FUNC bool xaot_bundle_require_representation_refinements(
+    XaotBundle *bundle);
 XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
                                                 const XrTargetDataLayout *target_layout);
 XR_FUNC bool xaot_bundle_set_target_simd_features(XaotBundle *bundle, uint32_t features);

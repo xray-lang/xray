@@ -80,6 +80,12 @@ uncaptured closure to a direct C symbol. A missing, stale, incomplete, or
 suspendable plan keeps the runtime closure representation; AOT must not
 rediscover synchronous behavior from Xi. This tightens compiler authority
 without changing the public closure layout or calling convention.
+Representation refinement is likewise retained as one immutable authority per
+module, bound to the exact SemanticPlan, TargetPlan, target policy, and backend
+materialization. AOT prepare runs only after every required BOX or UNBOX is
+present at its recorded source and use, and rejects a missing, extra, reordered,
+or stale adapter before ABI planning. This adds no public value representation,
+layout, or calling-convention change.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:
@@ -265,7 +271,7 @@ the compiler core does not download a provider.
 ## Digest anchors
 
 anchor-sha256: src/aot/xaot_link.c a268bec7948a3a9cecf081d63d51545e3fe41af0b6ab32a9a38b21b031127da0
-anchor-sha256: src/aot/xaot_prepare.c 5e02420ddb1c3b0e4b42b32478f69ea2b314958e1bb4db50efbe452106e625d4
+anchor-sha256: src/aot/xaot_prepare.c c1c08326ef4cc5592f67108cda0814d450b608c3373947ef9beae97143810900
 anchor-sha256: src/aot/xaot_verify.c b8c2fca0a1e6020f8240f1078afb8e257549aaab60dc81fd2f6b9ea25bfd023b
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c d601a3ce4e2ad9aa0ec1a6ef044fa7c67dcc530dff80cbf637b6614a7d83a35b
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c 11e99944b4cf4a3cddad2830bb60f364731489d6ec6b8be4e8df584312e852da
