@@ -893,7 +893,7 @@ static bool test_c_emission_registry_install(TestCEmissionRegistry *registry,
         }
         registry->plans[i] = emission_plan;
     }
-    if (!xi_cgen_ctx_set_scalar_emission_plans(ctx, registry->plans,
+    if (!xi_cgen_ctx_set_value_emission_plans(ctx, registry->plans,
                                                registry->count)) {
         test_c_emission_registry_free(registry);
         return false;
@@ -2872,8 +2872,8 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     xi_cgen_ctx_set_aot_bundle(ctx, &legacy_plan.bundle);
     const XrCEmissionPlan *emission_plans[] = {emission_plan,
                                               emission_plan_second};
-    TEST_REQUIRE(xi_cgen_ctx_set_scalar_emission_plans(ctx, emission_plans, 2),
-                 "verified scalar emission plans attached");
+    TEST_REQUIRE(xi_cgen_ctx_set_value_emission_plans(ctx, emission_plans, 2),
+                 "verified value emission plans attached");
     emission_plans[0] = NULL;
     emission_plans[1] = NULL;
 
@@ -2931,7 +2931,7 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     XiCgenCtx *reverse = xi_cgen_ctx_new();
     TEST_REQUIRE(reverse != NULL, "reverse registry context allocated");
     xi_cgen_ctx_set_aot_bundle(reverse, &legacy_plan.bundle);
-    TEST_REQUIRE(xi_cgen_ctx_set_scalar_emission_plans(reverse,
+    TEST_REQUIRE(xi_cgen_ctx_set_value_emission_plans(reverse,
                                                        emission_plans, 2),
                  "reverse registry installed");
     char *reverse_buf = NULL;
@@ -2952,7 +2952,7 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     xi_cgen_ctx_set_aot_bundle(swapped, &legacy_plan.bundle);
     const XrCEmissionPlan *swapped_plans[] = {emission_plan_second,
                                              emission_plan};
-    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plans(swapped,
+    TEST_REQUIRE(!xi_cgen_ctx_set_value_emission_plans(swapped,
                                                         swapped_plans, 2) &&
                      xi_cgen_has_error(swapped),
                  "swapped module emission plans fail closed");
@@ -2965,10 +2965,10 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     XiCgenCtx *missing_install = xi_cgen_ctx_new();
     TEST_REQUIRE(missing_install != NULL, "missing-plan context allocated");
     xi_cgen_ctx_set_aot_bundle(missing_install, &legacy_plan.bundle);
-    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plans(missing_install, NULL, 2) &&
+    TEST_REQUIRE(!xi_cgen_ctx_set_value_emission_plans(missing_install, NULL, 2) &&
                      xi_cgen_has_error(missing_install),
-                 "missing scalar emission plan fails closed");
-    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plans(missing_install,
+                 "missing value emission plan fails closed");
+    TEST_REQUIRE(!xi_cgen_ctx_set_value_emission_plans(missing_install,
                                                         emission_plans, 2) &&
                      xi_cgen_has_error(missing_install),
                  "sticky registry error cannot be cleared by a later valid install");

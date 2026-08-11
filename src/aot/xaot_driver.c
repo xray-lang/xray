@@ -2364,7 +2364,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     has_explicit_vector_ops = xaot_bundle_has_explicit_vector_ops(modules, nmodules);
     xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle);
-    if (!xi_cgen_ctx_set_scalar_emission_plans(
+    if (!xi_cgen_ctx_set_value_emission_plans(
             cg_ctx, (const XrCEmissionPlan *const *) emission_plans,
             (uint32_t) nmodules)) {
         fprintf(stderr, "Error: failed to install module C emission authorities\n");

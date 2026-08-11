@@ -121,13 +121,16 @@ static bool verify_target_machine_value_rep(const XrTargetPlan *target_plan,
         case XR_MACHINE_REP_F32: rep = XAOT_REP_F32; break;
         case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
         case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
+        case XR_MACHINE_REP_DYN_VALUE: rep = XAOT_REP_TAGGED; break;
         default: return false;
     }
     info = xaot_rep_info(rep);
     if (!info)
         return false;
     memset(out, 0, sizeof(*out));
-    out->kind = rep == XAOT_REP_VOID ? XAOT_VALUE_VOID : XAOT_VALUE_SCALAR;
+    out->kind = rep == XAOT_REP_VOID   ? XAOT_VALUE_VOID
+                : rep == XAOT_REP_TAGGED ? XAOT_VALUE_TAGGED
+                                         : XAOT_VALUE_SCALAR;
     out->rep = rep;
     out->type = value->type;
     out->c_type = info->c_type;
@@ -148,7 +151,7 @@ static bool verify_effective_value_rep(const XaotBundle *bundle, const XiFunc *f
         if (!verify_target_machine_value_rep(xaot_bundle_target_plan_for_func(bundle, func),
                                              binding, value, out))
             return set_error(errbuf, errbuf_len,
-                             "AOT scalar TargetPlan binding has invalid machine rep");
+                             "AOT TargetPlan binding has invalid C value rep");
         return true;
     }
     legacy = xaot_bundle_find_value_plan(bundle, value);
@@ -1085,6 +1088,7 @@ static bool verify_allocation_plan(const XaotBundle *bundle, const XaotAllocatio
 static bool verify_closure_plan(const XaotBundle *bundle, const XaotClosurePlan *plan, char *errbuf,
                                 size_t errbuf_len) {
     XaotClosurePlan derived;
+    XaotValueRep value_rep;
 
     if (!bundle || !plan)
         return set_error(errbuf, errbuf_len, "AOT closure plan is NULL");
@@ -1092,8 +1096,9 @@ static bool verify_closure_plan(const XaotBundle *bundle, const XaotClosurePlan 
         return set_error(errbuf, errbuf_len, "AOT closure plan lacks func or value");
     if (!xaot_bundle_find_func_plan(bundle, plan->func))
         return set_error(errbuf, errbuf_len, "AOT closure plan func has no func plan");
-    if (!xaot_bundle_find_value_plan(bundle, plan->value))
-        return set_error(errbuf, errbuf_len, "AOT closure plan value has no value plan");
+    if (!verify_effective_value_rep(bundle, plan->func, plan->value,
+                                    &value_rep, errbuf, errbuf_len))
+        return false;
     if (xaot_bundle_find_closure_plan(bundle, plan->value) != plan)
         return set_error(errbuf, errbuf_len, "AOT closure plan index mismatch");
     if (!xaot_prepare_closure_plan_for_value(plan->func, plan->value, &derived))

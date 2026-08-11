@@ -120,12 +120,12 @@ typedef enum XiCgenCDialect {
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
 XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle);
-/* Attach one immutable scalar projection for every module in the already
+/* Attach one immutable value projection for every module in the already
  * installed AOT bundle. The pointer array is copied; plans remain borrowed and
  * must outlive ctx. A successful install seals both bundle and registry.
  * Queries select an entry by exact SemanticPlan authority, including exports
  * and imported functions that are not part of the currently emitted module. */
-XR_FUNC bool xi_cgen_ctx_set_scalar_emission_plans(
+XR_FUNC bool xi_cgen_ctx_set_value_emission_plans(
     XiCgenCtx *ctx, const XrCEmissionPlan *const *emission_plans,
     uint32_t count);
 XR_FUNC void xi_cgen_ctx_set_target(XiCgenCtx *ctx, const XaotTarget *target, bool simd_active);

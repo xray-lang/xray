@@ -34,21 +34,22 @@ static const XaotValuePlan *cg_value_plan_optional(XiCgenCtx *ctx, const XiValue
     return xaot_bundle_find_value_plan(ctx->aot_bundle, v);
 }
 
-/* Frozen scalar/void values intentionally have no XaotValuePlan. Only a
- * verified non-scalar family or an exact backend representation adapter may
- * require a Xaot row. */
+/* Frozen values covered by immutable C emission intentionally have no
+ * XaotValuePlan. Only an unsupported verified value family or an exact backend
+ * representation adapter may require a Xaot row. */
 static const XaotValuePlan *cg_value_plan_require_legacy(XiCgenCtx *ctx,
                                                          const XiValue *v) {
     if (!ctx || !v)
         return NULL;
 
-    XrCScalarEmissionView scalar = {0};
-    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, NULL, v, &scalar);
-    if (scalar_status == CG_SCALAR_EMISSION_FOUND ||
-        scalar_status == CG_SCALAR_EMISSION_ERROR)
+    XrCValueEmissionView emission = {0};
+    CgValueEmissionStatus emission_status =
+        cg_value_emission_view(ctx, NULL, v, &emission);
+    if (emission_status == CG_VALUE_EMISSION_FOUND ||
+        emission_status == CG_VALUE_EMISSION_ERROR)
         return NULL;
-    if (scalar_status == CG_SCALAR_EMISSION_NOT_CONFIGURED) {
-        (void) cg_scalar_emission_fail(ctx, "legacy value lookup has no CGen authority");
+    if (emission_status == CG_VALUE_EMISSION_NOT_CONFIGURED) {
+        (void) cg_value_emission_fail(ctx, "legacy value lookup has no CGen authority");
         return NULL;
     }
 
@@ -62,13 +63,15 @@ static const XaotValuePlan *cg_value_plan_require_legacy(XiCgenCtx *ctx,
 }
 
 static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
-    XrCScalarEmissionView scalar = {0};
-    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, NULL, v, &scalar);
-    XrRep scalar_rep = XR_REP_VOID;
-    if (scalar_status == CG_SCALAR_EMISSION_FOUND)
-        return cg_scalar_emission_storage_rep(ctx, &scalar, &scalar_rep) ? scalar_rep
-                                                                        : XR_REP_VOID;
-    if (scalar_status == CG_SCALAR_EMISSION_ERROR)
+    XrCValueEmissionView emission = {0};
+    CgValueEmissionStatus emission_status =
+        cg_value_emission_view(ctx, NULL, v, &emission);
+    XrRep storage_rep = XR_REP_VOID;
+    if (emission_status == CG_VALUE_EMISSION_FOUND)
+        return cg_value_emission_storage_rep(ctx, &emission, &storage_rep)
+                   ? storage_rep
+                   : XR_REP_VOID;
+    if (emission_status == CG_VALUE_EMISSION_ERROR)
         return XR_REP_VOID;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;

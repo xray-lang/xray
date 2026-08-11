@@ -24,6 +24,7 @@
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
+#include <string.h>
 
 static bool report(char *error, size_t size, const char *code, const char *detail) {
     if (error && size)
@@ -439,6 +440,8 @@ static bool rep_kind_contract_is_exact(const XrTargetPlan *plan,
         case XR_MACHINE_REP_DYN_VALUE:
             return rep->detail == 0 && rep->lane_count == 0 &&
                    rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                   rep->ownership == XR_TARGET_OWNERSHIP_OWNED &&
+                   rep->null_encoding == XR_TARGET_NULL_TAGGED &&
                    rep->signedness == XR_TARGET_SIGN_NONE;
         case XR_MACHINE_REP_AGGREGATE:
         case XR_MACHINE_REP_VIEW: {
@@ -768,6 +771,107 @@ static int target_plan_layout_for_type(const XrTargetPlan *plan, uint32_t semant
                : -1;
 }
 
+static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
+                                           const XrSemanticOperationRecord *operation) {
+    static const char suffix[] = "/allocation";
+    XrStableId expected_allocation;
+    XrFingerprint allocation_digest;
+    size_t canonical_length =
+        operation && operation->canonical_key
+            ? strlen(operation->canonical_key)
+            : 0;
+    size_t allocation_length =
+        operation && operation->allocation_key
+            ? strlen(operation->allocation_key)
+            : 0;
+    if (!semantic || !operation || operation->opcode != XI_CLOSURE_NEW ||
+        operation->callable_function >= xr_semantic_plan_function_count(semantic) ||
+        operation->operand_count != 0 || !operation->canonical_key ||
+        !operation->allocation_key ||
+        canonical_length > SIZE_MAX - sizeof(suffix) ||
+        allocation_length != canonical_length + sizeof(suffix) - 1u ||
+        memcmp(operation->allocation_key, operation->canonical_key,
+               canonical_length) != 0 ||
+        memcmp(operation->allocation_key + canonical_length, suffix,
+               sizeof(suffix)) != 0 ||
+        !xr_stable_id_from_key(operation->allocation_key,
+                               &expected_allocation, &allocation_digest) ||
+        !xr_stable_id_equal(expected_allocation, operation->allocation_id) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
+        return false;
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(semantic, operation->callable_function);
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_count);
+    bool typed_function = type && type->kind == XR_KIND_FUNCTION;
+    bool opaque_closure = type && type->kind == XR_KIND_UNKNOWN &&
+                          type->child_count == 0;
+    if (!callee || !type || callee->parent != operation->function ||
+        callee->capture_count != 0 || (!typed_function && !opaque_closure) ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) != 0 ||
+        (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                        XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        callee->parameter_count == UINT16_MAX ||
+        (typed_function &&
+         type->child_count != (uint32_t) callee->parameter_count + 1u) ||
+        type->child_begin > child_count ||
+        type->child_count > child_count - type->child_begin ||
+        callee->parameter_begin > xr_semantic_plan_parameter_count(semantic) ||
+        callee->parameter_count > xr_semantic_plan_parameter_count(semantic) -
+                                      callee->parameter_begin)
+        return false;
+    for (uint32_t i = 0; i < callee->parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(semantic, callee->parameter_begin + i);
+        if (!parameter || parameter->function != operation->callable_function ||
+            parameter->ordinal != i ||
+            (typed_function &&
+             children[type->child_begin + i] != parameter->type))
+            return false;
+    }
+    return opaque_closure ||
+           children[type->child_begin + callee->parameter_count] ==
+               callee->return_type;
+}
+
+static bool collect_exact_closure_types(const XrTargetPlan *plan,
+                                        uint8_t **out, char *error,
+                                        size_t error_size) {
+    if (out)
+        *out = NULL;
+    size_t type_count = xr_semantic_plan_type_count(plan->semantic_plan);
+    size_t operation_count =
+        xr_semantic_plan_operation_count(plan->semantic_plan);
+    if (!out || type_count > UINT32_MAX || operation_count > UINT32_MAX)
+        return report(error, error_size, "XR_EXEC_5003",
+                      "closure-type verification budget is exhausted");
+    uint8_t *exact_types = type_count
+                               ? (uint8_t *) xr_calloc(type_count, sizeof(*exact_types))
+                               : NULL;
+    if (type_count && !exact_types)
+        return report(error, error_size, "XR_EXEC_5003",
+                      "closure-type verification allocation failed");
+    for (uint32_t i = 0; i < (uint32_t) operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan->semantic_plan, i);
+        if (!operation || operation->result_type >= type_count) {
+            xr_free(exact_types);
+            return report(error, error_size, "XR_TARGET_1001",
+                          "closure-type verification input is invalid");
+        }
+        if (semantic_heap_closure_is_exact(plan->semantic_plan, operation))
+            exact_types[operation->result_type] = 1;
+    }
+    *out = exact_types;
+    return true;
+}
+
 static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value,
                                  uint32_t semantic_type, uint32_t semantic_function,
                                  const XrSemanticOperationRecord *operation,
@@ -795,7 +899,9 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
             xi_generated_op_result_ownership(operation->opcode);
     if (generated_result_void && !operation_result_void)
         XR_VALUE_BINDING_FAIL(1);
-    int eligibility = operation_result_void
+    bool exact_heap_closure =
+        semantic_heap_closure_is_exact(plan->semantic_plan, operation);
+    int eligibility = operation_result_void || exact_heap_closure
                           ? 1
                           : (type ? semantic_type_expected_rep(type,
                                                                &expected_kind)
@@ -813,7 +919,15 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                                                          aggregate_stack, 0)
                         : 0;
     int expected_layout = -1;
-    if (eligibility == 0 && deferred_operation) {
+    if (exact_heap_closure) {
+        expected_kind = XR_MACHINE_REP_DYN_VALUE;
+        expected_layout = target_plan_layout_for_type(plan, semantic_type);
+        eligibility = expected_layout >= 0 &&
+                              plan->layouts[expected_layout].kind ==
+                                  XR_TARGET_LAYOUT_DYNAMIC
+                          ? 1
+                          : -1;
+    } else if (eligibility == 0 && deferred_operation) {
         eligibility = 0;
     } else if (aggregate == 1) {
         expected_kind = XR_MACHINE_REP_AGGREGATE;
@@ -1072,7 +1186,9 @@ static bool verify_aggregate_layout_acyclic(const XrTargetPlan *plan, uint32_t l
     return true;
 }
 
-static bool verify_layouts(const XrTargetPlan *plan, char *error, size_t error_size) {
+static bool verify_layouts(const XrTargetPlan *plan,
+                           const uint8_t *exact_closure_types,
+                           char *error, size_t error_size) {
     size_t semantic_types = xr_semantic_plan_type_count(plan->semantic_plan);
     uint32_t child_table_count = 0;
     const uint32_t *children =
@@ -1084,7 +1200,8 @@ static bool verify_layouts(const XrTargetPlan *plan, char *error, size_t error_s
         if (layout->id != i || layout->semantic_type >= semantic_types ||
             (previous_type != XR_SEMANTIC_INDEX_NONE && layout->semantic_type <= previous_type) ||
             (layout->kind != XR_TARGET_LAYOUT_SCALAR &&
-             layout->kind != XR_TARGET_LAYOUT_AGGREGATE) ||
+             layout->kind != XR_TARGET_LAYOUT_AGGREGATE &&
+             layout->kind != XR_TARGET_LAYOUT_DYNAMIC) ||
             layout->reserved != 0 ||
             !is_power_of_two(layout->align) || layout->fixed_prefix_size % layout->align != 0 ||
             layout->extent >= plan->extents_count ||
@@ -1114,6 +1231,21 @@ static bool verify_layouts(const XrTargetPlan *plan, char *error, size_t error_s
             if (!physical_match)
                 return report(error, error_size, "XR_TARGET_1002",
                               "scalar layout disagrees with its canonical machine representation");
+        } else if (layout->kind == XR_TARGET_LAYOUT_DYNAMIC) {
+            bool exact_closure_type = exact_closure_types &&
+                                      exact_closure_types[layout->semantic_type] != 0;
+            uint32_t representation_count = 0;
+            for (uint32_t r = 0; r < plan->machine_reps_count; r++) {
+                const XrTargetMachineRepRecord *rep = &plan->machine_reps[r];
+                representation_count +=
+                    rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+                    rep->memory_size == layout->fixed_prefix_size &&
+                    rep->memory_align == layout->align;
+            }
+            if (scalar != 0 || !exact_closure_type || layout->field_count != 0 ||
+                layout->root_field_count != 0 || representation_count != 1)
+                return report(error, error_size, "XR_TARGET_1002",
+                              "dynamic closure layout semantic contract is incomplete");
         } else {
             uint32_t expected_fields = semantic_type->aggregate_extent;
             if (scalar != 0 || semantic_aggregate_kind(semantic_type) != 1 ||
@@ -1619,19 +1751,27 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
         return report(error, error_size, "XR_TARGET_1000",
                       "TargetPlan semantic fingerprint does not match its exact input");
     if (!xr_target_profile_verify(plan->profile, error, error_size) ||
-         !verify_resource_budgets(plan, error, error_size) ||
-         !verify_machine_reps(plan, error, error_size) ||
+        !verify_resource_budgets(plan, error, error_size) ||
+        !verify_machine_reps(plan, error, error_size) ||
         !verify_value_reps(plan, error, error_size) ||
-        !verify_extents(plan, error, error_size) ||
-        !verify_layouts(plan, error, error_size) ||
-        !verify_extent_references(plan, error, error_size) ||
-        !verify_storage_and_allocations(plan, error, error_size) ||
-        !verify_functions_and_slots(plan, error, error_size) ||
-        !xr_target_instruction_program_verify(plan, error, error_size) ||
-        !verify_calls(plan, error, error_size) ||
-        !verify_roots_and_cleanups(plan, error, error_size) ||
-        !verify_adapters_and_capabilities(plan, error, error_size) ||
-        !verify_coroutines(plan, error, error_size))
+        !verify_extents(plan, error, error_size))
+        return false;
+    uint8_t *exact_closure_types = NULL;
+    if (!collect_exact_closure_types(plan, &exact_closure_types, error,
+                                     error_size))
+        return false;
+    bool verified =
+        verify_layouts(plan, exact_closure_types, error, error_size) &&
+        verify_extent_references(plan, error, error_size) &&
+        verify_storage_and_allocations(plan, error, error_size) &&
+        verify_functions_and_slots(plan, error, error_size) &&
+        xr_target_instruction_program_verify(plan, error, error_size) &&
+        verify_calls(plan, error, error_size) &&
+        verify_roots_and_cleanups(plan, error, error_size) &&
+        verify_adapters_and_capabilities(plan, error, error_size) &&
+        verify_coroutines(plan, error, error_size);
+    xr_free(exact_closure_types);
+    if (!verified)
         return false;
     XrFingerprint actual;
     xr_target_plan_compute_fingerprint(plan, &actual);

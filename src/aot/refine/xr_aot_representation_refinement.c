@@ -14,6 +14,7 @@
 #include "../../base/xmalloc.h"
 #include "../../ir/xi_opt.h"
 #include "../../ir/xi_own.h"
+#include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -703,6 +704,138 @@ static bool verify_scalar_type_authority(VerifyAuthority *ctx,
            memcmp(type->canonical_key + prefix_length, alias, alias_length) == 0;
 }
 
+static bool semantic_allocation_identity_is_canonical(
+    const XrSemanticOperationRecord *operation) {
+    static const char suffix[] = "/allocation";
+    if (!operation || !operation->canonical_key || !operation->allocation_key)
+        return false;
+    size_t canonical_length = strlen(operation->canonical_key);
+    size_t allocation_length = strlen(operation->allocation_key);
+    if (canonical_length > SIZE_MAX - sizeof(suffix) ||
+        allocation_length != canonical_length + sizeof(suffix) - 1u ||
+        memcmp(operation->allocation_key, operation->canonical_key,
+               canonical_length) != 0 ||
+        memcmp(operation->allocation_key + canonical_length, suffix,
+               sizeof(suffix)) != 0)
+        return false;
+    XrStableId expected;
+    XrFingerprint digest;
+    return xr_stable_id_from_key(operation->allocation_key, &expected, &digest) &&
+           xr_stable_id_equal(expected, operation->allocation_id);
+}
+
+static bool semantic_heap_closure_is_exact(const XrSemanticPlan *semantic,
+                                           const XrSemanticOperationRecord *operation) {
+    if (!semantic || !operation || operation->opcode != XI_CLOSURE_NEW ||
+        operation->callable_function >= xr_semantic_plan_function_count(semantic) ||
+        operation->operand_count != 0 ||
+        !semantic_allocation_identity_is_canonical(operation) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
+        return false;
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(semantic, operation->callable_function);
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_count);
+    bool typed_function = type && type->kind == XR_KIND_FUNCTION;
+    bool opaque_closure = type && type->kind == XR_KIND_UNKNOWN &&
+                          type->child_count == 0;
+    if (!callee || !type || callee->parent != operation->function ||
+        callee->capture_count != 0 || (!typed_function && !opaque_closure) ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) != 0 ||
+        (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                        XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        callee->parameter_count == UINT16_MAX ||
+        (typed_function &&
+         type->child_count != (uint32_t) callee->parameter_count + 1u) ||
+        type->child_begin > child_count ||
+        type->child_count > child_count - type->child_begin ||
+        callee->parameter_begin > xr_semantic_plan_parameter_count(semantic) ||
+        callee->parameter_count > xr_semantic_plan_parameter_count(semantic) -
+                                      callee->parameter_begin)
+        return false;
+    for (uint32_t i = 0; i < callee->parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(semantic, callee->parameter_begin + i);
+        if (!parameter || parameter->function != operation->callable_function ||
+            parameter->ordinal != i ||
+            (typed_function &&
+             children[type->child_begin + i] != parameter->type))
+            return false;
+    }
+    return opaque_closure ||
+           children[type->child_begin + callee->parameter_count] ==
+               callee->return_type;
+}
+
+static bool verify_heap_closure_type_authority(
+    VerifyAuthority *ctx, const XrSemanticOperationRecord *operation,
+    const XiFunc *owner, const XiValue *live) {
+    const XrSemanticTypeRecord *semantic_type =
+        ctx && operation
+            ? xr_semantic_plan_type(ctx->semantic, operation->result_type)
+            : NULL;
+    if (!ctx || !owner || !live ||
+        !semantic_heap_closure_is_exact(ctx->semantic, operation) ||
+        !semantic_type || !live->type || !live->aux ||
+        !source_type_matches(live->type, semantic_type))
+        return false;
+    const XiFunc *callee = (const XiFunc *) live->aux;
+    const XrSemanticFunctionRecord *semantic_callee =
+        xr_semantic_plan_function(ctx->semantic, operation->callable_function);
+    uint32_t pointer_matches = 0;
+    uint32_t index_matches = 0;
+    for (uint16_t i = 0; i < owner->nchildren; i++) {
+        const XiFunc *child = owner->children ? owner->children[i] : NULL;
+        pointer_matches += child == callee;
+        if (child && child->semantic_plan_function_index ==
+                         operation->callable_function) {
+            index_matches++;
+            if (child != callee)
+                return false;
+        }
+    }
+    bool typed_function = semantic_type->kind == XR_KIND_FUNCTION;
+    if (!semantic_callee || callee->parent_func != owner || callee->ncaptures != 0 ||
+        pointer_matches != 1 || index_matches != 1 ||
+        callee->semantic_plan_function_index != operation->callable_function ||
+        callee->nparams != semantic_callee->parameter_count ||
+        (typed_function &&
+         (live->type->function.param_count != semantic_callee->parameter_count ||
+          !live->type->function.return_type ||
+          !source_type_matches(
+              live->type->function.return_type,
+              xr_semantic_plan_type(ctx->semantic,
+                                    semantic_callee->return_type)))) ||
+        !callee->return_type ||
+        !source_type_matches(callee->return_type,
+                             xr_semantic_plan_type(ctx->semantic,
+                                                   semantic_callee->return_type)))
+        return false;
+    for (uint32_t i = 0; i < semantic_callee->parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(ctx->semantic,
+                                       semantic_callee->parameter_begin + i);
+        if (!parameter || !callee->params || !callee->params[i] ||
+            (typed_function &&
+             (!live->type->function.params ||
+              live->type->function.params[i].mode != parameter->mode ||
+              !source_type_matches(
+                  live->type->function.params[i].type,
+                  xr_semantic_plan_type(ctx->semantic, parameter->type)))) ||
+            !source_type_matches(callee->params[i]->type,
+                                 xr_semantic_plan_type(ctx->semantic,
+                                                       parameter->type)))
+            return false;
+    }
+    return true;
+}
+
 static bool verify_authority_init(VerifyAuthority *ctx) {
     size_t function_count = xr_semantic_plan_function_count(ctx->semantic);
     size_t block_count = xr_semantic_plan_block_count(ctx->semantic);
@@ -965,6 +1098,11 @@ static bool verify_live_operation(VerifyAuthority *ctx,
         if (value->block && semantic_function &&
             value->block->id < semantic_function->block_count)
             block_index = semantic_function->block_begin + value->block->id;
+        bool type_authority = semantic_heap_closure_is_exact(ctx->semantic, operation)
+                                  ? verify_heap_closure_type_authority(
+                                        ctx, operation, function, value)
+                                  : verify_scalar_type_authority(
+                                        ctx, operation->result_type, value->type);
         exact = exact && operation->function == function_index &&
                 operation->block == block_index &&
                 operation->result_value == semantic_value &&
@@ -977,8 +1115,7 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                 operation->parameter_mode == value->param_mode &&
                 operation->flags == value->flags &&
                 operation->result_alias_operand == value->result_alias_operand &&
-                verify_scalar_type_authority(ctx, operation->result_type,
-                                             value->type);
+                type_authority;
         if (exact && parameter)
             exact = operation->parameter_mode == parameter->mode &&
                     operation->parameter_ownership == parameter->ownership &&
@@ -998,10 +1135,25 @@ static bool verify_live_operation(VerifyAuthority *ctx,
                     verify_live_value_id(ctx, function, value->args[a],
                                          &source_value) &&
                     operand->value == source_value &&
-                    operand->type <
-                        xr_semantic_plan_type_count(ctx->semantic) &&
-                    verify_scalar_type_authority(ctx, operand->type,
-                                                 value->args[a]->type);
+                    operand->type < xr_semantic_plan_type_count(ctx->semantic);
+            if (exact) {
+                uint32_t source_operation_index =
+                    ctx->operation_by_value[source_value];
+                const XrSemanticOperationRecord *source_operation =
+                    source_operation_index != XR_SEMANTIC_INDEX_NONE
+                        ? xr_semantic_plan_operation(ctx->semantic,
+                                                     source_operation_index)
+                        : NULL;
+                exact = source_operation &&
+                                semantic_heap_closure_is_exact(
+                                    ctx->semantic, source_operation)
+                            ? verify_heap_closure_type_authority(
+                                  ctx, source_operation, function,
+                                  value->args[a]) &&
+                                  operand->type == source_operation->result_type
+                            : verify_scalar_type_authority(
+                                  ctx, operand->type, value->args[a]->type);
+            }
             if (!verify_charge_work(ctx, 1))
                 return false;
         }
@@ -1010,8 +1162,13 @@ static bool verify_live_operation(VerifyAuthority *ctx,
         uint32_t type_index = parameter ? parameter->type
                                         : operation ? operation->result_type
                                                     : XR_SEMANTIC_INDEX_NONE;
-        bool type_exact =
-            verify_scalar_type_authority(ctx, type_index, value->type);
+        bool type_exact = operation &&
+                                  semantic_heap_closure_is_exact(ctx->semantic,
+                                                                 operation)
+                              ? verify_heap_closure_type_authority(
+                                    ctx, operation, function, value)
+                              : verify_scalar_type_authority(ctx, type_index,
+                                                             value->type);
         set_diag(ctx->diag,
                  type_exact
                      ? (verify_operation_is_record_use(ctx, operation_index)
@@ -1165,6 +1322,76 @@ static bool oracle_machine_storage(const VerifyAuthority *ctx,
     return true;
 }
 
+static bool oracle_dynamic_closure_storage(const VerifyAuthority *ctx,
+                                           uint32_t semantic_value,
+                                           XrRep *out_storage,
+                                           uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    if (!operation || operation->result_value != semantic_value ||
+        !semantic_heap_closure_is_exact(ctx->semantic, operation))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetMachineRepRecord *register_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->register_rep)
+                : NULL;
+    const XrTargetMachineRepRecord *memory_rep =
+        binding ? xr_target_plan_machine_rep(ctx->target_plan,
+                                              binding->memory_rep)
+                : NULL;
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots =
+        xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(ctx->target_plan, &layout_count);
+    const XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != operation->result_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+    }
+    if (!binding || !register_rep || !memory_rep || !slot || !layout ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        layout->kind != XR_TARGET_LAYOUT_DYNAMIC || layout->field_count != 0 ||
+        layout->root_field_count != 0 ||
+        layout->fixed_prefix_size != memory_rep->memory_size ||
+        layout->align != memory_rep->memory_align ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index ||
+        slot->function != operation->function ||
+        slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep ||
+        slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static uint16_t oracle_representation_recipe(uint16_t adapter,
                                              uint16_t machine_kind) {
     bool box = adapter == XR_AOT_REP_ADAPTER_BOX;
@@ -1210,6 +1437,10 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
     if (!operation)
         return false;
     switch (operation->opcode) {
+        case XI_CLOSURE_NEW:
+            return oracle_dynamic_closure_storage(ctx, semantic_value,
+                                                  out_storage,
+                                                  out_machine_kind);
         case XI_CALL_BUILTIN:
         case XI_CHAN_RECV:
         case XI_CHAN_TRY_RECV:
@@ -1320,7 +1551,10 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         case XI_PRINT: {
             XrRep machine_storage = XR_REP_TAGGED;
             if (!oracle_machine_storage(ctx, source_value, &machine_storage,
-                                        &ignored_kind))
+                                        &ignored_kind) &&
+                !oracle_dynamic_closure_storage(ctx, source_value,
+                                                &machine_storage,
+                                                &ignored_kind))
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
@@ -1631,19 +1865,27 @@ bool xr_aot_representation_refinement_build_from_authority(
     return ok;
 }
 
+static void materialized_function_matches(const XiFunc *function,
+                                          uint32_t index,
+                                          const XiFunc **out,
+                                          uint32_t *matches) {
+    if (!function)
+        return;
+    if (function->semantic_plan_function_index == index) {
+        *out = function;
+        (*matches)++;
+    }
+    for (uint16_t i = 0; i < function->nchildren; i++)
+        materialized_function_matches(function->children[i], index, out,
+                                      matches);
+}
+
 static const XiFunc *materialized_function_by_index(const XiFunc *function,
                                                     uint32_t index) {
-    if (!function)
-        return NULL;
-    if (function->semantic_plan_function_index == index)
-        return function;
-    for (uint16_t i = 0; i < function->nchildren; i++) {
-        const XiFunc *match = materialized_function_by_index(
-            function->children[i], index);
-        if (match)
-            return match;
-    }
-    return NULL;
+    const XiFunc *match = NULL;
+    uint32_t matches = 0;
+    materialized_function_matches(function, index, &match, &matches);
+    return matches == 1 ? match : NULL;
 }
 
 static const XiValue *materialized_value_by_id(const XiFunc *function,
@@ -2122,8 +2364,17 @@ static bool verify_exact_obligation(VerifyAuthority *ctx,
     XrRep native_storage = XR_REP_TAGGED;
     uint16_t machine_kind = XR_MACHINE_REP_COUNT;
     if (!oracle_definition_storage(ctx, source_value, &input_storage,
-                                   &machine_kind) ||
-        !oracle_machine_storage(ctx, source_value, &native_storage,
+                                   &machine_kind)) {
+        set_diag(ctx->diag,
+                 XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+                 (uint32_t) ctx->work, source_value, use_operation);
+        return false;
+    }
+    if (!verify_charge_work(ctx, 1))
+        return false;
+    if (input_storage == output_storage)
+        return true;
+    if (!oracle_machine_storage(ctx, source_value, &native_storage,
                                 &machine_kind)) {
         set_diag(ctx->diag,
                  XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
@@ -2138,10 +2389,7 @@ static bool verify_exact_obligation(VerifyAuthority *ctx,
                  (uint32_t) ctx->work, source_value, use_operation);
         return false;
     }
-    if (!verify_charge_work(ctx, 1))
-        return false;
-    if (input_storage == output_storage ||
-        (input_storage != XR_REP_TAGGED && output_storage != XR_REP_TAGGED))
+    if (input_storage != XR_REP_TAGGED && output_storage != XR_REP_TAGGED)
         return true;
     uint32_t source_operation = ctx->operation_by_value[source_value];
     uint32_t source_parameter = ctx->parameter_by_value[source_value];

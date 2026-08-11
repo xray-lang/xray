@@ -27,6 +27,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_SCALAR = UINT64_C(1) << 0,
     XR_TARGET_FAMILY_AGGREGATE = UINT64_C(1) << 1,
     XR_TARGET_FAMILY_CALL_ADAPTER = UINT64_C(1) << 2,
+    XR_TARGET_FAMILY_CLOSURE_STORAGE = UINT64_C(1) << 3,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -48,7 +49,7 @@ typedef enum XrTargetInstructionOpcode {
 
 #define XR_TARGET_REQUIRED_FAMILIES                                                         \
     ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                  \
-                 XR_TARGET_FAMILY_CALL_ADAPTER))
+                 XR_TARGET_FAMILY_CALL_ADAPTER | XR_TARGET_FAMILY_CLOSURE_STORAGE))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,

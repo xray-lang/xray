@@ -30,13 +30,17 @@ XR_FUNC bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                                       size_t error_size);
 XR_FUNC void xr_c_emission_plan_free(XrCEmissionPlan *plan);
 XR_FUNC bool xr_c_emission_plan_is_verified(const XrCEmissionPlan *plan);
-XR_FUNC uint32_t xr_c_emission_plan_scalar_count(const XrCEmissionPlan *plan);
+XR_FUNC bool xr_c_emission_plan_verify(
+    const XrCEmissionPlan *plan, const XrTargetPlan *target_plan,
+    XrFingerprint expected_profile_fingerprint, char *error,
+    size_t error_size);
+XR_FUNC uint32_t xr_c_emission_plan_value_count(const XrCEmissionPlan *plan);
 XR_FUNC XrFingerprint xr_c_emission_plan_fingerprint(const XrCEmissionPlan *plan);
 XR_FUNC XrFingerprint xr_c_emission_plan_target_fingerprint(const XrCEmissionPlan *plan);
 XR_FUNC XrFingerprint xr_c_emission_plan_profile_fingerprint(const XrCEmissionPlan *plan);
-XR_FUNC bool xr_c_emission_plan_scalar_view(const XrCEmissionPlan *plan,
+XR_FUNC bool xr_c_emission_plan_value_view(const XrCEmissionPlan *plan,
                                             uint32_t semantic_value,
-                                            XrCScalarEmissionView *out,
+                                            XrCValueEmissionView *out,
                                             char *error,
                                             size_t error_size);
 

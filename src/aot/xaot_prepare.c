@@ -135,13 +135,16 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
         case XR_MACHINE_REP_F32: rep = XAOT_REP_F32; break;
         case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
         case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
+        case XR_MACHINE_REP_DYN_VALUE: rep = XAOT_REP_TAGGED; break;
         default: return false;
     }
     info = xaot_rep_info(rep);
     if (!info)
         return false;
     memset(out, 0, sizeof(*out));
-    out->kind = rep == XAOT_REP_VOID ? XAOT_VALUE_VOID : XAOT_VALUE_SCALAR;
+    out->kind = rep == XAOT_REP_VOID   ? XAOT_VALUE_VOID
+                : rep == XAOT_REP_TAGGED ? XAOT_VALUE_TAGGED
+                                         : XAOT_VALUE_SCALAR;
     out->rep = rep;
     out->type = value->type;
     out->c_type = info->c_type;
@@ -159,7 +162,7 @@ static bool prepare_effective_value_rep(XaotBundle *bundle, const XiFunc *func,
     if (binding) {
         target_plan = xaot_bundle_target_plan_for_func(bundle, func);
         if (!prepare_target_machine_value_rep(target_plan, binding, value, out)) {
-            bundle->error_msg = "AOT scalar TargetPlan binding has no supported machine rep";
+            bundle->error_msg = "AOT TargetPlan binding has no supported C value rep";
             return false;
         }
         return true;
@@ -4048,7 +4051,7 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                 if (!prepare_target_machine_value_rep(target_plan, binding, &phi->value,
                                                       &target_rep)) {
                     bundle->error_msg =
-                        "AOT scalar TargetPlan binding has no supported machine rep";
+                        "AOT TargetPlan binding has no supported C value rep";
                     return false;
                 }
                 record_value_stats(&bundle->stats, target_rep.kind, false,
@@ -4096,7 +4099,7 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                 if (!prepare_target_machine_value_rep(target_plan, binding, blk->values[vi],
                                                       &target_rep)) {
                     bundle->error_msg =
-                        "AOT scalar TargetPlan binding has no supported machine rep";
+                        "AOT TargetPlan binding has no supported C value rep";
                     return false;
                 }
                 record_value_stats(&bundle->stats, target_rep.kind, false,

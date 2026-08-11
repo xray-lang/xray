@@ -782,7 +782,7 @@ static void test_header_and_directory_mutations(void) {
     expect_decode_failure(copy, fixture.size);
 
     memcpy(copy, fixture.bytes, fixture.size);
-    xr_xtp_put_u32(copy + 4, 1);
+    xr_xtp_put_u32(copy + 4, UINT32_C(5)); /* v5 is a hard-cutover negative. */
     resign_artifact(copy, fixture.size);
     expect_decode_failure(copy, fixture.size);
 

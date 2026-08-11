@@ -3,8 +3,11 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_ops_gen.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
+#include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
@@ -70,6 +73,13 @@ static XrType stub_function = {
     .kind = XR_KIND_FUNCTION,
     .id = 6,
     .frozen = true,
+    .function = {.return_type = &stub_int, .throw_effect = XR_FN_EFFECT_NO_THROW},
+};
+static XrType stub_exact_function = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 7,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
     .function = {.return_type = &stub_int, .throw_effect = XR_FN_EFFECT_NO_THROW},
 };
 
@@ -202,6 +212,66 @@ static XrSemanticPlan *build_single_scalar_semantic(XrType *type) {
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_build(function, &plan, error, sizeof(error)));
     xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticPlan *build_heap_closure_semantic(bool captured) {
+    XiFunc *root = xi_func_new(captured ? "target_capturing_closure_root"
+                                       : "target_exact_closure_root",
+                               &stub_unit);
+    XiFunc *child = xi_func_new(captured ? "target_capturing_closure_child"
+                                        : "target_exact_closure_child",
+                                &stub_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+    XiValue *child_result = xi_const_int(child, child_entry, 42, &stub_int);
+    REQUIRE(child_result != NULL);
+    xi_block_set_return(child_entry, child_result);
+
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+
+    XiValue *captured_value = NULL;
+    if (captured) {
+        captured_value = xi_const_int(root, root_entry, 7, &stub_int);
+        REQUIRE(captured_value != NULL);
+        child->ncaptures = 1;
+        child->captures[0] = (XiCapture) {
+            .source = XI_CAPTURE_SRC_REG,
+            .capture_kind = XI_CAPTURE_BY_COPY,
+            .type = &stub_int,
+            .value = captured_value,
+            .name = "captured",
+            .storage_domain = XR_STORAGE_EXEC_LOCAL,
+            .value_capability = XR_SEM_VALUE_CONST,
+        };
+    }
+    XiValue *closure = xi_value_new(root, root_entry, XI_CLOSURE_NEW,
+                                    &stub_exact_function, captured ? 1 : 0);
+    REQUIRE(closure != NULL);
+    closure->aux = child;
+    if (captured)
+        closure->args[0] = captured_value;
+    XiValue *store = xi_value_new(root, root_entry, XI_SET_SHARED,
+                                  &stub_unit, 1);
+    REQUIRE(store != NULL);
+    store->args[0] = closure;
+    store->aux_int = 0;
+    xi_block_set_return(root_entry, NULL);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "heap closure semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(root);
     return plan;
 }
 
@@ -757,7 +827,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "1d2302ed4e7ff5142d7f3d161da01c1d1d9a48aef0f34b6c3bef570fa99f35a3") == 0);
+                   "d61242ab9a3f12e072b03dde60b592eed828ebaefe55baf970eced85558d0112") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -948,6 +1018,202 @@ static void test_builder_materializes_effect_void_independent_of_type(void) {
     REQUIRE(plan->machine_reps[binding->memory_rep].kind ==
             XR_MACHINE_REP_VOID);
     REQUIRE(plan->slots_count == 2);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_builder_materializes_exact_heap_closure_storage(void) {
+    XrSemanticPlan *semantic = build_heap_closure_semantic(false);
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+
+    uint32_t closure_operation = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperationRecord *closure = NULL;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (operation && operation->opcode == XI_CLOSURE_NEW) {
+            REQUIRE(closure == NULL);
+            closure = operation;
+            closure_operation = i;
+        }
+    }
+    REQUIRE(closure != NULL && closure->operand_count == 0 &&
+            closure->callable_function != XR_SEMANTIC_INDEX_NONE);
+    const XrSemanticFunctionRecord *exact_callee =
+        xr_semantic_plan_function(semantic, closure->callable_function);
+    const XrSemanticTypeRecord *exact_type =
+        xr_semantic_plan_type(semantic, closure->result_type);
+    uint32_t exact_child_count = 0;
+    const uint32_t *exact_children =
+        xr_semantic_plan_type_children(semantic, &exact_child_count);
+    REQUIRE(closure->opcode == XI_CLOSURE_NEW && closure->allocation_key &&
+            closure->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED);
+    REQUIRE(exact_callee && exact_type &&
+            exact_callee->parent == closure->function &&
+            exact_callee->capture_count == 0 &&
+            exact_type->kind == XR_KIND_FUNCTION &&
+            exact_type->scalar_rep == XR_SCALAR_REP_NONE &&
+            exact_type->aggregate_extent == 0 &&
+            exact_type->aggregate_align == 0);
+    REQUIRE((exact_type->flags &
+             (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+              XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) == 0);
+    REQUIRE((exact_type->flags &
+             (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) ==
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT));
+    REQUIRE(exact_type->child_count ==
+                (uint32_t) exact_callee->parameter_count + 1u &&
+            exact_type->child_begin <= exact_child_count &&
+            exact_type->child_count <=
+                exact_child_count - exact_type->child_begin &&
+            exact_callee->parameter_begin <=
+                xr_semantic_plan_parameter_count(semantic) &&
+            exact_callee->parameter_count <=
+                xr_semantic_plan_parameter_count(semantic) -
+                    exact_callee->parameter_begin &&
+            exact_children[exact_type->child_begin +
+                           exact_callee->parameter_count] ==
+                exact_callee->return_type);
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(plan, closure->result_value);
+    REQUIRE(binding != NULL && binding->slot < plan->slots_count);
+    XrTargetMachineRepRecord *dynamic =
+        &plan->machine_reps[binding->memory_rep];
+    REQUIRE(plan->machine_reps[binding->register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            dynamic->kind == XR_MACHINE_REP_DYN_VALUE &&
+            dynamic->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            dynamic->ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            dynamic->null_encoding == XR_TARGET_NULL_TAGGED);
+    const XrTargetMachineFacts *facts =
+        xr_target_profile_machine_facts(profile);
+    REQUIRE(facts != NULL &&
+            dynamic->memory_size == facts->data_layout.xr_value.size &&
+            dynamic->memory_align == facts->data_layout.xr_value.align &&
+            dynamic->register_bits == facts->data_layout.xr_value.size * 8u);
+
+    XrTargetLayoutRecord *closure_layout = NULL;
+    for (uint32_t i = 0; i < plan->layouts_count; i++) {
+        if (plan->layouts[i].semantic_type == closure->result_type) {
+            REQUIRE(closure_layout == NULL);
+            closure_layout = &plan->layouts[i];
+        }
+    }
+    REQUIRE(closure_layout != NULL &&
+            closure_layout->kind == XR_TARGET_LAYOUT_DYNAMIC &&
+            closure_layout->field_count == 0 &&
+            closure_layout->root_field_count == 0 &&
+            closure_layout->fixed_prefix_size == dynamic->memory_size &&
+            closure_layout->align == dynamic->memory_align);
+    XrTargetSlotRecord *slot = &plan->slots[binding->slot];
+    REQUIRE(slot->semantic_value == closure->result_value &&
+            slot->semantic_operation == closure_operation &&
+            slot->function == closure->function &&
+            slot->role == XR_TARGET_SLOT_TEMPORARY &&
+            slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            slot->ownership == XR_TARGET_OWNERSHIP_OWNED);
+
+    /* This family freezes the outer slot representation only. Semantic
+     * ownership and the existing AOT closure path still own lifetime. */
+    REQUIRE(plan->allocations_count == 0 && plan->root_maps_count == 0 &&
+            plan->root_slots_count == 0 && plan->cleanups_count == 0);
+    REQUIRE(plan->functions[closure->function].root_count == 0 &&
+            plan->functions[closure->function].cleanup_count == 0);
+
+    uint64_t saved_families = plan->completed_family_mask;
+    plan->completed_family_mask &= ~XR_TARGET_FAMILY_CLOSURE_STORAGE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->completed_family_mask = saved_families;
+
+    uint8_t saved_ownership = dynamic->ownership;
+    dynamic->ownership = XR_TARGET_OWNERSHIP_TRIVIAL;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    dynamic->ownership = saved_ownership;
+
+    uint8_t saved_root = dynamic->root_kind;
+    dynamic->root_kind = XR_TARGET_ROOT_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    dynamic->root_kind = saved_root;
+
+    uint8_t saved_null = dynamic->null_encoding;
+    dynamic->null_encoding = XR_TARGET_NULL_NOT_NULLABLE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    dynamic->null_encoding = saved_null;
+
+    uint32_t saved_operation = slot->semantic_operation;
+    slot->semantic_operation = saved_operation + 1u;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    slot->semantic_operation = saved_operation;
+
+    uint8_t saved_layout_kind = closure_layout->kind;
+    closure_layout->kind = XR_TARGET_LAYOUT_SCALAR;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    closure_layout->kind = saved_layout_kind;
+
+    XrSemanticOperationRecord *mutable_closure =
+        &semantic->operations[closure_operation];
+    const char *saved_allocation_key = mutable_closure->allocation_key;
+    XrStableId saved_allocation_id = mutable_closure->allocation_id;
+    const char forged_allocation_key[] =
+        "forged-closure-operation/allocation";
+    XrFingerprint allocation_digest;
+    REQUIRE(xr_stable_id_from_key(forged_allocation_key,
+                                  &mutable_closure->allocation_id,
+                                  &allocation_digest));
+    mutable_closure->allocation_key = forged_allocation_key;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    semantic->ownership->semantic_fingerprint = semantic->fingerprint;
+    semantic->ownership->fingerprint = semantic->fingerprint;
+    plan->semantic_fingerprint = semantic->fingerprint;
+    for (uint32_t i = 0; i < plan->layouts_count; i++)
+        xr_target_layout_compute_fingerprint(plan, i,
+                                             &plan->layouts[i].fingerprint);
+    for (uint32_t i = 0; i < plan->calls_count; i++)
+        xr_target_call_compute_fingerprint(plan, i,
+                                           &plan->calls[i].fingerprint);
+    xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
+    expect_verify_failure_raw(plan, "XR_TARGET_1001");
+
+    mutable_closure->allocation_key = saved_allocation_key;
+    mutable_closure->allocation_id = saved_allocation_id;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    semantic->ownership->semantic_fingerprint = semantic->fingerprint;
+    semantic->ownership->fingerprint = semantic->fingerprint;
+    plan->semantic_fingerprint = semantic->fingerprint;
+    for (uint32_t i = 0; i < plan->layouts_count; i++)
+        xr_target_layout_compute_fingerprint(plan, i,
+                                             &plan->layouts[i].fingerprint);
+    for (uint32_t i = 0; i < plan->calls_count; i++)
+        xr_target_call_compute_fingerprint(plan, i,
+                                           &plan->calls[i].fingerprint);
+    xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+
+    semantic = build_heap_closure_semantic(true);
+    profile = build_profile(0);
+    plan = NULL;
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (!operation || operation->opcode != XI_CLOSURE_NEW)
+            continue;
+        REQUIRE(operation->operand_count == 1);
+        REQUIRE(xr_target_plan_value_rep(plan, operation->result_value) == NULL);
+        for (uint32_t l = 0; l < plan->layouts_count; l++)
+            REQUIRE(plan->layouts[l].semantic_type != operation->result_type);
+    }
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
@@ -1715,6 +1981,7 @@ int main(void) {
     test_builder_materializes_canonical_scalar_intents();
     test_builder_materializes_parameter_without_operation();
     test_builder_materializes_effect_void_independent_of_type();
+    test_builder_materializes_exact_heap_closure_storage();
     test_builder_materializes_nested_aggregate_family();
     test_builder_materializes_struct_and_named_aggregates();
     test_unknown_call_target_fails_closed();

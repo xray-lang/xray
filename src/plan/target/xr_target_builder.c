@@ -96,7 +96,7 @@ typedef struct XrTargetCallArgumentIntent {
     uint8_t flags;
 } XrTargetCallArgumentIntent;
 
-typedef struct XrTargetScalarAnalysis {
+typedef struct XrTargetValueStorageAnalysis {
     uint8_t *defined_values;
     uint8_t *used_types;
     uint32_t *value_types;
@@ -105,7 +105,7 @@ typedef struct XrTargetScalarAnalysis {
     uint16_t *type_rep_kinds;
     uint32_t total_values;
     uint32_t type_count;
-} XrTargetScalarAnalysis;
+} XrTargetValueStorageAnalysis;
 
 typedef struct XrTargetMaterializedPlan {
     XrTargetMachineRepRecord *machine_reps;
@@ -203,7 +203,7 @@ static bool reserve_records(void **records, uint32_t *capacity, uint32_t require
     return true;
 }
 
-static void scalar_analysis_dispose(XrTargetScalarAnalysis *analysis) {
+static void value_storage_analysis_dispose(XrTargetValueStorageAnalysis *analysis) {
     if (!analysis)
         return;
     xr_free(analysis->defined_values);
@@ -376,6 +376,28 @@ static bool make_machine_rep(const XrTargetMachineFacts *profile, uint16_t kind,
     out->memory_align = (uint16_t) layout.align;
     out->signedness = signedness;
     out->ownership = XR_TARGET_OWNERSHIP_TRIVIAL;
+    return true;
+}
+
+static bool make_dynamic_value_rep(const XrTargetMachineFacts *profile,
+                                   XrTargetMachineRepRecord *out) {
+    if (!profile || !out || !profile->data_layout.xr_value.size ||
+        profile->data_layout.xr_value.size > UINT16_MAX / 8u ||
+        !profile->data_layout.xr_value.align ||
+        profile->data_layout.xr_value.align > UINT16_MAX)
+        return false;
+    /* This freezes only the outer XrValue slot representation. OWNED and
+     * DYNAMIC are storage facts; Semantic ownership and the existing AOT
+     * closure lifetime path still own allocation, roots, and cleanup. */
+    *out = (XrTargetMachineRepRecord) {
+        .kind = XR_MACHINE_REP_DYN_VALUE,
+        .register_bits = (uint16_t) (profile->data_layout.xr_value.size * 8u),
+        .memory_size = (uint32_t) profile->data_layout.xr_value.size,
+        .memory_align = (uint16_t) profile->data_layout.xr_value.align,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_OWNED,
+        .null_encoding = XR_TARGET_NULL_TAGGED,
+    };
     return true;
 }
 
@@ -552,12 +574,14 @@ static bool make_slot_identity(const XrSemanticPlan *plan, uint32_t function, ui
            xr_stable_id_from_key(key, out, &digest);
 }
 
-static bool scalar_analysis_init(const XrSemanticPlan *plan, XrTargetScalarAnalysis *analysis,
-                                 char *error, size_t error_size) {
+static bool value_storage_analysis_init(
+    const XrSemanticPlan *plan, XrTargetValueStorageAnalysis *analysis,
+    char *error, size_t error_size) {
     size_t type_count = xr_semantic_plan_type_count(plan);
     size_t function_count = xr_semantic_plan_function_count(plan);
     if (type_count > 1000000u || function_count > 100000u)
-        return fail(error, error_size, "XR_EXEC_5003", "scalar target input exceeds hard budgets");
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "target value-storage input exceeds hard budgets");
     uint32_t total_values = 0;
     if (function_count) {
         const XrSemanticFunctionRecord *last =
@@ -567,7 +591,8 @@ static bool scalar_analysis_init(const XrSemanticPlan *plan, XrTargetScalarAnaly
         total_values = last->value_begin + last->value_count;
     }
     if (total_values > 40000000u)
-        return fail(error, error_size, "XR_EXEC_5003", "scalar target value budget exhausted");
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "target value-storage budget exhausted");
     analysis->total_values = total_values;
     analysis->type_count = (uint32_t) type_count;
     analysis->defined_values = (uint8_t *) allocate_records(total_values, sizeof(uint8_t));
@@ -580,8 +605,9 @@ static bool scalar_analysis_init(const XrSemanticPlan *plan, XrTargetScalarAnaly
     if ((total_values && (!analysis->defined_values || !analysis->value_types ||
                           !analysis->value_functions || !analysis->value_operations)) ||
         (type_count && (!analysis->used_types || !analysis->type_rep_kinds))) {
-        scalar_analysis_dispose(analysis);
-        return fail(error, error_size, "XR_EXEC_5003", "scalar target analysis allocation failed");
+        value_storage_analysis_dispose(analysis);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "target value-storage analysis allocation failed");
     }
     for (uint32_t i = 0; i < total_values; i++)
         analysis->value_operations[i] = XR_SEMANTIC_INDEX_NONE;
@@ -591,7 +617,7 @@ static bool scalar_analysis_init(const XrSemanticPlan *plan, XrTargetScalarAnaly
 }
 
 static bool index_value_operations(const XrSemanticPlan *plan,
-                                   XrTargetScalarAnalysis *analysis, char *error,
+                                   XrTargetValueStorageAnalysis *analysis, char *error,
                                    size_t error_size) {
     size_t operation_count = xr_semantic_plan_operation_count(plan);
     if (operation_count > UINT32_MAX)
@@ -610,7 +636,76 @@ static bool index_value_operations(const XrSemanticPlan *plan,
     return true;
 }
 
-static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalysis *analysis,
+static bool semantic_allocation_identity_is_canonical(
+    const XrSemanticOperationRecord *operation) {
+    static const char suffix[] = "/allocation";
+    if (!operation || !operation->canonical_key || !operation->allocation_key)
+        return false;
+    size_t canonical_length = strlen(operation->canonical_key);
+    size_t allocation_length = strlen(operation->allocation_key);
+    if (canonical_length > SIZE_MAX - sizeof(suffix) ||
+        allocation_length != canonical_length + sizeof(suffix) - 1u ||
+        memcmp(operation->allocation_key, operation->canonical_key,
+               canonical_length) != 0 ||
+        memcmp(operation->allocation_key + canonical_length, suffix,
+               sizeof(suffix)) != 0)
+        return false;
+    XrStableId expected;
+    XrFingerprint digest;
+    return xr_stable_id_from_key(operation->allocation_key, &expected, &digest) &&
+           xr_stable_id_equal(expected, operation->allocation_id);
+}
+
+static bool semantic_heap_closure_is_exact(const XrSemanticPlan *plan,
+                                           const XrSemanticOperationRecord *operation) {
+    if (!plan || !operation || operation->opcode != XI_CLOSURE_NEW ||
+        operation->callable_function >= xr_semantic_plan_function_count(plan) ||
+        operation->operand_count != 0 ||
+        !semantic_allocation_identity_is_canonical(operation) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
+        return false;
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(plan, operation->callable_function);
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(plan, operation->result_type);
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+    bool typed_function = type && type->kind == XR_KIND_FUNCTION;
+    bool opaque_closure = type && type->kind == XR_KIND_UNKNOWN &&
+                          type->child_count == 0;
+    if (!callee || !type || callee->parent != operation->function ||
+        callee->capture_count != 0 || (!typed_function && !opaque_closure) ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) != 0 ||
+        (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                        XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        callee->parameter_count == UINT16_MAX ||
+        (typed_function &&
+         type->child_count != (uint32_t) callee->parameter_count + 1u) ||
+        type->child_begin > child_count ||
+        type->child_count > child_count - type->child_begin ||
+        callee->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
+        callee->parameter_count > xr_semantic_plan_parameter_count(plan) -
+                                      callee->parameter_begin)
+        return false;
+    for (uint32_t i = 0; i < callee->parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan, callee->parameter_begin + i);
+        if (!parameter || parameter->function != operation->callable_function ||
+            parameter->ordinal != i ||
+            (typed_function &&
+             children[type->child_begin + i] != parameter->type))
+            return false;
+    }
+    return opaque_closure ||
+           children[type->child_begin + callee->parameter_count] ==
+               callee->return_type;
+}
+
+static bool note_scalar_value(XrTargetPlanBuilder *builder,
+                              XrTargetValueStorageAnalysis *analysis,
                               uint32_t semantic_value, uint32_t semantic_type,
                               uint32_t semantic_function, uint32_t semantic_operation,
                               uint8_t role, XrStableId source_identity, char *error,
@@ -645,6 +740,9 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
              xi_generated_op_result_ownership(operation->opcode)))
         return fail(error, error_size, "XR_TARGET_1001",
                     "semantic result-void operation contract is inconsistent");
+    if (semantic_heap_closure_is_exact(builder->semantic_plan, operation))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "closure storage cannot be claimed by the scalar family");
     XrTargetScalarEligibility eligibility = operation_result_void
                                                 ? XR_TARGET_SCALAR_VALUE
                                                 : classify_scalar_type(type, &kind);
@@ -664,9 +762,11 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
         analysis->type_rep_kinds[semantic_type] = kind;
     }
     XrTargetMachineRepRecord rep;
-    if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile), kind, &rep) ||
+    if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile),
+                          kind, &rep) ||
         !append_rep_intent(builder, &rep, error, error_size))
-        return fail(error, error_size, "XR_TARGET_1001", "target profile cannot materialize a scalar representation");
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize a scalar representation");
     XrTargetValueIntent value = {
         .semantic_value = semantic_value,
         .semantic_function = semantic_function,
@@ -693,8 +793,8 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
             .register_rep = rep,
             .memory_rep = rep,
             .role = role,
-            .root_kind = XR_TARGET_ROOT_NONE,
-            .ownership = XR_TARGET_OWNERSHIP_TRIVIAL,
+            .root_kind = rep.root_kind,
+            .ownership = rep.ownership,
             .debug_variable = XR_SEMANTIC_INDEX_NONE,
         };
         if (!append_slot_intent(builder, &slot, error, error_size))
@@ -703,7 +803,8 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
         value.slot_identity = slot_identity;
         if (!analysis->used_types[semantic_type]) {
             analysis->used_types[semantic_type] = 1;
-            if (!append_layout_intent(builder, semantic_type, XR_TARGET_LAYOUT_SCALAR, 0,
+            if (!append_layout_intent(builder, semantic_type,
+                                      XR_TARGET_LAYOUT_SCALAR, 0,
                                       &rep, error, error_size))
                 return false;
         }
@@ -711,8 +812,87 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
     return append_value_intent(builder, &value, error, error_size);
 }
 
+static bool note_closure_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
+    if (!semantic_heap_closure_is_exact(builder->semantic_plan, operation))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "closure-storage family requires exact closure authority");
+    if (operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >=
+            xr_semantic_plan_function_count(builder->semantic_plan))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "semantic closure-storage identity is out of range");
+    if (analysis->defined_values[operation->result_value]) {
+        if (analysis->value_types[operation->result_value] !=
+                operation->result_type ||
+            analysis->value_functions[operation->result_value] !=
+                operation->function)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "semantic closure-storage identity is ambiguous");
+        return true;
+    }
+    if (analysis->type_rep_kinds[operation->result_type] !=
+            XR_MACHINE_REP_COUNT &&
+        analysis->type_rep_kinds[operation->result_type] !=
+            XR_MACHINE_REP_DYN_VALUE)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "semantic closure type has conflicting storage representations");
+    XrTargetMachineRepRecord rep;
+    if (!make_dynamic_value_rep(
+            xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize exact dynamic closure storage");
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function,
+                            XR_TARGET_SLOT_TEMPORARY, operation->id,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "closure-storage slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = rep.root_kind,
+        .ownership = rep.ownership,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    analysis->type_rep_kinds[operation->result_type] =
+        XR_MACHINE_REP_DYN_VALUE;
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[operation->result_type] &&
+         !append_layout_intent(builder, operation->result_type,
+                               XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                               error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->used_types[operation->result_type] = 1;
+    return true;
+}
+
 static bool collect_scalar_intents(XrTargetPlanBuilder *builder,
-                                   XrTargetScalarAnalysis *analysis, char *error,
+                                   XrTargetValueStorageAnalysis *analysis, char *error,
                                    size_t error_size) {
     if (!index_value_operations(builder->semantic_plan, analysis, error, error_size))
         return false;
@@ -760,6 +940,8 @@ static bool collect_scalar_intents(XrTargetPlanBuilder *builder,
                 return fail(error, error_size, "XR_TARGET_1001", "parameter operation has no semantic parameter");
             continue;
         }
+        if (semantic_heap_closure_is_exact(builder->semantic_plan, operation))
+            continue;
         uint8_t role = operation->opcode == XI_PHI ? XR_TARGET_SLOT_PHI
                                                    : XR_TARGET_SLOT_TEMPORARY;
         if (!note_scalar_value(builder, analysis, operation->result_value,
@@ -784,20 +966,52 @@ static bool builder_add_scalars(XrTargetPlanBuilder *builder, char *error,
                                 size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_SCALAR, error, error_size))
         return false;
-    XrTargetScalarAnalysis analysis = {0};
+    XrTargetValueStorageAnalysis analysis = {0};
     XrTargetMachineRepRecord void_rep;
     if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile),
                           XR_MACHINE_REP_VOID,
                           &void_rep) ||
         !append_rep_intent(builder, &void_rep, error, error_size) ||
-        !scalar_analysis_init(builder->semantic_plan, &analysis, error, error_size) ||
+        !value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size) ||
         !collect_scalar_intents(builder, &analysis, error, error_size)) {
-        scalar_analysis_dispose(&analysis);
+        value_storage_analysis_dispose(&analysis);
         builder->poisoned = true;
         return false;
     }
-    scalar_analysis_dispose(&analysis);
+    value_storage_analysis_dispose(&analysis);
     builder->completed_family_mask |= XR_TARGET_FAMILY_SCALAR;
+    return true;
+}
+
+static bool builder_add_closure_storage(XrTargetPlanBuilder *builder,
+                                        char *error, size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_CLOSURE_STORAGE,
+                              error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis,
+                                      error, error_size);
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "semantic operation is missing");
+            break;
+        }
+        if (!semantic_heap_closure_is_exact(builder->semantic_plan, operation))
+            continue;
+        valid = note_closure_storage_value(builder, &analysis, i, error,
+                                           error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_CLOSURE_STORAGE;
     return true;
 }
 
@@ -943,7 +1157,7 @@ static bool collect_layout_dependency(XrTargetPlanBuilder *builder, uint32_t sem
 }
 
 static bool note_aggregate_value(XrTargetPlanBuilder *builder,
-                                 XrTargetScalarAnalysis *analysis,
+                                 XrTargetValueStorageAnalysis *analysis,
                                  uint32_t semantic_value, uint32_t semantic_type,
                                  uint32_t semantic_function, uint32_t semantic_operation,
                                  uint8_t role, XrStableId source_identity, uint8_t *states,
@@ -1049,7 +1263,7 @@ static bool mark_coroutine_functions(const XrSemanticPlan *plan, uint8_t *deferr
 }
 
 static bool collect_aggregate_intents(XrTargetPlanBuilder *builder,
-                                      XrTargetScalarAnalysis *analysis, uint8_t *states,
+                                      XrTargetValueStorageAnalysis *analysis, uint8_t *states,
                                       int8_t *eligibility, const uint8_t *deferred_functions,
                                       char *error, size_t error_size) {
     if (!index_value_operations(builder->semantic_plan, analysis, error, error_size))
@@ -1104,7 +1318,7 @@ static bool builder_add_aggregates(XrTargetPlanBuilder *builder, char *error,
                                    size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_AGGREGATE, error, error_size))
         return false;
-    XrTargetScalarAnalysis analysis = {0};
+    XrTargetValueStorageAnalysis analysis = {0};
     uint32_t type_count = (uint32_t) xr_semantic_plan_type_count(builder->semantic_plan);
     uint32_t function_count =
         (uint32_t) xr_semantic_plan_function_count(builder->semantic_plan);
@@ -1116,14 +1330,15 @@ static bool builder_add_aggregates(XrTargetPlanBuilder *builder, char *error,
                  (!function_count || deferred_functions) &&
                  mark_coroutine_functions(builder->semantic_plan, deferred_functions,
                                           function_count, error, error_size) &&
-                 scalar_analysis_init(builder->semantic_plan, &analysis, error, error_size) &&
+                 value_storage_analysis_init(builder->semantic_plan, &analysis, error,
+                                             error_size) &&
                  collect_aggregate_intents(builder, &analysis, states, eligibility,
                                            deferred_functions,
                                            error, error_size);
     xr_free(states);
     xr_free(eligibility);
     xr_free(deferred_functions);
-    scalar_analysis_dispose(&analysis);
+    value_storage_analysis_dispose(&analysis);
     if (!valid) {
         builder->poisoned = true;
         if (!error || !error_size || !error[0])
@@ -1416,7 +1631,8 @@ static bool materialize_layout_geometry(XrTargetPlanBuilder *builder,
     states[index] = 1;
     XrTargetLayoutIntent *intent = &builder->layout_intents[index];
     XrTargetLayoutRecord *layout = &materialized->layouts[index];
-    if (intent->kind == XR_TARGET_LAYOUT_SCALAR) {
+    if (intent->kind == XR_TARGET_LAYOUT_SCALAR ||
+        intent->kind == XR_TARGET_LAYOUT_DYNAMIC) {
         layout->align = intent->memory_rep.memory_align;
         layout->fixed_prefix_size = intent->memory_rep.memory_size;
         states[index] = 2;
@@ -2242,6 +2458,7 @@ bool xr_target_plan_build(const XrSemanticPlan *semantic_plan, XrTargetProfile *
     if (!builder_new(semantic_plan, profile, &builder, error, error_size))
         return false;
     if (!builder_add_scalars(builder, error, error_size) ||
+        !builder_add_closure_storage(builder, error, error_size) ||
         !builder_add_aggregates(builder, error, error_size) ||
         !builder_add_calls_and_adapters(builder, error, error_size)) {
         builder_free(builder);

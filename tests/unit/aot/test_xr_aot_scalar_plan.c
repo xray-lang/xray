@@ -10,16 +10,16 @@
 
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #ifdef XAOT_REP_H
-#error "scalar C emission plan must not include the legacy XaotValueRep model"
+#error "C value emission plan must not include the legacy XaotValueRep model"
 #endif
 #ifdef XI_H
-#error "scalar C emission plan must not include compiler IR pointers"
+#error "C value emission plan must not include compiler IR pointers"
 #endif
 #ifdef XR_SEMANTIC_PLAN_H
-#error "scalar C emission plan must not include SemanticPlan"
+#error "C value emission plan must not include SemanticPlan"
 #endif
 #ifdef XTYPE_H
-#error "scalar C emission plan must not include analyzer/runtime type objects"
+#error "C value emission plan must not include analyzer/runtime type objects"
 #endif
 #include "../../../src/aot/refine/xr_aot_scalar_value.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
@@ -31,6 +31,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Complete the otherwise opaque type only in this mutation test translation
+ * unit. Production consumers receive read-only row views. */
+struct XrCEmissionPlan {
+    XrCValueEmissionView *values;
+    uint32_t value_count;
+    uint32_t schema_version;
+    XrFingerprint target_fingerprint;
+    XrFingerprint profile_fingerprint;
+    XrFingerprint fingerprint;
+    bool verified;
+};
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -71,6 +83,16 @@ static XrType scalar_unit = {
     .id = 4,
     .scalar_rep = XR_SCALAR_REP_NONE,
     .frozen = true,
+};
+static XrType dynamic_closure = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 5,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .frozen = true,
+    .function = {
+        .return_type = &scalar_int,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
 };
 
 static XrTargetProfile *build_profile(bool ilp32, bool freestanding_runtime) {
@@ -115,9 +137,9 @@ static XrTargetPlan *build_target_plan(const XrSemanticPlan *semantic_plan,
 static void require_ready(const XrTargetPlan *target_plan,
                           const XrCEmissionPlan *emission_plan,
                           const ScalarFixture *fixture,
-                          const XiValue *value, XrCScalarRep expected_rep,
+                          const XiValue *value, XrCValueRep expected_rep,
                           const char *expected_c_type) {
-    XrCScalarEmissionView view = {0};
+    XrCValueEmissionView view = {0};
     char error[512] = {0};
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
@@ -125,12 +147,12 @@ static void require_ready(const XrTargetPlan *target_plan,
                                             &semantic_function, &semantic_value, error,
                                             sizeof(error)));
     REQUIRE(semantic_function == fixture->function->semantic_plan_function_index);
-    REQUIRE(xr_c_emission_plan_scalar_view(emission_plan, semantic_value, &view, error,
+    REQUIRE(xr_c_emission_plan_value_view(emission_plan, semantic_value, &view, error,
                                            sizeof(error)));
     REQUIRE(view.rep == expected_rep);
     REQUIRE(view.target_register_rep == view.target_memory_rep);
     REQUIRE(view.target_register_kind == view.target_memory_kind);
-    REQUIRE(view.register_bits != 0 || expected_rep == XR_C_SCALAR_REP_VOID);
+    REQUIRE(view.register_bits != 0 || expected_rep == XR_C_VALUE_REP_VOID);
     REQUIRE(strcmp(view.c_type, expected_c_type) == 0);
 }
 
@@ -153,7 +175,7 @@ static void test_scalar_plan_and_emission_view(void) {
     REQUIRE(xr_c_emission_plan_build(same, profile_fingerprint, &same_emission, error,
                                      sizeof(error)));
     REQUIRE(xr_c_emission_plan_is_verified(emission));
-    REQUIRE(xr_c_emission_plan_scalar_count(emission) == 3);
+    REQUIRE(xr_c_emission_plan_value_count(emission) == 3);
     REQUIRE(xr_fingerprint_equal(xr_c_emission_plan_target_fingerprint(emission),
                                  xr_target_plan_fingerprint(first)));
     REQUIRE(xr_fingerprint_equal(xr_c_emission_plan_profile_fingerprint(emission),
@@ -198,20 +220,20 @@ static void test_scalar_plan_and_emission_view(void) {
     REQUIRE(functions[semantic_function].frame_size == 16);
     REQUIRE(functions[semantic_function].frame_align == 8);
     REQUIRE(xr_target_plan_layouts(first, &count) != NULL && count == 2);
-    require_ready(first, emission, &fixture, fixture.integer, XR_C_SCALAR_REP_I64, "int64_t");
-    require_ready(first, emission, &fixture, fixture.boolean, XR_C_SCALAR_REP_BOOL, "uint8_t");
-    require_ready(first, emission, &fixture, fixture.release, XR_C_SCALAR_REP_VOID, "void");
+    require_ready(first, emission, &fixture, fixture.integer, XR_C_VALUE_REP_I64, "int64_t");
+    require_ready(first, emission, &fixture, fixture.boolean, XR_C_VALUE_REP_BOOL, "uint8_t");
+    require_ready(first, emission, &fixture, fixture.release, XR_C_VALUE_REP_VOID, "void");
 
-    XrCScalarEmissionView view = {0};
+    XrCValueEmissionView view = {0};
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     REQUIRE(xr_aot_scalar_semantic_value_id(first, fixture.function, fixture.string,
                                             &semantic_function, &semantic_value, error,
                                             sizeof(error)));
-    REQUIRE(!xr_c_emission_plan_scalar_view(emission, semantic_value, &view, error,
+    REQUIRE(!xr_c_emission_plan_value_view(emission, semantic_value, &view, error,
                                             sizeof(error)));
     REQUIRE(view.c_type == NULL);
     REQUIRE(strncmp(error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0);
-    REQUIRE(!xr_c_emission_plan_scalar_view(NULL, semantic_value, &view, error, sizeof(error)));
+    REQUIRE(!xr_c_emission_plan_value_view(NULL, semantic_value, &view, error, sizeof(error)));
     REQUIRE(strncmp(error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0);
 
     xr_c_emission_plan_free(same_emission);
@@ -319,7 +341,7 @@ static void test_parameter_identity_requires_exact_member(void) {
 
 typedef struct ScalarKnownAnswer {
     XrType type;
-    XrCScalarRep c_rep;
+    XrCValueRep c_rep;
     uint16_t machine_kind;
     uint16_t fixed_register_bits;
     uint32_t fixed_memory_size;
@@ -329,37 +351,37 @@ typedef struct ScalarKnownAnswer {
 
 static ScalarKnownAnswer scalar_known_answers[] = {
     {{.kind = XR_KIND_INT, .id = 100, .frozen = true, .scalar_rep = XR_NATIVE_I8},
-     XR_C_SCALAR_REP_I8, XR_MACHINE_REP_I8, 8, 1, "int8_t", false},
+     XR_C_VALUE_REP_I8, XR_MACHINE_REP_I8, 8, 1, "int8_t", false},
     {{.kind = XR_KIND_INT, .id = 101, .frozen = true, .scalar_rep = XR_NATIVE_U8},
-     XR_C_SCALAR_REP_U8, XR_MACHINE_REP_U8, 8, 1, "uint8_t", false},
+     XR_C_VALUE_REP_U8, XR_MACHINE_REP_U8, 8, 1, "uint8_t", false},
     {{.kind = XR_KIND_INT, .id = 102, .frozen = true, .scalar_rep = XR_NATIVE_I16},
-     XR_C_SCALAR_REP_I16, XR_MACHINE_REP_I16, 16, 2, "int16_t", false},
+     XR_C_VALUE_REP_I16, XR_MACHINE_REP_I16, 16, 2, "int16_t", false},
     {{.kind = XR_KIND_INT, .id = 103, .frozen = true, .scalar_rep = XR_NATIVE_U16},
-     XR_C_SCALAR_REP_U16, XR_MACHINE_REP_U16, 16, 2, "uint16_t", false},
+     XR_C_VALUE_REP_U16, XR_MACHINE_REP_U16, 16, 2, "uint16_t", false},
     {{.kind = XR_KIND_INT, .id = 104, .frozen = true, .scalar_rep = XR_NATIVE_I32},
-     XR_C_SCALAR_REP_I32, XR_MACHINE_REP_I32, 32, 4, "int32_t", false},
+     XR_C_VALUE_REP_I32, XR_MACHINE_REP_I32, 32, 4, "int32_t", false},
     {{.kind = XR_KIND_INT, .id = 105, .frozen = true, .scalar_rep = XR_NATIVE_U32},
-     XR_C_SCALAR_REP_U32, XR_MACHINE_REP_U32, 32, 4, "uint32_t", false},
+     XR_C_VALUE_REP_U32, XR_MACHINE_REP_U32, 32, 4, "uint32_t", false},
     {{.kind = XR_KIND_INT, .id = 106, .frozen = true, .scalar_rep = XR_NATIVE_I64},
-     XR_C_SCALAR_REP_I64, XR_MACHINE_REP_I64, 64, 8, "int64_t", false},
+     XR_C_VALUE_REP_I64, XR_MACHINE_REP_I64, 64, 8, "int64_t", false},
     {{.kind = XR_KIND_INT, .id = 107, .frozen = true, .scalar_rep = XR_NATIVE_U64},
-     XR_C_SCALAR_REP_U64, XR_MACHINE_REP_U64, 64, 8, "uint64_t", false},
+     XR_C_VALUE_REP_U64, XR_MACHINE_REP_U64, 64, 8, "uint64_t", false},
     {{.kind = XR_KIND_INT, .id = 108, .frozen = true, .scalar_rep = XR_NATIVE_ISIZE},
-     XR_C_SCALAR_REP_ISIZE, XR_MACHINE_REP_ISIZE, 0, 0, "ptrdiff_t", true},
+     XR_C_VALUE_REP_ISIZE, XR_MACHINE_REP_ISIZE, 0, 0, "ptrdiff_t", true},
     {{.kind = XR_KIND_INT, .id = 109, .frozen = true, .scalar_rep = XR_NATIVE_USIZE},
-     XR_C_SCALAR_REP_USIZE, XR_MACHINE_REP_USIZE, 0, 0, "size_t", true},
+     XR_C_VALUE_REP_USIZE, XR_MACHINE_REP_USIZE, 0, 0, "size_t", true},
     {{.kind = XR_KIND_FLOAT, .id = 110, .frozen = true, .scalar_rep = XR_NATIVE_F32},
-     XR_C_SCALAR_REP_F32, XR_MACHINE_REP_F32, 32, 4, "float", false},
+     XR_C_VALUE_REP_F32, XR_MACHINE_REP_F32, 32, 4, "float", false},
     {{.kind = XR_KIND_FLOAT, .id = 111, .frozen = true, .scalar_rep = XR_NATIVE_F64},
-     XR_C_SCALAR_REP_F64, XR_MACHINE_REP_F64, 64, 8, "double", false},
+     XR_C_VALUE_REP_F64, XR_MACHINE_REP_F64, 64, 8, "double", false},
     {{.kind = XR_KIND_BOOL, .id = 112, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE},
-     XR_C_SCALAR_REP_BOOL, XR_MACHINE_REP_I1, 1, 1, "uint8_t", false},
+     XR_C_VALUE_REP_BOOL, XR_MACHINE_REP_I1, 1, 1, "uint8_t", false},
     {{.kind = XR_KIND_RUNE, .id = 113, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE},
-     XR_C_SCALAR_REP_RUNE, XR_MACHINE_REP_RUNE, 32, 4, "uint32_t", false},
+     XR_C_VALUE_REP_RUNE, XR_MACHINE_REP_RUNE, 32, 4, "uint32_t", false},
     {{.kind = XR_KIND_UNIT, .id = 114, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE},
-     XR_C_SCALAR_REP_VOID, XR_MACHINE_REP_VOID, 0, 0, "void", false},
+     XR_C_VALUE_REP_VOID, XR_MACHINE_REP_VOID, 0, 0, "void", false},
     {{.kind = XR_KIND_NEVER, .id = 115, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE},
-     XR_C_SCALAR_REP_VOID, XR_MACHINE_REP_VOID, 0, 0, "void", false},
+     XR_C_VALUE_REP_VOID, XR_MACHINE_REP_VOID, 0, 0, "void", false},
 };
 
 typedef struct ScalarMatrixFixture {
@@ -423,8 +445,8 @@ static void require_scalar_known_answer(const XrTargetPlan *target_plan,
     REQUIRE(xr_aot_scalar_semantic_value_id(target_plan, fixture->function,
                                             fixture->values[index], &semantic_function,
                                             &semantic_value, error, sizeof(error)));
-    XrCScalarEmissionView view = {0};
-    REQUIRE(xr_c_emission_plan_scalar_view(emission_plan, semantic_value, &view, error,
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission_plan, semantic_value, &view, error,
                                            sizeof(error)));
     uint16_t expected_bits = answer->pointer_sized ? (ilp32 ? 32u : 64u)
                                                    : answer->fixed_register_bits;
@@ -455,7 +477,7 @@ static void test_all_scalar_c_spelling_known_answers(bool ilp32) {
                                      sizeof(error)));
     uint32_t expected_count =
         (uint32_t) (sizeof(scalar_known_answers) / sizeof(scalar_known_answers[0]));
-    REQUIRE(xr_c_emission_plan_scalar_count(emission) == expected_count);
+    REQUIRE(xr_c_emission_plan_value_count(emission) == expected_count);
     REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(first),
                                  xr_target_plan_fingerprint(same)));
     REQUIRE(xr_fingerprint_equal(xr_c_emission_plan_fingerprint(emission),
@@ -463,8 +485,8 @@ static void test_all_scalar_c_spelling_known_answers(bool ilp32) {
     for (uint32_t i = 0; i < expected_count; i++)
         require_scalar_known_answer(first, emission, &fixture, i, ilp32);
 
-    XrCScalarEmissionView missing = {0};
-    REQUIRE(!xr_c_emission_plan_scalar_view(emission, UINT32_MAX, &missing, error,
+    XrCValueEmissionView missing = {0};
+    REQUIRE(!xr_c_emission_plan_value_view(emission, UINT32_MAX, &missing, error,
                                             sizeof(error)));
     REQUIRE(missing.c_type == NULL);
     REQUIRE(strncmp(error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0);
@@ -508,14 +530,14 @@ static void test_nullable_scalar_binding_is_rejected(void) {
     XrCEmissionPlan *emission = NULL;
     REQUIRE(xr_c_emission_plan_build(target_plan, xr_target_profile_fingerprint(profile),
                                      &emission, error, sizeof(error)));
-    REQUIRE(xr_c_emission_plan_scalar_count(emission) == 1);
+    REQUIRE(xr_c_emission_plan_value_count(emission) == 1);
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     REQUIRE(xr_aot_scalar_semantic_value_id(target_plan, function, nullable,
                                             &semantic_function, &semantic_value, error,
                                             sizeof(error)));
-    XrCScalarEmissionView view = {0};
-    REQUIRE(!xr_c_emission_plan_scalar_view(emission, semantic_value, &view, error,
+    XrCValueEmissionView view = {0};
+    REQUIRE(!xr_c_emission_plan_value_view(emission, semantic_value, &view, error,
                                             sizeof(error)));
     REQUIRE(strncmp(error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0);
 
@@ -558,15 +580,15 @@ static void test_aggregate_bindings_are_excluded_from_scalar_projection(void) {
     XrCEmissionPlan *emission = NULL;
     REQUIRE(xr_c_emission_plan_build(target_plan, xr_target_profile_fingerprint(profile),
                                      &emission, error, sizeof(error)));
-    REQUIRE(xr_c_emission_plan_scalar_count(emission) == 2);
+    REQUIRE(xr_c_emission_plan_value_count(emission) == 2);
 
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     REQUIRE(xr_aot_scalar_semantic_value_id(target_plan, function, result,
                                             &semantic_function, &semantic_value, error,
                                             sizeof(error)));
-    XrCScalarEmissionView view = {0};
-    REQUIRE(!xr_c_emission_plan_scalar_view(emission, semantic_value, &view, error,
+    XrCValueEmissionView view = {0};
+    REQUIRE(!xr_c_emission_plan_value_view(emission, semantic_value, &view, error,
                                             sizeof(error)));
     REQUIRE(strncmp(error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0);
 
@@ -598,6 +620,158 @@ static void test_profile_mismatch_fails_before_projection(void) {
     xi_func_free(fixture.function);
 }
 
+static void test_dynamic_closure_c_emission_is_exact_and_mutation_safe(void) {
+    XiFunc *root = xi_func_new("dynamic_closure_c_emission", &scalar_unit);
+    XiFunc *child = xi_func_new("dynamic_closure_callee", &scalar_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(entry != NULL && child_entry != NULL);
+    XiValue *child_result = xi_const_int(child, child_entry, 42, &scalar_int);
+    REQUIRE(child_result != NULL);
+    xi_block_set_return(child_entry, child_result);
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+    XiValue *closure =
+        xi_value_new(root, entry, XI_CLOSURE_NEW, &dynamic_closure, 0);
+    REQUIRE(closure != NULL);
+    closure->aux = child;
+    xi_block_set_return(entry, NULL);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    XrTargetProfile *profile = build_exact_profile();
+    XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                      error, sizeof(error)));
+
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, root, closure, &semantic_function, &semantic_value, error,
+        sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, semantic_value, &view,
+                                           error, sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_TAGGED &&
+            view.target_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+            view.target_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
+            strcmp(view.c_type, "XrValue") == 0);
+    const XrTargetMachineFacts *facts =
+        xr_target_profile_machine_facts(profile);
+    REQUIRE(facts != NULL &&
+            view.register_bits == facts->data_layout.xr_value.size * 8u &&
+            view.memory_size == facts->data_layout.xr_value.size &&
+            view.memory_align == facts->data_layout.xr_value.align);
+
+    XrCValueEmissionView *tagged = NULL;
+    uint32_t tagged_index = UINT32_MAX;
+    for (uint32_t i = 0; i < emission->value_count; i++) {
+        if (emission->values[i].semantic_value == semantic_value) {
+            REQUIRE(tagged == NULL);
+            tagged = &emission->values[i];
+            tagged_index = i;
+        }
+    }
+    REQUIRE(tagged != NULL && tagged_index != UINT32_MAX &&
+            emission->value_count >= 2);
+
+    uint32_t saved_count = emission->value_count;
+    XrCValueEmissionView *row_snapshot = (XrCValueEmissionView *) xr_calloc(
+        saved_count, sizeof(*row_snapshot));
+    REQUIRE(row_snapshot != NULL);
+    memcpy(row_snapshot, emission->values,
+           saved_count * sizeof(*row_snapshot));
+    memmove(&emission->values[tagged_index],
+            &emission->values[tagged_index + 1u],
+            (saved_count - tagged_index - 1u) * sizeof(*emission->values));
+    emission->value_count--;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    REQUIRE(strstr(error, "missing") != NULL);
+    emission->value_count = saved_count;
+    memcpy(emission->values, row_snapshot,
+           saved_count * sizeof(*row_snapshot));
+    xr_free(row_snapshot);
+
+    XrCValueEmissionView *saved_rows = emission->values;
+    XrCValueEmissionView *extra_rows = (XrCValueEmissionView *) xr_calloc(
+        saved_count + 1u, sizeof(*extra_rows));
+    REQUIRE(extra_rows != NULL);
+    memcpy(extra_rows, saved_rows, saved_count * sizeof(*extra_rows));
+    extra_rows[saved_count] = extra_rows[saved_count - 1u];
+    extra_rows[saved_count].semantic_value++;
+    emission->values = extra_rows;
+    emission->value_count++;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    REQUIRE(strstr(error, "extra") != NULL);
+    emission->value_count = saved_count;
+    emission->values = saved_rows;
+    xr_free(extra_rows);
+    tagged = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == semantic_value)
+            tagged = &emission->values[i];
+    REQUIRE(tagged != NULL);
+
+    uint16_t saved_kind = tagged->target_register_kind;
+    tagged->target_register_kind = XR_MACHINE_REP_I64;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    tagged->target_register_kind = saved_kind;
+
+    const char *saved_c_type = tagged->c_type;
+    tagged->c_type = "int64_t";
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    tagged->c_type = saved_c_type;
+
+    uint8_t saved_rep = tagged->rep;
+    tagged->rep = XR_C_VALUE_REP_I64;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    tagged->rep = saved_rep;
+
+    emission->profile_fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    REQUIRE(strncmp(error, "XR_TARGET_1000", strlen("XR_TARGET_1000")) == 0);
+    emission->profile_fingerprint.bytes[0] ^= 1u;
+
+    emission->target_fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    emission->target_fingerprint.bytes[0] ^= 1u;
+
+    emission->fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    REQUIRE(strstr(error, "fingerprint") != NULL);
+    emission->fingerprint.bytes[0] ^= 1u;
+
+    uint32_t saved_schema = emission->schema_version;
+    emission->schema_version = 3;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                       error, sizeof(error)));
+    emission->schema_version = saved_schema;
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                      error, sizeof(error)));
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(root);
+}
+
 int main(void) {
     test_scalar_plan_and_emission_view();
     test_missing_semantic_authority_fails_closed();
@@ -608,6 +782,7 @@ int main(void) {
     test_nullable_scalar_binding_is_rejected();
     test_aggregate_bindings_are_excluded_from_scalar_projection();
     test_profile_mismatch_fails_before_projection();
+    test_dynamic_closure_c_emission_is_exact_and_mutation_safe();
     printf("AOT scalar TargetPlan tests passed\n");
     return 0;
 }

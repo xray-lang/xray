@@ -81,6 +81,16 @@ typedef struct SharedScalarFixture {
     XrTargetPlan *target_plan;
 } SharedScalarFixture;
 
+typedef struct ClosureStorageFixture {
+    XiFunc *function;
+    XiFunc *child;
+    XiBlock *entry;
+    XiValue *closure;
+    XiValue *store;
+    XrTargetProfile *target_profile;
+    XrTargetPlan *target_plan;
+} ClosureStorageFixture;
+
 typedef struct FailingBackend {
     bool begun;
     bool aborted;
@@ -139,6 +149,17 @@ static XrType scalar_unit = {
     .id = 4,
     .scalar_rep = XR_SCALAR_REP_NONE,
     .frozen = true,
+};
+
+static XrType scalar_closure = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 5,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function = {
+        .return_type = &scalar_int,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
 };
 
 static XrSemanticPlan *build_semantic_plan(void) {
@@ -334,6 +355,79 @@ static void shared_scalar_fixture_free(SharedScalarFixture *fixture) {
     memset(fixture, 0, sizeof(*fixture));
 }
 
+static ClosureStorageFixture closure_storage_fixture_create(bool captured) {
+    ClosureStorageFixture fixture = {0};
+    fixture.function = xi_func_new(captured ? "capturing_closure_storage"
+                                            : "exact_closure_storage",
+                                   &scalar_unit);
+    fixture.child = xi_func_new(captured ? "capturing_closure_child"
+                                         : "exact_closure_child",
+                                &scalar_int);
+    REQUIRE(fixture.function != NULL && fixture.child != NULL);
+    fixture.entry = xi_block_new(fixture.function);
+    XiBlock *child_entry = xi_block_new(fixture.child);
+    REQUIRE(fixture.entry != NULL && child_entry != NULL);
+    XiValue *child_result =
+        xi_const_int(fixture.child, child_entry, 42, &scalar_int);
+    REQUIRE(child_result != NULL);
+    xi_block_set_return(child_entry, child_result);
+
+    fixture.function->children =
+        (XiFunc **) xr_calloc(1, sizeof(*fixture.function->children));
+    REQUIRE(fixture.function->children != NULL);
+    fixture.function->children[0] = fixture.child;
+    fixture.function->nchildren = fixture.function->children_cap = 1;
+    fixture.child->parent_func = fixture.function;
+
+    XiValue *captured_value = NULL;
+    if (captured) {
+        captured_value =
+            xi_const_int(fixture.function, fixture.entry, 7, &scalar_int);
+        REQUIRE(captured_value != NULL);
+        fixture.child->ncaptures = 1;
+        fixture.child->captures[0] = (XiCapture) {
+            .source = XI_CAPTURE_SRC_REG,
+            .capture_kind = XI_CAPTURE_BY_COPY,
+            .type = &scalar_int,
+            .value = captured_value,
+            .name = "captured",
+            .storage_domain = XR_STORAGE_EXEC_LOCAL,
+            .value_capability = XR_SEM_VALUE_CONST,
+        };
+    }
+    fixture.closure = xi_value_new(fixture.function, fixture.entry,
+                                   XI_CLOSURE_NEW, &scalar_closure,
+                                   captured ? 1 : 0);
+    REQUIRE(fixture.closure != NULL);
+    fixture.closure->aux = fixture.child;
+    if (captured)
+        fixture.closure->args[0] = captured_value;
+    fixture.store = xi_value_new(fixture.function, fixture.entry,
+                                 XI_SET_SHARED, &scalar_unit, 1);
+    REQUIRE(fixture.store != NULL);
+    fixture.store->args[0] = fixture.closure;
+    fixture.store->aux_int = 0;
+    xi_block_set_return(fixture.entry, NULL);
+    fixture.function->stage = fixture.child->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(fixture.function, error,
+                                              sizeof(error)));
+    fixture.target_profile = build_target_profile();
+    REQUIRE(xr_target_plan_build(fixture.function->semantic_plan,
+                                 fixture.target_profile,
+                                 &fixture.target_plan, error,
+                                 sizeof(error)));
+    return fixture;
+}
+
+static void closure_storage_fixture_free(ClosureStorageFixture *fixture) {
+    xr_target_plan_free(fixture->target_plan);
+    xr_target_profile_free(fixture->target_profile);
+    xi_func_free(fixture->function);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
 static XrAotRefinementPlan *build_refused_plan(
     const RefinementFixture *fixture, XrAotRefinementDiagnostic *diag) {
     XrAotRefinementBuilder *builder =
@@ -486,7 +580,7 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(xr_aot_backend_run(&view, fixture.target_plan,
                                xr_aot_test_backend_interface(), &test_backend,
                                &stats, &diag));
-    REQUIRE(strstr(emission, "families=0000000000000007") != NULL);
+    REQUIRE(strstr(emission, "families=000000000000000f") != NULL);
     REQUIRE(strstr(emission, "transform=direct-call decision=refused") != NULL);
     REQUIRE(strstr(emission,
                    "issue=XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE") != NULL);
@@ -647,6 +741,21 @@ static void test_immutable_authority_matches_backend_materialization(void) {
         &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_NONCANONICAL_ORDER);
 
+    XiFunc duplicate_index_child = {0};
+    duplicate_index_child.semantic_plan = fixture.function->semantic_plan;
+    duplicate_index_child.semantic_plan_function_index =
+        fixture.function->semantic_plan_function_index;
+    XiFunc *duplicate_children[1] = {&duplicate_index_child};
+    XiFunc **saved_children = fixture.function->children;
+    uint16_t saved_child_count = fixture.function->nchildren;
+    fixture.function->children = duplicate_children;
+    fixture.function->nchildren = 1;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+    fixture.function->children = saved_children;
+    fixture.function->nchildren = saved_child_count;
+
     XiValue *extra = xi_value_new(fixture.function, fixture.then_block,
                                   XI_BOX, &scalar_int, 1);
     REQUIRE(extra != NULL);
@@ -739,6 +848,91 @@ static void test_scalar_shared_boundary_is_exact_and_fail_closed(void) {
     xr_target_plan_free(target_plan);
     xr_target_profile_free(profile);
     xi_func_free(unsupported);
+}
+
+static void test_exact_heap_closure_storage_is_tagged_and_fail_closed(void) {
+    ClosureStorageFixture fixture = closure_storage_fixture_create(false);
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, &policy, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count == 0);
+
+    uint32_t closure_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_operation_count(fixture.function->semantic_plan);
+         i++) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(
+            fixture.function->semantic_plan, i);
+        if (operation && operation->opcode == XI_CLOSURE_NEW) {
+            REQUIRE(closure_value == XR_SEMANTIC_INDEX_NONE &&
+                    operation->operand_count == 0);
+            closure_value = operation->result_value;
+        }
+    }
+    REQUIRE(closure_value != XR_SEMANTIC_INDEX_NONE);
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(fixture.target_plan, closure_value);
+    REQUIRE(binding != NULL);
+    const XrTargetMachineRepRecord *register_rep = xr_target_plan_machine_rep(
+        fixture.target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep = xr_target_plan_machine_rep(
+        fixture.target_plan, binding->memory_rep);
+    REQUIRE(register_rep != NULL && memory_rep != NULL &&
+            register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            register_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            register_rep->ownership == XR_TARGET_OWNERSHIP_OWNED);
+    REQUIRE(xr_aot_representation_refinement_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    XiValue *closure_before = fixture.closure;
+    xi_opt_refresh_representations_with_policy(fixture.function, &policy);
+    REQUIRE(fixture.store->args[0] == closure_before &&
+            fixture.store->args[0]->op == XI_CLOSURE_NEW &&
+            fixture.store->args[0]->rep == XR_REP_TAGGED &&
+            fixture.store->args[0]->backend_origin == XI_BACKEND_VALUE_NONE);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(xr_aot_representation_refinement_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    void *saved_callable = fixture.closure->aux;
+    XiFunc detached_child = *fixture.child;
+    fixture.closure->aux = &detached_child;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    fixture.closure->aux = saved_callable;
+
+    fixture.closure->aux = fixture.function;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    fixture.closure->aux = saved_callable;
+
+    int64_t saved_slot = fixture.store->aux_int;
+    fixture.store->aux_int++;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+    fixture.store->aux_int = saved_slot;
+    REQUIRE(xr_aot_representation_refinement_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    xr_aot_refinement_plan_free(plan);
+    closure_storage_fixture_free(&fixture);
+
+    fixture = closure_storage_fixture_create(true);
+    plan = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, &policy, &plan, &diag));
+    REQUIRE(plan == NULL &&
+            diag.issue ==
+                XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
+    closure_storage_fixture_free(&fixture);
 }
 
 static void test_authority_rejects_string_without_machine_layout(void) {
@@ -1664,6 +1858,7 @@ int main(void) {
     test_representation_adapters_are_immutable_and_consumable();
     test_immutable_authority_matches_backend_materialization();
     test_scalar_shared_boundary_is_exact_and_fail_closed();
+    test_exact_heap_closure_storage_is_tagged_and_fail_closed();
     test_authority_rejects_string_without_machine_layout();
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();
