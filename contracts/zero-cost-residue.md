@@ -15,6 +15,10 @@ stdlib entries. A fragment has no program entry or runtime ownership, and an
 entry is admitted only after the ordinary post-CGen W1-W4 verifier plus its
 typed ABI gate pass. The residue categories, allowance set, and measurement
 point remain unchanged.
+Residue verification constructs AOT evidence only after installing the exact
+canonical TargetProfile selected for the numeric target. Target identity may
+restrict which evidence can be produced, but it never enables a shape request
+or changes any residue category or allowance.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -102,4 +106,4 @@ stack, or runtime push/pop helper is a contract violation.
 anchor-sha256: src/aot/xi_cgen.h cf5e527e5b7659a0573233c7f9c29b30ed5cd15dfcdb832377d35dac3292d23c
 anchor-sha256: src/aot/xi_cgen.c 5d81d84ce4a84e155ba270d81b4feb160493971ba2bb35fc9be0b01ac001097b
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c b3b66308fe7059d931398cde9b04656bd516f0febc309f0d331fdb3e8d8949ba
-anchor-sha256: src/app/cli/xcmd_verify.c ca122153d89cbc4fa2b2fcffe08604c109729941a5a9b34ff0d72b1d0226e8a8
+anchor-sha256: src/app/cli/xcmd_verify.c 5fd6d66c6bc2c4be29cb121963eea94682cb48ea20f42aacdeb52fb2a2285b9b
