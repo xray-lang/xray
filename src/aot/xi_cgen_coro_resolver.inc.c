@@ -90,6 +90,7 @@ static XiCoroResolver cg_coro_resolver_ctx(XiCgenCtx *ctx) {
     resolver.resolve_callee = cg_coro_resolve_callee_cb;
     resolver.resolve_method = cg_coro_resolve_method_cb;
     resolver.func_suspendability = cg_coro_func_suspendability_cb;
+    resolver.call_suspendability = NULL;
     resolver.value_is_module_import = cg_coro_module_import_ctx_cb;
     resolver.call_is_module_member = cg_coro_module_member_call_ctx_cb;
     resolver.ud = ctx;
@@ -99,37 +100,37 @@ static XiCoroResolver cg_coro_resolver_ctx(XiCgenCtx *ctx) {
 static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     const XaotFuncPlan *func_plan = xaot_bundle_find_func_plan(bundle, f);
-    XiCoroResolver resolver = cg_coro_resolver_ctx(ctx);
-    bool is_module_init = false;
-    /* Prepared whole-program effects are the canonical answer.  In
-     * particular, this keeps a callee's defining translation unit consistent
-     * with cross-module callers whose target flow made it transitively
-     * suspendable. */
-    if (func_plan)
-        return func_plan->may_suspend != 0;
-    if (xi_coro_func_is_suspendable(f, &resolver))
-        return true;
-    if (bundle && f) {
-        for (uint32_t i = 0; i < bundle->nmodules; i++) {
-            if (bundle->modules[i] && bundle->modules[i]->init == f) {
-                is_module_init = true;
-                break;
-            }
+    const XiCoroPlan *plan = f ? f->coro_plan : NULL;
+    bool planned;
+
+    if (!plan || !xi_coro_plan_is_current(f, plan)) {
+        if (ctx) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: missing or stale frozen coroutine plan for '%s' "
+                    "(func=%p plan=%p stage=%s revision=%llu/%llu lowered=%llu/%llu)\n",
+                    f && f->name ? f->name : "?", (const void *) f, (const void *) plan,
+                    f ? xi_stage_name(f->stage) : "?",
+                    (unsigned long long) (f ? f->ir_revision : 0),
+                    (unsigned long long) (f ? f->cfg_version : 0),
+                    (unsigned long long) (plan ? plan->lowered_ir_revision : 0),
+                    (unsigned long long) (plan ? plan->lowered_cfg_revision : 0));
+        }
+        return false;
+    }
+    planned = plan->is_coroutine;
+    /* The prepared AOT effect plan is an independent consistency witness, not
+     * a second coroutine classifier.  A disagreement is a hard compiler
+     * error; code generation always follows the frozen shared Xi plan. */
+    if (func_plan && planned != (func_plan->may_suspend != 0)) {
+        if (ctx) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: coroutine plan/effect mismatch for '%s' "
+                    "(plan=%u effect=%u)\n",
+                    f && f->name ? f->name : "?", planned ? 1u : 0u,
+                    func_plan->may_suspend ? 1u : 0u);
         }
     }
-    if (is_module_init && bundle->global_evidence_plan.evidence && f->xg_body_func_id != XG_NO_ID) {
-        const XgGlobalEvidence *evidence = bundle->global_evidence_plan.evidence;
-        for (uint32_t i = 0; i < evidence->nbodies; i++) {
-            const XgBodySummary *body = &evidence->bodies[i];
-            uint32_t effects = body->effect_bits;
-            if (body->func_id != f->xg_body_func_id)
-                continue;
-            if (xg_body_effects_compose_closed_world_calls(evidence, body, &effects))
-                return (effects & XG_BODY_MAY_SUSPEND) != 0;
-            if ((body->effect_bits & XG_BODY_MAY_CALL) == 0)
-                return (body->effect_bits & XG_BODY_MAY_SUSPEND) != 0;
-            break;
-        }
-    }
-    return false;
+    return planned;
 }

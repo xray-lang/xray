@@ -829,11 +829,45 @@ typedef enum {
 } CgCoroNetCallKind;
 static CgCoroNetCallKind cg_coro_net_call_kind(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 
-/* The shared coroutine plan for 'f', wired to the ctx-level resolver.  Cached
- * on f->coro_plan by xi_coro_analyze, so repeated lookups are cheap. */
+/* CGen consumes only the frozen shared plan.  It may select physical frame
+ * representations, but it may not insert suspension points or renumber states. */
 static const XiCoroPlan *cg_coro_plan(XiCgenCtx *ctx, const XiFunc *f) {
-    const XiCoroResolver resolver = cg_coro_resolver_ctx(ctx);
-    return xi_coro_analyze((XiFunc *) f, &resolver);
+    const XiCoroPlan *plan = f ? f->coro_plan : NULL;
+    if (!plan || !xi_coro_plan_is_current(f, plan)) {
+        if (ctx)
+            ctx->error = true;
+        return NULL;
+    }
+    return plan;
+}
+
+static int cg_coro_claim_state(XiCgenCtx *ctx, const XiFunc *f, const XiValue *op,
+                               int *legacy_cursor) {
+    const XiCoroPlan *plan = cg_coro_plan(ctx, f);
+    const XiCoroSuspendPoint *point = xi_coro_plan_find_point(plan, op);
+    if (!ctx || !plan || ctx->coro_emit_plan != plan || !point || point->state_id == 0 ||
+        point->state_id > plan->nstates || point->state_id >= ctx->coro_emit_seen_cap ||
+        ctx->coro_emit_seen[point->state_id]) {
+        if (ctx) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: coroutine '%s' cannot claim op v%u "
+                    "(plan=%u active=%u point=%u state=%u states=%u seen=%u)\n",
+                    f && f->name ? f->name : "?", op ? op->id : UINT32_MAX,
+                    plan ? 1u : 0u, plan && ctx->coro_emit_plan == plan ? 1u : 0u,
+                    point ? 1u : 0u, point ? point->state_id : 0u,
+                    plan ? plan->nstates : 0u,
+                    point && point->state_id < ctx->coro_emit_seen_cap
+                        ? ctx->coro_emit_seen[point->state_id]
+                        : 0u);
+        }
+        return 0;
+    }
+    ctx->coro_emit_seen[point->state_id] = 1;
+    ctx->coro_emit_seen_count++;
+    if (legacy_cursor)
+        *legacy_cursor = (int) point->state_id;
+    return (int) point->state_id;
 }
 
 /* Cross-suspend liveness is shared IR analysis: read it from the plan slot
@@ -929,9 +963,7 @@ static uint16_t cg_coro_value_frame_root_width(XiCgenCtx *ctx, const XiFunc *f, 
 }
 
 static bool cg_coro_value_can_trace_frame_slot(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    return cg_coro_value_frame_root_width(ctx, f, v) > 0 &&
-           !cg_coro_value_is_borrowed_unbox_alias(ctx, f, v) &&
-           !cg_coro_value_is_borrowed_identity_alias(ctx, f, v);
+    return cg_coro_value_frame_root_width(ctx, f, v) > 0;
 }
 
 static bool cg_coro_value_needs_frame_arc_release(XiCgenCtx *ctx, const XiFunc *f,
@@ -2342,105 +2374,6 @@ static bool emit_coro_i64_optional_native_stmt(XiCgenCtx *ctx, FILE *out, const 
     return false;
 }
 
-static bool cg_coro_edge_is_backedge(const XiBlock *from, const XiBlock *to) {
-    return from && to && to->rpo <= from->rpo;
-}
-
-static bool cg_coro_block_has_backedge(const XiBlock *blk) {
-    if (!blk)
-        return false;
-    switch (blk->kind) {
-        case XI_BLOCK_PLAIN:
-            return cg_coro_edge_is_backedge(blk, blk->succs[0]);
-        case XI_BLOCK_IF:
-            return cg_coro_edge_is_backedge(blk, blk->succs[0]) ||
-                   cg_coro_edge_is_backedge(blk, blk->succs[1]);
-        default:
-            return false;
-    }
-}
-
-static bool cg_coro_block_ends_with_yield(const XiBlock *blk) {
-    if (!blk || blk->nvalues == 0)
-        return false;
-    const XiValue *last = blk->values[blk->nvalues - 1];
-    return last && last->op == XI_YIELD;
-}
-
-static const XiValue *cg_coro_block_first_runtime_value(const XiBlock *blk) {
-    if (!blk)
-        return NULL;
-    for (uint32_t i = 0; i < blk->nvalues; i++) {
-        const XiValue *v = blk->values[i];
-        if (!v || v->op == XI_PHI)
-            continue;
-        return v;
-    }
-    return NULL;
-}
-
-static bool cg_coro_plain_backedge_targets_suspend_point(const XiFunc *f, const XiBlock *blk,
-                                                         const XiCoroResolver *resolver) {
-    if (!f || !blk || blk->kind != XI_BLOCK_PLAIN)
-        return false;
-    XiBlock *target = blk->succs[0];
-    if (!cg_coro_edge_is_backedge(blk, target))
-        return false;
-    const XiValue *head = cg_coro_block_first_runtime_value(target);
-    return head && xi_coro_is_suspend_point(f, head, resolver);
-}
-
-static bool cg_coro_value_is_deferred_batch_go(const XiValue *v) {
-    return v && v->op == XI_GO && (v->aux_int & XI_GO_AUX_DEFER_BATCH) != 0;
-}
-
-static bool cg_coro_block_is_deferred_spawn_registration_latch(const XiFunc *f, const XiBlock *blk,
-                                                               const XiCoroResolver *resolver) {
-    if (!f || !blk)
-        return false;
-    bool saw_deferred_go = false;
-    for (uint32_t i = 0; i < blk->nvalues; i++) {
-        const XiValue *v = blk->values[i];
-        if (!v || v->op == XI_PHI)
-            continue;
-        if (cg_coro_value_is_deferred_batch_go(v)) {
-            saw_deferred_go = true;
-            continue;
-        }
-        if (xi_coro_is_suspend_point(f, v, resolver))
-            return false;
-    }
-    return saw_deferred_go;
-}
-
-static void cg_coro_insert_loop_poll_safepoints(XiFunc *f, const XiCoroResolver *resolver) {
-    if (!f)
-        return;
-    xi_ensure_rpo(f);
-    xr_type_global_init();
-    XrType *unit_type = xr_type_new_unit(NULL);
-    bool changed = false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        XiBlock *blk = f->blocks[bi];
-        if (!cg_coro_block_has_backedge(blk) || cg_coro_block_ends_with_yield(blk))
-            continue;
-        if (cg_coro_plain_backedge_targets_suspend_point(f, blk, resolver))
-            continue;
-        if (cg_coro_block_is_deferred_spawn_registration_latch(f, blk, resolver))
-            continue;
-        XiValue *poll = xi_value_new(f, blk, XI_YIELD, unit_type, 0);
-        if (!poll)
-            continue;
-        poll->aux_int = XI_YIELD_AUX_POLL;
-        poll->line = blk->line;
-        changed = true;
-    }
-    if (changed) {
-        f->coro_plan = NULL;
-        xi_func_compute_effects(f);
-    }
-}
-
 static bool cg_coro_func_emits_loop_poll(const XiFunc *f) {
     if (!f)
         return false;
@@ -2507,7 +2440,7 @@ static bool emit_coro_callable_target_switch(XiCgenCtx *ctx, FILE *out, const Xi
     if (!plan)
         return false;
 
-    int sid = ++(*state_id);
+    int sid = cg_coro_claim_state(ctx, f, v, state_id);
     fprintf(out, "    XrAotResult _call_%u;\n", v->id);
     fprintf(out, "    XrValue _call_value_%u = XR_NULL_VAL;\n", v->id);
     fprintf(out, "    xrt_closure_t *_call_cl_%u = ", v->id);
@@ -2781,7 +2714,7 @@ static bool emit_coro_net_bidi_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc
         return true;
     }
 
-    int sid = ++(*state_id);
+    int sid = cg_coro_claim_state(ctx, f, v, state_id);
     fprintf(out,
             "    XrtI64PairResult _net_bidi_result_%u = "
             "xrt_net_bidi_result(0, 0, 9);\n",
@@ -2851,7 +2784,7 @@ static bool emit_coro_net_io_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
         return true;
     }
 
-    int sid = ++(*state_id);
+    int sid = cg_coro_claim_state(ctx, f, v, state_id);
     char retry_label[48];
     char done_label[48];
     char wait_name[48];
@@ -2929,7 +2862,7 @@ static bool emit_coro_test_yield_call_stmt(XiCgenCtx *ctx, FILE *out, const XiFu
         return true;
     }
 
-    int sid = ++(*state_id);
+    int sid = cg_coro_claim_state(ctx, f, v, state_id);
     emit_value_source_line(ctx, out, v);
     if (strcmp(method, "add") == 0) {
         fprintf(out, "    f->test_yield_value_%u = xr_aot_test_yield_add(", v->id);
@@ -3059,7 +2992,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
 
     if (v->op == XI_YIELD) {
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         emit_value_generated_line_reset(ctx, out, v);
         if (v->aux_int == XI_YIELD_AUX_POLL) {
             emit_value_source_line(ctx, out, v);
@@ -3094,7 +3027,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_GEN_YIELD) {
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         emit_value_generated_line_reset(ctx, out, v);
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
@@ -3207,7 +3140,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         bool result_copy_shared = (v->aux_int & XI_GO_AUX_RESULT_COPY_SHARED) != 0;
         bool defer_batch = (v->aux_int & XI_GO_AUX_DEFER_BATCH) != 0;
         bool fire_and_forget = (v->flags & XI_FLAG_FIRE_AND_FORGET) != 0;
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         emit_value_source_line(ctx, out, v);
         if (!ctx->freestanding_profile)
             fprintf(out, "    xrt_guard_task_spawn();\n");
@@ -3247,7 +3180,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         const XiValue *await_slot_value = xi_coro_typed_await_unbox_user(f, v);
         int await_flags = (int) v->aux_int;
         bool await_all = (await_flags & XI_AWAIT_AUX_ALL) != 0;
@@ -3552,7 +3485,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         fprintf(out, "    XrAotResult _call_%u;\n", v->id);
         fprintf(out, "    XrValue _call_value_%u = XR_NULL_VAL;\n", v->id);
         fprintf(out, "    if (!f->call_frame_%u) {\n", v->id);
@@ -3672,7 +3605,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (cg_is_time_sleep_call_ctx(ctx, f, v)) {
         emit_value_generated_line_reset(ctx, out, v);
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrAotResult _sleep_%u = xr_aot_sleep(ctx, ", v->id);
@@ -3734,7 +3667,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (v->op == XI_SCOPE_EXIT) {
         emit_value_generated_line_reset(ctx, out, v);
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         /* A scope block is a statement — scope exit yields no value.  When the
          * frame still reserves a slot for the unit result, park a null in it;
          * nothing ever reads it. */
@@ -3819,7 +3752,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         fprintf(out, "    XrValue _select_channels_%u[%u];\n", v->id, (unsigned) v->nargs);
         for (uint16_t i = 0; i < v->nargs; i++) {
             fprintf(out, "    _select_channels_%u[%u] = ", v->id, (unsigned) i);
@@ -4216,7 +4149,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         xi_value_is_task_method_call(v, "awaitTimeout", 1)) {
         emit_value_generated_line_reset(ctx, out, v);
         bool timeout_enabled = xi_value_is_task_method_call(v, "awaitTimeout", 1);
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
         fprintf(out, "    XrAotResult _task_await_%u = xr_aot_task_await_result(ctx, ", v->id);
@@ -4358,7 +4291,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (xi_value_is_blocking_work_queue_method_call(v)) {
         emit_value_generated_line_reset(ctx, out, v);
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         bool direct_i64_optional = cg_value_is_i64_optional_blocking_result_root(v) &&
                                    cg_value_is_elided_i64_optional_blocking_result(f, v);
         bool direct_xvalue = !direct_i64_optional && cg_coro_can_use_xvalue_result_ptr(f, v);
@@ -4530,7 +4463,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (xi_value_is_blocking_result_group_method_call(v)) {
         emit_value_generated_line_reset(ctx, out, v);
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         bool direct_i64_optional = cg_value_is_i64_optional_blocking_result_root(v) &&
                                    cg_value_is_elided_i64_optional_blocking_result(f, v);
         bool direct_xvalue = !direct_i64_optional && cg_coro_can_use_xvalue_result_ptr(f, v);
@@ -4681,7 +4614,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (xi_value_is_blocking_countdown_latch_method_call(v)) {
         emit_value_generated_line_reset(ctx, out, v);
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         fprintf(out, "    XrSlotRef _latch_wait_slot_%u = ", v->id);
         emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
         fprintf(out, ";\n");
@@ -4781,7 +4714,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (xi_value_is_blocking_semaphore_method_call(v)) {
         emit_value_generated_line_reset(ctx, out, v);
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         fprintf(out, "    XrSlotRef _sem_acquire_slot_%u = ", v->id);
         emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
         fprintf(out, ";\n");
@@ -4869,7 +4802,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (xi_value_is_blocking_event_count_method_call(v)) {
         emit_value_generated_line_reset(ctx, out, v);
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         fprintf(out, "    XrSlotRef _event_count_wait_slot_%u = ", v->id);
         emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
         fprintf(out, ";\n");
@@ -4934,7 +4867,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         bool transfer_helper = send_arg == NULL && strcmp(helper, "xr_aot_chan_send_timeout") == 0;
         if (transfer_helper)
             helper = "xr_aot_chan_send_timeout_transfer";
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         char bridge_value[64] = {0};
         char bridge_mode[64] = {0};
         if (transfer_helper) {
@@ -4986,7 +4919,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (xi_value_is_channel_method_call(v, "recvTimeout", 1)) {
         emit_value_generated_line_reset(ctx, out, v);
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         bool result_observed = cg_coro_value_result_observed(f, v);
         fprintf(out, "    f->state = %d;\n", sid);
         emit_value_source_line(ctx, out, v);
@@ -5039,7 +4972,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         bool transfer_helper = send_arg == NULL && strcmp(helper, "xr_aot_chan_send") == 0;
         if (transfer_helper)
             helper = "xr_aot_chan_send_transfer";
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         char bridge_value[64] = {0};
         char bridge_mode[64] = {0};
         if (transfer_helper) {
@@ -5101,7 +5034,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             return;
         }
         const XiValue *status = xi_coro_recv_status_user(f, v);
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         fprintf(out, "    XrSlotRef _chan_recv_slot_%u = ", v->id);
         emit_coro_slot_ref(ctx, out, f, prefix, v);
         fprintf(out, ";\n");
@@ -5168,7 +5101,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         bool result_observed = cg_coro_value_result_observed(f, v);
         fprintf(out, "    XrSlotRef _chan_recv_slot_%u = ", v->id);
         emit_coro_slot_ref(ctx, out, f, prefix, v);
@@ -5212,7 +5145,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        int sid = ++(*state_id);
+        int sid = cg_coro_claim_state(ctx, f, v, state_id);
         fprintf(out, "    XrSlotRef _chan_recv_or_slot_%u = ", v->id);
         emit_coro_slot_ref(ctx, out, f, prefix, v);
         fprintf(out, ";\n");
@@ -5824,7 +5757,7 @@ static uint16_t cg_coro_plan_slot_physical_release_width(XiCgenCtx *ctx, const X
     if (s && s->kind == XI_CORO_SLOT_PARAM)
         return 0;
     return s && s->frame_release && cg_coro_plan_slot_is_physical(f, s) &&
-                   cg_coro_value_needs_frame_arc_release(ctx, f, s->value)
+                   cg_coro_value_frame_root_width(ctx, f, s->value) > 0
                ? cg_coro_value_frame_root_width(ctx, f, s->value)
                : 0;
 }
@@ -5860,8 +5793,7 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
             const XiCoroSlot *slot = xi_coro_plan_find_slot(cg_coro_plan(ctx, f), &phi->value);
-            if (!slot || !slot->frame_release ||
-                !cg_coro_value_needs_frame_arc_release(ctx, f, &phi->value))
+            if (!slot || !slot->frame_release)
                 continue;
             (void) emit_coro_frame_slot_visits(ctx, out, f, &phi->value,
                                                cg_coro_decl_rep(ctx, f, &phi->value), "f->phi",
@@ -5871,7 +5803,6 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
             const XiValue *v = blk->values[vi];
             const XiCoroSlot *slot = xi_coro_plan_find_slot(cg_coro_plan(ctx, f), v);
             if (!cg_coro_value_needs_frame(ctx, f, v) || !slot || !slot->frame_release ||
-                !cg_coro_value_needs_frame_arc_release(ctx, f, v) ||
                 !cg_coro_value_live_across_suspend(ctx, f, v))
                 continue;
             (void) emit_coro_frame_slot_visits(ctx, out, f, v, cg_coro_decl_rep(ctx, f, v), "f->v",
@@ -5934,15 +5865,26 @@ static void emit_coro_static_cleanup_dispatch(FILE *out, const XiFunc *f) {
 
 static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     xi_ensure_rpo(f);
-    const XiCoroResolver resolver = cg_coro_resolver_ctx(ctx);
-    cg_coro_insert_loop_poll_safepoints(f, &resolver);
-    const XiCoroPlan *plan = xi_coro_analyze(f, &resolver);
+    const XiCoroPlan *plan = cg_coro_plan(ctx, f);
     if (!plan) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: AOT coroutine plan failed for '%s'\n",
                 f->name ? f->name : "?");
         return;
     }
+    uint32_t seen_required = plan->nstates + 1u;
+    if (seen_required > ctx->coro_emit_seen_cap) {
+        uint8_t *seen = (uint8_t *) xr_realloc(ctx->coro_emit_seen, seen_required);
+        if (!seen) {
+            ctx->error = true;
+            return;
+        }
+        ctx->coro_emit_seen = seen;
+        ctx->coro_emit_seen_cap = seen_required;
+    }
+    memset(ctx->coro_emit_seen, 0, seen_required);
+    ctx->coro_emit_plan = plan;
+    ctx->coro_emit_seen_count = 0;
     size_t frame_size = estimate_coro_frame_size(ctx, f);
     uint32_t root_count = cg_coro_plan_frame_roots(ctx, f, plan);
     uint32_t release_count = cg_coro_plan_frame_releases(ctx, f, plan);
@@ -5980,8 +5922,10 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     if (state_count > 0) {
         fprintf(out, "    switch (f->state) {\n");
         fprintf(out, "        case 0: break;\n");
-        for (int sid = 1; sid <= state_count; sid++)
-            fprintf(out, "        case %d: goto S%d;\n", sid, sid);
+        for (uint32_t i = 1; i < plan->ndispatch; i++) {
+            const XiCoroDispatchEntry *entry = &plan->dispatch[i];
+            fprintf(out, "        case %u: goto S%u;\n", entry->state_id, entry->state_id);
+        }
         fprintf(out, "        default: return xr_aot_error(XR_NULL_VAL, false);\n");
         fprintf(out, "    }\n");
     }
@@ -5993,6 +5937,20 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
         if (f->blocks[bi])
             emit_coro_block(ctx, out, f, f->blocks[bi], prefix, &state_id);
     }
+    if (ctx->coro_emit_seen_count != plan->nstates) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: coroutine '%s' emitted %u of %u frozen states; missing:",
+                f->name ? f->name : "?", ctx->coro_emit_seen_count, plan->nstates);
+        for (uint32_t state = 1; state <= plan->nstates; state++) {
+            if (!ctx->coro_emit_seen[state])
+                fprintf(stderr, " %u(v%u)", state,
+                        plan->points[state - 1u].op ? plan->points[state - 1u].op->id
+                                                   : UINT32_MAX);
+        }
+        fprintf(stderr, "\n");
+    }
+    ctx->coro_emit_plan = NULL;
     fprintf(out, "}\n");
 
     emit_coro_undefs(ctx, out, f);

@@ -46,6 +46,7 @@ static XrType stub_slice_i8 = {
 
 static int tests_passed = 0;
 static int tests_failed = 0;
+static const char *test_filter = NULL;
 
 #define ASSERT(cond)                                                                               \
     do {                                                                                           \
@@ -59,6 +60,8 @@ static int tests_failed = 0;
 #define TEST(name)                                                                                 \
     static void test_##name(void);                                                                 \
     static void run_##name(void) {                                                                 \
+        if (test_filter && !strstr(#name, test_filter))                                            \
+            return;                                                                                \
         printf("--- " #name " ---\n");                                                             \
         test_##name();                                                                             \
         printf("  PASS\n");                                                                        \
@@ -1539,6 +1542,40 @@ TEST(coro_plan_does_not_own_borrowed_place_load) {
     xi_func_free(f);
 }
 
+TEST(coro_plan_transfers_owned_rep_alias_into_frame) {
+    XiFunc *f = xi_func_new("coro_owned_rep_alias", &stub_str);
+    ASSERT(f != NULL);
+    XiBlock *entry = xi_block_new(f);
+    ASSERT(entry != NULL);
+    entry->sealed = true;
+
+    XiValue *a = xi_const_str(f, entry, "a", &stub_str);
+    XiValue *b = xi_const_str(f, entry, "b", &stub_str);
+    XiValue *owner = xi_value_new(f, entry, XI_STR_CONCAT, &stub_str, 2);
+    XiValue *alias = xi_value_new(f, entry, XI_UNBOX, &stub_str, 1);
+    XiValue *suspend = xi_value_new(f, entry, XI_YIELD, &stub_unit, 0);
+    ASSERT(a && b && owner && alias && suspend);
+    owner->args[0] = a;
+    owner->args[1] = b;
+    owner->rep = XR_REP_TAGGED;
+    alias->args[0] = owner;
+    alias->rep = XR_REP_PTR;
+    xi_block_set_return(entry, alias);
+
+    mark_coro_lower_input(f);
+    XiCoroPlan *plan = xi_coro_analyze(f, NULL);
+    ASSERT(plan != NULL);
+    const XiCoroSlot *slot = xi_coro_plan_find_slot(plan, alias);
+    ASSERT(slot != NULL);
+    ASSERT(slot->owner_value_id == owner->id);
+    ASSERT(slot->needs_release);
+    ASSERT(slot->frame_root);
+    ASSERT(slot->frame_release);
+    ASSERT(plan->points[0].nroots == 1 && plan->points[0].roots[0] == alias);
+    ASSERT(plan->points[0].ndrops == 1 && plan->points[0].drops[0] == alias);
+    xi_func_free(f);
+}
+
 static XiFunc *make_lowered_two_state_coro(void) {
     XiFunc *f = xi_func_new("coro_lower_two_state", &stub_array_i8);
     if (!f)
@@ -1586,7 +1623,7 @@ TEST(coro_lower_splits_cfg_and_records_cleanup_obligations) {
         ASSERT(point->suspend_block->nvalues == 1);
         ASSERT(point->suspend_block->values[0] == point->op);
         ASSERT(point->suspend_block->succs[0] == point->resume_block);
-        ASSERT(plan->dispatch[i + 1].target == point->resume_block);
+        ASSERT(plan->dispatch[i + 1].target == point->suspend_block);
         uint32_t expected_live = i == 0 ? 2u : 1u;
         ASSERT(point->nlive == expected_live);
         ASSERT(point->nroots == expected_live);
@@ -1599,6 +1636,9 @@ TEST(coro_lower_splits_cfg_and_records_cleanup_obligations) {
     }
     ASSERT(plan->spill_count == 3);
     ASSERT(plan->edge_count == 10);
+    ASSERT(plan->actions_materialized);
+    ASSERT(plan->frame_action_count > plan->spill_count);
+    ASSERT(plan->action_fingerprint != 0);
     ASSERT(plan->fingerprint != 0);
     ASSERT(verify_ok(f));
     xi_func_free(f);
@@ -1729,6 +1769,13 @@ TEST(coro_lower_mutation_rejects_stale_revision) {
     xi_func_free(f);
 }
 
+static int known_suspend_call(void *ud, const XiFunc *current, const XiValue *call) {
+    (void) ud;
+    (void) current;
+    (void) call;
+    return 1;
+}
+
 TEST(coro_lower_mutation_rejects_invalid_child_edge) {
     XiFunc *f = make_func("coro_child_edge");
     ASSERT(f != NULL);
@@ -1739,7 +1786,9 @@ TEST(coro_lower_mutation_rejects_invalid_child_edge) {
     call->flags |= XI_FLAG_MAY_SUSPEND;
     xi_block_set_return(f->entry, call);
     mark_coro_lower_input(f);
-    ASSERT(xi_coro_lower(f, NULL));
+    XiCoroResolver resolver = {0};
+    resolver.call_suspendability = known_suspend_call;
+    ASSERT(xi_coro_lower(f, &resolver));
     ASSERT(f->coro_plan->nstates == 1);
     ASSERT(f->coro_plan->points[0].nlive == 1);
     ASSERT(f->coro_plan->points[0].live[0] == call);
@@ -1766,8 +1815,27 @@ TEST(coro_lower_rejects_exception_region_before_cfg_mutation) {
     uint32_t blocks = f->nblocks;
     ASSERT(!xi_coro_lower(f, NULL));
     ASSERT(f->nblocks == blocks);
-    ASSERT(f->coro_plan != NULL);
-    ASSERT(!f->coro_plan->cfg_rewritten);
+    ASSERT(f->coro_plan == NULL);
+    xi_func_free(f);
+}
+
+TEST(coro_lower_rejects_unresolved_call_before_cfg_mutation) {
+    XiFunc *f = make_func("coro_unresolved_call");
+    ASSERT(f != NULL);
+    XiValue *callee = xi_value_new(f, f->entry, XI_CONST, &stub_func, 0);
+    XiValue *call = xi_value_new(f, f->entry, XI_CALL, &stub_int, 1);
+    ASSERT(callee != NULL && call != NULL);
+    call->args[0] = callee;
+    call->flags |= XI_FLAG_MAY_SUSPEND;
+    xi_block_set_return(f->entry, call);
+    mark_coro_lower_input(f);
+
+    uint32_t blocks = f->nblocks;
+    uint32_t values = f->entry->nvalues;
+    ASSERT(!xi_coro_lower(f, NULL));
+    ASSERT(f->nblocks == blocks);
+    ASSERT(f->entry->nvalues == values);
+    ASSERT(f->coro_plan == NULL);
     xi_func_free(f);
 }
 
@@ -2101,7 +2169,7 @@ TEST(backend_accepts_range_op) {
 
 /* Resolver for a synthetic linear chain f0 -> f1 -> ... -> fN. Prepared
  * suspendability is deliberately UNKNOWN (-1) for every function, forcing
- * the depth-bounded fallback walk. */
+ * the bounded local proof walk. */
 typedef struct {
     XiFunc **chain;
     int len;
@@ -2168,6 +2236,7 @@ TEST(coro_depth_bound_fails_closed) {
 
 int main(void) {
     printf("=== Xi Extended Verifier Tests ===\n\n");
+    test_filter = getenv("XRAY_TEST_FILTER");
 
     run_coro_depth_bound_fails_closed();
 
@@ -2245,6 +2314,7 @@ int main(void) {
     run_coro_plan_rejects_stale_point_op();
     run_coro_plan_rejects_root_count_mismatch();
     run_coro_plan_does_not_own_borrowed_place_load();
+    run_coro_plan_transfers_owned_rep_alias_into_frame();
     run_coro_lower_splits_cfg_and_records_cleanup_obligations();
     run_coro_lower_is_deterministic_and_idempotent();
     run_coro_lower_mutation_rejects_missing_spill();
@@ -2259,6 +2329,7 @@ int main(void) {
     run_coro_lower_mutation_rejects_stale_revision();
     run_coro_lower_mutation_rejects_invalid_child_edge();
     run_coro_lower_rejects_exception_region_before_cfg_mutation();
+    run_coro_lower_rejects_unresolved_call_before_cfg_mutation();
     run_coro_lower_rejects_raw_stage_before_analysis();
     run_coro_lower_preserves_successor_phi_pred_position();
     run_coro_lower_rejects_stale_cached_analysis();

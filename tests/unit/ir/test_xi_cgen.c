@@ -455,6 +455,18 @@ static void test_aot_add_function_evidence(TestAotPlan *plan, XiFunc *func, XgMo
         test_aot_add_function_evidence(plan, func->children[i], module_id, ids);
 }
 
+static bool test_aot_rebase_coroutine_plans(XiFunc *func) {
+    if (!func)
+        return true;
+    if (func->coro_plan && !xi_coro_plan_rebase(func))
+        return false;
+    for (uint16_t i = 0; i < func->nchildren; i++) {
+        if (!test_aot_rebase_coroutine_plans(func->children[i]))
+            return false;
+    }
+    return true;
+}
+
 static uint8_t test_aot_class_field_semantic_kind(uint8_t native_type) {
     switch (native_type) {
         case XR_NATIVE_I8:
@@ -769,6 +781,10 @@ static bool test_aot_plan_try_prepare_with_targets(TestAotPlan *plan, XiModule *
         }
         for (uint16_t ci = 0; ci < module->init->nchildren; ci++)
             test_aot_add_function_evidence(plan, module->init->children[ci], module_id, &ids);
+    }
+    for (uint32_t i = 0; i < nmodules; i++) {
+        TEST_REQUIRE(!modules[i] || test_aot_rebase_coroutine_plans(modules[i]->init),
+                     "AOT evidence IDs rebase frozen coroutine plans");
     }
     if (!xaot_bundle_set_global_evidence(&plan->bundle, &plan->evidence, XG_BUILD_NATIVE_RELEASE))
         return false;
@@ -1104,7 +1120,7 @@ static bool test_prepare_backend_ir(XiFunc *ir) {
         if (!semantic_lowered)
             goto fail;
         XiCoroLoweredProgram *coro_lowered =
-            xi_program_lower_coroutines(semantic_lowered, error, sizeof(error));
+            xi_program_lower_coroutines(semantic_lowered, NULL, error, sizeof(error));
         if (!coro_lowered)
             goto fail;
         optimized = xi_program_finish_optimization(coro_lowered, error, sizeof(error));
@@ -9513,7 +9529,7 @@ TEST(cgen_coro_frame_skips_dead_ssa_slots) {
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
+TEST(cgen_coro_loop_tail_phi_uses_shared_suspend_plan) {
     const char *src = "fn worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {\n"
                       "    return match (ch.sendTimeout(value, timeout_ms)) {\n"
                       "        SendResult.Timeout -> true\n"
@@ -9551,8 +9567,10 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
     assert(frame != NULL && "run_once coroutine frame should be emitted");
     const char *frame_end = strstr(frame, "} test_run_once_");
     assert(frame_end != NULL && "run_once coroutine frame should have an end marker");
-    assert(count_between(frame, frame_end, "\n    int64_t phi") >= 4 &&
-           "loop-tail accumulator phi must be stored in the frame across poll suspend");
+    assert(contains_between(frame, frame_end, "\n    int64_t phi14;") &&
+           contains_between(frame, frame_end, "\n    int64_t phi39;") &&
+           contains_between(frame, frame_end, "\n    int64_t phi32;") &&
+           "live loop-tail phi values must be stored in the shared suspend frame");
 
     const char *resume = strstr(frame_end, "test_run_once_");
     resume = resume ? strstr(resume, "_aot_resume(void *raw_frame") : NULL;
@@ -9565,17 +9583,10 @@ TEST(cgen_coro_loop_tail_phi_survives_poll_suspend) {
            !contains_between(resume, trace, "\n    int64_t phi33 = 0;") &&
            !contains_between(resume, trace, "\n    int64_t phi32 = 0;") &&
            "cross-suspend loop phi values must alias frame fields, not resume-local temps");
-    assert(contains(code, "uint32_t _xr_aot_coro_poll_count = 0;") &&
-           "automatic coroutine loop safepoint should declare a throttled poll counter");
-    assert(contains(code, "XrAotRunKind _yield_poll_") &&
-           "automatic coroutine loop safepoint should use the compact poll kind fast path");
-    assert(contains(code, "xr_aot_poll_yield_kind_cost(ctx, XR_AOT_LOOP_POLL_INTERVAL)") &&
-           "automatic coroutine loop safepoint should batch runtime polling by loop interval");
-    assert(!contains(code, "xr_aot_poll_yield_kind(ctx)") &&
-           "automatic coroutine loop safepoint should not call the runtime poll helper on every "
-           "backedge");
-    assert(!contains(code, "XrAotResult _yield_poll_") &&
-           "automatic coroutine loop safepoint should not materialize a result on the hot path");
+    assert(!contains(code, "_xr_aot_coro_poll_count") &&
+           "CGen must not discover or insert coroutine poll states after plan freeze");
+    assert(!contains(code, "_yield_poll_") &&
+           "all emitted suspension states must come from the shared Xi coroutine plan");
 
     printf("  Generated loop-tail phi frame %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -11473,6 +11484,56 @@ TEST(cgen_test_yield_calls_publish_resume_states) {
     xi_func_free(ir);
 }
 
+TEST(cgen_rejects_mutated_frozen_coroutine_plan) {
+    const char *src = "Coro.yield()\n"
+                      "print(7)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "coroutine mutation fixture compiled");
+    TEST_REQUIRE(test_prepare_backend_ir(ir), "coroutine mutation fixture reached Backend");
+    TEST_REQUIRE(ir->coro_plan != NULL && ir->coro_plan->nstates == 1 &&
+                     xi_coro_plan_is_current(ir, ir->coro_plan),
+                 "Backend fixture carries one current frozen state");
+
+    XiModule *mod = ir->module;
+    bool own_mod = false;
+    if (!mod) {
+        mod = xi_module_new("test.xr", "test", ir);
+        TEST_REQUIRE(mod != NULL, "coroutine mutation fixture module allocated");
+        own_mod = true;
+    }
+    XiModule *modules[] = {mod};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 1, 0);
+    TEST_REQUIRE(xi_coro_plan_is_current(ir, ir->coro_plan),
+                 "AOT evidence publication rebased the frozen coroutine plan");
+
+    ir->coro_plan->fingerprint ^= UINT64_C(1);
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL, "coroutine mutation fixture CGen context allocated");
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    char *code = NULL;
+    size_t code_size = 0;
+    FILE *mem = xr_open_memstream(&code, &code_size);
+    TEST_REQUIRE(mem != NULL, "coroutine mutation fixture output stream allocated");
+    xi_cgen_program(ctx, mem, mod);
+    TEST_REQUIRE(xr_close_memstream(mem, &code, &code_size) == 0,
+                 "coroutine mutation fixture output stream closed");
+    bool had_error = xi_cgen_has_error(ctx);
+    TEST_REQUIRE(code != NULL && had_error,
+                 "CGen rejects a frozen coroutine plan with a mutated fingerprint");
+
+    printf("  Rejected mutated frozen coroutine plan before state emission\n");
+    xr_free(code);
+    xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
+    if (own_mod) {
+        mod->init = NULL;
+        xi_module_free(mod);
+    }
+    xi_func_free(ir);
+}
+
 TEST(cgen_runtime_needed_main_uses_aot_runtime) {
     const char *src = "import time\n"
                       "time.sleep(5)\n";
@@ -12730,7 +12791,7 @@ int main(void) {
     run_cgen_suspendable_dependency_init_fails_fast();
     run_cgen_coro_frame_params_use_typed_storage();
     run_cgen_coro_frame_skips_dead_ssa_slots();
-    run_cgen_coro_loop_tail_phi_survives_poll_suspend();
+    run_cgen_coro_loop_tail_phi_uses_shared_suspend_plan();
     run_cgen_coro_wait_driven_loop_omits_redundant_poll();
     run_cgen_countdown_latch_methods_use_native_helpers();
     run_cgen_semaphore_methods_use_native_helpers();
@@ -12767,6 +12828,7 @@ int main(void) {
     run_cgen_descriptor_select_try_recv_uses_ready_bit();
     run_cgen_coro_sleep_publishes_state_before_block();
     run_cgen_test_yield_calls_publish_resume_states();
+    run_cgen_rejects_mutated_frozen_coroutine_plan();
     run_cgen_runtime_needed_main_uses_aot_runtime();
     run_cgen_coro_select_publishes_state_before_block();
     run_cgen_coro_channel_timeout_publishes_state_before_block();

@@ -11,6 +11,7 @@
 #include "xi_semantic_snapshot.h"
 
 #include "xi.h"
+#include "xi_coro_lower.h"
 #include "xi_core_api.h"
 #include "xi_module.h"
 #include "../base/xmalloc.h"
@@ -716,6 +717,13 @@ static bool snapshot_func(XiSemanticSnapshot *snapshot, XiFunc *func) {
             snapshot_note_failure(snapshot, "child function metadata");
             return false;
         }
+    }
+    /* Detaching replaces analyzer-owned type pointers on every Xi value.
+     * Rebase the frozen coroutine witness so its slot schema and fingerprint
+     * name those detached types before the graph escapes the pipeline. */
+    if (func->coro_plan && !xi_coro_plan_rebase(func)) {
+        snapshot_note_failure(snapshot, "coroutine plan after type detachment");
+        return false;
     }
     return !snapshot->failed;
 }

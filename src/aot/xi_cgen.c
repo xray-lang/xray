@@ -48,6 +48,7 @@
 #include "../ir/xi_range.h"
 #include "../ir/xi_value_query.h"
 #include "../ir/xi_coro_analyze.h"
+#include "../ir/xi_coro_lower.h"
 #include "../base/xdefs.h"
 #include "../module/xnative_package.h"
 #include "../runtime/class/xenum.h"
@@ -771,6 +772,10 @@ struct XiCgenCtx {
     size_t nfunc_residues;
     size_t func_residues_cap;
     XiCgenCoroFrameStats coro_frame_stats;
+    const XiCoroPlan *coro_emit_plan;
+    uint8_t *coro_emit_seen;
+    uint32_t coro_emit_seen_cap;
+    uint32_t coro_emit_seen_count;
     const XaotBundle *aot_bundle;
     CgScalarEmissionRegistryEntry *scalar_emission_registry; /* owned index; plans borrowed */
     uint32_t scalar_emission_registry_count;
@@ -2076,6 +2081,7 @@ static const char *cg_module_prefix_for_func(const XiCgenCtx *ctx, const XiFunc 
 }
 
 #include "xi_cgen_call_resolve.inc.c"
+/* Coroutine ABI classification is resolved from the frozen Xi plan. */
 #include "xi_cgen_coro_resolver.inc.c"
 
 static const char *cg_aot_context_expr(XiCgenCtx *ctx, const XiFunc *f) {
@@ -9257,6 +9263,8 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
     }
 }
 
+/* Coroutine emission consumes the frozen Xi state/action plan and its
+ * evidence-checked state numbering. */
 #include "xi_cgen_coro.inc.c"
 
 /* ========== Function Emission ========== */

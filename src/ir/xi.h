@@ -1840,9 +1840,10 @@ typedef struct XiFunc {
     const uint32_t *phi_coalesce;
     uint32_t phi_coalesce_count;
 
-    /* Backend-neutral coroutine plan produced by xi_coro_analyze() and
-     * consumed by both AOT and VM coroutine lowering.  Arena-allocated, so it
-     * lives and dies with this XiFunc.  NULL until the function is analyzed. */
+    /* Backend-neutral coroutine plan produced by xi_coro_analyze().  AOT
+     * consumes it today; the VM TargetPlan cutover must consume this same
+     * frozen plan rather than retaining a separate discovery path.
+     * Arena-allocated, so it lives and dies with this XiFunc. */
     struct XiCoroPlan *coro_plan;
 
     /* Opaque side-tables owned by analysis passes. */

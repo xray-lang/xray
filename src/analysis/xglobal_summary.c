@@ -2656,6 +2656,71 @@ static bool xg_interface_callsite_direct_target_method(const XgGlobalEvidence *e
 
 static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32_t body_index,
                                         uint8_t *state, uint32_t *memo, uint32_t *out_effect_bits);
+static bool xg_body_effects_compose_method_target(const XgGlobalEvidence *evidence,
+                                                  XgMethodId method_id, uint8_t *state,
+                                                  uint32_t *memo, uint32_t *effect_bits);
+static bool xg_method_callsite_compose_target_set(const XgGlobalEvidence *evidence,
+                                                  const XgCallsiteSummary *call, uint8_t *state,
+                                                  uint32_t *memo, uint32_t *effect_bits);
+static bool xg_interface_callsite_compose_target_set(const XgGlobalEvidence *evidence,
+                                                     const XgCallsiteSummary *call,
+                                                     uint8_t *state, uint32_t *memo,
+                                                     uint32_t *effect_bits);
+
+static bool xg_callsite_effects_compose(const XgGlobalEvidence *evidence,
+                                        const XgCallsiteSummary *call, uint8_t *state,
+                                        uint32_t *memo, uint32_t *out_effect_bits) {
+    uint32_t target_index = 0;
+    uint32_t effect_bits = 0;
+    XgMethodId target_method_id = XG_NO_ID;
+
+    if (!evidence || !call || !state || !memo || !out_effect_bits)
+        return false;
+    if (call->kind == XG_CALL_NATIVE || call->kind == XG_CALL_EXTERN) {
+        *out_effect_bits = 0;
+        return true;
+    }
+    if (call->kind == XG_CALL_DIRECT_FUNC ||
+        (call->kind == XG_CALL_CLOSURE && call->static_target_func_id != XG_NO_ID)) {
+        if (call->static_target_func_id == XG_NO_ID ||
+            !xg_global_evidence_find_body_index_by_func(evidence,
+                                                        call->static_target_func_id,
+                                                        &target_index) ||
+            !xg_body_effects_compose_rec(evidence, target_index, state, memo,
+                                         &effect_bits))
+            return false;
+        *out_effect_bits = effect_bits;
+        return true;
+    }
+    if (xg_method_callsite_is_direct_dispatch(evidence, call)) {
+        if (!xg_body_effects_compose_method_target(evidence, call->method_id, state, memo,
+                                                   &effect_bits))
+            return false;
+        *out_effect_bits = effect_bits;
+        return true;
+    }
+    if (call->kind == XG_CALL_INTERFACE) {
+        if (xg_interface_callsite_direct_target_method(evidence, call, &target_method_id)) {
+            if (!xg_body_effects_compose_method_target(evidence, target_method_id, state, memo,
+                                                       &effect_bits))
+                return false;
+        } else if (!xg_interface_callsite_compose_target_set(evidence, call, state, memo,
+                                                             &effect_bits)) {
+            return false;
+        }
+        *out_effect_bits = effect_bits;
+        return true;
+    }
+    if (call->kind == XG_CALL_METHOD) {
+        if (!xg_method_callsite_compose_target_set(evidence, call, state, memo,
+                                                   &effect_bits))
+            return false;
+        *out_effect_bits = effect_bits;
+        return true;
+    }
+    /* A closure without a stable target is deliberately unprovable. */
+    return false;
+}
 
 static bool xg_body_effects_compose_method_target(const XgGlobalEvidence *evidence,
                                                   XgMethodId method_id, uint8_t *state,
@@ -2891,54 +2956,15 @@ static bool xg_body_effects_compose_rec(const XgGlobalEvidence *evidence, uint32
         for (uint32_t i = 0; i < body->callsite_count; i++) {
             const XgCallsiteSummary *call = xg_global_evidence_find_callsite(
                 evidence, (XgCallsiteId) (body->callsite_start + i));
-            uint32_t target_index = 0;
             uint32_t target_effects = 0;
 
             if (!call || call->owner_func_id != body->func_id || call->body_ordinal != i)
                 return false;
-            if (call->kind == XG_CALL_NATIVE || call->kind == XG_CALL_EXTERN)
-                continue;
-            if (call->kind == XG_CALL_DIRECT_FUNC ||
-                (call->kind == XG_CALL_CLOSURE && call->static_target_func_id != XG_NO_ID)) {
-                if (call->static_target_func_id == XG_NO_ID ||
-                    !xg_global_evidence_find_body_index_by_func(
-                        evidence, call->static_target_func_id, &target_index))
-                    return false;
-                if (!xg_body_effects_compose_rec(evidence, target_index, state, memo,
-                                                 &target_effects))
-                    return false;
-                effect_bits |= target_effects;
-                memo[body_index] = effect_bits;
-            } else if (xg_method_callsite_is_direct_dispatch(evidence, call)) {
-                if (!xg_body_effects_compose_method_target(evidence, call->method_id, state, memo,
-                                                           &effect_bits))
-                    return false;
-                memo[body_index] = effect_bits;
-            } else if (call->kind == XG_CALL_INTERFACE) {
-                XgMethodId target_method_id = XG_NO_ID;
-                if (xg_interface_callsite_direct_target_method(evidence, call, &target_method_id)) {
-                    if (!xg_body_effects_compose_method_target(evidence, target_method_id, state,
-                                                               memo, &effect_bits))
-                        return false;
-                } else if (!xg_interface_callsite_compose_target_set(evidence, call, state, memo,
-                                                                     &effect_bits)) {
-                    return false;
-                }
-                memo[body_index] = effect_bits;
-            } else if (call->kind == XG_CALL_METHOD) {
-                if (!xg_method_callsite_compose_target_set(evidence, call, state, memo,
-                                                           &effect_bits))
-                    return false;
-                memo[body_index] = effect_bits;
-            } else if (call->kind == XG_CALL_CLOSURE) {
-                /* Function-value calls follow the IR coroutine resolver:
-                 * unresolved ordinary calls are not suspension points. A
-                 * suspendable closure contributes through a resolved static
-                 * target or through the callee body's own local effects. */
-                continue;
-            } else {
+            if (!xg_callsite_effects_compose(evidence, call, state, memo,
+                                             &target_effects))
                 return false;
-            }
+            effect_bits |= target_effects;
+            memo[body_index] = effect_bits;
         }
     }
 
@@ -2969,6 +2995,28 @@ XR_FUNC bool xg_body_effects_compose_closed_world_calls(const XgGlobalEvidence *
         return false;
     }
     ok = xg_body_effects_compose_rec(evidence, body_index, state, memo, out_effect_bits);
+    xr_free(state);
+    xr_free(memo);
+    return ok;
+}
+
+XR_FUNC bool xg_callsite_effects_compose_closed_world_calls(
+    const XgGlobalEvidence *evidence, const XgCallsiteSummary *call,
+    uint32_t *out_effect_bits) {
+    uint8_t *state;
+    uint32_t *memo;
+    bool ok;
+
+    if (!evidence || !call || !out_effect_bits || evidence->nbodies == 0)
+        return false;
+    state = (uint8_t *) xr_calloc(evidence->nbodies, sizeof(uint8_t));
+    memo = (uint32_t *) xr_calloc(evidence->nbodies, sizeof(uint32_t));
+    if (!state || !memo) {
+        xr_free(state);
+        xr_free(memo);
+        return false;
+    }
+    ok = xg_callsite_effects_compose(evidence, call, state, memo, out_effect_bits);
     xr_free(state);
     xr_free(memo);
     return ok;

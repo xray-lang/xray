@@ -7,6 +7,7 @@
  */
 
 #include "xi_stage.h"
+#include "xi_coro_lower.h"
 #include "xi_evidence.h"
 #include "xi_verify.h"
 #include "../plan/semantic/xr_semantic_plan.h"
@@ -62,9 +63,25 @@ static void initialize_lowering_facts(XiFunc *func) {
 static void finalize_coroutine_lowering_facts(XiFunc *func) {
     if (!func)
         return;
-    func->lowering_facts.coroutine_lowered = true;
+    func->lowering_facts.coroutine_required =
+        func->coro_plan && func->coro_plan->is_coroutine;
+    func->lowering_facts.coroutine_lowered =
+        func->coro_plan && func->coro_plan->analysis_complete &&
+        func->coro_plan->cfg_rewritten;
     for (uint16_t i = 0; i < func->nchildren; i++)
         finalize_coroutine_lowering_facts(func->children[i]);
+}
+
+static bool rebase_coroutine_plans(XiFunc *func) {
+    if (!func)
+        return false;
+    if (func->coro_plan && !xi_coro_plan_rebase(func))
+        return false;
+    for (uint16_t i = 0; i < func->nchildren; i++) {
+        if (func->children[i] && !rebase_coroutine_plans(func->children[i]))
+            return false;
+    }
+    return true;
 }
 
 static bool verify_tree(const XiFunc *func, XiStage stage, char *error, size_t error_size) {
@@ -79,14 +96,6 @@ static bool verify_tree(const XiFunc *func, XiStage stage, char *error, size_t e
             return false;
     }
     return true;
-}
-
-static void note_transition_recursive(XiFunc *func) {
-    if (!func)
-        return;
-    xi_evidence_note_rewrite(func, false, true, false, XI_EVD_ALL);
-    for (uint16_t i = 0; i < func->nchildren; i++)
-        note_transition_recursive(func->children[i]);
 }
 
 static XiStageHandle *transition(XiStageHandle *handle, XiStage from, XiStage to, char *error,
@@ -105,6 +114,12 @@ static XiStageHandle *transition(XiStageHandle *handle, XiStage from, XiStage to
                   "SemanticPlanned transition requires a frozen verified SemanticPlan");
         return NULL;
     }
+    if ((to == XI_STAGE_REPPED || to == XI_STAGE_BACKEND) &&
+        !rebase_coroutine_plans(handle->graph)) {
+        set_error(error, error_size,
+                  "coroutine plan rebase failed after a target-stage rewrite");
+        return NULL;
+    }
 
     set_tree_stage(handle->graph, to);
     if (to == XI_STAGE_SEMANTIC_LOWERED)
@@ -116,7 +131,6 @@ static XiStageHandle *transition(XiStageHandle *handle, XiStage from, XiStage to
         return NULL;
     }
 
-    note_transition_recursive(handle->graph);
     handle->stage = to;
     handle->generation++;
     return handle;
@@ -178,8 +192,6 @@ XI_DEFINE_TRANSITION(xi_program_make_owned, XiClosedProgram, XiOwnedProgram, XI_
                      XI_STAGE_OWNED)
 XI_DEFINE_TRANSITION(xi_program_lower_semantics, XiOwnedProgram, XiSemanticLoweredProgram,
                      XI_STAGE_OWNED, XI_STAGE_SEMANTIC_LOWERED)
-XI_DEFINE_TRANSITION(xi_program_lower_coroutines, XiSemanticLoweredProgram, XiCoroLoweredProgram,
-                     XI_STAGE_SEMANTIC_LOWERED, XI_STAGE_CORO_LOWERED)
 XI_DEFINE_TRANSITION(xi_program_finish_optimization, XiCoroLoweredProgram, XiOptimizedProgram,
                      XI_STAGE_CORO_LOWERED, XI_STAGE_OPTIMIZED)
 XI_DEFINE_TRANSITION(xi_program_freeze_semantics, XiOptimizedProgram, XiSemanticPlannedProgram,
@@ -190,6 +202,43 @@ XI_DEFINE_TRANSITION(xi_program_plan_backend, XiReppedProgram, XiBackendProgram,
                      XI_STAGE_BACKEND)
 
 #undef XI_DEFINE_TRANSITION
+
+XiCoroLoweredProgram *xi_program_lower_coroutines(XiSemanticLoweredProgram *input,
+                                                  const XiCoroResolver *resolver, char *error,
+                                                  size_t error_size) {
+    XiStageHandle *handle = (XiStageHandle *) input;
+    if (!handle || handle->released || !handle->graph ||
+        handle->stage != XI_STAGE_SEMANTIC_LOWERED) {
+        set_error(error, error_size, "consumed or wrong-stage Xi handle");
+        return NULL;
+    }
+    if (!tree_has_exact_stage(handle->graph, XI_STAGE_SEMANTIC_LOWERED)) {
+        set_error(error, error_size, "Xi graph does not satisfy the exact input-stage contract");
+        return NULL;
+    }
+    /* The coroutine rewrite is a publishing transaction.  Reject stale
+     * fingerprints and malformed CFG before it can attach detached blocks or
+     * expose a partially rewritten plan. */
+    if (!verify_tree(handle->graph, XI_STAGE_SEMANTIC_LOWERED, error, error_size))
+        return NULL;
+    if (!xi_coro_lower(handle->graph, resolver)) {
+        set_error(error, error_size,
+                  "coroutine lowering failed closed before publishing CoroLowered");
+        return NULL;
+    }
+    if (!verify_tree(handle->graph, XI_STAGE_SEMANTIC_LOWERED, error, error_size))
+        return NULL;
+
+    set_tree_stage(handle->graph, XI_STAGE_CORO_LOWERED);
+    finalize_coroutine_lowering_facts(handle->graph);
+    if (!verify_tree(handle->graph, XI_STAGE_CORO_LOWERED, error, error_size)) {
+        set_tree_stage(handle->graph, XI_STAGE_SEMANTIC_LOWERED);
+        return NULL;
+    }
+    handle->stage = XI_STAGE_CORO_LOWERED;
+    handle->generation++;
+    return (XiCoroLoweredProgram *) handle;
+}
 
 static XiFunc *borrow_graph(XiStageHandle *handle, XiStage expected) {
     if (!handle || handle->released || handle->stage != expected)

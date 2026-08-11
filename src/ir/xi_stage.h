@@ -40,6 +40,7 @@ XR_FUNC XiOwnedProgram *xi_program_make_owned(XiClosedProgram *input, char *erro
 XR_FUNC XiSemanticLoweredProgram *xi_program_lower_semantics(XiOwnedProgram *input, char *error,
                                                              size_t error_size);
 XR_FUNC XiCoroLoweredProgram *xi_program_lower_coroutines(XiSemanticLoweredProgram *input,
+                                                          const struct XiCoroResolver *resolver,
                                                           char *error, size_t error_size);
 XR_FUNC XiOptimizedProgram *xi_program_finish_optimization(XiCoroLoweredProgram *input, char *error,
                                                            size_t error_size);

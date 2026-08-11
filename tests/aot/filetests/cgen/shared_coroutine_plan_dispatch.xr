@@ -1,0 +1,8 @@
+fn worker(n: int) -> int {
+    var parked = n + 1
+    Coro.yield()
+    return parked
+}
+
+var task = go worker(41)
+print(await task)

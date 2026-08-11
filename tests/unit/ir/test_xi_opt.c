@@ -14,6 +14,7 @@
 #include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_stage.h"
+#include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -1472,7 +1473,7 @@ TEST(select_rep_advances_empty_func_tree) {
         xi_program_lower_semantics(owned, error, sizeof(error));
     assert(semantic_lowered != NULL);
     XiCoroLoweredProgram *coro =
-        xi_program_lower_coroutines(semantic_lowered, error, sizeof(error));
+        xi_program_lower_coroutines(semantic_lowered, NULL, error, sizeof(error));
     assert(coro != NULL);
     XiOptimizedProgram *optimized = xi_program_finish_optimization(coro, error, sizeof(error));
     assert(optimized != NULL);
@@ -1496,6 +1497,39 @@ TEST(select_rep_advances_empty_func_tree) {
            xi_stage_invariants(XI_STAGE_REPPED));
 
     xi_func_free(xi_repped_program_release(repped));
+}
+
+TEST(full_pipeline_preserves_frozen_coroutine_plan) {
+    XiFunc *f = make_func("coro_opt_rebase", &stub_int);
+    XiValue *one = xi_const_int(f, f->entry, 1, &stub_int);
+    XiValue *two = xi_const_int(f, f->entry, 2, &stub_int);
+    XiValue *sum = xi_value_new(f, f->entry, XI_ADD, &stub_int, 2);
+    XiValue *yield = xi_value_new(f, f->entry, XI_YIELD, &stub_void, 0);
+    assert(one && two && sum && yield);
+    sum->args[0] = one;
+    sum->args[1] = two;
+    xi_block_set_return(f->entry, sum);
+    f->stage = XI_STAGE_SEMANTIC_LOWERED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    assert(xi_coro_lower(f, NULL));
+    f->stage = XI_STAGE_CORO_LOWERED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_CORO_LOWERED);
+    f->lowering_facts.initialized = true;
+    f->lowering_facts.semantic_ops_lowered = true;
+    f->lowering_facts.coroutine_required = true;
+    f->lowering_facts.coroutine_lowered = true;
+    f->lowering_facts.callable_lowered = true;
+
+    uint64_t old_revision = f->ir_revision;
+    XiOptResult result = xi_opt_run_pipeline(f, XI_OPT_FULL);
+    if (!result.ok)
+        fprintf(stderr, "coroutine optimizer failure: %s\n", result.detail);
+    assert(result.ok);
+    assert(f->ir_revision > old_revision);
+    assert(f->coro_plan && xi_coro_plan_is_current(f, f->coro_plan));
+    char error[256] = {0};
+    assert(xi_verify_stage(f, XI_STAGE_CORO_LOWERED, error, sizeof(error)));
+    xi_func_free(f);
 }
 
 /* ========== Tuple Projection Peephole Tests ========== */
@@ -2068,6 +2102,7 @@ int main(void) {
     run_select_rep_native_policy_keeps_return_unboxed();
     run_select_rep_aot_policy_keeps_scalar_phi_unboxed();
     run_select_rep_advances_empty_func_tree();
+    run_full_pipeline_preserves_frozen_coroutine_plan();
 
     /* Tuple projection peephole */
     run_tuple_get_of_tuple_new_first();

@@ -1,0 +1,6 @@
+c_syntax=pass
+c_contains=switch (f->state)
+c_contains=case 1: goto S1;
+c_contains=f->state = 1;
+c_contains=_aot_release(void *frame, struct XrCoroHeap *heap)
+c_not_contains=_yield_poll_

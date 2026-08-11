@@ -16,6 +16,7 @@
 #include "xi_effect.h"
 #include "xi_backend.h"
 #include "xi_coro_analyze.h"
+#include "xi_coro_lower.h"
 #include "xi_ops_gen.h"
 #include "xi_verify_gen.h"
 #include "xi_op_name.h"
@@ -1979,6 +1980,18 @@ static void verify_coro_lowered(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed || f->stage < XI_STAGE_CORO_LOWERED)
         return;
     const XiLoweringFacts *facts = &f->lowering_facts;
+    if (!f->coro_plan || !f->coro_plan->analysis_complete ||
+        !f->coro_plan->cfg_rewritten) {
+        verr(ctx, "XR_CORO_4000 func '%s': CoroLowered stage has no frozen coroutine plan",
+             f->name);
+        return;
+    }
+    if (facts->coroutine_required != f->coro_plan->is_coroutine ||
+        facts->coroutine_lowered != f->coro_plan->cfg_rewritten) {
+        verr(ctx, "XR_CORO_4000 func '%s': coroutine lowering facts disagree with plan",
+             f->name);
+        return;
+    }
     if (facts->coroutine_required && !facts->coroutine_lowered)
         verr(ctx, "func '%s': required coroutine lowering is incomplete", f->name);
 }
@@ -2116,6 +2129,21 @@ static bool coro_plan_has_slot_for_value(const XiCoroPlan *plan, const XiValue *
     return false;
 }
 
+static uint8_t coro_verify_slot_kind(const XiFunc *f, const XiValue *value) {
+    for (uint16_t i = 0; f && i < f->nparams; i++) {
+        if (f->params[i] == value)
+            return XI_CORO_SLOT_PARAM;
+    }
+    for (uint32_t bi = 0; f && bi < f->nblocks; bi++) {
+        for (const XiPhi *phi = f->blocks[bi] ? f->blocks[bi]->phis : NULL; phi;
+             phi = phi->next) {
+            if (&phi->value == value)
+                return XI_CORO_SLOT_PHI;
+        }
+    }
+    return XI_CORO_SLOT_VALUE;
+}
+
 static bool coro_value_array_contains(XiValue *const *values, uint32_t count,
                                       const XiValue *value) {
     if (count > 0 && !values)
@@ -2143,7 +2171,11 @@ static bool coro_point_retry_uses(const XiCoroSuspendPoint *point, const XiValue
 }
 
 static bool coro_point_runtime_writes(const XiCoroSuspendPoint *point, const XiValue *value) {
-    if (!point || !point->op || !value || point->op->op != XI_AWAIT)
+    if (!point || !point->op || !value)
+        return false;
+    if (point->op == value && xi_coro_value_needs_runtime_slot(value))
+        return true;
+    if (point->op->op != XI_AWAIT)
         return false;
     bool into_result = point->op->nargs >= 2 && point->op->args[1] == value &&
                        (point->op->aux_int & XI_AWAIT_AUX_INTO_RESULT) != 0;
@@ -2174,6 +2206,52 @@ static bool coro_point_has_required_spill(const XiCoroPlan *plan,
                                           const XiValue *value) {
     return xi_coro_plan_find_slot(plan, value) &&
            coro_value_array_contains(point->live, point->nlive, value);
+}
+
+static bool coro_verify_borrowed_alias(const XiValue *value) {
+    return value && !xi_copy_is_value_clone(value) &&
+           xi_generated_op_result_ownership(value->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
+}
+
+static const XiValue *coro_verify_slot_owner(const XiValue *value) {
+    const XiValue *owner = xi_coro_release_origin(value);
+    return owner ? owner : value;
+}
+
+static bool coro_verify_slot_carries_owner(const XiFunc *f, const XiLiveness *live,
+                                           const XiCoroSuspendPoint *point,
+                                           const XiCoroSlot *slot, bool live_here) {
+    if (!live_here || !slot || !slot->value)
+        return false;
+    if (!coro_verify_borrowed_alias(slot->value))
+        return true;
+    const XiValue *owner = coro_verify_slot_owner(slot->value);
+    return owner && owner != slot->value && xi_coro_value_needs_arc_release(owner) &&
+           !coro_point_expected_live(f, live, point, owner);
+}
+
+static bool coro_verify_expected_root(const XiFunc *f, const XiLiveness *live,
+                                      const XiCoroSuspendPoint *point,
+                                      const XiCoroSlot *slot, bool live_here) {
+    if (!live_here || !slot || !slot->value || !slot->value->type ||
+        !xi_own_type_is_rc(slot->value->type) ||
+        !coro_verify_slot_carries_owner(f, live, point, slot, live_here))
+        return false;
+    bool reachable = true;
+    if (slot->kind == XI_CORO_SLOT_VALUE) {
+        reachable = live_here || slot->value->op == XI_GO ||
+                    slot->value->op == XI_THREAD_SPAWN ||
+                    xi_coro_value_needs_runtime_slot(slot->value) ||
+                    xi_coro_value_is_aggregate_await_tasks(f, slot->value);
+    }
+    return reachable;
+}
+
+static bool coro_verify_expected_drop(const XiFunc *f, const XiLiveness *live,
+                                      const XiCoroSuspendPoint *point,
+                                      const XiCoroSlot *slot, bool live_here) {
+    return slot && slot->value && live_here && xi_coro_value_needs_arc_release(slot->value) &&
+           coro_verify_slot_carries_owner(f, live, point, slot, live_here);
 }
 
 static void verify_coro_expected_spills(VerifyCtx *ctx, const XiFunc *f, const XiCoroPlan *plan,
@@ -2262,19 +2340,27 @@ static void verify_coro_point_sets(VerifyCtx *ctx, const XiFunc *f, const XiCoro
         bool live_here = coro_value_array_contains(point->live, point->nlive, slot->value);
         if (expected_here)
             expected_live++;
-        if (expected_here && slot->frame_root)
+        bool expected_root = coro_verify_expected_root(f, live, point, slot, expected_here);
+        bool expected_drop = coro_verify_expected_drop(f, live, point, slot, expected_here);
+        if (expected_root)
             expected_roots++;
-        if (expected_here && slot->frame_release)
+        if (expected_drop)
             expected_drops++;
         if (expected_here != live_here) {
-            verr(ctx, "XR_CORO_4001 func '%s': state %u has incorrect spill membership for v%u",
-                 f->name, point->state_id, slot->value->id);
+            verr(ctx,
+                 "XR_CORO_4001 func '%s': state %u has incorrect spill membership for v%u "
+                 "(expected=%u actual=%u live_out=%u retry=%u runtime=%u op=%d)",
+                 f->name, point->state_id, slot->value->id, expected_here ? 1u : 0u,
+                 live_here ? 1u : 0u,
+                 xi_is_live_out(live, point->suspend_block, slot->value) ? 1u : 0u,
+                 coro_point_retry_uses(point, slot->value) ? 1u : 0u,
+                 coro_point_runtime_writes(point, slot->value) ? 1u : 0u,
+                 (int) slot->value->op);
             return;
         }
         bool root = coro_value_array_contains(point->roots, point->nroots, slot->value);
         bool drop = coro_value_array_contains(point->drops, point->ndrops, slot->value);
-        if (root != (live_here && slot->frame_root) ||
-            drop != (live_here && slot->frame_release)) {
+        if (root != expected_root || drop != expected_drop) {
             verr(ctx, "XR_CORO_4002 func '%s': state %u has incomplete root/drop for v%u", f->name,
                  point->state_id, slot->value->id);
             return;
@@ -2301,8 +2387,12 @@ static void verify_coro_point_sets(VerifyCtx *ctx, const XiFunc *f, const XiCoro
         for (uint32_t i = 0; i < counts[set_index]; i++) {
             const XiValue *value = sets[set_index][i];
             const XiCoroSlot *slot = xi_coro_plan_find_slot(plan, value);
-            bool valid_kind = slot && coro_value_array_contains(point->live, point->nlive, value) &&
-                              (set_index == 0 ? slot->frame_root : slot->frame_release);
+            bool live_here = slot &&
+                             coro_value_array_contains(point->live, point->nlive, value);
+            bool valid_kind =
+                slot && (set_index == 0
+                             ? coro_verify_expected_root(f, live, point, slot, live_here)
+                             : coro_verify_expected_drop(f, live, point, slot, live_here));
             if (!valid_kind) {
                 verr(ctx, "XR_CORO_4002 func '%s': state %u has foreign %s value v%u", f->name,
                      point->state_id, set_index == 0 ? "root" : "drop",
@@ -2325,9 +2415,11 @@ static void verify_coro_point_sets(VerifyCtx *ctx, const XiFunc *f, const XiCoro
 
 static void verify_coro_point_edges(VerifyCtx *ctx, const XiFunc *f,
                                     const XiCoroSuspendPoint *point) {
-    bool has_child = point->op->nargs > 0 &&
-                     (point->kind == XI_CORO_SUSP_CALL || point->kind == XI_CORO_SUSP_GO ||
-                      point->kind == XI_CORO_SUSP_AWAIT);
+    XiValue *expected_child = NULL;
+    if (point->op->nargs > 0 && (point->op->op == XI_GO || point->op->op == XI_AWAIT ||
+                                point->op->op == XI_CALL))
+        expected_child = point->op->args[0];
+    bool has_child = expected_child != NULL || point->resolved_callee != NULL;
     uint8_t expected = (uint8_t) (XI_CORO_EDGE_CHILD + (has_child ? 1 : 0));
     if (!point->edges || point->nedges != expected) {
         verr(ctx, "XR_CORO_4003 func '%s': state %u has %u edges, expected %u", f->name,
@@ -2351,7 +2443,11 @@ static void verify_coro_point_edges(VerifyCtx *ctx, const XiFunc *f,
             }
         } else if (i == XI_CORO_EDGE_CHILD) {
             if (edge->terminal || edge->target_state_id != XI_CORO_STATE_ENTRY ||
-                edge->target_block || edge->child != point->op->args[0] || edge->ndrops != 0) {
+                edge->target_block || edge->child != expected_child ||
+                edge->callee != point->resolved_callee ||
+                edge->indirect_child !=
+                    (point->op->op == XI_CALL && point->resolved_callee == NULL) ||
+                edge->ndrops != 0) {
                 verr(ctx, "XR_CORO_4003 func '%s': state %u child edge is invalid", f->name,
                      point->state_id);
                 return;
@@ -2385,11 +2481,52 @@ static uint32_t coro_verify_block_id(const XiBlock *block) {
     return block ? block->id : UINT32_MAX;
 }
 
+static uint32_t coro_verify_func_id(const XiFunc *func) {
+    return func ? func->xg_body_func_id : UINT32_MAX;
+}
+
+static uint64_t coro_verify_actions_fingerprint(const XiCoroPlan *plan) {
+    uint64_t hash = CORO_VERIFY_FNV_OFFSET;
+    hash = coro_verify_hash_u32(hash, plan->frame_action_count);
+    for (uint32_t i = 0; i < plan->frame_action_count; i++) {
+        const XiCoroFrameAction *action = &plan->frame_actions[i];
+        hash = coro_verify_hash_u32(hash, action->kind);
+        hash = coro_verify_hash_u32(hash, action->edge_kind);
+        hash = coro_verify_hash_u32(hash, action->state_id);
+        hash = coro_verify_hash_u32(hash, action->slot_index);
+        hash = coro_verify_hash_u32(hash, coro_verify_value_id(action->value));
+        hash = coro_verify_hash_u32(hash, coro_verify_block_id(action->target));
+    }
+    return hash;
+}
+
 static uint64_t coro_verify_fingerprint(const XiCoroPlan *plan) {
     uint64_t hash = CORO_VERIFY_FNV_OFFSET;
     hash = coro_verify_hash_u32(hash, plan->nstates);
     hash = coro_verify_hash_u32(hash, plan->nslots);
     hash = coro_verify_hash_u32(hash, coro_verify_block_id(plan->entry_block));
+    for (uint32_t i = 0; i < plan->nslots; i++) {
+        const XiCoroSlot *slot = &plan->slots[i];
+#define CORO_HASH_SLOT(value) hash = coro_verify_hash_u32(hash, (uint32_t) (value))
+        CORO_HASH_SLOT(coro_verify_value_id(slot->value));
+        CORO_HASH_SLOT(slot->type ? slot->type->id : UINT32_MAX);
+        CORO_HASH_SLOT(slot->owner_value_id);
+        CORO_HASH_SLOT(slot->logical_rep);
+        CORO_HASH_SLOT(slot->kind);
+        CORO_HASH_SLOT(slot->is_root);
+        CORO_HASH_SLOT(slot->needs_release);
+        CORO_HASH_SLOT(slot->needs_runtime_slot);
+        CORO_HASH_SLOT(slot->needs_boundary_clone);
+        CORO_HASH_SLOT(slot->live_across);
+        CORO_HASH_SLOT(slot->frame_root);
+        CORO_HASH_SLOT(slot->frame_release);
+#undef CORO_HASH_SLOT
+    }
+    hash = coro_verify_hash_u32(hash, plan->ndispatch);
+    for (uint32_t i = 0; i < plan->ndispatch; i++) {
+        hash = coro_verify_hash_u32(hash, plan->dispatch[i].state_id);
+        hash = coro_verify_hash_u32(hash, coro_verify_block_id(plan->dispatch[i].target));
+    }
     for (uint32_t i = 0; i < plan->nstates; i++) {
         const XiCoroSuspendPoint *point = &plan->points[i];
 #define CORO_HASH_FIELD(value) hash = coro_verify_hash_u32(hash, (uint32_t) (value))
@@ -2399,6 +2536,16 @@ static uint64_t coro_verify_fingerprint(const XiCoroPlan *plan) {
         CORO_HASH_FIELD(coro_verify_block_id(point->pre_block));
         CORO_HASH_FIELD(coro_verify_block_id(point->suspend_block));
         CORO_HASH_FIELD(coro_verify_block_id(point->resume_block));
+        CORO_HASH_FIELD(coro_verify_block_id(point->continuation));
+        CORO_HASH_FIELD(coro_verify_func_id(point->resolved_callee));
+        CORO_HASH_FIELD(coro_verify_value_id(point->result_slot));
+        CORO_HASH_FIELD(coro_verify_value_id(point->error_slot));
+        CORO_HASH_FIELD(point->generation);
+        CORO_HASH_FIELD(point->capability_mask);
+        CORO_HASH_FIELD(point->store_state_id);
+        CORO_HASH_FIELD(point->returns_to_scheduler);
+        CORO_HASH_FIELD(point->action_begin);
+        CORO_HASH_FIELD(point->action_count);
         CORO_HASH_FIELD(point->nlive);
         for (uint32_t j = 0; j < point->nlive; j++)
             CORO_HASH_FIELD(coro_verify_value_id(point->live[j]));
@@ -2415,17 +2562,123 @@ static uint64_t coro_verify_fingerprint(const XiCoroPlan *plan) {
             CORO_HASH_FIELD(edge->target_state_id);
             CORO_HASH_FIELD(coro_verify_block_id(edge->target_block));
             CORO_HASH_FIELD(coro_verify_value_id(edge->child));
+            CORO_HASH_FIELD(coro_verify_func_id(edge->callee));
+            CORO_HASH_FIELD(edge->indirect_child);
         }
 #undef CORO_HASH_FIELD
     }
+    hash = coro_verify_hash_u32(hash, plan->actions_materialized);
+    hash = coro_verify_hash_u32(hash, (uint32_t) plan->action_fingerprint);
+    hash = coro_verify_hash_u32(hash, (uint32_t) (plan->action_fingerprint >> 32u));
     return hash;
+}
+
+static uint32_t coro_verify_point_capabilities(const XiCoroSuspendPoint *point) {
+    uint32_t result = XI_CORO_CAP_SCHEDULER | XI_CORO_CAP_CANCEL_CLEANUP;
+    if (point->op->op == XI_CHAN_SEND || point->op->op == XI_CHAN_RECV ||
+        point->kind == XI_CORO_SUSP_CHAN_SEND || point->kind == XI_CORO_SUSP_CHAN_RECV ||
+        point->kind == XI_CORO_SUSP_SELECT)
+        result |= XI_CORO_CAP_CHANNEL;
+    if (point->op->op == XI_GO || point->op->op == XI_AWAIT ||
+        point->kind == XI_CORO_SUSP_AWAIT)
+        result |= XI_CORO_CAP_TASK;
+    if ((point->op->nargs > 0 && (point->op->op == XI_GO || point->op->op == XI_AWAIT ||
+                                  point->op->op == XI_CALL)) ||
+        point->resolved_callee)
+        result |= XI_CORO_CAP_CHILD_FRAME;
+    return result;
+}
+
+static bool coro_verify_action(VerifyCtx *ctx, const XiFunc *f, const XiCoroPlan *plan,
+                               const XiCoroSuspendPoint *point, uint32_t cursor,
+                               XiCoroFrameActionKind kind, const XiValue *value,
+                               XiCoroEdgeKind edge_kind) {
+    if (cursor >= plan->frame_action_count) {
+        verr(ctx, "XR_CORO_4001 func '%s': state %u action stream is truncated", f->name,
+             point->state_id);
+        return false;
+    }
+    const XiCoroFrameAction *action = &plan->frame_actions[cursor];
+    const XiCoroSlot *slot = value ? xi_coro_plan_find_slot(plan, value) : NULL;
+    uint32_t slot_index = slot ? (uint32_t) (slot - plan->slots) : UINT32_MAX;
+    if (action->kind != (uint8_t) kind || action->edge_kind != (uint8_t) edge_kind ||
+        action->state_id != point->state_id || action->slot_index != slot_index ||
+        action->value != value || action->target != point->continuation) {
+        verr(ctx, "XR_CORO_4001 func '%s': state %u action %u is inconsistent", f->name,
+             point->state_id, cursor);
+        return false;
+    }
+    return true;
+}
+
+static void verify_coro_actions(VerifyCtx *ctx, const XiFunc *f, const XiCoroPlan *plan) {
+    if (!plan->actions_materialized ||
+        (plan->frame_action_count > 0 && !plan->frame_actions) ||
+        plan->frame_action_count > plan->frame_action_capacity ||
+        plan->frame_action_capacity > XI_CORO_MAX_FRAME_ACTIONS) {
+        verr(ctx, "XR_CORO_4001 func '%s': coroutine action stream is invalid", f->name);
+        return;
+    }
+    uint32_t cursor = 0;
+    for (uint32_t i = 0; i < plan->nstates && !ctx->failed; i++) {
+        const XiCoroSuspendPoint *point = &plan->points[i];
+        uint32_t begin = cursor;
+        if (point->action_begin != cursor || point->generation != point->state_id ||
+            point->store_state_id != point->state_id || !point->returns_to_scheduler ||
+            point->continuation != point->resume_block || point->result_slot != point->op ||
+            point->error_slot != NULL ||
+            point->capability_mask != coro_verify_point_capabilities(point)) {
+            verr(ctx, "XR_CORO_4000 func '%s': state %u execution contract is invalid", f->name,
+                 point->state_id);
+            return;
+        }
+        for (uint32_t j = 0; j < point->nlive; j++, cursor++) {
+            if (!coro_verify_action(ctx, f, plan, point, cursor, XI_CORO_FRAME_SPILL,
+                                    point->live[j], XI_CORO_EDGE_RESUME))
+                return;
+        }
+        if (!coro_verify_action(ctx, f, plan, point, cursor++, XI_CORO_FRAME_STORE_STATE, NULL,
+                                XI_CORO_EDGE_RESUME) ||
+            !coro_verify_action(ctx, f, plan, point, cursor++, XI_CORO_FRAME_SCHED_EXIT, NULL,
+                                XI_CORO_EDGE_RESUME))
+            return;
+        for (uint32_t j = 0; j < point->nlive; j++) {
+            const XiCoroSlot *slot = xi_coro_plan_find_slot(plan, point->live[j]);
+            if (!coro_verify_action(ctx, f, plan, point, cursor++, XI_CORO_FRAME_RELOAD,
+                                    point->live[j], XI_CORO_EDGE_RESUME))
+                return;
+            if (slot && slot->kind == XI_CORO_SLOT_PHI) {
+                if (!coro_verify_action(ctx, f, plan, point, cursor++,
+                                        XI_CORO_FRAME_PHI_CAPTURE, point->live[j],
+                                        XI_CORO_EDGE_RESUME) ||
+                    !coro_verify_action(ctx, f, plan, point, cursor++,
+                                        XI_CORO_FRAME_PHI_COMMIT, point->live[j],
+                                        XI_CORO_EDGE_RESUME))
+                    return;
+            }
+        }
+        for (uint8_t edge = XI_CORO_EDGE_ERROR; edge <= XI_CORO_EDGE_DROP; edge++) {
+            for (uint32_t j = 0; j < point->ndrops; j++, cursor++) {
+                if (!coro_verify_action(ctx, f, plan, point, cursor, XI_CORO_FRAME_DROP,
+                                        point->drops[j], (XiCoroEdgeKind) edge))
+                    return;
+            }
+        }
+        if (point->action_count != cursor - begin) {
+            verr(ctx, "XR_CORO_4001 func '%s': state %u action range is invalid", f->name,
+                 point->state_id);
+            return;
+        }
+    }
+    if (cursor != plan->frame_action_count ||
+        plan->action_fingerprint != coro_verify_actions_fingerprint(plan))
+        verr(ctx, "XR_CORO_4001 func '%s': coroutine action fingerprint is stale", f->name);
 }
 
 static void verify_coro_rewrite(VerifyCtx *ctx, const XiFunc *f, const XiCoroPlan *plan) {
     if (!plan->cfg_rewritten)
         return;
-    if (plan->lowered_ir_revision != f->ir_revision ||
-        plan->lowered_cfg_revision != f->cfg_version) {
+    if (plan->lowered_cfg_revision != f->cfg_version) {
         verr(ctx,
              "XR_CORO_4000 func '%s': coroutine plan revision is stale "
              "(plan=%llu/%llu func=%llu/%llu)",
@@ -2441,6 +2694,14 @@ static void verify_coro_rewrite(VerifyCtx *ctx, const XiFunc *f, const XiCoroPla
         verr(ctx, "XR_CORO_4000 func '%s': coroutine entry dispatch is invalid", f->name);
         return;
     }
+    if (!plan->analysis_complete || plan->nstates > XI_CORO_MAX_STATES ||
+        plan->nslots > plan->slot_capacity || plan->slot_capacity > XI_CORO_MAX_SLOTS ||
+        plan->planned_bytes > XI_CORO_MAX_PLAN_BYTES) {
+        verr(ctx, "XR_CORO_4000 func '%s': coroutine plan exceeds or lacks planning budget",
+             f->name);
+        return;
+    }
+    xi_ensure_rpo((XiFunc *) f);
     XiLiveness *live = xi_compute_liveness((XiFunc *) f);
     if (!live) {
         verr(ctx, "XR_CORO_4001 func '%s': cannot recompute coroutine liveness", f->name);
@@ -2457,7 +2718,9 @@ static void verify_coro_rewrite(VerifyCtx *ctx, const XiFunc *f, const XiCoroPla
             point->suspend_block->kind != XI_BLOCK_PLAIN ||
             point->suspend_block->succs[0] != point->resume_block ||
             plan->dispatch[i + 1].state_id != i + 1 ||
-            plan->dispatch[i + 1].target != point->resume_block) {
+            plan->dispatch[i + 1].target != point->suspend_block ||
+            point->pre_block->rpo == 0 || point->suspend_block->rpo == 0 ||
+            point->resume_block->rpo == 0) {
             verr(ctx, "XR_CORO_4000 func '%s': state %u CFG split is invalid", f->name,
                  point->state_id);
             break;
@@ -2475,6 +2738,8 @@ static void verify_coro_rewrite(VerifyCtx *ctx, const XiFunc *f, const XiCoroPla
     if (!ctx->failed && plan->spill_count != spill_count)
         verr(ctx, "XR_CORO_4001 func '%s': spill_count=%u but points contain %u spills", f->name,
              plan->spill_count, spill_count);
+    if (!ctx->failed)
+        verify_coro_actions(ctx, f, plan);
     if (!ctx->failed && plan->fingerprint != coro_verify_fingerprint(plan))
         verr(ctx, "XR_CORO_4000 func '%s': coroutine fingerprint is stale", f->name);
 }
@@ -2497,6 +2762,16 @@ static void verify_coro_plan(VerifyCtx *ctx, const XiFunc *f) {
     }
     if (plan->nslots > 0 && !plan->slots) {
         verr(ctx, "func '%s': coro plan has %u slots but NULL slots", f->name, plan->nslots);
+        return;
+    }
+    if (!plan->is_coroutine) {
+        if (!plan->analysis_complete || !plan->cfg_rewritten || plan->nstates != 0 ||
+            !plan->dispatch || plan->ndispatch != 1 ||
+            plan->dispatch[0].state_id != XI_CORO_STATE_ENTRY ||
+            plan->dispatch[0].target != f->entry) {
+            verr(ctx, "XR_CORO_4000 func '%s': synchronous coroutine marker is invalid",
+                 f->name);
+        }
         return;
     }
 
@@ -2572,7 +2847,7 @@ static void verify_coro_plan(VerifyCtx *ctx, const XiFunc *f) {
                 return;
             }
         }
-        if (slot->kind > XI_CORO_SLOT_VALUE) {
+        if (slot->kind > XI_CORO_SLOT_VALUE || slot->kind != coro_verify_slot_kind(f, slot->value)) {
             verr(ctx, "func '%s': coro slot[%u] has invalid kind %u", f->name, i,
                  (unsigned) slot->kind);
             return;
@@ -2585,6 +2860,35 @@ static void verify_coro_plan(VerifyCtx *ctx, const XiFunc *f) {
         if (slot->logical_rep >= XR_REP_COUNT) {
             verr(ctx, "func '%s': coro slot[%u] v%u has invalid logical_rep %u", f->name, i,
                  slot->value->id, (unsigned) slot->logical_rep);
+            return;
+        }
+        const XiValue *owner = coro_verify_slot_owner(slot->value);
+        bool borrowed_alias = coro_verify_borrowed_alias(slot->value);
+        bool expected_is_root = slot->value->type && xi_own_type_is_rc(slot->value->type);
+        bool expected_release =
+            xi_coro_value_needs_arc_release(slot->value) &&
+            (!borrowed_alias || (owner && owner != slot->value &&
+                                 xi_coro_value_needs_arc_release(owner)));
+        bool expected_runtime = xi_coro_value_needs_runtime_slot(slot->value);
+        bool expected_clone = xi_coro_value_needs_boundary_clone(slot->value);
+        bool expected_live = false, expected_frame_root = false, expected_frame_release = false;
+        for (uint32_t p = 0; p < plan->nstates; p++) {
+            expected_live |= coro_value_array_contains(plan->points[p].live,
+                                                       plan->points[p].nlive, slot->value);
+            expected_frame_root |= coro_value_array_contains(plan->points[p].roots,
+                                                             plan->points[p].nroots, slot->value);
+            expected_frame_release |= coro_value_array_contains(plan->points[p].drops,
+                                                                plan->points[p].ndrops,
+                                                                slot->value);
+        }
+        if (slot->owner_value_id != (owner ? owner->id : UINT32_MAX) ||
+            slot->is_root != expected_is_root || slot->needs_release != expected_release ||
+            slot->needs_runtime_slot != expected_runtime ||
+            slot->needs_boundary_clone != expected_clone || slot->live_across != expected_live ||
+            slot->frame_root != expected_frame_root ||
+            slot->frame_release != expected_frame_release) {
+            verr(ctx, "XR_CORO_4002 func '%s': coro slot[%u] v%u facts are not derivable",
+                 f->name, i, slot->value->id);
             return;
         }
         if (slot->frame_root && !slot->is_root) {

@@ -24,8 +24,12 @@
 #include "xi_arc.h"
 #include "xi_arc_verify.h"
 #include "xi_import_resolve.h"
+#include "xi_coro_analyze.h"
 #include "xi_source_move_verify.h"
 #include "xi_stage.h"
+#include "xi_value_query.h"
+#include "xi_module.h"
+#include "../analysis/xglobal_summary.h"
 #include "../plan/semantic/xr_semantic_builder.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/analyzer/xanalyzer.h"
@@ -89,6 +93,158 @@ static void xi_set_source_file_recursive(XiFunc *f, const char *source_file) {
     f->source_file = source_file;
     for (uint16_t i = 0; i < f->nchildren; i++)
         xi_set_source_file_recursive(f->children[i], source_file);
+}
+
+typedef struct XiPipelineCoroResolverCtx {
+    const XiPipelineConfig *cfg;
+    XiFunc *root;
+} XiPipelineCoroResolverCtx;
+
+static const XgBodySummary *xi_pipeline_coro_body(const XgGlobalEvidence *evidence,
+                                                  XgFuncId func_id) {
+    if (!evidence || func_id == XG_NO_ID)
+        return NULL;
+    for (uint32_t i = 0; i < evidence->nbodies; i++) {
+        if (evidence->bodies[i].func_id == func_id)
+            return &evidence->bodies[i];
+    }
+    return NULL;
+}
+
+static const XiFunc *xi_pipeline_coro_find_func_tree(const XiFunc *func, XgFuncId func_id) {
+    if (!func || func_id == XG_NO_ID)
+        return NULL;
+    if ((XgFuncId) func->xg_body_func_id == func_id)
+        return func;
+    for (uint16_t i = 0; i < func->nchildren; i++) {
+        const XiFunc *match = xi_pipeline_coro_find_func_tree(func->children[i], func_id);
+        if (match)
+            return match;
+    }
+    return NULL;
+}
+
+static const XiFunc *xi_pipeline_coro_find_func(XiPipelineCoroResolverCtx *ctx,
+                                                XgFuncId func_id) {
+    const XiFunc *match;
+    if (!ctx || func_id == XG_NO_ID)
+        return NULL;
+    match = xi_pipeline_coro_find_func_tree(ctx->root, func_id);
+    if (match)
+        return match;
+    if (!ctx->cfg || !ctx->cfg->graph_modules)
+        return NULL;
+    for (int i = 0; i < ctx->cfg->graph_module_count; i++) {
+        const XiModule *module = ctx->cfg->graph_modules[i];
+        match = module ? xi_pipeline_coro_find_func_tree(module->init, func_id) : NULL;
+        if (match)
+            return match;
+    }
+    return NULL;
+}
+
+static const XiFunc *xi_pipeline_coro_resolve_callee(void *ud, const XiFunc *current,
+                                                      const XiValue *callee) {
+    XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
+    const XiImportRef *ref = xi_value_import_ref(current, callee);
+    if (ref && ref->resolved_func)
+        return ref->resolved_func;
+    if (!ctx || !ctx->cfg || !ctx->cfg->global_evidence)
+        return NULL;
+    /* Ordinary calls carry their stable callsite on the call, not on the
+     * callee value.  Local closure/shared-slot targets are handled by the
+     * IR analysis itself; evidence-only targets are resolved per call below. */
+    return NULL;
+}
+
+static const XgCallsiteSummary *xi_pipeline_coro_callsite(
+    const XiPipelineCoroResolverCtx *ctx, const XiFunc *current, const XiValue *call) {
+    const XgCallsiteSummary *row;
+    if (!ctx || !ctx->cfg || !ctx->cfg->global_evidence || !current || !call ||
+        call->xg_callsite_id == XG_NO_ID)
+        return NULL;
+    row = xg_global_evidence_find_callsite(ctx->cfg->global_evidence,
+                                           (XgCallsiteId) call->xg_callsite_id);
+    if (!row || row->owner_func_id != (XgFuncId) current->xg_body_func_id)
+        return NULL;
+    return row;
+}
+
+static const XiFunc *xi_pipeline_coro_resolve_method(void *ud, const XiFunc *current,
+                                                     const XiValue *call) {
+    XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
+    const XgCallsiteSummary *row = xi_pipeline_coro_callsite(ctx, current, call);
+    if (!row)
+        return NULL;
+    /* A method id names a dispatch family, not one concrete child frame.
+     * Only the closed-world direct target is safe to attach to the plan. */
+    return xi_pipeline_coro_find_func(ctx, row->static_target_func_id);
+}
+
+static int xi_pipeline_coro_func_suspendability(void *ud, const XiFunc *func) {
+    XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
+    const XgGlobalEvidence *evidence = ctx && ctx->cfg ? ctx->cfg->global_evidence : NULL;
+    const XgBodySummary *body =
+        xi_pipeline_coro_body(evidence, func ? (XgFuncId) func->xg_body_func_id : XG_NO_ID);
+    uint32_t effects = 0;
+    if (!body || !xg_body_effects_compose_closed_world_calls(evidence, body, &effects))
+        return -1;
+    return (effects & XG_BODY_MAY_SUSPEND) != 0 ? 1 : 0;
+}
+
+static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
+                                                 const XiValue *call) {
+    XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
+    const XgGlobalEvidence *evidence = ctx && ctx->cfg ? ctx->cfg->global_evidence : NULL;
+    const XgCallsiteSummary *row = xi_pipeline_coro_callsite(ctx, current, call);
+    uint32_t effects = 0;
+    if (!row || !xg_callsite_effects_compose_closed_world_calls(evidence, row, &effects))
+        return -1;
+    return (effects & XG_BODY_MAY_SUSPEND) != 0 ? 1 : 0;
+}
+
+static bool xi_pipeline_coro_value_is_module_import(void *ud, const XiFunc *func,
+                                                    const XiValue *value, const char *module) {
+    (void) ud;
+    const XiImportRef *ref = xi_value_import_ref(func, value);
+    return ref && ref->module_path && module && strcmp(ref->module_path, module) == 0;
+}
+
+static bool xi_pipeline_coro_call_is_module_member(void *ud, const XiFunc *func,
+                                                   const XiValue *call, const char *module,
+                                                   const char *member) {
+    (void) ud;
+    if (!func || !call || !module || !member || call->nargs == 0)
+        return false;
+    if ((call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) && call->aux) {
+        const XiImportRef *ref = xi_value_import_ref(func, call->args[0]);
+        return ref && ref->module_path && !ref->member_name &&
+               strcmp(ref->module_path, module) == 0 &&
+               strcmp((const char *) call->aux, member) == 0;
+    }
+    if (call->op == XI_CALL) {
+        const XiImportRef *ref = xi_value_import_ref(func, call->args[0]);
+        return ref && ref->module_path && ref->member_name &&
+               strcmp(ref->module_path, module) == 0 &&
+               strcmp(ref->member_name, member) == 0;
+    }
+    return false;
+}
+
+static XiCoroResolver xi_pipeline_coro_resolver(XiPipelineCoroResolverCtx *ctx) {
+    XiCoroResolver resolver;
+    memset(&resolver, 0, sizeof(resolver));
+    resolver.resolve_callee = xi_pipeline_coro_resolve_callee;
+    resolver.resolve_method = xi_pipeline_coro_resolve_method;
+    resolver.func_suspendability = xi_pipeline_coro_func_suspendability;
+    resolver.call_suspendability =
+        ctx && ctx->cfg && ctx->cfg->global_evidence
+            ? xi_pipeline_coro_call_suspendability
+            : NULL;
+    resolver.value_is_module_import = xi_pipeline_coro_value_is_module_import;
+    resolver.call_is_module_member = xi_pipeline_coro_call_is_module_member;
+    resolver.ud = ctx;
+    return resolver;
 }
 
 static void xi_set_wide_vector_boundary_policy_recursive(XiFunc *f, bool preserve) {
@@ -273,8 +429,14 @@ static XiFunc *xi_pipeline_release_stage_handle(void *program, XiStage stage) {
 static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
                                      const XiPipelineConfig *cfg) {
     XiPipelineResult res;
+    XiPipelineCoroResolverCtx coro_resolver_ctx = {.cfg = cfg, .root = ir};
+    XiCoroResolver coro_resolver;
+    const XiCoroResolver *coro_resolver_ptr = NULL;
     memset(&res, 0, sizeof(res));
     res.ir = ir;
+
+    coro_resolver = xi_pipeline_coro_resolver(&coro_resolver_ctx);
+    coro_resolver_ptr = &coro_resolver;
 
     if (!ir) {
         xi_pipeline_set_error(&res, XI_PIPE_ERR_LOWER, XI_PIPE_STAGE_LOWER,
@@ -441,8 +603,8 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OWNERSHIP))
         goto fail;
 
-    next = xi_program_lower_coroutines((XiSemanticLoweredProgram *) program, transition_error,
-                                       sizeof(transition_error));
+    next = xi_program_lower_coroutines((XiSemanticLoweredProgram *) program, coro_resolver_ptr,
+                                       transition_error, sizeof(transition_error));
     if (!next) {
         xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OWNERSHIP,
                               XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);

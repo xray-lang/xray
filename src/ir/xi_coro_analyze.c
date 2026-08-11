@@ -9,9 +9,11 @@
  */
 
 #include "xi_coro_analyze.h"
+#include "xi_module.h"
 #include "xi_own.h"
 #include "xi_ops_gen.h"
 #include "../base/xglobal_indices.h"
+#include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
 #include <string.h>
 
@@ -22,7 +24,7 @@ static XrRep xi_coro_rep(const XiValue *v) {
 }
 
 /* Interprocedural recursion bound for suspendability. This walk is a
- * FALLBACK: every plan-covered function answers through
+ * LOCAL PROOF WALK: every plan-covered function answers through
  * resolver->func_suspendability (the analyzer's converged, fail-closed
  * summaries) and never recurses here — only plan-less synthetic functions
  * reach the walk at all. Past the bound the walk reports SUSPENDABLE:
@@ -292,6 +294,9 @@ static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolve
     return false;
 }
 
+static const XiFunc *xi_coro_resolve_local_callee(const XiFunc *caller,
+                                                   const XiValue *callee);
+
 static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResolver *resolver,
                                               int depth) {
     if (f && resolver && resolver->func_suspendability) {
@@ -301,7 +306,7 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
     }
     if (xi_coro_func_intrinsic_suspends(f, resolver))
         return true;
-    if (!f || !resolver)
+    if (!f)
         return false;
     if (depth >= XI_CORO_RESOLVE_DEPTH_MAX)
         return true; /* unknown past the bound: assume it suspends (fail-closed) */
@@ -314,13 +319,22 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
             if (!v)
                 continue;
             const XiFunc *target = NULL;
-            if (v->op == XI_CALL && v->nargs >= 1 && resolver->resolve_callee) {
+            if (v->op == XI_CALL && v->nargs >= 1 && resolver && resolver->resolve_callee) {
                 target = resolver->resolve_callee(resolver->ud, f, v->args[0]);
             } else if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
-                       v->nargs >= 1 && resolver->resolve_method) {
+                       v->nargs >= 1 && resolver && resolver->resolve_method) {
                 target = resolver->resolve_method(resolver->ud, f, v);
             }
-            if (!target || target == f)
+            if (!target && v->op == XI_CALL && v->nargs >= 1)
+                target = xi_coro_resolve_local_callee(f, v->args[0]);
+            if (!target && resolver && resolver->call_suspendability &&
+                (v->op == XI_CALL || v->op == XI_CALL_METHOD ||
+                 v->op == XI_CALL_METHOD_DIRECT)) {
+                int prepared = resolver->call_suspendability(resolver->ud, f, v);
+                if (prepared != 0)
+                    return true;
+            }
+            if (!target || target == f || target->entry_type == 2)
                 continue;
             if (xi_coro_func_is_suspendable_depth(target, resolver, depth + 1))
                 return true;
@@ -339,10 +353,24 @@ static bool xi_coro_call_suspends(const XiFunc *f, const XiValue *v,
                                   const XiCoroResolver *resolver) {
     if (!v || v->op != XI_CALL || v->nargs < 1)
         return false;
-    if (!resolver || !resolver->resolve_callee)
+    const XiFunc *target = resolver && resolver->resolve_callee
+                               ? resolver->resolve_callee(resolver->ud, f, v->args[0])
+                               : NULL;
+    if (!target)
+        target = xi_coro_resolve_local_callee(f, v->args[0]);
+    if (target && target->entry_type == 2)
         return false;
-    const XiFunc *target = resolver->resolve_callee(resolver->ud, f, v->args[0]);
-    return target && xi_coro_func_is_suspendable(target, resolver);
+    if (target)
+        return xi_coro_func_is_suspendable(target, resolver);
+    if (resolver && resolver->call_suspendability) {
+        int prepared = resolver->call_suspendability(resolver->ud, f, v);
+        /* An attached closed-world resolver may never erase an unresolved
+         * call from the coroutine graph.  Conservatively materializing the
+         * state makes the backend reject an unsupported adapter instead of
+         * silently selecting a synchronous ABI. */
+        return prepared != 0;
+    }
+    return false;
 }
 
 /* A statically resolved method call whose target is (transitively)
@@ -352,9 +380,16 @@ static bool xi_coro_method_call_suspends(const XiFunc *f, const XiValue *v,
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1)
         return false;
     if (!resolver || !resolver->resolve_method)
-        return false;
+        return resolver && resolver->call_suspendability &&
+               resolver->call_suspendability(resolver->ud, f, v) != 0;
     const XiFunc *target = resolver->resolve_method(resolver->ud, f, v);
-    return target && xi_coro_func_is_suspendable(target, resolver);
+    if (target && target->entry_type == 2)
+        return false;
+    if (target)
+        return xi_coro_func_is_suspendable(target, resolver);
+    if (resolver->call_suspendability)
+        return resolver->call_suspendability(resolver->ud, f, v) != 0;
+    return false;
 }
 
 /* ========== Suspension-point predicate ========== */
@@ -369,22 +404,8 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
     if (xi_coro_is_net_io_call(f, v, resolver))
         return true;
     if ((v->flags & XI_FLAG_MAY_SUSPEND) != 0) {
-        /* A global summary may conservatively project MAY_SUSPEND onto a
-         * direct call before the final whole-program target is known.  When a
-         * resolver can prove that target, its prepared execution shape wins;
-         * otherwise retain the conservative flag for true function-value/open
-         * calls.  This keeps plan state rows identical to backend child-frame
-         * emission. */
-        if (v->op == XI_CALL && v->nargs >= 1 && resolver && resolver->resolve_callee) {
-            const XiFunc *target = resolver->resolve_callee(resolver->ud, f, v->args[0]);
-            if (target)
-                return xi_coro_func_is_suspendable(target, resolver);
-        } else if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) && v->nargs >= 1 &&
-                   resolver && resolver->resolve_method) {
-            const XiFunc *target = resolver->resolve_method(resolver->ud, f, v);
-            if (target)
-                return xi_coro_func_is_suspendable(target, resolver);
-        }
+        /* MAY_SUSPEND is a conservative semantic contract.  A target resolver
+         * may identify the child frame but may never erase the shared state. */
         return true;
     }
     if (v->op == XI_YIELD || v->op == XI_GEN_YIELD || v->op == XI_GO || v->op == XI_AWAIT ||
@@ -403,6 +424,138 @@ XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
     if (xi_coro_is_test_yield_call(f, v, resolver))
         return true;
     return xi_coro_call_suspends(f, v, resolver) || xi_coro_method_call_suspends(f, v, resolver);
+}
+
+static const XiEnumData *xi_coro_static_enum_namespace(const XiFunc *f,
+                                                        const XiValue *receiver) {
+    if (!f || !receiver)
+        return NULL;
+    if (xi_copy_is_identity_alias(receiver) && receiver->nargs > 0)
+        return xi_coro_static_enum_namespace(f, receiver->args[0]);
+    if (receiver->op == XI_GET_SHARED && receiver->aux_int >= 0 && f->module &&
+        f->module->slot_enums && receiver->aux_int < f->module->nslots)
+        return f->module->slot_enums[receiver->aux_int];
+    if (receiver->op == XI_IMPORT_REF && receiver->aux) {
+        const XiImportRef *ref = (const XiImportRef *) receiver->aux;
+        const XiModule *module = ref->resolved_module;
+        if (module && module->slot_enums && ref->resolved_shared_slot >= 0 &&
+            ref->resolved_shared_slot < module->nslots)
+            return module->slot_enums[ref->resolved_shared_slot];
+    }
+    return NULL;
+}
+
+static bool xi_coro_is_static_enum_member_call(const XiFunc *f, const XiValue *v) {
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) ||
+        v->nargs == 0 || !v->aux)
+        return false;
+    const XiEnumData *data = xi_coro_static_enum_namespace(f, v->args[0]);
+    if (!data)
+        return false;
+    const char *member = (const char *) v->aux;
+    for (uint32_t i = 0; i < data->member_count; i++) {
+        if (data->members[i].name && strcmp(data->members[i].name, member) == 0)
+            return true;
+    }
+    return false;
+}
+
+/* Calls on language-owned value/container domains have a closed method table
+ * after semantic lowering.  Their blocking members are classified separately
+ * by the coroutine predicates above; every other validated member is
+ * synchronously complete and does not require a user-call target row. */
+static bool xi_coro_is_closed_builtin_method_call(const XiValue *v) {
+    if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) ||
+        v->nargs == 0 || !v->args[0] || !v->args[0]->type)
+        return false;
+    if (xi_value_type_is_channel(v->args[0]) || xi_value_type_is_task(v->args[0]) ||
+        xi_value_type_is_work_queue(v->args[0]) ||
+        xi_value_type_is_result_group(v->args[0]) ||
+        xi_value_type_is_countdown_latch(v->args[0]) ||
+        xi_value_type_is_semaphore(v->args[0]) || xi_value_type_is_event_count(v->args[0]))
+        return true;
+    switch (v->args[0]->type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_STRING:
+        case XR_KIND_BOOL:
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_JSON:
+        case XR_KIND_ENUM:
+        case XR_KIND_TUPLE:
+        case XR_KIND_FIXED_ARRAY:
+        case XR_KIND_POINTER:
+        case XR_KIND_RUNE:
+        case XR_KIND_STRUCT_OBJECT:
+        case XR_KIND_SLICE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool xi_coro_call_resolution_complete(const XiFunc *f, const XiValue *v,
+                                             const XiCoroResolver *resolver) {
+    const XiFunc *target = NULL;
+    if (!v || (v->op != XI_CALL && v->op != XI_CALL_METHOD &&
+               v->op != XI_CALL_METHOD_DIRECT))
+        return true;
+
+    /* A plain call is complete only when its callee is statically known or
+     * the closed-world callsite summary explicitly classifies it.  Method
+     * recognizers below are not valid for XI_CALL: args[0] is the callee,
+     * whereas a method call stores its receiver there. */
+    if (v->op == XI_CALL) {
+        if (xi_coro_is_test_yield_call(f, v, resolver) ||
+            xi_coro_is_net_io_call(f, v, resolver))
+            return true;
+        if (v->nargs > 0) {
+            if (resolver && resolver->resolve_callee)
+                target = resolver->resolve_callee(resolver->ud, f, v->args[0]);
+            if (!target)
+                target = xi_coro_resolve_local_callee(f, v->args[0]);
+        }
+        if (target)
+            return true;
+        return resolver && resolver->call_suspendability &&
+               resolver->call_suspendability(resolver->ud, f, v) >= 0;
+    }
+
+    if (xi_coro_is_static_enum_member_call(f, v) || xi_coro_is_closed_builtin_method_call(v) ||
+        xi_value_is_blocking_channel_method_call(v) ||
+        xi_value_is_blocking_task_method_call(v) ||
+        xi_value_is_blocking_work_queue_method_call(v) ||
+        xi_value_is_blocking_result_group_method_call(v) ||
+        xi_value_is_blocking_countdown_latch_method_call(v) ||
+        xi_value_is_blocking_semaphore_method_call(v) ||
+        xi_value_is_blocking_event_count_method_call(v) ||
+        xi_coro_is_time_sleep_call(f, v, resolver) ||
+        xi_coro_is_test_yield_call(f, v, resolver) ||
+        xi_coro_is_net_io_call(f, v, resolver))
+        return true;
+
+    if (resolver && resolver->resolve_method)
+        target = resolver->resolve_method(resolver->ud, f, v);
+    if (target)
+        return true;
+    return resolver && resolver->call_suspendability &&
+           resolver->call_suspendability(resolver->ud, f, v) >= 0;
+}
+
+static bool xi_coro_all_calls_resolved(const XiFunc *f, const XiCoroResolver *resolver) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            if (!xi_coro_call_resolution_complete(f, block->values[vi], resolver))
+                return false;
+        }
+    }
+    return true;
 }
 
 /* ========== Typed recv/await slot-reuse recognizers ========== */
@@ -687,6 +840,28 @@ static bool xi_coro_block_successor_phi_uses_target(const XiBlock *blk, const Xi
     return false;
 }
 
+static const XiFunc *xi_coro_resolve_local_callee(const XiFunc *caller,
+                                                   const XiValue *callee) {
+    if (!callee)
+        return NULL;
+    if ((callee->op == XI_CLOSURE_NEW ||
+         (callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW)) &&
+        callee->aux)
+        return (const XiFunc *) callee->aux;
+    if (callee->op == XI_GET_SHARED && callee->aux_int >= 0) {
+        for (const XiFunc *owner = caller; owner; owner = owner->parent_func) {
+            if (owner->shared_slot_funcs &&
+                callee->aux_int < (int64_t) owner->shared_slot_func_count &&
+                owner->shared_slot_funcs[callee->aux_int])
+                return owner->shared_slot_funcs[callee->aux_int];
+        }
+    }
+    if (xi_copy_is_identity_alias(callee) && callee->nargs > 0)
+        return xi_coro_resolve_local_callee(caller, callee->args[0]);
+    const XiImportRef *ref = xi_value_import_ref(caller, callee);
+    return ref ? ref->resolved_func : NULL;
+}
+
 /* Compute liveness at one suspension without consuming the materialized plan.
  * This is intentionally point-specific: a frame member can cross one state
  * without crossing every state in the function. */
@@ -737,6 +912,41 @@ static bool xi_coro_value_live_at_point(const XiFunc *f, const XiLiveness *live,
             if (place && place->op == XI_LOCAL_ADDR && place->nargs >= 1 &&
                 place->args[0] == target &&
                 xi_coro_value_direct_live_at_point(f, live, point, place))
+                return true;
+        }
+    }
+    return false;
+}
+
+/* Once lowering has isolated the suspension in its own block, the frame
+ * boundary is exactly that block's live-out set plus values consumed or
+ * produced by retrying the suspension operation itself.  Do not reuse the
+ * pre-split availability walk here: definitions that moved to the resume
+ * block are deliberately no longer available before the scheduler exit. */
+static bool xi_coro_value_live_at_split_point(const XiFunc *f, const XiLiveness *live,
+                                              const XiValue *point,
+                                              const XiValue *target) {
+    if (!f || !live || !point || !point->block || !target)
+        return false;
+    bool await_result = point->op == XI_AWAIT && point->nargs >= 2 &&
+                        point->args[1] == target &&
+                        (point->aux_int & XI_AWAIT_AUX_INTO_RESULT) != 0;
+    bool aggregate_await = point->op == XI_AWAIT && point->nargs >= 1 &&
+                           point->args[0] == target &&
+                           (((int) point->aux_int & 0x7) != 0);
+    if (xi_is_live_out(live, point->block, target) || await_result || aggregate_await ||
+        xi_coro_retry_suspend_uses_target(point, target) ||
+        (target == point && xi_coro_value_needs_runtime_slot(target)))
+        return true;
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *place = block->values[vi];
+            if (place && place->op == XI_LOCAL_ADDR && place->nargs >= 1 &&
+                place->args[0] == target && xi_is_live_out(live, point->block, place))
                 return true;
         }
     }
@@ -962,6 +1172,17 @@ XR_FUNC const XiCoroEdge *xi_coro_point_find_edge(const XiCoroSuspendPoint *poin
     return NULL;
 }
 
+XR_FUNC const XiCoroSuspendPoint *xi_coro_plan_find_point(const XiCoroPlan *plan,
+                                                          const XiValue *op) {
+    if (!plan || !op)
+        return NULL;
+    for (uint32_t i = 0; i < plan->nstates; i++) {
+        if (plan->points[i].op == op)
+            return &plan->points[i];
+    }
+    return NULL;
+}
+
 XR_FUNC bool xi_coro_plan_is_logical_member(const XiCoroPlan *plan, const XiValue *v) {
     return xi_coro_plan_find_slot(plan, v) != NULL;
 }
@@ -1003,15 +1224,6 @@ static XiCoroSuspendKind xi_coro_suspend_kind(const XiFunc *f, const XiValue *v,
     return XI_CORO_SUSP_CALL;
 }
 
-/* A logical-frame value can hold a GC root if it (or the runtime) keeps a live
- * reference across the suspend: a go handle, a live-across value, a runtime
- * result slot, or an await-aggregate element.  Typed recv/await unbox reuse and
- * paired recv-status do not, even though they are frame members. */
-static bool xi_coro_slot_value_may_hold_root(const XiFunc *f, const XiValue *v, bool live_across) {
-    return (v && (v->op == XI_GO || v->op == XI_THREAD_SPAWN)) || live_across ||
-           xi_coro_value_needs_runtime_slot(v) || xi_coro_value_is_aggregate_await_tasks(f, v);
-}
-
 /* A borrowed result names storage owned by another Xi value.  Moving that SSA
  * name into the coroutine frame does not manufacture a second ARC reference:
  * the owner's borrow closure keeps the real owner live, rooted, and releasable.
@@ -1023,6 +1235,36 @@ static bool xi_coro_slot_is_borrowed_alias(const XiValue *v) {
            xi_generated_op_result_ownership(v->op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
 }
 
+static const XiValue *xi_coro_slot_owner(const XiValue *v) {
+    const XiValue *owner = xi_coro_release_origin(v);
+    return owner ? owner : v;
+}
+
+/* A representation alias of a freshly owned value becomes the physical owner
+ * carrier when the original SSA name no longer crosses the suspension.  The
+ * stable owner id keeps that decision independent of the target representation. */
+static bool xi_coro_slot_can_carry_owner(const XiCoroSlot *slot) {
+    if (!slot || !slot->value)
+        return false;
+    if (!xi_coro_slot_is_borrowed_alias(slot->value))
+        return true;
+    const XiValue *owner = xi_coro_slot_owner(slot->value);
+    return owner && owner != slot->value && xi_coro_value_needs_arc_release(owner);
+}
+
+static bool xi_coro_slot_carries_owner_at_point(const XiFunc *f, const XiLiveness *live,
+                                                 const XiValue *point,
+                                                 const XiCoroSlot *slot, bool split) {
+    if (!xi_coro_slot_can_carry_owner(slot))
+        return false;
+    if (!xi_coro_slot_is_borrowed_alias(slot->value))
+        return true;
+    const XiValue *owner = xi_coro_slot_owner(slot->value);
+    bool owner_live = split ? xi_coro_value_live_at_split_point(f, live, point, owner)
+                            : xi_coro_value_live_at_point(f, live, point, owner);
+    return !owner_live;
+}
+
 static bool xi_coro_value_is_logical_root(const XiValue *v) {
     return v && v->type && xi_own_type_is_rc(v->type);
 }
@@ -1031,33 +1273,37 @@ static void xi_coro_fill_slot(XiCoroSlot *slot, const XiFunc *f, XiValue *v, XiC
                               const XiLiveness *live, const XiCoroResolver *resolver) {
     slot->value = v;
     slot->type = v->type;
+    const XiValue *owner = xi_coro_slot_owner(v);
+    slot->owner_value_id = owner ? owner->id : UINT32_MAX;
     slot->logical_rep = (uint8_t) xi_coro_rep(v);
     slot->kind = (uint8_t) kind;
     slot->is_root = xi_coro_value_is_logical_root(v);
     bool borrowed_alias = xi_coro_slot_is_borrowed_alias(v);
-    slot->needs_release = xi_coro_value_needs_arc_release(v) && !borrowed_alias;
+    slot->needs_release = xi_coro_value_needs_arc_release(v) &&
+                          (!borrowed_alias || xi_coro_slot_can_carry_owner(slot));
     slot->needs_runtime_slot = xi_coro_value_needs_runtime_slot(v);
     slot->needs_boundary_clone = xi_coro_value_needs_boundary_clone(v);
     slot->live_across = xi_coro_value_live_across_suspend(f, live, v, resolver) ||
                         xi_coro_value_address_live_across_suspend(f, live, v, resolver);
-    /* Parameters and phis are frame roots only when live across a suspend; a
-     * block value may also hold a root via its runtime/await origin. */
-    bool root_reachable = kind == XI_CORO_SLOT_VALUE
-                              ? xi_coro_slot_value_may_hold_root(f, v, slot->live_across)
-                              : slot->live_across;
-    slot->frame_root = slot->is_root && root_reachable && !borrowed_alias;
-    slot->frame_release = slot->needs_release && slot->live_across;
+    slot->frame_root = false;
+    slot->frame_release = false;
 }
 
-static void *xi_coro_plan_alloc(XiFunc *f, uint32_t count, uint32_t item_size) {
+static void *xi_coro_plan_alloc(XiFunc *f, XiCoroPlan *plan, uint32_t count,
+                                uint32_t item_size) {
     if (count == 0)
         return NULL;
     if (item_size == 0 || count > UINT32_MAX / item_size)
         return NULL;
     uint32_t size = count * item_size;
+    if (!plan || size > XI_CORO_MAX_PLAN_BYTES ||
+        plan->planned_bytes > XI_CORO_MAX_PLAN_BYTES - size)
+        return NULL;
     void *result = xi_func_arena_alloc(f, size);
-    if (result)
+    if (result) {
         memset(result, 0, size);
+        plan->planned_bytes += size;
+    }
     return result;
 }
 
@@ -1071,30 +1317,222 @@ static XiBlock *xi_coro_block_at_rpo(const XiFunc *f, uint32_t rpo) {
 
 static bool xi_coro_materialize_point_sets(XiFunc *f, XiCoroPlan *plan,
                                            const XiLiveness *live) {
+    for (uint32_t si = 0; si < plan->nslots; si++) {
+        plan->slots[si].frame_root = false;
+        plan->slots[si].frame_release = false;
+    }
     for (uint32_t pi = 0; pi < plan->nstates; pi++) {
         XiCoroSuspendPoint *point = &plan->points[pi];
-        if (plan->nslots > 0) {
-            point->live = (XiValue **) xi_coro_plan_alloc(
-                f, plan->nslots, (uint32_t) sizeof(XiValue *));
-            point->roots = (XiValue **) xi_coro_plan_alloc(
-                f, plan->nslots, (uint32_t) sizeof(XiValue *));
-            point->drops = (XiValue **) xi_coro_plan_alloc(
-                f, plan->nslots, (uint32_t) sizeof(XiValue *));
-            if (!point->live || !point->roots || !point->drops)
-                return false;
+        uint32_t nlive = 0;
+        for (uint32_t si = 0; si < plan->nslots; si++) {
+            const XiCoroSlot *slot = &plan->slots[si];
+            if (!xi_coro_value_live_at_point(f, live, point->op, slot->value))
+                continue;
+            nlive++;
         }
+        if (nlive > XI_CORO_MAX_FRAME_ACTIONS - plan->spill_count)
+            return false;
+        point->live = (XiValue **) xi_coro_plan_alloc(
+            f, plan, plan->slot_capacity, (uint32_t) sizeof(XiValue *));
+        point->roots = (XiValue **) xi_coro_plan_alloc(
+            f, plan, plan->slot_capacity, (uint32_t) sizeof(XiValue *));
+        point->drops = (XiValue **) xi_coro_plan_alloc(
+            f, plan, plan->slot_capacity, (uint32_t) sizeof(XiValue *));
+        if ((plan->nslots && !point->live) || (plan->nslots && !point->roots) ||
+            (plan->nslots && !point->drops))
+            return false;
         for (uint32_t si = 0; si < plan->nslots; si++) {
             const XiCoroSlot *slot = &plan->slots[si];
             if (!xi_coro_value_live_at_point(f, live, point->op, slot->value))
                 continue;
             point->live[point->nlive++] = slot->value;
-            if (slot->frame_root)
+            bool carries_owner =
+                xi_coro_slot_carries_owner_at_point(f, live, point->op, slot, false);
+            if (slot->is_root && carries_owner) {
                 point->roots[point->nroots++] = slot->value;
-            if (slot->frame_release)
+                plan->slots[si].frame_root = true;
+            }
+            if (slot->needs_release && carries_owner) {
                 point->drops[point->ndrops++] = slot->value;
+                plan->slots[si].frame_release = true;
+            }
         }
         plan->spill_count += point->nlive;
     }
+    return true;
+}
+
+static bool xi_coro_value_live_at_any_split_point(const XiFunc *f, const XiLiveness *live,
+                                                  const XiCoroPlan *plan,
+                                                  const XiValue *value) {
+    for (uint32_t pi = 0; pi < plan->nstates; pi++) {
+        if (xi_coro_value_live_at_split_point(f, live, plan->points[pi].op, value))
+            return true;
+    }
+    return false;
+}
+
+static bool xi_coro_append_split_slots(XiFunc *f, XiCoroPlan *plan,
+                                       const XiLiveness *live) {
+    for (uint32_t rpo = 1; rpo <= f->nblocks; rpo++) {
+        XiBlock *block = xi_coro_block_at_rpo(f, rpo);
+        if (!block)
+            continue;
+        for (XiPhi *phi = block->phis; phi; phi = phi->next) {
+            XiValue *value = &phi->value;
+            if (xi_coro_plan_find_slot(plan, value) ||
+                !xi_coro_value_live_at_any_split_point(f, live, plan, value))
+                continue;
+            if (plan->nslots >= plan->slot_capacity)
+                return false;
+            xi_coro_fill_slot(&plan->slots[plan->nslots++], f, value, XI_CORO_SLOT_PHI, live,
+                              NULL);
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (!value || value->op == XI_PARAM || xi_coro_plan_find_slot(plan, value) ||
+                !xi_coro_value_live_at_any_split_point(f, live, plan, value))
+                continue;
+            if (plan->nslots >= plan->slot_capacity)
+                return false;
+            xi_coro_fill_slot(&plan->slots[plan->nslots++], f, value, XI_CORO_SLOT_VALUE, live,
+                              NULL);
+        }
+    }
+    return true;
+}
+
+XR_FUNC bool xi_coro_plan_ensure_slot_capacity(XiFunc *f, XiCoroPlan *plan) {
+    if (!f || !plan)
+        return false;
+    uint32_t capacity = f->nparams;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *block = f->blocks[bi];
+        for (XiPhi *phi = block ? block->phis : NULL; phi; phi = phi->next) {
+            if (capacity == XI_CORO_MAX_SLOTS)
+                return false;
+            capacity++;
+        }
+        for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
+            if (block->values[vi] && block->values[vi]->op != XI_PARAM) {
+                if (capacity == XI_CORO_MAX_SLOTS)
+                    return false;
+                capacity++;
+            }
+        }
+    }
+    if (capacity <= plan->slot_capacity)
+        return true;
+
+    uint64_t slot_bytes = (uint64_t) capacity * sizeof(XiCoroSlot);
+    uint64_t set_bytes =
+        (uint64_t) plan->nstates * 3u * capacity * sizeof(XiValue *);
+    uint64_t total_bytes = slot_bytes + set_bytes;
+    if (slot_bytes > UINT32_MAX || plan->planned_bytes > XI_CORO_MAX_PLAN_BYTES ||
+        total_bytes > XI_CORO_MAX_PLAN_BYTES ||
+        total_bytes > XI_CORO_MAX_PLAN_BYTES - plan->planned_bytes)
+        return false;
+
+    XiCoroSlot *slots =
+        (XiCoroSlot *) xi_func_arena_alloc(f, (uint32_t) slot_bytes);
+    XiValue ***sets = (XiValue ***) xr_calloc((size_t) plan->nstates * 3u,
+                                             sizeof(XiValue **));
+    if (!slots || (plan->nstates && !sets)) {
+        xr_free(sets);
+        return false;
+    }
+    memset(slots, 0, (size_t) slot_bytes);
+    if (plan->nslots)
+        memcpy(slots, plan->slots, (size_t) plan->nslots * sizeof(XiCoroSlot));
+    bool ok = true;
+    uint32_t set_size = capacity * (uint32_t) sizeof(XiValue *);
+    for (uint32_t i = 0; i < plan->nstates * 3u; i++) {
+        sets[i] = (XiValue **) xi_func_arena_alloc(f, set_size);
+        if (!sets[i]) {
+            ok = false;
+            break;
+        }
+        memset(sets[i], 0, set_size);
+    }
+    if (!ok) {
+        xr_free(sets);
+        return false;
+    }
+
+    plan->slots = slots;
+    for (uint32_t i = 0; i < plan->nstates; i++) {
+        plan->points[i].live = sets[i * 3u];
+        plan->points[i].roots = sets[i * 3u + 1u];
+        plan->points[i].drops = sets[i * 3u + 2u];
+    }
+    xr_free(sets);
+    plan->slot_capacity = capacity;
+    plan->planned_bytes += (uint32_t) total_bytes;
+    return true;
+}
+
+XR_FUNC bool xi_coro_plan_refresh_point_sets(XiFunc *f, XiCoroPlan *plan) {
+    if (!f || !plan || plan->nslots > plan->slot_capacity ||
+        plan->slot_capacity > XI_CORO_MAX_SLOTS)
+        return false;
+    xi_ensure_rpo(f);
+    XiLiveness *live = xi_compute_liveness(f);
+    if (!live)
+        return false;
+    if (!xi_coro_plan_ensure_slot_capacity(f, plan)) {
+        xi_liveness_free(live);
+        return false;
+    }
+    if (!xi_coro_append_split_slots(f, plan, live)) {
+        xi_liveness_free(live);
+        return false;
+    }
+    for (uint32_t si = 0; si < plan->nslots; si++) {
+        XiCoroSlotKind kind = (XiCoroSlotKind) plan->slots[si].kind;
+        XiValue *value = plan->slots[si].value;
+        xi_coro_fill_slot(&plan->slots[si], f, value, kind, live, NULL);
+    }
+    plan->spill_count = 0;
+    plan->root_count = 0;
+    plan->release_count = 0;
+    for (uint32_t si = 0; si < plan->nslots; si++) {
+        plan->slots[si].live_across = false;
+        plan->slots[si].frame_root = false;
+        plan->slots[si].frame_release = false;
+    }
+    for (uint32_t pi = 0; pi < plan->nstates; pi++) {
+        XiCoroSuspendPoint *point = &plan->points[pi];
+        point->nlive = point->nroots = point->ndrops = 0;
+        for (uint32_t si = 0; si < plan->nslots; si++) {
+            const XiCoroSlot *slot = &plan->slots[si];
+            if (!xi_coro_value_live_at_split_point(f, live, point->op, slot->value))
+                continue;
+            point->live[point->nlive++] = slot->value;
+            bool carries_owner =
+                xi_coro_slot_carries_owner_at_point(f, live, point->op, slot, true);
+            if (slot->is_root && carries_owner) {
+                point->roots[point->nroots++] = slot->value;
+                plan->slots[si].frame_root = true;
+            }
+            if (slot->needs_release && carries_owner) {
+                point->drops[point->ndrops++] = slot->value;
+                plan->slots[si].frame_release = true;
+            }
+            plan->slots[si].live_across = true;
+        }
+        if (point->nlive > XI_CORO_MAX_FRAME_ACTIONS - plan->spill_count) {
+            xi_liveness_free(live);
+            return false;
+        }
+        plan->spill_count += point->nlive;
+    }
+    for (uint32_t si = 0; si < plan->nslots; si++) {
+        if (plan->slots[si].frame_root)
+            plan->root_count++;
+        if (plan->slots[si].frame_release)
+            plan->release_count++;
+    }
+    xi_liveness_free(live);
     return true;
 }
 
@@ -1110,11 +1548,14 @@ XR_FUNC XiCoroPlan *xi_coro_analyze(XiFunc *f, const XiCoroResolver *resolver) {
                                  cached->analyzed_cfg_revision == f->cfg_version;
         return current ? f->coro_plan : NULL;
     }
+    if (!xi_coro_all_calls_resolved(f, resolver))
+        return NULL;
 
     XiCoroPlan *plan = (XiCoroPlan *) xi_func_arena_alloc(f, (uint32_t) sizeof(XiCoroPlan));
     if (!plan)
         return NULL;
     memset(plan, 0, sizeof(*plan));
+    plan->planned_bytes = (uint32_t) sizeof(*plan);
     plan->entry_block = f->entry;
     plan->needs_cl = f->ncaptures > 0;
     plan->ctx_depth = XI_CORO_RESOLVE_DEPTH_MAX;
@@ -1128,34 +1569,53 @@ XR_FUNC XiCoroPlan *xi_coro_analyze(XiFunc *f, const XiCoroResolver *resolver) {
      * is a logical frame member; phis/values qualify via is_logical_member. */
     uint32_t npoints = 0;
     uint32_t nslots = f->nparams;
+    uint32_t slot_capacity = f->nparams;
+    if (nslots > XI_CORO_MAX_SLOTS || f->nblocks > XI_CORO_MAX_STATES * 3u) {
+        xi_liveness_free(live);
+        return NULL;
+    }
     for (uint32_t rpo = 1; rpo <= f->nblocks; rpo++) {
         const XiBlock *blk = xi_coro_block_at_rpo(f, rpo);
         if (!blk)
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            slot_capacity++;
             if (xi_coro_value_is_logical_member(f, &phi->value, live, resolver))
                 nslots++;
+            if (nslots > XI_CORO_MAX_SLOTS || slot_capacity > XI_CORO_MAX_SLOTS) {
+                xi_liveness_free(live);
+                return NULL;
+            }
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
             if (xi_coro_is_suspend_point(f, v, resolver))
                 npoints++;
-            if (xi_coro_value_is_logical_member(f, v, live, resolver))
-                nslots++;
+            if (v->op != XI_PARAM) {
+                slot_capacity++;
+                if (xi_coro_value_is_logical_member(f, v, live, resolver))
+                    nslots++;
+            }
+            if (npoints > XI_CORO_MAX_STATES || nslots > XI_CORO_MAX_SLOTS ||
+                slot_capacity > XI_CORO_MAX_SLOTS) {
+                xi_liveness_free(live);
+                return NULL;
+            }
         }
     }
 
     if (npoints > 0) {
         plan->points = (XiCoroSuspendPoint *) xi_coro_plan_alloc(
-            f, npoints, (uint32_t) sizeof(XiCoroSuspendPoint));
+            f, plan, npoints, (uint32_t) sizeof(XiCoroSuspendPoint));
         if (!plan->points) {
             xi_liveness_free(live);
             return NULL;
         }
     }
-    if (nslots > 0) {
+    if (slot_capacity > 0) {
         plan->slots =
-            (XiCoroSlot *) xi_coro_plan_alloc(f, nslots, (uint32_t) sizeof(XiCoroSlot));
+            (XiCoroSlot *) xi_coro_plan_alloc(f, plan, slot_capacity,
+                                              (uint32_t) sizeof(XiCoroSlot));
         if (!plan->slots) {
             xi_liveness_free(live);
             return NULL;
@@ -1194,7 +1654,7 @@ XR_FUNC XiCoroPlan *xi_coro_analyze(XiFunc *f, const XiCoroResolver *resolver) {
                 }
                 pi++;
             }
-            if (xi_coro_value_is_logical_member(f, v, live, resolver)) {
+            if (v->op != XI_PARAM && xi_coro_value_is_logical_member(f, v, live, resolver)) {
                 if (plan->slots)
                     xi_coro_fill_slot(&plan->slots[si], f, v, XI_CORO_SLOT_VALUE, live, resolver);
                 si++;
@@ -1204,7 +1664,13 @@ XR_FUNC XiCoroPlan *xi_coro_analyze(XiFunc *f, const XiCoroResolver *resolver) {
 
     plan->nstates = npoints;
     plan->nslots = si;
+    plan->slot_capacity = slot_capacity;
     plan->is_coroutine = npoints > 0;
+    if (!xi_coro_materialize_point_sets(f, plan, live)) {
+        xi_liveness_free(live);
+        return NULL;
+    }
+
     /* Logical frame root / release counts (backend-neutral; a backend may shed
      * some after applying its physical storage test). */
     for (uint32_t i = 0; i < plan->nslots; i++) {
@@ -1214,14 +1680,10 @@ XR_FUNC XiCoroPlan *xi_coro_analyze(XiFunc *f, const XiCoroResolver *resolver) {
             plan->release_count++;
     }
 
-    if (!xi_coro_materialize_point_sets(f, plan, live)) {
-        xi_liveness_free(live);
-        return NULL;
-    }
-
     xi_liveness_free(live);
     plan->analyzed_ir_revision = f->ir_revision;
     plan->analyzed_cfg_revision = f->cfg_version;
+    plan->analysis_complete = true;
     f->coro_plan = plan;
     return plan;
 }

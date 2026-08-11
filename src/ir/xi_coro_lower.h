@@ -30,10 +30,10 @@
 #include "xi_coro_analyze.h"
 
 /* Lower every suspendable function in the tree rooted at 'f' into an explicit
- * stackless state machine and record per-function XiLoweringFacts.
+ * logical stackless state machine and record per-function XiLoweringFacts.
  * Non-suspendable functions are left structurally unchanged.  'resolver'
  * supplies the interprocedural / module-import queries (see XiCoroResolver);
- * it may be NULL for intraprocedural-only lowering.
+ * it may be NULL only when all calls are provable directly from Xi.
  *
  * Requires ownership-explicit semantic IR; the consuming stage API owns stage
  * advancement. Exception regions are rejected until their handler/defer
@@ -41,5 +41,15 @@
  * false on a NULL function, unsupported exception region, or allocation
  * failure. */
 XR_FUNC bool xi_coro_lower(XiFunc *f, const XiCoroResolver *resolver);
+
+/* Re-derive type bindings, point liveness, and frame actions after a later
+ * stage has changed representations or backend op spelling without
+ * rediscovering state identities.  Fails closed if the frozen CFG anchors no
+ * longer exist. */
+XR_FUNC bool xi_coro_plan_rebase(XiFunc *f);
+
+/* Cheap freshness guard for backend consumers.  Full semantic validation is
+ * still performed by xi_verify_stage before Backend programs are exposed. */
+XR_FUNC bool xi_coro_plan_is_current(const XiFunc *f, const XiCoroPlan *plan);
 
 #endif  // XI_CORO_LOWER_H

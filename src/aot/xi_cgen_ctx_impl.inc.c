@@ -86,6 +86,7 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     xr_free(ctx->emitted_funcs);
     xr_free(ctx->emitted_func_names);
     xr_free(ctx->phi_repr);
+    xr_free(ctx->coro_emit_seen);
     xr_free(ctx->array_data_cache_decls);
     xr_free(ctx->func_reach_memo);
     xr_free(ctx->shared_slot_reach_memo);

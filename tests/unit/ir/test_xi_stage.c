@@ -12,6 +12,7 @@
 #include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_backend.h"
 #include "../../../src/ir/xi_backend_lower.h"
+#include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_effect.h"
 #include "../../../src/ir/xi_evidence.h"
 #include "../../../src/ir/xi_escape.h"
@@ -79,7 +80,8 @@ static XiCoroLoweredProgram *advance_to_coro_lowered(XiFunc *f) {
     assert(owned != NULL);
     XiSemanticLoweredProgram *semantic = xi_program_lower_semantics(owned, error, sizeof(error));
     assert(semantic != NULL);
-    XiCoroLoweredProgram *coro = xi_program_lower_coroutines(semantic, error, sizeof(error));
+    XiCoroLoweredProgram *coro =
+        xi_program_lower_coroutines(semantic, NULL, error, sizeof(error));
     assert(coro != NULL);
     return coro;
 }
@@ -655,6 +657,8 @@ static void test_semantic_stage_cannot_skip_coroutine_lowering(void) {
 
     XiFunc *f = xi_func_new("cannot_skip_coro", &stub_void);
     XiBlock *entry = xi_block_new(f);
+    XiValue *yield = xi_value_new(f, entry, XI_YIELD, &stub_void, 0);
+    assert(yield != NULL);
     xi_block_set_return(entry, NULL);
     char error[256] = {0};
     XiRawProgram *raw = xi_stage_adopt_raw(f, error, sizeof(error));
@@ -675,9 +679,98 @@ static void test_semantic_stage_cannot_skip_coroutine_lowering(void) {
     assert(strstr(error, "wrong-stage") != NULL);
     assert(f->stage == XI_STAGE_SEMANTIC_LOWERED);
 
-    XiCoroLoweredProgram *coro = xi_program_lower_coroutines(semantic, error, sizeof(error));
+    uint32_t blocks_before = f->nblocks;
+    XiCoroLoweredProgram *coro =
+        xi_program_lower_coroutines(semantic, NULL, error, sizeof(error));
     assert(coro != NULL);
+    assert(f->stage == XI_STAGE_CORO_LOWERED);
+    assert(f->coro_plan != NULL && f->coro_plan->cfg_rewritten);
+    assert(f->coro_plan->nstates == 1 && f->nblocks == blocks_before + 2);
+    assert(f->coro_plan->dispatch[1].target == f->coro_plan->points[0].suspend_block);
+    assert(f->coro_plan->actions_materialized);
+    assert(xi_coro_plan_is_current(f, f->coro_plan));
+    assert(xi_verify_stage(f, XI_STAGE_CORO_LOWERED, error, sizeof(error)));
     xi_func_free(xi_coro_lowered_program_release(coro));
+    printf("  PASS\n");
+}
+
+static void test_coroutine_transition_rolls_back_unresolved_call(void) {
+    printf("--- test_coroutine_transition_rolls_back_unresolved_call ---\n");
+
+    XiFunc *f = xi_func_new("unresolved_coro_transition", &stub_int);
+    XiBlock *entry = xi_block_new(f);
+    XiValue *callee = xi_value_new(f, entry, XI_CONST, &stub_function, 0);
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_int, 1);
+    assert(callee && call);
+    call->args[0] = callee;
+    call->flags |= XI_FLAG_MAY_SUSPEND;
+    xi_block_set_return(entry, call);
+
+    char error[256] = {0};
+    XiRawProgram *raw = xi_stage_adopt_raw(f, error, sizeof(error));
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+    assert(canonical != NULL);
+    xi_pass_close(f);
+    XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
+    assert(closed != NULL);
+    XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
+    assert(owned != NULL);
+    XiSemanticLoweredProgram *semantic = xi_program_lower_semantics(owned, error, sizeof(error));
+    assert(semantic != NULL);
+
+    uint32_t blocks_before = f->nblocks;
+    uint32_t values_before = entry->nvalues;
+    uint64_t ir_revision_before = f->ir_revision;
+    uint64_t cfg_revision_before = f->cfg_version;
+    error[0] = '\0';
+    assert(xi_program_lower_coroutines(semantic, NULL, error, sizeof(error)) == NULL);
+    assert(strstr(error, "failed closed") != NULL);
+    assert(f->stage == XI_STAGE_SEMANTIC_LOWERED);
+    assert(f->nblocks == blocks_before && entry->nvalues == values_before);
+    assert(f->ir_revision == ir_revision_before && f->cfg_version == cfg_revision_before);
+    assert(f->coro_plan == NULL);
+
+    xi_func_free(xi_semantic_lowered_program_release(semantic));
+    printf("  PASS\n");
+}
+
+static void test_coroutine_transition_rejects_invalid_cfg_before_rewrite(void) {
+    printf("--- test_coroutine_transition_rejects_invalid_cfg_before_rewrite ---\n");
+
+    XiFunc *f = xi_func_new("invalid_cfg_coro_transition", &stub_void);
+    XiBlock *entry = xi_block_new(f);
+    XiValue *yield = xi_value_new(f, entry, XI_YIELD, &stub_void, 0);
+    assert(yield != NULL);
+    xi_block_set_return(entry, NULL);
+
+    char error[256] = {0};
+    XiRawProgram *raw = xi_stage_adopt_raw(f, error, sizeof(error));
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, sizeof(error));
+    assert(canonical != NULL);
+    xi_pass_close(f);
+    XiClosedProgram *closed = xi_program_close(canonical, error, sizeof(error));
+    assert(closed != NULL);
+    XiOwnedProgram *owned = xi_program_make_owned(closed, error, sizeof(error));
+    assert(owned != NULL);
+    XiSemanticLoweredProgram *semantic = xi_program_lower_semantics(owned, error, sizeof(error));
+    assert(semantic != NULL);
+
+    entry->kind = XI_BLOCK_IF;
+    uint32_t blocks_before = f->nblocks;
+    uint64_t ir_revision_before = f->ir_revision;
+    uint64_t cfg_revision_before = f->cfg_version;
+    error[0] = '\0';
+    assert(xi_program_lower_coroutines(semantic, NULL, error, sizeof(error)) == NULL);
+    assert(error[0] != '\0');
+    assert(f->stage == XI_STAGE_SEMANTIC_LOWERED);
+    assert(f->nblocks == blocks_before);
+    assert(f->ir_revision == ir_revision_before && f->cfg_version == cfg_revision_before);
+    assert(f->coro_plan == NULL);
+
+    entry->kind = XI_BLOCK_RETURN;
+    xi_func_free(xi_semantic_lowered_program_release(semantic));
     printf("  PASS\n");
 }
 
@@ -1028,6 +1121,8 @@ int main(void) {
     test_corrupt_stage_contract_is_rejected();
     test_lowering_fact_corruption_fails_closed();
     test_semantic_stage_cannot_skip_coroutine_lowering();
+    test_coroutine_transition_rolls_back_unresolved_call();
+    test_coroutine_transition_rejects_invalid_cfg_before_rewrite();
     test_semantic_intrinsic_corruption_fails_closed();
     test_pass_order_and_invariants();
     test_optimizer_invariant_failure_is_data();

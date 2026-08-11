@@ -50,6 +50,7 @@
 #include "xi_pass.h"
 #include "xi_verify.h"
 #include "xi_arc_verify.h"
+#include "xi_coro_lower.h"
 #include "xi_opt_devirt.h"
 #include "../base/xdefs.h"
 #include "../base/xglobal_indices.h"
@@ -4096,7 +4097,7 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
         .name = pass_name,                                                                         \
         .fn = pass_fn,                                                                             \
         .min_level = level,                                                                        \
-        .flags = pass_flags,                                                                       \
+        .flags = (pass_flags) | XI_PASS_CORO_PLAN_SAFE,                                            \
         .min_stage = XI_STAGE_RAW,                                                                 \
         .max_stage = XI_STAGE_CORO_LOWERED,                                                        \
         .requires_inv_mask = 0,                                                                    \
@@ -4111,9 +4112,10 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
  * The driver runs all passes whose min_level <= requested level. */
 static const XiPassDesc xi_pass_table[] = {
     XI_ANALYSIS_PASS("tbaa", xi_tbaa_annotate, XI_OPT_LIGHT, XI_PASS_REQUIRED, XI_EVD_ALIAS),
-    XI_REWRITE_PASS("constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT, XI_PASS_NONE, 0),
-    XI_REWRITE_PASS("copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_NONE, 0),
+    XI_REWRITE_PASS("constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_CORO_PLAN_SAFE, 0),
+    XI_REWRITE_PASS("strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT,
+                    XI_PASS_CORO_PLAN_SAFE, 0),
+    XI_REWRITE_PASS("copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_CORO_PLAN_SAFE, 0),
     XI_REWRITE_PASS("mark_one_shot_await", xi_opt_mark_one_shot_await, XI_OPT_LIGHT, XI_PASS_NONE,
                     0),
     XI_REWRITE_PASS("phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, 0),
@@ -4616,6 +4618,13 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 continue;
             if (pass_disabled_by_mask(desc, disabled_passes))
                 continue;
+            /* Structural rewrites may delete or merge the frozen suspend,
+             * resume, and dispatch anchors.  Until a pass publishes an audited
+             * coroutine-plan preservation contract, do not enter it after
+             * coroutine lowering.  Marked value rewrites still run and rebase
+             * the plan below. */
+            if (f->coro_plan && !(desc->flags & XI_PASS_CORO_PLAN_SAFE))
+                continue;
 
             /* Budget check before each pass */
             if (budget_ns > 0) {
@@ -4671,6 +4680,15 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 for (uint32_t bi = 0; bi < f->nblocks; bi++) {
                     shuffle_block_values(f->blocks[bi]);
                 }
+                if (f->coro_plan && !xi_coro_plan_rebase(f)) {
+                    result.ok = false;
+                    result.pass_name = desc->name;
+                    result.round = round;
+                    snprintf(result.detail, sizeof(result.detail),
+                             "debug shuffle could not preserve coroutine plan for '%s'",
+                             f->name ? f->name : "?");
+                    goto done;
+                }
             }
 
             /* Debug shuffling changes CFG revision and value order. Acquire
@@ -4715,6 +4733,19 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
                 goto done;
             }
             (void) pass_outcome;
+
+            if (f->coro_plan &&
+                (pass_outcome.revision_delta.ir_changed ||
+                 pass_outcome.revision_delta.cfg_changed) &&
+                !xi_coro_plan_rebase(f)) {
+                result.ok = false;
+                result.pass_name = desc->name;
+                result.round = round;
+                snprintf(result.detail, sizeof(result.detail),
+                         "pass '%s' could not preserve coroutine plan for '%s'", desc->name,
+                         f->name ? f->name : "?");
+                goto done;
+            }
 
             uint64_t dt = xr_time_monotonic_ns() - t0;
 

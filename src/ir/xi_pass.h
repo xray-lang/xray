@@ -106,6 +106,7 @@ typedef XiPassChange (*XiPassFn)(XiFunc *f);
 #define XI_PASS_NEEDS_LOOP (1u << 1)   /* requires loop detection */
 #define XI_PASS_NEEDS_DEFUSE (1u << 2) /* requires def-use chains */
 #define XI_PASS_REQUIRED (1u << 3)     /* cannot be disabled by env / config */
+#define XI_PASS_CORO_PLAN_SAFE (1u << 4) /* preserves frozen coroutine CFG anchors */
 
 typedef struct XiPassDesc {
     const char *name;     /* human-readable name for logging */

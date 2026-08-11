@@ -48,6 +48,19 @@ typedef enum {
 #define XI_CORO_STATE_ENTRY 0u
 #define XI_CORO_STATE_TERMINAL UINT32_MAX
 
+/* Hard planning budgets.  Coroutine analysis is intentionally bounded before
+ * it allocates arena-backed plan storage or rewrites the CFG. */
+#define XI_CORO_MAX_STATES 4096u
+#define XI_CORO_MAX_SLOTS 65536u
+#define XI_CORO_MAX_FRAME_ACTIONS 262144u
+#define XI_CORO_MAX_PLAN_BYTES (64u * 1024u * 1024u)
+
+#define XI_CORO_CAP_SCHEDULER (1u << 0)
+#define XI_CORO_CAP_CHANNEL (1u << 1)
+#define XI_CORO_CAP_TASK (1u << 2)
+#define XI_CORO_CAP_CHILD_FRAME (1u << 3)
+#define XI_CORO_CAP_CANCEL_CLEANUP (1u << 4)
+
 /* Explicit continuation dispositions owned by the logical coroutine plan.
  * The fixed ordering makes plan construction deterministic.  TargetPlan later
  * turns these dispositions into executable scheduler and cleanup control flow. */
@@ -72,11 +85,36 @@ typedef struct XiCoroEdge {
     uint32_t target_state_id;
     XiBlock *target_block;
     XiValue *child;
+    const XiFunc *callee;
     XiValue **roots;
     uint32_t nroots;
     XiValue **drops;
     uint32_t ndrops;
 } XiCoroEdge;
+
+typedef enum {
+    XI_CORO_FRAME_SPILL,
+    XI_CORO_FRAME_STORE_STATE,
+    XI_CORO_FRAME_SCHED_EXIT,
+    XI_CORO_FRAME_RELOAD,
+    XI_CORO_FRAME_PHI_CAPTURE,
+    XI_CORO_FRAME_PHI_COMMIT,
+    XI_CORO_FRAME_DROP,
+} XiCoroFrameActionKind;
+
+/* Target-neutral frame action.  slot_index is the authoritative logical frame
+ * identity; value is retained so Xi verification can independently prove the
+ * mapping.  Physical targets may coalesce storage but may not rediscover the
+ * action set or state ordering. */
+typedef struct XiCoroFrameAction {
+    uint8_t kind; /* XiCoroFrameActionKind */
+    uint8_t edge_kind; /* XiCoroEdgeKind for DROP, zero otherwise */
+    uint8_t _pad[2];
+    uint32_t state_id;
+    uint32_t slot_index;
+    XiValue *value;
+    XiBlock *target;
+} XiCoroFrameAction;
 
 /* One suspension site and the values that stay live across it. */
 typedef struct XiCoroSuspendPoint {
@@ -92,6 +130,16 @@ typedef struct XiCoroSuspendPoint {
     XiBlock *pre_block;
     XiBlock *suspend_block;
     XiBlock *resume_block;
+    XiBlock *continuation;
+    const XiFunc *resolved_callee;
+    XiValue *result_slot;
+    XiValue *error_slot;
+    uint32_t generation;
+    uint32_t capability_mask;
+    uint32_t store_state_id;
+    uint32_t action_begin;
+    uint32_t action_count;
+    bool returns_to_scheduler;
     XiCoroEdge *edges;
     uint8_t nedges;
 } XiCoroSuspendPoint;
@@ -124,6 +172,7 @@ typedef enum {
 typedef struct XiCoroSlot {
     XiValue *value;
     struct XrType *type;
+    uint32_t owner_value_id; /* stable Xi owner identity across representation aliases */
     uint8_t logical_rep; /* XrRep value (xtype.h), via xr_type_rep() */
     uint8_t kind;        /* XiCoroSlotKind */
     bool is_root; /* logical reference root; physical root kind is target-planned */
@@ -142,6 +191,7 @@ typedef struct XiCoroPlan {
     XiCoroSuspendPoint *points;
     XiCoroSlot *slots;
     uint32_t nslots;
+    uint32_t slot_capacity;
     uint32_t root_count;
     uint32_t release_count;
     XiCoroDispatchEntry *dispatch;
@@ -154,6 +204,14 @@ typedef struct XiCoroPlan {
     uint64_t analyzed_cfg_revision;
     uint64_t lowered_ir_revision;
     uint64_t lowered_cfg_revision;
+    uint32_t frame_action_count;
+    uint32_t frame_action_capacity;
+    XiCoroFrameAction *frame_actions;
+    XiCoroEdge *edges;
+    uint64_t action_fingerprint;
+    uint32_t planned_bytes;
+    bool analysis_complete;
+    bool actions_materialized;
     bool cfg_rewritten;
     bool needs_cl;     /* frame carries a closure environment pointer */
     uint8_t ctx_depth; /* interprocedural resolution depth bound */
@@ -165,16 +223,20 @@ typedef struct XiCoroPlan {
  *   - resolve_method maps a method-call value to its statically known target.
  *   - func_suspendability returns the prepared whole-program execution shape
  *     for a function (1 = suspendable, 0 = synchronous, -1 = unknown).
+ *   - call_suspendability returns the prepared closed-world execution shape
+ *     for one call (1 = suspends, 0 = synchronous, -1 = unresolved).
  *   - value_is_module_import decides whether 'v' (as used in 'f') refers to
  *     an import of the named stdlib module (e.g. "time" for time.sleep).
  *   - call_is_module_member recognizes both module-method and selected-import
  *     calls for internal/native stdlib suspension contracts.
- * Either callback may be NULL; the analysis then answers only from the
- * intraprocedural / direct-import information available in the IR. */
+ * Callbacks may be NULL only when every call is already provable from
+ * target-neutral IR (static local/import target, closed builtin schema, or a
+ * contracted module member).  Any remaining call fails analysis closed. */
 typedef struct XiCoroResolver {
     const XiFunc *(*resolve_callee)(void *ud, const XiFunc *current, const XiValue *callee);
     const XiFunc *(*resolve_method)(void *ud, const XiFunc *current, const XiValue *call);
     int (*func_suspendability)(void *ud, const XiFunc *func);
+    int (*call_suspendability)(void *ud, const XiFunc *current, const XiValue *call);
     bool (*value_is_module_import)(void *ud, const XiFunc *f, const XiValue *v, const char *module);
     bool (*call_is_module_member)(void *ud, const XiFunc *f, const XiValue *v, const char *module,
                                   const char *member);
@@ -211,7 +273,7 @@ XR_FUNC bool xi_value_is_blocking_event_count_method_call(const XiValue *v);
 /* True if 'v' is a coroutine suspension site.  'resolver' supplies the two
  * context-dependent queries (stdlib module-import for time.sleep, and
  * interprocedural callee/method resolution for a direct call into a suspendable
- * function); pass a resolver wired to the current backend's bundle. */
+ * function); pass a resolver wired to the compilation's frozen evidence. */
 XR_FUNC bool xi_coro_is_suspend_point(const XiFunc *f, const XiValue *v,
                                       const XiCoroResolver *resolver);
 
@@ -295,11 +357,22 @@ XR_FUNC const XiCoroSlot *xi_coro_plan_find_slot(const XiCoroPlan *plan, const X
 XR_FUNC const XiCoroEdge *xi_coro_point_find_edge(const XiCoroSuspendPoint *point,
                                                   XiCoroEdgeKind kind);
 
+/* Exact point lookup used by target adapters.  A backend must consume these
+ * state ids rather than numbering suspension sites during emission. */
+XR_FUNC const XiCoroSuspendPoint *xi_coro_plan_find_point(const XiCoroPlan *plan,
+                                                          const XiValue *op);
+
+/* Recompute point-local liveness after a CFG-preserving state-machine split.
+ * Storage is budgeted during analysis; this function never grows the plan. */
+XR_FUNC bool xi_coro_plan_refresh_point_sets(XiFunc *f, XiCoroPlan *plan);
+XR_FUNC bool xi_coro_plan_ensure_slot_capacity(XiFunc *f, XiCoroPlan *plan);
+
 /* ========== Plan + suspendability ========== */
 
 /* Compute (or return the cached) coroutine plan for 'f'.  Idempotent: the
  * result is stored on f->coro_plan and reused on later calls.  Returns NULL
- * only for a NULL function or on allocation failure. */
+ * for a NULL function, unresolved call contract, hard-budget violation, or
+ * allocation failure. */
 XR_FUNC XiCoroPlan *xi_coro_analyze(XiFunc *f, const XiCoroResolver *resolver);
 
 /* True if 'f' itself, or (when the resolver supplies callee resolution) any
