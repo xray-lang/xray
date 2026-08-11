@@ -992,6 +992,9 @@ file(GLOB PLAN_TARGET_SRC CONFIGURE_DEPENDS "src/plan/target/*.c")
 file(GLOB MODULE_SRC CONFIGURE_DEPENDS "src/module/*.c")
 file(GLOB ANALYSIS_SRC CONFIGURE_DEPENDS "src/analysis/*.c")
 file(GLOB AOT_SRC CONFIGURE_DEPENDS "src/aot/*.c")
+file(GLOB AOT_REFINE_SRC CONFIGURE_DEPENDS "src/aot/refine/*.c")
+file(GLOB AOT_EMIT_C_SRC CONFIGURE_DEPENDS "src/aot/emit_c/*.c")
+list(APPEND AOT_SRC ${AOT_REFINE_SRC} ${AOT_EMIT_C_SRC})
 list(REMOVE_ITEM AOT_SRC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/aot/xrt_gen_iter.c"
     "src/aot/xrt_gen_iter.c")
