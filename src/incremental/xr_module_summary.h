@@ -63,6 +63,8 @@ XR_FUNC bool xr_module_summary_get_fingerprint(const XrModuleSummary *summary,
                                                XrFingerprint *out);
 XR_FUNC XrModuleFacetMask xr_module_summary_changed_facets(const XrModuleSummary *old_summary,
                                                            const XrModuleSummary *new_summary);
+XR_FUNC bool xr_module_summary_fingerprint(const XrModuleSummary *summary,
+                                           XrFingerprint *out);
 XR_FUNC bool xr_module_summary_validate(const XrModuleSummary *summary);
 
 #endif  // XR_MODULE_SUMMARY_H

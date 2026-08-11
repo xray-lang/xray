@@ -30,23 +30,47 @@ typedef enum XrInvalidationReason {
     XR_INVALIDATION_DEPENDENCY
 } XrInvalidationReason;
 
+#define XR_INVALIDATION_MAX_DELTA_ROWS 4096u
+#define XR_INVALIDATION_MAX_EVIDENCE_ROWS \
+    (XR_DEPENDENCY_GRAPH_MAX_EDGES * XR_MODULE_FACET_COUNT)
+
+typedef struct XrDependencyGraphDeltaRow {
+    XrStableId consumer;
+    XrStableId dependency;
+    /* An all-zero relation represents an absent edge. */
+    XrModuleFacetMask old_relation[XR_MODULE_FACET_COUNT];
+    XrModuleFacetMask new_relation[XR_MODULE_FACET_COUNT];
+} XrDependencyGraphDeltaRow;
+
+typedef struct XrDependencyGraphDelta {
+    const XrDependencyGraphDeltaRow *rows;
+    size_t row_count;
+} XrDependencyGraphDelta;
+
 typedef struct XrInvalidationEvent {
     XrInvalidationReason reason;
     XrStableId root_id;
-    XrModuleFacetMask changed_facets;
-    XrFingerprint old_fingerprint;
-    XrFingerprint new_fingerprint;
     /* Copied during apply; never retained by the graph or result. */
     const XrModuleSummary *replacement_summary;
+    /* Required only for GRAPH_CHANGED and applied as one verified transaction. */
+    const XrDependencyGraphDelta *graph_delta;
 } XrInvalidationEvent;
+
+typedef struct XrInvalidationEvidence {
+    XrStableId module_id;
+    XrStableId parent_module_id;
+    /* Exactly one dependency facet bit. */
+    XrModuleFacetMask observed_facet;
+    XrModuleFacetMask invalidated_facets;
+} XrInvalidationEvidence;
 
 typedef struct XrInvalidationRecord {
     XrStableId module_id;
     XrModuleFacetMask invalidated_facets;
     XrModuleFacetMask observed_facets;
     XrInvalidationReason direct_reason;
-    bool has_parent;
-    XrStableId parent_module_id;
+    size_t evidence_start;
+    size_t evidence_count;
 } XrInvalidationRecord;
 
 typedef struct XrInvalidationResult {
@@ -55,15 +79,23 @@ typedef struct XrInvalidationResult {
     XrFingerprint root_new_fingerprint;
     XrInvalidationRecord *records;
     size_t record_count;
+    XrInvalidationEvidence *evidence;
+    size_t evidence_count;
 } XrInvalidationResult;
 
 XR_FUNC bool xr_cache_invalidate_apply(XrDependencyGraph *graph,
                                        const XrInvalidationEvent *event,
                                        XrInvalidationResult *out_result);
+XR_FUNC bool xr_cache_invalidation_verify(const XrDependencyGraph *before,
+                                          const XrInvalidationEvent *event,
+                                          const XrDependencyGraph *after,
+                                          const XrInvalidationResult *result);
 XR_FUNC void xr_invalidation_result_finalize(XrInvalidationResult *result);
 XR_FUNC const XrInvalidationRecord *
 xr_invalidation_result_find(const XrInvalidationResult *result, XrStableId module_id);
 XR_FUNC const XrInvalidationRecord *
 xr_invalidation_result_at(const XrInvalidationResult *result, size_t index);
+XR_FUNC const XrInvalidationEvidence *
+xr_invalidation_evidence_at(const XrInvalidationResult *result, size_t index);
 
 #endif  // XR_CACHE_INVALIDATE_H

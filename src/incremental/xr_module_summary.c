@@ -11,11 +11,19 @@
 #include "xr_module_summary.h"
 
 #include "../base/xmalloc.h"
+#include "../base/xsha256.h"
 
 #include <string.h>
 
 static bool facet_is_valid(XrModuleSummaryFacet facet) {
     return (unsigned) facet < XR_MODULE_FACET_COUNT;
+}
+
+static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
+    uint8_t bytes[8];
+    for (unsigned i = 0; i < sizeof(bytes); i++)
+        bytes[i] = (uint8_t) (value >> (i * 8));
+    xr_sha256_update(ctx, bytes, sizeof(bytes));
 }
 
 bool xr_module_summary_init(XrModuleSummary *summary, const char *canonical_key) {
@@ -93,11 +101,44 @@ XrModuleFacetMask xr_module_summary_changed_facets(const XrModuleSummary *old_su
     return changed;
 }
 
+bool xr_module_summary_fingerprint(const XrModuleSummary *summary, XrFingerprint *out) {
+    static const uint8_t domain[] = "xray-module-summary-v1\0";
+    if (!out || !xr_module_summary_validate(summary))
+        return false;
+
+    XrSHA256Context ctx;
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
+    xr_sha256_update(&ctx, summary->module_id.bytes, sizeof(summary->module_id.bytes));
+    size_t key_size = strlen(summary->canonical_key);
+    hash_u64(&ctx, (uint64_t) key_size);
+    xr_sha256_update(&ctx, (const uint8_t *) summary->canonical_key, key_size);
+    hash_u64(&ctx, summary->present_facets);
+    for (unsigned facet = 0; facet < XR_MODULE_FACET_COUNT; facet++) {
+        XrModuleFacetMask bit = XR_MODULE_FACET_BIT(facet);
+        if ((summary->present_facets & bit) == 0)
+            continue;
+        hash_u64(&ctx, facet);
+        xr_sha256_update(&ctx, summary->facets[facet].bytes,
+                         sizeof(summary->facets[facet].bytes));
+    }
+    xr_sha256_final(&ctx, out->bytes);
+    return true;
+}
+
 bool xr_module_summary_validate(const XrModuleSummary *summary) {
     if (!summary || !summary->canonical_key || summary->canonical_key[0] == '\0' ||
         (summary->present_facets & ~XR_MODULE_FACET_ALL) != 0) {
         return false;
     }
+    static const XrFingerprint zero = {{0}};
+    for (unsigned facet = 0; facet < XR_MODULE_FACET_COUNT; facet++) {
+        if ((summary->present_facets & XR_MODULE_FACET_BIT(facet)) == 0 &&
+            !xr_fingerprint_equal(summary->facets[facet], zero)) {
+            return false;
+        }
+    }
+
     XrStableId expected_id;
     XrFingerprint key_digest;
     return xr_stable_id_from_key(summary->canonical_key, &expected_id, &key_digest) &&

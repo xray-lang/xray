@@ -20,6 +20,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#define XR_DEPENDENCY_GRAPH_MAX_NODES 4096u
+#define XR_DEPENDENCY_GRAPH_MAX_EDGES 16384u
+
 typedef struct XrDependencyEdge {
     XrStableId consumer;
     XrStableId dependency;
@@ -58,6 +61,11 @@ XR_FUNC const XrModuleSummary *xr_dependency_graph_node_at(const XrDependencyGra
                                                            size_t index);
 XR_FUNC const XrDependencyEdge *xr_dependency_graph_edge_at(const XrDependencyGraph *graph,
                                                             size_t index);
+XR_FUNC const XrDependencyEdge *xr_dependency_graph_find_edge(const XrDependencyGraph *graph,
+                                                              XrStableId consumer,
+                                                              XrStableId dependency);
+XR_FUNC bool xr_dependency_graph_fingerprint(const XrDependencyGraph *graph,
+                                             XrFingerprint *out);
 XR_FUNC bool xr_dependency_graph_validate(const XrDependencyGraph *graph);
 
 #endif  // XR_DEPENDENCY_GRAPH_H
