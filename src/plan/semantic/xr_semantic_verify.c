@@ -274,7 +274,8 @@ static bool verify_entity_record(const XrSemanticPlan *plan, const XrSemanticEnt
                    entity->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
                    entity->subject < plan->operation_count &&
                    parent->subject == plan->operations[entity->subject].function &&
-                   (plan->operations[entity->subject].effects & XI_EFFECT_MAY_SUSPEND) != 0 &&
+                   ((plan->operations[entity->subject].effects & XI_EFFECT_MAY_SUSPEND) != 0 ||
+                    plan->operations[entity->subject].opcode == XI_GO) &&
                    entity->ordinal != 0 &&
                    mark_entity(coverage->coroutine_states, plan->operation_count,
                                entity->subject);

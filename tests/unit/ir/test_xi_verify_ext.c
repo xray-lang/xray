@@ -1564,6 +1564,27 @@ TEST(coro_plan_does_not_own_borrowed_place_load) {
     xi_func_free(f);
 }
 
+TEST(coro_plan_records_go_as_scheduler_reduction_point) {
+    XiFunc *f = xi_func_new("coro_go_scheduler_reduction", &stub_unit);
+    ASSERT(f != NULL);
+    XiBlock *entry = xi_block_new(f);
+    ASSERT(entry != NULL);
+    entry->sealed = true;
+
+    XiValue *callee = xi_value_new(f, entry, XI_CONST, &stub_func, 0);
+    XiValue *go = xi_value_new(f, entry, XI_GO, &stub_unit, 1);
+    ASSERT(callee != NULL && go != NULL);
+    go->args[0] = callee;
+    xi_block_set_return(entry, NULL);
+
+    ASSERT(xi_coro_is_suspend_point(f, go, NULL));
+    XiCoroPlan *plan = xi_coro_analyze(f, NULL);
+    ASSERT(plan != NULL);
+    ASSERT(plan->nstates == 1);
+    ASSERT(plan->points[0].op == go && plan->points[0].state_id == 1);
+    xi_func_free(f);
+}
+
 TEST(coro_plan_transfers_owned_rep_alias_into_frame) {
     XiFunc *f = xi_func_new("coro_owned_rep_alias", &stub_str);
     ASSERT(f != NULL);
@@ -2377,6 +2398,7 @@ int main(void) {
     run_coro_plan_rejects_stale_point_op();
     run_coro_plan_rejects_root_count_mismatch();
     run_coro_plan_does_not_own_borrowed_place_load();
+    run_coro_plan_records_go_as_scheduler_reduction_point();
     run_coro_plan_transfers_owned_rep_alias_into_frame();
     run_coro_lower_splits_cfg_and_records_cleanup_obligations();
     run_coro_lower_is_deterministic_and_idempotent();
