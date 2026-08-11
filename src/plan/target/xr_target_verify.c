@@ -1518,14 +1518,103 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
     const XrSemanticOperandRecord *operands =
         xr_semantic_plan_operands(semantic, &operand_count);
     uint8_t *covered = (uint8_t *) xr_calloc(semantic_operations, sizeof(*covered));
-    uint8_t *deferred = (uint8_t *) xr_calloc(semantic_functions, sizeof(*deferred));
-    if ((semantic_operations && !covered) || (semantic_functions && !deferred) ||
-        !mark_coroutine_functions(semantic, deferred, semantic_functions)) {
+    uint8_t *state_counts =
+        (uint8_t *) xr_calloc(semantic_operations, sizeof(*state_counts));
+    uint8_t *suspendable =
+        (uint8_t *) xr_calloc(semantic_functions, sizeof(*suspendable));
+    uint32_t *reverse_head = semantic_functions
+                                 ? (uint32_t *) xr_malloc(
+                                       (size_t) semantic_functions *
+                                       sizeof(*reverse_head))
+                                 : NULL;
+    uint32_t *reverse_next = semantic_targets
+                                 ? (uint32_t *) xr_malloc(
+                                       (size_t) semantic_targets *
+                                       sizeof(*reverse_next))
+                                 : NULL;
+    uint32_t *queue = semantic_functions
+                          ? (uint32_t *) xr_malloc(
+                                (size_t) semantic_functions * sizeof(*queue))
+                          : NULL;
+    if ((semantic_operations && (!covered || !state_counts)) ||
+        (semantic_functions && (!suspendable || !reverse_head || !queue)) ||
+        (semantic_targets && !reverse_next)) {
         xr_free(covered);
-        xr_free(deferred);
+        xr_free(state_counts);
+        xr_free(suspendable);
+        xr_free(reverse_head);
+        xr_free(reverse_next);
+        xr_free(queue);
         return report(error, error_size, "XR_EXEC_5003", "call verifier allocation failed");
     }
     bool valid = plan->calls_count == semantic_targets;
+    uint32_t semantic_entities =
+        (uint32_t) xr_semantic_plan_entity_count(semantic);
+    for (uint32_t i = 0; valid && i < semantic_entities; i++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(semantic, i);
+        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE)
+            continue;
+        if (entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION ||
+            entity->subject >= semantic_operations ||
+            ++state_counts[entity->subject] != 1)
+            valid = false;
+    }
+    for (uint32_t function = 0; function < semantic_functions; function++)
+        reverse_head[function] = XR_SEMANTIC_INDEX_NONE;
+    uint32_t queue_begin = 0;
+    uint32_t queue_end = 0;
+    for (uint32_t operation_index = 0;
+         valid && operation_index < semantic_operations; operation_index++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, operation_index);
+        if (!operation || operation->function >= semantic_functions) {
+            valid = false;
+            break;
+        }
+        if (((operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 ||
+             operation->opcode == XI_GO) &&
+            !suspendable[operation->function]) {
+            suspendable[operation->function] = 1;
+            queue[queue_end++] = operation->function;
+        }
+    }
+    for (uint32_t target_index = 0;
+         valid && target_index < semantic_targets; target_index++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(semantic, target_index);
+        const XrSemanticOperationRecord *operation =
+            target && target->operation < semantic_operations
+                ? xr_semantic_plan_operation(semantic, target->operation)
+                : NULL;
+        if (!target || !operation || target->function >= semantic_functions ||
+            (operation->opcode != XI_CALL &&
+             operation->opcode != XI_TAIL_CALL)) {
+            valid = false;
+            break;
+        }
+        reverse_next[target_index] = reverse_head[target->function];
+        reverse_head[target->function] = target_index;
+    }
+    while (valid && queue_begin < queue_end) {
+        uint32_t callee = queue[queue_begin++];
+        for (uint32_t target_index = reverse_head[callee];
+             target_index != XR_SEMANTIC_INDEX_NONE;
+             target_index = reverse_next[target_index]) {
+            const XrSemanticCallTargetRecord *target =
+                xr_semantic_plan_call_target(semantic, target_index);
+            const XrSemanticOperationRecord *operation =
+                target ? xr_semantic_plan_operation(semantic, target->operation)
+                       : NULL;
+            if (!operation || operation->function >= semantic_functions) {
+                valid = false;
+                break;
+            }
+            if (!suspendable[operation->function]) {
+                suspendable[operation->function] = 1;
+                queue[queue_end++] = operation->function;
+            }
+        }
+    }
     uint32_t next_argument = 0;
     uint32_t next_adapter = 0;
     for (uint32_t i = 0; valid && i < plan->calls_count; i++) {
@@ -1554,11 +1643,21 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                                 ? semantic_type_expected_rep(result_type, &result_kind)
                                 : -1;
         const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(plan->profile);
+        bool suspends = target && target->operation < semantic_operations &&
+                        state_counts[target->operation] == 1;
+        bool expected_suspend =
+            operation && ((operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 ||
+                          operation->opcode == XI_GO ||
+                          (operation->opcode == XI_CALL && target &&
+                           target->function < semantic_functions &&
+                           suspendable[target->function] != 0));
         valid = target && operation && callee && machine &&
                 target->operation < semantic_operations && !covered[target->operation] &&
                 target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
-                operation->opcode == XI_CALL && operation->function < semantic_functions &&
-                !deferred[operation->function] && !deferred[target->function] &&
+                (operation->opcode == XI_CALL ||
+                 operation->opcode == XI_TAIL_CALL) &&
+                suspends == expected_suspend &&
+                operation->function < semantic_functions &&
                 operation->result_type == callee->return_type && result_scalar == 1 &&
                 result && result->register_rep < plan->machine_reps_count &&
                 result->memory_rep < plan->machine_reps_count &&
@@ -1571,7 +1670,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 callee->parameter_begin <= xr_semantic_plan_parameter_count(semantic) &&
                 callee->parameter_count <= xr_semantic_plan_parameter_count(semantic) -
                                                    callee->parameter_begin &&
-                reconstruct_call_identity("xray-target-call-v2", target->id,
+                reconstruct_call_identity("xray-target-call-v3", target->id,
                                           operation->id, 0, &expected_identity) &&
                 xr_stable_id_equal(call->identity, expected_identity) && call->id == i &&
                 call->semantic_call_target == i &&
@@ -1593,7 +1692,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 call->error_memory_rep < plan->machine_reps_count &&
                 plan->machine_reps[call->error_register_rep].kind == XR_MACHINE_REP_VOID &&
                 plan->machine_reps[call->error_memory_rep].kind == XR_MACHINE_REP_VOID &&
-                call->native_abi == machine->native_abi && call->flags == 0 &&
+                call->native_abi == machine->native_abi &&
+                call->flags ==
+                    ((suspends ? XR_TARGET_CALL_SUSPEND : 0) |
+                     (operation->opcode == XI_TAIL_CALL ? XR_TARGET_CALL_TAIL : 0)) &&
                 call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
                 call->target_kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
                 call->result_mode == XR_TARGET_CALL_VALUE &&
@@ -1676,7 +1778,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
     valid = valid && next_argument == plan->call_arguments_count &&
             next_adapter == plan->adapters_count;
     xr_free(covered);
-    xr_free(deferred);
+    xr_free(state_counts);
+    xr_free(suspendable);
+    xr_free(reverse_head);
+    xr_free(reverse_next);
+    xr_free(queue);
     return valid || report(error, error_size, "XR_TARGET_1003",
                            "call/adapter tables do not exactly cover DIRECT_LOCAL authority");
 }
@@ -1727,11 +1833,268 @@ static bool verify_adapters_and_capabilities(const XrTargetPlan *plan, char *err
     return true;
 }
 
+static bool verify_coroutine_resume_shape(const XrSemanticPlan *semantic,
+                                          uint32_t operation_index,
+                                          const uint32_t *edge_by_block,
+                                          const uint8_t *edge_counts,
+                                          uint32_t block_count,
+                                          uint32_t suspend_block,
+                                          uint32_t resume_block,
+                                          uint32_t resume_predecessor,
+                                          uint16_t predecessor_ordinal) {
+    uint32_t predecessor_count = 0;
+    const uint32_t *predecessors =
+        xr_semantic_plan_predecessors(semantic, &predecessor_count);
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, operation_index);
+    const XrSemanticBlockRecord *suspend = operation
+                                               ? xr_semantic_plan_block(
+                                                     semantic, operation->block)
+                                               : NULL;
+    if (!operation || operation->block >= block_count || !suspend ||
+        suspend_block != operation->block ||
+        suspend->function != operation->function ||
+        suspend->operation_begin != operation_index ||
+        suspend->operation_count != 1 || suspend->predecessor_count != 1 ||
+        suspend->predecessor_begin >= predecessor_count ||
+        suspend->successors[0] == XR_SEMANTIC_INDEX_NONE ||
+        resume_block != suspend->successors[0] ||
+        resume_predecessor != suspend_block ||
+        (suspend->successors[1] != XR_SEMANTIC_INDEX_NONE &&
+         suspend->successors[1] != suspend->successors[0]))
+        return false;
+    const XrSemanticBlockRecord *before = xr_semantic_plan_block(
+        semantic, predecessors[suspend->predecessor_begin]);
+    const XrSemanticBlockRecord *resume =
+        xr_semantic_plan_block(semantic, resume_block);
+    if (!before || !resume || before->function != operation->function ||
+        resume->function != operation->function ||
+        (before->successors[0] != suspend_block &&
+         before->successors[1] != suspend_block) ||
+        resume->predecessor_count != 1 ||
+        resume->predecessor_begin >= predecessor_count ||
+        predecessor_ordinal != 0 ||
+        predecessors[resume->predecessor_begin] != suspend_block ||
+        edge_counts[suspend_block] != 1)
+        return false;
+    const XrSemanticEdgeRecord *edge =
+        xr_semantic_plan_edge(semantic, edge_by_block[suspend_block]);
+    return edge && edge->function == operation->function &&
+           edge->from_block == suspend_block && edge->to_block == resume_block &&
+           edge->operation == XR_SEMANTIC_INDEX_NONE &&
+           edge->kind == XR_SEM_EDGE_NORMAL && edge->flags == 0;
+}
+
 static bool verify_coroutines(const XrTargetPlan *plan, char *error, size_t error_size) {
-    if (plan->coroutines_count)
-        return report(error, error_size, "XR_CORO_4000",
-                      "coroutine tables require semantic suspension-state facts");
-    return true;
+    const XrSemanticPlan *semantic = plan->semantic_plan;
+    uint32_t function_count =
+        (uint32_t) xr_semantic_plan_function_count(semantic);
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    uint32_t entity_count = (uint32_t) xr_semantic_plan_entity_count(semantic);
+    uint32_t block_count = (uint32_t) xr_semantic_plan_block_count(semantic);
+    uint32_t *function_states = function_count
+                                    ? (uint32_t *) xr_calloc(
+                                          function_count,
+                                          sizeof(*function_states))
+                                    : NULL;
+    uint32_t *state_by_operation = operation_count
+                                       ? (uint32_t *) xr_malloc(
+                                             (size_t) operation_count *
+                                             sizeof(*state_by_operation))
+                                       : NULL;
+    uint32_t *call_by_operation = operation_count
+                                      ? (uint32_t *) xr_malloc(
+                                            (size_t) operation_count *
+                                            sizeof(*call_by_operation))
+                                      : NULL;
+    uint8_t *expected_by_operation = operation_count
+                                         ? (uint8_t *) xr_calloc(
+                                               operation_count,
+                                               sizeof(*expected_by_operation))
+                                         : NULL;
+    uint8_t *call_state_counts = plan->calls_count
+                                     ? (uint8_t *) xr_calloc(
+                                           plan->calls_count,
+                                           sizeof(*call_state_counts))
+                                     : NULL;
+    uint32_t *edge_by_block = block_count
+                                  ? (uint32_t *) xr_malloc(
+                                        (size_t) block_count *
+                                        sizeof(*edge_by_block))
+                                  : NULL;
+    uint8_t *edge_counts = block_count
+                               ? (uint8_t *) xr_calloc(
+                                     block_count, sizeof(*edge_counts))
+                               : NULL;
+    if ((function_count && !function_states) ||
+        (operation_count && (!state_by_operation || !call_by_operation ||
+                             !expected_by_operation)) ||
+        (plan->calls_count && !call_state_counts) ||
+        (block_count && (!edge_by_block || !edge_counts))) {
+        xr_free(function_states);
+        xr_free(state_by_operation);
+        xr_free(call_by_operation);
+        xr_free(expected_by_operation);
+        xr_free(call_state_counts);
+        xr_free(edge_by_block);
+        xr_free(edge_counts);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "coroutine verifier allocation failed");
+    }
+    for (uint32_t operation = 0; operation < operation_count; operation++) {
+        state_by_operation[operation] = XR_SEMANTIC_INDEX_NONE;
+        call_by_operation[operation] = XR_SEMANTIC_INDEX_NONE;
+    }
+    for (uint32_t block = 0; block < block_count; block++)
+        edge_by_block[block] = XR_SEMANTIC_INDEX_NONE;
+    bool valid = plan->functions_count == function_count;
+    uint32_t semantic_edges = (uint32_t) xr_semantic_plan_edge_count(semantic);
+    for (uint32_t edge_index = 0; valid && edge_index < semantic_edges;
+         edge_index++) {
+        const XrSemanticEdgeRecord *edge =
+            xr_semantic_plan_edge(semantic, edge_index);
+        if (!edge || edge->from_block >= block_count) {
+            valid = false;
+            break;
+        }
+        if (edge_counts[edge->from_block] == 0)
+            edge_by_block[edge->from_block] = edge_index;
+        if (edge_counts[edge->from_block] < 2)
+            edge_counts[edge->from_block]++;
+    }
+    uint32_t expected_states = 0;
+    for (uint32_t entity_index = 0; valid && entity_index < entity_count;
+         entity_index++) {
+        const XrSemanticEntityRecord *entity =
+            xr_semantic_plan_entity(semantic, entity_index);
+        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE)
+            continue;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, entity->subject);
+        if (entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION ||
+            !operation || operation->function >= function_count ||
+            entity->ordinal == 0 ||
+            function_states[operation->function] == UINT32_MAX) {
+            valid = false;
+            break;
+        }
+        function_states[operation->function]++;
+        if (++expected_by_operation[entity->subject] != 1) {
+            valid = false;
+            break;
+        }
+        expected_states++;
+    }
+    for (uint32_t call = 0; valid && call < plan->calls_count; call++) {
+        uint32_t operation = plan->calls[call].semantic_operation;
+        if (operation >= operation_count ||
+            call_by_operation[operation] != XR_SEMANTIC_INDEX_NONE) {
+            valid = false;
+            break;
+        }
+        call_by_operation[operation] = call;
+    }
+    valid = valid && expected_states == plan->coroutines_count;
+    uint32_t next_state = 0;
+    for (uint32_t function = 0; valid && function < function_count; function++) {
+        const XrTargetFunctionRecord *record = &plan->functions[function];
+        valid = record->coroutine_begin == next_state &&
+                record->coroutine_count == function_states[function] &&
+                range_valid(record->coroutine_begin, record->coroutine_count,
+                            plan->coroutines_count);
+        next_state += record->coroutine_count;
+    }
+    valid = valid && next_state == plan->coroutines_count;
+    for (uint32_t state_index = 0; valid &&
+                                  state_index < plan->coroutines_count;
+         state_index++) {
+        const XrTargetCoroutineStateRecord *state =
+            &plan->coroutines[state_index];
+        const XrSemanticEntityRecord *entity =
+            xr_semantic_plan_entity(semantic, state->semantic_entity);
+        const XrSemanticOperationRecord *operation =
+            entity ? xr_semantic_plan_operation(semantic, entity->subject) : NULL;
+        if (!entity || !operation ||
+            entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
+            entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION ||
+            state->id != state_index || state->function != operation->function ||
+            state->semantic_operation != entity->subject ||
+            state->logical_state != entity->ordinal ||
+            state->function >= function_count || entity->ordinal == 0 ||
+            entity->ordinal > function_states[state->function] ||
+            state_index != plan->functions[state->function].coroutine_begin +
+                               entity->ordinal - 1u ||
+            entity->subject >= operation_count ||
+            state_by_operation[entity->subject] != XR_SEMANTIC_INDEX_NONE ||
+            !verify_coroutine_resume_shape(
+                semantic, entity->subject, edge_by_block, edge_counts,
+                block_count, state->suspend_block,
+                state->resume_block, state->resume_predecessor,
+                state->resume_predecessor_ordinal)) {
+            valid = false;
+            break;
+        }
+        state_by_operation[entity->subject] = state_index;
+        uint32_t expected_call = call_by_operation[entity->subject];
+        if (expected_call != XR_SEMANTIC_INDEX_NONE &&
+            (expected_call >= plan->calls_count || operation->opcode != XI_CALL ||
+             plan->calls[expected_call].flags != XR_TARGET_CALL_SUSPEND)) {
+            valid = false;
+            break;
+        }
+        uint32_t expected_slot = XR_SEMANTIC_INDEX_NONE;
+        uint16_t expected_flags = 0;
+        const XrTargetValueRepRecord *result =
+            xr_target_plan_value_rep(plan, operation->result_value);
+        if (result) {
+            if (result->memory_rep >= plan->machine_reps_count) {
+                valid = false;
+                break;
+            }
+            if (plan->machine_reps[result->memory_rep].kind !=
+                XR_MACHINE_REP_VOID) {
+                if (!slot_binds_value_in_function(plan, result,
+                                                  operation->function)) {
+                    valid = false;
+                    break;
+                }
+                expected_slot = result->slot;
+                expected_flags |= XR_TARGET_COROUTINE_RESULT_SLOT_BOUND;
+            }
+        }
+        if (expected_call != XR_SEMANTIC_INDEX_NONE) {
+            expected_flags |= XR_TARGET_COROUTINE_DIRECT_CHILD;
+            if (plan->calls[expected_call].result_slot != expected_slot ||
+                plan->calls[expected_call].caller_storage_slot !=
+                    XR_SEMANTIC_INDEX_NONE) {
+                valid = false;
+                break;
+            }
+            call_state_counts[expected_call]++;
+        }
+        valid = state->direct_call == expected_call &&
+                state->result_slot == expected_slot &&
+                state->flags == expected_flags;
+    }
+    for (uint32_t operation = 0; valid && operation < operation_count; operation++) {
+        valid = (state_by_operation[operation] != XR_SEMANTIC_INDEX_NONE) ==
+                (expected_by_operation[operation] == 1);
+    }
+    for (uint32_t call = 0; valid && call < plan->calls_count; call++) {
+        uint8_t expected =
+            (plan->calls[call].flags & XR_TARGET_CALL_SUSPEND) != 0;
+        valid = call_state_counts[call] == expected;
+    }
+    xr_free(function_states);
+    xr_free(state_by_operation);
+    xr_free(call_by_operation);
+    xr_free(expected_by_operation);
+    xr_free(call_state_counts);
+    xr_free(edge_by_block);
+    xr_free(edge_counts);
+    return valid || report(error, error_size, "XR_CORO_4000",
+                           "coroutine state-call table is not exact");
 }
 
 bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_size) {

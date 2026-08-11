@@ -4,7 +4,10 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_ops_gen.h"
+#include "../../../src/ir/xi_coro_lower.h"
+#include "../../../src/ir/xi_stage.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
@@ -827,7 +830,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "d61242ab9a3f12e072b03dde60b592eed828ebaefe55baf970eced85558d0112") == 0);
+                   "f42ca47259751cb7b45befac6ba2399ef7c5e7c58d08516f64263d4c1e93cc84") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -1459,6 +1462,194 @@ static XrSemanticPlan *build_direct_local_scalar_calls(uint16_t call_opcode) {
     return plan;
 }
 
+static XrSemanticPlan *build_lowered_coroutine_direct_call(bool unit_result) {
+    XrType unit_function = {
+        .kind = XR_KIND_FUNCTION,
+        .id = 109,
+        .frozen = true,
+        .function = {
+            .return_type = &stub_unit,
+            .throw_effect = XR_FN_EFFECT_NO_THROW,
+        },
+    };
+    XrType *result_type = unit_result ? &stub_unit : &stub_int;
+    XrType *function_type = unit_result ? &unit_function : &stub_function;
+    XiFunc *root = xi_func_new(unit_result ? "target_coro_unit_root"
+                                           : "target_coro_i64_root",
+                               result_type);
+    XiFunc *child = xi_func_new(unit_result ? "target_coro_unit_child"
+                                            : "target_coro_i64_child",
+                                result_type);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+    root_entry->sealed = child_entry->sealed = true;
+
+    XiValue *yield = xi_value_new(child, child_entry, XI_YIELD, &stub_unit, 0);
+    REQUIRE(yield != NULL);
+    if (unit_result) {
+        xi_block_set_return(child_entry, NULL);
+    } else {
+        XiValue *child_result = xi_const_int(child, child_entry, 73, &stub_int);
+        REQUIRE(child_result != NULL);
+        xi_block_set_return(child_entry, child_result);
+    }
+
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+
+    XiValue *closure =
+        xi_value_new(root, root_entry, XI_CLOSURE_NEW, function_type, 0);
+    REQUIRE(closure != NULL);
+    closure->aux = child;
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, result_type, 1);
+    REQUIRE(call != NULL);
+    call->args[0] = closure;
+    xi_block_set_return(root_entry, unit_result ? NULL : call);
+
+    root->stage = child->stage = XI_STAGE_SEMANTIC_LOWERED;
+    root->invariant_mask = child->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(root, NULL));
+    REQUIRE(root->coro_plan && root->coro_plan->is_coroutine &&
+            child->coro_plan && child->coro_plan->is_coroutine);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "lowered coroutine semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    REQUIRE(xr_semantic_plan_call_target_count(plan) == 1);
+    xi_func_free(root);
+    return plan;
+}
+
+static XrSemanticPlan *build_lowered_coroutine_with_sync_call(void) {
+    XiFunc *root = xi_func_new("target_coro_sync_caller", &stub_int);
+    XiFunc *child = xi_func_new("target_coro_sync_child", &stub_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+    root_entry->sealed = child_entry->sealed = true;
+    XiValue *child_result = xi_const_int(child, child_entry, 17, &stub_int);
+    REQUIRE(child_result != NULL);
+    xi_block_set_return(child_entry, child_result);
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+    XiValue *yield = xi_value_new(root, root_entry, XI_YIELD, &stub_unit, 0);
+    XiValue *closure =
+        xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 1);
+    REQUIRE(yield != NULL && closure != NULL && call != NULL);
+    closure->aux = child;
+    call->args[0] = closure;
+    xi_block_set_return(root_entry, call);
+    root->stage = child->stage = XI_STAGE_SEMANTIC_LOWERED;
+    root->invariant_mask = child->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(root, NULL));
+    REQUIRE(root->coro_plan && root->coro_plan->is_coroutine &&
+            child->coro_plan && !child->coro_plan->is_coroutine);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "sync call in coroutine semantic fixture failed: %s\n",
+                error);
+    REQUIRE(built && plan != NULL &&
+            xr_semantic_plan_call_target_count(plan) == 1);
+    xi_func_free(root);
+    return plan;
+}
+
+static XrSemanticPlan *build_lowered_tail_coroutine_chain(void) {
+    XiFunc *root = xi_func_new("target_coro_tail_root", &stub_int);
+    XiFunc *wrapper = xi_func_new("target_coro_tail_wrapper", &stub_int);
+    XiFunc *leaf = xi_func_new("target_coro_tail_leaf", &stub_int);
+    REQUIRE(root != NULL && wrapper != NULL && leaf != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *wrapper_entry = xi_block_new(wrapper);
+    XiBlock *leaf_entry = xi_block_new(leaf);
+    REQUIRE(root_entry != NULL && wrapper_entry != NULL && leaf_entry != NULL);
+    root_entry->sealed = wrapper_entry->sealed = leaf_entry->sealed = true;
+
+    XiValue *yield = xi_value_new(leaf, leaf_entry, XI_YIELD, &stub_unit, 0);
+    XiValue *leaf_result = xi_const_int(leaf, leaf_entry, 29, &stub_int);
+    REQUIRE(yield != NULL && leaf_result != NULL);
+    xi_block_set_return(leaf_entry, leaf_result);
+
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = wrapper;
+    root->nchildren = root->children_cap = 1;
+    wrapper->parent_func = root;
+    wrapper->children = (XiFunc **) xr_calloc(1, sizeof(*wrapper->children));
+    REQUIRE(wrapper->children != NULL);
+    wrapper->children[0] = leaf;
+    wrapper->nchildren = wrapper->children_cap = 1;
+    leaf->parent_func = wrapper;
+
+    /* Seed XiCoroLower so it materializes the caller state CFG.  The seed is
+     * rewritten below before SemanticPlan is frozen: schema 13 must then
+     * derive wrapper suspendability solely through the DIRECT_LOCAL tail
+     * edge, while the wrapper itself has no state row. */
+    XiValue *wrapper_seed =
+        xi_value_new(wrapper, wrapper_entry, XI_YIELD, &stub_unit, 0);
+    XiValue *leaf_closure =
+        xi_value_new(wrapper, wrapper_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *tail =
+        xi_value_new(wrapper, wrapper_entry, XI_TAIL_CALL, &stub_int, 1);
+    REQUIRE(wrapper_seed != NULL && leaf_closure != NULL && tail != NULL);
+    leaf_closure->aux = leaf;
+    tail->args[0] = leaf_closure;
+    xi_block_set_return(wrapper_entry, tail);
+
+    XiValue *wrapper_closure =
+        xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 1);
+    REQUIRE(wrapper_closure != NULL && call != NULL);
+    wrapper_closure->aux = wrapper;
+    call->args[0] = wrapper_closure;
+    xi_block_set_return(root_entry, call);
+
+    root->stage = wrapper->stage = leaf->stage = XI_STAGE_SEMANTIC_LOWERED;
+    root->invariant_mask = wrapper->invariant_mask = leaf->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(root, NULL));
+    REQUIRE(wrapper->coro_plan && wrapper->coro_plan->nstates == 1);
+    wrapper_seed->op = XI_CONST;
+    wrapper_seed->type = &stub_int;
+    wrapper_seed->aux_int = 0;
+    wrapper->coro_plan->nstates = 0;
+    REQUIRE(root->coro_plan && root->coro_plan->is_coroutine &&
+            wrapper->coro_plan && wrapper->coro_plan->is_coroutine &&
+            wrapper->coro_plan->nstates == 0 && leaf->coro_plan &&
+            leaf->coro_plan->is_coroutine);
+    root->stage = wrapper->stage = leaf->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "tail coroutine chain semantic fixture failed: %s\n",
+                error);
+    REQUIRE(built && plan != NULL &&
+            xr_semantic_plan_call_target_count(plan) == 2);
+    xi_func_free(root);
+    return plan;
+}
+
 static XrSemanticPlan *build_direct_local_aggregate_call(void) {
     XrType *aggregate_elements[2] = {&stub_int, &stub_bool};
     XrType aggregate = {
@@ -1549,7 +1740,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "b4281c4fbd23f87b76ecbbae1840d591714d1fdafde591a455a4da46dda4f8c7") == 0);
+                   "db1e0da0f9185fa41c8cf28b7d40c26bf1668dfa0809f50d2cc67ce5156f81d4") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -1607,14 +1798,185 @@ static void test_direct_local_call_adapter_family(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void test_coroutine_state_call_family(void) {
+    XrTargetProfile *profile = build_profile(0);
+    for (uint32_t unit_result = 0; unit_result < 2; unit_result++) {
+        XrSemanticPlan *semantic =
+            build_lowered_coroutine_direct_call(unit_result != 0);
+        XrTargetPlan *plan = NULL;
+        char error[512] = {0};
+        REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                     sizeof(error)));
+        REQUIRE(plan != NULL && plan->calls_count == 1 &&
+                plan->coroutines_count == 2);
+        const XrTargetCallRecord *call = &plan->calls[0];
+        REQUIRE(call->flags == XR_TARGET_CALL_SUSPEND &&
+                call->caller_storage_slot == XR_SEMANTIC_INDEX_NONE);
+        const XrTargetCoroutineStateRecord *call_state = NULL;
+        const XrTargetCoroutineStateRecord *yield_state = NULL;
+        for (uint32_t i = 0; i < plan->coroutines_count; i++) {
+            const XrTargetCoroutineStateRecord *state = &plan->coroutines[i];
+            REQUIRE(state->id == i && state->logical_state != 0 &&
+                    state->resume_predecessor == state->suspend_block &&
+                    state->resume_predecessor_ordinal == 0);
+            if (state->direct_call == 0)
+                call_state = state;
+            else {
+                REQUIRE(state->direct_call == XR_SEMANTIC_INDEX_NONE);
+                yield_state = state;
+            }
+        }
+        REQUIRE(call_state != NULL && yield_state != NULL &&
+                call_state->result_slot == call->result_slot &&
+                (call_state->flags & XR_TARGET_COROUTINE_DIRECT_CHILD) != 0);
+        if (unit_result) {
+            REQUIRE(call->result_slot == XR_SEMANTIC_INDEX_NONE &&
+                    call_state->flags == XR_TARGET_COROUTINE_DIRECT_CHILD);
+        } else {
+            REQUIRE(call->result_slot != XR_SEMANTIC_INDEX_NONE &&
+                    call_state->flags ==
+                        (XR_TARGET_COROUTINE_DIRECT_CHILD |
+                         XR_TARGET_COROUTINE_RESULT_SLOT_BOUND));
+        }
+        REQUIRE(yield_state->result_slot == XR_SEMANTIC_INDEX_NONE &&
+                yield_state->flags == 0);
+        uint32_t cursor = 0;
+        for (uint32_t function = 0; function < plan->functions_count;
+             function++) {
+            REQUIRE(plan->functions[function].coroutine_begin == cursor);
+            cursor += plan->functions[function].coroutine_count;
+        }
+        REQUIRE(cursor == plan->coroutines_count);
+
+        uint8_t *encoded = NULL;
+        size_t encoded_size = 0;
+        XrXtpCandidate *candidate = NULL;
+        XrTargetPlan *decoded = NULL;
+        REQUIRE(xr_xtp_encode_plan(plan, &encoded, &encoded_size, error,
+                                   sizeof(error)));
+        REQUIRE(xr_xtp_decode_candidate(encoded, encoded_size, &candidate,
+                                        error, sizeof(error)));
+        REQUIRE(xr_xtp_materialize_target_plan(candidate, semantic, profile,
+                                               &decoded, error,
+                                               sizeof(error)));
+        REQUIRE(decoded != NULL && decoded->coroutines_count == 2 &&
+                xr_fingerprint_equal(decoded->fingerprint,
+                                     plan->fingerprint));
+        xr_target_plan_free(decoded);
+        xr_xtp_candidate_release(candidate);
+        xr_xtp_encoded_free(encoded);
+
+        if (!unit_result) {
+            XrTargetCoroutineStateRecord *mutable_state =
+                &plan->coroutines[call_state->id];
+            uint32_t saved_u32 = mutable_state->semantic_entity;
+            mutable_state->semantic_entity =
+                (uint32_t) xr_semantic_plan_entity_count(semantic);
+            expect_verify_failure(plan, "XR_CORO_4000");
+            mutable_state->semantic_entity = saved_u32;
+            saved_u32 = mutable_state->semantic_operation;
+            mutable_state->semantic_operation = XR_SEMANTIC_INDEX_NONE;
+            expect_verify_failure(plan, "XR_CORO_4000");
+            mutable_state->semantic_operation = saved_u32;
+            saved_u32 = mutable_state->direct_call;
+            mutable_state->direct_call = XR_SEMANTIC_INDEX_NONE;
+            expect_verify_failure(plan, "XR_CORO_4000");
+            mutable_state->direct_call = saved_u32;
+            saved_u32 = mutable_state->result_slot;
+            mutable_state->result_slot = XR_SEMANTIC_INDEX_NONE;
+            expect_verify_failure(plan, "XR_CORO_4000");
+            mutable_state->result_slot = saved_u32;
+            mutable_state->resume_predecessor_ordinal = 1;
+            expect_verify_failure(plan, "XR_CORO_4000");
+            mutable_state->resume_predecessor_ordinal = 0;
+            uint16_t saved_flags = mutable_state->flags;
+            mutable_state->flags = 0;
+            expect_verify_failure(plan, "XR_CORO_4000");
+            mutable_state->flags = saved_flags;
+            uint32_t saved_coroutine_count = plan->coroutines_count;
+            plan->coroutines_count--;
+            expect_verify_failure(plan, "XR_CORO_4000");
+            plan->coroutines_count = saved_coroutine_count;
+            XrTargetCoroutineStateRecord *saved_coroutines = plan->coroutines;
+            XrTargetCoroutineStateRecord extra_coroutines[3] = {
+                plan->coroutines[0], plan->coroutines[1], plan->coroutines[0],
+            };
+            extra_coroutines[2].id = 2;
+            plan->coroutines = extra_coroutines;
+            plan->coroutines_count = 3;
+            expect_verify_failure(plan, "XR_CORO_4000");
+            plan->coroutines = saved_coroutines;
+            plan->coroutines_count = saved_coroutine_count;
+            uint32_t saved_entity = plan->coroutines[1].semantic_entity;
+            plan->coroutines[1].semantic_entity =
+                plan->coroutines[0].semantic_entity;
+            expect_verify_failure(plan, "XR_CORO_4000");
+            plan->coroutines[1].semantic_entity = saved_entity;
+            uint32_t state_function = mutable_state->function;
+            uint32_t saved_function_count =
+                plan->functions[state_function].coroutine_count;
+            plan->functions[state_function].coroutine_count--;
+            expect_verify_failure(plan, "XR_CORO_4000");
+            plan->functions[state_function].coroutine_count =
+                saved_function_count;
+            plan->calls[0].caller_storage_slot = plan->calls[0].result_slot;
+            expect_verify_failure(plan, "XR_TARGET_1003");
+            plan->calls[0].caller_storage_slot = XR_SEMANTIC_INDEX_NONE;
+            plan->calls[0].flags = 0;
+            expect_verify_failure(plan, "XR_TARGET_1003");
+            plan->calls[0].flags = XR_TARGET_CALL_SUSPEND;
+            REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+        }
+        xr_target_plan_free(plan);
+        xr_semantic_plan_free(semantic);
+    }
+
+    XrSemanticPlan *sync_semantic =
+        build_lowered_coroutine_with_sync_call();
+    XrTargetPlan *sync_plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(sync_semantic, profile, &sync_plan, error,
+                                 sizeof(error)));
+    REQUIRE(sync_plan->calls_count == 1 && sync_plan->calls[0].flags == 0 &&
+            sync_plan->coroutines_count == 1 &&
+            sync_plan->coroutines[0].direct_call == XR_SEMANTIC_INDEX_NONE);
+    xr_target_plan_free(sync_plan);
+    xr_semantic_plan_free(sync_semantic);
+
+    XrSemanticPlan *tail_semantic = build_lowered_tail_coroutine_chain();
+    XrTargetPlan *tail_plan = NULL;
+    REQUIRE(xr_target_plan_build(tail_semantic, profile, &tail_plan, error,
+                                 sizeof(error)));
+    REQUIRE(tail_plan->calls_count == 2 && tail_plan->coroutines_count == 2);
+    const XrTargetCallRecord *tail_call = NULL;
+    const XrTargetCallRecord *suspend_call = NULL;
+    for (uint32_t i = 0; i < tail_plan->calls_count; i++) {
+        if ((tail_plan->calls[i].flags & XR_TARGET_CALL_TAIL) != 0)
+            tail_call = &tail_plan->calls[i];
+        if ((tail_plan->calls[i].flags & XR_TARGET_CALL_SUSPEND) != 0)
+            suspend_call = &tail_plan->calls[i];
+    }
+    REQUIRE(tail_call != NULL && suspend_call != NULL &&
+            tail_call->flags == XR_TARGET_CALL_TAIL &&
+            tail_plan->functions[tail_call->caller_function].coroutine_count == 0);
+    char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
+    xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
+    REQUIRE(strcmp(tail_hex,
+                   "5f8d53d92f739fb63228a179747b907ea7de6363c790bb5d5d539649e20e2880") == 0);
+    uint32_t tail_id = tail_call->id;
+    tail_plan->calls[tail_id].flags = 0;
+    expect_verify_failure(tail_plan, "XR_TARGET_1003");
+    tail_plan->calls[tail_id].flags = XR_TARGET_CALL_TAIL;
+    REQUIRE(xr_target_plan_verify(tail_plan, error, sizeof(error)));
+    xr_target_plan_free(tail_plan);
+    xr_semantic_plan_free(tail_semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_direct_local_future_storage_fails_closed(void) {
     XrTargetProfile *profile = build_profile(0);
     char error[512] = {0};
     XrTargetPlan *plan = NULL;
-    XrSemanticPlan *tail = build_direct_local_scalar_calls(XI_TAIL_CALL);
-    REQUIRE(!xr_target_plan_build(tail, profile, &plan, error, sizeof(error)));
-    REQUIRE(plan == NULL && strncmp(error, "XR_TARGET_1003", 14) == 0);
-    xr_semantic_plan_free(tail);
     XrSemanticPlan *aggregate = build_direct_local_aggregate_call();
     error[0] = '\0';
     REQUIRE(!xr_target_plan_build(aggregate, profile, &plan, error, sizeof(error)));
@@ -1986,6 +2348,7 @@ int main(void) {
     test_builder_materializes_struct_and_named_aggregates();
     test_unknown_call_target_fails_closed();
     test_direct_local_call_adapter_family();
+    test_coroutine_state_call_family();
     test_direct_local_future_storage_fails_closed();
     test_structural_mutations_fail_closed();
     test_value_rep_mutations_fail_closed();

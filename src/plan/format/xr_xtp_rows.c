@@ -121,7 +121,8 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
 #define XR_XTP_FUNCTION_FIELDS(F)                                                                  \
     F(U32, id) F(U32, semantic_function) F(U32, slot_begin) F(U32, slot_count)                    \
     F(U32, frame_size) F(U16, frame_align) F(U16, reserved) F(U32, root_begin)                    \
-    F(U32, root_count) F(U32, cleanup_begin) F(U32, cleanup_count)
+    F(U32, root_count) F(U32, cleanup_begin) F(U32, cleanup_count)                                \
+    F(U32, coroutine_begin) F(U32, coroutine_count)
 #define XR_XTP_SLOT_FIELDS(F)                                                                      \
     F(ID, identity) F(U32, id) F(U32, function) F(U32, semantic_value)                            \
     F(U32, semantic_operation) F(U32, logical_slot) F(U32, offset) F(U32, size)                  \
@@ -157,9 +158,10 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
 #define XR_XTP_CAPABILITY_FIELDS(F)                                                                \
     F(U32, id) F(U32, capability) F(U16, provider) F(U16, flags)
 #define XR_XTP_COROUTINE_FIELDS(F)                                                                 \
-    F(U32, id) F(U32, function) F(U32, logical_state) F(U32, target_state)                       \
-    F(U32, root_map) F(U32, cleanup) F(U32, normal_state) F(U32, error_state)                    \
-    F(U32, cancel_state) F(U32, drop_state)
+    F(U32, id) F(U32, function) F(U32, semantic_entity) F(U32, semantic_operation)               \
+    F(U32, logical_state) F(U32, suspend_block) F(U32, resume_block)                              \
+    F(U32, resume_predecessor) F(U32, direct_call) F(U32, result_slot)                            \
+    F(U16, resume_predecessor_ordinal) F(U16, flags)
 
 #define XR_XTP_TYPED_ROWS(F)                                                                       \
     F(TARGET_PROFILE, XrTargetProfileDraft, XR_XTP_PROFILE_FIELDS)                                \

@@ -28,6 +28,7 @@ typedef enum XrTargetPlanFamily {
     XR_TARGET_FAMILY_AGGREGATE = UINT64_C(1) << 1,
     XR_TARGET_FAMILY_CALL_ADAPTER = UINT64_C(1) << 2,
     XR_TARGET_FAMILY_CLOSURE_STORAGE = UINT64_C(1) << 3,
+    XR_TARGET_FAMILY_COROUTINE_STATE_CALL = UINT64_C(1) << 4,
 } XrTargetPlanFamily;
 
 typedef enum XrTargetExecutionFamily {
@@ -49,7 +50,9 @@ typedef enum XrTargetInstructionOpcode {
 
 #define XR_TARGET_REQUIRED_FAMILIES                                                         \
     ((uint64_t) (XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_AGGREGATE |                  \
-                 XR_TARGET_FAMILY_CALL_ADAPTER | XR_TARGET_FAMILY_CLOSURE_STORAGE))
+                 XR_TARGET_FAMILY_CALL_ADAPTER |                                         \
+                 XR_TARGET_FAMILY_CLOSURE_STORAGE |                                      \
+                 XR_TARGET_FAMILY_COROUTINE_STATE_CALL))
 
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
@@ -213,6 +216,7 @@ typedef enum XrTargetCallFlag {
     XR_TARGET_CALL_SUSPEND = 1u << 1,
     XR_TARGET_CALL_ENVIRONMENT = 1u << 2,
     XR_TARGET_CALL_GENERATION = 1u << 3,
+    XR_TARGET_CALL_TAIL = 1u << 4,
 } XrTargetCallFlag;
 
 typedef enum XrTargetCallArgumentFlag {
@@ -253,6 +257,11 @@ typedef enum XrTargetSlotRole {
     XR_TARGET_SLOT_LOGICAL_COROUTINE,
     XR_TARGET_SLOT_ROLE_COUNT,
 } XrTargetSlotRole;
+
+typedef enum XrTargetCoroutineStateFlag {
+    XR_TARGET_COROUTINE_DIRECT_CHILD = 1u << 0,
+    XR_TARGET_COROUTINE_RESULT_SLOT_BOUND = 1u << 1,
+} XrTargetCoroutineStateFlag;
 
 typedef struct XrTargetMachineRepRecord {
     uint32_t id;
@@ -356,6 +365,8 @@ typedef struct XrTargetFunctionRecord {
     uint32_t root_count;
     uint32_t cleanup_begin;
     uint32_t cleanup_count;
+    uint32_t coroutine_begin;
+    uint32_t coroutine_count;
 } XrTargetFunctionRecord;
 
 typedef struct XrTargetSlotRecord {
@@ -479,14 +490,16 @@ typedef struct XrTargetCapabilityRecord {
 typedef struct XrTargetCoroutineStateRecord {
     uint32_t id;
     uint32_t function;
+    uint32_t semantic_entity;
+    uint32_t semantic_operation;
     uint32_t logical_state;
-    uint32_t target_state;
-    uint32_t root_map;
-    uint32_t cleanup;
-    uint32_t normal_state;
-    uint32_t error_state;
-    uint32_t cancel_state;
-    uint32_t drop_state;
+    uint32_t suspend_block;
+    uint32_t resume_block;
+    uint32_t resume_predecessor;
+    uint32_t direct_call;
+    uint32_t result_slot;
+    uint16_t resume_predecessor_ordinal;
+    uint16_t flags;
 } XrTargetCoroutineStateRecord;
 
 XR_FUNC XrTargetPlan *xr_target_plan_retain(XrTargetPlan *plan);

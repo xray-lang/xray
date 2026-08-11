@@ -3,6 +3,8 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_coro_lower.h"
+#include "../../../src/ir/xi_stage.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/format/xr_artifact_kind.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
@@ -36,6 +38,12 @@ typedef struct XtpFixture {
 } XtpFixture;
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_unit = {
+    .kind = XR_KIND_UNIT,
+    .id = 3,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 static XrType stub_function = {
     .kind = XR_KIND_FUNCTION,
     .id = 2,
@@ -93,6 +101,43 @@ static XrSemanticPlan *build_direct_call_semantic_plan(void) {
     call->args[0] = alias;
     call->args[1] = argument;
     xi_block_set_return(root_entry, call);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(root, &semantic, error, sizeof(error)));
+    REQUIRE(semantic != NULL && xr_semantic_plan_call_target_count(semantic) == 1);
+    xi_func_free(root);
+    return semantic;
+}
+
+static XrSemanticPlan *build_coroutine_call_semantic_plan(void) {
+    XiFunc *root = xi_func_new("xtp_coroutine_root", &stub_int);
+    XiFunc *child = xi_func_new("xtp_coroutine_child", &stub_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+    root_entry->sealed = child_entry->sealed = true;
+    XiValue *yield = xi_value_new(child, child_entry, XI_YIELD, &stub_unit, 0);
+    XiValue *child_result = xi_const_int(child, child_entry, 31, &stub_int);
+    REQUIRE(yield != NULL && child_result != NULL);
+    xi_block_set_return(child_entry, child_result);
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+    XiValue *closure =
+        xi_value_new(root, root_entry, XI_CLOSURE_NEW, &stub_function, 0);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 1);
+    REQUIRE(closure != NULL && call != NULL);
+    closure->aux = child;
+    call->args[0] = closure;
+    xi_block_set_return(root_entry, call);
+    root->stage = child->stage = XI_STAGE_SEMANTIC_LOWERED;
+    root->invariant_mask = child->invariant_mask =
+        xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    REQUIRE(xi_coro_lower(root, NULL));
     root->stage = child->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
@@ -318,6 +363,10 @@ static XtpFixture make_direct_call_fixture(void) {
     return make_fixture_from_semantic(build_direct_call_semantic_plan());
 }
 
+static XtpFixture make_coroutine_call_fixture(void) {
+    return make_fixture_from_semantic(build_coroutine_call_semantic_plan());
+}
+
 static void dispose_fixture(XtpFixture *fixture) {
     xr_xtp_encoded_free(fixture->bytes);
     xr_target_plan_free(fixture->plan);
@@ -463,6 +512,50 @@ static void test_direct_call_rows_roundtrip_and_mutate(void) {
     resign_artifact(copy, fixture.size);
     expect_materialize_failure(&fixture, copy);
     xr_free(copy);
+    dispose_fixture(&fixture);
+}
+
+static void test_coroutine_rows_roundtrip_and_mutate(void) {
+    XtpFixture fixture = make_coroutine_call_fixture();
+    uint32_t count = 0;
+    REQUIRE(xr_target_plan_coroutines(fixture.plan, &count) != NULL &&
+            count == 2);
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *decoded = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
+                                    error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
+                                           fixture.profile, &decoded,
+                                           error, sizeof(error)));
+    REQUIRE(xr_target_plan_coroutines(decoded, &count) != NULL && count == 2);
+    REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
+                                 xr_target_plan_fingerprint(fixture.plan)));
+    xr_target_plan_free(decoded);
+    xr_xtp_candidate_release(candidate);
+
+    static const size_t mutations[] = {
+        8,  /* semantic_entity */
+        12, /* semantic_operation */
+        16, /* logical_state */
+        20, /* suspend_block */
+        24, /* resume_block */
+        28, /* resume_predecessor */
+        32, /* direct_call */
+        36, /* result_slot */
+        40, /* resume_predecessor_ordinal */
+        42, /* flags */
+    };
+    for (size_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
+        uint8_t *copy = copy_artifact(&fixture);
+        uint8_t *entry = directory_entry(copy, XR_XTP_SECTION_COROUTINES);
+        size_t offset = (size_t) xr_xtp_take_u64(entry + 8);
+        copy[offset + mutations[i]] ^= 1;
+        resign_section(copy, XR_XTP_SECTION_COROUTINES);
+        resign_artifact(copy, fixture.size);
+        expect_materialize_failure(&fixture, copy);
+        xr_free(copy);
+    }
     dispose_fixture(&fixture);
 }
 
@@ -717,7 +810,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0, 292, 58, 12, 24, 108, 24, 40, 24, 12,
-        40, 58, 32, 114, 50, 20, 4, 20, 44, 12, 40,
+        48, 58, 32, 114, 50, 20, 4, 20, 44, 12, 44,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {
@@ -782,7 +875,7 @@ static void test_header_and_directory_mutations(void) {
     expect_decode_failure(copy, fixture.size);
 
     memcpy(copy, fixture.bytes, fixture.size);
-    xr_xtp_put_u32(copy + 4, UINT32_C(5)); /* v5 is a hard-cutover negative. */
+    xr_xtp_put_u32(copy + 4, UINT32_C(6)); /* v6 is a hard-cutover negative. */
     resign_artifact(copy, fixture.size);
     expect_decode_failure(copy, fixture.size);
 
@@ -959,6 +1052,7 @@ int main(int argc, char **argv) {
     test_every_typed_row_codec();
     test_exact_roundtrip_and_owned_candidate();
     test_direct_call_rows_roundtrip_and_mutate();
+    test_coroutine_rows_roundtrip_and_mutate();
     test_header_and_directory_mutations();
     test_identity_and_typed_mutations();
     test_runtime_machine_authority_is_exact_and_scalar_only();

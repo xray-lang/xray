@@ -209,6 +209,8 @@ static void hash_function(XrSHA256Context *ctx, const XrTargetFunctionRecord *re
     hash_u64(ctx, record->root_count);
     hash_u64(ctx, record->cleanup_begin);
     hash_u64(ctx, record->cleanup_count);
+    hash_u64(ctx, record->coroutine_begin);
+    hash_u64(ctx, record->coroutine_count);
 }
 
 static void hash_slot(XrSHA256Context *ctx, const XrTargetSlotRecord *record) {
@@ -334,14 +336,16 @@ static void hash_coroutine(XrSHA256Context *ctx,
                            const XrTargetCoroutineStateRecord *record) {
     hash_u64(ctx, record->id);
     hash_u64(ctx, record->function);
+    hash_u64(ctx, record->semantic_entity);
+    hash_u64(ctx, record->semantic_operation);
     hash_u64(ctx, record->logical_state);
-    hash_u64(ctx, record->target_state);
-    hash_u64(ctx, record->root_map);
-    hash_u64(ctx, record->cleanup);
-    hash_u64(ctx, record->normal_state);
-    hash_u64(ctx, record->error_state);
-    hash_u64(ctx, record->cancel_state);
-    hash_u64(ctx, record->drop_state);
+    hash_u64(ctx, record->suspend_block);
+    hash_u64(ctx, record->resume_block);
+    hash_u64(ctx, record->resume_predecessor);
+    hash_u64(ctx, record->direct_call);
+    hash_u64(ctx, record->result_slot);
+    hash_u64(ctx, record->resume_predecessor_ordinal);
+    hash_u64(ctx, record->flags);
 }
 
 void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t layout_index,
@@ -374,7 +378,7 @@ void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t lay
 
 void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_index,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-call-v2\0";
+    static const uint8_t domain[] = "xray-target-call-v3\0";
     const XrTargetCallRecord *call = &plan->calls[call_index];
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
@@ -407,7 +411,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v6\0";
+    static const uint8_t domain[] = "xray-target-plan-v7\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);

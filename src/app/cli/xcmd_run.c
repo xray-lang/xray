@@ -118,7 +118,7 @@ static int reject_non_executable_artifact(const char *path,
     if (!decoded) {
         fprintf(stderr, "%s\n",
                 detail[0] ? detail
-                          : "XR_ARTIFACT_2000: XTP v6 candidate decoding failed");
+                          : "XR_ARTIFACT_2000: XTP v7 candidate decoding failed");
         return XR_CLI_EXIT_FAIL;
     }
     xr_xtp_candidate_release(candidate);

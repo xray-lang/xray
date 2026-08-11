@@ -81,6 +81,8 @@ typedef struct XrTargetCallIntent {
     uint16_t argument_count;
     uint8_t result_mode;
     uint8_t result_ownership;
+    bool suspends;
+    bool tail;
 } XrTargetCallIntent;
 
 typedef struct XrTargetCallArgumentIntent {
@@ -132,6 +134,8 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t adapter_count;
     XrTargetCapabilityRecord *capabilities;
     uint32_t capability_count;
+    XrTargetCoroutineStateRecord *coroutines;
+    uint32_t coroutine_count;
 } XrTargetMaterializedPlan;
 
 typedef struct XrTargetPlanBuilder XrTargetPlanBuilder;
@@ -230,6 +234,7 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     xr_free(materialized->call_arguments);
     xr_free(materialized->adapters);
     xr_free(materialized->capabilities);
+    xr_free(materialized->coroutines);
     memset(materialized, 0, sizeof(*materialized));
 }
 
@@ -1383,24 +1388,6 @@ static bool semantic_operation_is_call_shaped(const XrSemanticPlan *plan,
     return false;
 }
 
-static bool semantic_function_has_coroutine_state(const XrSemanticPlan *plan,
-                                                  uint32_t function) {
-    size_t entity_count = xr_semantic_plan_entity_count(plan);
-    size_t operation_count = xr_semantic_plan_operation_count(plan);
-    for (size_t i = 0; i < entity_count; i++) {
-        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, (uint32_t) i);
-        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE ||
-            entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION ||
-            entity->subject >= operation_count)
-            continue;
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(plan, entity->subject);
-        if (operation && operation->function == function)
-            return true;
-    }
-    return false;
-}
-
 static bool call_type_is_exact_scalar(const XrSemanticPlan *plan, uint32_t type_index) {
     uint16_t kind = XR_MACHINE_REP_COUNT;
     return type_index < xr_semantic_plan_type_count(plan) &&
@@ -1411,6 +1398,8 @@ static bool call_type_is_exact_scalar(const XrSemanticPlan *plan, uint32_t type_
 static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
                                              uint32_t target_index,
                                              const XrSemanticCallTargetRecord *target,
+                                             bool suspends,
+                                             bool callee_suspendable,
                                              char *error, size_t error_size) {
     const XrSemanticPlan *plan = builder->semantic_plan;
     uint32_t operand_table_count = 0;
@@ -1421,16 +1410,20 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
     const XrSemanticFunctionRecord *callee =
         xr_semantic_plan_function(plan, target->function);
     if (!operation || !callee || target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
-        operation->opcode != XI_CALL || operation->function >=
+        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        operation->function >=
             xr_semantic_plan_function_count(plan) ||
         operation->operand_count == 0 || operation->operand_begin > operand_table_count ||
         operation->operand_count > operand_table_count - operation->operand_begin)
         return fail(error, error_size, "XR_TARGET_1003",
-                    "only exact non-tail DIRECT_LOCAL call operations are supported");
-    if (semantic_function_has_coroutine_state(plan, operation->function) ||
-        semantic_function_has_coroutine_state(plan, target->function))
+                    "only exact DIRECT_LOCAL call operations are supported");
+    bool expected_suspend =
+        (operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 ||
+        operation->opcode == XI_GO ||
+        (operation->opcode == XI_CALL && callee_suspendable);
+    if (expected_suspend != suspends)
         return fail(error, error_size, "XR_TARGET_1003",
-                    "coroutine call storage requires the future coroutine family");
+                    "coroutine call lacks exact suspension-state authority");
     if (callee->parameter_count == UINT16_MAX ||
         operation->operand_count != (uint32_t) callee->parameter_count + 1u ||
         callee->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
@@ -1457,8 +1450,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
         .argument_count = callee->parameter_count,
         .result_mode = XR_TARGET_CALL_VALUE,
         .result_ownership = XR_TARGET_CALL_NONE,
+        .suspends = suspends,
+        .tail = operation->opcode == XI_TAIL_CALL,
     };
-    if (!stable_identity_from_pair("xray-target-call-v2", target->id, operation->id,
+    if (!stable_identity_from_pair("xray-target-call-v3", target->id, operation->id,
                                    0, &call.identity))
         return fail(error, error_size, "XR_TARGET_1003",
                     "direct-local call identity is incomplete");
@@ -1513,11 +1508,103 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
     }
     uint8_t *covered = (uint8_t *) allocate_records((uint32_t) operation_count,
                                                     sizeof(*covered));
-    if (operation_count && !covered) {
+    uint8_t *state_by_operation = (uint8_t *) allocate_records(
+        (uint32_t) operation_count, sizeof(*state_by_operation));
+    uint32_t function_count =
+        (uint32_t) xr_semantic_plan_function_count(plan);
+    uint8_t *suspendable = (uint8_t *) allocate_records(
+        function_count, sizeof(*suspendable));
+    uint32_t *reverse_head = (uint32_t *) allocate_records(
+        function_count, sizeof(*reverse_head));
+    uint32_t *reverse_next = (uint32_t *) allocate_records(
+        (uint32_t) call_target_count, sizeof(*reverse_next));
+    uint32_t *queue = (uint32_t *) allocate_records(function_count,
+                                                     sizeof(*queue));
+    if ((operation_count && (!covered || !state_by_operation)) ||
+        (function_count && (!suspendable || !reverse_head || !queue)) ||
+        (call_target_count && !reverse_next)) {
+        xr_free(covered);
+        xr_free(state_by_operation);
+        xr_free(suspendable);
+        xr_free(reverse_head);
+        xr_free(reverse_next);
+        xr_free(queue);
         builder->poisoned = true;
         return fail(error, error_size, "XR_EXEC_5003", "call coverage allocation failed");
     }
     bool valid = true;
+    size_t entity_count = xr_semantic_plan_entity_count(plan);
+    for (uint32_t i = 0; i < (uint32_t) entity_count && valid; i++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
+        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE)
+            continue;
+        const XrSemanticOperationRecord *operation =
+            entity->subject < operation_count
+                ? xr_semantic_plan_operation(plan, entity->subject)
+                : NULL;
+        if (entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION ||
+            !operation || operation->function >= function_count ||
+            state_by_operation[entity->subject]) {
+            valid = fail(error, error_size, "XR_TARGET_1003",
+                         "coroutine state authority is missing or duplicated");
+            break;
+        }
+        state_by_operation[entity->subject] = 1;
+    }
+    for (uint32_t function = 0; function < function_count; function++)
+        reverse_head[function] = XR_SEMANTIC_INDEX_NONE;
+    uint32_t queue_begin = 0;
+    uint32_t queue_end = 0;
+    for (uint32_t operation_index = 0;
+         operation_index < (uint32_t) operation_count; operation_index++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan, operation_index);
+        if (!operation || operation->function >= function_count) {
+            valid = false;
+            break;
+        }
+        if (((operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 ||
+             operation->opcode == XI_GO) &&
+            !suspendable[operation->function]) {
+            suspendable[operation->function] = 1;
+            queue[queue_end++] = operation->function;
+        }
+    }
+    for (uint32_t i = 0; i < (uint32_t) call_target_count && valid; i++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(plan, i);
+        const XrSemanticOperationRecord *operation =
+            target && target->operation < operation_count
+                ? xr_semantic_plan_operation(plan, target->operation)
+                : NULL;
+        if (!target || !operation || target->function >= function_count ||
+            (operation->opcode != XI_CALL &&
+             operation->opcode != XI_TAIL_CALL)) {
+            valid = false;
+            break;
+        }
+        reverse_next[i] = reverse_head[target->function];
+        reverse_head[target->function] = i;
+    }
+    while (valid && queue_begin < queue_end) {
+        uint32_t callee = queue[queue_begin++];
+        for (uint32_t target_index = reverse_head[callee];
+             target_index != XR_SEMANTIC_INDEX_NONE;
+             target_index = reverse_next[target_index]) {
+            const XrSemanticCallTargetRecord *target =
+                xr_semantic_plan_call_target(plan, target_index);
+            const XrSemanticOperationRecord *operation =
+                target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+            if (!operation || operation->function >= function_count) {
+                valid = false;
+                break;
+            }
+            if (!suspendable[operation->function]) {
+                suspendable[operation->function] = 1;
+                queue[queue_end++] = operation->function;
+            }
+        }
+    }
     for (uint32_t i = 0; i < (uint32_t) call_target_count && valid; i++) {
         const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
         if (!target || target->operation >= operation_count || covered[target->operation]) {
@@ -1526,7 +1613,10 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             break;
         }
         covered[target->operation] = 1;
-        valid = collect_direct_local_call_intent(builder, i, target, error, error_size);
+        valid = collect_direct_local_call_intent(
+            builder, i, target, state_by_operation[target->operation] != 0,
+            target->function < function_count && suspendable[target->function] != 0,
+            error, error_size);
     }
     for (uint32_t i = 0; i < (uint32_t) operation_count && valid; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, i);
@@ -1535,11 +1625,37 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                          "call-shaped operation has no exact DIRECT_LOCAL authority");
     }
     xr_free(covered);
+    xr_free(state_by_operation);
+    xr_free(suspendable);
+    xr_free(reverse_head);
+    xr_free(reverse_next);
+    xr_free(queue);
     if (!valid) {
         builder->poisoned = true;
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_CALL_ADAPTER;
+    return true;
+}
+
+static bool builder_add_coroutine_state_calls(XrTargetPlanBuilder *builder,
+                                               char *error, size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_COROUTINE_STATE_CALL,
+                              error, error_size))
+        return false;
+    size_t state_count = 0;
+    size_t entity_count = xr_semantic_plan_entity_count(builder->semantic_plan);
+    for (size_t i = 0; i < entity_count; i++) {
+        const XrSemanticEntityRecord *entity =
+            xr_semantic_plan_entity(builder->semantic_plan, (uint32_t) i);
+        state_count += entity && entity->kind == XR_SEM_ENTITY_COROUTINE_STATE;
+    }
+    if (state_count > 10000000u) {
+        builder->poisoned = true;
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "coroutine state-call budget exhausted");
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_COROUTINE_STATE_CALL;
     return true;
 }
 
@@ -2241,6 +2357,13 @@ static bool materialize_calls_and_adapters(
             return fail(error, error_size, "XR_TARGET_1003",
                         "call result or argument partition cannot bind canonical storage");
         XrTargetCallRecord *call = &materialized->calls[i];
+        bool result_is_void =
+            result && result->memory_rep < materialized->machine_rep_count &&
+            materialized->machine_reps[result->memory_rep].kind == XR_MACHINE_REP_VOID;
+        if (intent->suspends && !result_is_void &&
+            result->slot == XR_SEMANTIC_INDEX_NONE)
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "suspending call result lacks exact caller storage");
         *call = (XrTargetCallRecord) {
             .identity = intent->identity,
             .id = i,
@@ -2261,6 +2384,8 @@ static bool materialize_calls_and_adapters(
             .argument_count = intent->argument_count,
             .adapter_count = 0,
             .native_abi = machine->native_abi,
+            .flags = (intent->suspends ? XR_TARGET_CALL_SUSPEND : 0) |
+                     (intent->tail ? XR_TARGET_CALL_TAIL : 0),
             .calling_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
             .target_kind = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
             .result_mode = intent->result_mode,
@@ -2312,6 +2437,259 @@ static bool materialize_calls_and_adapters(
     return true;
 }
 
+static bool reconstruct_coroutine_resume(const XrSemanticPlan *semantic,
+                                         uint32_t operation_index,
+                                         const uint32_t *edge_by_block,
+                                         const uint8_t *edge_counts,
+                                         uint32_t block_count,
+                                         uint32_t *suspend_block,
+                                         uint32_t *resume_block,
+                                         uint16_t *predecessor_ordinal) {
+    uint32_t predecessor_count = 0;
+    const uint32_t *predecessors =
+        xr_semantic_plan_predecessors(semantic, &predecessor_count);
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, operation_index);
+    const XrSemanticBlockRecord *suspend = operation
+                                               ? xr_semantic_plan_block(
+                                                     semantic, operation->block)
+                                               : NULL;
+    if (!operation || operation->block >= block_count || !suspend ||
+        suspend->function != operation->function ||
+        suspend->operation_begin != operation_index || suspend->operation_count != 1 ||
+        suspend->predecessor_count != 1 ||
+        suspend->predecessor_begin >= predecessor_count ||
+        suspend->successors[0] == XR_SEMANTIC_INDEX_NONE ||
+        (suspend->successors[1] != XR_SEMANTIC_INDEX_NONE &&
+         suspend->successors[1] != suspend->successors[0]))
+        return false;
+    const XrSemanticBlockRecord *before = xr_semantic_plan_block(
+        semantic, predecessors[suspend->predecessor_begin]);
+    const XrSemanticBlockRecord *resume =
+        xr_semantic_plan_block(semantic, suspend->successors[0]);
+    if (!before || !resume || before->function != operation->function ||
+        resume->function != operation->function ||
+        (before->successors[0] != operation->block &&
+         before->successors[1] != operation->block) ||
+        resume->predecessor_count != 1 ||
+        resume->predecessor_begin >= predecessor_count ||
+        predecessors[resume->predecessor_begin] != operation->block ||
+        edge_counts[operation->block] != 1)
+        return false;
+    const XrSemanticEdgeRecord *edge =
+        xr_semantic_plan_edge(semantic, edge_by_block[operation->block]);
+    if (!edge || edge->function != operation->function ||
+        edge->from_block != operation->block ||
+        edge->to_block != suspend->successors[0] ||
+        edge->operation != XR_SEMANTIC_INDEX_NONE ||
+        edge->kind != XR_SEM_EDGE_NORMAL || edge->flags != 0)
+        return false;
+    *suspend_block = operation->block;
+    *resume_block = suspend->successors[0];
+    *predecessor_ordinal = 0;
+    return true;
+}
+
+static bool materialize_coroutine_state_calls(
+    const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
+    char *error, size_t error_size) {
+    const XrSemanticPlan *semantic = builder->semantic_plan;
+    uint32_t function_count = materialized->function_count;
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(semantic);
+    uint32_t entity_count = (uint32_t) xr_semantic_plan_entity_count(semantic);
+    uint32_t block_count = (uint32_t) xr_semantic_plan_block_count(semantic);
+    uint32_t *call_by_operation = operation_count
+                                      ? (uint32_t *) allocate_records(
+                                            operation_count,
+                                            sizeof(*call_by_operation))
+                                      : NULL;
+    uint32_t *edge_by_block = block_count
+                                  ? (uint32_t *) allocate_records(
+                                        block_count, sizeof(*edge_by_block))
+                                  : NULL;
+    uint8_t *edge_counts = block_count
+                               ? (uint8_t *) allocate_records(
+                                     block_count, sizeof(*edge_counts))
+                               : NULL;
+    if ((operation_count && !call_by_operation) ||
+        (block_count && (!edge_by_block || !edge_counts))) {
+        xr_free(call_by_operation);
+        xr_free(edge_by_block);
+        xr_free(edge_counts);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "coroutine call index allocation failed");
+    }
+    for (uint32_t operation = 0; operation < operation_count; operation++)
+        call_by_operation[operation] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t block = 0; block < block_count; block++)
+        edge_by_block[block] = XR_SEMANTIC_INDEX_NONE;
+    bool valid = true;
+    uint32_t edge_count = (uint32_t) xr_semantic_plan_edge_count(semantic);
+    for (uint32_t edge_index = 0; edge_index < edge_count; edge_index++) {
+        const XrSemanticEdgeRecord *edge =
+            xr_semantic_plan_edge(semantic, edge_index);
+        if (!edge || edge->from_block >= block_count) {
+            valid = false;
+            break;
+        }
+        if (edge_counts[edge->from_block] == 0)
+            edge_by_block[edge->from_block] = edge_index;
+        if (edge_counts[edge->from_block] < 2)
+            edge_counts[edge->from_block]++;
+    }
+    for (uint32_t call = 0; call < materialized->call_count; call++) {
+        uint32_t operation = materialized->calls[call].semantic_operation;
+        if (operation >= operation_count ||
+            call_by_operation[operation] != XR_SEMANTIC_INDEX_NONE) {
+            valid = false;
+            break;
+        }
+        call_by_operation[operation] = call;
+    }
+    uint32_t state_count = 0;
+    for (uint32_t entity_index = 0; valid && entity_index < entity_count;
+         entity_index++) {
+        const XrSemanticEntityRecord *entity =
+            xr_semantic_plan_entity(semantic, entity_index);
+        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE)
+            continue;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, entity->subject);
+        if (entity->subject_kind != XR_SEM_ENTITY_SUBJECT_OPERATION ||
+            !operation || operation->function >= function_count ||
+            materialized->functions[operation->function].coroutine_count == UINT32_MAX) {
+            valid = false;
+            break;
+        }
+        materialized->functions[operation->function].coroutine_count++;
+        state_count++;
+    }
+    if (!valid || state_count > 10000000u) {
+        xr_free(call_by_operation);
+        xr_free(edge_by_block);
+        xr_free(edge_counts);
+        return fail(error, error_size, "XR_CORO_4000",
+                    "coroutine state-call coverage is invalid");
+    }
+    materialized->coroutine_count = state_count;
+    materialized->coroutines = (XrTargetCoroutineStateRecord *) allocate_records(
+        state_count, sizeof(*materialized->coroutines));
+    if (state_count && !materialized->coroutines) {
+        xr_free(call_by_operation);
+        xr_free(edge_by_block);
+        xr_free(edge_counts);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "coroutine state-call materialization failed");
+    }
+    uint32_t cursor = 0;
+    for (uint32_t function = 0; function < function_count; function++) {
+        XrTargetFunctionRecord *record = &materialized->functions[function];
+        record->coroutine_begin = cursor;
+        if (record->coroutine_count > state_count - cursor) {
+            valid = false;
+            break;
+        }
+        cursor += record->coroutine_count;
+    }
+    if (cursor != state_count)
+        valid = false;
+    for (uint32_t i = 0; i < state_count; i++)
+        materialized->coroutines[i].semantic_entity = XR_SEMANTIC_INDEX_NONE;
+
+    for (uint32_t entity_index = 0; valid && entity_index < entity_count;
+         entity_index++) {
+        const XrSemanticEntityRecord *entity =
+            xr_semantic_plan_entity(semantic, entity_index);
+        if (!entity || entity->kind != XR_SEM_ENTITY_COROUTINE_STATE)
+            continue;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, entity->subject);
+        XrTargetFunctionRecord *function =
+            operation && operation->function < function_count
+                ? &materialized->functions[operation->function]
+                : NULL;
+        if (!function || entity->ordinal == 0 ||
+            entity->ordinal > function->coroutine_count) {
+            valid = false;
+            break;
+        }
+        uint32_t state_index = function->coroutine_begin + entity->ordinal - 1u;
+        XrTargetCoroutineStateRecord *state =
+            &materialized->coroutines[state_index];
+        uint32_t suspend_block = XR_SEMANTIC_INDEX_NONE;
+        uint32_t resume_block = XR_SEMANTIC_INDEX_NONE;
+        uint16_t predecessor_ordinal = UINT16_MAX;
+        if (state->semantic_entity != XR_SEMANTIC_INDEX_NONE ||
+            !reconstruct_coroutine_resume(semantic, entity->subject,
+                                          edge_by_block, edge_counts, block_count,
+                                          &suspend_block, &resume_block,
+                                          &predecessor_ordinal)) {
+            valid = false;
+            break;
+        }
+        uint32_t direct_call = call_by_operation[entity->subject];
+        uint32_t result_slot = XR_SEMANTIC_INDEX_NONE;
+        uint16_t flags = 0;
+        const XrTargetValueRepRecord *result =
+            find_materialized_value(materialized, operation->result_value);
+        if (result) {
+            if (result->memory_rep >= materialized->machine_rep_count) {
+                valid = false;
+                break;
+            }
+            if (materialized->machine_reps[result->memory_rep].kind !=
+                XR_MACHINE_REP_VOID) {
+                if (result->slot >= materialized->slot_count ||
+                    materialized->slots[result->slot].function !=
+                        operation->function ||
+                    materialized->slots[result->slot].semantic_value !=
+                        operation->result_value) {
+                    valid = false;
+                    break;
+                }
+                result_slot = result->slot;
+                flags |= XR_TARGET_COROUTINE_RESULT_SLOT_BOUND;
+            }
+        }
+        if (direct_call != XR_SEMANTIC_INDEX_NONE) {
+            if (direct_call >= materialized->call_count ||
+                operation->opcode != XI_CALL ||
+                (materialized->calls[direct_call].flags &
+                 XR_TARGET_CALL_SUSPEND) == 0 ||
+                materialized->calls[direct_call].result_slot != result_slot ||
+                materialized->calls[direct_call].caller_storage_slot !=
+                    XR_SEMANTIC_INDEX_NONE) {
+                valid = false;
+                break;
+            }
+            flags |= XR_TARGET_COROUTINE_DIRECT_CHILD;
+        }
+        *state = (XrTargetCoroutineStateRecord) {
+            .id = state_index,
+            .function = operation->function,
+            .semantic_entity = entity_index,
+            .semantic_operation = entity->subject,
+            .logical_state = entity->ordinal,
+            .suspend_block = suspend_block,
+            .resume_block = resume_block,
+            .resume_predecessor = suspend_block,
+            .direct_call = direct_call,
+            .result_slot = result_slot,
+            .resume_predecessor_ordinal = predecessor_ordinal,
+            .flags = flags,
+        };
+    }
+    for (uint32_t i = 0; valid && i < state_count; i++)
+        valid = materialized->coroutines[i].semantic_entity !=
+                XR_SEMANTIC_INDEX_NONE;
+    xr_free(call_by_operation);
+    xr_free(edge_by_block);
+    xr_free(edge_counts);
+    return valid || fail(error, error_size, "XR_CORO_4000",
+                         "coroutine state-call facts are not canonical");
+}
+
 static bool materialize_foundation_capabilities(
     const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
     char *error, size_t error_size) {
@@ -2357,6 +2735,8 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_scalar_instructions(builder, materialized, error,
                                          error_size) ||
         !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
+        !materialize_coroutine_state_calls(builder, materialized, error,
+                                           error_size) ||
         !materialize_foundation_capabilities(builder, materialized, error,
                                              error_size)) {
         builder->poisoned = true;
@@ -2430,6 +2810,8 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out,
         .adapters_count = materialized.adapter_count,
         .capabilities = materialized.capabilities,
         .capabilities_count = materialized.capability_count,
+        .coroutines = materialized.coroutines,
+        .coroutines_count = materialized.coroutine_count,
     };
     bool frozen = xr_target_plan_freeze(&draft, out, error, error_size);
     materialized_dispose(&materialized);
@@ -2460,7 +2842,8 @@ bool xr_target_plan_build(const XrSemanticPlan *semantic_plan, XrTargetProfile *
     if (!builder_add_scalars(builder, error, error_size) ||
         !builder_add_closure_storage(builder, error, error_size) ||
         !builder_add_aggregates(builder, error, error_size) ||
-        !builder_add_calls_and_adapters(builder, error, error_size)) {
+        !builder_add_calls_and_adapters(builder, error, error_size) ||
+        !builder_add_coroutine_state_calls(builder, error, error_size)) {
         builder_free(builder);
         return false;
     }

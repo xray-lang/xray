@@ -580,7 +580,7 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(xr_aot_backend_run(&view, fixture.target_plan,
                                xr_aot_test_backend_interface(), &test_backend,
                                &stats, &diag));
-    REQUIRE(strstr(emission, "families=000000000000000f") != NULL);
+    REQUIRE(strstr(emission, "families=000000000000001f") != NULL);
     REQUIRE(strstr(emission, "transform=direct-call decision=refused") != NULL);
     REQUIRE(strstr(emission,
                    "issue=XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE") != NULL);
