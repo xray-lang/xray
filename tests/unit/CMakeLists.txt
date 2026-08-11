@@ -283,6 +283,12 @@ add_xray_unit_test(test_target_profile plan/test_target_profile.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_xray_unit_test(test_xtp_format plan/test_xtp_format.c)
+add_executable(test_xtp_fuzz_entry ../fuzz/fuzz_xtp_decode.c)
+target_compile_definitions(test_xtp_fuzz_entry PRIVATE FUZZ_STANDALONE)
+target_include_directories(test_xtp_fuzz_entry PRIVATE ${XRAY_COMMON_INCLUDES})
+target_link_libraries(test_xtp_fuzz_entry PRIVATE xray_core)
+add_test(NAME test_xtp_fuzz_entry COMMAND $<TARGET_FILE:test_xtp_fuzz_entry>)
 add_xray_unit_test(test_xr_aot_scalar_plan aot/test_xr_aot_scalar_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_xr_aot_refinement aot/test_xr_aot_refinement.c

@@ -86,6 +86,8 @@ tests/tmp/*
 # Keep curated, extension-bearing seed files in Git. libFuzzer-generated
 # hash-named corpus entries remain local.
 tests/fuzz/corpus/**
+!tests/fuzz/corpus/xtp/
+!tests/fuzz/corpus/xtp/structured.xtpseed
 !tests/fuzz/corpus/**/
 !tests/fuzz/corpus/**/*.xr
 !tests/fuzz/corpus/stdlib_data/*.txt

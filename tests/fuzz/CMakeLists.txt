@@ -85,6 +85,18 @@ target_link_libraries(fuzz_stdlib_data PRIVATE xray_core)
 target_compile_options(fuzz_stdlib_data PRIVATE ${FUZZ_COMPILE_OPTIONS})
 target_link_options(fuzz_stdlib_data PRIVATE ${FUZZ_LINK_OPTIONS})
 
+add_executable(fuzz_xtp_decode
+    fuzz_xtp_decode.c
+)
+
+target_include_directories(fuzz_xtp_decode PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+)
+
+target_link_libraries(fuzz_xtp_decode PRIVATE xray_core)
+target_compile_options(fuzz_xtp_decode PRIVATE ${FUZZ_COMPILE_OPTIONS})
+target_link_options(fuzz_xtp_decode PRIVATE ${FUZZ_LINK_OPTIONS})
+
 # ============================================================================
 # Standalone test versions (for debugging without libFuzzer)
 # ============================================================================
@@ -129,10 +141,12 @@ target_compile_definitions(fuzz_stdlib_data_standalone PRIVATE FUZZ_STANDALONE)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/lexer)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/parser)
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/stdlib_data)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/corpus/xtp)
 
 message(STATUS "  fuzz_lexer           - Lexer fuzzer")
 message(STATUS "  fuzz_parser          - Parser fuzzer")
 message(STATUS "  fuzz_stdlib_data     - Stdlib CSV/TOML/XML/YAML parser fuzzer")
+message(STATUS "  fuzz_xtp_decode      - Typed TargetPlan artifact fuzzer")
 message(STATUS "  fuzz_lexer_standalone  - Lexer test (no libFuzzer)")
 message(STATUS "  fuzz_parser_standalone - Parser test (no libFuzzer)")
 message(STATUS "  fuzz_stdlib_data_standalone - Stdlib data parser test (no libFuzzer)")
