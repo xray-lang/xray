@@ -756,7 +756,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
 
             /* Fold unary BNOT on const int */
             if (v->op == XI_BNOT && v->nargs == 1 && const_int_value(v->args[0], &unary_i)) {
-                rewrite_to_const_int(v, ~unary_i);
+                rewrite_to_const_int(v, xr_bits_not_i64(unary_i));
                 chg.values_changed = true;
                 continue;
             }

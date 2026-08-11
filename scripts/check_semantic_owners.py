@@ -730,6 +730,15 @@ def verify_bits_not_ratchet(root: Path, registry: dict) -> list[str]:
         encoding="utf-8", errors="strict")
     if "xi_to_c_template_bitwise_unary_op" in dispatch_gen_text:
         errors.append("src/aot/xi_to_c_dispatch_gen.h: generated raw bitwise-not operator revived")
+
+    optimizer_text = (root / "src/ir/xi_opt.c").read_text(encoding="utf-8", errors="strict")
+    optimizer_body = extract_c_function(optimizer_text, "xi_opt_const_fold")
+    raw_fold = (optimizer_body is not None and
+                re.search(r"rewrite_to_const_int\s*\(\s*v\s*,\s*~", optimizer_body))
+    if optimizer_body is None or "xr_bits_not_i64(unary_i)" not in optimizer_body:
+        errors.append("src/ir/xi_opt.c: constant-folded bitwise-not bypasses shared owner kernel")
+    if raw_fold:
+        errors.append("src/ir/xi_opt.c: retired raw constant-folded bitwise-not revived")
     return errors
 
 
@@ -1029,6 +1038,10 @@ def verify(root: Path, write: bool) -> list[str]:
 
 
 def self_test() -> int:
+    assert re.search(r"rewrite_to_const_int\s*\(\s*v\s*,\s*~",
+                     "rewrite_to_const_int(v, ~unary_i);")
+    assert not re.search(r"rewrite_to_const_int\s*\(\s*v\s*,\s*~",
+                         "rewrite_to_const_int(v, xr_bits_not_i64(unary_i));")
     assert SIGNATURE_RE.findall("static inline int xr_demo_core(int x) {") == ["xr_demo_core"]
     assert SIGNATURE_RE.findall(
         "XR_BYTE_SLICE_SCALAR_INLINE int xr_demo_c90_core(int x) {") == ["xr_demo_c90_core"]

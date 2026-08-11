@@ -386,16 +386,22 @@ TEST(const_fold_mod_by_zero) {
 }
 
 TEST(const_fold_bnot) {
-    /* ~0 -> -1 */
+    /* Shared bitwise-not semantics must remain exact at both signed edges. */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *blk = f->entry;
 
     XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
-    XiValue *bn = xi_unary(f, blk, XI_BNOT, &stub_int, c0);
+    XiValue *cmin = xi_const_int(f, blk, INT64_MIN, &stub_int);
+    XiValue *cmax = xi_const_int(f, blk, INT64_MAX, &stub_int);
+    XiValue *bn0 = xi_unary(f, blk, XI_BNOT, &stub_int, c0);
+    XiValue *bnmin = xi_unary(f, blk, XI_BNOT, &stub_int, cmin);
+    XiValue *bnmax = xi_unary(f, blk, XI_BNOT, &stub_int, cmax);
 
     xi_opt_const_fold(f);
 
-    assert(bn->op == XI_CONST && bn->aux_int == ~(int64_t) 0);
+    assert(bn0->op == XI_CONST && bn0->aux_int == -1);
+    assert(bnmin->op == XI_CONST && bnmin->aux_int == INT64_MAX);
+    assert(bnmax->op == XI_CONST && bnmax->aux_int == INT64_MIN);
     xi_func_free(f);
 }
 
