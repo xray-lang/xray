@@ -87,6 +87,7 @@ target_link_options(fuzz_stdlib_data PRIVATE ${FUZZ_LINK_OPTIONS})
 
 add_executable(fuzz_xtp_decode
     fuzz_xtp_decode.c
+    ../unit/plan/target_profile_test_fixture.c
 )
 
 target_include_directories(fuzz_xtp_decode PRIVATE

@@ -56,38 +56,38 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
 
 #define XR_XTP_PROFILE_FIELDS(F)                                                                  \
     F(U32, schema_version)                                                                        \
-    F(U16, architecture)                                                                          \
-    F(U16, operating_system)                                                                      \
-    F(U16, environment)                                                                           \
-    F(U16, native_abi)                                                                             \
-    F(U8, runtime_profile)                                                                         \
-    F(U8, reserved8[0])                                                                            \
-    F(U8, reserved8[1])                                                                            \
-    F(U8, reserved8[2])                                                                            \
-    F(U32, data_layout.i8.size) F(U32, data_layout.i8.align)                                       \
-    F(U32, data_layout.u8.size) F(U32, data_layout.u8.align)                                       \
-    F(U32, data_layout.i16.size) F(U32, data_layout.i16.align)                                     \
-    F(U32, data_layout.u16.size) F(U32, data_layout.u16.align)                                     \
-    F(U32, data_layout.i32.size) F(U32, data_layout.i32.align)                                     \
-    F(U32, data_layout.u32.size) F(U32, data_layout.u32.align)                                     \
-    F(U32, data_layout.i64.size) F(U32, data_layout.i64.align)                                     \
-    F(U32, data_layout.u64.size) F(U32, data_layout.u64.align)                                     \
-    F(U32, data_layout.f32.size) F(U32, data_layout.f32.align)                                     \
-    F(U32, data_layout.f64.size) F(U32, data_layout.f64.align)                                     \
-    F(U32, data_layout.boolean.size) F(U32, data_layout.boolean.align)                             \
-    F(U32, data_layout.pointer.size) F(U32, data_layout.pointer.align)                             \
-    F(U32, data_layout.isize.size) F(U32, data_layout.isize.align)                                 \
-    F(U32, data_layout.usize.size) F(U32, data_layout.usize.align)                                 \
-    F(U32, data_layout.xr_value.size) F(U32, data_layout.xr_value.align)                           \
-    F(U32, data_layout.endian)                                                                     \
-    F(U32, data_layout.abi_id)                                                                     \
-    F(U64, data_layout.stable_hash)                                                                \
-    F(U64, atomic_width_mask)                                                                      \
-    F(U64, atomic_order_mask)                                                                      \
-    F(U64, float_feature_mask)                                                                     \
-    F(U64, vector_feature_mask)                                                                    \
-    F(U16, maximum_vector_bits)                                                                    \
-    F(U16, reserved16)                                                                             \
+    F(U16, machine.architecture)                                                                  \
+    F(U16, machine.operating_system)                                                              \
+    F(U16, machine.environment)                                                                   \
+    F(U16, machine.native_abi)                                                                    \
+    F(U8, machine.runtime_profile)                                                                \
+    F(U8, machine.reserved8[0])                                                                   \
+    F(U8, machine.reserved8[1])                                                                   \
+    F(U8, machine.reserved8[2])                                                                   \
+    F(U32, machine.data_layout.i8.size) F(U32, machine.data_layout.i8.align)                       \
+    F(U32, machine.data_layout.u8.size) F(U32, machine.data_layout.u8.align)                       \
+    F(U32, machine.data_layout.i16.size) F(U32, machine.data_layout.i16.align)                     \
+    F(U32, machine.data_layout.u16.size) F(U32, machine.data_layout.u16.align)                     \
+    F(U32, machine.data_layout.i32.size) F(U32, machine.data_layout.i32.align)                     \
+    F(U32, machine.data_layout.u32.size) F(U32, machine.data_layout.u32.align)                     \
+    F(U32, machine.data_layout.i64.size) F(U32, machine.data_layout.i64.align)                     \
+    F(U32, machine.data_layout.u64.size) F(U32, machine.data_layout.u64.align)                     \
+    F(U32, machine.data_layout.f32.size) F(U32, machine.data_layout.f32.align)                     \
+    F(U32, machine.data_layout.f64.size) F(U32, machine.data_layout.f64.align)                     \
+    F(U32, machine.data_layout.boolean.size) F(U32, machine.data_layout.boolean.align)             \
+    F(U32, machine.data_layout.pointer.size) F(U32, machine.data_layout.pointer.align)             \
+    F(U32, machine.data_layout.isize.size) F(U32, machine.data_layout.isize.align)                 \
+    F(U32, machine.data_layout.usize.size) F(U32, machine.data_layout.usize.align)                 \
+    F(U32, machine.data_layout.xr_value.size) F(U32, machine.data_layout.xr_value.align)           \
+    F(U32, machine.data_layout.endian)                                                             \
+    F(U32, machine.data_layout.abi_id)                                                             \
+    F(U64, machine.data_layout.stable_hash)                                                        \
+    F(U64, machine.atomic_width_mask)                                                              \
+    F(U64, machine.atomic_order_mask)                                                              \
+    F(U64, machine.float_feature_mask)                                                             \
+    F(U64, machine.vector_feature_mask)                                                            \
+    F(U16, machine.maximum_vector_bits)                                                            \
+    F(U16, machine.reserved16)                                                                     \
     F(U64, provider_mask)                                                                          \
     F(FP, provider_set_fingerprint)                                                                \
     F(FP, object_header_fingerprint)                                                               \

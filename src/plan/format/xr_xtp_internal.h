@@ -12,6 +12,7 @@
 #define XR_XTP_INTERNAL_H
 
 #include "xr_xtp_schema.h"
+#include "../target/xr_target_profile_internal.h"
 #include <stdatomic.h>
 
 #define XR_XTP_TABLE_SECTION_COUNT ((uint32_t) XR_XTP_SECTION_COUNT - 1u)

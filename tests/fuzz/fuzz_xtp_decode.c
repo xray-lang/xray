@@ -9,6 +9,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xsha256.h"
 #include "../../src/runtime/value/xtype.h"
+#include "../unit/plan/target_profile_test_fixture.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,28 +52,9 @@ static bool initialize_fixture(void) {
         return false;
     }
     xi_func_free(function);
-    XrTargetProfileDraft profile = {0};
-    profile.schema_version = XR_TARGET_PROFILE_SCHEMA_VERSION;
-    profile.architecture = XR_TARGET_ARCH_X86_64;
-    profile.operating_system = XR_TARGET_OS_WINDOWS;
-    profile.environment = XR_TARGET_ENV_MSVC;
-    profile.native_abi = XR_TARGET_ABI_WIN64_X86_64;
-    profile.runtime_profile = XR_TARGET_RUNTIME_HOSTED;
-    if (!xr_target_data_layout_init_lp64(&profile.data_layout))
-        return false;
-    profile.atomic_width_mask = XR_TARGET_ATOMIC_WIDTH_8 | XR_TARGET_ATOMIC_WIDTH_16 |
-                                XR_TARGET_ATOMIC_WIDTH_32 | XR_TARGET_ATOMIC_WIDTH_64;
-    profile.atomic_order_mask = XR_TARGET_ATOMIC_RELAXED | XR_TARGET_ATOMIC_ACQUIRE |
-                                XR_TARGET_ATOMIC_RELEASE | XR_TARGET_ATOMIC_ACQ_REL |
-                                XR_TARGET_ATOMIC_SEQ_CST;
-    profile.float_feature_mask = XR_TARGET_FLOAT_IEEE754 | XR_TARGET_FLOAT_STRICT;
-    profile.vector_feature_mask = XR_TARGET_VECTOR_SSE2;
-    profile.maximum_vector_bits = 128;
-    profile.provider_mask = UINT64_C(1) << XR_TARGET_PROVIDER_ALLOCATOR;
-    profile.provider_set_fingerprint.bytes[0] = 0x31;
-    profile.object_header_fingerprint.bytes[0] = 0x32;
-    profile.runtime_abi_fingerprint.bytes[0] = 0x33;
-    if (!xr_target_profile_freeze(&profile, &fixture.profile, error, sizeof(error)) ||
+    fixture.profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    if (!fixture.profile ||
         !xr_target_plan_build(fixture.semantic, fixture.profile, &fixture.plan, error,
                               sizeof(error)) ||
         !xr_xtp_encode_plan(fixture.plan, &fixture.bytes, &fixture.size, error, sizeof(error)))
