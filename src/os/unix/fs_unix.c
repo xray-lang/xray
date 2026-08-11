@@ -10,7 +10,10 @@
 
 #include "../os_fs.h"
 
+#include "../../base/xmalloc.h"
+
 #include <errno.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>  // rename
 #include <stdlib.h>
@@ -31,7 +34,7 @@ int xr_fs_stat(const char *path, XrFsStat *out) {
         return -1;
     }
     struct stat st;
-    if (stat(path, &st) != 0) {
+    if (lstat(path, &st) != 0) {
         out->kind = XR_FS_NONE;
         out->size = 0;
         out->mtime_ns = 0;
@@ -39,9 +42,9 @@ int xr_fs_stat(const char *path, XrFsStat *out) {
     }
     out->kind = kind_from_mode(st.st_mode);
     out->size = (uint64_t) st.st_size;
-#if defined(__APPLE__)
+#if defined(XR_OS_MACOS)
     out->mtime_ns = (int64_t) st.st_mtimespec.tv_sec * 1000000000LL + st.st_mtimespec.tv_nsec;
-#elif defined(__linux__)
+#elif defined(XR_OS_LINUX)
     out->mtime_ns = (int64_t) st.st_mtim.tv_sec * 1000000000LL + st.st_mtim.tv_nsec;
 #else
     out->mtime_ns = (int64_t) st.st_mtime * 1000000000LL;
@@ -50,27 +53,18 @@ int xr_fs_stat(const char *path, XrFsStat *out) {
 }
 
 bool xr_fs_exists(const char *path) {
-    if (path == NULL) {
-        return false;
-    }
-    struct stat st;
-    return stat(path, &st) == 0;
+    XrFsStat st;
+    return xr_fs_stat(path, &st) == 0;
 }
 
 bool xr_fs_is_file(const char *path) {
-    if (path == NULL) {
-        return false;
-    }
-    struct stat st;
-    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
+    XrFsStat st;
+    return xr_fs_stat(path, &st) == 0 && st.kind == XR_FS_FILE;
 }
 
 bool xr_fs_is_dir(const char *path) {
-    if (path == NULL) {
-        return false;
-    }
-    struct stat st;
-    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+    XrFsStat st;
+    return xr_fs_stat(path, &st) == 0 && st.kind == XR_FS_DIR;
 }
 
 int xr_fs_mkdir(const char *path, unsigned int mode) {
@@ -82,7 +76,7 @@ int xr_fs_mkdir(const char *path, unsigned int mode) {
     }
     if (errno == EEXIST) {
         struct stat st;
-        if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
+        if (lstat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
             return 0;
         }
     }
@@ -101,6 +95,126 @@ int xr_fs_rename(const char *old_path, const char *new_path) {
         return -1;
     }
     return rename(old_path, new_path) == 0 ? 0 : -1;
+}
+
+static int read_full(int fd, uint8_t *bytes, size_t size) {
+    size_t offset = 0;
+    while (offset < size) {
+        ssize_t count = read(fd, bytes + offset, size - offset);
+        if (count < 0 && errno == EINTR)
+            continue;
+        if (count <= 0)
+            return -1;
+        offset += (size_t) count;
+    }
+    return 0;
+}
+
+int xr_fs_read_regular_file(const char *path, size_t max_size, uint8_t **out_bytes,
+                            size_t *out_size) {
+    if (!path || !out_bytes || !out_size)
+        return -1;
+    *out_bytes = NULL;
+    *out_size = 0;
+    int fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0)
+        return -1;
+    struct stat st;
+    int ok = fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && st.st_size >= 0 &&
+             (uint64_t) st.st_size <= (uint64_t) max_size &&
+             (uint64_t) st.st_size <= (uint64_t) SIZE_MAX;
+    size_t size = ok ? (size_t) st.st_size : 0;
+    uint8_t *bytes = ok ? (uint8_t *) xr_malloc(size ? size : 1) : NULL;
+    if (ok && !bytes)
+        ok = 0;
+    if (ok && read_full(fd, bytes, size) != 0)
+        ok = 0;
+    uint8_t extra;
+    ssize_t extra_count;
+    do {
+        extra_count = ok ? read(fd, &extra, 1) : 0;
+    } while (extra_count < 0 && errno == EINTR);
+    if (ok && extra_count != 0)
+        ok = 0;
+    if (close(fd) != 0)
+        ok = 0;
+    if (!ok) {
+        xr_free(bytes);
+        return -1;
+    }
+    *out_bytes = bytes;
+    *out_size = size;
+    return 0;
+}
+
+static int write_full(int fd, const uint8_t *bytes, size_t size) {
+    size_t offset = 0;
+    while (offset < size) {
+        ssize_t count = write(fd, bytes + offset, size - offset);
+        if (count < 0 && errno == EINTR)
+            continue;
+        if (count <= 0)
+            return -1;
+        offset += (size_t) count;
+    }
+    return 0;
+}
+
+int xr_fs_write_new_file_sync(const char *path, const uint8_t *data, size_t size) {
+    if (!path || (!data && size != 0))
+        return -1;
+    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600);
+    if (fd < 0)
+        return -1;
+    int ok = write_full(fd, data, size) == 0 && fsync(fd) == 0;
+    if (close(fd) != 0)
+        ok = 0;
+    if (!ok) {
+        (void) unlink(path);
+        return -1;
+    }
+    return 0;
+}
+
+XrFsPublishResult xr_fs_publish_noreplace(const char *temp_path, const char *final_path) {
+    if (!temp_path || !final_path)
+        return XR_FS_PUBLISH_ERROR;
+    struct stat st;
+    if (lstat(temp_path, &st) != 0 || !S_ISREG(st.st_mode))
+        return XR_FS_PUBLISH_ERROR;
+    if (link(temp_path, final_path) != 0) {
+        if (errno == EEXIST)
+            return XR_FS_PUBLISH_EXISTS;
+        return XR_FS_PUBLISH_ERROR;
+    }
+    if (unlink(temp_path) != 0)
+        return XR_FS_PUBLISH_ERROR;
+    return XR_FS_PUBLISH_OK;
+}
+
+XrFsSyncResult xr_fs_sync_directory(const char *path) {
+    if (!path || !path[0])
+        return XR_FS_SYNC_ERROR;
+    int fd = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0)
+        return XR_FS_SYNC_ERROR;
+    int ok = fsync(fd) == 0;
+    if (close(fd) != 0)
+        ok = 0;
+    return ok ? XR_FS_SYNC_OK : XR_FS_SYNC_ERROR;
+}
+
+int xr_fs_touch(const char *path) {
+    if (!path)
+        return -1;
+    int fd = open(path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0)
+        return -1;
+    struct stat st;
+    int ok = fstat(fd, &st) == 0 && S_ISREG(st.st_mode) && futimens(fd, NULL) == 0;
+    if (close(fd) != 0)
+        ok = 0;
+    return ok ? 0 : -1;
 }
 
 char *xr_fs_realpath(const char *path, char *out, size_t out_size) {

@@ -361,6 +361,12 @@ if(NOT XR_C_EMISSION_HEADERS_ARE_ISOLATED)
     message(FATAL_ERROR
         "C emission headers must compile without SemanticPlan, IR, Xaot, or xtype")
 endif()
+add_xray_unit_test(test_cache_key incremental/test_cache_key.c)
+add_xray_unit_test(test_cache_store incremental/test_cache_store.c)
+add_xray_unit_test(test_dependency_graph incremental/test_dependency_graph.c)
+add_xray_unit_test(test_compiler_session_generation
+                   toolchain/test_compiler_session_generation.c)
+add_xray_unit_test(test_fs_atomic os/test_fs_atomic.c)
 add_xray_unit_test(test_xi_tbaa ir/test_xi_tbaa.c)
 add_xray_unit_test(test_xi_range ir/test_xi_range.c)
 add_xray_unit_test(test_xi_bce ir/test_xi_bce.c)

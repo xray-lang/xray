@@ -21,7 +21,9 @@
  *     - Reports mkdir-already-exists as success (matches the
  *       common "ensure dir" pattern; callers can pre-check kind
  *       if they need stricter semantics).
- *     - Returns 0 / -1 for every mutating call. errno is set on
+ *     - Classifies symbolic links and Windows reparse points as
+ *       XR_FS_OTHER without following them.
+ *     - Returns 0 / -1 for simple mutating calls. errno is set on
  *       POSIX; on Windows the GetLastError mapping is reflected
  *       through the return code only (callers needing details
  *       should use the platform-specific layer directly, but
@@ -67,8 +69,21 @@ typedef struct XrFsStat {
     int64_t mtime_ns;  // last-modified time in ns since unix epoch; 0 if unknown
 } XrFsStat;
 
-// Inspect `path`. Returns 0 on success, -1 on error (path missing,
-// permission denied, etc.). On error `out->kind == XR_FS_NONE`.
+typedef enum XrFsPublishResult {
+    XR_FS_PUBLISH_ERROR = -1,
+    XR_FS_PUBLISH_OK = 0,
+    XR_FS_PUBLISH_EXISTS = 1,
+} XrFsPublishResult;
+
+typedef enum XrFsSyncResult {
+    XR_FS_SYNC_ERROR = -1,
+    XR_FS_SYNC_OK = 0,
+    XR_FS_SYNC_UNSUPPORTED = 1,
+} XrFsSyncResult;
+
+// Inspect `path` without following a final symbolic link or reparse point.
+// Returns 0 on success, -1 on error (path missing, permission denied, etc.).
+// On error `out->kind == XR_FS_NONE`.
 XR_FUNC int xr_fs_stat(const char *path, XrFsStat *out);
 
 // Convenience predicates. Each makes a single stat call and folds
@@ -89,6 +104,33 @@ XR_FUNC int xr_fs_remove(const char *path);
 // Rename `old_path` to `new_path` atomically when both live on
 // the same filesystem. Returns 0 on success, -1 on error.
 XR_FUNC int xr_fs_rename(const char *old_path, const char *new_path);
+
+// Read exactly one regular file without following a final symbolic link or
+// reparse point. Files larger than `max_size`, short reads, and concurrent
+// growth are rejected. On success `*out_bytes` is owned by xr_malloc and must
+// be released with xr_free. Empty files still return a non-NULL allocation.
+XR_FUNC int xr_fs_read_regular_file(const char *path, size_t max_size, uint8_t **out_bytes,
+                                    size_t *out_size);
+
+// Create `path` exclusively, write all bytes, and durably flush the file.
+// Existing paths are never opened or replaced. The partial file is removed
+// when writing or flushing fails.
+XR_FUNC int xr_fs_write_new_file_sync(const char *path, const uint8_t *data, size_t size);
+
+// Atomically publish a same-directory temporary regular file without
+// replacing an existing destination. A successful publish consumes the
+// temporary name. XR_FS_PUBLISH_EXISTS leaves the temporary file untouched.
+XR_FUNC XrFsPublishResult xr_fs_publish_noreplace(const char *temp_path, const char *final_path);
+
+// Flush `path`, which must name a directory, after publication or removal.
+// POSIX implementations provide a durable directory fsync. Windows reports
+// XR_FS_SYNC_UNSUPPORTED because Win32 exposes no portable directory-flush
+// contract; callers must retain a recoverable temp protocol on that platform.
+XR_FUNC XrFsSyncResult xr_fs_sync_directory(const char *path);
+
+// Update a regular file's modification time without following a final
+// symbolic link or reparse point. Intended for bounded cache recency metadata.
+XR_FUNC int xr_fs_touch(const char *path);
 
 // Resolve `path` to an absolute, canonical, nul-terminated form
 // in `out` (at most `out_size` bytes incl. terminator). Returns

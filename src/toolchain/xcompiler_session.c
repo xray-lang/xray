@@ -26,13 +26,14 @@
 
 struct XrCompilerSession {
     XrVMRuntime *vm_host;
-    const char *project_root;
-    const char *source_file;
+    char *project_root;
+    char *source_file;
     bool repl_mode;
     bool emit_aot;
     XrTargetDataLayout target_data_layout;
     XrTargetProfile *target_profile;
     const struct XrNativePackagePlan *native_package_plan;
+    XrCompilerSessionGenerationSnapshot generations;
 
     struct XrArena *current_arena;
     struct XrCompileStringPool *compile_string_pool;
@@ -51,10 +52,37 @@ struct XrCompilerSession {
     XrCompileUnitIdentity compile_unit_identity;
 };
 
+static const XrCompilerSessionGenerationSnapshot XR_INITIAL_GENERATIONS = {
+    .session_generation = XR_COMPILER_SESSION_INITIAL_GENERATION,
+    .workspace_generation = XR_COMPILER_SESSION_INITIAL_GENERATION,
+    .configuration_generation = XR_COMPILER_SESSION_INITIAL_GENERATION,
+    .target_generation = XR_COMPILER_SESSION_INITIAL_GENERATION,
+    .provider_generation = XR_COMPILER_SESSION_INITIAL_GENERATION,
+};
+
+static char *copy_optional_string(const char *text) {
+    if (!text)
+        return NULL;
+    size_t length = strlen(text);
+    if (length == SIZE_MAX)
+        return NULL;
+    char *copy = (char *) xr_malloc(length + 1);
+    if (!copy)
+        return NULL;
+    memcpy(copy, text, length + 1);
+    return copy;
+}
+
+static bool generation_would_overflow(uint64_t generation, uint32_t change_mask,
+                                      uint32_t change) {
+    return (change_mask & change) != 0 && generation == UINT64_MAX;
+}
+
 XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
     XrCompilerSession *session = (XrCompilerSession *) xr_calloc(1, sizeof(XrCompilerSession));
     if (!session)
         return NULL;
+    session->generations = XR_INITIAL_GENERATIONS;
     if (!xr_target_data_layout_init_native(&session->target_data_layout)) {
         xr_free(session);
         return NULL;
@@ -67,28 +95,36 @@ XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
                 !machine ||
                 memcmp(cfg->target_data_layout, &machine->data_layout,
                        sizeof(*cfg->target_data_layout)) != 0) {
-                xr_free(session);
-                return NULL;
+                goto failure;
             }
         }
+        session->project_root = copy_optional_string(cfg->project_root);
+        if (cfg->project_root && !session->project_root)
+            goto failure;
+        session->source_file = copy_optional_string(cfg->source_file);
+        if (cfg->source_file && !session->source_file)
+            goto failure;
         session->vm_host = cfg->vm_host;
-        session->project_root = cfg->project_root;
-        session->source_file = cfg->source_file;
         session->repl_mode = cfg->repl_mode;
         session->emit_aot = cfg->emit_aot;
         session->native_package_plan = cfg->native_package_plan;
-        if (cfg->target_data_layout &&
-            !xr_compiler_session_set_target_data_layout(session, cfg->target_data_layout)) {
-            xr_free(session);
-            return NULL;
-        }
-        if (cfg->target_profile &&
-            !xr_compiler_session_set_target_profile(session, cfg->target_profile)) {
-            xr_free(session);
-            return NULL;
+        if (cfg->target_profile) {
+            if (!xr_compiler_session_set_target_profile(session, cfg->target_profile))
+                goto failure;
+        } else if (cfg->target_data_layout &&
+                   !xr_compiler_session_set_target_data_layout(
+                       session, cfg->target_data_layout)) {
+            goto failure;
         }
     }
     return session;
+
+failure:
+    xr_target_profile_free(session->target_profile);
+    xr_free(session->source_file);
+    xr_free(session->project_root);
+    xr_free(session);
+    return NULL;
 }
 
 void xr_compiler_session_delete(XrCompilerSession *session) {
@@ -117,7 +153,73 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
     if (session->analyzer_pool)
         xr_type_pool_free(session->analyzer_pool);
     xr_target_profile_free(session->target_profile);
+    xr_free(session->source_file);
+    xr_free(session->project_root);
     xr_free(session);
+}
+
+const char *xr_compiler_session_project_root(const XrCompilerSession *session) {
+    return session ? session->project_root : NULL;
+}
+
+const char *xr_compiler_session_source_file(const XrCompilerSession *session) {
+    return session ? session->source_file : NULL;
+}
+
+XrCompilerSessionGenerationSnapshot
+xr_compiler_session_generation_snapshot(const XrCompilerSession *session) {
+    return session ? session->generations : (XrCompilerSessionGenerationSnapshot) {0};
+}
+
+bool xr_compiler_session_apply_generation_change(XrCompilerSession *session,
+                                                 uint32_t change_mask) {
+    if (!session || (change_mask & ~((uint32_t) XR_COMPILER_SESSION_CHANGE_ALL)) != 0)
+        return false;
+    if (change_mask == XR_COMPILER_SESSION_CHANGE_NONE)
+        return true;
+
+    XrCompilerSessionGenerationSnapshot next = session->generations;
+    if (generation_would_overflow(next.session_generation, change_mask,
+                                  XR_COMPILER_SESSION_CHANGE_SESSION) ||
+        generation_would_overflow(next.workspace_generation, change_mask,
+                                  XR_COMPILER_SESSION_CHANGE_WORKSPACE) ||
+        generation_would_overflow(next.configuration_generation, change_mask,
+                                  XR_COMPILER_SESSION_CHANGE_CONFIGURATION) ||
+        generation_would_overflow(next.target_generation, change_mask,
+                                  XR_COMPILER_SESSION_CHANGE_TARGET) ||
+        generation_would_overflow(next.provider_generation, change_mask,
+                                  XR_COMPILER_SESSION_CHANGE_PROVIDER))
+        return false;
+
+    if (change_mask & XR_COMPILER_SESSION_CHANGE_SESSION)
+        next.session_generation++;
+    if (change_mask & XR_COMPILER_SESSION_CHANGE_WORKSPACE)
+        next.workspace_generation++;
+    if (change_mask & XR_COMPILER_SESSION_CHANGE_CONFIGURATION)
+        next.configuration_generation++;
+    if (change_mask & XR_COMPILER_SESSION_CHANGE_TARGET)
+        next.target_generation++;
+    if (change_mask & XR_COMPILER_SESSION_CHANGE_PROVIDER)
+        next.provider_generation++;
+    session->generations = next;
+    return true;
+}
+
+bool xr_compiler_session_reset_incremental(XrCompilerSession *session) {
+    if (!session ||
+        !xr_compiler_session_apply_generation_change(
+            session, XR_COMPILER_SESSION_CHANGE_SESSION | XR_COMPILER_SESSION_CHANGE_WORKSPACE))
+        return false;
+
+    /* These pointers are owned by the active compile operation. Clearing the
+     * borrowed views prevents a cancelled operation from becoming the next
+     * operation's implicit state without discarding persistent analysis data. */
+    session->current_arena = NULL;
+    session->compile_string_pool = NULL;
+    session->next_ast_node_id = 0;
+    session->module_graph = NULL;
+    session->compile_unit_identity = (XrCompileUnitIdentity) {0};
+    return true;
 }
 
 XrVMRuntime *xr_compiler_session_vm_host(const XrCompilerSession *session) {
@@ -140,6 +242,9 @@ bool xr_compiler_session_set_target_data_layout(XrCompilerSession *session,
         if (!machine || memcmp(layout, &machine->data_layout, sizeof(*layout)) != 0)
             return false;
     }
+    if (!xr_compiler_session_apply_generation_change(
+            session, XR_COMPILER_SESSION_CHANGE_TARGET))
+        return false;
     session->target_data_layout = *layout;
     return true;
 }
@@ -154,9 +259,18 @@ bool xr_compiler_session_set_target_profile(XrCompilerSession *session,
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     if (!machine || !xr_target_data_layout_validate(&machine->data_layout))
         return false;
+    XrTargetProfile *retained = xr_target_profile_retain(profile);
+    if (!retained)
+        return false;
+    if (!xr_compiler_session_apply_generation_change(
+            session, XR_COMPILER_SESSION_CHANGE_TARGET |
+                         XR_COMPILER_SESSION_CHANGE_PROVIDER)) {
+        xr_target_profile_free(retained);
+        return false;
+    }
     session->target_data_layout = machine->data_layout;
-    session->target_profile = xr_target_profile_retain(profile);
-    return session->target_profile != NULL;
+    session->target_profile = retained;
+    return true;
 }
 
 const XrTargetProfile *xr_compiler_session_target_profile(
@@ -166,8 +280,10 @@ const XrTargetProfile *xr_compiler_session_target_profile(
 
 void xr_compiler_session_set_native_package_plan(XrCompilerSession *session,
                                                  const struct XrNativePackagePlan *plan) {
-    if (session)
-        session->native_package_plan = plan;
+    if (!session || !xr_compiler_session_apply_generation_change(
+                        session, XR_COMPILER_SESSION_CHANGE_PROVIDER))
+        return;
+    session->native_package_plan = plan;
 }
 
 const struct XrNativePackagePlan *
@@ -330,6 +446,7 @@ bool xr_compiler_session_push_arena(XrCompilerSession *session, struct XrArena *
     scope->session = session;
     scope->saved_arena = xr_compiler_session_current_arena(session);
     scope->saved_pool = xr_compiler_session_string_pool(session);
+    scope->session_generation = session->generations.session_generation;
 
     xr_compiler_session_set_current_arena(session, arena);
     if (!xr_compiler_session_string_pool(session) || scope->saved_arena != arena) {
@@ -344,8 +461,11 @@ void xr_compiler_session_pop_arena(XrCompilerSessionScope *scope) {
     if (!scope || !scope->active)
         return;
 
-    xr_compiler_session_set_current_arena(scope->session, scope->saved_arena);
-    xr_compiler_session_set_string_pool(scope->session, scope->saved_pool);
+    if (scope->session &&
+        scope->session_generation == scope->session->generations.session_generation) {
+        xr_compiler_session_set_current_arena(scope->session, scope->saved_arena);
+        xr_compiler_session_set_string_pool(scope->session, scope->saved_pool);
+    }
 
     memset(scope, 0, sizeof(*scope));
 }

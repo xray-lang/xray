@@ -27,6 +27,28 @@ struct XrTargetProfile;
 
 typedef struct XrCompilerSession XrCompilerSession;
 
+#define XR_COMPILER_SESSION_INITIAL_GENERATION UINT64_C(1)
+
+typedef enum XrCompilerSessionGenerationChange {
+    XR_COMPILER_SESSION_CHANGE_NONE = 0,
+    XR_COMPILER_SESSION_CHANGE_SESSION = 1u << 0,
+    XR_COMPILER_SESSION_CHANGE_WORKSPACE = 1u << 1,
+    XR_COMPILER_SESSION_CHANGE_CONFIGURATION = 1u << 2,
+    XR_COMPILER_SESSION_CHANGE_TARGET = 1u << 3,
+    XR_COMPILER_SESSION_CHANGE_PROVIDER = 1u << 4,
+    XR_COMPILER_SESSION_CHANGE_ALL = (1u << 5) - 1u,
+} XrCompilerSessionGenerationChange;
+
+/* A snapshot is detached from the mutable session and remains stable after
+ * later change notifications or resets. */
+typedef struct XrCompilerSessionGenerationSnapshot {
+    uint64_t session_generation;
+    uint64_t workspace_generation;
+    uint64_t configuration_generation;
+    uint64_t target_generation;
+    uint64_t provider_generation;
+} XrCompilerSessionGenerationSnapshot;
+
 typedef enum XrCompileUnitKind {
     XR_COMPILE_UNIT_USER = 0,
     XR_COMPILE_UNIT_STDLIB,
@@ -41,6 +63,7 @@ typedef struct XrCompilerSessionScope {
     XrCompilerSession *session;
     struct XrArena *saved_arena;
     struct XrCompileStringPool *saved_pool;
+    uint64_t session_generation;
     bool active;
 } XrCompilerSessionScope;
 
@@ -57,6 +80,14 @@ typedef struct XrCompilerSessionConfig {
 
 XR_FUNC XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg);
 XR_FUNC void xr_compiler_session_delete(XrCompilerSession *session);
+
+XR_FUNC const char *xr_compiler_session_project_root(const XrCompilerSession *session);
+XR_FUNC const char *xr_compiler_session_source_file(const XrCompilerSession *session);
+XR_FUNC XrCompilerSessionGenerationSnapshot
+xr_compiler_session_generation_snapshot(const XrCompilerSession *session);
+XR_FUNC bool xr_compiler_session_apply_generation_change(XrCompilerSession *session,
+                                                         uint32_t change_mask);
+XR_FUNC bool xr_compiler_session_reset_incremental(XrCompilerSession *session);
 
 XR_FUNC XrVMRuntime *xr_compiler_session_vm_host(const XrCompilerSession *session);
 XR_FUNC const XrTargetDataLayout *
