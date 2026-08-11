@@ -157,6 +157,7 @@
         "xr_bits_exact_rotate_right",
         "xr_bits_exact_trailing_zeros",
         "xr_bits_exact_width",
+        "xr_bits_not_i64",
         "xr_bits_smulh64",
         "xr_bits_umulh64"
       ],

@@ -94,6 +94,11 @@ EXACT_BITS_AOT_BINDINGS = (
     "src/aot/xrt.h",
     "src/aot/xrt_core_freestanding.h",
 )
+BITS_NOT_OPERATIONS = {"xi.bnot"}
+BITS_NOT_AOT_BINDINGS = (
+    "src/aot/xrt.h",
+    "src/aot/xrt_core_freestanding.h",
+)
 NUMERIC_WIDTH_OPERATIONS = {
     "xi.narrow.i8",
     "xi.narrow.u8",
@@ -666,6 +671,68 @@ def verify_exact_bits_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_bits_not_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.bits-not")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.bits-not"), None)
+    if owner is None or set(owner.get("operations", [])) != BITS_NOT_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.bits-not operation family")
+
+    core_text = (root / "src/shared/xr_bits_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    if (f"{marker}_HI" not in core_text or f"{marker}_LO" not in core_text or
+            "XR_BITS_NOT_OWNER_APPLY" not in core_text or "xr_bits_not_i64" not in core_text):
+        errors.append("src/shared/xr_bits_core.h: bitwise-not lacks its stable owner kernel")
+
+    vm_text = (root / "src/vm/xvm_dispatch_bitwise.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    vm_start = vm_text.find("#define XVM_TEMPLATE_BITWISE_UNARY_CASE")
+    vm_end = vm_text.find("#undef XVM_TEMPLATE_BITWISE_UNARY_CASE", vm_start)
+    vm_body = vm_text[vm_start:vm_end] if vm_start >= 0 and vm_end >= 0 else ""
+    if (f"{marker}_HI" not in vm_body or f"{marker}_LO" not in vm_body or
+            "XR_BITS_NOT_OWNER_APPLY" not in vm_body):
+        errors.append("src/vm/xvm_dispatch_bitwise.inc.c: VM bitwise-not bypasses stable owner")
+    if any(token in vm_body for token in ("VM_TRY_UNARY_OP_OVERLOAD", "SYMBOL_OP_BNOT", "~")):
+        errors.append("src/vm/xvm_dispatch_bitwise.inc.c: retired VM bitwise-not semantics revived")
+
+    vm_gen_text = (root / "src/vm/xvm_template_bitwise_unary_gen.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    if ("XVM_TEMPLATE_BITWISE_UNARY_CASE(OP_BNOT," not in vm_gen_text or
+            any(token in vm_gen_text for token in ("SYMBOL_OP_BNOT", "~"))):
+        errors.append("src/vm/xvm_template_bitwise_unary_gen.inc.c: generated VM semantics revived")
+
+    for relative in BITS_NOT_AOT_BINDINGS:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "XR_BITS_NOT_OWNER_APPLY" not in text or "xrt_bits_not_eval" not in text):
+            errors.append(f"{relative}: AOT bitwise-not adapter bypasses stable owner")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_bits_not_adapter_name")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append("src/aot/xi_cgen.c: CGen bitwise-not does not resolve by stable owner ID")
+    if "emit_bitwise_unop_ctx" in cgen_text:
+        errors.append("src/aot/xi_cgen.c: retired raw bitwise-not emitter revived")
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    emitter_body = extract_c_function(dispatch_text, "xicgen_template_bitwise_unary")
+    if emitter_body is None or "cg_bits_not_adapter_name" not in emitter_body:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: bitwise-not bypasses owner adapter")
+    elif any(token in emitter_body for token in
+             ("~", "xi_to_c_template_bitwise_unary_op", "emit_bitwise_unop_ctx")):
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: CGen bitwise-not semantics revived")
+
+    dispatch_gen_text = (root / "src/aot/xi_to_c_dispatch_gen.h").read_text(
+        encoding="utf-8", errors="strict")
+    if "xi_to_c_template_bitwise_unary_op" in dispatch_gen_text:
+        errors.append("src/aot/xi_to_c_dispatch_gen.h: generated raw bitwise-not operator revived")
+    return errors
+
+
 def verify_numeric_width_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     marker = owner_macro_prefix("shared.numeric-conversion")
@@ -953,6 +1020,7 @@ def verify(root: Path, write: bool) -> list[str]:
     if registry_path.is_file():
         registry = json.loads(registry_path.read_text(encoding="utf-8", errors="strict"))
         errors.extend(verify_exact_bits_ratchet(root, registry))
+        errors.extend(verify_bits_not_ratchet(root, registry))
         errors.extend(verify_numeric_width_ratchet(root, registry))
         errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)

@@ -6,4 +6,4 @@
 #error "XVM_TEMPLATE_BITWISE_UNARY_CASE must be defined before including this file"
 #endif
 
-XVM_TEMPLATE_BITWISE_UNARY_CASE(OP_BNOT, ~, SYMBOL_OP_BNOT, "~", "bitwise NOT requires integer type")
+XVM_TEMPLATE_BITWISE_UNARY_CASE(OP_BNOT, "bitwise NOT requires integer type")

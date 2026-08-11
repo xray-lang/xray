@@ -265,6 +265,18 @@ TEST(bits_core_exact_width_queries) {
     ASSERT_EQ_INT(xr_bits_exact_trailing_zeros(0x100, XR_NATIVE_U64), 8);
 }
 
+TEST(bits_not_owner_freezes_signed_64_bit_edges) {
+    ASSERT_EQ_INT(xr_bits_not_i64(INT64_C(0)), -INT64_C(1));
+    ASSERT_EQ_INT(xr_bits_not_i64(INT64_C(1)), -INT64_C(2));
+    ASSERT_EQ_INT(xr_bits_not_i64(-INT64_C(1)), INT64_C(0));
+    ASSERT_EQ_INT(xr_bits_not_i64(INT64_MAX), INT64_MIN);
+    ASSERT_EQ_INT(xr_bits_not_i64(INT64_MIN), INT64_MAX);
+    ASSERT_EQ_INT(XR_BITS_NOT_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,
+                      XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO, XR_SEM_CONSUMER_VM, INT64_MIN),
+                  INT64_MAX);
+}
+
 TEST(bits_core_exact_width_preserves_type_pattern) {
     ASSERT_EQ_INT(xr_bits_exact_byteswap(0x12, XR_NATIVE_U8), 0x12);
     ASSERT_EQ_INT(xr_bits_exact_byteswap(0x1234, XR_NATIVE_U16), 0x3412);
@@ -382,6 +394,7 @@ RUN_TEST(numeric_conversion_integer_to_float_is_round_to_even);
 RUN_TEST(numeric_conversion_f64_to_f32_has_frozen_edges);
 RUN_TEST(numeric_conversion_float_to_integer_checks_before_cast);
 RUN_TEST(bits_core_exact_width_queries);
+RUN_TEST(bits_not_owner_freezes_signed_64_bit_edges);
 RUN_TEST(bits_core_exact_width_preserves_type_pattern);
 RUN_TEST(bits_core_rotate_count_is_euclidean_mod_width);
 RUN_TEST(bits_core_aot_rotate_macros_match_exact_semantics);

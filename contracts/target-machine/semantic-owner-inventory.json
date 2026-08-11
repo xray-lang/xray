@@ -1395,16 +1395,16 @@
     {
       "benchmark_anchor": "target-machine/arithmetic-and-conversion",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_bits_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "arithmetic-and-conversion",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.bits-not",
       "independent_oracle": "independent-kat-property-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_bits_core.h",
       "observable_edges": [],
       "operation_id": "xi.bnot",
       "ownership": "borrow",
@@ -6498,5 +6498,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "39c4c106c56856769622275abd3f9c5ce1aefbc39e5071f07bcfa954094010dd"
+  "source_tree_fingerprint": "7955c25d9cf61e42310bd3bf5906b2c549dd33bbfc469b2a3cad57cf7781cdf8"
 }

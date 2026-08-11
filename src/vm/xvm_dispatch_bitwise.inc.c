@@ -77,17 +77,18 @@
 #undef XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE
 #undef XVM_TEMPLATE_BITWISE_BINARY_CASE
 
-#define XVM_TEMPLATE_BITWISE_UNARY_CASE(op, int_op, op_symbol, op_name, error_msg)                 \
+#define XVM_TEMPLATE_BITWISE_UNARY_CASE(op, error_msg)                                            \
     vmcase(op) {                                                                                   \
         int a = GETARG_A(i);                                                                       \
         int b = GETARG_B(i);                                                                       \
         XrValue vb = R(b);                                                                         \
-        if (XR_IS_INT(vb)) {                                                                       \
-            R(a) = xr_int(int_op XR_TO_INT(vb));                                                   \
-            vmbreak;                                                                               \
-        }                                                                                          \
-        VM_TRY_UNARY_OP_OVERLOAD(vb, a, op_symbol, op_name);                                       \
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
+        if (!XR_IS_INT(vb))                                                                        \
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                     \
+        XR_SET_INT(R(a), XR_BITS_NOT_OWNER_APPLY(                                                  \
+                             XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,                                  \
+                             XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO, XR_SEM_CONSUMER_VM,              \
+                             XR_TO_INT(vb)));                                                      \
+        vmbreak;                                                                                   \
     }
 
 #include "xvm_template_bitwise_unary_gen.inc.c"

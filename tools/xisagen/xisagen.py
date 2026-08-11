@@ -1831,7 +1831,7 @@ XI_VM_TEMPLATE_BITWISE_BINARY = {
 }
 
 XI_VM_TEMPLATE_BITWISE_UNARY = {
-    'xi.bnot': ('~', 'SYMBOL_OP_BNOT', '"~"', '"bitwise NOT requires integer type"'),
+    'xi.bnot': '"bitwise NOT requires integer type"',
 }
 
 XI_VM_TEMPLATE_UNARY = {
@@ -1895,9 +1895,7 @@ XI_AOT_C_TEMPLATE_BITWISE_BINARY = {
     'xi.bxor': '^',
 }
 
-XI_AOT_C_TEMPLATE_BITWISE_UNARY = {
-    'xi.bnot': '~',
-}
+XI_AOT_C_TEMPLATE_BITWISE_UNARY = {'xi.bnot'}
 
 XI_AOT_C_TEMPLATE_SHIFT = {
     'xi.shl': 'xrt_i64_shl',
@@ -2365,10 +2363,8 @@ def generate_xi_vm_template_bitwise_unary_dispatch(entries: list[XiLoweringDef])
     lines.append('')
     for entry in bitwise_entries:
         opcode = XI_VM_TEMPLATE_OPCODES[entry.op_name]
-        int_op, op_symbol, op_name, error_msg = XI_VM_TEMPLATE_BITWISE_UNARY[entry.op_name]
-        lines.append(
-            f'XVM_TEMPLATE_BITWISE_UNARY_CASE({opcode}, {int_op}, {op_symbol}, '
-            f'{op_name}, {error_msg})')
+        error_msg = XI_VM_TEMPLATE_BITWISE_UNARY[entry.op_name]
+        lines.append(f'XVM_TEMPLATE_BITWISE_UNARY_CASE({opcode}, {error_msg})')
     lines.append('')
     return '\n'.join(lines)
 
@@ -2708,17 +2704,6 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('    return "";')
     lines.append('}')
     lines.append('')
-    lines.append('static inline const char *xi_to_c_template_bitwise_unary_op(uint16_t op) {')
-    lines.append('    switch ((XiOp) op) {')
-    for entry in bitwise_unary_entries:
-        op_text = XI_AOT_C_TEMPLATE_BITWISE_UNARY[entry.op_name]
-        lines.append(f'        case XI_{entry.ident}: return "{op_text}";')
-    lines.append('        case XI_OP_COUNT: return "";')
-    lines.append('        default: return "";')
-    lines.append('    }')
-    lines.append('    return "";')
-    lines.append('}')
-    lines.append('')
     lines.append('static inline const char *xi_to_c_template_shift_fn(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for entry in shift_entries:
@@ -2862,10 +2847,6 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
             op_text = XI_AOT_C_TEMPLATE_BITWISE_BINARY[entry.op_name]
             lines.append(
                 f'    assert(strcmp(xi_to_c_template_bitwise_binary_op(XI_{entry.ident}), "{op_text}") == 0);')
-        if 'aot-c' in entry.target_drivers and entry.op_name in XI_AOT_C_TEMPLATE_BITWISE_UNARY:
-            op_text = XI_AOT_C_TEMPLATE_BITWISE_UNARY[entry.op_name]
-            lines.append(
-                f'    assert(strcmp(xi_to_c_template_bitwise_unary_op(XI_{entry.ident}), "{op_text}") == 0);')
         if 'aot-c' in entry.target_drivers and entry.op_name in XI_AOT_C_TEMPLATE_SHIFT:
             fn = XI_AOT_C_TEMPLATE_SHIFT[entry.op_name]
             lines.append(
@@ -4349,7 +4330,9 @@ def _test_xi_lowering_parser():
                       {'vm-bytecode': 'xi_emit_bnot'}, {}, {},
                       template='value-unary'),
     ])
-    assert 'XVM_TEMPLATE_BITWISE_UNARY_CASE(OP_BNOT, ~, SYMBOL_OP_BNOT' in vm_bitwise_unary
+    assert ('XVM_TEMPLATE_BITWISE_UNARY_CASE(OP_BNOT, '
+            '"bitwise NOT requires integer type")') in vm_bitwise_unary
+    assert '~' not in vm_bitwise_unary and 'SYMBOL_OP_BNOT' not in vm_bitwise_unary
     vm_unary = generate_xi_vm_template_unary_dispatch([
         XiLoweringDef('xi.neg', 'NEG', ['vm-bytecode'], ['vm-bytecode'],
                       {'vm-bytecode': 'xi_emit_arith'}, {}, {},

@@ -191,6 +191,16 @@ static inline int64_t xr_bits_exact_restore(uint64_t bits, uint8_t native_type) 
     return (int64_t) bits;
 }
 
+/* Canonical xi.bnot semantics are a signed 64-bit two's-complement complement.
+ * Convert the complemented bit pattern without an implementation-defined
+ * uint64_t-to-int64_t cast so hosted and freestanding C agree at both edges. */
+static inline int64_t xr_bits_not_i64(int64_t value) {
+    uint64_t bits = ~(uint64_t) value;
+    if ((bits & (UINT64_C(1) << 63)) == 0)
+        return (int64_t) bits;
+    return INT64_MIN + (int64_t) (bits & (uint64_t) INT64_MAX);
+}
+
 /* Number of set bits in the receiver's exact-width bit pattern. */
 static inline int64_t xr_bits_exact_popcount(int64_t x, uint8_t native_type) {
     uint64_t u = xr_bits_exact_pattern(x, native_type);
@@ -374,5 +384,28 @@ static inline int64_t xr_bits_exact_kernel_mul_high(int64_t lhs, int64_t rhs,
     (XR_BITS_EXACT_OWNER_GUARD((owner_hi), (owner_lo)),                                            \
      XR_BITS_EXACT_CONSUMER_GUARD((consumer_bit)),                                                 \
      (kernel)((int64_t) (lhs), (int64_t) (rhs), (uint8_t) (native_type)))
+
+#define XR_BITS_NOT_OWNER_GUARD(owner_hi, owner_lo)                                                \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_bits_not                                             \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI &&                    \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO)                      \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BITS_NOT_CONSUMER_GUARD(consumer_bit)                                                  \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_bits_not                                \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&           \
+                (XR_SEM_OWNER_ID_SHARED_BITS_NOT_CONSUMERS & (uint32_t) (consumer_bit)) != 0)     \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BITS_NOT_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, value)                           \
+    (XR_BITS_NOT_OWNER_GUARD((owner_hi), (owner_lo)),                                              \
+     XR_BITS_NOT_CONSUMER_GUARD((consumer_bit)), xr_bits_not_i64((int64_t) (value)))
 
 #endif  // XRAY_SHARED_XR_BITS_CORE_H

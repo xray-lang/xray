@@ -307,15 +307,6 @@ static inline const char *xi_to_c_template_bitwise_binary_op(uint16_t op) {
     return "";
 }
 
-static inline const char *xi_to_c_template_bitwise_unary_op(uint16_t op) {
-    switch ((XiOp) op) {
-        case XI_BNOT: return "~";
-        case XI_OP_COUNT: return "";
-        default: return "";
-    }
-    return "";
-}
-
 static inline const char *xi_to_c_template_shift_fn(uint16_t op) {
     switch ((XiOp) op) {
         case XI_SHL: return "xrt_i64_shl";

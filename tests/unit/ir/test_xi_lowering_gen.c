@@ -192,7 +192,6 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_BNOT) == true);
     assert(xi_emit_vm_template_opcode(XI_BNOT) == OP_BNOT);
     assert(xi_emit_vm_template_swaps_args(XI_BNOT) == false);
-    assert(strcmp(xi_to_c_template_bitwise_unary_op(XI_BNOT), "~") == 0);
     assert(xi_emit_vm_requires_fresh_dst(XI_BNOT) == false);
     assert(xi_lowering_generated_targets(XI_BIT_ROTL) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_BIT_ROTL) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C));

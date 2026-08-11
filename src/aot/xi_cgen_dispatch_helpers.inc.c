@@ -1041,7 +1041,19 @@ static void xicgen_template_bitwise_unary(XiCgenCtx *ctx, FILE *out, const XiFun
                                           const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    emit_bitwise_unop_ctx(ctx, out, v, xi_to_c_template_bitwise_unary_op(v->op));
+    const char *adapter = cg_bits_not_adapter_name(ctx);
+    if (!adapter || !v || v->op != XI_BNOT || v->nargs != 1 || !v->args[0] ||
+        (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    fprintf(out, "%s(", adapter);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
 }
 
 static const char *cg_exact_bit_kernel_name(uint16_t op) {

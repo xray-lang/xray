@@ -4246,17 +4246,6 @@ static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, 
         fprintf(out, ")");
 }
 
-static void emit_bitwise_unop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *op) {
-    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
-    if (boxed)
-        fprintf(out, "XR_FROM_INT(");
-    fprintf(out, "%s(", op);
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-    fprintf(out, ")");
-    if (boxed)
-        fprintf(out, ")");
-}
-
 static bool cg_shift_const_int_value(const XiValue *value, int64_t *out) {
     const XiValue *unwrapped = cg_unwrap_identity_value(value);
     if (!unwrapped || unwrapped->op != XI_CONST || !unwrapped->type ||
@@ -4507,6 +4496,24 @@ static const char *cg_exact_bits_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: exact-width bits owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_bits_not_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,
+                                        XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: bitwise-not owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI, XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: bitwise-not owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
@@ -7094,8 +7101,7 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
     if (template_fn && *template_fn)
         return arg_index < 2;
 
-    template_op = xi_to_c_template_bitwise_unary_op(user->op);
-    if (template_op && *template_op)
+    if (user->op == XI_BNOT)
         return arg_index == 0;
 
     template_op = xi_to_c_template_compare_native_op(user->op);

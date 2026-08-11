@@ -7579,6 +7579,33 @@ TEST(cgen_exact_bits_use_stable_owner_adapter) {
            "CGen must resolve the stable exact-width bit owner adapter");
 }
 
+TEST(cgen_bits_not_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,
+                                          XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
+           "bitwise-not owner must publish CGen as a mechanical consumer");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI, XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO);
+    assert(adapter != NULL && strcmp(adapter, "xrt_bits_not_eval") == 0 &&
+           "CGen must resolve the stable bitwise-not owner adapter");
+
+    const char *src = "fn bitsNotOwner(value: int) -> int {\n"
+                      "    return ~value\n"
+                      "}\n"
+                      "print(bitsNotOwner(-1))\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "bitwise-not IR compilation failed");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "stable-owner bitwise-not C generation failed");
+    assert(contains(code, "xrt_bits_not_eval(") &&
+           "generated C must call the stable bitwise-not owner adapter");
+    assert(!contains(code, "~(") && "generated C must not recreate bitwise-not semantics");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_numeric_width_uses_stable_owner_adapter) {
     assert(xr_semantic_owner_has_consumer(
                XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
@@ -12874,6 +12901,7 @@ int main(void) {
     run_cgen_typename_as_and_slice_use_direct_drivers();
     run_cgen_typeid_uses_stable_owner_adapter();
     run_cgen_exact_bits_use_stable_owner_adapter();
+    run_cgen_bits_not_uses_stable_owner_adapter();
     run_cgen_numeric_width_uses_stable_owner_adapter();
     run_cgen_byte_slice_scalar_uses_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();

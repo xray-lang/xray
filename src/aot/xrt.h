@@ -42,6 +42,10 @@
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
                               XR_SEM_OWNER_ID_SHARED_BITS_LO,                                     \
                               XR_SEM_CONSUMER_AOT_HOSTED, kernel, lhs, rhs, native_type)
+#define xrt_bits_not_eval(value)                                                                  \
+    XR_BITS_NOT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_NOT_HI,                                  \
+                            XR_SEM_OWNER_ID_SHARED_BITS_NOT_LO,                                  \
+                            XR_SEM_CONSUMER_AOT_HOSTED, value)
 #define xrt_numeric_width_eval(kernel, value)                                                      \
     XR_NUMERIC_WIDTH_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,                    \
                                  XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,                    \
