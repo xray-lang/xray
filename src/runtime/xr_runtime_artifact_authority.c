@@ -63,6 +63,34 @@ static void copy_fingerprint(uint8_t out[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE],
     memcpy(out, fingerprint.bytes, XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE);
 }
 
+static bool build_native_target_profile(XrTargetProfile **profile,
+                                        char *diagnostic,
+                                        size_t diagnostic_size) {
+    if (profile)
+        *profile = NULL;
+    if (!profile)
+        return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
+                    "native TargetProfile output is required");
+    XrRuntimeTargetAuthority runtime;
+    if (xr_runtime_target_authority_native_hosted(&runtime) !=
+        XR_RUNTIME_ABI_OK)
+        return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
+                    "canonical native runtime authority is unavailable");
+    XrTargetProfileBuildInput input = {
+        .machine = runtime.machine,
+        .runtime_abi = &runtime.runtime_abi,
+        .object_header_materialization =
+            &runtime.object_header_materialization,
+        .providers = runtime.providers,
+        .provider_count = runtime.provider_count,
+    };
+    char nested[512] = {0};
+    if (!xr_target_profile_build(&input, profile, nested, sizeof(nested)))
+        return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
+                    "canonical native TargetProfile construction failed");
+    return true;
+}
+
 static bool populate_identity(
     const XrSemanticPlan *semantic_plan, const XrTargetProfile *target_profile,
     XrRuntimeArtifactAuthorityIdentity *identity, char *diagnostic,
@@ -145,28 +173,35 @@ XRAY_API bool xr_runtime_artifact_authority_load_available(void) {
 
 XR_FUNCDEF bool xr_runtime_artifact_authority_create_internal(
     const XrSemanticPlan *verified_semantic_plan,
-    const XrTargetProfile *exact_target_profile,
     XrRuntimeArtifactAuthority **authority, char *diagnostic,
     size_t diagnostic_size) {
     if (authority)
         *authority = NULL;
-    if (!authority || !verified_semantic_plan || !exact_target_profile)
+    if (!authority || !verified_semantic_plan)
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
-                    "semantic and target authorities are required");
+                    "verified semantic authority is required");
+
+    XrTargetProfile *native_profile = NULL;
+    if (!build_native_target_profile(&native_profile, diagnostic,
+                                     diagnostic_size))
+        return false;
 
     XrRuntimeArtifactAuthorityIdentity identity;
-    if (!populate_identity(verified_semantic_plan, exact_target_profile,
-                           &identity, diagnostic, diagnostic_size))
+    if (!populate_identity(verified_semantic_plan, native_profile, &identity,
+                           diagnostic, diagnostic_size)) {
+        xr_target_profile_free(native_profile);
         return false;
+    }
     XrRuntimeArtifactAuthority *created =
         (XrRuntimeArtifactAuthority *) xr_calloc(1, sizeof(*created));
-    if (!created)
+    if (!created) {
+        xr_target_profile_free(native_profile);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
                     "artifact authority allocation failed");
+    }
     created->semantic_plan =
         xr_semantic_plan_retain((XrSemanticPlan *) verified_semantic_plan);
-    created->target_profile =
-        xr_target_profile_retain((XrTargetProfile *) exact_target_profile);
+    created->target_profile = native_profile;
     created->identity = identity;
     if (!created->semantic_plan || !created->target_profile ||
         !xr_runtime_artifact_authority_verify(created, diagnostic,

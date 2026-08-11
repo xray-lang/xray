@@ -537,23 +537,23 @@ static void test_runtime_machine_authority_is_exact_and_scalar_only(void) {
     }
 }
 
-static void test_runtime_machine_authority_rejects_foreign_profiles(void) {
+static void test_runtime_factory_owns_native_profile(void) {
     XtpFixture fixture = make_fixture();
     char diagnostic[512] = {0};
-    for (ForeignProfileMutation mutation = 0;
-         mutation < FOREIGN_PROFILE_MUTATION_COUNT; mutation++) {
-        XrTargetProfile *foreign =
-            build_foreign_profile(fixture.profile, mutation);
-        XrRuntimeArtifactAuthority *authority =
-            (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
-        memset(diagnostic, 0, sizeof(diagnostic));
-        REQUIRE(!xr_runtime_artifact_authority_create_internal(
-            fixture.semantic, foreign, &authority, diagnostic,
-            sizeof(diagnostic)));
-        REQUIRE(authority == NULL);
-        REQUIRE(strstr(diagnostic, "canonical native machine") != NULL);
-        xr_target_profile_free(foreign);
-    }
+    XrRuntimeArtifactAuthority *authority = NULL;
+    REQUIRE(xr_runtime_artifact_authority_create_internal(
+        fixture.semantic, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(authority != NULL);
+    REQUIRE(authority->target_profile != fixture.profile);
+    REQUIRE(xr_target_profile_require_exact(
+        fixture.profile, authority->target_profile, diagnostic,
+        sizeof(diagnostic)));
+    XrRuntimeTargetAuthority runtime;
+    REQUIRE(xr_runtime_target_authority_native_hosted(&runtime) ==
+            XR_RUNTIME_ABI_OK);
+    REQUIRE(xr_runtime_target_authority_machine_matches(
+        &runtime, xr_target_profile_machine_facts(authority->target_profile)));
+    xr_runtime_artifact_authority_free(authority);
     dispose_fixture(&fixture);
 }
 
@@ -562,8 +562,7 @@ static void test_independent_verifier_rejects_forged_machine_profiles(void) {
     char diagnostic[512] = {0};
     XrRuntimeArtifactAuthority *authority = NULL;
     REQUIRE(xr_runtime_artifact_authority_create_internal(
-        fixture.semantic, fixture.profile, &authority, diagnostic,
-        sizeof(diagnostic)));
+        fixture.semantic, &authority, diagnostic, sizeof(diagnostic)));
     XrTargetProfile *native_profile = authority->target_profile;
     XrRuntimeArtifactAuthorityIdentity native_identity = authority->identity;
 
@@ -594,13 +593,45 @@ static void test_independent_verifier_rejects_forged_machine_profiles(void) {
     dispose_fixture(&fixture);
 }
 
+static void test_runtime_load_rejects_foreign_profile_artifacts(void) {
+    XtpFixture fixture = make_fixture();
+    char diagnostic[512] = {0};
+    XrRuntimeArtifactAuthority *authority = NULL;
+    REQUIRE(xr_runtime_artifact_authority_create_internal(
+        fixture.semantic, &authority, diagnostic, sizeof(diagnostic)));
+    for (ForeignProfileMutation mutation = 0;
+         mutation < FOREIGN_PROFILE_MUTATION_COUNT; mutation++) {
+        XrTargetProfile *foreign =
+            build_foreign_profile(fixture.profile, mutation);
+        XrTargetPlan *foreign_plan = NULL;
+        uint8_t *foreign_bytes = NULL;
+        size_t foreign_size = 0;
+        REQUIRE(xr_target_plan_build(fixture.semantic, foreign, &foreign_plan,
+                                     diagnostic, sizeof(diagnostic)));
+        REQUIRE(xr_xtp_encode_plan(foreign_plan, &foreign_bytes,
+                                   &foreign_size, diagnostic,
+                                   sizeof(diagnostic)));
+        XrTargetPlan *loaded = (XrTargetPlan *) (uintptr_t) 1;
+        memset(diagnostic, 0, sizeof(diagnostic));
+        REQUIRE(!xr_runtime_target_plan_load(
+            foreign_bytes, foreign_size, authority, &loaded, diagnostic,
+            sizeof(diagnostic)));
+        REQUIRE(loaded == NULL);
+        REQUIRE(strstr(diagnostic, "XR_TARGET_1000") != NULL);
+        xr_xtp_encoded_free(foreign_bytes);
+        xr_target_plan_free(foreign_plan);
+        xr_target_profile_free(foreign);
+    }
+    xr_runtime_artifact_authority_free(authority);
+    dispose_fixture(&fixture);
+}
+
 static void test_runtime_load_materializes_only_verified_plan(void) {
     XtpFixture fixture = make_fixture();
     char diagnostic[512] = {0};
     XrRuntimeArtifactAuthority *authority = NULL;
     REQUIRE(xr_runtime_artifact_authority_create_internal(
-        fixture.semantic, fixture.profile, &authority, diagnostic,
-        sizeof(diagnostic)));
+        fixture.semantic, &authority, diagnostic, sizeof(diagnostic)));
     REQUIRE(authority != NULL);
     REQUIRE(xr_runtime_artifact_authority_verify(authority, diagnostic,
                                                  sizeof(diagnostic)));
@@ -930,8 +961,9 @@ int main(int argc, char **argv) {
     test_header_and_directory_mutations();
     test_identity_and_typed_mutations();
     test_runtime_machine_authority_is_exact_and_scalar_only();
-    test_runtime_machine_authority_rejects_foreign_profiles();
+    test_runtime_factory_owns_native_profile();
     test_independent_verifier_rejects_forged_machine_profiles();
+    test_runtime_load_rejects_foreign_profile_artifacts();
     test_runtime_load_materializes_only_verified_plan();
     puts("typed XTP format tests passed");
     return 0;

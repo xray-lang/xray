@@ -22,7 +22,6 @@ struct XrRuntimeArtifactAuthority {
 
 XR_FUNC bool xr_runtime_artifact_authority_create_internal(
     const XrSemanticPlan *verified_semantic_plan,
-    const XrTargetProfile *exact_target_profile,
     XrRuntimeArtifactAuthority **authority, char *diagnostic,
     size_t diagnostic_size);
 XR_FUNC void xr_runtime_artifact_authority_compute_fingerprint(
