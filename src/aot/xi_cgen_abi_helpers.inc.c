@@ -28,15 +28,23 @@ static bool cg_abi_slot_is_aggregate(const XaotAbiSlot *slot) {
     return rep.kind == XAOT_VALUE_AGGREGATE;
 }
 
-static const XaotValuePlan *cg_value_plan(XiCgenCtx *ctx, const XiValue *v) {
-    const XaotValuePlan *plan;
-
+static const XaotValuePlan *cg_find_value_plan(XiCgenCtx *ctx,
+                                               const XiValue *v) {
     if (!ctx || !v)
         return NULL;
-    plan = xaot_bundle_find_value_plan(ctx->aot_bundle, v);
+    return xaot_bundle_find_value_plan(ctx->aot_bundle, v);
+}
+
+static const XaotValuePlan *cg_require_value_plan(XiCgenCtx *ctx,
+                                                  const XiValue *v) {
+    const XaotValuePlan *plan = cg_find_value_plan(ctx, v);
     if (!plan)
         ctx->error = true;
     return plan;
+}
+
+static const XaotValuePlan *cg_value_plan(XiCgenCtx *ctx, const XiValue *v) {
+    return cg_require_value_plan(ctx, v);
 }
 
 static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
@@ -48,7 +56,7 @@ static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
                                                                         : XR_REP_VOID;
     if (scalar_status == CG_SCALAR_EMISSION_ERROR)
         return XR_REP_VOID;
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_require_value_plan(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
 

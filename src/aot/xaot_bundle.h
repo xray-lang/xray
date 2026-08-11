@@ -393,7 +393,7 @@ typedef enum XaotAliasKind {
 
 enum {
     /* Backing storage allocated by this function (array literal / Array<byte>
-     * constructor / with_capacity — a fresh malloc nothing else can point at yet). */
+     * constructor / with_capacity —a fresh malloc nothing else can point at yet). */
     XAOT_ALIAS_EV_FRESH_ALLOC = 1u << 0,
     /* Every XI_INDEX_GET / XI_INDEX_SET on the array has a proven bounds
      * plan, so every element access is emitted through the _adN cache and
@@ -1691,6 +1691,8 @@ typedef struct XaotPrepareStats {
     uint32_t values_vector;
     uint32_t values_view;
     uint32_t values_void;
+    uint32_t values_enum_ordinal;
+    uint32_t values_rep_adapter;
     uint32_t boundary_count;
     uint32_t containers_total;
     uint32_t containers_array;
@@ -2038,6 +2040,10 @@ XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan(const XaotBundle *bundle,
                                                        const XiEnumData *enum_data);
 XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan_for_type(const XaotBundle *bundle,
                                                                 const XrType *type);
+XR_FUNC bool xaot_value_plan_is_exact_enum_ordinal_family(
+    const XaotBundle *bundle, const XaotValuePlan *plan);
+XR_FUNC bool xaot_value_plan_is_exact_rep_adapter(
+    const XaotBundle *bundle, const XaotValuePlan *plan);
 XR_FUNC bool xaot_bundle_prepare_enum_plan_for_type(XaotBundle *bundle, const XrType *type);
 XR_FUNC XaotArrayStoragePlan *
 xaot_bundle_add_array_storage_plan(XaotBundle *bundle, const XiFunc *func, const XiValue *value,

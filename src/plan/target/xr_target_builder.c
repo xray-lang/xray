@@ -17,6 +17,7 @@
 #include "xr_target_plan_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../ir/xi.h"
+#include "../../ir/xi_ops_gen.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
@@ -515,7 +516,29 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(builder->semantic_plan, semantic_type);
     uint16_t kind = XR_MACHINE_REP_COUNT;
-    XrTargetScalarEligibility eligibility = classify_scalar_type(type, &kind);
+    const XrSemanticOperationRecord *operation =
+        semantic_operation <
+                xr_semantic_plan_operation_count(builder->semantic_plan)
+            ? xr_semantic_plan_operation(builder->semantic_plan,
+                                         semantic_operation)
+            : NULL;
+    bool operation_result_void =
+        operation && operation->function == semantic_function &&
+        operation->result_value == semantic_value &&
+        operation->result_type == semantic_type &&
+        operation->opcode < XI_OP_COUNT &&
+        xi_generated_op_result_kind(operation->opcode) == XI_GEN_RESULT_VOID;
+    if (operation_result_void &&
+        (operation->effects != xi_generated_op_effects(operation->opcode) ||
+         operation->result_ownership !=
+             xi_generated_op_result_ownership(operation->opcode)))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "semantic result-void operation contract is inconsistent");
+    XrTargetScalarEligibility eligibility = operation_result_void
+                                                ? XR_TARGET_SCALAR_VALUE
+                                                : classify_scalar_type(type, &kind);
+    if (operation_result_void)
+        kind = XR_MACHINE_REP_VOID;
     if (eligibility == XR_TARGET_SCALAR_INVALID)
         return fail(error, error_size, "XR_TARGET_1001", "semantic scalar type has no exact machine representation");
     analysis->defined_values[semantic_value] = 1;
@@ -523,10 +546,12 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
     analysis->value_functions[semantic_value] = semantic_function;
     if (eligibility == XR_TARGET_SCALAR_NOT_APPLICABLE)
         return true;
-    if (analysis->type_rep_kinds[semantic_type] != XR_MACHINE_REP_COUNT &&
-        analysis->type_rep_kinds[semantic_type] != kind)
-        return fail(error, error_size, "XR_TARGET_1001", "semantic type has conflicting scalar representations");
-    analysis->type_rep_kinds[semantic_type] = kind;
+    if (!operation_result_void) {
+        if (analysis->type_rep_kinds[semantic_type] != XR_MACHINE_REP_COUNT &&
+            analysis->type_rep_kinds[semantic_type] != kind)
+            return fail(error, error_size, "XR_TARGET_1001", "semantic type has conflicting scalar representations");
+        analysis->type_rep_kinds[semantic_type] = kind;
+    }
     XrTargetMachineRepRecord rep;
     if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile), kind, &rep) ||
         !append_rep_intent(builder, &rep, error, error_size))
@@ -539,7 +564,10 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
     };
     if (kind != XR_MACHINE_REP_VOID) {
         XrStableId slot_identity;
-        if (semantic_operation >= xr_semantic_plan_operation_count(builder->semantic_plan) ||
+        const bool parameter_slot = role == XR_TARGET_SLOT_PARAMETER;
+        if ((!parameter_slot &&
+             semantic_operation >=
+                 xr_semantic_plan_operation_count(builder->semantic_plan)) ||
             !make_slot_identity(builder->semantic_plan, semantic_function, role, source_identity,
                                 XR_SEMANTIC_INDEX_NONE, &slot_identity))
             return fail(error, error_size, "XR_TARGET_1001", "scalar slot identity is incomplete");
@@ -547,7 +575,8 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
             .identity = slot_identity,
             .function = semantic_function,
             .semantic_value = semantic_value,
-            .semantic_operation = semantic_operation,
+            .semantic_operation = parameter_slot ? XR_SEMANTIC_INDEX_NONE
+                                                 : semantic_operation,
             .logical_slot = XR_SEMANTIC_INDEX_NONE,
             .register_rep = rep,
             .memory_rep = rep,
@@ -586,11 +615,22 @@ static bool collect_scalar_intents(XrTargetPlanBuilder *builder,
             operation_index == XR_SEMANTIC_INDEX_NONE
                 ? NULL
                 : xr_semantic_plan_operation(builder->semantic_plan, operation_index);
-        if (!operation || operation->opcode != XI_PARAM ||
-            !note_scalar_value(builder, analysis, parameter->value, parameter->type,
-                               parameter->function, operation_index, XR_TARGET_SLOT_PARAMETER,
-                               parameter->id, error, error_size))
-            return false;
+        if (operation &&
+            (operation->opcode != XI_PARAM ||
+             operation->function != parameter->function ||
+             operation->result_value != parameter->value ||
+             operation->result_type != parameter->type))
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "semantic parameter operation is inconsistent");
+        if (!note_scalar_value(builder, analysis, parameter->value,
+                               parameter->type, parameter->function,
+                               XR_SEMANTIC_INDEX_NONE,
+                               XR_TARGET_SLOT_PARAMETER, parameter->id,
+                               error, error_size))
+            return error && error_size && error[0]
+                       ? false
+                       : fail(error, error_size, "XR_TARGET_1001",
+                              "semantic parameter scalar binding failed");
     }
     uint32_t operation_count =
         (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);

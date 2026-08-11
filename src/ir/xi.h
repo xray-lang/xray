@@ -979,6 +979,17 @@ typedef enum XiCaptureKind {
     XI_CAPTURE_SHARED,      /* stable shared identity capture */
 } XiCaptureKind;
 
+/* Provenance for values introduced only after the SemanticPlan snapshot.
+ * NONE is the only value produced by source/semantic lowering. */
+typedef enum XiBackendValueOrigin {
+    XI_BACKEND_VALUE_NONE = 0,
+    XI_BACKEND_VALUE_REP_BOX,
+    XI_BACKEND_VALUE_REP_UNBOX,
+    XI_BACKEND_VALUE_ENUM_DESCRIPTOR_BOX,
+    XI_BACKEND_VALUE_ENUM_DESCRIPTOR_UNBOX,
+    XI_BACKEND_VALUE_ORIGIN_COUNT,
+} XiBackendValueOrigin;
+
 typedef struct XiCapture {
     uint8_t source;           /* XI_CAPTURE_SRC_REG or XI_CAPTURE_SRC_UPVAL */
     uint16_t index;           /* SRC_UPVAL: parent upvalue index */
@@ -1069,6 +1080,7 @@ typedef struct XiValue {
     uint8_t flags;                  /* XI_FLAG_* */
     uint8_t rep;                    /* XrRep: machine representation (set by select_rep,
                                      * default XR_REP_TAGGED until STAGE_REPPED) */
+    uint8_t backend_origin;         /* XiBackendValueOrigin; post-SemanticPlan only */
     uint8_t transfer_mode;          /* XrTransferMode for single-value coroutine boundaries.
                                      * Default 0 = SHARE. GO uses its per-arg aux table. */
     uint8_t aux_kind;               /* XiAuxKind: disambiguates aux/aux_int layouts */

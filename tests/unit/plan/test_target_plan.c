@@ -3,6 +3,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/base/xmalloc.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
@@ -172,6 +173,54 @@ static XrSemanticPlan *build_single_scalar_semantic(XrType *type) {
     XiValue *result = type->kind == XR_KIND_BOOL ? xi_const_bool(function, entry, true, type)
                                                   : xi_const_int(function, entry, 1, type);
     REQUIRE(result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &plan, error, sizeof(error)));
+    xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticPlan *build_parameter_without_operation_semantic(void) {
+    XiFunc *function = xi_func_new("target_parameter_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    function->nparams = 1;
+    function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    XiValue *parameter = xi_param(function, entry, 0, &stub_int);
+    REQUIRE(parameter != NULL && entry->nvalues == 1);
+    function->params[0] = parameter;
+    xi_block_set_return(entry, parameter);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    /* A verified SemanticPlan may carry parameter SSA authority without a
+     * duplicate XI_PARAM operation record. Keep the Xi value alive for the
+     * builder, but exclude it from operation collection for this fixture. */
+    entry->nvalues = 0;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &plan, error, sizeof(error)));
+    REQUIRE(xr_semantic_plan_parameter_count(plan) == 1);
+    REQUIRE(xr_semantic_plan_operation_count(plan) == 0);
+    entry->values[entry->nvalues++] = parameter;
+    xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticPlan *build_scalar_and_effect_void_same_type_semantic(void) {
+    XiFunc *function = xi_func_new("target_effect_void_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *result = xi_const_int(function, entry, 1, &stub_int);
+    XiValue *released = xi_const_int(function, entry, 2, &stub_int);
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_int, 1);
+    REQUIRE(result && released && release);
+    release->args[0] = released;
     xi_block_set_return(entry, result);
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *plan = NULL;
@@ -611,6 +660,45 @@ static void test_builder_materializes_canonical_scalar_intents(void) {
     REQUIRE(first->value_reps_count == 3);
     REQUIRE(first->value_reps[0].semantic_value < first->value_reps[1].semantic_value);
     REQUIRE(first->value_reps[1].semantic_value < first->value_reps[2].semantic_value);
+    uint32_t release_operation = XR_SEMANTIC_INDEX_NONE;
+    uint32_t release_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (operation && operation->opcode == XI_RELEASE) {
+            release_operation = i;
+            release_value = operation->result_value;
+        }
+    }
+    REQUIRE(release_operation != XR_SEMANTIC_INDEX_NONE &&
+            release_value != XR_SEMANTIC_INDEX_NONE);
+    uint32_t release_binding = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < first->value_reps_count; i++)
+        if (first->value_reps[i].semantic_value == release_value)
+            release_binding = i;
+    REQUIRE(release_binding != XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(first->machine_reps[first->value_reps[release_binding].register_rep].kind ==
+            XR_MACHINE_REP_VOID);
+    REQUIRE(first->machine_reps[first->value_reps[release_binding].memory_rep].kind ==
+            XR_MACHINE_REP_VOID);
+    REQUIRE(first->value_reps[release_binding].slot == XR_SEMANTIC_INDEX_NONE);
+
+    XrTargetValueRepRecord saved_release = first->value_reps[release_binding];
+    first->value_reps[release_binding].register_rep = 1;
+    first->value_reps[release_binding].memory_rep = 1;
+    expect_verify_failure(first, "XR_TARGET_1001");
+    first->value_reps[release_binding] = saved_release;
+    first->value_reps[release_binding].slot = 0;
+    expect_verify_failure(first, "XR_TARGET_1001");
+    first->value_reps[release_binding] = saved_release;
+    XrTargetValueRepRecord saved_values[3];
+    memcpy(saved_values, first->value_reps, sizeof(saved_values));
+    for (uint32_t i = release_binding + 1; i < first->value_reps_count; i++)
+        first->value_reps[i - 1] = first->value_reps[i];
+    first->value_reps_count--;
+    expect_verify_failure(first, "XR_TARGET_1001");
+    memcpy(first->value_reps, saved_values, sizeof(saved_values));
+    first->value_reps_count = 3;
 
     first->slots[0].identity.bytes[0] ^= 1;
     expect_verify_failure(first, "XR_TARGET_1001");
@@ -628,6 +716,61 @@ static void test_builder_materializes_canonical_scalar_intents(void) {
 
     xr_target_plan_free(first);
     xr_target_plan_free(second);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_builder_materializes_parameter_without_operation(void) {
+    XrSemanticPlan *semantic = build_parameter_without_operation_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    REQUIRE(plan != NULL && plan->slots_count == 1 &&
+            plan->value_reps_count == 1);
+    REQUIRE(plan->slots[0].role == XR_TARGET_SLOT_PARAMETER);
+    REQUIRE(plan->slots[0].semantic_operation == XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(plan->slots[0].semantic_value ==
+            xr_semantic_plan_parameter(semantic, 0)->value);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    plan->slots[0].semantic_operation = 0;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->slots[0].semantic_operation = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_builder_materializes_effect_void_independent_of_type(void) {
+    XrSemanticPlan *semantic =
+        build_scalar_and_effect_void_same_type_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)));
+    uint32_t release_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, i);
+        if (operation && operation->opcode == XI_RELEASE)
+            release_value = operation->result_value;
+    }
+    REQUIRE(release_value != XR_SEMANTIC_INDEX_NONE);
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(plan, release_value);
+    REQUIRE(binding != NULL && binding->slot == XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(plan->machine_reps[binding->register_rep].kind ==
+            XR_MACHINE_REP_VOID);
+    REQUIRE(plan->machine_reps[binding->memory_rep].kind ==
+            XR_MACHINE_REP_VOID);
+    REQUIRE(plan->slots_count == 2);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
 }
@@ -978,6 +1121,8 @@ int main(void) {
     test_profile_freeze_and_determinism();
     test_plan_snapshot_and_determinism();
     test_builder_materializes_canonical_scalar_intents();
+    test_builder_materializes_parameter_without_operation();
+    test_builder_materializes_effect_void_independent_of_type();
     test_structural_mutations_fail_closed();
     test_value_rep_mutations_fail_closed();
     test_freeze_rejects_invalid_draft();

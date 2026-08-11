@@ -96,12 +96,19 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     xr_free(ctx->func_residues);
     xr_free(ctx->enum_scalar_sidecar_used);
     xr_free(ctx->stdlib_enum_scalar_sidecar_used);
+    xr_free(ctx->scalar_emission_registry);
     xr_free(ctx);
 }
 
 XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle) {
     if (!ctx)
         return;
+    if (ctx->error || ctx->scalar_emission_registry) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: XR_TARGET_1001: scalar C emission registry is sealed\n");
+        ctx->error = true;
+        return;
+    }
     ctx->aot_bundle = bundle;
     uint32_t need = bundle ? bundle->nenum_plans : 0;
     if (need > ctx->enum_scalar_sidecar_cap) {
@@ -117,30 +124,73 @@ XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle
         memset(ctx->enum_scalar_sidecar_used, 0, ctx->enum_scalar_sidecar_cap);
 }
 
-XR_FUNC bool xi_cgen_ctx_set_scalar_emission_plan(XiCgenCtx *ctx,
-                                                  const XrTargetPlan *target_plan,
-                                                  const XrCEmissionPlan *emission_plan) {
-    if (!ctx)
-        return false;
-    if (!target_plan || !emission_plan || !xr_target_plan_is_verified(target_plan) ||
-        !xr_c_emission_plan_is_verified(emission_plan)) {
+XR_FUNC bool xi_cgen_ctx_set_scalar_emission_plans(
+    XiCgenCtx *ctx, const XrCEmissionPlan *const *emission_plans,
+    uint32_t count) {
+    const XaotBundle *bundle = ctx ? ctx->aot_bundle : NULL;
+    if (!ctx || ctx->error || ctx->scalar_emission_registry || !bundle || !bundle->modules ||
+        !bundle->target_plans || !emission_plans || count == 0 ||
+        count != bundle->nmodules) {
         fprintf(stderr,
-                "[xi_cgen] ERROR: XR_TARGET_1001: verified scalar C emission plans are missing\n");
+                "[xi_cgen] ERROR: XR_TARGET_1001: complete scalar C emission registry is missing\n");
+        if (ctx)
+            ctx->error = true;
+        return false;
+    }
+    const XrTargetProfile *profile = NULL;
+    for (uint32_t module_index = 0; module_index < count; module_index++) {
+        const XiModule *module = bundle->modules[module_index];
+        const XrTargetPlan *target_plan = bundle->target_plans[module_index];
+        const XrCEmissionPlan *emission_plan = emission_plans[module_index];
+        if (!module || !module->init || !module->init->semantic_plan ||
+            !target_plan || !emission_plan ||
+            xr_target_plan_semantic_plan(target_plan) !=
+                module->init->semantic_plan ||
+            !xr_target_plan_is_verified(target_plan) ||
+            !xr_c_emission_plan_is_verified(emission_plan) ||
+            !xr_fingerprint_equal(
+                xr_target_plan_fingerprint(target_plan),
+                xr_c_emission_plan_target_fingerprint(emission_plan)) ||
+            !xr_fingerprint_equal(
+                xr_target_profile_fingerprint(
+                    xr_target_plan_profile(target_plan)),
+                xr_c_emission_plan_profile_fingerprint(emission_plan)) ||
+            (profile && !xr_target_profile_require_exact(
+                            profile, xr_target_plan_profile(target_plan),
+                            NULL, 0))) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: XR_TARGET_1000: scalar C emission registry fingerprint mismatch\n");
+            ctx->error = true;
+            return false;
+        }
+        profile = xr_target_plan_profile(target_plan);
+        for (uint32_t prior = 0; prior < module_index; prior++) {
+            if (xr_target_plan_semantic_plan(bundle->target_plans[prior]) ==
+                module->init->semantic_plan) {
+                fprintf(stderr,
+                        "[xi_cgen] ERROR: XR_TARGET_1001: duplicate scalar SemanticPlan authority\n");
+                ctx->error = true;
+                return false;
+            }
+        }
+    }
+    CgScalarEmissionRegistryEntry *registry =
+        (CgScalarEmissionRegistryEntry *) xr_calloc(count, sizeof(*registry));
+    if (!registry) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: XR_EXEC_5003: scalar C emission registry allocation failed\n");
         ctx->error = true;
         return false;
     }
-    if (!xr_fingerprint_equal(xr_target_plan_fingerprint(target_plan),
-                              xr_c_emission_plan_target_fingerprint(emission_plan)) ||
-        !xr_fingerprint_equal(
-            xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)),
-            xr_c_emission_plan_profile_fingerprint(emission_plan))) {
-        fprintf(stderr,
-                "[xi_cgen] ERROR: XR_TARGET_1000: scalar C emission plan fingerprint mismatch\n");
-        ctx->error = true;
-        return false;
+    for (uint32_t module_index = 0; module_index < count; module_index++) {
+        registry[module_index].semantic_plan =
+            bundle->modules[module_index]->init->semantic_plan;
+        registry[module_index].target_plan = bundle->target_plans[module_index];
+        registry[module_index].emission_plan = emission_plans[module_index];
     }
-    ctx->scalar_target_plan = target_plan;
-    ctx->scalar_emission_plan = emission_plan;
+    ctx->scalar_emission_registry = registry;
+    ctx->scalar_emission_registry_count = count;
+    ctx->scalar_emission_registry_last = NULL;
     return true;
 }
 

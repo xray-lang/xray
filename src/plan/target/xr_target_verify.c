@@ -17,6 +17,7 @@
 #include "xr_target_plan_internal.h"
 #include "xr_target_profile_internal.h"
 #include "../../ir/xi.h"
+#include "../../ir/xi_ops_gen.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
@@ -609,25 +610,27 @@ static bool reconstruct_scalar_slot_identity(const XrTargetPlan *plan,
                                              XrStableId *out) {
     if (!slot || !out || slot->semantic_value != semantic_value ||
         slot->function != semantic_function ||
-        slot->semantic_operation >= xr_semantic_plan_operation_count(plan->semantic_plan) ||
         slot->logical_slot != XR_SEMANTIC_INDEX_NONE)
-        return false;
-    const XrSemanticOperationRecord *operation =
-        xr_semantic_plan_operation(plan->semantic_plan, slot->semantic_operation);
-    if (!operation || operation->function != semantic_function ||
-        operation->result_value != semantic_value)
         return false;
     const XrSemanticParameterRecord *parameter =
         semantic_parameter_for_value(plan->semantic_plan, semantic_function, semantic_value);
     XrStableId source;
     uint8_t expected_role;
     if (parameter) {
-        if (operation->opcode != XI_PARAM)
+        if (slot->semantic_operation != XR_SEMANTIC_INDEX_NONE)
             return false;
         expected_role = XR_TARGET_SLOT_PARAMETER;
         source = parameter->id;
     } else {
-        if (operation->opcode == XI_PARAM)
+        if (slot->semantic_operation >=
+            xr_semantic_plan_operation_count(plan->semantic_plan))
+            return false;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan->semantic_plan,
+                                       slot->semantic_operation);
+        if (!operation || operation->function != semantic_function ||
+            operation->result_value != semantic_value ||
+            operation->opcode == XI_PARAM)
             return false;
         expected_role = operation->opcode == XI_PHI ? XR_TARGET_SLOT_PHI
                                                     : XR_TARGET_SLOT_TEMPORARY;
@@ -669,11 +672,30 @@ static bool target_plan_has_layout_for_type(const XrTargetPlan *plan, uint32_t s
 
 static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value,
                                  uint32_t semantic_type, uint32_t semantic_function,
+                                 const XrSemanticOperationRecord *operation,
                                  uint8_t *bound_slots) {
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(plan->semantic_plan, semantic_type);
     uint16_t expected_kind = XR_MACHINE_REP_COUNT;
-    int eligibility = type ? semantic_type_expected_rep(type, &expected_kind) : -1;
+    bool generated_result_void =
+        operation && operation->opcode < XI_OP_COUNT &&
+        xi_generated_op_result_kind(operation->opcode) == XI_GEN_RESULT_VOID;
+    bool operation_result_void =
+        generated_result_void && operation->function == semantic_function &&
+        operation->result_value == semantic_value &&
+        operation->result_type == semantic_type &&
+        operation->effects == xi_generated_op_effects(operation->opcode) &&
+        operation->result_ownership ==
+            xi_generated_op_result_ownership(operation->opcode);
+    if (generated_result_void && !operation_result_void)
+        return false;
+    int eligibility = operation_result_void
+                          ? 1
+                          : (type ? semantic_type_expected_rep(type,
+                                                               &expected_kind)
+                                  : -1);
+    if (operation_result_void)
+        expected_kind = XR_MACHINE_REP_VOID;
     const XrTargetValueRepRecord *record = xr_target_plan_value_rep(plan, semantic_value);
     if (eligibility < 0)
         return false;
@@ -766,7 +788,7 @@ static bool verify_value_reps(const XrTargetPlan *plan, char *error, size_t erro
         else if (!defined[parameter->value]) {
             defined[parameter->value] = 1;
             valid = verify_value_binding(plan, parameter->value, parameter->type,
-                                         parameter->function, bound_slots);
+                                         parameter->function, NULL, bound_slots);
         }
     }
     uint32_t operations = (uint32_t) xr_semantic_plan_operation_count(plan->semantic_plan);
@@ -781,7 +803,8 @@ static bool verify_value_reps(const XrTargetPlan *plan, char *error, size_t erro
             else if (!defined[operation->result_value]) {
                 defined[operation->result_value] = 1;
                 valid = verify_value_binding(plan, operation->result_value, operation->result_type,
-                                             operation->function, bound_slots);
+                                             operation->function, operation,
+                                             bound_slots);
             }
         }
     }

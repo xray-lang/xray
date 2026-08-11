@@ -67,11 +67,19 @@ static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
     if (out_binding)
         *out_binding = NULL;
     target_plan = xaot_bundle_target_plan_for_func(bundle, func);
-    if (!bundle || !func || !value || !out_binding || !target_plan ||
-        !xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
-                                         &semantic_value, error, sizeof(error))) {
+    if (!bundle || !func || !value || !out_binding || !target_plan) {
         if (bundle)
             bundle->error_msg = "AOT value lacks exact TargetPlan semantic identity";
+        return false;
+    }
+    if (!xr_aot_scalar_semantic_value_id(target_plan, func, value,
+                                         &semantic_function,
+                                         &semantic_value, error,
+                                         sizeof(error))) {
+        if (xr_aot_rep_adapter_value_is_exact(target_plan, func, value,
+                                              error, sizeof(error)))
+            return true;
+        bundle->error_msg = "AOT value lacks exact TargetPlan semantic identity";
         return false;
     }
     (void) semantic_function;
@@ -286,10 +294,19 @@ static void apply_native_class_ptr_value_plan(XaotBundle *bundle, XaotValuePlan 
         prepare_value_plan_set_rep(vp, ptr_value_rep_for_type(vp->value->type));
 }
 
-static void record_value_stats(XaotPrepareStats *stats, XaotValueKind kind) {
+static void record_value_stats(XaotPrepareStats *stats, XaotValueKind kind,
+                               bool enum_ordinal, bool rep_adapter) {
     if (!stats)
         return;
     stats->values_total++;
+    if (rep_adapter) {
+        stats->values_rep_adapter++;
+        return;
+    }
+    if (enum_ordinal) {
+        stats->values_enum_ordinal++;
+        return;
+    }
     switch (kind) {
         case XAOT_VALUE_SCALAR:
             stats->values_scalar++;
@@ -2965,8 +2982,8 @@ done:
     return true;
 }
 
-/* Prove every index access in the function and record the result — proven
- * ones with evidence, unproven ones with a reason — in the bounds plan.
+/* Prove every index access in the function and record the result —proven
+ * ones with evidence, unproven ones with a reason —in the bounds plan.
  * Emission consults only the plan (no pattern matching in Cgen), so the
  * proof, the verifier and the dump stay in lockstep, and the unproven rows
  * expose the remaining bounds-check budget for audit. */
@@ -3025,7 +3042,7 @@ static bool prepare_func_span_access_plans(XaotBundle *bundle, const XiFunc *fun
  * be bounds-proven (checked slow paths read ->data directly, which would
  * break restrict), the only permitted method call is the proven fill push
  * (emitted as a raw cache store), and anything that could create a second
- * pointer — calls, stores, captures, phi participation — is rejected.
+ * pointer —calls, stores, captures, phi participation —is rejected.
  * Returning the array is fine: the restrict scope ends with the function. */
 static bool prepare_alias_array_uses_are_cache_local(const XaotBundle *bundle, const XiFunc *func,
                                                      const XiValue *target,
@@ -4012,7 +4029,8 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                         "AOT scalar TargetPlan binding has no supported machine rep";
                     return false;
                 }
-                record_value_stats(&bundle->stats, target_rep.kind);
+                record_value_stats(&bundle->stats, target_rep.kind, false,
+                                   false);
                 if (!prepare_type_plans_for_type(bundle, phi->value.type, 0))
                     return false;
                 continue;
@@ -4024,12 +4042,25 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             apply_native_class_ptr_value_plan(bundle, vp);
             apply_unit_enum_ordinal_value_plan(bundle, vp);
-            if (vp->rep.kind == XAOT_VALUE_SCALAR || vp->rep.kind == XAOT_VALUE_VOID) {
+            const bool enum_ordinal =
+                xaot_value_plan_is_exact_enum_ordinal_family(bundle, vp);
+            const bool rep_adapter =
+                xaot_value_plan_is_exact_rep_adapter(bundle, vp);
+            if ((vp->value->backend_origin != XI_BACKEND_VALUE_NONE) !=
+                rep_adapter) {
+                bundle->error_msg =
+                    "AOT prepare refused an inexact representation adapter row";
+                return false;
+            }
+            if ((vp->rep.kind == XAOT_VALUE_SCALAR ||
+                 vp->rep.kind == XAOT_VALUE_VOID) &&
+                !enum_ordinal && !rep_adapter) {
                 bundle->error_msg =
                     "AOT prepare refused an unbound legacy scalar value row";
                 return false;
             }
-            record_value_stats(&bundle->stats, vp->rep.kind);
+            record_value_stats(&bundle->stats, vp->rep.kind, enum_ordinal,
+                               rep_adapter);
             if (!prepare_type_plans_for_type(bundle, phi->value.type, 0))
                 return false;
         }
@@ -4046,7 +4077,8 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                         "AOT scalar TargetPlan binding has no supported machine rep";
                     return false;
                 }
-                record_value_stats(&bundle->stats, target_rep.kind);
+                record_value_stats(&bundle->stats, target_rep.kind, false,
+                                   false);
                 if (!prepare_type_plans_for_type(bundle, blk->values[vi]->type, 0))
                     return false;
                 continue;
@@ -4083,12 +4115,25 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             apply_native_class_ptr_value_plan(bundle, vp);
             apply_unit_enum_ordinal_value_plan(bundle, vp);
-            if (vp->rep.kind == XAOT_VALUE_SCALAR || vp->rep.kind == XAOT_VALUE_VOID) {
+            const bool enum_ordinal =
+                xaot_value_plan_is_exact_enum_ordinal_family(bundle, vp);
+            const bool rep_adapter =
+                xaot_value_plan_is_exact_rep_adapter(bundle, vp);
+            if ((vp->value->backend_origin != XI_BACKEND_VALUE_NONE) !=
+                rep_adapter) {
+                bundle->error_msg =
+                    "AOT prepare refused an inexact representation adapter row";
+                return false;
+            }
+            if ((vp->rep.kind == XAOT_VALUE_SCALAR ||
+                 vp->rep.kind == XAOT_VALUE_VOID) &&
+                !enum_ordinal && !rep_adapter) {
                 bundle->error_msg =
                     "AOT prepare refused an unbound legacy scalar value row";
                 return false;
             }
-            record_value_stats(&bundle->stats, vp->rep.kind);
+            record_value_stats(&bundle->stats, vp->rep.kind, enum_ordinal,
+                               rep_adapter);
             if (!prepare_type_plans_for_type(bundle, blk->values[vi]->type, 0))
                 return false;
         }
@@ -4370,6 +4415,8 @@ static void prepare_recount_value_stats(XaotBundle *bundle) {
     bundle->stats.values_vector = 0;
     bundle->stats.values_view = 0;
     bundle->stats.values_void = 0;
+    bundle->stats.values_enum_ordinal = 0;
+    bundle->stats.values_rep_adapter = 0;
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         const XrTargetPlan *target_plan =
             xaot_bundle_target_plan_for_module(bundle, module_index);
@@ -4382,11 +4429,17 @@ static void prepare_recount_value_stats(XaotBundle *bundle) {
             record_value_stats(&bundle->stats,
                                machine && machine->kind == XR_MACHINE_REP_VOID
                                    ? XAOT_VALUE_VOID
-                                   : XAOT_VALUE_SCALAR);
+                                   : XAOT_VALUE_SCALAR,
+                               false, false);
         }
     }
     for (uint32_t i = 0; i < bundle->nvalue_plans; i++)
-        record_value_stats(&bundle->stats, bundle->value_plans[i].rep.kind);
+        record_value_stats(
+            &bundle->stats, bundle->value_plans[i].rep.kind,
+            xaot_value_plan_is_exact_enum_ordinal_family(
+                bundle, &bundle->value_plans[i]),
+            xaot_value_plan_is_exact_rep_adapter(
+                bundle, &bundle->value_plans[i]));
 }
 
 static void prepare_target_vector_value_plans(XaotBundle *bundle) {
@@ -5134,7 +5187,7 @@ static bool func_attr_body_summary_disqualifies(const XaotBundle *bundle, const 
  * __attribute__((const)) (touches no memory) or ((pure)) (reads only).
  * Evidence is the body summary plus per-value effect flags; the verifier
  * re-checks both.
- * Disqualification is not an error — the function simply gets no plan. */
+ * Disqualification is not an error —the function simply gets no plan. */
 static bool prepare_func_attr_plan(XaotBundle *bundle, const XiFunc *func,
                                    const XgBodySummary *body) {
     bool reads_mem;
@@ -5302,7 +5355,7 @@ static bool prepare_func_extern_decls(XaotBundle *bundle, const XiFunc *func) {
  * fire on calls that previously carried a mandatory error check (the check node
  * sat between the call and its return, so the call was never in tail position).
  * The AOT C backend expresses a tail call as an ordinary call and returns its
- * result — the host C compiler performs the actual tail jump — so it has no
+ * result —the host C compiler performs the actual tail jump —so it has no
  * XI_TAIL_CALL emitter. Normalize XI_TAIL_CALL back to XI_CALL for every
  * function reached by C generation. The VM keeps its XI_TAIL_CALL handling; this
  * only rewrites the AOT bundle's IR, after all prepare-time analyses (which are

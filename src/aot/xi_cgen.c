@@ -680,6 +680,12 @@ typedef struct CgWriter {
     bool error;
 } CgWriter;
 
+typedef struct CgScalarEmissionRegistryEntry {
+    const XrSemanticPlan *semantic_plan;
+    const XrTargetPlan *target_plan;
+    const XrCEmissionPlan *emission_plan;
+} CgScalarEmissionRegistryEntry;
+
 /* One static no-payload enum member box referenced by the current unit.
  * Body emission interns these; static-data emission writes exactly one
  * immortal file-scope XrAotEnumBox per symbol. */
@@ -766,8 +772,9 @@ struct XiCgenCtx {
     size_t func_residues_cap;
     XiCgenCoroFrameStats coro_frame_stats;
     const XaotBundle *aot_bundle;
-    const XrTargetPlan *scalar_target_plan;
-    const XrCEmissionPlan *scalar_emission_plan;
+    CgScalarEmissionRegistryEntry *scalar_emission_registry; /* owned index; plans borrowed */
+    uint32_t scalar_emission_registry_count;
+    const CgScalarEmissionRegistryEntry *scalar_emission_registry_last;
     const XaotTarget *target;
     bool simd_active;
     CgWriter writer;
@@ -2520,40 +2527,71 @@ static CgScalarEmissionStatus cg_scalar_emission_view(XiCgenCtx *ctx, const XiFu
                                                       XrCScalarEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
-    if (!ctx || (!ctx->scalar_target_plan && !ctx->scalar_emission_plan))
+    if (!ctx || (!ctx->scalar_emission_registry &&
+                 ctx->scalar_emission_registry_count == 0))
         return CG_SCALAR_EMISSION_NOT_CONFIGURED;
-    if (!ctx->scalar_target_plan || !ctx->scalar_emission_plan || !value || !out)
+    if (!ctx->scalar_emission_registry ||
+        ctx->scalar_emission_registry_count == 0 || !value || !out)
         return cg_scalar_emission_fail(ctx, "scalar C emission consumer input is missing");
 
     if (!function && value->block)
         function = value->block->func;
-    const XrSemanticPlan *semantic_plan =
-        xr_target_plan_semantic_plan(ctx->scalar_target_plan);
-    if (!function || !semantic_plan || function->semantic_plan != semantic_plan ||
+    if (!function || !function->semantic_plan ||
         function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
         return cg_scalar_emission_fail(
             ctx, "Xi function does not carry the scalar TargetPlan authority");
+
+    const CgScalarEmissionRegistryEntry *entry =
+        ctx->scalar_emission_registry_last;
+    if (!entry || entry->semantic_plan != function->semantic_plan) {
+        entry = NULL;
+        for (uint32_t module_index = 0;
+             module_index < ctx->scalar_emission_registry_count;
+             module_index++) {
+            if (ctx->scalar_emission_registry[module_index].semantic_plan ==
+                function->semantic_plan) {
+                entry = &ctx->scalar_emission_registry[module_index];
+                break;
+            }
+        }
+    }
+    if (!entry)
+        return cg_scalar_emission_fail(
+            ctx, "scalar SemanticPlan authority is missing from the module registry");
+    ctx->scalar_emission_registry_last = entry;
+    const XrTargetPlan *target_plan = entry->target_plan;
+    const XrCEmissionPlan *emission_plan = entry->emission_plan;
+
+    const XrSemanticPlan *semantic_plan =
+        xr_target_plan_semantic_plan(target_plan);
 
     const XrSemanticFunctionRecord *semantic_function = xr_semantic_plan_function(
         semantic_plan, function->semantic_plan_function_index);
     if (!semantic_function)
         return cg_scalar_emission_fail(ctx, "scalar semantic function record is missing");
-    if (value->id >= semantic_function->value_count)
-        return CG_SCALAR_EMISSION_NOT_COVERED;
+    if (value->id >= semantic_function->value_count) {
+        const XaotValuePlan *adapter =
+            xaot_bundle_find_value_plan(ctx->aot_bundle, value);
+        if (adapter &&
+            xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter))
+            return CG_SCALAR_EMISSION_NOT_COVERED;
+        return cg_scalar_emission_fail(
+            ctx, "post-freeze Xi value has no semantic authority");
+    }
 
     uint32_t semantic_function_id = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     char error[256] = {0};
-    if (!xr_aot_scalar_semantic_value_id(ctx->scalar_target_plan, function, value,
+    if (!xr_aot_scalar_semantic_value_id(target_plan, function, value,
                                          &semantic_function_id, &semantic_value, error,
                                          sizeof(error)))
         return cg_scalar_emission_fail(ctx, error[0] ? error : "scalar identity lookup failed");
     if (semantic_function_id != function->semantic_plan_function_index)
         return cg_scalar_emission_fail(ctx, "scalar semantic function identity changed");
 
-    if (!xr_target_plan_value_rep(ctx->scalar_target_plan, semantic_value))
+    if (!xr_target_plan_value_rep(target_plan, semantic_value))
         return CG_SCALAR_EMISSION_NOT_COVERED;
-    if (!xr_c_emission_plan_scalar_view(ctx->scalar_emission_plan, semantic_value, out, error,
+    if (!xr_c_emission_plan_scalar_view(emission_plan, semantic_value, out, error,
                                         sizeof(error)))
         return cg_scalar_emission_fail(
             ctx, error[0] ? error : "immutable scalar C emission binding is missing");
@@ -4045,14 +4083,37 @@ static bool cg_value_narrow_int_rep(XiCgenCtx *ctx, const XiFunc *f, const XiVal
         return false;
     XaotRep rep;
     bool have_rep = false;
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
-    if (plan) {
-        rep = plan->rep.rep;
+    XrCScalarEmissionView scalar = {0};
+    CgScalarEmissionStatus scalar_status =
+        cg_scalar_emission_view(ctx, f, v, &scalar);
+    if (scalar_status == CG_SCALAR_EMISSION_ERROR)
+        return false;
+    if (scalar_status == CG_SCALAR_EMISSION_FOUND) {
+        switch ((XrCScalarRep) scalar.rep) {
+            case XR_C_SCALAR_REP_I8: rep = XAOT_REP_I8; break;
+            case XR_C_SCALAR_REP_U8: rep = XAOT_REP_U8; break;
+            case XR_C_SCALAR_REP_I16: rep = XAOT_REP_I16; break;
+            case XR_C_SCALAR_REP_U16: rep = XAOT_REP_U16; break;
+            case XR_C_SCALAR_REP_I32: rep = XAOT_REP_I32; break;
+            case XR_C_SCALAR_REP_U32: rep = XAOT_REP_U32; break;
+            case XR_C_SCALAR_REP_I64: rep = XAOT_REP_I64; break;
+            case XR_C_SCALAR_REP_U64: rep = XAOT_REP_U64; break;
+            case XR_C_SCALAR_REP_ISIZE: rep = XAOT_REP_ISIZE; break;
+            case XR_C_SCALAR_REP_USIZE: rep = XAOT_REP_USIZE; break;
+            case XR_C_SCALAR_REP_F32: rep = XAOT_REP_F32; break;
+            case XR_C_SCALAR_REP_F64: rep = XAOT_REP_F64; break;
+            case XR_C_SCALAR_REP_BOOL: rep = XAOT_REP_BOOL; break;
+            case XR_C_SCALAR_REP_RUNE: rep = XAOT_REP_RUNE; break;
+            case XR_C_SCALAR_REP_VOID:
+            case XR_C_SCALAR_REP_COUNT: return false;
+        }
         have_rep = true;
     } else {
-        uint8_t code = 0;
-        if (cg_value_narrow_local_scalar_rep(v, 0, &code) && xaot_rep_from_native_type(code, &rep))
-            have_rep = true;
+        const XaotValuePlan *plan = cg_find_value_plan(ctx, v);
+        if (!plan)
+            return false;
+        rep = plan->rep.rep;
+        have_rep = true;
     }
     if (!have_rep)
         return false;

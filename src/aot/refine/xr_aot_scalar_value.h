@@ -26,4 +26,8 @@ XR_FUNC bool xr_aot_scalar_semantic_value_id(const XrTargetPlan *target_plan,
                                              char *error,
                                              size_t error_size);
 
+XR_FUNC bool xr_aot_rep_adapter_value_is_exact(
+    const XrTargetPlan *target_plan, const XiFunc *function,
+    const XiValue *value, char *error, size_t error_size);
+
 #endif  // XR_AOT_SCALAR_VALUE_H

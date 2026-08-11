@@ -3178,8 +3178,9 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
 }
 
 /* Allocate a BOX/UNBOX value in the arena without appending to the block. */
-static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
-                                XiValue *arg) {
+static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op,
+                                struct XrType *type, XiValue *arg,
+                                XiBackendValueOrigin origin) {
     XR_DCHECK(f != NULL, "sr_make_convert: NULL func");
     XR_DCHECK(blk != NULL, "sr_make_convert: NULL block");
     XR_DCHECK(arg != NULL, "sr_make_convert: NULL arg");
@@ -3187,6 +3188,7 @@ static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op, struct XrT
     if (!v)
         return NULL;
     v->var_id = arg->var_id;
+    v->backend_origin = (uint8_t) origin;
     v->args[0] = arg;
     v->enum_metadata_owner = arg->enum_metadata_owner;
     v->enum_metadata_field = arg->enum_metadata_field;
@@ -3226,7 +3228,11 @@ static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot, XrRep use_r, XiValue *
         XiValue **cache = erase_enum_descriptor ? erased_box_of : box_of;
         uint16_t op = erase_enum_descriptor ? XI_ENUM_DESCRIPTOR_BOX : XI_BOX;
         if (!cache[arg->id]) {
-            cache[arg->id] = sr_make_convert(f, arg->block, op, arg->type, arg);
+            cache[arg->id] = sr_make_convert(
+                f, arg->block, op, arg->type, arg,
+                erase_enum_descriptor
+                    ? XI_BACKEND_VALUE_ENUM_DESCRIPTOR_BOX
+                    : XI_BACKEND_VALUE_REP_BOX);
         }
         if (cache[arg->id])
             *arg_slot = cache[arg->id];
@@ -3234,7 +3240,11 @@ static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot, XrRep use_r, XiValue *
         /* Tagged -> unboxed: insert UNBOX */
         if (!unbox_of[arg->id]) {
             uint16_t op = arg->op == XI_ENUM_DESCRIPTOR_BOX ? XI_ENUM_DESCRIPTOR_UNBOX : XI_UNBOX;
-            unbox_of[arg->id] = sr_make_convert(f, arg->block, op, arg->type, arg);
+            unbox_of[arg->id] = sr_make_convert(
+                f, arg->block, op, arg->type, arg,
+                op == XI_ENUM_DESCRIPTOR_UNBOX
+                    ? XI_BACKEND_VALUE_ENUM_DESCRIPTOR_UNBOX
+                    : XI_BACKEND_VALUE_REP_UNBOX);
         }
         if (unbox_of[arg->id])
             *arg_slot = unbox_of[arg->id];
@@ -3581,7 +3591,9 @@ XR_FUNC XiPassChange xi_opt_materialize_enum_descriptor_erasure(XiFunc *f) {
                     continue;
                 if (!box_of[source->id])
                     box_of[source->id] =
-                        sr_make_convert(f, source->block, XI_ENUM_DESCRIPTOR_BOX, target, source);
+                        sr_make_convert(f, source->block,
+                                        XI_ENUM_DESCRIPTOR_BOX, target, source,
+                                        XI_BACKEND_VALUE_NONE);
                 if (box_of[source->id]) {
                     v->args[ai] = box_of[source->id];
                     changed = true;
@@ -3596,8 +3608,9 @@ XR_FUNC XiPassChange xi_opt_materialize_enum_descriptor_erasure(XiFunc *f) {
                     !sr_conversion_erases_enum_metadata(source, phi->value.type))
                     continue;
                 if (!box_of[source->id])
-                    box_of[source->id] = sr_make_convert(f, source->block, XI_ENUM_DESCRIPTOR_BOX,
-                                                         phi->value.type, source);
+                    box_of[source->id] = sr_make_convert(
+                        f, source->block, XI_ENUM_DESCRIPTOR_BOX,
+                        phi->value.type, source, XI_BACKEND_VALUE_NONE);
                 if (box_of[source->id]) {
                     phi->value.args[ai] = box_of[source->id];
                     changed = true;
@@ -3610,8 +3623,9 @@ XR_FUNC XiPassChange xi_opt_materialize_enum_descriptor_erasure(XiFunc *f) {
             sr_conversion_erases_enum_metadata(blk->control, f->return_type)) {
             XiValue *source = blk->control;
             if (!box_of[source->id])
-                box_of[source->id] = sr_make_convert(f, source->block, XI_ENUM_DESCRIPTOR_BOX,
-                                                     f->return_type, source);
+                box_of[source->id] = sr_make_convert(
+                    f, source->block, XI_ENUM_DESCRIPTOR_BOX,
+                    f->return_type, source, XI_BACKEND_VALUE_NONE);
             if (box_of[source->id]) {
                 blk->control = box_of[source->id];
                 changed = true;

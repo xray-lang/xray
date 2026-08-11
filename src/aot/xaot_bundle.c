@@ -11,6 +11,7 @@
 #include "xaot_bundle.h"
 #include "../module/xnative_package.h"
 #include "xaot_struct_name.h"
+#include "refine/xr_aot_scalar_value.h"
 #include "../base/xmalloc.h"
 #include "../base/xmemstream.h"
 #include "../frontend/parser/xtype_ref.h"
@@ -5468,6 +5469,147 @@ XR_FUNC const XaotEnumPlan *xaot_bundle_find_enum_plan_for_type(const XaotBundle
     return argc == 0 ? fallback : generic_fallback;
 }
 
+XR_FUNC bool xaot_value_plan_is_exact_enum_ordinal_family(
+    const XaotBundle *bundle, const XaotValuePlan *plan) {
+    const XrType *type = plan && plan->value ? plan->value->type : NULL;
+    if (!bundle || !plan || !type || type != plan->rep.type ||
+        type->kind != XR_KIND_ENUM || type->is_nullable ||
+        plan->rep.kind != XAOT_VALUE_SCALAR ||
+        plan->rep.rep != XAOT_REP_I64 ||
+        plan->rep.flags != XAOT_VALUE_FLAG_ENUM || !plan->rep.c_type ||
+        strcmp(plan->rep.c_type, "int64_t") != 0 ||
+        !type->enum_type.layout || !type->enum_type.layout->is_zero_payload ||
+        type->enum_type.layout->layout_id == 0)
+        return false;
+    const XaotEnumPlan *enum_plan =
+        xaot_bundle_find_enum_plan_for_type(bundle, type);
+    if (!enum_plan || !enum_plan->enum_data || !enum_plan->members ||
+        enum_plan->member_count == 0 || enum_plan->max_payload != 0 ||
+        enum_plan->layout_id != type->enum_type.layout->layout_id ||
+        enum_plan->member_count != type->enum_type.layout->variant_count)
+        return false;
+    for (uint32_t member = 0; member < enum_plan->member_count; member++) {
+        if (enum_plan->members[member].payload_count != 0 ||
+            enum_plan->members[member].ordinal != member)
+            return false;
+    }
+    return true;
+}
+
+static bool rep_adapter_fields_are_exact(const XaotValueRep *actual,
+                                         XaotValueKind kind, XaotRep rep,
+                                         const XrType *type,
+                                         const char *c_type, uint32_t flags) {
+    return actual && actual->kind == kind && actual->rep == rep &&
+           actual->type == type && actual->c_type && c_type &&
+           strcmp(actual->c_type, c_type) == 0 && actual->flags == flags &&
+           actual->vector_native_type == 0 && actual->vector_lanes == 0 &&
+           actual->vector_width_bytes == 0;
+}
+
+static bool rep_adapter_exact_non_scalar_legacy_source(
+    const XaotValuePlan *source, const XiFunc *function,
+    const XiValue *value, uint16_t adapter_op) {
+    if (!source || source->func != function || source->value != value ||
+        !value || !value->type || value->type->is_nullable)
+        return false;
+    if (value->type->kind == XR_KIND_SLICE)
+        return rep_adapter_fields_are_exact(
+            &source->rep, XAOT_VALUE_AGGREGATE, XAOT_REP_SLICE,
+            value->type, "xr_span_t", XAOT_VALUE_FLAG_SLICE);
+    switch (value->type->kind) {
+        case XR_KIND_STRING:
+            if (adapter_op == XI_UNBOX)
+                return rep_adapter_fields_are_exact(
+                    &source->rep, XAOT_VALUE_TAGGED,
+                    XAOT_REP_TAGGED, value->type, "XrValue", 0);
+            return rep_adapter_fields_are_exact(
+                &source->rep, XAOT_VALUE_PTR, XAOT_REP_PTR,
+                value->type, "void *", 0);
+        default: return false;
+    }
+}
+
+static bool rep_adapter_exact_target_scalar_output(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding, const XrType *type,
+    const XaotValueRep *actual) {
+    const XrTargetMachineRepRecord *machine =
+        binding ? xr_target_plan_machine_rep(target_plan, binding->memory_rep)
+                : NULL;
+    XaotRep rep = XAOT_REP_COUNT;
+    if (!machine)
+        return false;
+    switch ((XrMachineRepKind) machine->kind) {
+        case XR_MACHINE_REP_VOID: rep = XAOT_REP_VOID; break;
+        case XR_MACHINE_REP_I1: rep = XAOT_REP_BOOL; break;
+        case XR_MACHINE_REP_I8: rep = XAOT_REP_I8; break;
+        case XR_MACHINE_REP_U8: rep = XAOT_REP_U8; break;
+        case XR_MACHINE_REP_I16: rep = XAOT_REP_I16; break;
+        case XR_MACHINE_REP_U16: rep = XAOT_REP_U16; break;
+        case XR_MACHINE_REP_I32: rep = XAOT_REP_I32; break;
+        case XR_MACHINE_REP_U32: rep = XAOT_REP_U32; break;
+        case XR_MACHINE_REP_I64: rep = XAOT_REP_I64; break;
+        case XR_MACHINE_REP_U64: rep = XAOT_REP_U64; break;
+        case XR_MACHINE_REP_ISIZE: rep = XAOT_REP_ISIZE; break;
+        case XR_MACHINE_REP_USIZE: rep = XAOT_REP_USIZE; break;
+        case XR_MACHINE_REP_F32: rep = XAOT_REP_F32; break;
+        case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
+        case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
+        default: return false;
+    }
+    const XaotRepInfo *info = xaot_rep_info(rep);
+    XaotValueKind kind = rep == XAOT_REP_VOID ? XAOT_VALUE_VOID
+                                              : XAOT_VALUE_SCALAR;
+    return info && rep_adapter_fields_are_exact(actual, kind, rep, type,
+                                                info->c_type, 0);
+}
+
+XR_FUNC bool xaot_value_plan_is_exact_rep_adapter(
+    const XaotBundle *bundle, const XaotValuePlan *plan) {
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    if (!bundle || !plan || !plan->func || !plan->value)
+        return false;
+    const XrTargetPlan *target_plan =
+        xaot_bundle_target_plan_for_func(bundle, plan->func);
+    if (!target_plan || !xr_aot_rep_adapter_value_is_exact(
+                            target_plan, plan->func, plan->value, NULL, 0))
+        return false;
+    const XiValue *source = plan->value->args[0];
+    if (!xr_aot_scalar_semantic_value_id(
+            target_plan, plan->func, source, &semantic_function,
+            &semantic_value, NULL, 0))
+        return false;
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(target_plan, semantic_value);
+    const XaotValuePlan *legacy_source =
+        xaot_bundle_find_value_plan(bundle, source);
+    bool target_source = binding != NULL;
+    bool legacy_source_exact = rep_adapter_exact_non_scalar_legacy_source(
+        legacy_source, plan->func, source, plan->value->op);
+    if (target_source == legacy_source_exact)
+        return false;
+
+    if (plan->value->op == XI_BOX ||
+        plan->value->op == XI_ENUM_DESCRIPTOR_BOX)
+        return rep_adapter_fields_are_exact(
+            &plan->rep, XAOT_VALUE_TAGGED, XAOT_REP_TAGGED,
+            plan->value->type, "XrValue", 0);
+    if (target_source)
+        return rep_adapter_exact_target_scalar_output(
+            target_plan, binding, plan->value->type, &plan->rep);
+    if (plan->value->op != XI_UNBOX)
+        return false;
+    if (plan->value->type->kind == XR_KIND_SLICE)
+        return rep_adapter_fields_are_exact(
+            &plan->rep, XAOT_VALUE_AGGREGATE, XAOT_REP_SLICE,
+            plan->value->type, "xr_span_t", XAOT_VALUE_FLAG_SLICE);
+    return rep_adapter_fields_are_exact(
+        &plan->rep, XAOT_VALUE_PTR, XAOT_REP_PTR,
+        plan->value->type, "void *", 0);
+}
+
 static const XiEnumData *find_enum_data_by_name(const XaotBundle *bundle, const char *name,
                                                 uint32_t *module_index_out) {
     if (!bundle || !name)
@@ -8459,10 +8601,11 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
             bundle->stats.functions_tagged_abi, bundle->stats.functions_coro_abi,
             bundle->stats.values_total, bundle->stats.boundary_count,
             bundle->stats.containers_total);
-    fprintf(out, "value-stats scalar=%u tagged=%u ptr=%u aggregate=%u vector=%u view=%u void=%u\n",
+    fprintf(out, "value-stats scalar=%u tagged=%u ptr=%u aggregate=%u vector=%u view=%u void=%u enum-ordinal=%u rep-adapter=%u\n",
             bundle->stats.values_scalar, bundle->stats.values_tagged, bundle->stats.values_ptr,
             bundle->stats.values_aggregate, bundle->stats.values_vector, bundle->stats.values_view,
-            bundle->stats.values_void);
+            bundle->stats.values_void, bundle->stats.values_enum_ordinal,
+            bundle->stats.values_rep_adapter);
     fprintf(out, "container-stats array=%u map=%u set=%u direct=%u\n",
             bundle->stats.containers_array, bundle->stats.containers_map,
             bundle->stats.containers_set, bundle->stats.containers_direct);

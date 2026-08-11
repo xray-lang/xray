@@ -764,6 +764,29 @@ static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uin
     }
     if (!xaot_bundle_set_global_evidence(&plan->bundle, &plan->evidence, XG_BUILD_NATIVE_RELEASE))
         return false;
+    XrTargetProfile *target_profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    if (!target_profile)
+        return false;
+    for (uint32_t module_index = 0; module_index < nmodules; module_index++) {
+        XiModule *module = modules[module_index];
+        XrTargetPlan *target_plan = NULL;
+        char target_error[512] = {0};
+        if (!module || !module->init || !module->init->semantic_plan ||
+            !xr_target_plan_build(module->init->semantic_plan, target_profile,
+                                  &target_plan, target_error,
+                                  sizeof(target_error)) ||
+            !xaot_bundle_set_target_plan(&plan->bundle, module_index,
+                                         target_plan)) {
+            fprintf(stderr, "  TargetPlan fixture error: %s\n",
+                    target_error[0] ? target_error : "missing authority");
+            xr_target_plan_free(target_plan);
+            xr_target_profile_free(target_profile);
+            return false;
+        }
+        xr_target_plan_free(target_plan);
+    }
+    xr_target_profile_free(target_profile);
     if (!xaot_prepare_bundle(&plan->bundle, NULL))
         return false;
     test_aot_annotate_class_field_values(modules, nmodules, &plan->evidence);
@@ -2681,17 +2704,47 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     xi_block_set_return(entry, sum);
     TEST_REQUIRE(test_prepare_backend_ir(ir), "scalar emission consumer backend prepared");
 
+    XrType i16_type = {
+        .kind = XR_KIND_INT, .id = 962, .scalar_rep = XR_NATIVE_I16, .frozen = true};
+    XiFunc *ir_second = xi_func_new("scalar_emission_consumer_second", &i16_type);
+    TEST_REQUIRE(ir_second != NULL, "second scalar emission function allocated");
+    XiBlock *second_entry = xi_block_new(ir_second);
+    TEST_REQUIRE(second_entry != NULL, "second scalar emission entry allocated");
+    second_entry->sealed = true;
+    ir_second->nparams = 1;
+    ir_second->min_params = 1;
+    ir_second->params = (XiValue **) xr_calloc(1, sizeof(*ir_second->params));
+    TEST_REQUIRE(ir_second->params != NULL,
+                 "second scalar emission parameter table allocated");
+    XiValue *second_parameter = xi_param(ir_second, second_entry, 0, &i16_type);
+    XiValue *second_one = xi_const_int(ir_second, second_entry, 1, &i16_type);
+    XiValue *second_sum = xi_value_new(ir_second, second_entry, XI_ADD, &i16_type, 2);
+    TEST_REQUIRE(second_parameter && second_one && second_sum,
+                 "second scalar emission values allocated");
+    ir_second->params[0] = second_parameter;
+    second_sum->args[0] = second_parameter;
+    second_sum->args[1] = second_one;
+    xi_block_set_return(second_entry, second_sum);
+    TEST_REQUIRE(test_prepare_backend_ir(ir_second),
+                 "second scalar emission backend prepared");
+
     XiModule *module = xi_module_new("scalar_consumer.xr", "scalar_consumer", ir);
     TEST_REQUIRE(module != NULL, "scalar emission consumer module allocated");
-    XiModule *modules[] = {module};
+    XiModule *module_second = xi_module_new(
+        "scalar_consumer_second.xr", "scalar_consumer_second", ir_second);
+    TEST_REQUIRE(module_second != NULL,
+                 "second scalar emission module allocated");
+    XiModule *modules[] = {module, module_second};
     TestAotPlan legacy_plan;
-    test_aot_plan_prepare(&legacy_plan, modules, 1, 0);
+    test_aot_plan_prepare(&legacy_plan, modules, 2, 0);
 
     XrTargetProfile *profile = xr_test_target_profile_build(
         false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     TEST_REQUIRE(profile != NULL, "scalar emission consumer profile built");
     XrTargetPlan *target_plan = NULL;
+    XrTargetPlan *target_plan_second = NULL;
     XrCEmissionPlan *emission_plan = NULL;
+    XrCEmissionPlan *emission_plan_second = NULL;
     char error[512] = {0};
     TEST_REQUIRE(xr_target_plan_build(ir->semantic_plan, profile, &target_plan, error,
                                       sizeof(error)),
@@ -2700,25 +2753,37 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
                                           xr_target_profile_fingerprint(profile),
                                           &emission_plan, error, sizeof(error)),
                  "scalar emission consumer C plan built");
+    TEST_REQUIRE(xr_target_plan_build(ir_second->semantic_plan, profile,
+                                      &target_plan_second, error,
+                                      sizeof(error)),
+                 "second scalar emission TargetPlan built");
+    TEST_REQUIRE(xr_c_emission_plan_build(
+                     target_plan_second,
+                     xr_target_profile_fingerprint(profile),
+                     &emission_plan_second, error, sizeof(error)),
+                 "second scalar emission C plan built");
+    TEST_REQUIRE(xaot_bundle_set_target_plan(&legacy_plan.bundle, 0, target_plan),
+                 "scalar emission TargetPlan attached to module registry");
+    TEST_REQUIRE(xaot_bundle_set_target_plan(&legacy_plan.bundle, 1,
+                                             target_plan_second),
+                 "second scalar emission TargetPlan attached to module registry");
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     TEST_REQUIRE(ctx != NULL, "scalar emission consumer context allocated");
     xi_cgen_ctx_set_aot_bundle(ctx, &legacy_plan.bundle);
-    TEST_REQUIRE(xi_cgen_ctx_set_scalar_emission_plan(ctx, target_plan, emission_plan),
+    const XrCEmissionPlan *emission_plans[] = {emission_plan,
+                                              emission_plan_second};
+    TEST_REQUIRE(xi_cgen_ctx_set_scalar_emission_plans(ctx, emission_plans, 2),
                  "verified scalar emission plans attached");
+    emission_plans[0] = NULL;
+    emission_plans[1] = NULL;
 
-    /* Poison both legacy sources after the immutable plan is complete. The
-     * generated local must still use the target-selected uint32_t spelling and
-     * integer storage class. */
-    XaotValuePlan *legacy_value =
-        xaot_bundle_find_value_plan_mut(&legacy_plan.bundle, sum);
-    TEST_REQUIRE(legacy_value != NULL, "legacy scalar value plan found");
-    XaotValueRep saved_legacy_rep = legacy_value->rep;
+    /* Poison the mutable Xi storage hint after the immutable plan is complete.
+     * The generated local must still use the target-selected uint32_t spelling
+     * and integer storage class. */
+    TEST_REQUIRE(xaot_bundle_find_value_plan(&legacy_plan.bundle, sum) == NULL,
+                 "bound scalar has no legacy value row");
     uint8_t saved_xi_rep = sum->rep;
-    legacy_value->rep.kind = XAOT_VALUE_TAGGED;
-    legacy_value->rep.rep = XAOT_REP_TAGGED;
-    legacy_value->rep.c_type = "XrValue";
-    legacy_value->rep.flags = 0;
     sum->rep = XR_REP_TAGGED;
 
     char *buf = NULL;
@@ -2726,9 +2791,9 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     FILE *mem = xr_open_memstream(&buf, &bufsz);
     TEST_REQUIRE(mem != NULL, "scalar emission consumer stream opened");
     xi_cgen_program(ctx, mem, module);
+    xi_cgen_program(ctx, mem, module_second);
     TEST_REQUIRE(xr_close_memstream(mem, &buf, &bufsz) == 0,
                  "scalar emission consumer stream closed");
-    legacy_value->rep = saved_legacy_rep;
     sum->rep = saved_xi_rep;
 
     TEST_REQUIRE(!xi_cgen_has_error(ctx), "scalar emission consumer generated without error");
@@ -2740,23 +2805,78 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
                  "immutable C emission plan owns scalar local spelling");
     TEST_REQUIRE(!contains_between(fn, fn_end, "XrValue v2"),
                  "poisoned legacy scalar spelling is unreachable");
+    const char *second_fn = find_static_function_definition(
+        buf, "scalar_emission_consumer_second");
+    TEST_REQUIRE(second_fn != NULL,
+                 "second scalar emission definition emitted");
+    const char *second_fn_end = strstr(second_fn, "\n}\n");
+    TEST_REQUIRE(second_fn_end != NULL &&
+                     contains_between(second_fn, second_fn_end,
+                                      "int16_t v2 ="),
+                 "second SemanticPlan authority selects its own scalar spelling");
+
+    emission_plans[0] = emission_plan;
+    emission_plans[1] = emission_plan_second;
+
+    XiCgenCtx *reverse = xi_cgen_ctx_new();
+    TEST_REQUIRE(reverse != NULL, "reverse registry context allocated");
+    xi_cgen_ctx_set_aot_bundle(reverse, &legacy_plan.bundle);
+    TEST_REQUIRE(xi_cgen_ctx_set_scalar_emission_plans(reverse,
+                                                       emission_plans, 2),
+                 "reverse registry installed");
+    char *reverse_buf = NULL;
+    size_t reverse_size = 0;
+    FILE *reverse_mem = xr_open_memstream(&reverse_buf, &reverse_size);
+    TEST_REQUIRE(reverse_mem != NULL, "reverse registry stream opened");
+    xi_cgen_program(reverse, reverse_mem, module_second);
+    xi_cgen_program(reverse, reverse_mem, module);
+    TEST_REQUIRE(xr_close_memstream(reverse_mem, &reverse_buf,
+                                    &reverse_size) == 0 &&
+                     !xi_cgen_has_error(reverse),
+                 "registry cache preserves reverse module selection");
+    xr_free(reverse_buf);
+    xi_cgen_ctx_free(reverse);
+
+    XiCgenCtx *swapped = xi_cgen_ctx_new();
+    TEST_REQUIRE(swapped != NULL, "swapped registry context allocated");
+    xi_cgen_ctx_set_aot_bundle(swapped, &legacy_plan.bundle);
+    const XrCEmissionPlan *swapped_plans[] = {emission_plan_second,
+                                             emission_plan};
+    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plans(swapped,
+                                                        swapped_plans, 2) &&
+                     xi_cgen_has_error(swapped),
+                 "swapped module emission plans fail closed");
+    xi_cgen_ctx_free(swapped);
+
+    xi_cgen_ctx_set_aot_bundle(ctx, &legacy_plan.bundle);
+    TEST_REQUIRE(xi_cgen_has_error(ctx),
+                 "installed scalar registry seals the AOT bundle authority");
 
     XiCgenCtx *missing = xi_cgen_ctx_new();
     TEST_REQUIRE(missing != NULL, "missing-plan context allocated");
-    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plan(missing, target_plan, NULL) &&
+    xi_cgen_ctx_set_aot_bundle(missing, &legacy_plan.bundle);
+    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plans(missing, NULL, 2) &&
                      xi_cgen_has_error(missing),
                  "missing scalar emission plan fails closed");
+    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plans(missing, emission_plans, 2) &&
+                     xi_cgen_has_error(missing),
+                 "sticky registry error cannot be cleared by a later valid install");
 
     xi_cgen_ctx_free(missing);
     xr_free(buf);
     xi_cgen_ctx_free(ctx);
     xr_c_emission_plan_free(emission_plan);
+    xr_c_emission_plan_free(emission_plan_second);
     xr_target_plan_free(target_plan);
+    xr_target_plan_free(target_plan_second);
     xr_target_profile_free(profile);
     test_aot_plan_free(&legacy_plan);
     module->init = NULL;
     xi_module_free(module);
+    module_second->init = NULL;
+    xi_module_free(module_second);
     xi_func_free(ir);
+    xi_func_free(ir_second);
 }
 
 TEST(cgen_struct_fixed_array_index_keeps_required_constant_local) {

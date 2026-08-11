@@ -62,6 +62,7 @@ static bool verify_target_plan_bindings(const XaotBundle *bundle, char *errbuf,
 static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *func,
                                         const XiValue *value,
                                         const XrTargetValueRepRecord **out_binding,
+                                        bool *out_rep_adapter,
                                         char *errbuf, size_t errbuf_len) {
     const XrTargetPlan *target_plan;
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
@@ -70,13 +71,23 @@ static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *
 
     if (out_binding)
         *out_binding = NULL;
+    if (out_rep_adapter)
+        *out_rep_adapter = false;
     target_plan = xaot_bundle_target_plan_for_func(bundle, func);
-    if (!func || !value || !out_binding || !target_plan ||
-        !xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
-                                         &semantic_value, target_error,
-                                         sizeof(target_error)))
+    if (!func || !value || !out_binding || !out_rep_adapter || !target_plan)
         return set_error(errbuf, errbuf_len,
                          "AOT value lacks exact TargetPlan semantic identity");
+    if (!xr_aot_scalar_semantic_value_id(target_plan, func, value,
+                                         &semantic_function, &semantic_value,
+                                         target_error, sizeof(target_error))) {
+        if (!xr_aot_rep_adapter_value_is_exact(target_plan, func, value,
+                                               target_error,
+                                               sizeof(target_error)))
+            return set_error(errbuf, errbuf_len,
+                             "AOT value lacks exact TargetPlan semantic identity");
+        *out_rep_adapter = true;
+        return true;
+    }
     (void) semantic_function;
     *out_binding = xr_target_plan_value_rep(target_plan, semantic_value);
     return true;
@@ -128,8 +139,10 @@ static bool verify_effective_value_rep(const XaotBundle *bundle, const XiFunc *f
                                        char *errbuf, size_t errbuf_len) {
     const XrTargetValueRepRecord *binding;
     const XaotValuePlan *legacy;
+    bool rep_adapter = false;
 
-    if (!verify_target_value_binding(bundle, func, value, &binding, errbuf, errbuf_len))
+    if (!verify_target_value_binding(bundle, func, value, &binding,
+                                     &rep_adapter, errbuf, errbuf_len))
         return false;
     if (binding) {
         if (!verify_target_machine_value_rep(xaot_bundle_target_plan_for_func(bundle, func),
@@ -142,6 +155,9 @@ static bool verify_effective_value_rep(const XaotBundle *bundle, const XiFunc *f
     if (!legacy)
         return set_error(errbuf, errbuf_len,
                          "AOT unmigrated value has no legacy value plan");
+    if (rep_adapter && !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
+        return set_error(errbuf, errbuf_len,
+                         "AOT representation adapter has no exact legacy row");
     *out = xaot_value_rep_borrow(legacy->rep);
     return true;
 }
@@ -376,18 +392,27 @@ static bool verify_vector_rep(const XaotBundle *bundle, const XaotValuePlan *pla
 static bool verify_value_plan(const XaotBundle *bundle, const XaotValuePlan *plan, char *errbuf,
                               size_t errbuf_len) {
     const XrTargetValueRepRecord *binding = NULL;
+    bool rep_adapter = false;
 
     if (!plan || !plan->value)
         return set_error(errbuf, errbuf_len, "AOT value plan has no Xi value");
     if (!plan->func)
         return set_error(errbuf, errbuf_len, "AOT value plan has no Xi function");
-    if (!verify_target_value_binding(bundle, plan->func, plan->value, &binding, errbuf,
-                                     errbuf_len))
+    if (!verify_target_value_binding(bundle, plan->func, plan->value, &binding,
+                                     &rep_adapter, errbuf, errbuf_len))
         return false;
+    if ((plan->value->backend_origin != XI_BACKEND_VALUE_NONE) != rep_adapter ||
+        (rep_adapter &&
+         !xaot_value_plan_is_exact_rep_adapter(bundle, plan)))
+        return set_error(errbuf, errbuf_len,
+                         "AOT representation adapter row is inexact");
     if (binding)
         return set_error(errbuf, errbuf_len,
                          "AOT scalar value retains a forbidden legacy value plan");
-    if (plan->rep.kind == XAOT_VALUE_SCALAR || plan->rep.kind == XAOT_VALUE_VOID)
+    if ((plan->rep.kind == XAOT_VALUE_SCALAR ||
+         plan->rep.kind == XAOT_VALUE_VOID) &&
+        !xaot_value_plan_is_exact_enum_ordinal_family(bundle, plan) &&
+        !rep_adapter)
         return set_error(errbuf, errbuf_len,
                          "AOT bundle retains a forbidden legacy scalar value row");
     if (!plan->rep.c_type)
@@ -7184,9 +7209,10 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
             continue;
         for (phi = blk->phis; phi; phi = phi->next) {
             const XrTargetValueRepRecord *binding = NULL;
+            bool rep_adapter = false;
             const XaotValuePlan *legacy = xaot_bundle_find_value_plan(bundle, &phi->value);
-            if (!verify_target_value_binding(bundle, func, &phi->value, &binding, errbuf,
-                                             errbuf_len))
+            if (!verify_target_value_binding(bundle, func, &phi->value, &binding,
+                                             &rep_adapter, errbuf, errbuf_len))
                 return false;
             if (binding && legacy)
                 return set_error(errbuf, errbuf_len,
@@ -7194,11 +7220,17 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
             if (!binding && !legacy)
                 return set_error(errbuf, errbuf_len,
                                  "Xi unmigrated phi has no AOT value plan");
+            if (rep_adapter &&
+                !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
+                return set_error(errbuf, errbuf_len,
+                                 "Xi phi representation adapter row is inexact");
         }
         for (vi = 0; vi < blk->nvalues; vi++) {
             const XrTargetValueRepRecord *binding = NULL;
+            bool rep_adapter = false;
             const XaotValuePlan *legacy = xaot_bundle_find_value_plan(bundle, blk->values[vi]);
-            if (!verify_target_value_binding(bundle, func, blk->values[vi], &binding, errbuf,
+            if (!verify_target_value_binding(bundle, func, blk->values[vi],
+                                             &binding, &rep_adapter, errbuf,
                                              errbuf_len))
                 return false;
             if (binding && legacy)
@@ -7207,6 +7239,10 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
             if (!binding && !legacy)
                 return set_error(errbuf, errbuf_len,
                                  "Xi unmigrated value has no AOT value plan");
+            if (rep_adapter &&
+                !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
+                return set_error(errbuf, errbuf_len,
+                                 "Xi value representation adapter row is inexact");
         }
     }
 

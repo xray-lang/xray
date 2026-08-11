@@ -43,7 +43,7 @@
 #include "xi_cgen.h"
 #include "xi_cgen_verify_output.h"
 #include "xi_backend_plan_contract.h"
-#include "xi_lto.h"
+#include "emit_c/xr_c_emission_plan.h"
 #include "xaot_bundle.h"
 #include "xaot_boundary.h"
 #include "xaot_link.h"
@@ -54,6 +54,7 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_mono.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../plan/target/xr_target_builder.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1631,6 +1632,94 @@ static bool xaot_c90_link_manifest_supported(const XaotLinkManifest *manifest) {
            manifest->n_native_inputs == 0;
 }
 
+static void xaot_module_emission_plans_free(XrCEmissionPlan **plans,
+                                            uint32_t count) {
+    if (!plans)
+        return;
+    for (uint32_t i = 0; i < count; i++)
+        xr_c_emission_plan_free(plans[i]);
+    xr_free(plans);
+}
+
+static bool xaot_build_module_target_plans(XaotBundle *bundle,
+                                           XrTargetProfile *profile) {
+    if (!bundle || !profile || !bundle->modules ||
+        bundle->nmodules == 0 ||
+        !xr_target_profile_verify(profile, NULL, 0))
+        return false;
+    for (uint32_t module_index = 0; module_index < bundle->nmodules;
+         module_index++) {
+        XiModule *module = bundle->modules[module_index];
+        XrTargetPlan *target_plan = NULL;
+        char error[512] = {0};
+        if (!module || !module->init || !module->init->semantic_plan ||
+            !xr_target_plan_build(module->init->semantic_plan, profile,
+                                  &target_plan, error, sizeof(error)) ||
+            !xaot_bundle_set_target_plan(bundle, module_index, target_plan)) {
+            fprintf(stderr, "Error: module TargetPlan build failed for '%s': %s\n",
+                    module && module->name ? module->name : "?",
+                    error[0] ? error
+                             : (bundle->error_msg ? bundle->error_msg
+                                                  : "unknown error"));
+            xr_target_plan_free(target_plan);
+            return false;
+        }
+        const XrTargetPlan *bound =
+            xaot_bundle_target_plan_for_module(bundle, module_index);
+        xr_target_plan_free(target_plan);
+        if (!bound ||
+            !xr_target_profile_require_exact(profile,
+                                             xr_target_plan_profile(bound),
+                                             error, sizeof(error))) {
+            fprintf(stderr,
+                    "Error: module TargetPlan profile mismatch for '%s': %s\n",
+                    module->name ? module->name : "?",
+                    error[0] ? error : "missing exact profile authority");
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool xaot_build_module_emission_plans(
+    const XaotBundle *bundle, const XrTargetProfile *profile,
+    XrCEmissionPlan ***out_emission_plans) {
+    XrCEmissionPlan **emission_plans;
+    XrFingerprint profile_fingerprint;
+
+    if (out_emission_plans)
+        *out_emission_plans = NULL;
+    if (!bundle || !profile || !out_emission_plans || !bundle->modules ||
+        bundle->nmodules == 0)
+        return false;
+    emission_plans = (XrCEmissionPlan **) xr_calloc(
+        bundle->nmodules, sizeof(*emission_plans));
+    if (!emission_plans)
+        return false;
+    profile_fingerprint = xr_target_profile_fingerprint(profile);
+    for (uint32_t module_index = 0; module_index < bundle->nmodules;
+         module_index++) {
+        const XiModule *module = bundle->modules[module_index];
+        const XrTargetPlan *target_plan =
+            xaot_bundle_target_plan_for_module(bundle, module_index);
+        char error[512] = {0};
+        if (!target_plan ||
+            !xr_c_emission_plan_build(target_plan, profile_fingerprint,
+                                      &emission_plans[module_index], error,
+                                      sizeof(error)) ||
+            !xr_c_emission_plan_is_verified(emission_plans[module_index])) {
+            fprintf(stderr,
+                    "Error: module C emission plan build failed for '%s': %s\n",
+                    module && module->name ? module->name : "?",
+                    error[0] ? error : "unverified emission plan");
+            xaot_module_emission_plans_free(emission_plans, bundle->nmodules);
+            return false;
+        }
+    }
+    *out_emission_plans = emission_plans;
+    return true;
+}
+
 XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                        XaotBuildResult *result) {
     bool emit_plan_dump;
@@ -1943,6 +2032,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     XiPipelineResult *pres_arr = (XiPipelineResult *) xr_calloc(nmodules, sizeof(XiPipelineResult));
     XiFunc **ir_funcs = (XiFunc **) xr_calloc(nmodules, sizeof(XiFunc *));
     XiModule **modules = (XiModule **) xr_calloc(nmodules, sizeof(XiModule *));
+    XrCEmissionPlan **emission_plans = NULL;
     XaotBundle aot_bundle;
     bool aot_bundle_initialized = false;
     XgGlobalEvidence global_evidence;
@@ -2113,14 +2203,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         xi_resolve_imports(ir_funcs[ti], graph, paths[ti], modules, nmodules);
     }
 
-    /* --- Cross-module LTO: direct-bind imported callees --- */
-    {
-        XiLtoContext lto;
-        if (xi_lto_context_init(&lto, modules, (uint32_t) nmodules))
-            (void) xi_lto_link_modules(&lto);
-        xi_lto_context_free(&lto);
-    }
-
     /* --- AOT target prepare: build sidecar rep/ABI plan before C emission --- */
     if (!xaot_bundle_init(&aot_bundle, modules, (uint32_t) nmodules, (uint32_t) entry_index)) {
         fprintf(stderr, "Error: failed to initialize AOT bundle plan\n");
@@ -2149,6 +2231,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                 aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
         goto fail_free_ir;
     }
+    if (!xaot_build_module_target_plans(&aot_bundle,
+                                        options->target_profile))
+        goto fail_free_ir;
     if (!xaot_prepare_bundle(&aot_bundle, &prepare_stats)) {
         if (emit_global_evidence_dump && global_evidence_dump)
             fputs(global_evidence_dump, stdout);
@@ -2183,6 +2268,10 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     if (!reject_profile_static_data_plans(&aot_bundle))
         goto fail_free_ir;
+    if (!xaot_build_module_emission_plans(&aot_bundle,
+                                          options->target_profile,
+                                          &emission_plans))
+        goto fail_free_ir;
     if (emit_local_evidence_dump) {
         local_evidence_dump = xaot_dump_local_evidence(&aot_bundle, ir_funcs, nmodules);
         if (!local_evidence_dump) {
@@ -2215,6 +2304,13 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     has_explicit_vector_ops = xaot_bundle_has_explicit_vector_ops(modules, nmodules);
     xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle);
+    if (!xi_cgen_ctx_set_scalar_emission_plans(
+            cg_ctx, (const XrCEmissionPlan *const *) emission_plans,
+            (uint32_t) nmodules)) {
+        fprintf(stderr, "Error: failed to install module C emission authorities\n");
+        xi_cgen_ctx_free(cg_ctx);
+        goto fail_free_ir;
+    }
     xi_cgen_ctx_set_target(cg_ctx, options->target, has_explicit_vector_ops);
     xi_cgen_ctx_set_artifact_kind(cg_ctx, artifact_kind);
     xi_cgen_ctx_set_freestanding_profile(cg_ctx, profile == XAOT_BUILD_PROFILE_FREESTANDING);
@@ -2341,6 +2437,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     if (options->emit_residue_dump)
         residue_dump = xi_cgen_residue_dump(cg_ctx);
     xi_cgen_ctx_free(cg_ctx);
+    xaot_module_emission_plans_free(emission_plans, (uint32_t) nmodules);
+    emission_plans = NULL;
 
     /* Build link features before freeing IR. Runtime capabilities, external
      * dylibs, and stdlib module/symbol closure all come from verified global
@@ -2443,6 +2541,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     return 0;
 
 fail_free_ir:
+    xaot_module_emission_plans_free(emission_plans, (uint32_t) nmodules);
     xr_free(plan_dump);
     xr_free(global_evidence_dump);
     xr_free(local_evidence_dump);
