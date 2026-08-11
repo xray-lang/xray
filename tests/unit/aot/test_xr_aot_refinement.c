@@ -65,7 +65,7 @@ static XrSemanticPlan *build_semantic_plan(void) {
 
 static XrTargetProfile *build_target_profile(void) {
     XrTargetProfileDraft draft = {0};
-    draft.schema_version = XR_TARGET_PLAN_SCHEMA_VERSION;
+    draft.schema_version = XR_TARGET_PROFILE_SCHEMA_VERSION;
     draft.architecture = XR_TARGET_ARCH_X86_64;
     draft.operating_system = XR_TARGET_OS_WINDOWS;
     draft.environment = XR_TARGET_ENV_MSVC;
