@@ -233,7 +233,7 @@ static bool checked_align_u32(uint32_t value, uint32_t alignment, uint32_t *out)
     return true;
 }
 
-static bool rep_layout_for_kind(const XrTargetProfileDraft *profile, uint16_t kind,
+static bool rep_layout_for_kind(const XrTargetMachineFacts *profile, uint16_t kind,
                                 XrTargetTypeLayout *out, uint16_t *register_bits,
                                 uint8_t *signedness) {
     if (!profile || !out || !register_bits || !signedness)
@@ -300,7 +300,7 @@ static bool rep_layout_for_kind(const XrTargetProfileDraft *profile, uint16_t ki
     return true;
 }
 
-static bool make_machine_rep(const XrTargetProfileDraft *profile, uint16_t kind,
+static bool make_machine_rep(const XrTargetMachineFacts *profile, uint16_t kind,
                              XrTargetMachineRepRecord *out) {
     memset(out, 0, sizeof(*out));
     out->kind = kind;
@@ -528,7 +528,7 @@ static bool note_scalar_value(XrTargetPlanBuilder *builder, XrTargetScalarAnalys
         return fail(error, error_size, "XR_TARGET_1001", "semantic type has conflicting scalar representations");
     analysis->type_rep_kinds[semantic_type] = kind;
     XrTargetMachineRepRecord rep;
-    if (!make_machine_rep(xr_target_profile_facts(builder->profile), kind, &rep) ||
+    if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile), kind, &rep) ||
         !append_rep_intent(builder, &rep, error, error_size))
         return fail(error, error_size, "XR_TARGET_1001", "target profile cannot materialize a scalar representation");
     XrTargetValueIntent value = {
@@ -633,7 +633,8 @@ static bool builder_add_scalars(XrTargetPlanBuilder *builder, char *error,
         return false;
     XrTargetScalarAnalysis analysis = {0};
     XrTargetMachineRepRecord void_rep;
-    if (!make_machine_rep(xr_target_profile_facts(builder->profile), XR_MACHINE_REP_VOID,
+    if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile),
+                          XR_MACHINE_REP_VOID,
                           &void_rep) ||
         !append_rep_intent(builder, &void_rep, error, error_size) ||
         !scalar_analysis_init(builder->semantic_plan, &analysis, error, error_size) ||

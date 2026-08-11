@@ -22,6 +22,7 @@
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,35 +65,9 @@ static XrSemanticPlan *build_semantic_plan(void) {
 }
 
 static XrTargetProfile *build_target_profile(void) {
-    XrTargetProfileDraft draft = {0};
-    draft.schema_version = XR_TARGET_PROFILE_SCHEMA_VERSION;
-    draft.architecture = XR_TARGET_ARCH_X86_64;
-    draft.operating_system = XR_TARGET_OS_WINDOWS;
-    draft.environment = XR_TARGET_ENV_MSVC;
-    draft.native_abi = XR_TARGET_ABI_WIN64_X86_64;
-    draft.runtime_profile = XR_TARGET_RUNTIME_HOSTED;
-    REQUIRE(xr_target_data_layout_init_lp64(&draft.data_layout));
-    draft.atomic_width_mask = XR_TARGET_ATOMIC_WIDTH_8 |
-                              XR_TARGET_ATOMIC_WIDTH_16 |
-                              XR_TARGET_ATOMIC_WIDTH_32 |
-                              XR_TARGET_ATOMIC_WIDTH_64;
-    draft.atomic_order_mask = XR_TARGET_ATOMIC_RELAXED |
-                              XR_TARGET_ATOMIC_ACQUIRE |
-                              XR_TARGET_ATOMIC_RELEASE |
-                              XR_TARGET_ATOMIC_ACQ_REL |
-                              XR_TARGET_ATOMIC_SEQ_CST;
-    draft.float_feature_mask = XR_TARGET_FLOAT_IEEE754 |
-                               XR_TARGET_FLOAT_STRICT;
-    draft.vector_feature_mask = XR_TARGET_VECTOR_SSE2;
-    draft.maximum_vector_bits = 128;
-    draft.provider_mask = (UINT64_C(1) << XR_TARGET_PROVIDER_ALLOCATOR) |
-                          (UINT64_C(1) << XR_TARGET_PROVIDER_PANIC);
-    draft.provider_set_fingerprint.bytes[0] = 0x41;
-    draft.object_header_fingerprint.bytes[0] = 0x52;
-    draft.runtime_abi_fingerprint.bytes[0] = 0x63;
-    XrTargetProfile *profile = NULL;
-    char error[512] = {0};
-    REQUIRE(xr_target_profile_freeze(&draft, &profile, error, sizeof(error)));
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
     return profile;
 }
 

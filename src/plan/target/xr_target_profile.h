@@ -18,6 +18,8 @@
 
 #include "../semantic/xr_semantic_ids.h"
 #include "../../base/xtarget_data_layout.h"
+#include "../../runtime/abi/xr_runtime_contract.h"
+#include "../../runtime/abi/xr_runtime_object_header.h"
 #include "../../runtime/abi/xr_target_runtime_profile.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -107,8 +109,7 @@ typedef enum XrTargetVectorFeature {
     XR_TARGET_VECTOR_WASM128 = 1u << 7,
 } XrTargetVectorFeature;
 
-typedef struct XrTargetProfileDraft {
-    uint32_t schema_version;
+typedef struct XrTargetMachineFacts {
     uint16_t architecture;
     uint16_t operating_system;
     uint16_t environment;
@@ -122,21 +123,30 @@ typedef struct XrTargetProfileDraft {
     uint64_t vector_feature_mask;
     uint16_t maximum_vector_bits;
     uint16_t reserved16;
-    uint64_t provider_mask;
-    XrFingerprint provider_set_fingerprint;
-    XrFingerprint object_header_fingerprint;
-    XrFingerprint runtime_abi_fingerprint;
-} XrTargetProfileDraft;
+} XrTargetMachineFacts;
 
-XR_FUNC bool xr_target_profile_freeze(const XrTargetProfileDraft *draft,
-                                      XrTargetProfile **out, char *error,
-                                      size_t error_size);
+/* Structured inputs are consumed during the call and are never retained. */
+typedef struct XrTargetProfileBuildInput {
+    XrTargetMachineFacts machine;
+    const XrRuntimeAbiContract *runtime_abi;
+    const XrRuntimeObjectHeaderMaterializationFacts *object_header_materialization;
+    const XrTargetProviderContract *providers;
+    size_t provider_count;
+} XrTargetProfileBuildInput;
+
+XR_FUNC bool xr_target_profile_build(const XrTargetProfileBuildInput *input,
+                                     XrTargetProfile **out, char *error,
+                                     size_t error_size);
+XR_FUNC bool xr_target_profile_require_exact(const XrTargetProfile *expected,
+                                             const XrTargetProfile *actual,
+                                             char *error, size_t error_size);
 XR_FUNC XrTargetProfile *xr_target_profile_retain(XrTargetProfile *profile);
 XR_FUNC void xr_target_profile_free(XrTargetProfile *profile);
 XR_FUNC bool xr_target_profile_is_frozen(const XrTargetProfile *profile);
 XR_FUNC bool xr_target_profile_verify(const XrTargetProfile *profile, char *error,
                                       size_t error_size);
 XR_FUNC XrFingerprint xr_target_profile_fingerprint(const XrTargetProfile *profile);
-XR_FUNC const XrTargetProfileDraft *xr_target_profile_facts(const XrTargetProfile *profile);
+XR_FUNC const XrTargetMachineFacts *xr_target_profile_machine_facts(
+    const XrTargetProfile *profile);
 
 #endif  // XR_TARGET_PROFILE_H

@@ -9,6 +9,7 @@
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -92,34 +93,17 @@ static XrSemanticPlan *build_semantic_plan(void) {
 }
 
 static XrTargetProfile *build_profile(uint64_t extra_atomic_width) {
-    XrTargetProfileDraft draft = {0};
-    draft.schema_version = XR_TARGET_PROFILE_SCHEMA_VERSION;
-    draft.architecture = XR_TARGET_ARCH_X86_64;
-    draft.operating_system = XR_TARGET_OS_WINDOWS;
-    draft.environment = XR_TARGET_ENV_MSVC;
-    draft.native_abi = XR_TARGET_ABI_WIN64_X86_64;
-    draft.runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED;
-    REQUIRE(xr_target_data_layout_init_lp64(&draft.data_layout));
-    draft.atomic_width_mask = XR_TARGET_ATOMIC_WIDTH_8 | XR_TARGET_ATOMIC_WIDTH_16 |
-                              XR_TARGET_ATOMIC_WIDTH_32 | XR_TARGET_ATOMIC_WIDTH_64 |
-                              extra_atomic_width;
-    draft.atomic_order_mask = XR_TARGET_ATOMIC_RELAXED | XR_TARGET_ATOMIC_ACQUIRE |
-                              XR_TARGET_ATOMIC_RELEASE | XR_TARGET_ATOMIC_ACQ_REL |
-                              XR_TARGET_ATOMIC_SEQ_CST;
-    draft.float_feature_mask = XR_TARGET_FLOAT_IEEE754 | XR_TARGET_FLOAT_STRICT;
-    draft.vector_feature_mask = XR_TARGET_VECTOR_SSE2;
-    draft.maximum_vector_bits = 128;
-    draft.provider_mask = XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-                          XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
-    draft.provider_set_fingerprint.bytes[0] = 0x3c;
-    draft.object_header_fingerprint.bytes[0] = 0xa5;
-    draft.runtime_abi_fingerprint.bytes[0] = 0x5a;
+    XrTestTargetProfileFixture fixture;
+    REQUIRE(xr_test_target_profile_fixture_init(
+        &fixture, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    fixture.input.machine.atomic_width_mask |= extra_atomic_width;
     XrTargetProfile *profile = NULL;
     char error[512] = {0};
-    bool frozen = xr_target_profile_freeze(&draft, &profile, error, sizeof(error));
-    if (!frozen)
+    bool built = xr_target_profile_build(&fixture.input, &profile, error,
+                                         sizeof(error));
+    if (!built)
         fprintf(stderr, "target profile failed: %s\n", error);
-    REQUIRE(frozen && profile != NULL);
+    REQUIRE(built && profile != NULL);
     return profile;
 }
 
@@ -482,34 +466,34 @@ static void test_profile_freeze_and_determinism(void) {
     REQUIRE(!xr_fingerprint_equal(xr_target_profile_fingerprint(first),
                                   xr_target_profile_fingerprint(different)));
 
-    first->facts.data_layout.pointer.size = 4;
+    first->facts.machine.data_layout.pointer.size = 4;
     char error[512] = {0};
     REQUIRE(!xr_target_profile_verify(first, error, sizeof(error)));
     REQUIRE(strncmp(error, "XR_TARGET_1000", strlen("XR_TARGET_1000")) == 0);
-    first->facts.data_layout.pointer.size = 8;
+    first->facts.machine.data_layout.pointer.size = 8;
     REQUIRE(xr_target_profile_verify(first, error, sizeof(error)));
-    first->facts.native_abi = XR_TARGET_ABI_COUNT;
+    first->facts.machine.native_abi = XR_TARGET_ABI_COUNT;
     REQUIRE(!xr_target_profile_verify(first, error, sizeof(error)));
-    first->facts.native_abi = XR_TARGET_ABI_WIN64_X86_64;
+    first->facts.machine.native_abi = XR_TARGET_ABI_WIN64_X86_64;
     XrFingerprint saved_profile_fingerprint = first->fingerprint;
-    first->facts.maximum_vector_bits = 256;
+    first->facts.machine.maximum_vector_bits = 256;
     xr_target_profile_compute_fingerprint(&first->facts, &first->fingerprint);
     REQUIRE(!xr_target_profile_verify(first, error, sizeof(error)));
-    first->facts.maximum_vector_bits = 128;
-    first->facts.vector_feature_mask = XR_TARGET_VECTOR_AVX2;
-    first->facts.maximum_vector_bits = 256;
+    first->facts.machine.maximum_vector_bits = 128;
+    first->facts.machine.vector_feature_mask = XR_TARGET_VECTOR_AVX2;
+    first->facts.machine.maximum_vector_bits = 256;
     xr_target_profile_compute_fingerprint(&first->facts, &first->fingerprint);
     REQUIRE(!xr_target_profile_verify(first, error, sizeof(error)));
-    first->facts.vector_feature_mask = XR_TARGET_VECTOR_SSE2;
-    first->facts.maximum_vector_bits = 128;
-    first->facts.operating_system = XR_TARGET_OS_FREESTANDING;
-    first->facts.environment = XR_TARGET_ENV_FREESTANDING;
-    first->facts.runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING;
+    first->facts.machine.vector_feature_mask = XR_TARGET_VECTOR_SSE2;
+    first->facts.machine.maximum_vector_bits = 128;
+    first->facts.machine.operating_system = XR_TARGET_OS_FREESTANDING;
+    first->facts.machine.environment = XR_TARGET_ENV_FREESTANDING;
+    first->facts.machine.runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING;
     xr_target_profile_compute_fingerprint(&first->facts, &first->fingerprint);
     REQUIRE(!xr_target_profile_verify(first, error, sizeof(error)));
-    first->facts.operating_system = XR_TARGET_OS_WINDOWS;
-    first->facts.environment = XR_TARGET_ENV_MSVC;
-    first->facts.runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED;
+    first->facts.machine.operating_system = XR_TARGET_OS_WINDOWS;
+    first->facts.machine.environment = XR_TARGET_ENV_MSVC;
+    first->facts.machine.runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED;
     first->fingerprint = saved_profile_fingerprint;
     first->facts.provider_mask |= UINT64_C(1) << 63;
     xr_target_profile_compute_fingerprint(&first->facts, &first->fingerprint);

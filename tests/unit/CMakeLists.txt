@@ -6,7 +6,7 @@
 # ============================================================================
 
 macro(add_xray_unit_test name source)
-    add_executable(${name} ${source})
+    add_executable(${name} ${source} ${ARGN})
     target_compile_definitions(${name} PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
     target_include_directories(${name} PRIVATE
         ${XRAY_COMMON_INCLUDES}
@@ -278,9 +278,15 @@ add_xray_unit_test(test_xi_own ir/test_xi_own.c)
 add_xray_unit_test(test_xi_arc_verify ir/test_xi_arc_verify.c)
 add_xray_unit_test(test_xi_source_move_verify ir/test_xi_source_move_verify.c)
 add_xray_unit_test(test_semantic_plan plan/test_semantic_plan.c)
-add_xray_unit_test(test_target_plan plan/test_target_plan.c)
-add_xray_unit_test(test_xr_aot_scalar_plan aot/test_xr_aot_scalar_plan.c)
-add_xray_unit_test(test_xr_aot_refinement aot/test_xr_aot_refinement.c)
+set(XR_TARGET_PROFILE_TEST_FIXTURE plan/target_profile_test_fixture.c)
+add_xray_unit_test(test_target_profile plan/test_target_profile.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_xray_unit_test(test_target_plan plan/test_target_plan.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_xray_unit_test(test_xr_aot_scalar_plan aot/test_xr_aot_scalar_plan.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_xray_unit_test(test_xr_aot_refinement aot/test_xr_aot_refinement.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
 set_tests_properties(test_xr_aot_refinement PROPERTIES
     LABELS "aot;refinement;backend;task-279"
 )

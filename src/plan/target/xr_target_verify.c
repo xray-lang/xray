@@ -64,7 +64,7 @@ static bool stable_id_is_zero(XrStableId id) {
     return combined == 0;
 }
 
-static bool profile_identity_is_consistent(const XrTargetProfileDraft *facts) {
+static bool profile_identity_is_consistent(const XrTargetMachineFacts *facts) {
     switch (facts->operating_system) {
         case XR_TARGET_OS_WINDOWS:
             return facts->environment == XR_TARGET_ENV_MSVC &&
@@ -117,7 +117,7 @@ static bool profile_identity_is_consistent(const XrTargetProfileDraft *facts) {
     }
 }
 
-static bool profile_machine_features_are_consistent(const XrTargetProfileDraft *facts) {
+static bool profile_machine_features_are_consistent(const XrTargetMachineFacts *facts) {
     uint64_t vectors = facts->vector_feature_mask;
     uint64_t allowed = 0;
     switch (facts->architecture) {
@@ -203,19 +203,23 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
         return report(error, error_size, "XR_TARGET_1000",
                       "target profile is not frozen");
     const XrTargetProfileDraft *facts = &profile->facts;
+    const XrTargetMachineFacts *machine = &facts->machine;
     if (facts->schema_version != XR_TARGET_PROFILE_SCHEMA_VERSION ||
-        facts->architecture <= XR_TARGET_ARCH_NONE || facts->architecture >= XR_TARGET_ARCH_COUNT ||
-        facts->operating_system <= XR_TARGET_OS_NONE ||
-        facts->operating_system >= XR_TARGET_OS_COUNT ||
-        facts->environment <= XR_TARGET_ENV_NONE || facts->environment >= XR_TARGET_ENV_COUNT ||
-        facts->native_abi <= XR_TARGET_ABI_NONE || facts->native_abi >= XR_TARGET_ABI_COUNT ||
-        facts->runtime_profile < XR_TARGET_RUNTIME_PROFILE_HOSTED ||
-        facts->runtime_profile > XR_TARGET_RUNTIME_PROFILE_FREESTANDING ||
-        facts->reserved8[0] != 0 ||
-        facts->reserved8[1] != 0 || facts->reserved8[2] != 0 || facts->reserved16 != 0)
+        machine->architecture <= XR_TARGET_ARCH_NONE ||
+        machine->architecture >= XR_TARGET_ARCH_COUNT ||
+        machine->operating_system <= XR_TARGET_OS_NONE ||
+        machine->operating_system >= XR_TARGET_OS_COUNT ||
+        machine->environment <= XR_TARGET_ENV_NONE ||
+        machine->environment >= XR_TARGET_ENV_COUNT ||
+        machine->native_abi <= XR_TARGET_ABI_NONE ||
+        machine->native_abi >= XR_TARGET_ABI_COUNT ||
+        machine->runtime_profile < XR_TARGET_RUNTIME_PROFILE_HOSTED ||
+        machine->runtime_profile > XR_TARGET_RUNTIME_PROFILE_FREESTANDING ||
+        machine->reserved8[0] != 0 || machine->reserved8[1] != 0 ||
+        machine->reserved8[2] != 0 || machine->reserved16 != 0)
         return report(error, error_size, "XR_TARGET_1000",
                       "target profile contains an unsupported exact identity");
-    if (!xr_target_data_layout_validate(&facts->data_layout))
+    if (!xr_target_data_layout_validate(&machine->data_layout))
         return report(error, error_size, "XR_TARGET_1000",
                       "target profile data layout is invalid");
     const uint64_t atomic_width_mask = XR_TARGET_ATOMIC_WIDTH_8 | XR_TARGET_ATOMIC_WIDTH_16 |
@@ -231,33 +235,30 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
                                  XR_TARGET_VECTOR_SVE | XR_TARGET_VECTOR_VSX |
                                  XR_TARGET_VECTOR_LSX | XR_TARGET_VECTOR_WASM128;
     const uint64_t provider_mask = XR_TARGET_PROVIDER_MASK_ALL;
-    if ((facts->atomic_width_mask & ~atomic_width_mask) != 0 ||
-        (facts->atomic_order_mask & ~atomic_order_mask) != 0 ||
-        (facts->float_feature_mask & ~float_mask) != 0 ||
-        (facts->vector_feature_mask & ~vector_mask) != 0 ||
+    if ((machine->atomic_width_mask & ~atomic_width_mask) != 0 ||
+        (machine->atomic_order_mask & ~atomic_order_mask) != 0 ||
+        (machine->float_feature_mask & ~float_mask) != 0 ||
+        (machine->vector_feature_mask & ~vector_mask) != 0 ||
         (facts->provider_mask & ~provider_mask) != 0 ||
         (facts->provider_mask & XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR)) == 0 ||
         (facts->provider_mask & XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC)) == 0 ||
-        (facts->float_feature_mask & XR_TARGET_FLOAT_IEEE754) == 0 ||
-        ((facts->float_feature_mask & XR_TARGET_FLOAT_STRICT) != 0 &&
-         (facts->float_feature_mask & XR_TARGET_FLOAT_FAST) != 0) ||
-        (facts->vector_feature_mask == 0 && facts->maximum_vector_bits != 0) ||
-        (facts->vector_feature_mask != 0 &&
-         (!is_power_of_two(facts->maximum_vector_bits) || facts->maximum_vector_bits < 128u ||
-          facts->maximum_vector_bits > 2048u)) ||
+        (machine->float_feature_mask & XR_TARGET_FLOAT_IEEE754) == 0 ||
+        ((machine->float_feature_mask & XR_TARGET_FLOAT_STRICT) != 0 &&
+         (machine->float_feature_mask & XR_TARGET_FLOAT_FAST) != 0) ||
+        (machine->vector_feature_mask == 0 && machine->maximum_vector_bits != 0) ||
+        (machine->vector_feature_mask != 0 &&
+         (!is_power_of_two(machine->maximum_vector_bits) ||
+          machine->maximum_vector_bits < 128u ||
+          machine->maximum_vector_bits > 2048u)) ||
         fingerprint_is_zero(facts->provider_set_fingerprint) ||
         fingerprint_is_zero(facts->object_header_fingerprint) ||
         fingerprint_is_zero(facts->runtime_abi_fingerprint))
         return report(error, error_size, "XR_TARGET_1000",
                       "target profile runtime facts are incomplete");
-    bool freestanding =
-        facts->runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING;
-    if (freestanding != (facts->operating_system == XR_TARGET_OS_FREESTANDING) ||
-        freestanding != (facts->environment == XR_TARGET_ENV_FREESTANDING) ||
-        !profile_identity_is_consistent(facts) ||
-        !profile_machine_features_are_consistent(facts))
+    if (!profile_identity_is_consistent(machine) ||
+        !profile_machine_features_are_consistent(machine))
         return report(error, error_size, "XR_TARGET_1000",
-                      "runtime profile disagrees with the target environment");
+                      "target machine identity or feature facts are inconsistent");
     XrFingerprint actual;
     xr_target_profile_compute_fingerprint(facts, &actual);
     if (!xr_fingerprint_equal(actual, profile->fingerprint))
@@ -374,7 +375,7 @@ static bool rep_matches_layout(const XrTargetMachineRepRecord *rep,
 }
 
 static bool scalar_rep_matches_profile(const XrTargetMachineRepRecord *rep,
-                                       const XrTargetProfileDraft *profile) {
+                                       const XrTargetMachineFacts *profile) {
     switch (rep->kind) {
         case XR_MACHINE_REP_I1:
             return rep->register_bits == 1 &&
@@ -413,7 +414,8 @@ static bool scalar_rep_matches_profile(const XrTargetMachineRepRecord *rep,
 
 static bool rep_kind_contract_is_exact(const XrTargetPlan *plan,
                                        const XrTargetMachineRepRecord *rep) {
-    const XrTargetProfileDraft *profile = xr_target_profile_facts(plan->profile);
+    const XrTargetMachineFacts *profile =
+        xr_target_profile_machine_facts(plan->profile);
     bool scalar = rep->kind >= XR_MACHINE_REP_I1 && rep->kind <= XR_MACHINE_REP_RUNE;
     if (scalar)
         return rep->detail == 0 && rep->lane_count == 0 && rep->root_kind == XR_TARGET_ROOT_NONE &&
@@ -467,7 +469,8 @@ static bool rep_kind_contract_is_exact(const XrTargetPlan *plan,
 }
 
 static bool verify_machine_reps(const XrTargetPlan *plan, char *error, size_t error_size) {
-    const XrTargetProfileDraft *profile = xr_target_profile_facts(plan->profile);
+    const XrTargetMachineFacts *profile =
+        xr_target_profile_machine_facts(plan->profile);
     if (!plan->machine_reps_count)
         return report(error, error_size, "XR_TARGET_1001", "machine representation table is empty");
     for (uint32_t i = 0; i < plan->machine_reps_count; i++) {

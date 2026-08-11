@@ -27,6 +27,7 @@
 #include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,37 +73,16 @@ static XrType scalar_unit = {
     .frozen = true,
 };
 
-static XrTargetProfile *build_profile(bool ilp32, uint8_t fingerprint_seed) {
-    XrTargetProfileDraft draft = {0};
-    draft.schema_version = XR_TARGET_PROFILE_SCHEMA_VERSION;
-    draft.architecture = ilp32 ? XR_TARGET_ARCH_WASM32 : XR_TARGET_ARCH_X86_64;
-    draft.operating_system = ilp32 ? XR_TARGET_OS_WASI : XR_TARGET_OS_WINDOWS;
-    draft.environment = ilp32 ? XR_TARGET_ENV_WASI : XR_TARGET_ENV_MSVC;
-    draft.native_abi = ilp32 ? XR_TARGET_ABI_WASM : XR_TARGET_ABI_WIN64_X86_64;
-    draft.runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED;
-    REQUIRE(ilp32 ? xr_target_data_layout_init_ilp32(&draft.data_layout)
-                  : xr_target_data_layout_init_lp64(&draft.data_layout));
-    draft.atomic_width_mask = XR_TARGET_ATOMIC_WIDTH_8 | XR_TARGET_ATOMIC_WIDTH_16 |
-                              XR_TARGET_ATOMIC_WIDTH_32 | XR_TARGET_ATOMIC_WIDTH_64;
-    draft.atomic_order_mask = XR_TARGET_ATOMIC_RELAXED | XR_TARGET_ATOMIC_ACQUIRE |
-                              XR_TARGET_ATOMIC_RELEASE | XR_TARGET_ATOMIC_ACQ_REL |
-                              XR_TARGET_ATOMIC_SEQ_CST;
-    draft.float_feature_mask = XR_TARGET_FLOAT_IEEE754 | XR_TARGET_FLOAT_STRICT;
-    draft.vector_feature_mask = ilp32 ? XR_TARGET_VECTOR_WASM128 : XR_TARGET_VECTOR_SSE2;
-    draft.maximum_vector_bits = 128;
-    draft.provider_mask = XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-                          XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
-    draft.provider_set_fingerprint.bytes[0] = fingerprint_seed;
-    draft.object_header_fingerprint.bytes[0] = (uint8_t) (fingerprint_seed + 1u);
-    draft.runtime_abi_fingerprint.bytes[0] = (uint8_t) (fingerprint_seed + 2u);
-    XrTargetProfile *profile = NULL;
-    char error[512] = {0};
-    REQUIRE(xr_target_profile_freeze(&draft, &profile, error, sizeof(error)));
+static XrTargetProfile *build_profile(bool ilp32, bool freestanding_runtime) {
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        ilp32, freestanding_runtime ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+                                   : XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    REQUIRE(profile != NULL);
     return profile;
 }
 
 static XrTargetProfile *build_exact_profile(void) {
-    return build_profile(false, 0x11);
+    return build_profile(false, false);
 }
 
 static ScalarFixture build_scalar_fixture(void) {
@@ -462,7 +442,7 @@ static void require_scalar_known_answer(const XrTargetPlan *target_plan,
 
 static void test_all_scalar_c_spelling_known_answers(bool ilp32) {
     ScalarMatrixFixture fixture = build_scalar_matrix_fixture();
-    XrTargetProfile *profile = build_profile(ilp32, ilp32 ? 0x31 : 0x21);
+    XrTargetProfile *profile = build_profile(ilp32, false);
     XrTargetPlan *first = build_target_plan(fixture.function->semantic_plan, profile);
     XrTargetPlan *same = build_target_plan(fixture.function->semantic_plan, profile);
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
@@ -548,7 +528,7 @@ static void test_nullable_scalar_binding_is_rejected(void) {
 static void test_profile_mismatch_fails_before_projection(void) {
     ScalarFixture fixture = build_scalar_fixture();
     XrTargetProfile *profile = build_exact_profile();
-    XrTargetProfile *different = build_profile(false, 0x41);
+    XrTargetProfile *different = build_profile(false, true);
     XrTargetPlan *target_plan = build_target_plan(fixture.function->semantic_plan, profile);
     XrCEmissionPlan *emission = NULL;
     char error[512] = {0};
