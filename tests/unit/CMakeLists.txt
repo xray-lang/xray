@@ -395,6 +395,9 @@ if(NOT XR_C_EMISSION_HEADERS_ARE_ISOLATED)
 endif()
 add_xray_unit_test(test_cache_key incremental/test_cache_key.c)
 add_xray_unit_test(test_cache_store incremental/test_cache_store.c)
+add_xray_unit_test(test_cache_artifact_verify
+                   incremental/test_cache_artifact_verify.c
+                   ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_dependency_graph incremental/test_dependency_graph.c)
 add_xray_unit_test(test_compiler_session_generation
                    toolchain/test_compiler_session_generation.c)
