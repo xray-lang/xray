@@ -27,6 +27,39 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+int xr_fs_lock_exclusive(const char *path, XrFsExclusiveLock *out) {
+    if (!path || !out)
+        return -1;
+    out->handle = 0;
+    XrFsStat stat;
+    if (xr_fs_stat(path, &stat) == 0 && stat.kind != XR_FS_FILE)
+        return -1;
+    HANDLE handle = CreateFileA(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS,
+                                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+    if (handle == INVALID_HANDLE_VALUE)
+        return -1;
+    BY_HANDLE_FILE_INFORMATION info;
+    OVERLAPPED overlapped = {0};
+    if (!GetFileInformationByHandle(handle, &info) ||
+        (info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 ||
+        !LockFileEx(handle, LOCKFILE_EXCLUSIVE_LOCK, 0, MAXDWORD, MAXDWORD, &overlapped)) {
+        CloseHandle(handle);
+        return -1;
+    }
+    out->handle = (intptr_t) handle;
+    return 0;
+}
+
+int xr_fs_unlock_exclusive(XrFsExclusiveLock *lock) {
+    if (!lock || !lock->handle)
+        return -1;
+    HANDLE handle = (HANDLE) lock->handle;
+    OVERLAPPED overlapped = {0};
+    bool ok = UnlockFileEx(handle, 0, MAXDWORD, MAXDWORD, &overlapped) && CloseHandle(handle);
+    lock->handle = 0;
+    return ok ? 0 : -1;
+}
+
 // Convert FILETIME (100-ns ticks since 1601-01-01) to ns since unix epoch.
 static int64_t filetime_to_unix_ns(FILETIME ft) {
     ULARGE_INTEGER u;

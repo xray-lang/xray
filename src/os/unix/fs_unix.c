@@ -14,12 +14,36 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/file.h>
 #include <stdint.h>
 #include <stdio.h>  // rename
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
+int xr_fs_lock_exclusive(const char *path, XrFsExclusiveLock *out) {
+    if (!path || !out)
+        return -1;
+    out->handle = 0;
+    int fd = open(path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0600);
+    if (fd < 0 || flock(fd, LOCK_EX) != 0) {
+        if (fd >= 0)
+            close(fd);
+        return -1;
+    }
+    out->handle = (intptr_t) fd + 1;
+    return 0;
+}
+
+int xr_fs_unlock_exclusive(XrFsExclusiveLock *lock) {
+    if (!lock || !lock->handle)
+        return -1;
+    int fd = (int) (lock->handle - 1);
+    bool ok = flock(fd, LOCK_UN) == 0 && close(fd) == 0;
+    lock->handle = 0;
+    return ok ? 0 : -1;
+}
 
 static XrFsKind kind_from_mode(mode_t m) {
     if (S_ISREG(m))

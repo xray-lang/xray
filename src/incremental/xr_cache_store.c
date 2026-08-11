@@ -36,6 +36,7 @@ typedef struct XrCacheDiskEntry {
 
 struct XrCacheStore {
     char *root;
+    char *lock_path;
     char *artifact_dirs[3];
     uint64_t quota_bytes;
     size_t max_entry_bytes;
@@ -122,6 +123,7 @@ static void cache_store_free(XrCacheStore *store, bool destroy_lock) {
     for (size_t i = 0; i < 3u; i++)
         xr_free(store->artifact_dirs[i]);
     xr_free(store->root);
+    xr_free(store->lock_path);
     xr_free(store);
 }
 
@@ -137,12 +139,13 @@ XrCacheStore *xr_cache_store_open(const XrCacheStoreConfig *config) {
     if (!store)
         return NULL;
     store->root = copy_text(config->root);
+    store->lock_path = xr_path_join(config->root, ".cache-root.lock");
     store->quota_bytes = config->quota_bytes;
     store->max_entry_bytes = config->max_entry_bytes;
     store->stale_temp_age_ns = config->stale_temp_age_ns;
     store->verifier = config->verifier;
     store->verifier_context = config->verifier_context;
-    if (!store->root || !ensure_directory(store->root)) {
+    if (!store->root || !store->lock_path || !ensure_directory(store->root)) {
         cache_store_free(store, false);
         return NULL;
     }
@@ -383,7 +386,16 @@ XrCachePublishStatus xr_cache_store_publish(XrCacheStore *store, XrCacheArtifact
     if (!store->verifier(kind, key, bytes, size, store->verifier_context))
         return XR_CACHE_PUBLISH_REJECTED;
 
+    XrFsExclusiveLock root_lock = {0};
+    if (xr_fs_lock_exclusive(store->lock_path, &root_lock) != 0)
+        return XR_CACHE_PUBLISH_IO_ERROR;
     xr_mutex_lock(&store->lock);
+    XrCacheCollectStats before = {0};
+    if (!collect_locked(store, &before, NULL)) {
+        xr_mutex_unlock(&store->lock);
+        (void) xr_fs_unlock_exclusive(&root_lock);
+        return XR_CACHE_PUBLISH_IO_ERROR;
+    }
     XrCachePublishStatus status = publish_locked(store, kind, key, bytes, size);
     bool collected = true;
     if (status == XR_CACHE_PUBLISH_OK) {
@@ -393,7 +405,8 @@ XrCachePublishStatus xr_cache_store_publish(XrCacheStore *store, XrCacheArtifact
         xr_free(protected_path);
     }
     xr_mutex_unlock(&store->lock);
-    return collected ? status : XR_CACHE_PUBLISH_IO_ERROR;
+    bool unlocked = xr_fs_unlock_exclusive(&root_lock) == 0;
+    return collected && unlocked ? status : XR_CACHE_PUBLISH_IO_ERROR;
 }
 
 static bool append_disk_entry(XrCacheDiskEntry **entries, size_t *count, size_t *capacity,
@@ -538,10 +551,15 @@ static bool collect_locked(XrCacheStore *store, XrCacheCollectStats *stats,
 bool xr_cache_store_collect(XrCacheStore *store, XrCacheCollectStats *out) {
     if (!store)
         return false;
+    XrFsExclusiveLock root_lock = {0};
+    if (xr_fs_lock_exclusive(store->lock_path, &root_lock) != 0)
+        return false;
     XrCacheCollectStats stats = {0};
     xr_mutex_lock(&store->lock);
     bool ok = collect_locked(store, &stats, NULL);
     xr_mutex_unlock(&store->lock);
+    if (xr_fs_unlock_exclusive(&root_lock) != 0)
+        ok = false;
     if (out)
         *out = stats;
     return ok;

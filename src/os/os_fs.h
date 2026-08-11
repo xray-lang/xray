@@ -81,6 +81,15 @@ typedef enum XrFsSyncResult {
     XR_FS_SYNC_UNSUPPORTED = 1,
 } XrFsSyncResult;
 
+typedef struct XrFsExclusiveLock {
+    intptr_t handle;
+} XrFsExclusiveLock;
+
+/* Acquires an OS-released exclusive lock for a regular lock file. Reparse
+ * points and symlinks are rejected so cache roots never silently escape scope. */
+XR_FUNC int xr_fs_lock_exclusive(const char *path, XrFsExclusiveLock *out);
+XR_FUNC int xr_fs_unlock_exclusive(XrFsExclusiveLock *lock);
+
 // Inspect `path` without following a final symbolic link or reparse point.
 // Returns 0 on success, -1 on error (path missing, permission denied, etc.).
 // On error `out->kind == XR_FS_NONE`.
