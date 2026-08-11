@@ -183,6 +183,13 @@ static void test_plan_identity_shape_and_budgets(void) {
     REQUIRE(frame == NULL);
     fixture.plan->verified = true;
 
+    uint32_t schema = fixture.plan->schema_version;
+    fixture.plan->schema_version = schema - 1u;
+    REQUIRE(xr_typed_frame_create(fixture.plan, &fingerprint, 0, &limits,
+                                  &frame) == XR_TYPED_FRAME_PLAN_NOT_VERIFIED);
+    REQUIRE(frame == NULL);
+    fixture.plan->schema_version = schema;
+
     XrFingerprint wrong = fingerprint;
     wrong.bytes[0] ^= 1;
     REQUIRE(xr_typed_frame_create(fixture.plan, &wrong, 0, &limits, &frame) ==

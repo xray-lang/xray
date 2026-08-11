@@ -294,6 +294,16 @@ CONTRACT_SPECS = (
         ),
     ),
     ContractSpec(
+        "typed-target-plan-frame.md",
+        (
+            "src/plan/target/xr_target_plan.h",
+            "src/vm/xr_typed_frame.h",
+            "src/vm/xr_typed_frame.c",
+            "tests/unit/vm/test_typed_frame.c",
+            "tests/unit/runtime/test_typed_frame_runtime_archive.c",
+        ),
+    ),
+    ContractSpec(
         "incremental-cache-store.md",
         (
             "src/incremental/xr_cache_store.h",
