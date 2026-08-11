@@ -21,8 +21,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(2)
-#define XR_AOT_REFINEMENT_BACKEND_ABI_VERSION UINT32_C(1)
+#define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(3)
+#define XR_AOT_REFINEMENT_BACKEND_ABI_VERSION UINT32_C(2)
+#define XR_AOT_REFINEMENT_MAX_RECORDS UINT32_C(1048576)
 
 typedef enum XrAotInvariant {
     XR_AOT_INV_CFG = 0,
@@ -75,6 +76,12 @@ typedef enum XrAotRefinementIssue {
     XR_AOT_REFINEMENT_REPRESENTATION,
     XR_AOT_REFINEMENT_LAYOUT,
     XR_AOT_REFINEMENT_RECORD_FINGERPRINT,
+    XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
+    XR_AOT_REFINEMENT_DUPLICATE_USE,
+    XR_AOT_REFINEMENT_NONCANONICAL_ORDER,
+    XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE,
+    XR_AOT_REFINEMENT_RESOURCE_BUDGET,
+    XR_AOT_REFINEMENT_PLAN_FINGERPRINT,
     XR_AOT_REFINEMENT_PLAN_STATE,
     XR_AOT_REFINEMENT_BACKEND_ABI,
     XR_AOT_REFINEMENT_BACKEND_INCOMPLETE_COVERAGE,
@@ -126,14 +133,38 @@ typedef enum XrAotRepresentationAdapterKind {
     XR_AOT_REP_ADAPTER_COUNT,
 } XrAotRepresentationAdapterKind;
 
+typedef enum XrAotRepresentationUseKind {
+    XR_AOT_REP_USE_OPERATION = 1,
+    XR_AOT_REP_USE_BLOCK_CONTROL,
+} XrAotRepresentationUseKind;
+
+typedef enum XrAotRepresentationSourceKind {
+    XR_AOT_REP_SOURCE_OPERATION = 1,
+    XR_AOT_REP_SOURCE_PARAMETER,
+} XrAotRepresentationSourceKind;
+
+typedef enum XrAotRepresentationRecipe {
+    XR_AOT_REP_RECIPE_NONE = 0,
+    XR_AOT_REP_RECIPE_BOX_INTEGER,
+    XR_AOT_REP_RECIPE_UNBOX_INTEGER,
+    XR_AOT_REP_RECIPE_BOX_FLOAT,
+    XR_AOT_REP_RECIPE_UNBOX_FLOAT,
+    XR_AOT_REP_RECIPE_BOX_REFERENCE,
+    XR_AOT_REP_RECIPE_UNBOX_REFERENCE,
+    XR_AOT_REP_RECIPE_COUNT,
+} XrAotRepresentationRecipe;
+
 typedef struct XrAotRepresentationAdapterRequest {
     uint32_t source_value;
     uint32_t use_operation;
+    uint32_t use_block;
     uint16_t use_operand;
+    uint16_t use_kind;
     uint16_t adapter_kind;
     uint16_t input_rep_kind;
     uint16_t output_rep_kind;
     uint32_t layout;
+    XrFingerprint policy_fingerprint;
 } XrAotRepresentationAdapterRequest;
 
 typedef struct XrAotRepresentationAdapterRecord {
@@ -141,15 +172,31 @@ typedef struct XrAotRepresentationAdapterRecord {
     uint32_t source_value;
     uint32_t source_operation;
     uint32_t source_type;
+    uint16_t source_kind;
+    uint16_t reserved;
     uint32_t use_operation;
+    uint32_t use_block;
     uint16_t use_operand;
+    uint16_t use_kind;
     uint16_t adapter_kind;
+    uint16_t recipe;
     uint16_t input_rep_kind;
     uint16_t output_rep_kind;
+    uint16_t target_register_rep;
+    uint16_t target_memory_rep;
+    uint32_t target_slot;
     uint32_t layout;
+    uint8_t source_auxiliary_kind;
+    uint8_t source_flags;
+    uint8_t use_auxiliary_kind;
+    uint8_t use_flags;
+    int64_t source_semantic_immediate;
+    int64_t use_semantic_immediate;
     XrStableId source_operation_id;
     XrStableId source_type_id;
     XrStableId use_operation_id;
+    XrFingerprint policy_fingerprint;
+    XrFingerprint machine_rep_fingerprint;
     XrFingerprint layout_fingerprint;
     XrFingerprint fingerprint;
 } XrAotRepresentationAdapterRecord;
@@ -163,6 +210,7 @@ typedef struct XrAotTransformationRecord {
     uint16_t decision;
     uint16_t transform_kind;
     uint32_t diagnostic_issue;
+    XrFingerprint fingerprint;
 } XrAotTransformationRecord;
 
 typedef struct XrAotRefinementPlan XrAotRefinementPlan;
@@ -174,6 +222,7 @@ typedef struct XrAotRefinementPlanView {
     XrAotInvariantState initial_state;
     const XrAotTransformationRecord *records;
     uint32_t record_count;
+    XrFingerprint fingerprint;
     bool frozen;
     bool verified;
 } XrAotRefinementPlanView;
@@ -191,7 +240,10 @@ typedef struct XrAotBackendInterface {
                   uint32_t record_count);
     bool (*visit)(void *context, uint32_t index,
                   const XrAotTransformationRecord *record);
+    /* finish is called once after all visits and must release backend state
+     * even when it reports failure. abort releases state after a failed visit. */
     bool (*finish)(void *context);
+    void (*abort)(void *context);
 } XrAotBackendInterface;
 
 typedef struct XrAotNullBackend {
@@ -227,10 +279,11 @@ XR_FUNC bool xr_aot_refinement_try_direct_call(
     XrAotRefinementBuilder *builder, const XrAotPassProtocol *protocol,
     const XrTargetPlan *target_plan, const XrAotDirectCallRequest *request,
     uint32_t *out_decision, XrAotRefinementDiagnostic *diag);
-XR_FUNC bool xr_aot_refinement_add_representation_adapter(
+XR_FUNC bool xr_aot_refinement_try_representation_adapter(
     XrAotRefinementBuilder *builder, const XrAotPassProtocol *protocol,
     const XrTargetPlan *target_plan,
     const XrAotRepresentationAdapterRequest *request,
+    uint32_t *out_decision,
     XrAotRefinementDiagnostic *diag);
 XR_FUNC bool xr_aot_refinement_builder_freeze(
     XrAotRefinementBuilder *builder, const XrTargetPlan *target_plan,

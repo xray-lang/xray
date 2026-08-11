@@ -3252,6 +3252,75 @@ XR_FUNC bool xi_opt_rep_adapter_for_use(const XiValue *source, const XiValue *us
     return true;
 }
 
+XR_FUNC bool xi_opt_rep_adapter_for_boundary(
+    const XiValue *source, uint16_t required_rep, bool erase_enum_descriptor,
+    const XiRepPolicy *policy, XiRepAdapterKind *out_kind,
+    uint16_t *out_input_rep, uint16_t *out_output_rep) {
+    if (out_kind)
+        *out_kind = XI_REP_ADAPTER_NONE;
+    if (out_input_rep)
+        *out_input_rep = XR_REP_TAGGED;
+    if (out_output_rep)
+        *out_output_rep = XR_REP_TAGGED;
+    if (!source || !out_kind || !out_input_rep || !out_output_rep ||
+        required_rep > XR_REP_RAWPTR)
+        return false;
+    XiRepPolicy local_policy = policy ? *policy : xi_rep_policy_tagged_boundary();
+    XrRep input = sr_def_rep(source, &local_policy);
+    XrRep output = (XrRep) required_rep;
+    if (input == output)
+        return false;
+    if (input != XR_REP_TAGGED && output == XR_REP_TAGGED)
+        *out_kind = erase_enum_descriptor
+                        ? XI_REP_ADAPTER_ENUM_DESCRIPTOR_BOX
+                        : XI_REP_ADAPTER_BOX;
+    else if (input == XR_REP_TAGGED && output != XR_REP_TAGGED)
+        *out_kind = source->op == XI_ENUM_DESCRIPTOR_BOX
+                        ? XI_REP_ADAPTER_ENUM_DESCRIPTOR_UNBOX
+                        : XI_REP_ADAPTER_UNBOX;
+    else
+        return false;
+    *out_input_rep = input;
+    *out_output_rep = output;
+    return true;
+}
+
+XR_FUNC bool xi_opt_rep_adapter_for_phi(
+    const XiValue *source, const XiPhi *phi, uint16_t argument_index,
+    const XiRepPolicy *policy, XiRepAdapterKind *out_kind,
+    uint16_t *out_input_rep, uint16_t *out_output_rep) {
+    if (!phi || argument_index >= phi->value.nargs ||
+        phi->value.args[argument_index] != source)
+        return false;
+    XiRepPolicy local_policy = policy ? *policy : xi_rep_policy_tagged_boundary();
+    XrRep required = local_policy.force_phi_tagged
+                         ? XR_REP_TAGGED
+                         : sr_type_native_boundary_rep(phi->value.type);
+    bool erase = sr_conversion_erases_enum_metadata(source, phi->value.type);
+    return xi_opt_rep_adapter_for_boundary(source, required, erase,
+                                           &local_policy, out_kind,
+                                           out_input_rep, out_output_rep);
+}
+
+XR_FUNC bool xi_opt_rep_adapter_for_return(
+    const XiFunc *function, const XiBlock *block, const XiRepPolicy *policy,
+    XiRepAdapterKind *out_kind, uint16_t *out_input_rep,
+    uint16_t *out_output_rep) {
+    if (!function || !block || block->func != function ||
+        block->kind != XI_BLOCK_RETURN || !block->control ||
+        block->control->op == XI_ERR_RETURN)
+        return false;
+    XiRepPolicy local_policy = policy ? *policy : xi_rep_policy_tagged_boundary();
+    XrRep required = local_policy.force_return_tagged
+                         ? XR_REP_TAGGED
+                         : sr_type_native_boundary_rep(function->return_type);
+    bool erase = sr_conversion_erases_enum_metadata(block->control,
+                                                     function->return_type);
+    return xi_opt_rep_adapter_for_boundary(block->control, required, erase,
+                                           &local_policy, out_kind,
+                                           out_input_rep, out_output_rep);
+}
+
 /* Rewrite a single arg reference if rep mismatches. */
 static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot, XrRep use_r, XiValue **box_of,
                            XiValue **erased_box_of, XiValue **unbox_of, uint32_t max_id,

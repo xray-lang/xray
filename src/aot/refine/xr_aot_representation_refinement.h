@@ -31,4 +31,13 @@ XR_FUNC bool xr_aot_representation_refinement_verify(
     const XrTargetPlan *target_plan, const struct XiRepPolicy *policy,
     XrAotRefinementDiagnostic *diag);
 
+/* Execute a backend only after the independent live-Xi coverage verifier has
+ * authorized every applied representation record. Generic refinement backend
+ * execution intentionally rejects such records. */
+XR_FUNC bool xr_aot_representation_backend_run(
+    const XrAotRefinementPlanView *view, const struct XiFunc *root,
+    const XrTargetPlan *target_plan, const struct XiRepPolicy *policy,
+    const XrAotBackendInterface *backend, void *context,
+    XrAotBackendStats *out_stats, XrAotRefinementDiagnostic *diag);
+
 #endif  // XR_AOT_REPRESENTATION_REFINEMENT_H

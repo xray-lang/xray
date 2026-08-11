@@ -125,6 +125,18 @@ XR_FUNC bool xi_opt_rep_adapter_for_use(const XiValue *source, const XiValue *us
                                         XiRepAdapterKind *out_kind,
                                         uint16_t *out_input_rep,
                                         uint16_t *out_output_rep);
+XR_FUNC bool xi_opt_rep_adapter_for_boundary(
+    const XiValue *source, uint16_t required_rep, bool erase_enum_descriptor,
+    const XiRepPolicy *policy, XiRepAdapterKind *out_kind,
+    uint16_t *out_input_rep, uint16_t *out_output_rep);
+XR_FUNC bool xi_opt_rep_adapter_for_phi(
+    const XiValue *source, const XiPhi *phi, uint16_t argument_index,
+    const XiRepPolicy *policy, XiRepAdapterKind *out_kind,
+    uint16_t *out_input_rep, uint16_t *out_output_rep);
+XR_FUNC bool xi_opt_rep_adapter_for_return(
+    const XiFunc *function, const XiBlock *block, const XiRepPolicy *policy,
+    XiRepAdapterKind *out_kind, uint16_t *out_input_rep,
+    uint16_t *out_output_rep);
 
 /* Re-run representation selection after a late, semantics-preserving rewrite
  * (for example cross-module constant resolution), then remove conversion
