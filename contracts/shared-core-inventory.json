@@ -560,6 +560,13 @@
         "xr_numeric_u64_high_bit",
         "xr_numeric_unsigned_to_f32",
         "xr_numeric_unsigned_to_f64",
+        "xr_numeric_widen_f32",
+        "xr_numeric_widen_i16",
+        "xr_numeric_widen_i32",
+        "xr_numeric_widen_i8",
+        "xr_numeric_widen_u16",
+        "xr_numeric_widen_u32",
+        "xr_numeric_widen_u8",
         "xr_scalar_rep_holds_f64",
         "xr_scalar_rep_holds_i64"
       ],

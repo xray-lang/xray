@@ -55,32 +55,46 @@ int main(void) {
     if (xrt_bits_exact_eval(xr_bits_exact_kernel_mul_high, -INT64_C(1), INT64_C(2),
                             XR_NATIVE_U64) != INT64_C(1))
         return 17;
-    if (xrt_numeric_narrow_eval(xr_numeric_narrow_i8, INT64_C(0x1ff)) != -INT64_C(1))
+    if (xrt_numeric_width_eval(xr_numeric_narrow_i8, INT64_C(0x1ff)) != -INT64_C(1))
         return 18;
-    if (xrt_numeric_narrow_eval(xr_numeric_narrow_u8, INT64_C(0x1ff)) != INT64_C(0xff))
+    if (xrt_numeric_width_eval(xr_numeric_narrow_u8, INT64_C(0x1ff)) != INT64_C(0xff))
         return 19;
-    if (xrt_numeric_narrow_eval(xr_numeric_narrow_i16, INT64_C(0x18000)) !=
+    if (xrt_numeric_width_eval(xr_numeric_narrow_i16, INT64_C(0x18000)) !=
         -INT64_C(0x8000))
         return 20;
-    if (xrt_numeric_narrow_eval(xr_numeric_narrow_u16, INT64_C(0x18000)) !=
+    if (xrt_numeric_width_eval(xr_numeric_narrow_u16, INT64_C(0x18000)) !=
         INT64_C(0x8000))
         return 21;
-    if (xrt_numeric_narrow_eval(xr_numeric_narrow_i32, INT64_C(0x180000000)) != INT32_MIN)
+    if (xrt_numeric_width_eval(xr_numeric_narrow_i32, INT64_C(0x180000000)) != INT32_MIN)
         return 22;
-    if (xrt_numeric_narrow_eval(xr_numeric_narrow_u32, INT64_C(0x180000000)) !=
+    if (xrt_numeric_width_eval(xr_numeric_narrow_u32, INT64_C(0x180000000)) !=
         INT64_C(0x80000000))
         return 23;
-    if (xrt_numeric_narrow_eval(xr_numeric_narrow_f32, 16777217.0) != 16777216.0)
+    if (xrt_numeric_width_eval(xr_numeric_narrow_f32, 16777217.0) != 16777216.0)
         return 24;
-    if (xr_numeric_double_to_bits(xrt_numeric_narrow_eval(
+    if (xr_numeric_double_to_bits(xrt_numeric_width_eval(
             xr_numeric_narrow_f32,
             xr_numeric_double_from_bits(UINT64_C(0x7ff123456789abcd)))) !=
         xr_numeric_double_to_bits(
             (double) xr_numeric_float_from_bits(XR_NUMERIC_CANONICAL_F32_NAN)))
         return 25;
-    if (xr_numeric_double_to_bits(xrt_numeric_narrow_eval(
+    if (xr_numeric_double_to_bits(xrt_numeric_width_eval(
             xr_numeric_narrow_f32, xr_numeric_power_of_two(128))) !=
         UINT64_C(0x7ff0000000000000))
         return 26;
+    if (xrt_numeric_width_eval(xr_numeric_widen_i8, INT64_C(0xff)) != -INT64_C(1))
+        return 27;
+    if (xrt_numeric_width_eval(xr_numeric_widen_u8, INT64_C(0xff)) != INT64_C(0xff))
+        return 28;
+    if (xrt_numeric_width_eval(xr_numeric_widen_i16, INT64_C(0xffff)) != -INT64_C(1))
+        return 29;
+    if (xrt_numeric_width_eval(xr_numeric_widen_u16, INT64_C(0xffff)) != INT64_C(0xffff))
+        return 30;
+    if (xrt_numeric_width_eval(xr_numeric_widen_i32, INT64_C(0xffffffff)) != -INT64_C(1))
+        return 31;
+    if (xrt_numeric_width_eval(xr_numeric_widen_u32, -INT64_C(1)) != INT64_C(0xffffffff))
+        return 32;
+    if (xrt_numeric_width_eval(xr_numeric_widen_f32, 16777217.0) != 16777216.0)
+        return 33;
     return 0;
 }

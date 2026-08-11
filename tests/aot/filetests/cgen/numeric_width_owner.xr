@@ -1,0 +1,5 @@
+fn widenF32(value: f32) -> float {
+    return value as float
+}
+
+print(widenF32(16777217 as f32))

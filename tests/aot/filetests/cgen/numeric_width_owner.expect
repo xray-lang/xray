@@ -1,0 +1,6 @@
+contains=value v
+contains=op=NARROW_F32 kind=scalar rep=f64 c_type=double
+contains=op=WIDEN_F32 kind=scalar rep=f64 c_type=double
+c_contains=xrt_numeric_width_eval(xr_numeric_narrow_f32,
+c_contains=xrt_numeric_width_eval(xr_numeric_widen_f32,
+c_not_contains=xr_numeric_f64_to_f32(

@@ -364,75 +364,7 @@ static inline bool xi_to_c_template_compare_swaps_tagged_args(uint16_t op) {
     return false;
 }
 
-typedef enum {
-    AOT_WIDTH_TEMPLATE_INVALID = 0,
-    AOT_WIDTH_TEMPLATE_CAST_I64 = 1,
-    AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP = 2,
-} XiToCWidthTemplateKind;
-
-static inline XiToCWidthTemplateKind xi_to_c_template_width_kind(uint16_t op) {
-    switch ((XiOp) op) {
-        case XI_NARROW_I8: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_NARROW_U8: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_NARROW_I16: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_NARROW_U16: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_NARROW_I32: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_NARROW_U32: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_NARROW_F32: return AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP;
-        case XI_WIDEN_I8: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_WIDEN_U8: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_WIDEN_I16: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_WIDEN_U16: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_WIDEN_I32: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_WIDEN_U32: return AOT_WIDTH_TEMPLATE_CAST_I64;
-        case XI_WIDEN_F32: return AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP;
-        case XI_OP_COUNT: return AOT_WIDTH_TEMPLATE_INVALID;
-        default: return AOT_WIDTH_TEMPLATE_INVALID;
-    }
-    return AOT_WIDTH_TEMPLATE_INVALID;
-}
-
-static inline const char *xi_to_c_template_width_cast_type(uint16_t op) {
-    switch ((XiOp) op) {
-        case XI_NARROW_I8: return "int8_t";
-        case XI_NARROW_U8: return "uint8_t";
-        case XI_NARROW_I16: return "int16_t";
-        case XI_NARROW_U16: return "uint16_t";
-        case XI_NARROW_I32: return "int32_t";
-        case XI_NARROW_U32: return "uint32_t";
-        case XI_WIDEN_I8: return "int8_t";
-        case XI_WIDEN_U8: return "uint8_t";
-        case XI_WIDEN_I16: return "int16_t";
-        case XI_WIDEN_U16: return "uint16_t";
-        case XI_WIDEN_I32: return "int32_t";
-        case XI_WIDEN_U32: return "uint32_t";
-        case XI_OP_COUNT: return "";
-        default: return "";
-    }
-    return "";
-}
-
-static inline uint8_t xi_to_c_template_width_native_type(uint16_t op) {
-    switch ((XiOp) op) {
-        case XI_NARROW_I8: return XR_NATIVE_I8;
-        case XI_NARROW_U8: return XR_NATIVE_U8;
-        case XI_NARROW_I16: return XR_NATIVE_I16;
-        case XI_NARROW_U16: return XR_NATIVE_U16;
-        case XI_NARROW_I32: return XR_NATIVE_I32;
-        case XI_NARROW_U32: return XR_NATIVE_U32;
-        case XI_WIDEN_I8: return XR_NATIVE_I8;
-        case XI_WIDEN_U8: return XR_NATIVE_U8;
-        case XI_WIDEN_I16: return XR_NATIVE_I16;
-        case XI_WIDEN_U16: return XR_NATIVE_U16;
-        case XI_WIDEN_I32: return XR_NATIVE_I32;
-        case XI_WIDEN_U32: return XR_NATIVE_U32;
-        case XI_OP_COUNT: return UINT8_MAX;
-        default: return UINT8_MAX;
-    }
-    return UINT8_MAX;
-}
-
-static inline const char *xi_to_c_template_width_narrow_kernel(uint16_t op) {
+static inline const char *xi_to_c_template_width_numeric_kernel(uint16_t op) {
     switch ((XiOp) op) {
         case XI_NARROW_I8: return "xr_numeric_narrow_i8";
         case XI_NARROW_U8: return "xr_numeric_narrow_u8";
@@ -441,14 +373,22 @@ static inline const char *xi_to_c_template_width_narrow_kernel(uint16_t op) {
         case XI_NARROW_I32: return "xr_numeric_narrow_i32";
         case XI_NARROW_U32: return "xr_numeric_narrow_u32";
         case XI_NARROW_F32: return "xr_numeric_narrow_f32";
+        case XI_WIDEN_I8: return "xr_numeric_widen_i8";
+        case XI_WIDEN_U8: return "xr_numeric_widen_u8";
+        case XI_WIDEN_I16: return "xr_numeric_widen_i16";
+        case XI_WIDEN_U16: return "xr_numeric_widen_u16";
+        case XI_WIDEN_I32: return "xr_numeric_widen_i32";
+        case XI_WIDEN_U32: return "xr_numeric_widen_u32";
+        case XI_WIDEN_F32: return "xr_numeric_widen_f32";
         case XI_OP_COUNT: return "";
         default: return "";
     }
     return "";
 }
 
-static inline bool xi_to_c_template_width_preserves_loaded_f32(uint16_t op) {
+static inline bool xi_to_c_template_width_uses_f64_lane(uint16_t op) {
     switch ((XiOp) op) {
+        case XI_NARROW_F32: return true;
         case XI_WIDEN_F32: return true;
         case XI_OP_COUNT: return false;
         default: return false;

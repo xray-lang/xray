@@ -15,7 +15,7 @@
 #define XR_SEM_CONSUMER_CGEN UINT32_C(0x00000010)
 #define XR_SEM_CONSUMER_RUNTIME UINT32_C(0x00000020)
 
-#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "7e0b1e00cb8def1bbab8bfa25e555b15c7c6426ec72639ec938b5d3ad7406a70"
+#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "27639e128700c3a88f3e050d07ef35145476a2ad80bae7a809f581b887332417"
 
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI UINT64_C(0x7ec352d0136c63f9)
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO UINT64_C(0x9f71c69f3e6c2b2d)
@@ -64,7 +64,7 @@ static inline const char *xr_semantic_owner_cgen_adapter(uint64_t owner_id_hi,
         return "xrt_bits_exact_eval";
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO)
-        return "xrt_numeric_narrow_eval";
+        return "xrt_numeric_width_eval";
     if (owner_id_hi == XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO)
         return "xrt_typeof_id";

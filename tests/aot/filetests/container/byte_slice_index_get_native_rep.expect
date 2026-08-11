@@ -9,8 +9,8 @@ not_regex=boundary .* func=readByteAsInt .* reason=box
 not_regex=boundary .* func=readByteAsInt .* reason=unbox
 c_regex=uint8_t v[0-9]+ =
 c_contains=((uint8_t*)_s.data)[_idx]
-# The widening no longer needs its own copy: it happens in place on the span
-# index-get, which is what this case exists to pin.
-c_regex=\(int64_t\)\(\(uint8_t\*\)_s\.data\)\[_idx\]
+# Width conversion is observable and must pass through the stable numeric owner.
+c_contains=xrt_numeric_width_eval(xr_numeric_widen_u8,
+c_not_regex=\(int64_t\)\(\(uint8_t\*\)_s\.data\)\[_idx\]
 c_not_contains=xrt_to_int(
 c_not_contains=xrt_index_get(

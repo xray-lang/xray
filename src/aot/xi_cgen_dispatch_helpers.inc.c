@@ -12172,25 +12172,11 @@ XI_TO_C_TEMPLATE_COMPARE_DRIVERS(XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER)
 
 #undef XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER
 
-static void xicgen_convert_i64_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
-    const XiValue *arg = v->nargs > 0 ? v->args[0] : NULL;
-    uint8_t scalar_rep = xi_to_c_template_width_native_type(v->op);
+static void xicgen_numeric_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                 const XiValue *v) {
     (void) f;
-    if (!arg || scalar_rep == UINT8_MAX) {
-        emit_codegen_abort_expr(out);
-        return;
-    }
-    fprintf(out, "xr_numeric_int_convert_i64(");
-    emit_value_as_rep_ctx(ctx, out, arg, XR_REP_I64);
-    fprintf(out, ", %u, %u, (uint8_t)(sizeof(void *) * 8u))", (unsigned) scalar_rep,
-            (unsigned) scalar_rep);
-}
-
-static void xicgen_numeric_narrow(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                  const XiValue *v) {
-    (void) f;
-    const char *adapter = cg_numeric_narrow_adapter_name(ctx);
-    const char *kernel = v ? xi_to_c_template_width_narrow_kernel(v->op) : NULL;
+    const char *adapter = cg_numeric_width_adapter_name(ctx);
+    const char *kernel = v ? xi_to_c_template_width_numeric_kernel(v->op) : NULL;
     if (!adapter || !kernel || !kernel[0] || !v || v->nargs != 1 || !v->args[0] ||
         (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)) {
         if (ctx)
@@ -12200,41 +12186,15 @@ static void xicgen_numeric_narrow(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     }
     fprintf(out, "%s(%s, ", adapter, kernel);
     emit_value_as_rep_ctx(ctx, out, v->args[0],
-                          xi_to_c_template_width_kind(v->op) ==
-                                  AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP
-                              ? XR_REP_F64
-                              : XR_REP_I64);
+                          xi_to_c_template_width_uses_f64_lane(v->op) ? XR_REP_F64
+                                                                     : XR_REP_I64);
     fprintf(out, ")");
-}
-
-static void xicgen_f32_roundtrip(FILE *out, const XiValue *v, bool preserve_loaded_float32) {
-    if (!preserve_loaded_float32)
-        fputs("xr_numeric_f64_to_f32(", out);
-    emit_vref(out, v->args[0]);
-    if (!preserve_loaded_float32)
-        fputs(")", out);
 }
 
 static void xicgen_template_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     (void) prefix;
-    if (xi_to_c_template_width_narrow_kernel(v->op)[0]) {
-        xicgen_numeric_narrow(ctx, out, f, v);
-        return;
-    }
-    switch (xi_to_c_template_width_kind(v->op)) {
-        case AOT_WIDTH_TEMPLATE_CAST_I64:
-            xicgen_convert_i64_width(ctx, out, f, v);
-            return;
-        case AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP:
-            xicgen_f32_roundtrip(out, v,
-                                 xi_to_c_template_width_preserves_loaded_f32(v->op) &&
-                                     cg_array_index_get_reads_f32_storage(ctx, f, v->args[0]));
-            return;
-        case AOT_WIDTH_TEMPLATE_INVALID:
-            break;
-    }
-    emit_codegen_abort_expr(out);
+    xicgen_numeric_width(ctx, out, f, v);
 }
 
 #define XICGEN_DEFINE_TEMPLATE_WIDTH_DRIVER(ident, driver)                                         \

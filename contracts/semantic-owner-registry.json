@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "7e0b1e00cb8def1bbab8bfa25e555b15c7c6426ec72639ec938b5d3ad7406a70",
+  "canonical_fingerprint": "27639e128700c3a88f3e050d07ef35145476a2ad80bae7a809f581b887332417",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -128,7 +128,14 @@
         "xi.narrow.u16",
         "xi.narrow.i32",
         "xi.narrow.u32",
-        "xi.narrow.f32"
+        "xi.narrow.f32",
+        "xi.widen.i8",
+        "xi.widen.u8",
+        "xi.widen.i16",
+        "xi.widen.u16",
+        "xi.widen.i32",
+        "xi.widen.u32",
+        "xi.widen.f32"
       ],
       "consumers": [
         "semantic-plan",
@@ -138,7 +145,7 @@
         "cgen"
       ],
       "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_numeric_narrow_eval",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -148,22 +155,22 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_template_width_gen.inc.c",
-          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
         },
         {
           "consumer": "aot-hosted",
           "path": "src/aot/xrt.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "aot-freestanding",
           "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_numeric_narrow_adapter_name"
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -4664,160 +4671,6 @@
       ]
     },
     {
-      "owner": "xi.widen.f32",
-      "owner_id": "e07443d142c1701bf80238c7b3a85a60",
-      "owner_id_hi": "0xe07443d142c1701b",
-      "owner_id_lo": "0xf80238c7b3a85a60",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.widen.f32"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.widen.i16",
-      "owner_id": "361cde20ed70bd2e612461527a63c92e",
-      "owner_id_hi": "0x361cde20ed70bd2e",
-      "owner_id_lo": "0x612461527a63c92e",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.widen.i16"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.widen.i32",
-      "owner_id": "11ef549efe7d2f254337879477235699",
-      "owner_id_hi": "0x11ef549efe7d2f25",
-      "owner_id_lo": "0x4337879477235699",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.widen.i32"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.widen.i8",
-      "owner_id": "b9e8983908bbb364625437a5e6d4a3f4",
-      "owner_id_hi": "0xb9e8983908bbb364",
-      "owner_id_lo": "0x625437a5e6d4a3f4",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.widen.i8"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.widen.u16",
-      "owner_id": "8cd8105c30ee9ee2ebdde323de692a44",
-      "owner_id_hi": "0x8cd8105c30ee9ee2",
-      "owner_id_lo": "0xebdde323de692a44",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.widen.u16"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.widen.u32",
-      "owner_id": "862b6689d56ea72fa5515f0ae55bb72d",
-      "owner_id_hi": "0x862b6689d56ea72f",
-      "owner_id_lo": "0xa5515f0ae55bb72d",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.widen.u32"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.widen.u8",
-      "owner_id": "eaf9433494c0ce00aee6989cf561bd15",
-      "owner_id_hi": "0xeaf9433494c0ce00",
-      "owner_id_lo": "0xaee6989cf561bd15",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.widen.u8"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
       "owner": "xi.yield",
       "owner_id": "a9543cd1080d6ec47d71848ea8c67fbd",
       "owner_id_hi": "0xa9543cd1080d6ec4",
@@ -5977,7 +5830,7 @@
         "cgen"
       ],
       "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_numeric_narrow_eval",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -5987,22 +5840,22 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_template_width_gen.inc.c",
-          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
         },
         {
           "consumer": "aot-hosted",
           "path": "src/aot/xrt.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "aot-freestanding",
           "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_numeric_narrow_adapter_name"
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6024,7 +5877,7 @@
         "cgen"
       ],
       "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_numeric_narrow_eval",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -6034,22 +5887,22 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_template_width_gen.inc.c",
-          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
         },
         {
           "consumer": "aot-hosted",
           "path": "src/aot/xrt.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "aot-freestanding",
           "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_numeric_narrow_adapter_name"
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6071,7 +5924,7 @@
         "cgen"
       ],
       "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_numeric_narrow_eval",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -6081,22 +5934,22 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_template_width_gen.inc.c",
-          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
         },
         {
           "consumer": "aot-hosted",
           "path": "src/aot/xrt.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "aot-freestanding",
           "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_numeric_narrow_adapter_name"
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6118,7 +5971,7 @@
         "cgen"
       ],
       "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_numeric_narrow_eval",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -6128,22 +5981,22 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_template_width_gen.inc.c",
-          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
         },
         {
           "consumer": "aot-hosted",
           "path": "src/aot/xrt.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "aot-freestanding",
           "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_numeric_narrow_adapter_name"
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6165,7 +6018,7 @@
         "cgen"
       ],
       "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_numeric_narrow_eval",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -6175,22 +6028,22 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_template_width_gen.inc.c",
-          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
         },
         {
           "consumer": "aot-hosted",
           "path": "src/aot/xrt.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "aot-freestanding",
           "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_numeric_narrow_adapter_name"
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6212,7 +6065,7 @@
         "cgen"
       ],
       "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_numeric_narrow_eval",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -6222,22 +6075,22 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_template_width_gen.inc.c",
-          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
         },
         {
           "consumer": "aot-hosted",
           "path": "src/aot/xrt.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "aot-freestanding",
           "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_numeric_narrow_adapter_name"
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6259,7 +6112,7 @@
         "cgen"
       ],
       "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_numeric_narrow_eval",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -6269,22 +6122,22 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_template_width_gen.inc.c",
-          "symbol": "XR_NUMERIC_NARROW_OWNER_APPLY"
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
         },
         {
           "consumer": "aot-hosted",
           "path": "src/aot/xrt.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "aot-freestanding",
           "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_numeric_narrow_eval"
+          "symbol": "xrt_numeric_width_eval"
         },
         {
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_numeric_narrow_adapter_name"
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6293,21 +6146,45 @@
       "operation_id": "b9e8983908bbb364625437a5e6d4a3f4",
       "operation_id_hi": "0xb9e8983908bbb364",
       "operation_id_lo": "0x625437a5e6d4a3f4",
-      "owner": "xi.widen.i8",
-      "owner_id": "b9e8983908bbb364625437a5e6d4a3f4",
-      "owner_id_hi": "0xb9e8983908bbb364",
-      "owner_id_lo": "0x625437a5e6d4a3f4",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6316,21 +6193,45 @@
       "operation_id": "eaf9433494c0ce00aee6989cf561bd15",
       "operation_id_hi": "0xeaf9433494c0ce00",
       "operation_id_lo": "0xaee6989cf561bd15",
-      "owner": "xi.widen.u8",
-      "owner_id": "eaf9433494c0ce00aee6989cf561bd15",
-      "owner_id_hi": "0xeaf9433494c0ce00",
-      "owner_id_lo": "0xaee6989cf561bd15",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6339,21 +6240,45 @@
       "operation_id": "361cde20ed70bd2e612461527a63c92e",
       "operation_id_hi": "0x361cde20ed70bd2e",
       "operation_id_lo": "0x612461527a63c92e",
-      "owner": "xi.widen.i16",
-      "owner_id": "361cde20ed70bd2e612461527a63c92e",
-      "owner_id_hi": "0x361cde20ed70bd2e",
-      "owner_id_lo": "0x612461527a63c92e",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6362,21 +6287,45 @@
       "operation_id": "8cd8105c30ee9ee2ebdde323de692a44",
       "operation_id_hi": "0x8cd8105c30ee9ee2",
       "operation_id_lo": "0xebdde323de692a44",
-      "owner": "xi.widen.u16",
-      "owner_id": "8cd8105c30ee9ee2ebdde323de692a44",
-      "owner_id_hi": "0x8cd8105c30ee9ee2",
-      "owner_id_lo": "0xebdde323de692a44",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6385,21 +6334,45 @@
       "operation_id": "11ef549efe7d2f254337879477235699",
       "operation_id_hi": "0x11ef549efe7d2f25",
       "operation_id_lo": "0x4337879477235699",
-      "owner": "xi.widen.i32",
-      "owner_id": "11ef549efe7d2f254337879477235699",
-      "owner_id_hi": "0x11ef549efe7d2f25",
-      "owner_id_lo": "0x4337879477235699",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6408,21 +6381,45 @@
       "operation_id": "862b6689d56ea72fa5515f0ae55bb72d",
       "operation_id_hi": "0x862b6689d56ea72f",
       "operation_id_lo": "0xa5515f0ae55bb72d",
-      "owner": "xi.widen.u32",
-      "owner_id": "862b6689d56ea72fa5515f0ae55bb72d",
-      "owner_id_hi": "0x862b6689d56ea72f",
-      "owner_id_lo": "0xa5515f0ae55bb72d",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },
@@ -6431,21 +6428,45 @@
       "operation_id": "e07443d142c1701bf80238c7b3a85a60",
       "operation_id_hi": "0xe07443d142c1701b",
       "operation_id_lo": "0xf80238c7b3a85a60",
-      "owner": "xi.widen.f32",
-      "owner_id": "e07443d142c1701bf80238c7b3a85a60",
-      "owner_id_hi": "0xe07443d142c1701b",
-      "owner_id_lo": "0xf80238c7b3a85a60",
-      "category": "declarative-primitive",
+      "owner": "shared.numeric-conversion",
+      "owner_id": "03934e35643b1197e36762addff0755a",
+      "owner_id_hi": "0x03934e35643b1197",
+      "owner_id_lo": "0xe36762addff0755a",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_numeric_width_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_template_width_gen.inc.c",
+          "symbol": "XR_NUMERIC_WIDTH_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_numeric_width_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_numeric_width_adapter_name"
         }
       ]
     },

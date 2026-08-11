@@ -3041,14 +3041,6 @@ static bool cg_array_value_has_fresh_owned_origin(XiCgenCtx *ctx, const XiValue 
     return false;
 }
 
-static bool cg_array_index_get_reads_f32_storage(XiCgenCtx *ctx, const XiFunc *f,
-                                                 const XiValue *v) {
-    CgArrayElemInfo info;
-    return v && v->op == XI_INDEX_GET && v->nargs >= 1 &&
-           cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ) &&
-           strcmp(info.elem_name, "XR_ELEM_F32") == 0;
-}
-
 static bool cg_array_same_value(const XiValue *a, const XiValue *b) {
     const XiValue *ua = cg_unwrap_identity_value(a);
     const XiValue *ub = cg_unwrap_identity_value(b);

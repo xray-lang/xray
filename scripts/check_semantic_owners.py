@@ -92,7 +92,7 @@ EXACT_BITS_AOT_BINDINGS = (
     "src/aot/xrt.h",
     "src/aot/xrt_core_freestanding.h",
 )
-NUMERIC_NARROW_OPERATIONS = {
+NUMERIC_WIDTH_OPERATIONS = {
     "xi.narrow.i8",
     "xi.narrow.u8",
     "xi.narrow.i16",
@@ -100,8 +100,15 @@ NUMERIC_NARROW_OPERATIONS = {
     "xi.narrow.i32",
     "xi.narrow.u32",
     "xi.narrow.f32",
+    "xi.widen.i8",
+    "xi.widen.u8",
+    "xi.widen.i16",
+    "xi.widen.u16",
+    "xi.widen.i32",
+    "xi.widen.u32",
+    "xi.widen.f32",
 }
-NUMERIC_NARROW_KERNELS = {
+NUMERIC_WIDTH_KERNELS = {
     "xr_numeric_narrow_i8",
     "xr_numeric_narrow_u8",
     "xr_numeric_narrow_i16",
@@ -109,6 +116,13 @@ NUMERIC_NARROW_KERNELS = {
     "xr_numeric_narrow_i32",
     "xr_numeric_narrow_u32",
     "xr_numeric_narrow_f32",
+    "xr_numeric_widen_i8",
+    "xr_numeric_widen_u8",
+    "xr_numeric_widen_i16",
+    "xr_numeric_widen_u16",
+    "xr_numeric_widen_i32",
+    "xr_numeric_widen_u32",
+    "xr_numeric_widen_f32",
 }
 OWNER_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 OWNER_HALF_RE = re.compile(r"^0x[0-9a-f]{16}$")
@@ -640,72 +654,87 @@ def verify_exact_bits_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
-def verify_numeric_narrow_ratchet(root: Path, registry: dict) -> list[str]:
+def verify_numeric_width_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     marker = owner_macro_prefix("shared.numeric-conversion")
     owner = next((row for row in registry.get("owners", [])
                   if row.get("owner") == "shared.numeric-conversion"), None)
-    if owner is None or set(owner.get("operations", [])) != NUMERIC_NARROW_OPERATIONS:
+    if owner is None or set(owner.get("operations", [])) != NUMERIC_WIDTH_OPERATIONS:
         errors.append(
-            "semantic owner registry has no exact shared.numeric-conversion narrow family")
+            "semantic owner registry has no exact shared.numeric-conversion width family")
 
     core_text = (root / "src/shared/xr_numeric_conversion_core.h").read_text(
         encoding="utf-8", errors="strict")
     if (f"{marker}_HI" not in core_text or f"{marker}_LO" not in core_text or
-            "XR_NUMERIC_NARROW_OWNER_APPLY" not in core_text or
-            not NUMERIC_NARROW_KERNELS.issubset(set(SIGNATURE_RE.findall(core_text)))):
+            "XR_NUMERIC_WIDTH_OWNER_APPLY" not in core_text or
+            not NUMERIC_WIDTH_KERNELS.issubset(set(SIGNATURE_RE.findall(core_text)))):
         errors.append(
-            "src/shared/xr_numeric_conversion_core.h: numeric narrow family lacks its stable owner kernels")
+            "src/shared/xr_numeric_conversion_core.h: numeric width family lacks stable owner kernels")
 
     vm_text = (root / "src/vm/xvm_template_width_gen.inc.c").read_text(
         encoding="utf-8", errors="strict")
-    narrow_end = vm_text.find("#define XVM_TEMPLATE_WIDTH_INT_CASE")
-    narrow_body = vm_text[:narrow_end] if narrow_end >= 0 else ""
-    if (f"{marker}_HI" not in narrow_body or f"{marker}_LO" not in narrow_body or
-            "XR_NUMERIC_NARROW_OWNER_APPLY" not in narrow_body or
-            not NUMERIC_NARROW_KERNELS.issubset(set(re.findall(
-                r"\b(xr_numeric_narrow_[a-z0-9]+)\b", vm_text)))):
+    if (f"{marker}_HI" not in vm_text or f"{marker}_LO" not in vm_text or
+            "XR_NUMERIC_WIDTH_OWNER_APPLY" not in vm_text or
+            not NUMERIC_WIDTH_KERNELS.issubset(set(re.findall(
+                r"\b(xr_numeric_(?:narrow|widen)_[a-z0-9]+)\b", vm_text)))):
         errors.append(
-            "src/vm/xvm_template_width_gen.inc.c: VM numeric narrowing bypasses stable owner")
-    if "xr_numeric_int_convert_i64" in narrow_body or "xr_numeric_f64_to_f32" in narrow_body:
+            "src/vm/xvm_template_width_gen.inc.c: VM numeric width bypasses stable owner")
+    if "xr_numeric_int_convert_i64" in vm_text or "xr_numeric_f64_to_f32" in vm_text:
         errors.append(
-            "src/vm/xvm_template_width_gen.inc.c: VM revived private numeric narrow semantics")
+            "src/vm/xvm_template_width_gen.inc.c: VM revived private numeric width semantics")
 
     for relative in EXACT_BITS_AOT_BINDINGS:
         text = (root / relative).read_text(encoding="utf-8", errors="strict")
         if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
-                "XR_NUMERIC_NARROW_OWNER_APPLY" not in text or
-                "xrt_numeric_narrow_eval" not in text):
-            errors.append(f"{relative}: AOT numeric narrow adapter bypasses stable owner")
+                "XR_NUMERIC_WIDTH_OWNER_APPLY" not in text or
+                "xrt_numeric_width_eval" not in text):
+            errors.append(f"{relative}: AOT numeric width adapter bypasses stable owner")
 
     cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
-    adapter_body = extract_c_function(cgen_text, "cg_numeric_narrow_adapter_name")
+    adapter_body = extract_c_function(cgen_text, "cg_numeric_width_adapter_name")
     if (adapter_body is None or f"{marker}_HI" not in adapter_body or
             f"{marker}_LO" not in adapter_body or
             "xr_semantic_owner_cgen_adapter" not in adapter_body):
-        errors.append("src/aot/xi_cgen.c: CGen numeric narrow does not resolve by stable owner ID")
+        errors.append("src/aot/xi_cgen.c: CGen numeric width does not resolve by stable owner ID")
 
     dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
         encoding="utf-8", errors="strict")
-    emitter_body = extract_c_function(dispatch_text, "xicgen_numeric_narrow")
-    if (emitter_body is None or "cg_numeric_narrow_adapter_name" not in emitter_body or
-            "xi_to_c_template_width_narrow_kernel" not in emitter_body):
+    abi_text = (root / "src/aot/xi_cgen_abi_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    array_text = (root / "src/aot/xi_cgen_array_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    emitter_body = extract_c_function(dispatch_text, "xicgen_numeric_width")
+    if (emitter_body is None or "cg_numeric_width_adapter_name" not in emitter_body or
+            "xi_to_c_template_width_numeric_kernel" not in emitter_body):
         errors.append(
-            "src/aot/xi_cgen_dispatch_helpers.inc.c: numeric narrow bypasses owner adapter")
+            "src/aot/xi_cgen_dispatch_helpers.inc.c: numeric width bypasses owner adapter")
     elif any(token in emitter_body for token in
              ("xr_numeric_int_convert_i64", "xr_numeric_f64_to_f32", "(uint8_t)",
               "(uint16_t)", "(uint32_t)", "(int8_t)", "(int16_t)", "(int32_t)")):
         errors.append(
-            "src/aot/xi_cgen_dispatch_helpers.inc.c: numeric narrow revived CGen semantics")
+            "src/aot/xi_cgen_dispatch_helpers.inc.c: numeric width revived CGen semantics")
     retired = (
         "xicgen_unsigned_narrow_lowbits_binop",
         "cg_unsigned_narrow_lowbits_binop_arg",
         "cg_unsigned_narrow_cast_ctype",
         "cg_lowbits_binop_elided_into_unsigned_narrow",
+        "xicgen_convert_i64_width",
+        "xicgen_f32_roundtrip",
+        "cg_int_widen_source_rep",
+        "cg_int_widen_inner_value_rep",
+        "cg_int_widen_can_use_inner_for_slot",
+        "cg_int_widen_use_consumes_inner",
+        "cg_array_index_get_reads_f32_storage",
+        "XR_NUMERIC_NARROW_OWNER_APPLY",
+        "xrt_numeric_narrow_eval",
+        "cg_numeric_narrow_adapter_name",
+        "xicgen_numeric_narrow",
+        "xi_to_c_template_width_narrow_kernel",
     )
     for symbol in retired:
-        if symbol in cgen_text or symbol in dispatch_text:
-            errors.append(f"CGen revived retired private numeric narrow path: {symbol}")
+        if (symbol in cgen_text or symbol in dispatch_text or symbol in abi_text or
+                symbol in array_text or symbol in core_text or symbol in vm_text):
+            errors.append(f"retired private numeric width path remains: {symbol}")
     return errors
 
 
@@ -803,7 +832,7 @@ def verify(root: Path, write: bool) -> list[str]:
     if registry_path.is_file():
         registry = json.loads(registry_path.read_text(encoding="utf-8", errors="strict"))
         errors.extend(verify_exact_bits_ratchet(root, registry))
-        errors.extend(verify_numeric_narrow_ratchet(root, registry))
+        errors.extend(verify_numeric_width_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)
     errors.extend(registry_errors)
     return errors

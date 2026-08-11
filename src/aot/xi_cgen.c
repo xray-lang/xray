@@ -4172,17 +4172,6 @@ static const XiValue *cg_arith_narrow_src(XiCgenCtx *ctx, const XiFunc *f, const
             *out_signed = sign;
         return o;
     }
-    if (xi_to_c_template_width_kind(o->op) == AOT_WIDTH_TEMPLATE_CAST_I64 && o->nargs >= 1 &&
-        o->args[0]) {
-        const XiValue *src = o->args[0];
-        if (cg_value_narrow_int_rep(ctx, f, src, &size, &sign) && size <= 4) {
-            if (out_size)
-                *out_size = size;
-            if (out_signed)
-                *out_signed = sign;
-            return src;
-        }
-    }
     return NULL;
 }
 
@@ -4511,11 +4500,11 @@ static const char *cg_exact_bits_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
-static const char *cg_numeric_narrow_adapter_name(XiCgenCtx *ctx) {
+static const char *cg_numeric_width_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
                                         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,
                                         XR_SEM_CONSUMER_CGEN)) {
-        fprintf(stderr, "[xi_cgen] ERROR: numeric narrow owner has no CGen consumer\n");
+        fprintf(stderr, "[xi_cgen] ERROR: numeric width owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
@@ -4523,7 +4512,7 @@ static const char *cg_numeric_narrow_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO);
     if (!adapter || !adapter[0]) {
-        fprintf(stderr, "[xi_cgen] ERROR: numeric narrow owner has no CGen adapter\n");
+        fprintf(stderr, "[xi_cgen] ERROR: numeric width owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }
@@ -6716,39 +6705,6 @@ static bool cg_native_box_direct_call_arg_is_native(XiCgenCtx *ctx, const XiFunc
     return cg_abi_slot_storage_rep(&target_plan->abi.params[param_index]) != XR_REP_TAGGED;
 }
 
-static bool cg_direct_call_arg_consumes_int_widen_inner(XiCgenCtx *ctx, const XiFunc *f,
-                                                        const XiValue *call, uint16_t arg_index,
-                                                        const XiValue *widen) {
-    if (!ctx || !call || call->op != XI_CALL || arg_index == 0 || !call->args || !widen)
-        return false;
-    if (cg_func_needs_aot_coro_ctx(ctx, f))
-        return false;
-
-    CgStaticFunctionCall static_call = cg_resolve_static_function_call(ctx, f, call->args[0]);
-    if (!static_call.func || static_call.is_class_constructor)
-        return false;
-
-    const XaotFuncPlan *target_plan = cg_func_plan(ctx, static_call.func);
-    uint16_t param_index = (uint16_t) (arg_index - 1);
-    if (!target_plan || param_index >= target_plan->abi.nparams || !target_plan->abi.params)
-        return false;
-
-    return cg_int_widen_can_use_inner_for_slot(
-        ctx, f, widen, xaot_abi_slot_value_rep(&target_plan->abi.params[param_index]), NULL, NULL);
-}
-
-static bool cg_int_widen_use_consumes_inner(XiCgenCtx *ctx, const XiFunc *f, const XiValue *widen,
-                                            const XiValue *user, uint16_t arg_index) {
-    if (!ctx || !f || !widen || !user)
-        return false;
-    const XiValue *inner = NULL;
-    if (!cg_int_widen_inner_value_rep(ctx, widen, &inner, NULL, NULL))
-        return false;
-    if (cg_direct_call_arg_consumes_int_widen_inner(ctx, f, user, arg_index, widen))
-        return true;
-    return false;
-}
-
 static bool cg_call_method_is_typed_array_resize_zero_specialization(XiCgenCtx *ctx,
                                                                      const XiFunc *f,
                                                                      const XiValue *call) {
@@ -7127,13 +7083,8 @@ static bool cg_const_use_emits_immediate(XiCgenCtx *ctx, const XiFunc *f, const 
         return a0 == XR_REP_TAGGED || a1 == XR_REP_TAGGED;
     }
 
-    if (xi_to_c_template_width_kind(user->op) == AOT_WIDTH_TEMPLATE_CAST_I64) {
-        if (arg_index != 0 || user->nargs < 1)
-            return false;
-        const char *cast_ctype = xi_to_c_template_width_cast_type(user->op);
-        const char *arg_ctype = local_ctype_str_ctx(ctx, f, user->args[arg_index]);
-        return cast_ctype && *cast_ctype && arg_ctype && strcmp(arg_ctype, cast_ctype) != 0;
-    }
+    if (xi_to_c_template_width_numeric_kernel(user->op)[0])
+        return arg_index == 0 && user->nargs >= 1;
 
     switch ((XiOp) user->op) {
         case XI_BIT_POPCOUNT:
@@ -7531,17 +7482,14 @@ static bool cg_pure_value_only_feeds_aot_elided_values(XiCgenCtx *ctx, const XiF
         (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND))
         return false;
 
-    bool int_widen = cg_int_widen_inner_value_rep(ctx, v, NULL, NULL, NULL);
-    if (!int_widen) {
-        switch ((XiOp) v->op) {
-            case XI_CONST:
-            case XI_COPY:
-            case XI_SOURCE_MOVE:
-            case XI_OWNER_FORWARD:
-                break;
-            default:
-                return false;
-        }
+    switch ((XiOp) v->op) {
+        case XI_CONST:
+        case XI_COPY:
+        case XI_SOURCE_MOVE:
+        case XI_OWNER_FORWARD:
+            break;
+        default:
+            return false;
     }
 
     bool seen_use = false;
@@ -7565,8 +7513,6 @@ static bool cg_pure_value_only_feeds_aot_elided_values(XiCgenCtx *ctx, const XiF
                 if (user->args[a] != v)
                     continue;
                 seen_use = true;
-                if (int_widen && cg_int_widen_use_consumes_inner(ctx, f, v, user, a))
-                    continue;
                 if (!cg_native_box_value_is_elided_in_aot(ctx, f, user))
                     return false;
                 /* emit_value_as_rep_ctx() bypasses an elided BOX to its immediate

@@ -148,44 +148,75 @@ TEST(numeric_conversion_f64_to_f32_has_frozen_edges) {
                    UINT64_C(0x7ff0000000000000));
 }
 
-TEST(numeric_narrow_owner_freezes_lowbits_rounding_nan_and_overflow) {
-    ASSERT_EQ_INT(XR_NUMERIC_NARROW_OWNER_APPLY(
+TEST(numeric_width_owner_freezes_lowbits_sign_extension_rounding_nan_and_overflow) {
+    ASSERT_EQ_INT(XR_NUMERIC_WIDTH_OWNER_APPLY(
                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
                       xr_numeric_narrow_i8, INT64_C(0x1ff)),
                   -1);
-    ASSERT_EQ_INT(XR_NUMERIC_NARROW_OWNER_APPLY(
+    ASSERT_EQ_INT(XR_NUMERIC_WIDTH_OWNER_APPLY(
                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
                       xr_numeric_narrow_u8, INT64_C(0x1ff)),
                   255);
-    ASSERT_EQ_INT(XR_NUMERIC_NARROW_OWNER_APPLY(
+    ASSERT_EQ_INT(XR_NUMERIC_WIDTH_OWNER_APPLY(
                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
                       xr_numeric_narrow_i16, INT64_C(0x18000)),
                   INT16_MIN);
-    ASSERT_EQ_INT(XR_NUMERIC_NARROW_OWNER_APPLY(
+    ASSERT_EQ_INT(XR_NUMERIC_WIDTH_OWNER_APPLY(
                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
                       xr_numeric_narrow_u16, INT64_C(0x18000)),
                   UINT16_C(0x8000));
-    ASSERT_EQ_INT(XR_NUMERIC_NARROW_OWNER_APPLY(
+    ASSERT_EQ_INT(XR_NUMERIC_WIDTH_OWNER_APPLY(
                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
                       xr_numeric_narrow_i32, INT64_C(0x180000000)),
                   INT32_MIN);
-    ASSERT_EQ_UINT(xr_numeric_i64_to_bits(XR_NUMERIC_NARROW_OWNER_APPLY(
+    ASSERT_EQ_UINT(xr_numeric_i64_to_bits(XR_NUMERIC_WIDTH_OWNER_APPLY(
                        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
                        XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
                        xr_numeric_narrow_u32, INT64_C(0x180000000))),
                    UINT32_C(0x80000000));
 
-    double rounded = XR_NUMERIC_NARROW_OWNER_APPLY(
+    ASSERT_EQ_INT(XR_NUMERIC_WIDTH_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
+                      XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
+                      xr_numeric_widen_i8, INT64_C(0xff)),
+                  -1);
+    ASSERT_EQ_INT(XR_NUMERIC_WIDTH_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
+                      XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
+                      xr_numeric_widen_u8, INT64_C(0xff)),
+                  255);
+    ASSERT_EQ_INT(XR_NUMERIC_WIDTH_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
+                      XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
+                      xr_numeric_widen_i16, INT64_C(0xffff)),
+                  -1);
+    ASSERT_EQ_INT(XR_NUMERIC_WIDTH_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
+                      XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
+                      xr_numeric_widen_u16, INT64_C(0xffff)),
+                  65535);
+    ASSERT_EQ_INT(XR_NUMERIC_WIDTH_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
+                      XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
+                      xr_numeric_widen_i32, INT64_C(0xffffffff)),
+                  -1);
+    ASSERT_EQ_UINT(xr_numeric_i64_to_bits(XR_NUMERIC_WIDTH_OWNER_APPLY(
+                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
+                       XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
+                       xr_numeric_widen_u32, -INT64_C(1))),
+                   UINT32_MAX);
+
+    double rounded = XR_NUMERIC_WIDTH_OWNER_APPLY(
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
         xr_numeric_narrow_f32, 16777217.0);
     ASSERT(rounded == 16777216.0);
-    double nan = XR_NUMERIC_NARROW_OWNER_APPLY(
+    double nan = XR_NUMERIC_WIDTH_OWNER_APPLY(
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
         xr_numeric_narrow_f32,
@@ -193,11 +224,15 @@ TEST(numeric_narrow_owner_freezes_lowbits_rounding_nan_and_overflow) {
     ASSERT_EQ_UINT(xr_numeric_double_to_bits(nan),
                    xr_numeric_double_to_bits(
                        (double) xr_numeric_float_from_bits(XR_NUMERIC_CANONICAL_F32_NAN)));
-    double overflow = XR_NUMERIC_NARROW_OWNER_APPLY(
+    double overflow = XR_NUMERIC_WIDTH_OWNER_APPLY(
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
         xr_numeric_narrow_f32, xr_numeric_power_of_two(128));
     ASSERT_EQ_UINT(xr_numeric_double_to_bits(overflow), UINT64_C(0x7ff0000000000000));
+    ASSERT(XR_NUMERIC_WIDTH_OWNER_APPLY(
+               XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
+               XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_VM,
+               xr_numeric_widen_f32, 16777217.0) == 16777216.0);
 }
 
 TEST(numeric_conversion_float_to_integer_checks_before_cast) {

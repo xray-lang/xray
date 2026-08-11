@@ -74,101 +74,6 @@ static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
 
-static bool cg_int_widen_source_rep(uint16_t op, XaotRep *out) {
-    switch ((XiOp) op) {
-        case XI_WIDEN_I8:
-            if (out)
-                *out = XAOT_REP_I8;
-            return true;
-        case XI_WIDEN_U8:
-            if (out)
-                *out = XAOT_REP_U8;
-            return true;
-        case XI_WIDEN_I16:
-            if (out)
-                *out = XAOT_REP_I16;
-            return true;
-        case XI_WIDEN_U16:
-            if (out)
-                *out = XAOT_REP_U16;
-            return true;
-        case XI_WIDEN_I32:
-            if (out)
-                *out = XAOT_REP_I32;
-            return true;
-        case XI_WIDEN_U32:
-            if (out)
-                *out = XAOT_REP_U32;
-            return true;
-        default:
-            return false;
-    }
-}
-
-static bool cg_value_exact_scalar_rep(XaotValueRep rep, XaotRep exact) {
-    return rep.kind == XAOT_VALUE_SCALAR && rep.rep == exact;
-}
-
-static bool cg_int_widen_inner_value_rep(XiCgenCtx *ctx, const XiValue *v,
-                                         const XiValue **inner_out,
-                                         XaotRep *inner_rep_out,
-                                         XrRep *inner_storage_rep_out) {
-    XaotRep source_rep;
-    if (!ctx || !v || v->nargs < 1 || !v->args[0] || !cg_int_widen_source_rep(v->op, &source_rep))
-        return false;
-
-    const XiValue *inner = v->args[0];
-    XaotRep inner_rep = XAOT_REP_VOID;
-    XrRep inner_storage_rep = XR_REP_VOID;
-    XrCScalarEmissionView scalar = {0};
-    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, NULL, inner, &scalar);
-    if (scalar_status == CG_SCALAR_EMISSION_FOUND) {
-        if (!cg_scalar_emission_xaot_rep(ctx, &scalar, &inner_rep) ||
-            !cg_scalar_emission_storage_rep(ctx, &scalar, &inner_storage_rep))
-            return false;
-    } else if (scalar_status == CG_SCALAR_EMISSION_ERROR ||
-               scalar_status == CG_SCALAR_EMISSION_NOT_CONFIGURED) {
-        return false;
-    } else {
-        const XaotValuePlan *inner_plan = cg_value_plan_require_legacy(ctx, inner);
-        if (!inner_plan)
-            return false;
-        inner_rep = inner_plan->rep.rep;
-        inner_storage_rep = xaot_value_storage_rep(inner_plan->rep);
-    }
-    if (inner_rep != source_rep)
-        return false;
-
-    if (inner_out)
-        *inner_out = inner;
-    if (inner_rep_out)
-        *inner_rep_out = inner_rep;
-    if (inner_storage_rep_out)
-        *inner_storage_rep_out = inner_storage_rep;
-    return true;
-}
-
-static bool cg_int_widen_can_use_inner_for_slot(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
-                                                XaotValueRep slot_rep, const XiValue **inner_out,
-                                                XrRep *inner_storage_rep_out) {
-    if (!ctx || !v || (f && cg_func_needs_aot_coro_ctx(ctx, f)))
-        return false;
-
-    const XiValue *inner = NULL;
-    XaotRep inner_rep = XAOT_REP_VOID;
-    XrRep inner_storage_rep = XR_REP_VOID;
-    if (!cg_int_widen_inner_value_rep(ctx, v, &inner, &inner_rep, &inner_storage_rep))
-        return false;
-    if (!cg_value_exact_scalar_rep(slot_rep, inner_rep))
-        return false;
-
-    if (inner_out)
-        *inner_out = inner;
-    if (inner_storage_rep_out)
-        *inner_storage_rep_out = inner_storage_rep;
-    return true;
-}
-
 static bool cg_value_plan_is_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && plan->rep.kind == XAOT_VALUE_AGGREGATE;
@@ -1263,14 +1168,6 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     to_rep = cg_abi_slot_storage_rep(slot);
     if (ctx->error) {
         emit_codegen_abort_expr(out);
-        return;
-    }
-
-    const XiValue *widen_inner = NULL;
-    XrRep widen_inner_rep = XR_REP_I64;
-    if (cg_int_widen_can_use_inner_for_slot(ctx, f, arg, slot_rep, &widen_inner,
-                                            &widen_inner_rep)) {
-        emit_value_as_rep_ctx(ctx, out, widen_inner, widen_inner_rep);
         return;
     }
 

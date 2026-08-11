@@ -7579,16 +7579,16 @@ TEST(cgen_exact_bits_use_stable_owner_adapter) {
            "CGen must resolve the stable exact-width bit owner adapter");
 }
 
-TEST(cgen_numeric_narrow_uses_stable_owner_adapter) {
+TEST(cgen_numeric_width_uses_stable_owner_adapter) {
     assert(xr_semantic_owner_has_consumer(
                XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
                XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, XR_SEM_CONSUMER_CGEN) &&
-           "numeric narrow owner must publish CGen as a mechanical consumer");
+           "numeric width owner must publish CGen as a mechanical consumer");
     const char *adapter = xr_semantic_owner_cgen_adapter(
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,
         XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO);
-    assert(adapter != NULL && strcmp(adapter, "xrt_numeric_narrow_eval") == 0 &&
-           "CGen must resolve the stable numeric narrow owner adapter");
+    assert(adapter != NULL && strcmp(adapter, "xrt_numeric_width_eval") == 0 &&
+           "CGen must resolve the stable numeric width owner adapter");
 }
 
 TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
@@ -12862,7 +12862,7 @@ int main(void) {
     run_cgen_typename_as_and_slice_use_direct_drivers();
     run_cgen_typeid_uses_stable_owner_adapter();
     run_cgen_exact_bits_use_stable_owner_adapter();
-    run_cgen_numeric_narrow_uses_stable_owner_adapter();
+    run_cgen_numeric_width_uses_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();

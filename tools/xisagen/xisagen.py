@@ -1811,21 +1811,14 @@ XI_VM_TEMPLATE_SWAP_ARGS = {
     'xi.ge',
 }
 
-XI_VM_TEMPLATE_WIDTH = {
-    'xi.narrow.i8': 'XR_NATIVE_I8',
-    'xi.narrow.u8': 'XR_NATIVE_U8',
-    'xi.narrow.i16': 'XR_NATIVE_I16',
-    'xi.narrow.u16': 'XR_NATIVE_U16',
-    'xi.narrow.i32': 'XR_NATIVE_I32',
-    'xi.narrow.u32': 'XR_NATIVE_U32',
-    'xi.narrow.f32': '',
-    'xi.widen.i8': 'XR_NATIVE_I8',
-    'xi.widen.u8': 'XR_NATIVE_U8',
-    'xi.widen.i16': 'XR_NATIVE_I16',
-    'xi.widen.u16': 'XR_NATIVE_U16',
-    'xi.widen.i32': 'XR_NATIVE_I32',
-    'xi.widen.u32': 'XR_NATIVE_U32',
-    'xi.widen.f32': '',
+XI_NUMERIC_WIDTH_KERNELS = {
+    op_name: 'xr_numeric_' + op_name.removeprefix('xi.').replace('.', '_')
+    for op_name in {
+        'xi.narrow.i8', 'xi.narrow.u8', 'xi.narrow.i16', 'xi.narrow.u16',
+        'xi.narrow.i32', 'xi.narrow.u32', 'xi.narrow.f32',
+        'xi.widen.i8', 'xi.widen.u8', 'xi.widen.i16', 'xi.widen.u16',
+        'xi.widen.i32', 'xi.widen.u32', 'xi.widen.f32',
+    }
 }
 
 XI_VM_TEMPLATE_BITWISE_BINARY = {
@@ -1884,23 +1877,6 @@ XI_VM_TEMPLATE_COMPARE_OPS = (
     set(XI_VM_TEMPLATE_COMPARE_ORDER) |
     {'xi.gt', 'xi.ge'}
 )
-
-XI_AOT_C_TEMPLATE_WIDTH = {
-    'xi.narrow.i8': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'int8_t', False),
-    'xi.narrow.u8': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'uint8_t', False),
-    'xi.narrow.i16': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'int16_t', False),
-    'xi.narrow.u16': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'uint16_t', False),
-    'xi.narrow.i32': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'int32_t', False),
-    'xi.narrow.u32': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'uint32_t', False),
-    'xi.narrow.f32': ('AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP', '', False),
-    'xi.widen.i8': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'int8_t', False),
-    'xi.widen.u8': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'uint8_t', False),
-    'xi.widen.i16': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'int16_t', False),
-    'xi.widen.u16': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'uint16_t', False),
-    'xi.widen.i32': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'int32_t', False),
-    'xi.widen.u32': ('AOT_WIDTH_TEMPLATE_CAST_I64', 'uint32_t', False),
-    'xi.widen.f32': ('AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP', '', True),
-}
 
 XI_AOT_C_TEMPLATE_ARITH = {
     'xi.add': ('xrt_add', '+', 'xrt_i64_add'),
@@ -2278,7 +2254,8 @@ def generate_xi_vm_template_width_dispatch(entries: list[XiLoweringDef]) -> str:
     ]
     missing_width_ops = [
         entry.op_name for entry in width_entries
-        if entry.op_name not in XI_VM_TEMPLATE_WIDTH or entry.op_name not in XI_VM_TEMPLATE_OPCODES
+        if entry.op_name not in XI_NUMERIC_WIDTH_KERNELS or
+        entry.op_name not in XI_VM_TEMPLATE_OPCODES
     ]
     if missing_width_ops:
         die("xi-lowering: missing VM width template op(s) for " + ", ".join(missing_width_ops))
@@ -2288,59 +2265,36 @@ def generate_xi_vm_template_width_dispatch(entries: list[XiLoweringDef]) -> str:
     lines.append('/* Source: xisa/xi/lowering.def */')
     lines.append('/* Included inside xvm.c dispatch switch; relies on i, R, vmcase, vmbreak. */')
     lines.append('')
-    lines.append('#define XVM_TEMPLATE_NARROW_INT_CASE(op, kernel) \\')
+    lines.append('#define XVM_TEMPLATE_NUMERIC_WIDTH_INT_CASE(op, kernel) \\')
     lines.append('    vmcase(op) { \\')
     lines.append('        int a = GETARG_A(i), b = GETARG_B(i); \\')
-    lines.append('        R(a) = XR_FROM_INT(XR_NUMERIC_NARROW_OWNER_APPLY( \\')
+    lines.append('        R(a) = XR_FROM_INT(XR_NUMERIC_WIDTH_OWNER_APPLY( \\')
     lines.append('            XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI, \\')
     lines.append('            XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, \\')
     lines.append('            XR_SEM_CONSUMER_VM, kernel, XR_TO_INT(R(b)))); \\')
     lines.append('        vmbreak; \\')
     lines.append('    }')
     lines.append('')
-    lines.append('#define XVM_TEMPLATE_NARROW_F32_CASE(op, kernel) \\')
+    lines.append('#define XVM_TEMPLATE_NUMERIC_WIDTH_F32_CASE(op, kernel) \\')
     lines.append('    vmcase(op) { \\')
     lines.append('        int a = GETARG_A(i), b = GETARG_B(i); \\')
-    lines.append('        R(a) = XR_FROM_FLOAT(XR_NUMERIC_NARROW_OWNER_APPLY( \\')
+    lines.append('        R(a) = XR_FROM_FLOAT(XR_NUMERIC_WIDTH_OWNER_APPLY( \\')
     lines.append('            XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI, \\')
     lines.append('            XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO, \\')
     lines.append('            XR_SEM_CONSUMER_VM, kernel, XR_TO_FLOAT(R(b)))); \\')
     lines.append('        vmbreak; \\')
     lines.append('    }')
     lines.append('')
-    lines.append('#define XVM_TEMPLATE_WIDTH_INT_CASE(op, scalar_rep) \\')
-    lines.append('    vmcase(op) { \\')
-    lines.append('        int a = GETARG_A(i), b = GETARG_B(i); \\')
-    lines.append('        R(a) = XR_FROM_INT(xr_numeric_int_convert_i64( \\')
-    lines.append('            XR_TO_INT(R(b)), scalar_rep, scalar_rep, 64)); \\')
-    lines.append('        vmbreak; \\')
-    lines.append('    }')
-    lines.append('')
-    lines.append('#define XVM_TEMPLATE_WIDTH_F32_CASE(op) \\')
-    lines.append('    vmcase(op) { \\')
-    lines.append('        int a = GETARG_A(i), b = GETARG_B(i); \\')
-    lines.append('        R(a) = XR_FROM_FLOAT(xr_numeric_f64_to_f32(XR_TO_FLOAT(R(b)))); \\')
-    lines.append('        vmbreak; \\')
-    lines.append('    }')
-    lines.append('')
     for entry in width_entries:
         opcode = XI_VM_TEMPLATE_OPCODES[entry.op_name]
-        scalar_rep = XI_VM_TEMPLATE_WIDTH[entry.op_name]
-        if entry.template == 'narrow':
-            kernel = 'xr_numeric_' + entry.op_name.removeprefix('xi.').replace('.', '_')
-            if scalar_rep:
-                lines.append(f'XVM_TEMPLATE_NARROW_INT_CASE({opcode}, {kernel})')
-            else:
-                lines.append(f'XVM_TEMPLATE_NARROW_F32_CASE({opcode}, {kernel})')
-        elif scalar_rep:
-            lines.append(f'XVM_TEMPLATE_WIDTH_INT_CASE({opcode}, {scalar_rep})')
+        kernel = XI_NUMERIC_WIDTH_KERNELS[entry.op_name]
+        if entry.op_name.endswith('.f32'):
+            lines.append(f'XVM_TEMPLATE_NUMERIC_WIDTH_F32_CASE({opcode}, {kernel})')
         else:
-            lines.append(f'XVM_TEMPLATE_WIDTH_F32_CASE({opcode})')
+            lines.append(f'XVM_TEMPLATE_NUMERIC_WIDTH_INT_CASE({opcode}, {kernel})')
     lines.append('')
-    lines.append('#undef XVM_TEMPLATE_NARROW_INT_CASE')
-    lines.append('#undef XVM_TEMPLATE_NARROW_F32_CASE')
-    lines.append('#undef XVM_TEMPLATE_WIDTH_INT_CASE')
-    lines.append('#undef XVM_TEMPLATE_WIDTH_F32_CASE')
+    lines.append('#undef XVM_TEMPLATE_NUMERIC_WIDTH_INT_CASE')
+    lines.append('#undef XVM_TEMPLATE_NUMERIC_WIDTH_F32_CASE')
     lines.append('')
     return '\n'.join(lines)
 
@@ -2644,7 +2598,7 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
             ", ".join(missing_compare_ops))
     missing_width_ops = [
         entry.op_name for entry in width_entries
-        if entry.op_name not in XI_AOT_C_TEMPLATE_WIDTH
+        if entry.op_name not in XI_NUMERIC_WIDTH_KERNELS
     ]
     if missing_width_ops:
         die("xi-lowering: missing AOT C width template op(s) for " +
@@ -2810,64 +2764,21 @@ def generate_xi_to_c_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('    return false;')
     lines.append('}')
     lines.append('')
-    lines.append('typedef enum {')
-    lines.append('    AOT_WIDTH_TEMPLATE_INVALID = 0,')
-    lines.append('    AOT_WIDTH_TEMPLATE_CAST_I64 = 1,')
-    lines.append('    AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP = 2,')
-    lines.append('} XiToCWidthTemplateKind;')
-    lines.append('')
-    lines.append('static inline XiToCWidthTemplateKind xi_to_c_template_width_kind(uint16_t op) {')
+    lines.append('static inline const char *xi_to_c_template_width_numeric_kernel(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for entry in width_entries:
-        kind, _, _ = XI_AOT_C_TEMPLATE_WIDTH[entry.op_name]
-        lines.append(f'        case XI_{entry.ident}: return {kind};')
-    lines.append('        case XI_OP_COUNT: return AOT_WIDTH_TEMPLATE_INVALID;')
-    lines.append('        default: return AOT_WIDTH_TEMPLATE_INVALID;')
-    lines.append('    }')
-    lines.append('    return AOT_WIDTH_TEMPLATE_INVALID;')
-    lines.append('}')
-    lines.append('')
-    lines.append('static inline const char *xi_to_c_template_width_cast_type(uint16_t op) {')
-    lines.append('    switch ((XiOp) op) {')
-    for entry in width_entries:
-        _, ctype, _ = XI_AOT_C_TEMPLATE_WIDTH[entry.op_name]
-        if ctype:
-            lines.append(f'        case XI_{entry.ident}: return "{ctype}";')
+        kernel = XI_NUMERIC_WIDTH_KERNELS[entry.op_name]
+        lines.append(f'        case XI_{entry.ident}: return "{kernel}";')
     lines.append('        case XI_OP_COUNT: return "";')
     lines.append('        default: return "";')
     lines.append('    }')
     lines.append('    return "";')
     lines.append('}')
     lines.append('')
-    lines.append('static inline uint8_t xi_to_c_template_width_native_type(uint16_t op) {')
+    lines.append('static inline bool xi_to_c_template_width_uses_f64_lane(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for entry in width_entries:
-        native_type = XI_VM_TEMPLATE_WIDTH[entry.op_name]
-        if native_type:
-            lines.append(f'        case XI_{entry.ident}: return {native_type};')
-    lines.append('        case XI_OP_COUNT: return UINT8_MAX;')
-    lines.append('        default: return UINT8_MAX;')
-    lines.append('    }')
-    lines.append('    return UINT8_MAX;')
-    lines.append('}')
-    lines.append('')
-    lines.append('static inline const char *xi_to_c_template_width_narrow_kernel(uint16_t op) {')
-    lines.append('    switch ((XiOp) op) {')
-    for entry in width_entries:
-        if entry.template == 'narrow':
-            kernel = 'xr_numeric_' + entry.op_name.removeprefix('xi.').replace('.', '_')
-            lines.append(f'        case XI_{entry.ident}: return "{kernel}";')
-    lines.append('        case XI_OP_COUNT: return "";')
-    lines.append('        default: return "";')
-    lines.append('    }')
-    lines.append('    return "";')
-    lines.append('}')
-    lines.append('')
-    lines.append('static inline bool xi_to_c_template_width_preserves_loaded_f32(uint16_t op) {')
-    lines.append('    switch ((XiOp) op) {')
-    for entry in width_entries:
-        _, _, preserve = XI_AOT_C_TEMPLATE_WIDTH[entry.op_name]
-        if preserve:
+        if entry.op_name.endswith('.f32'):
             lines.append(f'        case XI_{entry.ident}: return true;')
     lines.append('        case XI_OP_COUNT: return false;')
     lines.append('        default: return false;')
@@ -2969,25 +2880,13 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
             lines.append(
                 f'    assert(xi_to_c_template_compare_swaps_tagged_args(XI_{entry.ident}) == {swaps_c});')
         if 'aot-c' in entry.target_drivers and entry.template in {'narrow', 'widen'}:
-            kind, ctype, preserve = XI_AOT_C_TEMPLATE_WIDTH[entry.op_name]
-            native_type = XI_VM_TEMPLATE_WIDTH[entry.op_name]
-            preserve_c = 'true' if preserve else 'false'
-            lines.append(f'    assert(xi_to_c_template_width_kind(XI_{entry.ident}) == {kind});')
+            expected_kernel = XI_NUMERIC_WIDTH_KERNELS[entry.op_name]
+            uses_f64 = 'true' if entry.op_name.endswith('.f32') else 'false'
             lines.append(
-                f'    assert(strcmp(xi_to_c_template_width_cast_type(XI_{entry.ident}), "{ctype}") == 0);')
-            expected_native_type = native_type if native_type else 'UINT8_MAX'
-            lines.append(
-                f'    assert(xi_to_c_template_width_native_type(XI_{entry.ident}) == '
-                f'{expected_native_type});')
-            expected_kernel = (
-                'xr_numeric_' + entry.op_name.removeprefix('xi.').replace('.', '_')
-                if entry.template == 'narrow' else ''
-            )
-            lines.append(
-                f'    assert(strcmp(xi_to_c_template_width_narrow_kernel(XI_{entry.ident}), '
+                f'    assert(strcmp(xi_to_c_template_width_numeric_kernel(XI_{entry.ident}), '
                 f'"{expected_kernel}") == 0);')
             lines.append(
-                f'    assert(xi_to_c_template_width_preserves_loaded_f32(XI_{entry.ident}) == {preserve_c});')
+                f'    assert(xi_to_c_template_width_uses_f64_lane(XI_{entry.ident}) == {uses_f64});')
         fresh_dst = 'true' if entry.target_attrs.get('vm-bytecode', {}).get('fresh-dst',
                                                                             False) else 'false'
         lines.append(f'    assert(xi_emit_vm_requires_fresh_dst(XI_{entry.ident}) == {fresh_dst});')
@@ -4521,11 +4420,8 @@ def _test_xi_lowering_parser():
     assert 'case XI_ADD: return "xrt_add";' in aot_header
     assert 'xi_to_c_template_arith_native_op' in aot_header
     assert 'XI_TO_C_TEMPLATE_WIDTH_DRIVERS' in aot_header
-    assert 'XiToCWidthTemplateKind' in aot_header
-    assert 'xi_to_c_template_width_kind' in aot_header
-    assert 'xi_to_c_template_width_cast_type' in aot_header
-    assert 'xi_to_c_template_width_native_type' in aot_header
-    assert 'xi_to_c_template_width_narrow_kernel' in aot_header
+    assert 'xi_to_c_template_width_numeric_kernel' in aot_header
+    assert 'xi_to_c_template_width_uses_f64_lane' in aot_header
     stmt_header = generate_xi_target_dispatch_header(entries, 'aot-c-stmt', 'TEST_STMT_H',
                                                      'TEST_STMT')
     assert 'X(COPY, "xi.copy", xicgen_stmt_copy)' in stmt_header

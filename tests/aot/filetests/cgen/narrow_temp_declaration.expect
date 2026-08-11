@@ -1,2 +1,2 @@
-c_contains=xrt_numeric_narrow_eval(xr_numeric_narrow_u32,
+c_contains=xrt_numeric_width_eval(xr_numeric_narrow_u32,
 c_not_contains=xrt_i64_add(
