@@ -73,6 +73,15 @@ typedef struct XiRepPolicy {
     bool prefer_call_args_native;
 } XiRepPolicy;
 
+typedef enum XiRepAdapterKind {
+    XI_REP_ADAPTER_NONE = 0,
+    XI_REP_ADAPTER_BOX,
+    XI_REP_ADAPTER_UNBOX,
+    XI_REP_ADAPTER_ENUM_DESCRIPTOR_BOX,
+    XI_REP_ADAPTER_ENUM_DESCRIPTOR_UNBOX,
+    XI_REP_ADAPTER_COUNT,
+} XiRepAdapterKind;
+
 static inline XiRepPolicy xi_rep_policy_tagged_boundary(void) {
     XiRepPolicy p;
     p.force_phi_tagged = true;
@@ -105,6 +114,17 @@ static inline XiRepPolicy xi_rep_policy_native_boundary(void) {
  * Intended for the AOT backend, which benefits from unboxed values. */
 XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f);
 XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy *policy);
+
+/* Read-only representation-boundary query used by immutable translation
+ * refinement. It is the single owner of the SelectRepresentations def/use
+ * rules: callers receive a typed adapter obligation without allocating,
+ * appending, rewiring, or changing a Xi representation field. */
+XR_FUNC bool xi_opt_rep_adapter_for_use(const XiValue *source, const XiValue *user,
+                                        uint16_t argument_index,
+                                        const XiRepPolicy *policy,
+                                        XiRepAdapterKind *out_kind,
+                                        uint16_t *out_input_rep,
+                                        uint16_t *out_output_rep);
 
 /* Re-run representation selection after a late, semantics-preserving rewrite
  * (for example cross-module constant resolution), then remove conversion

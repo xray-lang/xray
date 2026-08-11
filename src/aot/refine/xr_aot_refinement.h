@@ -21,7 +21,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(1)
+#define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(2)
 #define XR_AOT_REFINEMENT_BACKEND_ABI_VERSION UINT32_C(1)
 
 typedef enum XrAotInvariant {
@@ -49,6 +49,7 @@ typedef uint32_t XrAotInvariantMask;
 
 typedef enum XrAotTransformKind {
     XR_AOT_TRANSFORM_DIRECT_CALL = 1,
+    XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER,
     XR_AOT_TRANSFORM_COUNT,
 } XrAotTransformKind;
 
@@ -68,6 +69,12 @@ typedef enum XrAotRefinementIssue {
     XR_AOT_REFINEMENT_STALE_EVIDENCE,
     XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE,
     XR_AOT_REFINEMENT_DIRECT_CALL_SCHEMA_UNAVAILABLE,
+    XR_AOT_REFINEMENT_SOURCE_IDENTITY,
+    XR_AOT_REFINEMENT_USE_SITE,
+    XR_AOT_REFINEMENT_SOURCE_TYPE,
+    XR_AOT_REFINEMENT_REPRESENTATION,
+    XR_AOT_REFINEMENT_LAYOUT,
+    XR_AOT_REFINEMENT_RECORD_FINGERPRINT,
     XR_AOT_REFINEMENT_PLAN_STATE,
     XR_AOT_REFINEMENT_BACKEND_ABI,
     XR_AOT_REFINEMENT_BACKEND_INCOMPLETE_COVERAGE,
@@ -79,6 +86,8 @@ typedef struct XrAotRefinementDiagnostic {
     uint32_t record_index;
     uint32_t pass_id;
     uint32_t target_call_index;
+    uint32_t semantic_value;
+    uint32_t semantic_operation;
 } XrAotRefinementDiagnostic;
 
 /* These are the only baseline identities retained by a refinement plan. */
@@ -109,11 +118,48 @@ typedef struct XrAotDirectCallRequest {
     uint32_t target_call_index;
 } XrAotDirectCallRequest;
 
+typedef enum XrAotRepresentationAdapterKind {
+    XR_AOT_REP_ADAPTER_BOX = 1,
+    XR_AOT_REP_ADAPTER_UNBOX,
+    XR_AOT_REP_ADAPTER_ENUM_DESCRIPTOR_BOX,
+    XR_AOT_REP_ADAPTER_ENUM_DESCRIPTOR_UNBOX,
+    XR_AOT_REP_ADAPTER_COUNT,
+} XrAotRepresentationAdapterKind;
+
+typedef struct XrAotRepresentationAdapterRequest {
+    uint32_t source_value;
+    uint32_t use_operation;
+    uint16_t use_operand;
+    uint16_t adapter_kind;
+    uint16_t input_rep_kind;
+    uint16_t output_rep_kind;
+    uint32_t layout;
+} XrAotRepresentationAdapterRequest;
+
+typedef struct XrAotRepresentationAdapterRecord {
+    uint32_t source_function;
+    uint32_t source_value;
+    uint32_t source_operation;
+    uint32_t source_type;
+    uint32_t use_operation;
+    uint16_t use_operand;
+    uint16_t adapter_kind;
+    uint16_t input_rep_kind;
+    uint16_t output_rep_kind;
+    uint32_t layout;
+    XrStableId source_operation_id;
+    XrStableId source_type_id;
+    XrStableId use_operation_id;
+    XrFingerprint layout_fingerprint;
+    XrFingerprint fingerprint;
+} XrAotRepresentationAdapterRecord;
+
 typedef struct XrAotTransformationRecord {
     XrAotPassProtocol protocol;
     XrAotInvariantState input_state;
     XrAotInvariantState output_state;
     XrAotDirectCallRequest direct_call;
+    XrAotRepresentationAdapterRecord representation_adapter;
     uint16_t decision;
     uint16_t transform_kind;
     uint32_t diagnostic_issue;
@@ -172,6 +218,8 @@ XR_FUNC bool xr_aot_refinement_state_after_invalidation(
     XrAotInvariantState *output, XrAotRefinementDiagnostic *diag);
 XR_FUNC XrAotPassProtocol xr_aot_refinement_direct_call_protocol(
     uint32_t pass_id);
+XR_FUNC XrAotPassProtocol xr_aot_refinement_representation_protocol(
+    uint32_t pass_id);
 XR_FUNC XrAotRefinementBuilder *xr_aot_refinement_builder_create(
     const XrTargetPlan *target_plan, XrAotRefinementDiagnostic *diag);
 XR_FUNC void xr_aot_refinement_builder_free(XrAotRefinementBuilder *builder);
@@ -179,6 +227,11 @@ XR_FUNC bool xr_aot_refinement_try_direct_call(
     XrAotRefinementBuilder *builder, const XrAotPassProtocol *protocol,
     const XrTargetPlan *target_plan, const XrAotDirectCallRequest *request,
     uint32_t *out_decision, XrAotRefinementDiagnostic *diag);
+XR_FUNC bool xr_aot_refinement_add_representation_adapter(
+    XrAotRefinementBuilder *builder, const XrAotPassProtocol *protocol,
+    const XrTargetPlan *target_plan,
+    const XrAotRepresentationAdapterRequest *request,
+    XrAotRefinementDiagnostic *diag);
 XR_FUNC bool xr_aot_refinement_builder_freeze(
     XrAotRefinementBuilder *builder, const XrTargetPlan *target_plan,
     XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag);

@@ -10,6 +10,7 @@
 
 #include "xr_aot_refinement.h"
 #include "../../base/xmalloc.h"
+#include "../../base/xsha256.h"
 #include "../../plan/target/xr_target_verify.h"
 #include <stdarg.h>
 #include <stdio.h>
@@ -100,8 +101,8 @@ static bool protocol_valid(const XrAotPassProtocol *protocol) {
     XrAotInvariantMask declared;
     if (!protocol ||
         protocol->schema_version != XR_AOT_REFINEMENT_SCHEMA_VERSION ||
-        protocol->pass_id == 0 ||
-        protocol->transform_kind != XR_AOT_TRANSFORM_DIRECT_CALL)
+        protocol->pass_id == 0 || protocol->transform_kind == 0 ||
+        protocol->transform_kind >= XR_AOT_TRANSFORM_COUNT)
         return false;
     declared = protocol->requires | protocol->produces |
                protocol->invalidates | protocol->preserves;
@@ -111,11 +112,154 @@ static bool protocol_valid(const XrAotPassProtocol *protocol) {
     if ((protocol->invalidates | protocol->preserves) != XR_AOT_INV_ALL)
         return false;
     XrAotPassProtocol expected =
-        xr_aot_refinement_direct_call_protocol(protocol->pass_id);
+        protocol->transform_kind == XR_AOT_TRANSFORM_DIRECT_CALL
+            ? xr_aot_refinement_direct_call_protocol(protocol->pass_id)
+            : xr_aot_refinement_representation_protocol(protocol->pass_id);
     return protocol->requires == expected.requires &&
            protocol->produces == expected.produces &&
            protocol->invalidates == expected.invalidates &&
            protocol->preserves == expected.preserves;
+}
+
+static void hash_u32(XrSHA256Context *ctx, uint32_t value) {
+    uint8_t bytes[4];
+    for (uint32_t i = 0; i < 4; i++)
+        bytes[i] = (uint8_t) (value >> (i * 8u));
+    xr_sha256_update(ctx, bytes, sizeof(bytes));
+}
+
+static void representation_record_fingerprint(
+    const XrAotBaselineRef *baseline,
+    const XrAotRepresentationAdapterRecord *record,
+    XrFingerprint *out) {
+    static const uint8_t domain[] = "xray-aot-representation-adapter-v1\0";
+    XrSHA256Context ctx;
+    xr_sha256_init(&ctx);
+    xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
+    xr_sha256_update(&ctx, baseline->semantic_fingerprint.bytes,
+                     sizeof(baseline->semantic_fingerprint.bytes));
+    xr_sha256_update(&ctx, baseline->target_plan_fingerprint.bytes,
+                     sizeof(baseline->target_plan_fingerprint.bytes));
+    xr_sha256_update(&ctx, baseline->target_profile_fingerprint.bytes,
+                     sizeof(baseline->target_profile_fingerprint.bytes));
+    hash_u32(&ctx, record->source_function);
+    hash_u32(&ctx, record->source_value);
+    hash_u32(&ctx, record->source_operation);
+    hash_u32(&ctx, record->source_type);
+    hash_u32(&ctx, record->use_operation);
+    hash_u32(&ctx, record->use_operand);
+    hash_u32(&ctx, record->adapter_kind);
+    hash_u32(&ctx, record->input_rep_kind);
+    hash_u32(&ctx, record->output_rep_kind);
+    hash_u32(&ctx, record->layout);
+    xr_sha256_update(&ctx, record->source_operation_id.bytes,
+                     sizeof(record->source_operation_id.bytes));
+    xr_sha256_update(&ctx, record->source_type_id.bytes,
+                     sizeof(record->source_type_id.bytes));
+    xr_sha256_update(&ctx, record->use_operation_id.bytes,
+                     sizeof(record->use_operation_id.bytes));
+    xr_sha256_update(&ctx, record->layout_fingerprint.bytes,
+                     sizeof(record->layout_fingerprint.bytes));
+    xr_sha256_final(&ctx, out->bytes);
+}
+
+static uint32_t derive_representation_record(
+    const XrAotBaselineRef *baseline, const XrTargetPlan *target_plan,
+    const XrAotRepresentationAdapterRequest *request,
+    XrAotRepresentationAdapterRecord *out) {
+    if (!baseline || !target_plan || !request || !out ||
+        request->adapter_kind < XR_AOT_REP_ADAPTER_BOX ||
+        request->adapter_kind >= XR_AOT_REP_ADAPTER_COUNT ||
+        request->input_rep_kind >= XR_MACHINE_REP_COUNT ||
+        request->output_rep_kind >= XR_MACHINE_REP_COUNT)
+        return XR_AOT_REFINEMENT_REPRESENTATION;
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrTargetValueRepRecord *value_rep =
+        xr_target_plan_value_rep(target_plan, request->source_value);
+    if (!semantic || !value_rep)
+        return XR_AOT_REFINEMENT_SOURCE_IDENTITY;
+    const XrTargetMachineRepRecord *machine =
+        xr_target_plan_machine_rep(target_plan, value_rep->register_rep);
+    if (!machine)
+        return XR_AOT_REFINEMENT_REPRESENTATION;
+
+    uint32_t source_operation = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperationRecord *source = NULL;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(semantic, i);
+        if (candidate && candidate->result_value == request->source_value) {
+            if (source)
+                return XR_AOT_REFINEMENT_SOURCE_IDENTITY;
+            source = candidate;
+            source_operation = i;
+        }
+    }
+    if (!source)
+        return XR_AOT_REFINEMENT_SOURCE_IDENTITY;
+    const XrSemanticTypeRecord *source_type =
+        xr_semantic_plan_type(semantic, source->result_type);
+    if (!source_type)
+        return XR_AOT_REFINEMENT_SOURCE_TYPE;
+    bool enum_descriptor =
+        request->adapter_kind == XR_AOT_REP_ADAPTER_ENUM_DESCRIPTOR_BOX ||
+        request->adapter_kind == XR_AOT_REP_ADAPTER_ENUM_DESCRIPTOR_UNBOX;
+    /* The scalar-only TargetPlan has no enum descriptor layout family yet. */
+    if (enum_descriptor)
+        return XR_AOT_REFINEMENT_SOURCE_TYPE;
+    const XrSemanticOperationRecord *use =
+        xr_semantic_plan_operation(semantic, request->use_operation);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    if (!use || request->use_operand >= use->operand_count ||
+        use->operand_begin > operand_count ||
+        use->operand_count > operand_count - use->operand_begin ||
+        operands[use->operand_begin + request->use_operand].value !=
+            request->source_value)
+        return XR_AOT_REFINEMENT_USE_SITE;
+
+    uint16_t expected_input = XR_MACHINE_REP_DYN_VALUE;
+    uint16_t expected_output = XR_MACHINE_REP_DYN_VALUE;
+    bool boxes = request->adapter_kind == XR_AOT_REP_ADAPTER_BOX ||
+                 request->adapter_kind == XR_AOT_REP_ADAPTER_ENUM_DESCRIPTOR_BOX;
+    if (boxes)
+        expected_input = machine->kind;
+    else
+        expected_output = machine->kind;
+    if (request->input_rep_kind != expected_input ||
+        request->output_rep_kind != expected_output ||
+        machine->kind == XR_MACHINE_REP_VOID ||
+        machine->kind == XR_MACHINE_REP_DYN_VALUE)
+        return XR_AOT_REFINEMENT_REPRESENTATION;
+
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts =
+        xr_target_plan_layouts(target_plan, &layout_count);
+    if (!layouts || request->layout >= layout_count ||
+        layouts[request->layout].semantic_type != source->result_type ||
+        fingerprint_is_zero(layouts[request->layout].fingerprint))
+        return XR_AOT_REFINEMENT_LAYOUT;
+
+    *out = (XrAotRepresentationAdapterRecord) {
+        .source_function = source->function,
+        .source_value = request->source_value,
+        .source_operation = source_operation,
+        .source_type = source->result_type,
+        .use_operation = request->use_operation,
+        .use_operand = request->use_operand,
+        .adapter_kind = request->adapter_kind,
+        .input_rep_kind = request->input_rep_kind,
+        .output_rep_kind = request->output_rep_kind,
+        .layout = request->layout,
+        .source_operation_id = source->id,
+        .source_type_id = source_type->id,
+        .use_operation_id = use->id,
+        .layout_fingerprint = layouts[request->layout].fingerprint,
+    };
+    representation_record_fingerprint(baseline, out, &out->fingerprint);
+    return XR_AOT_REFINEMENT_OK;
 }
 
 static bool append_record(XrAotRefinementBuilder *builder,
@@ -161,6 +305,18 @@ const char *xr_aot_refinement_issue_name(uint32_t issue) {
             return "XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE";
         case XR_AOT_REFINEMENT_DIRECT_CALL_SCHEMA_UNAVAILABLE:
             return "XR_AOT_REFINEMENT_DIRECT_CALL_SCHEMA_UNAVAILABLE";
+        case XR_AOT_REFINEMENT_SOURCE_IDENTITY:
+            return "XR_AOT_REFINEMENT_SOURCE_IDENTITY";
+        case XR_AOT_REFINEMENT_USE_SITE:
+            return "XR_AOT_REFINEMENT_USE_SITE";
+        case XR_AOT_REFINEMENT_SOURCE_TYPE:
+            return "XR_AOT_REFINEMENT_SOURCE_TYPE";
+        case XR_AOT_REFINEMENT_REPRESENTATION:
+            return "XR_AOT_REFINEMENT_REPRESENTATION";
+        case XR_AOT_REFINEMENT_LAYOUT:
+            return "XR_AOT_REFINEMENT_LAYOUT";
+        case XR_AOT_REFINEMENT_RECORD_FINGERPRINT:
+            return "XR_AOT_REFINEMENT_RECORD_FINGERPRINT";
         case XR_AOT_REFINEMENT_PLAN_STATE:
             return "XR_AOT_REFINEMENT_PLAN_STATE";
         case XR_AOT_REFINEMENT_BACKEND_ABI:
@@ -269,6 +425,19 @@ XrAotPassProtocol xr_aot_refinement_direct_call_protocol(uint32_t pass_id) {
     };
 }
 
+XrAotPassProtocol xr_aot_refinement_representation_protocol(uint32_t pass_id) {
+    return (XrAotPassProtocol) {
+        .schema_version = XR_AOT_REFINEMENT_SCHEMA_VERSION,
+        .pass_id = pass_id,
+        .transform_kind = XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER,
+        .requires = XR_AOT_INV_BIT(XR_AOT_INV_VALUES) |
+                    XR_AOT_INV_BIT(XR_AOT_INV_TYPES),
+        .produces = 0,
+        .invalidates = 0,
+        .preserves = XR_AOT_INV_ALL,
+    };
+}
+
 XrAotRefinementBuilder *xr_aot_refinement_builder_create(
     const XrTargetPlan *target_plan, XrAotRefinementDiagnostic *diag) {
     XrAotBaselineRef baseline;
@@ -339,8 +508,56 @@ bool xr_aot_refinement_try_direct_call(
     return true;
 }
 
+bool xr_aot_refinement_add_representation_adapter(
+    XrAotRefinementBuilder *builder, const XrAotPassProtocol *protocol,
+    const XrTargetPlan *target_plan,
+    const XrAotRepresentationAdapterRequest *request,
+    XrAotRefinementDiagnostic *diag) {
+    clear_diag(diag);
+    if (!builder || builder->frozen || !protocol_valid(protocol) ||
+        protocol->transform_kind != XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER ||
+        !target_plan || !request)
+        return fail_diag(diag, XR_AOT_REFINEMENT_INVALID_ARGUMENT,
+                         builder ? builder->record_count : 0,
+                         protocol ? protocol->pass_id : 0, 0);
+    XrAotBaselineRef current;
+    if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &current, diag))
+        return false;
+    if (!baseline_equal(&builder->baseline, &current))
+        return fail_diag(diag, XR_AOT_REFINEMENT_BASELINE_FINGERPRINT,
+                         builder->record_count, protocol->pass_id, 0);
+    if ((builder->current_state.available & protocol->requires) !=
+        protocol->requires)
+        return fail_diag(diag, XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE,
+                         builder->record_count, protocol->pass_id, 0);
+    XrAotRepresentationAdapterRecord adapter = {0};
+    uint32_t issue = derive_representation_record(&builder->baseline, target_plan,
+                                                   request, &adapter);
+    if (issue != XR_AOT_REFINEMENT_OK) {
+        fail_diag(diag, issue, builder->record_count, protocol->pass_id, 0);
+        if (diag) {
+            diag->semantic_value = request->source_value;
+            diag->semantic_operation = request->use_operation;
+        }
+        return false;
+    }
+    XrAotTransformationRecord record = {
+        .protocol = *protocol,
+        .input_state = builder->current_state,
+        .output_state = builder->current_state,
+        .representation_adapter = adapter,
+        .decision = XR_AOT_REFINEMENT_APPLIED,
+        .transform_kind = XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER,
+        .diagnostic_issue = XR_AOT_REFINEMENT_OK,
+    };
+    if (!append_record(builder, &record, diag))
+        return false;
+    return true;
+}
+
 static bool verify_view(const XrAotRefinementPlanView *view,
                         const XrAotBaselineRef *current,
+                        const XrTargetPlan *target_plan,
                         bool require_verified,
                         XrAotRefinementDiagnostic *diag) {
     if (!view)
@@ -368,16 +585,81 @@ static bool verify_view(const XrAotRefinementPlanView *view,
             return fail_diag(diag, XR_AOT_REFINEMENT_STALE_EVIDENCE, i,
                              record->protocol.pass_id,
                              record->direct_call.target_call_index);
-        uint32_t issue = XR_AOT_REFINEMENT_DIRECT_CALL_SCHEMA_UNAVAILABLE;
+        if (record->transform_kind == XR_AOT_TRANSFORM_DIRECT_CALL) {
+            uint32_t issue = XR_AOT_REFINEMENT_DIRECT_CALL_SCHEMA_UNAVAILABLE;
+            if ((expected.available & record->protocol.requires) !=
+                record->protocol.requires)
+                issue = XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE;
+            if (record->decision != XR_AOT_REFINEMENT_REFUSED ||
+                record->diagnostic_issue != issue ||
+                !state_equal(&record->output_state, &record->input_state))
+                return fail_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, i,
+                                 record->protocol.pass_id,
+                                 record->direct_call.target_call_index);
+            continue;
+        }
         if ((expected.available & record->protocol.requires) !=
             record->protocol.requires)
-            issue = XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE;
-        if (record->decision != XR_AOT_REFINEMENT_REFUSED ||
-            record->diagnostic_issue != issue ||
+            return fail_diag(diag, XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE, i,
+                             record->protocol.pass_id, 0);
+        const XrAotRepresentationAdapterRecord *actual =
+            &record->representation_adapter;
+        XrAotRepresentationAdapterRequest request = {
+            .source_value = actual->source_value,
+            .use_operation = actual->use_operation,
+            .use_operand = actual->use_operand,
+            .adapter_kind = actual->adapter_kind,
+            .input_rep_kind = actual->input_rep_kind,
+            .output_rep_kind = actual->output_rep_kind,
+            .layout = actual->layout,
+        };
+        XrAotRepresentationAdapterRecord derived = {0};
+        uint32_t issue = derive_representation_record(
+            &view->baseline, target_plan, &request, &derived);
+        if (issue != XR_AOT_REFINEMENT_OK) {
+            fail_diag(diag, issue, i, record->protocol.pass_id, 0);
+            if (diag) {
+                diag->semantic_value = actual->source_value;
+                diag->semantic_operation = actual->use_operation;
+            }
+            return false;
+        }
+        if (record->decision != XR_AOT_REFINEMENT_APPLIED ||
+            record->diagnostic_issue != XR_AOT_REFINEMENT_OK ||
             !state_equal(&record->output_state, &record->input_state))
             return fail_diag(diag, XR_AOT_REFINEMENT_PLAN_STATE, i,
-                             record->protocol.pass_id,
-                             record->direct_call.target_call_index);
+                             record->protocol.pass_id, 0);
+        if (actual->source_function != derived.source_function ||
+            actual->source_value != derived.source_value ||
+            actual->source_operation != derived.source_operation ||
+            !xr_stable_id_equal(actual->source_operation_id,
+                                derived.source_operation_id))
+            return fail_diag(diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY, i,
+                             record->protocol.pass_id, 0);
+        if (actual->source_type != derived.source_type ||
+            !xr_stable_id_equal(actual->source_type_id,
+                                derived.source_type_id))
+            return fail_diag(diag, XR_AOT_REFINEMENT_SOURCE_TYPE, i,
+                             record->protocol.pass_id, 0);
+        if (actual->use_operation != derived.use_operation ||
+            actual->use_operand != derived.use_operand ||
+            !xr_stable_id_equal(actual->use_operation_id,
+                                derived.use_operation_id))
+            return fail_diag(diag, XR_AOT_REFINEMENT_USE_SITE, i,
+                             record->protocol.pass_id, 0);
+        if (actual->adapter_kind != derived.adapter_kind ||
+            actual->input_rep_kind != derived.input_rep_kind ||
+            actual->output_rep_kind != derived.output_rep_kind)
+            return fail_diag(diag, XR_AOT_REFINEMENT_REPRESENTATION, i,
+                             record->protocol.pass_id, 0);
+        if (actual->layout != derived.layout ||
+            !xr_fingerprint_equal(actual->layout_fingerprint,
+                                  derived.layout_fingerprint))
+            return fail_diag(diag, XR_AOT_REFINEMENT_LAYOUT, i,
+                             record->protocol.pass_id, 0);
+        if (!xr_fingerprint_equal(actual->fingerprint, derived.fingerprint))
+            return fail_diag(diag, XR_AOT_REFINEMENT_RECORD_FINGERPRINT, i,
+                             record->protocol.pass_id, 0);
     }
     clear_diag(diag);
     return true;
@@ -422,7 +704,7 @@ bool xr_aot_refinement_builder_freeze(
         .record_count = builder->record_count,
         .frozen = true,
     };
-    if (!verify_view(&plan->view, &current, false, diag)) {
+    if (!verify_view(&plan->view, &current, target_plan, false, diag)) {
         xr_aot_refinement_plan_free(plan);
         return false;
     }
@@ -453,7 +735,7 @@ bool xr_aot_refinement_verify(const XrAotRefinementPlanView *view,
     if (!xr_aot_refinement_baseline_from_target_plan(target_plan, &current,
                                                       diag))
         return false;
-    return verify_view(view, &current, true, diag);
+    return verify_view(view, &current, target_plan, true, diag);
 }
 
 bool xr_aot_backend_run(const XrAotRefinementPlanView *view,
@@ -564,11 +846,27 @@ static bool test_begin(void *context, const XrAotBaselineRef *baseline,
 }
 
 static bool test_visit(void *context, uint32_t index,
-                       const XrAotTransformationRecord *record) {
+                        const XrAotTransformationRecord *record) {
     XrAotTestBackend *backend = (XrAotTestBackend *) context;
     if (!backend || !record || index != backend->visited)
         return false;
     backend->visited++;
+    if (record->transform_kind == XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER) {
+        const XrAotRepresentationAdapterRecord *adapter =
+            &record->representation_adapter;
+        return test_append(
+            backend,
+            "record=%u pass=%u transform=representation-adapter decision=applied "
+            "kind=%u source=%u use=%u:%u rep=%u->%u layout=%u\n",
+            (unsigned) index, (unsigned) record->protocol.pass_id,
+            (unsigned) adapter->adapter_kind,
+            (unsigned) adapter->source_value,
+            (unsigned) adapter->use_operation,
+            (unsigned) adapter->use_operand,
+            (unsigned) adapter->input_rep_kind,
+            (unsigned) adapter->output_rep_kind,
+            (unsigned) adapter->layout);
+    }
     return test_append(
         backend,
         "record=%u pass=%u transform=direct-call decision=refused target-call=%u issue=%s\n",
@@ -588,7 +886,8 @@ const XrAotBackendInterface *xr_aot_null_backend_interface(void) {
     static const XrAotBackendInterface interface = {
         .abi_version = XR_AOT_REFINEMENT_BACKEND_ABI_VERSION,
         .supported_transforms =
-            XR_AOT_TRANSFORM_BIT(XR_AOT_TRANSFORM_DIRECT_CALL),
+            XR_AOT_TRANSFORM_BIT(XR_AOT_TRANSFORM_DIRECT_CALL) |
+            XR_AOT_TRANSFORM_BIT(XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER),
         .begin = null_begin,
         .visit = null_visit,
         .finish = null_finish,
@@ -600,7 +899,8 @@ const XrAotBackendInterface *xr_aot_test_backend_interface(void) {
     static const XrAotBackendInterface interface = {
         .abi_version = XR_AOT_REFINEMENT_BACKEND_ABI_VERSION,
         .supported_transforms =
-            XR_AOT_TRANSFORM_BIT(XR_AOT_TRANSFORM_DIRECT_CALL),
+            XR_AOT_TRANSFORM_BIT(XR_AOT_TRANSFORM_DIRECT_CALL) |
+            XR_AOT_TRANSFORM_BIT(XR_AOT_TRANSFORM_REPRESENTATION_ADAPTER),
         .begin = test_begin,
         .visit = test_visit,
         .finish = test_finish,
