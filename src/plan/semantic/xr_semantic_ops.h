@@ -45,6 +45,7 @@ typedef enum XrSemanticOwnUse {
 
 typedef struct XrSemanticOpContract {
     const char *canonical_name;
+    const char *canonical_owner;
     const char *operation_class;
     const char *operand_relation;
     const char *result_relation;
@@ -59,6 +60,10 @@ typedef struct XrSemanticOpContract {
     const char *requirements;
     const char *observable_contract;
     const char *negated_operation;
+    uint64_t operation_id_hi;
+    uint64_t operation_id_lo;
+    uint64_t owner_id_hi;
+    uint64_t owner_id_lo;
     uint32_t effects;
     uint16_t opcode;
     uint8_t owner;

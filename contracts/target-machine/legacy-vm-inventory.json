@@ -3590,11 +3590,140 @@
   "source_tree_fingerprint": "cf74b53a3fa2b3f51073d0aa53f1467e5ea4c46259977502c7706c8e68841a67",
   "tagged_frame_sites": [
     {
+      "path": "src/vm/xvm.c",
+      "pointer_names": [
+        "_base",
+        "_new_top",
+        "_old_stack",
+        "_stack_end",
+        "base",
+        "destination",
+        "k",
+        "slot"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_api.c",
+      "pointer_names": [
+        "args",
+        "frame_end",
+        "func_base",
+        "module_base",
+        "prev_stack_top",
+        "result_slot",
+        "saved_stack_top"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_chan_ops.c",
+      "pointer_names": [
+        "base"
+      ]
+    },
+    {
       "path": "src/vm/xvm_coro_api.h",
       "pointer_names": [
         "args",
         "out",
         "out_error"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_coro_backend.c",
+      "pointer_names": [
+        "args",
+        "base",
+        "closure_base",
+        "dst",
+        "func_base",
+        "new_stack",
+        "out",
+        "result",
+        "saved_stack",
+        "stack_base"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_coro_ops.c",
+      "pointer_names": [
+        "args",
+        "base",
+        "result_slot"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_coro_state.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_dispatch_call.inc.c",
+      "pointer_names": [
+        "arg_base",
+        "return_slot",
+        "stack_base_check"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_dispatch_collection.inc.c",
+      "pointer_names": [
+        "elements",
+        "elems",
+        "src"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_dispatch_convert.inc.c",
+      "pointer_names": [
+        "items"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_dispatch_helpers.h",
+      "pointer_names": [
+        "args",
+        "base",
+        "destination"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_dispatch_invoke.inc.c",
+      "pointer_names": [
+        "arg_base"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_ffi.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_ffi.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_helpers.c",
+      "pointer_names": [
+        "out"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_internal.h",
+      "pointer_names": [
+        "_frame_end",
+        "args",
+        "out"
+      ]
+    },
+    {
+      "path": "src/vm/xvm_invoke.c",
+      "pointer_names": [
+        "args",
+        "base"
       ]
     },
     {
@@ -3619,138 +3748,15 @@
       ]
     },
     {
-      "path": "src/vm/xvm_dispatch_collection.inc.c",
-      "pointer_names": [
-        "elements",
-        "elems",
-        "src"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_ffi.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/vm/xvm.c",
-      "pointer_names": [
-        "_base",
-        "_new_top",
-        "_old_stack",
-        "_stack_end",
-        "base",
-        "destination",
-        "k",
-        "slot"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_coro_state.h",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_coro_backend.c",
-      "pointer_names": [
-        "args",
-        "base",
-        "closure_base",
-        "dst",
-        "func_base",
-        "new_stack",
-        "out",
-        "result",
-        "saved_stack",
-        "stack_base"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_dispatch_convert.inc.c",
-      "pointer_names": [
-        "items"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_api.c",
-      "pointer_names": [
-        "args",
-        "frame_end",
-        "func_base",
-        "module_base",
-        "prev_stack_top",
-        "result_slot",
-        "saved_stack_top"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_dispatch_call.inc.c",
-      "pointer_names": [
-        "arg_base",
-        "return_slot",
-        "stack_base_check"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_dispatch_helpers.h",
-      "pointer_names": [
-        "args",
-        "base",
-        "destination"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_dispatch_invoke.inc.c",
-      "pointer_names": [
-        "arg_base"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_ffi.h",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_helpers.c",
-      "pointer_names": [
-        "out"
-      ]
-    },
-    {
       "path": "src/vm/xvm_props.c",
       "pointer_names": [
         "base"
       ]
     },
     {
-      "path": "src/vm/xvm_coro_ops.c",
+      "path": "src/api/xrepl.c",
       "pointer_names": [
-        "args",
-        "base",
-        "result_slot"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_chan_ops.c",
-      "pointer_names": [
-        "base"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_invoke.c",
-      "pointer_names": [
-        "args",
-        "base"
-      ]
-    },
-    {
-      "path": "src/vm/xvm_internal.h",
-      "pointer_names": [
-        "_frame_end",
-        "args",
-        "out"
+        "value"
       ]
     },
     {
@@ -3768,277 +3774,13 @@
       ]
     },
     {
-      "path": "src/api/xrepl.c",
-      "pointer_names": [
-        "value"
-      ]
-    },
-    {
-      "path": "src/module/xpkg_client.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
       "path": "src/module/xmodule.h",
       "pointer_names": [
         "export_values"
       ]
     },
     {
-      "path": "src/runtime/xvm_call.h",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/xexec_frame.h",
-      "pointer_names": [
-        "args",
-        "result",
-        "stack",
-        "stack_top"
-      ]
-    },
-    {
-      "path": "src/runtime/xglobal_dict.h",
-      "pointer_names": [
-        "value"
-      ]
-    },
-    {
-      "path": "src/runtime/xglobals_table.c",
-      "pointer_names": [
-        "new_values"
-      ]
-    },
-    {
-      "path": "src/runtime/xexec_state.h",
-      "pointer_names": [
-        "data",
-        "new_data",
-        "stack_top"
-      ]
-    },
-    {
-      "path": "src/runtime/xglobals_table.h",
-      "pointer_names": [
-        "values"
-      ]
-    },
-    {
-      "path": "src/runtime/closure/xbound_method.h",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/closure/xbound_method.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/value/xfloat_methods.h",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/value/xvalue.h",
-      "pointer_names": [
-        "v"
-      ]
-    },
-    {
-      "path": "src/runtime/value/xbool_methods.h",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/value/xvalue_string_ops.c",
-      "pointer_names": [
-        "v"
-      ]
-    },
-    {
-      "path": "src/runtime/value/xint_methods.h",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xmap_methods.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xjson_serde.h",
-      "pointer_names": [
-        "args",
-        "out"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xpanic_info.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xjson.h",
-      "pointer_names": [
-        "decoded_values",
-        "out",
-        "values"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xstring_methods.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xarray_vm.c",
-      "pointer_names": [
-        "boxed"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xarray_methods.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xatomic.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xarray.c",
-      "pointer_names": [
-        "data",
-        "elements",
-        "items",
-        "src"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xtuple.c",
-      "pointer_names": [
-        "values"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xset_methods.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xbigint_methods.h",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xjson_serde.c",
-      "pointer_names": [
-        "args",
-        "out",
-        "values"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xiterator.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xrange.c",
-      "pointer_names": [
-        "args",
-        "data"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xtuple.h",
-      "pointer_names": [
-        "values"
-      ]
-    },
-    {
-      "path": "src/runtime/object/xarray.h",
-      "pointer_names": [
-        "elements"
-      ]
-    },
-    {
-      "path": "src/runtime/class/xenum.c",
-      "pointer_names": [
-        "args",
-        "payloads"
-      ]
-    },
-    {
-      "path": "src/runtime/class/xclass_system.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/class/xenum_builtins.h",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/class/xclass_from_descriptor.c",
-      "pointer_names": [
-        "base"
-      ]
-    },
-    {
-      "path": "src/runtime/class/xmethod.h",
-      "pointer_names": [
-        "args",
-        "result"
-      ]
-    },
-    {
-      "path": "src/runtime/class/xinstance.h",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/class/xinstance_destroy.c",
-      "pointer_names": [
-        "overflow"
-      ]
-    },
-    {
-      "path": "src/runtime/class/xinstance_dynamic.c",
-      "pointer_names": [
-        "new_overflow",
-        "overflow"
-      ]
-    },
-    {
-      "path": "src/runtime/class/xenum.h",
-      "pointer_names": [
-        "args",
-        "payloads"
-      ]
-    },
-    {
-      "path": "src/runtime/class/xenum_builtins.c",
+      "path": "src/module/xpkg_client.c",
       "pointer_names": [
         "args"
       ]
@@ -4057,6 +3799,44 @@
       ]
     },
     {
+      "path": "src/runtime/class/xclass_from_descriptor.c",
+      "pointer_names": [
+        "base"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xclass_system.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xenum.c",
+      "pointer_names": [
+        "args",
+        "payloads"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xenum.h",
+      "pointer_names": [
+        "args",
+        "payloads"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xenum_builtins.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xenum_builtins.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
       "path": "src/runtime/class/xinstance.c",
       "pointer_names": [
         "args",
@@ -4064,9 +3844,47 @@
       ]
     },
     {
+      "path": "src/runtime/class/xinstance.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
       "path": "src/runtime/class/xinstance_core.c",
       "pointer_names": [
         "src_overflow"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xinstance_destroy.c",
+      "pointer_names": [
+        "overflow"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xinstance_dynamic.c",
+      "pointer_names": [
+        "new_overflow",
+        "overflow"
+      ]
+    },
+    {
+      "path": "src/runtime/class/xmethod.h",
+      "pointer_names": [
+        "args",
+        "result"
+      ]
+    },
+    {
+      "path": "src/runtime/closure/xbound_method.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/closure/xbound_method.h",
+      "pointer_names": [
+        "args"
       ]
     },
     {
@@ -4082,11 +3900,18 @@
       ]
     },
     {
-      "path": "src/runtime/object/builtins/xmap_builtins.c",
+      "path": "src/runtime/object/builtins/xarray_builtins.c",
       "pointer_names": [
+        "adata",
         "args",
-        "edata",
-        "pdata"
+        "dst",
+        "srcd"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xarray_builtins.h",
+      "pointer_names": [
+        "args"
       ]
     },
     {
@@ -4099,30 +3924,11 @@
       ]
     },
     {
-      "path": "src/runtime/object/builtins/xset_builtins.c",
+      "path": "src/runtime/object/builtins/xmap_builtins.c",
       "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/builtins/xarray_builtins.c",
-      "pointer_names": [
-        "adata",
         "args",
-        "dst",
-        "srcd"
-      ]
-    },
-    {
-      "path": "src/runtime/object/builtins/xstringbuilder_builtins.c",
-      "pointer_names": [
-        "args"
-      ]
-    },
-    {
-      "path": "src/runtime/object/builtins/xstring_builtins.h",
-      "pointer_names": [
-        "args"
+        "edata",
+        "pdata"
       ]
     },
     {
@@ -4132,7 +3938,7 @@
       ]
     },
     {
-      "path": "src/runtime/object/builtins/xarray_builtins.h",
+      "path": "src/runtime/object/builtins/xset_builtins.c",
       "pointer_names": [
         "args"
       ]
@@ -4144,13 +3950,207 @@
       ]
     },
     {
+      "path": "src/runtime/object/builtins/xstring_builtins.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xstring_builtins.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/builtins/xstringbuilder_builtins.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
       "path": "src/runtime/object/builtins/xstringbuilder_builtins.h",
       "pointer_names": [
         "args"
       ]
     },
     {
-      "path": "src/runtime/object/builtins/xstring_builtins.c",
+      "path": "src/runtime/object/xarray.c",
+      "pointer_names": [
+        "data",
+        "elements",
+        "items",
+        "src"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xarray.h",
+      "pointer_names": [
+        "elements"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xarray_methods.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xarray_vm.c",
+      "pointer_names": [
+        "boxed"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xatomic.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xbigint_methods.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xiterator.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xjson.h",
+      "pointer_names": [
+        "decoded_values",
+        "out",
+        "values"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xjson_serde.c",
+      "pointer_names": [
+        "args",
+        "out",
+        "values"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xjson_serde.h",
+      "pointer_names": [
+        "args",
+        "out"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xmap_methods.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xpanic_info.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xrange.c",
+      "pointer_names": [
+        "args",
+        "data"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xset_methods.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xstring_methods.c",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xtuple.c",
+      "pointer_names": [
+        "values"
+      ]
+    },
+    {
+      "path": "src/runtime/object/xtuple.h",
+      "pointer_names": [
+        "values"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xbool_methods.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xfloat_methods.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xint_methods.h",
+      "pointer_names": [
+        "args"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xvalue.h",
+      "pointer_names": [
+        "v"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xvalue_string_ops.c",
+      "pointer_names": [
+        "v"
+      ]
+    },
+    {
+      "path": "src/runtime/xexec_frame.h",
+      "pointer_names": [
+        "args",
+        "result",
+        "stack",
+        "stack_top"
+      ]
+    },
+    {
+      "path": "src/runtime/xexec_state.h",
+      "pointer_names": [
+        "data",
+        "new_data",
+        "stack_top"
+      ]
+    },
+    {
+      "path": "src/runtime/xglobal_dict.h",
+      "pointer_names": [
+        "value"
+      ]
+    },
+    {
+      "path": "src/runtime/xglobals_table.c",
+      "pointer_names": [
+        "new_values"
+      ]
+    },
+    {
+      "path": "src/runtime/xglobals_table.h",
+      "pointer_names": [
+        "values"
+      ]
+    },
+    {
+      "path": "src/runtime/xvm_call.h",
       "pointer_names": [
         "args"
       ]

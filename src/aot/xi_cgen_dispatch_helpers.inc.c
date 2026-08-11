@@ -4174,13 +4174,12 @@ static void xicgen_store_upval(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 }
 
 static void xicgen_emit_assert_condition(XiCgenCtx *ctx, FILE *out, const XiValue *condition) {
-    if (condition && condition->type && condition->type->kind == XR_KIND_BOOL) {
-        fprintf(out, "(");
-        emit_value_as_rep_ctx(ctx, out, condition, XR_REP_I64);
-        fprintf(out, " != 0)");
+    const char *adapter = cg_truthiness_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "xr_truthy(");
+    fprintf(out, "%s(", adapter);
     emit_value_as_rep_ctx(ctx, out, condition, XR_REP_TAGGED);
     fprintf(out, ")");
 }
@@ -7433,7 +7432,12 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, ", %d)", XRT_SYM_ITERATOR);
     } else if (strcmp(bn, "iter_valid") == 0) {
         XR_DCHECK(v->nargs >= 1, "builtin iter_valid: need arg");
-        fprintf(out, "xr_truthy(xrt_method_0(");
+        const char *adapter = cg_truthiness_adapter_name(ctx);
+        if (!adapter) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "%s(xrt_method_0(", adapter);
         emit_vref(out, v->args[0]);
         fprintf(out, ", %d))", XRT_SYM_HAS_NEXT);
     } else if (strcmp(bn, "iter_next") == 0) {

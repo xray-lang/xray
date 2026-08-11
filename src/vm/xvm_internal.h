@@ -37,6 +37,7 @@
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xenum_descriptor.h"
 #include "../runtime/symbol/xsymbol_table.h"
+#include "../shared/xr_truthy_core.h"
 #include "../base/xglobal_indices.h"
 #include "xvm_coro_api.h"
 
@@ -81,20 +82,29 @@ XR_FUNC XrValue xr_vm_send_result_value(XrVMRuntime *isolate, uint32_t member_in
  * Empty strings, collections, and other heap objects are not implicitly falsy.
  * User conditions must be bool or nullable presence (T?) checked via ISNULL.
  */
-static inline bool vm_is_falsey(XrValue value) {
-    if (XR_IS_NULL(value))
-        return true;
-    if (XR_IS_BOOL(value))
-        return value.i == 0;
-    if (XR_IS_INT(value))
-        return XR_TO_INT(value) == 0;
-    if (XR_IS_FLOAT(value))
-        return XR_TO_FLOAT(value) == 0.0;
-    return false;
+static inline bool vm_is_truthy(XrValue value) {
+    XrTruthyCoreKind kind = XR_TRUTHY_CORE_OBJECT;
+    int64_t integer = 0;
+    double floating = 0.0;
+    if (XR_IS_NULL(value)) {
+        kind = XR_TRUTHY_CORE_NULL;
+    } else if (XR_IS_BOOL(value)) {
+        kind = XR_TRUTHY_CORE_BOOL;
+        integer = XR_TO_BOOL(value);
+    } else if (XR_IS_INT(value)) {
+        kind = XR_TRUTHY_CORE_INT;
+        integer = XR_TO_INT(value);
+    } else if (XR_IS_FLOAT(value)) {
+        kind = XR_TRUTHY_CORE_FLOAT;
+        floating = XR_TO_FLOAT(value);
+    }
+    return xr_truthy_core_eval(XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI,
+                               XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO, XR_SEM_CONSUMER_VM, kind,
+                               integer, floating, 0);
 }
 
-static inline bool vm_is_truthy(XrValue value) {
-    return !vm_is_falsey(value);
+static inline bool vm_is_falsey(XrValue value) {
+    return !vm_is_truthy(value);
 }
 
 /* ========== Debug Macros ========== */

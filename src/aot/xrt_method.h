@@ -213,23 +213,38 @@ static XrValue xrt_to_string(XrValue val) {
 }
 
 static XrValue xrt_to_bool(XrValue val) {
-    if (XR_IS_BOOL(val))
-        return val;
-    if (XR_IS_NULL(val))
-        return XR_FALSE_VAL;
-    if (XR_IS_INT(val))
-        return XR_FROM_BOOL(XR_TO_INT(val) != 0);
-    if (XR_IS_FLOAT(val))
-        return XR_FROM_BOOL(XR_TO_FLOAT(val) != 0.0);
-    if (XR_IS_STR(val))
-        return XR_FROM_BOOL(xr_str_len(val) > 0);
-    if (XR_IS_ARRAY(val))
-        return XR_FROM_BOOL(((xrt_array_t *) val.ptr)->length > 0);
-    if (XR_IS_MAP(val))
-        return XR_FROM_BOOL(xrt_map_len((xrt_map_t *) val.ptr) > 0);
-    if (XR_IS_SET(val))
-        return XR_FROM_BOOL(xrt_set_len((xrt_set_t *) val.ptr) > 0);
-    return XR_TRUE_VAL;
+    XrTruthyCoreKind kind = XR_TRUTHY_CORE_OBJECT;
+    int64_t integer = 0;
+    double floating = 0.0;
+    int64_t size = 0;
+    if (XR_IS_BOOL(val)) {
+        kind = XR_TRUTHY_CORE_BOOL;
+        integer = XR_TO_BOOL(val);
+    } else if (XR_IS_NULL(val)) {
+        kind = XR_TRUTHY_CORE_NULL;
+    } else if (XR_IS_INT(val)) {
+        kind = XR_TRUTHY_CORE_INT;
+        integer = XR_TO_INT(val);
+    } else if (XR_IS_FLOAT(val)) {
+        kind = XR_TRUTHY_CORE_FLOAT;
+        floating = XR_TO_FLOAT(val);
+    } else if (XR_IS_STR(val)) {
+        kind = XR_TRUTHY_CORE_SIZED;
+        size = xr_str_len(val);
+    } else if (XR_IS_ARRAY(val)) {
+        kind = XR_TRUTHY_CORE_SIZED;
+        size = ((xrt_array_t *) val.ptr)->length;
+    } else if (XR_IS_MAP(val)) {
+        kind = XR_TRUTHY_CORE_SIZED;
+        size = xrt_map_len((xrt_map_t *) val.ptr);
+    } else if (XR_IS_SET(val)) {
+        kind = XR_TRUTHY_CORE_SIZED;
+        size = xrt_set_len((xrt_set_t *) val.ptr);
+    }
+    return XR_FROM_BOOL(xr_truthy_core_eval(XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI,
+                                             XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO,
+                                             XR_SEM_CONSUMER_AOT_HOSTED, kind, integer,
+                                             floating, size));
 }
 
 /* Fixed-arity method dispatch is intentionally inlineable by the C compiler. */

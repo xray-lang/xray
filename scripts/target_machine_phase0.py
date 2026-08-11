@@ -313,7 +313,7 @@ def legacy_vm_inventory(root: Path) -> dict[str, Any]:
     tagged_sites = []
     frame_pattern = re.compile(r"\bXrValue\s*\*\s*([A-Za-z_][A-Za-z0-9_]*)")
     for directory in ("src/vm", "src/api", "src/module", "src/runtime"):
-        for path in (root / directory).rglob("*"):
+        for path in sorted((root / directory).rglob("*")):
             if not path.is_file() or path.suffix not in {".c", ".h"}:
                 continue
             names = sorted(set(frame_pattern.findall(read(path))))

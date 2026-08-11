@@ -54,6 +54,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
 #include "../shared/xr_sync_core.h"
+#include "../shared/xr_truthy_core.h"
 /* Code-shape controls are pure compiler barriers over <stdint.h>: no runtime,
  * no libc, no allocation.  A freestanding target is exactly where an opaque
  * value and a compiler fence are needed most, so they belong in this core
@@ -1767,18 +1768,35 @@ static inline XrValue xrt_to_float(XrValue v) {
 }
 
 static inline XrValue xrt_to_bool(XrValue v) {
-    if (XR_IS_BOOL(v))
-        return v;
-    if (XR_IS_NULL(v))
-        return XR_FALSE_VAL;
-    if (XR_IS_INT(v) || XR_IS_RUNE(v))
-        return XR_FROM_BOOL(v.i != 0);
-    if (XR_IS_FLOAT(v))
-        return XR_FROM_BOOL(v.f != 0.0);
-    return XR_TRUE_VAL;
+    XrTruthyCoreKind kind = XR_TRUTHY_CORE_OBJECT;
+    int64_t integer = 0;
+    double floating = 0.0;
+    int64_t size = 0;
+    if (XR_IS_BOOL(v)) {
+        kind = XR_TRUTHY_CORE_BOOL;
+        integer = XR_TO_BOOL(v);
+    } else if (XR_IS_NULL(v)) {
+        kind = XR_TRUTHY_CORE_NULL;
+    } else if (XR_IS_INT(v) || XR_IS_RUNE(v)) {
+        kind = XR_TRUTHY_CORE_INT;
+        integer = v.i;
+    } else if (XR_IS_FLOAT(v)) {
+        kind = XR_TRUTHY_CORE_FLOAT;
+        floating = v.f;
+    } else if (XR_IS_STR(v)) {
+        kind = XR_TRUTHY_CORE_SIZED;
+        size = xr_str_len(v);
+    }
+    return XR_FROM_BOOL(xr_truthy_core_eval(XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI,
+                                             XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO,
+                                             XR_SEM_CONSUMER_AOT_FREESTANDING, kind, integer,
+                                             floating, size));
 }
 
 static inline int xr_truthy(XrValue v) {
+    XR_TRUTHY_CORE_OWNER_GUARD(XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI,
+                               XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO);
+    XR_TRUTHY_CORE_CONSUMER_GUARD(XR_SEM_CONSUMER_AOT_FREESTANDING);
     return XR_TO_INT(xrt_to_bool(v)) != 0;
 }
 

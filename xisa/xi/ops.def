@@ -2670,7 +2670,6 @@
     xi.le
     xi.gt
     xi.ge
-    xi.not
     xi.convert
     xi.box
     xi.unbox
@@ -2832,6 +2831,7 @@
 
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
+    xi.not
     xi.json.decode
     xi.go
     xi.await
@@ -2874,4 +2874,25 @@
 (define-xi-semantic-owner generated-specialization
   :operations (
     xi.gen.call
+  ))
+
+(define-xi-observable-owner shared.truthiness
+  :category shared-semantic-kernel
+  :operations (xi.not)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+    runtime
+  )
+  :cgen-adapter xr_truthy
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_internal.h" "vm_is_truthy")
+    (aot-hosted "src/aot/xrt_value.h" "xr_truthy")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xr_truthy")
+    (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")
+    (runtime "src/runtime/value/xvalue_truthy.c" "xr_value_is_truthy")
   ))

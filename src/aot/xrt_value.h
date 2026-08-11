@@ -38,6 +38,7 @@
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
+#include "../shared/xr_truthy_core.h"
 
 #if defined(__GNUC__) || defined(__clang__)
 typedef uint8_t xr_v16u8 __attribute__((vector_size(16)));
@@ -1158,18 +1159,24 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
  * ========================================================================= */
 
 static inline int xr_truthy(XrValue v) {
-    switch (v.tag) {
-        case XR_TAG_NULL:
-            return 0;
-        case XR_TAG_BOOL:
-            return v.i != 0;
-        case XR_TAG_I64:
-            return v.i != 0;
-        case XR_TAG_F64:
-            return v.f != 0.0;
-        default:
-            return 1;
+    XrTruthyCoreKind kind = XR_TRUTHY_CORE_OBJECT;
+    int64_t integer = 0;
+    double floating = 0.0;
+    if (XR_IS_NULL(v)) {
+        kind = XR_TRUTHY_CORE_NULL;
+    } else if (XR_IS_BOOL(v)) {
+        kind = XR_TRUTHY_CORE_BOOL;
+        integer = XR_TO_BOOL(v);
+    } else if (XR_IS_INT(v)) {
+        kind = XR_TRUTHY_CORE_INT;
+        integer = XR_TO_INT(v);
+    } else if (XR_IS_FLOAT(v)) {
+        kind = XR_TRUTHY_CORE_FLOAT;
+        floating = XR_TO_FLOAT(v);
     }
+    return xr_truthy_core_eval(XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI,
+                               XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO,
+                               XR_SEM_CONSUMER_AOT_HOSTED, kind, integer, floating, 0);
 }
 
 /* =========================================================================

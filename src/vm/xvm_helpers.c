@@ -905,7 +905,7 @@ void xr_vm_vm_free(XrVMRuntime *isolate) {
  * Uses vm_is_falsey from xvm_internal.h for consistent behavior
  */
 bool xr_vm_is_truthy(XrValue value) {
-    return xr_value_is_truthy(value);
+    return vm_is_truthy(value);
 }
 
 // ========== VM Execution Loop ==========

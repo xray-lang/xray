@@ -526,6 +526,10 @@ static void test_plan_snapshot_and_determinism(void) {
                                  xr_target_plan_fingerprint(second)));
     REQUIRE(xr_fingerprint_equal(xr_target_plan_semantic_fingerprint(first),
                                  xr_semantic_plan_fingerprint(semantic)));
+    char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
+    xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
+    REQUIRE(strcmp(target_hex,
+                   "ae58f3b68db55c8c7010e7bbb0bd3c137a912e54c9a0b23fa44918b9d776a17e") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;

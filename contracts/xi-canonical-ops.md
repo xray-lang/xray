@@ -69,8 +69,13 @@ language-level happens-before edge (`:sync`).
     field and owner category. It is part of the SemanticPlan fingerprint and
     the exact-version `.xsm` header. A missing or incompatible registry fails
     before artifact allocation or execution; there is no compatibility shim.
+17. Observable owners have canonical 128-bit operation and owner IDs generated
+    from `ops.def`. The generated JSON registry fingerprints production
+    consumers and adapter bindings; VM, AOT, CGen, and runtime use the stable
+    owner ID for migrated families instead of reconstructing an owner from a
+    source or C spelling.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def a63483aadb891e7a4d864d4eb1193cfddd9024d04e43a5d30d8b3c670563c034
+anchor-sha256: xisa/xi/ops.def 0dbc1ff963d8dc9251052798f93e8a898e6cb93d2b400d1867457ec7caeedf4f
 anchor-sha256: xisa/xi/lowering.def 8537a11e486566ce11847065319b2115558ea85ea7420deddc5753e61b6fda30

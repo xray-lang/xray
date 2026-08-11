@@ -4,7 +4,7 @@ xisagen — XISA code generator (Python rewrite)
 
 Reads declarative .def files, generates C headers for Xi IR and AOT metadata:
   - xi-ops:  xisa/xi/ops.def     → xi_ops_gen.h
-  - semantic-ops: xisa/xi/ops.def → xr_semantic_ops_gen.h
+  - semantic-ops: xisa/xi/ops.def → semantic owner registry artifacts
   - xi-lowering: xisa/xi/lowering.def → Xi target lowering headers and tests
   - xi-verify: xisa/xi/verifier.def → xi_verify_gen.h
   - aot-rep: xisa/aot/rep.def    → xaot_rep_gen.h
@@ -13,7 +13,7 @@ Reads declarative .def files, generates C headers for Xi IR and AOT metadata:
 
 Usage:
   python3 xisagen.py xi-ops  <ops.def>     <output.h>
-  <python-3.11+> xisagen.py semantic-ops <ops.def> <output.h>
+  <python-3.11+> xisagen.py semantic-ops <ops.def> <output-root>
   python3 xisagen.py xi-lowering <ops.def> <lowering.def> <output-root>
   python3 xisagen.py xi-verify <ops.def> <verifier.def> <output.h>
   python3 xisagen.py aot-rep <rep.def>     <output.h>
@@ -27,6 +27,8 @@ from __future__ import annotations
 import sys
 import re
 import os
+import hashlib
+import json
 from dataclasses import dataclass, field
 
 # ============================================================
@@ -422,6 +424,20 @@ VALID_XI_SEMANTIC_OWNERS = {
     'shared-semantic-kernel',
 }
 
+XI_SEMANTIC_CONSUMERS = {
+    'semantic-plan': 1 << 0,
+    'vm': 1 << 1,
+    'aot-hosted': 1 << 2,
+    'aot-freestanding': 1 << 3,
+    'cgen': 1 << 4,
+    'runtime': 1 << 5,
+}
+
+DEFAULT_SEMANTIC_PLAN_BINDING = (
+    'src/plan/semantic/xr_semantic_ops.c',
+    'xr_semantic_op_contract',
+)
+
 
 @dataclass
 class XiOperandDef:
@@ -465,6 +481,38 @@ class XiOpDef:
     own_use: str
     ic_site: str
     negated_op: str | None
+
+
+@dataclass(frozen=True)
+class XiProductionBinding:
+    consumer: str
+    path: str
+    symbol: str
+
+
+@dataclass(frozen=True)
+class XiObservableOwnerDef:
+    name: str
+    category: str
+    operations: tuple[str, ...]
+    consumers: tuple[str, ...]
+    cgen_adapter: str
+    production_bindings: tuple[XiProductionBinding, ...]
+
+
+@dataclass(frozen=True)
+class XiObservableOperation:
+    operation: str
+    category: str
+    owner: str
+    operation_id_hi: int
+    operation_id_lo: int
+    owner_id_hi: int
+    owner_id_lo: int
+    consumers: tuple[str, ...]
+    consumer_bits: int
+    cgen_adapter: str
+    production_bindings: tuple[XiProductionBinding, ...]
 
 
 def _xi_c_ident(token: str) -> str:
@@ -591,7 +639,7 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         if not isinstance(form, SList) or not form.children:
             die(f"{path}: top-level form must be a list")
         head = _sexpr_atom_value(form.children[0], path)
-        if head == 'define-xi-semantic-owner':
+        if head in {'define-xi-semantic-owner', 'define-xi-observable-owner'}:
             continue
         if head != 'define-xi-op':
             die(f"{path}:{form.line}:{form.col}: expected define-xi-op")
@@ -814,6 +862,161 @@ def parse_xi_semantic_owners(text: str, ops: list[XiOpDef],
     return owners
 
 
+def _semantic_stable_id(name: str, hasher=None) -> tuple[int, int]:
+    if hasher is None:
+        digest = hashlib.sha256(b'xray-semantic-id-v1\0' + name.encode('utf-8')).digest()[:16]
+    else:
+        digest = hasher(name)
+    if not isinstance(digest, bytes) or len(digest) != 16:
+        die(f"stable ID hasher returned an invalid digest for '{name}'")
+    return int.from_bytes(digest[:8], 'big'), int.from_bytes(digest[8:], 'big')
+
+
+def _parse_production_bindings(expr: SList | None, consumers: tuple[str, ...],
+                               context: str) -> tuple[XiProductionBinding, ...]:
+    if expr is None:
+        die(f"{context}: missing :production-bindings")
+    bindings = []
+    seen = set()
+    for entry in expr.children:
+        if not isinstance(entry, SList) or len(entry.children) != 3:
+            die(f"{context}: production binding must be (consumer \"path\" \"symbol\")")
+        consumer = _sexpr_atom_value(entry.children[0], context)
+        path_expr = entry.children[1]
+        symbol_expr = entry.children[2]
+        if consumer not in XI_SEMANTIC_CONSUMERS:
+            die(f"{context}: production binding names unknown consumer '{consumer}'")
+        if consumer in seen:
+            die(f"{context}: duplicate production binding for consumer '{consumer}'")
+        if (not isinstance(path_expr, SAtom) or not path_expr.is_string or
+                not isinstance(symbol_expr, SAtom) or not symbol_expr.is_string):
+            die(f"{context}: production binding path and symbol must be strings")
+        path_value = path_expr.str_value
+        symbol_value = symbol_expr.str_value
+        if not path_value or not symbol_value:
+            die(f"{context}: production binding path and symbol cannot be empty")
+        seen.add(consumer)
+        bindings.append(XiProductionBinding(consumer, path_value, symbol_value))
+    expected = set(consumers)
+    if seen != expected:
+        missing = sorted(expected - seen)
+        extra = sorted(seen - expected)
+        detail = []
+        if missing:
+            detail.append(f"missing bindings for {', '.join(missing)}")
+        if extra:
+            detail.append(f"unknown bindings for {', '.join(extra)}")
+        die(f"{context}: {'; '.join(detail)}")
+    return tuple(bindings)
+
+
+def parse_xi_observable_owners(text: str, ops: list[XiOpDef],
+                               semantic_owners: dict[str, str], path: str = '<input>',
+                               id_hasher=None) -> tuple[list[XiObservableOwnerDef],
+                                                        list[XiObservableOperation]]:
+    forms = parse_sexpr(tokenize_sexpr(text, path), path)
+    op_names = {op.name for op in ops}
+    explicit_owners = []
+    explicit_by_operation = {}
+    owner_names = set()
+    for form in forms:
+        if not isinstance(form, SList) or not form.children:
+            die(f"{path}: top-level form must be a list")
+        head = _sexpr_atom_value(form.children[0], path)
+        if head != 'define-xi-observable-owner':
+            continue
+        if len(form.children) < 2:
+            die(f"{path}:{form.line}:{form.col}: missing observable owner name")
+        name = _sexpr_atom_value(form.children[1], 'define-xi-observable-owner')
+        if not name or name in owner_names:
+            die(f"{path}: duplicate observable owner '{name}'")
+        owner_names.add(name)
+        category = _xi_get_kw_str(form, ':category')
+        if category not in VALID_XI_SEMANTIC_OWNERS:
+            die(f"{path}: observable owner '{name}' has unknown category '{category}'")
+        operations = tuple(_xi_parse_atom_list(_xi_get_kw_list(form, ':operations'),
+                                               f"{name}:operations"))
+        if not operations:
+            die(f"{path}: observable owner '{name}' has no operations")
+        for operation in operations:
+            if operation not in op_names:
+                die(f"{path}: observable owner '{name}' names unknown operation '{operation}'")
+            if operation in explicit_by_operation:
+                die(f"{path}: Xi op '{operation}' has multiple observable owners")
+            if semantic_owners.get(operation) != category:
+                die(f"{path}: observable owner '{name}' category does not match '{operation}'")
+            explicit_by_operation[operation] = name
+        consumer_values = _xi_parse_atom_list(_xi_get_kw_list(form, ':consumers'),
+                                              f"{name}:consumers")
+        if not consumer_values:
+            die(f"{path}: observable owner '{name}' has no consumers")
+        consumers = tuple(consumer_values)
+        if len(set(consumers)) != len(consumers):
+            die(f"{path}: observable owner '{name}' has duplicate consumers")
+        for consumer in consumers:
+            if consumer not in XI_SEMANTIC_CONSUMERS:
+                die(f"{path}: observable owner '{name}' names unknown consumer '{consumer}'")
+        cgen_adapter = _xi_get_kw_str(form, ':cgen-adapter')
+        if 'cgen' in consumers and not cgen_adapter:
+            die(f"{path}: observable owner '{name}' is missing :cgen-adapter")
+        if cgen_adapter and 'cgen' not in consumers:
+            die(f"{path}: observable owner '{name}' has a cgen adapter without a cgen consumer")
+        if cgen_adapter and not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', cgen_adapter):
+            die(f"{path}: observable owner '{name}' has invalid cgen adapter '{cgen_adapter}'")
+        bindings = _parse_production_bindings(_xi_get_kw_list(form, ':production-bindings'),
+                                              consumers, name)
+        explicit_owners.append(XiObservableOwnerDef(name, category, operations, consumers,
+                                                    cgen_adapter, bindings))
+
+    owner_by_name = {owner.name: owner for owner in explicit_owners}
+    claimed_ids = {}
+
+    def claim_stable_id(name: str) -> tuple[int, int]:
+        stable_id = _semantic_stable_id(name, id_hasher)
+        previous = claimed_ids.get(stable_id)
+        if previous is not None and previous != name:
+            die(f"{path}: stable semantic ID collision between '{previous}' and '{name}'")
+        claimed_ids[stable_id] = name
+        return stable_id
+
+    operation_ids = {op.name: claim_stable_id(op.name) for op in ops}
+    for owner in explicit_owners:
+        claim_stable_id(owner.name)
+
+    rows = []
+    for op in ops:
+        explicit_name = explicit_by_operation.get(op.name)
+        if explicit_name:
+            owner = owner_by_name[explicit_name]
+            owner_id = claim_stable_id(owner.name)
+            consumers = owner.consumers
+            cgen_adapter = owner.cgen_adapter
+            bindings = owner.production_bindings
+        else:
+            owner = None
+            owner_id = operation_ids[op.name]
+            consumers = ('semantic-plan',)
+            cgen_adapter = ''
+            bindings = (XiProductionBinding('semantic-plan', *DEFAULT_SEMANTIC_PLAN_BINDING),)
+        consumer_bits = 0
+        for consumer in consumers:
+            consumer_bits |= XI_SEMANTIC_CONSUMERS[consumer]
+        rows.append(XiObservableOperation(
+            operation=op.name,
+            category=semantic_owners[op.name],
+            owner=owner.name if owner else op.name,
+            operation_id_hi=operation_ids[op.name][0],
+            operation_id_lo=operation_ids[op.name][1],
+            owner_id_hi=owner_id[0],
+            owner_id_lo=owner_id[1],
+            consumers=consumers,
+            consumer_bits=consumer_bits,
+            cgen_adapter=cgen_adapter,
+            production_bindings=bindings,
+        ))
+    return explicit_owners, rows
+
+
 def _xi_bit_expr(prefix: str, values: list) -> str:
     if not values:
         return '0'
@@ -853,14 +1056,29 @@ def _xi_value_contract(values: list[XiOperandDef] | list[XiResultDef]) -> str:
     return ';'.join(records)
 
 
-def generate_xi_semantic_ops_header(ops: list[XiOpDef],
-                                    owners: dict[str, str]) -> str:
+def _c_u64(value: int) -> str:
+    return f'UINT64_C(0x{value:016x})'
+
+
+def _c_u32(value: int) -> str:
+    return f'UINT32_C(0x{value:08x})'
+
+
+def _semantic_id_hex(hi: int, lo: int) -> str:
+    return f'{hi:016x}{lo:016x}'
+
+
+def generate_xi_semantic_ops_header(ops: list[XiOpDef], owners: dict[str, str],
+                                    observable_rows: list[XiObservableOperation]) -> str:
+    observable_by_operation = {row.operation: row for row in observable_rows}
     lines = []
     lines.append('/* AUTO-GENERATED by xisagen - DO NOT EDIT */')
     lines.append('/* Source: xisa/xi/ops.def (target-neutral fields only) */')
     lines.append('')
     lines.append('#ifndef XR_SEMANTIC_OPS_GEN_H')
     lines.append('#define XR_SEMANTIC_OPS_GEN_H')
+    lines.append('')
+    lines.append('#include "../../shared/xr_semantic_owner_ids_gen.h"')
     lines.append('')
     lines.append('#define XR_SEM_EFFECT_NONE 0')
     for i, effect in enumerate(sorted(VALID_XI_EFFECTS)):
@@ -871,12 +1089,27 @@ def generate_xi_semantic_ops_header(ops: list[XiOpDef],
         owner = owners.get(op.name)
         if owner is None:
             die(f"Xi op '{op.name}' has no semantic owner")
+        observable = observable_by_operation.get(op.name)
+        if observable is None:
+            die(f"Xi op '{op.name}' has no observable owner binding")
+        if observable.owner != op.name:
+            owner_ident = _xi_c_ident(observable.owner)
+            owner_id_hi = f'XR_SEM_OWNER_ID_{owner_ident}_HI'
+            owner_id_lo = f'XR_SEM_OWNER_ID_{owner_ident}_LO'
+        else:
+            owner_id_hi = _c_u64(observable.owner_id_hi)
+            owner_id_lo = _c_u64(observable.owner_id_lo)
         arity = 'XR_SEMANTIC_OP_ARITY_VARIADIC' if op.arity == 0xFF else str(op.arity)
         effects = _xi_bit_expr('XR_SEM_EFFECT', op.effects)
         fields = [
             op.ident,
             _c_string_literal(op.name),
             f'XR_SEM_OWNER_{_xi_c_ident(owner)}',
+            _c_string_literal(observable.owner),
+            _c_u64(observable.operation_id_hi),
+            _c_u64(observable.operation_id_lo),
+            owner_id_hi,
+            owner_id_lo,
             _c_string_literal(op.cls),
             arity,
             str(len(op.operands)),
@@ -904,6 +1137,155 @@ def generate_xi_semantic_ops_header(ops: list[XiOpDef],
     lines.append('')
     lines.append('#endif  /* XR_SEMANTIC_OPS_GEN_H */')
     lines.append('')
+    return '\n'.join(lines)
+
+
+def build_semantic_owner_registry(rows: list[XiObservableOperation]) -> dict:
+    operations = []
+    owners_by_name = {}
+    for row in rows:
+        binding_rows = [
+            {
+                'consumer': binding.consumer,
+                'path': binding.path,
+                'symbol': binding.symbol,
+            }
+            for binding in row.production_bindings
+        ]
+        operation_row = {
+            'operation': row.operation,
+            'operation_id': _semantic_id_hex(row.operation_id_hi, row.operation_id_lo),
+            'operation_id_hi': f'0x{row.operation_id_hi:016x}',
+            'operation_id_lo': f'0x{row.operation_id_lo:016x}',
+            'owner': row.owner,
+            'owner_id': _semantic_id_hex(row.owner_id_hi, row.owner_id_lo),
+            'owner_id_hi': f'0x{row.owner_id_hi:016x}',
+            'owner_id_lo': f'0x{row.owner_id_lo:016x}',
+            'category': row.category,
+            'consumers': list(row.consumers),
+            'consumer_bits': f'0x{row.consumer_bits:08x}',
+            'cgen_adapter': row.cgen_adapter or None,
+            'production_bindings': binding_rows,
+        }
+        operations.append(operation_row)
+        owner_row = owners_by_name.get(row.owner)
+        if owner_row is None:
+            owner_row = {
+                'owner': row.owner,
+                'owner_id': operation_row['owner_id'],
+                'owner_id_hi': operation_row['owner_id_hi'],
+                'owner_id_lo': operation_row['owner_id_lo'],
+                'category': row.category,
+                'operations': [],
+                'consumers': list(row.consumers),
+                'consumer_bits': operation_row['consumer_bits'],
+                'cgen_adapter': operation_row['cgen_adapter'],
+                'production_bindings': binding_rows,
+            }
+            owners_by_name[row.owner] = owner_row
+        owner_row['operations'].append(row.operation)
+
+    payload = {
+        'schema': 1,
+        'source': 'xisa/xi/ops.def',
+        'consumers': {
+            name: f'0x{bit:08x}' for name, bit in XI_SEMANTIC_CONSUMERS.items()
+        },
+        'owners': [owners_by_name[name] for name in sorted(owners_by_name)],
+        'operations': operations,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(',', ':'),
+                           ensure_ascii=False).encode('utf-8')
+    fingerprint = hashlib.sha256(canonical).hexdigest()
+    return {
+        'schema': payload['schema'],
+        'source': payload['source'],
+        'canonical_fingerprint': fingerprint,
+        'consumers': payload['consumers'],
+        'owners': payload['owners'],
+        'operations': payload['operations'],
+    }
+
+
+def generate_semantic_owner_registry_json(rows: list[XiObservableOperation]) -> str:
+    registry = build_semantic_owner_registry(rows)
+    return json.dumps(registry, indent=2, ensure_ascii=False) + '\n'
+
+
+def generate_semantic_owner_ids_header(explicit_owners: list[XiObservableOwnerDef],
+                                       rows: list[XiObservableOperation]) -> str:
+    registry = build_semantic_owner_registry(rows)
+    row_by_operation = {row.operation: row for row in rows}
+    explicit_rows = [(owner, row_by_operation[owner.operations[0]])
+                     for owner in explicit_owners]
+
+    lines = [
+        '/* AUTO-GENERATED by xisagen - DO NOT EDIT */',
+        '/* Source: xisa/xi/ops.def */',
+        '',
+        '#ifndef XR_SEMANTIC_OWNER_IDS_GEN_H',
+        '#define XR_SEMANTIC_OWNER_IDS_GEN_H',
+        '',
+        '#include <stdbool.h>',
+        '#include <stddef.h>',
+        '#include <stdint.h>',
+        '',
+    ]
+    for consumer, bit in XI_SEMANTIC_CONSUMERS.items():
+        lines.append(f'#define XR_SEM_CONSUMER_{_xi_c_ident(consumer)} {_c_u32(bit)}')
+    lines.extend([
+        '',
+        f'#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "{registry["canonical_fingerprint"]}"',
+        '',
+    ])
+    for owner in explicit_owners:
+        row = row_by_operation[owner.operations[0]]
+        ident = _xi_c_ident(owner.name)
+        lines.append(f'#define XR_SEM_OWNER_ID_{ident}_HI {_c_u64(row.owner_id_hi)}')
+        lines.append(f'#define XR_SEM_OWNER_ID_{ident}_LO {_c_u64(row.owner_id_lo)}')
+        lines.append(f'#define XR_SEM_OWNER_ID_{ident}_CONSUMERS {_c_u32(row.consumer_bits)}')
+    lines.extend([
+        '',
+        'static inline uint32_t xr_semantic_owner_consumer_bits(uint64_t owner_id_hi,',
+        '                                                        uint64_t owner_id_lo) {',
+    ])
+    for owner, row in explicit_rows:
+        ident = _xi_c_ident(owner.name)
+        lines.extend([
+            f'    if (owner_id_hi == XR_SEM_OWNER_ID_{ident}_HI &&',
+            f'        owner_id_lo == XR_SEM_OWNER_ID_{ident}_LO)',
+            f'        return XR_SEM_OWNER_ID_{ident}_CONSUMERS;',
+        ])
+    lines.extend([
+        '    return 0;',
+        '}',
+        '',
+        'static inline bool xr_semantic_owner_has_consumer(uint64_t owner_id_hi,',
+        '                                                   uint64_t owner_id_lo,',
+        '                                                   uint32_t consumer_bit) {',
+        '    uint32_t bits = xr_semantic_owner_consumer_bits(owner_id_hi, owner_id_lo);',
+        '    return bits != 0 && consumer_bit != 0 && (bits & consumer_bit) != 0;',
+        '}',
+        '',
+        'static inline const char *xr_semantic_owner_cgen_adapter(uint64_t owner_id_hi,',
+        '                                                           uint64_t owner_id_lo) {',
+    ])
+    for owner, row in explicit_rows:
+        if not row.cgen_adapter:
+            continue
+        ident = _xi_c_ident(owner.name)
+        lines.extend([
+            f'    if (owner_id_hi == XR_SEM_OWNER_ID_{ident}_HI &&',
+            f'        owner_id_lo == XR_SEM_OWNER_ID_{ident}_LO)',
+            f'        return {_c_string_literal(row.cgen_adapter)};',
+        ])
+    lines.extend([
+        '    return NULL;',
+        '}',
+        '',
+        '#endif  /* XR_SEMANTIC_OWNER_IDS_GEN_H */',
+        '',
+    ])
     return '\n'.join(lines)
 
 
@@ -3362,17 +3744,29 @@ def cmd_xi_ops(args: list[str]):
 
 def cmd_semantic_ops(args: list[str]):
     if len(args) != 2:
-        die("usage: xisagen.py semantic-ops <ops.def> <output.h>")
+        die("usage: xisagen.py semantic-ops <ops.def> <output-root>")
     source = read_file(args[0])
     ops = parse_xi_ops_def(source, args[0])
     if not ops:
         die(f"no Xi ops parsed from {args[0]}")
     owners = parse_xi_semantic_owners(source, ops, args[0])
-    content = generate_xi_semantic_ops_header(ops, owners)
-    write_file(args[1], content)
+    explicit_owners, observable_rows = parse_xi_observable_owners(
+        source, ops, owners, args[0])
+    output_root = args[1]
+    outputs = {
+        'src/plan/semantic/xr_semantic_ops_gen.h':
+            generate_xi_semantic_ops_header(ops, owners, observable_rows),
+        'src/shared/xr_semantic_owner_ids_gen.h':
+            generate_semantic_owner_ids_header(explicit_owners, observable_rows),
+        'contracts/semantic-owner-registry.json':
+            generate_semantic_owner_registry_json(observable_rows),
+    }
+    for relative, content in outputs.items():
+        output = os.path.join(output_root, *relative.split('/'))
+        write_file(output, content)
+        print(f"xisagen: generated {output}", file=sys.stderr)
     print(f"xisagen: generated {len(ops)} target-neutral semantic op contracts",
           file=sys.stderr)
-    print(f"xisagen: generated {args[1]}", file=sys.stderr)
 
 def cmd_xi_lowering(args: list[str]):
     if len(args) != 3:
@@ -3833,24 +4227,84 @@ def _test_xi_semantic_ops_parser():
     (define-xi-semantic-owner shared-semantic-kernel :operations (xi.kernel))
     (define-xi-semantic-owner capability-provider :operations (xi.provider))
     (define-xi-semantic-owner generated-specialization :operations (xi.generated))
+    (define-xi-observable-owner shared.test-kernel
+      :category shared-semantic-kernel
+      :operations (xi.kernel)
+      :consumers (semantic-plan cgen)
+      :cgen-adapter xr_test_kernel
+      :production-bindings (
+        (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+        (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")))
     '''
     ops = parse_xi_ops_def(text)
     owners = parse_xi_semantic_owners(text, ops)
     assert owners['xi.primitive'] == 'declarative-primitive'
     assert owners['xi.kernel'] == 'shared-semantic-kernel'
-    header = generate_xi_semantic_ops_header(ops, owners)
+    explicit, observable = parse_xi_observable_owners(text, ops, owners)
+    header = generate_xi_semantic_ops_header(ops, owners, observable)
     assert 'XR_SEM_OWNER_CAPABILITY_PROVIDER' in header
     assert '"kernel-result"' in header
-    try:
-        parse_xi_semantic_owners(text.replace('xi.generated))', 'xi.primitive))'), ops)
-        assert False, "multiple semantic owners should be rejected"
-    except SystemExit:
-        pass
-    try:
-        parse_xi_semantic_owners(text.replace('(xi.generated))', '())'), ops)
-        assert False, "missing semantic owner should be rejected"
-    except SystemExit:
-        pass
+    assert 'XR_SEM_OWNER_ID_SHARED_TEST_KERNEL_HI' in header
+    assert explicit[0].name == 'shared.test-kernel'
+    assert observable[1].consumer_bits == (
+        XI_SEMANTIC_CONSUMERS['semantic-plan'] | XI_SEMANTIC_CONSUMERS['cgen'])
+    registry = build_semantic_owner_registry(observable)
+    assert len(registry['canonical_fingerprint']) == 64
+    assert registry['operations'][1]['owner'] == 'shared.test-kernel'
+    ids_header = generate_semantic_owner_ids_header(explicit, observable)
+    assert 'XR_SEM_OWNER_ID_SHARED_TEST_KERNEL_HI' in ids_header
+    assert 'xr_semantic_owner_cgen_adapter' in ids_header
+
+    def reject_semantic(source: str):
+        candidate_ops = parse_xi_ops_def(source)
+        try:
+            parse_xi_semantic_owners(source, candidate_ops)
+            assert False, "invalid semantic owner registry should be rejected"
+        except SystemExit:
+            pass
+
+    def reject_observable(source: str, hasher=None):
+        candidate_ops = parse_xi_ops_def(source)
+        candidate_owners = parse_xi_semantic_owners(source, candidate_ops)
+        try:
+            parse_xi_observable_owners(source, candidate_ops, candidate_owners,
+                                       id_hasher=hasher)
+            assert False, "invalid observable owner registry should be rejected"
+        except SystemExit:
+            pass
+
+    reject_semantic(text.replace('xi.generated))', 'xi.primitive))'))
+    reject_semantic(text.replace('(xi.generated))', '())'))
+    reject_semantic(text.replace('generated-specialization :operations (xi.generated)',
+                                 'unknown-category :operations (xi.generated)'))
+    reject_semantic(text + '''
+      (define-xi-semantic-owner declarative-primitive :operations ())
+    ''')
+    reject_observable(text.replace(':operations (xi.kernel)\n      :consumers',
+                                   ':operations (xi.unknown)\n      :consumers'))
+    reject_observable(text.replace(':category shared-semantic-kernel',
+                                   ':category unknown-category'))
+    reject_observable(text + '''
+      (define-xi-observable-owner shared.second
+        :category shared-semantic-kernel
+        :operations (xi.kernel)
+        :consumers (semantic-plan)
+        :production-bindings (
+          (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")))
+    ''')
+    reject_observable(text.replace('(semantic-plan cgen)',
+                                   '(semantic-plan unknown-consumer)'))
+    reject_observable(text.replace('      :cgen-adapter xr_test_kernel\n', ''))
+    reject_observable(text.replace(
+        '        (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")', ''))
+    reject_observable(text.replace(
+        '        (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")',
+        '        (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")\n'
+        '        (cgen "src/aot/xi_cgen.c" "duplicate")'))
+    reject_observable(text.replace(
+        '        (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")',
+        '        (unknown-consumer "src/aot/xi_cgen.c" "unknown")'))
+    reject_observable(text, hasher=lambda _: bytes(16))
     print(" PASS", file=sys.stderr)
 
 

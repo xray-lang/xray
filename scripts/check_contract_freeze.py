@@ -197,8 +197,10 @@ CONTRACT_SPECS = (
         "semantic-ownership.md",
         (
             "contracts/semantic-owners.toml",
+            "contracts/semantic-owner-registry.json",
             "contracts/hof-shape-matrix.toml",
             "contracts/shared-core-inventory.json",
+            "src/shared/xr_semantic_owner_ids_gen.h",
             "scripts/check_semantic_owners.py",
         ),
     ),

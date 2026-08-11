@@ -16,13 +16,15 @@
 #include <string.h>
 
 #define XR_SEMANTIC_CONTRACT_ROW(                                                                  \
-    ident, name, owner_value, class_value, arity_value, operand_count_value, result_count_value,   \
-    operand_relation_value, result_relation_value, result_kind_value, result_ownership_value,      \
-    speculation_value, vn_value, algebraic_value, alias_value, sync_value, escape_use_value,       \
-    escape_allocation_value, ownership_use_value, effects_value, requirements_value,               \
-    observable_value, negated_value)                                                               \
+    ident, name, owner_value, canonical_owner_value, operation_id_hi_value, operation_id_lo_value,  \
+    owner_id_hi_value, owner_id_lo_value, class_value, arity_value, operand_count_value,            \
+    result_count_value, operand_relation_value, result_relation_value, result_kind_value,           \
+    result_ownership_value, speculation_value, vn_value, algebraic_value, alias_value, sync_value,  \
+    escape_use_value, escape_allocation_value, ownership_use_value, effects_value,                  \
+    requirements_value, observable_value, negated_value)                                           \
     [XI_##ident] = {                                                                               \
         .canonical_name = name,                                                                    \
+        .canonical_owner = canonical_owner_value,                                                  \
         .operation_class = class_value,                                                            \
         .operand_relation = operand_relation_value,                                                \
         .result_relation = result_relation_value,                                                  \
@@ -37,6 +39,10 @@
         .requirements = requirements_value,                                                        \
         .observable_contract = observable_value,                                                   \
         .negated_operation = negated_value,                                                        \
+        .operation_id_hi = operation_id_hi_value,                                                  \
+        .operation_id_lo = operation_id_lo_value,                                                  \
+        .owner_id_hi = owner_id_hi_value,                                                          \
+        .owner_id_lo = owner_id_lo_value,                                                          \
         .effects = effects_value,                                                                  \
         .opcode = XI_##ident,                                                                      \
         .owner = owner_value,                                                                      \
@@ -90,14 +96,16 @@ const char *xr_semantic_op_owner_name(uint8_t owner) {
 }
 
 void xr_semantic_op_registry_fingerprint(XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-operation-registry-v1\0";
+    static const uint8_t domain[] = "xray-semantic-operation-registry-v2\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
+    hash_string(&ctx, XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT);
     hash_u64(&ctx, xr_semantic_op_contract_count());
     for (size_t i = 0; i < xr_semantic_op_contract_count(); i++) {
         const XrSemanticOpContract *contract = &xr_semantic_contracts[i];
         hash_string(&ctx, contract->canonical_name);
+        hash_string(&ctx, contract->canonical_owner);
         hash_string(&ctx, contract->operation_class);
         hash_string(&ctx, contract->operand_relation);
         hash_string(&ctx, contract->result_relation);
@@ -112,6 +120,10 @@ void xr_semantic_op_registry_fingerprint(XrFingerprint *out) {
         hash_string(&ctx, contract->requirements);
         hash_string(&ctx, contract->observable_contract);
         hash_string(&ctx, contract->negated_operation);
+        hash_u64(&ctx, contract->operation_id_hi);
+        hash_u64(&ctx, contract->operation_id_lo);
+        hash_u64(&ctx, contract->owner_id_hi);
+        hash_u64(&ctx, contract->owner_id_lo);
         hash_u64(&ctx, contract->effects);
         hash_u64(&ctx, contract->opcode);
         hash_u64(&ctx, contract->owner);
@@ -135,13 +147,16 @@ bool xr_semantic_op_registry_verify(char *error, size_t error_size) {
         const XrSemanticOpContract *contract = &xr_semantic_contracts[i];
         bool valid = contract->opcode == i && contract->canonical_name &&
                      strncmp(contract->canonical_name, "xi.", 3) == 0 &&
-                     contract->canonical_name[3] != '\0' && contract->operation_class &&
+                     contract->canonical_name[3] != '\0' && contract->canonical_owner &&
+                     contract->canonical_owner[0] != '\0' && contract->operation_class &&
                      contract->operand_relation && contract->result_relation &&
                      contract->result_kind && contract->speculation && contract->value_numbering &&
                      contract->algebraic_traits && contract->alias_scope &&
                      contract->synchronization && contract->escape_use &&
                      contract->escape_allocation && contract->requirements &&
                      contract->observable_contract && contract->negated_operation &&
+                     (contract->operation_id_hi != 0 || contract->operation_id_lo != 0) &&
+                     (contract->owner_id_hi != 0 || contract->owner_id_lo != 0) &&
                      contract->owner < XR_SEM_OWNER_COUNT &&
                      contract->result_ownership < XR_SEM_RESULT_OWNERSHIP_COUNT &&
                      contract->ownership_use < XR_SEM_OWN_USE_COUNT;
@@ -152,12 +167,32 @@ bool xr_semantic_op_registry_verify(char *error, size_t error_size) {
             return false;
         }
         for (size_t previous = 0; previous < i; previous++) {
-            if (strcmp(xr_semantic_contracts[previous].canonical_name, contract->canonical_name) ==
-                0) {
+            const XrSemanticOpContract *prior = &xr_semantic_contracts[previous];
+            bool duplicate_name = strcmp(prior->canonical_name, contract->canonical_name) == 0;
+            bool duplicate_operation_id = prior->operation_id_hi == contract->operation_id_hi &&
+                                          prior->operation_id_lo == contract->operation_id_lo;
+            bool same_owner_name = strcmp(prior->canonical_owner, contract->canonical_owner) == 0;
+            bool same_owner_id = prior->owner_id_hi == contract->owner_id_hi &&
+                                 prior->owner_id_lo == contract->owner_id_lo;
+            if (duplicate_name || duplicate_operation_id) {
                 if (error && error_size)
                     snprintf(error, error_size,
-                             "XR_SEM_0017: operation registry has duplicate name %s",
+                             "XR_SEM_0017: operation registry has duplicate identity %s",
                              contract->canonical_name);
+                return false;
+            }
+            if (same_owner_name != same_owner_id) {
+                if (error && error_size)
+                    snprintf(error, error_size,
+                             "XR_SEM_0017: operation registry has inconsistent owner %s",
+                             contract->canonical_owner);
+                return false;
+            }
+            if (same_owner_id && prior->owner != contract->owner) {
+                if (error && error_size)
+                    snprintf(error, error_size,
+                             "XR_SEM_0017: operation registry owner category drifted for %s",
+                             contract->canonical_owner);
                 return false;
             }
         }

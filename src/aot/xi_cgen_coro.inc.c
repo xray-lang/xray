@@ -5565,7 +5565,7 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             XR_DCHECK(blk->control != NULL, "AOT coro IF block missing control");
             emit_block_terminator_source_line(ctx, out, blk);
             fprintf(out, "    if (");
-            emit_condition_expr(out, blk->control);
+            emit_condition_expr_ctx(ctx, out, blk->control);
             fprintf(out, ") {\n");
             emit_phi_copies(ctx, out, f, blk->succs[0], find_pred_idx(blk->succs[0], blk));
             fprintf(out, "        goto L%u;\n", blk->succs[0]->id);

@@ -33,6 +33,7 @@
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
+#include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
 #include "../ir/xi_op_name.h"
@@ -2549,7 +2550,6 @@ static bool cg_array_value_known_nonnegative(const XiValue *v, const XiValue *ro
 static bool cg_array_block_has_no_side_effect_after(const XiBlock *blk, const XiValue *start);
 static bool cg_array_block_has_no_side_effect_before(const XiBlock *blk, const XiValue *target);
 static bool cg_array_index_access_bounds_proven(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
-static void emit_condition_expr(FILE *out, const XiValue *v);
 static void emit_condition_expr_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v);
 
 static const char *cg_current_source_path(const XiCgenCtx *ctx) {
@@ -4280,22 +4280,22 @@ static void emit_shift_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
 #include "xi_cgen_arith_helpers.inc.c"
 
-static void emit_condition_expr(FILE *out, const XiValue *v) {
-    if (xi_copy_is_branch_hint(v) && v->nargs >= 1 && v->args[0]) {
-        fprintf(out, "%s(", v->aux_int == XI_COPY_KIND_LIKELY ? "XR_LIKELY" : "XR_UNLIKELY");
-        emit_condition_expr(out, v->args[0]);
-        fprintf(out, ")");
-        return;
+static const char *cg_truthiness_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI,
+                                        XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: truthiness owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
     }
-    if (cg_rep(v) == XR_REP_TAGGED) {
-        fprintf(out, "xr_truthy(");
-        emit_vref(out, v);
-        fprintf(out, ")");
-    } else {
-        fprintf(out, "(");
-        emit_vref(out, v);
-        fprintf(out, " != 0)");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI, XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: truthiness owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
     }
+    return adapter;
 }
 
 static void emit_condition_expr_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
@@ -4305,15 +4305,14 @@ static void emit_condition_expr_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v)
         fprintf(out, ")");
         return;
     }
-    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED) {
-        fprintf(out, "xr_truthy(");
-        emit_vref(out, v);
-        fprintf(out, ")");
-    } else {
-        fprintf(out, "(");
-        emit_vref(out, v);
-        fprintf(out, " != 0)");
+    const char *adapter = cg_truthiness_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return;
     }
+    fprintf(out, "%s(", adapter);
+    emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);
+    fprintf(out, ")");
 }
 
 static void emit_codegen_abort_expr(FILE *out) {

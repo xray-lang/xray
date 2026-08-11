@@ -901,7 +901,12 @@
       "header": "src/shared/xr_truthy_core.h",
       "id": "truthiness",
       "owner": "shared-kernel",
-      "production_callers": [],
+      "production_callers": [
+        "src/aot/xrt_core_freestanding.h",
+        "src/aot/xrt_value.h",
+        "src/runtime/value/xvalue_truthy.c",
+        "src/vm/xvm_internal.h"
+      ],
       "profiles": [
         "vm",
         "aot",
@@ -909,9 +914,9 @@
       ],
       "representation": "native",
       "signatures": [
-        "xr_truthy_core_eval"
+        "xr_truthy_core_eval_impl"
       ],
-      "status": "test-only",
+      "status": "production",
       "test_callers": [
         "tests/unit/stdlib/test_truthy_core.c"
       ]

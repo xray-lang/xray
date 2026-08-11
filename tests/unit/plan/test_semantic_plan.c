@@ -20,6 +20,7 @@
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/shared/xr_semantic_owner_ids_gen.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -639,6 +640,16 @@ static void test_immutable_owned_snapshot(void) {
     REQUIRE(xr_semantic_plan_schema(plan) == XR_SEMANTIC_SCHEMA_VERSION);
     XrFingerprint registry_fingerprint;
     xr_semantic_op_registry_fingerprint(&registry_fingerprint);
+    char registry_hex[XR_FINGERPRINT_BYTES * 2 + 1];
+    char semantic_hex[XR_FINGERPRINT_BYTES * 2 + 1];
+    xr_fingerprint_hex(registry_fingerprint, registry_hex);
+    xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
+    REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
+                   "e316e1122af4cbe1d6ac2c924a78d4de2ac08eb42fb892f42f22150c6a0eb536") == 0);
+    REQUIRE(strcmp(registry_hex,
+                   "d01b95f7569b8b26118288bd11800bdfc5266165682b74d00b53b76510648d85") == 0);
+    REQUIRE(strcmp(semantic_hex,
+                   "7909124cfe8057b624e716831e6f0df54514860844a0f85bf4aff22b5ca99def") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -676,11 +687,26 @@ static void test_operation_registry(void) {
     const XrSemanticOpContract *decode = xr_semantic_op_contract(XI_JSON_DECODE);
     const XrSemanticOpContract *print = xr_semantic_op_contract(XI_PRINT);
     const XrSemanticOpContract *generated = xr_semantic_op_contract(XI_GEN_CALL);
+    const XrSemanticOpContract *logical_not = xr_semantic_op_contract(XI_NOT);
     REQUIRE(add != NULL && strcmp(add->canonical_name, "xi.add") == 0);
+    REQUIRE(strcmp(add->canonical_owner, "xi.add") == 0);
+    REQUIRE(add->operation_id_hi == add->owner_id_hi);
+    REQUIRE(add->operation_id_lo == add->owner_id_lo);
     REQUIRE(add->owner == XR_SEM_OWNER_DECLARATIVE_PRIMITIVE);
     REQUIRE(decode != NULL && decode->owner == XR_SEM_OWNER_SHARED_SEMANTIC_KERNEL);
     REQUIRE(print != NULL && print->owner == XR_SEM_OWNER_CAPABILITY_PROVIDER);
     REQUIRE(generated != NULL && generated->owner == XR_SEM_OWNER_GENERATED_SPECIALIZATION);
+    REQUIRE(logical_not != NULL && logical_not->owner == XR_SEM_OWNER_SHARED_SEMANTIC_KERNEL);
+    REQUIRE(strcmp(logical_not->canonical_owner, "shared.truthiness") == 0);
+    REQUIRE(logical_not->owner_id_hi == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI);
+    REQUIRE(logical_not->owner_id_lo == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO);
+    REQUIRE(logical_not->operation_id_hi != logical_not->owner_id_hi ||
+            logical_not->operation_id_lo != logical_not->owner_id_lo);
+    REQUIRE(xr_semantic_owner_has_consumer(logical_not->owner_id_hi,
+                                           logical_not->owner_id_lo,
+                                           XR_SEM_CONSUMER_SEMANTIC_PLAN));
+    REQUIRE(xr_semantic_owner_consumer_bits(0, 0) == 0);
+    REQUIRE(xr_semantic_owner_cgen_adapter(0, 0) == NULL);
     REQUIRE(xr_semantic_op_contract(XI_OP_COUNT) == NULL);
 }
 

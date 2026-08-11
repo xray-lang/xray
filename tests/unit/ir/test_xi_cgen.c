@@ -7002,9 +7002,9 @@ TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
            count_between(code, code_end, "xrt_map_get_i64_value_typed(") >= 1 &&
            "Map<int,bool>.get guarded by has should keep typed storage");
     assert(count_between(count, count_end, "\n    XrValue v") == 0 &&
-           count_between(count, count_end, "XR_FROM_BOOL(") == 0 &&
-           count_between(count, count_end, "xr_truthy(") == 0 &&
-           "Map<int,bool>.get guarded by has should use a native bool condition");
+           count_between(count, count_end, "XR_FROM_BOOL(") >= 1 &&
+           count_between(count, count_end, "xr_truthy(") >= 1 &&
+           "Map<int,bool>.get condition should consume the stable truthiness owner adapter");
 
     printf("  Generated guarded bool map condition %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -7029,8 +7029,8 @@ TEST(cgen_class_map_bool_value_unguarded_explicit_true_uses_tagged_compare) {
     assert(count_between(count, count_end, "XrValue ") >= 1 &&
            count_between(count, count_end, "XR_FROM_BOOL(") >= 1 &&
            count_between(count, count_end, "xrt_eq(") >= 1 &&
-           count_between(count, count_end, "xr_truthy(") == 0 &&
-           "unguarded Map<int,bool>.get explicit comparison must keep nullable tagged semantics");
+           count_between(count, count_end, "xr_truthy(") >= 1 &&
+           "unguarded Map<int,bool>.get comparison should consume the stable truthiness owner adapter");
 
     printf("  Generated unguarded bool map explicit comparison %zu bytes of C code\n",
            strlen(code));
