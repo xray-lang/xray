@@ -948,6 +948,49 @@ static void test_arc_unknown_call_result_retains_before_single_consume(void) {
     xi_func_free(f);
 }
 
+static void test_arc_resolved_callee_contract_overrides_callsite_borrow(void) {
+    XiFunc *f = make_func("arc_resolved_callee_contract", &t_int);
+    XiBlock *entry = f->entry;
+    XiFunc *callee = make_func("owned_identity", &t_array);
+    callee->parent_func = f;
+    XiValue *parameter = xi_param(callee, callee->entry, 0, &t_array);
+    set_single_param(callee, parameter);
+    xi_block_set_return(callee->entry, parameter);
+
+    f->children = (XiFunc **) xr_calloc(1, sizeof(*f->children));
+    XR_CHECK(f->children != NULL, "test_xi_escape: child allocation failed");
+    f->children[0] = callee;
+    f->children_cap = 1;
+    f->nchildren = 1;
+
+    XiValue *closure = xi_value_new(f, entry, XI_CLOSURE_NEW, &t_func, 0);
+    closure->aux = callee;
+    XiValue *argument = xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &t_array, 2);
+    call->args[0] = closure;
+    call->args[1] = argument;
+    call->flags = XI_FLAG_SIDE_EFFECT;
+    call->call_return_ownership.kind = XI_RETURN_OWNERSHIP_BORROWED_PARAM;
+    call->call_return_ownership.param_index = 0;
+    call->call_return_ownership.complete = true;
+    XiValue *store = xi_value_new(f, entry, XI_SET_SHARED, &t_unit, 1);
+    store->args[0] = call;
+    store->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    ASSERT_EQ(callee->arc_borrow_sig->param_own[0], XI_OWN_OWNED,
+              "resolved callee parameter mode must reach its fixed point");
+    ASSERT_EQ(callee->arc_return_ownership.kind, XI_RETURN_OWNERSHIP_OWNED,
+              "resolved callee must publish its owned return ABI");
+    ASSERT_EQ(count_target_ops(f, XI_RELEASE, argument), 0,
+              "caller must move the argument required by the resolved callee");
+    ASSERT_EQ(count_target_ops(f, XI_RETAIN, call), 0,
+              "owned resolved-call result moves directly into the shared slot");
+    xi_func_free(f);
+}
+
 static void test_arc_stringbuilder_builtin_result_is_fresh(void) {
     XiFunc *f = make_func("arc_fresh_stringbuilder", &t_int);
     XiBlock *entry = f->entry;
@@ -1605,6 +1648,7 @@ int main(void) {
     test_arc_call_result_retain_before_same_block_phi_consume();
     test_arc_orders_adjacent_retain_before_release();
     test_arc_unknown_call_result_retains_before_single_consume();
+    test_arc_resolved_callee_contract_overrides_callsite_borrow();
     test_arc_stringbuilder_builtin_result_is_fresh();
     test_arc_value_clone_is_fresh_owner();
     test_arc_builtin_iterator_results_are_fresh();

@@ -1124,12 +1124,13 @@ static bool arc_call_arg_is_callee_borrowed(XiFunc *f, const XiValue *user, uint
     else if (user->op == XI_CALL_METHOD || user->op == XI_CALL_METHOD_DIRECT)
         callee = arc_resolve_namespace_method_callee(f, user);
     uint16_t parameter = (uint16_t) (a - 1);
-    /* The call-site return contract is analyzer-sealed even when a relative
-     * module function has no live XiFunc pointer in this compilation. A
-     * BORROWED_PARAM result proves that exact actual is inspected/forwarded
-     * at +0, so treating it as moved-in would manufacture an unmatched retain
-     * before the call. */
-    if (user->call_return_ownership.complete &&
+    /* The call-site return contract is the only ownership evidence when a
+     * relative module function has no live XiFunc pointer in this compilation.
+     * A statically resolved callee is stronger: its fixed-point parameter mode
+     * and return ABI must be consumed as one coherent contract. Mixing a stale
+     * BORROWED_PARAM call-site result with an OWNED callee ABI would leave the
+     * argument in the caller while the callee assumes it was moved. */
+    if (!callee && user->call_return_ownership.complete &&
         user->call_return_ownership.kind == XI_RETURN_OWNERSHIP_BORROWED_PARAM &&
         user->call_return_ownership.param_index == (int16_t) parameter)
         return true;
