@@ -26,6 +26,7 @@
 #include "../../runtime/xisolate_api.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../toolchain/xtc_shape_oracle.h"
+#include "../toolchain/xtc_target_profile.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,6 +39,24 @@ typedef struct VerifyAnalysis {
     XaAnalyzer *analyzer;
     char *entry;
 } VerifyAnalysis;
+
+static bool verify_native_target_profile(const char *target_name,
+                                         XaotBuildProfile profile,
+                                         const XaotTarget *aot_target,
+                                         XrTargetProfile **out) {
+    if (out)
+        *out = NULL;
+    if (!out || profile != XAOT_BUILD_PROFILE_HOSTED)
+        return false;
+    XrTargetCodegenFacts codegen;
+    XrToolchainTarget target;
+    char error[256];
+    return xaot_target_profile_codegen_facts(aot_target, &codegen) &&
+           xtc_target_parse(target_name ? target_name : "native", &target,
+                            error, sizeof(error)) &&
+           xtc_target_profile_build_native_hosted(
+               &target, &codegen, out, error, sizeof(error));
+}
 
 static bool verify_key_allowed(const char *key, const char *const *allowed, size_t count) {
     if (!key)
@@ -488,6 +507,7 @@ static bool verify_backend_contract(const VerifyAnalysis *state, XrTomlValue *it
         return false;
     }
     XaotTarget target = {0};
+    XrTargetProfile *target_profile = NULL;
     XaotBuildResult result = {0};
     XaotBuildOptions options = {0};
     if (!xaot_target_init(&target, target_name)) {
@@ -498,6 +518,14 @@ static bool verify_backend_contract(const VerifyAnalysis *state, XrTomlValue *it
     options.native_package_plan = state->project->native_plan;
     options.profile = strcmp(profile_name, "freestanding") == 0 ? XAOT_BUILD_PROFILE_FREESTANDING
                                                                 : XAOT_BUILD_PROFILE_HOSTED;
+    if (!verify_native_target_profile(target_name, options.profile, &target,
+                                      &target_profile)) {
+        xr_cli_error("verify", "exact TargetProfile authority is unavailable for '%s'",
+                     target_name);
+        xaot_target_free(&target);
+        return false;
+    }
+    options.target_profile = target_profile;
     options.type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
     options.emit_residue_dump = true;
     options.quiet = true;
@@ -554,6 +582,7 @@ static bool verify_backend_contract(const VerifyAnalysis *state, XrTomlValue *it
         ok = false;
     }
     xaot_build_result_free(&result);
+    xr_target_profile_free(target_profile);
     xaot_target_free(&target);
     return ok;
 }
@@ -1105,6 +1134,7 @@ static bool verify_codegen_realize(const XrCliInvocation *inv, const XaotBuildRe
 static bool verify_codegen_contracts(const XrCliInvocation *inv, const VerifyAnalysis *state,
                                      XrTomlValue *controls, XrTomlValue *edges, int *failures) {
     XaotTarget target = {0};
+    XrTargetProfile *target_profile = NULL;
     XaotBuildOptions options = {0};
     XaotBuildResult result = {0};
     bool wants_freestanding = false;
@@ -1132,6 +1162,14 @@ static bool verify_codegen_contracts(const XrCliInvocation *inv, const VerifyAna
     options.native_package_plan = state->project->native_plan;
     options.profile =
         wants_freestanding ? XAOT_BUILD_PROFILE_FREESTANDING : XAOT_BUILD_PROFILE_HOSTED;
+    if (!verify_native_target_profile("native", options.profile, &target,
+                                      &target_profile)) {
+        xr_cli_error("verify", "exact native TargetProfile authority is unavailable");
+        xaot_target_free(&target);
+        (*failures)++;
+        return false;
+    }
+    options.target_profile = target_profile;
     options.type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
     options.emit_local_evidence_dump = true;
     options.quiet = true;
@@ -1154,6 +1192,7 @@ static bool verify_codegen_contracts(const XrCliInvocation *inv, const VerifyAna
         }
     }
     xaot_build_result_free(&result);
+    xr_target_profile_free(target_profile);
     xaot_target_free(&target);
     return built;
 }

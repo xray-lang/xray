@@ -26,6 +26,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include "../../aot/xaot_driver.h"
+#include "../toolchain/xtc_target_profile.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -340,6 +341,7 @@ static int explain_backend_topic(const XrCliInvocation *inv, const char *topic,
     XrProject *project = NULL;
     char *entry = NULL;
     XaotTarget target = {0};
+    XrTargetProfile *target_profile = NULL;
     XaotBuildOptions options = {0};
     XaotBuildResult result = {0};
     const char *records = NULL;
@@ -355,11 +357,17 @@ static int explain_backend_topic(const XrCliInvocation *inv, const char *topic,
         goto cleanup;
     }
     entry = xr_path_join(root, project->main);
-    if (!entry || !xaot_target_init(&target, "native-c90")) {
+    XrTargetCodegenFacts codegen;
+    char profile_error[256];
+    if (!entry || !xaot_target_init(&target, "native-c90") ||
+        !xaot_target_profile_codegen_facts(&target, &codegen) ||
+        !xtc_target_profile_build_current_native_hosted(
+            &codegen, &target_profile, profile_error, sizeof(profile_error))) {
         rc = XR_CLI_EXIT_INTERNAL;
         goto cleanup;
     }
     options.target = &target;
+    options.target_profile = target_profile;
     options.native_package_plan = project->native_plan;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
     options.type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
@@ -392,6 +400,7 @@ static int explain_backend_topic(const XrCliInvocation *inv, const char *topic,
 cleanup_result:
     xaot_build_result_free(&result);
 cleanup:
+    xr_target_profile_free(target_profile);
     if (target.name)
         xaot_target_free(&target);
     xr_free(entry);

@@ -348,7 +348,11 @@ add_xray_unit_test(test_xi_reduction ir/test_xi_reduction.c)
 add_xray_unit_test(test_xi_call_specialize ir/test_xi_call_specialize.c)
 add_xray_unit_test(test_xi_comptime ir/test_xi_comptime.c)
 add_xray_unit_test(test_xi_lto aot/test_xi_lto.c)
-add_xray_unit_test(test_xaot_driver aot/test_xaot_driver.c)
+add_xray_unit_test(test_xaot_driver
+    aot/test_xaot_driver.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_model.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_target_profile.c
+)
 add_xray_unit_test(test_xaot_transfer_plan aot/test_xaot_transfer_plan.c)
 add_xray_unit_test(test_cgen_verify_output aot/test_cgen_verify_output.c)
 set_tests_properties(test_cgen_verify_output PROPERTIES LABELS "aot;cgen;task-218")
@@ -901,6 +905,14 @@ target_include_directories(test_cli_toolchain PRIVATE
 )
 target_link_libraries(test_cli_toolchain PRIVATE xray_core)
 add_test(NAME test_cli_toolchain COMMAND test_cli_toolchain)
+
+add_xray_unit_test(test_target_profile_authority
+    cli/test_target_profile_authority.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_model.c
+    ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_target_profile.c
+)
+set_tests_properties(test_target_profile_authority PROPERTIES
+    LABELS "aot;runtime;target-machine")
 
 add_executable(process_spawn_benchmark EXCLUDE_FROM_ALL
     ${CMAKE_SOURCE_DIR}/tests/benchmarks/process/process_spawn_benchmark.c

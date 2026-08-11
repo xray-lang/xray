@@ -105,6 +105,77 @@ static bool xaot_target_uses_x86_vector_islands(const XaotTarget *target) {
            (target->simd_features & (XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512)) != 0;
 }
 
+bool xaot_target_profile_codegen_facts(const XaotTarget *target,
+                                       XrTargetCodegenFacts *out) {
+    if (!target || !out)
+        return false;
+    XrTargetCodegenFacts facts = {0};
+    uint32_t features = target->simd_features;
+    const uint32_t all_features = XAOT_SIMD_FEATURE_NEON |
+                                  XAOT_SIMD_FEATURE_SSE2 |
+                                  XAOT_SIMD_FEATURE_AVX2 |
+                                  XAOT_SIMD_FEATURE_VSX |
+                                  XAOT_SIMD_FEATURE_AVX512 |
+                                  XAOT_SIMD_FEATURE_LSX |
+                                  XAOT_SIMD_FEATURE_SVE;
+    if ((features & ~all_features) != 0)
+        return false;
+    if ((features & XAOT_SIMD_FEATURE_SSE2) != 0) {
+        facts.vector_feature_mask |= XR_TARGET_VECTOR_SSE2;
+        facts.maximum_vector_bits = 128;
+    }
+    if ((features & XAOT_SIMD_FEATURE_AVX2) != 0) {
+        facts.vector_feature_mask |= XR_TARGET_VECTOR_AVX2;
+        facts.maximum_vector_bits = 256;
+    }
+    if ((features & XAOT_SIMD_FEATURE_AVX512) != 0) {
+        facts.vector_feature_mask |= XR_TARGET_VECTOR_AVX512;
+        facts.maximum_vector_bits = 512;
+    }
+    if ((features & XAOT_SIMD_FEATURE_NEON) != 0) {
+        facts.vector_feature_mask |= XR_TARGET_VECTOR_NEON;
+        if (facts.maximum_vector_bits < 128)
+            facts.maximum_vector_bits = 128;
+    }
+    if ((features & XAOT_SIMD_FEATURE_SVE) != 0) {
+        facts.vector_feature_mask |= XR_TARGET_VECTOR_NEON | XR_TARGET_VECTOR_SVE;
+        if (facts.maximum_vector_bits < 128)
+            facts.maximum_vector_bits = 128;
+    }
+    if ((features & XAOT_SIMD_FEATURE_VSX) != 0) {
+        facts.vector_feature_mask |= XR_TARGET_VECTOR_VSX;
+        if (facts.maximum_vector_bits < 128)
+            facts.maximum_vector_bits = 128;
+    }
+    if ((features & XAOT_SIMD_FEATURE_LSX) != 0) {
+        facts.vector_feature_mask |= XR_TARGET_VECTOR_LSX;
+        if (facts.maximum_vector_bits < 128)
+            facts.maximum_vector_bits = 128;
+    }
+    *out = facts;
+    return true;
+}
+
+static bool xaot_target_profile_matches_options(const XaotBuildOptions *options) {
+    if (!options || !options->target || !options->target_profile ||
+        !xr_target_profile_verify(options->target_profile, NULL, 0))
+        return false;
+    const XrTargetMachineFacts *machine =
+        xr_target_profile_machine_facts(options->target_profile);
+    XrTargetCodegenFacts codegen;
+    if (!xaot_target_profile_codegen_facts(options->target, &codegen))
+        return false;
+    uint8_t runtime_profile =
+        options->profile == XAOT_BUILD_PROFILE_FREESTANDING
+            ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+            : XR_TARGET_RUNTIME_PROFILE_HOSTED;
+    return machine && machine->runtime_profile == runtime_profile &&
+           memcmp(&machine->data_layout, &options->target->data_layout,
+                  sizeof(machine->data_layout)) == 0 &&
+           machine->vector_feature_mask == codegen.vector_feature_mask &&
+           machine->maximum_vector_bits == codegen.maximum_vector_bits;
+}
+
 static const char *xaot_view_origin_name(uint8_t origin) {
     switch (origin) {
         case XI_VIEW_ORIGIN_PARAM:
@@ -1594,6 +1665,11 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         !xr_target_data_layout_validate(&options->target->data_layout) || !result)
         return 1;
     memset(result, 0, sizeof(*result));
+    if (!xaot_target_profile_matches_options(options)) {
+        fprintf(stderr,
+                "Error: exact TargetProfile authority is missing or does not match AOT options\n");
+        return 1;
+    }
     if (!xaot_c90_build_options_supported(options)) {
         fprintf(stderr,
                 "Error: restricted C90 AOT requires a freestanding shared-library graph, an "
@@ -1638,8 +1714,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
     xr_compiler_session_set_native_package_plan(session, options->native_package_plan);
-    if (!xr_compiler_session_set_target_data_layout(session, &options->target->data_layout)) {
-        fprintf(stderr, "Error: failed to install target data layout in compiler session\n");
+    if (!xr_compiler_session_set_target_profile(session,
+                                                options->target_profile)) {
+        fprintf(stderr, "Error: failed to install exact TargetProfile in compiler session\n");
         xray_vm_delete(X);
         return 1;
     }

@@ -1553,6 +1553,8 @@ endif()
 
 add_executable(xray_stdlib_bcgen
     src/app/tools/xstdlib_bcgen.c
+    src/app/toolchain/xtc_model.c
+    src/app/toolchain/xtc_target_profile.c
 )
 # Both halves of stage 1: the shared core objects plus the bootstrap-stage
 # stdlib_embedded.c (linking an OBJECT library contributes its objects).

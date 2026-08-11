@@ -25,6 +25,7 @@
 #include "../toolchain/xtc_discovery.h"
 #include "../toolchain/xtc_model.h"
 #include "../toolchain/xtc_probe.h"
+#include "../toolchain/xtc_target_profile.h"
 #include "../../api/xisolate_profile.h"
 #include "xray.h"
 #include "xray_vm.h"
@@ -3264,6 +3265,7 @@ static int cmd_build_native(
     const XrNativePackagePlan *native_package_plan, const char *objcopy_output) {
     XaotBuildResult aot_result;
     XaotBuildOptions build_options;
+    XrTargetProfile *target_profile = NULL;
     XaotTargetCapabilityProvider capability_provider;
     bool has_capability_provider = false;
     XaotTarget build_target;
@@ -3295,6 +3297,22 @@ static int cmd_build_native(
             return 2;
         }
     }
+    {
+        XrTargetCodegenFacts codegen;
+        char profile_err[256] = "invalid numeric target codegen facts";
+        if (!xaot_target_profile_codegen_facts(&build_target, &codegen) ||
+            profile != XR_CLI_BUILD_PROFILE_HOSTED ||
+            !xtc_target_profile_build_native_hosted(
+                target, &codegen, &target_profile, profile_err,
+                sizeof(profile_err))) {
+            fprintf(stderr, "Error: %s\n",
+                    profile == XR_CLI_BUILD_PROFILE_HOSTED
+                        ? profile_err
+                        : "freestanding TargetProfile authority is unavailable");
+            xaot_target_free(&build_target);
+            return 1;
+        }
+    }
     memset(&build_options, 0, sizeof(build_options));
     {
         char provider_err[256];
@@ -3302,11 +3320,13 @@ static int cmd_build_native(
                                                   &capability_provider, &has_capability_provider,
                                                   provider_err, sizeof(provider_err))) {
             fprintf(stderr, "Error: %s\n", provider_err);
+            xr_target_profile_free(target_profile);
             xaot_target_free(&build_target);
             return 1;
         }
     }
     build_options.target = &build_target;
+    build_options.target_profile = target_profile;
     build_options.native_package_plan = native_package_plan;
     build_options.capability_provider = has_capability_provider ? &capability_provider : NULL;
     build_options.profile = aot_profile;
@@ -3321,6 +3341,7 @@ static int cmd_build_native(
     build_options.evidence_cache_rebuild = rebuild;
     build_options.evidence_cache_verbose = verbose;
     int rc = xaot_build(input, &build_options, &aot_result);
+    xr_target_profile_free(target_profile);
     xaot_target_free(&build_target);
     if (rc != 0)
         return rc;

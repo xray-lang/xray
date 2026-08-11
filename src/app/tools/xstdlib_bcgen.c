@@ -21,6 +21,7 @@
 #include "../../module/xproject.h"
 #include "../../runtime/xr_process_shutdown.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../toolchain/xtc_target_profile.h"
 #include "xray_vm.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,6 +72,7 @@ static int generate_native_fastpaths(int argc, char **argv) {
     XaotTarget target;
     XaotBuildOptions options;
     XaotBuildResult result;
+    XrTargetProfile *target_profile = NULL;
     XrProject *project = xr_project_load(NULL, ".");
     if (!project || !project->initialized || !project->native_plan) {
         fprintf(stderr, "xray_stdlib_bcgen: invalid generated fastpath manifest%s%s\n",
@@ -87,7 +89,18 @@ static int generate_native_fastpaths(int argc, char **argv) {
         return 1;
     }
     memset(&options, 0, sizeof(options));
+    XrTargetCodegenFacts codegen;
+    char profile_error[256];
+    if (!xaot_target_profile_codegen_facts(&target, &codegen) ||
+        !xtc_target_profile_build_current_native_hosted(
+            &codegen, &target_profile, profile_error, sizeof(profile_error))) {
+        fprintf(stderr, "xray_stdlib_bcgen: %s\n", profile_error);
+        xaot_target_free(&target);
+        xr_project_free(project);
+        return 1;
+    }
     options.target = &target;
+    options.target_profile = target_profile;
     options.native_package_plan = project->native_plan;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
     options.c_dialect = XI_CGEN_C_DIALECT_C11;
@@ -96,6 +109,7 @@ static int generate_native_fastpaths(int argc, char **argv) {
     options.quiet = true;
 
     int rc = xaot_build(input, &options, &result);
+    xr_target_profile_free(target_profile);
     xaot_target_free(&target);
     if (rc != 0) {
         xr_project_free(project);

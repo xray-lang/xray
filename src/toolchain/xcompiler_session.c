@@ -17,6 +17,7 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast_api.h"
 #include "../frontend/parser/xstring_pool.h"
+#include "../plan/target/xr_target_profile.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_internal.h"
@@ -30,6 +31,7 @@ struct XrCompilerSession {
     bool repl_mode;
     bool emit_aot;
     XrTargetDataLayout target_data_layout;
+    XrTargetProfile *target_profile;
     const struct XrNativePackagePlan *native_package_plan;
 
     struct XrArena *current_arena;
@@ -58,6 +60,17 @@ XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
         return NULL;
     }
     if (cfg) {
+        if (cfg->target_data_layout && cfg->target_profile) {
+            const XrTargetMachineFacts *machine =
+                xr_target_profile_machine_facts(cfg->target_profile);
+            if (!xr_target_profile_verify(cfg->target_profile, NULL, 0) ||
+                !machine ||
+                memcmp(cfg->target_data_layout, &machine->data_layout,
+                       sizeof(*cfg->target_data_layout)) != 0) {
+                xr_free(session);
+                return NULL;
+            }
+        }
         session->vm_host = cfg->vm_host;
         session->project_root = cfg->project_root;
         session->source_file = cfg->source_file;
@@ -66,6 +79,11 @@ XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
         session->native_package_plan = cfg->native_package_plan;
         if (cfg->target_data_layout &&
             !xr_compiler_session_set_target_data_layout(session, cfg->target_data_layout)) {
+            xr_free(session);
+            return NULL;
+        }
+        if (cfg->target_profile &&
+            !xr_compiler_session_set_target_profile(session, cfg->target_profile)) {
             xr_free(session);
             return NULL;
         }
@@ -98,6 +116,7 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
         xr_source_cache_free(session->source_cache);
     if (session->analyzer_pool)
         xr_type_pool_free(session->analyzer_pool);
+    xr_target_profile_free(session->target_profile);
     xr_free(session);
 }
 
@@ -115,8 +134,34 @@ bool xr_compiler_session_set_target_data_layout(XrCompilerSession *session,
                                                 const XrTargetDataLayout *layout) {
     if (!session || !xr_target_data_layout_validate(layout))
         return false;
+    if (session->target_profile) {
+        const XrTargetMachineFacts *machine =
+            xr_target_profile_machine_facts(session->target_profile);
+        if (!machine || memcmp(layout, &machine->data_layout, sizeof(*layout)) != 0)
+            return false;
+    }
     session->target_data_layout = *layout;
     return true;
+}
+
+bool xr_compiler_session_set_target_profile(XrCompilerSession *session,
+                                            XrTargetProfile *profile) {
+    if (!session || !profile || !xr_target_profile_verify(profile, NULL, 0))
+        return false;
+    if (session->target_profile)
+        return xr_target_profile_require_exact(session->target_profile, profile,
+                                               NULL, 0);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
+    if (!machine || !xr_target_data_layout_validate(&machine->data_layout))
+        return false;
+    session->target_data_layout = machine->data_layout;
+    session->target_profile = xr_target_profile_retain(profile);
+    return session->target_profile != NULL;
+}
+
+const XrTargetProfile *xr_compiler_session_target_profile(
+    const XrCompilerSession *session) {
+    return session ? session->target_profile : NULL;
 }
 
 void xr_compiler_session_set_native_package_plan(XrCompilerSession *session,

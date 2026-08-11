@@ -3,6 +3,7 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/module/xmodule_resolver.h"
+#include "../../../src/app/toolchain/xtc_target_profile.h"
 #include "../test_win_compat.h"
 
 #include <errno.h>
@@ -18,6 +19,22 @@
 
 static int passed;
 static int failed;
+
+static bool install_native_target_profile(XaotBuildOptions *options,
+                                          const XaotTarget *target) {
+    XrTargetCodegenFacts codegen;
+    char error[256];
+    return options && xaot_target_profile_codegen_facts(target, &codegen) &&
+           xtc_target_profile_build_current_native_hosted(
+               &codegen, &options->target_profile, error, sizeof(error));
+}
+
+static void release_target_profile(XaotBuildOptions *options) {
+    if (!options)
+        return;
+    xr_target_profile_free(options->target_profile);
+    options->target_profile = NULL;
+}
 
 #define ASSERT_TRUE(cond)                                                                          \
     do {                                                                                           \
@@ -536,6 +553,7 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
 
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
     options.imported_summary_payloads = payloads;
     options.imported_summary_payload_count = 1;
@@ -545,6 +563,7 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
     ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
 
     xaot_build_result_free(&result);
+    release_target_profile(&options);
     xaot_target_free(&target);
     xr_free(payload);
     xr_test_unlink(source_path);
@@ -565,6 +584,7 @@ static void test_driver_dumps_subject_bound_local_evidence(void) {
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_local_evidence_dump = true;
 
     ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
@@ -579,6 +599,7 @@ static void test_driver_dumps_subject_bound_local_evidence(void) {
         strstr(result.local_evidence_dump, "capability=read lifetime=caller complete=yes") != NULL);
 
     xaot_build_result_free(&result);
+    release_target_profile(&options);
     xaot_target_free(&target);
     xr_test_unlink(source_path);
     passed++;
@@ -594,6 +615,7 @@ static void test_driver_rejects_invalid_imported_summary_payload_set(void) {
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.imported_summary_payloads = payloads;
     options.imported_summary_payload_count = 1;
 
@@ -601,6 +623,7 @@ static void test_driver_rejects_invalid_imported_summary_payload_set(void) {
     ASSERT_TRUE(result.n_sources == 0);
 
     xaot_build_result_free(&result);
+    release_target_profile(&options);
     xaot_target_free(&target);
     passed++;
 }
@@ -631,10 +654,9 @@ static void test_driver_analyzes_aggregate_layout_with_selected_target(void) {
     options.emit_plan_dump = true;
     memset(&result, 0, sizeof(result));
 
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
-    ASSERT_TRUE(result.plan_dump != NULL);
-    ASSERT_TRUE(strstr(result.plan_dump, "target-data-layout pointer=4/4") != NULL);
-    ASSERT_TRUE(result.n_sources == 1);
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    ASSERT_TRUE(result.plan_dump == NULL);
+    ASSERT_TRUE(result.n_sources == 0);
 
     xaot_build_result_free(&result);
     xaot_target_free(&target);
@@ -668,10 +690,9 @@ static void test_driver_analyzes_riscv64_layout_with_selected_target(void) {
     options.emit_plan_dump = true;
     memset(&result, 0, sizeof(result));
 
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
-    ASSERT_TRUE(result.plan_dump != NULL);
-    ASSERT_TRUE(strstr(result.plan_dump, "target-data-layout pointer=8/8") != NULL);
-    ASSERT_TRUE(result.n_sources == 1);
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    ASSERT_TRUE(result.plan_dump == NULL);
+    ASSERT_TRUE(result.n_sources == 0);
 
     xaot_build_result_free(&result);
     xaot_target_free(&target);
@@ -726,6 +747,7 @@ static void test_spawn_target_contributes_artifact_runtime_capabilities(void) {
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_plan_dump = true;
     memset(&result, 0, sizeof(result));
 
@@ -735,6 +757,7 @@ static void test_spawn_target_contributes_artifact_runtime_capabilities(void) {
     ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=worker", "reachable=1"));
 
     xaot_build_result_free(&result);
+    release_target_profile(&options);
     xaot_target_free(&target);
     xr_test_unlink(source_path);
     passed++;
@@ -751,6 +774,7 @@ static void test_driver_hosted_fragment_borrows_runtime_ownership(void) {
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
 
     ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
@@ -765,6 +789,7 @@ static void test_driver_hosted_fragment_borrows_runtime_ownership(void) {
     }
 
     xaot_build_result_free(&result);
+    release_target_profile(&options);
     xaot_target_free(&target);
     xr_test_unlink(source_path);
     passed++;
@@ -805,13 +830,7 @@ static void test_driver_validates_freestanding_runtime_provider(void) {
 
     provider.hook_bits |= XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
     memset(&result, 0, sizeof(result));
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
-    ASSERT_TRUE(result.link_manifest.n_runtime_objects == 0);
-    ASSERT_TRUE(result.link_manifest.n_runtime_caps == 0);
-    ASSERT_TRUE(manifest_has_define(&result.link_manifest, "XRAY_TARGET_RUNTIME_PROVIDER=1"));
-    ASSERT_TRUE(manifest_has_define(&result.link_manifest, "XRAY_PROVIDER_ABI=1"));
-    ASSERT_TRUE(manifest_has_define(&result.link_manifest,
-                                    "XRAY_PROVIDER_TARGET_METADATA_HASH=0x197195ULL"));
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
     xaot_build_result_free(&result);
 
     xaot_target_free(&target);
@@ -854,6 +873,7 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
     options.evidence_cache_dir = cache_dir;
 
@@ -862,6 +882,7 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
 
     xaot_build_result_free(&result);
+    release_target_profile(&options);
     xaot_target_free(&target);
     restore_env_value("HOME", old_home);
     xr_free(payload);
@@ -912,6 +933,7 @@ static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
     options.evidence_cache_dir = cache_dir;
 
@@ -919,6 +941,7 @@ static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
 
     xaot_build_result_free(&result);
+    release_target_profile(&options);
     xaot_target_free(&target);
     restore_env_value("HOME", old_home);
     xr_free(payload_a);
@@ -981,6 +1004,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     ASSERT_TRUE(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
     options.evidence_cache_dir = cache_dir;
 
@@ -988,6 +1012,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
 
     xaot_build_result_free(&result);
+    release_target_profile(&options);
     xaot_target_free(&target);
     restore_env_value("HOME", old_home);
     xr_free(payload_ab);

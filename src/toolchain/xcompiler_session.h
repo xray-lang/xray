@@ -23,6 +23,7 @@ struct XrTypePool;
 struct XaAnalyzer;
 struct XrModuleGraph;
 struct XrNativePackagePlan;
+struct XrTargetProfile;
 
 typedef struct XrCompilerSession XrCompilerSession;
 
@@ -50,6 +51,7 @@ typedef struct XrCompilerSessionConfig {
     bool repl_mode;
     bool emit_aot;
     const XrTargetDataLayout *target_data_layout;
+    struct XrTargetProfile *target_profile;
     const struct XrNativePackagePlan *native_package_plan; /* borrowed */
 } XrCompilerSessionConfig;
 
@@ -61,6 +63,10 @@ XR_FUNC const XrTargetDataLayout *
 xr_compiler_session_target_data_layout(const XrCompilerSession *session);
 XR_FUNC bool xr_compiler_session_set_target_data_layout(XrCompilerSession *session,
                                                         const XrTargetDataLayout *layout);
+XR_FUNC bool xr_compiler_session_set_target_profile(
+    XrCompilerSession *session, struct XrTargetProfile *profile);
+XR_FUNC const struct XrTargetProfile *xr_compiler_session_target_profile(
+    const XrCompilerSession *session);
 XR_FUNC void xr_compiler_session_set_native_package_plan(XrCompilerSession *session,
                                                          const struct XrNativePackagePlan *plan);
 XR_FUNC const struct XrNativePackagePlan *

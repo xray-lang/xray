@@ -125,6 +125,15 @@ typedef struct XrTargetMachineFacts {
     uint16_t reserved16;
 } XrTargetMachineFacts;
 
+/* Numeric codegen selection after backend option resolution. This is not a
+ * target identity; the production authority validates it against one. */
+typedef struct XrTargetCodegenFacts {
+    uint64_t vector_feature_mask;
+    uint16_t maximum_vector_bits;
+    uint16_t reserved16;
+    uint32_t reserved32;
+} XrTargetCodegenFacts;
+
 /* Structured inputs are consumed during the call and are never retained. */
 typedef struct XrTargetProfileBuildInput {
     XrTargetMachineFacts machine;

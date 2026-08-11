@@ -25,6 +25,7 @@
 
 #include "../base/xchecks.h"
 #include "../analysis/xglobal_summary.h"
+#include "../plan/target/xr_target_profile.h"
 #include "xi_cgen.h"
 #include "xaot_artifact.h"
 #include "xaot_link.h"
@@ -139,6 +140,7 @@ typedef enum XaotBuildProfile {
 
 typedef struct XaotBuildOptions {
     const XaotTarget *target;
+    XrTargetProfile *target_profile; /* borrowed; exact authority is required */
     const struct XrNativePackagePlan *native_package_plan; /* borrowed for this build */
     const XaotTargetCapabilityProvider *capability_provider;
     XaotBuildProfile profile;
@@ -156,6 +158,11 @@ typedef struct XaotBuildOptions {
     const char *const *imported_summary_payloads;
     uint32_t imported_summary_payload_count;
 } XaotBuildOptions;
+
+/* Converts only numeric resolved SIMD bits. Target identity remains owned by
+ * XrToolchainTarget and is never inferred from XaotTarget strings. */
+XR_FUNC bool xaot_target_profile_codegen_facts(
+    const XaotTarget *target, XrTargetCodegenFacts *out);
 
 /* Full AOT pipeline: Source → AST → Xi IR → C.
  * Supports single and multi-module bundles.
