@@ -39,6 +39,18 @@ static size_t find_edge_index(const XrDependencyGraph *graph, XrStableId consume
     return SIZE_MAX;
 }
 
+static bool relation_is_valid(const XrModuleFacetMask relation[XR_MODULE_FACET_COUNT]) {
+    if (!relation)
+        return false;
+    XrModuleFacetMask mapped = 0;
+    for (unsigned facet = 0; facet < XR_MODULE_FACET_COUNT; facet++) {
+        if ((relation[facet] & ~XR_MODULE_FACET_ALL) != 0)
+            return false;
+        mapped |= relation[facet];
+    }
+    return mapped != 0;
+}
+
 static bool reserve_nodes(XrDependencyGraph *graph, size_t needed) {
     if (needed <= graph->node_capacity)
         return true;
@@ -178,11 +190,9 @@ const XrModuleSummary *xr_dependency_graph_find_node(const XrDependencyGraph *gr
 }
 
 bool xr_dependency_graph_add_edge(XrDependencyGraph *graph, XrStableId consumer,
-                                  XrStableId dependency, XrModuleFacetMask observed_facets,
-                                  XrModuleFacetMask propagated_facets) {
-    if (!graph || !observed_facets || !propagated_facets ||
-        (observed_facets & ~XR_MODULE_FACET_ALL) != 0 ||
-        (propagated_facets & ~XR_MODULE_FACET_ALL) != 0 ||
+                                  XrStableId dependency,
+                                  const XrModuleFacetMask relation[XR_MODULE_FACET_COUNT]) {
+    if (!graph || !relation_is_valid(relation) ||
         find_node_index(graph, consumer) == SIZE_MAX ||
         find_node_index(graph, dependency) == SIZE_MAX) {
         return false;
@@ -190,8 +200,7 @@ bool xr_dependency_graph_add_edge(XrDependencyGraph *graph, XrStableId consumer,
 
     size_t existing = find_edge_index(graph, consumer, dependency);
     if (existing != SIZE_MAX) {
-        graph->edges[existing].observed_facets = observed_facets;
-        graph->edges[existing].propagated_facets = propagated_facets;
+        memcpy(graph->edges[existing].relation, relation, sizeof(graph->edges[existing].relation));
         return true;
     }
     if (!reserve_edges(graph, graph->edge_count + 1u))
@@ -199,9 +208,10 @@ bool xr_dependency_graph_add_edge(XrDependencyGraph *graph, XrStableId consumer,
     graph->edges[graph->edge_count++] = (XrDependencyEdge) {
         .consumer = consumer,
         .dependency = dependency,
-        .observed_facets = observed_facets,
-        .propagated_facets = propagated_facets,
+        .relation = {0},
     };
+    memcpy(graph->edges[graph->edge_count - 1u].relation, relation,
+           sizeof(graph->edges[graph->edge_count - 1u].relation));
     return true;
 }
 
@@ -253,9 +263,7 @@ bool xr_dependency_graph_validate(const XrDependencyGraph *graph) {
     }
     for (size_t i = 0; i < graph->edge_count; i++) {
         const XrDependencyEdge *edge = &graph->edges[i];
-        if (!edge->observed_facets || !edge->propagated_facets ||
-            (edge->observed_facets & ~XR_MODULE_FACET_ALL) != 0 ||
-            (edge->propagated_facets & ~XR_MODULE_FACET_ALL) != 0 ||
+        if (!relation_is_valid(edge->relation) ||
             find_node_index(graph, edge->consumer) == SIZE_MAX ||
             find_node_index(graph, edge->dependency) == SIZE_MAX) {
             return false;

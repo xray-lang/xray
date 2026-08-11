@@ -23,8 +23,8 @@
 typedef struct XrDependencyEdge {
     XrStableId consumer;
     XrStableId dependency;
-    XrModuleFacetMask observed_facets;
-    XrModuleFacetMask propagated_facets;
+    /* Row i maps dependency facet i to the exact consumer facets made stale. */
+    XrModuleFacetMask relation[XR_MODULE_FACET_COUNT];
 } XrDependencyEdge;
 
 typedef struct XrDependencyGraph {
@@ -49,8 +49,7 @@ XR_FUNC const XrModuleSummary *xr_dependency_graph_find_node(const XrDependencyG
                                                              XrStableId module_id);
 XR_FUNC bool xr_dependency_graph_add_edge(XrDependencyGraph *graph, XrStableId consumer,
                                           XrStableId dependency,
-                                          XrModuleFacetMask observed_facets,
-                                          XrModuleFacetMask propagated_facets);
+                                          const XrModuleFacetMask relation[XR_MODULE_FACET_COUNT]);
 XR_FUNC bool xr_dependency_graph_remove_edge(XrDependencyGraph *graph, XrStableId consumer,
                                              XrStableId dependency);
 XR_FUNC size_t xr_dependency_graph_remove_consumer_edges(XrDependencyGraph *graph,

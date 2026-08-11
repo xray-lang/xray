@@ -70,35 +70,43 @@ static bool build_facet_graph(XrDependencyGraph *graph, TestGraphIds *ids, bool 
         return false;
     }
 
-    XrDependencyEdge edges[] = {
+    typedef struct TestEdge {
+        XrStableId consumer;
+        XrStableId dependency;
+        XrModuleFacetMask observed;
+        XrModuleFacetMask propagated;
+    } TestEdge;
+    TestEdge edges[] = {
         {.consumer = ids->leaf,
          .dependency = ids->body,
-         .observed_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
-         .propagated_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE)},
+         .observed = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+         .propagated = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE)},
         {.consumer = ids->layout,
          .dependency = ids->root,
-         .observed_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT),
-         .propagated_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT)},
+         .observed = XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT),
+         .propagated = XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT)},
         {.consumer = ids->signature,
          .dependency = ids->root,
-         .observed_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_PUBLIC_SIGNATURE),
-         .propagated_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_PUBLIC_SIGNATURE)},
+         .observed = XR_MODULE_FACET_BIT(XR_MODULE_FACET_PUBLIC_SIGNATURE),
+         .propagated = XR_MODULE_FACET_BIT(XR_MODULE_FACET_PUBLIC_SIGNATURE)},
         {.consumer = ids->body,
          .dependency = ids->root,
-         .observed_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
-         .propagated_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE)},
+         .observed = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+         .propagated = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE)},
         {.consumer = ids->untouched,
          .dependency = ids->root,
-         .observed_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY),
-         .propagated_facets = XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY)},
+         .observed = XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY),
+         .propagated = XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY)},
     };
     size_t edge_count = sizeof(edges) / sizeof(edges[0]);
     for (size_t i = 0; i < edge_count; i++) {
         size_t index = reverse_edges ? edge_count - i - 1u : i;
+        XrModuleFacetMask relation[XR_MODULE_FACET_COUNT] = {0};
+        for (unsigned facet = 0; facet < XR_MODULE_FACET_COUNT; facet++)
+            if ((edges[index].observed & XR_MODULE_FACET_BIT(facet)) != 0)
+                relation[facet] = edges[index].propagated;
         if (!xr_dependency_graph_add_edge(graph, edges[index].consumer,
-                                          edges[index].dependency,
-                                          edges[index].observed_facets,
-                                          edges[index].propagated_facets)) {
+                                          edges[index].dependency, relation)) {
             xr_dependency_graph_finalize(graph);
             return false;
         }
@@ -276,6 +284,92 @@ TEST(public_and_layout_changes_do_not_reuse_body_closure) {
     xr_dependency_graph_finalize(&graph);
 }
 
+TEST(relation_rows_propagate_exact_consumer_facets) {
+    XrDependencyGraph graph;
+    xr_dependency_graph_init(&graph);
+    XrStableId root_id;
+    XrStableId consumer_id;
+    XrStableId leaf_id;
+    ASSERT_TRUE(add_test_module(&graph, "pkg/exact-root", 1, &root_id));
+    ASSERT_TRUE(add_test_module(&graph, "pkg/exact-consumer", 20, &consumer_id));
+    ASSERT_TRUE(add_test_module(&graph, "pkg/exact-leaf", 40, &leaf_id));
+    ASSERT_TRUE(xr_dependency_graph_add_edge(
+        &graph, consumer_id, root_id,
+        (XrModuleFacetMask[XR_MODULE_FACET_COUNT]) {
+            [XR_MODULE_FACET_BODY_EVIDENCE] = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+            [XR_MODULE_FACET_PUBLIC_SIGNATURE] = XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY),
+        }));
+    ASSERT_TRUE(xr_dependency_graph_add_edge(
+        &graph, leaf_id, consumer_id,
+        (XrModuleFacetMask[XR_MODULE_FACET_COUNT]) {
+            [XR_MODULE_FACET_BODY_EVIDENCE] = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+            [XR_MODULE_FACET_CAPABILITY] = XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT),
+        }));
+
+    const XrModuleSummary *stored = xr_dependency_graph_find_node(&graph, root_id);
+    XrModuleSummary replacement;
+    ASSERT_NOT_NULL(stored);
+    ASSERT_TRUE(xr_module_summary_copy(&replacement, stored));
+    ASSERT_TRUE(xr_module_summary_set_fingerprint(&replacement, XR_MODULE_FACET_BODY_EVIDENCE,
+                                                  test_fingerprint(200)));
+    ASSERT_TRUE(xr_module_summary_set_fingerprint(&replacement, XR_MODULE_FACET_PUBLIC_SIGNATURE,
+                                                  test_fingerprint(201)));
+    XrInvalidationEvent event = {
+        .reason = XR_INVALIDATION_SUMMARY_CHANGED,
+        .root_id = root_id,
+        .replacement_summary = &replacement,
+    };
+    XrInvalidationResult result;
+    ASSERT_TRUE(xr_cache_invalidate_apply(&graph, &event, &result));
+
+    const XrInvalidationRecord *consumer = xr_invalidation_result_find(&result, consumer_id);
+    const XrInvalidationRecord *leaf = xr_invalidation_result_find(&result, leaf_id);
+    ASSERT_NOT_NULL(consumer);
+    ASSERT_NOT_NULL(leaf);
+    ASSERT_EQ_UINT(consumer->observed_facets,
+                   XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE) |
+                       XR_MODULE_FACET_BIT(XR_MODULE_FACET_PUBLIC_SIGNATURE));
+    ASSERT_EQ_UINT(consumer->invalidated_facets,
+                   XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE) |
+                       XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY));
+    ASSERT_EQ_UINT(leaf->observed_facets,
+                   XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE) |
+                       XR_MODULE_FACET_BIT(XR_MODULE_FACET_CAPABILITY));
+    ASSERT_EQ_UINT(leaf->invalidated_facets,
+                   XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE) |
+                       XR_MODULE_FACET_BIT(XR_MODULE_FACET_LAYOUT));
+
+    xr_invalidation_result_finalize(&result);
+    xr_module_summary_finalize(&replacement);
+    xr_dependency_graph_finalize(&graph);
+}
+
+TEST(invalid_relation_rows_are_rejected_without_mutating_graph) {
+    XrDependencyGraph graph;
+    xr_dependency_graph_init(&graph);
+    XrStableId dependency_id;
+    XrStableId consumer_id;
+    ASSERT_TRUE(add_test_module(&graph, "pkg/relation-dependency", 1, &dependency_id));
+    ASSERT_TRUE(add_test_module(&graph, "pkg/relation-consumer", 20, &consumer_id));
+    XrModuleFacetMask valid[XR_MODULE_FACET_COUNT] = {0};
+    valid[XR_MODULE_FACET_BODY_EVIDENCE] = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE);
+    ASSERT_TRUE(xr_dependency_graph_add_edge(&graph, consumer_id, dependency_id, valid));
+
+    XrModuleFacetMask empty[XR_MODULE_FACET_COUNT] = {0};
+    ASSERT_FALSE(xr_dependency_graph_add_edge(&graph, consumer_id, dependency_id, empty));
+    ASSERT_TRUE(xr_dependency_graph_validate(&graph));
+    const XrDependencyEdge *edge = xr_dependency_graph_edge_at(&graph, 0);
+    ASSERT_NOT_NULL(edge);
+    ASSERT_MEM_EQ(edge->relation, valid, sizeof(valid));
+
+    XrModuleFacetMask invalid[XR_MODULE_FACET_COUNT] = {0};
+    invalid[XR_MODULE_FACET_LAYOUT] = XR_MODULE_FACET_ALL | (XR_MODULE_FACET_ALL + 1u);
+    ASSERT_FALSE(xr_dependency_graph_add_edge(&graph, consumer_id, dependency_id, invalid));
+    ASSERT_TRUE(xr_dependency_graph_validate(&graph));
+    ASSERT_MEM_EQ(edge->relation, valid, sizeof(valid));
+    xr_dependency_graph_finalize(&graph);
+}
+
 TEST(edge_insertion_order_does_not_change_records) {
     XrDependencyGraph forward;
     XrDependencyGraph reverse;
@@ -312,8 +406,13 @@ TEST(delete_rename_add_and_graph_change_leave_no_ghost_nodes) {
     ASSERT_TRUE(add_test_module(&graph, "pkg/consumer", 20, &consumer_id));
     ASSERT_TRUE(add_test_module(&graph, "pkg/unrelated", 40, &unrelated_id));
     ASSERT_TRUE(xr_dependency_graph_add_edge(
-        &graph, consumer_id, root_id, XR_MODULE_FACET_ALL,
-        XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE)));
+        &graph, consumer_id, root_id,
+        (XrModuleFacetMask[XR_MODULE_FACET_COUNT]) {
+            [XR_MODULE_FACET_BODY_EVIDENCE] = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+            [XR_MODULE_FACET_PUBLIC_SIGNATURE] = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+            [XR_MODULE_FACET_LAYOUT] = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+            [XR_MODULE_FACET_CAPABILITY] = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+        }));
 
     XrInvalidationEvent deletion = {
         .reason = XR_INVALIDATION_MODULE_DELETED,
@@ -348,8 +447,9 @@ TEST(delete_rename_add_and_graph_change_leave_no_ghost_nodes) {
 
     ASSERT_TRUE(xr_dependency_graph_add_edge(
         &graph, unrelated_id, consumer_id,
-        XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
-        XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE)));
+        (XrModuleFacetMask[XR_MODULE_FACET_COUNT]) {
+            [XR_MODULE_FACET_BODY_EVIDENCE] = XR_MODULE_FACET_BIT(XR_MODULE_FACET_BODY_EVIDENCE),
+        }));
     XrModuleSummary renamed;
     ASSERT_TRUE(init_test_summary(&renamed, "pkg/renamed-consumer", 80));
     XrInvalidationEvent rename = {
@@ -396,6 +496,8 @@ RUN_TEST(module_summary_owns_key_and_distinguishes_facets);
 RUN_TEST(body_only_change_is_precise_and_reason_chain_is_traversable);
 RUN_TEST(summary_change_rejects_caller_mask_that_omits_a_changed_facet);
 RUN_TEST(public_and_layout_changes_do_not_reuse_body_closure);
+RUN_TEST(relation_rows_propagate_exact_consumer_facets);
+RUN_TEST(invalid_relation_rows_are_rejected_without_mutating_graph);
 RUN_TEST(edge_insertion_order_does_not_change_records);
 RUN_TEST(delete_rename_add_and_graph_change_leave_no_ghost_nodes);
 TEST_MAIN_END()

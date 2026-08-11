@@ -127,17 +127,22 @@ static void propagate_invalidations(const XrDependencyGraph *graph, XrPropagatio
                 const XrDependencyEdge *edge = &graph->edges[edge_index];
                 if (!xr_stable_id_equal(edge->dependency, source->module_id))
                     continue;
-                XrModuleFacetMask observed = source->invalidated_facets & edge->observed_facets;
-                if (!observed)
+                XrModuleFacetMask observed = 0;
+                XrModuleFacetMask propagated = 0;
+                for (unsigned facet = 0; facet < XR_MODULE_FACET_COUNT; facet++) {
+                    XrModuleFacetMask bit = XR_MODULE_FACET_BIT(facet);
+                    if ((source->invalidated_facets & bit) != 0 && edge->relation[facet] != 0) {
+                        observed |= bit;
+                        propagated |= edge->relation[facet];
+                    }
+                }
+                if (!observed || !propagated)
                     continue;
                 size_t consumer_index = find_state(states, state_count, edge->consumer);
                 if (consumer_index == SIZE_MAX)
                     continue;
                 XrPropagationState *consumer = &states[consumer_index];
-                XrModuleFacetMask added =
-                    edge->propagated_facets & ~consumer->invalidated_facets;
-                if (!added)
-                    continue;
+                XrModuleFacetMask added = propagated & ~consumer->invalidated_facets;
                 if (!consumer->invalidated_facets) {
                     consumer->has_parent = true;
                     consumer->parent_module_id = source->module_id;
@@ -146,6 +151,8 @@ static void propagate_invalidations(const XrDependencyGraph *graph, XrPropagatio
                            xr_stable_id_equal(consumer->parent_module_id, source->module_id)) {
                     consumer->observed_facets |= observed;
                 }
+                if (!added)
+                    continue;
                 consumer->invalidated_facets |= added;
                 changed = true;
             }
