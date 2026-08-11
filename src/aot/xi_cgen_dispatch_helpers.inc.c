@@ -6670,31 +6670,14 @@ static void xicgen_checktype(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         }
     }
 
-    fprintf(out, "({ XrValue _ct = ");
+    const char *ok_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, out_rep);
+    fprintf(out, "xrt_check_type_borrowed(");
     const char *arg_suffix =
         emit_conversion_prefix(out, arg ? arg->type : NULL, arg_rep, XR_REP_TAGGED);
     emit_vref(out, arg);
     emit_conversion_suffix(out, arg_suffix);
-    fprintf(out, "; int64_t _ct_tid = xrt_typeof_id(_ct); ");
-    fprintf(out, "(xrt_value_is_type_id(_ct, %" PRId32 ")", tid);
-    if (allow_null)
-        fprintf(out, " || (_ct_tid == 0)");
-    fprintf(out, ") ? ");
-    const char *ok_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, out_rep);
-    fprintf(out, "_ct");
+    fprintf(out, ", %" PRId32 ", %s)", tid, allow_null ? "true" : "false");
     emit_conversion_suffix(out, ok_suffix);
-    /* Mismatch: identical TypeError shape (message + code 404) as VM OP_CHECKTYPE. */
-    fprintf(out, " : (xrt_throw_type_mismatch(%" PRId32 ", _ct_tid), ", tid);
-    if (out_rep == XR_REP_TAGGED) {
-        fprintf(out, "XR_NULL_VAL");
-    } else if (out_rep == XR_REP_F64) {
-        fprintf(out, "0.0");
-    } else if (out_rep == XR_REP_PTR) {
-        fprintf(out, "NULL");
-    } else {
-        fprintf(out, "INT64_C(0)");
-    }
-    fprintf(out, "); })");
 }
 
 static bool xicgen_emit_full_fixed_array_span(XiCgenCtx *ctx, FILE *out, const XiValue *v) {

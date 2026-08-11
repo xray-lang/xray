@@ -7162,6 +7162,34 @@ TEST(cgen_typename_as_and_slice_use_direct_drivers) {
     xi_func_free(ir);
 }
 
+TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
+    const char *src = "fn forceUtf8(data: Array<byte>) -> string {\n"
+                      "    return string.fromUtf8(data[:])!\n"
+                      "}\n"
+                      "var bytes = Array<byte>(1)\n"
+                      "bytes[0] = 65\n"
+                      "print(forceUtf8(bytes))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "force-unwrap CHECKTYPE fixture compiled");
+    TEST_REQUIRE(count_op_in_func(ir, XI_CHECKTYPE) > 0,
+                 "force unwrap must exercise a real CHECKTYPE operation");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "force-unwrap CHECKTYPE C generated");
+    const char *fn = find_static_function_definition(code, "test_forceUtf8_");
+    TEST_REQUIRE(fn != NULL, "force-unwrap CHECKTYPE function emitted");
+    const char *fn_end = next_static_after(fn);
+    TEST_REQUIRE(contains_between(fn, fn_end, "xrt_check_type_borrowed("),
+                 "CHECKTYPE uses the portable borrowed-identity helper");
+    TEST_REQUIRE(!contains(code, "({ XrValue _ct = "),
+                 "CHECKTYPE must not emit a GNU statement expression");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_span_index_set_checks_readonly_flag) {
     const char *src = "fn write(dst: ref Slice<byte>) {\n"
                       "    dst[0] = 7\n"
@@ -12288,6 +12316,7 @@ int main(void) {
     run_cgen_inherited_class_uses_native_base_layout();
     run_cgen_typed_array_slice_preserves_raw_storage_fast_path();
     run_cgen_typename_as_and_slice_use_direct_drivers();
+    run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();
     run_cgen_cell_backed_function_upvalue_uses_boxed_indirect_call();

@@ -271,6 +271,19 @@ XRT_COLD _Noreturn void xrt_fixed_index_oob(int64_t idx, int64_t length);
 XRT_COLD _Noreturn void xrt_type_no_index(const char *message);
 XRT_COLD _Noreturn void xrt_throw_type_mismatch(int64_t expected_tid, int64_t actual_tid);
 
+/* CHECKTYPE preserves the operand's borrowed identity. Keep the check in a
+ * typed helper so generated code evaluates the operand once without relying on
+ * a provider-specific statement expression. */
+static inline XrValue xrt_check_type_borrowed(XrValue value, int64_t expected_tid,
+                                              bool allow_null) {
+    int64_t actual_tid = xrt_typeof_id(value);
+    if (xrt_value_is_type_id(value, expected_tid) ||
+        (allow_null && actual_tid == XR_TID_NULL))
+        return value;
+    xrt_throw_type_mismatch(expected_tid, actual_tid);
+    return XR_NULL_VAL;
+}
+
 /* A checked cast borrows its operand and therefore must establish a distinct
  * owner when it returns the same runtime object.  Keep this header-inline so
  * every separately compiled AOT module has an exact prototype and body. */
