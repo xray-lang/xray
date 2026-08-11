@@ -694,8 +694,9 @@ static void test_aot_annotate_class_field_values(XiModule **modules, uint32_t nm
     }
 }
 
-static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
-                                      uint32_t entry_module) {
+static bool test_aot_plan_try_prepare_with_targets(TestAotPlan *plan, XiModule **modules,
+                                                   uint32_t nmodules, uint32_t entry_module,
+                                                   XrTargetPlan *const *target_plans) {
     char verify_err[256];
 
     TEST_REQUIRE(plan != NULL, "AOT plan holder is NULL");
@@ -703,6 +704,13 @@ static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uin
     TEST_REQUIRE(xaot_bundle_init(&plan->bundle, modules, nmodules, entry_module),
                  "AOT bundle init failed");
     plan->initialized = true;
+    if (target_plans) {
+        for (uint32_t i = 0; i < nmodules; i++) {
+            TEST_REQUIRE(target_plans[i] != NULL &&
+                             xaot_bundle_set_target_plan(&plan->bundle, i, target_plans[i]),
+                         "AOT TargetPlan binding failed");
+        }
+    }
     XgBuildKey key = {.source_hash = 0,
                       .compiler_semver_hash = 0x171,
                       .profile_hash = 0,
@@ -803,6 +811,11 @@ static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uin
     return true;
 }
 
+static bool test_aot_plan_try_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
+                                      uint32_t entry_module) {
+    return test_aot_plan_try_prepare_with_targets(plan, modules, nmodules, entry_module, NULL);
+}
+
 static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
                                   uint32_t entry_module) {
     bool prepared = test_aot_plan_try_prepare(plan, modules, nmodules, entry_module);
@@ -816,6 +829,57 @@ static void test_aot_plan_free(TestAotPlan *plan) {
         xaot_bundle_free(&plan->bundle);
     if (plan && plan->evidence_initialized)
         xg_global_evidence_free(&plan->evidence);
+}
+
+typedef struct TestCEmissionRegistry {
+    const XrCEmissionPlan **plans;
+    uint32_t count;
+} TestCEmissionRegistry;
+
+static void test_c_emission_registry_free(TestCEmissionRegistry *registry) {
+    if (!registry)
+        return;
+    for (uint32_t i = 0; i < registry->count; i++)
+        xr_c_emission_plan_free((XrCEmissionPlan *) registry->plans[i]);
+    xr_free(registry->plans);
+    memset(registry, 0, sizeof(*registry));
+}
+
+static bool test_c_emission_registry_install(TestCEmissionRegistry *registry,
+                                             XiCgenCtx *ctx,
+                                             const XaotBundle *bundle) {
+    if (!registry || !ctx || !bundle || !bundle->target_plans ||
+        bundle->nmodules == 0)
+        return false;
+    memset(registry, 0, sizeof(*registry));
+    registry->plans = (const XrCEmissionPlan **) xr_calloc(
+        bundle->nmodules, sizeof(*registry->plans));
+    if (!registry->plans)
+        return false;
+    registry->count = bundle->nmodules;
+    for (uint32_t i = 0; i < registry->count; i++) {
+        const XrTargetPlan *target_plan = bundle->target_plans[i];
+        XrCEmissionPlan *emission_plan = NULL;
+        char error[512] = {0};
+        if (!target_plan ||
+            !xr_c_emission_plan_build(
+                target_plan,
+                xr_target_profile_fingerprint(
+                    xr_target_plan_profile(target_plan)),
+                &emission_plan, error, sizeof(error))) {
+            fprintf(stderr, "  C emission registry fixture error: %s\n",
+                    error[0] ? error : "missing TargetPlan authority");
+            test_c_emission_registry_free(registry);
+            return false;
+        }
+        registry->plans[i] = emission_plan;
+    }
+    if (!xi_cgen_ctx_set_scalar_emission_plans(ctx, registry->plans,
+                                               registry->count)) {
+        test_c_emission_registry_free(registry);
+        return false;
+    }
+    return true;
 }
 
 static char *generate_c_with_status(XiFunc *ir, const char *module_name, bool *had_error);
@@ -1127,6 +1191,10 @@ static char *generate_c_with_status_and_stats_for_artifact(XiFunc *ir, const cha
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     assert(ctx != NULL);
     xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    TestCEmissionRegistry emission_registry;
+    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx,
+                                                  &plan.bundle),
+                 "C emission registry fixture installation failed");
     xi_cgen_ctx_set_artifact_kind(ctx, artifact_kind);
 
     char *buf = NULL;
@@ -1143,6 +1211,7 @@ static char *generate_c_with_status_and_stats_for_artifact(XiFunc *ir, const cha
         *coro_stats = xi_cgen_coro_frame_stats(ctx);
 
     xi_cgen_ctx_free(ctx);
+    test_c_emission_registry_free(&emission_registry);
     test_aot_plan_free(&plan);
     if (own_mod) {
         mod->init = NULL; /* don't double-free ir */
@@ -1187,6 +1256,10 @@ static char *generate_c_with_status_and_cgen_stats(XiFunc *ir, const char *modul
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     assert(ctx != NULL);
     xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+    TestCEmissionRegistry emission_registry;
+    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx,
+                                                  &plan.bundle),
+                 "C emission registry fixture installation failed");
 
     char *buf = NULL;
     size_t bufsz = 0;
@@ -1202,6 +1275,7 @@ static char *generate_c_with_status_and_cgen_stats(XiFunc *ir, const char *modul
         *cgen_stats = xi_cgen_stats(ctx);
 
     xi_cgen_ctx_free(ctx);
+    test_c_emission_registry_free(&emission_registry);
     test_aot_plan_free(&plan);
     if (own_mod) {
         mod->init = NULL; /* don't double-free ir */
@@ -2705,7 +2779,7 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     TEST_REQUIRE(test_prepare_backend_ir(ir), "scalar emission consumer backend prepared");
 
     XrType i16_type = {
-        .kind = XR_KIND_INT, .id = 962, .scalar_rep = XR_NATIVE_I16, .frozen = true};
+        .kind = XR_KIND_INT, .id = 963, .scalar_rep = XR_NATIVE_I16, .frozen = true};
     XiFunc *ir_second = xi_func_new("scalar_emission_consumer_second", &i16_type);
     TEST_REQUIRE(ir_second != NULL, "second scalar emission function allocated");
     XiBlock *second_entry = xi_block_new(ir_second);
@@ -2737,7 +2811,6 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     XiModule *modules[] = {module, module_second};
     TestAotPlan legacy_plan;
     test_aot_plan_prepare(&legacy_plan, modules, 2, 0);
-
     XrTargetProfile *profile = xr_test_target_profile_build(
         false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
     TEST_REQUIRE(profile != NULL, "scalar emission consumer profile built");
@@ -2749,6 +2822,7 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     TEST_REQUIRE(xr_target_plan_build(ir->semantic_plan, profile, &target_plan, error,
                                       sizeof(error)),
                  "scalar emission consumer TargetPlan built");
+
     TEST_REQUIRE(xr_c_emission_plan_build(target_plan,
                                           xr_target_profile_fingerprint(profile),
                                           &emission_plan, error, sizeof(error)),
@@ -2768,6 +2842,11 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
                                              target_plan_second),
                  "second scalar emission TargetPlan attached to module registry");
 
+    TEST_REQUIRE(xaot_bundle_find_value_plan(&legacy_plan.bundle, parameter) == NULL &&
+                     xaot_bundle_find_value_plan(&legacy_plan.bundle, one) == NULL &&
+                     xaot_bundle_find_value_plan(&legacy_plan.bundle, sum) == NULL,
+                 "migrated scalar values have no legacy Xaot rows");
+
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     TEST_REQUIRE(ctx != NULL, "scalar emission consumer context allocated");
     xi_cgen_ctx_set_aot_bundle(ctx, &legacy_plan.bundle);
@@ -2778,11 +2857,17 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     emission_plans[0] = NULL;
     emission_plans[1] = NULL;
 
-    /* Poison the mutable Xi storage hint after the immutable plan is complete.
-     * The generated local must still use the target-selected uint32_t spelling
-     * and integer storage class. */
+    /* The normal plan carries no scalar legacy row. Inject a corrupt residue
+     * after registry validation to prove that neither it nor the mutable Xi
+     * representation can override the immutable emission authority. */
     TEST_REQUIRE(xaot_bundle_find_value_plan(&legacy_plan.bundle, sum) == NULL,
                  "bound scalar has no legacy value row");
+    XaotValuePlan *legacy_value = xaot_bundle_add_value_plan(&legacy_plan.bundle, ir, sum);
+    TEST_REQUIRE(legacy_value != NULL, "legacy scalar residue injected");
+    legacy_value->rep.kind = XAOT_VALUE_TAGGED;
+    legacy_value->rep.rep = XAOT_REP_TAGGED;
+    legacy_value->rep.c_type = "XrValue";
+    legacy_value->rep.flags = 0;
     uint8_t saved_xi_rep = sum->rep;
     sum->rep = XR_REP_TAGGED;
 
@@ -2801,9 +2886,14 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     TEST_REQUIRE(fn != NULL, "scalar emission consumer definition emitted");
     const char *fn_end = strstr(fn, "\n}\n");
     TEST_REQUIRE(fn_end != NULL, "scalar emission consumer definition terminated");
-    TEST_REQUIRE(contains_between(fn, fn_end, "uint32_t v2 ="),
+    char scalar_decl[64];
+    char poisoned_scalar_decl[64];
+    snprintf(scalar_decl, sizeof(scalar_decl), "uint32_t v%u =", (unsigned) sum->id);
+    snprintf(poisoned_scalar_decl, sizeof(poisoned_scalar_decl), "XrValue v%u",
+             (unsigned) sum->id);
+    TEST_REQUIRE(contains_between(fn, fn_end, scalar_decl),
                  "immutable C emission plan owns scalar local spelling");
-    TEST_REQUIRE(!contains_between(fn, fn_end, "XrValue v2"),
+    TEST_REQUIRE(!contains_between(fn, fn_end, poisoned_scalar_decl),
                  "poisoned legacy scalar spelling is unreachable");
     const char *second_fn = find_static_function_definition(
         buf, "scalar_emission_consumer_second");
@@ -2852,17 +2942,33 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     TEST_REQUIRE(xi_cgen_has_error(ctx),
                  "installed scalar registry seals the AOT bundle authority");
 
-    XiCgenCtx *missing = xi_cgen_ctx_new();
-    TEST_REQUIRE(missing != NULL, "missing-plan context allocated");
-    xi_cgen_ctx_set_aot_bundle(missing, &legacy_plan.bundle);
-    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plans(missing, NULL, 2) &&
-                     xi_cgen_has_error(missing),
+    XiCgenCtx *missing_install = xi_cgen_ctx_new();
+    TEST_REQUIRE(missing_install != NULL, "missing-plan context allocated");
+    xi_cgen_ctx_set_aot_bundle(missing_install, &legacy_plan.bundle);
+    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plans(missing_install, NULL, 2) &&
+                     xi_cgen_has_error(missing_install),
                  "missing scalar emission plan fails closed");
-    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plans(missing, emission_plans, 2) &&
-                     xi_cgen_has_error(missing),
+    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plans(missing_install,
+                                                        emission_plans, 2) &&
+                     xi_cgen_has_error(missing_install),
                  "sticky registry error cannot be cleared by a later valid install");
+    xi_cgen_ctx_free(missing_install);
 
-    xi_cgen_ctx_free(missing);
+    XiCgenCtx *unregistered = xi_cgen_ctx_new();
+    TEST_REQUIRE(unregistered != NULL, "unregistered context allocated");
+    xi_cgen_ctx_set_aot_bundle(unregistered, &legacy_plan.bundle);
+    char *missing_buf = NULL;
+    size_t missing_bufsz = 0;
+    FILE *missing_mem = xr_open_memstream(&missing_buf, &missing_bufsz);
+    TEST_REQUIRE(missing_mem != NULL, "missing-plan stream opened");
+    xi_cgen_program(unregistered, missing_mem, module);
+    TEST_REQUIRE(xr_close_memstream(missing_mem, &missing_buf, &missing_bufsz) == 0,
+                 "missing-plan stream closed");
+    TEST_REQUIRE(xi_cgen_has_error(unregistered),
+                 "frozen scalar without registry fails closed despite injected residue");
+
+    xi_cgen_ctx_free(unregistered);
+    xr_free(missing_buf);
     xr_free(buf);
     xi_cgen_ctx_free(ctx);
     xr_c_emission_plan_free(emission_plan);

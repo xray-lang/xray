@@ -28,23 +28,37 @@ static bool cg_abi_slot_is_aggregate(const XaotAbiSlot *slot) {
     return rep.kind == XAOT_VALUE_AGGREGATE;
 }
 
-static const XaotValuePlan *cg_find_value_plan(XiCgenCtx *ctx,
-                                               const XiValue *v) {
+static const XaotValuePlan *cg_value_plan_optional(XiCgenCtx *ctx, const XiValue *v) {
     if (!ctx || !v)
         return NULL;
     return xaot_bundle_find_value_plan(ctx->aot_bundle, v);
 }
 
-static const XaotValuePlan *cg_require_value_plan(XiCgenCtx *ctx,
-                                                  const XiValue *v) {
-    const XaotValuePlan *plan = cg_find_value_plan(ctx, v);
-    if (!plan)
-        ctx->error = true;
-    return plan;
-}
+/* Frozen scalar/void values intentionally have no XaotValuePlan. Only a
+ * verified non-scalar family or an exact backend representation adapter may
+ * require a Xaot row. */
+static const XaotValuePlan *cg_value_plan_require_legacy(XiCgenCtx *ctx,
+                                                         const XiValue *v) {
+    if (!ctx || !v)
+        return NULL;
 
-static const XaotValuePlan *cg_value_plan(XiCgenCtx *ctx, const XiValue *v) {
-    return cg_require_value_plan(ctx, v);
+    XrCScalarEmissionView scalar = {0};
+    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, NULL, v, &scalar);
+    if (scalar_status == CG_SCALAR_EMISSION_FOUND ||
+        scalar_status == CG_SCALAR_EMISSION_ERROR)
+        return NULL;
+    if (scalar_status == CG_SCALAR_EMISSION_NOT_CONFIGURED) {
+        (void) cg_scalar_emission_fail(ctx, "legacy value lookup has no CGen authority");
+        return NULL;
+    }
+
+    const XaotValuePlan *plan = cg_value_plan_optional(ctx, v);
+    if (!plan) {
+        fprintf(stderr, "[xi_cgen] ERROR: required legacy Xaot row is missing for v%u\n",
+                (unsigned) v->id);
+        ctx->error = true;
+    }
+    return plan;
 }
 
 static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
@@ -56,7 +70,7 @@ static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
                                                                         : XR_REP_VOID;
     if (scalar_status == CG_SCALAR_EMISSION_ERROR)
         return XR_REP_VOID;
-    const XaotValuePlan *plan = cg_require_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
 
@@ -95,22 +109,42 @@ static bool cg_value_exact_scalar_rep(XaotValueRep rep, XaotRep exact) {
     return rep.kind == XAOT_VALUE_SCALAR && rep.rep == exact;
 }
 
-static bool cg_int_widen_inner_value_plan(XiCgenCtx *ctx, const XiValue *v,
-                                          const XiValue **inner_out,
-                                          const XaotValuePlan **inner_plan_out) {
+static bool cg_int_widen_inner_value_rep(XiCgenCtx *ctx, const XiValue *v,
+                                         const XiValue **inner_out,
+                                         XaotRep *inner_rep_out,
+                                         XrRep *inner_storage_rep_out) {
     XaotRep source_rep;
     if (!ctx || !v || v->nargs < 1 || !v->args[0] || !cg_int_widen_source_rep(v->op, &source_rep))
         return false;
 
     const XiValue *inner = v->args[0];
-    const XaotValuePlan *inner_plan = cg_value_plan(ctx, inner);
-    if (!inner_plan || !cg_value_exact_scalar_rep(inner_plan->rep, source_rep))
+    XaotRep inner_rep = XAOT_REP_VOID;
+    XrRep inner_storage_rep = XR_REP_VOID;
+    XrCScalarEmissionView scalar = {0};
+    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, NULL, inner, &scalar);
+    if (scalar_status == CG_SCALAR_EMISSION_FOUND) {
+        if (!cg_scalar_emission_xaot_rep(ctx, &scalar, &inner_rep) ||
+            !cg_scalar_emission_storage_rep(ctx, &scalar, &inner_storage_rep))
+            return false;
+    } else if (scalar_status == CG_SCALAR_EMISSION_ERROR ||
+               scalar_status == CG_SCALAR_EMISSION_NOT_CONFIGURED) {
+        return false;
+    } else {
+        const XaotValuePlan *inner_plan = cg_value_plan_require_legacy(ctx, inner);
+        if (!inner_plan)
+            return false;
+        inner_rep = inner_plan->rep.rep;
+        inner_storage_rep = xaot_value_storage_rep(inner_plan->rep);
+    }
+    if (inner_rep != source_rep)
         return false;
 
     if (inner_out)
         *inner_out = inner;
-    if (inner_plan_out)
-        *inner_plan_out = inner_plan;
+    if (inner_rep_out)
+        *inner_rep_out = inner_rep;
+    if (inner_storage_rep_out)
+        *inner_storage_rep_out = inner_storage_rep;
     return true;
 }
 
@@ -121,26 +155,27 @@ static bool cg_int_widen_can_use_inner_for_slot(XiCgenCtx *ctx, const XiFunc *f,
         return false;
 
     const XiValue *inner = NULL;
-    const XaotValuePlan *inner_plan = NULL;
-    if (!cg_int_widen_inner_value_plan(ctx, v, &inner, &inner_plan))
+    XaotRep inner_rep = XAOT_REP_VOID;
+    XrRep inner_storage_rep = XR_REP_VOID;
+    if (!cg_int_widen_inner_value_rep(ctx, v, &inner, &inner_rep, &inner_storage_rep))
         return false;
-    if (!cg_value_exact_scalar_rep(slot_rep, inner_plan->rep.rep))
+    if (!cg_value_exact_scalar_rep(slot_rep, inner_rep))
         return false;
 
     if (inner_out)
         *inner_out = inner;
     if (inner_storage_rep_out)
-        *inner_storage_rep_out = xaot_value_storage_rep(inner_plan->rep);
+        *inner_storage_rep_out = inner_storage_rep;
     return true;
 }
 
 static bool cg_value_plan_is_aggregate(XiCgenCtx *ctx, const XiValue *v) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && plan->rep.kind == XAOT_VALUE_AGGREGATE;
 }
 
 static bool cg_value_plan_is_vector(XiCgenCtx *ctx, const XiValue *v) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && plan->rep.kind == XAOT_VALUE_VECTOR;
 }
 
@@ -190,18 +225,18 @@ static const XrType *cg_func_param_type(const XiFunc *f, uint16_t arg_index) {
 }
 
 static bool cg_value_plan_is_adt_aggregate(XiCgenCtx *ctx, const XiValue *v) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && cg_value_rep_is_adt_aggregate(plan->rep);
 }
 
 static bool cg_value_plan_is_struct_aggregate(XiCgenCtx *ctx, const XiValue *v) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && cg_value_rep_is_struct_aggregate(plan->rep);
 }
 
 static bool cg_value_plan_is_span_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     v = cg_unwrap_identity_value(v);
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan && cg_value_rep_is_span_aggregate(plan->rep);
 }
 
@@ -255,7 +290,7 @@ static void emit_aggregate_zero_expr(FILE *out, XaotValueRep rep) {
 }
 
 static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     if (plan && plan->rep.kind == XAOT_VALUE_AGGREGATE) {
         emit_aggregate_zero_expr(out, plan->rep);
         return;
@@ -280,7 +315,7 @@ static void emit_value_plan_zero_expr(XiCgenCtx *ctx, FILE *out, const XiValue *
 }
 
 static void emit_adt_aggregate_as_base_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     if (plan && cg_value_rep_is_typed_adt_aggregate(plan->rep))
         fprintf(out, "%s_to_base(", plan->rep.c_type);
     emit_vref(out, v);
@@ -749,7 +784,7 @@ static void emit_conversion_suffix(FILE *out, const char *suffix) {
  * plain conversion. */
 static const char *emit_load_conversion_prefix(XiCgenCtx *ctx, FILE *out, const XiValue *v,
                                                XrRep from_rep) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     if (from_rep == XR_REP_TAGGED && plan && cg_value_rep_is_typed_adt_aggregate(plan->rep) &&
         plan->rep.c_type) {
         fprintf(out, "%s_from_base(xrt_value_to_enum_aggregate(", plan->rep.c_type);
@@ -810,7 +845,7 @@ static bool cg_value_box_inner_native_rep(XiCgenCtx *ctx, const XiValue *v, XrRe
         return false;
 
     const XiValue *inner = v->args[0];
-    const XaotValuePlan *inner_plan = ctx ? cg_value_plan(ctx, inner) : NULL;
+    const XaotValuePlan *inner_plan = ctx ? cg_value_plan_require_legacy(ctx, inner) : NULL;
     if (inner_plan && inner_plan->rep.kind == XAOT_VALUE_AGGREGATE)
         return false;
 
@@ -918,7 +953,7 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         (literal->type->kind == XR_KIND_INT || literal->type->kind == XR_KIND_BOOL ||
          literal->type->kind == XR_KIND_RUNE || literal->type->kind == XR_KIND_FLOAT ||
          literal->type->kind == XR_KIND_NULL)) {
-        const XaotValuePlan *literal_plan = cg_value_plan(ctx, literal);
+        const XaotValuePlan *literal_plan = cg_value_plan_require_legacy(ctx, literal);
         XrRep from_rep = cg_value_plan_storage_rep(ctx, literal);
         if (emit_const_value_as_rep_expr(ctx, out, literal, from_rep, target_rep))
             return;
@@ -933,7 +968,7 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
-    const XaotValuePlan *plan = (ctx && v) ? cg_value_plan(ctx, v) : NULL;
+    const XaotValuePlan *plan = (ctx && v) ? cg_value_plan_require_legacy(ctx, v) : NULL;
     if (v && v->op == XI_CONST) {
         XrRep from_rep = ctx ? cg_value_plan_storage_rep(ctx, v)
                              : (plan ? xaot_value_storage_rep(plan->rep) : cg_rep(v));
@@ -1041,7 +1076,7 @@ static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FIL
 
     if (!target_plan)
         return NULL;
-    call_plan = cg_value_plan(ctx, call);
+    call_plan = cg_value_plan_require_legacy(ctx, call);
     if (call_plan && (target_plan->abi.ret.rep.kind == XAOT_VALUE_AGGREGATE ||
                       call_plan->rep.kind == XAOT_VALUE_AGGREGATE)) {
         XaotValueRep target_rep = xaot_abi_slot_value_rep(&target_plan->abi.ret);
@@ -1153,7 +1188,7 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
 
     slot = &target_plan->abi.params[arg_index];
     slot_rep = xaot_abi_slot_value_rep(slot);
-    arg_plan = cg_value_plan(ctx, arg);
+    arg_plan = cg_value_plan_require_legacy(ctx, arg);
     const XrType *param_type = cg_func_param_type(target, arg_index);
     if (param_type && XR_TYPE_IS_C_FUNCTION(param_type)) {
         if (arg_plan && xaot_value_storage_rep(arg_plan->rep) == XR_REP_RAWPTR && arg->type &&

@@ -215,7 +215,7 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
 static bool xicgen_stmt_err_catch(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     (void) prefix;
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     bool aggregate_error = xicgen_value_is_enum_aggregate_error(ctx, v);
     bool freestanding_aggregate = ctx->freestanding_profile && aggregate_error;
     XrRep catch_rep = aggregate_error ? cg_rep(v) : cg_value_plan_storage_rep(ctx, v);

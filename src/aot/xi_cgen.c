@@ -2502,6 +2502,7 @@ static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *
 
 typedef enum CgScalarEmissionStatus {
     CG_SCALAR_EMISSION_NOT_CONFIGURED = 0,
+    CG_SCALAR_EMISSION_BACKEND_ONLY,
     CG_SCALAR_EMISSION_NOT_COVERED,
     CG_SCALAR_EMISSION_FOUND,
     CG_SCALAR_EMISSION_ERROR,
@@ -2520,8 +2521,9 @@ static CgScalarEmissionStatus cg_scalar_emission_fail(XiCgenCtx *ctx, const char
 
 /* Resolve only values that existed in the frozen SemanticPlan snapshot.
  * Backend-only temporaries have ids beyond that snapshot and remain owned by
- * the legacy, non-migrated lowering families. A covered scalar row, however,
- * must have an exact immutable C emission record or code generation stops. */
+ * the legacy, non-migrated lowering families. Every frozen value requires the
+ * exact TargetPlan/C-emission pair, even when the value belongs to a family
+ * that still lowers through Xaot. */
 static CgScalarEmissionStatus cg_scalar_emission_view(XiCgenCtx *ctx, const XiFunc *function,
                                                       const XiValue *value,
                                                       XrCScalarEmissionView *out) {
@@ -2538,8 +2540,7 @@ static CgScalarEmissionStatus cg_scalar_emission_view(XiCgenCtx *ctx, const XiFu
         function = value->block->func;
     if (!function || !function->semantic_plan ||
         function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
-        return cg_scalar_emission_fail(
-            ctx, "Xi function does not carry the scalar TargetPlan authority");
+        return CG_SCALAR_EMISSION_BACKEND_ONLY;
 
     const CgScalarEmissionRegistryEntry *entry =
         ctx->scalar_emission_registry_last;
@@ -2564,6 +2565,9 @@ static CgScalarEmissionStatus cg_scalar_emission_view(XiCgenCtx *ctx, const XiFu
 
     const XrSemanticPlan *semantic_plan =
         xr_target_plan_semantic_plan(target_plan);
+    if (!semantic_plan || semantic_plan != function->semantic_plan)
+        return cg_scalar_emission_fail(
+            ctx, "Xi function does not carry the module TargetPlan authority");
 
     const XrSemanticFunctionRecord *semantic_function = xr_semantic_plan_function(
         semantic_plan, function->semantic_plan_function_index);
@@ -2574,7 +2578,7 @@ static CgScalarEmissionStatus cg_scalar_emission_view(XiCgenCtx *ctx, const XiFu
             xaot_bundle_find_value_plan(ctx->aot_bundle, value);
         if (adapter &&
             xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter))
-            return CG_SCALAR_EMISSION_NOT_COVERED;
+            return CG_SCALAR_EMISSION_BACKEND_ONLY;
         return cg_scalar_emission_fail(
             ctx, "post-freeze Xi value has no semantic authority");
     }
@@ -2596,6 +2600,75 @@ static CgScalarEmissionStatus cg_scalar_emission_view(XiCgenCtx *ctx, const XiFu
         return cg_scalar_emission_fail(
             ctx, error[0] ? error : "immutable scalar C emission binding is missing");
     return CG_SCALAR_EMISSION_FOUND;
+}
+
+static bool cg_scalar_emission_xaot_rep(XiCgenCtx *ctx,
+                                        const XrCScalarEmissionView *view,
+                                        XaotRep *out) {
+    if (!view || !out)
+        return false;
+    switch ((XrCScalarRep) view->rep) {
+        case XR_C_SCALAR_REP_I8:
+            *out = XAOT_REP_I8;
+            return true;
+        case XR_C_SCALAR_REP_U8:
+            *out = XAOT_REP_U8;
+            return true;
+        case XR_C_SCALAR_REP_I16:
+            *out = XAOT_REP_I16;
+            return true;
+        case XR_C_SCALAR_REP_U16:
+            *out = XAOT_REP_U16;
+            return true;
+        case XR_C_SCALAR_REP_I32:
+            *out = XAOT_REP_I32;
+            return true;
+        case XR_C_SCALAR_REP_U32:
+            *out = XAOT_REP_U32;
+            return true;
+        case XR_C_SCALAR_REP_I64:
+            *out = XAOT_REP_I64;
+            return true;
+        case XR_C_SCALAR_REP_U64:
+            *out = XAOT_REP_U64;
+            return true;
+        case XR_C_SCALAR_REP_ISIZE:
+            *out = XAOT_REP_ISIZE;
+            return true;
+        case XR_C_SCALAR_REP_USIZE:
+            *out = XAOT_REP_USIZE;
+            return true;
+        case XR_C_SCALAR_REP_F32:
+            *out = XAOT_REP_F32;
+            return true;
+        case XR_C_SCALAR_REP_F64:
+            *out = XAOT_REP_F64;
+            return true;
+        case XR_C_SCALAR_REP_BOOL:
+            *out = XAOT_REP_BOOL;
+            return true;
+        case XR_C_SCALAR_REP_RUNE:
+            *out = XAOT_REP_RUNE;
+            return true;
+        case XR_C_SCALAR_REP_VOID:
+            *out = XAOT_REP_VOID;
+            return true;
+        case XR_C_SCALAR_REP_COUNT: break;
+    }
+    (void) cg_scalar_emission_fail(ctx, "immutable scalar C representation is invalid");
+    return false;
+}
+
+static bool cg_scalar_emission_views_equal(const XrCScalarEmissionView *left,
+                                           const XrCScalarEmissionView *right) {
+    return left && right && left->target_register_rep == right->target_register_rep &&
+           left->target_memory_rep == right->target_memory_rep &&
+           left->target_register_kind == right->target_register_kind &&
+           left->target_memory_kind == right->target_memory_kind &&
+           left->register_bits == right->register_bits &&
+           left->memory_align == right->memory_align &&
+           left->memory_size == right->memory_size && left->rep == right->rep &&
+           left->c_type && right->c_type && strcmp(left->c_type, right->c_type) == 0;
 }
 
 static bool cg_scalar_emission_storage_rep(XiCgenCtx *ctx,
@@ -4001,7 +4074,7 @@ static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const Xi
         return scalar.c_type;
     if (scalar_status == CG_SCALAR_EMISSION_ERROR)
         return "XrValue";
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     if (plan && plan->rep.c_type)
         return plan->rep.c_type;
     return local_ctype_str(v);
@@ -4039,7 +4112,7 @@ static const char *cg_coro_decl_ctype(XiCgenCtx *ctx, const XiFunc *f, const XiV
         return "XrValue";
     const char *t = scalar_status == CG_SCALAR_EMISSION_FOUND ? scalar.c_type : NULL;
     if (!t) {
-        const XaotValuePlan *plan = cg_value_plan(ctx, v);
+        const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
         t = (plan && plan->rep.c_type) ? plan->rep.c_type : local_ctype_str(v);
     }
     return (t && strcmp(t, "void") == 0) ? "XrValue" : t;
@@ -4081,42 +4154,21 @@ static bool cg_value_narrow_int_rep(XiCgenCtx *ctx, const XiFunc *f, const XiVal
                                     uint8_t *out_size, bool *out_signed) {
     if (!v || cg_array_value_uses_native_local(ctx, f, v))
         return false;
-    XaotRep rep;
-    bool have_rep = false;
+    XaotRep rep = XAOT_REP_VOID;
     XrCScalarEmissionView scalar = {0};
-    CgScalarEmissionStatus scalar_status =
-        cg_scalar_emission_view(ctx, f, v, &scalar);
-    if (scalar_status == CG_SCALAR_EMISSION_ERROR)
-        return false;
+    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, f, v, &scalar);
     if (scalar_status == CG_SCALAR_EMISSION_FOUND) {
-        switch ((XrCScalarRep) scalar.rep) {
-            case XR_C_SCALAR_REP_I8: rep = XAOT_REP_I8; break;
-            case XR_C_SCALAR_REP_U8: rep = XAOT_REP_U8; break;
-            case XR_C_SCALAR_REP_I16: rep = XAOT_REP_I16; break;
-            case XR_C_SCALAR_REP_U16: rep = XAOT_REP_U16; break;
-            case XR_C_SCALAR_REP_I32: rep = XAOT_REP_I32; break;
-            case XR_C_SCALAR_REP_U32: rep = XAOT_REP_U32; break;
-            case XR_C_SCALAR_REP_I64: rep = XAOT_REP_I64; break;
-            case XR_C_SCALAR_REP_U64: rep = XAOT_REP_U64; break;
-            case XR_C_SCALAR_REP_ISIZE: rep = XAOT_REP_ISIZE; break;
-            case XR_C_SCALAR_REP_USIZE: rep = XAOT_REP_USIZE; break;
-            case XR_C_SCALAR_REP_F32: rep = XAOT_REP_F32; break;
-            case XR_C_SCALAR_REP_F64: rep = XAOT_REP_F64; break;
-            case XR_C_SCALAR_REP_BOOL: rep = XAOT_REP_BOOL; break;
-            case XR_C_SCALAR_REP_RUNE: rep = XAOT_REP_RUNE; break;
-            case XR_C_SCALAR_REP_VOID:
-            case XR_C_SCALAR_REP_COUNT: return false;
-        }
-        have_rep = true;
+        if (!cg_scalar_emission_xaot_rep(ctx, &scalar, &rep))
+            return false;
+    } else if (scalar_status == CG_SCALAR_EMISSION_ERROR ||
+               scalar_status == CG_SCALAR_EMISSION_NOT_CONFIGURED) {
+        return false;
     } else {
-        const XaotValuePlan *plan = cg_find_value_plan(ctx, v);
+        const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
         if (!plan)
             return false;
         rep = plan->rep.rep;
-        have_rep = true;
     }
-    if (!have_rep)
-        return false;
     const XaotRepInfo *info = xaot_rep_info(rep);
     if (!info || !info->is_integer)
         return false;
@@ -5680,12 +5732,6 @@ static uint32_t cg_debug_source_var_shadow_index(const XiFunc *f, XiVarId var_id
     return shadow_index;
 }
 
-static const XaotValuePlan *cg_debug_value_plan(XiCgenCtx *ctx, const XiValue *v) {
-    if (!ctx || !v)
-        return NULL;
-    return xaot_bundle_find_value_plan(ctx->aot_bundle, v);
-}
-
 static const char *cg_debug_value_ctype(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (cg_array_value_uses_native_local(ctx, f, v))
         return "xrt_array_t *";
@@ -5695,7 +5741,7 @@ static const char *cg_debug_value_ctype(XiCgenCtx *ctx, const XiFunc *f, const X
         return scalar.c_type;
     if (scalar_status == CG_SCALAR_EMISSION_ERROR)
         return "XrValue";
-    const XaotValuePlan *plan = cg_debug_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     if (plan && plan->rep.c_type)
         return plan->rep.c_type;
     return local_ctype_str(v);
@@ -5712,8 +5758,20 @@ static XrRep cg_debug_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, co
                                                                         : XR_REP_VOID;
     if (scalar_status == CG_SCALAR_EMISSION_ERROR)
         return XR_REP_VOID;
-    const XaotValuePlan *plan = cg_debug_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
+}
+
+static bool cg_debug_value_has_storage_binding(XiCgenCtx *ctx, const XiFunc *f,
+                                               const XiValue *v) {
+    XrCScalarEmissionView scalar = {0};
+    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, f, v, &scalar);
+    if (scalar_status == CG_SCALAR_EMISSION_FOUND)
+        return scalar.rep != XR_C_SCALAR_REP_VOID;
+    if (scalar_status == CG_SCALAR_EMISSION_ERROR ||
+        scalar_status == CG_SCALAR_EMISSION_NOT_CONFIGURED)
+        return false;
+    return cg_value_plan_require_legacy(ctx, v) != NULL;
 }
 
 static const XrAggregateLayout *cg_debug_type_struct_layout(const XrType *type) {
@@ -5810,7 +5868,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         return false;
     if (xicgen_slice_value_only_used_by_stack_slice_direct_call(ctx, f, v))
         return false;
-    if (!cg_debug_value_plan(ctx, v))
+    if (!cg_debug_value_has_storage_binding(ctx, f, v))
         return false;
     if (v->op == XI_PHI) {
         const XiPhi *phi = (const XiPhi *) v;
@@ -6055,7 +6113,7 @@ static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *
         if (cg_value_plan_is_aggregate(ctx, storage_v)) {
             emit_vref(out, storage_v);
         } else {
-            const XaotValuePlan *plan = cg_value_plan(ctx, storage_v);
+            const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, storage_v);
             XaotValueRep rep = plan ? plan->rep : (XaotValueRep) {0};
             rep.kind = XAOT_VALUE_AGGREGATE;
             rep.flags |= XAOT_VALUE_FLAG_ENUM;
@@ -6682,7 +6740,7 @@ static bool cg_int_widen_use_consumes_inner(XiCgenCtx *ctx, const XiFunc *f, con
     if (!ctx || !f || !widen || !user)
         return false;
     const XiValue *inner = NULL;
-    if (!cg_int_widen_inner_value_plan(ctx, widen, &inner, NULL))
+    if (!cg_int_widen_inner_value_rep(ctx, widen, &inner, NULL, NULL))
         return false;
     if (cg_direct_call_arg_consumes_int_widen_inner(ctx, f, user, arg_index, widen))
         return true;
@@ -7475,7 +7533,7 @@ static bool cg_pure_value_only_feeds_aot_elided_values(XiCgenCtx *ctx, const XiF
         (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND))
         return false;
 
-    bool int_widen = cg_int_widen_inner_value_plan(ctx, v, NULL, NULL);
+    bool int_widen = cg_int_widen_inner_value_rep(ctx, v, NULL, NULL, NULL);
     if (!int_widen) {
         switch ((XiOp) v->op) {
             case XI_CONST:
@@ -7614,8 +7672,8 @@ static bool cg_span_phi_snapshot_has_no_release_use(XiCgenCtx *ctx, const XiFunc
     if (target->flags & (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
                          XI_FLAG_MAY_SUSPEND | XI_FLAG_SIDE_EFFECT))
         return false;
-    const XaotValuePlan *target_plan = cg_value_plan(ctx, target);
-    const XaotValuePlan *source_plan = cg_value_plan(ctx, target->args[0]);
+    const XaotValuePlan *target_plan = cg_value_plan_require_legacy(ctx, target);
+    const XaotValuePlan *source_plan = cg_value_plan_require_legacy(ctx, target->args[0]);
     if (!target_plan || !source_plan || !xaot_value_reps_equal(target_plan->rep, source_plan->rep))
         return false;
 
@@ -8500,8 +8558,8 @@ static void emit_phi_incoming_as_rep(XiCgenCtx *ctx, FILE *out, const XiPhi *phi
         return;
     }
     if (cg_value_plan_is_vector(ctx, &phi->value)) {
-        const XaotValuePlan *phi_plan = cg_value_plan(ctx, &phi->value);
-        const XaotValuePlan *incoming_plan = cg_value_plan(ctx, incoming);
+        const XaotValuePlan *phi_plan = cg_value_plan_require_legacy(ctx, &phi->value);
+        const XaotValuePlan *incoming_plan = cg_value_plan_require_legacy(ctx, incoming);
         if (phi_plan && incoming_plan && xaot_value_reps_equal(phi_plan->rep, incoming_plan->rep)) {
             emit_vref(out, incoming);
             return;
@@ -9462,10 +9520,29 @@ static bool cg_rep_identical_alias_can_share_c_local(XiCgenCtx *ctx, const XiFun
     if (alias->flags & (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
                         XI_FLAG_MAY_SUSPEND | XI_FLAG_SIDE_EFFECT))
         return false;
-    const XaotValuePlan *alias_plan = cg_value_plan(ctx, alias);
-    const XaotValuePlan *source_plan = cg_value_plan(ctx, source);
-    if (!alias_plan || !source_plan || !xaot_value_reps_equal(alias_plan->rep, source_plan->rep))
+    XrCScalarEmissionView alias_scalar = {0};
+    XrCScalarEmissionView source_scalar = {0};
+    CgScalarEmissionStatus alias_status = cg_scalar_emission_view(ctx, f, alias, &alias_scalar);
+    CgScalarEmissionStatus source_status =
+        cg_scalar_emission_view(ctx, f, source, &source_scalar);
+    if (alias_status == CG_SCALAR_EMISSION_ERROR ||
+        source_status == CG_SCALAR_EMISSION_ERROR ||
+        alias_status == CG_SCALAR_EMISSION_NOT_CONFIGURED ||
+        source_status == CG_SCALAR_EMISSION_NOT_CONFIGURED)
         return false;
+    if (alias_status == CG_SCALAR_EMISSION_FOUND ||
+        source_status == CG_SCALAR_EMISSION_FOUND) {
+        if (alias_status != CG_SCALAR_EMISSION_FOUND ||
+            source_status != CG_SCALAR_EMISSION_FOUND ||
+            !cg_scalar_emission_views_equal(&alias_scalar, &source_scalar))
+            return false;
+    } else {
+        const XaotValuePlan *alias_plan = cg_value_plan_require_legacy(ctx, alias);
+        const XaotValuePlan *source_plan = cg_value_plan_require_legacy(ctx, source);
+        if (!alias_plan || !source_plan ||
+            !xaot_value_reps_equal(alias_plan->rep, source_plan->rep))
+            return false;
+    }
     bool forwarding_boundary = alias->op == XI_BOX || alias->op == XI_UNBOX ||
                                xi_copy_is_identity_alias(alias) ||
                                xi_op_is_identity_forward(alias->op);

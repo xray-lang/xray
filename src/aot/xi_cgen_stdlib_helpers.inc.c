@@ -312,7 +312,7 @@ static const char *const cg_runtime_info_object_fields[] = {
 
 static void cg_emit_runtime_info_value(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                        const char *aot_ctx) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     const XrAggregateLayout *layout = cg_value_struct_layout(ctx, f, v);
     if (layout && layout->field_count == 7 && plan && cg_value_rep_is_struct_aggregate(plan->rep) &&
         plan->rep.c_type) {
@@ -611,7 +611,7 @@ static bool cg_emit_aot_i64_pair_result(XiCgenCtx *ctx, FILE *out, const XiFunc 
     }
     fprintf(out, "})[_are%u], _are%u); } ", id, id);
 
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     if (layout && plan && cg_value_rep_is_struct_aggregate(plan->rep) && plan->rep.c_type) {
         fprintf(out, "(%s){ .%s = _arp%u.first, .%s = _arp%u.second }; })", plan->rep.c_type,
                 field0, id, field1, id);

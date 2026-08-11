@@ -1169,7 +1169,7 @@ static void emit_adt_enum_construct_expr(XiCgenCtx *ctx, FILE *out, const XiEnum
             ? ed->members[member_idx].name
             : "";
     if (cg_value_plan_is_aggregate(ctx, v)) {
-        const XaotValuePlan *plan = cg_value_plan(ctx, v);
+        const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
         if (plan)
             emit_adt_base_to_value_rep_prefix(out, plan->rep);
         emit_adt_enum_make_expr(ctx, out, ed, member_idx, v, payload_count, enum_name, member_name);

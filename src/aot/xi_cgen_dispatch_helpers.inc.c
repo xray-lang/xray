@@ -553,7 +553,7 @@ static bool xicgen_emit_adt_field_load(XiCgenCtx *ctx, FILE *out, const XiValue 
         return false;
 
     if (cg_value_plan_is_aggregate(ctx, v->args[0])) {
-        const XaotValuePlan *recv_plan = cg_value_plan(ctx, v->args[0]);
+        const XaotValuePlan *recv_plan = cg_value_plan_require_legacy(ctx, v->args[0]);
         bool typed_enum = recv_plan && cg_value_rep_is_typed_adt_aggregate(recv_plan->rep);
         XrRep from_rep = v->aux_int == 0 ? XR_REP_I64 : XR_REP_TAGGED;
         const char *conv_suffix =
@@ -593,7 +593,7 @@ static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     uint16_t param_idx = (uint16_t) v->aux_int;
     XrRep from_rep = cg_func_param_decl_storage_rep(ctx, f, param_idx);
     XaotValueRep param_value_rep = cg_func_param_abi_value_rep(ctx, f, param_idx);
-    const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v);
     if (param_value_rep.kind == XAOT_VALUE_TAGGED && value_plan &&
         cg_value_rep_is_span_aggregate(value_plan->rep)) {
         fprintf(out, "xrt_span_from_value_ref(p%u)", (unsigned) v->aux_int);
@@ -614,8 +614,8 @@ static void xicgen_identity(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
      * PTR array moved into a TAGGED-declared local). Bridge that gap so the
      * emitted initializer matches the result's declared C type; when the reps
      * already agree this is a no-op and emits the bare source reference. */
-    const XaotValuePlan *from_plan = cg_value_plan(ctx, v->args[0]);
-    const XaotValuePlan *to_plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *from_plan = cg_value_plan_require_legacy(ctx, v->args[0]);
+    const XaotValuePlan *to_plan = cg_value_plan_require_legacy(ctx, v);
     if ((from_plan && from_plan->rep.kind == XAOT_VALUE_VECTOR) ||
         (to_plan && to_plan->rep.kind == XAOT_VALUE_VECTOR)) {
         if (!from_plan || !to_plan || !xaot_value_reps_equal(from_plan->rep, to_plan->rep)) {
@@ -662,8 +662,8 @@ static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         }
     }
     if (cg_debug_boxed_adapter_enabled() && cg_value_plan_is_aggregate(ctx, v)) {
-        const XaotValuePlan *vp = cg_value_plan(ctx, v);
-        const XaotValuePlan *ap = cg_value_plan(ctx, v->args[0]);
+        const XaotValuePlan *vp = cg_value_plan_require_legacy(ctx, v);
+        const XaotValuePlan *ap = cg_value_plan_require_legacy(ctx, v->args[0]);
         fprintf(stderr,
                 "[xi_cgen][boxed] aggregate copy not identity %s v%u arg=v%u/%s "
                 "value(kind=%d rep=%d flags=%u c=%s) arg(kind=%d rep=%d flags=%u c=%s)\n",
@@ -1294,7 +1294,7 @@ static void xicgen_vec_error(XiCgenCtx *ctx, FILE *out, const XiValue *value, co
 
 static void xicgen_emit_vec_lanes(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     value = xicgen_vec_unwrap_value(value);
-    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, value);
     if (plan && plan->rep.kind == XAOT_VALUE_TAGGED) {
         const XrAggregateLayout *layout = cg_type_struct_layout(value ? value->type : NULL);
         char field_name[128];
@@ -1320,7 +1320,7 @@ static void xicgen_emit_vec_lanes(XiCgenCtx *ctx, FILE *out, const XiValue *valu
 
 static bool xicgen_vec_result_aggregate(XiCgenCtx *ctx, const XiValue *value,
                                         const char **ctype_out) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, value);
     if (!plan || plan->rep.kind != XAOT_VALUE_AGGREGATE || !plan->rep.c_type)
         return false;
     if (ctype_out)
@@ -1329,7 +1329,7 @@ static bool xicgen_vec_result_aggregate(XiCgenCtx *ctx, const XiValue *value,
 }
 
 static bool xicgen_vec_result_native(XiCgenCtx *ctx, const XiValue *value, const char **ctype_out) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, value);
     if (!plan || plan->rep.kind != XAOT_VALUE_VECTOR || !plan->rep.c_type)
         return false;
     if (ctype_out)
@@ -1354,7 +1354,7 @@ static void xicgen_emit_vec_range_check(FILE *out, const char *index_name, uint8
 static void xicgen_emit_vec_native_load(XiCgenCtx *ctx, FILE *out, const XiValue *value,
                                         uint8_t native_type, bool neon, bool wide) {
     value = xicgen_vec_unwrap_value(value);
-    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, value);
     if (plan && plan->rep.kind == XAOT_VALUE_VECTOR) {
         emit_vref(out, value);
         return;
@@ -1396,7 +1396,7 @@ static const char *xicgen_vec_neon_type(uint8_t native_type) {
 static uint8_t xicgen_vec_value_native_type(XiCgenCtx *ctx, const XiValue *value,
                                             uint8_t fallback) {
     value = xicgen_vec_unwrap_value(value);
-    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, value);
     if (plan && plan->rep.kind == XAOT_VALUE_VECTOR)
         return plan->rep.vector_native_type;
     if (value && xi_vec_shape_is_explicit(value->aux_int))
@@ -1566,7 +1566,7 @@ static const char *xicgen_vec_fixed128_type(uint8_t native_type) {
 static void xicgen_emit_vec_fixed128_load(XiCgenCtx *ctx, FILE *out, const XiValue *value,
                                           uint8_t native_type) {
     value = xicgen_vec_unwrap_value(value);
-    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, value);
     if (plan && plan->rep.kind == XAOT_VALUE_VECTOR) {
         emit_vref(out, value);
         return;
@@ -1953,7 +1953,7 @@ static void xicgen_emit_vec_sve_active_predicate(FILE *out, uint8_t native_type)
 static void xicgen_emit_vec_sve_scalable_load(XiCgenCtx *ctx, FILE *out, const XiValue *value,
                                               uint8_t native_type) {
     value = xicgen_vec_unwrap_value(value);
-    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, value);
     if (plan && plan->rep.kind == XAOT_VALUE_VECTOR) {
         emit_vref(out, value);
         return;
@@ -2417,7 +2417,7 @@ static bool xicgen_emit_vec_sve(XiCgenCtx *ctx, FILE *out, const XiValue *v, uin
 
 static void xicgen_emit_vec_avx512_load(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     value = xicgen_vec_unwrap_value(value);
-    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, value);
     if (plan && plan->rep.kind == XAOT_VALUE_VECTOR) {
         emit_vref(out, value);
         return;
@@ -3848,7 +3848,7 @@ static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
      * has to be dereferenced instead of assigning the box. The rep-based
      * conversion below cannot express this: a struct aggregate's rep is
      * XAOT_REP_TAGGED, so it sees no conversion to make. */
-    const XaotValuePlan *shared_plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *shared_plan = cg_value_plan_require_legacy(ctx, v);
     if (shared_plan && cg_value_rep_is_struct_aggregate(shared_plan->rep) &&
         shared_plan->rep.c_type) {
         fprintf(out, "(*(%s *)%s[%d].ptr)", shared_plan->rep.c_type, ctx->shared_name,
@@ -6318,7 +6318,7 @@ static XrRep xicgen_value_c_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const X
     if (ctx && f && !cg_func_needs_aot_coro_ctx(ctx, f) &&
         cg_array_value_uses_native_local(ctx, f, v))
         return XR_REP_PTR;
-    return cg_emitted_value_storage_rep(ctx, v, cg_value_plan(ctx, v));
+    return cg_emitted_value_storage_rep(ctx, v, cg_value_plan_require_legacy(ctx, v));
 }
 
 static void xicgen_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -6557,8 +6557,8 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_as: need arg");
 
-    const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
-    const XaotValuePlan *arg_plan = cg_value_plan(ctx, v->args[0]);
+    const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v);
+    const XaotValuePlan *arg_plan = cg_value_plan_require_legacy(ctx, v->args[0]);
     if (v->args[0] && v->args[0]->op == XI_ERR_CATCH && value_plan && arg_plan &&
         (value_plan->rep.flags & XAOT_VALUE_FLAG_ENUM) != 0 &&
         xaot_value_reps_equal(value_plan->rep, arg_plan->rep)) {
@@ -12048,7 +12048,7 @@ static bool xicgen_emit_struct_place_field_lvalue(XiCgenCtx *ctx, FILE *out, con
     const XiValue *load = xicgen_struct_place_load(object);
     if (!load || !load->args[0] || !layout)
         return false;
-    const XaotValuePlan *load_plan = cg_value_plan(ctx, load);
+    const XaotValuePlan *load_plan = cg_value_plan_require_legacy(ctx, load);
     const char *c_type =
         load_plan && load_plan->rep.kind == XAOT_VALUE_AGGREGATE ? load_plan->rep.c_type : NULL;
     if (!c_type)
@@ -12100,7 +12100,8 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
     const XiValue *place_load = xicgen_struct_place_load(v->args[0]);
-    const XaotValuePlan *place_load_plan = place_load ? cg_value_plan(ctx, place_load) : NULL;
+    const XaotValuePlan *place_load_plan =
+        place_load ? cg_value_plan_require_legacy(ctx, place_load) : NULL;
     if (place_load_plan && place_load_plan->rep.kind == XAOT_VALUE_AGGREGATE &&
         place_load_plan->rep.c_type) {
         const XrAggregateFieldLayout *field = cg_struct_field(sl, v->aux_int);
@@ -12598,7 +12599,7 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     }
     uint32_t enum_layout_id = 0;
     if (xicgen_is_enum_evidence(ctx, f, v, target, &enum_layout_id)) {
-        const XaotValuePlan *input_plan = cg_value_plan(ctx, v->args[0]);
+        const XaotValuePlan *input_plan = cg_value_plan_require_legacy(ctx, v->args[0]);
         if (ctx && ctx->freestanding_profile && v->args[0] && v->args[0]->op == XI_ERR_CATCH &&
             input_plan && (input_plan->rep.flags & XAOT_VALUE_FLAG_ENUM) != 0) {
             uint32_t input_layout_id = cg_enum_layout_id_for_type(ctx, input_plan->rep.type);
@@ -15447,7 +15448,7 @@ static XaotValueRep xicgen_place_pointee_value_rep(XiCgenCtx *ctx, const XiFunc 
     XaotValueRep rep;
     memset(&rep, 0, sizeof(rep));
     if (place && place->op == XI_LOCAL_ADDR && place->nargs == 1 && place->args[0]) {
-        const XaotValuePlan *source_plan = cg_value_plan(ctx, place->args[0]);
+        const XaotValuePlan *source_plan = cg_value_plan_require_legacy(ctx, place->args[0]);
         if (source_plan)
             return source_plan->rep;
     }
@@ -15475,7 +15476,7 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         emit_codegen_abort_expr(out);
         return;
     }
-    const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v);
     XrRep result_rep = value_plan ? xaot_value_storage_rep(value_plan->rep) : XR_REP_RAWPTR;
     const char *result_c_type = value_plan && value_plan->rep.c_type &&
                                         (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR)
@@ -15659,7 +15660,7 @@ static void xicgen_place_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, "(*(%s%s *)(", cleanup_live ? "volatile " : "", cty);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
     fprintf(out, ")) = ");
-    const XaotValuePlan *value_plan = cg_value_plan(ctx, v->args[1]);
+    const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v->args[1]);
     if (pointee_rep.kind == XAOT_VALUE_AGGREGATE && value_plan &&
         value_plan->rep.kind == XAOT_VALUE_AGGREGATE)
         emit_vref(out, v->args[1]);
@@ -15732,7 +15733,7 @@ static void xicgen_ptr_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         emit_codegen_abort_expr(out);
         return;
     }
-    const XaotValuePlan *value_plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v);
     if (value_plan && value_plan->rep.kind == XAOT_VALUE_AGGREGATE && value_plan->rep.c_type) {
         fprintf(out, "(*(%s *)(", value_plan->rep.c_type);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
@@ -15785,7 +15786,7 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
         return;
     }
     const XiValue *stored_value = cg_unwrap_identity_value(v->args[1]);
-    const XaotValuePlan *value_plan = cg_value_plan(ctx, stored_value);
+    const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, stored_value);
     if (stored_value && value_plan && value_plan->rep.kind == XAOT_VALUE_AGGREGATE &&
         value_plan->rep.c_type) {
         fprintf(out, "(*(%s *)(", value_plan->rep.c_type);
@@ -16241,7 +16242,7 @@ static bool xicgen_par_reduce_value_has_i64_accumulator(const XiValue *v) {
 }
 
 static const char *xicgen_par_reduce_struct_agg_c_type(XiCgenCtx *ctx, const XiValue *v) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
     if (!plan || !cg_value_rep_is_struct_aggregate(plan->rep))
         return NULL;
     return plan->rep.c_type;

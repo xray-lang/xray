@@ -27,8 +27,8 @@ static XrRep cg_struct_native_rep(uint8_t native_type) {
  * Only the exact AOT representation may inherit the projection's address. */
 static bool cg_exact_place_rep_alias_safe(XiCgenCtx *ctx, const XiValue *value,
                                           const XiValue *projection) {
-    const XaotValuePlan *value_plan = cg_value_plan(ctx, value);
-    const XaotValuePlan *projection_plan = cg_value_plan(ctx, projection);
+    const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, value);
+    const XaotValuePlan *projection_plan = cg_value_plan_require_legacy(ctx, projection);
     if (!value_plan || !projection_plan ||
         !xaot_value_reps_equal(value_plan->rep, projection_plan->rep) ||
         value_plan->rep.rep != projection_plan->rep.rep)
@@ -1953,7 +1953,7 @@ static bool emit_struct_aggregate_box_expr(XiCgenCtx *ctx, FILE *out, const XiFu
     const XrAggregateLayout *sl = cg_value_struct_layout(ctx, f, value);
     if (!cg_struct_native_heap_supported(sl))
         return false;
-    const XaotValuePlan *plan = cg_value_plan(ctx, value);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, value);
     char tname_buf[128];
     const char *tname = (plan && plan->rep.c_type) ? plan->rep.c_type : NULL;
     if (!tname || !tname[0]) {
@@ -2600,7 +2600,7 @@ static void emit_struct_field_lvalue(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         place_load = place_load->args[0];
     if (place_load && place_load->op == XI_PLACE_LOAD && place_load->nargs == 1 &&
         place_load->args[0]) {
-        const XaotValuePlan *load_plan = cg_value_plan(ctx, place_load);
+        const XaotValuePlan *load_plan = cg_value_plan_require_legacy(ctx, place_load);
         const char *c_type =
             load_plan && load_plan->rep.kind == XAOT_VALUE_AGGREGATE ? load_plan->rep.c_type : NULL;
         if (c_type) {

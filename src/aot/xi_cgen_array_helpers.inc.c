@@ -4534,7 +4534,7 @@ static bool emit_typed_array_index_get_expr_as_rep(XiCgenCtx *ctx, FILE *out, co
     bool unchecked = cg_array_index_access_bounds_proven(ctx, f, v);
     const XiValue *cached_origin = NULL;
     bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
-    const XaotValuePlan *_v_plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *_v_plan = cg_value_plan_require_legacy(ctx, v);
     bool _v_is_adt_agg = _v_plan && cg_value_rep_is_typed_adt_aggregate(_v_plan->rep);
     bool borrowed_tagged = !_v_is_adt_agg && target_rep == XR_REP_TAGGED &&
                            info.rep == XR_REP_TAGGED &&
@@ -4641,7 +4641,7 @@ static bool emit_portable_collection_value_stmt(XiCgenCtx *ctx, FILE *out, const
                     cg_span_elem_info_from_value(ctx, v->args[0], &info);
         bool array =
             !span && cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ);
-        const XaotValuePlan *plan = cg_value_plan(ctx, v);
+        const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
         if ((!span && !array) || (plan && (cg_value_rep_is_struct_aggregate(plan->rep) ||
                                            cg_value_rep_is_typed_adt_aggregate(plan->rep))))
             return false;
@@ -4841,7 +4841,7 @@ static bool emit_span_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
 
     XrRep target_rep = cg_value_plan_storage_rep(ctx, v);
     bool unchecked = cg_span_index_bounds_proven(ctx, f, v, XAOT_SLICE_ACCESS_INDEX_GET);
-    const XaotValuePlan *_v_plan = cg_value_plan(ctx, v);
+    const XaotValuePlan *_v_plan = cg_value_plan_require_legacy(ctx, v);
     bool struct_aggregate =
         _v_plan && cg_value_rep_is_struct_aggregate(_v_plan->rep) && _v_plan->rep.c_type;
     const XrAggregateLayout *borrowed_struct_layout = cg_type_struct_layout(v->type);

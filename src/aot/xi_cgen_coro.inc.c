@@ -454,10 +454,10 @@ static void emit_assign_from_xrvalue_temp(FILE *out, const XiValue *dst, const c
  * rather than letting the statement emitter assign incompatible C types. */
 static void emit_assign_from_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *dst,
                                               const char *temp_name) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, dst);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, dst);
     if (!plan || !cg_value_rep_is_adt_aggregate(plan->rep)) {
         emit_assign_from_xrvalue_temp_rep(out, dst, temp_name,
-                                          plan ? xaot_value_storage_rep(plan->rep) : cg_rep(dst));
+                                          cg_value_plan_storage_rep(ctx, dst));
         return;
     }
     fprintf(out, "    ");
@@ -473,10 +473,10 @@ static void emit_assign_from_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, const X
 
 static void emit_assign_from_owned_xrvalue_temp_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *dst,
                                                     const char *temp_name) {
-    const XaotValuePlan *plan = cg_value_plan(ctx, dst);
+    const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, dst);
     if (!plan || !cg_value_rep_is_adt_aggregate(plan->rep)) {
         emit_assign_from_xrvalue_temp_rep(out, dst, temp_name,
-                                          plan ? xaot_value_storage_rep(plan->rep) : cg_rep(dst));
+                                          cg_value_plan_storage_rep(ctx, dst));
         return;
     }
     fprintf(out, "    ");
@@ -977,7 +977,7 @@ static void emit_coro_aot_done_value(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         return;
     }
     if (cg_coro_return_value_needs_retain(ctx, f, value)) {
-        const XaotValuePlan *plan = cg_value_plan(ctx, value);
+        const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, value);
         if (plan && cg_value_rep_is_adt_aggregate(plan->rep)) {
             fprintf(out, "xrt_enum_aggregate_box_from_borrowed(");
             emit_adt_aggregate_as_base_expr(ctx, out, value);
