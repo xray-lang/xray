@@ -295,6 +295,22 @@ static bool audit_operation_has_owner(const XrSemanticPlan *plan,
            operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_NONE;
 }
 
+static bool audit_operation_defines_owner_identity(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation) {
+    if (!audit_operation_has_owner(plan, operation))
+        return false;
+    if (operation->opcode == XI_PARAM || operation->opcode == XI_CONST ||
+        operation->opcode == XI_STACK_ALLOC || operation->opcode == XI_PHI)
+        return true;
+    if (operation->result_alias_operand >= 0 ||
+        operation->ownership_use == XI_GEN_OWN_USE_PASS ||
+        operation->opcode == XI_RETAIN || operation->opcode == XI_RELEASE)
+        return false;
+    return operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+           operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED ||
+           operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
+}
+
 static uint32_t audit_owner_for_value(XrOwnershipAudit *audit, uint32_t value) {
     return value < audit->value_count ? audit->owner_by_root[audit_find_root(audit, value)]
                                       : XR_SEMANTIC_INDEX_NONE;
@@ -408,7 +424,7 @@ static bool audit_canonical_owners(XrOwnershipAudit *audit, char *error, size_t 
     uint32_t expected_count = 0;
     for (uint32_t i = 0; i < audit->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &audit->plan->operations[i];
-        if (!audit_operation_has_owner(audit->plan, operation) ||
+        if (!audit_operation_defines_owner_identity(audit->plan, operation) ||
             operation->result_value >= audit->value_count)
             continue;
         uint32_t root = audit_find_root(audit, operation->result_value);
@@ -431,6 +447,16 @@ static bool audit_canonical_owners(XrOwnershipAudit *audit, char *error, size_t 
             return report(error, error_size, "XR_OWN_3002",
                           "ownership owner origin or canonical root is not exact");
         expected_count++;
+    }
+    for (uint32_t i = 0; i < audit->plan->operation_count; i++) {
+        const XrSemanticOperationRecord *operation = &audit->plan->operations[i];
+        if (!audit_operation_has_owner(audit->plan, operation) ||
+            operation->result_value >= audit->value_count)
+            continue;
+        uint32_t root = audit_find_root(audit, operation->result_value);
+        if (audit->owner_by_root[root] == XR_SEMANTIC_INDEX_NONE)
+            return report(error, error_size, "XR_OWN_3002",
+                          "owner equivalence class has no ownership-defining operation");
     }
     if (expected_count != audit->certificate->owner_count)
         return report(error, error_size, "XR_OWN_3002",
