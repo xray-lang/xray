@@ -33,6 +33,11 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="strict")
 
 
+def source_files(root: Path, directory: str) -> list[Path]:
+    """Return a stable traversal order for generated inventory inputs."""
+    return sorted((root / directory).rglob("*"), key=lambda path: path.as_posix())
+
+
 def canonical_source_bytes(data: bytes) -> bytes:
     """Return the repository-canonical bytes for governed text inputs."""
     return data.replace(b"\r\n", b"\n")
@@ -213,7 +218,7 @@ def aot_destination(type_name: str) -> tuple[str, str, int]:
 def reference_files(root: Path, needle: str, directories: tuple[str, ...]) -> list[str]:
     rows = []
     for directory in directories:
-        for path in (root / directory).rglob("*"):
+        for path in source_files(root, directory):
             if not path.is_file() or not (path.suffix in {".c", ".h"} or path.name.endswith(".inc.c")):
                 continue
             if needle in read(path):
@@ -313,7 +318,7 @@ def legacy_vm_inventory(root: Path) -> dict[str, Any]:
     tagged_sites = []
     frame_pattern = re.compile(r"\bXrValue\s*\*\s*([A-Za-z_][A-Za-z0-9_]*)")
     for directory in ("src/vm", "src/api", "src/module", "src/runtime"):
-        for path in sorted((root / directory).rglob("*")):
+        for path in source_files(root, directory):
             if not path.is_file() or path.suffix not in {".c", ".h"}:
                 continue
             names = sorted(set(frame_pattern.findall(read(path))))
@@ -660,6 +665,13 @@ def self_test() -> int:
         lf_fingerprint = sha256_paths(root, [relative])
         path.write_bytes(b"first\r\nsecond\r\n")
         crlf_fingerprint = sha256_paths(root, [relative])
+        (root / "z").mkdir()
+        (root / "a").mkdir()
+        (root / "z" / "later.c").write_text("", encoding="utf-8")
+        (root / "a" / "first.c").write_text("", encoding="utf-8")
+        assert [path.relative_to(root).as_posix() for path in source_files(root, ".")] == [
+            "a", "a/first.c", "governed.txt", "z", "z/later.c"
+        ]
     if lf_fingerprint != crlf_fingerprint:
         print("target-machine Phase 0 inventory self-test: FAIL", file=sys.stderr)
         return 1
