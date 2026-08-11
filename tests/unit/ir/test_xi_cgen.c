@@ -44,6 +44,8 @@
 #include "../../../src/base/xmemstream.h"
 #include "../../../src/base/xglobal_indices.h"
 #include "../../../src/shared/xr_int_arith.h"
+#include "../../../src/shared/xr_semantic_owner_ids_gen.h"
+#include "../../../src/plan/semantic/xr_semantic_ops_gen.h"
 #include "../../../include/xray.h"
 #include "../plan/target_profile_test_fixture.h"
 
@@ -7566,6 +7568,17 @@ TEST(cgen_typeid_uses_stable_owner_adapter) {
     xi_func_free(ir);
 }
 
+TEST(cgen_exact_bits_use_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BITS_HI,
+                                          XR_SEM_OWNER_ID_SHARED_BITS_LO,
+                                          XR_SEM_CONSUMER_CGEN) &&
+           "exact-width bits owner must publish CGen as a mechanical consumer");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO);
+    assert(adapter != NULL && strcmp(adapter, "xrt_bits_exact_eval") == 0 &&
+           "CGen must resolve the stable exact-width bit owner adapter");
+}
+
 TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
     const char *src = "fn forceUtf8(data: Array<byte>) -> string {\n"
                       "    return string.fromUtf8(data[:])!\n"
@@ -12836,6 +12849,7 @@ int main(void) {
     run_cgen_typed_array_slice_preserves_raw_storage_fast_path();
     run_cgen_typename_as_and_slice_use_direct_drivers();
     run_cgen_typeid_uses_stable_owner_adapter();
+    run_cgen_exact_bits_use_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();

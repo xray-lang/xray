@@ -79,6 +79,19 @@ TYPE_IDENTITY_SURROGATE_OWNER_TOKENS = (
     '"xi.typeid"',
     '"primitive.type-identity"',
 )
+EXACT_BITS_OPERATIONS = {
+    "xi.bit.rotl",
+    "xi.bit.rotr",
+    "xi.bit.bswap",
+    "xi.bit.popcount",
+    "xi.bit.clz",
+    "xi.bit.ctz",
+    "xi.bit.mul-high",
+}
+EXACT_BITS_AOT_BINDINGS = (
+    "src/aot/xrt.h",
+    "src/aot/xrt_core_freestanding.h",
+)
 OWNER_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 OWNER_HALF_RE = re.compile(r"^0x[0-9a-f]{16}$")
 CONSUMER_BITS_RE = re.compile(r"^0x[0-9a-f]{8}$")
@@ -559,6 +572,56 @@ def verify_type_identity_ratchet(root: Path) -> list[str]:
     return errors
 
 
+def verify_exact_bits_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.bits")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.bits"), None)
+    if owner is None or set(owner.get("operations", [])) != EXACT_BITS_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.bits operation family")
+
+    core_text = (root / "src/shared/xr_bits_core.h").read_text(encoding="utf-8", errors="strict")
+    if (f"{marker}_HI" not in core_text or f"{marker}_LO" not in core_text or
+            "XR_BITS_EXACT_OWNER_APPLY" not in core_text):
+        errors.append("src/shared/xr_bits_core.h: exact bit family lacks its stable owner guard")
+
+    vm_text = (root / "src/vm/xvm_dispatch_bitwise.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    exact_start = vm_text.find("/* Exact-width bit intrinsics")
+    exact_body = vm_text[exact_start:] if exact_start >= 0 else ""
+    if (f"{marker}_HI" not in exact_body or f"{marker}_LO" not in exact_body or
+            "XR_BITS_EXACT_OWNER_APPLY" not in exact_body):
+        errors.append("src/vm/xvm_dispatch_bitwise.inc.c: VM exact bits bypass stable owner")
+    for retired in ("xr_u64_mul_high", "__builtin_", "high = ((uint"):
+        if retired in exact_body:
+            errors.append(
+                f"src/vm/xvm_dispatch_bitwise.inc.c: VM revived private exact-bit rule: {retired}")
+
+    for relative in EXACT_BITS_AOT_BINDINGS:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "XR_BITS_EXACT_OWNER_APPLY" not in text or "xrt_bits_exact_eval" not in text):
+            errors.append(f"{relative}: AOT exact-bit adapter bypasses stable owner")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_exact_bits_adapter_name")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append("src/aot/xi_cgen.c: CGen exact bits do not resolve by stable owner ID")
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    emitter_body = extract_c_function(dispatch_text, "xicgen_exact_bit")
+    if (emitter_body is None or "cg_exact_bits_adapter_name" not in emitter_body or
+            "cg_exact_bit_kernel_name" not in emitter_body):
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: exact bits bypass owner adapter")
+    elif any(token in emitter_body for token in
+             ("__builtin_", "XR_BITS_ROT", "xr_u64_mul_high", "sizeof(uintptr_t)")):
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: exact bits revived CGen semantics")
+    return errors
+
+
 def verify_operation_registry(root: Path) -> tuple[list[str], int]:
     errors: list[str] = []
     source_path = root / "xisa/xi/ops.def"
@@ -582,18 +645,8 @@ def verify_operation_registry(root: Path) -> tuple[list[str], int]:
     }
     if set(inventory_rows) != operation_names:
         errors.append("target-machine Xi operation inventory differs from xisa/xi/ops.def")
-    for name, category in owners.items():
-        row = inventory_rows.get(name)
-        if row and row.get("future_semantic_owner") != "SemanticPlan.operation_registry":
-            errors.append(f"{name}: phase-zero inventory does not point at the operation registry")
-        if category not in {
-            "declarative-primitive",
-            "shared-semantic-kernel",
-            "capability-provider",
-            "generated-specialization",
-        }:
-            errors.append(f"{name}: invalid semantic owner category {category}")
     registry_path = root / "contracts/semantic-owner-registry.json"
+    registry: dict = {}
     if not registry_path.is_file():
         errors.append("generated semantic owner registry is missing")
     else:
@@ -603,12 +656,31 @@ def verify_operation_registry(root: Path) -> tuple[list[str], int]:
             errors.extend(verify_generated_owner_header(root, registry))
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
             errors.append(f"generated semantic owner registry is unreadable: {exc}")
+    explicit_owner_by_operation = {
+        operation: row.get("owner")
+        for row in registry.get("owners", [])
+        if set(row.get("consumers", [])) != {"semantic-plan"}
+        for operation in row.get("operations", [])
+    }
+    for name, category in owners.items():
+        row = inventory_rows.get(name)
+        expected_owner = explicit_owner_by_operation.get(name, "SemanticPlan.operation_registry")
+        if row and row.get("future_semantic_owner") != expected_owner:
+            errors.append(f"{name}: target-machine inventory does not point at {expected_owner}")
+        if category not in {
+            "declarative-primitive",
+            "shared-semantic-kernel",
+            "capability-provider",
+            "generated-specialization",
+        }:
+            errors.append(f"{name}: invalid semantic owner category {category}")
     return errors, len(operations)
 
 
 def verify(root: Path, write: bool) -> list[str]:
     manifest_path = root / "contracts/semantic-owners.toml"
     snapshot_path = root / "contracts/shared-core-inventory.json"
+    registry_path = root / "contracts/semantic-owner-registry.json"
     manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
     errors: list[str] = []
 
@@ -641,6 +713,9 @@ def verify(root: Path, write: bool) -> list[str]:
     errors.extend(verify_sort_ratchet(root))
     errors.extend(verify_truthiness_ratchet(root))
     errors.extend(verify_type_identity_ratchet(root))
+    if registry_path.is_file():
+        errors.extend(verify_exact_bits_ratchet(root, json.loads(
+            registry_path.read_text(encoding="utf-8", errors="strict"))))
     registry_errors, _ = verify_operation_registry(root)
     errors.extend(registry_errors)
     return errors

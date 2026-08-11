@@ -757,7 +757,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "050039896f3041517206d4773531cc463ffec80c317ad99c13273083e4cf7f40") == 0);
+                   "1c4df9f0d98f67f6d20e3d61ac245f0f0d7149adad0b236c538c69b1ec5b1e3c") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -1282,7 +1282,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "e84375f08dc5359d1ef221fba56690f9a0f71ea93c847bd5046158902da07de7") == 0);
+                   "34d19809ec080317e68183a66115ad010553f50f5be4ba41314c068cabac1225") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {

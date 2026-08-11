@@ -185,6 +185,14 @@ TEST(bits_core_exact_width_preserves_type_pattern) {
     ASSERT_EQ_INT(xr_bits_exact_rotate_left(0x81, 1, XR_NATIVE_U8), 3);
     ASSERT_EQ_INT(xr_bits_exact_rotate_right(1, 1, XR_NATIVE_U8), 128);
     ASSERT_EQ_INT(xr_bits_exact_rotate_left(-128, -1, XR_NATIVE_I8), 64);
+    ASSERT_EQ_INT(XR_BITS_EXACT_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO,
+                      XR_SEM_CONSUMER_VM, xr_bits_exact_kernel_rotl, 0x81, 1, XR_NATIVE_U8),
+                  3);
+    ASSERT_EQ_INT(XR_BITS_EXACT_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO,
+                      XR_SEM_CONSUMER_VM, xr_bits_exact_kernel_mul_high, 0xff, 2, XR_NATIVE_U8),
+                  1);
 }
 
 TEST(bits_core_rotate_count_is_euclidean_mod_width) {

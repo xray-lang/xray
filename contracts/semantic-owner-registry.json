@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "9d360d5b841562ce96f4e44203450bc6e39084e3f06a8f38ec848decd5990da9",
+  "canonical_fingerprint": "f535555a820d53d3f02a8dd6d40bac324d6c7faf9822673f5fe980b1fddb18f7",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -60,6 +60,58 @@
           "consumer": "runtime",
           "path": "src/runtime/value/xvalue_typeid.c",
           "symbol": "xr_value_typeid"
+        }
+      ]
+    },
+    {
+      "owner": "shared.bits",
+      "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
+      "owner_id_hi": "0x658354f83ccf3838",
+      "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.bit.rotl",
+        "xi.bit.rotr",
+        "xi.bit.bswap",
+        "xi.bit.popcount",
+        "xi.bit.clz",
+        "xi.bit.ctz",
+        "xi.bit.mul-high"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
+      ],
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_bits_exact_eval",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITS_EXACT_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_exact_bits_adapter_name"
         }
       ]
     },
@@ -519,160 +571,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.band"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.bit.bswap",
-      "owner_id": "a6b828914202f609f0c384e3f4a1ef5b",
-      "owner_id_hi": "0xa6b828914202f609",
-      "owner_id_lo": "0xf0c384e3f4a1ef5b",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.bit.bswap"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.bit.clz",
-      "owner_id": "3ac0d8b85cf6859d45f9ed1259c97b23",
-      "owner_id_hi": "0x3ac0d8b85cf6859d",
-      "owner_id_lo": "0x45f9ed1259c97b23",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.bit.clz"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.bit.ctz",
-      "owner_id": "80983343cf963bb6c23e69de3c1fb9eb",
-      "owner_id_hi": "0x80983343cf963bb6",
-      "owner_id_lo": "0xc23e69de3c1fb9eb",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.bit.ctz"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.bit.mul-high",
-      "owner_id": "853725164f99b0812ca682e41db63b3f",
-      "owner_id_hi": "0x853725164f99b081",
-      "owner_id_lo": "0x2ca682e41db63b3f",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.bit.mul-high"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.bit.popcount",
-      "owner_id": "0300c8217a119fc14e5f43e9be8d69f4",
-      "owner_id_hi": "0x0300c8217a119fc1",
-      "owner_id_lo": "0x4e5f43e9be8d69f4",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.bit.popcount"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.bit.rotl",
-      "owner_id": "fd1456a00dc52532528a12f22a05b742",
-      "owner_id_hi": "0xfd1456a00dc52532",
-      "owner_id_lo": "0x528a12f22a05b742",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.bit.rotl"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.bit.rotr",
-      "owner_id": "9cbeb4a7f9c8eab8d9284f224e47dd39",
-      "owner_id_hi": "0x9cbeb4a7f9c8eab8",
-      "owner_id_lo": "0xd9284f224e47dd39",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.bit.rotr"
       ],
       "consumers": [
         "semantic-plan"
@@ -5487,21 +5385,45 @@
       "operation_id": "fd1456a00dc52532528a12f22a05b742",
       "operation_id_hi": "0xfd1456a00dc52532",
       "operation_id_lo": "0x528a12f22a05b742",
-      "owner": "xi.bit.rotl",
-      "owner_id": "fd1456a00dc52532528a12f22a05b742",
-      "owner_id_hi": "0xfd1456a00dc52532",
-      "owner_id_lo": "0x528a12f22a05b742",
-      "category": "declarative-primitive",
+      "owner": "shared.bits",
+      "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
+      "owner_id_hi": "0x658354f83ccf3838",
+      "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_bits_exact_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITS_EXACT_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_exact_bits_adapter_name"
         }
       ]
     },
@@ -5510,21 +5432,45 @@
       "operation_id": "9cbeb4a7f9c8eab8d9284f224e47dd39",
       "operation_id_hi": "0x9cbeb4a7f9c8eab8",
       "operation_id_lo": "0xd9284f224e47dd39",
-      "owner": "xi.bit.rotr",
-      "owner_id": "9cbeb4a7f9c8eab8d9284f224e47dd39",
-      "owner_id_hi": "0x9cbeb4a7f9c8eab8",
-      "owner_id_lo": "0xd9284f224e47dd39",
-      "category": "declarative-primitive",
+      "owner": "shared.bits",
+      "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
+      "owner_id_hi": "0x658354f83ccf3838",
+      "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_bits_exact_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITS_EXACT_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_exact_bits_adapter_name"
         }
       ]
     },
@@ -5533,21 +5479,45 @@
       "operation_id": "a6b828914202f609f0c384e3f4a1ef5b",
       "operation_id_hi": "0xa6b828914202f609",
       "operation_id_lo": "0xf0c384e3f4a1ef5b",
-      "owner": "xi.bit.bswap",
-      "owner_id": "a6b828914202f609f0c384e3f4a1ef5b",
-      "owner_id_hi": "0xa6b828914202f609",
-      "owner_id_lo": "0xf0c384e3f4a1ef5b",
-      "category": "declarative-primitive",
+      "owner": "shared.bits",
+      "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
+      "owner_id_hi": "0x658354f83ccf3838",
+      "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_bits_exact_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITS_EXACT_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_exact_bits_adapter_name"
         }
       ]
     },
@@ -5556,21 +5526,45 @@
       "operation_id": "0300c8217a119fc14e5f43e9be8d69f4",
       "operation_id_hi": "0x0300c8217a119fc1",
       "operation_id_lo": "0x4e5f43e9be8d69f4",
-      "owner": "xi.bit.popcount",
-      "owner_id": "0300c8217a119fc14e5f43e9be8d69f4",
-      "owner_id_hi": "0x0300c8217a119fc1",
-      "owner_id_lo": "0x4e5f43e9be8d69f4",
-      "category": "declarative-primitive",
+      "owner": "shared.bits",
+      "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
+      "owner_id_hi": "0x658354f83ccf3838",
+      "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_bits_exact_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITS_EXACT_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_exact_bits_adapter_name"
         }
       ]
     },
@@ -5579,21 +5573,45 @@
       "operation_id": "3ac0d8b85cf6859d45f9ed1259c97b23",
       "operation_id_hi": "0x3ac0d8b85cf6859d",
       "operation_id_lo": "0x45f9ed1259c97b23",
-      "owner": "xi.bit.clz",
-      "owner_id": "3ac0d8b85cf6859d45f9ed1259c97b23",
-      "owner_id_hi": "0x3ac0d8b85cf6859d",
-      "owner_id_lo": "0x45f9ed1259c97b23",
-      "category": "declarative-primitive",
+      "owner": "shared.bits",
+      "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
+      "owner_id_hi": "0x658354f83ccf3838",
+      "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_bits_exact_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITS_EXACT_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_exact_bits_adapter_name"
         }
       ]
     },
@@ -5602,21 +5620,45 @@
       "operation_id": "80983343cf963bb6c23e69de3c1fb9eb",
       "operation_id_hi": "0x80983343cf963bb6",
       "operation_id_lo": "0xc23e69de3c1fb9eb",
-      "owner": "xi.bit.ctz",
-      "owner_id": "80983343cf963bb6c23e69de3c1fb9eb",
-      "owner_id_hi": "0x80983343cf963bb6",
-      "owner_id_lo": "0xc23e69de3c1fb9eb",
-      "category": "declarative-primitive",
+      "owner": "shared.bits",
+      "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
+      "owner_id_hi": "0x658354f83ccf3838",
+      "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_bits_exact_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITS_EXACT_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_exact_bits_adapter_name"
         }
       ]
     },
@@ -5625,21 +5667,45 @@
       "operation_id": "853725164f99b0812ca682e41db63b3f",
       "operation_id_hi": "0x853725164f99b081",
       "operation_id_lo": "0x2ca682e41db63b3f",
-      "owner": "xi.bit.mul-high",
-      "owner_id": "853725164f99b0812ca682e41db63b3f",
-      "owner_id_hi": "0x853725164f99b081",
-      "owner_id_lo": "0x2ca682e41db63b3f",
-      "category": "declarative-primitive",
+      "owner": "shared.bits",
+      "owner_id": "658354f83ccf3838fa2ed89ccc2a3fa4",
+      "owner_id_hi": "0x658354f83ccf3838",
+      "owner_id_lo": "0xfa2ed89ccc2a3fa4",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_bits_exact_eval",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_bitwise.inc.c",
+          "symbol": "XR_BITS_EXACT_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_bits_exact_eval"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_exact_bits_adapter_name"
         }
       ]
     },

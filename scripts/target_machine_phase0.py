@@ -131,21 +131,49 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
         "contracts/semantic-owners.toml",
         "src/ir/xi_emit_vm_gen.h",
         "src/aot/xi_to_c_dispatch_gen.h",
+        "contracts/semantic-owner-registry.json",
     ]
     text = read(root / inputs[0])
+    manifest = tomllib.loads(read(root / inputs[1]))
+    registry = json.loads(read(root / inputs[4]))
+    kernels_by_owner = {
+        f"shared.{item['id']}": item["header"] for item in manifest.get("core", [])
+    }
+    kernels_by_owner.update({
+        item["typed_plan"]: item["semantic_kernel"]
+        for item in manifest.get("operation", [])
+        if item.get("typed_plan") and item.get("semantic_kernel")
+    })
+    explicit_by_operation: dict[str, dict[str, Any]] = {}
+    for owner in registry.get("owners", []):
+        canonical_source = kernels_by_owner.get(owner.get("owner"))
+        consumers = set(owner.get("consumers", []))
+        if (not canonical_source or "vm" not in consumers or "cgen" not in consumers or
+                not {"aot-hosted", "aot-freestanding"}.issubset(consumers)):
+            continue
+        for operation in owner.get("operations", []):
+            explicit_by_operation[operation] = {
+                "owner": owner["owner"],
+                "source": canonical_source,
+            }
     blocks = re.findall(r"\(define-xi-op\s+([^\s()]+)(.*?)(?=\n\(define-xi-op|\Z)", text, re.S)
     rows: list[dict[str, Any]] = []
     for name, body in blocks:
         op_class = sexpr_atom(body, "class", "unclassified")
         family = op_family(op_class)
+        explicit = explicit_by_operation.get(name)
         rows.append({
             "operation_id": name,
             "family": family,
-            "observable_contract": "contracts/xi-canonical-ops.md",
-            "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm",
-            "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-            "current_shared_owner": "xisa/xi/ops.def",
-            "future_semantic_owner": "SemanticPlan.operation_registry",
+            "observable_contract": (explicit["source"] if explicit
+                                    else "contracts/xi-canonical-ops.md"),
+            "current_vm_owner": ("representation adapter" if explicit else
+                                 "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm"),
+            "current_aot_owner": ("representation adapter" if explicit else
+                                  "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c"),
+            "current_shared_owner": (explicit["source"] if explicit else "xisa/xi/ops.def"),
+            "future_semantic_owner": (explicit["owner"] if explicit
+                                      else "SemanticPlan.operation_registry"),
             "effects": sexpr_list(body, "effects"),
             "capabilities": sexpr_list(body, "requires"),
             "observable_edges": sexpr_list(body, "observable"),
@@ -157,11 +185,10 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
             ],
             "independent_oracle": oracle_for_family(family),
             "benchmark_anchor": f"target-machine/{family}",
-            "migration_task": 271,
+            "migration_task": 278 if explicit else 271,
         })
 
     shared = []
-    manifest = tomllib.loads(read(root / inputs[1]))
     for item in manifest.get("core", []):
         shared.append({
             "operation_id": f"shared.{item['id']}",

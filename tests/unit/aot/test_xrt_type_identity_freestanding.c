@@ -34,5 +34,26 @@ int main(void) {
         return 9;
     if (xrt_typeof_id(set) != XR_TYPE_IDENTITY_CORE_SET)
         return 10;
+    if (xrt_bits_exact_eval(xr_bits_exact_kernel_rotl, INT64_C(0x81), INT64_C(1),
+                            XR_NATIVE_U8) != INT64_C(0x03))
+        return 11;
+    if (xrt_bits_exact_eval(xr_bits_exact_kernel_rotr, INT64_C(0x81), INT64_C(1),
+                            XR_NATIVE_U8) != INT64_C(0xc0))
+        return 12;
+    if (xrt_bits_exact_eval(xr_bits_exact_kernel_bswap, INT64_C(0x1234), INT64_C(0),
+                            XR_NATIVE_U16) != INT64_C(0x3412))
+        return 13;
+    if (xrt_bits_exact_eval(xr_bits_exact_kernel_popcount, INT64_C(0x0101), INT64_C(0),
+                            XR_NATIVE_U16) != INT64_C(2))
+        return 14;
+    if (xrt_bits_exact_eval(xr_bits_exact_kernel_clz, INT64_C(0x0100), INT64_C(0),
+                            XR_NATIVE_U16) != INT64_C(7))
+        return 15;
+    if (xrt_bits_exact_eval(xr_bits_exact_kernel_ctz, INT64_C(0x0100), INT64_C(0),
+                            XR_NATIVE_U16) != INT64_C(8))
+        return 16;
+    if (xrt_bits_exact_eval(xr_bits_exact_kernel_mul_high, -INT64_C(1), INT64_C(2),
+                            XR_NATIVE_U64) != INT64_C(1))
+        return 17;
     return 0;
 }

@@ -135,7 +135,7 @@ XVM_TEMPLATE_SHIFT_CASE(OP_SHR_U, xr_int_shr_u_wrap, xr_bigint_shr)
 /* Exact-width bit intrinsics are statically typed Xi operations. C carries
  * the receiver's XrNativeType; rotations place receiver/count contiguously at
  * B/B+1 so one compact opcode still retains the width contract. */
-#define XVM_EXACT_BIT_UNARY_CASE(op, fn)                                                           \
+#define XVM_EXACT_BIT_UNARY_CASE(op, kernel)                                                       \
     vmcase(op) {                                                                                   \
         int a = GETARG_A(i);                                                                       \
         int b = GETARG_B(i);                                                                       \
@@ -143,18 +143,21 @@ XVM_TEMPLATE_SHIFT_CASE(OP_SHR_U, xr_int_shr_u_wrap, xr_bigint_shr)
         XrValue value = R(b);                                                                      \
         if (!XR_IS_INT(value))                                                                     \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "exact-width bit intrinsic requires int");      \
-        XR_SET_INT(R(a), fn(XR_TO_INT(value), native_type));                                       \
+        XR_SET_INT(R(a),                                                                           \
+                   XR_BITS_EXACT_OWNER_APPLY(                                                      \
+                       XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO,             \
+                       XR_SEM_CONSUMER_VM, kernel, XR_TO_INT(value), 0, native_type));             \
         vmbreak;                                                                                   \
     }
 
-XVM_EXACT_BIT_UNARY_CASE(OP_BIT_BSWAP, xr_bits_exact_byteswap)
-XVM_EXACT_BIT_UNARY_CASE(OP_BIT_POPCOUNT, xr_bits_exact_popcount)
-XVM_EXACT_BIT_UNARY_CASE(OP_BIT_CLZ, xr_bits_exact_leading_zeros)
-XVM_EXACT_BIT_UNARY_CASE(OP_BIT_CTZ, xr_bits_exact_trailing_zeros)
+XVM_EXACT_BIT_UNARY_CASE(OP_BIT_BSWAP, xr_bits_exact_kernel_bswap)
+XVM_EXACT_BIT_UNARY_CASE(OP_BIT_POPCOUNT, xr_bits_exact_kernel_popcount)
+XVM_EXACT_BIT_UNARY_CASE(OP_BIT_CLZ, xr_bits_exact_kernel_clz)
+XVM_EXACT_BIT_UNARY_CASE(OP_BIT_CTZ, xr_bits_exact_kernel_ctz)
 
 #undef XVM_EXACT_BIT_UNARY_CASE
 
-#define XVM_EXACT_BIT_ROTATE_CASE(op, fn)                                                          \
+#define XVM_EXACT_BIT_ROTATE_CASE(op, kernel)                                                      \
     vmcase(op) {                                                                                   \
         int a = GETARG_A(i);                                                                       \
         int b = GETARG_B(i);                                                                       \
@@ -163,12 +166,16 @@ XVM_EXACT_BIT_UNARY_CASE(OP_BIT_CTZ, xr_bits_exact_trailing_zeros)
         XrValue count = R(b + 1);                                                                  \
         if (!XR_IS_INT(value) || !XR_IS_INT(count))                                                \
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "exact-width rotate requires integer inputs");  \
-        XR_SET_INT(R(a), fn(XR_TO_INT(value), XR_TO_INT(count), native_type));                     \
+        XR_SET_INT(R(a),                                                                           \
+                   XR_BITS_EXACT_OWNER_APPLY(                                                      \
+                       XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO,             \
+                       XR_SEM_CONSUMER_VM, kernel, XR_TO_INT(value), XR_TO_INT(count),             \
+                       native_type));                                                              \
         vmbreak;                                                                                   \
     }
 
-XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_ROTL, xr_bits_exact_rotate_left)
-XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_ROTR, xr_bits_exact_rotate_right)
+XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_ROTL, xr_bits_exact_kernel_rotl)
+XVM_EXACT_BIT_ROTATE_CASE(OP_BIT_ROTR, xr_bits_exact_kernel_rotr)
 
 #undef XVM_EXACT_BIT_ROTATE_CASE
 
@@ -181,31 +188,21 @@ vmcase(OP_BIT_MUL_HIGH) {
     if (!XR_IS_INT(lhs_value) || !XR_IS_INT(rhs_value))
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                          "unsigned mulHigh requires exact-width integer inputs");
-    uint64_t lhs = (uint64_t) XR_TO_INT(lhs_value);
-    uint64_t rhs = (uint64_t) XR_TO_INT(rhs_value);
-    uint64_t high = 0;
     switch (native_type) {
         case XR_NATIVE_U8:
-            high = ((uint16_t) (uint8_t) lhs * (uint16_t) (uint8_t) rhs) >> 8;
-            break;
         case XR_NATIVE_U16:
-            high = ((uint32_t) (uint16_t) lhs * (uint32_t) (uint16_t) rhs) >> 16;
-            break;
         case XR_NATIVE_U32:
-            high = ((uint64_t) (uint32_t) lhs * (uint64_t) (uint32_t) rhs) >> 32;
-            break;
         case XR_NATIVE_USIZE:
-            high = sizeof(uintptr_t) == 8
-                       ? xr_u64_mul_high((uint64_t) (uintptr_t) lhs, (uint64_t) (uintptr_t) rhs)
-                       : (((uint64_t) (uint32_t) lhs * (uint64_t) (uint32_t) rhs) >> 32);
-            break;
         case XR_NATIVE_U64:
-            high = xr_u64_mul_high(lhs, rhs);
             break;
         default:
             VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
                              "mulHigh receiver must be an unsigned exact-width integer");
     }
-    XR_SET_INT(R(a), (int64_t) high);
+    XR_SET_INT(R(a),
+               XR_BITS_EXACT_OWNER_APPLY(
+                   XR_SEM_OWNER_ID_SHARED_BITS_HI, XR_SEM_OWNER_ID_SHARED_BITS_LO,
+                   XR_SEM_CONSUMER_VM, xr_bits_exact_kernel_mul_high, XR_TO_INT(lhs_value),
+                   XR_TO_INT(rhs_value), native_type));
     vmbreak;
 }

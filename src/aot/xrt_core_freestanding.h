@@ -53,6 +53,10 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
+#define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
+    XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
+                              XR_SEM_OWNER_ID_SHARED_BITS_LO,                                     \
+                              XR_SEM_CONSUMER_AOT_FREESTANDING, kernel, lhs, rhs, native_type)
 #include "../shared/xr_sync_core.h"
 #include "../shared/xr_truthy_core.h"
 #include "../shared/xr_type_identity_core.h"

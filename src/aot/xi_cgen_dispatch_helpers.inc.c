@@ -1044,60 +1044,38 @@ static void xicgen_template_bitwise_unary(XiCgenCtx *ctx, FILE *out, const XiFun
     emit_bitwise_unop_ctx(ctx, out, v, xi_to_c_template_bitwise_unary_op(v->op));
 }
 
-static const char *cg_exact_bit_unsigned_ctype(uint8_t native_type) {
-    switch (native_type) {
-        case XR_NATIVE_I8:
-        case XR_NATIVE_U8:
-            return "uint8_t";
-        case XR_NATIVE_I16:
-        case XR_NATIVE_U16:
-            return "uint16_t";
-        case XR_NATIVE_I32:
-        case XR_NATIVE_U32:
-            return "uint32_t";
-        case XR_NATIVE_ISIZE:
-        case XR_NATIVE_USIZE:
-            return "uintptr_t";
-        case XR_NATIVE_I64:
-        case XR_NATIVE_U64:
+static const char *cg_exact_bit_kernel_name(uint16_t op) {
+    switch (op) {
+        case XI_BIT_ROTL:
+            return "xr_bits_exact_kernel_rotl";
+        case XI_BIT_ROTR:
+            return "xr_bits_exact_kernel_rotr";
+        case XI_BIT_BSWAP:
+            return "xr_bits_exact_kernel_bswap";
+        case XI_BIT_POPCOUNT:
+            return "xr_bits_exact_kernel_popcount";
+        case XI_BIT_CLZ:
+            return "xr_bits_exact_kernel_clz";
+        case XI_BIT_CTZ:
+            return "xr_bits_exact_kernel_ctz";
+        case XI_BIT_MUL_HIGH:
+            return "xr_bits_exact_kernel_mul_high";
         default:
-            return "uint64_t";
+            return NULL;
     }
-}
-
-static const char *cg_exact_bit_width_expr(uint8_t native_type) {
-    switch (native_type) {
-        case XR_NATIVE_I8:
-        case XR_NATIVE_U8:
-            return "8u";
-        case XR_NATIVE_I16:
-        case XR_NATIVE_U16:
-            return "16u";
-        case XR_NATIVE_I32:
-        case XR_NATIVE_U32:
-            return "32u";
-        case XR_NATIVE_ISIZE:
-        case XR_NATIVE_USIZE:
-            return "(sizeof(uintptr_t) * 8u)";
-        case XR_NATIVE_I64:
-        case XR_NATIVE_U64:
-        default:
-            return "64u";
-    }
-}
-
-static void cg_emit_exact_bit_pattern(XiCgenCtx *ctx, FILE *out, const XiValue *value,
-                                      uint8_t native_type) {
-    fprintf(out, "((%s) (", cg_exact_bit_unsigned_ctype(native_type));
-    emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
-    fprintf(out, "))");
 }
 
 static void xicgen_exact_bit(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     (void) f;
     (void) prefix;
-    if (!v || v->nargs < 1 || !v->args[0]) {
+    const char *adapter = cg_exact_bits_adapter_name(ctx);
+    const char *kernel = v ? cg_exact_bit_kernel_name(v->op) : NULL;
+    bool binary = v && (v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR ||
+                        v->op == XI_BIT_MUL_HIGH);
+    if (!adapter || !kernel || !v || v->nargs != (binary ? 2 : 1) || !v->args[0] ||
+        (binary && !v->args[1]) ||
+        (ctx && ctx->c_dialect == XI_CGEN_C_DIALECT_C90)) {
         if (ctx)
             ctx->error = true;
         emit_codegen_abort_expr(out);
@@ -1105,130 +1083,15 @@ static void xicgen_exact_bit(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     }
 
     uint8_t native_type = (uint8_t) v->aux_int;
-    const char *width = cg_exact_bit_width_expr(native_type);
-    const char *uctype = cg_exact_bit_unsigned_ctype(native_type);
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
-
-    if (v->op == XI_BIT_POPCOUNT) {
-        fprintf(out, "((int64_t) __builtin_popcountll((unsigned long long) ");
-        cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-        fprintf(out, "))");
-    } else if (v->op == XI_BIT_CLZ || v->op == XI_BIT_CTZ) {
-        fprintf(out, "(");
-        cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-        fprintf(out, " == 0 ? (int64_t) %s : (int64_t) ", width);
-        if (v->op == XI_BIT_CLZ) {
-            fprintf(out, "(__builtin_clzll((unsigned long long) ");
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-            fprintf(out, ") - (64u - %s)))", width);
-        } else {
-            fprintf(out, "__builtin_ctzll((unsigned long long) ");
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-            fprintf(out, "))");
-        }
-    } else if (v->op == XI_BIT_BSWAP) {
-        const char *result_ctype = cg_native_int_ctype(native_type);
-        if (!result_ctype)
-            result_ctype = "int64_t";
-        fprintf(out, "((int64_t) ((%s) (", result_ctype);
-        if (native_type == XR_NATIVE_I8 || native_type == XR_NATIVE_U8) {
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-        } else if (native_type == XR_NATIVE_I16 || native_type == XR_NATIVE_U16) {
-            fprintf(out, "__builtin_bswap16((uint16_t) ");
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-            fprintf(out, ")");
-        } else if (native_type == XR_NATIVE_I32 || native_type == XR_NATIVE_U32) {
-            fprintf(out, "__builtin_bswap32((uint32_t) ");
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-            fprintf(out, ")");
-        } else if (native_type == XR_NATIVE_ISIZE || native_type == XR_NATIVE_USIZE) {
-            fprintf(out, "(sizeof(uintptr_t) == 8 ? (uintptr_t) __builtin_bswap64((uint64_t) ");
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-            fprintf(out, ") : (uintptr_t) __builtin_bswap32((uint32_t) ");
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-            fprintf(out, "))");
-        } else {
-            fprintf(out, "__builtin_bswap64((uint64_t) ");
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-            fprintf(out, ")");
-        }
-        fprintf(out, ")))");
-    } else if (v->op == XI_BIT_MUL_HIGH && v->nargs == 2) {
-        const char *result_ctype = cg_native_int_ctype(native_type);
-        if (!result_ctype)
-            result_ctype = "int64_t";
-        fprintf(out, "((int64_t) ((%s) (", result_ctype);
-        if (native_type == XR_NATIVE_U8) {
-            fprintf(out, "(((uint16_t) (uint8_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-            fprintf(out, " * (uint16_t) (uint8_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ") >> 8)");
-        } else if (native_type == XR_NATIVE_U16) {
-            fprintf(out, "(((uint32_t) (uint16_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-            fprintf(out, " * (uint32_t) (uint16_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ") >> 16)");
-        } else if (native_type == XR_NATIVE_U32) {
-            fprintf(out, "(((uint64_t) (uint32_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-            fprintf(out, " * (uint64_t) (uint32_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ") >> 32)");
-        } else if (native_type == XR_NATIVE_USIZE) {
-            fprintf(out, "(sizeof(uintptr_t) == 8 ? xr_u64_mul_high((uint64_t) (uintptr_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-            fprintf(out, ", (uint64_t) (uintptr_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ") : (((uint64_t) (uint32_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-            fprintf(out, " * (uint64_t) (uint32_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ") >> 32))");
-        } else {
-            fprintf(out, "xr_u64_mul_high((uint64_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
-            fprintf(out, ", (uint64_t) ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ")");
-        }
-        fprintf(out, ")))");
-    } else if ((v->op == XI_BIT_ROTL || v->op == XI_BIT_ROTR) && v->nargs == 2) {
-        const char *result_ctype = cg_native_int_ctype(native_type);
-        if (!result_ctype)
-            result_ctype = "int64_t";
-        const char *direction = v->op == XI_BIT_ROTL ? "ROTL" : "ROTR";
-        fprintf(out, "((int64_t) ((%s) (", result_ctype);
-        if (native_type == XR_NATIVE_ISIZE || native_type == XR_NATIVE_USIZE) {
-            fprintf(out, "sizeof(uintptr_t) == 8 ? (uintptr_t) XR_BITS_%s64((uint64_t) ",
-                    direction);
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-            fprintf(out, ", ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ") : (uintptr_t) XR_BITS_%s32((uint32_t) ", direction);
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-            fprintf(out, ", ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ")");
-        } else {
-            const char *bits = native_type == XR_NATIVE_I8 || native_type == XR_NATIVE_U8     ? "8"
-                               : native_type == XR_NATIVE_I16 || native_type == XR_NATIVE_U16 ? "16"
-                               : native_type == XR_NATIVE_I32 || native_type == XR_NATIVE_U32
-                                   ? "32"
-                                   : "64";
-            fprintf(out, "XR_BITS_%s%s((%s) ", direction, bits, uctype);
-            cg_emit_exact_bit_pattern(ctx, out, v->args[0], native_type);
-            fprintf(out, ", ");
-            emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-            fprintf(out, ")");
-        }
-        fprintf(out, ")))");
-    } else {
-        if (ctx)
-            ctx->error = true;
-        emit_codegen_abort_expr(out);
-    }
+    fprintf(out, "%s(%s, ", adapter, kernel);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, ", ");
+    if (binary)
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+    else
+        fprintf(out, "INT64_C(0)");
+    fprintf(out, ", %u)", (unsigned) native_type);
     emit_conversion_suffix(out, conv_suffix);
 }
 

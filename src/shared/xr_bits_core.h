@@ -20,6 +20,7 @@
 #ifndef XRAY_SHARED_XR_BITS_CORE_H
 #define XRAY_SHARED_XR_BITS_CORE_H
 
+#include "xr_semantic_owner_ids_gen.h"
 #include <stdint.h>
 #include "xr_native_type_core.h"
 
@@ -313,5 +314,65 @@ static inline int64_t xr_bits_exact_mul_high(int64_t a, int64_t b, uint8_t nativ
     uint64_t ub = xr_bits_exact_pattern(b, native_type);
     return xr_bits_exact_restore((ua * ub) >> width, native_type);
 }
+
+/* Canonical entry points keep operation selection in the shared owner while
+ * allowing VM and AOT adapters to marshal their own representations. */
+static inline int64_t xr_bits_exact_kernel_rotl(int64_t lhs, int64_t rhs, uint8_t native_type) {
+    return xr_bits_exact_rotate_left(lhs, rhs, native_type);
+}
+
+static inline int64_t xr_bits_exact_kernel_rotr(int64_t lhs, int64_t rhs, uint8_t native_type) {
+    return xr_bits_exact_rotate_right(lhs, rhs, native_type);
+}
+
+static inline int64_t xr_bits_exact_kernel_bswap(int64_t lhs, int64_t rhs, uint8_t native_type) {
+    (void) rhs;
+    return xr_bits_exact_byteswap(lhs, native_type);
+}
+
+static inline int64_t xr_bits_exact_kernel_popcount(int64_t lhs, int64_t rhs,
+                                                    uint8_t native_type) {
+    (void) rhs;
+    return xr_bits_exact_popcount(lhs, native_type);
+}
+
+static inline int64_t xr_bits_exact_kernel_clz(int64_t lhs, int64_t rhs, uint8_t native_type) {
+    (void) rhs;
+    return xr_bits_exact_leading_zeros(lhs, native_type);
+}
+
+static inline int64_t xr_bits_exact_kernel_ctz(int64_t lhs, int64_t rhs, uint8_t native_type) {
+    (void) rhs;
+    return xr_bits_exact_trailing_zeros(lhs, native_type);
+}
+
+static inline int64_t xr_bits_exact_kernel_mul_high(int64_t lhs, int64_t rhs,
+                                                    uint8_t native_type) {
+    return xr_bits_exact_mul_high(lhs, rhs, native_type);
+}
+
+#define XR_BITS_EXACT_OWNER_GUARD(owner_hi, owner_lo)                                             \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_bits                                                 \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_BITS_HI &&                        \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_BITS_LO)                          \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BITS_EXACT_CONSUMER_GUARD(consumer_bit)                                                \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_bits                                    \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&           \
+                (XR_SEM_OWNER_ID_SHARED_BITS_CONSUMERS & (uint32_t) (consumer_bit)) != 0)         \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BITS_EXACT_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, kernel, lhs, rhs, native_type) \
+    (XR_BITS_EXACT_OWNER_GUARD((owner_hi), (owner_lo)),                                            \
+     XR_BITS_EXACT_CONSUMER_GUARD((consumer_bit)),                                                 \
+     (kernel)((int64_t) (lhs), (int64_t) (rhs), (uint8_t) (native_type)))
 
 #endif  // XRAY_SHARED_XR_BITS_CORE_H

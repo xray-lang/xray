@@ -137,6 +137,7 @@
       "id": "bits",
       "owner": "shared-kernel",
       "production_callers": [
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
         "src/aot/xrt.h",
         "src/aot/xrt_core_freestanding.h",
         "src/ir/xi_opt.c",
@@ -163,6 +164,13 @@
         "xr_bits_aot_rotr8",
         "xr_bits_exact_byteswap",
         "xr_bits_exact_is_signed",
+        "xr_bits_exact_kernel_bswap",
+        "xr_bits_exact_kernel_clz",
+        "xr_bits_exact_kernel_ctz",
+        "xr_bits_exact_kernel_mul_high",
+        "xr_bits_exact_kernel_popcount",
+        "xr_bits_exact_kernel_rotl",
+        "xr_bits_exact_kernel_rotr",
         "xr_bits_exact_leading_zeros",
         "xr_bits_exact_mask",
         "xr_bits_exact_mul_high",
@@ -178,6 +186,7 @@
       ],
       "status": "production",
       "test_callers": [
+        "tests/unit/aot/test_xrt_type_identity_freestanding.c",
         "tests/unit/stdlib/test_numeric_core.c"
       ]
     },
