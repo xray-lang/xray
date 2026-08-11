@@ -297,6 +297,74 @@ static bool xi_coro_func_intrinsic_suspends(const XiFunc *f, const XiCoroResolve
 static const XiFunc *xi_coro_resolve_local_callee(const XiFunc *caller,
                                                    const XiValue *callee);
 
+static const XiModule *xi_coro_owning_module(const XiFunc *f) {
+    for (const XiFunc *owner = f; owner; owner = owner->parent_func) {
+        if (owner->module)
+            return owner->module;
+    }
+    return NULL;
+}
+
+/* Resolve `mod.f(...)` through the frozen module export table.  The receiver
+ * must be a resolved whole-module import and the selected export must carry a
+ * concrete Xi function; missing or value/class exports remain unresolved. */
+static const XiFunc *xi_coro_resolve_namespace_method_callee(const XiFunc *caller,
+                                                              const XiValue *call) {
+    if (!caller || !call ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs < 1 || !call->aux)
+        return NULL;
+    const XiImportRef *ref = xi_value_import_ref(caller, call->args[0]);
+    if (!ref || ref->member_name || !ref->resolved_module)
+        return NULL;
+    const XiModule *module = ref->resolved_module;
+    const char *member = (const char *) call->aux;
+    for (uint16_t i = 0; i < module->nexports; i++) {
+        const XiModuleExport *exported = &module->exports[i];
+        if (exported->function && exported->name && strcmp(exported->name, member) == 0)
+            return exported->function;
+    }
+    return NULL;
+}
+
+/* Resolve an instance method declared in the current Xi module by analyzer
+ * class identity.  Names select a member only after the receiver's exact
+ * declaration has matched a frozen XiClassData entry. */
+static const XiFunc *xi_coro_resolve_local_method_callee(const XiFunc *caller,
+                                                          const XiValue *call) {
+    if (!caller || !call ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs < 1 || !call->args[0] || !call->args[0]->type || !call->aux)
+        return NULL;
+    const XrType *receiver_type = call->args[0]->type;
+    if ((receiver_type->kind != XR_KIND_INSTANCE && receiver_type->kind != XR_KIND_CLASS) ||
+        !receiver_type->instance.class_ref)
+        return NULL;
+    const XiModule *module = xi_coro_owning_module(caller);
+    const char *member = (const char *) call->aux;
+    for (uint16_t ci = 0; module && ci < module->nclasses; ci++) {
+        const XiClassData *class_data = module->classes[ci];
+        if (!class_data || class_data->class_info != receiver_type->instance.class_ref ||
+            !class_data->methods || !class_data->child_idx)
+            continue;
+        for (uint16_t mi = 0; mi < class_data->nmethod; mi++) {
+            const XiClassMethod *method = &class_data->methods[mi];
+            if (method->is_static || !method->name || strcmp(method->name, member) != 0)
+                continue;
+            uint16_t child = class_data->child_idx[mi];
+            if (module->init && child < module->init->nchildren)
+                return module->init->children[child];
+        }
+    }
+    return NULL;
+}
+
+static const XiFunc *xi_coro_resolve_method_callee(const XiFunc *caller,
+                                                    const XiValue *call) {
+    const XiFunc *target = xi_coro_resolve_namespace_method_callee(caller, call);
+    return target ? target : xi_coro_resolve_local_method_callee(caller, call);
+}
+
 static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResolver *resolver,
                                               int depth) {
     if (f && resolver && resolver->func_suspendability) {
@@ -327,6 +395,8 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
             }
             if (!target && v->op == XI_CALL && v->nargs >= 1)
                 target = xi_coro_resolve_local_callee(f, v->args[0]);
+            if (!target && (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT))
+                target = xi_coro_resolve_method_callee(f, v);
             if (!target && resolver && resolver->call_suspendability &&
                 (v->op == XI_CALL || v->op == XI_CALL_METHOD ||
                  v->op == XI_CALL_METHOD_DIRECT)) {
@@ -379,15 +449,16 @@ static bool xi_coro_method_call_suspends(const XiFunc *f, const XiValue *v,
                                          const XiCoroResolver *resolver) {
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs < 1)
         return false;
-    if (!resolver || !resolver->resolve_method)
-        return resolver && resolver->call_suspendability &&
-               resolver->call_suspendability(resolver->ud, f, v) != 0;
-    const XiFunc *target = resolver->resolve_method(resolver->ud, f, v);
+    const XiFunc *target = resolver && resolver->resolve_method
+                               ? resolver->resolve_method(resolver->ud, f, v)
+                               : NULL;
+    if (!target)
+        target = xi_coro_resolve_method_callee(f, v);
     if (target && target->entry_type == 2)
         return false;
     if (target)
         return xi_coro_func_is_suspendable(target, resolver);
-    if (resolver->call_suspendability)
+    if (resolver && resolver->call_suspendability)
         return resolver->call_suspendability(resolver->ud, f, v) != 0;
     return false;
 }
@@ -432,9 +503,10 @@ static const XiEnumData *xi_coro_static_enum_namespace(const XiFunc *f,
         return NULL;
     if (xi_copy_is_identity_alias(receiver) && receiver->nargs > 0)
         return xi_coro_static_enum_namespace(f, receiver->args[0]);
-    if (receiver->op == XI_GET_SHARED && receiver->aux_int >= 0 && f->module &&
-        f->module->slot_enums && receiver->aux_int < f->module->nslots)
-        return f->module->slot_enums[receiver->aux_int];
+    const XiModule *owner_module = xi_coro_owning_module(f);
+    if (receiver->op == XI_GET_SHARED && receiver->aux_int >= 0 && owner_module &&
+        owner_module->slot_enums && receiver->aux_int < owner_module->nslots)
+        return owner_module->slot_enums[receiver->aux_int];
     if (receiver->op == XI_IMPORT_REF && receiver->aux) {
         const XiImportRef *ref = (const XiImportRef *) receiver->aux;
         const XiModule *module = ref->resolved_module;
@@ -473,6 +545,24 @@ static bool xi_coro_is_closed_builtin_method_call(const XiValue *v) {
         xi_value_type_is_result_group(v->args[0]) ||
         xi_value_type_is_countdown_latch(v->args[0]) ||
         xi_value_type_is_semaphore(v->args[0]) || xi_value_type_is_event_count(v->args[0]))
+        return true;
+    /* Native classes and interfaces carry a NULL class_ref as their frozen
+     * declaration identity.  User declarations always carry their owning
+     * XrClassInfo, including when they shadow a builtin spelling.  This one
+     * identity gate covers StringBuilder, Iterator, Buffer, and the remaining
+     * compiler-owned named method tables without a name-based allow-list. */
+    const XrType *receiver_type = v->args[0]->type;
+    if ((receiver_type->kind == XR_KIND_INSTANCE || receiver_type->kind == XR_KIND_INTERFACE) &&
+        receiver_type->instance.class_name && receiver_type->instance.class_ref == NULL)
+        return true;
+    /* GET_BUILTIN is the frozen class-namespace form for native constructors
+     * and static members.  Only reserved compiler globals may carry it; user
+     * bindings start at XR_USER_GLOBALS_START and remain subject to ordinary
+     * callsite/target resolution. */
+    if (v->args[0]->op == XI_GET_BUILTIN && receiver_type->kind == XR_KIND_CLASS &&
+        v->args[0]->aux_int > XR_GLOBAL_VAR_RESERVED0 &&
+        v->args[0]->aux_int < XR_USER_GLOBALS_START &&
+        v->args[0]->aux_int != XR_GLOBAL_VAR_RESERVED30)
         return true;
     switch (v->args[0]->type->kind) {
         case XR_KIND_INT:
@@ -539,6 +629,8 @@ static bool xi_coro_call_resolution_complete(const XiFunc *f, const XiValue *v,
 
     if (resolver && resolver->resolve_method)
         target = resolver->resolve_method(resolver->ud, f, v);
+    if (!target)
+        target = xi_coro_resolve_method_callee(f, v);
     if (target)
         return true;
     return resolver && resolver->call_suspendability &&
@@ -855,11 +947,42 @@ static const XiFunc *xi_coro_resolve_local_callee(const XiFunc *caller,
                 owner->shared_slot_funcs[callee->aux_int])
                 return owner->shared_slot_funcs[callee->aux_int];
         }
+        const XiModule *module = xi_coro_owning_module(caller);
+        if (module && module->slot_classes && callee->aux_int < module->nslots) {
+            const XiClassData *class_data = module->slot_classes[callee->aux_int];
+            for (uint16_t i = 0; class_data && class_data->methods && class_data->child_idx &&
+                                 i < class_data->nmethod;
+                 i++) {
+                if (!class_data->methods[i].is_constructor || class_data->methods[i].is_static)
+                    continue;
+                uint16_t child = class_data->child_idx[i];
+                if (module->init && child < module->init->nchildren)
+                    return module->init->children[child];
+            }
+        }
     }
     if (xi_copy_is_identity_alias(callee) && callee->nargs > 0)
         return xi_coro_resolve_local_callee(caller, callee->args[0]);
     const XiImportRef *ref = xi_value_import_ref(caller, callee);
-    return ref ? ref->resolved_func : NULL;
+    if (!ref)
+        return NULL;
+    if (ref->resolved_func)
+        return ref->resolved_func;
+    const XiModule *module = ref->resolved_module;
+    if (!module || !module->slot_classes || ref->resolved_shared_slot < 0 ||
+        ref->resolved_shared_slot >= module->nslots)
+        return NULL;
+    const XiClassData *class_data = module->slot_classes[ref->resolved_shared_slot];
+    for (uint16_t i = 0;
+         class_data && class_data->methods && class_data->child_idx && i < class_data->nmethod;
+         i++) {
+        if (!class_data->methods[i].is_constructor || class_data->methods[i].is_static)
+            continue;
+        uint16_t child = class_data->child_idx[i];
+        if (module->init && child < module->init->nchildren)
+            return module->init->children[child];
+    }
+    return NULL;
 }
 
 /* Compute liveness at one suspension without consuming the materialized plan.

@@ -7848,6 +7848,7 @@ XR_FUNC void xi_lower_func_add_child(XiFunc *parent, XiFunc *child) {
         parent->children = tmp;
         parent->children_cap = new_cap;
     }
+    child->parent_func = parent;
     parent->children[parent->nchildren++] = child;
 }
 

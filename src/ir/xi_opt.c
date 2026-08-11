@@ -4623,7 +4623,8 @@ XR_FUNC XiOptResult xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level
              * coroutine-plan preservation contract, do not enter it after
              * coroutine lowering.  Marked value rewrites still run and rebase
              * the plan below. */
-            if (f->coro_plan && !(desc->flags & XI_PASS_CORO_PLAN_SAFE))
+            if (f->coro_plan && f->coro_plan->is_coroutine &&
+                !(desc->flags & XI_PASS_CORO_PLAN_SAFE))
                 continue;
 
             /* Budget check before each pass */

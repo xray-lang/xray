@@ -3856,7 +3856,9 @@ static XaBuiltinMember *mutable_builtin_type_member(XrType *type, const char *na
 
 TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     XrType *string_type = xr_type_new_string(g_isolate);
+    XrType *string_builder_type = xr_type_new_named_instance(g_isolate, "StringBuilder");
     ASSERT(string_type != NULL);
+    ASSERT(string_builder_type != NULL);
     XaBuiltinMember *from_utf8 = mutable_builtin_type_member(string_type, "fromUtf8", true);
     XaBuiltinMember *slice_bytes = mutable_builtin_type_member(string_type, "sliceBytes", false);
     ASSERT(from_utf8 != NULL);
@@ -3869,16 +3871,28 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
         xa_builtin_get_type_member_effect_contract(string_type, "fromUtf8", true);
     const XaEffectContract *slice_bytes_contract =
         xa_builtin_get_type_member_effect_contract(string_type, "sliceBytes", false);
+    const XaEffectContract *builder_append_contract =
+        xa_builtin_get_type_member_effect_contract(string_builder_type, "append", false);
+    const XaEffectContract *builder_finish_contract =
+        xa_builtin_get_type_member_effect_contract(string_builder_type, "toString", false);
+    const XaEffectContract *builder_clear_contract =
+        xa_builtin_get_type_member_effect_contract(string_builder_type, "clear", false);
     const XaEffectContract *gunzip_contract =
         xa_builtin_get_module_func_effect_contract("compress", "gunzip");
     const XaEffectContract *decrypt_contract =
         xa_builtin_get_module_func_effect_contract("crypto", "decrypt");
     ASSERT(from_utf8_contract != NULL);
     ASSERT(slice_bytes_contract != NULL);
+    ASSERT(builder_append_contract != NULL);
+    ASSERT(builder_finish_contract != NULL);
+    ASSERT(builder_clear_contract != NULL);
     ASSERT(gunzip_contract != NULL);
     ASSERT(decrypt_contract != NULL);
     ASSERT(from_utf8_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(slice_bytes_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
+    ASSERT(builder_append_contract->kind == XA_EFFECT_CONTRACT_NOTHROW);
+    ASSERT(builder_finish_contract->kind == XA_EFFECT_CONTRACT_NOTHROW);
+    ASSERT(builder_clear_contract->kind == XA_EFFECT_CONTRACT_NOTHROW);
     ASSERT(gunzip_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(decrypt_contract->kind == XA_EFFECT_CONTRACT_ERRORS);
     ASSERT(from_utf8_contract->error_count == 1);

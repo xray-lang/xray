@@ -13,6 +13,7 @@
 #include "xi_pipeline.h"
 #include "xi_semantic_snapshot.h"
 #include "../frontend/analyzer/xa_typed_program.h"
+#include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "xi_lower.h"
 #include "xi_verify.h"
 #include "xi_opt.h"
@@ -198,9 +199,28 @@ static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
     const XgGlobalEvidence *evidence = ctx && ctx->cfg ? ctx->cfg->global_evidence : NULL;
     const XgCallsiteSummary *row = xi_pipeline_coro_callsite(ctx, current, call);
     uint32_t effects = 0;
-    if (!row || !xg_callsite_effects_compose_closed_world_calls(evidence, row, &effects))
+    if (row && xg_callsite_effects_compose_closed_world_calls(evidence, row, &effects))
+        return (effects & XG_BODY_MAY_SUSPEND) != 0 ? 1 : 0;
+
+    /* Native-module calls have no Xi body or module object.  Classify them
+     * only through the analyzer's sealed ABI registry; an absent declaration
+     * remains unresolved.  A resolved source module must take the Xi/export
+     * path instead, even if its path shadows a native module spelling. */
+    if (!current || !call || call->nargs < 1)
         return -1;
-    return (effects & XG_BODY_MAY_SUSPEND) != 0 ? 1 : 0;
+    const XiImportRef *ref = xi_value_import_ref(current, call->args[0]);
+    if (!ref || !ref->module_path || ref->resolved_module || ref->resolved_func)
+        return -1;
+    const char *member = NULL;
+    if (call->op == XI_CALL && ref->member_name) {
+        member = ref->member_name;
+    } else if ((call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
+               !ref->member_name && call->aux) {
+        member = (const char *) call->aux;
+    }
+    if (!member || !xa_builtin_get_module_func_abi_signature(ref->module_path, member))
+        return -1;
+    return xa_builtin_module_func_is_yieldable(ref->module_path, member) ? 1 : 0;
 }
 
 static bool xi_pipeline_coro_value_is_module_import(void *ud, const XiFunc *func,
@@ -237,10 +257,7 @@ static XiCoroResolver xi_pipeline_coro_resolver(XiPipelineCoroResolverCtx *ctx) 
     resolver.resolve_callee = xi_pipeline_coro_resolve_callee;
     resolver.resolve_method = xi_pipeline_coro_resolve_method;
     resolver.func_suspendability = xi_pipeline_coro_func_suspendability;
-    resolver.call_suspendability =
-        ctx && ctx->cfg && ctx->cfg->global_evidence
-            ? xi_pipeline_coro_call_suspendability
-            : NULL;
+    resolver.call_suspendability = xi_pipeline_coro_call_suspendability;
     resolver.value_is_module_import = xi_pipeline_coro_value_is_module_import;
     resolver.call_is_module_member = xi_pipeline_coro_call_is_module_member;
     resolver.ud = ctx;

@@ -2345,7 +2345,16 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     if (!coll || !l->cur_block)
         return;
 
-    XiValue *iter = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, l->type_any, 1);
+    /* Key/value iteration is a compiler-owned Map protocol.  Preserve the
+     * sealed Iterator declaration identity in Xi instead of erasing it to
+     * UNKNOWN: coroutine analysis must distinguish these synchronous native
+     * calls from unresolved user iterator methods. */
+    XrType *iterator_args[1] = {l->type_any};
+    XrType *iterator_type =
+        xr_type_new_generic_instance(l->isolate, "Iterator", NULL, iterator_args, 1);
+    if (!iterator_type)
+        return;
+    XiValue *iter = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, iterator_type, 1);
     if (!iter)
         return;
     iter->args[0] = coll;
@@ -2362,7 +2371,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     char *iter_name = (char *) xi_func_arena_alloc(l->func, (uint32_t) (strlen(buf) + 1));
     XR_DCHECK(iter_name != NULL, "arena alloc failed");
     memcpy(iter_name, buf, strlen(buf) + 1);
-    int iter_var = xi_lower_var_create(l, 0, iter_name, l->type_any);
+    int iter_var = xi_lower_var_create(l, 0, iter_name, iterator_type);
     xi_lower_braun_write(l, iter_var, l->cur_block, iter);
 
     XiBlock *cond_blk = xi_block_new(l->func);

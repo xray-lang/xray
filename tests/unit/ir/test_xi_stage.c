@@ -61,6 +61,15 @@ static XrType stub_set = {
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 7, .frozen = true};
 static XrType stub_function = {
     .kind = XR_KIND_FUNCTION, .id = 8, .frozen = true, .function = {.return_type = &stub_int}};
+static XrType stub_string_builder = {.kind = XR_KIND_INSTANCE,
+                                     .id = 9,
+                                     .frozen = true,
+                                     .instance = {.class_name = "StringBuilder"}};
+static XrType stub_shadow_string_builder = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 10,
+    .frozen = true,
+    .instance = {.class_name = "StringBuilder", .class_ref = (XrClassInfo *) (uintptr_t) 1}};
 
 static XiCoroLoweredProgram *advance_to_coro_lowered(XiFunc *f) {
     char error[512] = {0};
@@ -735,6 +744,65 @@ static void test_coroutine_transition_rolls_back_unresolved_call(void) {
     printf("  PASS\n");
 }
 
+static XiSemanticLoweredProgram *make_string_builder_call_program(XrType *receiver_type,
+                                                                  XiFunc **out_func,
+                                                                  char *error,
+                                                                  size_t error_size) {
+    XiFunc *f = xi_func_new("string_builder_coro_transition", &stub_void);
+    XiBlock *entry = xi_block_new(f);
+    XiValue *receiver = xi_value_new(f, entry, XI_PARAM, receiver_type, 0);
+    XiValue *argument = xi_value_new(f, entry, XI_CONST, &stub_string, 0);
+    XiValue *append = xi_value_new(f, entry, XI_CALL_METHOD, receiver_type, 2);
+    XiValue *yield = xi_value_new(f, entry, XI_YIELD, &stub_void, 0);
+    assert(f && entry && receiver && argument && append && yield);
+    append->aux = (void *) "append";
+    append->args[0] = receiver;
+    append->args[1] = argument;
+    xi_block_set_return(entry, NULL);
+
+    XiRawProgram *raw = xi_stage_adopt_raw(f, error, error_size);
+    assert(raw != NULL);
+    XiCanonicalProgram *canonical = xi_program_canonicalize(raw, error, error_size);
+    assert(canonical != NULL);
+    xi_pass_close(f);
+    XiClosedProgram *closed = xi_program_close(canonical, error, error_size);
+    assert(closed != NULL);
+    XiOwnedProgram *owned = xi_program_make_owned(closed, error, error_size);
+    assert(owned != NULL);
+    XiSemanticLoweredProgram *semantic = xi_program_lower_semantics(owned, error, error_size);
+    assert(semantic != NULL);
+    *out_func = f;
+    return semantic;
+}
+
+static void test_coroutine_transition_uses_builtin_string_builder_identity(void) {
+    printf("--- test_coroutine_transition_uses_builtin_string_builder_identity ---\n");
+
+    char error[256] = {0};
+    XiFunc *builtin_func = NULL;
+    XiSemanticLoweredProgram *builtin = make_string_builder_call_program(
+        &stub_string_builder, &builtin_func, error, sizeof(error));
+    XiCoroLoweredProgram *lowered =
+        xi_program_lower_coroutines(builtin, NULL, error, sizeof(error));
+    assert(lowered != NULL);
+    assert(builtin_func->stage == XI_STAGE_CORO_LOWERED);
+    assert(builtin_func->coro_plan != NULL && builtin_func->coro_plan->cfg_rewritten);
+    xi_func_free(xi_coro_lowered_program_release(lowered));
+
+    XiFunc *shadow_func = NULL;
+    XiSemanticLoweredProgram *shadow = make_string_builder_call_program(
+        &stub_shadow_string_builder, &shadow_func, error, sizeof(error));
+    uint32_t blocks_before = shadow_func->nblocks;
+    error[0] = '\0';
+    assert(xi_program_lower_coroutines(shadow, NULL, error, sizeof(error)) == NULL);
+    assert(strstr(error, "failed closed") != NULL);
+    assert(shadow_func->stage == XI_STAGE_SEMANTIC_LOWERED);
+    assert(shadow_func->nblocks == blocks_before && shadow_func->coro_plan == NULL);
+    xi_func_free(xi_semantic_lowered_program_release(shadow));
+
+    printf("  PASS\n");
+}
+
 static void test_coroutine_transition_rejects_invalid_cfg_before_rewrite(void) {
     printf("--- test_coroutine_transition_rejects_invalid_cfg_before_rewrite ---\n");
 
@@ -1122,6 +1190,7 @@ int main(void) {
     test_lowering_fact_corruption_fails_closed();
     test_semantic_stage_cannot_skip_coroutine_lowering();
     test_coroutine_transition_rolls_back_unresolved_call();
+    test_coroutine_transition_uses_builtin_string_builder_identity();
     test_coroutine_transition_rejects_invalid_cfg_before_rewrite();
     test_semantic_intrinsic_corruption_fails_closed();
     test_pass_order_and_invariants();

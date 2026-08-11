@@ -1532,6 +1532,33 @@ TEST(full_pipeline_preserves_frozen_coroutine_plan) {
     xi_func_free(f);
 }
 
+TEST(non_coroutine_plan_keeps_full_optimizer_pipeline) {
+    XiFunc *f = make_func("sync_opt_rebase", &stub_int);
+    XiValue *dead = xi_const_int(f, f->entry, 41, &stub_int);
+    XiValue *result = xi_const_int(f, f->entry, 42, &stub_int);
+    assert(dead && result);
+    xi_block_set_return(f->entry, result);
+    f->stage = XI_STAGE_SEMANTIC_LOWERED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
+    assert(xi_coro_lower(f, NULL));
+    assert(f->coro_plan && !f->coro_plan->is_coroutine);
+    f->stage = XI_STAGE_CORO_LOWERED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_CORO_LOWERED);
+    f->lowering_facts.initialized = true;
+    f->lowering_facts.semantic_ops_lowered = true;
+    f->lowering_facts.coroutine_lowered = true;
+    f->lowering_facts.callable_lowered = true;
+
+    uint32_t values_before = f->entry->nvalues;
+    XiOptResult optimized = xi_opt_run_pipeline(f, XI_OPT_LIGHT);
+    if (!optimized.ok)
+        fprintf(stderr, "synchronous optimizer failure: %s\n", optimized.detail);
+    assert(optimized.ok);
+    assert(f->entry->nvalues < values_before && "DCE must not be disabled by a synchronous plan");
+    assert(f->coro_plan && xi_coro_plan_is_current(f, f->coro_plan));
+    xi_func_free(f);
+}
+
 /* ========== Tuple Projection Peephole Tests ========== */
 
 /* TUPLE_GET(TUPLE_NEW(a, b), 0) collapses to COPY(a). */
@@ -2103,6 +2130,7 @@ int main(void) {
     run_select_rep_aot_policy_keeps_scalar_phi_unboxed();
     run_select_rep_advances_empty_func_tree();
     run_full_pipeline_preserves_frozen_coroutine_plan();
+    run_non_coroutine_plan_keeps_full_optimizer_pipeline();
 
     /* Tuple projection peephole */
     run_tuple_get_of_tuple_new_first();
