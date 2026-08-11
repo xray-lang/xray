@@ -8,7 +8,7 @@ import hashlib
 import json
 import math
 import os
-import platform
+import platform as host_platform
 import re
 import statistics
 import subprocess
@@ -17,6 +17,16 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+def _bootstrap() -> None:
+    lib = Path(__file__).resolve().parents[2] / "lib"
+    if str(lib) not in sys.path:
+        sys.path.insert(0, str(lib))
+
+
+_bootstrap()
+from xraytest import platform  # noqa: E402
 
 
 if sys.version_info < (3, 11):
@@ -94,8 +104,12 @@ def tool_version(command: list[str], root: Path) -> str:
     return first[0] if result.returncode == 0 and first else "unavailable"
 
 
+def compiler_binary_path(build: Path) -> Path:
+    return build / platform.exe_name("xray")
+
+
 def compiler_identity(root: Path, build: Path, allow_dirty: bool) -> dict[str, Any]:
-    binary = build / "xray"
+    binary = compiler_binary_path(build)
     if not binary.is_file():
         raise RuntimeError(f"compiler binary missing: {binary}")
     status = git(root, "status", "--porcelain=v1")
@@ -135,7 +149,7 @@ def host_info(root: Path, build: Path) -> dict[str, Any]:
         match = re.search(rf"^{re.escape(name)}:[^=]*=(.*)$", cache_text, re.M)
         return match.group(1).strip() if match else "unknown"
 
-    cpu = platform.processor() or platform.machine()
+    cpu = host_platform.processor() or host_platform.machine()
     memory = "unknown"
     if sys.platform == "darwin":
         cpu_result = run_capture(["sysctl", "-n", "machdep.cpu.brand_string"], root, 10)
@@ -145,13 +159,13 @@ def host_info(root: Path, build: Path) -> dict[str, Any]:
         if memory_result.returncode == 0 and memory_result.stdout.strip().isdigit():
             memory = int(memory_result.stdout.strip())
     return {
-        "os": platform.platform(),
-        "system": platform.system(),
-        "release": platform.release(),
-        "machine": platform.machine(),
+        "os": host_platform.platform(),
+        "system": host_platform.system(),
+        "release": host_platform.release(),
+        "machine": host_platform.machine(),
         "cpu": cpu,
         "ram_bytes": memory,
-        "python": platform.python_version(),
+        "python": host_platform.python_version(),
         "cmake": tool_version(["cmake", "--version"], root),
         "ninja": tool_version(["ninja", "--version"], root),
         "c_compiler": cache_value("CMAKE_C_COMPILER"),
@@ -286,6 +300,8 @@ def self_test() -> int:
     assert round(percentile([1.0, 2.0, 3.0], 0.95), 3) == 2.9
     stats = lane_stats([{"duration_seconds": 1.0}, {"duration_seconds": 1.0}])
     assert stats["coefficient_of_variation"] == 0.0
+    expected_binary = "xray.exe" if os.name == "nt" else "xray"
+    assert compiler_binary_path(Path("build")).name == expected_binary
     print("target-machine baseline runner self-test: PASS")
     return 0
 
