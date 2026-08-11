@@ -561,6 +561,36 @@ static void dump_text(FILE *out, const char *text) {
         fprintf(out, "%02x", (unsigned char) text[i]);
 }
 
+bool xr_semantic_plan_dump_entity(const XrSemanticPlan *plan, XrStableId id, FILE *out) {
+    if (!plan || !out || !plan->frozen)
+        return false;
+    uint32_t begin = 0;
+    uint32_t end = plan->entity_count;
+    while (begin < end) {
+        uint32_t middle = begin + (end - begin) / 2u;
+        int order = xr_stable_id_compare(plan->entities[middle].id, id);
+        if (order < 0)
+            begin = middle + 1u;
+        else
+            end = middle;
+    }
+    if (begin >= plan->entity_count || !xr_stable_id_equal(plan->entities[begin].id, id))
+        return false;
+    const XrSemanticEntityRecord *record = &plan->entities[begin];
+    fputs("semantic-entity id=", out);
+    dump_id(out, record->id);
+    fputs(" key=", out);
+    dump_text(out, record->canonical_key);
+    fprintf(out, " kind=%u parent=%u subject=%u:%u ordinal=%u flags=%u",
+            record->kind, record->parent, record->subject_kind, record->subject,
+            record->ordinal, record->flags);
+    if (record->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
+        record->subject < plan->operation_count)
+        fprintf(out, " source-line=%u", plan->operations[record->subject].source_line);
+    fputc('\n', out);
+    return !ferror(out);
+}
+
 bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
     if (!plan || !out)
         return false;

@@ -55,6 +55,7 @@ typedef struct XrEntityCoverage {
     uint8_t *owners;
     uint8_t *parameter_loans;
     uint8_t *capture_loans;
+    uint8_t *operation_loans;
     uint8_t domains[XR_STORAGE_FOREIGN + 1];
     uint32_t packages;
     uint32_t modules;
@@ -75,6 +76,7 @@ static void entity_coverage_dispose(XrEntityCoverage *coverage) {
     xr_free(coverage->owners);
     xr_free(coverage->parameter_loans);
     xr_free(coverage->capture_loans);
+    xr_free(coverage->operation_loans);
 }
 
 static bool entity_coverage_init(const XrSemanticPlan *plan, XrEntityCoverage *coverage) {
@@ -100,6 +102,7 @@ static bool entity_coverage_init(const XrSemanticPlan *plan, XrEntityCoverage *c
     XR_ENTITY_COVERAGE_ALLOC(owners, plan->ownership->owner_count);
     XR_ENTITY_COVERAGE_ALLOC(parameter_loans, plan->parameter_count);
     XR_ENTITY_COVERAGE_ALLOC(capture_loans, plan->capture_count);
+    XR_ENTITY_COVERAGE_ALLOC(operation_loans, plan->operation_count);
 #undef XR_ENTITY_COVERAGE_ALLOC
     return true;
 failure:
@@ -112,6 +115,58 @@ static bool mark_entity(uint8_t *coverage, uint32_t count, uint32_t index) {
         return false;
     coverage[index] = 1;
     return true;
+}
+
+static bool borrowed_result_has_loan(const XrSemanticPlan *plan, uint32_t operation) {
+    if (operation >= plan->operation_count)
+        return false;
+    const XrSemanticOperationRecord *record = &plan->operations[operation];
+    return record->result_ownership == XR_SEM_RESULT_OWNERSHIP_BORROWED &&
+           record->result_value != XR_SEMANTIC_INDEX_NONE &&
+           record->result_type < plan->type_count &&
+           (plan->types[record->result_type].flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0;
+}
+
+static bool verify_borrowed_result_loan_key(const XrSemanticPlan *plan,
+                                            const XrSemanticEntityRecord *entity) {
+    if (!entity || entity->parent >= plan->entity_count ||
+        !borrowed_result_has_loan(plan, entity->subject))
+        return false;
+    const XrSemanticEntityRecord *operation_entity = &plan->entities[entity->parent];
+    if (operation_entity->kind != XR_SEM_ENTITY_OPERATION ||
+        operation_entity->subject != entity->subject ||
+        operation_entity->parent >= plan->entity_count)
+        return false;
+    const XrSemanticEntityRecord *function_entity = &plan->entities[operation_entity->parent];
+    if (function_entity->kind != XR_SEM_ENTITY_FUNCTION ||
+        function_entity->parent >= plan->entity_count)
+        return false;
+    const XrSemanticEntityRecord *declaration_entity = &plan->entities[function_entity->parent];
+    const XrSemanticOperationRecord *operation = &plan->operations[entity->subject];
+    if (declaration_entity->kind != XR_SEM_ENTITY_DECLARATION ||
+        function_entity->subject != operation->function ||
+        declaration_entity->subject != operation->function)
+        return false;
+    char parent_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char declaration_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char function_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char type_id[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(operation_entity->id, parent_id);
+    xr_stable_id_hex(declaration_entity->id, declaration_id);
+    xr_stable_id_hex(plan->functions[operation->function].id, function_id);
+    xr_stable_id_hex(operation->id, operation_id);
+    xr_stable_id_hex(plan->types[operation->result_type].id, type_id);
+    char expected[512];
+    int length = snprintf(expected, sizeof(expected),
+                          "entity-v1:schema=%u:kind=%u:parent=%s:declaration=%s:"
+                          "function=%s:operation=%s:ordinal=0:type=%s:ownership=%u:alias=%d",
+                          XR_SEMANTIC_SCHEMA_VERSION, (unsigned) XR_SEM_ENTITY_LOAN, parent_id,
+                          declaration_id, function_id, operation_id, type_id,
+                          (unsigned) operation->result_ownership,
+                          (int) operation->result_alias_operand);
+    return length > 0 && (size_t) length < sizeof(expected) &&
+           strcmp(entity->canonical_key, expected) == 0;
 }
 
 static bool verify_entity_record(const XrSemanticPlan *plan, const XrSemanticEntityRecord *entity,
@@ -188,6 +243,10 @@ static bool verify_entity_record(const XrSemanticPlan *plan, const XrSemanticEnt
                    parent->subject == plan->ownership->owners[entity->subject].function &&
                    mark_entity(coverage->owners, plan->ownership->owner_count, entity->subject);
         case XR_SEM_ENTITY_LOAN:
+            if (entity->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION)
+                return entity->ordinal == 0 && verify_borrowed_result_loan_key(plan, entity) &&
+                       mark_entity(coverage->operation_loans, plan->operation_count,
+                                   entity->subject);
             if (!parent || parent->kind != XR_SEM_ENTITY_FUNCTION)
                 return false;
             if (entity->subject_kind == XR_SEM_ENTITY_SUBJECT_PARAMETER)
@@ -256,9 +315,11 @@ static bool verify_entity_coverage(const XrSemanticPlan *plan, const XrEntityCov
     for (uint32_t i = 0; i < plan->operation_count; i++) {
         bool allocation = plan->operations[i].allocation_key != NULL;
         bool debug_span = plan->operations[i].source_line != 0;
+        bool operation_loan = borrowed_result_has_loan(plan, i);
         if (coverage->operations[i] != 1 ||
             coverage->allocations[i] != (uint8_t) allocation ||
-            coverage->debug_spans[i] != (uint8_t) debug_span)
+            coverage->debug_spans[i] != (uint8_t) debug_span ||
+            coverage->operation_loans[i] != (uint8_t) operation_loan)
             return false;
     }
     for (uint32_t i = 0; i < plan->ownership->owner_count; i++) {

@@ -23,6 +23,7 @@
 #include "../../../src/shared/xr_semantic_owner_ids_gen.h"
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -322,10 +323,12 @@ static XrSemanticPlan *build_capture_contract_plan(void) {
     return plan;
 }
 
-static XrSemanticPlan *build_entity_identity_plan(void) {
+static XrSemanticPlan *build_entity_identity_plan_with_source(uintptr_t *source_address) {
     XiFunc *root = xi_func_new("entity_identity_root", &stub_int);
     XiFunc *native = xi_func_new("entity_identity_native", &stub_int);
     REQUIRE(root != NULL && native != NULL);
+    if (source_address)
+        *source_address = (uintptr_t) root;
     root->source_file = "pkg\\identity_probe.xr";
     native->source_file = "pkg/identity_probe.xr";
     XiBlock *root_entry = xi_block_new(root);
@@ -341,8 +344,11 @@ static XrSemanticPlan *build_entity_identity_plan(void) {
     root->params[1] = shape;
     root->receiver_borrowed = true;
     XiValue *capacity = xi_const_int(root, root_entry, 1, &stub_int);
+    XiValue *borrowed_result = xi_value_new(root, root_entry, XI_CODEGEN_OPAQUE, &stub_string, 1);
     XiValue *allocation = xi_value_new(root, root_entry, XI_ARRAY_NEW, &stub_array, 1);
-    REQUIRE(capacity != NULL && allocation != NULL);
+    REQUIRE(capacity != NULL && borrowed_result != NULL && allocation != NULL);
+    borrowed_result->args[0] = loan;
+    borrowed_result->line = 15;
     allocation->args[0] = capacity;
     allocation->flags = xi_op_default_effects(XI_ARRAY_NEW);
     allocation->line = 16;
@@ -385,6 +391,10 @@ static XrSemanticPlan *build_entity_identity_plan(void) {
     REQUIRE(built && plan != NULL);
     xi_func_free(root);
     return plan;
+}
+
+static XrSemanticPlan *build_entity_identity_plan(void) {
+    return build_entity_identity_plan_with_source(NULL);
 }
 
 static XrSemanticPlan *build_signed_extreme_plan(void) {
@@ -543,6 +553,25 @@ static char *dump_plan(const XrSemanticPlan *plan, size_t *size) {
     return text;
 }
 
+static char *dump_entity(const XrSemanticPlan *plan, XrStableId id, size_t *size) {
+    FILE *stream = tmpfile();
+    REQUIRE(stream != NULL);
+    REQUIRE(xr_semantic_plan_dump_entity(plan, id, stream));
+    REQUIRE(fflush(stream) == 0);
+    REQUIRE(fseek(stream, 0, SEEK_END) == 0);
+    long end = ftell(stream);
+    REQUIRE(end >= 0);
+    REQUIRE(fseek(stream, 0, SEEK_SET) == 0);
+    char *text = (char *) xr_malloc((size_t) end + 1u);
+    REQUIRE(text != NULL);
+    REQUIRE(fread(text, 1, (size_t) end, stream) == (size_t) end);
+    text[end] = '\0';
+    fclose(stream);
+    if (size)
+        *size = (size_t) end;
+    return text;
+}
+
 static void expect_decode_failure(const uint8_t *bytes, size_t size, const char *code) {
     XrSemanticPlan *decoded = NULL;
     char error[512] = {0};
@@ -571,7 +600,8 @@ static void test_stable_ids(void) {
 }
 
 static void test_typed_entity_identity_table(void) {
-    XrSemanticPlan *first = build_entity_identity_plan();
+    uintptr_t source_address = 0;
+    XrSemanticPlan *first = build_entity_identity_plan_with_source(&source_address);
     XrSemanticPlan *second = build_entity_identity_plan();
     uint32_t kinds[XR_SEM_ENTITY_KIND_COUNT] = {0};
     for (uint32_t i = 0; i < first->entity_count; i++) {
@@ -595,6 +625,9 @@ static void test_typed_entity_identity_table(void) {
     REQUIRE(xr_xsm_encode(first, &first_bytes, &first_size, error, sizeof(error)));
     REQUIRE(xr_xsm_encode(second, &second_bytes, &second_size, error, sizeof(error)));
     REQUIRE(first_size == second_size && memcmp(first_bytes, second_bytes, first_size) == 0);
+    if (sizeof(source_address) >= 8)
+        REQUIRE(find_raw_bytes(first_bytes, first_size, (const uint8_t *) &source_address,
+                               sizeof(source_address)) == SIZE_MAX);
     XrSemanticPlan *decoded = NULL;
     REQUIRE(xr_xsm_decode(first_bytes, first_size, &decoded, error, sizeof(error)));
     REQUIRE(decoded->entity_count == first->entity_count);
@@ -610,13 +643,36 @@ static void test_typed_entity_identity_table(void) {
 
     uint32_t module = XR_SEMANTIC_INDEX_NONE;
     uint32_t field = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_loan = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < first->entity_count; i++) {
         if (first->entities[i].kind == XR_SEM_ENTITY_MODULE)
             module = i;
         if (first->entities[i].kind == XR_SEM_ENTITY_FIELD)
             field = i;
+        if (first->entities[i].kind == XR_SEM_ENTITY_LOAN &&
+            first->entities[i].subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION)
+            operation_loan = i;
     }
-    REQUIRE(module != XR_SEMANTIC_INDEX_NONE && field != XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(module != XR_SEMANTIC_INDEX_NONE && field != XR_SEMANTIC_INDEX_NONE &&
+            operation_loan != XR_SEMANTIC_INDEX_NONE);
+    const XrSemanticEntityRecord *loan_entity = &first->entities[operation_loan];
+    REQUIRE(strstr(loan_entity->canonical_key, ":declaration=") != NULL);
+    REQUIRE(strstr(loan_entity->canonical_key, ":function=") != NULL);
+    REQUIRE(strstr(loan_entity->canonical_key, ":operation=") != NULL);
+    REQUIRE(strstr(loan_entity->canonical_key, ":ordinal=0:type=") != NULL);
+    char loan_id_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    xr_stable_id_hex(loan_entity->id, loan_id_hex);
+    REQUIRE(strcmp(loan_id_hex, "5203da032be679cc80ef16860f26be4f") == 0);
+    size_t entity_dump_size = 0;
+    char *entity_dump = dump_entity(first, loan_entity->id, &entity_dump_size);
+    REQUIRE(entity_dump_size != 0 && strstr(entity_dump, "kind=12") != NULL &&
+            strstr(entity_dump, "source-line=15") != NULL);
+    size_t decoded_entity_dump_size = 0;
+    char *decoded_entity_dump = dump_entity(decoded, loan_entity->id, &decoded_entity_dump_size);
+    REQUIRE(entity_dump_size == decoded_entity_dump_size &&
+            memcmp(entity_dump, decoded_entity_dump, entity_dump_size) == 0);
+    xr_free(decoded_entity_dump);
+    xr_free(entity_dump);
     uint8_t saved_subject_kind = first->entities[module].subject_kind;
     first->entities[module].subject_kind = XR_SEM_ENTITY_SUBJECT_TYPE;
     expect_verify_failure(first, "XR_SEM_0019");
@@ -625,6 +681,14 @@ static void test_typed_entity_identity_table(void) {
     first->entities[field].ordinal = UINT32_MAX;
     expect_verify_failure(first, "XR_SEM_0019");
     first->entities[field].ordinal = saved_ordinal;
+    saved_ordinal = first->entities[operation_loan].ordinal;
+    first->entities[operation_loan].ordinal = 1;
+    expect_verify_failure(first, "XR_SEM_0019");
+    first->entities[operation_loan].ordinal = saved_ordinal;
+    XrStableId saved_loan_id = first->entities[operation_loan].id;
+    first->entities[operation_loan].id = first->entities[module].id;
+    expect_verify_failure(first, "XR_SEM_0003");
+    first->entities[operation_loan].id = saved_loan_id;
 
     xr_semantic_plan_free(decoded);
     xr_free(second_bytes);
@@ -649,7 +713,7 @@ static void test_immutable_owned_snapshot(void) {
     REQUIRE(strcmp(registry_hex,
                    "d01b95f7569b8b26118288bd11800bdfc5266165682b74d00b53b76510648d85") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "7909124cfe8057b624e716831e6f0df54514860844a0f85bf4aff22b5ca99def") == 0);
+                   "e99fc6d06b89045ac6b2391cb032d6e3132e0ea6aa5dab9dc2a3ef263e3673a9") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -1115,6 +1179,15 @@ static void test_xsm_fail_closed_mutations(void) {
     uint32_t excessive_operations = 10000000u;
     for (unsigned i = 0; i < sizeof(uint32_t); i++)
         mutation[operation_count_offset + i] = (uint8_t) (excessive_operations >> (i * 8));
+    rewrite_payload_digest(mutation, size);
+    expect_decode_failure(mutation, size, "XR_EXEC_5003");
+    xr_free(mutation);
+
+    mutation = copy_bytes(bytes, size);
+    size_t entity_count_offset = XR_XSM_HEADER_SIZE + 6u * sizeof(uint32_t);
+    uint32_t excessive_entities = 80000001u;
+    for (unsigned i = 0; i < sizeof(uint32_t); i++)
+        mutation[entity_count_offset + i] = (uint8_t) (excessive_entities >> (i * 8));
     rewrite_payload_digest(mutation, size);
     expect_decode_failure(mutation, size, "XR_EXEC_5003");
     xr_free(mutation);

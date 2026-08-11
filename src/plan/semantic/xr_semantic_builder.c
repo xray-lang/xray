@@ -1750,6 +1750,48 @@ static bool build_ownership_entities(XrSemanticBuildContext *ctx, uint32_t modul
         }
         text_dispose(&key);
     }
+    for (uint32_t i = 0; i < ctx->plan->operation_count; i++) {
+        const XrSemanticOperationRecord *operation = &ctx->plan->operations[i];
+        if (operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+            operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+            operation->result_type >= ctx->plan->type_count ||
+            (ctx->plan->types[operation->result_type].flags &
+             XR_SEM_TYPE_REFERENCE_CAPABLE) == 0)
+            continue;
+        uint32_t operation_entity = find_entity(ctx->plan, XR_SEM_ENTITY_OPERATION,
+                                                XR_SEM_ENTITY_SUBJECT_OPERATION, i);
+        uint32_t function_entity = find_entity(ctx->plan, XR_SEM_ENTITY_FUNCTION,
+                                               XR_SEM_ENTITY_SUBJECT_FUNCTION,
+                                               operation->function);
+        uint32_t declaration_entity = find_entity(ctx->plan, XR_SEM_ENTITY_DECLARATION,
+                                                  XR_SEM_ENTITY_SUBJECT_FUNCTION,
+                                                  operation->function);
+        XrTextBuilder key = {0};
+        bool valid = operation_entity != XR_SEMANTIC_INDEX_NONE &&
+                     function_entity != XR_SEMANTIC_INDEX_NONE &&
+                     declaration_entity != XR_SEMANTIC_INDEX_NONE &&
+                     ctx->plan->entities[operation_entity].parent == function_entity &&
+                     ctx->plan->entities[function_entity].parent == declaration_entity &&
+                     begin_entity_key(ctx, &key, XR_SEM_ENTITY_LOAN, operation_entity) &&
+                     text_append(&key, ":declaration=") &&
+                     text_append_stable_id(&key, ctx->plan->entities[declaration_entity].id) &&
+                     text_append(&key, ":function=") &&
+                     text_append_stable_id(&key, ctx->plan->functions[operation->function].id) &&
+                     text_append(&key, ":operation=") &&
+                     text_append_stable_id(&key, operation->id) &&
+                     text_append_format(&key, ":ordinal=0:type=") &&
+                     text_append_stable_id(&key, ctx->plan->types[operation->result_type].id) &&
+                     text_append_format(&key, ":ownership=%u:alias=%d",
+                                        (unsigned) operation->result_ownership,
+                                        (int) operation->result_alias_operand);
+        if (!valid || !append_entity(ctx, XR_SEM_ENTITY_LOAN,
+                                     XR_SEM_ENTITY_SUBJECT_OPERATION, i, 0,
+                                     operation_entity, &key, NULL)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_SEM_0019", "borrowed-result loan identity is incomplete");
+        }
+        text_dispose(&key);
+    }
     for (uint32_t domain = XR_STORAGE_EXEC_LOCAL; domain <= XR_STORAGE_FOREIGN; domain++) {
         XrTextBuilder key = {0};
         bool valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_DOMAIN, module) &&
@@ -1848,9 +1890,13 @@ static bool canonicalize_entity_table(XrSemanticBuildContext *ctx) {
     qsort(entries, count, sizeof(*entries), compare_semantic_entity);
     for (uint32_t i = 0; i < count; i++) {
         if (i > 0 && xr_stable_id_equal(entries[i - 1].record.id, entries[i].record.id)) {
+            bool different_keys = strcmp(entries[i - 1].record.canonical_key,
+                                         entries[i].record.canonical_key) != 0;
             xr_free(entries);
             xr_free(remap);
-            return fail(ctx, "XR_SEM_0003", "semantic entity identity is duplicated");
+            return fail(ctx, "XR_SEM_0003",
+                        different_keys ? "semantic entity hash collision has distinct keys"
+                                       : "semantic entity identity is duplicated");
         }
         remap[entries[i].old_index] = i;
         ctx->plan->entities[i] = entries[i].record;
