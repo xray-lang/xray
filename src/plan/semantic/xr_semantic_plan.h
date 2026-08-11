@@ -63,6 +63,11 @@ typedef enum XrSemanticOperandFlag {
     XR_SEM_OPERAND_ADDRESSABLE = 1u << 1,
 } XrSemanticOperandFlag;
 
+typedef enum XrSemanticCallTargetKind {
+    XR_SEM_CALL_TARGET_DIRECT_LOCAL = 1,
+    XR_SEM_CALL_TARGET_KIND_COUNT,
+} XrSemanticCallTargetKind;
+
 typedef enum XrSemanticTypeFlag {
     XR_SEM_TYPE_NULLABLE = 1u << 0,
     XR_SEM_TYPE_CONST = 1u << 1,
@@ -271,6 +276,7 @@ typedef struct XrSemanticOperationRecord {
     uint32_t source_discriminator;
     int64_t semantic_immediate;
     uint32_t constant;
+    uint32_t callable_function;
     uint32_t evidence[8];
     uint8_t ownership_use;
     uint8_t result_ownership;
@@ -320,6 +326,16 @@ typedef struct XrSemanticOperandRecord {
     uint8_t flags;
 } XrSemanticOperandRecord;
 
+/* Exact call-site authority.  The target function owns signature and effect facts. */
+typedef struct XrSemanticCallTargetRecord {
+    XrStableId id;
+    const char *canonical_key;
+    uint32_t operation;
+    uint32_t function;
+    uint8_t kind;
+    uint8_t reserved[3];
+} XrSemanticCallTargetRecord;
+
 XR_FUNC XrSemanticPlan *xr_semantic_plan_retain(XrSemanticPlan *plan);
 XR_FUNC void xr_semantic_plan_free(XrSemanticPlan *plan);
 XR_FUNC bool xr_semantic_plan_is_frozen(const XrSemanticPlan *plan);
@@ -333,6 +349,7 @@ XR_FUNC size_t xr_semantic_plan_parameter_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_capture_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_block_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_operation_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_call_target_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_edge_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_constant_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_entity_count(const XrSemanticPlan *plan);
@@ -348,6 +365,8 @@ XR_FUNC const XrSemanticBlockRecord *xr_semantic_plan_block(const XrSemanticPlan
                                                             uint32_t index);
 XR_FUNC const XrSemanticOperationRecord *xr_semantic_plan_operation(const XrSemanticPlan *plan,
                                                                     uint32_t index);
+XR_FUNC const XrSemanticCallTargetRecord *xr_semantic_plan_call_target(
+    const XrSemanticPlan *plan, uint32_t index);
 XR_FUNC const XrSemanticEdgeRecord *xr_semantic_plan_edge(const XrSemanticPlan *plan,
                                                           uint32_t index);
 XR_FUNC const XrSemanticConstantRecord *xr_semantic_plan_constant(const XrSemanticPlan *plan,

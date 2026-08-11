@@ -39,6 +39,9 @@ struct XrSemanticPlan {
     XrSemanticOperationRecord *operations;
     uint32_t operation_count;
     uint32_t operation_capacity;
+    XrSemanticCallTargetRecord *call_targets;
+    uint32_t call_target_count;
+    uint32_t call_target_capacity;
     XrSemanticEdgeRecord *edges;
     uint32_t edge_count;
     uint32_t edge_capacity;

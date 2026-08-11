@@ -31,6 +31,7 @@
 #define XR_SEMANTIC_MAX_FUNCTIONS UINT32_C(100000)
 #define XR_SEMANTIC_MAX_BLOCKS UINT32_C(2000000)
 #define XR_SEMANTIC_MAX_OPERATIONS UINT32_C(10000000)
+#define XR_SEMANTIC_MAX_CALL_TARGETS XR_SEMANTIC_MAX_OPERATIONS
 #define XR_SEMANTIC_MAX_OPERANDS UINT32_C(40000000)
 #define XR_SEMANTIC_MAX_EDGES UINT32_C(40000000)
 #define XR_SEMANTIC_MAX_PARAMETERS (XR_SEMANTIC_MAX_FUNCTIONS * UINT32_C(256))
@@ -1339,6 +1340,54 @@ static bool append_constant(XrSemanticBuildContext *ctx, const XiValue *value,
     return true;
 }
 
+static int resolve_direct_local_callee(const XrSemanticBuildContext *ctx,
+                                       const XiValue *callee) {
+    uint32_t depth = 0;
+    while (callee && xi_copy_is_identity_alias(callee) && callee->nargs == 1 &&
+           depth++ < XR_SEMANTIC_MAX_OPERATIONS)
+        callee = callee->args[0];
+    if (!callee || depth >= XR_SEMANTIC_MAX_OPERATIONS || !callee->aux ||
+        (callee->op != XI_CLOSURE_NEW &&
+         !(callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW)))
+        return -1;
+    return function_index(ctx, (const XiFunc *) callee->aux);
+}
+
+static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value,
+                               uint32_t operation) {
+    if (!value || (value->op != XI_CALL && value->op != XI_TAIL_CALL) || value->nargs == 0)
+        return true;
+    int function = resolve_direct_local_callee(ctx, value->args[0]);
+    if (function < 0)
+        return true;
+    if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
+        !reserve_array((void **) &ctx->plan->call_targets,
+                       &ctx->plan->call_target_capacity, ctx->plan->call_target_count + 1,
+                       sizeof(*ctx->plan->call_targets), XR_SEMANTIC_MAX_CALL_TARGETS))
+        return fail(ctx, "XR_EXEC_5003", "semantic call-target budget exhausted");
+    XrSemanticCallTargetRecord *record =
+        &ctx->plan->call_targets[ctx->plan->call_target_count++];
+    memset(record, 0, sizeof(*record));
+    record->operation = operation;
+    record->function = (uint32_t) function;
+    record->kind = XR_SEM_CALL_TARGET_DIRECT_LOCAL;
+    XrTextBuilder key = {0};
+    bool valid = text_append_format(&key, "call-target-v1:schema=%u:operation=",
+                                    XR_SEMANTIC_SCHEMA_VERSION) &&
+                 text_append_stable_id(&key, ctx->plan->operations[operation].id) &&
+                 text_append(&key, ":function=") &&
+                 text_append_stable_id(&key, ctx->plan->functions[function].id) &&
+                 text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    if (valid)
+        record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
+    text_dispose(&key);
+    XrFingerprint digest;
+    if (!valid || !record->canonical_key ||
+        !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+        return fail(ctx, "XR_EXEC_5003", "semantic call-target identity allocation failed");
+    return true;
+}
+
 static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_index_value,
                              uint32_t block_index_value, const XiValue *value) {
     if (!value || value->op >= XI_OP_COUNT || !xi_generated_op_name(value->op))
@@ -1377,6 +1426,7 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->operand_count = value->nargs;
     record->opcode = value->op;
     record->metadata_begin = ctx->plan->metadata_count;
+    record->callable_function = XR_SEMANTIC_INDEX_NONE;
     record->auxiliary_kind = value->aux_kind;
     record->effects = xi_generated_op_effects(value->op);
     record->source_line = value->line;
@@ -1434,17 +1484,24 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         if (!append_operand(ctx, function, value, i))
             return false;
     }
-    if (value->op == XI_CLOSURE_NEW && value->aux) {
+    bool closure_binding =
+        value->op == XI_CLOSURE_NEW ||
+        (value->op == XI_STACK_ALLOC && value->aux_int == XI_CLOSURE_NEW);
+    if (closure_binding) {
+        if (!value->aux)
+            return fail(ctx, "XR_SEM_0007", "closure operation has no exact function binding");
         int child = function_index(ctx, (const XiFunc *) value->aux);
         if (child < 0)
             return fail(ctx, "XR_SEM_0007", "closure operation references an unknown function");
-        record->evidence[7] = (uint32_t) child;
+        record->callable_function = (uint32_t) child;
     } else if (value->op == XI_TRY && value->aux) {
         record->evidence[7] = block_ref(ctx, (const XiBlock *) value->aux);
         if (record->evidence[7] == XR_SEMANTIC_INDEX_NONE)
             return fail(ctx, "XR_SEM_0007", "try operation references an unknown block");
     }
-    return add_operation_metadata(ctx, value, record) && append_constant(ctx, value, record);
+    if (!add_operation_metadata(ctx, value, record) || !append_constant(ctx, value, record))
+        return false;
+    return append_call_target(ctx, value, index);
 }
 
 static bool build_blocks_and_operations(XrSemanticBuildContext *ctx) {

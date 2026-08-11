@@ -24,6 +24,7 @@ typedef struct XrXsmCounts {
     uint32_t functions;
     uint32_t blocks;
     uint32_t operations;
+    uint32_t call_targets;
     uint32_t edges;
     uint32_t constants;
     uint32_t entities;
@@ -168,6 +169,7 @@ static bool counts_fit_storage_budget(XrXsmCounts count, size_t *storage_bytes) 
     XR_COUNT_STORAGE(functions, XrSemanticFunctionRecord);
     XR_COUNT_STORAGE(blocks, XrSemanticBlockRecord);
     XR_COUNT_STORAGE(operations, XrSemanticOperationRecord);
+    XR_COUNT_STORAGE(call_targets, XrSemanticCallTargetRecord);
     XR_COUNT_STORAGE(edges, XrSemanticEdgeRecord);
     XR_COUNT_STORAGE(constants, XrSemanticConstantRecord);
     XR_COUNT_STORAGE(entities, XrSemanticEntityRecord);
@@ -214,6 +216,7 @@ static bool counts_fit_payload_minimum(XrXsmCounts count, size_t remaining) {
     XR_MINIMUM_PAYLOAD(blocks, 56u);
     XR_MINIMUM_PAYLOAD(predecessors, 4u);
     XR_MINIMUM_PAYLOAD(operations, 160u);
+    XR_MINIMUM_PAYLOAD(call_targets, 32u);
     XR_MINIMUM_PAYLOAD(operands, 19u);
     XR_MINIMUM_PAYLOAD(metadata, 4u);
     XR_MINIMUM_PAYLOAD(edges, 40u);
@@ -242,6 +245,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     XR_ALLOC_TABLE(functions, count.functions, XrSemanticFunctionRecord);
     XR_ALLOC_TABLE(blocks, count.blocks, XrSemanticBlockRecord);
     XR_ALLOC_TABLE(operations, count.operations, XrSemanticOperationRecord);
+    XR_ALLOC_TABLE(call_targets, count.call_targets, XrSemanticCallTargetRecord);
     XR_ALLOC_TABLE(edges, count.edges, XrSemanticEdgeRecord);
     XR_ALLOC_TABLE(constants, count.constants, XrSemanticConstantRecord);
     XR_ALLOC_TABLE(entities, count.entities, XrSemanticEntityRecord);
@@ -269,6 +273,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     plan->function_count = plan->function_capacity = count.functions;
     plan->block_count = plan->block_capacity = count.blocks;
     plan->operation_count = plan->operation_capacity = count.operations;
+    plan->call_target_count = plan->call_target_capacity = count.call_targets;
     plan->edge_count = plan->edge_capacity = count.edges;
     plan->constant_count = plan->constant_capacity = count.constants;
     plan->entity_count = plan->entity_capacity = count.entities;
@@ -291,6 +296,7 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->functions = xr_xsm_take_u32(reader);
     count->blocks = xr_xsm_take_u32(reader);
     count->operations = xr_xsm_take_u32(reader);
+    count->call_targets = xr_xsm_take_u32(reader);
     count->edges = xr_xsm_take_u32(reader);
     count->constants = xr_xsm_take_u32(reader);
     count->entities = xr_xsm_take_u32(reader);
@@ -306,6 +312,7 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->loop_invariants = xr_xsm_take_u32(reader);
     return !reader->failed && count->types <= 1000000u && count->functions <= 100000u &&
            count->blocks <= 2000000u && count->operations <= 10000000u &&
+           count->call_targets <= count->operations &&
            count->edges <= 40000000u && count->constants <= 10000000u &&
            count->entities <= 80000000u &&
            count->type_children <= 8000000u && count->parameters <= 25600000u &&
@@ -472,6 +479,7 @@ static void decode_operations(XrXsmReader *reader, XrSemanticPlan *plan) {
         record->source_discriminator = xr_xsm_take_u32(reader);
         record->semantic_immediate = decode_twos_complement_i64(xr_xsm_take_u64(reader));
         record->constant = xr_xsm_take_u32(reader);
+        record->callable_function = xr_xsm_take_u32(reader);
         for (unsigned e = 0; e < 8; e++)
             record->evidence[e] = xr_xsm_take_u32(reader);
         record->ownership_use = xr_xsm_take_u8(reader);
@@ -502,6 +510,20 @@ static void decode_operations(XrXsmReader *reader, XrSemanticPlan *plan) {
     }
     for (uint32_t i = 0; i < plan->metadata_count; i++)
         plan->metadata[i] = take_plan_string(reader, plan, false);
+}
+
+static void decode_call_targets(XrXsmReader *reader, XrSemanticPlan *plan) {
+    for (uint32_t i = 0; i < plan->call_target_count; i++) {
+        XrSemanticCallTargetRecord *record = &plan->call_targets[i];
+        xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
+        record->canonical_key = take_plan_string(reader, plan, false);
+        record->operation = xr_xsm_take_u32(reader);
+        record->function = xr_xsm_take_u32(reader);
+        record->kind = xr_xsm_take_u8(reader);
+        record->reserved[0] = xr_xsm_take_u8(reader);
+        record->reserved[1] = xr_xsm_take_u8(reader);
+        record->reserved[2] = xr_xsm_take_u8(reader);
+    }
 }
 
 static void decode_constants(XrXsmReader *reader, XrSemanticPlan *plan) {
@@ -653,6 +675,7 @@ bool xr_xsm_decode(const uint8_t *bytes, size_t size, XrSemanticPlan **out, char
     decode_functions(&reader, plan);
     decode_blocks(&reader, plan);
     decode_operations(&reader, plan);
+    decode_call_targets(&reader, plan);
     decode_edges(&reader, plan);
     decode_constants(&reader, plan);
     decode_ownership(&reader, certificate);

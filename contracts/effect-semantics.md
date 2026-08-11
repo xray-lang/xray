@@ -9,6 +9,13 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
+SemanticPlan schema 10 adds a pointer-free direct-local call-target authority.
+It is emitted only when the frozen SSA callee chain independently resolves
+through exact identity copies to a closure/function binding. The record names
+the call operation and callee function by stable identity and index; it never
+copies caller-authored effects, provider spellings, symbols, pointers, or raw
+digests. Unknown, shared-slot, imported, method, and native targets remain
+absent and therefore fail closed until their own authority families exist.
 Function declarations publish their immutable binding capability and lexical
 storage domain with the rest of analyzer ownership evidence. Closure lowering
 may copy those facts into SemanticPlan capture records but may not infer them

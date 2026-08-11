@@ -958,6 +958,10 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         bool explicit_call = operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
                              operation->opcode == XI_CALL_METHOD ||
                              operation->opcode == XI_CALL_METHOD_DIRECT;
+        bool closure_binding =
+            operation->opcode == XI_CLOSURE_NEW ||
+            (operation->opcode == XI_STACK_ALLOC &&
+             operation->semantic_immediate == XI_CLOSURE_NEW);
         if (!verify_id(operation->canonical_key, operation->id) || !function ||
             operation->block >= plan->block_count ||
             plan->blocks[operation->block].function != operation->function ||
@@ -987,8 +991,13 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
                          plan->operand_count) ||
             !range_valid(operation->metadata_begin, operation->metadata_count,
                          plan->metadata_count) ||
-             (operation->constant != XR_SEMANTIC_INDEX_NONE &&
-              operation->constant >= plan->constant_count)) {
+            (operation->constant != XR_SEMANTIC_INDEX_NONE &&
+             operation->constant >= plan->constant_count) ||
+            (closure_binding !=
+             (operation->callable_function != XR_SEMANTIC_INDEX_NONE)) ||
+            (closure_binding &&
+             (operation->callable_function >= plan->function_count ||
+              plan->functions[operation->callable_function].parent != operation->function))) {
             return report(error, error_size, "XR_SEM_0015", "operation record is invalid");
         }
         if (!operation_debug_span_valid(plan, i))
@@ -1036,6 +1045,76 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
     return (operand_cursor == plan->operand_count && metadata_cursor == plan->metadata_count) ||
            report(error, error_size, "XR_SEM_0015",
                   "operation side tables are not exactly partitioned");
+}
+
+static uint32_t resolve_frozen_direct_call_target(const XrSemanticPlan *plan,
+                                                  const uint32_t *definitions,
+                                                  uint32_t value_count,
+                                                  uint32_t operation_index) {
+    const XrSemanticOperationRecord *call = &plan->operations[operation_index];
+    if ((call->opcode != XI_CALL && call->opcode != XI_TAIL_CALL) ||
+        call->operand_count == 0)
+        return XR_SEMANTIC_INDEX_NONE;
+    uint32_t value = plan->operands[call->operand_begin].value;
+    for (uint32_t depth = 0; depth < plan->operation_count; depth++) {
+        if (value >= value_count)
+            return XR_SEMANTIC_INDEX_NONE;
+        uint32_t producer_index = definitions[value];
+        if (producer_index >= plan->operation_count)
+            return XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *producer = &plan->operations[producer_index];
+        if (producer->function != call->function)
+            return XR_SEMANTIC_INDEX_NONE;
+        bool closure_binding =
+            producer->opcode == XI_CLOSURE_NEW ||
+            (producer->opcode == XI_STACK_ALLOC &&
+             producer->semantic_immediate == XI_CLOSURE_NEW);
+        if (closure_binding)
+            return producer->callable_function;
+        if (producer->opcode != XI_COPY ||
+            producer->semantic_immediate != XI_COPY_KIND_IDENTITY ||
+            producer->operand_count != 1 || producer->result_alias_operand != 0)
+            return XR_SEMANTIC_INDEX_NONE;
+        value = plan->operands[producer->operand_begin].value;
+    }
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
+static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *definitions,
+                                uint32_t value_count, char *error, size_t error_size) {
+    uint32_t cursor = 0;
+    for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
+        uint32_t function = resolve_frozen_direct_call_target(
+            plan, definitions, value_count, operation);
+        if (function == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        if (cursor >= plan->call_target_count)
+            return report(error, error_size, "XR_SEM_0019",
+                          "provable direct call has no call-target authority");
+        const XrSemanticCallTargetRecord *target = &plan->call_targets[cursor++];
+        if (target->operation != operation || target->function != function ||
+            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL || target->reserved[0] != 0 ||
+            target->reserved[1] != 0 || target->reserved[2] != 0)
+            return report(error, error_size, "XR_SEM_0019",
+                          "call-target authority disagrees with frozen SSA");
+        char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
+        char function_id[XR_STABLE_ID_BYTES * 2 + 1];
+        char expected_key[192];
+        xr_stable_id_hex(plan->operations[operation].id, operation_id);
+        xr_stable_id_hex(plan->functions[function].id, function_id);
+        int length = snprintf(expected_key, sizeof(expected_key),
+                              "call-target-v1:schema=%u:operation=%s:function=%s:kind=%u",
+                              XR_SEMANTIC_SCHEMA_VERSION, operation_id, function_id,
+                              (unsigned) XR_SEM_CALL_TARGET_DIRECT_LOCAL);
+        if (length < 0 || (size_t) length >= sizeof(expected_key) ||
+            strcmp(target->canonical_key ? target->canonical_key : "", expected_key) != 0 ||
+            !verify_id(target->canonical_key, target->id))
+            return report(error, error_size, "XR_SEM_0019",
+                          "call-target stable identity is not canonical");
+    }
+    return cursor == plan->call_target_count ||
+           report(error, error_size, "XR_SEM_0019",
+                  "unprovable call-target authority is present");
 }
 
 static bool verify_parameter_and_capture_definitions(const XrSemanticPlan *plan,
@@ -1165,7 +1244,8 @@ static bool verify_operations(const XrSemanticPlan *plan, const uint8_t *edge_ma
         verify_parameter_and_capture_definitions(plan, definitions, value_count, error,
                                                  error_size) &&
         verify_operation_uses(plan, graph, definitions, value_count, error, error_size) &&
-        verify_block_controls(plan, graph, definitions, value_count, error, error_size);
+        verify_block_controls(plan, graph, definitions, value_count, error, error_size) &&
+        verify_call_targets(plan, definitions, value_count, error, error_size);
     xr_free(definitions);
     return valid;
 }
@@ -1208,7 +1288,7 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
         plan->block_count > 2000000u || plan->operation_count > 10000000u ||
         plan->parameter_count > 25600000u || plan->capture_count > 6400000u ||
         plan->edge_count > 40000000u || plan->operand_count > 40000000u ||
-        plan->entity_count > 80000000u)
+        plan->entity_count > 80000000u || plan->call_target_count > plan->operation_count)
         return report(error, error_size, "XR_EXEC_5003", "SemanticPlan exceeds hard budgets");
     uint8_t *block_edge_mask = (uint8_t *) xr_calloc(plan->block_count, sizeof(*block_edge_mask));
     uint8_t *operation_edge_mask =

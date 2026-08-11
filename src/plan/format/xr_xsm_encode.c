@@ -23,6 +23,7 @@ static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->function_count);
     xr_xsm_put_u32(writer, plan->block_count);
     xr_xsm_put_u32(writer, plan->operation_count);
+    xr_xsm_put_u32(writer, plan->call_target_count);
     xr_xsm_put_u32(writer, plan->edge_count);
     xr_xsm_put_u32(writer, plan->constant_count);
     xr_xsm_put_u32(writer, plan->entity_count);
@@ -177,6 +178,7 @@ static void encode_operations(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u32(writer, record->source_discriminator);
         xr_xsm_put_u64(writer, (uint64_t) record->semantic_immediate);
         xr_xsm_put_u32(writer, record->constant);
+        xr_xsm_put_u32(writer, record->callable_function);
         for (unsigned e = 0; e < 8; e++)
             xr_xsm_put_u32(writer, record->evidence[e]);
         xr_xsm_put_u8(writer, record->ownership_use);
@@ -207,6 +209,20 @@ static void encode_operations(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     }
     for (uint32_t i = 0; i < plan->metadata_count; i++)
         xr_xsm_put_string(writer, plan->metadata[i]);
+}
+
+static void encode_call_targets(XrXsmWriter *writer, const XrSemanticPlan *plan) {
+    for (uint32_t i = 0; i < plan->call_target_count; i++) {
+        const XrSemanticCallTargetRecord *record = &plan->call_targets[i];
+        xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
+        xr_xsm_put_string(writer, record->canonical_key);
+        xr_xsm_put_u32(writer, record->operation);
+        xr_xsm_put_u32(writer, record->function);
+        xr_xsm_put_u8(writer, record->kind);
+        xr_xsm_put_u8(writer, 0);
+        xr_xsm_put_u8(writer, 0);
+        xr_xsm_put_u8(writer, 0);
+    }
 }
 
 static void encode_constants(XrXsmWriter *writer, const XrSemanticPlan *plan) {
@@ -309,6 +325,7 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
     encode_functions(&payload, plan);
     encode_blocks(&payload, plan);
     encode_operations(&payload, plan);
+    encode_call_targets(&payload, plan);
     encode_edges(&payload, plan);
     encode_constants(&payload, plan);
     encode_ownership(&payload, plan);
