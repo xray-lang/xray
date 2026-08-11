@@ -58,9 +58,9 @@ if(XR_ENABLE_CYCLE_DETECTOR)
     target_compile_definitions(test_cycle_detector_shared PRIVATE XR_ENABLE_CYCLE_DETECTOR=1)
 endif()
 
-# This contract test builds only the low-level runtime ABI module. The focused
+# These contract tests build only the low-level runtime modules. The focused
 # validation loop stays independent of the full compiler archive while the
-# same source remains part of every runtime product library.
+# same sources remain part of every runtime product library.
 add_executable(test_runtime_descriptor
     runtime/test_runtime_descriptor.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_descriptor.c
@@ -71,6 +71,19 @@ target_include_directories(test_runtime_descriptor PRIVATE
 )
 add_test(NAME test_runtime_descriptor COMMAND $<TARGET_FILE:test_runtime_descriptor>)
 set_tests_properties(test_runtime_descriptor PROPERTIES LABELS "runtime;abi;target-machine")
+
+add_executable(test_ownership_audit
+    runtime/test_ownership_audit.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_descriptor.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/ownership/xr_ownership_audit.c
+    ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
+)
+target_include_directories(test_ownership_audit PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+add_test(NAME test_ownership_audit COMMAND $<TARGET_FILE:test_ownership_audit>)
+set_tests_properties(test_ownership_audit PROPERTIES
+    LABELS "runtime;ownership;target-machine")
 
 # ============================================================================
 # object/ — Runtime objects (string, array, utf8)

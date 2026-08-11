@@ -234,6 +234,16 @@ CONTRACT_SPECS = (
             "tests/unit/runtime/test_runtime_descriptor.c",
         ),
     ),
+    ContractSpec(
+        "ownership-audit-foundation.md",
+        (
+            "src/shared/xr_ownership_event.h",
+            "src/plan/ownership/xr_ownership_certificate.h",
+            "src/runtime/ownership/xr_ownership_audit.h",
+            "src/runtime/ownership/xr_ownership_audit.c",
+            "tests/unit/runtime/test_ownership_audit.c",
+        ),
+    ),
 )
 
 ANCHOR_RE = re.compile(r"^anchor-sha256:\s+(\S+)\s+([0-9a-f]{64})\s*$")

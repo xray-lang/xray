@@ -12,51 +12,13 @@
 #define XR_OWNERSHIP_CERTIFICATE_H
 
 #include "../semantic/xr_semantic_ids.h"
+#include "../../shared/xr_ownership_event.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 typedef struct XrSemanticPlan XrSemanticPlan;
 typedef struct XrOwnershipCertificate XrOwnershipCertificate;
-
-typedef enum XrOwnershipState {
-    XR_OWN_UNINITIALIZED = 0,
-    XR_OWN_OWNED_UNIQUE,
-    XR_OWN_OWNED_LOCAL,
-    XR_OWN_BORROWED,
-    XR_OWN_MOVED,
-    XR_OWN_PUBLISHED_SHARED,
-    XR_OWN_FRAME_OWNED,
-    XR_OWN_FOREIGN_OWNED,
-    XR_OWN_FOREIGN_BORROWED,
-    XR_OWN_RELEASED,
-    XR_OWN_IMMORTAL,
-} XrOwnershipState;
-
-typedef enum XrOwnershipEventKind {
-    XR_OWN_EVENT_ALLOC = 0,
-    XR_OWN_EVENT_RETAIN,
-    XR_OWN_EVENT_RELEASE,
-    XR_OWN_EVENT_BORROW,
-    XR_OWN_EVENT_END_BORROW,
-    XR_OWN_EVENT_MOVE,
-    XR_OWN_EVENT_STORE,
-    XR_OWN_EVENT_PUBLISH,
-    XR_OWN_EVENT_DETACH,
-    XR_OWN_EVENT_SUSPEND,
-    XR_OWN_EVENT_RESUME,
-    XR_OWN_EVENT_CANCEL,
-    XR_OWN_EVENT_DESTROY,
-    XR_OWN_EVENT_PIN,
-    XR_OWN_EVENT_UNPIN,
-    XR_OWN_EVENT_RETURN,
-} XrOwnershipEventKind;
-
-typedef enum XrOwnershipProgramPoint {
-    XR_OWN_POINT_AFTER_OPERATION = 0,
-    XR_OWN_POINT_BLOCK_EXIT,
-    XR_OWN_POINT_EDGE,
-} XrOwnershipProgramPoint;
 
 typedef struct XrOwnershipOwnerRecord {
     XrStableId id;
