@@ -158,6 +158,16 @@ set_tests_properties(check_ownership_audit_record_no_alloc PROPERTIES
     LABELS "runtime;ownership;static-analysis;target-machine"
 )
 
+add_test(
+    NAME check_ownership_audit_release_boundary
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_ownership_audit_release_boundary.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(check_ownership_audit_release_boundary PROPERTIES
+    LABELS "runtime;ownership;static-analysis;target-machine"
+)
+
 # ============================================================================
 # object/ — Runtime objects (string, array, utf8)
 # ============================================================================

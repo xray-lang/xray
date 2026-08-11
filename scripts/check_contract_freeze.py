@@ -328,6 +328,7 @@ CONTRACT_SPECS = (
             "src/runtime/ownership/xr_ownership_audit.h",
             "src/runtime/ownership/xr_ownership_audit.c",
             "scripts/check_ownership_audit_record_no_alloc.py",
+            "scripts/check_ownership_audit_release_boundary.py",
             "scripts/run_tsan_focused.py",
             "tests/unit/CMakeLists.txt",
             "tests/unit/runtime/test_ownership_audit.c",

@@ -45,6 +45,9 @@ integration gates; none is implied by this leaf module.
    Its CMake source list names only the audit implementation, so future
    production ownership sources cannot be silently excluded by a directory
    glob. Only the explicit excluded audit target and focused test compile it.
+   A fail-closed source-graph gate rejects direct or variable-mediated archive
+   inclusion, production linkage to the audit target, recursive runtime globs,
+   ownership-directory globs, or loss of `EXCLUDE_FROM_ALL`.
 9. The public report scope is exactly "executed-path dynamic evidence, not
    formal proof". Optimized paths still require proof mapping or an audit lane
    that preserves logical observations. Evaluated-extent identity, sized-free
@@ -59,6 +62,7 @@ anchor-sha256: src/plan/ownership/xr_ownership_certificate.h 33de50d0b6bb3a65462
 anchor-sha256: src/runtime/ownership/xr_ownership_audit.h 524251f129b91b7f6de71081b9514528748ebab1264e25803b547d12a1c39309
 anchor-sha256: src/runtime/ownership/xr_ownership_audit.c 89516b97cfd7a9109acc8c429e486d3743158abb1e718948a1011134076685f5
 anchor-sha256: scripts/check_ownership_audit_record_no_alloc.py 00f71577e9278988a69467ffb3ef1078618cb3658ba544568742ffc9c1581f63
+anchor-sha256: scripts/check_ownership_audit_release_boundary.py c37cf66d17e075549cc4e2fbef4b376ae781e3ab0f5b1974bb3f825d59fc2657
 anchor-sha256: scripts/run_tsan_focused.py 9a59c3b7e5882551d947bb745a2bc06acf982f7d5d5cbf682dea5f08b33d2802
-anchor-sha256: tests/unit/CMakeLists.txt 567e72e7991045d98ead52d6e239f8342504038ed54fcc2800e733837d0c383f
+anchor-sha256: tests/unit/CMakeLists.txt cbb566c000a318a073edbafc9c2f2183576813f852fdc4217cb3b588cff2e46a
 anchor-sha256: tests/unit/runtime/test_ownership_audit.c 98c718b64f6b840bee6172c07e0a931178ca4dd237e5bb1a88ff9f03a130f59e
