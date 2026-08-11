@@ -14,9 +14,10 @@
 #include <stdio.h>
 #include <string.h>
 
-XR_FUNC void xr_xtp_set_error(char *error, size_t error_size, const char *detail) {
+XR_FUNC void xr_xtp_set_error(char *error, size_t error_size,
+                              const char *code, const char *detail) {
     if (error && error_size)
-        snprintf(error, error_size, "XTP: %s", detail);
+        snprintf(error, error_size, "%s: XTP: %s", code, detail);
 }
 
 XR_FUNC bool xr_xtp_fingerprint_is_zero(XrFingerprint fingerprint) {

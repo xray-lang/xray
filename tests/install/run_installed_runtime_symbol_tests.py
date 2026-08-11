@@ -23,7 +23,11 @@ from xraytest import binary as binlib  # noqa: E402
 
 
 REQUIRED = {
-    "xr_artifact_classify",
+    "xr_artifact_probe",
+    "xr_runtime_artifact_authority_load_available",
+    "xr_runtime_artifact_authority_free",
+    "xr_runtime_artifact_authority_identity",
+    "xr_runtime_artifact_authority_verify",
     "xr_runtime_target_authority_native_hosted",
     "xr_runtime_target_plan_load",
     "xr_target_plan_free",
@@ -38,7 +42,7 @@ FORBIDDEN = {
     "xr_target_plan_build",
     "xr_xtp_encode_plan",
 }
-FORBIDDEN_PREFIXES = ("xa_analyzer", "xanalyzer_", "xr_parse", "xtc_")
+FORBIDDEN_PREFIXES = ("xa_analyzer", "xanalyzer_", "xi_", "xr_parse", "xtc_")
 
 
 def run(command: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -71,7 +75,7 @@ def legacy_symbols(symbols: set[str]) -> set[str]:
     }
     return {
         symbol for symbol in symbols
-        if symbol.startswith(("xray_vm_", "xr_vm_", "xr_bytecode_",
+        if symbol.startswith(("xray_vm_", "xr_vm_", "xvm_", "xr_bytecode_",
                               "xr_bundle_", "xr_load_module_", "xr_proto_"))
         or symbol in exact
     }
@@ -105,8 +109,12 @@ def compile_header(cc: Path, prefix: Path, work: Path) -> None:
     source = work / "target_plan_load_header_probe.c"
     source.write_text(
         "#include <xray_target_plan_load.h>\n"
+        "static XrRuntimeArtifactAuthority *authority;\n"
+        "static XrRuntimeArtifactAuthorityIdentity identity;\n"
         "static XrTargetPlan *plan;\n"
-        "int main(void) { return plan != 0; }\n",
+        "int main(void) { return xr_runtime_artifact_authority_load_available() || "
+        "authority != 0 || plan != 0 || "
+        "identity.schema_version != 0; }\n",
         encoding="utf-8",
     )
     if os.name == "nt":

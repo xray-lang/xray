@@ -382,7 +382,7 @@ typedef struct XrTargetAdapterRecord {
 
 typedef struct XrTargetCapabilityRecord {
     uint32_t id;
-    uint32_t semantic_capability;
+    uint32_t capability;
     uint16_t provider;
     uint16_t flags;
 } XrTargetCapabilityRecord;

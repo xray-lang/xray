@@ -20,7 +20,7 @@ TEXT_SUFFIXES = {".c", ".h", ".in", ".py", ".sh", ".ps1", ".cmake", ".toml"}
 CANDIDATE_RE = re.compile(
     r"(?P<xrc>\.xrc\b)|"
     r"(?P<xrc_identity>\bXR_ARTIFACT_KIND_LEGACY_XRC\b)|"
-    r"(?P<bytecode_abi>\bXR_BC_(?:MAGIC|VERSION)\b)|"
+    r"(?P<bytecode_abi>\b(?:XR_BC_(?:MAGIC|VERSION)|XR_LEGACY_XRC_VERSION)\b)|"
     r"(?P<public_vm_symbol>\bxray_vm_[A-Za-z0-9_]+\b)|"
     r"(?P<public_vm_type>\bXr(?:VMRuntime|VMConfig|VMBackendType|BytecodeModule|BytecodeBundle)\b)|"
     r"(?P<internal_vm_alias>\bxr_vm_[A-Za-z0-9_]+\b)|"
@@ -244,8 +244,29 @@ def check(root: Path, current: dict[str, object] | None = None) -> tuple[bool, s
             errors.append(f"cannot read inventory: {exc}")
         else:
             errors.extend(validate(committed))
-            if committed != current:
-                errors.append("inventory drift; run with --write and review the owner changes")
+            committed_rows = {
+                (row["surface"], row["family"], row["path"]): row
+                for row in committed.get("owners", [])
+                if isinstance(row, dict)
+            }
+            for row in current.get("owners", []):
+                key = (row["surface"], row["family"], row["path"])
+                ceiling = committed_rows.get(key)
+                if ceiling is None:
+                    errors.append(f"new residue owner: {key}")
+                    continue
+                if not set(row["tokens"]).issubset(ceiling.get("tokens", [])):
+                    errors.append(f"new residue token in owner: {key}")
+                if row["hit_count"] > ceiling.get("hit_count", -1):
+                    errors.append(f"residue count grew in owner: {key}")
+                if (row["hit_count"] == ceiling.get("hit_count") and
+                        row["tokens"] == ceiling.get("tokens") and
+                        row["evidence_sha256"] != ceiling.get("evidence_sha256")):
+                    errors.append(f"residue evidence changed without removal: {key}")
+            current_symbols = set(current.get("legacy_symbol_tokens", []))
+            committed_symbols = set(committed.get("legacy_symbol_tokens", []))
+            if not current_symbols.issubset(committed_symbols):
+                errors.append("legacy symbol inventory grew")
     if errors:
         return False, "\n".join(errors)
     return True, f"PASS ({current['total']} hits, {current['owner_count']} owners)"
@@ -269,7 +290,8 @@ def self_test() -> int:
         owner.unlink()
         (root / "src/new_loader.c").unlink()
         zero = collect(root)
-    if not clean or drifted or zero["total"] != 0 or validate(zero):
+        terminal, _ = check(root, zero)
+    if not clean or drifted or not terminal or zero["total"] != 0 or validate(zero):
         print("legacy product residue self-test: FAIL")
         return 1
     print("legacy product residue self-test: PASS")
@@ -279,7 +301,6 @@ def self_test() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path("."))
-    parser.add_argument("--write", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
@@ -287,10 +308,6 @@ def main() -> int:
         return self_test()
     root = args.root.resolve(strict=True)
     current = collect(root)
-    if args.write:
-        path = root / INVENTORY
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(render(current), encoding="utf-8")
     ok, message = check(root, current)
     if args.json:
         print(json.dumps({"ok": ok, "inventory": current,

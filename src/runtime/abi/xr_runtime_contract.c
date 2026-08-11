@@ -1378,8 +1378,7 @@ static XrRuntimeAbiStatus verify_provider_set(
         }
         mask |= XR_TARGET_PROVIDER_MASK(providers[i].provider_kind);
     }
-    uint64_t required = XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-                        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
+    uint64_t required = XR_TARGET_FOUNDATION_CAPABILITY_MASK;
     if ((mask & required) != required || (mask & ~XR_TARGET_PROVIDER_MASK_ALL) != 0)
         return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
     *derived_mask = mask;

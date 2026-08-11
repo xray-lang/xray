@@ -282,7 +282,7 @@ static void hash_adapter(XrSHA256Context *ctx, const XrTargetAdapterRecord *reco
 
 static void hash_capability(XrSHA256Context *ctx, const XrTargetCapabilityRecord *record) {
     hash_u64(ctx, record->id);
-    hash_u64(ctx, record->semantic_capability);
+    hash_u64(ctx, record->capability);
     hash_u64(ctx, record->provider);
     hash_u64(ctx, record->flags);
 }

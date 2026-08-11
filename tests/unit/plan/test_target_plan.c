@@ -39,7 +39,7 @@ typedef struct TargetFixture {
     uint32_t root_slots[1];
     XrTargetCleanupRecord cleanups[1];
     XrTargetAdapterRecord adapters[1];
-    XrTargetCapabilityRecord capabilities[1];
+    XrTargetCapabilityRecord capabilities[2];
     XrTargetCoroutineStateRecord coroutines[1];
     XrTargetPlanDraft draft;
 } TargetFixture;
@@ -64,6 +64,21 @@ static XrType stub_nullable_int = {
     .frozen = true,
     .is_nullable = true,
 };
+
+static void fill_foundation_capabilities(XrTargetCapabilityRecord capabilities[2]) {
+    capabilities[0] = (XrTargetCapabilityRecord) {
+        .id = 0,
+        .capability = XR_TARGET_PROVIDER_ALLOCATOR,
+        .provider = XR_TARGET_PROVIDER_ALLOCATOR,
+        .flags = XR_TARGET_CAPABILITY_REQUIRED,
+    };
+    capabilities[1] = (XrTargetCapabilityRecord) {
+        .id = 1,
+        .capability = XR_TARGET_PROVIDER_PANIC,
+        .provider = XR_TARGET_PROVIDER_PANIC,
+        .flags = XR_TARGET_CAPABILITY_REQUIRED,
+    };
+}
 
 static XrSemanticPlan *build_semantic_plan(void) {
     XiFunc *function = xi_func_new("target_plan_probe", &stub_int);
@@ -291,6 +306,8 @@ static bool freeze_single_scalar(XrSemanticPlan *semantic, XrTargetProfile *prof
         .ownership = XR_TARGET_OWNERSHIP_TRIVIAL,
         .debug_variable = XR_SEMANTIC_INDEX_NONE,
     };
+    XrTargetCapabilityRecord capabilities[2];
+    fill_foundation_capabilities(capabilities);
     if (bind_value)
         fill_slot_source(semantic, &slot, 0, semantic_function->value_begin);
     XrTargetPlanDraft draft = {
@@ -309,6 +326,8 @@ static bool freeze_single_scalar(XrSemanticPlan *semantic, XrTargetProfile *prof
         .functions_count = 1,
         .slots = bind_value ? &slot : NULL,
         .slots_count = bind_value ? 1u : 0u,
+        .capabilities = capabilities,
+        .capabilities_count = 2,
     };
     return xr_target_plan_freeze(&draft, out, error, error_size);
 }
@@ -455,6 +474,8 @@ static void fill_draft(TargetFixture *fixture, XrSemanticPlan *semantic,
         .functions_count = 1,
         .slots = fixture->slots,
         .slots_count = 2,
+        .capabilities = fixture->capabilities,
+        .capabilities_count = 2,
     };
 }
 
@@ -465,6 +486,7 @@ static void fill_fixture(TargetFixture *fixture, XrSemanticPlan *semantic,
     uint32_t string_layout;
     fill_representation_fixture(fixture, semantic, &int_layout, &string_layout);
     fill_execution_fixture(fixture, semantic, int_layout, string_layout);
+    fill_foundation_capabilities(fixture->capabilities);
     fill_draft(fixture, semantic, profile);
 }
 
@@ -578,7 +600,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "7d0b0b9d5a1c5f5493404d571715f5972e8e7530bcb912e29b4311ecb8ef85fe") == 0);
+                   "d70ce6a752ed3aa090f6526d009affeb72e81362b28094280ae12f435430499b") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -913,12 +935,22 @@ static void test_structural_mutations_fail_closed(void) {
     plan->adapters_count = 0;
     plan->adapters = NULL;
 
+    XrTargetCapabilityRecord *saved_capabilities = plan->capabilities;
+    uint32_t saved_capability_count = plan->capabilities_count;
     XrTargetCapabilityRecord fabricated_capability = {0};
     plan->capabilities = &fabricated_capability;
     plan->capabilities_count = 1;
     expect_verify_failure(plan, "XR_TARGET_1004");
-    plan->capabilities_count = 0;
-    plan->capabilities = NULL;
+    plan->capabilities = saved_capabilities;
+    plan->capabilities_count = 1;
+    expect_verify_failure(plan, "XR_TARGET_1004");
+    plan->capabilities_count = saved_capability_count;
+    plan->capabilities[0].provider = XR_TARGET_PROVIDER_PANIC;
+    expect_verify_failure(plan, "XR_TARGET_1004");
+    plan->capabilities[0].provider = XR_TARGET_PROVIDER_ALLOCATOR;
+    plan->capabilities[1].flags = 0;
+    expect_verify_failure(plan, "XR_TARGET_1004");
+    plan->capabilities[1].flags = XR_TARGET_CAPABILITY_REQUIRED;
 
     XrTargetCoroutineStateRecord fabricated_coroutine = {.function = 1};
     plan->coroutines = &fabricated_coroutine;

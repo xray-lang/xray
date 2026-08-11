@@ -34,14 +34,14 @@
 #include <string.h>
 #include <stdbool.h>
 
-static XrArtifactKind classify_file_artifact(const char *path) {
+static XrArtifactProbeResult classify_file_artifact(const char *path) {
     FILE *file = fopen(path, "rb");
     if (!file)
-        return XR_ARTIFACT_KIND_SOURCE;
+        return xr_artifact_probe(path, NULL, 0);
     uint8_t header[XR_ARTIFACT_PROBE_SIZE] = {0};
     size_t header_size = fread(header, 1, sizeof(header), file);
     fclose(file);
-    return xr_artifact_classify(path, header, header_size);
+    return xr_artifact_probe(path, header, header_size);
 }
 
 static bool read_file_bytes(const char *path, uint8_t **bytes, size_t *size) {
@@ -56,6 +56,7 @@ static bool read_file_bytes(const char *path, uint8_t **bytes, size_t *size) {
     }
     long end = ftell(file);
     if (end < 0 || (uint64_t) end > XR_XTP_MAX_ARTIFACT_SIZE ||
+        (uint64_t) end > XR_XTP_MAX_RUNTIME_LOAD_PEAK_BYTES / 2u ||
         fseek(file, 0, SEEK_SET) != 0) {
         fclose(file);
         return false;
@@ -78,23 +79,28 @@ static bool read_file_bytes(const char *path, uint8_t **bytes, size_t *size) {
 }
 
 static int reject_non_executable_artifact(const char *path,
-                                          XrArtifactKind kind) {
-    if (kind == XR_ARTIFACT_KIND_CONFLICT) {
+                                          XrArtifactProbeResult probe) {
+    if (probe.status == XR_ARTIFACT_PROBE_CONFLICT) {
         fprintf(stderr,
                 "XR_ARTIFACT_2006: artifact extension conflicts with its canonical magic\n");
         return XR_CLI_EXIT_FAIL;
     }
-    if (kind == XR_ARTIFACT_KIND_UNSUPPORTED) {
+    if (probe.status == XR_ARTIFACT_PROBE_NEED_MORE) {
         fprintf(stderr,
-                "XR_ARTIFACT_2000: removed TargetPlan artifact schema is unsupported\n");
+                "XR_ARTIFACT_2001: artifact header is a truncated reserved prefix\n");
         return XR_CLI_EXIT_FAIL;
     }
-    if (kind == XR_ARTIFACT_KIND_XSM) {
+    if (probe.status == XR_ARTIFACT_PROBE_UNKNOWN_RESERVED) {
+        fprintf(stderr,
+                "XR_ARTIFACT_2000: artifact uses an unknown or removed reserved identity\n");
+        return XR_CLI_EXIT_FAIL;
+    }
+    if (probe.kind == XR_ARTIFACT_KIND_XSM) {
         fprintf(stderr,
                 "XR_ARTIFACT_2005: semantic module artifacts are planning inputs and are not executable\n");
         return XR_CLI_EXIT_FAIL;
     }
-    if (kind != XR_ARTIFACT_KIND_XTP)
+    if (probe.kind != XR_ARTIFACT_KIND_XTP)
         return -1;
 
     uint8_t *bytes = NULL;
@@ -110,8 +116,9 @@ static int reject_non_executable_artifact(const char *path,
                                            sizeof(detail));
     xr_free(bytes);
     if (!decoded) {
-        fprintf(stderr, "XR_ARTIFACT_2000: XTP v2 candidate decoding failed: %s\n",
-                detail[0] ? detail : "unspecified rejection");
+        fprintf(stderr, "%s\n",
+                detail[0] ? detail
+                          : "XR_ARTIFACT_2000: XTP v2 candidate decoding failed");
         return XR_CLI_EXIT_FAIL;
     }
     xr_xtp_candidate_release(candidate);
@@ -197,9 +204,10 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
     }
 
-    XrArtifactKind artifact_kind = classify_file_artifact(file);
+    XrArtifactProbeResult artifact_probe = classify_file_artifact(file);
+    XrArtifactKind artifact_kind = artifact_probe.kind;
     int artifact_result =
-        reject_non_executable_artifact(file, artifact_kind);
+        reject_non_executable_artifact(file, artifact_probe);
     if (artifact_result >= 0)
         return artifact_result;
 

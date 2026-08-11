@@ -144,7 +144,7 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(U32, id) F(U8, kind) F(U8, ownership) F(U16, flags) F(U32, input_rep)                      \
     F(U32, output_rep) F(U32, layout)
 #define XR_XTP_CAPABILITY_FIELDS(F)                                                                \
-    F(U32, id) F(U32, semantic_capability) F(U16, provider) F(U16, flags)
+    F(U32, id) F(U32, capability) F(U16, provider) F(U16, flags)
 #define XR_XTP_COROUTINE_FIELDS(F)                                                                 \
     F(U32, id) F(U32, function) F(U32, logical_state) F(U32, target_state)                       \
     F(U32, root_map) F(U32, cleanup) F(U32, normal_state) F(U32, error_state)                    \

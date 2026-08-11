@@ -41,4 +41,10 @@ typedef enum XrTargetProviderKind {
 #define XR_TARGET_PROVIDER_MASK_ALL                                                     \
     ((UINT64_C(1) << (uint8_t) XR_TARGET_PROVIDER_KIND_COUNT) - UINT64_C(2))
 
+/* Every currently materialized scalar TargetPlan requires these runtime
+ * services before an executor may allocate a frame or report a fatal fault. */
+#define XR_TARGET_FOUNDATION_CAPABILITY_MASK                                            \
+    (XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |                            \
+     XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC))
+
 #endif  // XR_TARGET_RUNTIME_PROFILE_H

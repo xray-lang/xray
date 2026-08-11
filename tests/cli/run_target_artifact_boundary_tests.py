@@ -59,7 +59,7 @@ def main() -> int:
         malformed_xtp = root / "malformed-target-plan.bin"
         malformed_xtp.write_bytes(b"XTPF")
         require_rejection(run([str(binary), "run", str(malformed_xtp)]),
-                          "XR_ARTIFACT_2000", "malformed XTP fails in candidate decoding")
+                          "XR_EXEC_5003", "malformed XTP preserves its decoder diagnostic")
 
         valid_xtp = root / "verified-target-plan.bin"
         write = run([str(writer), "--write", str(valid_xtp)])
@@ -73,6 +73,24 @@ def main() -> int:
         old_xtp.write_bytes(b"XRAYXTP\0")
         require_rejection(run([str(binary), "run", str(old_xtp)]),
                           "XR_ARTIFACT_2000", "removed XTP schema is unsupported")
+
+        for length in range(5, 8):
+            truncated = root / f"truncated-xsm-{length}.bin"
+            truncated.write_bytes(b"XRAYXSM\0"[:length])
+            require_rejection(run([str(binary), "run", str(truncated)]),
+                              "XR_ARTIFACT_2001",
+                              f"{length}-byte XSM prefix is fail-closed")
+
+        for name, payload in (
+            ("corrupt-removed.bin", b"XRAYXTP\1"),
+            ("unknown-reserved.bin", b"XRAYQQQ\0"),
+            ("wrong-xrc-version.bin", b"XRAY\x1d\x00"),
+        ):
+            reserved = root / name
+            reserved.write_bytes(payload)
+            require_rejection(run([str(binary), "run", str(reserved)]),
+                              "XR_ARTIFACT_2000",
+                              f"{name} cannot fall through to legacy XRC")
 
         conflict = root / "wrong.xtp"
         conflict.write_bytes(b"XRAYXSM\0")

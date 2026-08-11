@@ -83,13 +83,15 @@ static bool compute_resources(const XrTargetPlan *plan, XrXtpSectionInput sectio
         uint32_t row_size = xr_xtp_wire_row_size(sections[i].kind);
         if (!row_size || sections[i].count > xr_xtp_table_count_limit(sections[i].kind) ||
             (sections[i].count && !sections[i].rows)) {
-            xr_xtp_set_error(error, error_size, "TargetPlan table cannot be encoded");
+            xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2003",
+                             "TargetPlan table cannot be encoded");
             return false;
         }
         uint64_t length = (uint64_t) sections[i].count * row_size;
         if (length > SIZE_MAX || resources->table_bytes > UINT64_MAX - length ||
             resources->total_rows > UINT64_MAX - sections[i].count) {
-            xr_xtp_set_error(error, error_size, "typed table size overflows");
+            xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                             "typed table size overflows");
             return false;
         }
         sections[i].length = (size_t) length;
@@ -100,7 +102,8 @@ static bool compute_resources(const XrTargetPlan *plan, XrXtpSectionInput sectio
     const XrTargetFunctionRecord *functions = xr_target_plan_functions(plan, &function_count);
     for (uint32_t i = 0; i < function_count; i++) {
         if (resources->total_frame_bytes > UINT64_MAX - functions[i].frame_size) {
-            xr_xtp_set_error(error, error_size, "frame byte manifest overflows");
+            xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                             "frame byte manifest overflows");
             return false;
         }
         resources->total_frame_bytes += functions[i].frame_size;
@@ -110,7 +113,8 @@ static bool compute_resources(const XrTargetPlan *plan, XrXtpSectionInput sectio
         resources->table_bytes > XR_XTP_MAX_TABLE_BYTES ||
         resources->total_frame_bytes > XR_XTP_MAX_TOTAL_FRAME_BYTES ||
         resources->verification_work_units > XR_XTP_MAX_VERIFY_WORK_UNITS) {
-        xr_xtp_set_error(error, error_size, "TargetPlan exceeds XTP hard budgets");
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "TargetPlan exceeds XTP hard budgets");
         return false;
     }
     return true;
@@ -123,7 +127,8 @@ static bool layout_sections(XrXtpSectionInput sections[], size_t *artifact_size,
     size_t cursor = 0;
     if (!checked_add(XR_XTP_HEADER_SIZE, directory_length, &cursor) ||
         !checked_align(cursor, XR_XTP_SECTION_ALIGNMENT, &cursor)) {
-        xr_xtp_set_error(error, error_size, "artifact directory size overflows");
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "artifact directory size overflows");
         return false;
     }
     for (uint32_t i = 0; i < XR_XTP_TABLE_SECTION_COUNT; i++) {
@@ -131,7 +136,8 @@ static bool layout_sections(XrXtpSectionInput sections[], size_t *artifact_size,
         if (!checked_add(cursor, sections[i].length, &cursor) ||
             !checked_align(cursor, XR_XTP_SECTION_ALIGNMENT, &cursor) ||
             cursor > XR_XTP_MAX_ARTIFACT_SIZE) {
-            xr_xtp_set_error(error, error_size, "artifact byte budget is exhausted");
+            xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                             "artifact byte budget is exhausted");
             return false;
         }
     }
@@ -207,12 +213,14 @@ XR_FUNC bool xr_xtp_encode_plan(const XrTargetPlan *plan, uint8_t **bytes, size_
     if (!plan || !bytes || !size || !xr_target_plan_is_verified(plan) ||
         xr_target_plan_schema_version(plan) != XR_TARGET_PLAN_SCHEMA_VERSION ||
         xr_target_plan_completed_family_mask(plan) != XR_TARGET_REQUIRED_FAMILIES) {
-        xr_xtp_set_error(error, error_size, "encoder requires a complete verified TargetPlan");
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2004",
+                         "encoder requires a complete verified TargetPlan");
         return false;
     }
     char verify_error[512] = {0};
     if (!xr_target_plan_verify(plan, verify_error, sizeof(verify_error))) {
-        xr_xtp_set_error(error, error_size, "TargetPlan failed independent verification");
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                         "TargetPlan failed independent verification");
         return false;
     }
     XrXtpSectionInput sections[XR_XTP_TABLE_SECTION_COUNT] = {0};
@@ -224,7 +232,8 @@ XR_FUNC bool xr_xtp_encode_plan(const XrTargetPlan *plan, uint8_t **bytes, size_
         return false;
     uint8_t *artifact = (uint8_t *) xr_calloc(artifact_size, 1);
     if (!artifact) {
-        xr_xtp_set_error(error, error_size, "artifact allocation failed");
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "artifact allocation failed");
         return false;
     }
     write_header(artifact, artifact_size, plan, &resources);

@@ -4,7 +4,7 @@
     "build": 122,
     "cli": 137,
     "install": 12,
-    "source": 4133
+    "source": 4136
   },
   "generated_from": [
     "CMakeLists.txt",
@@ -590,7 +590,7 @@
     "xray_vm_set_userdata",
     "xray_vm_timed_out"
   ],
-  "owner_count": 780,
+  "owner_count": 783,
   "owners": [
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
@@ -777,19 +777,19 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "77282fbf7edd93ea8aec6455861444b888ce51cb5a97af53cc1ed6809fa9d540",
+      "evidence_sha256": "9ccc80f14849b60cec7d8086e17e1d8fdcc233efa9ce45f5450a83ee07ee611d",
       "family": "legacy-bytecode-abi",
       "hit_count": 1,
       "path": "CMakeLists.txt",
       "status": "transitional-owner",
       "surface": "build",
       "tokens": [
-        "XR_BC_VERSION"
+        "XR_LEGACY_XRC_VERSION"
       ]
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "b733b42526cef362451559718aef63645d6d2c82694f0d405bfd083bbc38df39",
+      "evidence_sha256": "e6f4d3ad1fc38d2c1cb79e75a33d2ef4aceb832ef8ba60315e649e1ba2c6275a",
       "family": "legacy-embed-build-owner",
       "hit_count": 39,
       "path": "CMakeLists.txt",
@@ -1645,7 +1645,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "1befb3125ba5fbcfaa3f67cc159b6e1d137dfe6e1aaba2e8b7dad62a596b0a5c",
+      "evidence_sha256": "23975144d102e2348d4abdf771bea597033b85c336313c97cb4745dc0c533e4c",
       "family": "legacy-loader-writer-or-converter",
       "hit_count": 5,
       "path": "tests/install/run_installed_runtime_symbol_tests.py",
@@ -1745,15 +1745,14 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "1ce54c814210d6bc140bb3b4a7267d9c1a1637df3d7f7f4cd17015b96aab0604",
+      "evidence_sha256": "52930eb0a8378ddc7cba0021fc33b6d24062edb928e36302b5649a4979f7f1e2",
       "family": "legacy-bytecode-abi",
-      "hit_count": 4,
+      "hit_count": 2,
       "path": "src/module/xbytecode_io.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "XR_BC_MAGIC",
-        "XR_BC_VERSION"
+        "XR_LEGACY_XRC_VERSION"
       ]
     },
     {
@@ -1771,14 +1770,50 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "174ba89cd1c4b733c5c8a092c2c9b38114fec83b00c09dd237a61806c3512c95",
+      "evidence_sha256": "844b0fe16dde416b365db875a4cda4a7aff7f5e3ae9a144e2340c66e9aacb30c",
+      "family": "legacy-bytecode-abi",
+      "hit_count": 1,
+      "path": "src/plan/format/xr_artifact_kind.c",
+      "status": "transitional-owner",
+      "surface": "source",
+      "tokens": [
+        "XR_LEGACY_XRC_VERSION"
+      ]
+    },
+    {
+      "disposition": "remove-with-atomic-target-plan-product-cutover",
+      "evidence_sha256": "820d173e2ac893ca20264cc1a8c3fbdd647bf23d5b94bfcdb99199e8ca976b2f",
+      "family": "legacy-bytecode-abi",
+      "hit_count": 1,
+      "path": "src/plan/format/xr_artifact_kind.h",
+      "status": "transitional-owner",
+      "surface": "source",
+      "tokens": [
+        "XR_LEGACY_XRC_VERSION"
+      ]
+    },
+    {
+      "disposition": "remove-with-atomic-target-plan-product-cutover",
+      "evidence_sha256": "6707dd3d479655d75adb880d9bfba6fe28e3f9ef2f9446c602b9e7c9f3b784e7",
+      "family": "legacy-bytecode-abi",
+      "hit_count": 3,
+      "path": "tests/unit/plan/test_xtp_format.c",
+      "status": "transitional-owner",
+      "surface": "source",
+      "tokens": [
+        "XR_LEGACY_XRC_VERSION"
+      ]
+    },
+    {
+      "disposition": "remove-with-atomic-target-plan-product-cutover",
+      "evidence_sha256": "13dc558cc13f7751319ec2d145592b086463459c3580d856f687748e13775be6",
       "family": "legacy-bytecode-abi",
       "hit_count": 2,
       "path": "tests/unit/vm/test_bytecode_io.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
-        "XR_BC_VERSION"
+        "XR_LEGACY_XRC_VERSION"
       ]
     },
     {
@@ -10620,7 +10655,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "6df8d0bcb8ac7217e7b7e4871284699009fbf3a3b1e20198806672a92561b98c",
+      "evidence_sha256": "b882ac148d8560a745fe3f6f0469f3fb88d26628dde2fc74b8cd8c78230b37a0",
       "family": "xrc-artifact-identity",
       "hit_count": 2,
       "path": "src/plan/format/xr_artifact_kind.c",
@@ -10644,7 +10679,7 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "ccb9450a24efb3f63e0d50590e6c36eebf2936dffe0ad64dcf8f0af8d650f11e",
+      "evidence_sha256": "ddcacdaa77d1282266ff1e66a356ff9f69b6bb099b45bce5fac17001a44607bc",
       "family": "xrc-artifact-identity",
       "hit_count": 1,
       "path": "tests/unit/plan/test_xtp_format.c",
@@ -10663,6 +10698,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "2f3b5aad27e4e938f061abeb41a6e9d2b0494ef1245b35d87645f01bc0761892",
-  "total": 4481
+  "source_tree_fingerprint": "e6c87e7e9a3b4bd55aa1432582c6298e5fb9c0a613bc8667aad580f9cda30074",
+  "total": 4484
 }

@@ -35,7 +35,8 @@ struct XrXtpCandidate {
     XrXtpSectionView sections[XR_XTP_TABLE_SECTION_COUNT];
 };
 
-XR_FUNC void xr_xtp_set_error(char *error, size_t error_size, const char *detail);
+XR_FUNC void xr_xtp_set_error(char *error, size_t error_size,
+                              const char *code, const char *detail);
 XR_FUNC bool xr_xtp_fingerprint_is_zero(XrFingerprint fingerprint);
 XR_FUNC uint16_t xr_xtp_take_u16(const uint8_t *bytes);
 XR_FUNC uint32_t xr_xtp_take_u32(const uint8_t *bytes);
@@ -51,6 +52,8 @@ XR_FUNC bool xr_xtp_decode_rows(XrXtpSectionKind kind, const uint8_t *bytes, uin
                                 void *rows);
 XR_FUNC const XrXtpSectionView *xr_xtp_candidate_section(const XrXtpCandidate *candidate,
                                                         XrXtpSectionKind kind);
+XR_FUNC bool xr_xtp_runtime_peak_within_budget(size_t artifact_bytes,
+                                               size_t decoded_bytes);
 XR_FUNC bool xr_xtp_materialize_target_plan(const XrXtpCandidate *candidate,
                                             const XrSemanticPlan *semantic_plan,
                                             const XrTargetProfile *expected_profile,

@@ -15,6 +15,7 @@
 
 #include "xr_target_builder.h"
 #include "xr_target_plan_internal.h"
+#include "xr_target_profile_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_ops_gen.h"
@@ -86,6 +87,8 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t function_count;
     XrTargetSlotRecord *slots;
     uint32_t slot_count;
+    XrTargetCapabilityRecord *capabilities;
+    uint32_t capability_count;
 } XrTargetMaterializedPlan;
 
 typedef struct XrTargetPlanBuilder XrTargetPlanBuilder;
@@ -172,6 +175,7 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     xr_free(materialized->layouts);
     xr_free(materialized->functions);
     xr_free(materialized->slots);
+    xr_free(materialized->capabilities);
     memset(materialized, 0, sizeof(*materialized));
 }
 
@@ -890,6 +894,36 @@ static bool materialize_values(XrTargetPlanBuilder *builder,
     return true;
 }
 
+static bool materialize_foundation_capabilities(
+    const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
+    char *error, size_t error_size) {
+    const XrTargetProfileDraft *facts = xr_target_profile_facts(builder->profile);
+    if (!facts ||
+        (facts->provider_mask & XR_TARGET_FOUNDATION_CAPABILITY_MASK) !=
+            XR_TARGET_FOUNDATION_CAPABILITY_MASK)
+        return fail(error, error_size, "XR_TARGET_1004",
+                    "target profile lacks a foundation capability provider");
+    materialized->capability_count = 2;
+    materialized->capabilities = (XrTargetCapabilityRecord *) allocate_records(
+        materialized->capability_count, sizeof(*materialized->capabilities));
+    if (!materialized->capabilities)
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "capability closure materialization failed");
+    materialized->capabilities[0] = (XrTargetCapabilityRecord) {
+        .id = 0,
+        .capability = XR_TARGET_PROVIDER_ALLOCATOR,
+        .provider = XR_TARGET_PROVIDER_ALLOCATOR,
+        .flags = XR_TARGET_CAPABILITY_REQUIRED,
+    };
+    materialized->capabilities[1] = (XrTargetCapabilityRecord) {
+        .id = 1,
+        .capability = XR_TARGET_PROVIDER_PANIC,
+        .provider = XR_TARGET_PROVIDER_PANIC,
+        .flags = XR_TARGET_CAPABILITY_REQUIRED,
+    };
+    return true;
+}
+
 static bool builder_materialize(XrTargetPlanBuilder *builder,
                                 XrTargetMaterializedPlan *materialized, char *error,
                                 size_t error_size) {
@@ -900,7 +934,9 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
     if (!materialize_machine_reps(builder, materialized, error, error_size) ||
         !materialize_layouts(builder, materialized, error, error_size) ||
         !materialize_functions_and_slots(builder, materialized, error, error_size) ||
-        !materialize_values(builder, materialized, error, error_size)) {
+        !materialize_values(builder, materialized, error, error_size) ||
+        !materialize_foundation_capabilities(builder, materialized, error,
+                                             error_size)) {
         builder->poisoned = true;
         return false;
     }
@@ -960,6 +996,8 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out,
         .functions_count = materialized.function_count,
         .slots = materialized.slots,
         .slots_count = materialized.slot_count,
+        .capabilities = materialized.capabilities,
+        .capabilities_count = materialized.capability_count,
     };
     bool frozen = xr_target_plan_freeze(&draft, out, error, error_size);
     materialized_dispose(&materialized);

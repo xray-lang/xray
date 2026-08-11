@@ -89,7 +89,8 @@ static bool parse_header(const uint8_t *bytes, size_t size, XrXtpIdentity *ident
                          XrXtpResourceManifest *resources, size_t *directory_length,
                          char *error, size_t error_size) {
     if (!bytes || size < XR_XTP_HEADER_SIZE || size > XR_XTP_MAX_ARTIFACT_SIZE) {
-        xr_xtp_set_error(error, error_size, "artifact byte budget is invalid");
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "artifact byte budget is invalid");
         return false;
     }
     uint32_t schema = xr_xtp_take_u32(bytes + 4);
@@ -111,11 +112,13 @@ static bool parse_header(const uint8_t *bytes, size_t size, XrXtpIdentity *ident
         raw_directory_length != exact_directory_length ||
         raw_directory_length > size - XR_XTP_HEADER_SIZE || !bytes_are_zero(bytes + 20, 4) ||
         !bytes_are_zero(bytes + 68, 4) || !bytes_are_zero(bytes + 360, 88)) {
-        xr_xtp_set_error(error, error_size, "exact schema or header contract is invalid");
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2000",
+                         "exact schema or header contract is invalid");
         return false;
     }
     if (!parse_identity(bytes, identity)) {
-        xr_xtp_set_error(error, error_size, "artifact identity or family coverage is invalid");
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                         "artifact identity or family coverage is invalid");
         return false;
     }
     resources->total_rows = xr_xtp_take_u64(bytes + 296);
@@ -127,11 +130,13 @@ static bool parse_header(const uint8_t *bytes, size_t size, XrXtpIdentity *ident
         resources->total_frame_bytes > XR_XTP_MAX_TOTAL_FRAME_BYTES ||
         resources->verification_work_units > XR_XTP_MAX_VERIFY_WORK_UNITS ||
         resources->verification_work_units != resources->total_rows) {
-        xr_xtp_set_error(error, error_size, "resource manifest exceeds its hard budget");
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "resource manifest exceeds its hard budget");
         return false;
     }
     if (!full_digest_matches(bytes, size)) {
-        xr_xtp_set_error(error, error_size, "complete artifact digest is invalid");
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2002",
+                         "complete artifact digest is invalid");
         return false;
     }
     *directory_length = (size_t) raw_directory_length;
@@ -146,7 +151,8 @@ static bool parse_directory(const uint8_t *bytes, size_t size, size_t directory_
                        &expected_offset) || expected_offset > size ||
         !bytes_are_zero(bytes + XR_XTP_HEADER_SIZE + directory_length,
                         expected_offset - XR_XTP_HEADER_SIZE - directory_length)) {
-        xr_xtp_set_error(error, error_size, "directory padding is not canonical");
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2001",
+                         "directory padding is not canonical");
         return false;
     }
     uint64_t total_rows = 0;
@@ -171,13 +177,15 @@ static bool parse_directory(const uint8_t *bytes, size_t size, size_t directory_
             (row_size && raw_count > UINT64_MAX / row_size) ||
             raw_length != raw_count * row_size || raw_length > XR_XTP_MAX_TABLE_BYTES ||
             raw_offset != expected_offset || raw_offset > size || raw_length > size - raw_offset) {
-            xr_xtp_set_error(error, error_size, "typed section directory is invalid");
+            xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2003",
+                             "typed section directory is invalid");
             return false;
         }
         uint8_t digest[XR_FINGERPRINT_BYTES];
         xr_sha256(bytes + expected_offset, (size_t) raw_length, digest);
         if (memcmp(entry + XR_XTP_DIRECTORY_DIGEST_OFFSET, digest, sizeof(digest)) != 0) {
-            xr_xtp_set_error(error, error_size, "typed section digest is invalid");
+            xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2002",
+                             "typed section digest is invalid");
             return false;
         }
         views[i] = (XrXtpSectionView) {
@@ -193,13 +201,15 @@ static bool parse_directory(const uint8_t *bytes, size_t size, size_t directory_
         if (!checked_align(section_end, XR_XTP_SECTION_ALIGNMENT, &expected_offset) ||
             expected_offset > size ||
             !bytes_are_zero(bytes + section_end, expected_offset - section_end)) {
-            xr_xtp_set_error(error, error_size, "section padding is not canonical");
+            xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2001",
+                             "section padding is not canonical");
             return false;
         }
     }
     if (expected_offset != size || total_rows != resources->total_rows ||
         table_bytes != resources->table_bytes) {
-        xr_xtp_set_error(error, error_size, "resource manifest does not match typed tables");
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2001",
+                         "resource manifest does not match typed tables");
         return false;
     }
     return true;
@@ -211,31 +221,46 @@ XR_FUNC bool xr_xtp_decode_candidate(const uint8_t *bytes, size_t size,
     if (candidate)
         *candidate = NULL;
     if (!candidate) {
-        xr_xtp_set_error(error, error_size, "candidate output is required");
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2004",
+                         "candidate output is required");
         return false;
     }
-    XrXtpIdentity identity = {0};
-    XrXtpResourceManifest resources = {0};
-    size_t directory_length = 0;
-    if (!parse_header(bytes, size, &identity, &resources, &directory_length, error, error_size))
+    if (!bytes || size < XR_XTP_HEADER_SIZE ||
+        size > XR_XTP_MAX_ARTIFACT_SIZE) {
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "artifact byte budget is invalid");
         return false;
-    XrXtpSectionView views[XR_XTP_TABLE_SECTION_COUNT] = {0};
-    if (!parse_directory(bytes, size, directory_length, &resources, views, error, error_size))
-        return false;
+    }
     XrXtpCandidate *decoded = (XrXtpCandidate *) xr_calloc(1, sizeof(*decoded));
     if (!decoded) {
-        xr_xtp_set_error(error, error_size, "candidate allocation failed");
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "candidate allocation failed");
         return false;
     }
     atomic_init(&decoded->references, 1);
     decoded->bytes = (uint8_t *) xr_malloc(size);
     if (!decoded->bytes) {
         xr_xtp_candidate_release(decoded);
-        xr_xtp_set_error(error, error_size, "candidate byte snapshot allocation failed");
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "candidate byte snapshot allocation failed");
         return false;
     }
     memcpy(decoded->bytes, bytes, size);
     decoded->size = size;
+    XrXtpIdentity identity = {0};
+    XrXtpResourceManifest resources = {0};
+    size_t directory_length = 0;
+    if (!parse_header(decoded->bytes, decoded->size, &identity, &resources,
+                      &directory_length, error, error_size)) {
+        xr_xtp_candidate_release(decoded);
+        return false;
+    }
+    XrXtpSectionView views[XR_XTP_TABLE_SECTION_COUNT] = {0};
+    if (!parse_directory(decoded->bytes, decoded->size, directory_length,
+                         &resources, views, error, error_size)) {
+        xr_xtp_candidate_release(decoded);
+        return false;
+    }
     decoded->identity = identity;
     decoded->resources = resources;
     memcpy(decoded->sections, views, sizeof(views));

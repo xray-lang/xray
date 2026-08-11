@@ -76,13 +76,15 @@ static bool validate_requirements(const XrXtpCandidate *candidate,
                                   const XrTargetProfile *expected_profile,
                                   char *error, size_t error_size) {
     if (!candidate || !semantic_plan || !expected_profile) {
-        xr_xtp_set_error(error, error_size, "materialization requirements are incomplete");
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2004",
+                         "materialization requirements are incomplete");
         return false;
     }
     char nested_error[512] = {0};
     if (!xr_semantic_plan_verify(semantic_plan, nested_error, sizeof(nested_error)) ||
         !xr_target_profile_verify(expected_profile, nested_error, sizeof(nested_error))) {
-        xr_xtp_set_error(error, error_size, "materialization requirements are not verified");
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                         "materialization requirements are not verified");
         return false;
     }
     const XrTargetProfileDraft *facts = xr_target_profile_facts(expected_profile);
@@ -102,7 +104,8 @@ static bool validate_requirements(const XrXtpCandidate *candidate,
                              facts->provider_set_fingerprint) ||
         !fingerprint_matches(identity->object_fingerprint,
                              facts->object_header_fingerprint)) {
-        xr_xtp_set_error(error, error_size, "artifact identity does not match exact requirements");
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                         "artifact identity does not match exact requirements");
         return false;
     }
     return true;
@@ -115,13 +118,22 @@ static bool decode_profile(const XrXtpCandidate *candidate, XrXtpDecodedTables *
     if (!section || section->count != 1 ||
         !xr_xtp_decode_rows(section->kind, candidate->bytes + section->offset, section->count,
                             &tables->profile)) {
-        xr_xtp_set_error(error, error_size, "target profile table cannot be decoded");
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2003",
+                         "target profile table cannot be decoded");
         return false;
     }
     return true;
 }
 
-static bool decoded_storage_within_budget(const XrXtpCandidate *candidate) {
+XR_FUNC bool xr_xtp_runtime_peak_within_budget(size_t artifact_bytes,
+                                               size_t decoded_bytes) {
+    return artifact_bytes <= XR_XTP_MAX_RUNTIME_LOAD_PEAK_BYTES / 2u &&
+           decoded_bytes <= XR_XTP_MAX_RUNTIME_LOAD_PEAK_BYTES / 2u -
+                                artifact_bytes;
+}
+
+static bool decoded_storage_within_budget(const XrXtpCandidate *candidate,
+                                          size_t *decoded_bytes) {
     size_t total = sizeof(XrTargetProfileDraft);
 #define XR_XTP_ADD_DECODED_BYTES(kind, type)                                                       \
     do {                                                                                           \
@@ -150,6 +162,7 @@ static bool decoded_storage_within_budget(const XrXtpCandidate *candidate) {
     XR_XTP_ADD_DECODED_BYTES(CAPABILITIES, XrTargetCapabilityRecord);
     XR_XTP_ADD_DECODED_BYTES(COROUTINES, XrTargetCoroutineStateRecord);
 #undef XR_XTP_ADD_DECODED_BYTES
+    *decoded_bytes = total;
     return true;
 }
 
@@ -160,13 +173,15 @@ static bool allocate_and_decode(const XrXtpCandidate *candidate, XrXtpSectionKin
     *count = 0;
     const XrXtpSectionView *section = xr_xtp_candidate_section(candidate, kind);
     if (!section || section->count > SIZE_MAX / element_size) {
-        xr_xtp_set_error(error, error_size, "typed table allocation size overflows");
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "typed table allocation size overflows");
         return false;
     }
     if (section->count) {
         *storage = xr_calloc(section->count, element_size);
         if (!*storage) {
-            xr_xtp_set_error(error, error_size, "typed table allocation failed");
+            xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                             "typed table allocation failed");
             return false;
         }
     }
@@ -175,7 +190,8 @@ static bool allocate_and_decode(const XrXtpCandidate *candidate, XrXtpSectionKin
         xr_free(*storage);
         *storage = NULL;
         *count = 0;
-        xr_xtp_set_error(error, error_size, "typed table cannot be decoded");
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2003",
+                         "typed table cannot be decoded");
         return false;
     }
     return true;
@@ -280,8 +296,11 @@ XR_FUNC bool xr_xtp_materialize_target_plan(const XrXtpCandidate *candidate,
     if (!plan || !validate_requirements(candidate, semantic_plan, expected_profile, error,
                                         error_size))
         return false;
-    if (!decoded_storage_within_budget(candidate)) {
-        xr_xtp_set_error(error, error_size, "decoded table storage exceeds its hard budget");
+    size_t decoded_bytes = 0;
+    if (!decoded_storage_within_budget(candidate, &decoded_bytes) ||
+        !xr_xtp_runtime_peak_within_budget(candidate->size, decoded_bytes)) {
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "read, snapshot, decode, and freeze peak exceeds its hard budget");
         return false;
     }
     XrXtpDecodedTables tables = {0};
@@ -291,7 +310,8 @@ XR_FUNC bool xr_xtp_materialize_target_plan(const XrXtpCandidate *candidate,
     }
     if (compute_total_frame_bytes(&tables) != candidate->resources.total_frame_bytes) {
         dispose_tables(&tables);
-        xr_xtp_set_error(error, error_size, "frame byte manifest does not match functions");
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2001",
+                         "frame byte manifest does not match functions");
         return false;
     }
     XrTargetProfile *decoded_profile = NULL;
@@ -302,7 +322,9 @@ XR_FUNC bool xr_xtp_materialize_target_plan(const XrXtpCandidate *candidate,
                              xr_target_profile_fingerprint(expected_profile))) {
         xr_target_profile_free(decoded_profile);
         dispose_tables(&tables);
-        xr_xtp_set_error(error, error_size, "decoded target profile identity is invalid");
+        if (!error || !error_size || !error[0])
+            xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                             "decoded target profile identity is invalid");
         return false;
     }
     XrTargetPlanDraft draft = make_draft(&tables, semantic_plan, decoded_profile);
@@ -316,7 +338,9 @@ XR_FUNC bool xr_xtp_materialize_target_plan(const XrXtpCandidate *candidate,
         !derived_fingerprints_match(&tables, materialized)) {
         xr_target_plan_free(materialized);
         dispose_tables(&tables);
-        xr_xtp_set_error(error, error_size, "typed TargetPlan failed exact verification");
+        if (!error || !error_size || !error[0])
+            xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                             "typed TargetPlan failed exact verification");
         return false;
     }
     dispose_tables(&tables);

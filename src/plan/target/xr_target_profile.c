@@ -42,6 +42,59 @@ static void hash_type_layout(XrSHA256Context *ctx, XrTargetTypeLayout layout) {
     hash_u64(ctx, layout.align);
 }
 
+static bool type_layout_equal(XrTargetTypeLayout left,
+                              XrTargetTypeLayout right) {
+    return left.size == right.size && left.align == right.align;
+}
+
+static bool data_layout_equal(const XrTargetDataLayout *left,
+                              const XrTargetDataLayout *right) {
+#define XR_LAYOUT_FIELD_EQUAL(name) \
+    type_layout_equal(left->name, right->name)
+    return XR_LAYOUT_FIELD_EQUAL(i8) && XR_LAYOUT_FIELD_EQUAL(u8) &&
+           XR_LAYOUT_FIELD_EQUAL(i16) && XR_LAYOUT_FIELD_EQUAL(u16) &&
+           XR_LAYOUT_FIELD_EQUAL(i32) && XR_LAYOUT_FIELD_EQUAL(u32) &&
+           XR_LAYOUT_FIELD_EQUAL(i64) && XR_LAYOUT_FIELD_EQUAL(u64) &&
+           XR_LAYOUT_FIELD_EQUAL(f32) && XR_LAYOUT_FIELD_EQUAL(f64) &&
+           XR_LAYOUT_FIELD_EQUAL(boolean) && XR_LAYOUT_FIELD_EQUAL(pointer) &&
+           XR_LAYOUT_FIELD_EQUAL(isize) && XR_LAYOUT_FIELD_EQUAL(usize) &&
+           XR_LAYOUT_FIELD_EQUAL(xr_value) && left->endian == right->endian &&
+           left->abi_id == right->abi_id &&
+           left->stable_hash == right->stable_hash;
+#undef XR_LAYOUT_FIELD_EQUAL
+}
+
+static bool machine_facts_equal(const XrTargetMachineFacts *left,
+                                const XrTargetMachineFacts *right) {
+    return left->architecture == right->architecture &&
+           left->operating_system == right->operating_system &&
+           left->environment == right->environment &&
+           left->native_abi == right->native_abi &&
+           left->runtime_profile == right->runtime_profile &&
+           memcmp(left->reserved8, right->reserved8,
+                  sizeof(left->reserved8)) == 0 &&
+           data_layout_equal(&left->data_layout, &right->data_layout) &&
+           left->atomic_width_mask == right->atomic_width_mask &&
+           left->atomic_order_mask == right->atomic_order_mask &&
+           left->float_feature_mask == right->float_feature_mask &&
+           left->vector_feature_mask == right->vector_feature_mask &&
+           left->maximum_vector_bits == right->maximum_vector_bits &&
+           left->reserved16 == right->reserved16;
+}
+
+static bool profile_facts_equal(const XrTargetProfileDraft *left,
+                                const XrTargetProfileDraft *right) {
+    return left->schema_version == right->schema_version &&
+           machine_facts_equal(&left->machine, &right->machine) &&
+           left->provider_mask == right->provider_mask &&
+           xr_fingerprint_equal(left->provider_set_fingerprint,
+                                right->provider_set_fingerprint) &&
+           xr_fingerprint_equal(left->object_header_fingerprint,
+                                right->object_header_fingerprint) &&
+           xr_fingerprint_equal(left->runtime_abi_fingerprint,
+                                right->runtime_abi_fingerprint);
+}
+
 void xr_target_profile_compute_fingerprint(const XrTargetProfileDraft *facts,
                                            XrFingerprint *out) {
     static const uint8_t domain[] = "xray-target-profile-v1\0";
@@ -215,7 +268,8 @@ bool xr_target_profile_require_exact(const XrTargetProfile *expected,
                   "exact target profile comparison requires verified profiles");
         return false;
     }
-    if (!xr_fingerprint_equal(expected->fingerprint, actual->fingerprint)) {
+    if (!profile_facts_equal(&expected->facts, &actual->facts) ||
+        !xr_fingerprint_equal(expected->fingerprint, actual->fingerprint)) {
         set_error(error, error_size, "XR_TARGET_1000",
                   "exact target profile fingerprint mismatch");
         return false;

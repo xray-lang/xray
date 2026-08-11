@@ -24,6 +24,8 @@
 #define XR_XSM_ARTIFACT_MAGIC_SIZE 8u
 #define XR_XTP_ARTIFACT_MAGIC_SIZE 4u
 #define XR_LEGACY_XRC_ARTIFACT_MAGIC_SIZE 4u
+#define XR_LEGACY_XRC_HEADER_IDENTITY_SIZE 6u
+#define XR_LEGACY_XRC_VERSION UINT16_C(30)
 
 XR_DATA const uint8_t xr_xsm_artifact_magic[XR_XSM_ARTIFACT_MAGIC_SIZE];
 XR_DATA const uint8_t xr_xtp_artifact_magic[XR_XTP_ARTIFACT_MAGIC_SIZE];
@@ -34,12 +36,23 @@ typedef enum XrArtifactKind {
     XR_ARTIFACT_KIND_LEGACY_XRC,
     XR_ARTIFACT_KIND_XSM,
     XR_ARTIFACT_KIND_XTP,
-    XR_ARTIFACT_KIND_UNSUPPORTED,
-    XR_ARTIFACT_KIND_CONFLICT,
 } XrArtifactKind;
 
-XR_FUNC XrArtifactKind xr_artifact_classify(const char *path,
-                                             const uint8_t *prefix,
-                                             size_t prefix_size);
+typedef enum XrArtifactProbeStatus {
+    XR_ARTIFACT_PROBE_MATCH = 0,
+    XR_ARTIFACT_PROBE_NEED_MORE,
+    XR_ARTIFACT_PROBE_UNKNOWN_RESERVED,
+    XR_ARTIFACT_PROBE_CONFLICT,
+} XrArtifactProbeStatus;
+
+typedef struct XrArtifactProbeResult {
+    XrArtifactProbeStatus status;
+    XrArtifactKind kind;
+    size_t required_size;
+} XrArtifactProbeResult;
+
+XR_FUNC XrArtifactProbeResult xr_artifact_probe(const char *path,
+                                                const uint8_t *prefix,
+                                                size_t prefix_size);
 
 #endif  // XR_ARTIFACT_KIND_H

@@ -44,11 +44,6 @@ struct XrVMRuntime;
 struct XrCompilerSession;
 struct XrProto;
 
-#define XR_BC_MAGIC 0x59415258  // "XRAY" (little-endian)
-// v30: call-bound-place parameter ABI bitmap, with the canonical
-// scheduler-suspend and task-spawn proto effects
-#define XR_BC_VERSION 30
-
 // Serialization flags
 #define XR_BC_STRIP_DEBUG (1 << 0)   // Remove debug info (line numbers, var names)
 #define XR_BC_STRIP_SOURCE (1 << 1)  // Remove source file path

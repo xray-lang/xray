@@ -1094,9 +1094,27 @@ static bool verify_adapters_and_capabilities(const XrTargetPlan *plan, char *err
     if (plan->adapters_count)
         return report(error, error_size, "XR_EXEC_5002",
                       "adapter tables require semantic boundary facts");
-    if (plan->capabilities_count)
+    const XrTargetProfileDraft *facts = xr_target_profile_facts(plan->profile);
+    uint64_t capability_mask = 0;
+    for (uint32_t i = 0; i < plan->capabilities_count; i++) {
+        const XrTargetCapabilityRecord *record = &plan->capabilities[i];
+        if (record->id != i ||
+            record->capability <= XR_TARGET_PROVIDER_INVALID ||
+            record->capability >= XR_TARGET_PROVIDER_KIND_COUNT ||
+            record->provider != record->capability ||
+            record->flags != XR_TARGET_CAPABILITY_REQUIRED)
+            return report(error, error_size, "XR_TARGET_1004",
+                          "capability record is not canonically provider-bound");
+        uint64_t bit = XR_TARGET_PROVIDER_MASK(record->provider);
+        if ((capability_mask & bit) != 0 || !facts ||
+            (facts->provider_mask & bit) == 0)
+            return report(error, error_size, "XR_TARGET_1004",
+                          "capability provider is absent or duplicated");
+        capability_mask |= bit;
+    }
+    if (capability_mask != XR_TARGET_FOUNDATION_CAPABILITY_MASK)
         return report(error, error_size, "XR_TARGET_1004",
-                      "capability tables require semantic provider requirements");
+                      "TargetPlan foundation capability closure is incomplete");
     return true;
 }
 
