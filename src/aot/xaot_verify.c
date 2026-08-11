@@ -12,6 +12,7 @@
 #include "xaot_prepare.h"
 #include "xaot_callable.h"
 #include "xaot_link.h"
+#include "refine/xr_aot_scalar_value.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xhash.h"
 #include "../base/xmalloc.h"
@@ -20,6 +21,7 @@
 #include "../frontend/analyzer/xa_selection.h"
 #include "../ir/xi_effect.h"
 #include "../ir/xi_escape.h"
+#include "../plan/target/xr_target_verify.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../shared/xr_derive_flags.h"
 #include "../stdlib/xstdlib_metadata.h"
@@ -31,6 +33,117 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
         snprintf(errbuf, errbuf_len, "%s", msg ? msg : "AOT verifier error");
     }
     return false;
+}
+
+static bool verify_target_plan_bindings(const XaotBundle *bundle, char *errbuf,
+                                        size_t errbuf_len) {
+    char target_error[256] = {0};
+
+    if (!bundle || !bundle->modules || !bundle->target_plans)
+        return set_error(errbuf, errbuf_len, "AOT bundle has no module TargetPlans");
+    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
+        const XiModule *module = bundle->modules[module_index];
+        const XrTargetPlan *target_plan = bundle->target_plans[module_index];
+        if (!module || !module->init || !module->init->semantic_plan || !target_plan)
+            return set_error(errbuf, errbuf_len, "AOT module has no bound TargetPlan");
+        if (xr_target_plan_semantic_plan(target_plan) != module->init->semantic_plan)
+            return set_error(errbuf, errbuf_len,
+                             "AOT module TargetPlan has different semantic authority");
+        if (xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES)
+            return set_error(errbuf, errbuf_len,
+                             "AOT module TargetPlan family coverage is incomplete");
+        if (!xr_target_plan_is_verified(target_plan) ||
+            !xr_target_plan_verify(target_plan, target_error, sizeof(target_error)))
+            return set_error(errbuf, errbuf_len, "AOT module TargetPlan is corrupt");
+    }
+    return true;
+}
+
+static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *func,
+                                        const XiValue *value,
+                                        const XrTargetValueRepRecord **out_binding,
+                                        char *errbuf, size_t errbuf_len) {
+    const XrTargetPlan *target_plan;
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    char target_error[256] = {0};
+
+    if (out_binding)
+        *out_binding = NULL;
+    target_plan = xaot_bundle_target_plan_for_func(bundle, func);
+    if (!func || !value || !out_binding || !target_plan ||
+        !xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
+                                         &semantic_value, target_error,
+                                         sizeof(target_error)))
+        return set_error(errbuf, errbuf_len,
+                         "AOT value lacks exact TargetPlan semantic identity");
+    (void) semantic_function;
+    *out_binding = xr_target_plan_value_rep(target_plan, semantic_value);
+    return true;
+}
+
+static bool verify_target_machine_value_rep(const XrTargetPlan *target_plan,
+                                            const XrTargetValueRepRecord *binding,
+                                            const XiValue *value, XaotValueRep *out) {
+    const XrTargetMachineRepRecord *machine;
+    const XaotRepInfo *info;
+    XaotRep rep;
+
+    if (!target_plan || !binding || !value || !out)
+        return false;
+    machine = xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    if (!machine)
+        return false;
+    switch ((XrMachineRepKind) machine->kind) {
+        case XR_MACHINE_REP_VOID: rep = XAOT_REP_VOID; break;
+        case XR_MACHINE_REP_I1: rep = XAOT_REP_BOOL; break;
+        case XR_MACHINE_REP_I8: rep = XAOT_REP_I8; break;
+        case XR_MACHINE_REP_U8: rep = XAOT_REP_U8; break;
+        case XR_MACHINE_REP_I16: rep = XAOT_REP_I16; break;
+        case XR_MACHINE_REP_U16: rep = XAOT_REP_U16; break;
+        case XR_MACHINE_REP_I32: rep = XAOT_REP_I32; break;
+        case XR_MACHINE_REP_U32: rep = XAOT_REP_U32; break;
+        case XR_MACHINE_REP_I64: rep = XAOT_REP_I64; break;
+        case XR_MACHINE_REP_U64: rep = XAOT_REP_U64; break;
+        case XR_MACHINE_REP_ISIZE: rep = XAOT_REP_ISIZE; break;
+        case XR_MACHINE_REP_USIZE: rep = XAOT_REP_USIZE; break;
+        case XR_MACHINE_REP_F32: rep = XAOT_REP_F32; break;
+        case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
+        case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
+        default: return false;
+    }
+    info = xaot_rep_info(rep);
+    if (!info)
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->kind = rep == XAOT_REP_VOID ? XAOT_VALUE_VOID : XAOT_VALUE_SCALAR;
+    out->rep = rep;
+    out->type = value->type;
+    out->c_type = info->c_type;
+    return true;
+}
+
+static bool verify_effective_value_rep(const XaotBundle *bundle, const XiFunc *func,
+                                       const XiValue *value, XaotValueRep *out,
+                                       char *errbuf, size_t errbuf_len) {
+    const XrTargetValueRepRecord *binding;
+    const XaotValuePlan *legacy;
+
+    if (!verify_target_value_binding(bundle, func, value, &binding, errbuf, errbuf_len))
+        return false;
+    if (binding) {
+        if (!verify_target_machine_value_rep(xaot_bundle_target_plan_for_func(bundle, func),
+                                             binding, value, out))
+            return set_error(errbuf, errbuf_len,
+                             "AOT scalar TargetPlan binding has invalid machine rep");
+        return true;
+    }
+    legacy = xaot_bundle_find_value_plan(bundle, value);
+    if (!legacy)
+        return set_error(errbuf, errbuf_len,
+                         "AOT unmigrated value has no legacy value plan");
+    *out = xaot_value_rep_borrow(legacy->rep);
+    return true;
 }
 
 static bool verify_entry_plan(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
@@ -262,8 +375,21 @@ static bool verify_vector_rep(const XaotBundle *bundle, const XaotValuePlan *pla
 
 static bool verify_value_plan(const XaotBundle *bundle, const XaotValuePlan *plan, char *errbuf,
                               size_t errbuf_len) {
+    const XrTargetValueRepRecord *binding = NULL;
+
     if (!plan || !plan->value)
         return set_error(errbuf, errbuf_len, "AOT value plan has no Xi value");
+    if (!plan->func)
+        return set_error(errbuf, errbuf_len, "AOT value plan has no Xi function");
+    if (!verify_target_value_binding(bundle, plan->func, plan->value, &binding, errbuf,
+                                     errbuf_len))
+        return false;
+    if (binding)
+        return set_error(errbuf, errbuf_len,
+                         "AOT scalar value retains a forbidden legacy value plan");
+    if (plan->rep.kind == XAOT_VALUE_SCALAR || plan->rep.kind == XAOT_VALUE_VOID)
+        return set_error(errbuf, errbuf_len,
+                         "AOT bundle retains a forbidden legacy scalar value row");
     if (!plan->rep.c_type)
         return set_error(errbuf, errbuf_len, "AOT value plan is missing C type");
     if (plan->rep.kind == XAOT_VALUE_VECTOR)
@@ -7057,12 +7183,30 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
         if (!blk)
             continue;
         for (phi = blk->phis; phi; phi = phi->next) {
-            if (!xaot_bundle_find_value_plan(bundle, &phi->value))
-                return set_error(errbuf, errbuf_len, "Xi phi has no AOT value plan");
+            const XrTargetValueRepRecord *binding = NULL;
+            const XaotValuePlan *legacy = xaot_bundle_find_value_plan(bundle, &phi->value);
+            if (!verify_target_value_binding(bundle, func, &phi->value, &binding, errbuf,
+                                             errbuf_len))
+                return false;
+            if (binding && legacy)
+                return set_error(errbuf, errbuf_len,
+                                 "Xi scalar phi retains a legacy AOT value plan");
+            if (!binding && !legacy)
+                return set_error(errbuf, errbuf_len,
+                                 "Xi unmigrated phi has no AOT value plan");
         }
         for (vi = 0; vi < blk->nvalues; vi++) {
-            if (!xaot_bundle_find_value_plan(bundle, blk->values[vi]))
-                return set_error(errbuf, errbuf_len, "Xi value has no AOT value plan");
+            const XrTargetValueRepRecord *binding = NULL;
+            const XaotValuePlan *legacy = xaot_bundle_find_value_plan(bundle, blk->values[vi]);
+            if (!verify_target_value_binding(bundle, func, blk->values[vi], &binding, errbuf,
+                                             errbuf_len))
+                return false;
+            if (binding && legacy)
+                return set_error(errbuf, errbuf_len,
+                                 "Xi scalar value retains a legacy AOT value plan");
+            if (!binding && !legacy)
+                return set_error(errbuf, errbuf_len,
+                                 "Xi unmigrated value has no AOT value plan");
         }
     }
 
@@ -7193,7 +7337,7 @@ static bool storage_reps_equal(XaotValueRep a, XaotValueRep b) {
 static bool verify_direct_call_arg_step(const XaotBundle *bundle, const XaotBoundaryStep *step,
                                         char *errbuf, size_t errbuf_len) {
     const XaotFuncPlan *target_plan;
-    const XaotValuePlan *arg_plan;
+    XaotValueRep arg_rep;
 
     if (!step->target_func)
         return set_error(errbuf, errbuf_len, "AOT direct call argument step has no target");
@@ -7212,10 +7356,10 @@ static bool verify_direct_call_arg_step(const XaotBundle *bundle, const XaotBoun
         return set_error(errbuf, errbuf_len, "AOT direct call argument target has no ABI plan");
     if (step->arg_index >= target_plan->abi.nparams || !target_plan->abi.params)
         return set_error(errbuf, errbuf_len, "AOT direct call argument index is out of range");
-    arg_plan = xaot_bundle_find_value_plan(bundle, step->input);
-    if (!arg_plan)
-        return set_error(errbuf, errbuf_len, "AOT direct call argument input has no value plan");
-    if (!storage_reps_equal(step->from_rep, arg_plan->rep))
+    if (!verify_effective_value_rep(bundle, step->func, step->input, &arg_rep, errbuf,
+                                    errbuf_len))
+        return false;
+    if (!storage_reps_equal(step->from_rep, arg_rep))
         return set_error(errbuf, errbuf_len, "AOT direct call argument from-rep mismatch");
     if (!storage_reps_equal(step->to_rep, target_plan->abi.params[step->arg_index].rep))
         return set_error(errbuf, errbuf_len, "AOT direct call argument to-rep mismatch");
@@ -7227,7 +7371,7 @@ static bool verify_direct_call_arg_step(const XaotBundle *bundle, const XaotBoun
 static bool verify_direct_call_ret_step(const XaotBundle *bundle, const XaotBoundaryStep *step,
                                         char *errbuf, size_t errbuf_len) {
     const XaotFuncPlan *target_plan;
-    const XaotValuePlan *call_plan;
+    XaotValueRep call_rep;
 
     if (!step->target_func)
         return set_error(errbuf, errbuf_len, "AOT direct call return step has no target");
@@ -7244,12 +7388,12 @@ static bool verify_direct_call_ret_step(const XaotBundle *bundle, const XaotBoun
     target_plan = xaot_bundle_find_func_plan(bundle, step->target_func);
     if (!target_plan)
         return set_error(errbuf, errbuf_len, "AOT direct call return target has no ABI plan");
-    call_plan = xaot_bundle_find_value_plan(bundle, step->value);
-    if (!call_plan)
-        return set_error(errbuf, errbuf_len, "AOT direct call return site has no value plan");
+    if (!verify_effective_value_rep(bundle, step->func, step->value, &call_rep, errbuf,
+                                    errbuf_len))
+        return false;
     if (!storage_reps_equal(step->from_rep, target_plan->abi.ret.rep))
         return set_error(errbuf, errbuf_len, "AOT direct call return from-rep mismatch");
-    if (!storage_reps_equal(step->to_rep, call_plan->rep))
+    if (!storage_reps_equal(step->to_rep, call_rep))
         return set_error(errbuf, errbuf_len, "AOT direct call return to-rep mismatch");
     if (storage_reps_equal(step->from_rep, step->to_rep))
         return set_error(errbuf, errbuf_len, "AOT direct call return step is a no-op");
@@ -7291,7 +7435,7 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
                                           const XiValue *call, char *errbuf, size_t errbuf_len) {
     const XiFunc *target;
     const XaotFuncPlan *target_plan;
-    const XaotValuePlan *call_plan;
+    XaotValueRep call_rep;
     uint16_t first_arg;
     uint16_t call_arg_count;
     uint16_t a;
@@ -7315,14 +7459,13 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
         return set_error(errbuf, errbuf_len, "AOT direct call has more args than target ABI");
     for (a = first_arg; a < first_arg + verify_argc; a++) {
         const XiValue *arg = call->args[a];
-        const XaotValuePlan *arg_plan;
+        XaotValueRep arg_rep;
         const XaotBoundaryStep *step;
         if (!arg)
             return set_error(errbuf, errbuf_len, "AOT direct call has NULL argument");
-        arg_plan = xaot_bundle_find_value_plan(bundle, arg);
-        if (!arg_plan)
-            return set_error(errbuf, errbuf_len, "AOT direct call arg has no value plan");
-        if (storage_reps_equal(arg_plan->rep,
+        if (!verify_effective_value_rep(bundle, func, arg, &arg_rep, errbuf, errbuf_len))
+            return false;
+        if (storage_reps_equal(arg_rep,
                                xaot_abi_slot_value_rep(&target_plan->abi.params[a - first_arg])))
             continue;
         step = xaot_bundle_find_boundary_step_ex(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_ARG, func,
@@ -7332,10 +7475,9 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
     }
     if (target_plan->abi.ret.cls == XAOT_ARG_VOID)
         return true;
-    call_plan = xaot_bundle_find_value_plan(bundle, call);
-    if (!call_plan)
-        return set_error(errbuf, errbuf_len, "AOT direct call result has no value plan");
-    if (storage_reps_equal(xaot_abi_slot_value_rep(&target_plan->abi.ret), call_plan->rep))
+    if (!verify_effective_value_rep(bundle, func, call, &call_rep, errbuf, errbuf_len))
+        return false;
+    if (storage_reps_equal(xaot_abi_slot_value_rep(&target_plan->abi.ret), call_rep))
         return true;
     if (!xaot_bundle_find_boundary_step_ex(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET, func, call,
                                            NULL, target, UINT16_MAX))
@@ -7646,6 +7788,8 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, XaotVerifyMode mode, c
         return set_error(errbuf, errbuf_len, "AOT bundle has no modules");
     if (bundle->entry_module >= bundle->nmodules)
         return set_error(errbuf, errbuf_len, "AOT bundle entry module is out of range");
+    if (!verify_target_plan_bindings(bundle, errbuf, errbuf_len))
+        return false;
     if (bundle->nfunc_plans == 0)
         return set_error(errbuf, errbuf_len, "AOT bundle has no function plans");
     if (!verify_global_evidence_plan(bundle, errbuf, errbuf_len))

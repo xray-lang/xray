@@ -13,6 +13,7 @@
 #include "xaot_class_native.h"
 #include "xaot_callable.h"
 #include "xaot_link.h"
+#include "refine/xr_aot_scalar_value.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
@@ -23,12 +24,125 @@
 #include "../ir/xi_effect.h"
 #include "../ir/xi_range.h"
 #include "../ir/xi_value_query.h"
+#include "../plan/target/xr_target_verify.h"
 #include "../shared/xr_array_core.h"
 #include <stdlib.h>
 #include <string.h>
 
 static bool value_reps_equal(XaotValueRep a, XaotValueRep b) {
     return xaot_value_reps_equal(a, b);
+}
+
+static bool prepare_require_target_plans(XaotBundle *bundle) {
+    char error[256] = {0};
+
+    if (!bundle || !bundle->modules || !bundle->target_plans) {
+        if (bundle)
+            bundle->error_msg = "AOT prepare requires module TargetPlans";
+        return false;
+    }
+    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
+        const XiModule *module = bundle->modules[module_index];
+        const XrTargetPlan *target_plan = bundle->target_plans[module_index];
+        if (!module || !module->init || !module->init->semantic_plan || !target_plan ||
+            xr_target_plan_semantic_plan(target_plan) != module->init->semantic_plan ||
+            xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES ||
+            !xr_target_plan_is_verified(target_plan) ||
+            !xr_target_plan_verify(target_plan, error, sizeof(error))) {
+            bundle->error_msg = "AOT prepare rejected a missing or corrupt module TargetPlan";
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
+                                         const XiValue *value,
+                                         const XrTargetValueRepRecord **out_binding) {
+    const XrTargetPlan *target_plan;
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    char error[256] = {0};
+
+    if (out_binding)
+        *out_binding = NULL;
+    target_plan = xaot_bundle_target_plan_for_func(bundle, func);
+    if (!bundle || !func || !value || !out_binding || !target_plan ||
+        !xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
+                                         &semantic_value, error, sizeof(error))) {
+        if (bundle)
+            bundle->error_msg = "AOT value lacks exact TargetPlan semantic identity";
+        return false;
+    }
+    (void) semantic_function;
+    *out_binding = xr_target_plan_value_rep(target_plan, semantic_value);
+    return true;
+}
+
+static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
+                                             const XrTargetValueRepRecord *binding,
+                                             const XiValue *value, XaotValueRep *out) {
+    const XrTargetMachineRepRecord *machine;
+    const XaotRepInfo *info;
+    XaotRep rep;
+
+    if (!target_plan || !binding || !value || !out)
+        return false;
+    machine = xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    if (!machine)
+        return false;
+    switch ((XrMachineRepKind) machine->kind) {
+        case XR_MACHINE_REP_VOID: rep = XAOT_REP_VOID; break;
+        case XR_MACHINE_REP_I1: rep = XAOT_REP_BOOL; break;
+        case XR_MACHINE_REP_I8: rep = XAOT_REP_I8; break;
+        case XR_MACHINE_REP_U8: rep = XAOT_REP_U8; break;
+        case XR_MACHINE_REP_I16: rep = XAOT_REP_I16; break;
+        case XR_MACHINE_REP_U16: rep = XAOT_REP_U16; break;
+        case XR_MACHINE_REP_I32: rep = XAOT_REP_I32; break;
+        case XR_MACHINE_REP_U32: rep = XAOT_REP_U32; break;
+        case XR_MACHINE_REP_I64: rep = XAOT_REP_I64; break;
+        case XR_MACHINE_REP_U64: rep = XAOT_REP_U64; break;
+        case XR_MACHINE_REP_ISIZE: rep = XAOT_REP_ISIZE; break;
+        case XR_MACHINE_REP_USIZE: rep = XAOT_REP_USIZE; break;
+        case XR_MACHINE_REP_F32: rep = XAOT_REP_F32; break;
+        case XR_MACHINE_REP_F64: rep = XAOT_REP_F64; break;
+        case XR_MACHINE_REP_RUNE: rep = XAOT_REP_RUNE; break;
+        default: return false;
+    }
+    info = xaot_rep_info(rep);
+    if (!info)
+        return false;
+    memset(out, 0, sizeof(*out));
+    out->kind = rep == XAOT_REP_VOID ? XAOT_VALUE_VOID : XAOT_VALUE_SCALAR;
+    out->rep = rep;
+    out->type = value->type;
+    out->c_type = info->c_type;
+    return true;
+}
+
+static bool prepare_effective_value_rep(XaotBundle *bundle, const XiFunc *func,
+                                        const XiValue *value, XaotValueRep *out) {
+    const XrTargetValueRepRecord *binding;
+    const XrTargetPlan *target_plan;
+    const XaotValuePlan *legacy;
+
+    if (!prepare_target_value_binding(bundle, func, value, &binding))
+        return false;
+    if (binding) {
+        target_plan = xaot_bundle_target_plan_for_func(bundle, func);
+        if (!prepare_target_machine_value_rep(target_plan, binding, value, out)) {
+            bundle->error_msg = "AOT scalar TargetPlan binding has no supported machine rep";
+            return false;
+        }
+        return true;
+    }
+    legacy = xaot_bundle_find_value_plan(bundle, value);
+    if (!legacy) {
+        bundle->error_msg = "AOT unmigrated value has no legacy value plan";
+        return false;
+    }
+    *out = xaot_value_rep_borrow(legacy->rep);
+    return true;
 }
 
 static void prepare_value_plan_set_rep(XaotValuePlan *plan, XaotValueRep rep) {
@@ -3886,6 +4000,23 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
         if (!blk)
             continue;
         for (phi = blk->phis; phi; phi = phi->next) {
+            const XrTargetValueRepRecord *binding = NULL;
+            if (!prepare_target_value_binding(bundle, func, &phi->value, &binding))
+                return false;
+            if (binding) {
+                const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_func(bundle, func);
+                XaotValueRep target_rep;
+                if (!prepare_target_machine_value_rep(target_plan, binding, &phi->value,
+                                                      &target_rep)) {
+                    bundle->error_msg =
+                        "AOT scalar TargetPlan binding has no supported machine rep";
+                    return false;
+                }
+                record_value_stats(&bundle->stats, target_rep.kind);
+                if (!prepare_type_plans_for_type(bundle, phi->value.type, 0))
+                    return false;
+                continue;
+            }
             XaotValuePlan *vp = xaot_bundle_add_value_plan(bundle, func, &phi->value);
             if (!vp) {
                 bundle->error_msg = "failed to allocate AOT value plan";
@@ -3893,11 +4024,33 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             apply_native_class_ptr_value_plan(bundle, vp);
             apply_unit_enum_ordinal_value_plan(bundle, vp);
+            if (vp->rep.kind == XAOT_VALUE_SCALAR || vp->rep.kind == XAOT_VALUE_VOID) {
+                bundle->error_msg =
+                    "AOT prepare refused an unbound legacy scalar value row";
+                return false;
+            }
             record_value_stats(&bundle->stats, vp->rep.kind);
             if (!prepare_type_plans_for_type(bundle, phi->value.type, 0))
                 return false;
         }
         for (vi = 0; vi < blk->nvalues; vi++) {
+            const XrTargetValueRepRecord *binding = NULL;
+            if (!prepare_target_value_binding(bundle, func, blk->values[vi], &binding))
+                return false;
+            if (binding) {
+                const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_func(bundle, func);
+                XaotValueRep target_rep;
+                if (!prepare_target_machine_value_rep(target_plan, binding, blk->values[vi],
+                                                      &target_rep)) {
+                    bundle->error_msg =
+                        "AOT scalar TargetPlan binding has no supported machine rep";
+                    return false;
+                }
+                record_value_stats(&bundle->stats, target_rep.kind);
+                if (!prepare_type_plans_for_type(bundle, blk->values[vi]->type, 0))
+                    return false;
+                continue;
+            }
             XaotValuePlan *vp = xaot_bundle_add_value_plan(bundle, func, blk->values[vi]);
             if (!vp) {
                 bundle->error_msg = "failed to allocate AOT value plan";
@@ -3930,6 +4083,11 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             }
             apply_native_class_ptr_value_plan(bundle, vp);
             apply_unit_enum_ordinal_value_plan(bundle, vp);
+            if (vp->rep.kind == XAOT_VALUE_SCALAR || vp->rep.kind == XAOT_VALUE_VOID) {
+                bundle->error_msg =
+                    "AOT prepare refused an unbound legacy scalar value row";
+                return false;
+            }
             record_value_stats(&bundle->stats, vp->rep.kind);
             if (!prepare_type_plans_for_type(bundle, blk->values[vi]->type, 0))
                 return false;
@@ -4212,6 +4370,21 @@ static void prepare_recount_value_stats(XaotBundle *bundle) {
     bundle->stats.values_vector = 0;
     bundle->stats.values_view = 0;
     bundle->stats.values_void = 0;
+    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
+        const XrTargetPlan *target_plan =
+            xaot_bundle_target_plan_for_module(bundle, module_index);
+        uint32_t binding_count = 0;
+        const XrTargetValueRepRecord *bindings =
+            xr_target_plan_value_reps(target_plan, &binding_count);
+        for (uint32_t binding_index = 0; binding_index < binding_count; binding_index++) {
+            const XrTargetMachineRepRecord *machine =
+                xr_target_plan_machine_rep(target_plan, bindings[binding_index].memory_rep);
+            record_value_stats(&bundle->stats,
+                               machine && machine->kind == XR_MACHINE_REP_VOID
+                                   ? XAOT_VALUE_VOID
+                                   : XAOT_VALUE_SCALAR);
+        }
+    }
     for (uint32_t i = 0; i < bundle->nvalue_plans; i++)
         record_value_stats(&bundle->stats, bundle->value_plans[i].rep.kind);
 }
@@ -4564,8 +4737,8 @@ static bool prepare_direct_call_arg_boundary(XaotBundle *bundle, const XaotFuncP
                                              const XiValue *call, const XiFunc *target,
                                              const XaotFuncPlan *target_plan, uint16_t arg_index,
                                              const XiValue *arg) {
-    const XaotValuePlan *arg_plan;
     const XaotAbiSlot *slot;
+    XaotValueRep arg_rep;
     XaotValueRep slot_rep;
     XaotBoundaryStep *step;
 
@@ -4576,14 +4749,11 @@ static bool prepare_direct_call_arg_boundary(XaotBundle *bundle, const XaotFuncP
         return false;
     }
 
-    arg_plan = xaot_bundle_find_value_plan(bundle, arg);
-    if (!arg_plan) {
-        bundle->error_msg = "AOT direct call argument has no value plan";
+    if (!prepare_effective_value_rep(bundle, caller_plan->func, arg, &arg_rep))
         return false;
-    }
     slot = &target_plan->abi.params[arg_index];
     slot_rep = xaot_abi_slot_value_rep(slot);
-    if (value_reps_equal(arg_plan->rep, slot_rep))
+    if (value_reps_equal(arg_rep, slot_rep))
         return true;
 
     step = xaot_bundle_add_boundary_step(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_ARG,
@@ -4594,7 +4764,7 @@ static bool prepare_direct_call_arg_boundary(XaotBundle *bundle, const XaotFuncP
     }
     step->target_func = target;
     step->arg_index = arg_index;
-    step->from_rep = xaot_value_rep_borrow(arg_plan->rep);
+    step->from_rep = xaot_value_rep_borrow(arg_rep);
     step->to_rep = xaot_value_rep_borrow(slot_rep);
     bundle->stats.boundary_count++;
     return true;
@@ -4604,6 +4774,7 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
                                              const XiValue *call, const XiFunc *target,
                                              const XaotFuncPlan *target_plan) {
     XaotValuePlan *call_plan;
+    XaotValueRep call_rep;
     XaotValueRep ret_rep;
     XaotBoundaryStep *step;
 
@@ -4612,17 +4783,19 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
     if (target_plan->abi.ret.cls == XAOT_ARG_VOID)
         return true;
 
-    call_plan = xaot_bundle_find_value_plan_mut(bundle, call);
-    if (!call_plan) {
-        bundle->error_msg = "AOT direct call result has no value plan";
+    if (!prepare_effective_value_rep(bundle, caller_plan->func, call, &call_rep))
         return false;
-    }
     ret_rep = xaot_abi_slot_value_rep(&target_plan->abi.ret);
     if (ret_rep.kind == XAOT_VALUE_AGGREGATE) {
+        call_plan = xaot_bundle_find_value_plan_mut(bundle, call);
+        if (!call_plan) {
+            bundle->error_msg = "AOT aggregate direct call result has no legacy value plan";
+            return false;
+        }
         prepare_value_plan_set_rep(call_plan, xaot_value_rep_borrow(ret_rep));
         return true;
     }
-    if (value_reps_equal(ret_rep, call_plan->rep))
+    if (value_reps_equal(ret_rep, call_rep))
         return true;
 
     step = xaot_bundle_add_boundary_step(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET,
@@ -4633,7 +4806,7 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
     }
     step->target_func = target;
     step->from_rep = xaot_value_rep_borrow(ret_rep);
-    step->to_rep = xaot_value_rep_borrow(call_plan->rep);
+    step->to_rep = xaot_value_rep_borrow(call_rep);
     bundle->stats.boundary_count++;
     return true;
 }
@@ -5160,6 +5333,8 @@ XR_FUNC bool xaot_prepare_bundle(XaotBundle *bundle, XaotPrepareStats *out_stats
 
     memset(&bundle->stats, 0, sizeof(bundle->stats));
     bundle->error_msg = NULL;
+    if (!prepare_require_target_plans(bundle))
+        return false;
 
     /* Task 216: normalize tail calls to ordinary calls before any prepare-time
      * analysis or boundary/conversion planning, so those steps build the call

@@ -294,6 +294,8 @@ target_link_libraries(test_xtp_fuzz_entry PRIVATE xray_core)
 add_test(NAME test_xtp_fuzz_entry COMMAND $<TARGET_FILE:test_xtp_fuzz_entry>)
 add_xray_unit_test(test_xr_aot_scalar_plan aot/test_xr_aot_scalar_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_xray_unit_test(test_xaot_scalar_target_cutover aot/test_xaot_scalar_target_cutover.c
+    ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_xr_aot_refinement aot/test_xr_aot_refinement.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 set_tests_properties(test_xr_aot_refinement PROPERTIES

@@ -15,6 +15,7 @@
 #include "../base/xmemstream.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../ir/xi_op_name.h"
+#include "../plan/target/xr_target_verify.h"
 #include "../runtime/value/xvalue.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -436,6 +437,10 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
     bundle->modules = modules;
     bundle->nmodules = nmodules;
     bundle->entry_module = entry_module;
+    bundle->target_plans =
+        (XrTargetPlan **) xr_calloc(nmodules, sizeof(*bundle->target_plans));
+    if (!bundle->target_plans)
+        return false;
     for (uint32_t mi = 0; mi < nmodules; mi++) {
         const XiModule *mod = modules[mi];
         if (!mod || !mod->slot_enums)
@@ -449,6 +454,52 @@ XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t n
         }
     }
     return true;
+}
+
+XR_FUNC bool xaot_bundle_set_target_plan(XaotBundle *bundle, uint32_t module_index,
+                                         XrTargetPlan *target_plan) {
+    const XiModule *module;
+    char error[256] = {0};
+
+    if (!bundle || !bundle->target_plans || module_index >= bundle->nmodules || !target_plan)
+        return false;
+    module = bundle->modules ? bundle->modules[module_index] : NULL;
+    if (!module || !module->init || !module->init->semantic_plan ||
+        xr_target_plan_semantic_plan(target_plan) != module->init->semantic_plan ||
+        xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES ||
+        !xr_target_plan_is_verified(target_plan) ||
+        !xr_target_plan_verify(target_plan, error, sizeof(error))) {
+        bundle->error_msg = "module TargetPlan is missing, corrupt, or bound to different Xi";
+        return false;
+    }
+    if (bundle->target_plans[module_index] == target_plan)
+        return true;
+    xr_target_plan_free(bundle->target_plans[module_index]);
+    bundle->target_plans[module_index] = xr_target_plan_retain(target_plan);
+    if (!bundle->target_plans[module_index]) {
+        bundle->error_msg = "failed to retain module TargetPlan";
+        return false;
+    }
+    return true;
+}
+
+XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_module(const XaotBundle *bundle,
+                                                               uint32_t module_index) {
+    if (!bundle || !bundle->target_plans || module_index >= bundle->nmodules)
+        return NULL;
+    return bundle->target_plans[module_index];
+}
+
+XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_func(const XaotBundle *bundle,
+                                                             const XiFunc *func) {
+    if (!bundle || !func || !func->semantic_plan || !bundle->target_plans)
+        return NULL;
+    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
+        const XrTargetPlan *target_plan = bundle->target_plans[module_index];
+        if (target_plan && xr_target_plan_semantic_plan(target_plan) == func->semantic_plan)
+            return target_plan;
+    }
+    return NULL;
 }
 
 static const XgClassSummary *xg_evidence_find_class(const XgGlobalEvidence *ev,
@@ -4089,6 +4140,9 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     uint32_t i;
     if (!bundle)
         return;
+    for (i = 0; i < bundle->nmodules; i++)
+        xr_target_plan_free(bundle->target_plans ? bundle->target_plans[i] : NULL);
+    xr_free(bundle->target_plans);
     for (i = 0; i < bundle->nfunc_plans; i++)
         xaot_abi_free(&bundle->func_plans[i].abi);
     xr_free(bundle->func_plans);

@@ -19,6 +19,7 @@
 #include "xaot_storage_plan.h"
 #include "../analysis/xglobal_summary.h"
 #include "../ir/xi_module.h"
+#include "../plan/target/xr_target_plan.h"
 #include "../base/xdefs.h"
 #include <stdint.h>
 
@@ -1711,6 +1712,10 @@ typedef struct XaotBundle {
     XiModule **modules;
     uint32_t nmodules;
     uint32_t entry_module;
+    /* One retained, independently verified target authority per Xi module.
+     * Migrated families must resolve through these plans and must not retain
+     * parallel Xaot-private rows. */
+    XrTargetPlan **target_plans;
     XaotArtifactKind artifact_kind;
     uint32_t target_simd_features;
     XaotTargetCapabilityProvider target_provider;
@@ -1908,6 +1913,12 @@ typedef struct XaotBundle {
 XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t nmodules,
                               uint32_t entry_module);
 XR_FUNC void xaot_bundle_free(XaotBundle *bundle);
+XR_FUNC bool xaot_bundle_set_target_plan(XaotBundle *bundle, uint32_t module_index,
+                                         XrTargetPlan *target_plan);
+XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_module(const XaotBundle *bundle,
+                                                               uint32_t module_index);
+XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_func(const XaotBundle *bundle,
+                                                             const XiFunc *func);
 XR_FUNC bool xaot_bundle_set_target_data_layout(XaotBundle *bundle,
                                                 const XrTargetDataLayout *target_layout);
 XR_FUNC bool xaot_bundle_set_target_simd_features(XaotBundle *bundle, uint32_t features);
