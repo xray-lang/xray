@@ -716,7 +716,7 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
                     xr_semantic_graph_build(plan, &graph, error, error_size) &&
                     verify_operations(plan, operation_edge_mask, &graph, error, error_size) &&
                     verify_constants(plan, error, error_size) &&
-                    xr_ownership_certificate_check(plan, error, error_size);
+                    xr_ownership_certificate_check(plan, &graph, error, error_size);
     xr_semantic_graph_dispose(&graph);
     xr_free(block_edge_mask);
     xr_free(operation_edge_mask);

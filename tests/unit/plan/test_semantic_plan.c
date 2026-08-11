@@ -12,6 +12,7 @@
 #include "../../../src/plan/ownership/xr_ownership_certificate.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_graph.h"
 #include "../../../src/plan/semantic/xr_semantic_ops.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
@@ -816,6 +817,38 @@ static void test_semantic_and_ownership_mutations(void) {
     expect_verify_failure(plan, "XR_OWN_3001");
     release_event->logical_delta = saved_delta;
 
+    uint8_t saved_reserved = release_event->reserved;
+    release_event->reserved = 1;
+    expect_verify_failure(plan, "XR_OWN_3002");
+    release_event->reserved = saved_reserved;
+
+    uint8_t saved_program_point = release_event->program_point;
+    release_event->program_point = XR_OWN_POINT_EDGE;
+    expect_verify_failure(plan, "XR_OWN_3002");
+    release_event->program_point = saved_program_point;
+
+    XrOwnershipEventRecord *opening_event = NULL;
+    for (uint32_t i = 0; i < plan->ownership->event_count; i++) {
+        XrOwnershipEventRecord *candidate = &plan->ownership->events[i];
+        if (candidate->owner == release_event->owner && candidate->block == release_event->block &&
+            candidate->successor == XR_SEMANTIC_INDEX_NONE && candidate->logical_delta > 0) {
+            opening_event = candidate;
+            break;
+        }
+    }
+    REQUIRE(opening_event != NULL);
+    REQUIRE(opening_event->program_point == XR_OWN_POINT_AFTER_OPERATION);
+    uint8_t opening_program_point = opening_event->program_point;
+    opening_event->program_point = XR_OWN_POINT_BLOCK_EXIT;
+    expect_verify_failure(plan, "XR_OWN_3002");
+    opening_event->program_point = opening_program_point;
+    int16_t opening_delta = opening_event->logical_delta;
+    opening_event->logical_delta = saved_delta;
+    release_event->logical_delta = opening_delta;
+    expect_verify_failure(plan, "XR_OWN_3003");
+    opening_event->logical_delta = opening_delta;
+    release_event->logical_delta = saved_delta;
+
     XrOwnershipEdgeStateRecord *edge = &plan->ownership->edge_states[0];
     int32_t saved_exit = edge->exit_balance;
     edge->exit_balance = saved_exit + 1;
@@ -882,6 +915,13 @@ static void test_semantic_and_ownership_mutations(void) {
     plan->operands[phi->operand_begin].value = saved_operand;
     char graph_error[512] = {0};
     REQUIRE(xr_semantic_plan_verify(plan, graph_error, sizeof(graph_error)));
+    XrSemanticGraph graph = {0};
+    REQUIRE(xr_semantic_graph_build(plan, &graph, graph_error, sizeof(graph_error)));
+    REQUIRE(xr_semantic_graph_postdominates(&graph, phi->block, 0));
+    REQUIRE(xr_semantic_graph_postdominates(&graph, phi->block, 1));
+    REQUIRE(xr_semantic_graph_postdominates(&graph, phi->block, 2));
+    REQUIRE(!xr_semantic_graph_postdominates(&graph, 1, 0));
+    xr_semantic_graph_dispose(&graph);
     xr_semantic_plan_free(plan);
 }
 

@@ -10,10 +10,13 @@
 
 #include "xr_ownership_check.h"
 #include "xr_ownership_certificate_internal.h"
+#include "xr_ownership_replay.h"
+#include "../semantic/xr_semantic_graph.h"
 #include "../semantic/xr_semantic_plan_internal.h"
 #include "../../base/xmalloc.h"
 #include <limits.h>
 #include <stdio.h>
+#include <string.h>
 
 static bool report(char *error, size_t size, const char *code, const char *detail) {
     if (error && size)
@@ -40,6 +43,50 @@ static const XrOwnershipEdgeStateRecord *find_block_state(const XrOwnershipCerti
             return edge;
     }
     return NULL;
+}
+
+static bool event_program_point_valid(const XrSemanticPlan *plan,
+                                      const XrOwnershipCertificate *certificate,
+                                      const XrOwnershipEventRecord *event) {
+    if (event->owner >= certificate->owner_count || event->operation >= plan->operation_count ||
+        event->block >= plan->block_count || event->program_point > XR_OWN_POINT_EDGE ||
+        event->reserved != 0)
+        return false;
+    const XrOwnershipOwnerRecord *owner = &certificate->owners[event->owner];
+    const XrSemanticOperationRecord *operation = &plan->operations[event->operation];
+    const XrSemanticBlockRecord *block = &plan->blocks[event->block];
+    if (operation->function != owner->function || block->function != owner->function)
+        return false;
+    if (event->program_point == XR_OWN_POINT_AFTER_OPERATION)
+        return event->successor == XR_SEMANTIC_INDEX_NONE && operation->block == event->block;
+    if (event->program_point == XR_OWN_POINT_BLOCK_EXIT)
+        return event->successor == XR_SEMANTIC_INDEX_NONE;
+    return event->successor != XR_SEMANTIC_INDEX_NONE &&
+           (block->successors[0] == event->successor || block->successors[1] == event->successor);
+}
+
+static bool event_canonical_key_valid(const XrSemanticPlan *plan,
+                                      const XrOwnershipCertificate *certificate,
+                                      uint32_t event_index) {
+    const XrOwnershipEventRecord *event = &certificate->events[event_index];
+    char owner_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char expected[224];
+    uint32_t occurrence = 0;
+    for (uint32_t i = 0; i < event_index; i++) {
+        const XrOwnershipEventRecord *prior = &certificate->events[i];
+        if (prior->owner == event->owner && prior->operation == event->operation &&
+            prior->block == event->block && prior->successor == event->successor &&
+            prior->kind == event->kind)
+            occurrence++;
+    }
+    xr_stable_id_hex(certificate->owners[event->owner].id, owner_id);
+    xr_stable_id_hex(plan->operations[event->operation].id, operation_id);
+    int written = snprintf(expected, sizeof(expected), "ownership-event-v3:%s:%s:%u:%u:%u:%u:%u",
+                           owner_id, operation_id, event->block, event->successor, event->kind,
+                           event->program_point, occurrence);
+    return written >= 0 && (size_t) written < sizeof(expected) && event->canonical_key &&
+           strcmp(event->canonical_key, expected) == 0;
 }
 
 static bool check_owner_dataflow(const XrSemanticPlan *plan, uint32_t owner_index, char *error,
@@ -146,8 +193,9 @@ static bool check_owner_dataflow(const XrSemanticPlan *plan, uint32_t owner_inde
     return true;
 }
 
-bool xr_ownership_certificate_check(const XrSemanticPlan *plan, char *error, size_t error_size) {
-    if (!plan || !plan->frozen || !plan->ownership || !plan->ownership->frozen)
+bool xr_ownership_certificate_check(const XrSemanticPlan *plan, const XrSemanticGraph *graph,
+                                    char *error, size_t error_size) {
+    if (!plan || !graph || !plan->frozen || !plan->ownership || !plan->ownership->frozen)
         return report(error, error_size, "XR_OWN_3001",
                       "ownership checker requires a frozen plan and certificate");
     const XrOwnershipCertificate *certificate = plan->ownership;
@@ -161,12 +209,10 @@ bool xr_ownership_certificate_check(const XrSemanticPlan *plan, char *error, siz
         XrFingerprint digest;
         if (!event->canonical_key ||
             !xr_stable_id_from_key(event->canonical_key, &expected, &digest) ||
-            !xr_stable_id_equal(expected, event->id) || event->owner >= certificate->owner_count ||
-            event->operation >= plan->operation_count || event->block >= plan->block_count ||
-            event->kind > XR_OWN_EVENT_RETURN || event->state_after > XR_OWN_IMMORTAL ||
-            (event->successor != XR_SEMANTIC_INDEX_NONE &&
-             plan->blocks[event->block].successors[0] != event->successor &&
-             plan->blocks[event->block].successors[1] != event->successor))
+            !xr_stable_id_equal(expected, event->id) || event->kind > XR_OWN_EVENT_RETURN ||
+            event->state_after > XR_OWN_IMMORTAL ||
+            !event_program_point_valid(plan, certificate, event) ||
+            !event_canonical_key_valid(plan, certificate, i))
             return report(error, error_size, "XR_OWN_3002",
                           "ownership event contains an invalid index or state");
     }
@@ -190,5 +236,5 @@ bool xr_ownership_certificate_check(const XrSemanticPlan *plan, char *error, siz
             !check_owner_dataflow(plan, i, error, error_size))
             return false;
     }
-    return true;
+    return xr_ownership_replay_check(plan, graph, error, error_size);
 }

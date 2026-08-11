@@ -236,6 +236,8 @@ static void encode_ownership(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u16(writer, (uint16_t) record->logical_delta);
         xr_xsm_put_u8(writer, record->kind);
         xr_xsm_put_u8(writer, record->state_after);
+        xr_xsm_put_u8(writer, record->program_point);
+        xr_xsm_put_u8(writer, 0);
     }
     for (uint32_t i = 0; i < certificate->edge_state_count; i++) {
         const XrOwnershipEdgeStateRecord *record = &certificate->edge_states[i];

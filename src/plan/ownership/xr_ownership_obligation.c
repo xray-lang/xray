@@ -179,7 +179,8 @@ static bool add_owner(XrOwnershipBuildContext *ctx, uint32_t root,
 
 static bool add_event_at(XrOwnershipBuildContext *ctx, uint32_t owner_index,
                          uint32_t operation_index, uint32_t block, uint32_t successor,
-                         XrOwnershipEventKind kind, int16_t delta, XrOwnershipState state) {
+                         XrOwnershipEventKind kind, int16_t delta, XrOwnershipState state,
+                         XrOwnershipProgramPoint program_point) {
     XrOwnershipCertificate *certificate = ctx->certificate;
     if (!reserve_array((void **) &certificate->events, &certificate->event_capacity,
                        certificate->event_count + 1, sizeof(*certificate->events),
@@ -194,6 +195,7 @@ static bool add_event_at(XrOwnershipBuildContext *ctx, uint32_t owner_index,
     event->logical_delta = delta;
     event->kind = (uint8_t) kind;
     event->state_after = (uint8_t) state;
+    event->program_point = (uint8_t) program_point;
     char owner_id[XR_STABLE_ID_BYTES * 2 + 1];
     char operation_id[XR_STABLE_ID_BYTES * 2 + 1];
     char key[224];
@@ -206,8 +208,9 @@ static bool add_event_at(XrOwnershipBuildContext *ctx, uint32_t owner_index,
     }
     xr_stable_id_hex(certificate->owners[owner_index].id, owner_id);
     xr_stable_id_hex(ctx->plan->operations[operation_index].id, operation_id);
-    int written = snprintf(key, sizeof(key), "ownership-event-v2:%s:%s:%u:%u:%u:%u", owner_id,
-                           operation_id, block, successor, (unsigned) kind, occurrence);
+    int written = snprintf(key, sizeof(key), "ownership-event-v3:%s:%s:%u:%u:%u:%u:%u", owner_id,
+                           operation_id, block, successor, (unsigned) kind,
+                           (unsigned) program_point, occurrence);
     if (written < 0 || (size_t) written >= sizeof(key))
         return fail(ctx, "XR_EXEC_5003", "ownership event identity failed");
     event->canonical_key = copy_text(key);
@@ -222,24 +225,26 @@ static bool add_event_at(XrOwnershipBuildContext *ctx, uint32_t owner_index,
     return true;
 }
 
-static bool add_event_in_block(XrOwnershipBuildContext *ctx, uint32_t owner_index,
-                               uint32_t operation_index, uint32_t block, XrOwnershipEventKind kind,
-                               int16_t delta, XrOwnershipState state) {
+static bool add_event_at_block_exit(XrOwnershipBuildContext *ctx, uint32_t owner_index,
+                                    uint32_t operation_index, uint32_t block,
+                                    XrOwnershipEventKind kind, int16_t delta,
+                                    XrOwnershipState state) {
     return add_event_at(ctx, owner_index, operation_index, block, XR_SEMANTIC_INDEX_NONE, kind,
-                        delta, state);
+                        delta, state, XR_OWN_POINT_BLOCK_EXIT);
 }
 
 static bool add_event_on_edge(XrOwnershipBuildContext *ctx, uint32_t owner_index,
                               uint32_t operation_index, uint32_t predecessor, uint32_t successor,
                               XrOwnershipEventKind kind, int16_t delta, XrOwnershipState state) {
     return add_event_at(ctx, owner_index, operation_index, predecessor, successor, kind, delta,
-                        state);
+                        state, XR_OWN_POINT_EDGE);
 }
 
 static bool add_event(XrOwnershipBuildContext *ctx, uint32_t owner_index, uint32_t operation_index,
                       XrOwnershipEventKind kind, int16_t delta, XrOwnershipState state) {
-    return add_event_in_block(ctx, owner_index, operation_index,
-                              ctx->plan->operations[operation_index].block, kind, delta, state);
+    return add_event_at(ctx, owner_index, operation_index,
+                        ctx->plan->operations[operation_index].block, XR_SEMANTIC_INDEX_NONE, kind,
+                        delta, state, XR_OWN_POINT_AFTER_OPERATION);
 }
 
 static uint32_t owner_for_value(XrOwnershipBuildContext *ctx, uint32_t value) {
@@ -553,10 +558,10 @@ static bool classify_returns(XrOwnershipBuildContext *ctx) {
                 (disposition_provenance == XR_SEM_RETURN_BORROWED_STATIC && balance > 0)) {
                 uint32_t operation = operation_for_value(ctx->plan, f, block->control_value);
                 if (operation == XR_SEMANTIC_INDEX_NONE ||
-                    !add_event_in_block(ctx, owner_index, operation, b, XR_OWN_EVENT_RETURN, -1,
-                                        disposition_provenance == XR_SEM_RETURN_OWNED
-                                            ? XR_OWN_MOVED
-                                            : XR_OWN_IMMORTAL))
+                    !add_event_at_block_exit(
+                        ctx, owner_index, operation, b, XR_OWN_EVENT_RETURN, -1,
+                        disposition_provenance == XR_SEM_RETURN_OWNED ? XR_OWN_MOVED
+                                                                      : XR_OWN_IMMORTAL))
                     return fail(ctx, "XR_OWN_3002",
                                 "returned reference has no semantic producer operation");
             }
@@ -715,8 +720,8 @@ static bool classify_stack_extents(XrOwnershipBuildContext *ctx) {
                             "stack extent reaches an exit in conflicting states");
             }
             if (terminal_live[local] &&
-                !add_event_in_block(ctx, owner, operation_index, function->block_begin + local,
-                                    XR_OWN_EVENT_DESTROY, -1, XR_OWN_RELEASED)) {
+                !add_event_at_block_exit(ctx, owner, operation_index, function->block_begin + local,
+                                         XR_OWN_EVENT_DESTROY, -1, XR_OWN_RELEASED)) {
                 xr_free(visited);
                 xr_free(terminal_live);
                 xr_free(terminal_dead);
@@ -933,8 +938,8 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
             }
             uint32_t operation =
                 terminal_disposition_operation(ctx, function, block_index, origin_operation);
-            if (!add_event_in_block(ctx, owner, operation, block_index, XR_OWN_EVENT_RELEASE,
-                                    (int16_t) -balance, XR_OWN_RELEASED)) {
+            if (!add_event_at_block_exit(ctx, owner, operation, block_index, XR_OWN_EVENT_RELEASE,
+                                         (int16_t) -balance, XR_OWN_RELEASED)) {
                 xr_free(entry);
                 xr_free(delta);
                 xr_free(edge_delta);

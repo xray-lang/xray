@@ -52,6 +52,12 @@ typedef enum XrOwnershipEventKind {
     XR_OWN_EVENT_RETURN,
 } XrOwnershipEventKind;
 
+typedef enum XrOwnershipProgramPoint {
+    XR_OWN_POINT_AFTER_OPERATION = 0,
+    XR_OWN_POINT_BLOCK_EXIT,
+    XR_OWN_POINT_EDGE,
+} XrOwnershipProgramPoint;
+
 typedef struct XrOwnershipOwnerRecord {
     XrStableId id;
     const char *canonical_key;
@@ -73,6 +79,8 @@ typedef struct XrOwnershipEventRecord {
     int16_t logical_delta;
     uint8_t kind;
     uint8_t state_after;
+    uint8_t program_point;
+    uint8_t reserved;
 } XrOwnershipEventRecord;
 
 typedef struct XrOwnershipEdgeStateRecord {

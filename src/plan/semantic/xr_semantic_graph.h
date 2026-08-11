@@ -25,7 +25,10 @@ typedef struct XrSemanticGraph {
     uint32_t *in_edges;
     uint32_t *rpo_rank;
     uint32_t *immediate_dominator;
+    uint32_t *post_rpo_rank;
+    uint32_t *immediate_postdominator;
     uint8_t *reachable;
+    uint8_t *post_reachable;
 } XrSemanticGraph;
 
 XR_FUNC bool xr_semantic_graph_build(const XrSemanticPlan *plan, XrSemanticGraph *graph,
@@ -36,5 +39,7 @@ XR_FUNC bool xr_semantic_graph_has_edge(const XrSemanticPlan *plan, const XrSema
 XR_FUNC bool xr_semantic_graph_is_reachable(const XrSemanticGraph *graph, uint32_t block);
 XR_FUNC bool xr_semantic_graph_dominates(const XrSemanticGraph *graph, uint32_t dominator,
                                          uint32_t block);
+XR_FUNC bool xr_semantic_graph_postdominates(const XrSemanticGraph *graph, uint32_t postdominator,
+                                             uint32_t block);
 
 #endif  // XR_SEMANTIC_GRAPH_H

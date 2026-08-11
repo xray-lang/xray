@@ -29,7 +29,10 @@ void xr_semantic_graph_dispose(XrSemanticGraph *graph) {
     xr_free(graph->in_edges);
     xr_free(graph->rpo_rank);
     xr_free(graph->immediate_dominator);
+    xr_free(graph->post_rpo_rank);
+    xr_free(graph->immediate_postdominator);
     xr_free(graph->reachable);
+    xr_free(graph->post_reachable);
     memset(graph, 0, sizeof(*graph));
 }
 
@@ -39,6 +42,17 @@ static uint32_t intersect(const XrSemanticGraph *graph, uint32_t left, uint32_t 
             left = graph->immediate_dominator[left];
         while (graph->rpo_rank[right] > graph->rpo_rank[left])
             right = graph->immediate_dominator[right];
+    }
+    return left;
+}
+
+static uint32_t intersect_local(const uint32_t *rank, const uint32_t *idom, uint32_t left,
+                                uint32_t right) {
+    while (left != right) {
+        while (rank[left] > rank[right])
+            left = idom[left];
+        while (rank[right] > rank[left])
+            right = idom[right];
     }
     return left;
 }
@@ -112,6 +126,141 @@ static bool build_function_dominators(const XrSemanticPlan *plan, XrSemanticGrap
     return true;
 }
 
+static uint32_t reverse_successor_count(const XrSemanticGraph *graph, uint32_t function_begin,
+                                        uint32_t block, uint32_t virtual_exit,
+                                        uint32_t terminal_count) {
+    if (block == virtual_exit)
+        return terminal_count;
+    uint32_t global = function_begin + block;
+    return graph->in_begin[global + 1] - graph->in_begin[global];
+}
+
+static uint32_t reverse_successor_at(const XrSemanticPlan *plan, const XrSemanticGraph *graph,
+                                     uint32_t function_begin, uint32_t block, uint32_t virtual_exit,
+                                     const uint32_t *terminals, uint32_t index) {
+    if (block == virtual_exit)
+        return terminals[index] - function_begin;
+    uint32_t global = function_begin + block;
+    return plan->edges[graph->in_edges[graph->in_begin[global] + index]].from_block -
+           function_begin;
+}
+
+static bool build_function_postdominators(const XrSemanticPlan *plan, XrSemanticGraph *graph,
+                                          const XrSemanticFunctionRecord *function, char *error,
+                                          size_t error_size) {
+    uint32_t count = function->block_count;
+    uint32_t virtual_exit = count;
+    uint32_t *terminals = (uint32_t *) xr_malloc((size_t) count * sizeof(*terminals));
+    uint32_t *node_stack = (uint32_t *) xr_malloc(((size_t) count + 1u) * sizeof(*node_stack));
+    uint32_t *cursor_stack = (uint32_t *) xr_malloc(((size_t) count + 1u) * sizeof(*cursor_stack));
+    uint32_t *postorder = (uint32_t *) xr_malloc(((size_t) count + 1u) * sizeof(*postorder));
+    uint32_t *rank = (uint32_t *) xr_malloc(((size_t) count + 1u) * sizeof(*rank));
+    uint32_t *idom = (uint32_t *) xr_malloc(((size_t) count + 1u) * sizeof(*idom));
+    uint8_t *visited = (uint8_t *) xr_calloc((size_t) count + 1u, sizeof(*visited));
+    if (count &&
+        (!terminals || !node_stack || !cursor_stack || !postorder || !rank || !idom || !visited)) {
+        xr_free(terminals);
+        xr_free(node_stack);
+        xr_free(cursor_stack);
+        xr_free(postorder);
+        xr_free(rank);
+        xr_free(idom);
+        xr_free(visited);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "post-dominator allocation budget exhausted");
+    }
+    uint32_t terminal_count = 0;
+    for (uint32_t local = 0; local < count; local++) {
+        uint32_t block = function->block_begin + local;
+        if (graph->reachable[block] && graph->out_begin[block] == graph->out_begin[block + 1])
+            terminals[terminal_count++] = block;
+        rank[local] = XR_SEMANTIC_INDEX_NONE;
+        idom[local] = XR_SEMANTIC_INDEX_NONE;
+    }
+    rank[virtual_exit] = XR_SEMANTIC_INDEX_NONE;
+    idom[virtual_exit] = XR_SEMANTIC_INDEX_NONE;
+    uint32_t depth = 1;
+    uint32_t postorder_count = 0;
+    visited[virtual_exit] = 1;
+    node_stack[0] = virtual_exit;
+    cursor_stack[0] = 0;
+    while (depth > 0) {
+        uint32_t node = node_stack[depth - 1];
+        uint32_t cursor = cursor_stack[depth - 1];
+        uint32_t end = reverse_successor_count(graph, function->block_begin, node, virtual_exit,
+                                               terminal_count);
+        if (cursor < end) {
+            cursor_stack[depth - 1]++;
+            uint32_t next = reverse_successor_at(plan, graph, function->block_begin, node,
+                                                 virtual_exit, terminals, cursor);
+            if (!visited[next]) {
+                visited[next] = 1;
+                node_stack[depth] = next;
+                cursor_stack[depth++] = 0;
+            }
+            continue;
+        }
+        postorder[postorder_count++] = node;
+        depth--;
+    }
+    for (uint32_t i = 0; i < postorder_count; i++)
+        rank[postorder[postorder_count - i - 1]] = i;
+    idom[virtual_exit] = virtual_exit;
+    bool changed = true;
+    uint32_t iteration_count = 0;
+    while (changed) {
+        if (++iteration_count > postorder_count + 1u) {
+            xr_free(terminals);
+            xr_free(node_stack);
+            xr_free(cursor_stack);
+            xr_free(postorder);
+            xr_free(rank);
+            xr_free(idom);
+            xr_free(visited);
+            return report(error, error_size, "XR_EXEC_5003",
+                          "post-dominator iteration budget exhausted");
+        }
+        changed = false;
+        for (uint32_t r = 1; r < postorder_count; r++) {
+            uint32_t node = postorder[postorder_count - r - 1];
+            uint32_t global = function->block_begin + node;
+            uint32_t next_idom = graph->out_begin[global] == graph->out_begin[global + 1]
+                                     ? virtual_exit
+                                     : XR_SEMANTIC_INDEX_NONE;
+            for (uint32_t cursor = graph->out_begin[global]; cursor < graph->out_begin[global + 1];
+                 cursor++) {
+                uint32_t successor =
+                    plan->edges[graph->out_edges[cursor]].to_block - function->block_begin;
+                if (!visited[successor] || idom[successor] == XR_SEMANTIC_INDEX_NONE)
+                    continue;
+                next_idom = next_idom == XR_SEMANTIC_INDEX_NONE
+                                ? successor
+                                : intersect_local(rank, idom, successor, next_idom);
+            }
+            if (next_idom != XR_SEMANTIC_INDEX_NONE && idom[node] != next_idom) {
+                idom[node] = next_idom;
+                changed = true;
+            }
+        }
+    }
+    for (uint32_t local = 0; local < count; local++) {
+        uint32_t block = function->block_begin + local;
+        graph->post_reachable[block] = visited[local];
+        graph->post_rpo_rank[block] = rank[local];
+        graph->immediate_postdominator[block] = idom[local] == virtual_exit
+                                                    ? XR_SEMANTIC_INDEX_NONE
+                                                    : function->block_begin + idom[local];
+    }
+    xr_free(terminals);
+    xr_free(node_stack);
+    xr_free(cursor_stack);
+    xr_free(postorder);
+    xr_free(rank);
+    xr_free(idom);
+    xr_free(visited);
+    return true;
+}
+
 bool xr_semantic_graph_build(const XrSemanticPlan *plan, XrSemanticGraph *graph, char *error,
                              size_t error_size) {
     if (!plan || !graph)
@@ -129,14 +278,22 @@ bool xr_semantic_graph_build(const XrSemanticPlan *plan, XrSemanticGraph *graph,
     graph->rpo_rank = (uint32_t *) xr_malloc((size_t) plan->block_count * sizeof(*graph->rpo_rank));
     graph->immediate_dominator =
         (uint32_t *) xr_malloc((size_t) plan->block_count * sizeof(*graph->immediate_dominator));
+    graph->post_rpo_rank =
+        (uint32_t *) xr_malloc((size_t) plan->block_count * sizeof(*graph->post_rpo_rank));
+    graph->immediate_postdominator = (uint32_t *) xr_malloc(
+        (size_t) plan->block_count * sizeof(*graph->immediate_postdominator));
     graph->reachable = (uint8_t *) xr_calloc(plan->block_count, sizeof(*graph->reachable));
+    graph->post_reachable =
+        (uint8_t *) xr_calloc(plan->block_count, sizeof(*graph->post_reachable));
     uint32_t *node_stack = (uint32_t *) xr_malloc((size_t) plan->block_count * sizeof(*node_stack));
     uint32_t *cursor_stack =
         (uint32_t *) xr_malloc((size_t) plan->block_count * sizeof(*cursor_stack));
     uint32_t *postorder = (uint32_t *) xr_malloc((size_t) plan->block_count * sizeof(*postorder));
-    if ((plan->block_count && (!graph->out_begin || !graph->in_begin || !graph->rpo_rank ||
-                               !graph->immediate_dominator || !graph->reachable || !node_stack ||
-                               !cursor_stack || !postorder)) ||
+    if ((plan->block_count &&
+         (!graph->out_begin || !graph->in_begin || !graph->rpo_rank ||
+          !graph->immediate_dominator || !graph->post_rpo_rank || !graph->immediate_postdominator ||
+          !graph->reachable || !graph->post_reachable || !node_stack || !cursor_stack ||
+          !postorder)) ||
         (plan->edge_count && (!graph->out_edges || !graph->in_edges))) {
         xr_free(node_stack);
         xr_free(cursor_stack);
@@ -147,6 +304,8 @@ bool xr_semantic_graph_build(const XrSemanticPlan *plan, XrSemanticGraph *graph,
     for (uint32_t b = 0; b < plan->block_count; b++) {
         graph->rpo_rank[b] = XR_SEMANTIC_INDEX_NONE;
         graph->immediate_dominator[b] = XR_SEMANTIC_INDEX_NONE;
+        graph->post_rpo_rank[b] = XR_SEMANTIC_INDEX_NONE;
+        graph->immediate_postdominator[b] = XR_SEMANTIC_INDEX_NONE;
     }
     for (uint32_t e = 0; e < plan->edge_count; e++) {
         const XrSemanticEdgeRecord *edge = &plan->edges[e];
@@ -188,9 +347,13 @@ bool xr_semantic_graph_build(const XrSemanticPlan *plan, XrSemanticGraph *graph,
     xr_free(in_cursor);
 
     bool valid = true;
-    for (uint32_t f = 0; valid && f < plan->function_count; f++)
+    for (uint32_t f = 0; valid && f < plan->function_count; f++) {
         valid = build_function_dominators(plan, graph, &plan->functions[f], node_stack,
                                           cursor_stack, postorder, error, error_size);
+        if (valid)
+            valid =
+                build_function_postdominators(plan, graph, &plan->functions[f], error, error_size);
+    }
     xr_free(node_stack);
     xr_free(cursor_stack);
     xr_free(postorder);
@@ -221,6 +384,21 @@ bool xr_semantic_graph_dominates(const XrSemanticGraph *graph, uint32_t dominato
     uint32_t cursor = block;
     while (cursor != dominator) {
         uint32_t parent = graph->immediate_dominator[cursor];
+        if (parent == XR_SEMANTIC_INDEX_NONE || parent == cursor)
+            return false;
+        cursor = parent;
+    }
+    return true;
+}
+
+bool xr_semantic_graph_postdominates(const XrSemanticGraph *graph, uint32_t postdominator,
+                                     uint32_t block) {
+    if (!graph || postdominator >= graph->block_count || block >= graph->block_count ||
+        !graph->post_reachable[postdominator] || !graph->post_reachable[block])
+        return false;
+    uint32_t cursor = block;
+    while (cursor != postdominator) {
+        uint32_t parent = graph->immediate_postdominator[cursor];
         if (parent == XR_SEMANTIC_INDEX_NONE || parent == cursor)
             return false;
         cursor = parent;

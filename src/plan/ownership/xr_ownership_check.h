@@ -16,8 +16,10 @@
 #include <stddef.h>
 
 struct XrSemanticPlan;
+struct XrSemanticGraph;
 
-XR_FUNC bool xr_ownership_certificate_check(const struct XrSemanticPlan *plan, char *error,
+XR_FUNC bool xr_ownership_certificate_check(const struct XrSemanticPlan *plan,
+                                            const struct XrSemanticGraph *graph, char *error,
                                             size_t error_size);
 
 #endif  // XR_OWNERSHIP_CHECK_H

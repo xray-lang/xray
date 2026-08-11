@@ -119,7 +119,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v5\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v6\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -312,6 +312,7 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
             hash_u64(&ctx, (uint16_t) event->logical_delta);
             hash_u64(&ctx, event->kind);
             hash_u64(&ctx, event->state_after);
+            hash_u64(&ctx, event->program_point);
         }
         for (uint32_t i = 0; i < plan->ownership->edge_state_count; i++) {
             const XrOwnershipEdgeStateRecord *edge = &plan->ownership->edge_states[i];
@@ -689,9 +690,12 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
             dump_id(out, record->id);
             fputs(" key=", out);
             dump_text(out, record->canonical_key);
-            fprintf(out, " owner=%u operation=%u block=%u successor=%u delta=%d kind=%u state=%u\n",
+            fprintf(out,
+                    " owner=%u operation=%u block=%u successor=%u delta=%d kind=%u state=%u "
+                    "point=%u\n",
                     record->owner, record->operation, record->block, record->successor,
-                    record->logical_delta, record->kind, record->state_after);
+                    record->logical_delta, record->kind, record->state_after,
+                    record->program_point);
         }
         for (uint32_t i = 0; i < certificate->edge_state_count; i++) {
             const XrOwnershipEdgeStateRecord *record = &certificate->edge_states[i];

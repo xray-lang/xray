@@ -404,6 +404,8 @@ static void decode_ownership(XrXsmReader *reader, XrOwnershipCertificate *certif
         record->logical_delta = (int16_t) xr_xsm_take_u16(reader);
         record->kind = xr_xsm_take_u8(reader);
         record->state_after = xr_xsm_take_u8(reader);
+        record->program_point = xr_xsm_take_u8(reader);
+        record->reserved = xr_xsm_take_u8(reader);
     }
     for (uint32_t i = 0; i < certificate->edge_state_count; i++) {
         XrOwnershipEdgeStateRecord *record = &certificate->edge_states[i];
