@@ -247,7 +247,7 @@ static XrRuntimeAbiStatus verify_flag_groups(const XrRuntimeObjectFlagAbi *flags
 static XrRuntimeAbiStatus verify_object_flags(const XrRuntimeObjectFlagAbi *flags) {
     if (flags->entry_count > XR_RUNTIME_ABI_MAX_OBJECT_FLAGS)
         return XR_RUNTIME_ABI_BUDGET_EXCEEDED;
-    if (flags->entry_count == 0 || !scalar_width_valid(flags->encoding_width))
+    if (!scalar_width_valid(flags->encoding_width))
         return XR_RUNTIME_ABI_INVALID_SHAPE;
     if (flags->reserved8 != 0 || flags->reserved32 != 0)
         return XR_RUNTIME_ABI_INVALID_POLICY;

@@ -539,6 +539,17 @@ static void test_object_header_known_answer_and_mutation(void) {
               XR_RUNTIME_ABI_BUDGET_EXCEEDED,
           "object-kind registry budget is fail closed");
     mutated = abi;
+    memset(&mutated.object_kinds.entries[0].stable_id, 0,
+           sizeof(mutated.object_kinds.entries[0].stable_id));
+    CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_SHAPE,
+          "zero object-kind stable IDs are rejected");
+    mutated = abi;
+    mutated.object_kinds.entries[3].encoding = 4;
+    CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_POLICY,
+          "unused object-kind registry rows must be zero");
+    mutated = abi;
     mutated.flags.reserved_zero_mask ^= UINT64_C(8);
     CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
               XR_RUNTIME_ABI_INVALID_MASK,
@@ -548,6 +559,36 @@ static void test_object_header_known_answer_and_mutation(void) {
     CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
               XR_RUNTIME_ABI_INVALID_SHAPE,
           "flag exclusivity groups cannot contain one member");
+    mutated = abi;
+    mutated.flags.entry_count = XR_RUNTIME_ABI_MAX_OBJECT_FLAGS + 1;
+    CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_BUDGET_EXCEEDED,
+          "object-flag registry budget is fail closed");
+    mutated = abi;
+    mutated.flags.entries[0].bit = 0;
+    CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_SHAPE,
+          "zero object-flag bits are rejected");
+    mutated = abi;
+    mutated.flags.entries[0].bit = 3;
+    CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_SHAPE,
+          "multi-bit object-flag entries are rejected");
+    mutated = abi;
+    mutated.flags.entries[1].stable_id = mutated.flags.entries[0].stable_id;
+    CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_ORDER,
+          "object-flag stable IDs are unique and ordered");
+    mutated = abi;
+    mutated.flags.entries[1].bit = mutated.flags.entries[0].bit;
+    CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_SHAPE,
+          "object-flag bits are unique");
+    mutated = abi;
+    mutated.flags.entries[3].reserved32 = 1;
+    CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==
+              XR_RUNTIME_ABI_INVALID_POLICY,
+          "unused object-flag registry rows must be zero");
     mutated = abi;
     mutated.reserved32 = 1;
     CHECK(xr_runtime_object_header_abi_fingerprint(&mutated, &changed) ==

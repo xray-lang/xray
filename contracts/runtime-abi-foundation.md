@@ -3,8 +3,9 @@
 Status: preparatory runtime leaf frozen by task 274.
 
 This contract freezes the target-plan-independent representation consumed by a
-future canonical runtime ABI cutover. It does not claim that object headers,
-value families, VM, or AOT materialization have already switched.
+future canonical runtime ABI cutover. The canonical five-field object header is
+materialized by this leaf, but no value family, VM, or AOT allocation path has
+switched to it yet.
 
 1. Stable IDs and fingerprints are pointer-free byte value types shared across
    compiler, plan, runtime, and audit layers. Runtime code does not depend on
@@ -19,8 +20,8 @@ value families, VM, or AOT materialization have already switched.
    bytes are derived data and retain the source extent ID and fingerprint.
 4. `descriptor_id` names the immutable runtime descriptor. `layout_id` names
    the verified source layout-plan identity from which it was generated.
-   `object_kind_id` is a stable identity, not a prematurely frozen runtime tag
-   registry or a private VM/AOT enum.
+   `object_kind_id` is the stable identity of a canonical materialized carrier
+   kind, never a private VM/AOT enum or an open-ended generic fallback.
 5. Semantic ownership domain and backend materialization remain independent
    axes from `xstorage.h`. An actual domain additionally has a stable contract
    ID and nonzero runtime instance ID. Category allowlists never erase exact
@@ -40,10 +41,9 @@ value families, VM, or AOT materialization have already switched.
 The three TargetProfile runtime fingerprints are derived from structured
 contracts. A nonzero byte string is not evidence. The builders in this leaf
 validate pointer-free candidate schemas without treating the current legacy
-`XrObjHeader` as an input. Production profile freeze remains blocked until the
-five-field header and canonical dynamic-value registry are materialized in the
-runtime and supplied to these builders; this prevents `objsize`, the overloaded
-auxiliary word, and backend-private flags from entering the new ABI.
+object header as an input. Production profile freeze remains blocked until the
+canonical dynamic-value and provider registries are materialized and the
+TargetProfile freeze API consumes structured schemas rather than raw digests.
 
 The required object-header entry point is:
 
@@ -77,6 +77,51 @@ names, target strings, addresses, paths, and C struct bytes are never inputs.
 The canonical header contract must not contain `objsize`, VM/AOT-private tags,
 weak/cycle slots, or a reusable auxiliary word; evaluated extent and allocator
 metadata own those facts.
+
+`XrRuntimeObjectHeader` is the materialized implementation of this contract:
+
+```c
+typedef struct XrRuntimeObjectHeader {
+    _Atomic int32_t rc;
+    uint16_t object_kind;
+    uint16_t flags;
+    uint32_t layout_id;
+    uint32_t domain_id;
+} XrRuntimeObjectHeader;
+```
+
+Its hard budget is 16 bytes with four-byte alignment and offsets 0/4/6/8/12.
+Static assertions reject compiler layout drift. The initial RC is positive one;
+retain/release deltas are +1/-1; `INT32_MIN` is the sticky sentinel and values
+through `INT32_MIN + 1024` form the sticky band. Local access is plain and
+shared access uses the frozen relaxed/release/acquire protocol.
+
+The v1 registry contains only the carrier families specified by design 910:
+string, closure, boxed aggregate, array, map, set, instance, boxed enum, and
+cell. Tuple materialization folds into boxed aggregate and non-owning views do
+not receive headers. There is no generic/opaque entry. Concrete behavior comes
+from the verified layout table. Stable IDs are fixed literals derived under
+`contracts/target-machine/id-and-fingerprint-policy.toml` from canonical keys
+under `xray.runtime.object-kind.v1/`; a governance KAT independently recomputes
+every literal with the policy's v1 domain and u32 framing and checks collisions.
+The flags registry is empty in schema v1 and all 16 bits are reserved zero;
+destructor and domain facts remain in their verified tables instead of becoming
+unchecked duplicate header state.
+
+The materializer consumes `XrRuntimeObjectHeaderMaterializationFacts`, not
+implicit host layout. These pointer-free facts record exact scalar/atomic size
+and alignment, all five offsets, target endian, two's-complement encoding,
+lock-free atomic-i32 RMW support, required relaxed/acquire/release orders, and
+reserved-zero fields. Compiler code supplies facts from a target provider
+probe. Runtime code independently creates native facts from the compiled type.
+Any fact other than the exact 16-byte/4-aligned canonical ABI fails closed; the
+materializer self-validates the complete `XrRuntimeObjectHeaderAbi` and
+publishes no output on failure. Header initialization rejects unknown kinds,
+reserved flag bits, and invalid layout/domain table indexes.
+
+The planner's entity-ID implementation is not a production dependency of this
+leaf. TargetProfile wiring must align it with the frozen v1 policy before a
+layout descriptor can name these kinds; no v2-ID compatibility map is allowed.
 
 The required whole-runtime entry point is:
 
@@ -136,10 +181,16 @@ fallback.
 ## Digest anchors
 
 anchor-sha256: src/base/xstable_id.h 3a7abe4d53ba0771a8b064e5d7c395d883253a1a9c65cc46a284872f7119c3b1
+anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 7ec819570b47e2a3f01132fc729eb73f91dda65cf2d343cb9bee34ad229b4284
 anchor-sha256: src/runtime/abi/xr_runtime_descriptor.h ce4f02055de60da60e1e36e04f522508fc0259ada826b29bc39c4bcb9ee0478b
 anchor-sha256: src/runtime/abi/xr_runtime_descriptor.c 1d755ca9d0bf8d830273dbaad86c2390ed74c35464913aba6127e0a1c9b4e423
 anchor-sha256: src/runtime/abi/xr_runtime_contract.h aae1d9df44c1635c09cd2db86583a9695f5d324ce697cd45d483f7546505ba1a
-anchor-sha256: src/runtime/abi/xr_runtime_contract.c 9d6c6c1587a632131b2cae3e0aa41501709cc54660b7ee0673e697ddd63a9b2c
+anchor-sha256: src/runtime/abi/xr_runtime_contract.c 0cd355ffce40eb306a92d5575b5c3b1bd35ab892a8dbd55c7bb95f3604bd1fd3
+anchor-sha256: src/runtime/abi/xr_runtime_object_header.h e2bcd9cfcbb3cc9d06d0ee83bc112a2cde2813f8e899268aecba6c5fe4aad41f
+anchor-sha256: src/runtime/abi/xr_runtime_object_header.c 59fbac2c2fd4a195f2be2980217036636db1fdeadcd05993e5f6e528bfbbf307
 anchor-sha256: tests/unit/runtime/test_runtime_descriptor.c 76e3c93da9b9acc28d14fd83bc9d31504e54082ebf9349c517f3fac897487e46
-anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 57c30a96995f4d18dc955d53035dd7f7fe61d3be93d2373f55be142a0dbc8ddb
+anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 13ec8fedc019e19a893ccbf779dd45800fb859165dae8afde0a1777a70415a28
+anchor-sha256: tests/unit/runtime/test_runtime_object_header.c 05f3c1bd1e157e010cdddac4fb827294c49ca08599f7b8d52f2490cc0efaea95
+anchor-sha256: tests/unit/CMakeLists.txt b5862348fc3f536cb247125739a3a07b73f96f15d799916c73b6c2ab92360325
+anchor-sha256: scripts/check_runtime_object_header_boundary.py 66e28cadaf5c456eca44528ae8ccb0926089d4ef603e6c06ca77113ddd0a7282

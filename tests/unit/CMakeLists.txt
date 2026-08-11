@@ -83,6 +83,27 @@ target_include_directories(test_runtime_abi_contract PRIVATE
 add_test(NAME test_runtime_abi_contract COMMAND $<TARGET_FILE:test_runtime_abi_contract>)
 set_tests_properties(test_runtime_abi_contract PROPERTIES LABELS "runtime;abi;target-machine")
 
+add_executable(test_runtime_object_header
+    runtime/test_runtime_object_header.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_object_header.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_contract.c
+    ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
+)
+target_include_directories(test_runtime_object_header PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+add_test(NAME test_runtime_object_header COMMAND $<TARGET_FILE:test_runtime_object_header>)
+set_tests_properties(test_runtime_object_header PROPERTIES LABELS "runtime;abi;target-machine")
+
+add_test(
+    NAME check_runtime_object_header_boundary
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_runtime_object_header_boundary.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+set_tests_properties(check_runtime_object_header_boundary PROPERTIES
+    LABELS "runtime;abi;static-analysis;target-machine")
+
 add_executable(test_ownership_audit
     runtime/test_ownership_audit.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_descriptor.c
