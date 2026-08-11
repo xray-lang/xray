@@ -19,9 +19,9 @@ unsupported configurations.  A failed row cannot be relabelled as a skipped
 configuration.
 
 anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 0b7e445ee298f308423d42732230afd7647a93361c91a6b15e08fee31784bb95
-anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 30d79df402954c0fe4afe482524d5b831d5865d3637ae08ff9fbe8eb6e4cb38e
+anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json e081cecbe5598dbc4fa413f0379f39223bdd6b111f80ab121a9aa2b200fa47d4
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json aa463ab2250f7f76eadb197b9e949f1b51a1f988b7a8b425c0e282fb4d102bf6
-anchor-sha256: contracts/target-machine/object-extent-inventory.json 9164a835db2c2793ce9374913bafc46039ccbb5e07a0abe0bee6b2660796cff0
+anchor-sha256: contracts/target-machine/object-extent-inventory.json a3e9d3298cc2ff9e773c09fe71af90fe5c07c6f20f2c41eafe7e3c33cce3cf21
 anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc66576441dcdfa3b8b52ee606fb6256abefefa2e848310aed
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 17cca3dcffa272a844d56726d970f4ccce57870ff6a5cd292be58705e75d6d97
 anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2

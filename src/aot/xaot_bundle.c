@@ -7752,19 +7752,384 @@ static void print_transfer_evidence_bits(FILE *out, uint32_t bits) {
 #undef PRINT_BIT
 }
 
+typedef struct XaotDumpValueAuthority {
+    uint32_t semantic_value;
+    const XrTargetValueRepRecord *target;
+    const XaotValuePlan *legacy;
+    const XaotEnumPlan *legacy_enum_ordinal;
+} XaotDumpValueAuthority;
+
+static const XiValue *dump_func_value_by_id(const XiFunc *func, uint32_t value_id,
+                                            uint32_t *matches) {
+    const XiValue *result = NULL;
+    uint32_t count = 0;
+
+    if (!func)
+        return NULL;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        const XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next) {
+            if (phi->value.id == value_id) {
+                result = &phi->value;
+                count++;
+            }
+        }
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *value = block->values[vi];
+            if (value && value->id == value_id) {
+                result = value;
+                count++;
+            }
+        }
+    }
+    if (matches)
+        *matches = count;
+    return count == 1 ? result : NULL;
+}
+
+static uint32_t dump_legacy_value_plan_count(const XaotBundle *bundle, const XiFunc *func,
+                                             const XiValue *value,
+                                             const XaotValuePlan **first) {
+    uint32_t count = 0;
+
+    if (first)
+        *first = NULL;
+    if (!bundle || !func || !value)
+        return 0;
+    for (uint32_t vi = 0; vi < bundle->nvalue_plans; vi++) {
+        const XaotValuePlan *plan = &bundle->value_plans[vi];
+        if (plan->func != func || plan->value != value)
+            continue;
+        if (first && count == 0)
+            *first = plan;
+        count++;
+    }
+    return count;
+}
+
+static bool dump_target_plan_is_exact(const XaotBundle *bundle, uint32_t module_index,
+                                      const XrTargetPlan *target_plan) {
+    const XiModule *module;
+    char error[256] = {0};
+
+    if (!bundle || !bundle->modules || module_index >= bundle->nmodules || !target_plan)
+        return false;
+    module = bundle->modules[module_index];
+    return module && module->init && module->init->semantic_plan &&
+           xr_target_plan_semantic_plan(target_plan) == module->init->semantic_plan &&
+           xr_target_plan_completed_family_mask(target_plan) == XR_TARGET_REQUIRED_FAMILIES &&
+           xr_target_plan_is_verified(target_plan) &&
+           xr_target_plan_verify(target_plan, error, sizeof(error));
+}
+
+static const XaotEnumPlan *dump_legacy_enum_ordinal_plan(const XaotBundle *bundle,
+                                                        const XaotValuePlan *legacy) {
+    const XiValue *value = legacy ? legacy->value : NULL;
+    XrType *type = value ? value->type : NULL;
+    const XaotEnumPlan *plan;
+
+    if (!bundle || !legacy || legacy->rep.kind != XAOT_VALUE_SCALAR ||
+        legacy->rep.rep != XAOT_REP_I64 || legacy->rep.flags != XAOT_VALUE_FLAG_ENUM ||
+        legacy->rep.type != type || !legacy->rep.c_type ||
+        strcmp(legacy->rep.c_type, "int64_t") != 0 || !type || type->is_nullable ||
+        type->kind != XR_KIND_ENUM || !type->enum_type.enum_name ||
+        !type->enum_type.layout || !type->enum_type.layout->is_zero_payload ||
+        type->enum_type.type_arg_count < 0 || type->enum_type.type_arg_count > UINT8_MAX ||
+        type->enum_type.layout_id == 0 ||
+        type->enum_type.layout->layout_id != type->enum_type.layout_id)
+        return NULL;
+    plan = xaot_bundle_find_enum_plan_for_type(bundle, type);
+    if (!plan || !plan->enum_data || !plan->enum_data->name ||
+        strcmp(plan->enum_data->name, type->enum_type.enum_name) != 0 ||
+        plan->layout_id != type->enum_type.layout_id ||
+        plan->enum_data->layout_id != type->enum_type.layout_id ||
+        plan->member_count == 0 || plan->member_count != plan->enum_data->member_count ||
+        plan->member_count != type->enum_type.layout->variant_count || plan->max_payload != 0 ||
+        plan->enum_data->max_payload != 0 || !plan->members ||
+        plan->type_arg_count != (uint8_t) type->enum_type.type_arg_count)
+        return NULL;
+    if (plan->concrete_type && !xr_type_equals((XrType *) plan->concrete_type, type))
+        return NULL;
+    for (uint32_t i = 0; i < plan->member_count; i++) {
+        if (plan->members[i].payload_count != 0)
+            return NULL;
+    }
+    for (uint8_t i = 0; i < plan->type_arg_count; i++) {
+        if (!plan->type_args || !type->enum_type.type_args ||
+            !xr_type_equals(plan->type_args[i], type->enum_type.type_args[i]))
+            return NULL;
+    }
+    return plan;
+}
+
+static bool dump_value_authority(const XaotBundle *bundle, const XaotFuncPlan *function_plan,
+                                 const XrSemanticFunctionRecord *semantic_function,
+                                 const XiValue *value, XaotDumpValueAuthority *out) {
+    const XrTargetPlan *target_plan;
+    const XaotValuePlan *legacy = NULL;
+    uint32_t legacy_count;
+
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!bundle || !function_plan || !semantic_function || !value || !out ||
+        !bundle->target_plans || function_plan->module_index >= bundle->nmodules ||
+        semantic_function->value_begin > UINT32_MAX - value->id)
+        return false;
+    target_plan = bundle->target_plans[function_plan->module_index];
+    out->semantic_value = semantic_function->value_begin + value->id;
+    out->target = xr_target_plan_value_rep(target_plan, out->semantic_value);
+    legacy_count =
+        dump_legacy_value_plan_count(bundle, function_plan->func, value, &legacy);
+    if ((out->target ? 1u : 0u) + legacy_count != 1u)
+        return false;
+    if (out->target) {
+        if (!xr_target_plan_machine_rep(target_plan, out->target->register_rep) ||
+            !xr_target_plan_machine_rep(target_plan, out->target->memory_rep))
+            return false;
+    } else {
+        if (!legacy || legacy->rep.kind == XAOT_VALUE_VOID)
+            return false;
+        if (legacy->rep.kind == XAOT_VALUE_SCALAR) {
+            out->legacy_enum_ordinal = dump_legacy_enum_ordinal_plan(bundle, legacy);
+            if (!out->legacy_enum_ordinal)
+                return false;
+        }
+    }
+    out->legacy = legacy;
+    return true;
+}
+
+static bool dump_backend_adapter_authority(
+    const XaotBundle *bundle, const XaotFuncPlan *function_plan,
+    const XrSemanticFunctionRecord *semantic_function, const XiValue *value,
+    const XaotValuePlan **out) {
+    const XaotValuePlan *legacy = NULL;
+    uint32_t legacy_count;
+
+    if (out)
+        *out = NULL;
+    if (!bundle || !function_plan || !semantic_function || !value || !out ||
+        value->id < semantic_function->value_count ||
+        value->backend_origin == XI_BACKEND_VALUE_NONE)
+        return false;
+    legacy_count = dump_legacy_value_plan_count(
+        bundle, function_plan->func, value, &legacy);
+    if (legacy_count != 1 || !legacy ||
+        !xaot_value_plan_is_exact_rep_adapter(bundle, legacy))
+        return false;
+    *out = legacy;
+    return true;
+}
+
+static bool dump_validate_function_authority(const XaotBundle *bundle,
+                                             const XaotFuncPlan *function_plan,
+                                             uint32_t *target_values,
+                                             uint32_t *legacy_values,
+                                             uint32_t *backend_adapters) {
+    const XiFunc *func;
+    const XrTargetPlan *target_plan;
+    const XrSemanticFunctionRecord *semantic_function;
+    uint32_t target_count = 0;
+    uint32_t legacy_count = 0;
+    uint32_t adapter_count = 0;
+
+    if (!bundle || !function_plan || !target_values || !legacy_values ||
+        !backend_adapters || function_plan->module_index >= bundle->nmodules)
+        return false;
+    func = function_plan->func;
+    target_plan = bundle->target_plans[function_plan->module_index];
+    if (!func || !target_plan || func->semantic_plan != xr_target_plan_semantic_plan(target_plan) ||
+        func->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    semantic_function =
+        xr_semantic_plan_function(func->semantic_plan, func->semantic_plan_function_index);
+    if (!semantic_function || func->next_value_id < semantic_function->value_count)
+        return false;
+
+    for (uint32_t value_id = 0; value_id < semantic_function->value_count; value_id++) {
+        uint32_t matches = 0;
+        const XiValue *value = dump_func_value_by_id(func, value_id, &matches);
+        XaotDumpValueAuthority authority;
+        if (!value || matches != 1 ||
+            !dump_value_authority(bundle, function_plan, semantic_function, value, &authority))
+            return false;
+        if (authority.target)
+            target_count++;
+        else
+            legacy_count++;
+    }
+    for (uint32_t value_id = semantic_function->value_count;
+         value_id < func->next_value_id; value_id++) {
+        uint32_t matches = 0;
+        const XiValue *value = dump_func_value_by_id(func, value_id, &matches);
+        const XaotValuePlan *adapter = NULL;
+        if (!value) {
+            if (matches != 0)
+                return false;
+            continue;
+        }
+        if (matches != 1 ||
+            !dump_backend_adapter_authority(bundle, function_plan,
+                                            semantic_function, value, &adapter))
+            return false;
+        adapter_count++;
+    }
+    *target_values = target_count;
+    *legacy_values = legacy_count;
+    *backend_adapters = adapter_count;
+    return true;
+}
+
+static bool dump_validate_value_authorities(const XaotBundle *bundle) {
+    uint64_t target_values = 0;
+    uint64_t legacy_values = 0;
+    uint64_t backend_adapters = 0;
+    uint64_t target_bindings = 0;
+
+    if (!bundle || (bundle->nmodules && !bundle->modules) ||
+        (bundle->nvalue_plans && !bundle->value_plans))
+        return false;
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        const XrTargetPlan *target_plan =
+            bundle->target_plans ? bundle->target_plans[mi] : NULL;
+        if (target_plan && !dump_target_plan_is_exact(bundle, mi, target_plan))
+            return false;
+    }
+    if (bundle->nfunc_plans == 0)
+        return bundle->nmodules == 0 && bundle->nvalue_plans == 0;
+    if (!bundle->func_plans || !bundle->target_plans)
+        return false;
+
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        uint32_t count = 0;
+        const XrTargetPlan *target_plan = bundle->target_plans[mi];
+        if (!dump_target_plan_is_exact(bundle, mi, target_plan))
+            return false;
+        (void) xr_target_plan_value_reps(target_plan, &count);
+        target_bindings += count;
+        size_t semantic_function_count =
+            xr_semantic_plan_function_count(xr_target_plan_semantic_plan(target_plan));
+        for (size_t semantic_function = 0; semantic_function < semantic_function_count;
+             semantic_function++) {
+            uint32_t matches = 0;
+            for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+                const XaotFuncPlan *function_plan = &bundle->func_plans[fi];
+                if (function_plan->module_index == mi && function_plan->func &&
+                    function_plan->func->semantic_plan ==
+                        xr_target_plan_semantic_plan(target_plan) &&
+                    function_plan->func->semantic_plan_function_index == semantic_function)
+                    matches++;
+            }
+            if (matches != 1)
+                return false;
+        }
+    }
+    for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+        const XaotFuncPlan *function_plan = &bundle->func_plans[fi];
+        uint32_t function_target_values = 0;
+        uint32_t function_legacy_values = 0;
+        uint32_t function_backend_adapters = 0;
+        for (uint32_t previous = 0; previous < fi; previous++) {
+            if (bundle->func_plans[previous].func == function_plan->func)
+                return false;
+        }
+        if (!dump_validate_function_authority(bundle, function_plan, &function_target_values,
+                                              &function_legacy_values,
+                                              &function_backend_adapters))
+            return false;
+        target_values += function_target_values;
+        legacy_values += function_legacy_values;
+        backend_adapters += function_backend_adapters;
+    }
+    return target_values == target_bindings &&
+           legacy_values + backend_adapters == bundle->nvalue_plans;
+}
+
+static void dump_module_target_plan(FILE *out, const XaotBundle *bundle, uint32_t module_index) {
+    const XrTargetPlan *target_plan = bundle->target_plans[module_index];
+    char target[XR_FINGERPRINT_BYTES * 2 + 1];
+    char semantic[XR_FINGERPRINT_BYTES * 2 + 1];
+    char profile[XR_FINGERPRINT_BYTES * 2 + 1];
+    uint32_t binding_count = 0;
+    xr_fingerprint_hex(xr_target_plan_fingerprint(target_plan), target);
+    xr_fingerprint_hex(xr_target_plan_semantic_fingerprint(target_plan), semantic);
+    xr_fingerprint_hex(xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)), profile);
+    (void) xr_target_plan_value_reps(target_plan, &binding_count);
+    fprintf(out,
+            "target-plan module=%u schema=%u fingerprint=%s semantic=%s profile=%s "
+            "families=0x%016" PRIx64 " bindings=%u\n",
+            module_index, xr_target_plan_schema_version(target_plan), target, semantic, profile,
+            xr_target_plan_completed_family_mask(target_plan), binding_count);
+}
+
+static void dump_value_metadata(FILE *out, const XiValue *value) {
+    if (value->xa_intrinsic_id != 0)
+        fprintf(out, " intrinsic=%u", value->xa_intrinsic_id);
+    if (xi_vec_shape_is_explicit(value->aux_int))
+        fprintf(out, " vec_shape=0x%" PRIx64 " scalable=%u", (uint64_t) value->aux_int,
+                xi_vec_shape_is_scalable(value->aux_int) ? 1u : 0u);
+    if (value->enum_metadata_owner || value->enum_metadata_kind != 0)
+        fprintf(out, " enum_owner=%s enum_kind=%u enum_field=%u",
+                value->enum_metadata_owner && value->enum_metadata_owner->kind == XR_KIND_ENUM
+                    ? safe_str(value->enum_metadata_owner->enum_type.enum_name)
+                    : "?",
+                (unsigned) value->enum_metadata_kind, (unsigned) value->enum_metadata_field);
+}
+
+typedef struct XaotDumpFunctionOrder {
+    uint32_t plan_index;
+    uint32_t module_index;
+    uint32_t semantic_function;
+} XaotDumpFunctionOrder;
+
+static int compare_dump_function_order(const void *left_value, const void *right_value) {
+    const XaotDumpFunctionOrder *left = (const XaotDumpFunctionOrder *) left_value;
+    const XaotDumpFunctionOrder *right = (const XaotDumpFunctionOrder *) right_value;
+    if (left->module_index != right->module_index)
+        return left->module_index < right->module_index ? -1 : 1;
+    if (left->semantic_function != right->semantic_function)
+        return left->semantic_function < right->semantic_function ? -1 : 1;
+    if (left->plan_index != right->plan_index)
+        return left->plan_index < right->plan_index ? -1 : 1;
+    return 0;
+}
+
 XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     char *buf = NULL;
     size_t bufsz = 0;
     FILE *out;
+    XaotDumpFunctionOrder *function_order = NULL;
     uint32_t mi;
-    uint32_t fi;
 
-    if (!bundle)
+    if (!bundle || !dump_validate_value_authorities(bundle))
         return NULL;
+
+    if (bundle->nfunc_plans) {
+        if (bundle->nfunc_plans > SIZE_MAX / sizeof(*function_order))
+            return NULL;
+        function_order =
+            (XaotDumpFunctionOrder *) xr_malloc(sizeof(*function_order) * bundle->nfunc_plans);
+        if (!function_order)
+            return NULL;
+        for (uint32_t fi = 0; fi < bundle->nfunc_plans; fi++) {
+            function_order[fi] = (XaotDumpFunctionOrder) {
+                .plan_index = fi,
+                .module_index = bundle->func_plans[fi].module_index,
+                .semantic_function =
+                    bundle->func_plans[fi].func->semantic_plan_function_index,
+            };
+        }
+        qsort(function_order, bundle->nfunc_plans, sizeof(*function_order),
+              compare_dump_function_order);
+    }
 
     out = xr_open_memstream(&buf, &bufsz);
-    if (!out)
+    if (!out) {
+        xr_free(function_order);
         return NULL;
+    }
 
     fprintf(out, "xaot-plan v0\n");
     fprintf(out, "modules %u entry %u\n", bundle->nmodules, bundle->entry_module);
@@ -7847,6 +8212,7 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 safe_str(mod ? mod->name : NULL), safe_str(mod ? mod->path : NULL),
                 mi == bundle->entry_module ? 1u : 0u,
                 init ? (unsigned) (1u + init->nchildren) : 0u);
+        dump_module_target_plan(out, bundle, mi);
     }
 
     for (uint32_t ci = 0; ci < bundle->nclass_hierarchy_plans; ci++) {
@@ -8278,50 +8644,100 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                 decl->signature_hash, decl->first_module, decl->first_source_line);
     }
 
-    for (fi = 0; fi < bundle->nfunc_plans; fi++) {
-        const XaotFuncPlan *plan = &bundle->func_plans[fi];
+    for (uint32_t order_index = 0; order_index < bundle->nfunc_plans; order_index++) {
+        const XaotFuncPlan *plan = &bundle->func_plans[function_order[order_index].plan_index];
         const XiFunc *func = plan->func;
         const XaotFuncAbi *abi = &plan->abi;
+        const XrTargetPlan *target_plan = bundle->target_plans[plan->module_index];
+        const XrSemanticFunctionRecord *semantic_function =
+            xr_semantic_plan_function(func->semantic_plan, func->semantic_plan_function_index);
+        uint32_t target_values = 0;
+        uint32_t legacy_values = 0;
+        uint32_t backend_adapters = 0;
         uint16_t pi;
 
+        (void) dump_validate_function_authority(bundle, plan, &target_values,
+                                                &legacy_values,
+                                                &backend_adapters);
+
         fprintf(out,
-                "function %u name=%s module=%u depth=%u abi=%s boundary=%s params=%u "
+                "function %u name=%s module=%u semantic_function=%u depth=%u abi=%s "
+                "boundary=%s params=%u "
                 "ret=%s/%s/%s may_suspend=%u captures=%u blocks=%u values=%u body=%u "
-                "reachable=%u\n",
-                fi, safe_str(func ? func->name : NULL), plan->module_index, (unsigned) plan->depth,
+                "reachable=%u target_values=%u legacy_values=%u "
+                "backend_adapters=%u\n",
+                order_index, safe_str(func ? func->name : NULL), plan->module_index,
+                func->semantic_plan_function_index, (unsigned) plan->depth,
                 xaot_abi_kind_name(abi->kind), xaot_boundary_reason_name(abi->boundary_reason),
                 (unsigned) abi->nparams, safe_str(abi->ret.c_type),
                 xaot_value_kind_name(abi->ret.rep.kind), rep_name(abi->ret.rep.rep),
                 (unsigned) plan->may_suspend, func ? (unsigned) func->ncaptures : 0u,
                 func ? (unsigned) func->nblocks : 0u, count_func_values(func),
-                func ? (unsigned) func->xg_body_func_id : 0u, (unsigned) plan->reachable);
+                func ? (unsigned) func->xg_body_func_id : 0u, (unsigned) plan->reachable,
+                target_values, legacy_values, backend_adapters);
         dump_slot(out, "  ret", &abi->ret);
         for (pi = 0; pi < abi->nparams; pi++) {
             char prefix[32];
             snprintf(prefix, sizeof(prefix), "  param %u", (unsigned) pi);
             dump_slot(out, prefix, &abi->params[pi]);
         }
-        for (uint32_t vi = 0; vi < bundle->nvalue_plans; vi++) {
-            const XaotValuePlan *vp = &bundle->value_plans[vi];
-            if (vp->func != func || !vp->value)
+        for (uint32_t value_id = 0; value_id < semantic_function->value_count; value_id++) {
+            const XiValue *value = dump_func_value_by_id(func, value_id, NULL);
+            XaotDumpValueAuthority authority;
+            (void) dump_value_authority(bundle, plan, semantic_function, value, &authority);
+            if (authority.target) {
+                const XrTargetMachineRepRecord *register_rep =
+                    xr_target_plan_machine_rep(target_plan, authority.target->register_rep);
+                const XrTargetMachineRepRecord *memory_rep =
+                    xr_target_plan_machine_rep(target_plan, authority.target->memory_rep);
+                fprintf(out,
+                        "  value %s%u op=%s semantic=%u authority=target "
+                        "family=target-scalar "
+                        "register=%u(kind=%u,bits=%u) "
+                        "memory=%u(kind=%u,size=%u,align=%u) slot=%u",
+                        value->op == XI_PHI ? "phi" : "v", value->id, xi_op_name(value->op),
+                        authority.semantic_value, authority.target->register_rep,
+                        (unsigned) register_rep->kind, (unsigned) register_rep->register_bits,
+                        authority.target->memory_rep, (unsigned) memory_rep->kind,
+                        memory_rep->memory_size, (unsigned) memory_rep->memory_align,
+                        authority.target->slot);
+                dump_value_metadata(out, value);
+                fprintf(out, "\n");
                 continue;
+            }
+            const XaotValuePlan *vp = authority.legacy;
             fprintf(out, "  value %s%u op=%s kind=%s rep=%s c_type=%s",
-                    vp->value->op == XI_PHI ? "phi" : "v", vp->value->id, xi_op_name(vp->value->op),
+                    value->op == XI_PHI ? "phi" : "v", value->id, xi_op_name(value->op),
                     xaot_value_kind_name(vp->rep.kind), rep_name(vp->rep.rep),
                     safe_str(vp->rep.c_type));
-            if (vp->value->xa_intrinsic_id != 0)
-                fprintf(out, " intrinsic=%u", vp->value->xa_intrinsic_id);
-            if (xi_vec_shape_is_explicit(vp->value->aux_int))
-                fprintf(out, " vec_shape=0x%" PRIx64 " scalable=%u", (uint64_t) vp->value->aux_int,
-                        xi_vec_shape_is_scalable(vp->value->aux_int) ? 1u : 0u);
-            if (vp->value->enum_metadata_owner || vp->value->enum_metadata_kind != 0)
-                fprintf(out, " enum_owner=%s enum_kind=%u enum_field=%u",
-                        vp->value->enum_metadata_owner &&
-                                vp->value->enum_metadata_owner->kind == XR_KIND_ENUM
-                            ? safe_str(vp->value->enum_metadata_owner->enum_type.enum_name)
-                            : "?",
-                        (unsigned) vp->value->enum_metadata_kind,
-                        (unsigned) vp->value->enum_metadata_field);
+            if (authority.legacy_enum_ordinal)
+                fprintf(out, " family=legacy-enum-ordinal enum=%s enum_layout=%u enum_members=%u",
+                        authority.legacy_enum_ordinal->enum_data->name,
+                        authority.legacy_enum_ordinal->layout_id,
+                        authority.legacy_enum_ordinal->member_count);
+            else
+                fprintf(out, " family=legacy");
+            dump_value_metadata(out, value);
+            fprintf(out, " semantic=%u authority=legacy\n", authority.semantic_value);
+        }
+        for (uint32_t value_id = semantic_function->value_count;
+             value_id < func->next_value_id; value_id++) {
+            const XiValue *value = dump_func_value_by_id(func, value_id, NULL);
+            const XaotValuePlan *adapter = NULL;
+            if (!value)
+                continue;
+            (void) dump_backend_adapter_authority(
+                bundle, plan, semantic_function, value, &adapter);
+            fprintf(out,
+                    "  value v%u op=%s kind=%s rep=%s c_type=%s "
+                    "authority=backend-adapter "
+                    "family=backend-representation-adapter origin=%u source=v%u",
+                    value->id, xi_op_name(value->op),
+                    xaot_value_kind_name(adapter->rep.kind),
+                    rep_name(adapter->rep.rep), safe_str(adapter->rep.c_type),
+                    (unsigned) value->backend_origin,
+                    value->args[0] ? value->args[0]->id : UINT32_MAX);
+            dump_value_metadata(out, value);
             fprintf(out, "\n");
         }
     }
@@ -8621,9 +9037,14 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     if (ferror(out)) {
         (void) xr_close_memstream(out, &buf, &bufsz);
         xr_free(buf);
+        xr_free(function_order);
         return NULL;
     }
-    if (xr_close_memstream(out, &buf, &bufsz) != 0)
+    if (xr_close_memstream(out, &buf, &bufsz) != 0) {
+        xr_free(buf);
+        xr_free(function_order);
         return NULL;
+    }
+    xr_free(function_order);
     return buf;
 }

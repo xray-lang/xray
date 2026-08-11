@@ -11,12 +11,14 @@
 #include "../../../src/aot/xaot_prepare.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/ir/xi_op_name.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/runtime/value/xenum_layout.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../plan/target_profile_test_fixture.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,6 +106,43 @@ static XrType scalar_enum = {
         .layout_id = 27004,
         .layout = &scalar_enum_layout,
     },
+};
+
+static XiEnumMemberData ordinal_enum_members[] = {
+    {.name = "FIRST", .ordinal = 0},
+    {.name = "SECOND", .ordinal = 1},
+};
+
+static XiEnumData ordinal_enum_data = {
+    .name = "DumpOrdinal",
+    .member_count = 2,
+    .is_adt = true,
+    .max_payload = 0,
+    .layout_id = 27204,
+    .members = ordinal_enum_members,
+};
+
+static XrEnumLayout ordinal_enum_layout = {
+    .layout_id = 27204,
+    .name = "DumpOrdinal",
+    .variant_count = 2,
+    .tag_size = 1,
+    .align = 1,
+    .size = 1,
+    .is_zero_payload = true,
+};
+
+static XrType ordinal_enum_type = {
+    .kind = XR_KIND_ENUM,
+    .id = 27204,
+    .enum_type =
+        {
+            .enum_name = "DumpOrdinal",
+            .layout_id = 27204,
+            .layout = &ordinal_enum_layout,
+        },
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .frozen = true,
 };
 
 static CutoverModule cutover_module_create(const char *name, int64_t value) {
@@ -197,6 +236,67 @@ static void cutover_bundle_free(CutoverBundle *fixture) {
     memset(fixture, 0, sizeof(*fixture));
 }
 
+static size_t substring_count(const char *text, const char *needle) {
+    size_t count = 0;
+    size_t needle_length = strlen(needle);
+
+    REQUIRE(needle_length != 0);
+    while ((text = strstr(text, needle)) != NULL) {
+        count++;
+        text += needle_length;
+    }
+    return count;
+}
+
+static void require_target_plan_summary(const char *dump, uint32_t module_index,
+                                        const XrTargetPlan *target_plan) {
+    char fingerprint[XR_FINGERPRINT_BYTES * 2 + 1];
+    char semantic[XR_FINGERPRINT_BYTES * 2 + 1];
+    char profile[XR_FINGERPRINT_BYTES * 2 + 1];
+    char expected[512];
+    uint32_t binding_count = 0;
+
+    xr_fingerprint_hex(xr_target_plan_fingerprint(target_plan), fingerprint);
+    xr_fingerprint_hex(xr_target_plan_semantic_fingerprint(target_plan), semantic);
+    xr_fingerprint_hex(xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)), profile);
+    (void) xr_target_plan_value_reps(target_plan, &binding_count);
+    snprintf(expected, sizeof(expected),
+             "target-plan module=%u schema=%u fingerprint=%s semantic=%s profile=%s "
+             "families=0x%016" PRIx64 " bindings=%u\n",
+             module_index, xr_target_plan_schema_version(target_plan), fingerprint, semantic,
+             profile, xr_target_plan_completed_family_mask(target_plan), binding_count);
+    REQUIRE(strstr(dump, expected) != NULL);
+}
+
+static void require_target_value_row(const char *dump, const CutoverModule *module,
+                                     const XiValue *value) {
+    const XrSemanticFunctionRecord *semantic_function = xr_semantic_plan_function(
+        module->function->semantic_plan, module->function->semantic_plan_function_index);
+    uint32_t semantic_value;
+    const XrTargetValueRepRecord *binding;
+    const XrTargetMachineRepRecord *register_rep;
+    const XrTargetMachineRepRecord *memory_rep;
+    char expected[384];
+
+    REQUIRE(semantic_function != NULL);
+    semantic_value = semantic_function->value_begin + value->id;
+    binding = xr_target_plan_value_rep(module->target_plan, semantic_value);
+    REQUIRE(binding != NULL);
+    register_rep = xr_target_plan_machine_rep(module->target_plan, binding->register_rep);
+    memory_rep = xr_target_plan_machine_rep(module->target_plan, binding->memory_rep);
+    REQUIRE(register_rep != NULL);
+    REQUIRE(memory_rep != NULL);
+    snprintf(expected, sizeof(expected),
+             "  value v%u op=%s semantic=%u authority=target "
+             "family=target-scalar "
+             "register=%u(kind=%u,bits=%u) memory=%u(kind=%u,size=%u,align=%u) slot=%u\n",
+             value->id, xi_op_name(value->op), semantic_value, binding->register_rep,
+             (unsigned) register_rep->kind, (unsigned) register_rep->register_bits,
+             binding->memory_rep, (unsigned) memory_rep->kind, memory_rep->memory_size,
+             (unsigned) memory_rep->memory_align, binding->slot);
+    REQUIRE(strstr(dump, expected) != NULL);
+}
+
 static void test_missing_and_partial_module_plans_fail_before_prepare(void) {
     CutoverBundle fixture;
     char error[512] = {0};
@@ -277,6 +377,171 @@ static void test_multi_module_prepare_has_no_scalar_legacy_rows(void) {
     cutover_bundle_free(&fixture);
 }
 
+static void test_plan_dump_records_exact_value_authority(void) {
+    CutoverBundle fixture;
+    cutover_bundle_create(&fixture);
+    cutover_bundle_bind_all(&fixture);
+    REQUIRE(xaot_prepare_bundle(&fixture.bundle, NULL));
+
+    char *first = xaot_bundle_dump_plan(&fixture.bundle);
+    char *second = xaot_bundle_dump_plan(&fixture.bundle);
+    REQUIRE(first != NULL);
+    REQUIRE(second != NULL);
+    REQUIRE(strcmp(first, second) == 0);
+    REQUIRE(fixture.bundle.nfunc_plans == 2);
+    XaotFuncPlan saved_first = fixture.bundle.func_plans[0];
+    fixture.bundle.func_plans[0] = fixture.bundle.func_plans[1];
+    fixture.bundle.func_plans[1] = saved_first;
+    char *permuted = xaot_bundle_dump_plan(&fixture.bundle);
+    REQUIRE(permuted != NULL);
+    REQUIRE(strcmp(first, permuted) == 0);
+    saved_first = fixture.bundle.func_plans[0];
+    fixture.bundle.func_plans[0] = fixture.bundle.func_plans[1];
+    fixture.bundle.func_plans[1] = saved_first;
+    REQUIRE(substring_count(first,
+                            "target_values=2 legacy_values=2 "
+                            "backend_adapters=0\n") == 2);
+    REQUIRE(substring_count(first, " authority=target ") == 4);
+    REQUIRE(substring_count(first, " authority=legacy\n") == 4);
+    for (uint32_t module_index = 0; module_index < 2; module_index++) {
+        const CutoverModule *module = &fixture.modules[module_index];
+        require_target_plan_summary(first, module_index, module->target_plan);
+        require_target_value_row(first, module, module->integer);
+        require_target_value_row(first, module, module->release);
+    }
+    REQUIRE(substring_count(
+                first,
+                "op=CONST kind=tagged rep=tagged c_type=XrValue family=legacy semantic=1 "
+                "authority=legacy\n") ==
+            2);
+
+    xr_free(permuted);
+    xr_free(second);
+    xr_free(first);
+    cutover_bundle_free(&fixture);
+}
+
+static void test_plan_dump_rejects_missing_duplicate_and_residue_authority(void) {
+    CutoverBundle missing;
+    cutover_bundle_create(&missing);
+    cutover_bundle_bind_all(&missing);
+    REQUIRE(xaot_prepare_bundle(&missing.bundle, NULL));
+    REQUIRE(missing.bundle.nvalue_plans == 4);
+    missing.bundle.nvalue_plans--;
+    REQUIRE(xaot_bundle_dump_plan(&missing.bundle) == NULL);
+    missing.bundle.nvalue_plans++;
+    cutover_bundle_free(&missing);
+
+    CutoverBundle duplicate;
+    cutover_bundle_create(&duplicate);
+    cutover_bundle_bind_all(&duplicate);
+    REQUIRE(xaot_prepare_bundle(&duplicate.bundle, NULL));
+    REQUIRE(xaot_bundle_add_value_plan(&duplicate.bundle, duplicate.modules[0].function,
+                                       duplicate.modules[0].text) != NULL);
+    REQUIRE(xaot_bundle_dump_plan(&duplicate.bundle) == NULL);
+    cutover_bundle_free(&duplicate);
+
+    CutoverBundle residue;
+    cutover_bundle_create(&residue);
+    cutover_bundle_bind_all(&residue);
+    REQUIRE(xaot_prepare_bundle(&residue.bundle, NULL));
+    REQUIRE(xaot_bundle_add_value_plan(&residue.bundle, residue.modules[0].function,
+                                       residue.modules[0].integer) != NULL);
+    REQUIRE(xaot_bundle_dump_plan(&residue.bundle) == NULL);
+    cutover_bundle_free(&residue);
+
+    CutoverBundle absent_target;
+    cutover_bundle_create(&absent_target);
+    cutover_bundle_bind_all(&absent_target);
+    REQUIRE(xaot_prepare_bundle(&absent_target.bundle, NULL));
+    XrTargetPlan *saved = absent_target.bundle.target_plans[0];
+    absent_target.bundle.target_plans[0] = NULL;
+    REQUIRE(xaot_bundle_dump_plan(&absent_target.bundle) == NULL);
+    absent_target.bundle.target_plans[0] = saved;
+    cutover_bundle_free(&absent_target);
+}
+
+static void test_plan_dump_preserves_exact_enum_ordinal_authority(void) {
+    XiFunc *function = xi_func_new("enum_dump", &scalar_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *integer = xi_const_int(function, entry, 27, &scalar_int);
+    XiValue *ordinal = xi_param(function, entry, 0, &ordinal_enum_type);
+    REQUIRE(integer != NULL);
+    REQUIRE(ordinal != NULL);
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = ordinal;
+    function->nparams = 1;
+    xi_block_set_return(entry, integer);
+    function->stage = XI_STAGE_OPTIMIZED;
+    char error[512] = {0};
+    bool semantic_built =
+        xr_semantic_plan_build_and_attach(function, error, sizeof(error));
+    if (!semantic_built)
+        fprintf(stderr, "semantic plan build failed: %s\n", error);
+    REQUIRE(semantic_built);
+
+    XiEnumData *slot_enums[] = {&ordinal_enum_data};
+    XiModule module = {
+        .name = "enum_dump",
+        .init = function,
+        .slot_enums = slot_enums,
+        .nslots = 1,
+    };
+    XiModule *modules[] = {&module};
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetPlan *target_plan = NULL;
+    REQUIRE(profile != NULL);
+    REQUIRE(xr_target_plan_build(function->semantic_plan, profile, &target_plan, error,
+                                 sizeof(error)));
+
+    XaotBundle bundle;
+    REQUIRE(xaot_bundle_init(&bundle, modules, 1, 0));
+    REQUIRE(xaot_bundle_set_target_plan(&bundle, 0, target_plan));
+    REQUIRE(xaot_bundle_add_func_plan(&bundle, function, 0, 0) != NULL);
+    XaotValuePlan *legacy = xaot_bundle_add_value_plan(&bundle, function, ordinal);
+    REQUIRE(legacy != NULL);
+    legacy->rep = (XaotValueRep) {
+        .kind = XAOT_VALUE_SCALAR,
+        .rep = XAOT_REP_I64,
+        .type = &ordinal_enum_type,
+        .c_type = "int64_t",
+        .flags = XAOT_VALUE_FLAG_ENUM,
+    };
+
+    char *dump = xaot_bundle_dump_plan(&bundle);
+    REQUIRE(dump != NULL);
+    require_target_plan_summary(dump, 0, target_plan);
+    CutoverModule target_row = {
+        .function = function,
+        .integer = integer,
+        .target_plan = target_plan,
+    };
+    require_target_value_row(dump, &target_row, integer);
+    REQUIRE(strstr(dump,
+                   "value v1 op=PARAM kind=scalar rep=i64 c_type=int64_t "
+                   "family=legacy-enum-ordinal enum=DumpOrdinal enum_layout=27204 "
+                   "enum_members=2 semantic=1 authority=legacy\n") != NULL);
+    xr_free(dump);
+
+    const XaotEnumPlan *enum_plan = xaot_bundle_find_enum_plan_for_type(&bundle, &ordinal_enum_type);
+    REQUIRE(enum_plan != NULL);
+    ((XaotEnumPlan *) enum_plan)->layout_id++;
+    REQUIRE(xaot_bundle_dump_plan(&bundle) == NULL);
+    ((XaotEnumPlan *) enum_plan)->layout_id--;
+    legacy->rep.flags = 0;
+    REQUIRE(xaot_bundle_dump_plan(&bundle) == NULL);
+    legacy->rep.flags = XAOT_VALUE_FLAG_ENUM;
+
+    xaot_bundle_free(&bundle);
+    xr_target_plan_free(target_plan);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static void test_corrupt_bound_plan_and_scalar_residue_fail_closed(void) {
     CutoverBundle corrupt;
     cutover_bundle_create(&corrupt);
@@ -350,6 +615,13 @@ static void test_exact_rep_adapter_family_and_mutations(void) {
                                                  string_plan));
     REQUIRE(xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
                                error, sizeof(error)));
+    char *adapter_dump = xaot_bundle_dump_plan(&fixture.bundle);
+    REQUIRE(adapter_dump != NULL);
+    REQUIRE(strstr(adapter_dump, "backend_adapters=2") != NULL);
+    REQUIRE(strstr(adapter_dump,
+                   "authority=backend-adapter "
+                   "family=backend-representation-adapter") != NULL);
+    xr_free(adapter_dump);
 
     const char *saved_c_type = scalar_plan->rep.c_type;
     scalar_plan->rep.c_type = "forged_scalar_t";
@@ -357,6 +629,7 @@ static void test_exact_rep_adapter_family_and_mutations(void) {
                                                   scalar_plan));
     REQUIRE(!xaot_verify_bundle(&fixture.bundle, XAOT_VERIFY_AOT_READY,
                                 error, sizeof(error)));
+    REQUIRE(xaot_bundle_dump_plan(&fixture.bundle) == NULL);
     scalar_plan->rep.c_type = saved_c_type;
     uint32_t saved_flags = scalar_plan->rep.flags;
     scalar_plan->rep.flags = XAOT_VALUE_FLAG_DYNAMIC_C_TYPE;
@@ -470,6 +743,9 @@ static void test_exact_rep_adapter_family_and_mutations(void) {
 int main(void) {
     test_missing_and_partial_module_plans_fail_before_prepare();
     test_multi_module_prepare_has_no_scalar_legacy_rows();
+    test_plan_dump_records_exact_value_authority();
+    test_plan_dump_rejects_missing_duplicate_and_residue_authority();
+    test_plan_dump_preserves_exact_enum_ordinal_authority();
     test_corrupt_bound_plan_and_scalar_residue_fail_closed();
     test_exact_rep_adapter_family_and_mutations();
     puts("test_xaot_scalar_target_cutover: ok");
