@@ -27,6 +27,7 @@ typedef struct XrXsmCounts {
     uint32_t operations;
     uint32_t edges;
     uint32_t constants;
+    uint32_t entities;
     uint32_t type_children;
     uint32_t parameters;
     uint32_t captures;
@@ -110,6 +111,7 @@ static bool counts_fit_storage_budget(XrXsmCounts count) {
     XR_COUNT_STORAGE(operations, XrSemanticOperationRecord);
     XR_COUNT_STORAGE(edges, XrSemanticEdgeRecord);
     XR_COUNT_STORAGE(constants, XrSemanticConstantRecord);
+    XR_COUNT_STORAGE(entities, XrSemanticEntityRecord);
     XR_COUNT_STORAGE(type_children, uint32_t);
     XR_COUNT_STORAGE(parameters, XrSemanticParameterRecord);
     XR_COUNT_STORAGE(captures, XrSemanticCaptureRecord);
@@ -141,6 +143,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     XR_ALLOC_TABLE(operations, count.operations, XrSemanticOperationRecord);
     XR_ALLOC_TABLE(edges, count.edges, XrSemanticEdgeRecord);
     XR_ALLOC_TABLE(constants, count.constants, XrSemanticConstantRecord);
+    XR_ALLOC_TABLE(entities, count.entities, XrSemanticEntityRecord);
     XR_ALLOC_TABLE(type_children, count.type_children, uint32_t);
     XR_ALLOC_TABLE(parameters, count.parameters, XrSemanticParameterRecord);
     XR_ALLOC_TABLE(captures, count.captures, XrSemanticCaptureRecord);
@@ -166,6 +169,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     plan->operation_count = plan->operation_capacity = count.operations;
     plan->edge_count = plan->edge_capacity = count.edges;
     plan->constant_count = plan->constant_capacity = count.constants;
+    plan->entity_count = plan->entity_capacity = count.entities;
     plan->type_child_count = plan->type_child_capacity = count.type_children;
     plan->parameter_count = plan->parameter_capacity = count.parameters;
     plan->capture_count = plan->capture_capacity = count.captures;
@@ -185,6 +189,7 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->operations = xr_xsm_take_u32(reader);
     count->edges = xr_xsm_take_u32(reader);
     count->constants = xr_xsm_take_u32(reader);
+    count->entities = xr_xsm_take_u32(reader);
     count->type_children = xr_xsm_take_u32(reader);
     count->parameters = xr_xsm_take_u32(reader);
     count->captures = xr_xsm_take_u32(reader);
@@ -197,11 +202,26 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     return !reader->failed && count->types <= 1000000u && count->functions <= 100000u &&
            count->blocks <= 2000000u && count->operations <= 10000000u &&
            count->edges <= 40000000u && count->constants <= 10000000u &&
+           count->entities <= 80000000u &&
            count->type_children <= 8000000u && count->parameters <= 25600000u &&
            count->captures <= 6400000u && count->predecessors <= 16000000u &&
            count->operands <= 40000000u && count->metadata <= 80000000u &&
            count->owners <= 2000000u && count->events <= 20000000u &&
            count->edge_states <= 40000000u;
+}
+
+static void decode_entities(XrXsmReader *reader, XrSemanticPlan *plan) {
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        XrSemanticEntityRecord *record = &plan->entities[i];
+        xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
+        record->canonical_key = take_plan_string(reader, plan, false);
+        record->parent = xr_xsm_take_u32(reader);
+        record->subject = xr_xsm_take_u32(reader);
+        record->ordinal = xr_xsm_take_u32(reader);
+        record->kind = xr_xsm_take_u16(reader);
+        record->subject_kind = xr_xsm_take_u8(reader);
+        record->flags = xr_xsm_take_u8(reader);
+    }
 }
 
 static void decode_types(XrXsmReader *reader, XrSemanticPlan *plan) {
@@ -473,6 +493,7 @@ bool xr_xsm_decode(const uint8_t *bytes, size_t size, XrSemanticPlan **out, char
         xr_ownership_certificate_free(certificate);
         return report(error, error_size, "XR_EXEC_5003", "XSM table budget is invalid");
     }
+    decode_entities(&reader, plan);
     decode_types(&reader, plan);
     decode_functions(&reader, plan);
     decode_blocks(&reader, plan);

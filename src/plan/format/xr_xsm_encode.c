@@ -26,6 +26,7 @@ static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->operation_count);
     xr_xsm_put_u32(writer, plan->edge_count);
     xr_xsm_put_u32(writer, plan->constant_count);
+    xr_xsm_put_u32(writer, plan->entity_count);
     xr_xsm_put_u32(writer, plan->type_child_count);
     xr_xsm_put_u32(writer, plan->parameter_count);
     xr_xsm_put_u32(writer, plan->capture_count);
@@ -35,6 +36,20 @@ static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->ownership->owner_count);
     xr_xsm_put_u32(writer, plan->ownership->event_count);
     xr_xsm_put_u32(writer, plan->ownership->edge_state_count);
+}
+
+static void encode_entities(XrXsmWriter *writer, const XrSemanticPlan *plan) {
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *record = &plan->entities[i];
+        xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
+        xr_xsm_put_string(writer, record->canonical_key);
+        xr_xsm_put_u32(writer, record->parent);
+        xr_xsm_put_u32(writer, record->subject);
+        xr_xsm_put_u32(writer, record->ordinal);
+        xr_xsm_put_u16(writer, record->kind);
+        xr_xsm_put_u8(writer, record->subject_kind);
+        xr_xsm_put_u8(writer, record->flags);
+    }
 }
 
 static void encode_types(XrXsmWriter *writer, const XrSemanticPlan *plan) {
@@ -268,6 +283,7 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
         return false;
     XrXsmWriter payload = {.limit = XR_XSM_MAX_PAYLOAD_SIZE};
     encode_counts(&payload, plan);
+    encode_entities(&payload, plan);
     encode_types(&payload, plan);
     encode_functions(&payload, plan);
     encode_blocks(&payload, plan);

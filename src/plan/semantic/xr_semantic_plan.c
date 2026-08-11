@@ -41,7 +41,7 @@ static int compare_id_key_ref(const void *left, const void *right) {
 bool xr_semantic_plan_verify_identity_set(const XrSemanticPlan *plan, char *error,
                                           size_t error_size) {
     size_t count =
-        (size_t) plan->type_count + plan->function_count + plan->block_count +
+        (size_t) plan->entity_count + plan->type_count + plan->function_count + plan->block_count +
         plan->parameter_count + plan->capture_count + plan->operation_count * 2u +
         plan->edge_count +
         (plan->ownership ? (size_t) plan->ownership->owner_count + plan->ownership->event_count
@@ -61,6 +61,8 @@ bool xr_semantic_plan_verify_identity_set(const XrSemanticPlan *plan, char *erro
     } while (0)
     for (uint32_t i = 0; i < plan->type_count; i++)
         XR_ADD_ID_KEY(plan->types[i].id, plan->types[i].canonical_key);
+    for (uint32_t i = 0; i < plan->entity_count; i++)
+        XR_ADD_ID_KEY(plan->entities[i].id, plan->entities[i].canonical_key);
     for (uint32_t i = 0; i < plan->function_count; i++)
         XR_ADD_ID_KEY(plan->functions[i].id, plan->functions[i].canonical_key);
     for (uint32_t i = 0; i < plan->parameter_count; i++)
@@ -119,7 +121,7 @@ static void hash_string(XrSHA256Context *ctx, const char *text) {
 }
 
 void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-semantic-plan-v6\0";
+    static const uint8_t domain[] = "xray-semantic-plan-v7\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -134,6 +136,18 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
     hash_u64(&ctx, plan->operation_count);
     hash_u64(&ctx, plan->edge_count);
     hash_u64(&ctx, plan->constant_count);
+    hash_u64(&ctx, plan->entity_count);
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        hash_bytes(&ctx, entity->id.bytes, sizeof(entity->id.bytes));
+        hash_string(&ctx, entity->canonical_key);
+        hash_u64(&ctx, entity->parent);
+        hash_u64(&ctx, entity->subject);
+        hash_u64(&ctx, entity->ordinal);
+        hash_u64(&ctx, entity->kind);
+        hash_u64(&ctx, entity->subject_kind);
+        hash_u64(&ctx, entity->flags);
+    }
     for (uint32_t i = 0; i < plan->type_count; i++) {
         const XrSemanticTypeRecord *type = &plan->types[i];
         hash_bytes(&ctx, type->id.bytes, sizeof(type->id.bytes));
@@ -418,6 +432,7 @@ void xr_semantic_plan_free(XrSemanticPlan *plan) {
     xr_free(plan->operations);
     xr_free(plan->edges);
     xr_free(plan->constants);
+    xr_free(plan->entities);
     xr_free(plan->type_children);
     xr_free(plan->parameters);
     xr_free(plan->captures);
@@ -462,6 +477,7 @@ XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_block_count, block_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_operation_count, operation_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_edge_count, edge_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_constant_count, constant_count)
+XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_entity_count, entity_count)
 #undef XR_PLAN_COUNT_ACCESSOR
 
 #define XR_PLAN_RECORD_ACCESSOR(name, type, field, count_field)                                    \
@@ -480,6 +496,7 @@ XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_operation, XrSemanticOperationRecord, o
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_edge, XrSemanticEdgeRecord, edges, edge_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_constant, XrSemanticConstantRecord, constants,
                         constant_count)
+XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_entity, XrSemanticEntityRecord, entities, entity_count)
 #undef XR_PLAN_RECORD_ACCESSOR
 
 #define XR_PLAN_INDEX_ACCESSOR(name, field, count_field)                                           \
@@ -537,9 +554,20 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
             plan->schema, plan->frozen ? 1u : 0u, fingerprint, registry_fingerprint);
     fprintf(out,
             "  types=%u functions=%u parameters=%u captures=%u blocks=%u operations=%u "
-            "edges=%u constants=%u\n",
+            "edges=%u constants=%u entities=%u\n",
             plan->type_count, plan->function_count, plan->parameter_count, plan->capture_count,
-            plan->block_count, plan->operation_count, plan->edge_count, plan->constant_count);
+            plan->block_count, plan->operation_count, plan->edge_count, plan->constant_count,
+            plan->entity_count);
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *record = &plan->entities[i];
+        fprintf(out, "  entity[%u] id=", i);
+        dump_id(out, record->id);
+        fputs(" key=", out);
+        dump_text(out, record->canonical_key);
+        fprintf(out, " kind=%u parent=%u subject=%u:%u ordinal=%u flags=%u\n", record->kind,
+                record->parent, record->subject_kind, record->subject, record->ordinal,
+                record->flags);
+    }
     for (uint32_t i = 0; i < plan->type_count; i++) {
         const XrSemanticTypeRecord *record = &plan->types[i];
         fprintf(out, "  type[%u] id=", i);

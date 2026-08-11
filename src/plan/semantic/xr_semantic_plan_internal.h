@@ -45,6 +45,9 @@ struct XrSemanticPlan {
     XrSemanticConstantRecord *constants;
     uint32_t constant_count;
     uint32_t constant_capacity;
+    XrSemanticEntityRecord *entities;
+    uint32_t entity_count;
+    uint32_t entity_capacity;
     uint32_t *type_children;
     uint32_t type_child_count;
     uint32_t type_child_capacity;

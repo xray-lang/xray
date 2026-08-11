@@ -119,6 +119,48 @@ typedef enum XrSemanticEdgeFlag {
     XR_SEM_EDGE_HANDLER_SCOPE = 1u << 0,
 } XrSemanticEdgeFlag;
 
+typedef enum XrSemanticEntityKind {
+    XR_SEM_ENTITY_PACKAGE = 0,
+    XR_SEM_ENTITY_MODULE,
+    XR_SEM_ENTITY_DECLARATION,
+    XR_SEM_ENTITY_TYPE_INSTANTIATION,
+    XR_SEM_ENTITY_SHAPE,
+    XR_SEM_ENTITY_FIELD,
+    XR_SEM_ENTITY_FUNCTION,
+    XR_SEM_ENTITY_CLOSURE,
+    XR_SEM_ENTITY_NATIVE,
+    XR_SEM_ENTITY_OPERATION,
+    XR_SEM_ENTITY_ALLOCATION,
+    XR_SEM_ENTITY_OWNER,
+    XR_SEM_ENTITY_LOAN,
+    XR_SEM_ENTITY_DOMAIN,
+    XR_SEM_ENTITY_COROUTINE_STATE,
+    XR_SEM_ENTITY_DEBUG_SPAN,
+    XR_SEM_ENTITY_KIND_COUNT,
+} XrSemanticEntityKind;
+
+typedef enum XrSemanticEntitySubject {
+    XR_SEM_ENTITY_SUBJECT_NONE = 0,
+    XR_SEM_ENTITY_SUBJECT_TYPE,
+    XR_SEM_ENTITY_SUBJECT_FUNCTION,
+    XR_SEM_ENTITY_SUBJECT_PARAMETER,
+    XR_SEM_ENTITY_SUBJECT_CAPTURE,
+    XR_SEM_ENTITY_SUBJECT_OPERATION,
+    XR_SEM_ENTITY_SUBJECT_OWNER,
+    XR_SEM_ENTITY_SUBJECT_STORAGE_DOMAIN,
+} XrSemanticEntitySubject;
+
+typedef struct XrSemanticEntityRecord {
+    XrStableId id;
+    const char *canonical_key;
+    uint32_t parent;
+    uint32_t subject;
+    uint32_t ordinal;
+    uint16_t kind;
+    uint8_t subject_kind;
+    uint8_t flags;
+} XrSemanticEntityRecord;
+
 typedef struct XrSemanticTypeRecord {
     XrStableId id;
     const char *canonical_key;
@@ -284,6 +326,7 @@ XR_FUNC size_t xr_semantic_plan_block_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_operation_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_edge_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_constant_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_entity_count(const XrSemanticPlan *plan);
 XR_FUNC const XrSemanticTypeRecord *xr_semantic_plan_type(const XrSemanticPlan *plan,
                                                           uint32_t index);
 XR_FUNC const XrSemanticFunctionRecord *xr_semantic_plan_function(const XrSemanticPlan *plan,
@@ -300,6 +343,8 @@ XR_FUNC const XrSemanticEdgeRecord *xr_semantic_plan_edge(const XrSemanticPlan *
                                                           uint32_t index);
 XR_FUNC const XrSemanticConstantRecord *xr_semantic_plan_constant(const XrSemanticPlan *plan,
                                                                   uint32_t index);
+XR_FUNC const XrSemanticEntityRecord *xr_semantic_plan_entity(const XrSemanticPlan *plan,
+                                                              uint32_t index);
 XR_FUNC const uint32_t *xr_semantic_plan_type_children(const XrSemanticPlan *plan, uint32_t *count);
 XR_FUNC const uint32_t *xr_semantic_plan_predecessors(const XrSemanticPlan *plan, uint32_t *count);
 XR_FUNC const XrSemanticOperandRecord *xr_semantic_plan_operands(const XrSemanticPlan *plan,

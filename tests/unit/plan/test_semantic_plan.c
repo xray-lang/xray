@@ -7,6 +7,7 @@
 #include "../../../src/base/xstorage.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_arc.h"
+#include "../../../src/ir/xi_coro_analyze.h"
 #include "../../../src/ir/xi_effect.h"
 #include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate.h"
@@ -46,6 +47,18 @@ static XrType stub_array = {
     .id = 5,
     .frozen = true,
     .container = {.element_type = &stub_int},
+};
+static const char *stub_shape_field_names[] = {"count", "label"};
+static XrType *stub_shape_field_types[] = {&stub_int, &stub_string};
+static XrType stub_shape = {
+    .kind = XR_KIND_STRUCT_OBJECT,
+    .id = 7,
+    .frozen = true,
+    .object = {
+        .field_names = stub_shape_field_names,
+        .field_types = stub_shape_field_types,
+        .field_count = 2,
+    },
 };
 
 static XrSemanticPlan *build_probe_plan(void) {
@@ -306,6 +319,71 @@ static XrSemanticPlan *build_capture_contract_plan(void) {
     return plan;
 }
 
+static XrSemanticPlan *build_entity_identity_plan(void) {
+    XiFunc *root = xi_func_new("entity_identity_root", &stub_int);
+    XiFunc *native = xi_func_new("entity_identity_native", &stub_int);
+    REQUIRE(root != NULL && native != NULL);
+    root->source_file = "pkg\\identity_probe.xr";
+    native->source_file = "pkg/identity_probe.xr";
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *native_entry = xi_block_new(native);
+    REQUIRE(root_entry != NULL && native_entry != NULL);
+    XiValue *loan = xi_param(root, root_entry, 0, &stub_string);
+    XiValue *shape = xi_param(root, root_entry, 1, &stub_shape);
+    REQUIRE(loan != NULL && shape != NULL);
+    root->nparams = 2;
+    root->params = (XiValue **) xr_malloc(2 * sizeof(*root->params));
+    REQUIRE(root->params != NULL);
+    root->params[0] = loan;
+    root->params[1] = shape;
+    root->receiver_borrowed = true;
+    XiValue *capacity = xi_const_int(root, root_entry, 1, &stub_int);
+    XiValue *allocation = xi_value_new(root, root_entry, XI_ARRAY_NEW, &stub_array, 1);
+    REQUIRE(capacity != NULL && allocation != NULL);
+    allocation->args[0] = capacity;
+    allocation->flags = xi_op_default_effects(XI_ARRAY_NEW);
+    allocation->line = 16;
+    XiValue *suspend = xi_value_new(root, root_entry, XI_YIELD, &stub_int, 0);
+    REQUIRE(suspend != NULL);
+    suspend->line = 17;
+    XiValue *result = xi_const_int(root, root_entry, 9, &stub_int);
+    REQUIRE(result != NULL);
+    result->line = 18;
+    xi_block_set_return(root_entry, result);
+    XiValue *native_result = xi_const_int(native, native_entry, 4, &stub_int);
+    REQUIRE(native_result != NULL);
+    native_result->line = 21;
+    xi_block_set_return(native_entry, native_result);
+    native->is_extern = true;
+    native->extern_symbol = "identity_native";
+    root->children = (XiFunc **) xr_malloc(sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = native;
+    root->nchildren = root->children_cap = 1;
+    native->parent_func = root;
+    XiCoroSuspendPoint point = {
+        .state_id = 1,
+        .op = suspend,
+        .kind = XI_CORO_SUSP_YIELD,
+    };
+    XiCoroPlan coroutine = {
+        .is_coroutine = true,
+        .nstates = 1,
+        .points = &point,
+    };
+    root->coro_plan = &coroutine;
+    root->stage = native->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "entity-identity plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(root);
+    return plan;
+}
+
 static uint8_t *copy_bytes(const uint8_t *bytes, size_t size) {
     uint8_t *copy = (uint8_t *) xr_malloc(size);
     REQUIRE(copy != NULL);
@@ -372,6 +450,69 @@ static void test_stable_ids(void) {
     xr_stable_id_hex(function->id, hex);
     REQUIRE(strcmp(hex, "cf96f5ef90be2fedbf7f7f632cfd5fb6") == 0);
     xr_semantic_plan_free(plan);
+}
+
+static void test_typed_entity_identity_table(void) {
+    XrSemanticPlan *first = build_entity_identity_plan();
+    XrSemanticPlan *second = build_entity_identity_plan();
+    uint32_t kinds[XR_SEM_ENTITY_KIND_COUNT] = {0};
+    for (uint32_t i = 0; i < first->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(first, i);
+        REQUIRE(entity != NULL && entity->kind < XR_SEM_ENTITY_KIND_COUNT);
+        kinds[entity->kind]++;
+        if (i > 0)
+            REQUIRE(xr_stable_id_compare(first->entities[i - 1].id, entity->id) < 0);
+    }
+    for (uint16_t kind = 0; kind < XR_SEM_ENTITY_KIND_COUNT; kind++)
+        REQUIRE(kinds[kind] > 0);
+    REQUIRE(xr_semantic_plan_entity_count(first) == first->entity_count);
+    REQUIRE(xr_fingerprint_equal(xr_semantic_plan_fingerprint(first),
+                                 xr_semantic_plan_fingerprint(second)));
+
+    uint8_t *first_bytes = NULL;
+    uint8_t *second_bytes = NULL;
+    size_t first_size = 0;
+    size_t second_size = 0;
+    char error[512] = {0};
+    REQUIRE(xr_xsm_encode(first, &first_bytes, &first_size, error, sizeof(error)));
+    REQUIRE(xr_xsm_encode(second, &second_bytes, &second_size, error, sizeof(error)));
+    REQUIRE(first_size == second_size && memcmp(first_bytes, second_bytes, first_size) == 0);
+    XrSemanticPlan *decoded = NULL;
+    REQUIRE(xr_xsm_decode(first_bytes, first_size, &decoded, error, sizeof(error)));
+    REQUIRE(decoded->entity_count == first->entity_count);
+    for (uint32_t i = 0; i < first->entity_count; i++) {
+        const XrSemanticEntityRecord *left = &first->entities[i];
+        const XrSemanticEntityRecord *right = &decoded->entities[i];
+        REQUIRE(xr_stable_id_equal(left->id, right->id));
+        REQUIRE(left->kind == right->kind && left->subject_kind == right->subject_kind &&
+                left->subject == right->subject && left->parent == right->parent &&
+                left->ordinal == right->ordinal);
+        REQUIRE(strcmp(left->canonical_key, right->canonical_key) == 0);
+    }
+
+    uint32_t module = XR_SEMANTIC_INDEX_NONE;
+    uint32_t field = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < first->entity_count; i++) {
+        if (first->entities[i].kind == XR_SEM_ENTITY_MODULE)
+            module = i;
+        if (first->entities[i].kind == XR_SEM_ENTITY_FIELD)
+            field = i;
+    }
+    REQUIRE(module != XR_SEMANTIC_INDEX_NONE && field != XR_SEMANTIC_INDEX_NONE);
+    uint8_t saved_subject_kind = first->entities[module].subject_kind;
+    first->entities[module].subject_kind = XR_SEM_ENTITY_SUBJECT_TYPE;
+    expect_verify_failure(first, "XR_SEM_0019");
+    first->entities[module].subject_kind = saved_subject_kind;
+    uint32_t saved_ordinal = first->entities[field].ordinal;
+    first->entities[field].ordinal = UINT32_MAX;
+    expect_verify_failure(first, "XR_SEM_0019");
+    first->entities[field].ordinal = saved_ordinal;
+
+    xr_semantic_plan_free(decoded);
+    xr_free(second_bytes);
+    xr_free(first_bytes);
+    xr_semantic_plan_free(second);
+    xr_semantic_plan_free(first);
 }
 
 static void test_immutable_owned_snapshot(void) {
@@ -777,6 +918,8 @@ static void test_xsm_fail_closed_mutations(void) {
 static void expect_verify_failure(XrSemanticPlan *plan, const char *code) {
     char error[512] = {0};
     REQUIRE(!xr_semantic_plan_verify(plan, error, sizeof(error)));
+    if (strncmp(error, code, strlen(code)) != 0)
+        fprintf(stderr, "expected verifier code %s, got %s\n", code, error);
     REQUIRE(strncmp(error, code, strlen(code)) == 0);
 }
 
@@ -857,14 +1000,14 @@ static void test_semantic_and_ownership_mutations(void) {
 
     uint32_t saved_line = plan->operations[0].source_line;
     plan->operations[0].source_line = saved_line + 1;
-    expect_verify_failure(plan, "XR_SEM_0004");
+    expect_verify_failure(plan, "XR_SEM_0019");
     uint8_t *invalid_artifact = NULL;
     size_t invalid_artifact_size = 0;
     char encode_error[512] = {0};
     REQUIRE(!xr_xsm_encode(plan, &invalid_artifact, &invalid_artifact_size, encode_error,
                            sizeof(encode_error)));
     REQUIRE(invalid_artifact == NULL && invalid_artifact_size == 0);
-    REQUIRE(strncmp(encode_error, "XR_SEM_0004", strlen("XR_SEM_0004")) == 0);
+    REQUIRE(strncmp(encode_error, "XR_SEM_0019", strlen("XR_SEM_0019")) == 0);
     plan->operations[0].source_line = saved_line;
 
     char error[512] = {0};
@@ -1071,6 +1214,7 @@ static void test_nullable_borrowed_parameter_keeps_sealed_provenance(void) {
 
 int main(void) {
     test_stable_ids();
+    test_typed_entity_identity_table();
     test_operation_registry();
     test_immutable_owned_snapshot();
     test_xsm_roundtrip_and_determinism();

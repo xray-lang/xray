@@ -13,11 +13,14 @@
 #include "xr_semantic_ops.h"
 #include "xr_semantic_plan_internal.h"
 #include "../ownership/xr_ownership_check.h"
+#include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
+#include "../../ir/xi_ops_gen.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static bool report(char *error, size_t size, const char *code, const char *detail) {
@@ -35,6 +38,323 @@ static bool verify_id(const char *key, XrStableId actual) {
     XrFingerprint digest;
     return key && xr_stable_id_from_key(key, &expected, &digest) &&
            xr_stable_id_equal(expected, actual);
+}
+
+typedef struct XrEntityCoverage {
+    uint8_t *types;
+    uint8_t *shapes;
+    uint8_t *fields;
+    uint8_t *functions;
+    uint8_t *declarations;
+    uint8_t *closures;
+    uint8_t *natives;
+    uint8_t *operations;
+    uint8_t *allocations;
+    uint8_t *debug_spans;
+    uint8_t *coroutine_states;
+    uint8_t *owners;
+    uint8_t *parameter_loans;
+    uint8_t *capture_loans;
+    uint8_t domains[XR_STORAGE_FOREIGN + 1];
+    uint32_t packages;
+    uint32_t modules;
+} XrEntityCoverage;
+
+static void entity_coverage_dispose(XrEntityCoverage *coverage) {
+    xr_free(coverage->types);
+    xr_free(coverage->shapes);
+    xr_free(coverage->fields);
+    xr_free(coverage->functions);
+    xr_free(coverage->declarations);
+    xr_free(coverage->closures);
+    xr_free(coverage->natives);
+    xr_free(coverage->operations);
+    xr_free(coverage->allocations);
+    xr_free(coverage->debug_spans);
+    xr_free(coverage->coroutine_states);
+    xr_free(coverage->owners);
+    xr_free(coverage->parameter_loans);
+    xr_free(coverage->capture_loans);
+}
+
+static bool entity_coverage_init(const XrSemanticPlan *plan, XrEntityCoverage *coverage) {
+#define XR_ENTITY_COVERAGE_ALLOC(field, count)                                                     \
+    do {                                                                                           \
+        if ((count) != 0) {                                                                        \
+            coverage->field = (uint8_t *) xr_calloc((count), 1);                                  \
+            if (!coverage->field)                                                                  \
+                goto failure;                                                                      \
+        }                                                                                          \
+    } while (0)
+    XR_ENTITY_COVERAGE_ALLOC(types, plan->type_count);
+    XR_ENTITY_COVERAGE_ALLOC(shapes, plan->type_count);
+    XR_ENTITY_COVERAGE_ALLOC(fields, plan->type_child_count);
+    XR_ENTITY_COVERAGE_ALLOC(functions, plan->function_count);
+    XR_ENTITY_COVERAGE_ALLOC(declarations, plan->function_count);
+    XR_ENTITY_COVERAGE_ALLOC(closures, plan->function_count);
+    XR_ENTITY_COVERAGE_ALLOC(natives, plan->function_count);
+    XR_ENTITY_COVERAGE_ALLOC(operations, plan->operation_count);
+    XR_ENTITY_COVERAGE_ALLOC(allocations, plan->operation_count);
+    XR_ENTITY_COVERAGE_ALLOC(debug_spans, plan->operation_count);
+    XR_ENTITY_COVERAGE_ALLOC(coroutine_states, plan->operation_count);
+    XR_ENTITY_COVERAGE_ALLOC(owners, plan->ownership->owner_count);
+    XR_ENTITY_COVERAGE_ALLOC(parameter_loans, plan->parameter_count);
+    XR_ENTITY_COVERAGE_ALLOC(capture_loans, plan->capture_count);
+#undef XR_ENTITY_COVERAGE_ALLOC
+    return true;
+failure:
+    entity_coverage_dispose(coverage);
+    return false;
+}
+
+static bool mark_entity(uint8_t *coverage, uint32_t count, uint32_t index) {
+    if (index >= count || coverage[index] != 0)
+        return false;
+    coverage[index] = 1;
+    return true;
+}
+
+static bool verify_entity_record(const XrSemanticPlan *plan, const XrSemanticEntityRecord *entity,
+                                 XrEntityCoverage *coverage) {
+    const XrSemanticEntityRecord *parent = entity->parent == XR_SEMANTIC_INDEX_NONE
+                                               ? NULL
+                                               : &plan->entities[entity->parent];
+    switch (entity->kind) {
+        case XR_SEM_ENTITY_PACKAGE:
+            coverage->packages++;
+            return !parent && entity->subject_kind == XR_SEM_ENTITY_SUBJECT_NONE &&
+                   entity->subject == XR_SEMANTIC_INDEX_NONE && entity->ordinal == 0;
+        case XR_SEM_ENTITY_MODULE:
+            coverage->modules++;
+            return parent && parent->kind == XR_SEM_ENTITY_PACKAGE &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_NONE &&
+                   entity->subject == XR_SEMANTIC_INDEX_NONE && entity->ordinal == 0;
+        case XR_SEM_ENTITY_DECLARATION:
+            return parent &&
+                   (parent->kind == XR_SEM_ENTITY_MODULE ||
+                    parent->kind == XR_SEM_ENTITY_FUNCTION) &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_FUNCTION &&
+                   mark_entity(coverage->declarations, plan->function_count, entity->subject);
+        case XR_SEM_ENTITY_TYPE_INSTANTIATION:
+            return parent && parent->kind == XR_SEM_ENTITY_MODULE &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_TYPE &&
+                   mark_entity(coverage->types, plan->type_count, entity->subject);
+        case XR_SEM_ENTITY_SHAPE:
+            return parent && parent->kind == XR_SEM_ENTITY_TYPE_INSTANTIATION &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_TYPE &&
+                   entity->subject < plan->type_count &&
+                   plan->types[entity->subject].kind == XR_KIND_STRUCT_OBJECT &&
+                   parent->subject == entity->subject &&
+                   mark_entity(coverage->shapes, plan->type_count, entity->subject);
+        case XR_SEM_ENTITY_FIELD:
+            return parent && parent->kind == XR_SEM_ENTITY_SHAPE &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_TYPE &&
+                   entity->subject < plan->type_count && parent->subject == entity->subject &&
+                   entity->ordinal < plan->types[entity->subject].child_count &&
+                   mark_entity(coverage->fields, plan->type_child_count,
+                               plan->types[entity->subject].child_begin + entity->ordinal);
+        case XR_SEM_ENTITY_FUNCTION:
+            return parent && parent->kind == XR_SEM_ENTITY_DECLARATION &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_FUNCTION &&
+                   parent->subject == entity->subject &&
+                   mark_entity(coverage->functions, plan->function_count, entity->subject);
+        case XR_SEM_ENTITY_CLOSURE:
+            return parent && parent->kind == XR_SEM_ENTITY_FUNCTION &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_FUNCTION &&
+                   entity->subject < plan->function_count && parent->subject == entity->subject &&
+                   plan->functions[entity->subject].parent != XR_SEMANTIC_INDEX_NONE &&
+                   mark_entity(coverage->closures, plan->function_count, entity->subject);
+        case XR_SEM_ENTITY_NATIVE:
+            return parent && parent->kind == XR_SEM_ENTITY_FUNCTION &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_FUNCTION &&
+                   parent->subject == entity->subject &&
+                   mark_entity(coverage->natives, plan->function_count, entity->subject);
+        case XR_SEM_ENTITY_OPERATION:
+            return parent && parent->kind == XR_SEM_ENTITY_FUNCTION &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
+                   entity->subject < plan->operation_count &&
+                   parent->subject == plan->operations[entity->subject].function &&
+                   mark_entity(coverage->operations, plan->operation_count, entity->subject);
+        case XR_SEM_ENTITY_ALLOCATION:
+            return parent && parent->kind == XR_SEM_ENTITY_OPERATION &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
+                   entity->subject < plan->operation_count && parent->subject == entity->subject &&
+                   plan->operations[entity->subject].allocation_key &&
+                   mark_entity(coverage->allocations, plan->operation_count, entity->subject);
+        case XR_SEM_ENTITY_OWNER:
+            return parent && parent->kind == XR_SEM_ENTITY_FUNCTION &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_OWNER &&
+                   entity->subject < plan->ownership->owner_count &&
+                   parent->subject == plan->ownership->owners[entity->subject].function &&
+                   mark_entity(coverage->owners, plan->ownership->owner_count, entity->subject);
+        case XR_SEM_ENTITY_LOAN:
+            if (!parent || parent->kind != XR_SEM_ENTITY_FUNCTION)
+                return false;
+            if (entity->subject_kind == XR_SEM_ENTITY_SUBJECT_PARAMETER)
+                return entity->subject < plan->parameter_count &&
+                       parent->subject == plan->parameters[entity->subject].function &&
+                       plan->parameters[entity->subject].ownership == XI_OWN_BORROWED &&
+                       mark_entity(coverage->parameter_loans, plan->parameter_count,
+                                   entity->subject);
+            if (entity->subject_kind == XR_SEM_ENTITY_SUBJECT_CAPTURE)
+                return entity->subject < plan->capture_count &&
+                       parent->subject == plan->captures[entity->subject].function &&
+                       plan->captures[entity->subject].kind == XR_SEM_CAPTURE_BY_IMM_REF &&
+                       mark_entity(coverage->capture_loans, plan->capture_count, entity->subject);
+            return false;
+        case XR_SEM_ENTITY_DOMAIN:
+            if (!parent || parent->kind != XR_SEM_ENTITY_MODULE ||
+                entity->subject_kind != XR_SEM_ENTITY_SUBJECT_STORAGE_DOMAIN ||
+                entity->subject < XR_STORAGE_EXEC_LOCAL || entity->subject > XR_STORAGE_FOREIGN ||
+                coverage->domains[entity->subject] != 0)
+                return false;
+            coverage->domains[entity->subject] = 1;
+            return entity->ordinal == 0;
+        case XR_SEM_ENTITY_COROUTINE_STATE:
+            return parent && parent->kind == XR_SEM_ENTITY_FUNCTION &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
+                   entity->subject < plan->operation_count &&
+                   parent->subject == plan->operations[entity->subject].function &&
+                   (plan->operations[entity->subject].effects & XI_EFFECT_MAY_SUSPEND) != 0 &&
+                   entity->ordinal != 0 &&
+                   mark_entity(coverage->coroutine_states, plan->operation_count,
+                               entity->subject);
+        case XR_SEM_ENTITY_DEBUG_SPAN:
+            return parent && parent->kind == XR_SEM_ENTITY_OPERATION &&
+                   entity->subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
+                   entity->subject < plan->operation_count && parent->subject == entity->subject &&
+                   entity->ordinal == plan->operations[entity->subject].source_line &&
+                   entity->ordinal != 0 &&
+                   mark_entity(coverage->debug_spans, plan->operation_count, entity->subject);
+        default:
+            return false;
+    }
+}
+
+static bool verify_entity_coverage(const XrSemanticPlan *plan, const XrEntityCoverage *coverage) {
+    if (coverage->packages != 1 || coverage->modules != 1)
+        return false;
+    for (uint32_t i = 0; i < plan->type_count; i++) {
+        if (coverage->types[i] != 1 ||
+            (plan->types[i].kind == XR_KIND_STRUCT_OBJECT && coverage->shapes[i] != 1))
+            return false;
+        if (plan->types[i].kind == XR_KIND_STRUCT_OBJECT) {
+            for (uint16_t field = 0; field < plan->types[i].child_count; field++) {
+                if (coverage->fields[plan->types[i].child_begin + field] != 1)
+                    return false;
+            }
+        }
+    }
+    for (uint32_t i = 0; i < plan->function_count; i++) {
+        bool closure = plan->functions[i].parent != XR_SEMANTIC_INDEX_NONE;
+        bool native = (plan->functions[i].flags & 8u) != 0;
+        if (coverage->declarations[i] != 1 || coverage->functions[i] != 1 ||
+            coverage->closures[i] != (uint8_t) closure ||
+            (native && coverage->natives[i] != 1))
+            return false;
+    }
+    for (uint32_t i = 0; i < plan->operation_count; i++) {
+        bool allocation = plan->operations[i].allocation_key != NULL;
+        bool debug_span = plan->operations[i].source_line != 0;
+        if (coverage->operations[i] != 1 ||
+            coverage->allocations[i] != (uint8_t) allocation ||
+            coverage->debug_spans[i] != (uint8_t) debug_span)
+            return false;
+    }
+    for (uint32_t i = 0; i < plan->ownership->owner_count; i++) {
+        if (coverage->owners[i] != 1)
+            return false;
+    }
+    for (uint32_t i = 0; i < plan->parameter_count; i++) {
+        bool borrowed = plan->parameters[i].ownership == XI_OWN_BORROWED;
+        if (coverage->parameter_loans[i] != (uint8_t) borrowed)
+            return false;
+    }
+    for (uint32_t i = 0; i < plan->capture_count; i++) {
+        bool borrowed = plan->captures[i].kind == XR_SEM_CAPTURE_BY_IMM_REF;
+        if (coverage->capture_loans[i] != (uint8_t) borrowed)
+            return false;
+    }
+    for (uint32_t domain = XR_STORAGE_EXEC_LOCAL; domain <= XR_STORAGE_FOREIGN; domain++) {
+        if (coverage->domains[domain] != 1)
+            return false;
+    }
+    return true;
+}
+
+typedef struct XrCoroutineEntityKey {
+    uint32_t function;
+    uint32_t state;
+} XrCoroutineEntityKey;
+
+static int compare_coroutine_entity_key(const void *left, const void *right) {
+    const XrCoroutineEntityKey *a = (const XrCoroutineEntityKey *) left;
+    const XrCoroutineEntityKey *b = (const XrCoroutineEntityKey *) right;
+    if (a->function != b->function)
+        return a->function < b->function ? -1 : 1;
+    return a->state < b->state ? -1 : a->state != b->state;
+}
+
+static bool verify_coroutine_entity_sequence(const XrSemanticPlan *plan) {
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        if (plan->entities[i].kind == XR_SEM_ENTITY_COROUTINE_STATE)
+            count++;
+    }
+    XrCoroutineEntityKey *keys = count
+                                     ? (XrCoroutineEntityKey *) xr_malloc((size_t) count *
+                                                                          sizeof(*keys))
+                                     : NULL;
+    if (count && !keys)
+        return false;
+    uint32_t cursor = 0;
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        if (entity->kind != XR_SEM_ENTITY_COROUTINE_STATE)
+            continue;
+        keys[cursor++] = (XrCoroutineEntityKey) {
+            plan->operations[entity->subject].function,
+            entity->ordinal,
+        };
+    }
+    qsort(keys, count, sizeof(*keys), compare_coroutine_entity_key);
+    bool valid = true;
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t expected = i == 0 || keys[i - 1].function != keys[i].function
+                                ? 1
+                                : keys[i - 1].state + 1;
+        if (keys[i].state != expected) {
+            valid = false;
+            break;
+        }
+    }
+    xr_free(keys);
+    return valid;
+}
+
+static bool verify_entities(const XrSemanticPlan *plan, char *error, size_t error_size) {
+    XrEntityCoverage coverage = {0};
+    if (!entity_coverage_init(plan, &coverage))
+        return report(error, error_size, "XR_EXEC_5003", "entity verifier budget exhausted");
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        bool valid = verify_id(entity->canonical_key, entity->id) &&
+                     entity->kind < XR_SEM_ENTITY_KIND_COUNT && entity->flags == 0 &&
+                     (entity->parent == XR_SEMANTIC_INDEX_NONE ||
+                      entity->parent < plan->entity_count) &&
+                     (i == 0 || xr_stable_id_compare(plan->entities[i - 1].id, entity->id) < 0) &&
+                     verify_entity_record(plan, entity, &coverage);
+        if (!valid) {
+            entity_coverage_dispose(&coverage);
+            return report(error, error_size, "XR_SEM_0019",
+                          "stable entity identity relation is invalid");
+        }
+    }
+    bool complete = verify_entity_coverage(plan, &coverage) &&
+                    verify_coroutine_entity_sequence(plan);
+    entity_coverage_dispose(&coverage);
+    return complete || report(error, error_size, "XR_SEM_0019",
+                              "stable entity identity coverage is incomplete");
 }
 
 static bool verify_types(const XrSemanticPlan *plan, char *error, size_t error_size) {
@@ -696,7 +1016,8 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
     if (plan->type_count > 1000000u || plan->function_count > 100000u ||
         plan->block_count > 2000000u || plan->operation_count > 10000000u ||
         plan->parameter_count > 25600000u || plan->capture_count > 6400000u ||
-        plan->edge_count > 40000000u || plan->operand_count > 40000000u)
+        plan->edge_count > 40000000u || plan->operand_count > 40000000u ||
+        plan->entity_count > 80000000u)
         return report(error, error_size, "XR_EXEC_5003", "SemanticPlan exceeds hard budgets");
     uint8_t *block_edge_mask = (uint8_t *) xr_calloc(plan->block_count, sizeof(*block_edge_mask));
     uint8_t *operation_edge_mask =
@@ -709,6 +1030,7 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
     }
     XrSemanticGraph graph = {0};
     bool verified = xr_semantic_plan_verify_identity_set(plan, error, error_size) &&
+                    verify_entities(plan, error, error_size) &&
                     verify_types(plan, error, error_size) &&
                     verify_functions(plan, error, error_size) &&
                     verify_edges(plan, block_edge_mask, operation_edge_mask, error, error_size) &&

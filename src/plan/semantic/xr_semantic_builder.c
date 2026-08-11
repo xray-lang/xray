@@ -12,9 +12,11 @@
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_verify.h"
 #include "../ownership/xr_ownership_obligation.h"
+#include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_arc.h"
+#include "../../ir/xi_coro_analyze.h"
 #include "../../ir/xi_module.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
@@ -32,6 +34,7 @@
 #define XR_SEMANTIC_MAX_EDGES UINT32_C(40000000)
 #define XR_SEMANTIC_MAX_PARAMETERS (XR_SEMANTIC_MAX_FUNCTIONS * UINT32_C(256))
 #define XR_SEMANTIC_MAX_CAPTURES (XR_SEMANTIC_MAX_FUNCTIONS * (uint32_t) XI_MAX_CAPTURES)
+#define XR_SEMANTIC_MAX_ENTITIES UINT32_C(80000000)
 #define XR_SEMANTIC_MAX_KEY_BYTES UINT32_C(1048576)
 
 typedef struct XrTextBuilder {
@@ -155,6 +158,19 @@ static bool text_append_stable_id(XrTextBuilder *text, XrStableId id) {
 static void text_dispose(XrTextBuilder *text) {
     xr_free(text->data);
     memset(text, 0, sizeof(*text));
+}
+
+static bool text_append_path_component(XrTextBuilder *text, const char *value) {
+    const char *path = value ? value : "";
+    while (path[0] == '.' && (path[1] == '/' || path[1] == '\\'))
+        path += 2;
+    size_t length = strlen(path);
+    if (!text_append_format(text, "%zu:", length) || !text_reserve(text, length))
+        return false;
+    for (size_t i = 0; i < length; i++)
+        text->data[text->size++] = path[i] == '\\' ? '/' : path[i];
+    text->data[text->size] = '\0';
+    return true;
 }
 
 static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stack, uint32_t depth,
@@ -1415,6 +1431,448 @@ static bool build_semantic_edges(XrSemanticBuildContext *ctx) {
     return true;
 }
 
+typedef struct XrSemanticEntitySortEntry {
+    XrSemanticEntityRecord record;
+    uint32_t old_index;
+} XrSemanticEntitySortEntry;
+
+static int compare_semantic_entity(const void *left, const void *right) {
+    const XrSemanticEntitySortEntry *a = (const XrSemanticEntitySortEntry *) left;
+    const XrSemanticEntitySortEntry *b = (const XrSemanticEntitySortEntry *) right;
+    int order = xr_stable_id_compare(a->record.id, b->record.id);
+    if (order != 0)
+        return order;
+    order = strcmp(a->record.canonical_key, b->record.canonical_key);
+    if (order != 0)
+        return order;
+    return a->record.kind < b->record.kind ? -1 : a->record.kind != b->record.kind;
+}
+
+static bool begin_entity_key(XrSemanticBuildContext *ctx, XrTextBuilder *key, uint16_t kind,
+                             uint32_t parent) {
+    if (!text_append_format(key, "entity-v1:schema=%u:kind=%u:parent=",
+                            XR_SEMANTIC_SCHEMA_VERSION, (unsigned) kind))
+        return false;
+    if (parent == XR_SEMANTIC_INDEX_NONE)
+        return text_append(key, "none");
+    if (parent >= ctx->plan->entity_count)
+        return false;
+    return text_append_stable_id(key, ctx->plan->entities[parent].id);
+}
+
+static bool append_entity(XrSemanticBuildContext *ctx, uint16_t kind, uint8_t subject_kind,
+                          uint32_t subject, uint32_t ordinal, uint32_t parent,
+                          XrTextBuilder *key, uint32_t *out) {
+    if (kind >= XR_SEM_ENTITY_KIND_COUNT ||
+        !reserve_array((void **) &ctx->plan->entities, &ctx->plan->entity_capacity,
+                       ctx->plan->entity_count + 1, sizeof(*ctx->plan->entities),
+                       XR_SEMANTIC_MAX_ENTITIES))
+        return fail(ctx, "XR_EXEC_5003", "semantic entity budget exhausted");
+    uint32_t index = ctx->plan->entity_count;
+    XrSemanticEntityRecord *record = &ctx->plan->entities[index];
+    memset(record, 0, sizeof(*record));
+    record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key->data);
+    XrFingerprint digest;
+    if (!record->canonical_key ||
+        !xr_stable_id_from_key(record->canonical_key, &record->id, &digest))
+        return fail(ctx, "XR_EXEC_5003", "semantic entity identity allocation failed");
+    record->parent = parent;
+    record->subject = subject;
+    record->ordinal = ordinal;
+    record->kind = kind;
+    record->subject_kind = subject_kind;
+    ctx->plan->entity_count++;
+    if (out)
+        *out = index;
+    return true;
+}
+
+static uint32_t find_entity(const XrSemanticPlan *plan, uint16_t kind, uint8_t subject_kind,
+                            uint32_t subject) {
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        if (entity->kind == kind && entity->subject_kind == subject_kind &&
+            entity->subject == subject)
+            return i;
+    }
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
+static const XrType *source_type_for_index(const XrSemanticBuildContext *ctx, uint32_t index) {
+    for (uint32_t i = 0; i < ctx->type_count; i++) {
+        if (ctx->types[i].index == index)
+            return ctx->types[i].source;
+    }
+    return NULL;
+}
+
+static bool build_module_entities(XrSemanticBuildContext *ctx, const XiFunc *root,
+                                  uint32_t *package_out, uint32_t *module_out) {
+    const char *module_name = root->module && root->module->name
+                                  ? root->module->name
+                                  : (root->name ? root->name : "");
+    const char *module_path = root->module && root->module->path
+                                  ? root->module->path
+                                  : (root->source_file ? root->source_file : module_name);
+    XrTextBuilder key = {0};
+    bool valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_PACKAGE, XR_SEMANTIC_INDEX_NONE) &&
+                 text_append(&key, ":name=") && text_append_component(&key, module_name);
+    if (!valid || !append_entity(ctx, XR_SEM_ENTITY_PACKAGE, XR_SEM_ENTITY_SUBJECT_NONE,
+                                 XR_SEMANTIC_INDEX_NONE, 0, XR_SEMANTIC_INDEX_NONE, &key,
+                                 package_out)) {
+        text_dispose(&key);
+        return fail(ctx, "XR_SEM_0019", "semantic package identity is incomplete");
+    }
+    text_dispose(&key);
+    valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_MODULE, *package_out) &&
+            text_append(&key, ":name=") && text_append_component(&key, module_name) &&
+            text_append(&key, ":path=") && text_append_path_component(&key, module_path);
+    if (!valid || !append_entity(ctx, XR_SEM_ENTITY_MODULE, XR_SEM_ENTITY_SUBJECT_NONE,
+                                 XR_SEMANTIC_INDEX_NONE, 0, *package_out, &key, module_out)) {
+        text_dispose(&key);
+        return fail(ctx, "XR_SEM_0019", "semantic module identity is incomplete");
+    }
+    text_dispose(&key);
+    return true;
+}
+
+static bool build_type_entities(XrSemanticBuildContext *ctx, uint32_t module) {
+    for (uint32_t i = 0; i < ctx->plan->type_count; i++) {
+        const XrSemanticTypeRecord *type = &ctx->plan->types[i];
+        XrTextBuilder key = {0};
+        bool valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_TYPE_INSTANTIATION, module) &&
+                     text_append(&key, ":type=") && text_append_stable_id(&key, type->id);
+        uint32_t type_entity;
+        if (!valid || !append_entity(ctx, XR_SEM_ENTITY_TYPE_INSTANTIATION,
+                                     XR_SEM_ENTITY_SUBJECT_TYPE, i, 0, module, &key,
+                                     &type_entity)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_SEM_0019", "type-instantiation identity is incomplete");
+        }
+        text_dispose(&key);
+        if (type->kind != XR_KIND_STRUCT_OBJECT)
+            continue;
+        valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_SHAPE, type_entity) &&
+                text_append(&key, ":type=") && text_append_stable_id(&key, type->id);
+        uint32_t shape;
+        if (!valid || !append_entity(ctx, XR_SEM_ENTITY_SHAPE, XR_SEM_ENTITY_SUBJECT_TYPE, i, 0,
+                                     type_entity, &key, &shape)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_SEM_0019", "structural-shape identity is incomplete");
+        }
+        text_dispose(&key);
+        const XrType *source = source_type_for_index(ctx, i);
+        if (!source || source->kind != XR_KIND_STRUCT_OBJECT || source->object.field_count < 0 ||
+            (source->object.field_count > 0 && !source->object.field_names))
+            return fail(ctx, "XR_SEM_0019", "structural-shape field facts are unavailable");
+        for (uint16_t field = 0; field < type->child_count; field++) {
+            uint32_t child = ctx->plan->type_children[type->child_begin + field];
+            valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_FIELD, shape) &&
+                    text_append_format(&key, ":ordinal=%u:name=", field) &&
+                    text_append_component(&key, source->object.field_names[field]) &&
+                    text_append(&key, ":type=") &&
+                    text_append_stable_id(&key, ctx->plan->types[child].id);
+            if (!valid || !append_entity(ctx, XR_SEM_ENTITY_FIELD, XR_SEM_ENTITY_SUBJECT_TYPE, i,
+                                         field, shape, &key, NULL)) {
+                text_dispose(&key);
+                return fail(ctx, "XR_SEM_0019", "structural-field identity is incomplete");
+            }
+            text_dispose(&key);
+        }
+    }
+    return true;
+}
+
+static bool build_function_entities(XrSemanticBuildContext *ctx, uint32_t module) {
+    for (uint32_t i = 0; i < ctx->plan->function_count; i++) {
+        const XrSemanticFunctionRecord *function = &ctx->plan->functions[i];
+        const XiFunc *source = ctx->functions[i].source;
+        uint32_t parent = module;
+        if (function->parent != XR_SEMANTIC_INDEX_NONE) {
+            parent = find_entity(ctx->plan, XR_SEM_ENTITY_FUNCTION,
+                                 XR_SEM_ENTITY_SUBJECT_FUNCTION, function->parent);
+            if (parent == XR_SEMANTIC_INDEX_NONE)
+                return fail(ctx, "XR_SEM_0019", "function parent identity is unavailable");
+        }
+        XrTextBuilder key = {0};
+        bool valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_DECLARATION, parent) &&
+                     text_append(&key, ":function=") && text_append_stable_id(&key, function->id) &&
+                     text_append_format(&key, ":evidence=%u", source->xg_body_func_id);
+        uint32_t declaration;
+        if (!valid || !append_entity(ctx, XR_SEM_ENTITY_DECLARATION,
+                                     XR_SEM_ENTITY_SUBJECT_FUNCTION, i, 0, parent, &key,
+                                     &declaration)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_SEM_0019", "declaration identity is incomplete");
+        }
+        text_dispose(&key);
+        valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_FUNCTION, declaration) &&
+                text_append(&key, ":function=") && text_append_stable_id(&key, function->id);
+        uint32_t function_entity;
+        if (!valid || !append_entity(ctx, XR_SEM_ENTITY_FUNCTION,
+                                     XR_SEM_ENTITY_SUBJECT_FUNCTION, i, 0, declaration, &key,
+                                     &function_entity)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_SEM_0019", "function entity identity is incomplete");
+        }
+        text_dispose(&key);
+        if (function->parent != XR_SEMANTIC_INDEX_NONE) {
+            valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_CLOSURE, function_entity) &&
+                    text_append(&key, ":function=") && text_append_stable_id(&key, function->id);
+            if (!valid || !append_entity(ctx, XR_SEM_ENTITY_CLOSURE,
+                                         XR_SEM_ENTITY_SUBJECT_FUNCTION, i, 0, function_entity,
+                                         &key, NULL)) {
+                text_dispose(&key);
+                return fail(ctx, "XR_SEM_0019", "closure identity is incomplete");
+            }
+            text_dispose(&key);
+        }
+        if (source->is_extern || source->native_callback_kind != XI_NATIVE_CALLBACK_NONE) {
+            valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_NATIVE, function_entity) &&
+                    text_append(&key, ":function=") && text_append_stable_id(&key, function->id) &&
+                    text_append_format(&key, ":callback=%u:extern=%u",
+                                       (unsigned) source->native_callback_kind,
+                                       source->is_extern ? 1u : 0u);
+            if (!valid || !append_entity(ctx, XR_SEM_ENTITY_NATIVE,
+                                         XR_SEM_ENTITY_SUBJECT_FUNCTION, i, 0, function_entity,
+                                         &key, NULL)) {
+                text_dispose(&key);
+                return fail(ctx, "XR_SEM_0019", "native declaration identity is incomplete");
+            }
+            text_dispose(&key);
+        }
+    }
+    return true;
+}
+
+static bool build_operation_entities(XrSemanticBuildContext *ctx) {
+    for (uint32_t i = 0; i < ctx->plan->operation_count; i++) {
+        const XrSemanticOperationRecord *operation = &ctx->plan->operations[i];
+        uint32_t parent = find_entity(ctx->plan, XR_SEM_ENTITY_FUNCTION,
+                                     XR_SEM_ENTITY_SUBJECT_FUNCTION, operation->function);
+        if (parent == XR_SEMANTIC_INDEX_NONE)
+            return fail(ctx, "XR_SEM_0019", "operation function identity is unavailable");
+        XrTextBuilder key = {0};
+        bool valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_OPERATION, parent) &&
+                     text_append(&key, ":operation=") &&
+                     text_append_stable_id(&key, operation->id);
+        uint32_t operation_entity;
+        if (!valid || !append_entity(ctx, XR_SEM_ENTITY_OPERATION,
+                                     XR_SEM_ENTITY_SUBJECT_OPERATION, i, 0, parent, &key,
+                                     &operation_entity)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_SEM_0019", "operation entity identity is incomplete");
+        }
+        text_dispose(&key);
+        if (operation->allocation_key) {
+            valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_ALLOCATION, operation_entity) &&
+                    text_append(&key, ":allocation=") &&
+                    text_append_stable_id(&key, operation->allocation_id);
+            if (!valid || !append_entity(ctx, XR_SEM_ENTITY_ALLOCATION,
+                                         XR_SEM_ENTITY_SUBJECT_OPERATION, i, 0,
+                                         operation_entity, &key, NULL)) {
+                text_dispose(&key);
+                return fail(ctx, "XR_SEM_0019", "allocation entity identity is incomplete");
+            }
+            text_dispose(&key);
+        }
+        if (operation->source_line != 0) {
+            const XiFunc *source = ctx->functions[operation->function].source;
+            const char *file = source->source_file
+                                   ? source->source_file
+                                   : (source->module ? source->module->path : "");
+            valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_DEBUG_SPAN, operation_entity) &&
+                    text_append(&key, ":file=") && text_append_path_component(&key, file) &&
+                    text_append_format(&key, ":line=%u:operation=", operation->source_line) &&
+                    text_append_stable_id(&key, operation->id);
+            if (!valid || !append_entity(ctx, XR_SEM_ENTITY_DEBUG_SPAN,
+                                         XR_SEM_ENTITY_SUBJECT_OPERATION, i,
+                                         operation->source_line, operation_entity, &key, NULL)) {
+                text_dispose(&key);
+                return fail(ctx, "XR_SEM_0019", "debug-span identity is incomplete");
+            }
+            text_dispose(&key);
+        }
+    }
+    return true;
+}
+
+static bool build_ownership_entities(XrSemanticBuildContext *ctx, uint32_t module) {
+    for (uint32_t i = 0; i < ctx->plan->ownership->owner_count; i++) {
+        const XrOwnershipOwnerRecord *owner = &ctx->plan->ownership->owners[i];
+        uint32_t parent = find_entity(ctx->plan, XR_SEM_ENTITY_FUNCTION,
+                                     XR_SEM_ENTITY_SUBJECT_FUNCTION, owner->function);
+        XrTextBuilder key = {0};
+        bool valid = parent != XR_SEMANTIC_INDEX_NONE &&
+                     begin_entity_key(ctx, &key, XR_SEM_ENTITY_OWNER, parent) &&
+                     text_append(&key, ":owner=") && text_append_stable_id(&key, owner->id);
+        if (!valid || !append_entity(ctx, XR_SEM_ENTITY_OWNER, XR_SEM_ENTITY_SUBJECT_OWNER, i, 0,
+                                     parent, &key, NULL)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_SEM_0019", "ownership entity identity is incomplete");
+        }
+        text_dispose(&key);
+    }
+    for (uint32_t i = 0; i < ctx->plan->parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter = &ctx->plan->parameters[i];
+        if (parameter->ownership != XI_OWN_BORROWED)
+            continue;
+        uint32_t parent = find_entity(ctx->plan, XR_SEM_ENTITY_FUNCTION,
+                                     XR_SEM_ENTITY_SUBJECT_FUNCTION, parameter->function);
+        XrTextBuilder key = {0};
+        bool valid = parent != XR_SEMANTIC_INDEX_NONE &&
+                     begin_entity_key(ctx, &key, XR_SEM_ENTITY_LOAN, parent) &&
+                     text_append(&key, ":parameter=") &&
+                     text_append_stable_id(&key, parameter->id);
+        if (!valid || !append_entity(ctx, XR_SEM_ENTITY_LOAN,
+                                     XR_SEM_ENTITY_SUBJECT_PARAMETER, i, parameter->ordinal,
+                                     parent, &key, NULL)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_SEM_0019", "borrowed-parameter loan identity is incomplete");
+        }
+        text_dispose(&key);
+    }
+    for (uint32_t i = 0; i < ctx->plan->capture_count; i++) {
+        const XrSemanticCaptureRecord *capture = &ctx->plan->captures[i];
+        if (capture->kind != XR_SEM_CAPTURE_BY_IMM_REF)
+            continue;
+        uint32_t parent = find_entity(ctx->plan, XR_SEM_ENTITY_FUNCTION,
+                                     XR_SEM_ENTITY_SUBJECT_FUNCTION, capture->function);
+        XrTextBuilder key = {0};
+        bool valid = parent != XR_SEMANTIC_INDEX_NONE &&
+                     begin_entity_key(ctx, &key, XR_SEM_ENTITY_LOAN, parent) &&
+                     text_append(&key, ":capture=") && text_append_stable_id(&key, capture->id);
+        if (!valid || !append_entity(ctx, XR_SEM_ENTITY_LOAN,
+                                     XR_SEM_ENTITY_SUBJECT_CAPTURE, i, capture->ordinal, parent,
+                                     &key, NULL)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_SEM_0019", "borrowed-capture loan identity is incomplete");
+        }
+        text_dispose(&key);
+    }
+    for (uint32_t domain = XR_STORAGE_EXEC_LOCAL; domain <= XR_STORAGE_FOREIGN; domain++) {
+        XrTextBuilder key = {0};
+        bool valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_DOMAIN, module) &&
+                     text_append_format(&key, ":storage-domain=%u", domain);
+        if (!valid || !append_entity(ctx, XR_SEM_ENTITY_DOMAIN,
+                                     XR_SEM_ENTITY_SUBJECT_STORAGE_DOMAIN, domain, 0, module,
+                                     &key, NULL)) {
+            text_dispose(&key);
+            return fail(ctx, "XR_SEM_0019", "storage-domain identity is incomplete");
+        }
+        text_dispose(&key);
+    }
+    return true;
+}
+
+static bool build_coroutine_entities(XrSemanticBuildContext *ctx) {
+    uint32_t total_values = 0;
+    if (ctx->plan->function_count != 0) {
+        const XrSemanticFunctionRecord *last =
+            &ctx->plan->functions[ctx->plan->function_count - 1];
+        if (last->value_begin > UINT32_MAX - last->value_count)
+            return fail(ctx, "XR_EXEC_5003", "coroutine value identity space is invalid");
+        total_values = last->value_begin + last->value_count;
+    }
+    uint32_t *operation_by_value = total_values
+                                       ? (uint32_t *) xr_malloc((size_t) total_values *
+                                                                sizeof(*operation_by_value))
+                                       : NULL;
+    if (total_values && !operation_by_value)
+        return fail(ctx, "XR_EXEC_5003", "coroutine identity map allocation failed");
+    for (uint32_t value = 0; value < total_values; value++)
+        operation_by_value[value] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t operation = 0; operation < ctx->plan->operation_count; operation++) {
+        uint32_t value = ctx->plan->operations[operation].result_value;
+        if (value >= total_values || operation_by_value[value] != XR_SEMANTIC_INDEX_NONE) {
+            xr_free(operation_by_value);
+            return fail(ctx, "XR_SEM_0019", "coroutine operation identity map is ambiguous");
+        }
+        operation_by_value[value] = operation;
+    }
+    for (uint32_t function = 0; function < ctx->plan->function_count; function++) {
+        const XiCoroPlan *coro = ctx->functions[function].source->coro_plan;
+        if (!coro)
+            continue;
+        if (coro->nstates > ctx->plan->functions[function].value_count ||
+            (coro->nstates > 0 && !coro->points)) {
+            xr_free(operation_by_value);
+            return fail(ctx, "XR_SEM_0019", "coroutine state facts are incomplete");
+        }
+        uint32_t parent = find_entity(ctx->plan, XR_SEM_ENTITY_FUNCTION,
+                                     XR_SEM_ENTITY_SUBJECT_FUNCTION, function);
+        for (uint32_t state = 0; state < coro->nstates; state++) {
+            const XiCoroSuspendPoint *point = &coro->points[state];
+            uint32_t value = point->op ? ctx->plan->functions[function].value_begin + point->op->id
+                                       : XR_SEMANTIC_INDEX_NONE;
+            uint32_t operation = value < total_values ? operation_by_value[value]
+                                                      : XR_SEMANTIC_INDEX_NONE;
+            if (parent == XR_SEMANTIC_INDEX_NONE || point->state_id != state + 1 ||
+                operation == XR_SEMANTIC_INDEX_NONE ||
+                ctx->plan->operations[operation].function != function) {
+                xr_free(operation_by_value);
+                return fail(ctx, "XR_SEM_0019", "coroutine state identity is incomplete");
+            }
+            XrTextBuilder key = {0};
+            bool valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_COROUTINE_STATE, parent) &&
+                         text_append_format(&key, ":state=%u:operation=", point->state_id) &&
+                         text_append_stable_id(&key, ctx->plan->operations[operation].id);
+            if (!valid || !append_entity(ctx, XR_SEM_ENTITY_COROUTINE_STATE,
+                                         XR_SEM_ENTITY_SUBJECT_OPERATION, operation,
+                                         point->state_id, parent, &key, NULL)) {
+                text_dispose(&key);
+                xr_free(operation_by_value);
+                return fail(ctx, "XR_SEM_0019", "coroutine state identity allocation failed");
+            }
+            text_dispose(&key);
+        }
+    }
+    xr_free(operation_by_value);
+    return true;
+}
+
+static bool canonicalize_entity_table(XrSemanticBuildContext *ctx) {
+    uint32_t count = ctx->plan->entity_count;
+    XrSemanticEntitySortEntry *entries = count
+                                             ? (XrSemanticEntitySortEntry *) xr_malloc(
+                                                   (size_t) count * sizeof(*entries))
+                                             : NULL;
+    uint32_t *remap = count ? (uint32_t *) xr_malloc((size_t) count * sizeof(*remap)) : NULL;
+    if (count && (!entries || !remap)) {
+        xr_free(entries);
+        xr_free(remap);
+        return fail(ctx, "XR_EXEC_5003", "semantic entity canonicalization allocation failed");
+    }
+    for (uint32_t i = 0; i < count; i++)
+        entries[i] = (XrSemanticEntitySortEntry) {ctx->plan->entities[i], i};
+    qsort(entries, count, sizeof(*entries), compare_semantic_entity);
+    for (uint32_t i = 0; i < count; i++) {
+        if (i > 0 && xr_stable_id_equal(entries[i - 1].record.id, entries[i].record.id)) {
+            xr_free(entries);
+            xr_free(remap);
+            return fail(ctx, "XR_SEM_0003", "semantic entity identity is duplicated");
+        }
+        remap[entries[i].old_index] = i;
+        ctx->plan->entities[i] = entries[i].record;
+    }
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t parent = ctx->plan->entities[i].parent;
+        if (parent != XR_SEMANTIC_INDEX_NONE)
+            ctx->plan->entities[i].parent = remap[parent];
+    }
+    xr_free(entries);
+    xr_free(remap);
+    return true;
+}
+
+static bool build_semantic_entities(XrSemanticBuildContext *ctx, const XiFunc *root) {
+    uint32_t package, module;
+    return build_module_entities(ctx, root, &package, &module) &&
+           build_type_entities(ctx, module) && build_function_entities(ctx, module) &&
+           build_operation_entities(ctx) && build_ownership_entities(ctx, module) &&
+           build_coroutine_entities(ctx) && canonicalize_entity_table(ctx);
+}
+
 bool xr_semantic_plan_build(const XiFunc *root, XrSemanticPlan **out, char *error,
                             size_t error_size) {
     if (out)
@@ -1438,6 +1896,8 @@ bool xr_semantic_plan_build(const XiFunc *root, XrSemanticPlan **out, char *erro
     if (!xr_ownership_certificate_build(ctx.plan, &ownership, error, error_size))
         goto failure;
     xr_semantic_plan_set_ownership(ctx.plan, ownership);
+    if (!build_semantic_entities(&ctx, root))
+        goto failure;
     if (!xr_semantic_plan_freeze(ctx.plan, error, error_size))
         goto failure;
     if (!xr_semantic_plan_verify(ctx.plan, error, error_size))
