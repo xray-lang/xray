@@ -72,6 +72,17 @@ target_include_directories(test_runtime_descriptor PRIVATE
 add_test(NAME test_runtime_descriptor COMMAND $<TARGET_FILE:test_runtime_descriptor>)
 set_tests_properties(test_runtime_descriptor PROPERTIES LABELS "runtime;abi;target-machine")
 
+add_executable(test_runtime_abi_contract
+    runtime/test_runtime_abi_contract.c
+    ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_contract.c
+    ${CMAKE_SOURCE_DIR}/src/base/xsha256.c
+)
+target_include_directories(test_runtime_abi_contract PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+add_test(NAME test_runtime_abi_contract COMMAND $<TARGET_FILE:test_runtime_abi_contract>)
+set_tests_properties(test_runtime_abi_contract PROPERTIES LABELS "runtime;abi;target-machine")
+
 add_executable(test_ownership_audit
     runtime/test_ownership_audit.c
     ${CMAKE_SOURCE_DIR}/src/runtime/abi/xr_runtime_descriptor.c

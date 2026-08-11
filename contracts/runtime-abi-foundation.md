@@ -37,14 +37,13 @@ value families, VM, or AOT materialization have already switched.
 
 ## TargetProfile fingerprint handoff
 
-The three TargetProfile runtime fingerprints must be derived from structured
-contracts. A nonzero byte string is not evidence. This preparatory leaf does
-not yet expose a concrete object-header or whole-runtime fingerprint: the
-design-910 five-field header and canonical dynamic-value tag registry are not
-materialized in either executor, so fingerprinting the current legacy
-`XrObjHeader` would freeze `objsize`, the overloaded auxiliary word, and
-backend-private flags that the cutover must remove. Production profile freeze
-must remain blocked until the following schemas have real inputs.
+The three TargetProfile runtime fingerprints are derived from structured
+contracts. A nonzero byte string is not evidence. The builders in this leaf
+validate pointer-free candidate schemas without treating the current legacy
+`XrObjHeader` as an input. Production profile freeze remains blocked until the
+five-field header and canonical dynamic-value registry are materialized in the
+runtime and supplied to these builders; this prevents `objsize`, the overloaded
+auxiliary word, and backend-private flags from entering the new ABI.
 
 The required object-header entry point is:
 
@@ -54,9 +53,10 @@ XrRuntimeAbiStatus xr_runtime_object_header_abi_fingerprint(
     XrFingerprint *out);
 ```
 
-`XrRuntimeObjectHeaderAbi` contains an exact schema version, target endian,
-total size/alignment, a padding-must-be-zero rule, and exactly five ordered
-field contracts for `rc`, `object_kind`, `flags`, `layout_id`, and `domain_id`.
+`XrRuntimeObjectHeaderAbi` is pointer-free and contains an exact schema version,
+target endian, total size/alignment, a padding-must-be-zero rule, and exactly
+five ordered field contracts for `rc`, `object_kind`, `flags`, `layout_id`, and
+`domain_id`.
 Each field contract contains its semantic role, offset, width, alignment, and
 signed/unsigned/atomic encoding. The header contract additionally contains:
 
@@ -87,8 +87,8 @@ XrRuntimeAbiStatus xr_runtime_abi_contract_fingerprint(
 ```
 
 `XrRuntimeAbiContract` contains its schema, canonical numeric serialization
-endian, stable-ID/fingerprint widths, the verified object-header contract, and
-the canonical dynamic-value contract. The dynamic-value contract records
+endian, stable-ID/fingerprint/pointer widths, the verified object-header
+contract, and the canonical dynamic-value contract. The dynamic-value contract records
 size/alignment, every tag/flags/payload field offset and width, null/object-ref
 encoding, and the complete stable tag registry. It also contains exact
 physical field contracts and enum/sentinel namespaces for domain identity,
@@ -98,7 +98,10 @@ contract records the provider ID, operand element/count/result widths, return
 status namespace, and error-normalization rule. Checked arithmetic, alignment,
 unknown-enum rejection, and reserved-zero policies are explicit versioned
 fields. The pointer-bearing `XrRuntimeExtentGroupEntry` verifier view is
-ephemeral and is therefore excluded.
+ephemeral and is therefore excluded. Variable tables use fixed-capacity inline
+storage plus validated counts. Counts above the frozen budgets fail before an
+element is read, and every unused slot must be all-zero through its declared
+members.
 
 Provider selection remains a separate fingerprint boundary:
 
@@ -110,8 +113,9 @@ XrRuntimeAbiStatus xr_target_provider_set_fingerprint(
     XrFingerprint *out);
 ```
 
-Each provider contract contains the provider kind, stable provider-contract
-ID, ABI schema, flags, and a stable-ID-sorted operation table. Each operation
+Each pointer-free provider contract contains the runtime profile, provider
+kind, stable provider-contract ID, ABI schema, flags, and a stable-ID-sorted
+operation table. Each operation
 contains its stable ID, call-ABI fingerprint, effects/lifetime/failure flags,
 and kind-specific facts such as allocator alignment/sized-free/zeroing/thread
 safety or panic unwind/no-return behavior. Provider kinds are strictly
@@ -123,7 +127,7 @@ symbols, compiler objects, target strings, and file-content hashes are
 forbidden.
 
 `xr_target_profile_freeze` must invoke these structured builders internally and
-store their results. It must not continue accepting caller-authored raw
+store their results. It must not accept caller-authored raw
 fingerprints. Until canonical header/value/provider registries and matching
 runtime materialization exist, a production TargetPlan is incomplete and must
 fail closed rather than choose an alias, compatibility path, or scalar
@@ -133,6 +137,9 @@ fallback.
 
 anchor-sha256: src/base/xstable_id.h 3a7abe4d53ba0771a8b064e5d7c395d883253a1a9c65cc46a284872f7119c3b1
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 7ec819570b47e2a3f01132fc729eb73f91dda65cf2d343cb9bee34ad229b4284
-anchor-sha256: src/runtime/abi/xr_runtime_descriptor.h 19744b87e3b564ebec4938a3fa4906bf8884b3524af65d89f30c5cc1cfa2a7e4
-anchor-sha256: src/runtime/abi/xr_runtime_descriptor.c d0fc3c48b1273fbb355f4e03204a96995faa853fe4c56147c3d8dc7967e7bb91
+anchor-sha256: src/runtime/abi/xr_runtime_descriptor.h ce4f02055de60da60e1e36e04f522508fc0259ada826b29bc39c4bcb9ee0478b
+anchor-sha256: src/runtime/abi/xr_runtime_descriptor.c 1d755ca9d0bf8d830273dbaad86c2390ed74c35464913aba6127e0a1c9b4e423
+anchor-sha256: src/runtime/abi/xr_runtime_contract.h aae1d9df44c1635c09cd2db86583a9695f5d324ce697cd45d483f7546505ba1a
+anchor-sha256: src/runtime/abi/xr_runtime_contract.c 9d6c6c1587a632131b2cae3e0aa41501709cc54660b7ee0673e697ddd63a9b2c
 anchor-sha256: tests/unit/runtime/test_runtime_descriptor.c 76e3c93da9b9acc28d14fd83bc9d31504e54082ebf9349c517f3fac897487e46
+anchor-sha256: tests/unit/runtime/test_runtime_abi_contract.c 57c30a96995f4d18dc955d53035dd7f7fe61d3be93d2373f55be142a0dbc8ddb

@@ -231,7 +231,10 @@ CONTRACT_SPECS = (
             "src/plan/semantic/xr_semantic_ids.h",
             "src/runtime/abi/xr_runtime_descriptor.h",
             "src/runtime/abi/xr_runtime_descriptor.c",
+            "src/runtime/abi/xr_runtime_contract.h",
+            "src/runtime/abi/xr_runtime_contract.c",
             "tests/unit/runtime/test_runtime_descriptor.c",
+            "tests/unit/runtime/test_runtime_abi_contract.c",
         ),
     ),
     ContractSpec(

@@ -424,9 +424,11 @@ const char *xr_runtime_abi_status_name(XrRuntimeAbiStatus status) {
         "ok",          "invalid-argument", "invalid-schema",   "invalid-identity",
         "invalid-kind", "invalid-alignment", "invalid-domain", "invalid-extent",
         "fingerprint-mismatch", "overflow", "limit-exceeded", "provider-required",
-        "provider-rejected", "invalid-group",
+        "provider-rejected", "invalid-group", "invalid-shape", "invalid-order",
+        "invalid-overlap", "invalid-mask", "invalid-policy", "invalid-provider-set",
+        "budget-exceeded",
     };
-    return status >= XR_RUNTIME_ABI_OK && status <= XR_RUNTIME_ABI_INVALID_GROUP
+    return status >= XR_RUNTIME_ABI_OK && status < XR_RUNTIME_ABI_STATUS_COUNT
                ? names[status]
                : "unknown-status";
 }
