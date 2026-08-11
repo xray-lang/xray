@@ -139,7 +139,7 @@ def compile_header(cc: Path, prefix: Path, work: Path) -> None:
     if os.name == "nt":
         obj = work / "target_plan_load_header_probe.obj"
         command = [
-            str(cc), "/nologo", "/W4", "/WX", "/c",
+            str(cc), "/nologo", "/std:c11", "/W4", "/WX", "/c",
             f"/I{prefix / 'include/xray'}", f"/Fo{obj}", str(source),
         ]
     else:
