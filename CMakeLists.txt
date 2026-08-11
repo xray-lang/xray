@@ -4,6 +4,14 @@
 
 cmake_minimum_required(VERSION 3.21)
 
+# MSVC emits localized /showIncludes lines.  Ninja can record header
+# dependencies only when its configured prefix is byte-for-byte identical to
+# the compiler output, so request a stable diagnostic language before CMake
+# enables and probes the C compiler.
+if(CMAKE_HOST_WIN32)
+    set(ENV{VSLANG} "1033")
+endif()
+
 if(POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
 endif()
@@ -52,6 +60,65 @@ if(XRAY_USE_COMPILER_CACHE AND NOT CMAKE_C_COMPILER_LAUNCHER)
     else()
         message(STATUS "Compiler cache: not found (install ccache to speed up rebuilds)")
     endif()
+endif()
+
+# Keep the MSVC process language stable for every compile, including build
+# invocations launched from an IDE or a shell whose locale differs from the
+# configure environment.  This wrapper deliberately preserves an existing
+# ccache, sccache, or user-provided launcher as its tail command.
+if(CMAKE_HOST_WIN32 AND MSVC)
+    if(NOT CMAKE_GENERATOR MATCHES "Ninja")
+        message(FATAL_ERROR "Xray requires the Ninja generator for MSVC builds")
+    endif()
+    # CMake's ENCODING AUTO probe can decode modern cl.exe's UTF-8 diagnostic
+    # stream using the active ANSI code page.  On localized Windows hosts that
+    # produces mojibake in rules.ninja and silently drops every header
+    # dependency.  Repeat the probe with the encoding cl.exe actually emits
+    # and install its exact prefix before build rules are written.  VSLANG is
+    # still applied to configure and build processes, but this does not assume
+    # that every installed cl.exe translates it to English.
+    set(_xray_showincludes_dir "${CMAKE_BINARY_DIR}/CMakeFiles/XrayShowIncludes")
+    file(MAKE_DIRECTORY "${_xray_showincludes_dir}")
+    file(WRITE "${_xray_showincludes_dir}/probe.h" "\n")
+    file(WRITE "${_xray_showincludes_dir}/probe.c"
+        "#include \"probe.h\"\nint main(void) { return 0; }\n")
+    execute_process(
+        COMMAND "${CMAKE_C_COMPILER}" /nologo /showIncludes /c probe.c
+        WORKING_DIRECTORY "${_xray_showincludes_dir}"
+        OUTPUT_VARIABLE _xray_showincludes_output
+        ERROR_VARIABLE _xray_showincludes_error
+        RESULT_VARIABLE _xray_showincludes_result
+        ENCODING UTF-8
+    )
+    if(NOT _xray_showincludes_result EQUAL 0 OR
+       NOT _xray_showincludes_output MATCHES
+           "(^|\n)([^:\n][^:\n]+:[^:\n]*[^: \n][^: \n]:?[ \t]+)([A-Za-z]:\\\\|\\./|\\.\\\\|/)")
+        message(FATAL_ERROR
+            "Unable to determine the UTF-8 MSVC /showIncludes prefix:\n"
+            "${_xray_showincludes_output}${_xray_showincludes_error}")
+    endif()
+    set(CMAKE_CL_SHOWINCLUDES_PREFIX "${CMAKE_MATCH_2}")
+
+    function(_xray_wrap_msvc_launcher language)
+        set(_xray_existing_launcher "${CMAKE_${language}_COMPILER_LAUNCHER}")
+        set(_xray_vslang_launcher "${CMAKE_COMMAND};-E;env;VSLANG=1033")
+        set(_xray_launcher "${_xray_vslang_launcher}")
+        if(_xray_existing_launcher)
+            list(LENGTH _xray_existing_launcher _xray_existing_launcher_length)
+            if(_xray_existing_launcher_length GREATER_EQUAL 4)
+                list(SUBLIST _xray_existing_launcher 0 4 _xray_existing_prefix)
+            endif()
+            if(NOT "${_xray_existing_prefix}" STREQUAL "${_xray_vslang_launcher}")
+                list(APPEND _xray_launcher ${_xray_existing_launcher})
+            else()
+                set(_xray_launcher "${_xray_existing_launcher}")
+            endif()
+        endif()
+        set(CMAKE_${language}_COMPILER_LAUNCHER "${_xray_launcher}" PARENT_SCOPE)
+    endfunction()
+
+    _xray_wrap_msvc_launcher(C)
+    _xray_wrap_msvc_launcher(CXX)
 endif()
 
 # Release identity is captured once at configure time and is shared by the
@@ -1785,6 +1852,39 @@ message(STATUS "Main executable: xray (${MODULES_ENABLED})")
 
 if(BUILD_TESTS)
     enable_testing()
+
+    if(CMAKE_HOST_WIN32 AND MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
+        set(_xray_showincludes_regression_dir
+            "${CMAKE_BINARY_DIR}/CMakeFiles/XrayShowIncludesRegression")
+        file(MAKE_DIRECTORY "${_xray_showincludes_regression_dir}")
+        file(WRITE "${_xray_showincludes_regression_dir}/leaf.h"
+            "#define XRAY_SHOWINCLUDES_REGRESSION_VALUE 1\n")
+        file(WRITE "${_xray_showincludes_regression_dir}/bridge.h"
+            "#include \"leaf.h\"\n")
+        file(WRITE "${_xray_showincludes_regression_dir}/probe.c"
+            "#include \"bridge.h\"\nint xray_showincludes_regression(void) { return XRAY_SHOWINCLUDES_REGRESSION_VALUE; }\n")
+        add_library(xray_msvc_showincludes_transitive_probe OBJECT EXCLUDE_FROM_ALL
+            "${_xray_showincludes_regression_dir}/probe.c")
+        target_include_directories(xray_msvc_showincludes_transitive_probe PRIVATE
+            "${_xray_showincludes_regression_dir}")
+
+        add_test(
+            NAME msvc_ninja_showincludes_dependency_gate
+            COMMAND ${CMAKE_COMMAND}
+                    -DXRAY_BUILD_DIR=${CMAKE_BINARY_DIR}
+                    -DXRAY_C_COMPILER=${CMAKE_C_COMPILER}
+                    -DXRAY_PROBE_TARGET=xray_msvc_showincludes_transitive_probe
+                    -DXRAY_PROBE_HEADER=${_xray_showincludes_regression_dir}/leaf.h
+                    -DXRAY_PROBE_OBJECT_DIR=${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/xray_msvc_showincludes_transitive_probe.dir
+                    -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cmake/test_msvc_ninja_showincludes.cmake
+        )
+        set_tests_properties(msvc_ninja_showincludes_dependency_gate PROPERTIES
+            LABELS "build;msvc;ninja;dependency"
+            PROCESSORS 1
+            RUN_SERIAL TRUE
+            TIMEOUT 30
+        )
+    endif()
 
     # No Bash is required to run the test suite: every registered gate is a
     # Python entry point invoked through XRAY_PYTHON. That removes the Windows
