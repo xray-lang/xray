@@ -41,13 +41,29 @@ XrValue xr_task_consume_result(struct XrRuntimeCore *core, XrTask *task,
     } else if (atomic_load_explicit(&task->payload_taken, memory_order_relaxed) != 0) {
         result = xr_null();
     } else if (task->result_owner == XR_TASK_PAYLOAD_SHARED && XR_IS_PTR(result)) {
-        XrObjHeader *obj = XR_VALUE_GCPTR(result);
-        XR_CHECK(obj && XR_OBJ_IS_SHARED(obj), "Task shared result owner mismatch");
-        xr_obj_dup(obj);
+        if (XR_IS_STRING(result)) {
+            XR_CHECK(xr_value_runtime_string_is_shared(result),
+                     "Task shared string result owner mismatch");
+            XR_CHECK(xr_runtime_object_header_retain(
+                         xr_value_runtime_object_header(result)) ==
+                         XR_RUNTIME_ABI_OK,
+                     "Task shared string retain mismatch");
+        } else {
+            XrObjHeader *obj = XR_VALUE_GCPTR(result);
+            XR_CHECK(obj && XR_OBJ_IS_SHARED(obj),
+                     "Task shared result owner mismatch");
+            xr_obj_dup(obj);
+        }
     } else if (XR_IS_PTR(result)) {
-        XrObjHeader *obj = XR_VALUE_GCPTR(result);
-        XR_CHECK(obj && (XR_OBJ_IS_SHARED(obj) || XR_OBJ_IS_TRANSFER(obj)),
-                 "Task result bypassed verified storage publication");
+        if (XR_IS_STRING(result)) {
+            XR_CHECK(xr_value_runtime_string_is_shared(result) ||
+                         xr_value_runtime_string_is_transferable(result),
+                     "Task string result bypassed verified storage publication");
+        } else {
+            XrObjHeader *obj = XR_VALUE_GCPTR(result);
+            XR_CHECK(obj && (XR_OBJ_IS_SHARED(obj) || XR_OBJ_IS_TRANSFER(obj)),
+                     "Task result bypassed verified storage publication");
+        }
     }
     task_result_lock_release(&task->await_lock);
     return result;
@@ -72,13 +88,29 @@ XrValue xr_task_observe_error(struct XrRuntimeCore *core, XrTask *task,
     } else if (atomic_load_explicit(&task->payload_taken, memory_order_relaxed) != 0) {
         error = xr_null();
     } else if (task->error_owner == XR_TASK_PAYLOAD_SHARED && XR_IS_PTR(error)) {
-        XrObjHeader *obj = XR_VALUE_GCPTR(error);
-        XR_CHECK(obj && XR_OBJ_IS_SHARED(obj), "Task shared error owner mismatch");
-        xr_obj_dup(obj);
+        if (XR_IS_STRING(error)) {
+            XR_CHECK(xr_value_runtime_string_is_shared(error),
+                     "Task shared string error owner mismatch");
+            XR_CHECK(xr_runtime_object_header_retain(
+                         xr_value_runtime_object_header(error)) ==
+                         XR_RUNTIME_ABI_OK,
+                     "Task shared string retain mismatch");
+        } else {
+            XrObjHeader *obj = XR_VALUE_GCPTR(error);
+            XR_CHECK(obj && XR_OBJ_IS_SHARED(obj),
+                     "Task shared error owner mismatch");
+            xr_obj_dup(obj);
+        }
     } else if (XR_IS_PTR(error)) {
-        XrObjHeader *obj = XR_VALUE_GCPTR(error);
-        XR_CHECK(obj && (XR_OBJ_IS_SHARED(obj) || XR_OBJ_IS_TRANSFER(obj)),
-                 "Task error bypassed verified storage publication");
+        if (XR_IS_STRING(error)) {
+            XR_CHECK(xr_value_runtime_string_is_shared(error) ||
+                         xr_value_runtime_string_is_transferable(error),
+                     "Task string error bypassed verified storage publication");
+        } else {
+            XrObjHeader *obj = XR_VALUE_GCPTR(error);
+            XR_CHECK(obj && (XR_OBJ_IS_SHARED(obj) || XR_OBJ_IS_TRANSFER(obj)),
+                     "Task error bypassed verified storage publication");
+        }
     }
     task_result_lock_release(&task->await_lock);
     return error;

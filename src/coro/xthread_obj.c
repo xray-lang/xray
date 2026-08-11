@@ -17,6 +17,7 @@
 #include "../base/xchecks.h"
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/mem/xsystem_heap.h"
+#include "../runtime/mem/xruntime_object_heap.h"
 #include "../runtime/object/xnative_type.h"
 #include "../runtime/object/xpanic_info.h"
 #include "../runtime/xshared.h"
@@ -189,6 +190,13 @@ static void thread_runtime_leave(XrVMRuntime *isolate) {
 static uint8_t thread_payload_owner_for_value(XrValue value) {
     if (!XR_IS_PTR(value))
         return XR_THREAD_PAYLOAD_NONE;
+    if (XR_IS_STRING(value)) {
+        if (xr_value_runtime_string_is_transferable(value))
+            return XR_THREAD_PAYLOAD_TRANSFER;
+        if (xr_value_runtime_string_is_shared(value))
+            return XR_THREAD_PAYLOAD_SHARED;
+        return XR_THREAD_PAYLOAD_NONE;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return XR_THREAD_PAYLOAD_NONE;
@@ -202,6 +210,12 @@ static uint8_t thread_payload_owner_for_value(XrValue value) {
 static XrValue thread_validate_publish_value(XrValue value) {
     if (!XR_IS_PTR(value))
         return value;
+    if (XR_IS_STRING(value)) {
+        XR_CHECK(xr_value_runtime_string_is_transferable(value) ||
+                     xr_value_runtime_string_is_shared(value),
+                 "Thread string publish bypassed verified storage publication");
+        return value;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     XR_CHECK(obj && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
              "Thread publish: TRANSIT payload is not a terminal result");
@@ -219,6 +233,18 @@ static void thread_release_payload(XrRuntimeCore *core, XrValue *slot, uint8_t *
     *owner_slot = XR_THREAD_PAYLOAD_NONE;
     if (!XR_IS_PTR(value))
         return;
+    if (XR_IS_STRING(value)) {
+        bool last = false;
+        XrRuntimeObjectHeader *header =
+            xr_value_runtime_object_header(value);
+        XR_CHECK(xr_runtime_object_header_release(header, &last) ==
+                     XR_RUNTIME_ABI_OK,
+                 "Thread canonical string RC mismatch");
+        if (last)
+            XR_CHECK(xr_runtime_object_reclaim(header) == XR_RUNTIME_ABI_OK,
+                     "Thread canonical string reclaim mismatch");
+        return;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj || !xr_obj_drop_is_last(obj))
         return;
@@ -265,13 +291,29 @@ static XrValue thread_observe_terminal_payload(XrThread *thread, bool failed) {
         XR_CHECK(false, "Thread transferable payload has already been taken");
         value = xr_null();
     } else if (*owner_slot == XR_THREAD_PAYLOAD_SHARED && XR_IS_PTR(value)) {
-        XrObjHeader *obj = XR_VALUE_GCPTR(value);
-        XR_CHECK(obj && XR_OBJ_IS_SHARED(obj), "Thread shared payload owner mismatch");
-        xr_obj_dup(obj);
+        if (XR_IS_STRING(value)) {
+            XR_CHECK(xr_value_runtime_string_is_shared(value),
+                     "Thread shared string payload owner mismatch");
+            XR_CHECK(xr_runtime_object_header_retain(
+                         xr_value_runtime_object_header(value)) ==
+                         XR_RUNTIME_ABI_OK,
+                     "Thread shared string retain mismatch");
+        } else {
+            XrObjHeader *obj = XR_VALUE_GCPTR(value);
+            XR_CHECK(obj && XR_OBJ_IS_SHARED(obj),
+                     "Thread shared payload owner mismatch");
+            xr_obj_dup(obj);
+        }
     } else if (XR_IS_PTR(value)) {
-        XrObjHeader *obj = XR_VALUE_GCPTR(value);
-        XR_CHECK(obj && (XR_OBJ_IS_TRANSFER(obj) || XR_OBJ_IS_SHARED(obj)),
-                 "Thread payload bypassed verified storage publication");
+        if (XR_IS_STRING(value)) {
+            XR_CHECK(xr_value_runtime_string_is_transferable(value) ||
+                         xr_value_runtime_string_is_shared(value),
+                     "Thread string payload bypassed verified storage publication");
+        } else {
+            XrObjHeader *obj = XR_VALUE_GCPTR(value);
+            XR_CHECK(obj && (XR_OBJ_IS_TRANSFER(obj) || XR_OBJ_IS_SHARED(obj)),
+                     "Thread payload bypassed verified storage publication");
+        }
     }
     thread_payload_lock_release(thread);
     return value;

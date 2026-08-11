@@ -23,7 +23,6 @@
 #include "../../coro/xcoro_pool.h"
 #include "../../coro/xcoroutine.h"
 #include "xobj_header.h"        // XR_TCOROUTINE
-#include "../object/xstring.h"  // STR_FLAG_GLOBAL
 #include <string.h>
 #include <stdio.h>
 #include "../../os/os_mem.h"
@@ -47,6 +46,29 @@ uint64_t xr_sysheap_shared_live_bytes_total(void) {
 
 uint64_t xr_sysheap_static_alloc_bytes_total(void) {
     return atomic_load_explicit(&g_static_alloc_bytes, memory_order_relaxed);
+}
+
+void xr_sysheap_note_runtime_object_alloc(XrSystemHeap *heap, size_t size,
+                                          bool shared) {
+    if (!heap || !heap->initialized)
+        return;
+    if (shared) {
+        atomic_fetch_add_explicit(&heap->stats.shared_alloc_count, 1,
+                                  memory_order_relaxed);
+        atomic_fetch_add_explicit(&g_shared_live_bytes, size,
+                                  memory_order_relaxed);
+    } else {
+        atomic_fetch_add_explicit(&heap->stats.transfer_alloc_count, 1,
+                                  memory_order_relaxed);
+    }
+}
+
+void xr_sysheap_note_runtime_object_free(XrSystemHeap *heap, size_t size,
+                                         bool shared) {
+    (void) heap;
+    if (shared)
+        atomic_fetch_sub_explicit(&g_shared_live_bytes, size,
+                                  memory_order_relaxed);
 }
 
 /* One place decides whether an object participates in shared-domain
@@ -490,12 +512,6 @@ void xr_shared_destroy_core(XrRuntimeCore *core, XrObjHeader *obj) {
         return;
     if (xr_runtime_core_release_aot_native_value(core, obj))
         return;
-
-    /* Global pool strings are owned by XrGlobalStringPool, not by coroutine GC.
-     * They are freed in xr_global_pool_free during isolate shutdown. */
-    if (XR_OBJ_GET_TYPE(obj) == XR_TSTRING && (obj->extra & STR_FLAG_GLOBAL)) {
-        return;
-    }
 
     uint8_t type = XR_OBJ_GET_TYPE(obj);
 

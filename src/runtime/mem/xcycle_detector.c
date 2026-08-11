@@ -85,7 +85,7 @@ static void detector_visit_children(XrObjHeader *obj, XrObjGraphVisitor visitor,
                 break;
             for (uint32_t i = 0; i < ch->buf_count; i++) {
                 XrValue v = ch->buffer[(ch->recv_idx + i) % ch->buf_size];
-                if (XR_IS_PTR(v)) {
+                if (XR_IS_PTR(v) && !XR_IS_STRING(v)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(v);
                     if (child)
                         visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
@@ -95,12 +95,12 @@ static void detector_visit_children(XrObjHeader *obj, XrObjGraphVisitor visitor,
         }
         case XR_TTASK: {
             XrTask *task = (XrTask *) obj;
-            if (XR_IS_PTR(task->result)) {
+            if (XR_IS_PTR(task->result) && !XR_IS_STRING(task->result)) {
                 XrObjHeader *child = XR_VALUE_GCPTR(task->result);
                 if (child)
                     visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
             }
-            if (XR_IS_PTR(task->error)) {
+            if (XR_IS_PTR(task->error) && !XR_IS_STRING(task->error)) {
                 XrObjHeader *child = XR_VALUE_GCPTR(task->error);
                 if (child)
                     visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);

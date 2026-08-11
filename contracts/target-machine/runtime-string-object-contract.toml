@@ -1,0 +1,120 @@
+schema = 1
+name = "runtime-string-object-v1"
+fingerprint = "a87ef4c611b54f7bcee9396d8226ee1dc31c80e9b907ffb0c4d8b51811ba6596"
+stable_id_authority = "xray-entity-id-v2-u64-framed"
+object_kind = 1
+object_kind_key = "xray.runtime.object-kind.v1/string"
+layout_index = 0
+fixed_prefix_size = 32
+alignment = 4
+data_offset = 32
+extent_operand = "utf8-byte-length-plus-nul"
+extent_operand_bias = 1
+rune_length_unknown = 4294967295
+traits_mask = 63
+
+[header]
+size = 16
+alignment = 4
+rc_offset = 0
+object_kind_offset = 4
+flags_offset = 6
+layout_id_offset = 8
+domain_id_offset = 12
+
+[extent]
+kind = "inline-tail"
+tail_offset = 32
+stride = 1
+operand_index = 0
+part_index = 0
+part_count = 1
+stable_id_key = "runtime.extent.string.inline-utf8.v1"
+
+[layout]
+stable_id_key = "runtime.layout.string.inline-utf8.v1"
+descriptor_stable_id_key = "runtime.layout-descriptor.string.inline-utf8.v1"
+eq_hash_stable_id_key = "runtime.eq-hash.string.utf8-bytes.v1"
+destructor_stable_id_key = ""
+clone_stable_id_key = "runtime.clone.string.inline-utf8.v1"
+
+[[field]]
+role = "object-header"
+offset = 0
+width = 16
+flags = []
+
+[[field]]
+role = "traits"
+offset = 16
+width = 2
+flags = ["atomic"]
+
+[[field]]
+role = "byte-length"
+offset = 20
+width = 4
+flags = []
+
+[[field]]
+role = "rune-length"
+offset = 24
+width = 4
+flags = []
+
+[[field]]
+role = "hash"
+offset = 28
+width = 4
+flags = []
+
+[[field]]
+role = "utf8-tail"
+offset = 32
+width = 1
+flags = ["flexible-tail"]
+
+[literal_view]
+has_object_header = false
+owns_utf8_bytes = false
+nul_terminated = true
+semantic_domains = ["const-shared"]
+backend_materializations = ["static-data"]
+
+[owned_object]
+has_object_header = true
+owns_utf8_bytes = true
+nul_terminated = true
+semantic_domains = ["exec-local", "transferable", "const-shared", "sync-shared"]
+backend_materializations = ["exec-heap", "system-heap"]
+
+[[domain]]
+index = 0
+semantic = "exec-local"
+materialization = "exec-heap"
+stable_id_key = "runtime.domain.string.exec-local.v1"
+
+[[domain]]
+index = 1
+semantic = "transferable"
+materialization = "system-heap"
+stable_id_key = "runtime.domain.string.transferable.v1"
+
+[[domain]]
+index = 2
+semantic = "const-shared"
+materialization = "system-heap"
+stable_id_key = "runtime.domain.string.const-shared.v1"
+
+[[domain]]
+index = 3
+semantic = "sync-shared"
+materialization = "system-heap"
+stable_id_key = "runtime.domain.string.sync-shared.v1"
+
+[boundary]
+compiler_literals = "non-object-read-only-view"
+materialized_runtime_strings = "canonical-header-first-inline-tail"
+legacy_object_header_allowed = false
+backend_private_string_tag_allowed = false
+backend_private_offset_inference_allowed = false

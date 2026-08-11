@@ -380,6 +380,9 @@ static inline XrClass *invoke_resolve_class(XrVMRuntime *isolate, XrValue receiv
     if (!XR_IS_PTR(receiver))
         return NULL;
 
+    if (XR_IS_STRING(receiver))
+        return isolate->core_rt->native_type_classes[XR_TSTRING];
+
     XrObjHeader *gc = (XrObjHeader *) XR_TO_PTR(receiver);
     XrObjType type = XR_OBJ_GET_TYPE(gc);
 

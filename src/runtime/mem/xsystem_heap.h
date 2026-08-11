@@ -203,4 +203,12 @@ XR_FUNC void xr_sysheap_print_stats(XrSystemHeap *heap);
 XR_FUNC uint64_t xr_sysheap_shared_live_bytes_total(void);
 XR_FUNC uint64_t xr_sysheap_static_alloc_bytes_total(void);
 
+/* Canonical-header objects keep physical allocation size in allocator
+ * metadata rather than in the object ABI. These hooks preserve the existing
+ * system-heap counters without reconstructing size from object fields. */
+XR_FUNC void xr_sysheap_note_runtime_object_alloc(XrSystemHeap *heap, size_t size,
+                                                  bool shared);
+XR_FUNC void xr_sysheap_note_runtime_object_free(XrSystemHeap *heap, size_t size,
+                                                 bool shared);
+
 #endif  // XSYSTEM_HEAP_H

@@ -324,13 +324,13 @@ void xr_aot_runtime_enable_transfer(XrAotRuntime *runtime) {
 
 #define XR_AOT_VALUE_TAG_STR 14
 #define XR_AOT_VALUE_TAG_STR_ARC 19
-typedef struct XrAotStringView {
+typedef struct XrAotLiteralStringView {
     int64_t len;
     int64_t rune_len;
     uint32_t hash;
     uint32_t flags;
     char *data;
-} XrAotStringView;
+} XrAotLiteralStringView;
 
 static bool aot_value_is_aot_string(XrValue value) {
     return value.tag == XR_AOT_VALUE_TAG_STR || value.tag == XR_AOT_VALUE_TAG_STR_ARC;
@@ -339,10 +339,28 @@ static bool aot_value_is_aot_string(XrValue value) {
 static XrValue aot_bridge_string_to_runtime(XrRuntimeCore *core, XrValue value) {
     if (!core || !aot_value_is_aot_string(value) || !value.ptr)
         return value;
-    const XrAotStringView *src = (const XrAotStringView *) value.ptr;
-    if (!src->data || src->len < 0)
-        return XR_NULL_VAL;
-    XrString *dst = xr_string_intern_core(core, src->data, (size_t) src->len, src->hash);
+    const char *data;
+    size_t length;
+    uint32_t hash;
+    if (value.tag == XR_AOT_VALUE_TAG_STR_ARC) {
+        const XrString *src = (const XrString *) value.ptr;
+        if (xr_runtime_string_object_validate_prefix(src) !=
+            XR_RUNTIME_ABI_OK)
+            return XR_NULL_VAL;
+        data = src->data;
+        length = src->length;
+        hash = src->hash;
+    } else {
+        const XrAotLiteralStringView *src =
+            (const XrAotLiteralStringView *) value.ptr;
+        if (!src->data || src->len < 0 ||
+            (uint64_t) src->len > XR_RUNTIME_STRING_MAXIMUM_BYTE_LENGTH)
+            return XR_NULL_VAL;
+        data = src->data;
+        length = (size_t) src->len;
+        hash = src->hash;
+    }
+    XrString *dst = xr_string_intern_core(core, data, length, hash);
     return dst ? xr_string_value(dst) : XR_NULL_VAL;
 }
 

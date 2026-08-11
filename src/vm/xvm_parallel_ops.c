@@ -103,6 +103,11 @@ static bool vm_par_closure_safe_to_share(const XrClosure *closure) {
         XrValue uv = closure->upvals[i];
         if (!XR_IS_PTR(uv))
             continue;
+        if (XR_IS_STRING(uv)) {
+            if (xr_value_runtime_string_is_shared(uv))
+                continue;
+            return false;
+        }
         XrObjHeader *h = (XrObjHeader *) XR_VALUE_GCPTR(uv);
         if (!h)
             continue;
@@ -170,6 +175,10 @@ static void vm_par_latch_release(XrVmParBatch *batch) {
 static void vm_par_release_terminal_value(XrRuntimeCore *core, XrValue value) {
     if (!XR_IS_PTR(value))
         return;
+    if (XR_IS_STRING(value)) {
+        xr_rc_release_value(NULL, value);
+        return;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj || !xr_obj_drop_is_last(obj))
         return;
@@ -184,6 +193,13 @@ static void vm_par_release_terminal_value(XrRuntimeCore *core, XrValue value) {
 static XrValue vm_par_validate_terminal_value(XrValue value, const char *label) {
     if (!XR_IS_PTR(value))
         return value;
+    if (XR_IS_STRING(value)) {
+        XR_CHECK(xr_value_runtime_string_is_transferable(value) ||
+                     xr_value_runtime_string_is_shared(value),
+                 label ? label
+                       : "parallel string payload bypassed verified storage publication");
+        return value;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     XR_CHECK(obj && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
              "parallel payload cannot use legacy TRANSIT storage");
@@ -195,6 +211,13 @@ static XrValue vm_par_validate_terminal_value(XrValue value, const char *label) 
 static XrValue vm_par_publish_error_value(XrRuntimeCore *core, XrValue value) {
     if (!XR_IS_PTR(value))
         return value;
+    if (XR_IS_STRING(value)) {
+        if (xr_value_runtime_string_is_transferable(value) ||
+            xr_value_runtime_string_is_shared(value))
+            return value;
+        return xr_deep_copy_explicit_to_storage_core(
+            core, value, XR_OBJ_STORAGE_SHARED);
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (obj && (XR_OBJ_IS_TRANSFER(obj) || XR_OBJ_IS_SHARED(obj)))
         return value;

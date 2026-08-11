@@ -165,8 +165,11 @@ vmcase(OP_GEN_YIELD) {
         int a = GETARG_A(i);
         current->result = R(a);
         if (XR_IS_PTR(R(a))) {
-            XrObjHeader *obj = XR_VALUE_GCPTR(R(a));
-            if (obj && XR_OBJ_IS_TRANSFER(obj))
+            bool transfers = XR_IS_STRING(R(a))
+                                 ? xr_value_runtime_string_is_transferable(R(a))
+                                 : XR_VALUE_GCPTR(R(a)) &&
+                                       XR_OBJ_IS_TRANSFER(XR_VALUE_GCPTR(R(a)));
+            if (transfers)
                 R(a) = xr_null();
         }
         frame->pc = pc;

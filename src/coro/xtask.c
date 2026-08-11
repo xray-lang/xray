@@ -28,6 +28,7 @@
 
 #include "xtask.h"
 #include "xcoroutine.h"
+#include "../runtime/mem/xruntime_object_heap.h"
 #include "xworker.h"
 #include "xchannel.h"
 #include "../runtime/xshared.h"
@@ -420,6 +421,13 @@ static XrRuntimeCore *task_payload_core(XrTask *task) {
 static uint8_t task_payload_owner_for_value(XrValue value) {
     if (!XR_IS_PTR(value))
         return XR_TASK_PAYLOAD_NONE;
+    if (XR_IS_STRING(value)) {
+        if (xr_value_runtime_string_is_transferable(value))
+            return XR_TASK_PAYLOAD_TRANSFER;
+        if (xr_value_runtime_string_is_shared(value))
+            return XR_TASK_PAYLOAD_SHARED;
+        return XR_TASK_PAYLOAD_NONE;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return XR_TASK_PAYLOAD_NONE;
@@ -439,6 +447,18 @@ static void task_release_payload(XrRuntimeCore *core, XrValue *slot, uint8_t *ow
     *slot = xr_null();
     if (!XR_IS_PTR(value))
         return;
+    if (XR_IS_STRING(value)) {
+        bool last = false;
+        XrRuntimeObjectHeader *header =
+            xr_value_runtime_object_header(value);
+        XR_CHECK(xr_runtime_object_header_release(header, &last) ==
+                     XR_RUNTIME_ABI_OK,
+                 "Task canonical string RC mismatch");
+        if (last)
+            XR_CHECK(xr_runtime_object_reclaim(header) == XR_RUNTIME_ABI_OK,
+                     "Task canonical string reclaim mismatch");
+        return;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj || !xr_obj_drop_is_last(obj))
         return;
@@ -451,7 +471,7 @@ static void task_release_payload(XrRuntimeCore *core, XrValue *slot, uint8_t *ow
 static void task_store_result_payload(XrTask *task, XrValue value) {
     uint8_t owner = task_payload_owner_for_value(value);
     if (task->result_owner != XR_TASK_PAYLOAD_NONE &&
-        (!XR_IS_PTR(value) || XR_VALUE_GCPTR(task->result) != XR_VALUE_GCPTR(value))) {
+        (!XR_IS_PTR(value) || task->result.ptr != value.ptr)) {
         task_release_payload(task_payload_core(task), &task->result, &task->result_owner);
     }
     task->result = value;
@@ -471,7 +491,7 @@ static void task_store_error_channel(XrTask *task, bool error_is_value) {
 static void task_store_error_payload(XrTask *task, XrValue value) {
     uint8_t owner = task_payload_owner_for_value(value);
     if (task->error_owner != XR_TASK_PAYLOAD_NONE &&
-        (!XR_IS_PTR(value) || XR_VALUE_GCPTR(task->error) != XR_VALUE_GCPTR(value))) {
+        (!XR_IS_PTR(value) || task->error.ptr != value.ptr)) {
         task_release_payload(task_payload_core(task), &task->error, &task->error_owner);
     }
     task->error = value;
@@ -495,6 +515,12 @@ static bool task_cas_state(XrTask *task, uint32_t from_mask, uint8_t to) {
 XrValue xr_task_validate_publish_value(XrTask *task, XrValue value) {
     if (!task || !XR_IS_PTR(value))
         return value;
+    if (XR_IS_STRING(value)) {
+        XR_CHECK(xr_value_runtime_string_is_shared(value) ||
+                     xr_value_runtime_string_is_transferable(value),
+                 "task result string requires verified shared or transferable domain");
+        return value;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;

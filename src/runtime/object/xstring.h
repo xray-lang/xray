@@ -19,7 +19,7 @@
 #define XSTRING_H
 
 #include "../value/xvalue.h"
-#include "../mem/xobj_header.h"
+#include "../abi/xr_runtime_string_object.h"
 #include "xarray.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -32,28 +32,8 @@
 struct XrArray;
 struct XrRuntimeCore;
 
-/* ========== String Object ========== */
-
-/*
- * Memory layout (header + data):
- *   [0-15]  object header
- *   [16-19] length (4 bytes, max 4GB)
- *   [20-23] rune_length (4 bytes)
- *   [24-27] hash (4 bytes, FNV-1a)
- *   [28+]   data[] (flexible array)
- */
-typedef struct XrString {
-    XrObjHeader hdr;
-    uint32_t length;       // UTF-8 byte count
-    uint32_t rune_length;  // Unicode scalar count
-    uint32_t hash;
-    char data[];
-} XrString;
-
 // Get string data pointer
 #define XR_STRING_CHARS(s) ((s)->data)
-
-_Static_assert(offsetof(XrString, data) == 28, "XrString data offset must include both counts");
 
 /* ========== Short/Long String Separation ========== */
 
@@ -61,21 +41,23 @@ _Static_assert(offsetof(XrString, data) == 28, "XrString data offset must includ
  * Short runtime strings (≤64B): coroutine-local, no global lock
  * Canonical short strings: interned in the global pool, pointer fast path
  * Long strings (>64B): content comparison; shared when crossing boundaries
- * Flag stored in hdr.extra lowest bit
+ * Classification lives in the descriptor-governed string traits field; the
+ * canonical object header never stores family-private bits.
  */
 
 // Short string max length
 #define XR_SHORT_STR_MAX 64
 
-// Long string flag (stored in hdr.extra bit 4; bit 0 is reserved for object storage mode)
-#define XR_STR_LONG_FLAG 0x10
-
 // Check if long string
-#define XR_STR_IS_LONG(s) ((s)->hdr.extra & XR_STR_LONG_FLAG)
+#define XR_STR_IS_LONG(s)                                                               \
+    ((atomic_load_explicit(&(s)->traits, memory_order_relaxed) &                         \
+      XR_RUNTIME_STRING_TRAIT_LONG) != 0)
 #define XR_STR_IS_SHORT(s) (!XR_STR_IS_LONG(s))
 
 // Set long string flag
-#define XR_STR_SET_LONG(s) ((s)->hdr.extra |= XR_STR_LONG_FLAG)
+#define XR_STR_SET_LONG(s)                                                              \
+    ((void) atomic_fetch_or_explicit(&(s)->traits, XR_RUNTIME_STRING_TRAIT_LONG,         \
+                                     memory_order_relaxed))
 
 /* ========== String Interning Pool ========== */
 
@@ -94,19 +76,19 @@ typedef struct XrStringPool {
 
 /* ========== Tiered String Pool (Thread-safe) ========== */
 
-// String flags (stored in hdr.extra)
-#define STR_FLAG_INTERNED 0x02
-#define STR_FLAG_GLOBAL 0x04
-#define STR_FLAG_LOCAL 0x08
-#define STR_FLAG_PERMANENT 0x20  // compile-time constant, never evicted
-#define STR_FLAG_ACCESSED 0x40   // touched since last sweep cycle
+// String-family traits (stored outside the canonical object header)
+#define STR_FLAG_INTERNED XR_RUNTIME_STRING_TRAIT_INTERNED
+#define STR_FLAG_GLOBAL XR_RUNTIME_STRING_TRAIT_GLOBAL
+#define STR_FLAG_LOCAL XR_RUNTIME_STRING_TRAIT_LOCAL
+#define STR_FLAG_PERMANENT XR_RUNTIME_STRING_TRAIT_PERMANENT
+#define STR_FLAG_ACCESSED XR_RUNTIME_STRING_TRAIT_ACCESSED
 
-/* Pooled-string flag accesses use relaxed atomics on the header flags word:
+/* Pooled-string trait accesses use relaxed atomics on the family trait word:
  * the ACCESSED bit is set by concurrent lookups holding only the pool read
  * lock (LRU heuristic), so plain |= would be a racy RMW that could drop a
  * concurrent bit update. Same cast-to-_Atomic idiom as task->waiter. */
-#define XR_STR_FLAGS_RELAXED(s)                                                                    \
-    atomic_load_explicit((_Atomic uint16_t *) &(s)->hdr.extra, memory_order_relaxed)
+#define XR_STR_FLAGS_RELAXED(s)                                                      \
+    atomic_load_explicit(&(s)->traits, memory_order_relaxed)
 
 // Check macros
 #define XR_STR_IS_INTERNED(s) (XR_STR_FLAGS_RELAXED(s) & STR_FLAG_INTERNED)
@@ -116,16 +98,17 @@ typedef struct XrStringPool {
 #define XR_STR_IS_ACCESSED(s) (XR_STR_FLAGS_RELAXED(s) & STR_FLAG_ACCESSED)
 
 // Set macros
-#define XR_STR_SET_FLAGS_RELAXED(s, bits)                                                          \
-    ((void) atomic_fetch_or_explicit((_Atomic uint16_t *) &(s)->hdr.extra, (uint16_t) (bits),      \
+#define XR_STR_SET_FLAGS_RELAXED(s, bits)                                            \
+    ((void) atomic_fetch_or_explicit(&(s)->traits, (uint16_t) (bits),                 \
                                      memory_order_relaxed))
 #define XR_STR_SET_GLOBAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_INTERNED | STR_FLAG_GLOBAL)
 #define XR_STR_SET_LOCAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_LOCAL)
 #define XR_STR_SET_PERMANENT(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_PERMANENT)
 #define XR_STR_SET_ACCESSED(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_ACCESSED)
-#define XR_STR_CLR_ACCESSED(s)                                                                     \
-    ((void) atomic_fetch_and_explicit((_Atomic uint16_t *) &(s)->hdr.extra,                        \
-                                      (uint16_t) ~STR_FLAG_ACCESSED, memory_order_relaxed))
+#define XR_STR_CLR_ACCESSED(s)                                                      \
+    ((void) atomic_fetch_and_explicit(&(s)->traits,                                 \
+                                      (uint16_t) ~STR_FLAG_ACCESSED,                \
+                                      memory_order_relaxed))
 
 // XrGlobalStringPool - Global string intern pool (thread-safe)
 typedef struct XrGlobalStringPool {

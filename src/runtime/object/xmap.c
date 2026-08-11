@@ -134,13 +134,13 @@ static XrValue map_canonicalize_key(XrMap *map, XrValue key, XrCoroHeap *heap) {
      * needed the core; routing through the VM owner meant a core without one —
      * a standalone AOT runtime, or a unit test that builds a bare core — gave
      * up on canonicalization and silently kept duplicate string keys. */
-    XrVMRuntime *iso = (heap && heap->core) ? xr_runtime_core_vm_owner(heap->core) : NULL;
-    XrRuntimeCore *core = iso ? xr_isolate_get_runtime_core(iso) : NULL;
+    XrRuntimeCore *core = heap ? heap->core : NULL;
     if (!core)
         return key;
     XrString *src = XR_TO_STRING(key);
-    if (XR_STR_IS_INTERNED(src) || (src->length > XR_SHORT_STR_MAX && XR_OBJ_IS_SHARED(&src->hdr) &&
-                                    !XR_OBJ_GET_FLAG(&src->hdr, XR_OBJ_TRANSIT)))
+    if (XR_STR_IS_INTERNED(src) ||
+        (src->length > XR_SHORT_STR_MAX &&
+         src->header.domain_id == XR_RUNTIME_STRING_DOMAIN_CONST_SHARED))
         return key;
     XrString *canonical = xr_string_intern_core(core, src->data, src->length, src->hash);
     if (!canonical || canonical == src)

@@ -21,6 +21,7 @@
 #include "../../base/xchecks.h"
 #include "../xshared.h"
 #include "xsystem_heap.h"
+#include "xruntime_object_heap.h"
 #include "../object/xstring.h"
 #include "../core/xr_runtime_core.h"
 #include "../xisolate_api.h"
@@ -70,7 +71,7 @@ static inline XrRuntimeCore *coro_heap_core(XrCoroHeap *heap) {
 }
 
 static inline bool coro_heap_value_to_header(XrValue value, XrObjHeader **out) {
-    if (!XR_VALUE_NEEDS_GC(value))
+    if (!XR_VALUE_NEEDS_GC(value) || XR_IS_STRING(value))
         return false;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
@@ -347,6 +348,7 @@ void xr_coro_heap_teardown_inplace(XrCoroHeap *heap) {
 
     heap->is_tearing_down = 1;
     coro_heap_finalize_registered_objects(heap);
+    xr_runtime_object_heap_teardown(heap);
     xr_region_destroy(&heap->region);
     coro_heap_free_large_objects(heap);
     xr_coro_heap_recycler_destroy(heap);
@@ -404,6 +406,7 @@ void xr_coro_heap_reset(XrCoroHeap *heap, struct XrCoroutine *new_owner) {
 
     heap->is_tearing_down = 1;
     coro_heap_finalize_registered_objects(heap);
+    xr_runtime_object_heap_teardown(heap);
     xr_region_reset(&heap->region);
     coro_heap_free_large_objects(heap);
     xr_coro_heap_recycler_destroy(heap);

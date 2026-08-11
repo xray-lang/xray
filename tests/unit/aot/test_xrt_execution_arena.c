@@ -73,9 +73,52 @@ int main(void) {
     XrValue scalar = xrt_str_from_cstr("short-lived");
     CHECK(xrt_execution_arena_live_objects(arena) == 1,
           "normal allocation is registered with current execution");
+    XrString *scalar_string = (XrString *) scalar.ptr;
+    CHECK(scalar_string->header.object_kind == XR_RUNTIME_OBJECT_KIND_STRING &&
+              scalar_string->header.layout_id == XR_RUNTIME_STRING_LAYOUT_INDEX &&
+              scalar_string->header.domain_id ==
+                  XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL,
+          "hosted AOT string uses the canonical materialized header");
+    CHECK(offsetof(XrString, data) == XR_RUNTIME_STRING_FIXED_PREFIX_SIZE,
+          "hosted AOT string uses the canonical inline-tail offset");
+    CHECK(xr_str_value_from_ptr(scalar.ptr).tag == XR_TAG_STR_ARC,
+          "raw AOT frame reconstruction recognizes the canonical string header");
+    CHECK(xr_runtime_string_object_validate(
+              scalar_string,
+              xrt_execution_node(scalar_string)->object_bytes) ==
+              XR_RUNTIME_ABI_OK,
+          "hosted AOT string satisfies the canonical object verifier");
+    xrt_retain(scalar);
+    CHECK(atomic_load_explicit(&scalar_string->header.rc,
+                               memory_order_relaxed) == 2,
+          "hosted AOT retain uses positive canonical RC");
+    xrt_release(scalar);
+    CHECK(atomic_load_explicit(&scalar_string->header.rc,
+                               memory_order_relaxed) == 1,
+          "hosted AOT release preserves the remaining owner");
     xrt_release(scalar);
     CHECK(xrt_execution_arena_live_objects(arena) == 0,
           "normal RC release unlinks and reclaims an acyclic object");
+
+    XrValue published_string = xrt_str_from_cstr("published-string");
+    XrString *published_string_object = (XrString *) published_string.ptr;
+    size_t published_string_bytes =
+        (size_t) xrt_execution_node(published_string_object)->object_bytes;
+    published_string =
+        xrt_value_set_storage(published_string, XR_OBJ_STORAGE_SHARED);
+    CHECK(xrt_execution_arena_live_objects(arena) == 0 &&
+              published_string_object->header.domain_id ==
+                  XR_RUNTIME_STRING_DOMAIN_CONST_SHARED &&
+              published_string_object->rune_length != UINT32_MAX &&
+              published_string_object->hash != 0 &&
+              (atomic_load_explicit(&published_string_object->traits,
+                                    memory_order_relaxed) &
+               XR_RUNTIME_STRING_TRAIT_LOCAL) == 0 &&
+              xr_runtime_string_object_validate(
+                  published_string_object, published_string_bytes) ==
+                  XR_RUNTIME_ABI_OK,
+          "hosted AOT publication freezes caches and validates shared policy");
+    xrt_release(published_string);
 
     XrValue json = xrt_struct_object_new(0);
     CHECK(((XrObjHeader *) json.ptr)->type == XR_TINSTANCE,

@@ -129,7 +129,9 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
     iter->scan_index = 0;
     iter->coro = coro;
     iter->total_count = (uint32_t) xr_string_rune_length(s);
-    xr_rc_retain((XrObjHeader *) s);
+    XR_CHECK(xr_runtime_object_header_retain(&s->header) ==
+                 XR_RUNTIME_ABI_OK,
+             "string iterator retain rejected canonical header state");
     iter->context = (void *) isolate;
     iter->mode = XR_ITER_MODE_PAIRS;
     return iter;
@@ -473,6 +475,14 @@ XrValue xr_iterator_next(XrIterator *iter) {
         gen->result = xr_null();
         if (!XR_IS_PTR(value))
             return value;
+        if (XR_IS_STRING(value)) {
+            if (xr_value_runtime_string_is_transferable(value))
+                return value;
+            XR_CHECK(xr_value_runtime_string_is_shared(value),
+                     "generator string yield bypassed verified storage publication");
+            xr_rc_retain_value(value);
+            return value;
+        }
         XrObjHeader *obj = XR_VALUE_GCPTR(value);
         XR_CHECK(obj && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT),
                  "generator yield: TRANSIT payload is not a terminal value");
@@ -514,6 +524,7 @@ XrIterator *xr_value_to_iterator(XrValue value) {
 static void iterator_body_destroy(void *body) {
     XrIterator *iter = (XrIterator *) ((char *) body - offsetof(XrIterator, type));
     XrObjHeader *src = NULL;
+    XrValue canonical_source = xr_null();
     switch (iter->type) {
         case XR_ITERATOR_MAP:
             src = (XrObjHeader *) iter->source.map;
@@ -525,7 +536,7 @@ static void iterator_body_destroy(void *body) {
             src = (XrObjHeader *) iter->source.array;
             break;
         case XR_ITERATOR_STRING:
-            src = (XrObjHeader *) iter->source.string;
+            canonical_source = XR_FROM_STR(iter->source.string);
             break;
         case XR_ITERATOR_JSON:
             src = (XrObjHeader *) iter->source.json;
@@ -539,9 +550,16 @@ static void iterator_body_destroy(void *body) {
                 XrValue pending = iter->source.gen->result;
                 iter->source.gen->result = xr_null();
                 if (XR_IS_PTR(pending)) {
-                    XrObjHeader *obj = XR_VALUE_GCPTR(pending);
-                    if (obj && XR_OBJ_IS_TRANSFER(obj) && xr_obj_drop_is_last(obj))
-                        xr_transfer_destroy_core(iter->source.gen->core, obj);
+                    if (XR_IS_STRING(pending)) {
+                        if (xr_value_runtime_string_is_transferable(pending))
+                            xr_rc_release_value(NULL, pending);
+                    } else {
+                        XrObjHeader *obj = XR_VALUE_GCPTR(pending);
+                        if (obj && XR_OBJ_IS_TRANSFER(obj) &&
+                            xr_obj_drop_is_last(obj))
+                            xr_transfer_destroy_core(iter->source.gen->core,
+                                                     obj);
+                    }
                 }
                 xr_coro_destroy(iter->source.gen);
                 iter->source.gen = NULL;
@@ -550,6 +568,8 @@ static void iterator_body_destroy(void *body) {
         default:
             break;
     }
+    if (XR_IS_STRING(canonical_source))
+        xr_rc_release_value(NULL, canonical_source);
     if (src)
         xr_rc_release(xr_coro_get_heap(iter->coro), src);
 }

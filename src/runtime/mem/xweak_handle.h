@@ -64,8 +64,15 @@ struct XrCoroHeap;
  * handle; the handle holds a NON-owning pointer to the target. */
 typedef struct XrWeakHandle {
     XrObjHeader hdr;
-    XrObjHeader *target; /* NULL once the target has been destroyed */
+    void *target; /* NULL once the target has been destroyed */
+    uint8_t target_kind;
+    uint8_t reserved[7];
 } XrWeakHandle;
+
+typedef enum XrWeakTargetKind {
+    XR_WEAK_TARGET_LEGACY_OBJECT = 0,
+    XR_WEAK_TARGET_RUNTIME_STRING = 1,
+} XrWeakTargetKind;
 
 /* Per-coroutine target -> handle map. Open addressing on the target pointer,
  * same shape as XrHeapPtrSet but carrying a value, so a target's death is one
@@ -89,6 +96,8 @@ XrObjHeader *xr_weak_handle_load(XrWeakHandle *handle);
  * every reader sees null from this instant. Only objects flagged
  * XR_OBJ_HAS_WEAK reach here, so the common path pays one bit test. */
 void xr_weak_table_target_dying(struct XrCoroHeap *heap, XrObjHeader *target);
+void xr_weak_table_runtime_target_dying(
+    struct XrCoroHeap *heap, XrRuntimeObjectHeader *target);
 
 /* Release the table itself at coroutine teardown. */
 void xr_weak_table_destroy(struct XrCoroHeap *heap);

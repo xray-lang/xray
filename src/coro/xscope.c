@@ -154,6 +154,17 @@ static bool wake_waiter_record_child_completion_locked(XrCoroutine *coro, XrScop
 
     if (XR_IS_NULL(scope->first_error)) {
         if (XR_IS_PTR(err)) {
+            if (XR_IS_STRING(err)) {
+                XR_CHECK(xr_value_runtime_string_is_shared(err),
+                         "linked scope string error requires shared publication");
+                XR_CHECK(xr_runtime_object_header_retain(
+                             xr_value_runtime_object_header(err)) ==
+                             XR_RUNTIME_ABI_OK,
+                         "linked scope string retain mismatch");
+                scope->first_error = err;
+                scope->first_error_is_value = coro->error_is_value;
+                return true;
+            }
             XrObjHeader *obj = XR_VALUE_GCPTR(err);
             XR_CHECK(xr_obj_is_publishable_across_executions(obj),
                      "linked scope error requires compiler-planned shared publication");

@@ -102,7 +102,8 @@ XrValue xr_panic_info_new(XrVMRuntime *X, XrErrorCode code, const char *message)
     if (message) {
         msg = xr_string_intern(X, message, strlen(message), 0);
     }
-    inst->fields[PANIC_INFO_FIELD_MESSAGE] = msg ? XR_FROM_PTR(msg) : xr_null();
+    inst->fields[PANIC_INFO_FIELD_MESSAGE] =
+        msg ? xr_string_value(msg) : xr_null();
 
     XrArray *stack = exception_new_stack(X, shared);
     inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
@@ -138,7 +139,7 @@ XrValue xr_panic_info_from_error(XrVMRuntime *X, XrError *error) {
         return xr_null();
 
     inst->fields[PANIC_INFO_FIELD_MESSAGE] =
-        error->message ? XR_FROM_PTR(error->message) : xr_null();
+        error->message ? xr_string_value(error->message) : xr_null();
 
     XrArray *stack = exception_new_stack(X, shared);
     inst->fields[PANIC_INFO_FIELD_STACK] = stack ? xr_value_from_array(stack) : xr_null();
@@ -265,7 +266,8 @@ static XrValue exception_primitive_constructor(XrVMRuntime *X, XrValue self, XrV
     } else {
         msg_str = xr_string_intern(X, "", 0, 0);
     }
-    inst->fields[PANIC_INFO_FIELD_MESSAGE] = msg_str ? XR_FROM_PTR(msg_str) : xr_null();
+    inst->fields[PANIC_INFO_FIELD_MESSAGE] =
+        msg_str ? xr_string_value(msg_str) : xr_null();
 
     // stack: Array<string> — fresh empty array per instance
     XrArray *stack = xr_array_new(NULL);
@@ -321,7 +323,7 @@ static XrValue exception_primitive_to_string(XrVMRuntime *X, XrValue self, XrVal
     if ((size_t) n >= sizeof(buffer))
         n = (int) sizeof(buffer) - 1;
     XrString *result = xr_string_intern(X, buffer, (size_t) n, 0);
-    return result ? XR_FROM_PTR(result) : xr_null();
+    return result ? xr_string_value(result) : xr_null();
 }
 
 /* ========== Class Registration ==========

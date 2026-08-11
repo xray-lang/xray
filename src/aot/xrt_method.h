@@ -737,7 +737,7 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
             if (len > 0)
                 memcpy(xr_str_buf(out), data, len);
             xr_str_buf(out)[len] = 0;
-            xr_str_hdr(out)->rune_len = (int64_t) scan.rune_count;
+            xr_str_set_rune_len(out, (uint32_t) scan.rune_count);
             return out;
         }
         if (sym == XRT_SYM_FROM_UTF8) {
@@ -752,8 +752,8 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         XrValue out = xrt_str_alloc(plan.output_length);
         size_t dst = xr_utf8_core_lossy_write(xr_str_buf(out), data, len);
         xr_str_buf(out)[dst] = 0;
-        xr_str_hdr(out)->len = (int64_t) dst;
-        xr_str_hdr(out)->rune_len = (int64_t) plan.rune_count;
+        xr_str_set_len(out, (uint32_t) dst);
+        xr_str_set_rune_len(out, (uint32_t) plan.rune_count);
         return out;
     }
     if (sym == XRT_SYM_CONTAINS && XR_IS_STR(arg0)) {

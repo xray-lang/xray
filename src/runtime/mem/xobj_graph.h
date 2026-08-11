@@ -72,7 +72,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
                 XrEnumAggregateValue *agg = (XrEnumAggregateValue *) obj;
                 for (uint32_t i = 0; i < agg->payload_count; i++) {
                     XrValue v = agg->payloads[i];
-                    if (XR_IS_PTR(v)) {
+                    if (XR_IS_PTR(v) && !XR_IS_STRING(v)) {
                         XrObjHeader *child = XR_VALUE_GCPTR(v);
                         if (child)
                             visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
@@ -83,7 +83,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
             uint32_t fc = xr_class_instance_field_count(klass);
             for (uint32_t i = 0; i < fc; i++) {
                 XrValue v = inst->fields[i];
-                if (XR_IS_PTR(v)) {
+                if (XR_IS_PTR(v) && !XR_IS_STRING(v)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(v);
                     if (child)
                         visitor(child, i, ctx);
@@ -97,7 +97,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
                 break;
             XrValue *data = (XrValue *) arr->data;
             for (int32_t i = 0; i < arr->length; i++) {
-                if (XR_IS_PTR(data[i])) {
+                if (XR_IS_PTR(data[i]) && !XR_IS_STRING(data[i])) {
                     XrObjHeader *child = XR_VALUE_GCPTR(data[i]);
                     if (child)
                         visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
@@ -114,12 +114,12 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
                 XrMapEntry *node = &map->entries[i];
                 if (XR_MAP_ENTRY_EMPTY(node))
                     continue;
-                if (XR_IS_PTR(node->key)) {
+                if (XR_IS_PTR(node->key) && !XR_IS_STRING(node->key)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(node->key);
                     if (child)
                         visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
                 }
-                if (XR_IS_PTR(node->value)) {
+                if (XR_IS_PTR(node->value) && !XR_IS_STRING(node->value)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(node->value);
                     if (child)
                         visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
@@ -135,7 +135,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
                 XrSetEntry *e = &set->entries[i];
                 if (XR_SET_ENTRY_EMPTY(e))
                     continue;
-                if (XR_IS_PTR(e->value)) {
+                if (XR_IS_PTR(e->value) && !XR_IS_STRING(e->value)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(e->value);
                     if (child)
                         visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
@@ -147,7 +147,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
             XrClosure *closure = (XrClosure *) obj;
             for (uint16_t i = 0; i < closure->upval_count; i++) {
                 XrValue v = closure->upvals[i];
-                if (XR_IS_PTR(v)) {
+                if (XR_IS_PTR(v) && !XR_IS_STRING(v)) {
                     XrObjHeader *child = XR_VALUE_GCPTR(v);
                     if (child)
                         visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);
@@ -158,7 +158,7 @@ static inline void xr_obj_graph_visit_children(XrObjHeader *obj, XrObjGraphVisit
         case XR_TCELL: {
             XrCell *cell = (XrCell *) obj;
             XrValue v = cell->value;
-            if (XR_IS_PTR(v)) {
+            if (XR_IS_PTR(v) && !XR_IS_STRING(v)) {
                 XrObjHeader *child = XR_VALUE_GCPTR(v);
                 if (child)
                     visitor(child, XR_OBJ_GRAPH_SLOT_NONE, ctx);

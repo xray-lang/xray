@@ -26,13 +26,13 @@
 #include "xstringbuilder.h"
 #include "../core/xr_runtime_core.h"
 #include "../xisolate_api.h"
-#include "../xisolate_api.h"
 #include "../../base/xchecks.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
 #include "../mem/xheap.h"
 #include "../mem/xcoro_heap.h"
 #include "../mem/xsystem_heap.h"
+#include "../mem/xruntime_object_heap.h"
 #include "../xshared.h"
 #include "../../shared/xr_string_core.h"
 #include <string.h>
@@ -88,16 +88,39 @@ static inline void string_finish_runtime(XrString *str, const char *chars, size_
     XR_STR_SET_LOCAL(str);
 }
 
+static XrString *string_allocate(size_t total_size, uint32_t domain_index,
+                                 XrRuntimeObjectAllocationOwner owner_kind,
+                                 void *owner, uint16_t traits) {
+    XrRuntimeObjectHeader *header = xr_runtime_object_allocate(
+        total_size, XR_RUNTIME_OBJECT_KIND_STRING,
+        XR_RUNTIME_STRING_LAYOUT_INDEX, domain_index, owner_kind, owner, NULL,
+        NULL);
+    if (!header)
+        return NULL;
+    XrString *string = (XrString *) header;
+    if (xr_runtime_string_object_init(string, domain_index, 0, 0, 0,
+                                      traits) != XR_RUNTIME_ABI_OK) {
+        (void) xr_runtime_object_reclaim(header);
+        return NULL;
+    }
+    return string;
+}
+
 // Allocate string object on coroutine heap (shared by runtime-local paths)
 static XrString *string_alloc_uninit(XrVMRuntime *iso, size_t length) {
-    if (length > UINT32_MAX)
+    if (length > XR_RUNTIME_STRING_MAXIMUM_BYTE_LENGTH)
         return NULL;
 
-    size_t total_size = sizeof(XrString) + length + 1;
+    size_t total_size = (size_t) xr_runtime_string_object_allocation_bytes(
+        (uint32_t) length);
     XrAllocationContext *alloc = xr_alloc_context_current();
-    XrString *str = alloc && iso && alloc->core == xr_isolate_get_runtime_core(iso)
-                        ? (XrString *) xr_alloc_context_new_object(alloc, total_size, XR_TSTRING)
-                        : NULL;
+    XrString *str =
+        alloc && alloc->domain == XR_STORAGE_EXEC_LOCAL && alloc->local_heap && iso &&
+                alloc->core == xr_isolate_get_runtime_core(iso)
+            ? string_allocate(total_size, XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL,
+                              XR_RUNTIME_OBJECT_OWNER_EXECUTION,
+                              alloc->local_heap, XR_RUNTIME_STRING_TRAIT_LOCAL)
+            : NULL;
     if (!str)
         return NULL;
 
@@ -201,7 +224,7 @@ XrString *xr_string_concat(XrVMRuntime *iso, XrString *a, XrString *b) {
 // Short strings (<=64B): global pool with rwlock
 // Long strings (>64B): shared system-heap allocation
 XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t length,
-                                uint32_t hash) {
+                                 uint32_t hash) {
     if (!core) {
         xr_log_warning("string", "string_intern_core: core is NULL");
         return NULL;
@@ -212,6 +235,10 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
         chars = "";
     if (!chars) {
         xr_log_warning("string", "string_intern_core: chars is NULL");
+        return NULL;
+    }
+    if (length > XR_RUNTIME_STRING_MAXIMUM_BYTE_LENGTH) {
+        xr_log_warning("string", "string_intern_core: byte length exceeds canonical extent");
         return NULL;
     }
     if (!xr_utf8_validate(chars, length)) {
@@ -226,16 +253,19 @@ XrString *xr_string_intern_core(XrRuntimeCore *core, const char *chars, size_t l
         XrSystemHeap *heap = core->sys_heap;
         if (!heap)
             return NULL;
-        size_t total_size = sizeof(XrString) + length + 1;
-        XrString *str = (XrString *) xr_sysheap_alloc_shared(heap, total_size, XR_TSTRING);
+        size_t total_size = (size_t) xr_runtime_string_object_allocation_bytes(
+            (uint32_t) length);
+        XrString *str = string_allocate(
+            total_size, XR_RUNTIME_STRING_DOMAIN_CONST_SHARED,
+            XR_RUNTIME_OBJECT_OWNER_SHARED, heap,
+            XR_RUNTIME_STRING_TRAIT_INTERNED |
+                (length > XR_SHORT_STR_MAX ? XR_RUNTIME_STRING_TRAIT_LONG : 0));
         if (str) {
             str->length = (uint32_t) length;
             str->rune_length = (uint32_t) xr_utf8_strlen(chars, length);
             str->hash = hash;
             memcpy(str->data, chars, length);
             str->data[length] = '\0';
-            XR_STR_SET_LONG(str);
-            xr_shared_set_refc(&str->hdr, 1);
         }
         return str;
     }
@@ -292,15 +322,20 @@ XrString *xr_string_intern(XrVMRuntime *iso, const char *chars, size_t length, u
 XrString *xr_string_clone_shared_core(XrRuntimeCore *core, XrString *str) {
     if (!str)
         return NULL;
-    if (XR_OBJ_IS_SHARED(&str->hdr) && !XR_OBJ_GET_FLAG(&str->hdr, XR_OBJ_TRANSIT)) {
-        xr_shared_retain(&str->hdr);
+    if (str->header.domain_id == XR_RUNTIME_STRING_DOMAIN_CONST_SHARED ||
+        str->header.domain_id == XR_RUNTIME_STRING_DOMAIN_SYNC_SHARED) {
+        (void) xr_runtime_object_header_retain(&str->header);
         return str;
     }
     if (!core || !core->sys_heap)
         return NULL;
     size_t length = str->length;
-    size_t total_size = sizeof(XrString) + length + 1;
-    XrString *shared = (XrString *) xr_sysheap_alloc_shared(core->sys_heap, total_size, XR_TSTRING);
+    size_t total_size = (size_t) xr_runtime_string_object_allocation_bytes(
+        (uint32_t) length);
+    XrString *shared = string_allocate(
+        total_size, XR_RUNTIME_STRING_DOMAIN_CONST_SHARED,
+        XR_RUNTIME_OBJECT_OWNER_SHARED, core->sys_heap,
+        length > XR_SHORT_STR_MAX ? XR_RUNTIME_STRING_TRAIT_LONG : 0);
     if (!shared)
         return NULL;
     shared->length = str->length;
@@ -308,8 +343,6 @@ XrString *xr_string_clone_shared_core(XrRuntimeCore *core, XrString *str) {
     shared->hash = str->hash ? str->hash : string_hash_nonzero(str->data, str->length);
     memcpy(shared->data, str->data, length);
     shared->data[length] = '\0';
-    if (length > XR_SHORT_STR_MAX)
-        XR_STR_SET_LONG(shared);
     return shared;
 }
 

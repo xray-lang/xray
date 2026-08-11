@@ -86,11 +86,19 @@ vmcase(OP_CHAN_SEND) {
         if (_transfer_mode != XR_TRANSFER_MOVE && XR_IS_PTR(_v))
             break;
         if (XR_IS_PTR(_v)) {
-            XrObjHeader *_obj = XR_VALUE_GCPTR(_v);
-            XR_CHECK(!_obj || !XR_OBJ_GET_FLAG(_obj, XR_OBJ_TRANSIT),
-                     "OP_CHAN_SEND fast path: TRANSIT payload is not a valid channel transport");
-            if (_obj && !XR_OBJ_IS_TRANSFER(_obj) && !XR_OBJ_IS_SHARED(_obj))
-                break;
+            if (XR_IS_STRING(_v)) {
+                if (!xr_value_runtime_string_is_transferable(_v) &&
+                    !xr_value_runtime_string_is_shared(_v))
+                    break;
+            } else {
+                XrObjHeader *_obj = XR_VALUE_GCPTR(_v);
+                XR_CHECK(
+                    !_obj || !XR_OBJ_GET_FLAG(_obj, XR_OBJ_TRANSIT),
+                    "OP_CHAN_SEND fast path: TRANSIT payload is not a valid channel transport");
+                if (_obj && !XR_OBJ_IS_TRANSFER(_obj) &&
+                    !XR_OBJ_IS_SHARED(_obj))
+                    break;
+            }
         }
         if (!xr_amutex_trylock(&_ch->lock))
             break;

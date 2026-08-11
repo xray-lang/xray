@@ -1225,11 +1225,18 @@ TEST(coro_task_shared_result_supports_multiple_observers) {
     ASSERT_TRUE(close_fixture_init(&f));
 
     static const char text[] = "shared task result";
-    size_t bytes = sizeof(XrString) + sizeof(text);
-    XrString *shared = (XrString *) xr_sysheap_alloc_shared(f.core.sys_heap, bytes, XR_TSTRING);
+    size_t bytes = (size_t) xr_runtime_string_object_allocation_bytes(
+        (uint32_t) (sizeof(text) - 1));
+    XrString *shared = (XrString *) xr_runtime_object_allocate(
+        bytes, XR_RUNTIME_OBJECT_KIND_STRING, XR_RUNTIME_STRING_LAYOUT_INDEX,
+        XR_RUNTIME_STRING_DOMAIN_CONST_SHARED,
+        XR_RUNTIME_OBJECT_OWNER_SHARED, f.core.sys_heap, NULL, NULL);
     ASSERT_NOT_NULL(shared);
-    shared->length = (uint32_t) (sizeof(text) - 1);
-    shared->rune_length = shared->length;
+    ASSERT_EQ_INT(xr_runtime_string_object_init(
+                      shared, XR_RUNTIME_STRING_DOMAIN_CONST_SHARED,
+                      (uint32_t) (sizeof(text) - 1),
+                      (uint32_t) (sizeof(text) - 1), 1, 0),
+                  XR_RUNTIME_ABI_OK);
     memcpy(shared->data, text, sizeof(text));
 
     XrTask task;
@@ -1238,18 +1245,27 @@ TEST(coro_task_shared_result_supports_multiple_observers) {
     xr_task_complete(&task, xr_string_value(shared));
 
     ASSERT_EQ_INT(task.result_owner, XR_TASK_PAYLOAD_SHARED);
-    ASSERT_EQ_INT(xr_shared_get_refc(&shared->hdr), 1);
+    ASSERT_EQ_INT(atomic_load_explicit(&shared->header.rc,
+                                       memory_order_relaxed),
+                  1);
 
     XrValue first = xr_task_consume_result(&f.core, &task, NULL);
     XrValue second = xr_task_consume_result(&f.core, &task, NULL);
-    ASSERT_EQ_PTR(XR_VALUE_GCPTR(first), &shared->hdr);
-    ASSERT_EQ_PTR(XR_VALUE_GCPTR(second), &shared->hdr);
-    ASSERT_EQ_PTR(XR_VALUE_GCPTR(task.result), &shared->hdr);
-    ASSERT_EQ_INT(xr_shared_get_refc(&shared->hdr), 3);
+    ASSERT_EQ_PTR(first.ptr, shared);
+    ASSERT_EQ_PTR(second.ptr, shared);
+    ASSERT_EQ_PTR(task.result.ptr, shared);
+    ASSERT_EQ_INT(atomic_load_explicit(&shared->header.rc,
+                                       memory_order_relaxed),
+                  3);
     ASSERT_EQ_INT(atomic_load(&task.payload_taken), 0);
 
-    ASSERT_EQ_INT(xr_shared_decref(&shared->hdr), 2);
-    ASSERT_EQ_INT(xr_shared_decref(&shared->hdr), 1);
+    bool last = true;
+    ASSERT_EQ_INT(xr_runtime_object_header_release(&shared->header, &last),
+                  XR_RUNTIME_ABI_OK);
+    ASSERT_FALSE(last);
+    ASSERT_EQ_INT(xr_runtime_object_header_release(&shared->header, &last),
+                  XR_RUNTIME_ABI_OK);
+    ASSERT_FALSE(last);
     xr_obj_destroy_task(&task.hdr, NULL);
     close_fixture_cleanup(&f);
 }

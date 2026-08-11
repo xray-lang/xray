@@ -24,7 +24,7 @@ static inline bool weak_slot_live(const XrWeakHandle *slot) {
 
 /* Pointer hash: the low bits of a heap pointer are alignment zeros, so mix the
  * high bits down before masking. */
-static inline uint32_t weak_hash(const XrObjHeader *target) {
+static inline uint32_t weak_hash(const void *target) {
     uintptr_t x = (uintptr_t) target;
     x ^= x >> 33;
     x *= (uintptr_t) 0xff51afd7ed558ccdULL;
@@ -53,7 +53,7 @@ static bool weak_table_grow(XrWeakTable *table, uint32_t new_cap) {
     return true;
 }
 
-static XrWeakHandle *weak_table_find(XrWeakTable *table, const XrObjHeader *target) {
+static XrWeakHandle *weak_table_find(XrWeakTable *table, const void *target) {
     if (!table->cap)
         return NULL;
     uint32_t mask = table->cap - 1;
@@ -90,7 +90,7 @@ static bool weak_table_insert(XrWeakTable *table, XrWeakHandle *handle) {
     return true;
 }
 
-static void weak_table_remove(XrWeakTable *table, const XrObjHeader *target) {
+static void weak_table_remove(XrWeakTable *table, const void *target) {
     if (!table->cap)
         return;
     uint32_t mask = table->cap - 1;
@@ -109,7 +109,8 @@ static void weak_table_remove(XrWeakTable *table, const XrObjHeader *target) {
     }
 }
 
-XrWeakHandle *xr_weak_handle_acquire(XrCoroHeap *heap, XrObjHeader *target) {
+static XrWeakHandle *weak_handle_acquire_target(
+    XrCoroHeap *heap, void *target, XrWeakTargetKind target_kind) {
     if (!heap || !target)
         return NULL;
 
@@ -122,6 +123,8 @@ XrWeakHandle *xr_weak_handle_acquire(XrCoroHeap *heap, XrObjHeader *target) {
      * handle leaving it is exactly what xr_obj_destroy_weak_handle handles. */
     XrWeakHandle *existing = weak_table_find(&heap->weak_table, target);
     if (existing) {
+        XR_CHECK(existing->target_kind == (uint8_t) target_kind,
+                 "weak target representation changed for a live address");
         xr_obj_dup(&existing->hdr);
         return existing;
     }
@@ -133,6 +136,8 @@ XrWeakHandle *xr_weak_handle_acquire(XrCoroHeap *heap, XrObjHeader *target) {
         return NULL;
     XrWeakHandle *handle = (XrWeakHandle *) obj;
     handle->target = target;
+    handle->target_kind = (uint8_t) target_kind;
+    memset(handle->reserved, 0, sizeof(handle->reserved));
 
     if (!weak_table_insert(&heap->weak_table, handle)) {
         /* Out of memory registering it. Returning a handle that the target's
@@ -151,25 +156,37 @@ XrWeakHandle *xr_weak_handle_acquire(XrCoroHeap *heap, XrObjHeader *target) {
 
     /* The destroy path checks this bit before consulting the table, so an
      * object nobody weakly references pays one bit test. */
-    target->extra |= XR_OBJ_HAS_WEAK;
+    return handle;
+}
+
+XrWeakHandle *xr_weak_handle_acquire(XrCoroHeap *heap,
+                                     XrObjHeader *target) {
+    XrWeakHandle *handle = weak_handle_acquire_target(
+        heap, target, XR_WEAK_TARGET_LEGACY_OBJECT);
+    if (handle)
+        target->extra |= XR_OBJ_HAS_WEAK;
     return handle;
 }
 
 XrObjHeader *xr_weak_handle_load(XrWeakHandle *handle) {
-    if (!handle || !handle->target)
+    if (!handle || !handle->target ||
+        handle->target_kind != XR_WEAK_TARGET_LEGACY_OBJECT)
         return NULL;
     /* W1: reading promotes. Handing back a borrowed pointer would let the
      * target die mid-expression — `node.parent.render()` must be safe. */
-    xr_obj_dup(handle->target);
-    return handle->target;
+    xr_obj_dup((XrObjHeader *) handle->target);
+    return (XrObjHeader *) handle->target;
 }
 
-void xr_weak_table_target_dying(XrCoroHeap *heap, XrObjHeader *target) {
+static void weak_table_target_dying(XrCoroHeap *heap, void *target,
+                                    XrWeakTargetKind target_kind) {
     if (!heap || !target)
         return;
     XrWeakHandle *handle = weak_table_find(&heap->weak_table, target);
     if (!handle)
         return;
+    XR_CHECK(handle->target_kind == (uint8_t) target_kind,
+             "weak target representation changed before destruction");
     /* W5: from this instant every reader sees null. The handle itself lives on
      * under its own refcount — the fields pointing at it are still valid, they
      * just read empty now. */
@@ -181,6 +198,15 @@ void xr_weak_table_target_dying(XrCoroHeap *heap, XrObjHeader *target) {
      * leak one handle per target that was ever weakly referenced — which is
      * exactly the leak `weak` exists to remove. */
     xr_rc_release(heap, &handle->hdr);
+}
+
+void xr_weak_table_target_dying(XrCoroHeap *heap, XrObjHeader *target) {
+    weak_table_target_dying(heap, target, XR_WEAK_TARGET_LEGACY_OBJECT);
+}
+
+void xr_weak_table_runtime_target_dying(
+    XrCoroHeap *heap, XrRuntimeObjectHeader *target) {
+    weak_table_target_dying(heap, target, XR_WEAK_TARGET_RUNTIME_STRING);
 }
 
 void xr_weak_table_destroy(XrCoroHeap *heap) {
@@ -200,7 +226,17 @@ XrValue xr_weak_field_load(XrValue slot) {
     XrObjHeader *hdr = XR_VALUE_GCPTR(slot);
     if (!hdr || XR_OBJ_GET_TYPE(hdr) != XR_TWEAK_HANDLE)
         return xr_null();
-    XrObjHeader *target = xr_weak_handle_load((XrWeakHandle *) hdr);
+    XrWeakHandle *handle = (XrWeakHandle *) hdr;
+    if (handle->target_kind == XR_WEAK_TARGET_RUNTIME_STRING) {
+        XrString *string = (XrString *) handle->target;
+        if (!string)
+            return xr_null();
+        if (xr_runtime_object_header_retain(&string->header) !=
+            XR_RUNTIME_ABI_OK)
+            return xr_null();
+        return XR_FROM_STR(string);
+    }
+    XrObjHeader *target = xr_weak_handle_load(handle);
     if (!target)
         return xr_null(); /* W5: the target is gone, so the slot reads null */
     return XR_FROM_PTR(target);
@@ -209,6 +245,17 @@ XrValue xr_weak_field_load(XrValue slot) {
 XrValue xr_weak_field_store(XrCoroHeap *heap, XrValue target) {
     if (!XR_IS_PTR(target))
         return xr_null(); /* storing null (or a scalar, which W3 rejects) */
+    if (XR_IS_STRING(target)) {
+        XrString *string = XR_TO_STRING(target);
+        if (!string || string->header.domain_id !=
+                           XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL ||
+            xr_runtime_object_register_weak(&string->header, heap) !=
+                XR_RUNTIME_ABI_OK)
+            return xr_null();
+        XrWeakHandle *handle = weak_handle_acquire_target(
+            heap, string, XR_WEAK_TARGET_RUNTIME_STRING);
+        return handle ? XR_FROM_PTR(&handle->hdr) : xr_null();
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(target);
     if (!obj)
         return xr_null();

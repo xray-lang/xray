@@ -27,6 +27,7 @@
 #include "../../../src/runtime/mem/xcoro_heap.h"
 #include "../../../src/runtime/mem/xobj_header.h"
 #include "../../../src/runtime/mem/xweak_handle.h"
+#include "../../../src/runtime/mem/xruntime_object_heap.h"
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/runtime/xisolate_api.h"
 #include "../../../src/runtime/xisolate_internal.h"
@@ -187,6 +188,46 @@ static void test_handle_dying_first_leaves_the_table(void) {
     xr_coro_heap_destroy(heap);
 }
 
+static void test_canonical_string_weak_promotion_and_clear(void) {
+    XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
+    CHECK(heap != NULL, "heap create");
+
+    static const char text[] = "weak-string";
+    size_t bytes = (size_t) xr_runtime_string_object_allocation_bytes(
+        (uint32_t) (sizeof(text) - 1));
+    XrString *string = (XrString *) xr_runtime_object_allocate(
+        bytes, XR_RUNTIME_OBJECT_KIND_STRING,
+        XR_RUNTIME_STRING_LAYOUT_INDEX,
+        XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL,
+        XR_RUNTIME_OBJECT_OWNER_EXECUTION, heap, NULL, NULL);
+    CHECK(string != NULL, "allocate canonical string target");
+    CHECK(xr_runtime_string_object_init(
+              string, XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL,
+              (uint32_t) (sizeof(text) - 1),
+              (uint32_t) (sizeof(text) - 1), 1,
+              XR_RUNTIME_STRING_TRAIT_LOCAL) == XR_RUNTIME_ABI_OK,
+          "materialize canonical string target");
+    memcpy(string->data, text, sizeof(text));
+
+    XrValue slot = xr_weak_field_store(heap, XR_FROM_STR(string));
+    CHECK(XR_IS_PTR(slot), "weak string store creates a handle");
+    XrValue loaded = xr_weak_field_load(slot);
+    CHECK(XR_IS_STRING(loaded) && XR_TO_STRING(loaded) == string,
+          "weak string load promotes the canonical target");
+    CHECK(atomic_load_explicit(&string->header.rc,
+                               memory_order_relaxed) == 2,
+          "weak string promotion raises canonical RC");
+    xr_rc_release_value(heap, loaded);
+    CHECK(atomic_load_explicit(&string->header.rc,
+                               memory_order_relaxed) == 1,
+          "promoted weak string owner releases independently");
+    xr_rc_release_value(heap, XR_FROM_STR(string));
+    CHECK(XR_IS_NULL(xr_weak_field_load(slot)),
+          "canonical string last release clears weak handles");
+
+    xr_coro_heap_destroy(heap);
+}
+
 int main(void) {
     xr_test_suppress_dialogs();
     printf("test_weak_handle:\n");
@@ -196,6 +237,7 @@ int main(void) {
     test_target_death_clears_the_handle();
     test_many_targets_clear_independently();
     test_handle_dying_first_leaves_the_table();
+    test_canonical_string_weak_promotion_and_clear();
     printf("  %d passed, %d failed\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;
 }

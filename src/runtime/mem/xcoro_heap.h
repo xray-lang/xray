@@ -33,6 +33,7 @@
 #include "../value/xvalue.h"
 #include "xregion.h"
 #include "xobj_ops.h"
+#include "xruntime_object_heap.h"
 
 /* ========== Forward Declarations ========== */
 
@@ -41,6 +42,7 @@ typedef struct XrValue XrValue;
 #endif
 struct XrCoroutine;
 struct XrFixedHeap;
+struct XrRuntimeObjectAllocation;
 
 /* ========== Large Object Threshold ========== */
 
@@ -191,6 +193,10 @@ typedef struct XrCoroHeap {
     XrObjHeader **deferred_drops;  // LIFO stack of objects awaiting destroy
     uint32_t deferred_drop_count;  // entries in use
     uint32_t deferred_drop_cap;    // allocated entries (NULL/0 until first defer)
+
+    /* Canonical header-first runtime objects use allocation-prefix metadata
+     * instead of storing allocator size/type facts in their ABI header. */
+    struct XrRuntimeObjectAllocation *runtime_object_allocations;
 } XrCoroHeap;
 
 /* ========== Coroutine Heap Lifecycle API ========== */
@@ -288,12 +294,35 @@ static inline void xr_rc_release(XrCoroHeap *heap, XrObjHeader *o) {
 static inline void xr_rc_retain_value(XrValue value) {
     if (!XR_IS_PTR(value))
         return;
+    if (XR_HEAP_TYPE(value) == XR_TSTRING) {
+        XrRuntimeAbiStatus status = xr_runtime_object_header_retain(
+            (XrRuntimeObjectHeader *) XR_VALUE_GCPTR(value));
+        XR_CHECK(status == XR_RUNTIME_ABI_OK,
+                 "canonical string retain rejected invalid header state");
+        return;
+    }
     xr_rc_retain((XrObjHeader *) XR_VALUE_GCPTR(value));
 }
 
 static inline void xr_rc_release_value(XrCoroHeap *heap, XrValue value) {
     if (!XR_IS_PTR(value))
         return;
+    if (XR_HEAP_TYPE(value) == XR_TSTRING) {
+        (void) heap;
+        XrRuntimeObjectHeader *header =
+            (XrRuntimeObjectHeader *) XR_VALUE_GCPTR(value);
+        bool last = false;
+        XrRuntimeAbiStatus status =
+            xr_runtime_object_header_release(header, &last);
+        XR_CHECK(status == XR_RUNTIME_ABI_OK,
+                 "canonical string release rejected invalid header state");
+        if (last) {
+            status = xr_runtime_object_reclaim(header);
+            XR_CHECK(status == XR_RUNTIME_ABI_OK,
+                     "canonical string allocation metadata is invalid");
+        }
+        return;
+    }
     xr_rc_release(heap, (XrObjHeader *) XR_VALUE_GCPTR(value));
 }
 

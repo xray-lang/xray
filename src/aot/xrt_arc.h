@@ -200,6 +200,11 @@ typedef struct XrtExecutionArena XrtExecutionArena;
 typedef struct XrtExecutionAllocation XrtExecutionAllocation;
 typedef void (*XrtExecutionFinalizer)(XrObjHeader *hdr);
 
+typedef enum XrtExecutionObjectFormat {
+    XRT_EXECUTION_OBJECT_LEGACY = 1,
+    XRT_EXECUTION_OBJECT_RUNTIME_STRING = 2,
+} XrtExecutionObjectFormat;
+
 struct XrtExecutionArena {
     XrtExecutionAllocation *head;
     uint64_t live_bytes;
@@ -221,6 +226,8 @@ struct XrtExecutionAllocation {
     XrtExecutionFinalizer finalizer;
     uint64_t object_bytes;
     uint64_t magic;
+    uint64_t object_format;
+    uint64_t reserved;
 };
 
 #define XRT_EXECUTION_ALLOCATION_MAGIC UINT64_C(0x585241594152454e)
@@ -303,9 +310,9 @@ static inline void xrt_execution_arena_restore(void *raw_previous) {
     xrt_current_execution_arena = (XrtExecutionArena *) raw_previous;
 }
 
-static inline XrtExecutionAllocation *xrt_execution_node(XrObjHeader *hdr) {
+static inline XrtExecutionAllocation *xrt_execution_node(const void *object) {
     XrtExecutionAllocation *node =
-        (XrtExecutionAllocation *) ((char *) hdr - sizeof(XrtExecutionAllocation));
+        (XrtExecutionAllocation *) ((char *) object - sizeof(XrtExecutionAllocation));
     if (XR_UNLIKELY(node->magic != XRT_EXECUTION_ALLOCATION_MAGIC)) {
         fprintf(stderr, "xrt: corrupt execution allocation prefix\n");
         abort();
@@ -313,10 +320,12 @@ static inline XrtExecutionAllocation *xrt_execution_node(XrObjHeader *hdr) {
     return node;
 }
 
-static inline void xrt_execution_unlink(XrObjHeader *hdr) {
-    if (!hdr || !(hdr->extra & XR_OBJ_AOT_EXECUTION))
+static inline void xrt_execution_unlink_object(void *object) {
+    if (!object)
         return;
-    XrtExecutionAllocation *node = xrt_execution_node(hdr);
+    XrtExecutionAllocation *node = xrt_execution_node(object);
+    if (!node->arena)
+        return;
     XrtExecutionArena *arena = node->arena;
     if (node->prev)
         node->prev->next = node->next;
@@ -331,6 +340,12 @@ static inline void xrt_execution_unlink(XrObjHeader *hdr) {
     node->prev = NULL;
     node->next = NULL;
     node->arena = NULL;
+}
+
+static inline void xrt_execution_unlink(XrObjHeader *hdr) {
+    if (!hdr || !(hdr->extra & XR_OBJ_AOT_EXECUTION))
+        return;
+    xrt_execution_unlink_object(hdr);
     hdr->extra &= (uint16_t) ~(uint16_t) XR_OBJ_AOT_EXECUTION;
 }
 
@@ -338,12 +353,21 @@ static inline void xrt_execution_unbind(XrObjHeader *hdr) {
     xrt_execution_unlink(hdr);
 }
 
-static inline void *xrt_execution_alloc(size_t object_bytes, XrtExecutionFinalizer finalizer) {
-    if (XR_UNLIKELY(object_bytes > SIZE_MAX - 15u)) {
+static inline void *xrt_execution_alloc_format(
+    size_t object_bytes, XrtExecutionFinalizer finalizer,
+    XrtExecutionObjectFormat object_format) {
+    if (XR_UNLIKELY(object_format != XRT_EXECUTION_OBJECT_LEGACY &&
+                    object_format != XRT_EXECUTION_OBJECT_RUNTIME_STRING)) {
+        fprintf(stderr, "xrt_execution_alloc: invalid object format\n");
+        abort();
+    }
+    if (XR_UNLIKELY(object_format == XRT_EXECUTION_OBJECT_LEGACY &&
+                    object_bytes > SIZE_MAX - 15u)) {
         fprintf(stderr, "xrt_execution_alloc: allocation size overflow\n");
         abort();
     }
-    object_bytes = (object_bytes + 15u) & ~(size_t) 15u;
+    if (object_format == XRT_EXECUTION_OBJECT_LEGACY)
+        object_bytes = (object_bytes + 15u) & ~(size_t) 15u;
     if (XR_UNLIKELY(object_bytes > SIZE_MAX - sizeof(XrtExecutionAllocation))) {
         fprintf(stderr, "xrt_execution_alloc: allocation size overflow\n");
         abort();
@@ -363,16 +387,27 @@ static inline void *xrt_execution_alloc(size_t object_bytes, XrtExecutionFinaliz
     node->finalizer = finalizer;
     node->object_bytes = object_bytes;
     node->magic = XRT_EXECUTION_ALLOCATION_MAGIC;
+    node->object_format = (uint64_t) object_format;
     node->next = arena->head;
     if (arena->head)
         arena->head->prev = node;
     arena->head = node;
     arena->live_objects++;
     arena->live_bytes += object_bytes;
-    XrObjHeader *hdr = (XrObjHeader *) (node + 1);
-    hdr->extra = XR_OBJ_AOT_ALLOCATION | XR_OBJ_AOT_EXECUTION;
-    atomic_store_explicit(&hdr->refcount, XR_RC_INIT, memory_order_relaxed);
-    return hdr;
+    void *object = (void *) (node + 1);
+    if (object_format == XRT_EXECUTION_OBJECT_LEGACY) {
+        XrObjHeader *hdr = (XrObjHeader *) object;
+        hdr->extra = XR_OBJ_AOT_ALLOCATION | XR_OBJ_AOT_EXECUTION;
+        atomic_store_explicit(&hdr->refcount, XR_RC_INIT,
+                              memory_order_relaxed);
+    }
+    return object;
+}
+
+static inline void *xrt_execution_alloc(size_t object_bytes,
+                                        XrtExecutionFinalizer finalizer) {
+    return xrt_execution_alloc_format(object_bytes, finalizer,
+                                      XRT_EXECUTION_OBJECT_LEGACY);
 }
 
 static inline void *xrt_execution_alloc_embedded(size_t object_bytes,
@@ -480,7 +515,7 @@ static inline int xrt_arc_value_has_header(XrValue v) {
         return (v.flags & XRT_VALUE_FLAG_ARRAY_REF_OWNED) != 0;
     if (v.tag == XR_TAG_PTR)
         return v.heap_type == XR_TINSTANCE || v.heap_type == XR_TENUM_DESCRIPTOR;
-    return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_STRBUF || v.tag == XR_TAG_CLOSURE ||
+    return v.tag == XR_TAG_STRBUF || v.tag == XR_TAG_CLOSURE ||
            v.tag == XR_TAG_CELL || v.tag == XR_TAG_ITERATOR || v.tag == XR_TAG_AGG_REF ||
            v.tag == XR_TAG_REGEX || v.tag == XR_TAG_SYS_MUTEX || v.tag == XR_TAG_SYS_RWLOCK ||
            v.tag == XR_TAG_SYS_CONDVAR || v.tag == XR_TAG_SYS_BARRIER || v.tag == XR_TAG_SYS_ONCE ||
@@ -563,6 +598,16 @@ static inline void xrt_retain(XrValue v) {
      * lifetime fact when a literal key has travelled through a collection. */
     if (v.tag == XR_TAG_STR)
         return;
+    if (v.tag == XR_TAG_STR_ARC) {
+        XrString *string = (XrString *) v.ptr;
+        XrRuntimeAbiStatus status = xr_runtime_object_header_retain(
+            string ? &string->header : NULL);
+        if (XR_UNLIKELY(status != XR_RUNTIME_ABI_OK)) {
+            fprintf(stderr, "xrt_retain: invalid canonical string RC\n");
+            abort();
+        }
+        return;
+    }
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
         (v.tag == XR_TAG_PTR && v.heap_type == 0 && (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0)) {
         xrt_coll_retain(v);
@@ -714,12 +759,20 @@ static inline void xrt_execution_arena_dispose(XrtExecutionArena *arena) {
         return;
     arena->destroying = 1;
     for (XrtExecutionAllocation *node = arena->head; node; node = node->next) {
-        XrObjHeader *hdr = (XrObjHeader *) (node + 1);
-        hdr->extra |= XR_OBJ_AOT_SWEEP;
+        void *object = (void *) (node + 1);
+        if (node->object_format == XRT_EXECUTION_OBJECT_RUNTIME_STRING) {
+            XrString *string = (XrString *) object;
+            atomic_store_explicit(&string->header.rc,
+                                  XR_RUNTIME_OBJECT_RC_STICKY,
+                                  memory_order_release);
+        } else {
+            ((XrObjHeader *) object)->extra |= XR_OBJ_AOT_SWEEP;
+        }
     }
     for (XrtExecutionAllocation *node = arena->head; node; node = node->next) {
         XrObjHeader *hdr = (XrObjHeader *) (node + 1);
-        if (node->finalizer)
+        if (node->object_format == XRT_EXECUTION_OBJECT_LEGACY &&
+            node->finalizer)
             node->finalizer(hdr);
         arena->finalizer_count++;
     }
@@ -765,6 +818,29 @@ static int xrt_deferred_push(XrObjHeader *hdr) {
 static inline void xrt_release(XrValue v) {
     if (v.tag == XR_TAG_STR)
         return;
+    if (v.tag == XR_TAG_STR_ARC) {
+        XrString *string = (XrString *) v.ptr;
+        bool last = false;
+        XrRuntimeAbiStatus status = xr_runtime_object_header_release(
+            string ? &string->header : NULL, &last);
+        if (XR_UNLIKELY(status != XR_RUNTIME_ABI_OK)) {
+            fprintf(stderr, "xrt_release: invalid canonical string RC\n");
+            abort();
+        }
+        if (last) {
+            XrtExecutionAllocation *node = xrt_execution_node(string);
+            if (XR_UNLIKELY(
+                    node->object_format != XRT_EXECUTION_OBJECT_RUNTIME_STRING)) {
+                fprintf(stderr,
+                        "xrt_release: canonical string allocation format mismatch\n");
+                abort();
+            }
+            xrt_execution_unlink_object(string);
+            node->magic = 0;
+            XRT_FREE(node);
+        }
+        return;
+    }
     if (XR_IS_ARRAY(v) || XR_IS_MAP(v) || XR_IS_SET(v) ||
         (v.tag == XR_TAG_PTR && v.heap_type == 0 && (v.flags & XR_VALUE_FLAG_HEADER_AT_PTR) != 0)) {
         xrt_coll_release(v);
@@ -926,31 +1002,38 @@ static inline void xrt_arc_shutdown(void) {
 
 /* =========================================================================
  * String constructors — header + bytes in one execution allocation.
- * Layout: [XrObjHeader][xrt_str_t][len+1 bytes]; data points at the tail.
+ * Layout: [XrRuntimeObjectHeader][string fields][UTF-8 tail].
  * Callers fill the bytes via xr_str_buf() after xrt_str_alloc().
  * ========================================================================= */
 
 static inline XrValue xrt_str_alloc(size_t len) {
-    xrt_str_t *h = (xrt_str_t *) xrt_arc_alloc(sizeof(xrt_str_t) + len + 1);
-    h->len = (int64_t) len;
-    h->rune_len = -1;
-    h->hash = 0;
-    h->flags = 0;
-    h->data = (char *) (h + 1);
-    h->data[len] = 0;
-    return xr_mkptr(h, XR_TAG_STR_ARC);
+    if (XR_UNLIKELY(len > XR_RUNTIME_STRING_MAXIMUM_BYTE_LENGTH ||
+                    len > SIZE_MAX - sizeof(XrString) - 1u)) {
+        fprintf(stderr, "xrt_str_alloc: string extent overflow\n");
+        abort();
+    }
+    size_t object_bytes = (size_t) xr_runtime_string_object_allocation_bytes(
+        (uint32_t) len);
+    XrString *string = (XrString *) xrt_execution_alloc_format(
+        object_bytes, NULL, XRT_EXECUTION_OBJECT_RUNTIME_STRING);
+    if (XR_UNLIKELY(xr_runtime_string_object_init(
+                        string, XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL,
+                        (uint32_t) len, UINT32_MAX, 0,
+                        XR_RUNTIME_STRING_TRAIT_LOCAL) != XR_RUNTIME_ABI_OK)) {
+        fprintf(stderr, "xrt_str_alloc: canonical materializer rejected extent\n");
+        abort();
+    }
+    string->data[len] = 0;
+    return xr_mkptr(string, XR_TAG_STR_ARC);
 }
 
-/* Wrap a NUL-terminated C string with static storage duration (literals,
- * argv, environment) without copying the bytes. */
+/* Materialize a NUL-terminated C string into the canonical object layout. */
 static inline XrValue xr_box_str(const char *s) {
-    xrt_str_t *h = (xrt_str_t *) xrt_arc_alloc(sizeof(xrt_str_t));
-    h->len = (int64_t) strlen(s);
-    h->rune_len = -1;
-    h->hash = 0;
-    h->flags = 0;
-    h->data = (char *) s;
-    return xr_mkptr(h, XR_TAG_STR_ARC);
+    size_t len = s ? strlen(s) : 0;
+    XrValue value = xrt_str_alloc(len);
+    if (len > 0)
+        memcpy(xr_str_buf(value), s, len);
+    return value;
 }
 
 /* Copy a transient C buffer (stack scratch, number formatting) into a fresh

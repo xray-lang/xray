@@ -86,8 +86,9 @@ static XrValue set_canonicalize_value(XrSet *set, XrValue value, XrCoroHeap *hea
     if (!core)
         return value;
     XrString *src = XR_TO_STRING(value);
-    if (XR_STR_IS_INTERNED(src) || (src->length > XR_SHORT_STR_MAX && XR_OBJ_IS_SHARED(&src->hdr) &&
-                                    !XR_OBJ_GET_FLAG(&src->hdr, XR_OBJ_TRANSIT)))
+    if (XR_STR_IS_INTERNED(src) ||
+        (src->length > XR_SHORT_STR_MAX &&
+         src->header.domain_id == XR_RUNTIME_STRING_DOMAIN_CONST_SHARED))
         return value;
     XrString *canonical = xr_string_intern_core(core, src->data, src->length, src->hash);
     if (!canonical || canonical == src)

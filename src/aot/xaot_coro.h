@@ -18,17 +18,8 @@
 #include "../coro/xaot_coro.h"
 #include "../coro/xaot_task.h"
 
-typedef struct XrString XrString;
 XR_FUNC XrString *xr_string_intern_core(struct XrRuntimeCore *core, const char *chars,
                                         size_t length, uint32_t hash);
-
-typedef struct XrAotRuntimeStringView {
-    XrObjHeader hdr;
-    uint32_t length;
-    uint32_t rune_length;
-    uint32_t hash;
-    char data[];
-} XrAotRuntimeStringView;
 
 /* Byte-compatible mirror of VM XrArray (see src/runtime/object/xarray.h): the
  * bridge reads VM-layout arrays through this view, so it must embed the exact
@@ -134,14 +125,14 @@ static inline XrValue xr_aot_bridge_runtime_tuple_to_xrt(XrValue value) {
 }
 
 static inline XrValue xr_aot_bridge_string_to_xrt(XrValue value) {
-    XrAotRuntimeStringView *src = (XrAotRuntimeStringView *) value.ptr;
-    if (!src)
+    XrString *src = (XrString *) value.ptr;
+    if (!src || xr_runtime_string_object_validate_prefix(src) !=
+                    XR_RUNTIME_ABI_OK)
         return XR_NULL_VAL;
 
     XrValue dst = xrt_str_alloc((size_t) src->length);
-    xrt_str_t *hdr = xr_str_hdr(dst);
-    hdr->hash = src->hash;
-    hdr->rune_len = (int64_t) src->rune_length;
+    ((XrString *) dst.ptr)->hash = src->hash;
+    xr_str_set_rune_len(dst, src->rune_length);
     char *data = xr_str_buf(dst);
     memcpy(data, src->data, (size_t) src->length);
     data[src->length] = '\0';
@@ -154,15 +145,17 @@ static inline XrValue xr_aot_bridge_xrt_string_to_runtime(const XrAotContext *ct
     if (!ctx || !ctx->runtime)
         return XR_NULL_VAL;
 
-    const xrt_str_t *src = xr_str_hdr(value);
-    if (!src || !src->data || src->len < 0)
+    const char *data = xr_str_data(value);
+    int64_t length = xr_str_len(value);
+    if (!data || length < 0 || (uint64_t) length > UINT32_MAX)
         return XR_NULL_VAL;
 
     struct XrRuntimeCore *core = xr_aot_runtime_core(ctx->runtime);
     if (!core)
         return XR_NULL_VAL;
 
-    XrString *dst = xr_string_intern_core(core, src->data, (size_t) src->len, src->hash);
+    XrString *dst = xr_string_intern_core(core, data, (size_t) length,
+                                          xrt_str_hash(value));
     return dst ? xr_mkheap(dst, XR_TSTRING) : XR_NULL_VAL;
 }
 

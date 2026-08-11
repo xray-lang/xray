@@ -15,6 +15,7 @@
 #include "../base/xhash.h"
 #include "../base/xmalloc.h"
 #include "../runtime/object/xstring.h"
+#include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xshared.h"
@@ -47,6 +48,10 @@ static XrValue monitor_shared_reason(XrVMRuntime *X, const char *reason) {
 static void monitor_release_unsent(XrVMRuntime *X, XrValue value) {
     if (!X || !XR_IS_PTR(value))
         return;
+    if (XR_IS_STRING(value)) {
+        xr_rc_release_value(NULL, value);
+        return;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (obj && XR_OBJ_IS_SHARED(obj) && xr_obj_drop_is_last(obj))
         xr_shared_destroy_core(xr_isolate_get_runtime_core(X), obj);

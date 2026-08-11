@@ -62,6 +62,8 @@ XrTypeId xr_value_typeid(XrValue v) {
     if (v.tag <= XR_TAG_F64)
         return tag_to_typeid[v.tag];
     if (v.tag == XR_TAG_PTR && v.ptr) {
+        if (v.heap_type == XR_TSTRING)
+            return XR_TID_STRING;
         uint8_t gctype = XR_OBJ_GET_TYPE((XrObjHeader *) v.ptr);
         if (gctype < sizeof(gctype_to_typeid) / sizeof(gctype_to_typeid[0])) {
             XrTypeId tid = gctype_to_typeid[gctype];

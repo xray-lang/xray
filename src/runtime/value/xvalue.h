@@ -40,6 +40,7 @@
 #include "../../base/xdefs.h"
 #include "../../base/xchecks.h"
 #include "../../shared/xr_int_arith.h"
+#include "../abi/xr_runtime_string_object.h"
 
 // Internal base types
 typedef int64_t xr_Integer;
@@ -97,6 +98,14 @@ static inline XrValue xr_make_ptr_val(void *p) {
     return v;
 }
 
+static inline XrValue xr_make_typed_ptr_val(void *p, uint16_t heap_type) {
+    XrValue v = {0};
+    v.tag = XR_TAG_PTR;
+    v.ptr = p;
+    v.heap_type = p ? heap_type : 0;
+    return v;
+}
+
 #define XR_NULL_VAL (xr_make_int_val(0, XR_TAG_NULL))
 #define XR_TRUE_VAL (xr_make_int_val(1, XR_TAG_BOOL))
 #define XR_FALSE_VAL (xr_make_int_val(0, XR_TAG_BOOL))
@@ -124,6 +133,26 @@ static inline XrValue xr_make_ptr_val(void *p) {
 
 // Heap object type checks (all single-branch, no SSO fallback)
 #define XR_IS_STRING(v) (XR_IS_PTR(v) && (v).heap_type == XR_TSTRING)
+
+static inline XrRuntimeObjectHeader *xr_value_runtime_object_header(
+    XrValue value) {
+    return XR_IS_STRING(value) && value.ptr
+               ? &((XrString *) value.ptr)->header
+               : NULL;
+}
+
+static inline bool xr_value_runtime_string_is_transferable(XrValue value) {
+    XrRuntimeObjectHeader *header = xr_value_runtime_object_header(value);
+    return header &&
+           header->domain_id == XR_RUNTIME_STRING_DOMAIN_TRANSFERABLE;
+}
+
+static inline bool xr_value_runtime_string_is_shared(XrValue value) {
+    XrRuntimeObjectHeader *header = xr_value_runtime_object_header(value);
+    return header &&
+           (header->domain_id == XR_RUNTIME_STRING_DOMAIN_CONST_SHARED ||
+            header->domain_id == XR_RUNTIME_STRING_DOMAIN_SYNC_SHARED);
+}
 #define XR_IS_FUNCTION(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TFUNCTION)
 #define XR_IS_CFUNCTION(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCFUNCTION)
 #define XR_IS_ARRAY(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TARRAY)
@@ -258,7 +287,7 @@ static inline uint16_t xr_aggregate_layout_id(XrValue v) {
  * validated the scalar (0..0x10FFFF, excluding U+D800..U+DFFF). */
 #define XR_FROM_RUNE(cp) xr_make_int_val((int64_t) (uint32_t) (cp), XR_TAG_RUNE)
 #define XR_FROM_PTR(p) xr_make_ptr_val((void *) (p))
-#define XR_FROM_STR(s) xr_make_ptr_val((void *) (s))
+#define XR_FROM_STR(s) xr_make_typed_ptr_val((void *) (s), XR_TSTRING)
 
 /* ========== Value Decoding Macros ========== */
 

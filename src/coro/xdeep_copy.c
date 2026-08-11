@@ -43,16 +43,15 @@
 #define XR_AOT_VALUE_TAG_STR 14
 #define XR_AOT_VALUE_TAG_STR_ARC 19
 
-typedef struct XrAotStringView {
+typedef struct XrAotLiteralStringView {
     int64_t len;
     int64_t rune_len;
     uint32_t hash;
     uint32_t flags;
     char *data;
-} XrAotStringView;
+} XrAotLiteralStringView;
 
 const XrObjDeepCopyFn xr_obj_deep_copy_ops[XR_OBJ_TYPE_MAX] = {
-    [XR_TSTRING] = xr_deep_copy_string_with_ctx,
     [XR_TARRAY] = xr_deep_copy_array_with_ctx,
     [XR_TMAP] = xr_deep_copy_map_with_ctx,
     [XR_TSET] = xr_deep_copy_set_with_ctx,
@@ -151,10 +150,10 @@ static bool xr_deep_copy_share_sticky_singleton(XrObjHeader *obj) {
     }
 }
 
-XrValue xr_deep_copy_string_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
-    if (!ctx || !obj)
+XrValue xr_deep_copy_string_with_ctx(XrCopyContext *ctx, XrString *string) {
+    if (!ctx || !string)
         return XR_NULL_VAL;
-    XrString *copy = xr_string_clone_shared_core(ctx->core, (XrString *) obj);
+    XrString *copy = xr_string_clone_shared_core(ctx->core, string);
     return copy ? xr_string_value(copy) : XR_NULL_VAL;
 }
 
@@ -184,9 +183,7 @@ static XrValue xr_copy_context_lookup(XrCopyContext *ctx, void *src) {
              * second parent referencing the same copy must own its own
              * reference. */
             if (ctx->to_transit && XR_IS_PTR(e->dst)) {
-                XrObjHeader *dst_obj = XR_VALUE_GCPTR(e->dst);
-                if (dst_obj)
-                    xr_shared_retain(dst_obj);
+                xr_rc_retain_value(e->dst);
             }
             return e->dst;
         }
@@ -631,13 +628,21 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
             } else if (!XR_IS_PTR(upval)) {
                 new_closure->upvals[i] = upval;
             } else {
-                XrObjHeader *upval_obj = XR_VALUE_GCPTR(upval);
-                uint8_t type = upval_obj ? XR_OBJ_GET_TYPE(upval_obj) : XR_OBJ_TYPE_MAX;
+                XrObjHeader *upval_obj = XR_HEAP_TYPE(upval) == XR_TSTRING
+                                               ? NULL
+                                               : XR_VALUE_GCPTR(upval);
+                uint8_t type = XR_HEAP_TYPE(upval) == XR_TSTRING
+                                   ? XR_TSTRING
+                                   : (upval_obj ? XR_OBJ_GET_TYPE(upval_obj)
+                                                : XR_OBJ_TYPE_MAX);
                 XrCopyKind kind = xr_value_copy_kind(upval);
                 if (kind == XR_COPY_SHARED || kind == XR_COPY_SHARED_REF) {
                     new_closure->upvals[i] = upval;
-                    if (upval_obj)
-                        xr_rc_retain(upval_obj);
+                    xr_rc_retain_value(upval);
+                } else if (XR_IS_STRING(upval)) {
+                    new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, upval);
+                    if (XR_IS_NULL(new_closure->upvals[i]))
+                        return XR_NULL_VAL;
                 } else if (type < XR_OBJ_TYPE_MAX && xr_obj_deep_copy_ops[type]) {
                     new_closure->upvals[i] = xr_deep_copy_with_ctx(ctx, upval);
                     if (XR_IS_NULL(new_closure->upvals[i]))
@@ -649,7 +654,7 @@ XrValue xr_deep_copy_closure_with_ctx(XrCopyContext *ctx, XrObjHeader *obj) {
         } else {
             new_closure->upvals[i] = upval;
             if (XR_IS_PTR(upval))
-                xr_rc_retain(XR_VALUE_GCPTR(upval));
+                xr_rc_retain_value(upval);
         }
     }
     return result;
@@ -872,17 +877,59 @@ static inline XrValue deep_copy_dispatch_bounded(XrCopyContext *ctx, XrValue val
 
 XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XR_DCHECK(ctx != NULL, "deep_copy_with_ctx: NULL context");
-    if (value.tag == XR_AOT_VALUE_TAG_STR || value.tag == XR_AOT_VALUE_TAG_STR_ARC) {
-        const XrAotStringView *src = (const XrAotStringView *) value.ptr;
-        if (!ctx->core || !src || !src->data || src->len < 0)
+    if (value.tag == XR_AOT_VALUE_TAG_STR ||
+        value.tag == XR_AOT_VALUE_TAG_STR_ARC) {
+        if (!ctx->core || !value.ptr)
             return XR_NULL_VAL;
-        XrString *dst = xr_string_intern_core(ctx->core, src->data, (size_t) src->len, src->hash);
+        const char *data;
+        size_t length;
+        uint32_t hash;
+        if (value.tag == XR_AOT_VALUE_TAG_STR_ARC) {
+            const XrString *src = (const XrString *) value.ptr;
+            if (xr_runtime_string_object_validate_prefix(src) !=
+                XR_RUNTIME_ABI_OK)
+                return XR_NULL_VAL;
+            data = src->data;
+            length = src->length;
+            hash = src->hash;
+        } else {
+            const XrAotLiteralStringView *src =
+                (const XrAotLiteralStringView *) value.ptr;
+            if (!src->data || src->len < 0 ||
+                (uint64_t) src->len > XR_RUNTIME_STRING_MAXIMUM_BYTE_LENGTH)
+                return XR_NULL_VAL;
+            data = src->data;
+            length = (size_t) src->len;
+            hash = src->hash;
+        }
+        XrString *dst =
+            xr_string_intern_core(ctx->core, data, length, hash);
         return dst ? xr_string_value(dst) : XR_NULL_VAL;
     }
     if (XR_IS_ARRAY_REF(value))
         return deep_copy_dispatch_bounded(ctx, value, NULL, NULL);
     if (!XR_IS_PTR(value))
         return value;
+    if (XR_HEAP_TYPE(value) == XR_TSTRING) {
+        XrString *string = (XrString *) XR_VALUE_GCPTR(value);
+        if (!string)
+            return value;
+        if (string->header.domain_id != XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL &&
+            ctx->share_existing_shared) {
+            if (xr_runtime_object_header_retain(&string->header) !=
+                XR_RUNTIME_ABI_OK)
+                return XR_NULL_VAL;
+            return value;
+        }
+        if (ctx->depth >= XR_DEEP_COPY_MAX_DEPTH) {
+            ctx->depth_exceeded = true;
+            return XR_NULL_VAL;
+        }
+        ctx->depth++;
+        XrValue result = xr_deep_copy_string_with_ctx(ctx, string);
+        ctx->depth--;
+        return ctx->depth == 0 && ctx->depth_exceeded ? XR_NULL_VAL : result;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;
@@ -988,9 +1035,21 @@ XrValue xr_deep_copy_to_coro_core(XrRuntimeCore *core, XrValue value,
     XR_DCHECK(core != NULL, "deep_copy_to_coro_core: NULL runtime core");
     if (!XR_IS_PTR(value))
         return value;
+    if (XR_HEAP_TYPE(value) == XR_TSTRING) {
+        XrString *string = (XrString *) XR_VALUE_GCPTR(value);
+        if (string &&
+            string->header.domain_id != XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL) {
+            if (xr_runtime_object_header_retain(&string->header) !=
+                XR_RUNTIME_ABI_OK)
+                return XR_NULL_VAL;
+            return value;
+        }
+    }
     // Shared objects (channel, etc): just increment refcount, no copy needed.
     // TRANSIT graphs are the exception: they must be materialized privately.
-    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    XrObjHeader *obj = XR_HEAP_TYPE(value) == XR_TSTRING
+                           ? NULL
+                           : XR_VALUE_GCPTR(value);
     if (obj && XR_OBJ_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
         xr_shared_retain(obj);
         return value;
@@ -1038,7 +1097,11 @@ XrValue xr_deep_copy_explicit_to_coro_core(XrRuntimeCore *core, XrValue value,
     }
     if (!XR_IS_PTR(value))
         return value;
-    XrObjHeader *obj = XR_VALUE_GCPTR(value);
+    XrObjHeader *obj = XR_HEAP_TYPE(value) == XR_TSTRING
+                           ? NULL
+                           : XR_VALUE_GCPTR(value);
+    if (XR_HEAP_TYPE(value) == XR_TSTRING)
+        goto explicit_copy_value;
     if (!obj)
         return value;
     uint8_t type = XR_OBJ_GET_TYPE(obj);
@@ -1047,6 +1110,7 @@ XrValue xr_deep_copy_explicit_to_coro_core(XrRuntimeCore *core, XrValue value,
             xr_shared_retain(obj);
         return value;
     }
+explicit_copy_value:
     XrCopyContext ctx;
     xr_copy_context_init_core(&ctx, core, &core->fixed_heap);
     ctx.share_existing_shared = false;
@@ -1072,7 +1136,7 @@ XrValue xr_deep_copy_explicit_to_storage_core(XrRuntimeCore *core, XrValue value
     if (!XR_IS_PTR(value) && !XR_IS_ARRAY_REF(value))
         return value;
 
-    if (XR_IS_PTR(value)) {
+    if (XR_IS_PTR(value) && XR_HEAP_TYPE(value) != XR_TSTRING) {
         XrObjHeader *obj = XR_VALUE_GCPTR(value);
         if (!obj)
             return value;

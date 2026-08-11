@@ -96,6 +96,56 @@ typedef struct XrRuntimeObjectHeader {
     uint32_t domain_id;
 } XrRuntimeObjectHeader;
 
+/* Canonical RC operations are defined beside the physical header so hosted
+ * runtime code and standalone generated C cannot drift into different count
+ * polarity or terminal-claim rules. A successful last release atomically
+ * claims the object by installing the sticky sentinel; the allocation owner
+ * then finalizes and reclaims the physical block exactly once. */
+static inline XrRuntimeAbiStatus xr_runtime_object_header_retain(
+    XrRuntimeObjectHeader *header) {
+    if (!header)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+    for (;;) {
+        int32_t current =
+            atomic_load_explicit(&header->rc, memory_order_relaxed);
+        if (current <= XR_RUNTIME_OBJECT_RC_STICKY_BAND)
+            return XR_RUNTIME_ABI_OK;
+        if (current <= 0)
+            return XR_RUNTIME_ABI_INVALID_POLICY;
+        if (current == INT32_MAX)
+            return XR_RUNTIME_ABI_OVERFLOW;
+        int32_t next = current + XR_RUNTIME_OBJECT_RC_RETAIN_DELTA;
+        if (atomic_compare_exchange_weak_explicit(
+                &header->rc, &current, next, memory_order_relaxed,
+                memory_order_relaxed))
+            return XR_RUNTIME_ABI_OK;
+    }
+}
+
+static inline XrRuntimeAbiStatus xr_runtime_object_header_release(
+    XrRuntimeObjectHeader *header, bool *out_last) {
+    if (!header || !out_last)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+    *out_last = false;
+    for (;;) {
+        int32_t current =
+            atomic_load_explicit(&header->rc, memory_order_acquire);
+        if (current <= XR_RUNTIME_OBJECT_RC_STICKY_BAND)
+            return XR_RUNTIME_ABI_OK;
+        if (current <= 0)
+            return XR_RUNTIME_ABI_INVALID_POLICY;
+        int32_t next = current == XR_RUNTIME_OBJECT_RC_INITIAL
+                           ? XR_RUNTIME_OBJECT_RC_STICKY
+                           : current + XR_RUNTIME_OBJECT_RC_RELEASE_DELTA;
+        if (atomic_compare_exchange_weak_explicit(
+                &header->rc, &current, next, memory_order_acq_rel,
+                memory_order_acquire)) {
+            *out_last = current == XR_RUNTIME_OBJECT_RC_INITIAL;
+            return XR_RUNTIME_ABI_OK;
+        }
+    }
+}
+
 _Static_assert(sizeof(_Atomic int32_t) == 4, "canonical RC must be four bytes");
 _Static_assert(_Alignof(_Atomic int32_t) == 4, "canonical RC must be four-byte aligned");
 _Static_assert(sizeof(XrRuntimeObjectHeader) == XR_RUNTIME_OBJECT_HEADER_SIZE,

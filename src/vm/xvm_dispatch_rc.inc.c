@@ -26,7 +26,7 @@ vmcase(OP_DUP) {
     int a = GETARG_A(i);
     XrValue v = R(a);
     if (XR_IS_PTR(v))
-        xr_rc_retain((XrObjHeader *) XR_VALUE_GCPTR(v));
+        xr_rc_retain_value(v);
     vmbreak;
 }
 
@@ -45,7 +45,7 @@ vmcase(OP_DROP) {
          * its destructor or reclaiming its memory, so every drop the compiler
          * placed in top-level code was silently discarded. */
         XrCoroutine *_co = (XrCoroutine *) VM_CURRENT_CORO;
-        xr_rc_release(_co ? _co->heap : vm_exec_local_heap(), (XrObjHeader *) XR_VALUE_GCPTR(v));
+        xr_rc_release_value(_co ? _co->heap : vm_exec_local_heap(), v);
     }
     vmbreak;
 }

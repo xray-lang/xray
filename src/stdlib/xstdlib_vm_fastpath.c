@@ -228,7 +228,7 @@ static XrValue stdlib_host_string_new_utf8(void *host, const char *data, size_t 
         return xr_null();
     if (hash != 0)
         string->hash = hash;
-    return XR_FROM_PTR(string);
+    return xr_string_value(string);
 }
 
 static XrValue stdlib_host_error_new_utf8(void *host, int32_t code, const char *message,

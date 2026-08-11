@@ -7221,6 +7221,36 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
  * survive its producer coroutine without turning the producer's whole arena
  * into process-lifetime storage. */
 static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage_mode) {
+    if (value.tag == XR_TAG_STR_ARC) {
+        XrString *string = (XrString *) value.ptr;
+        if (!string || storage_mode == XR_OBJ_STORAGE_NORMAL)
+            return value;
+        /* Family-private lazy caches become immutable before publication. */
+        (void) xr_str_rune_len(value);
+        (void) xrt_str_hash(value);
+        uint32_t domain_id = storage_mode == XR_OBJ_STORAGE_SHARED
+                                 ? XR_RUNTIME_STRING_DOMAIN_CONST_SHARED
+                                 : storage_mode == XR_OBJ_STORAGE_TRANSFER
+                                       ? XR_RUNTIME_STRING_DOMAIN_TRANSFERABLE
+                                       : XR_RUNTIME_STRING_DOMAIN_COUNT;
+        if (XR_UNLIKELY(domain_id == XR_RUNTIME_STRING_DOMAIN_COUNT)) {
+            fprintf(stderr, "xrt: invalid canonical string storage domain\n");
+            abort();
+        }
+        XrtExecutionAllocation *node = xrt_execution_node(string);
+        if (XR_UNLIKELY(
+                node->object_format != XRT_EXECUTION_OBJECT_RUNTIME_STRING)) {
+            fprintf(stderr, "xrt: canonical string allocation format mismatch\n");
+            abort();
+        }
+        xrt_execution_unlink_object(string);
+        string->header.domain_id = domain_id;
+        atomic_fetch_and_explicit(
+            &string->traits,
+            (uint16_t) ~XR_RUNTIME_STRING_TRAIT_LOCAL,
+            memory_order_relaxed);
+        return value;
+    }
     bool embedded = XR_IS_ARRAY(value) || XR_IS_MAP(value) || XR_IS_SET(value) ||
                     xrt_is_struct_object_value(value);
     if (storage_mode == XR_OBJ_STORAGE_NORMAL || (!embedded && !xrt_arc_value_has_header(value)))
@@ -7342,14 +7372,14 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
         case XR_TAG_STR:
             return val;
         case XR_TAG_STR_ARC: {
-            xrt_str_t *src = (xrt_str_t *) val.ptr;
+            XrString *src = (XrString *) val.ptr;
             if (!src)
                 return val;
-            XrValue dstv = xrt_str_alloc((size_t) src->len);
-            xrt_str_t *dst = (xrt_str_t *) dstv.ptr;
+            XrValue dstv = xrt_str_alloc((size_t) src->length);
+            XrString *dst = (XrString *) dstv.ptr;
             dst->hash = src->hash;
-            dst->rune_len = src->rune_len;
-            memcpy(xr_str_buf(dstv), src->data, (size_t) src->len);
+            dst->rune_length = src->rune_length;
+            memcpy(dst->data, src->data, (size_t) src->length);
             return dstv;
         }
         case XR_TAG_ARRAY: {

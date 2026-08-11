@@ -17,6 +17,15 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
     if (!XR_IS_PTR(value))
         return XR_COPY_IMMEDIATE;
 
+    if (XR_HEAP_TYPE(value) == XR_TSTRING) {
+        const XrString *string = (const XrString *) XR_VALUE_GCPTR(value);
+        if (!string)
+            return XR_COPY_DEEP;
+        return string->header.domain_id == XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL
+                   ? XR_COPY_DEEP
+                   : XR_COPY_SHARED_REF;
+    }
+
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     /* Scheduler-owned handles (Task, Coroutine, CoroPool, and future managed
      * control-plane objects) are identity values, never execution-local data
@@ -30,8 +39,6 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
 
     uint8_t type = XR_HEAP_TYPE(value);
     switch (type) {
-        case XR_TSTRING:
-            return XR_OBJ_IS_SHARED(obj) ? XR_COPY_SHARED_REF : XR_COPY_DEEP;
         case XR_TCHANNEL:
         case XR_TATOMIC:
         case XR_TWORKQUEUE:

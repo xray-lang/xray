@@ -198,10 +198,8 @@ XrValue xr_vm_call_closure(XrVMRuntime *isolate, XrClosure *closure, XrValue *ar
         fixed_dup = proto->numparams;
     for (int i = 0; i < nargs; i++) {
         func_base[i] = args[i];
-        if (i < fixed_dup && XR_IS_PTR(args[i])) {
-            XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(args[i]);
-            xr_obj_dup(o);
-        }
+        if (i < fixed_dup && XR_IS_PTR(args[i]))
+            xr_rc_retain_value(args[i]);
     }
 
     if (proto->is_vararg) {

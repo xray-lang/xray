@@ -80,6 +80,18 @@ static bool deep_eq_ctx(DeepEqCtx *ctx, XrValue a, XrValue b) {
     }
 
 deep_compare: {
+    if (a.heap_type == XR_TSTRING || b.heap_type == XR_TSTRING) {
+        if (a.heap_type != XR_TSTRING || b.heap_type != XR_TSTRING || !a.ptr ||
+            !b.ptr)
+            return false;
+        XrString *str_a = (XrString *) a.ptr;
+        XrString *str_b = (XrString *) b.ptr;
+        if (str_a == str_b)
+            return true;
+        if (str_a->length != str_b->length)
+            return false;
+        return memcmp(str_a->data, str_b->data, str_a->length) == 0;
+    }
     XrObjHeader *gc_a = (XrObjHeader *) a.ptr;
     XrObjHeader *gc_b = (XrObjHeader *) b.ptr;
     if (gc_a == gc_b)
@@ -90,14 +102,6 @@ deep_compare: {
         return false;
 
     // Strings do not recurse — no cycle guard needed.
-    if (XR_OBJ_GET_TYPE(gc_a) == XR_TSTRING) {
-        XrString *str_a = (XrString *) gc_a;
-        XrString *str_b = (XrString *) gc_b;
-        if (str_a->length != str_b->length)
-            return false;
-        return memcmp(str_a->data, str_b->data, str_a->length) == 0;
-    }
-
     // Containers: guard against cycles + unbounded depth before recursing.
     bool is_container = (XR_OBJ_GET_TYPE(gc_a) == XR_TARRAY || XR_OBJ_GET_TYPE(gc_a) == XR_TMAP ||
                          XR_OBJ_GET_TYPE(gc_a) == XR_TINSTANCE);

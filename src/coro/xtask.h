@@ -243,6 +243,8 @@ static inline bool xr_task_error_is_value(const XrTask *task) {
 }
 
 static inline bool xr_task_value_is_transfer_payload(XrValue value) {
+    if (XR_IS_STRING(value))
+        return xr_value_runtime_string_is_transferable(value);
     return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_TRANSFER(XR_VALUE_GCPTR(value)) &&
            !XR_OBJ_GET_FLAG(XR_VALUE_GCPTR(value), XR_OBJ_TRANSIT);
 }

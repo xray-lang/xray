@@ -15,6 +15,7 @@
 #include "../../base/xmalloc.h"
 #include "../../base/xutf8.h"
 #include "../xisolate_api.h"
+#include "../mem/xruntime_object_heap.h"
 #include <string.h>
 
 void xr_global_pool_init(XrGlobalStringPool *pool) {
@@ -40,7 +41,7 @@ void xr_global_pool_free(XrGlobalStringPool *pool) {
     xr_rwlock_destroy(&pool->lock);
     for (size_t i = 0; i < pool->capacity; i++) {
         if (pool->entries[i] != NULL)
-            xr_free(pool->entries[i]);
+            (void) xr_runtime_object_reclaim(&pool->entries[i]->header);
     }
 
     xr_free(pool->entries);
@@ -91,7 +92,7 @@ static void global_pool_grow(XrGlobalStringPool *pool) {
 
 XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *chars, size_t len,
                                        uint32_t hash) {
-    if (!pool)
+    if (!pool || len > XR_RUNTIME_STRING_MAXIMUM_BYTE_LENGTH)
         return NULL;
 
     if (pool->count >= GLOBAL_POOL_WARN_THRESHOLD) {
@@ -117,24 +118,30 @@ XrString *xr_global_pool_insert_locked(XrGlobalStringPool *pool, const char *cha
         XrString *entry = pool->entries[index];
 
         if (entry == NULL) {
-            size_t total_size = sizeof(XrString) + len + 1;
-            XrString *str = (XrString *) xr_malloc(total_size);
+            size_t total_size = (size_t) xr_runtime_string_object_allocation_bytes(
+                (uint32_t) len);
+            XrString *str = (XrString *) xr_runtime_object_allocate(
+                total_size, XR_RUNTIME_OBJECT_KIND_STRING,
+                XR_RUNTIME_STRING_LAYOUT_INDEX,
+                XR_RUNTIME_STRING_DOMAIN_CONST_SHARED,
+                XR_RUNTIME_OBJECT_OWNER_STATIC, NULL, NULL, NULL);
             if (!str)
                 return NULL;
 
-            memset(&str->hdr, 0, sizeof(XrObjHeader));
-            str->hdr.type = XR_TSTRING;
-            str->hdr.objsize = (uint32_t) total_size;
+            if (xr_runtime_string_object_init(
+                    str, XR_RUNTIME_STRING_DOMAIN_CONST_SHARED, (uint32_t) len,
+                    (uint32_t) xr_utf8_strlen(chars, len), hash,
+                    XR_RUNTIME_STRING_TRAIT_INTERNED |
+                        XR_RUNTIME_STRING_TRAIT_GLOBAL) != XR_RUNTIME_ABI_OK) {
+                (void) xr_runtime_object_reclaim(&str->header);
+                return NULL;
+            }
 
-            str->length = (uint32_t) len;
-            str->rune_length = (uint32_t) xr_utf8_strlen(chars, len);
-            str->hash = hash;
             memcpy(str->data, chars, len);
             str->data[len] = '\0';
-
-            XR_STR_SET_GLOBAL(str);
-            XR_OBJ_SET_STORAGE(&str->hdr, XR_OBJ_STORAGE_SHARED);
-            atomic_store_explicit(&str->hdr.refcount, XR_RC_STICKY, memory_order_relaxed);
+            atomic_store_explicit(&str->header.rc,
+                                  XR_RUNTIME_OBJECT_RC_STICKY,
+                                  memory_order_release);
 
             pool->entries[index] = str;
             pool->count++;
@@ -237,7 +244,7 @@ size_t xr_global_pool_sweep(XrGlobalStringPool *pool) {
             continue;
         }
 
-        xr_free(str);
+        (void) xr_runtime_object_reclaim(&str->header);
         pool->entries[i] = NULL;
         pool->count--;
         evicted++;

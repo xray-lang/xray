@@ -36,6 +36,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+
+struct XrString;
 #include "../runtime/value/xvalue.h"
 
 struct XrCoroutine;
@@ -152,7 +154,8 @@ XR_FUNC void xr_chan_transit_release_core(struct XrRuntimeCore *core, XrValue va
 #include "../runtime/mem/xobj_header.h"
 
 XR_FUNC XrValue xr_deep_copy_array_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
-XR_FUNC XrValue xr_deep_copy_string_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
+XR_FUNC XrValue xr_deep_copy_string_with_ctx(struct XrCopyContext *ctx,
+                                             struct XrString *string);
 XR_FUNC XrValue xr_deep_copy_map_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_deep_copy_set_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);
 XR_FUNC XrValue xr_deep_copy_instance_with_ctx(struct XrCopyContext *ctx, struct XrObjHeader *obj);

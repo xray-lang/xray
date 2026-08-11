@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "../test_helper.h"
 #include "runtime/object/xstring.h"
+#include "runtime/mem/xruntime_object_heap.h"
 
 static XrVMRuntime *X = NULL;
 
@@ -119,6 +120,43 @@ TEST(string_new_is_local_not_interned) {
     ASSERT_TRUE(xr_string_equal(a, b));
     ASSERT_NE(a->hash, 0u);
     ASSERT_NE(b->hash, 0u);
+    ASSERT_EQ_INT(a->header.object_kind, XR_RUNTIME_OBJECT_KIND_STRING);
+    ASSERT_EQ_INT(a->header.layout_id, XR_RUNTIME_STRING_LAYOUT_INDEX);
+    ASSERT_EQ_INT(a->header.domain_id,
+                  XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL);
+    ASSERT_EQ_INT(offsetof(XrString, data),
+                  XR_RUNTIME_STRING_FIXED_PREFIX_SIZE);
+    ASSERT_EQ_INT(xr_runtime_string_object_validate(
+                      a, xr_runtime_object_allocation_size(&a->header)),
+                  XR_RUNTIME_ABI_OK);
+    XrValue value = XR_FROM_STR(a);
+    ASSERT_EQ_INT(value.heap_type, XR_TSTRING);
+    ASSERT_EQ_PTR(xr_value_runtime_object_header(value), &a->header);
+    ASSERT_EQ_INT(xr_runtime_object_header_retain(&a->header),
+                  XR_RUNTIME_ABI_OK);
+    bool last = true;
+    ASSERT_EQ_INT(xr_runtime_object_header_release(&a->header, &last),
+                  XR_RUNTIME_ABI_OK);
+    ASSERT_FALSE(last);
+    teardown();
+}
+
+TEST(string_intern_uses_canonical_shared_header) {
+    setup();
+    XrString *string = xr_string_intern(X, "canonical", 9,
+                                        xr_string_hash("canonical", 9));
+    ASSERT_NOT_NULL(string);
+    ASSERT_EQ_INT(string->header.object_kind, XR_RUNTIME_OBJECT_KIND_STRING);
+    ASSERT_EQ_INT(string->header.domain_id,
+                  XR_RUNTIME_STRING_DOMAIN_CONST_SHARED);
+    ASSERT_EQ_INT(atomic_load_explicit(&string->header.rc,
+                                       memory_order_relaxed),
+                  XR_RUNTIME_OBJECT_RC_STICKY);
+    ASSERT_TRUE(xr_value_runtime_string_is_shared(XR_FROM_STR(string)));
+    ASSERT_EQ_INT(xr_runtime_string_object_validate(
+                      string,
+                      xr_runtime_object_allocation_size(&string->header)),
+                  XR_RUNTIME_ABI_OK);
     teardown();
 }
 

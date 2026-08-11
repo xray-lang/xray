@@ -1005,13 +1005,13 @@ TEST(aot_runtime_copy_context_uses_core_without_isolate) {
 }
 
 TEST(aot_runtime_copy_context_bridges_aot_string_leaves) {
-    typedef struct TestAotStringView {
+    typedef struct TestAotLiteralStringView {
         int64_t len;
         int64_t rune_len;
         uint32_t hash;
         uint32_t flags;
         char *data;
-    } TestAotStringView;
+    } TestAotLiteralStringView;
 
     XrAotRuntimeConfig cfg;
     aot_test_runtime_config_init(&cfg);
@@ -1022,22 +1022,46 @@ TEST(aot_runtime_copy_context_bridges_aot_string_leaves) {
     ASSERT_NOT_NULL(core);
 
     char chars[] = "route";
-    TestAotStringView src = {
+    TestAotLiteralStringView literal = {
         .len = 5,
         .rune_len = 5,
         .hash = 0,
         .flags = 0,
         .data = chars,
     };
-    XrValue aot_value = {.tag = 19, .ptr = &src};
     XrCopyContext copy;
     xr_copy_context_init_core(&copy, core, NULL);
-    XrValue bridged = xr_deep_copy_with_ctx(&copy, aot_value);
+    XrValue bridged = xr_deep_copy_with_ctx(
+        &copy, (XrValue) {.tag = 14, .ptr = &literal});
     xr_copy_context_cleanup(&copy);
 
     ASSERT_TRUE(XR_IS_STRING(bridged));
     ASSERT_EQ_INT((int) XR_TO_STRING(bridged)->length, 5);
     ASSERT_STR_EQ(XR_STRING_CHARS(XR_TO_STRING(bridged)), "route");
+
+    size_t object_size = (size_t) xr_runtime_string_object_allocation_bytes(5);
+    XrString *materialized = (XrString *) xr_calloc(1, object_size);
+    ASSERT_NOT_NULL(materialized);
+    ASSERT_EQ_INT(xr_runtime_string_object_init(
+                      materialized, XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL, 5,
+                      5, 0, XR_RUNTIME_STRING_TRAIT_LOCAL),
+                  XR_RUNTIME_ABI_OK);
+    memcpy(materialized->data, chars, sizeof(chars));
+    xr_copy_context_init_core(&copy, core, NULL);
+    bridged = xr_deep_copy_with_ctx(
+        &copy, (XrValue) {.tag = 19, .ptr = materialized});
+    xr_copy_context_cleanup(&copy);
+    ASSERT_TRUE(XR_IS_STRING(bridged));
+    ASSERT_EQ_INT((int) XR_TO_STRING(bridged)->length, 5);
+    ASSERT_STR_EQ(XR_STRING_CHARS(XR_TO_STRING(bridged)), "route");
+
+    materialized->reserved16 = 1;
+    xr_copy_context_init_core(&copy, core, NULL);
+    bridged = xr_deep_copy_with_ctx(
+        &copy, (XrValue) {.tag = 19, .ptr = materialized});
+    xr_copy_context_cleanup(&copy);
+    ASSERT_TRUE(XR_IS_NULL(bridged));
+    xr_free(materialized);
     xr_aot_runtime_delete(runtime);
 }
 

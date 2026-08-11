@@ -600,20 +600,24 @@ static void test_iterator_release_balances_source_and_arc_object(void) {
     reset_alloc_counts();
     XrValue source = xrt_str_alloc(3);
     memcpy(xr_str_buf(source), "abc", 3);
-    XrObjHeader *source_header = XRT_ARC_HDR(source.ptr);
+    XrString *source_string = (XrString *) source.ptr;
     XrValue iterator = xrt_iterator_new(source, XRT_ITER_VALUES);
     XrObjHeader *iterator_header = XRT_ARC_HDR(iterator.ptr);
 
     ASSERT_EQ_INT(iterator.tag, XR_TAG_ITERATOR, "iterator uses its AOT value tag");
     ASSERT_EQ_INT(iterator_header->_rsv, XRT_ARC_KIND_ITERATOR,
                   "iterator header selects the builtin destructor");
-    ASSERT_EQ_INT(atomic_load_explicit(&source_header->refcount, memory_order_relaxed), 1,
+    ASSERT_EQ_INT(atomic_load_explicit(&source_string->header.rc,
+                                       memory_order_relaxed),
+                  2,
                   "iterator retains one source reference");
     ASSERT_EQ_INT(g_malloc_count, 2, "source and iterator each allocate one ARC object");
 
     xrt_release(source);
     ASSERT_EQ_INT(g_free_count, 0, "dropping the caller source keeps iterator storage alive");
-    ASSERT_EQ_INT(atomic_load_explicit(&source_header->refcount, memory_order_relaxed), 0,
+    ASSERT_EQ_INT(atomic_load_explicit(&source_string->header.rc,
+                                       memory_order_relaxed),
+                  1,
                   "iterator remains the sole source owner");
     xrt_release(iterator);
     ASSERT_EQ_INT(g_free_count, 2,

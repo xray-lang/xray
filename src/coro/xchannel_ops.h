@@ -30,6 +30,7 @@
 #include "../runtime/xshared.h"
 #include "../runtime/mem/xalloc_unified.h"
 #include "../runtime/mem/xsystem_heap.h"
+#include "../runtime/mem/xruntime_object_heap.h"
 
 struct XrCoroutine;
 struct XrVMRuntime;
@@ -37,6 +38,8 @@ struct XrVMRuntime;
 /* ========== Send-side ownership ========== */
 
 static inline bool xr_chan_value_is_transfer_message(XrValue value) {
+    if (XR_IS_STRING(value))
+        return xr_value_runtime_string_is_transferable(value);
     return XR_IS_PTR(value) && XR_VALUE_GCPTR(value) && XR_OBJ_IS_TRANSFER(XR_VALUE_GCPTR(value));
 }
 
@@ -57,6 +60,12 @@ static inline XrValue xr_chan_prepare_send_core(XrRuntimeCore *core, XrValue val
     (void) core;
     if (!XR_IS_PTR(value))
         return value;
+    if (XR_IS_STRING(value)) {
+        XR_CHECK(xr_value_runtime_string_is_shared(value) ||
+                     xr_value_runtime_string_is_transferable(value),
+                 "channel string send requires verified shared or transferable domain");
+        return value;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;
@@ -77,6 +86,20 @@ static inline XrValue xr_chan_prepare_send_transfer_core(XrRuntimeCore *core, Xr
         return xr_chan_prepare_send_core(core, value);
     if (!XR_IS_PTR(value))
         return value;
+
+    if (XR_IS_STRING(value)) {
+        if (mode == XR_TRANSFER_COPY)
+            return xr_deep_copy_explicit_to_storage_core(
+                core, value, XR_OBJ_STORAGE_TRANSFER);
+        XR_CHECK(mode == XR_TRANSFER_SHARE &&
+                     xr_value_runtime_string_is_shared(value),
+                 "channel string share requires verified shared domain");
+        XR_CHECK(xr_runtime_object_header_retain(
+                     xr_value_runtime_object_header(value)) ==
+                     XR_RUNTIME_ABI_OK,
+                 "channel string share retain mismatch");
+        return value;
+    }
 
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
@@ -114,6 +137,18 @@ static inline XrValue xr_chan_prepare_send_transfer(struct XrVMRuntime *isolate,
 static inline void xr_chan_abandon_send_core(XrRuntimeCore *core, XrValue prepared) {
     if (!XR_IS_PTR(prepared))
         return;
+    if (XR_IS_STRING(prepared)) {
+        bool last = false;
+        XrRuntimeObjectHeader *header =
+            xr_value_runtime_object_header(prepared);
+        XR_CHECK(xr_runtime_object_header_release(header, &last) ==
+                     XR_RUNTIME_ABI_OK,
+                 "channel string release mismatch");
+        if (last)
+            XR_CHECK(xr_runtime_object_reclaim(header) == XR_RUNTIME_ABI_OK,
+                     "channel string reclaim mismatch");
+        return;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(prepared);
     if (!obj)
         return;
@@ -144,6 +179,12 @@ static inline XrValue xr_chan_take_recv_core(XrRuntimeCore *core, XrValue value,
     (void) recv_coro;
     if (!XR_IS_PTR(value))
         return value;
+    if (XR_IS_STRING(value)) {
+        XR_CHECK(xr_value_runtime_string_is_shared(value) ||
+                     xr_value_runtime_string_is_transferable(value),
+                 "channel string receive requires verified storage publication");
+        return value;
+    }
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;

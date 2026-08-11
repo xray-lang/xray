@@ -33,7 +33,7 @@ uint32_t xr_hash_string(XrString *str) {
     if (str->hash == 0) {
         uint32_t h = xr_string_hash(str->data, str->length);
         h = (h == 0) ? 1 : h;
-        if (!XR_OBJ_IS_SHARED(&str->hdr))
+        if (str->header.domain_id == XR_RUNTIME_STRING_DOMAIN_EXEC_LOCAL)
             str->hash = h;
         return h;
     }

@@ -39,6 +39,7 @@
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
 #include "../shared/xr_truthy_core.h"
+#include "../runtime/abi/xr_runtime_string_object.h"
 
 #if defined(__GNUC__) || defined(__clang__)
 typedef uint8_t xr_v16u8 __attribute__((vector_size(16)));
@@ -464,10 +465,10 @@ static inline int xrt_enum_key_eq(XrValue a, XrValue b) {
  *
  * XR_TAG_STR marks compiler-interned literals: the header is static const
  * data with the content hash precomputed at C generation time.
- * XR_TAG_STR_ARC marks runtime-allocated strings: header and bytes live in
- * one execution allocation, `data` points at the trailing bytes.
+ * XR_TAG_STR_ARC marks materialized runtime objects. Those values use the
+ * canonical XrString header-first inline-tail contract shared with the VM.
  *
- * `len` makes length O(1); `hash` caches the content hash for map keys and
+ * Length is O(1); `hash` caches the content hash for map keys and
  * equality short-circuits (0 = not computed yet; real hashes are never 0).
  * UTF-8 payloads stay NUL-terminated so C interop (`xr_str_data`) remains free.
  * ========================================================================= */
@@ -482,24 +483,59 @@ typedef struct {
     char *data; /* NUL-terminated bytes (trailing block for heap strings) */
 } xrt_str_t;
 
-static inline xrt_str_t *xr_str_hdr(XrValue v) {
-    return (xrt_str_t *) v.ptr;
+static inline xrt_str_t *xr_str_literal_header(XrValue v) {
+    return v.tag == XR_TAG_STR ? (xrt_str_t *) v.ptr : NULL;
 }
 
 static inline const char *xr_str_data(XrValue v) {
-    return ((const xrt_str_t *) v.ptr)->data;
+    return v.tag == XR_TAG_STR_ARC ? ((const XrString *) v.ptr)->data
+                                  : ((const xrt_str_t *) v.ptr)->data;
 }
 
 /* Writable bytes of a freshly allocated (not yet shared) string. */
 static inline char *xr_str_buf(XrValue v) {
-    return ((xrt_str_t *) v.ptr)->data;
+    return v.tag == XR_TAG_STR_ARC ? ((XrString *) v.ptr)->data
+                                  : ((xrt_str_t *) v.ptr)->data;
 }
 
 static inline int64_t xr_str_len(XrValue v) {
-    return ((const xrt_str_t *) v.ptr)->len;
+    return v.tag == XR_TAG_STR_ARC ? (int64_t) ((const XrString *) v.ptr)->length
+                                  : ((const xrt_str_t *) v.ptr)->len;
+}
+
+static inline void xr_str_set_len(XrValue v, uint32_t length) {
+    if (v.tag == XR_TAG_STR_ARC && v.ptr)
+        ((XrString *) v.ptr)->length = length;
+}
+
+static inline void xr_str_set_rune_len(XrValue v, uint32_t rune_length) {
+    if (v.tag == XR_TAG_STR_ARC && v.ptr)
+        ((XrString *) v.ptr)->rune_length = rune_length;
 }
 
 static inline int64_t xr_str_rune_len(XrValue v) {
+    if (v.tag == XR_TAG_STR_ARC) {
+        XrString *string = (XrString *) v.ptr;
+        if (!string || string->length == 0)
+            return 0;
+        if (string->rune_length != UINT32_MAX)
+            return (int64_t) string->rune_length;
+        const unsigned char *p = (const unsigned char *) string->data;
+        const unsigned char *end = p + string->length;
+        uint32_t count = 0;
+        while (p < end) {
+            unsigned char b = *p;
+            ptrdiff_t width = (b < 0x80u)              ? 1
+                              : ((b & 0xE0u) == 0xC0u) ? 2
+                              : ((b & 0xF0u) == 0xE0u) ? 3
+                              : ((b & 0xF8u) == 0xF0u) ? 4
+                                                       : 1;
+            p += width <= end - p ? width : 1;
+            count++;
+        }
+        string->rune_length = count;
+        return (int64_t) count;
+    }
     xrt_str_t *h = (xrt_str_t *) v.ptr;
     if (!h || !h->data || h->len <= 0)
         return 0;
@@ -534,9 +570,19 @@ static inline XrValue xr_str_lit(const xrt_str_t *hdr) {
 static inline XrValue xr_str_value_from_ptr(void *ptr) {
     if (!ptr)
         return (XrValue) {.tag = XR_TAG_NULL};
-    const xrt_str_t *hdr = (const xrt_str_t *) ptr;
     XrValue r = {0};
-    r.tag = (hdr->flags & XRT_STR_LITERAL) ? XR_TAG_STR : XR_TAG_STR_ARC;
+    const XrRuntimeObjectHeader *header =
+        (const XrRuntimeObjectHeader *) ptr;
+    /* Valid literal views are capped at uint32 length, so bytes 4-5 of their
+     * int64 length are zero. A materialized string stores the nonzero canonical
+     * object-kind encoding there. Raw frame reconstruction is therefore
+     * unambiguous without a legacy tag or an allocation-address heuristic. */
+    r.tag = header->object_kind == XR_RUNTIME_OBJECT_KIND_STRING &&
+                    header->flags == XR_RUNTIME_OBJECT_FLAG_NONE &&
+                    header->layout_id == XR_RUNTIME_STRING_LAYOUT_INDEX &&
+                    header->domain_id < XR_RUNTIME_STRING_DOMAIN_COUNT
+                ? XR_TAG_STR_ARC
+                : XR_TAG_STR;
     r.ptr = ptr;
     return r;
 }
@@ -552,6 +598,20 @@ static inline XrValue xr_str_value_from_ptr(void *ptr) {
  * The relaxed atomic store keeps concurrent lazy hashing well-defined:
  * every writer stores the same value. */
 static inline uint32_t xrt_str_hash(XrValue v) {
+    if (v.tag == XR_TAG_STR_ARC) {
+        XrString *string = (XrString *) v.ptr;
+        uint32_t cached = string->hash;
+        if (cached)
+            return cached;
+        uint32_t computed =
+            xr_hash_core_str_hash_bytes(string->data, string->length);
+#if defined(_MSC_VER)
+        _InterlockedExchange((volatile long *) &string->hash, (long) computed);
+#else
+        __atomic_store_n(&string->hash, computed, __ATOMIC_RELAXED);
+#endif
+        return computed;
+    }
     xrt_str_t *h = (xrt_str_t *) v.ptr;
     uint32_t cached = h->hash;
     if (cached)
@@ -969,15 +1029,16 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
     if (ta == XR_TAG_F64)
         return a.f == b.f;
     if (ta == XR_TAG_STR) {
-        const xrt_str_t *sa = (const xrt_str_t *) a.ptr;
-        const xrt_str_t *sb = (const xrt_str_t *) b.ptr;
-        if (sa == sb)
+        if (a.ptr == b.ptr)
             return 1;
-        if (sa->len != sb->len)
+        int64_t length = xr_str_len(a);
+        if (length != xr_str_len(b))
             return 0;
-        if (sa->hash && sb->hash && sa->hash != sb->hash)
+        uint32_t hash_a = xrt_str_hash(a);
+        uint32_t hash_b = xrt_str_hash(b);
+        if (hash_a != hash_b)
             return 0;
-        return memcmp(sa->data, sb->data, (size_t) sa->len) == 0;
+        return memcmp(xr_str_data(a), xr_str_data(b), (size_t) length) == 0;
     }
     if (ta == XR_TAG_AGG_REF) {
         if (a.ptr == b.ptr)

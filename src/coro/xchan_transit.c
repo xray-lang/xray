@@ -15,6 +15,8 @@
 void xr_chan_transit_release_core(XrRuntimeCore *core, XrValue value) {
     if (!XR_IS_PTR(value))
         return;
+    if (XR_IS_STRING(value))
+        return;
     XrObjHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj || !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
         return;

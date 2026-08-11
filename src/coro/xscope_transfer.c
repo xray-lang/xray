@@ -29,6 +29,15 @@ static XrValue scope_observe_for_owner(XrCoroutine *coro, XrScopeContext *scope,
     if (!coro || !scope || !scope->owner || XR_IS_NULL(value))
         return value;
     if (XR_IS_PTR(value)) {
+        if (XR_IS_STRING(value)) {
+            XR_CHECK(xr_value_runtime_string_is_shared(value),
+                     "linked scope string error requires shared publication");
+            XR_CHECK(xr_runtime_object_header_retain(
+                         xr_value_runtime_object_header(value)) ==
+                         XR_RUNTIME_ABI_OK,
+                     "linked scope string retain mismatch");
+            return value;
+        }
         XrObjHeader *obj = XR_VALUE_GCPTR(value);
         XR_CHECK(xr_obj_is_publishable_across_executions(obj),
                  "linked scope error requires compiler-planned shared publication");

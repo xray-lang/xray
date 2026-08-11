@@ -279,8 +279,10 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             bool was_main = xr_coro_flags_has(coro, XR_CORO_FLG_MAIN);
             if (done_task && (done_task->flags & XR_TASK_FLG_RESULT_COPY_SHARED) &&
                 XR_IS_PTR(coro->result)) {
-                XrObjHeader *result_obj = XR_VALUE_GCPTR(coro->result);
                 XrValue published = XR_NULL_VAL;
+                XrObjHeader *result_obj = XR_IS_STRING(coro->result)
+                                              ? NULL
+                                              : XR_VALUE_GCPTR(coro->result);
                 if (result_obj && XR_OBJ_GET_FLAG(result_obj, XR_OBJ_AOT_NATIVE) &&
                     XR_OBJ_GET_TYPE(result_obj) == XR_TINSTANCE) {
                     /* AOT sealed records are immutable Copy values backed by a
