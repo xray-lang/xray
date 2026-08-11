@@ -270,6 +270,17 @@ XR_FUNC bool xr_aot_rep_adapter_value_is_exact(
         return false;
     const XrTargetValueRepRecord *binding =
         xr_target_plan_value_rep(target_plan, source_value);
+    if (binding) {
+        const XrTargetMachineRepRecord *register_rep =
+            xr_target_plan_machine_rep(target_plan, binding->register_rep);
+        const XrTargetMachineRepRecord *memory_rep =
+            xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+        if (!register_rep || !memory_rep ||
+            register_rep->kind == XR_MACHINE_REP_VOID ||
+            memory_rep->kind == XR_MACHINE_REP_VOID)
+            return fail(error, error_size,
+                        "void values cannot source representation adapters");
+    }
     if (!binding) {
         const XrType *source_type = value->args[0]->type;
         if (!source_type || source_type->is_nullable ||

@@ -19,7 +19,7 @@ unsupported configurations.  A failed row cannot be relabelled as a skipped
 configuration.
 
 anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 0b7e445ee298f308423d42732230afd7647a93361c91a6b15e08fee31784bb95
-anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json e081cecbe5598dbc4fa413f0379f39223bdd6b111f80ab121a9aa2b200fa47d4
+anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 0daf23df128e105ab7bcc9a3bce1a7d3d2e289efae2cd65920e84bb39cbdf3d6
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json aa463ab2250f7f76eadb197b9e949f1b51a1f988b7a8b425c0e282fb4d102bf6
 anchor-sha256: contracts/target-machine/object-extent-inventory.json a3e9d3298cc2ff9e773c09fe71af90fe5c07c6f20f2c41eafe7e3c33cce3cf21
 anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc66576441dcdfa3b8b52ee606fb6256abefefa2e848310aed

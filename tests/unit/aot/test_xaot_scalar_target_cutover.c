@@ -430,6 +430,18 @@ static void test_plan_dump_rejects_missing_duplicate_and_residue_authority(void)
     missing.bundle.nvalue_plans--;
     REQUIRE(xaot_bundle_dump_plan(&missing.bundle) == NULL);
     missing.bundle.nvalue_plans++;
+    uint32_t saved_value_count = missing.bundle.nvalue_plans;
+    uint32_t saved_function_count = missing.bundle.nfunc_plans;
+    uint32_t saved_enum_count = missing.bundle.nenum_plans;
+    missing.bundle.nvalue_plans = missing.bundle.value_plan_cap + 1;
+    REQUIRE(xaot_bundle_dump_plan(&missing.bundle) == NULL);
+    missing.bundle.nvalue_plans = saved_value_count;
+    missing.bundle.nfunc_plans = missing.bundle.func_plan_cap + 1;
+    REQUIRE(xaot_bundle_dump_plan(&missing.bundle) == NULL);
+    missing.bundle.nfunc_plans = saved_function_count;
+    missing.bundle.nenum_plans = missing.bundle.enum_plan_cap + 1;
+    REQUIRE(xaot_bundle_dump_plan(&missing.bundle) == NULL);
+    missing.bundle.nenum_plans = saved_enum_count;
     cutover_bundle_free(&missing);
 
     CutoverBundle duplicate;
@@ -532,6 +544,12 @@ static void test_plan_dump_preserves_exact_enum_ordinal_authority(void) {
     ((XaotEnumPlan *) enum_plan)->layout_id++;
     REQUIRE(xaot_bundle_dump_plan(&bundle) == NULL);
     ((XaotEnumPlan *) enum_plan)->layout_id--;
+    XiEnumMemberData *mutable_members =
+        (XiEnumMemberData *) enum_plan->members;
+    uint32_t saved_ordinal = mutable_members[0].ordinal;
+    mutable_members[0].ordinal++;
+    REQUIRE(xaot_bundle_dump_plan(&bundle) == NULL);
+    mutable_members[0].ordinal = saved_ordinal;
     legacy->rep.flags = 0;
     REQUIRE(xaot_bundle_dump_plan(&bundle) == NULL);
     legacy->rep.flags = XAOT_VALUE_FLAG_ENUM;
@@ -728,6 +746,16 @@ static void test_exact_rep_adapter_family_and_mutations(void) {
     REQUIRE(xaot_verify_bundle(&unbox.bundle, XAOT_VERIFY_AOT_READY,
                                error, sizeof(error)));
     cutover_bundle_free(&unbox);
+
+    CutoverBundle void_source;
+    cutover_bundle_create(&void_source);
+    void_source.modules[0].release->rep = XR_REP_TAGGED;
+    (void) append_rep_adapter(
+        &void_source.modules[0], void_source.modules[0].release, XI_UNBOX,
+        XI_BACKEND_VALUE_REP_UNBOX, XR_REP_VOID);
+    cutover_bundle_bind_all(&void_source);
+    REQUIRE(!xaot_prepare_bundle(&void_source.bundle, NULL));
+    cutover_bundle_free(&void_source);
 
     CutoverBundle forged;
     cutover_bundle_create(&forged);

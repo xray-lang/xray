@@ -7830,7 +7830,9 @@ static const XaotEnumPlan *dump_legacy_enum_ordinal_plan(const XaotBundle *bundl
     XrType *type = value ? value->type : NULL;
     const XaotEnumPlan *plan;
 
-    if (!bundle || !legacy || legacy->rep.kind != XAOT_VALUE_SCALAR ||
+    if (!bundle || !legacy ||
+        !xaot_value_plan_is_exact_enum_ordinal_family(bundle, legacy) ||
+        legacy->rep.kind != XAOT_VALUE_SCALAR ||
         legacy->rep.rep != XAOT_REP_I64 || legacy->rep.flags != XAOT_VALUE_FLAG_ENUM ||
         legacy->rep.type != type || !legacy->rep.c_type ||
         strcmp(legacy->rep.c_type, "int64_t") != 0 || !type || type->is_nullable ||
@@ -7988,7 +7990,10 @@ static bool dump_validate_value_authorities(const XaotBundle *bundle) {
     uint64_t backend_adapters = 0;
     uint64_t target_bindings = 0;
 
-    if (!bundle || (bundle->nmodules && !bundle->modules) ||
+    if (!bundle || bundle->nfunc_plans > bundle->func_plan_cap ||
+        bundle->nvalue_plans > bundle->value_plan_cap ||
+        bundle->nenum_plans > bundle->enum_plan_cap ||
+        (bundle->nmodules && !bundle->modules) ||
         (bundle->nvalue_plans && !bundle->value_plans))
         return false;
     for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
