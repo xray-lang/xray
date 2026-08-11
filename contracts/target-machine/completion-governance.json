@@ -1,0 +1,236 @@
+{
+  "authorities": [
+    {
+      "id": "semantic-schema-v8",
+      "path": "src/plan/semantic/xr_semantic_ids.h",
+      "required_regex": [
+        "#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(8\\)"
+      ]
+    },
+    {
+      "id": "immutable-target-plan",
+      "path": "src/plan/target/xr_target_plan.h",
+      "required_regex": [
+        "typedef\\s+struct\\s+XrTargetPlan\\s+XrTargetPlan",
+        "xr_target_plan_is_frozen",
+        "xr_target_plan_is_verified",
+        "xr_target_plan_fingerprint"
+      ]
+    },
+    {
+      "id": "exact-xtp-artifact",
+      "path": "src/plan/format/xr_xtp_schema.h",
+      "required_regex": [
+        "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(2\\)",
+        "XR_XTP_MAX_ARTIFACT_SIZE",
+        "xr_xtp_decode_candidate"
+      ]
+    },
+    {
+      "id": "runtime-target-authority",
+      "path": "src/runtime/abi/xr_runtime_target_authority.h",
+      "required_regex": [
+        "typedef\\s+struct\\s+XrRuntimeTargetAuthority",
+        "xr_runtime_target_authority_native_hosted"
+      ]
+    },
+    {
+      "id": "runtime-artifact-authority",
+      "path": "src/runtime/xr_runtime_artifact_verify.c",
+      "required_regex": [
+        "xr_runtime_artifact_authority_verify",
+        "xr_runtime_artifact_authority_bind_candidate",
+        "xr_runtime_artifact_authority_bind_plan",
+        "independently verified TargetPlan"
+      ]
+    },
+    {
+      "id": "runtime-xtp-load-boundary",
+      "path": "src/runtime/xr_target_plan_load.c",
+      "required_regex": [
+        "accepts only XTP v2 bytes",
+        "xr_runtime_artifact_authority_bind_candidate",
+        "xr_runtime_artifact_authority_bind_plan"
+      ]
+    }
+  ],
+  "checker": "target-machine-completion-governance/2",
+  "dual_owner": {
+    "inventory": "contracts/target-machine/semantic-owner-inventory.json",
+    "mechanical_adapter": "representation adapter"
+  },
+  "evidence": {
+    "default_directory": "build/target-machine-completion-evidence",
+    "required_files": {
+      "activation-generation": "activation-generation.json",
+      "dependency-graph": "dependency-graph.json",
+      "full-validation": "full-validation.json",
+      "installed": "installed.json",
+      "matrix": "matrix.json",
+      "runtime-reachability": "runtime-reachability.json",
+      "symbol": "symbol.json"
+    }
+  },
+  "input_identity": {
+    "algorithm": "sha256",
+    "files": [
+      "CMakeLists.txt",
+      "contracts/ownership-audit-foundation.md",
+      "contracts/target-machine/aot-plan-destination-inventory.json",
+      "contracts/target-machine/baseline-manifest.json",
+      "contracts/target-machine/diagnostic-codes.toml",
+      "contracts/target-machine/id-and-fingerprint-policy.toml",
+      "contracts/target-machine/legacy-product-residue.json",
+      "contracts/target-machine/legacy-vm-inventory.json",
+      "contracts/target-machine/object-extent-inventory.json",
+      "contracts/target-machine/semantic-owner-inventory.json",
+      "contracts/target-machine/validation-matrix.json",
+      "scripts/check_target_machine_completion.py",
+      "src/plan/format/xr_xtp_schema.h",
+      "src/plan/semantic/xr_semantic_ids.h",
+      "src/plan/target/xr_target_plan.h",
+      "src/plan/target/xr_target_verify.c",
+      "src/runtime/abi/xr_runtime_target_authority.c",
+      "src/runtime/abi/xr_runtime_target_authority.h",
+      "src/runtime/xr_runtime_artifact_authority.c",
+      "src/runtime/xr_runtime_artifact_verify.c",
+      "src/runtime/xr_target_plan_load.c",
+      "tests/target-machine/phase0/coroutine_vertical/report.json",
+      "tests/target-machine/phase0/typed_slot_calibration/report.json"
+    ],
+    "sha256": "7d5f26cf2b6d08bba5ed921d2b8faca298794cc14b2d60394c58a6c1bad4f359"
+  },
+  "installed": {
+    "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
+    "forbidden_text_regex": "(?i)(?:\\.xrc\\b|\\bxray_vm_[A-Za-z0-9_]+\\b|\\bxr_(?:bytecode_[A-Za-z0-9_]+|detect_output_format|eval_bytecode|output_c_source|run_bytecode_file)\\b|xbytecode_io\\.h|xopcode_def\\.h)",
+    "required_deliverables": [
+      "xray-cli",
+      "libxray-exec-core",
+      "libxray-vm",
+      "libxray-compiler"
+    ],
+    "required_public_headers": [
+      "include/xray/runtime.h"
+    ]
+  },
+  "inventories": {
+    "aot_plan": "contracts/target-machine/aot-plan-destination-inventory.json",
+    "legacy_product": "contracts/target-machine/legacy-product-residue.json",
+    "legacy_vm": "contracts/target-machine/legacy-vm-inventory.json"
+  },
+  "matrix": {
+    "policy": "contracts/target-machine/validation-matrix.json",
+    "qualifying_tiers": [
+      "supported",
+      "ci-only"
+    ],
+    "required_artifact_routes": [
+      "source-to-xsm",
+      "xsm-to-xtp",
+      "xtp-to-vm",
+      "target-plan-to-native",
+      "runtime-only-embed",
+      "hosted-fragment",
+      "generation-lifecycle"
+    ],
+    "required_dimensions": [
+      "target",
+      "provider",
+      "artifact_route",
+      "executor_or_generation",
+      "build_or_sanitizer"
+    ]
+  },
+  "policy": {
+    "accepted_evidence_status": [
+      "passed",
+      "unsupported"
+    ],
+    "compatibility_or_fallback": "forbidden",
+    "missing_or_unclassified": "error",
+    "residue_count": 0,
+    "self_certifying_write": "forbidden",
+    "skip_or_allowlist": "forbidden"
+  },
+  "residue_scan": {
+    "definition_paths": [
+      "scripts/check_target_machine_completion.py"
+    ],
+    "roots": [
+      ".github",
+      "CMakeLists.txt",
+      "cmake",
+      "demos",
+      "include",
+      "scripts",
+      "src",
+      "stdlib",
+      "tests",
+      "tools"
+    ],
+    "rules": [
+      {
+        "id": "legacy-xrc",
+        "path_regex": "(?i)(?:^|/)(?:xbytecode_io\\.[ch]|[^/]*\\.xrc)$",
+        "text_regex": "(?i)(?:\\.xrc\\b|\\bXR_ARTIFACT_KIND_LEGACY_XRC\\b|\\bXR_(?:BC_MAGIC|BC_VERSION|LEGACY_XRC_VERSION)\\b|\\bxr_bytecode_[A-Za-z0-9_]+\\b|xbytecode_io)"
+      },
+      {
+        "id": "legacy-vm",
+        "path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|xvm(?:_[^/]*)?\\.[ch]|xvm_[^/]*\\.inc\\.c)$",
+        "text_regex": "(?i)(?:\\bxray_vm_[A-Za-z0-9_]+\\b|\\bXr(?:VMRuntime|VMConfig|VMBackendType|BytecodeModule|BytecodeBundle)\\b|\\bxr_vm_(?:interpret_proto|proto_[A-Za-z0-9_]+|run_closure_blocking|call_closure|prepare_entry)\\b)"
+      },
+      {
+        "id": "legacy-opcode",
+        "path_regex": "(?i)(?:^|/)xopcode_def\\.h$",
+        "text_regex": "(?:\\bXrOpcode\\b|\\bOP_[A-Z][A-Z0-9_]+\\b|\\bXR_OPCODE_[A-Z0-9_]+\\b|xopcode_def\\.h)"
+      },
+      {
+        "id": "legacy-tagged-frame",
+        "path_regex": "(?i)(?:^|/)(?:xchunk\\.h|xinstruction\\.h)$",
+        "text_regex": "(?:\\bXrBcCallFrame\\b|\\bXR_TAG_PLACE\\b|\\bmaxstacksize\\b|\\bXrValue\\s*(?:\\*+\\s*)?(?:base|registers|regs|slots|stack|stack_buf|stack_top)\\b)"
+      },
+      {
+        "id": "legacy-xaot-plan",
+        "path_regex": "(?!)",
+        "text_regex": "\\bXaot[A-Za-z0-9_]*(?:Plan|Rep|Abi)\\b"
+      }
+    ]
+  },
+  "runtime_reachability": {
+    "required_lanes": {
+      "bytecode-flag-negative": "rejected-before-activation",
+      "legacy-api-negative": "rejected-before-activation",
+      "runtime-only-link": "linked-and-passed",
+      "source-eval-negative": "rejected-before-activation",
+      "xrc-negative": "rejected-before-activation",
+      "xtp-positive": "activated-and-passed"
+    }
+  },
+  "schema": 2,
+  "symbols": {
+    "forbidden_regex": "(?i)(?<![A-Za-z0-9_])_?(?:xray_vm_[A-Za-z0-9_]+|xr_vm_[A-Za-z0-9_]+|xr_(?:bytecode_[A-Za-z0-9_]+|detect_output_format|eval_bytecode|output_c_source|run_bytecode_file)|XrOpcode)\\b"
+  },
+  "validation": {
+    "required_lanes": [
+      "unit",
+      "regression",
+      "compile-error",
+      "aot",
+      "generated-c",
+      "vm",
+      "stdlib",
+      "ffi",
+      "coroutine",
+      "concurrency",
+      "contract",
+      "asan-ubsan",
+      "tsan",
+      "fuzz",
+      "model-stress",
+      "portability",
+      "performance",
+      "runtime-embedding",
+      "installer-package"
+    ]
+  }
+}

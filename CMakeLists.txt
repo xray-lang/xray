@@ -4067,6 +4067,33 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    # The terminal product check remains explicit while legacy owners are reachable.
+    # Register it with CTest only in the atomic change that deletes those owners.
+    add_custom_target(target_machine_completion_governance
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_target_machine_completion.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --evidence-root
+                ${CMAKE_BINARY_DIR}/target-machine-completion-evidence
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Checking terminal-zero target-machine completion evidence"
+        VERBATIM
+    )
+
+    add_test(
+        NAME target_machine_completion_governance_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_target_machine_completion.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_machine_completion_governance_self_test PROPERTIES
+        LABELS "meta;target-machine;governance;residue"
+        PROCESSORS 1
+        TIMEOUT 180
+    )
+
     add_test(
         NAME target_machine_baseline_runner_self_test
         COMMAND ${XRAY_PYTHON}
