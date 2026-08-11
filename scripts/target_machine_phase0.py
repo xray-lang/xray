@@ -15,6 +15,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 
 if sys.version_info < (3, 11):
     raise SystemExit("target_machine_phase0.py requires Python 3.11 or newer")
@@ -32,10 +33,15 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="strict")
 
 
+def canonical_source_bytes(data: bytes) -> bytes:
+    """Return the repository-canonical bytes for governed text inputs."""
+    return data.replace(b"\r\n", b"\n")
+
+
 def sha256_paths(root: Path, paths: Iterable[str]) -> str:
     digest = hashlib.sha256()
     for relative in sorted(set(paths)):
-        data = (root / relative).read_bytes()
+        data = canonical_source_bytes((root / relative).read_bytes())
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
         digest.update(len(data).to_bytes(8, "big"))
@@ -645,11 +651,30 @@ def run(root: Path, write: bool) -> int:
     return 0
 
 
+def self_test() -> int:
+    relative = "governed.txt"
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        path = root / relative
+        path.write_bytes(b"first\nsecond\n")
+        lf_fingerprint = sha256_paths(root, [relative])
+        path.write_bytes(b"first\r\nsecond\r\n")
+        crlf_fingerprint = sha256_paths(root, [relative])
+    if lf_fingerprint != crlf_fingerprint:
+        print("target-machine Phase 0 inventory self-test: FAIL", file=sys.stderr)
+        return 1
+    print("target-machine Phase 0 inventory self-test: PASS")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", default=".")
     parser.add_argument("--write", action="store_true")
+    parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
+    if args.self_test:
+        return self_test()
     root = Path(args.root).resolve()
     try:
         return run(root, args.write)

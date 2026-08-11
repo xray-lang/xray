@@ -3827,6 +3827,18 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME target_machine_inventory_self_test
+        COMMAND ${XRAY_PYTHON} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/target_machine_phase0.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_machine_inventory_self_test PROPERTIES
+        LABELS "meta;target-machine;contracts"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME target_machine_baseline_runner_self_test
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/phase0/run_baseline.py
