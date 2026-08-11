@@ -294,6 +294,20 @@ CONTRACT_SPECS = (
         ),
     ),
     ContractSpec(
+        "runtime-generation-lifecycle.md",
+        (
+            "include/xray_runtime_generation.h",
+            "src/runtime/xr_module_generation_internal.h",
+            "src/runtime/xr_module_generation.c",
+            "src/runtime/xr_module_generation_verify.c",
+            "contracts/target-machine/diagnostic-codes.toml",
+            "tests/unit/runtime/test_runtime_generation.c",
+            "tests/unit/runtime/test_runtime_generation_archive.c",
+            "tests/install/run_installed_runtime_symbol_tests.py",
+            "tests/install/run_install_public_surface_tests.py",
+        ),
+    ),
+    ContractSpec(
         "ownership-audit-foundation.md",
         (
             "CMakeLists.txt",

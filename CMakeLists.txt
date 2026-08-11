@@ -4306,6 +4306,7 @@ install(TARGETS xray_vm_runtime
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/xray_export.h
     ${CMAKE_SOURCE_DIR}/include/xray_target_plan_load.h
+    ${CMAKE_SOURCE_DIR}/include/xray_runtime_generation.h
     DESTINATION include/xray
     COMPONENT XrayCore
 )
@@ -4325,6 +4326,7 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
     FILES_MATCHING PATTERN "*.h"
     PATTERN "xray_export.h" EXCLUDE
     PATTERN "xray_target_plan_load.h" EXCLUDE
+    PATTERN "xray_runtime_generation.h" EXCLUDE
 )
 
 # Generated AOT C includes xrt headers whose relative includes reach into the

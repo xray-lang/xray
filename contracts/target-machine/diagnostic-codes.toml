@@ -243,3 +243,23 @@ message = "verified execution or decoding exceeded a declared hard resource budg
 id = "XR_EXEC_5004"
 name = "target-plan-activation-unavailable"
 message = "a verified TargetPlan has no installed typed activation authority"
+
+[[code]]
+id = "XR_EXEC_5005"
+name = "invalid-generation-transition"
+message = "loaded module generation attempted an illegal lifecycle transition"
+
+[[code]]
+id = "XR_EXEC_5006"
+name = "generation-still-pinned"
+message = "loaded module generation cannot retire, unload, or release its authority while pinned"
+
+[[code]]
+id = "XR_EXEC_5007"
+name = "invalid-generation-poison"
+message = "loaded module generation poison identity is missing, conflicting, or too late"
+
+[[code]]
+id = "XR_EXEC_5008"
+name = "generation-identity-mismatch"
+message = "loaded module generation identity, state, or counter proof is invalid"

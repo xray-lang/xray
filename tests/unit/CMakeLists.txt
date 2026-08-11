@@ -319,6 +319,16 @@ target_link_libraries(test_runtime_target_plan_load_archive PRIVATE
     xray_vm_runtime)
 add_test(NAME test_runtime_target_plan_load_archive
     COMMAND $<TARGET_FILE:test_runtime_target_plan_load_archive>)
+add_xray_unit_test(test_runtime_generation
+    runtime/test_runtime_generation.c)
+add_executable(test_runtime_generation_archive
+    runtime/test_runtime_generation_archive.c)
+target_include_directories(test_runtime_generation_archive PRIVATE
+    ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(test_runtime_generation_archive PRIVATE
+    xray_vm_runtime)
+add_test(NAME test_runtime_generation_archive
+    COMMAND $<TARGET_FILE:test_runtime_generation_archive>)
 add_xray_unit_test(test_typed_frame vm/test_typed_frame.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_executable(test_typed_frame_runtime_archive

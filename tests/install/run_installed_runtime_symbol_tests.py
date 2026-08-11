@@ -30,6 +30,21 @@ REQUIRED = {
     "xr_runtime_artifact_authority_verify",
     "xr_runtime_target_authority_native_hosted",
     "xr_runtime_target_plan_load",
+    "xr_runtime_generation_activation_available",
+    "xr_runtime_generation_authority_create",
+    "xr_runtime_generation_authority_destroy",
+    "xr_module_generation_activate",
+    "xr_module_generation_begin_drain",
+    "xr_module_generation_load_verified_target_plan",
+    "xr_module_generation_pin_acquire",
+    "xr_module_generation_pin_release",
+    "xr_module_generation_poison",
+    "xr_module_generation_prepare",
+    "xr_module_generation_retire",
+    "xr_module_generation_rollback",
+    "xr_module_generation_snapshot",
+    "xr_module_generation_unload",
+    "xr_module_generation_verify",
     "xr_target_plan_free",
     "xr_target_plan_verify",
     "xr_target_profile_verify",
@@ -109,11 +124,15 @@ def compile_header(cc: Path, prefix: Path, work: Path) -> None:
     source = work / "target_plan_load_header_probe.c"
     source.write_text(
         "#include <xray_target_plan_load.h>\n"
+        "#include <xray_runtime_generation.h>\n"
         "static XrRuntimeArtifactAuthority *authority;\n"
         "static XrRuntimeArtifactAuthorityIdentity identity;\n"
         "static XrTargetPlan *plan;\n"
+        "static XrRuntimeGenerationAuthority *generation_authority;\n"
+        "static XrLoadedModuleGeneration *generation;\n"
         "int main(void) { return xr_runtime_artifact_authority_load_available() || "
-        "authority != 0 || plan != 0 || "
+        "xr_runtime_generation_activation_available() || "
+        "authority != 0 || plan != 0 || generation_authority != 0 || generation != 0 || "
         "identity.schema_version != 0; }\n",
         encoding="utf-8",
     )
@@ -172,6 +191,11 @@ def main() -> int:
             header = prefix / "include/xray/xray_target_plan_load.h"
             if not header.is_file():
                 raise AssertionError(f"installed load header is missing: {header}")
+            generation_header = prefix / "include/xray/xray_runtime_generation.h"
+            if not generation_header.is_file():
+                raise AssertionError(
+                    f"installed generation header is missing: {generation_header}"
+                )
             archive = prefix / f"lib/xray/vm/{host}/{archive_name}"
             if not archive.is_file():
                 raise AssertionError(f"installed runtime archive is missing: {archive}")
