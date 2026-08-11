@@ -13,10 +13,13 @@
  *   - PHI locals are declared at function top to avoid scope issues across labels.
  *   - Each basic block emits a label (L0:, L1:, ...).
  *   - PHI nodes are eliminated by inserting assignments before predecessor jumps.
- *   - Value representation (I64/F64/TAGGED) read from v->rep,
- *     populated by xi_opt_select_rep in the pipeline.
+ *   - Scalar/void C storage and spelling come from the immutable C emission
+ *     plan when its verified TargetPlan consumer seam is attached.
+ *   - Families not covered by that plan retain their existing Xaot lowering.
  */
 #include "xi_cgen.h"
+#include "emit_c/xr_c_emission_plan.h"
+#include "refine/xr_aot_scalar_value.h"
 #include "xaot_bundle.h"
 #include "xaot_callable.h"
 #include "xaot_link.h"
@@ -763,6 +766,8 @@ struct XiCgenCtx {
     size_t func_residues_cap;
     XiCgenCoroFrameStats coro_frame_stats;
     const XaotBundle *aot_bundle;
+    const XrTargetPlan *scalar_target_plan;
+    const XrCEmissionPlan *scalar_emission_plan;
     const XaotTarget *target;
     bool simd_active;
     CgWriter writer;
@@ -2487,6 +2492,106 @@ static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const Xi
 static void emit_value_generated_line_reset(XiCgenCtx *ctx, FILE *out, const XiValue *v);
 static void emit_debug_source_var_sync(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                        const XiValue *v);
+
+typedef enum CgScalarEmissionStatus {
+    CG_SCALAR_EMISSION_NOT_CONFIGURED = 0,
+    CG_SCALAR_EMISSION_NOT_COVERED,
+    CG_SCALAR_EMISSION_FOUND,
+    CG_SCALAR_EMISSION_ERROR,
+} CgScalarEmissionStatus;
+
+static CgScalarEmissionStatus cg_scalar_emission_fail(XiCgenCtx *ctx, const char *detail) {
+    if (ctx && !ctx->error) {
+        const char *prefix = detail && strncmp(detail, "XR_", 3) == 0 ? "" : "XR_TARGET_1001: ";
+        fprintf(stderr, "[xi_cgen] ERROR: %s%s\n", prefix,
+                detail ? detail : "scalar C emission failed");
+    }
+    if (ctx)
+        ctx->error = true;
+    return CG_SCALAR_EMISSION_ERROR;
+}
+
+/* Resolve only values that existed in the frozen SemanticPlan snapshot.
+ * Backend-only temporaries have ids beyond that snapshot and remain owned by
+ * the legacy, non-migrated lowering families. A covered scalar row, however,
+ * must have an exact immutable C emission record or code generation stops. */
+static CgScalarEmissionStatus cg_scalar_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                                      const XiValue *value,
+                                                      XrCScalarEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || (!ctx->scalar_target_plan && !ctx->scalar_emission_plan))
+        return CG_SCALAR_EMISSION_NOT_CONFIGURED;
+    if (!ctx->scalar_target_plan || !ctx->scalar_emission_plan || !value || !out)
+        return cg_scalar_emission_fail(ctx, "scalar C emission consumer input is missing");
+
+    if (!function && value->block)
+        function = value->block->func;
+    const XrSemanticPlan *semantic_plan =
+        xr_target_plan_semantic_plan(ctx->scalar_target_plan);
+    if (!function || !semantic_plan || function->semantic_plan != semantic_plan ||
+        function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
+        return cg_scalar_emission_fail(
+            ctx, "Xi function does not carry the scalar TargetPlan authority");
+
+    const XrSemanticFunctionRecord *semantic_function = xr_semantic_plan_function(
+        semantic_plan, function->semantic_plan_function_index);
+    if (!semantic_function)
+        return cg_scalar_emission_fail(ctx, "scalar semantic function record is missing");
+    if (value->id >= semantic_function->value_count)
+        return CG_SCALAR_EMISSION_NOT_COVERED;
+
+    uint32_t semantic_function_id = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    char error[256] = {0};
+    if (!xr_aot_scalar_semantic_value_id(ctx->scalar_target_plan, function, value,
+                                         &semantic_function_id, &semantic_value, error,
+                                         sizeof(error)))
+        return cg_scalar_emission_fail(ctx, error[0] ? error : "scalar identity lookup failed");
+    if (semantic_function_id != function->semantic_plan_function_index)
+        return cg_scalar_emission_fail(ctx, "scalar semantic function identity changed");
+
+    if (!xr_target_plan_value_rep(ctx->scalar_target_plan, semantic_value))
+        return CG_SCALAR_EMISSION_NOT_COVERED;
+    if (!xr_c_emission_plan_scalar_view(ctx->scalar_emission_plan, semantic_value, out, error,
+                                        sizeof(error)))
+        return cg_scalar_emission_fail(
+            ctx, error[0] ? error : "immutable scalar C emission binding is missing");
+    return CG_SCALAR_EMISSION_FOUND;
+}
+
+static bool cg_scalar_emission_storage_rep(XiCgenCtx *ctx,
+                                           const XrCScalarEmissionView *view,
+                                           XrRep *out) {
+    if (!view || !out)
+        return false;
+    switch ((XrCScalarRep) view->rep) {
+        case XR_C_SCALAR_REP_VOID:
+            *out = XR_REP_VOID;
+            return true;
+        case XR_C_SCALAR_REP_F32:
+        case XR_C_SCALAR_REP_F64:
+            *out = XR_REP_F64;
+            return true;
+        case XR_C_SCALAR_REP_I8:
+        case XR_C_SCALAR_REP_U8:
+        case XR_C_SCALAR_REP_I16:
+        case XR_C_SCALAR_REP_U16:
+        case XR_C_SCALAR_REP_I32:
+        case XR_C_SCALAR_REP_U32:
+        case XR_C_SCALAR_REP_I64:
+        case XR_C_SCALAR_REP_U64:
+        case XR_C_SCALAR_REP_ISIZE:
+        case XR_C_SCALAR_REP_USIZE:
+        case XR_C_SCALAR_REP_BOOL:
+        case XR_C_SCALAR_REP_RUNE:
+            *out = XR_REP_I64;
+            return true;
+        case XR_C_SCALAR_REP_COUNT: break;
+    }
+    (void) cg_scalar_emission_fail(ctx, "immutable scalar C representation is invalid");
+    return false;
+}
 #include "xi_cgen_abi_helpers.inc.c"
 
 static bool cg_closure_new_value_can_emit_null_for_unreachable_body(
@@ -3852,6 +3957,12 @@ static bool cg_class_descriptor_value_is_elided(XiCgenCtx *ctx, const XiFunc *cu
 static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (cg_array_value_uses_native_local(ctx, f, v))
         return "xrt_array_t *";
+    XrCScalarEmissionView scalar = {0};
+    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, f, v, &scalar);
+    if (scalar_status == CG_SCALAR_EMISSION_FOUND)
+        return scalar.c_type;
+    if (scalar_status == CG_SCALAR_EMISSION_ERROR)
+        return "XrValue";
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
     if (plan && plan->rep.c_type)
         return plan->rep.c_type;
@@ -3882,11 +3993,17 @@ static XrRep cg_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const Xi
  *   - a unit/void value keeps an XrValue slot, since declaring a `void` local is
  *     illegal C and such slots are never read as values. */
 static const char *cg_coro_decl_ctype(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    (void) f;
     if (cg_value_type_is_bool(v) && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64)
         return ctype_str(XR_REP_I64);
-    const XaotValuePlan *plan = cg_value_plan(ctx, v);
-    const char *t = (plan && plan->rep.c_type) ? plan->rep.c_type : local_ctype_str(v);
+    XrCScalarEmissionView scalar = {0};
+    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, f, v, &scalar);
+    if (scalar_status == CG_SCALAR_EMISSION_ERROR)
+        return "XrValue";
+    const char *t = scalar_status == CG_SCALAR_EMISSION_FOUND ? scalar.c_type : NULL;
+    if (!t) {
+        const XaotValuePlan *plan = cg_value_plan(ctx, v);
+        t = (plan && plan->rep.c_type) ? plan->rep.c_type : local_ctype_str(v);
+    }
     return (t && strcmp(t, "void") == 0) ? "XrValue" : t;
 }
 
@@ -5511,6 +5628,12 @@ static const XaotValuePlan *cg_debug_value_plan(XiCgenCtx *ctx, const XiValue *v
 static const char *cg_debug_value_ctype(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (cg_array_value_uses_native_local(ctx, f, v))
         return "xrt_array_t *";
+    XrCScalarEmissionView scalar = {0};
+    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, f, v, &scalar);
+    if (scalar_status == CG_SCALAR_EMISSION_FOUND)
+        return scalar.c_type;
+    if (scalar_status == CG_SCALAR_EMISSION_ERROR)
+        return "XrValue";
     const XaotValuePlan *plan = cg_debug_value_plan(ctx, v);
     if (plan && plan->rep.c_type)
         return plan->rep.c_type;
@@ -5520,6 +5643,14 @@ static const char *cg_debug_value_ctype(XiCgenCtx *ctx, const XiFunc *f, const X
 static XrRep cg_debug_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (cg_array_value_uses_native_local(ctx, f, v))
         return XR_REP_PTR;
+    XrCScalarEmissionView scalar = {0};
+    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, f, v, &scalar);
+    XrRep scalar_rep = XR_REP_VOID;
+    if (scalar_status == CG_SCALAR_EMISSION_FOUND)
+        return cg_scalar_emission_storage_rep(ctx, &scalar, &scalar_rep) ? scalar_rep
+                                                                        : XR_REP_VOID;
+    if (scalar_status == CG_SCALAR_EMISSION_ERROR)
+        return XR_REP_VOID;
     const XaotValuePlan *plan = cg_debug_value_plan(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }

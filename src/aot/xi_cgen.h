@@ -31,6 +31,8 @@
 typedef struct XiCgenCtx XiCgenCtx;
 typedef struct XaotBundle XaotBundle;
 typedef struct XaotTarget XaotTarget;
+typedef struct XrTargetPlan XrTargetPlan;
+typedef struct XrCEmissionPlan XrCEmissionPlan;
 
 typedef struct XiCgenCoroFrameStats {
     uint32_t coroutine_count;
@@ -118,6 +120,12 @@ typedef enum XiCgenCDialect {
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
 XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle);
+/* Attach the immutable scalar projection consumed by C emission. Both plans
+ * are borrowed and must outlive ctx. Once attached, a scalar value covered by
+ * TargetPlan is never recovered from the legacy Xaot/value/type model. */
+XR_FUNC bool xi_cgen_ctx_set_scalar_emission_plan(XiCgenCtx *ctx,
+                                                  const XrTargetPlan *target_plan,
+                                                  const XrCEmissionPlan *emission_plan);
 XR_FUNC void xi_cgen_ctx_set_target(XiCgenCtx *ctx, const XaotTarget *target, bool simd_active);
 XR_FUNC void xi_cgen_ctx_set_artifact_kind(XiCgenCtx *ctx, XaotArtifactKind artifact_kind);
 XR_FUNC void xi_cgen_ctx_set_freestanding_profile(XiCgenCtx *ctx, bool freestanding);

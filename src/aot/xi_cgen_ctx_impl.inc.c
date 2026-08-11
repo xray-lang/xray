@@ -117,6 +117,33 @@ XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle
         memset(ctx->enum_scalar_sidecar_used, 0, ctx->enum_scalar_sidecar_cap);
 }
 
+XR_FUNC bool xi_cgen_ctx_set_scalar_emission_plan(XiCgenCtx *ctx,
+                                                  const XrTargetPlan *target_plan,
+                                                  const XrCEmissionPlan *emission_plan) {
+    if (!ctx)
+        return false;
+    if (!target_plan || !emission_plan || !xr_target_plan_is_verified(target_plan) ||
+        !xr_c_emission_plan_is_verified(emission_plan)) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: XR_TARGET_1001: verified scalar C emission plans are missing\n");
+        ctx->error = true;
+        return false;
+    }
+    if (!xr_fingerprint_equal(xr_target_plan_fingerprint(target_plan),
+                              xr_c_emission_plan_target_fingerprint(emission_plan)) ||
+        !xr_fingerprint_equal(
+            xr_target_profile_fingerprint(xr_target_plan_profile(target_plan)),
+            xr_c_emission_plan_profile_fingerprint(emission_plan))) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: XR_TARGET_1000: scalar C emission plan fingerprint mismatch\n");
+        ctx->error = true;
+        return false;
+    }
+    ctx->scalar_target_plan = target_plan;
+    ctx->scalar_emission_plan = emission_plan;
+    return true;
+}
+
 XR_FUNC void xi_cgen_ctx_set_target(XiCgenCtx *ctx, const XaotTarget *target, bool simd_active) {
     if (ctx) {
         ctx->target = target;

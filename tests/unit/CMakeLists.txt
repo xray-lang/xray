@@ -260,6 +260,7 @@ add_xray_unit_test(test_xi_emit ir/test_xi_emit.c)
 add_xray_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_unit_test(test_xi_cgen ir/test_xi_cgen.c)
+target_sources(test_xi_cgen PRIVATE plan/target_profile_test_fixture.c)
 target_compile_definitions(test_xi_cgen PRIVATE
     XRAY_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )

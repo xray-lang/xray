@@ -40,6 +40,14 @@ static const XaotValuePlan *cg_value_plan(XiCgenCtx *ctx, const XiValue *v) {
 }
 
 static XrRep cg_value_plan_storage_rep(XiCgenCtx *ctx, const XiValue *v) {
+    XrCScalarEmissionView scalar = {0};
+    CgScalarEmissionStatus scalar_status = cg_scalar_emission_view(ctx, NULL, v, &scalar);
+    XrRep scalar_rep = XR_REP_VOID;
+    if (scalar_status == CG_SCALAR_EMISSION_FOUND)
+        return cg_scalar_emission_storage_rep(ctx, &scalar, &scalar_rep) ? scalar_rep
+                                                                        : XR_REP_VOID;
+    if (scalar_status == CG_SCALAR_EMISSION_ERROR)
+        return XR_REP_VOID;
     const XaotValuePlan *plan = cg_value_plan(ctx, v);
     return plan ? xaot_value_storage_rep(plan->rep) : XR_REP_VOID;
 }
@@ -798,8 +806,8 @@ static bool cg_value_box_inner_native_rep(XiCgenCtx *ctx, const XiValue *v, XrRe
     if (inner_plan && inner_plan->rep.kind == XAOT_VALUE_AGGREGATE)
         return false;
 
-    XrRep inner_rep = inner_plan ? xaot_value_storage_rep(inner_plan->rep)
-                                 : (ctx ? cg_value_plan_storage_rep(ctx, inner) : cg_rep(inner));
+    XrRep inner_rep = ctx ? cg_value_plan_storage_rep(ctx, inner)
+                          : (inner_plan ? xaot_value_storage_rep(inner_plan->rep) : cg_rep(inner));
     if (inner_rep == XR_REP_TAGGED || inner_rep == XR_REP_VOID)
         return false;
     if (out_rep)
@@ -821,8 +829,8 @@ static bool emit_const_value_as_rep_expr(XiCgenCtx *ctx, FILE *out, const XiValu
 
 static XrRep cg_emitted_value_storage_rep(XiCgenCtx *ctx, const XiValue *v,
                                           const XaotValuePlan *plan) {
-    XrRep rep = plan ? xaot_value_storage_rep(plan->rep)
-                     : (ctx ? cg_value_plan_storage_rep(ctx, v) : cg_rep(v));
+    XrRep rep = ctx ? cg_value_plan_storage_rep(ctx, v)
+                    : (plan ? xaot_value_storage_rep(plan->rep) : cg_rep(v));
     const XiFunc *owner = v && v->block ? v->block->func : NULL;
     if (!ctx || !v || v->op != XI_PARAM || !owner || !cg_func_needs_aot_coro_ctx(ctx, owner))
         return rep;
@@ -903,8 +911,7 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
          literal->type->kind == XR_KIND_RUNE || literal->type->kind == XR_KIND_FLOAT ||
          literal->type->kind == XR_KIND_NULL)) {
         const XaotValuePlan *literal_plan = cg_value_plan(ctx, literal);
-        XrRep from_rep = literal_plan ? xaot_value_storage_rep(literal_plan->rep)
-                                      : cg_value_plan_storage_rep(ctx, literal);
+        XrRep from_rep = cg_value_plan_storage_rep(ctx, literal);
         if (emit_const_value_as_rep_expr(ctx, out, literal, from_rep, target_rep))
             return;
     }
@@ -920,8 +927,8 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
     }
     const XaotValuePlan *plan = (ctx && v) ? cg_value_plan(ctx, v) : NULL;
     if (v && v->op == XI_CONST) {
-        XrRep from_rep = plan ? xaot_value_storage_rep(plan->rep)
-                              : (ctx ? cg_value_plan_storage_rep(ctx, v) : cg_rep(v));
+        XrRep from_rep = ctx ? cg_value_plan_storage_rep(ctx, v)
+                             : (plan ? xaot_value_storage_rep(plan->rep) : cg_rep(v));
         if (v->type && v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE) {
             const char *conv_suffix =
                 emit_conversion_prefix_ctx(ctx, out, v->type, from_rep, target_rep);

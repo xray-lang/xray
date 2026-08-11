@@ -15,6 +15,7 @@
 #include "../../../src/aot/xaot_prepare.h"
 #include "../../../src/aot/xaot_struct_name.h"
 #include "../../../src/aot/xaot_verify.h"
+#include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_arc.h"
@@ -24,6 +25,8 @@
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_plan.h"
+#include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/ir/xi_backend_lower.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/module/xnative_package.h"
@@ -41,6 +44,7 @@
 #include "../../../src/base/xglobal_indices.h"
 #include "../../../src/shared/xr_int_arith.h"
 #include "../../../include/xray.h"
+#include "../plan/target_profile_test_fixture.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -2652,6 +2656,106 @@ TEST(cgen_clean_narrow_arithmetic_keeps_required_constant_local) {
 
     printf("  Preserved clean-narrow constant local in %zu bytes of C code\n", strlen(code));
     xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
+    XrType u32_type = {
+        .kind = XR_KIND_INT, .id = 961, .scalar_rep = XR_NATIVE_U32, .frozen = true};
+    XiFunc *ir = xi_func_new("scalar_emission_consumer", &u32_type);
+    TEST_REQUIRE(ir != NULL, "scalar emission consumer function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "scalar emission consumer entry allocated");
+    entry->sealed = true;
+    ir->nparams = 1;
+    ir->min_params = 1;
+    ir->params = (XiValue **) xr_calloc(1, sizeof(*ir->params));
+    TEST_REQUIRE(ir->params != NULL, "scalar emission consumer parameter table allocated");
+    XiValue *parameter = xi_param(ir, entry, 0, &u32_type);
+    XiValue *one = xi_const_int(ir, entry, 1, &u32_type);
+    XiValue *sum = xi_value_new(ir, entry, XI_ADD, &u32_type, 2);
+    TEST_REQUIRE(parameter && one && sum, "scalar emission consumer values allocated");
+    ir->params[0] = parameter;
+    sum->args[0] = parameter;
+    sum->args[1] = one;
+    xi_block_set_return(entry, sum);
+    TEST_REQUIRE(test_prepare_backend_ir(ir), "scalar emission consumer backend prepared");
+
+    XiModule *module = xi_module_new("scalar_consumer.xr", "scalar_consumer", ir);
+    TEST_REQUIRE(module != NULL, "scalar emission consumer module allocated");
+    XiModule *modules[] = {module};
+    TestAotPlan legacy_plan;
+    test_aot_plan_prepare(&legacy_plan, modules, 1, 0);
+
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    TEST_REQUIRE(profile != NULL, "scalar emission consumer profile built");
+    XrTargetPlan *target_plan = NULL;
+    XrCEmissionPlan *emission_plan = NULL;
+    char error[512] = {0};
+    TEST_REQUIRE(xr_target_plan_build(ir->semantic_plan, profile, &target_plan, error,
+                                      sizeof(error)),
+                 "scalar emission consumer TargetPlan built");
+    TEST_REQUIRE(xr_c_emission_plan_build(target_plan,
+                                          xr_target_profile_fingerprint(profile),
+                                          &emission_plan, error, sizeof(error)),
+                 "scalar emission consumer C plan built");
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL, "scalar emission consumer context allocated");
+    xi_cgen_ctx_set_aot_bundle(ctx, &legacy_plan.bundle);
+    TEST_REQUIRE(xi_cgen_ctx_set_scalar_emission_plan(ctx, target_plan, emission_plan),
+                 "verified scalar emission plans attached");
+
+    /* Poison both legacy sources after the immutable plan is complete. The
+     * generated local must still use the target-selected uint32_t spelling and
+     * integer storage class. */
+    XaotValuePlan *legacy_value =
+        xaot_bundle_find_value_plan_mut(&legacy_plan.bundle, sum);
+    TEST_REQUIRE(legacy_value != NULL, "legacy scalar value plan found");
+    XaotValueRep saved_legacy_rep = legacy_value->rep;
+    uint8_t saved_xi_rep = sum->rep;
+    legacy_value->rep.kind = XAOT_VALUE_TAGGED;
+    legacy_value->rep.rep = XAOT_REP_TAGGED;
+    legacy_value->rep.c_type = "XrValue";
+    legacy_value->rep.flags = 0;
+    sum->rep = XR_REP_TAGGED;
+
+    char *buf = NULL;
+    size_t bufsz = 0;
+    FILE *mem = xr_open_memstream(&buf, &bufsz);
+    TEST_REQUIRE(mem != NULL, "scalar emission consumer stream opened");
+    xi_cgen_program(ctx, mem, module);
+    TEST_REQUIRE(xr_close_memstream(mem, &buf, &bufsz) == 0,
+                 "scalar emission consumer stream closed");
+    legacy_value->rep = saved_legacy_rep;
+    sum->rep = saved_xi_rep;
+
+    TEST_REQUIRE(!xi_cgen_has_error(ctx), "scalar emission consumer generated without error");
+    const char *fn = find_static_function_definition(buf, "scalar_emission_consumer");
+    TEST_REQUIRE(fn != NULL, "scalar emission consumer definition emitted");
+    const char *fn_end = strstr(fn, "\n}\n");
+    TEST_REQUIRE(fn_end != NULL, "scalar emission consumer definition terminated");
+    TEST_REQUIRE(contains_between(fn, fn_end, "uint32_t v2 ="),
+                 "immutable C emission plan owns scalar local spelling");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "XrValue v2"),
+                 "poisoned legacy scalar spelling is unreachable");
+
+    XiCgenCtx *missing = xi_cgen_ctx_new();
+    TEST_REQUIRE(missing != NULL, "missing-plan context allocated");
+    TEST_REQUIRE(!xi_cgen_ctx_set_scalar_emission_plan(missing, target_plan, NULL) &&
+                     xi_cgen_has_error(missing),
+                 "missing scalar emission plan fails closed");
+
+    xi_cgen_ctx_free(missing);
+    xr_free(buf);
+    xi_cgen_ctx_free(ctx);
+    xr_c_emission_plan_free(emission_plan);
+    xr_target_plan_free(target_plan);
+    xr_target_profile_free(profile);
+    test_aot_plan_free(&legacy_plan);
+    module->init = NULL;
+    xi_module_free(module);
     xi_func_free(ir);
 }
 
@@ -12237,6 +12341,7 @@ int main(void) {
     run_cgen_runtime_string_slice_constant_emits_immediate_without_local();
     run_cgen_typed_array_constants_emit_immediate_without_locals();
     run_cgen_clean_narrow_arithmetic_keeps_required_constant_local();
+    run_cgen_scalar_emission_plan_owns_local_rep_and_c_spelling();
     run_cgen_struct_fixed_array_index_keeps_required_constant_local();
     run_cgen_skips_unused_process_builtin_init();
     run_cgen_initializes_used_process_builtin();
