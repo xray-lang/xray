@@ -1,10 +1,10 @@
 {
   "authorities": [
     {
-      "id": "semantic-schema-v8",
+      "id": "semantic-schema-v12",
       "path": "src/plan/semantic/xr_semantic_ids.h",
       "required_regex": [
-        "#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(8\\)"
+        "#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(12\\)"
       ]
     },
     {
@@ -21,7 +21,7 @@
       "id": "exact-xtp-artifact",
       "path": "src/plan/format/xr_xtp_schema.h",
       "required_regex": [
-        "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(2\\)",
+        "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(3\\)",
         "XR_XTP_MAX_ARTIFACT_SIZE",
         "xr_xtp_decode_candidate"
       ]
@@ -48,7 +48,7 @@
       "id": "runtime-xtp-load-boundary",
       "path": "src/runtime/xr_target_plan_load.c",
       "required_regex": [
-        "accepts only XTP v2 bytes",
+        "accepts only XTP v3 bytes",
         "xr_runtime_artifact_authority_bind_candidate",
         "xr_runtime_artifact_authority_bind_plan"
       ]
@@ -98,7 +98,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "b08b92b2d8b3ca322c85cb6c022af7b92ea58b3f8099bcf8cf21807f952539ab"
+    "sha256": "de81257a074d84ad3d337026b392f5840ed0b595c4b1e7778f0d858ac34c7b71"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
