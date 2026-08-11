@@ -1217,6 +1217,17 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             *out_storage = XR_REP_TAGGED;
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
             return true;
+        case XI_GET_SHARED: {
+            XrRep machine_storage = XR_REP_TAGGED;
+            if (!oracle_machine_storage(ctx, semantic_value,
+                                        &machine_storage,
+                                        out_machine_kind))
+                return false;
+            /* Shared storage is tagged, while the exact target value row owns
+             * the only legal native adapter recipe for this scalar result. */
+            *out_storage = XR_REP_TAGGED;
+            return true;
+        }
         case XI_PHI:
             if (ctx->policy->force_phi_tagged) {
                 *out_storage = XR_REP_TAGGED;
@@ -1305,6 +1316,15 @@ static bool oracle_use_storage(const VerifyAuthority *ctx,
         case XI_CALL_BUILTIN:
             *out_storage = XR_REP_TAGGED;
             return true;
+        case XI_SET_SHARED:
+        case XI_PRINT: {
+            XrRep machine_storage = XR_REP_TAGGED;
+            if (!oracle_machine_storage(ctx, source_value, &machine_storage,
+                                        &ignored_kind))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
+        }
         case XI_ADD:
         case XI_SUB:
         case XI_MUL:

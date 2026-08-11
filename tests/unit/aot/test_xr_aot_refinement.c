@@ -70,6 +70,17 @@ typedef struct MaterializationFixture {
     XrTargetPlan *target_plan;
 } MaterializationFixture;
 
+typedef struct SharedScalarFixture {
+    XiFunc *function;
+    XiBlock *entry;
+    XiValue *constant;
+    XiValue *store;
+    XiValue *load;
+    XiValue *print;
+    XrTargetProfile *target_profile;
+    XrTargetPlan *target_plan;
+} SharedScalarFixture;
+
 typedef struct FailingBackend {
     bool begun;
     bool aborted;
@@ -119,6 +130,13 @@ static XrType scalar_bool = {
 static XrType scalar_string = {
     .kind = XR_KIND_STRING,
     .id = 3,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .frozen = true,
+};
+
+static XrType scalar_unit = {
+    .kind = XR_KIND_UNIT,
+    .id = 4,
     .scalar_rep = XR_SCALAR_REP_NONE,
     .frozen = true,
 };
@@ -269,6 +287,47 @@ static MaterializationFixture materialization_fixture_create(void) {
 }
 
 static void materialization_fixture_free(MaterializationFixture *fixture) {
+    xr_target_plan_free(fixture->target_plan);
+    xr_target_profile_free(fixture->target_profile);
+    xi_func_free(fixture->function);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
+static SharedScalarFixture shared_scalar_fixture_create(void) {
+    SharedScalarFixture fixture = {0};
+    fixture.function = xi_func_new("shared_scalar_representation",
+                                   &scalar_unit);
+    REQUIRE(fixture.function != NULL);
+    fixture.entry = xi_block_new(fixture.function);
+    REQUIRE(fixture.entry != NULL);
+    fixture.constant = xi_const_int(fixture.function, fixture.entry, 42,
+                                    &scalar_int);
+    fixture.store = xi_value_new(fixture.function, fixture.entry,
+                                 XI_SET_SHARED, &scalar_unit, 1);
+    fixture.load = xi_value_new(fixture.function, fixture.entry,
+                                XI_GET_SHARED, &scalar_int, 0);
+    fixture.print = xi_value_new(fixture.function, fixture.entry, XI_PRINT,
+                                 &scalar_unit, 1);
+    REQUIRE(fixture.constant && fixture.store && fixture.load && fixture.print);
+    fixture.store->aux_int = 0;
+    fixture.store->args[0] = fixture.constant;
+    fixture.load->aux_int = 0;
+    fixture.print->args[0] = fixture.load;
+    xi_block_set_return(fixture.entry, NULL);
+    fixture.function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(fixture.function, error,
+                                              sizeof(error)));
+    fixture.target_profile = build_target_profile();
+    REQUIRE(xr_target_plan_build(fixture.function->semantic_plan,
+                                 fixture.target_profile,
+                                 &fixture.target_plan, error,
+                                 sizeof(error)));
+    return fixture;
+}
+
+static void shared_scalar_fixture_free(SharedScalarFixture *fixture) {
     xr_target_plan_free(fixture->target_plan);
     xr_target_profile_free(fixture->target_profile);
     xi_func_free(fixture->function);
@@ -600,6 +659,86 @@ static void test_immutable_authority_matches_backend_materialization(void) {
 
     xr_aot_refinement_plan_free(plan);
     materialization_fixture_free(&fixture);
+}
+
+static void test_scalar_shared_boundary_is_exact_and_fail_closed(void) {
+    SharedScalarFixture fixture = shared_scalar_fixture_create();
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, &policy, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count == 1);
+    const XrAotRepresentationAdapterRecord *adapter =
+        &view.records[0].representation_adapter;
+    REQUIRE(adapter->adapter_kind == XR_AOT_REP_ADAPTER_BOX);
+    REQUIRE(adapter->input_rep_kind == XR_MACHINE_REP_I64);
+    REQUIRE(adapter->output_rep_kind == XR_MACHINE_REP_DYN_VALUE);
+    const XrSemanticOperationRecord *use = xr_semantic_plan_operation(
+        fixture.function->semantic_plan, adapter->use_operation);
+    REQUIRE(use != NULL && use->opcode == XI_SET_SHARED);
+
+    xi_opt_refresh_representations_with_policy(fixture.function, &policy);
+    REQUIRE(fixture.store->args[0] != NULL &&
+            fixture.store->args[0]->op == XI_BOX &&
+            fixture.store->args[0]->backend_origin ==
+                XI_BACKEND_VALUE_REP_BOX);
+    REQUIRE(fixture.store->args[0]->args[0] == fixture.constant);
+    REQUIRE(fixture.print->args[0] == fixture.load);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    XiValue *box = fixture.store->args[0];
+    fixture.store->args[0] = fixture.constant;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_REPRESENTATION);
+    fixture.store->args[0] = box;
+
+    box->args[0] = fixture.load;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_REPRESENTATION);
+    box->args[0] = fixture.constant;
+
+    fixture.store->aux_int++;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
+    fixture.store->aux_int--;
+
+    xr_aot_refinement_plan_free(plan);
+    shared_scalar_fixture_free(&fixture);
+
+    XiFunc *unsupported = xi_func_new("shared_string_representation",
+                                      &scalar_unit);
+    REQUIRE(unsupported != NULL);
+    XiBlock *entry = xi_block_new(unsupported);
+    XiValue *text = xi_const_str(unsupported, entry, "not-scalar",
+                                 &scalar_string);
+    XiValue *store = xi_value_new(unsupported, entry, XI_SET_SHARED,
+                                  &scalar_unit, 1);
+    REQUIRE(entry && text && store);
+    store->args[0] = text;
+    xi_block_set_return(entry, NULL);
+    unsupported->stage = XI_STAGE_OPTIMIZED;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(unsupported, error,
+                                              sizeof(error)));
+    XrTargetProfile *profile = build_target_profile();
+    XrTargetPlan *target_plan = NULL;
+    REQUIRE(xr_target_plan_build(unsupported->semantic_plan, profile,
+                                 &target_plan, error, sizeof(error)));
+    plan = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target_plan, &policy, &plan, &diag));
+    REQUIRE(plan == NULL);
+    REQUIRE(diag.issue ==
+            XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
+    xr_target_plan_free(target_plan);
+    xr_target_profile_free(profile);
+    xi_func_free(unsupported);
 }
 
 static void test_authority_rejects_string_without_machine_layout(void) {
@@ -1524,6 +1663,7 @@ int main(void) {
     test_null_and_test_backends_cover_refusal();
     test_representation_adapters_are_immutable_and_consumable();
     test_immutable_authority_matches_backend_materialization();
+    test_scalar_shared_boundary_is_exact_and_fail_closed();
     test_authority_rejects_string_without_machine_layout();
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();

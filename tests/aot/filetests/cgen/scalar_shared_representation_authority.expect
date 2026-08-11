@@ -1,0 +1,4 @@
+c_contains=XrValue xrt_shared[1]
+c_contains=XR_FROM_INT(
+c_contains=XR_TO_INT(xrt_shared[0])
+c_syntax=pass
