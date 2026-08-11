@@ -16,6 +16,7 @@
 #include "xr_target_verify.h"
 #include "xr_target_plan_internal.h"
 #include "xr_target_profile_internal.h"
+#include "../../ir/xi.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../../base/xmalloc.h"
 #include "../../runtime/value/xtype.h"
@@ -39,6 +40,13 @@ static bool checked_u32_add(uint32_t left, uint32_t right, uint32_t *out) {
     if (left > UINT32_MAX - right)
         return false;
     *out = left + right;
+    return true;
+}
+
+static bool checked_align_u32(uint32_t value, uint32_t alignment, uint32_t *out) {
+    if (!is_power_of_two(alignment) || value > UINT32_MAX - alignment + 1u)
+        return false;
+    *out = (value + alignment - 1u) & ~(alignment - 1u);
     return true;
 }
 
@@ -195,7 +203,7 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
         return report(error, error_size, "XR_TARGET_1000",
                       "target profile is not frozen");
     const XrTargetProfileDraft *facts = &profile->facts;
-    if (facts->schema_version != XR_TARGET_PLAN_SCHEMA_VERSION ||
+    if (facts->schema_version != XR_TARGET_PROFILE_SCHEMA_VERSION ||
         facts->architecture <= XR_TARGET_ARCH_NONE || facts->architecture >= XR_TARGET_ARCH_COUNT ||
         facts->operating_system <= XR_TARGET_OS_NONE ||
         facts->operating_system >= XR_TARGET_OS_COUNT ||
@@ -559,24 +567,86 @@ static int semantic_type_expected_rep(const XrSemanticTypeRecord *type, uint16_t
             return -1;
         case XR_KIND_BOOL:
             /* Bool is canonical in the semantic schema and carries no native scalar spelling. */
-            if (type->scalar_rep != 0)
+            if (type->scalar_rep != XR_SCALAR_REP_NONE)
                 return -1;
             *out_kind = XR_MACHINE_REP_I1;
             return 1;
         case XR_KIND_RUNE:
-            if (type->scalar_rep != 0)
+            if (type->scalar_rep != XR_SCALAR_REP_NONE)
                 return -1;
             *out_kind = XR_MACHINE_REP_RUNE;
             return 1;
         case XR_KIND_UNIT:
         case XR_KIND_NEVER:
-            if (type->scalar_rep != 0)
+            if (type->scalar_rep != XR_SCALAR_REP_NONE)
                 return -1;
             *out_kind = XR_MACHINE_REP_VOID;
             return 1;
         default:
             return 0;
     }
+}
+
+static const XrSemanticParameterRecord *semantic_parameter_for_value(
+    const XrSemanticPlan *plan, uint32_t function, uint32_t value) {
+    uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(plan);
+    for (uint32_t i = 0; i < parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, i);
+        if (parameter && parameter->function == function && parameter->value == value)
+            return parameter;
+    }
+    return NULL;
+}
+
+static bool reconstruct_scalar_slot_identity(const XrTargetPlan *plan,
+                                             const XrTargetSlotRecord *slot,
+                                             uint32_t semantic_value,
+                                             uint32_t semantic_function,
+                                             XrStableId *out) {
+    if (!slot || !out || slot->semantic_value != semantic_value ||
+        slot->function != semantic_function ||
+        slot->semantic_operation >= xr_semantic_plan_operation_count(plan->semantic_plan) ||
+        slot->logical_slot != XR_SEMANTIC_INDEX_NONE)
+        return false;
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(plan->semantic_plan, slot->semantic_operation);
+    if (!operation || operation->function != semantic_function ||
+        operation->result_value != semantic_value)
+        return false;
+    const XrSemanticParameterRecord *parameter =
+        semantic_parameter_for_value(plan->semantic_plan, semantic_function, semantic_value);
+    XrStableId source;
+    uint8_t expected_role;
+    if (parameter) {
+        if (operation->opcode != XI_PARAM)
+            return false;
+        expected_role = XR_TARGET_SLOT_PARAMETER;
+        source = parameter->id;
+    } else {
+        if (operation->opcode == XI_PARAM)
+            return false;
+        expected_role = operation->opcode == XI_PHI ? XR_TARGET_SLOT_PHI
+                                                    : XR_TARGET_SLOT_TEMPORARY;
+        source = operation->id;
+    }
+    if (slot->role != expected_role)
+        return false;
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(plan->semantic_plan, semantic_function);
+    if (!function)
+        return false;
+    char function_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char source_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[192];
+    xr_stable_id_hex(function->id, function_id);
+    xr_stable_id_hex(source, source_id);
+    int written = snprintf(key, sizeof(key),
+                           "xray-target-slot-v2:function=%s:role=%u:source=%s:logical=%u",
+                           function_id, (unsigned) expected_role, source_id,
+                           XR_SEMANTIC_INDEX_NONE);
+    XrFingerprint digest;
+    return written > 0 && (size_t) written < sizeof(key) &&
+           xr_stable_id_from_key(key, out, &digest);
 }
 
 static bool target_plan_has_layout_for_type(const XrTargetPlan *plan, uint32_t semantic_type) {
@@ -617,6 +687,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     const XrTargetFunctionRecord *target_function = &plan->functions[semantic_function];
     const XrTargetSlotRecord *slot = &plan->slots[record->slot];
     const XrTargetMachineRepRecord *memory = &plan->machine_reps[record->memory_rep];
+    XrStableId expected_slot_identity;
     if (target_function->id != semantic_function ||
         target_function->semantic_function != semantic_function ||
         !range_valid(target_function->slot_begin, target_function->slot_count,
@@ -624,6 +695,9 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         record->slot < target_function->slot_begin ||
         record->slot >= target_function->slot_begin + target_function->slot_count ||
         bound_slots[record->slot] || slot->function != semantic_function ||
+        !reconstruct_scalar_slot_identity(plan, slot, semantic_value, semantic_function,
+                                          &expected_slot_identity) ||
+        !xr_stable_id_equal(slot->identity, expected_slot_identity) ||
         slot->register_rep != record->register_rep || slot->memory_rep != record->memory_rep ||
         slot->size != memory->memory_size || slot->align != memory->memory_align ||
         slot->root_kind != XR_TARGET_ROOT_NONE ||
@@ -872,25 +946,34 @@ static bool verify_functions_and_slots(const XrTargetPlan *plan, char *error,
         const XrTargetFunctionRecord *function = &plan->functions[i];
         if (function->id != i || function->semantic_function != i ||
             function->slot_begin != next_slot || function->root_begin != next_root ||
-            function->cleanup_begin != next_cleanup ||
+            function->cleanup_begin != next_cleanup || function->reserved != 0 ||
             !range_valid(function->slot_begin, function->slot_count, plan->slots_count) ||
             !range_valid(function->root_begin, function->root_count, plan->root_maps_count) ||
             !range_valid(function->cleanup_begin, function->cleanup_count, plan->cleanups_count))
             return report(error, error_size, "XR_TARGET_1002",
                           "target function table range is invalid");
         uint32_t previous_end = 0;
+        uint32_t expected_frame_align = 1;
         for (uint32_t s = 0; s < function->slot_count; s++) {
             uint32_t slot_index = function->slot_begin + s;
             const XrTargetSlotRecord *slot = &plan->slots[slot_index];
             uint32_t slot_end = 0;
-            if (slot->id != slot_index || slot->function != i || !slot->size ||
+            uint32_t expected_offset = 0;
+            if (slot->id != slot_index || slot->function != i ||
+                stable_id_is_zero(slot->identity) || !slot->size ||
                 !is_power_of_two(slot->align) || slot->offset % slot->align != 0 ||
-                slot->offset < previous_end || !checked_u32_add(slot->offset, slot->size, &slot_end) ||
+                !checked_align_u32(previous_end, slot->align, &expected_offset) ||
+                slot->offset != expected_offset ||
+                !checked_u32_add(slot->offset, slot->size, &slot_end) ||
                 slot->register_rep >= plan->machine_reps_count ||
                 slot->memory_rep >= plan->machine_reps_count ||
+                slot->role <= XR_TARGET_SLOT_ROLE_INVALID ||
+                slot->role >= XR_TARGET_SLOT_ROLE_COUNT ||
                 slot->root_kind > XR_TARGET_ROOT_VIEW_OWNER ||
                 slot->ownership > XR_TARGET_OWNERSHIP_SHARED ||
-                slot->debug_variable != XR_SEMANTIC_INDEX_NONE)
+                slot->reserved != 0 || slot->debug_variable != XR_SEMANTIC_INDEX_NONE ||
+                (s && xr_stable_id_compare(plan->slots[slot_index - 1u].identity,
+                                           slot->identity) >= 0))
                 return report(error, error_size, "XR_TARGET_1002",
                               "slot or its bounded debug reference is invalid");
             const XrTargetMachineRepRecord *memory = &plan->machine_reps[slot->memory_rep];
@@ -899,8 +982,16 @@ static bool verify_functions_and_slots(const XrTargetPlan *plan, char *error,
                 slot->root_kind != memory->root_kind || slot->ownership != memory->ownership)
                 return report(error, error_size, "XR_TARGET_1002",
                               "slot disagrees with its memory representation");
+            if (slot->align > expected_frame_align)
+                expected_frame_align = slot->align;
             previous_end = slot_end;
         }
+        uint32_t expected_frame_size = 0;
+        if (!checked_align_u32(previous_end, expected_frame_align, &expected_frame_size) ||
+            function->frame_align != expected_frame_align ||
+            function->frame_size != expected_frame_size)
+            return report(error, error_size, "XR_TARGET_1002",
+                          "function frame does not exactly pack its slot range");
         next_slot += function->slot_count;
         next_root += function->root_count;
         next_cleanup += function->cleanup_count;

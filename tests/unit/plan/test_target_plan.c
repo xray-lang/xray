@@ -4,6 +4,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/plan/target/xr_target_verify.h"
@@ -43,8 +44,18 @@ typedef struct TargetFixture {
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 2, .frozen = true};
-static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 3, .frozen = true};
-static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 4, .frozen = true};
+static XrType stub_unit = {
+    .kind = XR_KIND_UNIT,
+    .id = 3,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+static XrType stub_bool = {
+    .kind = XR_KIND_BOOL,
+    .id = 4,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 static XrType stub_nullable_int = {
     .kind = XR_KIND_INT,
     .id = 5,
@@ -82,7 +93,7 @@ static XrSemanticPlan *build_semantic_plan(void) {
 
 static XrTargetProfile *build_profile(uint64_t extra_atomic_width) {
     XrTargetProfileDraft draft = {0};
-    draft.schema_version = XR_TARGET_PLAN_SCHEMA_VERSION;
+    draft.schema_version = XR_TARGET_PROFILE_SCHEMA_VERSION;
     draft.architecture = XR_TARGET_ARCH_X86_64;
     draft.operating_system = XR_TARGET_OS_WINDOWS;
     draft.environment = XR_TARGET_ENV_MSVC;
@@ -110,6 +121,63 @@ static XrTargetProfile *build_profile(uint64_t extra_atomic_width) {
         fprintf(stderr, "target profile failed: %s\n", error);
     REQUIRE(frozen && profile != NULL);
     return profile;
+}
+
+static uint32_t operation_for_value(const XrSemanticPlan *semantic, uint32_t value) {
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
+        if (operation && operation->result_value == value)
+            return i;
+    }
+    return XR_SEMANTIC_INDEX_NONE;
+}
+
+static const XrSemanticParameterRecord *parameter_for_value(const XrSemanticPlan *semantic,
+                                                            uint32_t function,
+                                                            uint32_t value) {
+    uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(semantic);
+    for (uint32_t i = 0; i < parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(semantic, i);
+        if (parameter && parameter->function == function && parameter->value == value)
+            return parameter;
+    }
+    return NULL;
+}
+
+static void fill_slot_source(const XrSemanticPlan *semantic, XrTargetSlotRecord *slot,
+                             uint32_t function, uint32_t value) {
+    uint32_t operation_index = operation_for_value(semantic, value);
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, operation_index);
+    const XrSemanticParameterRecord *parameter =
+        parameter_for_value(semantic, function, value);
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(semantic, function);
+    REQUIRE(operation && semantic_function && operation->function == function);
+    XrStableId source = operation->id;
+    slot->role = operation->opcode == XI_PHI ? XR_TARGET_SLOT_PHI
+                                             : XR_TARGET_SLOT_TEMPORARY;
+    if (parameter) {
+        REQUIRE(operation->opcode == XI_PARAM);
+        source = parameter->id;
+        slot->role = XR_TARGET_SLOT_PARAMETER;
+    }
+    slot->semantic_value = value;
+    slot->semantic_operation = operation_index;
+    slot->logical_slot = XR_SEMANTIC_INDEX_NONE;
+    char function_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char source_id[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[192];
+    xr_stable_id_hex(semantic_function->id, function_id);
+    xr_stable_id_hex(source, source_id);
+    int written = snprintf(key, sizeof(key),
+                           "xray-target-slot-v2:function=%s:role=%u:source=%s:logical=%u",
+                           function_id, (unsigned) slot->role, source_id,
+                           XR_SEMANTIC_INDEX_NONE);
+    XrFingerprint digest;
+    REQUIRE(written > 0 && (size_t) written < sizeof(key));
+    REQUIRE(xr_stable_id_from_key(key, &slot->identity, &digest));
 }
 
 static XrSemanticPlan *build_single_scalar_semantic(XrType *type) {
@@ -177,6 +245,8 @@ static bool freeze_single_scalar(XrSemanticPlan *semantic, XrTargetProfile *prof
         .id = 0,
         .semantic_function = 0,
         .slot_count = bind_value ? 1u : 0u,
+        .frame_size = bind_value ? (boolean_rep ? 1u : 8u) : 0u,
+        .frame_align = bind_value ? (boolean_rep ? 1u : 8u) : 1u,
     };
     XrTargetSlotRecord slot = {
         .id = 0,
@@ -188,6 +258,8 @@ static bool freeze_single_scalar(XrSemanticPlan *semantic, XrTargetProfile *prof
         .ownership = XR_TARGET_OWNERSHIP_TRIVIAL,
         .debug_variable = XR_SEMANTIC_INDEX_NONE,
     };
+    if (bind_value)
+        fill_slot_source(semantic, &slot, 0, semantic_function->value_begin);
     XrTargetPlanDraft draft = {
         .semantic_plan = semantic,
         .profile = profile,
@@ -278,8 +350,8 @@ static void fill_representation_fixture(TargetFixture *fixture, XrSemanticPlan *
     *out_string_layout = XR_SEMANTIC_INDEX_NONE;
 }
 
-static void fill_execution_fixture(TargetFixture *fixture, uint32_t int_layout,
-                                   uint32_t string_layout) {
+static void fill_execution_fixture(TargetFixture *fixture, XrSemanticPlan *semantic,
+                                   uint32_t int_layout, uint32_t string_layout) {
     (void) int_layout;
     (void) string_layout;
     fixture->functions[0] = (XrTargetFunctionRecord) {
@@ -287,6 +359,8 @@ static void fill_execution_fixture(TargetFixture *fixture, uint32_t int_layout,
         .semantic_function = 0,
         .slot_begin = 0,
         .slot_count = 2,
+        .frame_size = 16,
+        .frame_align = 8,
         .root_begin = 0,
         .root_count = 0,
         .cleanup_begin = 0,
@@ -303,6 +377,7 @@ static void fill_execution_fixture(TargetFixture *fixture, uint32_t int_layout,
         .ownership = XR_TARGET_OWNERSHIP_TRIVIAL,
         .debug_variable = XR_SEMANTIC_INDEX_NONE,
     };
+    fill_slot_source(semantic, &fixture->slots[0], 0, fixture->value_reps[0].semantic_value);
     fixture->slots[1] = (XrTargetSlotRecord) {
         .id = 1,
         .function = 0,
@@ -314,6 +389,19 @@ static void fill_execution_fixture(TargetFixture *fixture, uint32_t int_layout,
         .ownership = XR_TARGET_OWNERSHIP_TRIVIAL,
         .debug_variable = XR_SEMANTIC_INDEX_NONE,
     };
+    fill_slot_source(semantic, &fixture->slots[1], 0, fixture->value_reps[2].semantic_value);
+    if (xr_stable_id_compare(fixture->slots[0].identity, fixture->slots[1].identity) > 0) {
+        XrTargetSlotRecord temporary = fixture->slots[0];
+        fixture->slots[0] = fixture->slots[1];
+        fixture->slots[1] = temporary;
+    }
+    for (uint32_t i = 0; i < 2; i++) {
+        fixture->slots[i].id = i;
+        fixture->slots[i].offset = i * 8u;
+        for (uint32_t value = 0; value < 3; value++)
+            if (fixture->value_reps[value].semantic_value == fixture->slots[i].semantic_value)
+                fixture->value_reps[value].slot = i;
+    }
 }
 
 static void fill_draft(TargetFixture *fixture, XrSemanticPlan *semantic,
@@ -343,7 +431,7 @@ static void fill_fixture(TargetFixture *fixture, XrSemanticPlan *semantic,
     uint32_t int_layout;
     uint32_t string_layout;
     fill_representation_fixture(fixture, semantic, &int_layout, &string_layout);
-    fill_execution_fixture(fixture, int_layout, string_layout);
+    fill_execution_fixture(fixture, semantic, int_layout, string_layout);
     fill_draft(fixture, semantic, profile);
 }
 
@@ -509,11 +597,57 @@ static void test_plan_snapshot_and_determinism(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void test_builder_materializes_canonical_scalar_intents(void) {
+    XrSemanticPlan *semantic = build_semantic_plan();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *first = NULL;
+    XrTargetPlan *second = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &first, error, sizeof(error)));
+    REQUIRE(xr_target_plan_build(semantic, profile, &second, error, sizeof(error)));
+    REQUIRE(xr_fingerprint_equal(xr_target_plan_fingerprint(first),
+                                 xr_target_plan_fingerprint(second)));
+    REQUIRE(first->completed_family_mask == XR_TARGET_REQUIRED_FAMILIES);
+    REQUIRE(first->functions_count == 1 && first->slots_count == 2);
+    REQUIRE(first->functions[0].slot_begin == 0 && first->functions[0].slot_count == 2);
+    REQUIRE(first->functions[0].frame_size == 16 && first->functions[0].frame_align == 8);
+    REQUIRE(xr_stable_id_compare(first->slots[0].identity, first->slots[1].identity) < 0);
+    for (uint32_t i = 0; i < first->slots_count; i++) {
+        const XrTargetSlotRecord *slot = &first->slots[i];
+        REQUIRE(slot->id == i && slot->function == 0);
+        REQUIRE(slot->logical_slot == XR_SEMANTIC_INDEX_NONE);
+        REQUIRE(slot->role == XR_TARGET_SLOT_TEMPORARY);
+        REQUIRE(slot->semantic_operation == operation_for_value(semantic,
+                                                                 slot->semantic_value));
+    }
+    REQUIRE(first->value_reps_count == 3);
+    REQUIRE(first->value_reps[0].semantic_value < first->value_reps[1].semantic_value);
+    REQUIRE(first->value_reps[1].semantic_value < first->value_reps[2].semantic_value);
+
+    first->slots[0].identity.bytes[0] ^= 1;
+    expect_verify_failure(first, "XR_TARGET_1001");
+    first->slots[0].identity.bytes[0] ^= 1;
+    first->slots[0].role = XR_TARGET_SLOT_ROLE_INVALID;
+    expect_verify_failure(first, "XR_TARGET_1001");
+    first->slots[0].role = XR_TARGET_SLOT_TEMPORARY;
+    first->slots[0].logical_slot = 0;
+    expect_verify_failure(first, "XR_TARGET_1001");
+    first->slots[0].logical_slot = XR_SEMANTIC_INDEX_NONE;
+    first->functions[0].frame_size += first->functions[0].frame_align;
+    expect_verify_failure(first, "XR_TARGET_1002");
+    first->functions[0].frame_size -= first->functions[0].frame_align;
+    REQUIRE(xr_target_plan_verify(first, NULL, 0));
+
+    xr_target_plan_free(first);
+    xr_target_plan_free(second);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 static void test_structural_mutations_fail_closed(void) {
     XrSemanticPlan *semantic = build_semantic_plan();
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = build_target_plan(semantic, profile);
-
     plan->schema_version++;
     expect_verify_failure(plan, "XR_ARTIFACT_2000");
     plan->schema_version--;
@@ -709,6 +843,10 @@ static void test_value_rep_mutations_fail_closed(void) {
     XrSemanticPlan *semantic = build_semantic_plan();
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = build_target_plan(semantic, profile);
+    uint32_t first_slot = plan->value_reps[0].slot;
+    uint32_t last_slot = plan->value_reps[2].slot;
+    REQUIRE(first_slot < plan->slots_count && last_slot < plan->slots_count &&
+            first_slot != last_slot);
 
     plan->value_reps[2].semantic_value = 4;
     expect_verify_failure(plan, "XR_TARGET_1001");
@@ -741,25 +879,25 @@ static void test_value_rep_mutations_fail_closed(void) {
     plan->value_reps_count = 3;
     plan->value_reps[0].slot = XR_SEMANTIC_INDEX_NONE;
     expect_verify_failure(plan, "XR_TARGET_1001");
-    plan->value_reps[0].slot = 1;
+    plan->value_reps[0].slot = last_slot;
     expect_verify_failure(plan, "XR_TARGET_1001");
-    plan->value_reps[0].slot = 0;
-    plan->slots[0].function = 1;
+    plan->value_reps[0].slot = first_slot;
+    plan->slots[first_slot].function = 1;
     expect_verify_failure(plan, "XR_TARGET_1001");
-    plan->slots[0].function = 0;
-    plan->slots[0].register_rep = 4;
+    plan->slots[first_slot].function = 0;
+    plan->slots[first_slot].register_rep = 4;
     expect_verify_failure(plan, "XR_TARGET_1001");
-    plan->slots[0].register_rep = 1;
-    plan->slots[0].size = 4;
+    plan->slots[first_slot].register_rep = 1;
+    plan->slots[first_slot].size = 4;
     expect_verify_failure(plan, "XR_TARGET_1001");
-    plan->slots[0].size = 8;
-    plan->slots[0].align = 4;
+    plan->slots[first_slot].size = 8;
+    plan->slots[first_slot].align = 4;
     expect_verify_failure(plan, "XR_TARGET_1001");
-    plan->slots[0].align = 8;
-    plan->value_reps[2].slot = 0;
+    plan->slots[first_slot].align = 8;
+    plan->value_reps[2].slot = first_slot;
     expect_verify_failure(plan, "XR_TARGET_1001");
-    plan->value_reps[2].slot = 1;
-    plan->value_reps[1].slot = 0;
+    plan->value_reps[2].slot = last_slot;
+    plan->value_reps[1].slot = first_slot;
     expect_verify_failure(plan, "XR_TARGET_1001");
     plan->value_reps[1].slot = XR_SEMANTIC_INDEX_NONE;
     REQUIRE(xr_target_plan_verify(plan, NULL, 0));
@@ -818,7 +956,7 @@ static void test_bool_and_nullable_scalar_boundary(void) {
     for (uint32_t i = 0; i < xr_semantic_plan_type_count(boolean_semantic); i++)
         if (xr_semantic_plan_type(boolean_semantic, i)->kind == XR_KIND_BOOL)
             boolean_type = xr_semantic_plan_type(boolean_semantic, i);
-    REQUIRE(boolean_type != NULL && boolean_type->scalar_rep == 0);
+    REQUIRE(boolean_type != NULL && boolean_type->scalar_rep == XR_SCALAR_REP_NONE);
     XrTargetPlan *boolean_plan = NULL;
     REQUIRE(freeze_single_scalar(boolean_semantic, profile, true, true, &boolean_plan, error,
                                  sizeof(error)));
@@ -851,6 +989,7 @@ static void test_bool_and_nullable_scalar_boundary(void) {
 int main(void) {
     test_profile_freeze_and_determinism();
     test_plan_snapshot_and_determinism();
+    test_builder_materializes_canonical_scalar_intents();
     test_structural_mutations_fail_closed();
     test_value_rep_mutations_fail_closed();
     test_freeze_rejects_invalid_draft();

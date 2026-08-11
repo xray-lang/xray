@@ -200,6 +200,9 @@ static void hash_function(XrSHA256Context *ctx, const XrTargetFunctionRecord *re
     hash_u64(ctx, record->semantic_function);
     hash_u64(ctx, record->slot_begin);
     hash_u64(ctx, record->slot_count);
+    hash_u64(ctx, record->frame_size);
+    hash_u64(ctx, record->frame_align);
+    hash_u64(ctx, record->reserved);
     hash_u64(ctx, record->root_begin);
     hash_u64(ctx, record->root_count);
     hash_u64(ctx, record->cleanup_begin);
@@ -207,15 +210,21 @@ static void hash_function(XrSHA256Context *ctx, const XrTargetFunctionRecord *re
 }
 
 static void hash_slot(XrSHA256Context *ctx, const XrTargetSlotRecord *record) {
+    hash_id(ctx, record->identity);
     hash_u64(ctx, record->id);
     hash_u64(ctx, record->function);
+    hash_u64(ctx, record->semantic_value);
+    hash_u64(ctx, record->semantic_operation);
+    hash_u64(ctx, record->logical_slot);
     hash_u64(ctx, record->offset);
     hash_u64(ctx, record->size);
     hash_u64(ctx, record->align);
     hash_u64(ctx, record->register_rep);
     hash_u64(ctx, record->memory_rep);
+    hash_u64(ctx, record->role);
     hash_u64(ctx, record->root_kind);
     hash_u64(ctx, record->ownership);
+    hash_u64(ctx, record->reserved);
     hash_u64(ctx, record->debug_variable);
 }
 
@@ -355,7 +364,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v1\0";
+    static const uint8_t domain[] = "xray-target-plan-v2\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);

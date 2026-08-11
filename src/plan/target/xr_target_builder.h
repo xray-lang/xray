@@ -9,8 +9,8 @@
  *
  * KEY CONCEPT:
  *   The public API owns one internal collection sequence and one final freeze.
- *   This foundation currently collects the required scalar family; later
- *   families need canonical intent materialization before joining the mask.
+ *   Family collectors contribute intents; one canonical materialization
+ *   assigns dense identities and packed frames after coverage is complete.
  */
 
 #ifndef XR_TARGET_BUILDER_H

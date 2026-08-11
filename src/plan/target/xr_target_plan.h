@@ -193,6 +193,18 @@ typedef enum XrTargetCapabilityFlag {
     XR_TARGET_CAPABILITY_REQUIRED = 1u << 0,
 } XrTargetCapabilityFlag;
 
+typedef enum XrTargetSlotRole {
+    XR_TARGET_SLOT_ROLE_INVALID = 0,
+    XR_TARGET_SLOT_PARAMETER,
+    XR_TARGET_SLOT_LOCAL,
+    XR_TARGET_SLOT_PHI,
+    XR_TARGET_SLOT_TEMPORARY,
+    XR_TARGET_SLOT_RETURN,
+    XR_TARGET_SLOT_CALLER_STORAGE,
+    XR_TARGET_SLOT_LOGICAL_COROUTINE,
+    XR_TARGET_SLOT_ROLE_COUNT,
+} XrTargetSlotRole;
+
 typedef struct XrTargetMachineRepRecord {
     uint32_t id;
     uint16_t kind;
@@ -288,6 +300,9 @@ typedef struct XrTargetFunctionRecord {
     uint32_t semantic_function;
     uint32_t slot_begin;
     uint32_t slot_count;
+    uint32_t frame_size;
+    uint16_t frame_align;
+    uint16_t reserved;
     uint32_t root_begin;
     uint32_t root_count;
     uint32_t cleanup_begin;
@@ -295,15 +310,21 @@ typedef struct XrTargetFunctionRecord {
 } XrTargetFunctionRecord;
 
 typedef struct XrTargetSlotRecord {
+    XrStableId identity;
     uint32_t id;
     uint32_t function;
+    uint32_t semantic_value;
+    uint32_t semantic_operation;
+    uint32_t logical_slot;
     uint32_t offset;
     uint32_t size;
     uint16_t align;
     uint16_t register_rep;
     uint16_t memory_rep;
+    uint8_t role;
     uint8_t root_kind;
     uint8_t ownership;
+    uint8_t reserved;
     uint32_t debug_variable;
 } XrTargetSlotRecord;
 
