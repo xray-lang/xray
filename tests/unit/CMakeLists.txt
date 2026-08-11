@@ -205,6 +205,33 @@ add_xray_unit_test(test_xi_source_move_verify ir/test_xi_source_move_verify.c)
 add_xray_unit_test(test_semantic_plan plan/test_semantic_plan.c)
 add_xray_unit_test(test_target_plan plan/test_target_plan.c)
 add_xray_unit_test(test_xr_aot_scalar_plan aot/test_xr_aot_scalar_plan.c)
+
+# Keep the dumb-emitter contract self-contained even though the behavioral
+# test later includes compiler-only fixtures. This compile probe has only the
+# emission directory on its include path and fails if a forbidden layer leaks
+# through the public emission headers.
+include(CheckCSourceCompiles)
+set(_XR_C_EMISSION_SAVED_REQUIRED_INCLUDES "${CMAKE_REQUIRED_INCLUDES}")
+set(CMAKE_REQUIRED_INCLUDES "${PROJECT_SOURCE_DIR}/src/aot/emit_c")
+unset(XR_C_EMISSION_HEADERS_ARE_ISOLATED CACHE)
+check_c_source_compiles([=[
+#include "xr_c_emission_schema.h"
+#include "xr_c_emission_plan.h"
+#if defined(XR_SEMANTIC_PLAN_H) || defined(XI_H) || defined(XAOT_REP_H) || defined(XTYPE_H)
+#error "C emission headers exposed a forbidden compiler layer"
+#endif
+_Static_assert(XR_C_SCALAR_REP_COUNT == 15, "scalar spelling schema changed");
+int main(void) {
+    XrCScalarEmissionView view = {0};
+    return (int) view.semantic_value;
+}
+]=] XR_C_EMISSION_HEADERS_ARE_ISOLATED)
+set(CMAKE_REQUIRED_INCLUDES "${_XR_C_EMISSION_SAVED_REQUIRED_INCLUDES}")
+unset(_XR_C_EMISSION_SAVED_REQUIRED_INCLUDES)
+if(NOT XR_C_EMISSION_HEADERS_ARE_ISOLATED)
+    message(FATAL_ERROR
+        "C emission headers must compile without SemanticPlan, IR, Xaot, or xtype")
+endif()
 add_xray_unit_test(test_xi_tbaa ir/test_xi_tbaa.c)
 add_xray_unit_test(test_xi_range ir/test_xi_range.c)
 add_xray_unit_test(test_xi_bce ir/test_xi_bce.c)

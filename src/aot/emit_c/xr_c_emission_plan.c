@@ -9,18 +9,20 @@
  */
 
 #include "xr_c_emission_plan.h"
+#include "../../plan/target/xr_target_plan.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(1)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(2)
 
 struct XrCEmissionPlan {
     XrCScalarEmissionView *scalars;
     uint32_t scalar_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
+    XrFingerprint profile_fingerprint;
     XrFingerprint fingerprint;
     bool verified;
 };
@@ -32,8 +34,7 @@ static bool emission_error(char *error, size_t error_size, const char *code,
     return false;
 }
 
-static bool machine_kind_to_c_rep(uint16_t kind, XrCScalarRep *out,
-                                  const char **c_type) {
+static bool machine_kind_to_c_rep(uint16_t kind, XrCScalarRep *out, const char **c_type) {
     if (!out || !c_type)
         return false;
     switch (kind) {
@@ -109,13 +110,15 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v1\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v2\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
     hash_u64(&ctx, plan->schema_version);
     xr_sha256_update(&ctx, plan->target_fingerprint.bytes,
                      sizeof(plan->target_fingerprint.bytes));
+    xr_sha256_update(&ctx, plan->profile_fingerprint.bytes,
+                     sizeof(plan->profile_fingerprint.bytes));
     hash_u64(&ctx, plan->scalar_count);
     for (uint32_t i = 0; i < plan->scalar_count; i++) {
         const XrCScalarEmissionView *scalar = &plan->scalars[i];
@@ -226,8 +229,9 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
     return xr_fingerprint_equal(actual, plan->fingerprint);
 }
 
-bool xr_c_emission_plan_build(const XrTargetPlan *target_plan, XrCEmissionPlan **out,
-                              char *error, size_t error_size) {
+bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
+                              XrFingerprint expected_profile_fingerprint,
+                              XrCEmissionPlan **out, char *error, size_t error_size) {
     if (out)
         *out = NULL;
     if (!target_plan || !out)
@@ -236,9 +240,24 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan, XrCEmissionPlan *
     if (!xr_target_plan_is_verified(target_plan))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission plan requires a verified TargetPlan");
+    /* Value-representation rows do not yet carry a family discriminator. An
+     * exact mask keeps future non-scalar rows out until they have a dedicated
+     * accessor and projection contract. */
+    if (xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_FAMILY_SCALAR)
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "C emission plan requires the exact scalar-family partition");
+    const XrTargetProfile *profile = xr_target_plan_profile(target_plan);
+    XrFingerprint actual_profile_fingerprint = xr_target_profile_fingerprint(profile);
+    if (!profile || !xr_fingerprint_equal(actual_profile_fingerprint,
+                                           expected_profile_fingerprint))
+        return emission_error(error, error_size, "XR_TARGET_1000",
+                              "C emission target profile fingerprint does not match");
     uint32_t value_count = 0;
     const XrTargetValueRepRecord *values =
         xr_target_plan_value_reps(target_plan, &value_count);
+    if (value_count && !values)
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "completed scalar family has no value-representation rows");
     if (value_count > SIZE_MAX / sizeof(XrCScalarEmissionView))
         return emission_error(error, error_size, "XR_EXEC_5003",
                               "C emission scalar record budget overflow");
@@ -258,6 +277,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan, XrCEmissionPlan *
     plan->scalar_count = value_count;
     plan->schema_version = XR_C_EMISSION_PLAN_SCHEMA_VERSION;
     plan->target_fingerprint = xr_target_plan_fingerprint(target_plan);
+    plan->profile_fingerprint = actual_profile_fingerprint;
     for (uint32_t i = 0; i < value_count; i++) {
         const XrTargetValueRepRecord *binding = &values[i];
         const XrTargetMachineRepRecord *register_rep =
@@ -321,6 +341,11 @@ XrFingerprint xr_c_emission_plan_fingerprint(const XrCEmissionPlan *plan) {
 XrFingerprint xr_c_emission_plan_target_fingerprint(const XrCEmissionPlan *plan) {
     XrFingerprint zero = {{0}};
     return plan ? plan->target_fingerprint : zero;
+}
+
+XrFingerprint xr_c_emission_plan_profile_fingerprint(const XrCEmissionPlan *plan) {
+    XrFingerprint zero = {{0}};
+    return plan ? plan->profile_fingerprint : zero;
 }
 
 bool xr_c_emission_plan_scalar_view(const XrCEmissionPlan *plan, uint32_t semantic_value,
