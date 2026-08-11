@@ -294,6 +294,18 @@ CONTRACT_SPECS = (
         ),
     ),
     ContractSpec(
+        "incremental-cache-store.md",
+        (
+            "src/incremental/xr_cache_store.h",
+            "src/incremental/xr_cache_store.c",
+            "src/os/os_fs.h",
+            "src/os/unix/fs_unix.c",
+            "src/os/win/fs_win.c",
+            "tests/unit/incremental/test_cache_store.c",
+            "tests/unit/os/test_fs_atomic.c",
+        ),
+    ),
+    ContractSpec(
         "runtime-generation-lifecycle.md",
         (
             "include/xray_runtime_generation.h",
