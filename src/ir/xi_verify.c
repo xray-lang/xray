@@ -26,6 +26,7 @@
 #include "xi_tbaa.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xffi_sig.h"
+#include "../frontend/analyzer/xa_effect_db.h"
 #include "../shared/xr_array_core.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
@@ -1517,6 +1518,16 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
 
+    /* Raw Xi verification has no dependency-complete call resolver.  Once the
+     * analyzer has frozen both suspension dimensions as synchronous, do not
+     * reclassify an ordinary call by recursively scanning an erased generic
+     * body with the NULL resolver.  Coroutine lowering later consumes the
+     * same fingerprinted sidecar and verifies every materialized point. */
+    if (f->analyzer_effect_fingerprint != 0 &&
+        ((f->semantic_effects | f->unknown_semantic_effects) &
+         XA_SEM_EFFECT_ANY_SUSPEND) == 0)
+        return;
+
     bool needs_liveness = false;
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
@@ -1526,12 +1537,6 @@ static void verify_place_suspend_intervals(VerifyCtx *ctx, const XiFunc *f) {
             XiValue *v = blk->values[i];
             if (!v)
                 continue;
-            if (v->call_plan && xi_coro_is_suspend_point(f, v, NULL)) {
-                verr(ctx,
-                     "func '%s': call v%u carries a call-bound place across a suspension point",
-                     f->name, v->id);
-                break;
-            }
             if ((v->op == XI_PARAM && verify_is_call_bound_place(v)) ||
                 (v->op == XI_PLACE_LOAD && xi_own_type_may_be_ref(v->type)))
                 needs_liveness = true;
@@ -2170,6 +2175,25 @@ static bool coro_point_retry_uses(const XiCoroSuspendPoint *point, const XiValue
     return false;
 }
 
+static bool coro_point_call_plan_uses_place(const XiCoroSuspendPoint *point,
+                                            const XiValue *value) {
+    if (!point || !point->op || !value || !point->op->call_plan ||
+        !point->op->call_plan->verified)
+        return false;
+    const XiCallPlan *plan = point->op->call_plan;
+    if (plan->has_receiver && plan->receiver.place == value)
+        return true;
+    for (uint16_t i = 0; i < plan->nargs; i++) {
+        if (plan->args && plan->args[i].place == value)
+            return true;
+    }
+    return false;
+}
+
+static bool coro_point_boundary_uses(const XiCoroSuspendPoint *point, const XiValue *value) {
+    return coro_point_retry_uses(point, value) || coro_point_call_plan_uses_place(point, value);
+}
+
 static bool coro_point_runtime_writes(const XiCoroSuspendPoint *point, const XiValue *value) {
     if (!point || !point->op || !value)
         return false;
@@ -2186,7 +2210,8 @@ static bool coro_point_runtime_writes(const XiCoroSuspendPoint *point, const XiV
 
 static bool coro_point_expected_live(const XiFunc *f, const XiLiveness *live,
                                      const XiCoroSuspendPoint *point, const XiValue *value) {
-    if (xi_is_live_out(live, point->suspend_block, value) || coro_point_retry_uses(point, value) ||
+    if (xi_is_live_out(live, point->suspend_block, value) ||
+        coro_point_boundary_uses(point, value) ||
         coro_point_runtime_writes(point, value))
         return true;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -2194,7 +2219,9 @@ static bool coro_point_expected_live(const XiFunc *f, const XiLiveness *live,
         for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
             const XiValue *place = block->values[vi];
             if (place && place->op == XI_LOCAL_ADDR && place->nargs >= 1 &&
-                place->args[0] == value && xi_is_live_out(live, point->suspend_block, place))
+                place->args[0] == value &&
+                (xi_is_live_out(live, point->suspend_block, place) ||
+                 coro_point_call_plan_uses_place(point, place)))
                 return true;
         }
     }

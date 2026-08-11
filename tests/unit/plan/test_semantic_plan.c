@@ -2014,6 +2014,135 @@ static void test_loop_redefinition_closes_previous_owner(void) {
     xi_func_free(function);
 }
 
+static void test_owner_forward_creates_a_distinct_loop_owner(void) {
+    XiFunc *function = xi_func_new("owner_forward_loop_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    XiBlock *header = xi_block_new(function);
+    XiBlock *body = xi_block_new(function);
+    XiBlock *exit = xi_block_new(function);
+    REQUIRE(entry != NULL && header != NULL && body != NULL && exit != NULL);
+
+    xi_block_set_jump(entry, header);
+    XiValue *condition = xi_const_bool(function, header, true, &stub_bool);
+    REQUIRE(condition != NULL);
+    xi_block_set_if(header, condition, body, exit);
+    XiValue *capacity = xi_const_int(function, body, 1, &stub_int);
+    REQUIRE(capacity != NULL);
+    XiValue *array = xi_value_new(function, body, XI_ARRAY_NEW, &stub_array, 1);
+    REQUIRE(array != NULL);
+    array->args[0] = capacity;
+    array->flags = xi_op_default_effects(XI_ARRAY_NEW);
+    XiValue *forward = xi_value_new(function, body, XI_OWNER_FORWARD, &stub_array, 1);
+    REQUIRE(forward != NULL);
+    forward->args[0] = array;
+    XiValue *release = xi_value_new(function, body, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = forward;
+    xi_block_set_jump(body, header);
+    XiValue *result = xi_const_int(function, exit, 0, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(exit, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "owner-forward loop plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL && plan->ownership != NULL);
+
+    uint32_t array_owner = XR_SEMANTIC_INDEX_NONE;
+    uint32_t forward_owner = XR_SEMANTIC_INDEX_NONE;
+    bool saw_forward_alloc = false;
+    bool saw_source_move = false;
+    bool saw_forward_release = false;
+    for (uint32_t i = 0; i < plan->ownership->owner_count; i++) {
+        const XrOwnershipOwnerRecord *owner = &plan->ownership->owners[i];
+        uint32_t origin = XR_SEMANTIC_INDEX_NONE;
+        for (uint32_t op = 0; op < plan->operation_count; op++) {
+            if (plan->operations[op].result_value == owner->origin_value) {
+                origin = op;
+                break;
+            }
+        }
+        if (origin == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        if (plan->operations[origin].opcode == XI_ARRAY_NEW)
+            array_owner = i;
+        else if (plan->operations[origin].opcode == XI_OWNER_FORWARD)
+            forward_owner = i;
+    }
+    REQUIRE(array_owner != XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(forward_owner != XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(array_owner != forward_owner);
+    for (uint32_t i = 0; i < plan->ownership->event_count; i++) {
+        const XrOwnershipEventRecord *event = &plan->ownership->events[i];
+        saw_forward_alloc |= event->owner == forward_owner && event->kind == XR_OWN_EVENT_ALLOC &&
+                             event->logical_delta == 1;
+        saw_source_move |= event->owner == array_owner && event->kind == XR_OWN_EVENT_MOVE &&
+                           event->logical_delta == -1;
+        saw_forward_release |= event->owner == forward_owner &&
+                               event->kind == XR_OWN_EVENT_RELEASE &&
+                               event->logical_delta == -1;
+    }
+    REQUIRE(saw_forward_alloc && saw_source_move && saw_forward_release);
+    xr_semantic_plan_free(plan);
+    xi_func_free(function);
+}
+
+static void test_owner_origin_ignores_preceding_alias_storage_order(void) {
+    XiFunc *function = xi_func_new("owner_origin_storage_order_probe", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    XiBlock *alias_use = xi_block_new(function);
+    XiBlock *definition = xi_block_new(function);
+    XiBlock *exit = xi_block_new(function);
+    REQUIRE(entry != NULL && alias_use != NULL && definition != NULL && exit != NULL);
+
+    xi_block_set_jump(entry, definition);
+    XiValue *capacity = xi_const_int(function, definition, 1, &stub_int);
+    REQUIRE(capacity != NULL);
+    XiValue *array = xi_value_new(function, definition, XI_ARRAY_NEW, &stub_array, 1);
+    REQUIRE(array != NULL);
+    array->args[0] = capacity;
+    array->flags = xi_op_default_effects(XI_ARRAY_NEW);
+    xi_block_set_jump(definition, alias_use);
+    XiValue *alias = xi_value_new(function, alias_use, XI_COPY, &stub_array, 1);
+    REQUIRE(alias != NULL);
+    alias->args[0] = array;
+    XiValue *release = xi_value_new(function, alias_use, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = alias;
+    xi_block_set_jump(alias_use, exit);
+    XiValue *result = xi_const_int(function, exit, 0, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(exit, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "owner-origin storage-order plan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL && plan->ownership != NULL);
+
+    bool saw_array_origin = false;
+    bool saw_copy_origin = false;
+    for (uint32_t i = 0; i < plan->ownership->owner_count; i++) {
+        const XrOwnershipOwnerRecord *owner = &plan->ownership->owners[i];
+        for (uint32_t op = 0; op < plan->operation_count; op++) {
+            if (plan->operations[op].result_value != owner->origin_value)
+                continue;
+            saw_array_origin |= plan->operations[op].opcode == XI_ARRAY_NEW;
+            saw_copy_origin |= plan->operations[op].opcode == XI_COPY;
+        }
+    }
+    REQUIRE(saw_array_origin && !saw_copy_origin);
+    xr_semantic_plan_free(plan);
+    xi_func_free(function);
+}
+
 static void test_nullable_borrowed_parameter_keeps_sealed_provenance(void) {
     XiFunc *function = xi_func_new("nullable_borrowed_parameter_probe", &stub_array);
     REQUIRE(function != NULL);
@@ -2075,6 +2204,8 @@ int main(void) {
     test_borrowed_phi_loan_frontiers();
     test_stack_extent_is_logical_and_fail_closed();
     test_loop_redefinition_closes_previous_owner();
+    test_owner_forward_creates_a_distinct_loop_owner();
+    test_owner_origin_ignores_preceding_alias_storage_order();
     test_nullable_borrowed_parameter_keeps_sealed_provenance();
     printf("SemanticPlan/XSM tests passed\n");
     return 0;

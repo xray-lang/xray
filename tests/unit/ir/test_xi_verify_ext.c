@@ -117,6 +117,16 @@ static void mark_coro_lower_input(XiFunc *f) {
     f->invariant_mask = xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
 }
 
+static int known_suspend_call(void *ud, const XiFunc *current, const XiValue *call);
+
+static bool coro_point_has_live_value(const XiCoroSuspendPoint *point, const XiValue *value) {
+    for (uint32_t i = 0; point && i < point->nlive; i++) {
+        if (point->live[i] == value)
+            return true;
+    }
+    return false;
+}
+
 static void make_if_returning_ints(XiFunc *f, XiValue *cond) {
     XiBlock *entry = f->entry;
     XiBlock *then_b = xi_block_new(f);
@@ -581,15 +591,27 @@ TEST(call_bound_param_use_after_suspend_fails) {
     xi_func_free(f);
 }
 
-TEST(call_plan_rejects_suspendable_call_boundary) {
+TEST(call_plan_suspendable_boundary_uses_frame_place) {
     XiFunc *f = make_func("call_place_suspendable_call");
     ASSERT(f != NULL);
-    XiValue *call = make_ref_call(f, f->entry, NULL);
-    ASSERT(call != NULL);
+    XiValue *place = NULL;
+    XiValue *call = make_ref_call(f, f->entry, &place);
+    ASSERT(call != NULL && place != NULL && place->args[0] != NULL);
     call->flags |= XI_FLAG_MAY_SUSPEND;
+    call->lowering_flags |= XI_LOWERING_FLAG_RETRY_SUSPEND_OPERANDS;
     xi_block_set_return(f->entry, call);
 
-    ASSERT(verify_fail(f));
+    mark_coro_lower_input(f);
+    XiCoroResolver resolver = {0};
+    resolver.call_suspendability = known_suspend_call;
+    ASSERT(xi_coro_lower(f, &resolver));
+    ASSERT(f->coro_plan != NULL && f->coro_plan->nstates == 1);
+    const XiCoroSuspendPoint *point = &f->coro_plan->points[0];
+    ASSERT(coro_point_has_live_value(point, place));
+    ASSERT(coro_point_has_live_value(point, place->args[0]));
+    ASSERT(xi_coro_plan_find_slot(f->coro_plan, place) != NULL);
+    ASSERT(xi_coro_plan_find_slot(f->coro_plan, place->args[0]) != NULL);
+    ASSERT(verify_ok(f));
     xi_func_free(f);
 }
 
@@ -1819,6 +1841,47 @@ TEST(coro_lower_rejects_exception_region_before_cfg_mutation) {
     xi_func_free(f);
 }
 
+TEST(coro_lower_accepts_frame_backed_static_cleanup_region) {
+    XiFunc *f = make_func("coro_static_cleanup_region");
+    ASSERT(f != NULL);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *handler = xi_block_new(f);
+    ASSERT(body != NULL && handler != NULL);
+    body->sealed = true;
+    handler->sealed = true;
+
+    XiValue *try_op = xi_value_new(f, f->entry, XI_TRY, &stub_unit, 0);
+    ASSERT(try_op != NULL);
+    try_op->aux = handler;
+    try_op->aux_int = XI_TRY_AUX_STATIC_CLEANUP;
+    try_op->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_add_pred(handler, f->entry);
+    xi_block_set_jump(f->entry, body);
+
+    XiValue *yield = xi_value_new(f, body, XI_YIELD, &stub_unit, 0);
+    XiValue *end_try = xi_value_new(f, body, XI_END_TRY, &stub_unit, 0);
+    XiValue *result = xi_const_int(f, body, 1, &stub_int);
+    ASSERT(yield != NULL && end_try != NULL && result != NULL);
+    end_try->aux = try_op;
+    end_try->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(body, result);
+
+    XiValue *caught = xi_value_new(f, handler, XI_CATCH, &stub_unit, 0);
+    XiValue *handler_result = xi_const_int(f, handler, 2, &stub_int);
+    ASSERT(caught != NULL && handler_result != NULL);
+    caught->aux = try_op;
+    caught->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(handler, handler_result);
+
+    mark_coro_lower_input(f);
+    ASSERT(xi_coro_lower(f, NULL));
+    ASSERT(f->coro_plan != NULL);
+    ASSERT(f->coro_plan->cfg_rewritten);
+    ASSERT(f->coro_plan->nstates == 1);
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
 TEST(coro_lower_rejects_unresolved_call_before_cfg_mutation) {
     XiFunc *f = make_func("coro_unresolved_call");
     ASSERT(f != NULL);
@@ -2265,7 +2328,7 @@ int main(void) {
     run_call_bound_place_rejects_return_escape();
     run_call_bound_param_last_use_before_suspend_passes();
     run_call_bound_param_use_after_suspend_fails();
-    run_call_plan_rejects_suspendable_call_boundary();
+    run_call_plan_suspendable_boundary_uses_frame_place();
     run_call_plan_valid_method_receiver_place_passes();
     run_call_plan_rejects_method_receiver_place_mismatch();
     run_tbaa_memory_op_requires_mem_group();
@@ -2329,6 +2392,7 @@ int main(void) {
     run_coro_lower_mutation_rejects_stale_revision();
     run_coro_lower_mutation_rejects_invalid_child_edge();
     run_coro_lower_rejects_exception_region_before_cfg_mutation();
+    run_coro_lower_accepts_frame_backed_static_cleanup_region();
     run_coro_lower_rejects_unresolved_call_before_cfg_mutation();
     run_coro_lower_rejects_raw_stage_before_analysis();
     run_coro_lower_preserves_successor_phi_pred_position();

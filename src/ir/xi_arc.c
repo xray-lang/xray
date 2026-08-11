@@ -376,6 +376,7 @@ typedef struct {
     XiBlock *blk;
     XiValue *user;  /* the value whose arg consumes the tracked value */
     uint32_t order; /* sort key: (rpo << 16) | index_in_block */
+    uint16_t phi_pred_index; /* stable predecessor slot for a PHI-edge consume */
 } ConsumeSite;
 
 typedef struct {
@@ -411,7 +412,7 @@ static bool xi_func_vec_push(XiFuncVec *vec, XiFunc *fn) {
 }
 
 static bool consume_site_vec_push(ConsumeSiteVec *vec, XiBlock *blk, XiValue *user,
-                                  uint32_t order) {
+                                  uint32_t order, uint16_t phi_pred_index) {
     XR_DCHECK(vec != NULL, "consume_site_vec_push: NULL vec");
     if (vec->count == vec->cap) {
         uint32_t new_cap = vec->cap ? vec->cap * 2 : 16;
@@ -424,6 +425,7 @@ static bool consume_site_vec_push(ConsumeSiteVec *vec, XiBlock *blk, XiValue *us
     vec->items[vec->count].blk = blk;
     vec->items[vec->count].user = user;
     vec->items[vec->count].order = order;
+    vec->items[vec->count].phi_pred_index = phi_pred_index;
     vec->count++;
     return true;
 }
@@ -1196,7 +1198,8 @@ static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *si
                  * callee never releases a borrowed parameter). */
                 if (arc_call_arg_is_callee_borrowed(f, user, a))
                     continue;
-                if (!consume_site_vec_push(sites, blk, user, (blk->rpo << 16) | (i & 0xFFFF)))
+                if (!consume_site_vec_push(sites, blk, user, (blk->rpo << 16) | (i & 0xFFFF),
+                                           UINT16_MAX))
                     return false;
                 break; /* one consume record per user is enough */
             }
@@ -1219,13 +1222,15 @@ static bool collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSiteVec *si
                     continue;
                 /* 0xFFFE = end of the predecessor block: after every value
                  * index, before a return terminator's 0xFFFF. */
-                if (!consume_site_vec_push(sites, pred, &phi->value, (pred->rpo << 16) | 0xFFFE))
+                if (!consume_site_vec_push(sites, pred, &phi->value,
+                                           (pred->rpo << 16) | 0xFFFE, a))
                     return false;
             }
         }
         /* Block control (return value) consumes the value. */
         if (blk->control == target && blk->kind == XI_BLOCK_RETURN) {
-            if (!consume_site_vec_push(sites, blk, NULL, (blk->rpo << 16) | 0xFFFF))
+            if (!consume_site_vec_push(sites, blk, NULL, (blk->rpo << 16) | 0xFFFF,
+                                       UINT16_MAX))
                 return false;
         }
     }
@@ -1613,10 +1618,24 @@ static bool arc_edge_forwards_target_to_self_phi(const XiBlock *pred, const XiBl
     return false;
 }
 
+static bool arc_block_forwards_target_to_distinct_phi(const XiBlock *block,
+                                                      const XiValue *target) {
+    if (!block || !target)
+        return false;
+    for (unsigned s = 0; s < 2; s++) {
+        const XiBlock *successor = block->succs[s];
+        if (successor && arc_edge_forwards_target_to_phi(block, successor, target) &&
+            !arc_edge_forwards_target_to_self_phi(block, successor, target))
+            return true;
+    }
+    return false;
+}
+
 /* Place releases on the live→dead frontier for `target`. Returns true if a
  * CFG edge was split (caller must invalidate analyses). */
 static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *live,
-                                     const uint32_t *pos_by_id, const XiBlock *def_blk) {
+                                     const uint32_t *pos_by_id, const XiBlock *def_blk,
+                                     bool frame_pinned) {
     bool split_any = false;
     uint32_t def_pos = pos_by_id[def_blk->id] ? pos_by_id[def_blk->id] - 1 : 0;
     /* Snapshot the block count. arc_split_edge() below appends fresh
@@ -1731,8 +1750,28 @@ static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *
             XiBlock *sb = blk->succs[s];
             if (!sb || !pos_by_id[sb->id])
                 continue;
-            if (arc_edge_forwards_target_to_phi(blk, sb, target))
+            if (arc_edge_forwards_target_to_phi(blk, sb, target)) {
+                /* A frame-pinned distinct PHI receives a retained reference,
+                 * so the old frame-slot owner still dies on this edge.  The
+                 * predecessor can remain live-out because a sibling path
+                 * keeps using the old slot; that must not suppress the
+                 * selected edge's release.  A self-PHI carries the same slot
+                 * into the next iteration and therefore keeps its owner. */
+                if (frame_pinned &&
+                    !arc_edge_forwards_target_to_self_phi(blk, sb, target) &&
+                    !live[pos_by_id[sb->id] - 1].live_in) {
+                    if (sb->npreds == 1) {
+                        insert_drop_at_head(f, sb, target);
+                    } else {
+                        XiBlock *mid = arc_split_edge(f, blk, sb);
+                        if (mid) {
+                            insert_drop_after(f, mid, NULL, target);
+                            split_any = true;
+                        }
+                    }
+                }
                 continue;
+            }
             if (live[pos_by_id[sb->id] - 1].live_in)
                 continue;
             if (sb->npreds == 1) {
@@ -1826,7 +1865,7 @@ static bool arc_compute_liveness(XiFunc *f, XiValue *target, ArcLive **out_live,
 
 /* Place releases for an owned value with no consuming use. Returns true if
  * an edge was split (CFG analyses must be invalidated by the caller). */
-static bool insert_drops_at_death(XiFunc *f, XiValue *target) {
+static bool insert_drops_at_death(XiFunc *f, XiValue *target, bool frame_pinned) {
     XiBlock *def_blk = target->block ? target->block : f->entry;
     if (!def_blk)
         return false;
@@ -1834,7 +1873,8 @@ static bool insert_drops_at_death(XiFunc *f, XiValue *target) {
     uint32_t *pos_by_id = NULL;
     if (!arc_compute_liveness(f, target, &live, &pos_by_id))
         return false;
-    bool split_any = arc_place_frontier_drops(f, target, live, pos_by_id, def_blk);
+    bool split_any =
+        arc_place_frontier_drops(f, target, live, pos_by_id, def_blk, frame_pinned);
     xr_free(pos_by_id);
     xr_free(live);
     return split_any;
@@ -2049,7 +2089,11 @@ static bool arc_return_forwards_borrow(const XiFunc *f) {
             f->arc_return_ownership.kind == XI_RETURN_OWNERSHIP_BORROWED_STATIC);
 }
 
-static bool insert_dup_at_consume_site(XiFunc *f, XiValue *target, const ConsumeSite *site) {
+static bool insert_dup_at_consume_site(XiFunc *f, XiValue *target, ConsumeSiteVec *sites,
+                                       uint32_t site_index) {
+    XR_DCHECK(sites != NULL && site_index < sites->count,
+              "insert_dup_at_consume_site: invalid site");
+    ConsumeSite *site = &sites->items[site_index];
     if (!site->user && arc_return_forwards_borrow(f))
         return false;
     if (!site->user || site->user->op == XI_PHI) {
@@ -2057,10 +2101,47 @@ static bool insert_dup_at_consume_site(XiFunc *f, XiValue *target, const Consume
         bool split = false;
         if (site->user && site->user->op == XI_PHI && site->user->block && site->blk->succs[0] &&
             site->blk->succs[1]) {
-            XiBlock *mid = arc_split_edge(f, site->blk, site->user->block);
-            if (mid) {
-                placement = mid;
-                split = true;
+            XiBlock *original_pred = site->blk;
+            XiBlock *join = site->user->block;
+            bool has_direct_edge = original_pred->succs[0] == join || original_pred->succs[1] == join;
+            if (has_direct_edge) {
+                placement = arc_split_edge(f, original_pred, join);
+                split = placement != NULL;
+            } else if (site->phi_pred_index < join->npreds) {
+                /* Death-frontier placement can split this edge after consume
+                 * sites have been collected but before their retains are
+                 * inserted. xi_cfg_replace_pred preserves the PHI predecessor
+                 * slot, so recover the exact edge block from that stable slot. */
+                XiBlock *candidate = join->preds[site->phi_pred_index];
+                bool candidate_from_original = false;
+                for (uint16_t p = 0; candidate && p < candidate->npreds; p++) {
+                    if (candidate->preds[p] == original_pred) {
+                        candidate_from_original = true;
+                        break;
+                    }
+                }
+                bool candidate_targets_join = candidate &&
+                                              (candidate->succs[0] == join ||
+                                               candidate->succs[1] == join);
+                if (candidate_from_original && candidate_targets_join)
+                    placement = candidate;
+            }
+            XR_DCHECK(placement != original_pred,
+                      "xi_arc: PHI edge no longer has a unique split placement");
+            if (placement != original_pred) {
+                site->blk = placement;
+                /* Several PHIs can consume the same owner on one CFG edge.
+                 * Their sites were collected before this split, so retarget
+                 * the remaining members of that exact edge group to the
+                 * single edge block. Each consume still gets its own retain,
+                 * but the logical edge is split only once. */
+                for (uint32_t i = site_index + 1; i < sites->count; i++) {
+                    ConsumeSite *later = &sites->items[i];
+                    if (later->blk == original_pred && later->user &&
+                        later->user->op == XI_PHI && later->user->block == join &&
+                        later->phi_pred_index == site->phi_pred_index)
+                        later->blk = placement;
+                }
             }
         }
         XiValue *last = phi_dup_anchor(placement);
@@ -2071,14 +2152,14 @@ static bool insert_dup_at_consume_site(XiFunc *f, XiValue *target, const Consume
     return false;
 }
 
-static bool process_call_result_consumes(XiFunc *f, XiValue *target, const ConsumeSiteVec *sites) {
+static bool process_call_result_consumes(XiFunc *f, XiValue *target, ConsumeSiteVec *sites) {
     /* UNKNOWN is fail-closed as a +0 borrow. A last consuming use transfers an
      * owning reference to its consumer, so it needs a retain just as much as
      * every earlier consume. Liveness decides only how many independent
      * owners are needed; it cannot prove that the original result was +1. */
     bool split_any = false;
     for (uint32_t i = 0; i < sites->count; i++)
-        split_any |= insert_dup_at_consume_site(f, target, &sites->items[i]);
+        split_any |= insert_dup_at_consume_site(f, target, sites, i);
     return split_any;
 }
 
@@ -2091,11 +2172,14 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
         return false;
     }
 
+    bool frame_pinned = arc_value_is_coro_frame_pinned(f, coro_live, target);
+
     if (sites.count == 0) {
         /* Never consumed. Only an OWNED value is dropped (at its death
          * point). A borrowed value is owned by the caller; a call result
          * may be an alias — in both cases we must not drop it here. */
-        bool split_any = mode == OWN_OWNED ? insert_drops_at_death(f, target) : false;
+        bool split_any =
+            mode == OWN_OWNED ? insert_drops_at_death(f, target, frame_pinned) : false;
         xr_free(sites.items);
         return split_any;
     }
@@ -2107,7 +2191,7 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
          * must dup first; nothing is moved out and nothing is dropped. */
         bool split_any = false;
         for (uint32_t i = 0; i < sites.count; i++)
-            split_any |= insert_dup_at_consume_site(f, target, &sites.items[i]);
+            split_any |= insert_dup_at_consume_site(f, target, &sites, i);
         xr_free(sites.items);
         return split_any;
     }
@@ -2127,8 +2211,6 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
      * leaking that reference whenever that arm ran. Paths that reach the
      * value's death WITHOUT consuming it (a branch arm that only borrows it)
      * get a death-drop, so the owner is released exactly once on every path. */
-    bool frame_pinned = arc_value_is_coro_frame_pinned(f, coro_live, target);
-
     ArcLive *live = NULL;
     uint32_t *pos_by_id = NULL;
     if (!arc_compute_liveness(f, target, &live, &pos_by_id)) {
@@ -2143,7 +2225,7 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
                 break;
             if (sites.items[i].user == NULL)
                 continue;
-            split_any |= insert_dup_at_consume_site(f, target, &sites.items[i]);
+            split_any |= insert_dup_at_consume_site(f, target, &sites, i);
         }
         xr_free(sites.items);
         return split_any;
@@ -2176,7 +2258,8 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
     /* Place death-drops where the owner dies without a move (a borrow-only
      * branch arm, or a path that never touches it). */
     XiBlock *def_blk = target->block ? target->block : f->entry;
-    bool split_any = def_blk && arc_place_frontier_drops(f, target, live, pos_by_id, def_blk);
+    bool split_any =
+        def_blk && arc_place_frontier_drops(f, target, live, pos_by_id, def_blk, frame_pinned);
 
     /* Insert the dups last (pointer-anchored, so the drop insertions above that
      * shifted block indices do not matter). */
@@ -2185,7 +2268,7 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode,
             continue; /* MOVE: the consume transfers the owned reference */
         if (sites.items[i].user == NULL)
             continue; /* return terminator: last use, never live after */
-        split_any |= insert_dup_at_consume_site(f, target, &sites.items[i]);
+        split_any |= insert_dup_at_consume_site(f, target, &sites, i);
     }
 
     xr_free(moves);
@@ -3071,6 +3154,9 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiLiveness *coro_live
                 /* Found a RELEASE. Check if it drops the same target. */
                 if (drop->nargs < 1 || drop->args[0] != target)
                     continue;
+                if (arc_value_is_coro_frame_pinned(f, coro_live, target) &&
+                    arc_block_forwards_target_to_distinct_phi(blk, target))
+                    break;
                 /* Match! Remove both the RETAIN (at i) and RELEASE (at j).
                  * Remove j first (higher index) to keep i valid. */
                 arc_remove_value(blk, j);

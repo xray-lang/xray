@@ -32,6 +32,7 @@
 #include "xi_cfg_edit.h"
 #include "xi_tbaa.h"
 #include "xi_ops_gen.h"
+#include "xi_own.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xffi_sig.h"
 #include "../base/xchecks.h"
@@ -815,6 +816,17 @@ XR_FUNC uint32_t xi_inline_budget(uint32_t caller_size) {
     return XI_INLINE_MAX_PER_PASS;
 }
 
+static bool inline_ownership_boundary_is_exact(const XiValue *call, const XiFunc *callee) {
+    if (!call || !callee || !call->type || !xi_own_type_is_rc(call->type))
+        return true;
+
+    XiReturnOwnership site = call->call_return_ownership;
+    XiReturnOwnership body = callee->arc_return_ownership;
+    if (!site.complete || !body.complete)
+        return false;
+    return site.kind == body.kind && site.param_index == body.param_index;
+}
+
 XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_inline: NULL func");
 
@@ -850,6 +862,14 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue; /* LOAD_UPVAL/STORE_UPVAL need closure-env remapping before inlining. */
             if (callee->is_vararg)
                 continue; /* Rest-Array construction needs a dedicated inline rewrite. */
+            /* ARC has already materialized the source call boundary.  Replacing
+             * an owned result with a borrowed argument (or the reverse) would
+             * retarget those retains/releases after the fact.  Inline only
+             * when the callsite and callee publish the same frozen reference
+             * return convention; unknown or conflicting evidence is a hard
+             * optimization boundary, not permission to guess. */
+            if (!inline_ownership_boundary_is_exact(v, callee))
+                continue;
             /* Open class/interface dispatch plans are keyed by both callsite
              * and owning function. Cloning such a site into another function
              * would make the backend miss the verified type-switch plan and

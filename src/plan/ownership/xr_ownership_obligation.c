@@ -257,10 +257,30 @@ static uint32_t owner_for_value(XrOwnershipBuildContext *ctx, uint32_t value) {
     return ctx->owner_by_root[find_root(ctx, value)];
 }
 
+static bool operation_defines_owner_identity(const XrSemanticPlan *plan,
+                                             const XrSemanticOperationRecord *operation) {
+    if (!operation_has_ownership_result(plan, operation))
+        return false;
+    if (operation->opcode == XI_PARAM || operation->opcode == XI_CONST ||
+        operation->opcode == XI_STACK_ALLOC || operation->opcode == XI_PHI)
+        return true;
+    if (operation->result_alias_operand >= 0 || operation->ownership_use == XI_GEN_OWN_USE_PASS ||
+        operation->opcode == XI_RETAIN || operation->opcode == XI_RELEASE)
+        return false;
+    return operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+           operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED ||
+           operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
+}
+
 static bool ensure_owners(XrOwnershipBuildContext *ctx) {
+    /* Block storage order is not execution or dominance order.  An alias block
+     * may therefore precede the operation which creates its owner, as happens
+     * after CFG splitting.  Bind each equivalence class to its real ownership
+     * definition first; choosing the first alias would seed dataflow at a use
+     * and turn a valid release into a negative balance. */
     for (uint32_t i = 0; i < ctx->plan->operation_count; i++) {
         const XrSemanticOperationRecord *operation = &ctx->plan->operations[i];
-        if (!operation_has_ownership_result(ctx->plan, operation) ||
+        if (!operation_defines_owner_identity(ctx->plan, operation) ||
             operation->result_value >= ctx->value_count)
             continue;
         uint32_t root = find_root(ctx, operation->result_value);
@@ -269,6 +289,16 @@ static bool ensure_owners(XrOwnershipBuildContext *ctx) {
         uint32_t ignored;
         if (!add_owner(ctx, root, operation, &ignored))
             return false;
+    }
+    for (uint32_t i = 0; i < ctx->plan->operation_count; i++) {
+        const XrSemanticOperationRecord *operation = &ctx->plan->operations[i];
+        if (!operation_has_ownership_result(ctx->plan, operation) ||
+            operation->result_value >= ctx->value_count)
+            continue;
+        uint32_t root = find_root(ctx, operation->result_value);
+        if (ctx->owner_by_root[root] == XR_SEMANTIC_INDEX_NONE)
+            return fail(ctx, "XR_OWN_3002",
+                        "owner equivalence class has no ownership-defining operation");
     }
     return true;
 }
@@ -319,7 +349,8 @@ static bool classify_definition(XrOwnershipBuildContext *ctx, uint32_t operation
                          XR_OWN_BORROWED);
     }
     if (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
-        operation->return_provenance != XI_RETURN_OWNERSHIP_OWNED) {
+        operation->return_provenance != XI_RETURN_OWNERSHIP_OWNED &&
+        operation->result_alias_operand < 0) {
         /* An unresolved call result is usable at +0 but cannot be dropped as
          * an owned local. ARC preserves exactly that contract by retaining it
          * before every consuming use. Model the incoming token as a foreign
@@ -1220,12 +1251,43 @@ static bool classify_implicit_exit_dispositions(XrOwnershipBuildContext *ctx) {
                     entry[next] = incoming;
                     queue[tail++] = next;
                 } else if (entry[next] != incoming) {
+                    uint32_t phi_source = XR_SEMANTIC_INDEX_NONE;
+                    uint32_t phi_source_owner = XR_SEMANTIC_INDEX_NONE;
+                    if (origin_is_phi && successor == origin_block) {
+                        const XrSemanticOperationRecord *origin =
+                            &ctx->plan->operations[origin_operation];
+                        const XrSemanticBlockRecord *origin_record =
+                            &ctx->plan->blocks[origin_block];
+                        for (uint32_t p = 0; p < origin_record->predecessor_count &&
+                                             p < origin->operand_count;
+                             p++) {
+                            if (ctx->plan->predecessors[origin_record->predecessor_begin + p] !=
+                                fn->block_begin + local)
+                                continue;
+                            phi_source = ctx->plan->operands[origin->operand_begin + p].value;
+                            phi_source_owner = owner_for_value(ctx, phi_source);
+                            break;
+                        }
+                    }
+                    if (ctx->error && ctx->error_size)
+                        snprintf(ctx->error, ctx->error_size,
+                                 "XR_OWN_3001: ownership balance differs across a CFG join or "
+                                 "loop (owner=%s origin=%s func=%s from=%u to=%u prior=%d "
+                                 "incoming=%d exit=%d edge-delta=%d phi-source=%u "
+                                 "phi-source-owner=%u function-begin=%u from-local=%u "
+                                 "to-local=%u origin-local=%u)",
+                                 owner_record->canonical_key,
+                                 xi_generated_op_name(
+                                     ctx->plan->operations[origin_operation].opcode),
+                                 fn->name, fn->block_begin + local, successor, entry[next],
+                                 incoming, exit_balance, edge_delta[local * 2u + s], phi_source,
+                                 phi_source_owner, fn->block_begin, local,
+                                 successor - fn->block_begin, origin_local);
                     xr_free(entry);
                     xr_free(delta);
                     xr_free(edge_delta);
                     xr_free(queue);
-                    return fail(ctx, "XR_OWN_3001",
-                                "ownership balance differs across a CFG join or loop");
+                    return false;
                 }
             }
         }

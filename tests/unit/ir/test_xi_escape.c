@@ -889,6 +889,140 @@ static void test_arc_call_result_retain_before_same_block_phi_consume(void) {
     xi_func_free(f);
 }
 
+static void test_arc_frame_pinned_phi_edge_drops_with_live_sibling(void) {
+    XiFunc *f = make_func("arc_frame_pinned_phi_live_sibling", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *choice = xi_block_new(f);
+    XiBlock *alternate = xi_block_new(f);
+    XiBlock *join = xi_block_new(f);
+    XiBlock *keep = xi_block_new(f);
+
+    XiValue *source = xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+    (void) xi_value_new(f, entry, XI_YIELD, &t_unit, 0);
+    XiValue *outer = xi_const_bool(f, entry, true, &t_bool);
+    xi_block_set_if(entry, outer, choice, alternate);
+
+    XiValue *inner = xi_const_bool(f, choice, true, &t_bool);
+    xi_block_set_if(choice, inner, join, keep);
+    XiValue *other = xi_value_new(f, alternate, XI_ARRAY_NEW, &t_array, 0);
+    other->escape = XI_ESC_ARG;
+    xi_block_set_jump(alternate, join);
+
+    XiPhi *merged = xi_phi_new(f, join, &t_array, join->npreds);
+    for (uint16_t i = 0; i < join->npreds; i++)
+        merged->value.args[i] = join->preds[i] == choice ? source : other;
+    XiValue *consume = xi_value_new(f, join, XI_SET_SHARED, &t_any, 1);
+    consume->args[0] = &merged->value;
+    consume->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_return(join, xi_const_int(f, join, 0, &t_int));
+
+    XiValue *length = xi_value_new(f, keep, XI_LEN, &t_int, 1);
+    length->args[0] = source;
+    xi_block_set_return(keep, length);
+    choice->sealed = true;
+    alternate->sealed = true;
+    join->sealed = true;
+    keep->sealed = true;
+
+    xi_arc_insert(f);
+    xi_arc_elim(f);
+
+    XiBlock *selected_edge = NULL;
+    for (uint16_t i = 0; i < join->npreds; i++) {
+        if (merged->value.args[i] == source) {
+            selected_edge = join->preds[i];
+            break;
+        }
+    }
+    ASSERT_EQ(selected_edge != NULL && selected_edge != choice, true,
+              "frame-pinned distinct PHI must use a dedicated selected edge");
+    ASSERT_EQ(count_target_ops(f, XI_RETAIN, source), 1,
+              "selected PHI edge must retain the new owner while a sibling uses the old slot");
+    bool edge_retain = false;
+    bool edge_release = false;
+    for (uint32_t i = 0; selected_edge && i < selected_edge->nvalues; i++) {
+        XiValue *value = selected_edge->values[i];
+        edge_retain |= value && value->op == XI_RETAIN && value->nargs == 1 &&
+                       value->args[0] == source;
+        edge_release |= value && value->op == XI_RELEASE && value->nargs == 1 &&
+                        value->args[0] == source;
+    }
+    ASSERT_EQ(edge_retain && edge_release, true,
+              "selected PHI edge must retain the new owner and release the old frame owner");
+    XiArcVerifyReport report;
+    ASSERT_EQ(xi_arc_verify(f, &report), true,
+              "path-specific frame PHI transfer must satisfy ARC verification");
+    xi_func_free(f);
+}
+
+static void test_arc_reuses_split_edge_for_multiple_phi_consumes(void) {
+    XiFunc *f = make_func("arc_multiple_phi_consumes_one_edge", &t_int);
+    XiBlock *entry = f->entry;
+    XiBlock *other = xi_block_new(f);
+    XiBlock *join = xi_block_new(f);
+    other->sealed = true;
+    join->sealed = true;
+
+    XiValue *source = xi_value_new(f, entry, XI_ARRAY_NEW, &t_array, 0);
+    source->escape = XI_ESC_ARG;
+    (void) xi_value_new(f, entry, XI_YIELD, &t_unit, 0);
+    XiValue *condition = xi_const_bool(f, entry, true, &t_bool);
+    xi_block_set_if(entry, condition, other, join);
+
+    XiValue *alternate1 = xi_value_new(f, other, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *alternate2 = xi_value_new(f, other, XI_ARRAY_NEW, &t_array, 0);
+    alternate1->escape = XI_ESC_ARG;
+    alternate2->escape = XI_ESC_ARG;
+    xi_block_set_jump(other, join);
+
+    XiPhi *first = xi_phi_new(f, join, &t_array, join->npreds);
+    XiPhi *second = xi_phi_new(f, join, &t_array, join->npreds);
+    for (uint16_t i = 0; i < join->npreds; i++) {
+        bool direct = join->preds[i] == entry;
+        first->value.args[i] = direct ? source : alternate1;
+        second->value.args[i] = direct ? source : alternate2;
+    }
+    XiValue *store1 = xi_value_new(f, join, XI_SET_SHARED, &t_any, 1);
+    store1->args[0] = &first->value;
+    store1->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    XiValue *store2 = xi_value_new(f, join, XI_SET_SHARED, &t_any, 1);
+    store2->args[0] = &second->value;
+    store2->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    xi_block_set_return(join, xi_const_int(f, join, 0, &t_int));
+
+    xi_arc_insert(f);
+
+    XiBlock *direct_edge = NULL;
+    for (uint16_t i = 0; i < join->npreds; i++) {
+        if (first->value.args[i] == source) {
+            direct_edge = join->preds[i];
+            break;
+        }
+    }
+    ASSERT_EQ(direct_edge != NULL && direct_edge != entry, true,
+              "multiple PHI consumes must share a dedicated direct-edge block");
+    ASSERT_EQ(direct_edge && direct_edge->npreds == 1 && direct_edge->preds[0] == entry, true,
+              "the shared PHI edge block must preserve the original predecessor");
+    ASSERT_EQ(count_target_ops(f, XI_RETAIN, source), 2,
+              "each frame-pinned PHI consume needs a retain on the shared edge block");
+    uint32_t edge_retains = 0;
+    for (uint32_t i = 0; direct_edge && i < direct_edge->nvalues; i++) {
+        XiValue *value = direct_edge->values[i];
+        if (value && value->op == XI_RETAIN && value->nargs == 1 && value->args[0] == source)
+            edge_retains++;
+    }
+    ASSERT_EQ(edge_retains, 2,
+              "both PHI retains must remain executable on the direct edge");
+    char error[512] = {0};
+    ASSERT_EQ(xi_verify(f, error, sizeof(error)), true,
+              "shared PHI edge split must preserve CFG and SSA verification");
+    XiArcVerifyReport report;
+    ASSERT_EQ(xi_arc_verify(f, &report), true,
+              "shared PHI edge retains must satisfy the ARC verifier");
+    xi_func_free(f);
+}
+
 static void test_arc_orders_adjacent_retain_before_release(void) {
     XiFunc *f = make_func("arc_adjacent_rc_order", &t_int);
     XiBlock *entry = f->entry;
@@ -1644,8 +1778,10 @@ int main(void) {
     test_arc_tracks_owner_forward_through_phi();
     test_arc_phi_move_drops_owner_on_sibling_edge();
     test_arc_frame_pinned_distinct_phi_releases_old_owner();
+    test_arc_frame_pinned_phi_edge_drops_with_live_sibling();
     test_arc_call_result_forward_retains_across_sibling_borrow();
     test_arc_call_result_retain_before_same_block_phi_consume();
+    test_arc_reuses_split_edge_for_multiple_phi_consumes();
     test_arc_orders_adjacent_retain_before_release();
     test_arc_unknown_call_result_retains_before_single_consume();
     test_arc_resolved_callee_contract_overrides_callsite_borrow();

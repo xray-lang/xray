@@ -1181,8 +1181,18 @@ static const XaotCallableInvokePlan *cg_coro_callable_target_switch_plan(XiCgenC
                                                                          const XiValue *v) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     const XaotCallableInvokePlan *plan = xaot_bundle_find_callable_invoke_plan(bundle, v);
-    if (!plan || plan->action != XAOT_CALLABLE_TARGET_SWITCH || plan->target_count < 2 ||
-        (plan->effect_bits & XG_BODY_MAY_SUSPEND) == 0)
+    const XiCoroSuspendPoint *point =
+        ctx && ctx->coro_emit_plan ? xi_coro_plan_find_point(ctx->coro_emit_plan, v) : NULL;
+    uint32_t required_evidence = XAOT_CALLABLE_EV_CLOSED_TARGET_SET |
+                                 XAOT_CALLABLE_EV_SIGNATURE |
+                                 XAOT_CALLABLE_EV_TARGET_EFFECTS |
+                                 XAOT_CALLABLE_EV_XI_FLOW;
+    if (!point || !plan || plan->target_count == 0 ||
+        plan->unproven_reason != XAOT_CALLABLE_PROVEN ||
+        (plan->evidence & required_evidence) != required_evidence ||
+        (plan->action != XAOT_CALLABLE_DIRECT_SYNC &&
+         plan->action != XAOT_CALLABLE_DIRECT_SUSPEND &&
+         plan->action != XAOT_CALLABLE_TARGET_SWITCH))
         return NULL;
     return plan;
 }

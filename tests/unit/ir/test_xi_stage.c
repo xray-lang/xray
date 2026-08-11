@@ -745,6 +745,7 @@ static void test_coroutine_transition_rolls_back_unresolved_call(void) {
 }
 
 static XiSemanticLoweredProgram *make_string_builder_call_program(XrType *receiver_type,
+                                                                  bool with_yield,
                                                                   XiFunc **out_func,
                                                                   char *error,
                                                                   size_t error_size) {
@@ -753,8 +754,8 @@ static XiSemanticLoweredProgram *make_string_builder_call_program(XrType *receiv
     XiValue *receiver = xi_value_new(f, entry, XI_PARAM, receiver_type, 0);
     XiValue *argument = xi_value_new(f, entry, XI_CONST, &stub_string, 0);
     XiValue *append = xi_value_new(f, entry, XI_CALL_METHOD, receiver_type, 2);
-    XiValue *yield = xi_value_new(f, entry, XI_YIELD, &stub_void, 0);
-    assert(f && entry && receiver && argument && append && yield);
+    XiValue *yield = with_yield ? xi_value_new(f, entry, XI_YIELD, &stub_void, 0) : NULL;
+    assert(f && entry && receiver && argument && append && (!with_yield || yield));
     append->aux = (void *) "append";
     append->args[0] = receiver;
     append->args[1] = argument;
@@ -781,7 +782,7 @@ static void test_coroutine_transition_uses_builtin_string_builder_identity(void)
     char error[256] = {0};
     XiFunc *builtin_func = NULL;
     XiSemanticLoweredProgram *builtin = make_string_builder_call_program(
-        &stub_string_builder, &builtin_func, error, sizeof(error));
+        &stub_string_builder, true, &builtin_func, error, sizeof(error));
     XiCoroLoweredProgram *lowered =
         xi_program_lower_coroutines(builtin, NULL, error, sizeof(error));
     assert(lowered != NULL);
@@ -791,7 +792,7 @@ static void test_coroutine_transition_uses_builtin_string_builder_identity(void)
 
     XiFunc *shadow_func = NULL;
     XiSemanticLoweredProgram *shadow = make_string_builder_call_program(
-        &stub_shadow_string_builder, &shadow_func, error, sizeof(error));
+        &stub_shadow_string_builder, true, &shadow_func, error, sizeof(error));
     uint32_t blocks_before = shadow_func->nblocks;
     error[0] = '\0';
     assert(xi_program_lower_coroutines(shadow, NULL, error, sizeof(error)) == NULL);
@@ -799,6 +800,32 @@ static void test_coroutine_transition_uses_builtin_string_builder_identity(void)
     assert(shadow_func->stage == XI_STAGE_SEMANTIC_LOWERED);
     assert(shadow_func->nblocks == blocks_before && shadow_func->coro_plan == NULL);
     xi_func_free(xi_semantic_lowered_program_release(shadow));
+
+    printf("  PASS\n");
+}
+
+static int unknown_call_suspendability(void *ud, const XiFunc *current, const XiValue *call) {
+    (void) ud;
+    (void) current;
+    (void) call;
+    return -1;
+}
+
+static void test_coroutine_transition_keeps_known_builtin_sync(void) {
+    printf("--- test_coroutine_transition_keeps_known_builtin_sync ---\n");
+
+    char error[256] = {0};
+    XiFunc *func = NULL;
+    XiSemanticLoweredProgram *semantic = make_string_builder_call_program(
+        &stub_string_builder, false, &func, error, sizeof(error));
+    XiCoroResolver resolver = {0};
+    resolver.call_suspendability = unknown_call_suspendability;
+    XiCoroLoweredProgram *lowered =
+        xi_program_lower_coroutines(semantic, &resolver, error, sizeof(error));
+    assert(lowered != NULL);
+    assert(func->coro_plan != NULL && !func->coro_plan->is_coroutine);
+    assert(func->coro_plan->nstates == 0);
+    xi_func_free(xi_coro_lowered_program_release(lowered));
 
     printf("  PASS\n");
 }
@@ -1191,6 +1218,7 @@ int main(void) {
     test_semantic_stage_cannot_skip_coroutine_lowering();
     test_coroutine_transition_rolls_back_unresolved_call();
     test_coroutine_transition_uses_builtin_string_builder_identity();
+    test_coroutine_transition_keeps_known_builtin_sync();
     test_coroutine_transition_rejects_invalid_cfg_before_rewrite();
     test_semantic_intrinsic_corruption_fails_closed();
     test_pass_order_and_invariants();

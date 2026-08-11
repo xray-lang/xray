@@ -868,6 +868,20 @@ TEST(e2e_time_sleep_uses_dedicated_vm_suspend) {
     xr_vm_proto_free(p);
 }
 
+TEST(e2e_generic_this_method_call_uses_frozen_member_identity) {
+    const char *source =
+        "class Router {\n"
+        "    add<T>(value: T) -> int { return this.addRoute(value) }\n"
+        "    addRoute<T>(value: T) -> int { return 7 }\n"
+        "}\n"
+        "var router = Router()\n"
+        "print(router.add(1))\n";
+    XrProto *p = compile_source(source, NULL);
+    assert(p != NULL);
+    assert(has_opcode(p, OP_PRINT));
+    xr_vm_proto_free(p);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -996,6 +1010,7 @@ int main(void) {
     run_e2e_analyzer_error_stops_before_lowering();
     run_e2e_status_str();
     run_e2e_time_sleep_uses_dedicated_vm_suspend();
+    run_e2e_generic_this_method_call_uses_frozen_member_identity();
 
     teardown();
 

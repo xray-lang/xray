@@ -11,6 +11,7 @@
  */
 
 #include "xi_pipeline.h"
+#include "../base/xglobal_indices.h"
 #include "xi_semantic_snapshot.h"
 #include "../frontend/analyzer/xa_typed_program.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
@@ -101,17 +102,6 @@ typedef struct XiPipelineCoroResolverCtx {
     XiFunc *root;
 } XiPipelineCoroResolverCtx;
 
-static const XgBodySummary *xi_pipeline_coro_body(const XgGlobalEvidence *evidence,
-                                                  XgFuncId func_id) {
-    if (!evidence || func_id == XG_NO_ID)
-        return NULL;
-    for (uint32_t i = 0; i < evidence->nbodies; i++) {
-        if (evidence->bodies[i].func_id == func_id)
-            return &evidence->bodies[i];
-    }
-    return NULL;
-}
-
 static const XiFunc *xi_pipeline_coro_find_func_tree(const XiFunc *func, XgFuncId func_id) {
     if (!func || func_id == XG_NO_ID)
         return NULL;
@@ -140,6 +130,53 @@ static const XiFunc *xi_pipeline_coro_find_func(XiPipelineCoroResolverCtx *ctx,
         match = module ? xi_pipeline_coro_find_func_tree(module->init, func_id) : NULL;
         if (match)
             return match;
+    }
+    return NULL;
+}
+
+static const XiFunc *xi_pipeline_coro_class_method(const XiModule *module,
+                                                    const XiClassData *class_data,
+                                                    const char *member, bool expect_static) {
+    if (!module || !module->init || !class_data || !class_data->methods ||
+        !class_data->child_idx || !member)
+        return NULL;
+    for (uint16_t method_index = 0; method_index < class_data->nmethod; method_index++) {
+        const XiClassMethod *method = &class_data->methods[method_index];
+        if (method->is_static != expect_static || !method->name ||
+            strcmp(method->name, member) != 0)
+            continue;
+        uint16_t child_index = class_data->child_idx[method_index];
+        return child_index < module->init->nchildren ? module->init->children[child_index] : NULL;
+    }
+    return NULL;
+}
+
+static const XiClassData *xi_pipeline_coro_current_method_class(
+    const XiPipelineCoroResolverCtx *ctx, const XiFunc *current,
+    const XiModule **owner_module) {
+    if (owner_module)
+        *owner_module = NULL;
+    if (!ctx || !ctx->cfg || !ctx->cfg->graph_modules || !current)
+        return NULL;
+    for (int module_index = 0; module_index < ctx->cfg->graph_module_count; module_index++) {
+        const XiModule *module = ctx->cfg->graph_modules[module_index];
+        if (!module || !module->init)
+            continue;
+        for (uint16_t class_index = 0; class_index < module->nclasses; class_index++) {
+            const XiClassData *class_data = module->classes[class_index];
+            if (!class_data || !class_data->methods || !class_data->child_idx)
+                continue;
+            for (uint16_t method_index = 0; method_index < class_data->nmethod;
+                 method_index++) {
+                uint16_t child_index = class_data->child_idx[method_index];
+                if (child_index >= module->init->nchildren ||
+                    module->init->children[child_index] != current)
+                    continue;
+                if (owner_module)
+                    *owner_module = module;
+                return class_data;
+            }
+        }
     }
     return NULL;
 }
@@ -175,22 +212,107 @@ static const XiFunc *xi_pipeline_coro_resolve_method(void *ud, const XiFunc *cur
                                                      const XiValue *call) {
     XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
     const XgCallsiteSummary *row = xi_pipeline_coro_callsite(ctx, current, call);
-    if (!row)
+    const XiFunc *target =
+        row ? xi_pipeline_coro_find_func(ctx, row->static_target_func_id) : NULL;
+    if (target)
+        return target;
+
+    /* Computed-property reads are method invocations but do not have an
+     * AST_CALL callsite row.  Resolve those and other row-less source methods
+     * through the dependency-complete Xi class table, using the stable global
+     * class id rather than a class or member spelling.  Dependency modules may
+     * already have detached their analyzer pointers, but XiClassData keeps the
+     * same xg_class_id carried by the current receiver's class_ref. */
+    if (!ctx || !ctx->cfg || !ctx->cfg->graph_modules || !call ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs < 1 || !call->args[0] || !call->aux)
         return NULL;
-    /* A method id names a dispatch family, not one concrete child frame.
-     * Only the closed-world direct target is safe to attach to the plan. */
-    return xi_pipeline_coro_find_func(ctx, row->static_target_func_id);
+    const XiValue *receiver = call->args[0];
+    while (xi_copy_is_identity_alias(receiver) && receiver->nargs > 0)
+        receiver = receiver->args[0];
+    const char *member = (const char *) call->aux;
+
+    /* An open generic method body has a canonical erased receiver type whose
+     * analyzer class identity is intentionally not executable.  `this` still
+     * has an exact Xi identity: parameter zero of a function selected by one
+     * frozen XiClassData member row.  Resolve a sibling method through that
+     * row before consulting receiver layout metadata. */
+    if (current && current->params && current->nparams > 0 &&
+        receiver == current->params[0]) {
+        const XiModule *owner_module = NULL;
+        const XiClassData *owner_class =
+            xi_pipeline_coro_current_method_class(ctx, current, &owner_module);
+        if (owner_class) {
+            target = xi_pipeline_coro_class_method(owner_module, owner_class, member, false);
+            if (target)
+                return target;
+        }
+    }
+    const XiImportRef *import_ref = xi_value_import_ref(current, receiver);
+    if (import_ref && import_ref->resolved_module && import_ref->resolved_shared_slot >= 0 &&
+        import_ref->resolved_shared_slot < import_ref->resolved_module->nslots &&
+        import_ref->resolved_module->slot_classes) {
+        const XiClassData *imported_class =
+            import_ref->resolved_module->slot_classes[import_ref->resolved_shared_slot];
+        if (imported_class)
+            return xi_pipeline_coro_class_method(import_ref->resolved_module, imported_class,
+                                                 member, true);
+    }
+    const XrType *receiver_type = receiver ? receiver->type : NULL;
+    if (!receiver_type ||
+        (receiver_type->kind != XR_KIND_INSTANCE && receiver_type->kind != XR_KIND_CLASS) ||
+        !receiver_type->instance.class_ref || receiver_type->instance.class_ref->xg_class_id == 0)
+        return NULL;
+    const XgClassId receiver_class_id =
+        (XgClassId) receiver_type->instance.class_ref->xg_class_id;
+    const bool expect_static = receiver_type->kind == XR_KIND_CLASS;
+    for (int module_index = 0; module_index < ctx->cfg->graph_module_count; module_index++) {
+        const XiModule *module = ctx->cfg->graph_modules[module_index];
+        for (uint16_t class_index = 0; module && class_index < module->nclasses; class_index++) {
+            const XiClassData *class_data = module->classes[class_index];
+            if (!class_data || class_data->xg_class_id != receiver_class_id ||
+                !class_data->methods || !class_data->child_idx || !module->init)
+                continue;
+            target = xi_pipeline_coro_class_method(module, class_data, member, expect_static);
+            if (target)
+                return target;
+            /* Exact class identity matched.  A missing method is unresolved;
+             * never continue into an unrelated class with the same spelling. */
+            return NULL;
+        }
+    }
+    return NULL;
 }
 
 static int xi_pipeline_coro_func_suspendability(void *ud, const XiFunc *func) {
-    XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
-    const XgGlobalEvidence *evidence = ctx && ctx->cfg ? ctx->cfg->global_evidence : NULL;
-    const XgBodySummary *body =
-        xi_pipeline_coro_body(evidence, func ? (XgFuncId) func->xg_body_func_id : XG_NO_ID);
-    uint32_t effects = 0;
-    if (!body || !xg_body_effects_compose_closed_world_calls(evidence, body, &effects))
+    (void) ud;
+    if (!func || func->analyzer_effect_fingerprint == 0)
         return -1;
-    return (effects & XG_BODY_MAY_SUSPEND) != 0 ? 1 : 0;
+    /* Effect-summary completeness is dimensional.  An unresolved error or
+     * native-allocation contract must not turn a function into a coroutine
+     * when the analyzer has nevertheless closed the scheduler/generator
+     * suspension dimensions.  Conversely, an unknown suspension bit is not a
+     * synchronous proof and remains fail-closed. */
+    if ((func->unknown_semantic_effects & XA_SEM_EFFECT_ANY_SUSPEND) != 0)
+        return -1;
+    return (func->semantic_effects & XA_SEM_EFFECT_ANY_SUSPEND) != 0 ? 1 : 0;
+}
+
+static const XiValue *xi_pipeline_coro_unwrap_identity(const XiValue *value) {
+    while (value && xi_copy_is_identity_alias(value) && value->nargs > 0)
+        value = value->args[0];
+    return value;
+}
+
+static bool xi_pipeline_coro_is_sealed_builtin_constructor(const XiValue *call) {
+    if (!call || call->op != XI_CALL || call->nargs < 1 ||
+        !xi_value_is_constructor_call(call))
+        return false;
+    const XiValue *callee = xi_pipeline_coro_unwrap_identity(call->args[0]);
+    return callee && callee->op == XI_GET_BUILTIN &&
+           callee->aux_int > XR_GLOBAL_VAR_RESERVED0 &&
+           callee->aux_int < XR_USER_GLOBALS_START &&
+           callee->aux_int != XR_GLOBAL_VAR_RESERVED30;
 }
 
 static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
@@ -198,29 +320,66 @@ static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
     XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
     const XgGlobalEvidence *evidence = ctx && ctx->cfg ? ctx->cfg->global_evidence : NULL;
     const XgCallsiteSummary *row = xi_pipeline_coro_callsite(ctx, current, call);
+    const XiImportRef *ref = NULL;
+    const char *member = NULL;
     uint32_t effects = 0;
+    /* Builtin constructors are sealed synchronous allocation boundaries.  A
+     * source callsite may conservatively be shaped like a closure call before
+     * lowering, so the Xi constructor proof and reserved global identity must
+     * take precedence over graph-wide call-effect composition. */
+    if (xi_pipeline_coro_is_sealed_builtin_constructor(call))
+        return 0;
+    /* Source-level callsite composition does not carry the private/public ABI
+     * distinction of embedded module members.  Consume the sealed native ABI
+     * registry first, including internal stdlib primitives such as
+     * `os.__sleep`; a source module shadow stays on the Xi target path. */
+    if (current && call && call->nargs >= 1) {
+        ref = xi_value_import_ref(current, call->args[0]);
+        if (ref && ref->module_path && !ref->resolved_module && !ref->resolved_func) {
+            if (call->op == XI_CALL && ref->member_name) {
+                member = ref->member_name;
+            } else if ((call->op == XI_CALL_METHOD ||
+                        call->op == XI_CALL_METHOD_DIRECT) &&
+                       !ref->member_name && call->aux) {
+                member = (const char *) call->aux;
+            }
+            if (member &&
+                xa_builtin_get_module_func_abi_signature(ref->module_path, member))
+                return xa_builtin_module_func_is_yieldable(ref->module_path, member) ? 1 : 0;
+        }
+    }
     if (row && xg_callsite_effects_compose_closed_world_calls(evidence, row, &effects))
         return (effects & XG_BODY_MAY_SUSPEND) != 0 ? 1 : 0;
+    /* A frozen function-value callsite without one static target is not an
+     * unresolved source call: the later callable TargetPlan closes its exact
+     * target set.  Until that target-neutral boundary is refined, treating the
+     * invocation as a suspension point is the only fail-closed answer.  The
+     * shared plan records an indirect child edge, and AOT must subsequently
+     * prove a non-empty callable plan before it may emit either a sync entry or
+     * a child frame. */
+    if (row && row->kind == XG_CALL_CLOSURE) {
+        /* Statically constructed local closures have already resolved to one
+         * XiFunc above. Anything reaching this branch still has an open
+         * function-value target set, even if the value passed through a local
+         * or shared slot. Only TargetPlan may refine it to an all-sync set. */
+        return 1;
+    }
+
+    /* Some erased builtin projections intentionally have no per-call target
+     * row (for example `process.args[0].slice(...)` after the receiver has
+     * become `any`).  A fingerprinted analyzer summary with both suspension
+     * dimensions closed is still an exact proof that no call in this function
+     * can suspend.  Unknown suspension bits never reach this branch, and a
+     * known-suspending function cannot use its aggregate fact to classify an
+     * individual unresolved call. */
+    if (xi_pipeline_coro_func_suspendability(ud, current) == 0)
+        return 0;
 
     /* Native-module calls have no Xi body or module object.  Classify them
      * only through the analyzer's sealed ABI registry; an absent declaration
      * remains unresolved.  A resolved source module must take the Xi/export
      * path instead, even if its path shadows a native module spelling. */
-    if (!current || !call || call->nargs < 1)
-        return -1;
-    const XiImportRef *ref = xi_value_import_ref(current, call->args[0]);
-    if (!ref || !ref->module_path || ref->resolved_module || ref->resolved_func)
-        return -1;
-    const char *member = NULL;
-    if (call->op == XI_CALL && ref->member_name) {
-        member = ref->member_name;
-    } else if ((call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
-               !ref->member_name && call->aux) {
-        member = (const char *) call->aux;
-    }
-    if (!member || !xa_builtin_get_module_func_abi_signature(ref->module_path, member))
-        return -1;
-    return xa_builtin_module_func_is_yieldable(ref->module_path, member) ? 1 : 0;
+    return -1;
 }
 
 static bool xi_pipeline_coro_value_is_module_import(void *ud, const XiFunc *func,

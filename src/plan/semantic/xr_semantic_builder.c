@@ -1227,7 +1227,7 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     XiReturnOwnership value_ownership = xi_arc_value_return_ownership(function, value);
     record->result_alias_operand = xi_arc_value_alias_operand(function, value);
     if (record->result_alias_operand < 0 && value->nargs > 0 &&
-        (xi_copy_is_identity_alias(value) || xi_op_is_identity_forward(value->op)))
+        (xi_copy_is_identity_alias(value) || value->op == XI_SOURCE_MOVE))
         record->result_alias_operand = 0;
     record->return_parameter = value_ownership.param_index;
     record->return_provenance = value_ownership.kind;

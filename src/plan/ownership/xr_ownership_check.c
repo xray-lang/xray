@@ -507,7 +507,8 @@ static bool audit_definition_events(XrOwnershipAudit *audit) {
                     return false;
             }
         } else if (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
-                   operation->return_provenance != XI_RETURN_OWNERSHIP_OWNED) {
+                   operation->return_provenance != XI_RETURN_OWNERSHIP_OWNED &&
+                   operation->result_alias_operand < 0) {
             if (*initial == XR_OWN_UNINITIALIZED)
                 *initial = XR_OWN_FOREIGN_BORROWED;
             if (!audit_add_event(audit, owner, i, operation->block, XR_SEMANTIC_INDEX_NONE,

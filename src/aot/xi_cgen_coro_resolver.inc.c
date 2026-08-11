@@ -97,6 +97,36 @@ static XiCoroResolver cg_coro_resolver_ctx(XiCgenCtx *ctx) {
     return resolver;
 }
 
+static bool cg_coro_target_proves_conservative_sync(XiCgenCtx *ctx,
+                                                     const XiCoroPlan *plan) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const uint32_t required_evidence = XAOT_CALLABLE_EV_CLOSED_TARGET_SET |
+                                       XAOT_CALLABLE_EV_SIGNATURE |
+                                       XAOT_CALLABLE_EV_TARGET_EFFECTS |
+                                       XAOT_CALLABLE_EV_XI_FLOW;
+    if (!bundle || !plan || plan->nstates == 0)
+        return false;
+    for (uint32_t point_index = 0; point_index < plan->nstates; point_index++) {
+        const XiCoroSuspendPoint *point = &plan->points[point_index];
+        const XaotCallableInvokePlan *callable =
+            point->op ? xaot_bundle_find_callable_invoke_plan(bundle, point->op) : NULL;
+        if (!point->op || point->op->op != XI_CALL || !callable ||
+            callable->target_count == 0 || callable->unproven_reason != XAOT_CALLABLE_PROVEN ||
+            (callable->evidence & required_evidence) != required_evidence ||
+            (callable->action != XAOT_CALLABLE_DIRECT_SYNC &&
+             callable->action != XAOT_CALLABLE_TARGET_SWITCH))
+            return false;
+        for (uint16_t target_index = 0; target_index < callable->target_count; target_index++) {
+            const XaotCallableTargetCase *target =
+                xaot_bundle_callable_target_case(bundle, callable, target_index);
+            if (!target || !target->target_func ||
+                (target->effect_bits & XG_BODY_MAY_SUSPEND) != 0)
+                return false;
+        }
+    }
+    return true;
+}
+
 static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     const XaotFuncPlan *func_plan = xaot_bundle_find_func_plan(bundle, f);
@@ -119,17 +149,28 @@ static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f) {
         return false;
     }
     planned = plan->is_coroutine;
-    /* The prepared AOT effect plan is an independent consistency witness, not
-     * a second coroutine classifier.  A disagreement is a hard compiler
-     * error; code generation always follows the frozen shared Xi plan. */
-    if (func_plan && planned != (func_plan->may_suspend != 0)) {
+    /* A target plan may refine a fail-closed indirect Xi point to a non-empty
+     * all-sync callable target set.  The shared state is deliberately kept so
+     * code generation remains plan-driven and target-neutral.  Every other
+     * disagreement, especially a target suspension missed by Xi, is fatal. */
+    bool target_suspends = func_plan && func_plan->may_suspend != 0;
+    bool safe_sync_refinement =
+        func_plan && planned && !target_suspends &&
+        cg_coro_target_proves_conservative_sync(ctx, plan);
+    if (func_plan && planned != target_suspends && !safe_sync_refinement) {
         if (ctx) {
             ctx->error = true;
             fprintf(stderr,
                     "[xi_cgen] ERROR: coroutine plan/effect mismatch for '%s' "
-                    "(plan=%u effect=%u)\n",
+                    "(plan=%u effect=%u states=%u first-op=%s first-callsite=%u)\n",
                     f && f->name ? f->name : "?", planned ? 1u : 0u,
-                    func_plan->may_suspend ? 1u : 0u);
+                    func_plan->may_suspend ? 1u : 0u, plan->nstates,
+                    plan->nstates > 0 && plan->points[0].op
+                        ? xi_op_name(plan->points[0].op->op)
+                        : "<none>",
+                    plan->nstates > 0 && plan->points[0].op
+                        ? plan->points[0].op->xg_callsite_id
+                        : 0);
         }
     }
     return planned;

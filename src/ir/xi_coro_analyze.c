@@ -12,6 +12,8 @@
 #include "xi_module.h"
 #include "xi_own.h"
 #include "xi_ops_gen.h"
+#include "xi_receiver_alias.h"
+#include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -34,6 +36,36 @@ static XrRep xi_coro_rep(const XiValue *v) {
  * miscompile). The depth bound therefore treats unknown callees as suspendable; the old text
  * claimed non-suspendable was the conservative answer, which is fail-open. */
 #define XI_CORO_RESOLVE_DEPTH_MAX 8
+
+/* Receiver-returning native members preserve the receiver's declaration
+ * identity even when their result type is intentionally erased to `any`.
+ * Follow only the sealed alias fact stamped by semantic lowering; an ordinary
+ * method result is never treated as its receiver. */
+static const XiValue *xi_coro_unwrap_receiver_identity(const XiValue *receiver) {
+    while (receiver && receiver->nargs > 0 &&
+           (xi_copy_is_identity_alias(receiver) ||
+            xi_call_result_aliases_receiver(receiver)))
+        receiver = receiver->args[0];
+    return receiver;
+}
+
+static int xi_coro_native_import_suspendability(const XiFunc *f, const XiValue *call) {
+    if (!f || !call || (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
+                        call->op != XI_CALL_METHOD_DIRECT) ||
+        call->nargs < 1)
+        return -1;
+    const XiImportRef *ref = xi_value_import_ref(f, call->args[0]);
+    if (!ref || !ref->module_path || ref->resolved_module || ref->resolved_func)
+        return -1;
+    const char *member = NULL;
+    if (call->op == XI_CALL)
+        member = ref->member_name;
+    else if (!ref->member_name && call->aux)
+        member = (const char *) call->aux;
+    if (!member || !xa_builtin_get_module_func_abi_signature(ref->module_path, member))
+        return -1;
+    return xa_builtin_module_func_is_yieldable(ref->module_path, member) ? 1 : 0;
+}
 
 /* ========== Op classifier ========== */
 
@@ -327,34 +359,83 @@ static const XiFunc *xi_coro_resolve_namespace_method_callee(const XiFunc *calle
     return NULL;
 }
 
-/* Resolve an instance method declared in the current Xi module by analyzer
- * class identity.  Names select a member only after the receiver's exact
- * declaration has matched a frozen XiClassData entry. */
+/* Resolve a method declared in the current Xi module by analyzer class
+ * identity.  Names select a member only after the receiver's exact
+ * declaration and static/instance domain match a frozen XiClassData entry. */
 static const XiFunc *xi_coro_resolve_local_method_callee(const XiFunc *caller,
                                                           const XiValue *call) {
     if (!caller || !call ||
         (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
-        call->nargs < 1 || !call->args[0] || !call->args[0]->type || !call->aux)
+        call->nargs < 1 || !call->args[0] || !call->aux)
         return NULL;
-    const XrType *receiver_type = call->args[0]->type;
-    if ((receiver_type->kind != XR_KIND_INSTANCE && receiver_type->kind != XR_KIND_CLASS) ||
-        !receiver_type->instance.class_ref)
-        return NULL;
+    const XiValue *receiver = xi_coro_unwrap_receiver_identity(call->args[0]);
     const XiModule *module = xi_coro_owning_module(caller);
-    const char *member = (const char *) call->aux;
-    for (uint16_t ci = 0; module && ci < module->nclasses; ci++) {
-        const XiClassData *class_data = module->classes[ci];
-        if (!class_data || class_data->class_info != receiver_type->instance.class_ref ||
-            !class_data->methods || !class_data->child_idx)
-            continue;
-        for (uint16_t mi = 0; mi < class_data->nmethod; mi++) {
-            const XiClassMethod *method = &class_data->methods[mi];
-            if (method->is_static || !method->name || strcmp(method->name, member) != 0)
-                continue;
-            uint16_t child = class_data->child_idx[mi];
-            if (module->init && child < module->init->nchildren)
-                return module->init->children[child];
+    const XiClassData *selected = NULL;
+    bool expect_static = false;
+
+    /* Generic method bodies use an erased receiver type, but parameter zero
+     * is still bound to exactly one frozen class-member row in this module.
+     * Recover that declaration identity before consulting type metadata. */
+    if (module && module->init && caller->params && caller->nparams > 0 &&
+        receiver == caller->params[0]) {
+        for (uint16_t ci = 0; ci < module->nclasses && !selected; ci++) {
+            const XiClassData *candidate = module->classes[ci];
+            for (uint16_t mi = 0;
+                 candidate && candidate->methods && candidate->child_idx &&
+                 mi < candidate->nmethod;
+                 mi++) {
+                uint16_t child = candidate->child_idx[mi];
+                if (child < module->init->nchildren &&
+                    module->init->children[child] == caller) {
+                    selected = candidate;
+                    break;
+                }
+            }
         }
+    }
+
+    if (!selected && receiver->op == XI_GET_SHARED && receiver->aux_int >= 0 && module &&
+        module->slot_classes && receiver->aux_int < module->nslots) {
+        selected = module->slot_classes[receiver->aux_int];
+        expect_static = selected != NULL;
+    } else {
+        const XiImportRef *ref = xi_value_import_ref(caller, receiver);
+        if (ref && ref->resolved_module && ref->resolved_shared_slot >= 0 &&
+            ref->resolved_module->slot_classes &&
+            ref->resolved_shared_slot < ref->resolved_module->nslots) {
+            module = ref->resolved_module;
+            selected = module->slot_classes[ref->resolved_shared_slot];
+            expect_static = selected != NULL;
+        }
+    }
+
+    const XrType *receiver_type = receiver->type;
+    if (!selected && receiver_type &&
+        (receiver_type->kind == XR_KIND_INSTANCE || receiver_type->kind == XR_KIND_CLASS) &&
+        receiver_type->instance.class_ref) {
+        expect_static = receiver_type->kind == XR_KIND_CLASS;
+        for (uint16_t ci = 0; module && ci < module->nclasses; ci++) {
+            const XiClassData *candidate = module->classes[ci];
+            if (candidate && candidate->class_info == receiver_type->instance.class_ref) {
+                selected = candidate;
+                break;
+            }
+        }
+    }
+    if (!selected || !module)
+        return NULL;
+
+    const char *member = (const char *) call->aux;
+    if (!selected->methods || !selected->child_idx)
+        return NULL;
+    for (uint16_t mi = 0; mi < selected->nmethod; mi++) {
+        const XiClassMethod *method = &selected->methods[mi];
+        if (method->is_static != expect_static || !method->name ||
+            strcmp(method->name, member) != 0)
+            continue;
+        uint16_t child = selected->child_idx[mi];
+        if (module->init && child < module->init->nchildren)
+            return module->init->children[child];
     }
     return NULL;
 }
@@ -367,6 +448,16 @@ static const XiFunc *xi_coro_resolve_method_callee(const XiFunc *caller,
 
 static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResolver *resolver,
                                               int depth) {
+    if (f && f->coro_plan && f->coro_plan->analysis_complete) {
+        const XiCoroPlan *published = f->coro_plan;
+        bool current = published->cfg_rewritten
+                           ? published->lowered_ir_revision == f->ir_revision &&
+                                 published->lowered_cfg_revision == f->cfg_version
+                           : published->analyzed_ir_revision == f->ir_revision &&
+                                 published->analyzed_cfg_revision == f->cfg_version;
+        if (current)
+            return published->is_coroutine;
+    }
     if (f && resolver && resolver->func_suspendability) {
         int prepared = resolver->func_suspendability(resolver->ud, f);
         if (prepared >= 0)
@@ -397,11 +488,14 @@ static bool xi_coro_func_is_suspendable_depth(const XiFunc *f, const XiCoroResol
                 target = xi_coro_resolve_local_callee(f, v->args[0]);
             if (!target && (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT))
                 target = xi_coro_resolve_method_callee(f, v);
+            int native_suspendability = xi_coro_native_import_suspendability(f, v);
+            if (!target && native_suspendability > 0)
+                return true;
             if (!target && resolver && resolver->call_suspendability &&
                 (v->op == XI_CALL || v->op == XI_CALL_METHOD ||
                  v->op == XI_CALL_METHOD_DIRECT)) {
                 int prepared = resolver->call_suspendability(resolver->ud, f, v);
-                if (prepared != 0)
+                if (prepared > 0)
                     return true;
             }
             if (!target || target == f || target->entry_type == 2)
@@ -432,13 +526,15 @@ static bool xi_coro_call_suspends(const XiFunc *f, const XiValue *v,
         return false;
     if (target)
         return xi_coro_func_is_suspendable(target, resolver);
+    int native_suspendability = xi_coro_native_import_suspendability(f, v);
+    if (native_suspendability >= 0)
+        return native_suspendability > 0;
     if (resolver && resolver->call_suspendability) {
         int prepared = resolver->call_suspendability(resolver->ud, f, v);
-        /* An attached closed-world resolver may never erase an unresolved
-         * call from the coroutine graph.  Conservatively materializing the
-         * state makes the backend reject an unsupported adapter instead of
-         * silently selecting a synchronous ABI. */
-        return prepared != 0;
+        /* Unknown targets are rejected independently before a plan is
+         * published.  Only a positive closed-world classification creates a
+         * suspension state; treating -1 as true would corrupt sync plans. */
+        return prepared > 0;
     }
     return false;
 }
@@ -458,8 +554,11 @@ static bool xi_coro_method_call_suspends(const XiFunc *f, const XiValue *v,
         return false;
     if (target)
         return xi_coro_func_is_suspendable(target, resolver);
+    int native_suspendability = xi_coro_native_import_suspendability(f, v);
+    if (native_suspendability >= 0)
+        return native_suspendability > 0;
     if (resolver && resolver->call_suspendability)
-        return resolver->call_suspendability(resolver->ud, f, v) != 0;
+        return resolver->call_suspendability(resolver->ud, f, v) > 0;
     return false;
 }
 
@@ -501,8 +600,9 @@ static const XiEnumData *xi_coro_static_enum_namespace(const XiFunc *f,
                                                         const XiValue *receiver) {
     if (!f || !receiver)
         return NULL;
-    if (xi_copy_is_identity_alias(receiver) && receiver->nargs > 0)
-        return xi_coro_static_enum_namespace(f, receiver->args[0]);
+    const XiValue *identity = xi_coro_unwrap_receiver_identity(receiver);
+    if (identity != receiver)
+        return xi_coro_static_enum_namespace(f, identity);
     const XiModule *owner_module = xi_coro_owning_module(f);
     if (receiver->op == XI_GET_SHARED && receiver->aux_int >= 0 && owner_module &&
         owner_module->slot_enums && receiver->aux_int < owner_module->nslots)
@@ -540,18 +640,20 @@ static bool xi_coro_is_closed_builtin_method_call(const XiValue *v) {
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) ||
         v->nargs == 0 || !v->args[0] || !v->args[0]->type)
         return false;
-    if (xi_value_type_is_channel(v->args[0]) || xi_value_type_is_task(v->args[0]) ||
-        xi_value_type_is_work_queue(v->args[0]) ||
-        xi_value_type_is_result_group(v->args[0]) ||
-        xi_value_type_is_countdown_latch(v->args[0]) ||
-        xi_value_type_is_semaphore(v->args[0]) || xi_value_type_is_event_count(v->args[0]))
+    const XiValue *receiver = xi_coro_unwrap_receiver_identity(v->args[0]);
+    if (!receiver || !receiver->type)
+        return false;
+    if (xi_value_type_is_channel(receiver) || xi_value_type_is_task(receiver) ||
+        xi_value_type_is_work_queue(receiver) || xi_value_type_is_result_group(receiver) ||
+        xi_value_type_is_countdown_latch(receiver) || xi_value_type_is_semaphore(receiver) ||
+        xi_value_type_is_event_count(receiver))
         return true;
     /* Native classes and interfaces carry a NULL class_ref as their frozen
      * declaration identity.  User declarations always carry their owning
      * XrClassInfo, including when they shadow a builtin spelling.  This one
      * identity gate covers StringBuilder, Iterator, Buffer, and the remaining
      * compiler-owned named method tables without a name-based allow-list. */
-    const XrType *receiver_type = v->args[0]->type;
+    const XrType *receiver_type = receiver->type;
     if ((receiver_type->kind == XR_KIND_INSTANCE || receiver_type->kind == XR_KIND_INTERFACE) &&
         receiver_type->instance.class_name && receiver_type->instance.class_ref == NULL)
         return true;
@@ -559,12 +661,12 @@ static bool xi_coro_is_closed_builtin_method_call(const XiValue *v) {
      * and static members.  Only reserved compiler globals may carry it; user
      * bindings start at XR_USER_GLOBALS_START and remain subject to ordinary
      * callsite/target resolution. */
-    if (v->args[0]->op == XI_GET_BUILTIN && receiver_type->kind == XR_KIND_CLASS &&
-        v->args[0]->aux_int > XR_GLOBAL_VAR_RESERVED0 &&
-        v->args[0]->aux_int < XR_USER_GLOBALS_START &&
-        v->args[0]->aux_int != XR_GLOBAL_VAR_RESERVED30)
+    if (receiver->op == XI_GET_BUILTIN && receiver_type->kind == XR_KIND_CLASS &&
+        receiver->aux_int > XR_GLOBAL_VAR_RESERVED0 &&
+        receiver->aux_int < XR_USER_GLOBALS_START &&
+        receiver->aux_int != XR_GLOBAL_VAR_RESERVED30)
         return true;
-    switch (v->args[0]->type->kind) {
+    switch (receiver_type->kind) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
         case XR_KIND_STRING:
@@ -587,6 +689,33 @@ static bool xi_coro_is_closed_builtin_method_call(const XiValue *v) {
     }
 }
 
+/* A class with no declared instance constructor has a compiler-defined
+ * allocation-only constructor. Its closed XiClassData row is the proof: if a
+ * constructor member exists, ordinary target/effect resolution must classify
+ * that body instead. */
+static bool xi_coro_is_default_class_constructor_call(const XiFunc *f,
+                                                       const XiValue *call) {
+    if (!f || !call || call->op != XI_CALL || call->nargs < 1 ||
+        !xi_value_is_constructor_call(call))
+        return false;
+    const XiValue *callee = call->args[0];
+    while (callee && callee->nargs > 0 &&
+           (xi_copy_is_identity_alias(callee) || xi_op_is_identity_forward(callee->op)))
+        callee = callee->args[0];
+    const XiModule *module = xi_coro_owning_module(f);
+    if (!callee || callee->op != XI_GET_SHARED || callee->aux_int < 0 || !module ||
+        !module->slot_classes || callee->aux_int >= module->nslots)
+        return false;
+    const XiClassData *class_data = module->slot_classes[callee->aux_int];
+    if (!class_data)
+        return false;
+    for (uint16_t i = 0; class_data->methods && i < class_data->nmethod; i++) {
+        if (class_data->methods[i].is_constructor && !class_data->methods[i].is_static)
+            return false;
+    }
+    return true;
+}
+
 static bool xi_coro_call_resolution_complete(const XiFunc *f, const XiValue *v,
                                              const XiCoroResolver *resolver) {
     const XiFunc *target = NULL;
@@ -602,6 +731,10 @@ static bool xi_coro_call_resolution_complete(const XiFunc *f, const XiValue *v,
         if (xi_coro_is_test_yield_call(f, v, resolver) ||
             xi_coro_is_net_io_call(f, v, resolver))
             return true;
+        if (xi_coro_is_default_class_constructor_call(f, v))
+            return true;
+        if (xi_coro_native_import_suspendability(f, v) >= 0)
+            return true;
         if (v->nargs > 0) {
             if (resolver && resolver->resolve_callee)
                 target = resolver->resolve_callee(resolver->ud, f, v->args[0]);
@@ -615,6 +748,7 @@ static bool xi_coro_call_resolution_complete(const XiFunc *f, const XiValue *v,
     }
 
     if (xi_coro_is_static_enum_member_call(f, v) || xi_coro_is_closed_builtin_method_call(v) ||
+        xi_coro_native_import_suspendability(f, v) >= 0 ||
         xi_value_is_blocking_channel_method_call(v) ||
         xi_value_is_blocking_task_method_call(v) ||
         xi_value_is_blocking_work_queue_method_call(v) ||
@@ -643,8 +777,9 @@ static bool xi_coro_all_calls_resolved(const XiFunc *f, const XiCoroResolver *re
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *block = f->blocks[bi];
         for (uint32_t vi = 0; block && vi < block->nvalues; vi++) {
-            if (!xi_coro_call_resolution_complete(f, block->values[vi], resolver))
+            if (!xi_coro_call_resolution_complete(f, block->values[vi], resolver)) {
                 return false;
+            }
         }
     }
     return true;
@@ -932,8 +1067,103 @@ static bool xi_coro_block_successor_phi_uses_target(const XiBlock *blk, const Xi
     return false;
 }
 
-static const XiFunc *xi_coro_resolve_local_callee(const XiFunc *caller,
-                                                   const XiValue *callee) {
+/* A ref/out/read call plan passes a nonescaping place into the active call.
+ * When that call suspends, the place remains part of the child/retry boundary
+ * even if ordinary SSA sees only one call-site use. The pointee is lifted by
+ * xi_coro_value_address_live_across_suspend, so a local place is reconstructed
+ * against stable coroutine-frame storage rather than a resume-stack local. */
+static bool xi_coro_suspend_call_plan_uses_place(const XiValue *user, const XiValue *target) {
+    if (!user || !target || !user->call_plan || !user->call_plan->verified)
+        return false;
+    const XiCallPlan *plan = user->call_plan;
+    if (plan->has_receiver && plan->receiver.place == target)
+        return true;
+    for (uint16_t i = 0; i < plan->nargs; i++) {
+        if (plan->args && plan->args[i].place == target)
+            return true;
+    }
+    return false;
+}
+
+static bool xi_coro_suspend_boundary_uses_target(const XiValue *user, const XiValue *target) {
+    return xi_coro_retry_suspend_uses_target(user, target) ||
+           xi_coro_suspend_call_plan_uses_place(user, target);
+}
+
+static void xi_coro_find_shared_store_in_function(const XiFunc *function, int64_t slot,
+                                                  const XiValue **source, bool *ambiguous) {
+    if (!function || !source || !ambiguous || *ambiguous)
+        return;
+    for (uint32_t block_index = 0; block_index < function->nblocks; block_index++) {
+        const XiBlock *block = function->blocks[block_index];
+        for (uint32_t value_index = 0; block && value_index < block->nvalues; value_index++) {
+            const XiValue *store = block->values[value_index];
+            if (!store || store->op != XI_SET_SHARED || store->aux_int != slot ||
+                store->nargs < 1)
+                continue;
+            if (*source && *source != store->args[0]) {
+                *ambiguous = true;
+                return;
+            }
+            *source = store->args[0];
+        }
+    }
+}
+
+/* Shared-slot numbers are lexical-domain local. Search the caller first and
+ * then its parents; never combine numerically equal slots from sibling child
+ * functions. The first lexical domain containing a store owns the load. */
+static const XiValue *xi_coro_find_lexical_shared_store(const XiFunc *caller, int64_t slot,
+                                                        const XiFunc **store_function,
+                                                        bool *ambiguous) {
+    if (store_function)
+        *store_function = NULL;
+    if (ambiguous)
+        *ambiguous = false;
+    for (const XiFunc *owner = caller; owner; owner = owner->parent_func) {
+        const XiValue *source = NULL;
+        bool owner_ambiguous = false;
+        xi_coro_find_shared_store_in_function(owner, slot, &source, &owner_ambiguous);
+        if (owner_ambiguous) {
+            if (ambiguous)
+                *ambiguous = true;
+            return NULL;
+        }
+        if (source) {
+            if (store_function)
+                *store_function = owner;
+            return source;
+        }
+    }
+    return NULL;
+}
+
+static const XiFunc *xi_coro_resolve_local_callee_depth(const XiFunc *caller,
+                                                         const XiValue *callee, uint8_t depth);
+
+static const XiFunc *xi_coro_resolve_returned_callee(const XiFunc *producer, uint8_t depth) {
+    if (!producer || depth > XI_CORO_RESOLVE_DEPTH_MAX)
+        return NULL;
+    const XiFunc *resolved = NULL;
+    bool saw_return = false;
+    for (uint32_t block_index = 0; block_index < producer->nblocks; block_index++) {
+        const XiBlock *block = producer->blocks[block_index];
+        if (!block || block->kind != XI_BLOCK_RETURN || !block->control)
+            continue;
+        const XiFunc *candidate = xi_coro_resolve_local_callee_depth(
+            producer, block->control, (uint8_t) (depth + 1));
+        if (!candidate || (resolved && resolved != candidate))
+            return NULL;
+        resolved = candidate;
+        saw_return = true;
+    }
+    return saw_return ? resolved : NULL;
+}
+
+static const XiFunc *xi_coro_resolve_local_callee_depth(const XiFunc *caller,
+                                                         const XiValue *callee, uint8_t depth) {
+    if (depth > XI_CORO_RESOLVE_DEPTH_MAX)
+        return NULL;
     if (!callee)
         return NULL;
     if ((callee->op == XI_CLOSURE_NEW ||
@@ -946,6 +1176,25 @@ static const XiFunc *xi_coro_resolve_local_callee(const XiFunc *caller,
                 callee->aux_int < (int64_t) owner->shared_slot_func_count &&
                 owner->shared_slot_funcs[callee->aux_int])
                 return owner->shared_slot_funcs[callee->aux_int];
+        }
+        const XiFunc *store_function = NULL;
+        bool ambiguous = false;
+        const XiValue *source = xi_coro_find_lexical_shared_store(
+            caller, callee->aux_int, &store_function, &ambiguous);
+        if (!ambiguous && source) {
+            const XiFunc *direct = xi_coro_resolve_local_callee_depth(
+                store_function ? store_function : caller, source, (uint8_t) (depth + 1));
+            if (direct)
+                return direct;
+            if (source->op == XI_CALL && source->nargs >= 1) {
+                const XiFunc *producer = xi_coro_resolve_local_callee_depth(
+                    store_function ? store_function : caller, source->args[0],
+                    (uint8_t) (depth + 1));
+                const XiFunc *returned = xi_coro_resolve_returned_callee(
+                    producer, (uint8_t) (depth + 1));
+                if (returned)
+                    return returned;
+            }
         }
         const XiModule *module = xi_coro_owning_module(caller);
         if (module && module->slot_classes && callee->aux_int < module->nslots) {
@@ -961,8 +1210,15 @@ static const XiFunc *xi_coro_resolve_local_callee(const XiFunc *caller,
             }
         }
     }
-    if (xi_copy_is_identity_alias(callee) && callee->nargs > 0)
-        return xi_coro_resolve_local_callee(caller, callee->args[0]);
+    /* A successful CHECKTYPE is the same callable object with a refined
+     * semantic type. SOURCE_MOVE/OWNER_FORWARD and identity COPY likewise
+     * preserve the target. Follow only these first-class forwarding ops;
+     * conversions and arbitrary call results remain unresolved. */
+    if (callee->nargs > 0 &&
+        (xi_copy_is_identity_alias(callee) || xi_op_is_identity_forward(callee->op) ||
+         callee->op == XI_CHECKTYPE))
+        return xi_coro_resolve_local_callee_depth(caller, callee->args[0],
+                                                  (uint8_t) (depth + 1));
     const XiImportRef *ref = xi_value_import_ref(caller, callee);
     if (!ref)
         return NULL;
@@ -983,6 +1239,11 @@ static const XiFunc *xi_coro_resolve_local_callee(const XiFunc *caller,
             return module->init->children[child];
     }
     return NULL;
+}
+
+static const XiFunc *xi_coro_resolve_local_callee(const XiFunc *caller,
+                                                   const XiValue *callee) {
+    return xi_coro_resolve_local_callee_depth(caller, callee, 0);
 }
 
 /* Compute liveness at one suspension without consuming the materialized plan.
@@ -1015,7 +1276,8 @@ static bool xi_coro_value_direct_live_at_point(const XiFunc *f, const XiLiveness
                         (point->aux_int & XI_AWAIT_AUX_INTO_RESULT) != 0;
     bool aggregate_await = point->op == XI_AWAIT && point->nargs >= 1 &&
                            point->args[0] == target && (((int) point->aux_int & 0x7) != 0);
-    return await_result || aggregate_await || xi_coro_retry_suspend_uses_target(point, target) ||
+    return await_result || aggregate_await ||
+           xi_coro_suspend_boundary_uses_target(point, target) ||
            xi_is_live_out(live, blk, target) ||
            xi_coro_block_uses_target_after(blk, point_index + 1, target) ||
            xi_coro_block_successor_phi_uses_target(blk, target) ||
@@ -1058,7 +1320,7 @@ static bool xi_coro_value_live_at_split_point(const XiFunc *f, const XiLiveness 
                            point->args[0] == target &&
                            (((int) point->aux_int & 0x7) != 0);
     if (xi_is_live_out(live, point->block, target) || await_result || aggregate_await ||
-        xi_coro_retry_suspend_uses_target(point, target) ||
+        xi_coro_suspend_boundary_uses_target(point, target) ||
         (target == point && xi_coro_value_needs_runtime_slot(target)))
         return true;
 
@@ -1069,7 +1331,9 @@ static bool xi_coro_value_live_at_split_point(const XiFunc *f, const XiLiveness 
         for (uint32_t vi = 0; vi < block->nvalues; vi++) {
             const XiValue *place = block->values[vi];
             if (place && place->op == XI_LOCAL_ADDR && place->nargs >= 1 &&
-                place->args[0] == target && xi_is_live_out(live, point->block, place))
+                place->args[0] == target &&
+                (xi_is_live_out(live, point->block, place) ||
+                 xi_coro_suspend_boundary_uses_target(point, place)))
                 return true;
         }
     }
@@ -1106,7 +1370,8 @@ XR_FUNC bool xi_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness
             }
             if (!available || !xi_coro_is_suspend_point(f, v, resolver))
                 continue;
-            if (xi_coro_retry_suspend_uses_target(v, target) || xi_is_live_out(live, blk, target) ||
+            if (xi_coro_suspend_boundary_uses_target(v, target) ||
+                xi_is_live_out(live, blk, target) ||
                 xi_coro_block_uses_target_after(blk, vi + 1, target) ||
                 xi_coro_block_successor_phi_uses_target(blk, target))
                 return true;

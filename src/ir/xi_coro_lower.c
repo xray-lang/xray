@@ -350,6 +350,14 @@ static bool coro_has_unsupported_exception_region(const XiFunc *f,
             const XiValue *value = block->values[vi];
             if (!value || value->op != XI_TRY)
                 continue;
+            /* Hidden defer regions are represented by an explicit cleanup stack in
+             * the coroutine frame. Their handler remains a cold CFG target while
+             * suspend, panic, and cancellation preserve the active handler IDs in
+             * heap-owned frame state. Source try/catch and cleanup-local handlers
+             * still require exceptional-edge SSA reconstruction and must fail
+             * closed when they span a suspension point. */
+            if (value->aux_int == XI_TRY_AUX_STATIC_CLEANUP)
+                continue;
             for (uint32_t pi = 0; pi < plan->nstates; pi++) {
                 if (coro_try_region_reaches_point(f, value, plan->points[pi].op))
                     return true;
