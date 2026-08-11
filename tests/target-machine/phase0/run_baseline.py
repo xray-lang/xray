@@ -40,7 +40,7 @@ if sys.version_info < (3, 11):
 
 EVIDENCE_SCHEMA = 2
 POLICY_SCHEMA = 1
-RUNNER_VERSION = "target-machine-baseline/2"
+RUNNER_VERSION = "target-machine-baseline/3"
 DEFAULT_POLICY = Path("contracts/target-machine/baseline-manifest.json")
 
 
@@ -211,6 +211,17 @@ def validate_policy(root: Path, policy: dict[str, Any]) -> list[str]:
         errors.append("performance RSS interval must be in (0, 1]")
     if not isinstance(performance.get("timeout_seconds"), int) or performance.get("timeout_seconds", 0) < 1:
         errors.append("performance timeout_seconds must be positive")
+    power_policy = performance.get("power_policy", {})
+    if os.name == "nt":
+        guid = power_policy.get("windows_active_scheme_guid")
+        if not isinstance(guid, str) or re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", guid
+        ) is None:
+            errors.append("performance power policy must govern a Windows scheme GUID")
+    elif sys.platform.startswith("linux"):
+        governor = power_policy.get("linux_scaling_governor")
+        if not isinstance(governor, str) or not governor:
+            errors.append("performance power policy must govern a Linux scaling governor")
 
     modes: set[str] = set()
     performance_names: set[str] = set()
@@ -441,24 +452,29 @@ def total_memory_bytes() -> int | None:
         return None
 
 
+def affinity_from_windows_handle(handle: int | ctypes.c_void_p) -> list[int] | str:
+    process_mask = ctypes.c_size_t()
+    system_mask = ctypes.c_size_t()
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetProcessAffinityMask.argtypes = (
+        ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_size_t)
+    )
+    kernel32.GetProcessAffinityMask.restype = ctypes.c_int
+    if kernel32.GetProcessAffinityMask(
+        ctypes.c_void_p(handle), ctypes.byref(process_mask), ctypes.byref(system_mask)
+    ):
+        return [index for index in range(process_mask.value.bit_length())
+                if process_mask.value & (1 << index)]
+    return "unavailable"
+
+
 def process_affinity() -> list[int] | str:
     if hasattr(os, "sched_getaffinity"):
         return sorted(os.sched_getaffinity(0))
     if os.name == "nt":
-        process_mask = ctypes.c_size_t()
-        system_mask = ctypes.c_size_t()
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         kernel32.GetCurrentProcess.restype = ctypes.c_void_p
-        kernel32.GetProcessAffinityMask.argtypes = (
-            ctypes.c_void_p, ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_size_t)
-        )
-        kernel32.GetProcessAffinityMask.restype = ctypes.c_int
-        handle = kernel32.GetCurrentProcess()
-        if kernel32.GetProcessAffinityMask(
-            handle, ctypes.byref(process_mask), ctypes.byref(system_mask)
-        ):
-            return [index for index in range(process_mask.value.bit_length())
-                    if process_mask.value & (1 << index)]
+        return affinity_from_windows_handle(kernel32.GetCurrentProcess())
     return "unavailable"
 
 
@@ -496,15 +512,13 @@ def fixed_affinity(logical_cpu: int):
         set_process_affinity(previous)
 
 
-def active_power_policy(root: Path, expected: str | None,
+def active_power_policy(root: Path, policy: dict[str, Any],
                         require_performance: bool) -> dict[str, Any]:
     if not require_performance:
         return {"required": False}
-    if not expected:
-        raise RuntimeError(
-            "performance evidence requires --power-policy or XRAY_BASELINE_POWER_POLICY"
-        )
+    governed = policy["performance"]["power_policy"]
     if os.name == "nt":
+        expected = governed["windows_active_scheme_guid"]
         result = run_capture(["powercfg", "/getactivescheme"], root, 30)
         output = result.stdout.strip()
         match = re.search(
@@ -524,6 +538,7 @@ def active_power_policy(root: Path, expected: str | None,
             "query_sha256": sha256_bytes((output + "\n").encode("utf-8")),
         }
     if sys.platform.startswith("linux"):
+        expected = governed["linux_scaling_governor"]
         files = sorted(Path("/sys/devices/system/cpu").glob("cpu[0-9]*/cpufreq/scaling_governor"))
         governors = sorted({path.read_text(encoding="ascii").strip() for path in files})
         if not governors:
@@ -541,7 +556,7 @@ def active_power_policy(root: Path, expected: str | None,
 
 
 def host_and_toolchain_info(root: Path, build: Path, binary: Path,
-                            power_policy: str | None, require_performance: bool,
+                            require_performance: bool,
                             policy: dict[str, Any]) -> dict[str, Any]:
     values = cmake_identity_values(build)
     expected = policy["identity"]
@@ -577,7 +592,7 @@ def host_and_toolchain_info(root: Path, build: Path, binary: Path,
     except json.JSONDecodeError as error:
         raise RuntimeError(f"native toolchain probe is not JSON: {error}") from error
     probe_canonical = json.dumps(probe_json, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    power = active_power_policy(root, power_policy, require_performance)
+    power = active_power_policy(root, policy, require_performance)
 
     cpu = host_platform.processor() or host_platform.machine()
     if sys.platform == "darwin":
@@ -795,6 +810,22 @@ def execute_process_sample(command: list[str], cwd: Path, output: Path, log_stem
             stderr=stderr_stream,
             env=env,
         )
+        observed_affinity: list[int] | str = "unavailable"
+        if os.name == "nt":
+            child_handle = getattr(process, "_handle", None)
+            if child_handle:
+                observed_affinity = affinity_from_windows_handle(child_handle)
+        elif hasattr(os, "sched_getaffinity"):
+            try:
+                observed_affinity = sorted(os.sched_getaffinity(process.pid))
+            except OSError:
+                observed_affinity = "unavailable"
+        if isinstance(observed_affinity, list):
+            affinity = observed_affinity
+            affinity_evidence = "observed-child"
+        else:
+            affinity = process_affinity()
+            affinity_evidence = "inherited-parent"
         deadline = started + timeout_seconds
         while True:
             peak_rss = max(peak_rss, process_rss_bytes(process.pid))
@@ -825,7 +856,8 @@ def execute_process_sample(command: list[str], cwd: Path, output: Path, log_stem
         "stdout_matches": output_matches,
         "duration_ns": duration_ns,
         "peak_rss_bytes": peak_rss,
-        "process_affinity": process_affinity(),
+        "process_affinity": affinity,
+        "process_affinity_evidence": affinity_evidence,
         "stdout_log": stdout_log.name,
         "stdout_sha256": sha256_bytes(stdout),
         "stderr_log": stderr_log.name,
@@ -833,16 +865,40 @@ def execute_process_sample(command: list[str], cwd: Path, output: Path, log_stem
     }
 
 
-def fixture_digest(directory: Path, policy: dict[str, Any]) -> str:
+def fixture_digest(directory: Path, policy: dict[str, Any],
+                   replacements: dict[str, bytes] | None = None) -> str:
     digest = hashlib.sha256()
     for row in policy["performance"]["fixture"]["files"]:
         relative = row["path"]
-        data = (directory / relative).read_bytes()
+        if replacements is not None and relative in replacements:
+            data = replacements[relative]
+        else:
+            data = (directory / relative).read_bytes()
         digest.update(relative.encode("utf-8"))
         digest.update(b"\0")
         digest.update(len(data).to_bytes(8, "big"))
         digest.update(data)
     return digest.hexdigest()
+
+
+def expected_fixture_digest(root: Path, policy: dict[str, Any], variant: str) -> str:
+    fixture = policy["performance"]["fixture"]
+    directory = (root / fixture["directory"]).resolve()
+    if variant == "base":
+        return fixture_digest(directory, policy)
+    if variant == "edited":
+        return fixture_digest(directory, policy, {
+            fixture["edit_file"]: (directory / fixture["edited_source"]).read_bytes(),
+        })
+    raise RuntimeError(f"unknown fixture variant {variant!r}")
+
+
+def governed_inputs(root: Path, policy: dict[str, Any], policy_path: Path) -> dict[str, str]:
+    return {
+        "baseline_manifest_sha256": sha256(policy_path),
+        "runner_sha256": sha256(Path(__file__).resolve()),
+        "fixture_sha256": expected_fixture_digest(root, policy, "base"),
+    }
 
 
 def controlled_environment(directory: Path) -> dict[str, str]:
@@ -973,7 +1029,7 @@ def aggregate_result(correctness: list[dict[str, Any]], performance: list[dict[s
 
 
 def render_manifest(root: Path, build: Path, output: Path, repeat: int, scope: str,
-                    power_policy: str | None, policy: dict[str, Any],
+                    policy: dict[str, Any],
                     policy_path: Path) -> dict[str, Any]:
     source_snapshot = clean_source_snapshot(root, policy)
     preflight = run_freshness_preflight(root, build, output, policy)
@@ -989,7 +1045,7 @@ def render_manifest(root: Path, build: Path, output: Path, repeat: int, scope: s
     if not errors:
         identity = compiler_identity(root, build, policy)
         environment = host_and_toolchain_info(
-            root, build, compiler_binary_path(build), power_policy, run_performance_lanes, policy
+            root, build, compiler_binary_path(build), run_performance_lanes, policy
         )
         correctness = [] if scope == "performance" else run_correctness(
             root, build, output, repeat, scope, policy
@@ -1023,6 +1079,7 @@ def render_manifest(root: Path, build: Path, output: Path, repeat: int, scope: s
             if policy_path.is_relative_to(root) else str(policy_path),
             "sha256": sha256(policy_path),
         },
+        "governed_inputs": governed_inputs(root, policy, policy_path),
         "source": identity,
         "final_source": final_source,
         "environment": environment,
@@ -1070,6 +1127,15 @@ def validate_evidence(manifest: dict[str, Any], policy: dict[str, Any], policy_p
         errors.append(f"evidence runner must be {RUNNER_VERSION}")
     if manifest.get("policy", {}).get("sha256") != sha256(policy_path):
         errors.append("evidence policy digest does not match")
+    root = policy_path.parents[2].resolve()
+    expected_inputs = governed_inputs(root, policy, policy_path)
+    actual_inputs = manifest.get("governed_inputs")
+    if not isinstance(actual_inputs, dict):
+        errors.append("evidence governed input hashes are missing")
+    else:
+        for key, expected in expected_inputs.items():
+            if actual_inputs.get(key) != expected:
+                errors.append(f"evidence {key} does not match governed inputs")
 
     source = manifest.get("source")
     if strict and not isinstance(source, dict):
@@ -1223,10 +1289,22 @@ def validate_evidence(manifest: dict[str, Any], policy: dict[str, Any], policy_p
                 errors.append(f"performance lane {name} process status is not derived")
             if row.get("process_affinity") != [logical_cpu]:
                 errors.append(f"performance lane {name} was not pinned to logical CPU {logical_cpu}")
+            if row.get("process_affinity_evidence") not in (
+                "observed-child", "inherited-parent"
+            ):
+                errors.append(f"performance lane {name} affinity evidence is missing")
         variants = {row.get("variant") for row in samples}
         expected_variant = "edited" if spec["mode"] == "edit" else "base"
         if variants != {expected_variant}:
             errors.append(f"performance lane {name} sample variant drift")
+        for row in samples:
+            try:
+                expected_fixture = expected_fixture_digest(root, policy, row.get("variant"))
+            except (OSError, RuntimeError):
+                errors.append(f"performance lane {name} fixture variant is invalid")
+                continue
+            if row.get("fixture_sha256") != expected_fixture:
+                errors.append(f"performance lane {name} fixture digest does not match raw fixture")
         durations = [float(row.get("duration_ns", 0)) for row in samples]
         rss_values = [float(row.get("peak_rss_bytes", 0)) for row in samples]
         duration = distribution(durations, "nanoseconds")
@@ -1276,7 +1354,13 @@ def validate_evidence(manifest: dict[str, Any], policy: dict[str, Any], policy_p
         if host.get("measurement_affinity") != [logical_cpu]:
             errors.append("evidence measurement affinity does not match policy")
         power = host.get("power_policy", {})
-        if power.get("required") is not True or power.get("active") != power.get("expected"):
+        governed_power = policy["performance"]["power_policy"]
+        expected_power = (
+            governed_power.get("windows_active_scheme_guid")
+            if os.name == "nt" else governed_power.get("linux_scaling_governor")
+        )
+        if (power.get("required") is not True or power.get("expected") != expected_power
+                or power.get("active") != expected_power):
             errors.append("evidence active power policy is not verified")
         if not valid_sha256(power.get("query_sha256")):
             errors.append("evidence power-policy query digest is missing")
@@ -1318,6 +1402,13 @@ def validate_log_digests(manifest: dict[str, Any], base: Path) -> list[str]:
     return errors
 
 
+def verify_evidence(manifest: dict[str, Any], policy: dict[str, Any], policy_path: Path,
+                    evidence_root: Path, require_qualifying: bool = False) -> list[str]:
+    errors = validate_evidence(manifest, policy, policy_path, require_qualifying)
+    errors.extend(validate_log_digests(manifest, evidence_root))
+    return errors
+
+
 def validate_policy_qualification(root: Path, policy: dict[str, Any],
                                   policy_path: Path) -> list[str]:
     qualification = policy["qualification"]
@@ -1334,9 +1425,7 @@ def validate_policy_qualification(root: Path, policy: dict[str, Any],
         manifest = json.loads(evidence_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         return [f"cannot load qualifying evidence: {error}"]
-    errors = validate_evidence(manifest, policy, policy_path, True)
-    errors.extend(validate_log_digests(manifest, evidence_path.parent))
-    return errors
+    return verify_evidence(manifest, policy, policy_path, evidence_path.parent, True)
 
 
 def failed_manifest(scope: str, policy_path: Path, error: Exception) -> dict[str, Any]:
@@ -1362,25 +1451,33 @@ def write_evidence(path: Path, manifest: dict[str, Any]) -> None:
     path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def self_check(condition: bool, message: str) -> None:
+    if not condition:
+        raise RuntimeError("self-test failed: " + message)
+
+
 def self_test(root: Path, policy_path: Path) -> int:
     policy = load_policy(root, policy_path)
-    assert captured_text(b"timeout\xff") == "timeout�"
+    self_check(captured_text(b"timeout\xff") == "timeout�", "bytes decoding")
     parsed = parse_ctest_summary("100% tests passed, 0 tests failed out of 8")
-    assert parsed == {"percent_passed": 100, "failed": 0, "total": 8}
-    assert percentile([1.0, 2.0, 3.0], 0.5) == 2.0
-    assert round(percentile([1.0, 2.0, 3.0], 0.95), 3) == 2.9
+    self_check(parsed == {"percent_passed": 100, "failed": 0, "total": 8}, "CTest parsing")
+    self_check(percentile([1.0, 2.0, 3.0], 0.5) == 2.0, "p50")
+    self_check(round(percentile([1.0, 2.0, 3.0], 0.95), 3) == 2.9, "p95")
     stats = distribution([1.0, 1.0], "seconds")
-    assert stats["coefficient_of_variation"] == 0.0
+    self_check(stats["coefficient_of_variation"] == 0.0, "variance")
     expected_binary = "xray.exe" if os.name == "nt" else "xray"
-    assert compiler_binary_path(Path("build")).name == expected_binary
-    assert aggregate_result([{"status": "passed"}], [{"status": "failed"}]) == "failed"
+    self_check(compiler_binary_path(Path("build")).name == expected_binary, "binary name")
+    self_check(
+        aggregate_result([{"status": "passed"}], [{"status": "failed"}]) == "failed",
+        "result aggregation",
+    )
 
     with tempfile.TemporaryDirectory(prefix="xray-target-baseline-self-test.") as directory:
         temp = Path(directory)
         (temp / ".gitignore").write_text("*.obj\n", encoding="utf-8")
         residue = temp / "leaked.fast-test.obj"
         residue.write_bytes(b"not-an-object")
-        assert source_root_residue(temp, policy) == [residue.name]
+        self_check(source_root_residue(temp, policy) == [residue.name], "residue ignores .gitignore")
         residue.unlink()
 
         sample_output = temp / "sample"
@@ -1394,12 +1491,16 @@ def self_test(root: Path, policy_path: Path) -> int:
             command, temp, sample_output, "rss", 5, 0.005, b"ok\n",
             controlled_environment(temp),
         )
-        assert sample["status"] == "passed"
-        assert sample["peak_rss_bytes"] > 0
-        assert sample["process_affinity"] == process_affinity()
+        self_check(sample["status"] == "passed", "RSS sample")
+        self_check(sample["peak_rss_bytes"] > 0, "RSS capture")
+        self_check(sample["process_affinity"] == process_affinity(), "sample affinity")
+        self_check(
+            sample["process_affinity_evidence"] in ("observed-child", "inherited-parent"),
+            "sample affinity provenance",
+        )
         environment = controlled_environment(temp)
-        assert environment["HOME"] == environment["USERPROFILE"]
-        assert Path(environment["XRAY_CACHE_DIR"]).is_relative_to(temp)
+        self_check(environment["HOME"] == environment["USERPROFILE"], "controlled home")
+        self_check(Path(environment["XRAY_CACHE_DIR"]).is_relative_to(temp), "controlled cache")
 
         false_pass = {
             "schema": EVIDENCE_SCHEMA,
@@ -1412,8 +1513,21 @@ def self_test(root: Path, policy_path: Path) -> int:
             "performance_lanes": [],
         }
         evidence_errors = validate_evidence(false_pass, policy, policy_path)
-        assert any("aggregate result" in value for value in evidence_errors)
-        assert any("source identity" in value for value in evidence_errors)
+        self_check(any("aggregate result" in value for value in evidence_errors), "false pass result")
+        self_check(any("source identity" in value for value in evidence_errors), "false pass identity")
+        self_check(
+            any("governed input hashes" in value for value in evidence_errors),
+            "false pass governed inputs",
+        )
+        expected_inputs = governed_inputs(root, policy, policy_path)
+        for key in expected_inputs:
+            hash_tampered = {**false_pass, "governed_inputs": dict(expected_inputs)}
+            hash_tampered["governed_inputs"][key] = "0" * 64
+            hash_errors = validate_evidence(hash_tampered, policy, policy_path)
+            self_check(
+                any(key in value for value in hash_errors),
+                f"governed {key} mismatch",
+            )
 
         tampered_stats = {
             "schema": EVIDENCE_SCHEMA,
@@ -1441,8 +1555,20 @@ def self_test(root: Path, policy_path: Path) -> int:
             }],
         }
         tampered_errors = validate_evidence(tampered_stats, policy, policy_path)
-        assert any("duration statistics" in value for value in tampered_errors)
-        assert any("RSS statistics" in value for value in tampered_errors)
+        self_check(any("duration statistics" in value for value in tampered_errors), "duration recompute")
+        self_check(any("RSS statistics" in value for value in tampered_errors), "RSS recompute")
+
+        missing_log = {
+            "freshness_preflight": [{"log": "missing.log", "log_sha256": "0" * 64}],
+            "correctness_lanes": [],
+            "performance_lanes": [],
+        }
+        log_errors = validate_log_digests(missing_log, temp)
+        self_check(bool(log_errors), "missing logs fail closed")
+
+        malformed_policy = json.loads(json.dumps(policy))
+        malformed_policy["performance"]["fixture"]["files"][0]["sha256"] = "0" * 64
+        self_check(bool(validate_policy(root, malformed_policy)), "fixture inventory drift")
     print("target-machine baseline runner self-test: PASS")
     return 0
 
@@ -1456,10 +1582,8 @@ def main() -> int:
     parser.add_argument("--manifest")
     parser.add_argument("--repeat", type=int)
     parser.add_argument("--scope", choices=("core", "full", "performance"), default="core")
-    parser.add_argument("--power-policy", default=os.environ.get("XRAY_BASELINE_POWER_POLICY"))
     parser.add_argument("--verify-policy", action="store_true")
     parser.add_argument("--verify-manifest")
-    parser.add_argument("--verify-logs", action="store_true")
     parser.add_argument("--require-qualifying", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
@@ -1489,9 +1613,9 @@ def main() -> int:
         except (OSError, json.JSONDecodeError) as error:
             print(f"target-machine baseline evidence: FAILED: {error}", file=sys.stderr)
             return 1
-        errors = validate_evidence(manifest, policy, policy_path, args.require_qualifying)
-        if args.verify_logs or args.require_qualifying:
-            errors.extend(validate_log_digests(manifest, evidence_path.parent))
+        errors = verify_evidence(
+            manifest, policy, policy_path, evidence_path.parent, args.require_qualifying
+        )
         if errors:
             print("target-machine baseline evidence: FAILED", file=sys.stderr)
             for error in errors:
@@ -1512,11 +1636,8 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     evidence_path = output / "baseline-evidence.json"
     try:
-        manifest = render_manifest(
-            root, build, output, repeat, args.scope, args.power_policy, policy, policy_path
-        )
-        validation_errors = validate_evidence(manifest, policy, policy_path)
-        validation_errors.extend(validate_log_digests(manifest, output))
+        manifest = render_manifest(root, build, output, repeat, args.scope, policy, policy_path)
+        validation_errors = verify_evidence(manifest, policy, policy_path, output)
         if validation_errors:
             manifest["errors"].extend(validation_errors)
             manifest["result"] = "failed"

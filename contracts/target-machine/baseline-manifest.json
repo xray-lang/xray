@@ -83,7 +83,7 @@
     "failure_semantics": "Any failed, timed-out, unparsable, residue-producing, or high-variance lane makes the evidence result failed; failed is never rewritten as skipped.",
     "generation_protocol": "Measure a clean source commit with a freshly configured matching binary into an ignored or external evidence directory. Commit reviewed evidence later; the measured source commit is intentionally recorded instead of attempting a self-referential evidence commit.",
     "qualifying_scope": "full",
-    "verification_protocol": "Validate policy identity, clean source/binary/build/toolchain identity, raw sample/log digests, lane statistics, residue assertions, and aggregate result before qualification."
+    "verification_protocol": "Validate policy, runner, and fixture hashes; clean source/binary/build/toolchain identity; raw sample/log digests; lane statistics; residue assertions; and aggregate result before qualification. Manifest verification always requires retained raw logs."
   },
   "identity": {
     "build_directory": "build",
@@ -102,6 +102,9 @@
   },
   "performance": {
     "logical_cpu": 0,
+    "power_policy": {
+      "windows_active_scheme_guid": "381b4222-f694-41f0-9685-ff5bb260df2e"
+    },
     "fixture": {
       "base_stdout": "1000001\n",
       "directory": "tests/benchmarks/target-machine/source_run",
@@ -159,7 +162,7 @@
       "*.fast-test.c"
     ]
   },
-  "runner": "target-machine-baseline/2",
+  "runner": "target-machine-baseline/3",
   "schema": 1,
   "status_values": [
     "passed",

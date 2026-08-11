@@ -4078,6 +4078,21 @@ if(BUILD_TESTS)
         TIMEOUT 30
     )
 
+    if(WIN32)
+        add_test(
+            NAME target_machine_msvc_fast_test_residue
+            COMMAND ${XRAY_PYTHON}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/phase0/test_msvc_fast_test_residue.py
+                    $<TARGET_FILE:xray>
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(target_machine_msvc_fast_test_residue PROPERTIES
+            LABELS "meta;target-machine;baseline;toolchain"
+            PROCESSORS 1
+            TIMEOUT 180
+        )
+    endif()
+
     add_test(
         NAME semantic_performance_evidence
         COMMAND ${XRAY_PYTHON}
