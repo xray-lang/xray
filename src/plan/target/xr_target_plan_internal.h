@@ -14,9 +14,56 @@
 #include "xr_target_plan.h"
 #include <stdatomic.h>
 
+/* Mutable draft storage is private to the unified target builder and tests. */
+typedef struct XrTargetPlanDraft {
+    const XrSemanticPlan *semantic_plan;
+    XrTargetProfile *profile;
+    uint64_t completed_family_mask;
+    const XrTargetMachineRepRecord *machine_reps;
+    uint32_t machine_reps_count;
+    const XrTargetValueRepRecord *value_reps;
+    uint32_t value_reps_count;
+    const XrTargetExtentRecord *extents;
+    uint32_t extents_count;
+    const XrTargetLayoutRecord *layouts;
+    uint32_t layouts_count;
+    const XrTargetFieldRecord *fields;
+    uint32_t fields_count;
+    const XrTargetStorageRecord *storage;
+    uint32_t storage_count;
+    const XrTargetAllocationRecord *allocations;
+    uint32_t allocations_count;
+    const XrTargetExtentOperandRecord *extent_operands;
+    uint32_t extent_operands_count;
+    const XrTargetFunctionRecord *functions;
+    uint32_t functions_count;
+    const XrTargetSlotRecord *slots;
+    uint32_t slots_count;
+    const XrTargetCallRecord *calls;
+    uint32_t calls_count;
+    const XrTargetCallArgumentRecord *call_arguments;
+    uint32_t call_arguments_count;
+    const XrTargetRootMapRecord *root_maps;
+    uint32_t root_maps_count;
+    const uint32_t *root_slots;
+    uint32_t root_slots_count;
+    const XrTargetCleanupRecord *cleanups;
+    uint32_t cleanups_count;
+    const XrTargetAdapterRecord *adapters;
+    uint32_t adapters_count;
+    const XrTargetCapabilityRecord *capabilities;
+    uint32_t capabilities_count;
+    const XrTargetCoroutineStateRecord *coroutines;
+    uint32_t coroutines_count;
+} XrTargetPlanDraft;
+
+XR_FUNC bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out,
+                                   char *error, size_t error_size);
+
 struct XrTargetPlan {
     atomic_uint_least32_t references;
     uint32_t schema_version;
+    uint64_t completed_family_mask;
     bool frozen;
     bool verified;
     XrFingerprint fingerprint;

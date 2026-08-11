@@ -437,7 +437,10 @@ static bool rep_kind_contract_is_exact(const XrTargetPlan *plan,
         }
         case XR_MACHINE_REP_VECTOR: {
             if (rep->detail >= plan->machine_reps_count || rep->detail == rep->id ||
-                rep->lane_count < 2)
+                rep->lane_count < 2 || rep->signedness != XR_TARGET_SIGN_NONE ||
+                rep->root_kind != XR_TARGET_ROOT_NONE ||
+                rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+                rep->null_encoding != XR_TARGET_NULL_NOT_NULLABLE)
                 return false;
             const XrTargetMachineRepRecord *lane = &plan->machine_reps[rep->detail];
             uint64_t size = (uint64_t) lane->memory_size * rep->lane_count;
@@ -731,7 +734,7 @@ static bool verify_extents(const XrTargetPlan *plan, char *error, size_t error_s
             return report(error, error_size, "XR_TARGET_1002", "extent record is invalid");
         if (extent->kind == XR_TARGET_EXTENT_FIXED) {
             if (extent->operand_count || extent->alignment || extent->stride || extent->provider ||
-                extent->element_layout != XR_SEMANTIC_INDEX_NONE)
+                extent->element_layout != XR_SEMANTIC_INDEX_NONE || extent->flags)
                 return report(error, error_size, "XR_TARGET_1002",
                               "fixed extent carries variable-size facts");
             continue;
@@ -739,6 +742,28 @@ static bool verify_extents(const XrTargetPlan *plan, char *error, size_t error_s
         return report(error, error_size, "XR_TARGET_1002",
                       "variable extent lacks independently frozen semantic shape facts");
     }
+    return true;
+}
+
+static bool verify_extent_references(const XrTargetPlan *plan, char *error,
+                                     size_t error_size) {
+    uint8_t *referenced = NULL;
+    if (plan->extents_count) {
+        referenced = (uint8_t *) xr_calloc(plan->extents_count, sizeof(*referenced));
+        if (!referenced)
+            return report(error, error_size, "XR_EXEC_5003",
+                          "extent reference verifier allocation failed");
+    }
+    for (uint32_t i = 0; i < plan->layouts_count; i++)
+        referenced[plan->layouts[i].extent] = 1;
+    for (uint32_t i = 0; i < plan->extents_count; i++) {
+        if (!referenced[i]) {
+            xr_free(referenced);
+            return report(error, error_size, "XR_TARGET_1002",
+                          "extent table contains a row outside the layout reference domain");
+        }
+    }
+    xr_free(referenced);
     return true;
 }
 
@@ -971,6 +996,9 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
     if (plan->schema_version != XR_TARGET_PLAN_SCHEMA_VERSION)
         return report(error, error_size, "XR_ARTIFACT_2000",
                       "TargetPlan schema version is not exactly supported");
+    if (plan->completed_family_mask != XR_TARGET_REQUIRED_FAMILIES)
+        return report(error, error_size, "XR_TARGET_1001",
+                      "TargetPlan family coverage is incomplete or unsupported");
     char nested_error[512] = {0};
     if (!xr_semantic_plan_verify(plan->semantic_plan, nested_error, sizeof(nested_error)) ||
         !xr_fingerprint_equal(plan->semantic_fingerprint,
@@ -980,9 +1008,10 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
     if (!xr_target_profile_verify(plan->profile, error, error_size) ||
          !verify_resource_budgets(plan, error, error_size) ||
          !verify_machine_reps(plan, error, error_size) ||
-         !verify_value_reps(plan, error, error_size) ||
+        !verify_value_reps(plan, error, error_size) ||
         !verify_extents(plan, error, error_size) ||
         !verify_layouts(plan, error, error_size) ||
+        !verify_extent_references(plan, error, error_size) ||
         !verify_storage_and_allocations(plan, error, error_size) ||
         !verify_functions_and_slots(plan, error, error_size) ||
         !verify_calls(plan, error, error_size) ||

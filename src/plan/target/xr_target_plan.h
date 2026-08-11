@@ -23,6 +23,12 @@
 
 typedef struct XrTargetPlan XrTargetPlan;
 
+typedef enum XrTargetPlanFamily {
+    XR_TARGET_FAMILY_SCALAR = UINT64_C(1) << 0,
+} XrTargetPlanFamily;
+
+#define XR_TARGET_REQUIRED_FAMILIES ((uint64_t) XR_TARGET_FAMILY_SCALAR)
+
 typedef enum XrMachineRepKind {
     XR_MACHINE_REP_VOID = 0,
     XR_MACHINE_REP_I1,
@@ -373,54 +379,6 @@ typedef struct XrTargetCoroutineStateRecord {
     uint32_t drop_state;
 } XrTargetCoroutineStateRecord;
 
-/*
- * In-memory planning boundary only.  This foundation deliberately defines no
- * serialized .xtp artifact; persistence requires a separately versioned,
- * independently verified format contract.
- */
-typedef struct XrTargetPlanDraft {
-    const XrSemanticPlan *semantic_plan;
-    XrTargetProfile *profile;
-    const XrTargetMachineRepRecord *machine_reps;
-    uint32_t machine_reps_count;
-    const XrTargetValueRepRecord *value_reps;
-    uint32_t value_reps_count;
-    const XrTargetExtentRecord *extents;
-    uint32_t extents_count;
-    const XrTargetLayoutRecord *layouts;
-    uint32_t layouts_count;
-    const XrTargetFieldRecord *fields;
-    uint32_t fields_count;
-    const XrTargetStorageRecord *storage;
-    uint32_t storage_count;
-    const XrTargetAllocationRecord *allocations;
-    uint32_t allocations_count;
-    const XrTargetExtentOperandRecord *extent_operands;
-    uint32_t extent_operands_count;
-    const XrTargetFunctionRecord *functions;
-    uint32_t functions_count;
-    const XrTargetSlotRecord *slots;
-    uint32_t slots_count;
-    const XrTargetCallRecord *calls;
-    uint32_t calls_count;
-    const XrTargetCallArgumentRecord *call_arguments;
-    uint32_t call_arguments_count;
-    const XrTargetRootMapRecord *root_maps;
-    uint32_t root_maps_count;
-    const uint32_t *root_slots;
-    uint32_t root_slots_count;
-    const XrTargetCleanupRecord *cleanups;
-    uint32_t cleanups_count;
-    const XrTargetAdapterRecord *adapters;
-    uint32_t adapters_count;
-    const XrTargetCapabilityRecord *capabilities;
-    uint32_t capabilities_count;
-    const XrTargetCoroutineStateRecord *coroutines;
-    uint32_t coroutines_count;
-} XrTargetPlanDraft;
-
-XR_FUNC bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out,
-                                   char *error, size_t error_size);
 XR_FUNC XrTargetPlan *xr_target_plan_retain(XrTargetPlan *plan);
 XR_FUNC void xr_target_plan_free(XrTargetPlan *plan);
 XR_FUNC bool xr_target_plan_is_frozen(const XrTargetPlan *plan);
@@ -428,6 +386,7 @@ XR_FUNC bool xr_target_plan_is_verified(const XrTargetPlan *plan);
 XR_FUNC uint32_t xr_target_plan_schema_version(const XrTargetPlan *plan);
 XR_FUNC XrFingerprint xr_target_plan_fingerprint(const XrTargetPlan *plan);
 XR_FUNC XrFingerprint xr_target_plan_semantic_fingerprint(const XrTargetPlan *plan);
+XR_FUNC uint64_t xr_target_plan_completed_family_mask(const XrTargetPlan *plan);
 XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_plan(const XrTargetPlan *plan);
 XR_FUNC const XrTargetProfile *xr_target_plan_profile(const XrTargetPlan *plan);
 XR_FUNC const XrTargetMachineRepRecord *xr_target_plan_machine_rep(const XrTargetPlan *plan,

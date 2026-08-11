@@ -191,6 +191,7 @@ static bool freeze_single_scalar(XrSemanticPlan *semantic, XrTargetProfile *prof
     XrTargetPlanDraft draft = {
         .semantic_plan = semantic,
         .profile = profile,
+        .completed_family_mask = XR_TARGET_REQUIRED_FAMILIES,
         .machine_reps = reps,
         .machine_reps_count = 2,
         .value_reps = bind_value ? &value : NULL,
@@ -320,6 +321,7 @@ static void fill_draft(TargetFixture *fixture, XrSemanticPlan *semantic,
     fixture->draft = (XrTargetPlanDraft) {
         .semantic_plan = semantic,
         .profile = profile,
+        .completed_family_mask = XR_TARGET_REQUIRED_FAMILIES,
         .machine_reps = fixture->reps,
         .machine_reps_count = 3,
         .value_reps = fixture->value_reps,
@@ -538,6 +540,18 @@ static void test_structural_mutations_fail_closed(void) {
     xr_target_layout_compute_fingerprint(plan, 0, &plan->layouts[0].fingerprint);
     xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
     REQUIRE(xr_target_plan_verify(plan, NULL, 0));
+    plan->machine_reps[2].root_kind = XR_TARGET_ROOT_OBJECT;
+    xr_target_layout_compute_fingerprint(plan, 0, &plan->layouts[0].fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->machine_reps[2].root_kind = XR_TARGET_ROOT_NONE;
+    plan->machine_reps[2].ownership = XR_TARGET_OWNERSHIP_SHARED;
+    xr_target_layout_compute_fingerprint(plan, 0, &plan->layouts[0].fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->machine_reps[2].ownership = XR_TARGET_OWNERSHIP_TRIVIAL;
+    plan->machine_reps[2].null_encoding = XR_TARGET_NULL_TAGGED;
+    xr_target_layout_compute_fingerprint(plan, 0, &plan->layouts[0].fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->machine_reps[2].null_encoding = XR_TARGET_NULL_NOT_NULLABLE;
     plan->machine_reps[2].lane_count = 3;
     expect_verify_failure(plan, "XR_TARGET_1001");
     plan->machine_reps[2].lane_count = 4;
@@ -649,9 +663,25 @@ static void test_structural_mutations_fail_closed(void) {
     plan->coroutines = NULL;
 
     plan->extents[0].flags = XR_TARGET_EXTENT_ZERO;
+    xr_target_layout_compute_fingerprint(plan, 0, &plan->layouts[0].fingerprint);
     xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
     expect_verify_failure(plan, "XR_TARGET_1002");
     plan->extents[0].flags = 0;
+    xr_target_layout_compute_fingerprint(plan, 0, &plan->layouts[0].fingerprint);
+    xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
+
+    XrTargetExtentRecord *saved_extents = plan->extents;
+    XrTargetExtentRecord extra_extents[2] = {
+        saved_extents[0],
+        {.id = 1, .kind = XR_TARGET_EXTENT_FIXED,
+         .element_layout = XR_SEMANTIC_INDEX_NONE},
+    };
+    plan->extents = extra_extents;
+    plan->extents_count = 2;
+    xr_target_layout_compute_fingerprint(plan, 0, &plan->layouts[0].fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    plan->extents = saved_extents;
+    plan->extents_count = 1;
     xr_target_layout_compute_fingerprint(plan, 0, &plan->layouts[0].fingerprint);
     xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
 
@@ -743,9 +773,14 @@ static void test_freeze_rejects_invalid_draft(void) {
     XrTargetProfile *profile = build_profile(0);
     TargetFixture fixture;
     fill_fixture(&fixture, semantic, profile);
-    fixture.slots[1].offset = 0;
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
+    fixture.draft.completed_family_mask = 0;
+    REQUIRE(!xr_target_plan_freeze(&fixture.draft, &plan, error, sizeof(error)));
+    REQUIRE(plan == NULL);
+    REQUIRE(strncmp(error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0);
+    fixture.draft.completed_family_mask = XR_TARGET_REQUIRED_FAMILIES;
+    fixture.slots[1].offset = 0;
     REQUIRE(!xr_target_plan_freeze(&fixture.draft, &plan, error, sizeof(error)));
     REQUIRE(plan == NULL);
     REQUIRE(strncmp(error, "XR_TARGET_1002", strlen("XR_TARGET_1002")) == 0);

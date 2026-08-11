@@ -360,6 +360,7 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
     hash_u64(&ctx, plan->schema_version);
+    hash_u64(&ctx, plan->completed_family_mask);
     hash_fingerprint(&ctx, plan->semantic_fingerprint);
     hash_fingerprint(&ctx, xr_target_profile_fingerprint(plan->profile));
 #define XR_HASH_TABLE_COUNT(name) hash_u64(&ctx, plan->name##_count)
@@ -451,6 +452,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
     }
     atomic_init(&plan->references, 1);
     plan->schema_version = XR_TARGET_PLAN_SCHEMA_VERSION;
+    plan->completed_family_mask = draft->completed_family_mask;
     plan->semantic_plan = xr_semantic_plan_retain((XrSemanticPlan *) draft->semantic_plan);
     plan->semantic_fingerprint = xr_semantic_plan_fingerprint(draft->semantic_plan);
     plan->profile = xr_target_profile_retain(draft->profile);
@@ -581,6 +583,10 @@ XrFingerprint xr_target_plan_fingerprint(const XrTargetPlan *plan) {
 XrFingerprint xr_target_plan_semantic_fingerprint(const XrTargetPlan *plan) {
     XrFingerprint zero = {{0}};
     return plan ? plan->semantic_fingerprint : zero;
+}
+
+uint64_t xr_target_plan_completed_family_mask(const XrTargetPlan *plan) {
+    return plan ? plan->completed_family_mask : 0;
 }
 
 const XrSemanticPlan *xr_target_plan_semantic_plan(const XrTargetPlan *plan) {
