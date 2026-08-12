@@ -283,6 +283,13 @@ def self_test() -> int:
         inventory = root / INVENTORY
         inventory.write_text(render(collect(root)), encoding="utf-8")
         clean, _ = check(root, collect(root))
+        retired_backend = root / "include/xray_vm.h"
+        retired_backend.write_text(
+            "typedef enum { XR_VM_BACKEND_BYTECODE } XrVMBackendType;\n",
+            encoding="utf-8",
+        )
+        backend_drifted, _ = check(root, collect(root))
+        retired_backend.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -291,7 +298,8 @@ def self_test() -> int:
         (root / "src/new_loader.c").unlink()
         zero = collect(root)
         terminal, _ = check(root, zero)
-    if not clean or drifted or not terminal or zero["total"] != 0 or validate(zero):
+    if (not clean or backend_drifted or drifted or not terminal
+            or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")
         return 1
     print("legacy product residue self-test: PASS")

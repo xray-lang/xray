@@ -22,7 +22,6 @@ void xray_vm_config_init(XrVMConfig *params) {
         return;
     memset(params, 0, sizeof(XrVMConfig));
 
-    params->backend_type = XR_VM_BACKEND_BYTECODE;
     params->initial_heap_size = 1024 * 1024;
     params->max_heap_size = 0;
 }

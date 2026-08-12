@@ -38,13 +38,7 @@ typedef struct XrBytecodeBundle {
     size_t entry_index;
 } XrBytecodeBundle;
 
-typedef enum {
-    XR_VM_BACKEND_BYTECODE,
-} XrVMBackendType;
-
 typedef struct {
-    XrVMBackendType backend_type;
-
     size_t initial_heap_size;
     size_t max_heap_size;
 
@@ -73,8 +67,6 @@ XRAY_API int xray_vm_dofile(XrVMRuntime *vm, const char *filename);
 XRAY_API int xray_vm_dofile_debug(XrVMRuntime *vm, const char *filename, void **out_proto);
 
 XRAY_API int xray_vm_eval_bundle(XrVMRuntime *vm, const XrBytecodeBundle *bundle);
-
-XRAY_API XrVMBackendType xray_vm_get_backend(XrVMRuntime *vm);
 
 XRAY_API void xray_vm_set_userdata(XrVMRuntime *vm, void *userdata);
 XRAY_API void *xray_vm_get_userdata(XrVMRuntime *vm);

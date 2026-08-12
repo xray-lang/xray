@@ -101,15 +101,6 @@ TEST(api_isolate_dofile_null_filename) {
 
 /* ========== Advanced API NULL Safety ========== */
 
-TEST(api_isolate_get_backend_null) {
-    if (SKIP_NULL_RETURN_TESTS) {
-        ASSERT_TRUE(1);
-        return;
-    }
-    int backend = xray_vm_get_backend(NULL);
-    ASSERT_EQ_INT(backend, 0);
-}
-
 TEST(api_isolate_set_userdata_null) {
     if (SKIP_NULL_RETURN_TESTS) {
         ASSERT_TRUE(1);

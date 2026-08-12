@@ -319,11 +319,6 @@ void xray_vm_delete(XrVMRuntime *isolate) {
 
 /* ========== Advanced API ========== */
 
-XrVMBackendType xray_vm_get_backend(XrVMRuntime *isolate) {
-    xray_api_checkr(isolate != NULL, "xray_vm_get_backend: NULL isolate", 0);
-    return isolate->params.backend_type;
-}
-
 void xray_vm_set_userdata(XrVMRuntime *isolate, void *userdata) {
     xray_api_check(isolate != NULL, "xray_vm_set_userdata: NULL isolate");
     if (isolate->core_rt)
