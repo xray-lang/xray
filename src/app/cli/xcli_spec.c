@@ -22,6 +22,10 @@
 static const XrCliOptionSpec run_options[] = {
     {"trace", 't', XR_CLI_VALUE_NONE, false, false, NULL, "Trace execution"},
     {"dump-bytecode", 'd', XR_CLI_VALUE_NONE, false, false, NULL, "Dump bytecode"},
+    {"semantic-plan", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
+     "Bind an exact XSM authority to an XTP input"},
+    {"timings", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Report exact artifact execution stage timings"},
     {"workers", 'W', XR_CLI_VALUE_INT, false, false, "N", "Number of worker threads"},
     {"coro-watch", 'w', XR_CLI_VALUE_INT, false, false, "MS", "Coroutine watch interval (ms)"},
     {"coro-http", 'H', XR_CLI_VALUE_INT, false, false, "PORT", "Coroutine HTTP monitor port"},

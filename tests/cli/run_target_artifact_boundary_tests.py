@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import subprocess
 import tempfile
@@ -68,6 +69,59 @@ def main() -> int:
         require_rejection(run([str(binary), "run", str(valid_xtp)]),
                           "XR_ARTIFACT_2007",
                           "XTP candidate stops before authority-bound materialization")
+
+        runtime_xsm = root / "runtime-semantic.bin"
+        runtime_xtp = root / "runtime-target.bin"
+        write_runtime = run([
+            str(writer), "--write-runtime-artifacts", str(runtime_xsm),
+            str(runtime_xtp),
+        ])
+        require(write_runtime.returncode == 0 and runtime_xsm.is_file()
+                and runtime_xtp.is_file(),
+                "fixture writer produced a matching exact XSM/XTP pair",
+                write_runtime.stdout)
+        executed_runtime = run([
+            str(binary), "run", str(runtime_xtp),
+            "--semantic-plan", str(runtime_xsm), "--timings",
+        ])
+        require(executed_runtime.returncode == 0,
+                "matching XSM/XTP executes through runtime generation",
+                executed_runtime.stdout)
+        require(re.search(r"(?m)^42$", executed_runtime.stdout) is not None,
+                "sole scalar artifact prints its exact result",
+                executed_runtime.stdout)
+        timing_match = re.search(
+            r"xray-run-timing artifact_read_ns=(\d+) "
+            r"semantic_verify_ns=(\d+) target_verify_ns=(\d+) "
+            r"activation_ns=(\d+) entry_output_ns=(\d+) total_ns=(\d+)",
+            executed_runtime.stdout,
+        )
+        require(timing_match is not None and
+                all(int(value) >= 0 for value in timing_match.groups()),
+                "artifact execution reports every exact stage timing",
+                executed_runtime.stdout)
+
+        corrupt_xsm = root / "corrupt-runtime-semantic.bin"
+        corrupt_bytes = bytearray(runtime_xsm.read_bytes())
+        corrupt_bytes[-1] ^= 1
+        corrupt_xsm.write_bytes(corrupt_bytes)
+        require_rejection(run([
+            str(binary), "run", str(runtime_xtp),
+            "--semantic-plan", str(corrupt_xsm),
+        ]), "XR_ARTIFACT_2002",
+            "corrupt XSM cannot authorize a matching XTP")
+
+        source_with_authority = root / "source-with-authority.xr"
+        source_with_authority.write_text("42\n", encoding="utf-8")
+        require_rejection(run([
+            str(binary), "run", str(source_with_authority),
+            "--semantic-plan", str(runtime_xsm),
+        ]), "XR_ARTIFACT_2006",
+            "semantic authority cannot attach to a source or legacy route")
+        require_rejection(run([
+            str(binary), "run", str(source_with_authority), "--timings",
+        ]), "XR_ARTIFACT_2004",
+            "exact artifact timings cannot decorate a legacy source route")
 
         old_xtp = root / "removed-target-plan.bin"
         old_xtp.write_bytes(b"XRAYXTP\0")

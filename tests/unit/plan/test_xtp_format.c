@@ -1525,6 +1525,31 @@ static int write_fixture(const char *path) {
     return written && closed ? 0 : 1;
 }
 
+static int write_runtime_artifacts(const char *xsm_path,
+                                   const char *xtp_path) {
+    XtpFixture fixture = make_fixture();
+    uint8_t *xsm = NULL;
+    size_t xsm_size = 0;
+    char diagnostic[512] = {0};
+    if (!xr_xsm_encode(fixture.semantic, &xsm, &xsm_size, diagnostic,
+                       sizeof(diagnostic))) {
+        dispose_fixture(&fixture);
+        return 1;
+    }
+    FILE *xsm_file = fopen(xsm_path, "wb");
+    bool xsm_written =
+        xsm_file && fwrite(xsm, 1, xsm_size, xsm_file) == xsm_size;
+    bool xsm_closed = xsm_file && fclose(xsm_file) == 0;
+    FILE *xtp_file = fopen(xtp_path, "wb");
+    bool xtp_written = xtp_file &&
+                       fwrite(fixture.bytes, 1, fixture.size, xtp_file) ==
+                           fixture.size;
+    bool xtp_closed = xtp_file && fclose(xtp_file) == 0;
+    xr_free(xsm);
+    dispose_fixture(&fixture);
+    return xsm_written && xsm_closed && xtp_written && xtp_closed ? 0 : 1;
+}
+
 static bool write_c_byte_array(FILE *file, const char *name,
                                const uint8_t *bytes, size_t size) {
     if (fprintf(file, "static const uint8_t %s[] = {\n", name) < 0)
@@ -1574,6 +1599,8 @@ static int write_runtime_fixture_header(const char *path) {
 int main(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "--write") == 0)
         return write_fixture(argv[2]);
+    if (argc == 4 && strcmp(argv[1], "--write-runtime-artifacts") == 0)
+        return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
     test_artifact_classifier();

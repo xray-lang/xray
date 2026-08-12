@@ -109,9 +109,9 @@ TEST(spec_option_count) {
     const XrCliCommandSpec *spec = xr_cli_find_command("run");
     ASSERT_NOT_NULL(spec);
     int count = xr_cli_option_count(spec->options);
-    /* run has: trace, dump-bytecode, workers, coro-watch,
-     *          coro-http, dump-ic = 6 */
-    ASSERT_EQ_INT(count, 6);
+    /* run has: trace, dump-bytecode, semantic-plan, timings, workers,
+     *          coro-watch, coro-http, dump-ic = 8 */
+    ASSERT_EQ_INT(count, 8);
 }
 
 TEST(spec_option_count_empty) {
@@ -194,9 +194,9 @@ TEST(optmap_present_int) {
     bool present[16] = {false};
     const char *values[16] = {NULL};
 
-    /* Set "workers" (index 2) */
-    present[2] = true;
-    values[2] = "8";
+    /* Set "workers" (index 4). */
+    present[4] = true;
+    values[4] = "8";
 
     XrCliOptionMap map = {
         .spec = spec->options,

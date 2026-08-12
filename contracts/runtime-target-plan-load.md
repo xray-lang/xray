@@ -116,10 +116,17 @@ roots, or general module activation.
    fixture generator freezes exact bytes for the current native profile; the
    executed archive test links only the installed runtime archive, constructs
    authority from XSM, materializes the verified XTP, prepares and activates
-   one generation, and executes function 0 to its exact scalar result. No XSM
-   or XTP encoder enters the runtime archive. Plans with exports, calls, roots,
-   storage, allocation, adapters, or coroutine execution authority still fail
-   PREPARE; this route is not general module activation.
+   one generation, and executes function 0 to its exact scalar result. The CLI
+   exposes this same governed product route only as
+   `xray run module.xtp --semantic-plan module.xsm`. It identifies both inputs
+   by bytes, runs the public runtime authority/load/generation APIs, prints the
+   scalar result, and completes drain, retire, unload, and authority teardown.
+   Optional `--timings` reports artifact-read, semantic-verify, target-verify,
+   activation, and entry/output monotonic durations for this exact route only;
+   it cannot decorate source or legacy execution. No XSM or XTP encoder enters
+   the runtime archive. Plans with exports, calls, roots, storage, allocation,
+   adapters, or coroutine execution authority still fail PREPARE; this route
+   is not general module activation.
 8. Decoder and materializer diagnostics retain their governed stage code at
    the public API and CLI boundaries. They are not folded into a generic
    schema or unverified-artifact error.
@@ -154,12 +161,12 @@ anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad3
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
 anchor-sha256: src/runtime/xr_target_plan_load.c fdd4f8fd332e99ce2ec225927928212375fe214475162a8a11d82acfacd93684
-anchor-sha256: src/app/cli/xcmd_run.c 3e43b82975749b304881ee4cf5e018b081c95189f1b676f42d84985bdf2d47e9
+anchor-sha256: src/app/cli/xcmd_run.c d73bed02af29c95f70a0d9ae4eecb74167d4acfcb333860df0e0827320eb53e6
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 052cac030a7f91c22c7c4a40e2571f3d9f0a274661aa1396a13f5c5bf4600827
 anchor-sha256: scripts/check_legacy_product_residue.py 0388d636da6384ea62bfaf8401764955541be24b207511727c33af2d85f3a11f
 anchor-sha256: tests/unit/plan/test_target_plan.c b10a1789e946435719796993bb3a036519e1e9d65b15dfb8a72f02acc7f77848
-anchor-sha256: tests/unit/plan/test_xtp_format.c 17e1a8fc6b8518fdc2d6a7c603eb8e34e374c1f405030ee1634252f4505202a0
+anchor-sha256: tests/unit/plan/test_xtp_format.c cb5f0b62069d71568552f929c8efc228d8dcaf320dcacad832a4c01266999911
 anchor-sha256: tests/unit/CMakeLists.txt 23c9e8a7fdac7c760c712bc08dcc5a88651ced5eb5910261583c8bc3440cf383
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 2f1c3edbdb31af5e60f63d8333bad6685d4b415b09f02c03a89f11e816f6bbfb
-anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py b4cdd67f71ed4e670c85cab74c57758eed1733fbea424192904d2e94be850317
+anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 3bfe684c257dcdc74e4d6518f48b4eec6ca7339cd61a09c913183d9ed8639bc0
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 3ec8c875fcabbaeb42cc83a4a20782b3b2edab52a7912362215483a40da241e6
