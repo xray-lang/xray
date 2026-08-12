@@ -14,7 +14,7 @@
  *
  * SOURCE OF TRUTH:
  *   The disptab[] body is generated from XR_OPCODE_TABLE in
- *   xopcode_def.h. Adding an opcode there automatically gets a slot
+ *   xinstruction_table.h. Adding an opcode there automatically gets a slot
  *   here, and the corresponding L_OP_<NAME> label inside run() must
  *   exist (compiler emits a "jump to undefined label" error otherwise,
  *   making the missing case impossible to ship).
@@ -23,7 +23,7 @@
 #ifndef XVM_JUMPTAB_H
 #define XVM_JUMPTAB_H
 
-#include "../runtime/value/xopcode_def.h"
+#include "../runtime/value/xinstruction_table.h"
 
 // vmdispatch: jump to label pointed by disptab[opcode]
 // vmcase: define label L_OP_XXX

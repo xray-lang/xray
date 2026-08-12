@@ -87,11 +87,11 @@ typedef uint64_t XrInstruction;
 
 /* ========== Opcode Enum ========== */
 
-#include "xopcode_def.h"
+#include "xinstruction_table.h"
 
 /*
  * The OpCode enum body is generated from XR_OPCODE_TABLE in
- * xopcode_def.h -- the single source of truth shared with the
+ * xinstruction_table.h -- the single source of truth shared with the
  * disassembler info table (xopcode_info.c) and the computed-goto
  * label array (xvm_jumptab.h). Adding a new opcode means editing
  * one X-macro entry there; the three consumers stay in lockstep.

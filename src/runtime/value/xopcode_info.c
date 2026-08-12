@@ -7,21 +7,21 @@
  *
  * xopcode_info.c - Instruction metadata table.
  *
- * The table is generated from XR_OPCODE_TABLE in xopcode_def.h, the
+ * The table is generated from XR_OPCODE_TABLE in xinstruction_table.h, the
  * single source of truth shared with the OpCode enum (xchunk.h) and
  * the computed-goto label array (xvm_jumptab.h). Adding a new opcode
  * means editing one X-macro entry there; this file recompiles in
  * lockstep automatically.
  *
  * Per-opcode metadata now carries a field_kind triple sourced from
- * the KOP_* shorthand in xopcode_def.h. The triple is the runtime
+ * the KOP_* shorthand in xinstruction_table.h. The triple is the runtime
  * contract every opcode publishes (which slot is a register / a K
  * index / a literal / unused), letting the emitter validate operands
  * before they are encoded into an instruction word.
  */
 
 #include "xopcode_info.h"
-#include "xopcode_def.h"
+#include "xinstruction_table.h"
 #include "../../base/xchecks.h"
 
 static const XrOpCodeInfo opcode_table[NUM_OPCODES] = {

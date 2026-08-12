@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Generate src/frontend/codegen/xemit_typed.h from xopcode_def.h.
+"""Generate src/frontend/codegen/xemit_typed.h from xinstruction_table.h.
 
-Each opcode entry in xopcode_def.h carries a KOP_* tag classifying
+Each opcode entry in xinstruction_table.h carries a KOP_* tag classifying
 the runtime semantics of its A/B/C byte slots. This script reads
 that table and emits one strongly typed `xemit_<op>()` inline
 function per opcode whose signature reflects the KOP semantics —
@@ -9,7 +9,7 @@ parameter count, parameter names, and the choice of underlying
 emit_abc / emit_abx / emit_asbx are all derived from the KOP tag,
 not from per-opcode hand maintenance.
 
-Adding a new opcode in xopcode_def.h means re-running this script;
+Adding a new opcode in xinstruction_table.h means re-running this script;
 no manual edit of the typed header is required.
 
 Usage:
@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEF_FILE = REPO_ROOT / "src/runtime/value/xopcode_def.h"
+DEF_FILE = REPO_ROOT / "src/runtime/value/xinstruction_table.h"
 OUT_FILE = REPO_ROOT / "src/frontend/codegen/xemit_typed.h"
 
 # KOP_NAME -> (params, encoder, args)
@@ -154,7 +154,7 @@ ENTRY_RE = re.compile(
 def parse_opcodes(def_path: Path) -> list[tuple[str, str, str, str]]:
     """Return [(NAME, FMT, KOP, DESC), ...] in declaration order.
 
-    xopcode_def.h is a `_(NAME, FMT, KOP, "desc") \\` table inside a
+    xinstruction_table.h is a `_(NAME, FMT, KOP, "desc") \\` table inside a
     macro list, so individual entries may span more than one source
     line via trailing-backslash continuations (SPAWN_CONT, NEW_STRUCT,
     SELECT_BLOCK, INST_TYPE_ARGS, ...). Splice the continuations away
@@ -187,12 +187,12 @@ HEADER_PROLOGUE = """\
  *
  * GENERATED FILE — DO NOT EDIT BY HAND.
  *
- *   Source of truth : src/runtime/value/xopcode_def.h
+ *   Source of truth : src/runtime/value/xinstruction_table.h
  *   Generator       : scripts/gen_xemit_typed.py
  *   Re-generate     : python3 scripts/gen_xemit_typed.py
  *
  * One inline function per VM opcode. The function signature mirrors
- * the KOP_* field-kind triple declared in xopcode_def.h, so the call
+ * the KOP_* field-kind triple declared in xinstruction_table.h, so the call
  * site documents — and the compiler enforces — which slot is a
  * register, a K-index, a symbol index, a literal flag, etc.
  *

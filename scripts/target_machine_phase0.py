@@ -168,7 +168,7 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
             "observable_contract": (explicit["source"] if explicit
                                     else "contracts/xi-canonical-ops.md"),
             "current_vm_owner": ("representation adapter" if explicit else
-                                 "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm"),
+                                 "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm"),
             "current_aot_owner": ("representation adapter" if explicit else
                                   "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c"),
             "current_shared_owner": (explicit["source"] if explicit else "xisa/xi/ops.def"),
@@ -314,7 +314,7 @@ def aot_plan_inventory(root: Path) -> dict[str, Any]:
 
 def legacy_vm_inventory(root: Path) -> dict[str, Any]:
     inputs = [
-        "src/runtime/value/xopcode_def.h", "src/runtime/value/xvalue.h",
+        "src/runtime/value/xinstruction_table.h", "src/runtime/value/xvalue.h",
         "src/runtime/value/xchunk.h", "src/module/xproto_codec.h",
         "include/xray_vm.h", "src/vm/xvm.c", "src/vm/xvm_coro_backend.c",
     ]
@@ -335,7 +335,7 @@ def legacy_vm_inventory(root: Path) -> dict[str, Any]:
         opcodes.append({
             "opcode": f"OP_{name}", "operand_format": fmt, "operand_roles": operands,
             "tag_assumption": "XrValue-register-frame", "family": family,
-            "observable_behavior": "description-in-xopcode_def",
+            "observable_behavior": "description-in-xinstruction-table",
             "ownership": "implicit-opcode-handler-contract",
             "error_suspend_edges": "handler-specific",
             "target_plan_mapping": disposition,

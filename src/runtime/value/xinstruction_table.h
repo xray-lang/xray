@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xopcode_def.h - Single source of truth for the VM opcode table.
+ * xinstruction_table.h - Single source of truth for the VM instruction table.
  *
  * KEY CONCEPT:
  *   X-macro listing every VM opcode exactly once. Downstream consumers
@@ -34,8 +34,8 @@
  *   "..."    description string used by the disassembler / debugger.
  */
 
-#ifndef XOPCODE_DEF_H
-#define XOPCODE_DEF_H
+#ifndef XINSTRUCTION_TABLE_H
+#define XINSTRUCTION_TABLE_H
 
 /* ========== KOP_* — field-kind triple shorthands ==========
  * Each macro expands to three XrOpFieldKind values for slots A, B, C.
@@ -427,4 +427,4 @@
     _(MOD_U, FMT_ABC, KOP_ABC_BIN, "R[A] = (uint64)R[B] % R[C]  (statically-unsigned modulo)")     \
     _(NOP, FMT_SPECIAL, KOP_SPECIAL, "no-op / spawn metadata")
 
-#endif  // XOPCODE_DEF_H
+#endif  // XINSTRUCTION_TABLE_H
