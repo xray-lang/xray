@@ -78,11 +78,17 @@ pure uncaptured callbacks. Captured, dynamic, generic, cross-module, and tagged
 forms follow the explicit matrix in `hof-shape-matrix.toml`; unknown target or
 effect evidence cannot be guessed inside CGen.
 
+`shared.target-layout-query` owns `xi.target.sizeof` and `xi.target.alignof`.
+The owner evaluates a frozen `XrTargetDataLayout` plus the native scalar tag;
+VM only materializes the result and CGen emits the already-decided integer.
+Generated C may not ask the host compiler to rediscover target layout through
+`sizeof` or `_Alignof`, and invalid layout, query, or type inputs fail closed.
+
 ## Digest anchors
 
-anchor-sha256: contracts/semantic-owners.toml ed99db81d04992043fc9944292091db4d6059db68074f9a63db3282ba1c55ac9
-anchor-sha256: contracts/semantic-owner-registry.json 10c44e59c2f97146ac5e62719a1451d5adca0ee9fe138c5009007152651a4aad
+anchor-sha256: contracts/semantic-owners.toml 299e3e1523003a7b0115064f4fe291793f56a6f36a1af180f1406b75acf5b67e
+anchor-sha256: contracts/semantic-owner-registry.json 9222abeeda7fbfac4742349aba1d231c807317aec18521b0905faa91abec38b5
 anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
-anchor-sha256: contracts/shared-core-inventory.json 4b398fcccd09cb4a06e5f91b5b2419771d5690d1b1f09e816871af5311048684
-anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h c63012fb5198745c3cbba4dc98f145aef8281ffabd0d7ffb1ebecef1d4c39b95
-anchor-sha256: scripts/check_semantic_owners.py 777be63a54f776ffe4f3c103dca2c930d384e301463ed45b74611e5bc4db4359
+anchor-sha256: contracts/shared-core-inventory.json d091be06d50b1da0d6ca2fc525b77ee838b29e5ca369df8692a6dca6ec809ecb
+anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h e234be1eba3b9f6ca9a772bc3a72c8aef2e0f8b63cdc42d59306250b95b42d1b
+anchor-sha256: scripts/check_semantic_owners.py 75d1ea780762b1ac5721a710548ea8c053625a06f39597a9aebfe9cbb0d1f908

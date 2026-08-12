@@ -12,6 +12,7 @@
 #define XR_NATIVE_TYPE_CORE_H
 
 #include "../base/xtarget_data_layout.h"
+#include "xr_semantic_owner_ids_gen.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -39,6 +40,47 @@ typedef enum {
     XR_NATIVE_USIZE = 19,             // size_t (target pointer-width unsigned int)
     XR_NATIVE_POINTER = 20,           // raw C pointer (void *, target pointer width)
 } XrNativeType;
+
+typedef enum XrTargetLayoutQueryKind {
+    XR_TARGET_LAYOUT_QUERY_SIZE = 0,
+    XR_TARGET_LAYOUT_QUERY_ALIGN = 1
+} XrTargetLayoutQueryKind;
+
+typedef enum XrTargetLayoutQueryStatus {
+    XR_TARGET_LAYOUT_QUERY_OK = 0,
+    XR_TARGET_LAYOUT_QUERY_INVALID_KIND = 1,
+    XR_TARGET_LAYOUT_QUERY_INVALID_LAYOUT = 2,
+    XR_TARGET_LAYOUT_QUERY_INVALID_NATIVE_TYPE = 3
+} XrTargetLayoutQueryStatus;
+
+typedef struct XrTargetLayoutQueryResult {
+    XrTargetLayoutQueryStatus status;
+    uint8_t value;
+} XrTargetLayoutQueryResult;
+
+#define XR_TARGET_LAYOUT_QUERY_OWNER_GUARD(owner_hi, owner_lo)                                  \
+    ((void) sizeof(struct {                                                                      \
+        unsigned int owner_id_must_be_shared_target_layout_query                                \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI &&       \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO)          \
+                   ? 1                                                                          \
+                   : -1);                                                                       \
+    }))
+
+#define XR_TARGET_LAYOUT_QUERY_CONSUMER_GUARD(consumer_bit)                                     \
+    ((void) sizeof(struct {                                                                      \
+        unsigned int consumer_must_be_declared_for_shared_target_layout_query                   \
+            : (((uint32_t) (consumer_bit) != 0 &&                                               \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&         \
+                (XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_CONSUMERS &                          \
+                 (uint32_t) (consumer_bit)) != 0)                                               \
+                   ? 1                                                                          \
+                   : -1);                                                                       \
+    }))
+
+#define XR_TARGET_LAYOUT_QUERY_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)        \
+    (XR_TARGET_LAYOUT_QUERY_OWNER_GUARD((owner_hi), (owner_lo)),                                \
+     XR_TARGET_LAYOUT_QUERY_CONSUMER_GUARD((consumer_bit)), (expression))
 
 static inline uint8_t xr_native_type_size(const XrTargetDataLayout *layout, uint8_t native_type) {
     if (!layout)
@@ -129,6 +171,29 @@ static inline uint8_t xr_native_type_align(const XrTargetDataLayout *layout, uin
         default:
             return 0;
     }
+}
+
+static inline XrTargetLayoutQueryResult xr_target_layout_query_core(
+    XrTargetLayoutQueryKind kind, const XrTargetDataLayout *layout, uint8_t native_type) {
+    XrTargetLayoutQueryResult result;
+    result.status = XR_TARGET_LAYOUT_QUERY_OK;
+    result.value = 0;
+
+    if (!layout || !xr_target_data_layout_validate(layout)) {
+        result.status = XR_TARGET_LAYOUT_QUERY_INVALID_LAYOUT;
+        return result;
+    }
+    if (kind == XR_TARGET_LAYOUT_QUERY_SIZE)
+        result.value = xr_native_type_size(layout, native_type);
+    else if (kind == XR_TARGET_LAYOUT_QUERY_ALIGN)
+        result.value = xr_native_type_align(layout, native_type);
+    else {
+        result.status = XR_TARGET_LAYOUT_QUERY_INVALID_KIND;
+        return result;
+    }
+    if (result.value == 0)
+        result.status = XR_TARGET_LAYOUT_QUERY_INVALID_NATIVE_TYPE;
+    return result;
 }
 
 #endif /* XR_NATIVE_TYPE_CORE_H */

@@ -31,6 +31,7 @@
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../toolchain/xcompiler_session.h"
 #include "../frontend/analyzer/xa_effect_db.h"
+#include "../shared/xr_native_type_core.h"
 
 #include <math.h>
 
@@ -539,14 +540,26 @@ static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 }
 
+static void xi_emit_target_layout_query(EmitCtx *ctx, XiValue *v, XiEmitReg dst,
+                                        XrTargetLayoutQueryKind kind) {
+    XrTargetLayoutQueryResult result = XR_TARGET_LAYOUT_QUERY_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI,
+        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO, XR_SEM_CONSUMER_VM,
+        xr_target_layout_query_core(kind, ctx ? ctx->target_data_layout : NULL,
+                                    (uint8_t) (v ? v->aux_int : 0)));
+    if (result.status != XR_TARGET_LAYOUT_QUERY_OK) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    emit_i64_const_reg(ctx, dst, (int64_t) result.value);
+}
+
 static void xi_emit_target_sizeof(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_i64_const_reg(
-        ctx, dst, (int64_t) xr_native_type_size(ctx->target_data_layout, (uint8_t) v->aux_int));
+    xi_emit_target_layout_query(ctx, v, dst, XR_TARGET_LAYOUT_QUERY_SIZE);
 }
 
 static void xi_emit_target_alignof(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    emit_i64_const_reg(
-        ctx, dst, (int64_t) xr_native_type_align(ctx->target_data_layout, (uint8_t) v->aux_int));
+    xi_emit_target_layout_query(ctx, v, dst, XR_TARGET_LAYOUT_QUERY_ALIGN);
 }
 
 static void emit_param(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {

@@ -38,6 +38,7 @@
 #include "../shared/xr_hash_core.h"
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_enum_metadata_core.h"
+#include "../shared/xr_native_type_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../shared/xobject_shape.h"
 #include "../shared/xr_swiss_index.h"
@@ -4632,6 +4633,25 @@ static const char *cg_byte_array_copy_adapter_name(XiCgenCtx *ctx) {
         XR_SEM_OWNER_ID_SHARED_BYTE_ARRAY_COPY_LO);
     if (!adapter || !adapter[0]) {
         fprintf(stderr, "[xi_cgen] ERROR: byte-array copy owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_target_layout_query_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(
+            XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI,
+            XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO, XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: target-layout query owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI,
+        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: target-layout query owner has no CGen adapter\n");
         cg_ctx_set_error(ctx);
         return NULL;
     }

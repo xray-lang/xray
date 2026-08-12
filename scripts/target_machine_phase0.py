@@ -148,8 +148,11 @@ def semantic_owner_inventory(root: Path) -> dict[str, Any]:
     for owner in registry.get("owners", []):
         canonical_source = kernels_by_owner.get(owner.get("owner"))
         consumers = set(owner.get("consumers", []))
-        if (not canonical_source or "vm" not in consumers or "cgen" not in consumers or
-                not {"aot-hosted", "aot-freestanding"}.issubset(consumers)):
+        # CGen is the production AOT consumer for compile-time-only semantics.
+        # Runtime owners additionally name their hosted/freestanding adapters,
+        # but requiring those profiles would hide source-backed target queries
+        # that are fully reduced before generated C crosses that boundary.
+        if not canonical_source or "vm" not in consumers or "cgen" not in consumers:
             continue
         for operation in owner.get("operations", []):
             explicit_by_operation[operation] = {

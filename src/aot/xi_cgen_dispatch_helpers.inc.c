@@ -227,25 +227,29 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     }
 }
 
-static const char *xicgen_native_layout_c_type(uint8_t native_type) {
-    switch (native_type) {
-        case XR_NATIVE_ISIZE:
-            return "ptrdiff_t";
-        case XR_NATIVE_USIZE:
-            return "size_t";
-        default:
-            return xaot_c_type_for_native_type(native_type);
+static void xicgen_target_layout_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                      XrTargetLayoutQueryKind kind) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const char *adapter = cg_target_layout_query_adapter_name(ctx);
+    if (!adapter || strcmp(adapter, "xr_target_layout_query_core") != 0 || !bundle || !v ||
+        !xr_target_data_layout_validate(&bundle->target_data_layout)) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
     }
-}
-
-static void xicgen_target_layout_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *op) {
-    const char *c_type = xicgen_native_layout_c_type((uint8_t) (v ? v->aux_int : 0));
     bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
-    if (!c_type)
-        c_type = "int64_t";
+    XrTargetLayoutQueryResult result = XR_TARGET_LAYOUT_QUERY_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI,
+        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO, XR_SEM_CONSUMER_CGEN,
+        xr_target_layout_query_core(kind, &bundle->target_data_layout, (uint8_t) v->aux_int));
+    if (result.status != XR_TARGET_LAYOUT_QUERY_OK) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (boxed)
         fprintf(out, "XR_FROM_INT(");
-    fprintf(out, "(int64_t)%s(%s)", op, c_type);
+    fprintf(out, "INT64_C(%u)", (unsigned) result.value);
     if (boxed)
         fprintf(out, ")");
 }
@@ -254,14 +258,14 @@ static void xicgen_target_sizeof(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                                  const char *prefix) {
     (void) f;
     (void) prefix;
-    xicgen_target_layout_expr(ctx, out, v, "sizeof");
+    xicgen_target_layout_expr(ctx, out, v, XR_TARGET_LAYOUT_QUERY_SIZE);
 }
 
 static void xicgen_target_alignof(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix) {
     (void) f;
     (void) prefix;
-    xicgen_target_layout_expr(ctx, out, v, "_Alignof");
+    xicgen_target_layout_expr(ctx, out, v, XR_TARGET_LAYOUT_QUERY_ALIGN);
 }
 
 static void xicgen_target_simd_bytes(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

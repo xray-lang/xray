@@ -629,6 +629,8 @@
       "owner": "shared-kernel",
       "production_callers": [
         "src/aot/xaot_class_layout.c",
+        "src/aot/xi_cgen.c",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
         "src/aot/xi_to_c_dispatch_gen.h",
         "src/aot/xrt_value.h",
         "src/coro/xdeep_copy.c",
@@ -644,6 +646,7 @@
         "src/shared/xr_bits_core.h",
         "src/shared/xr_numeric_conversion_core.h",
         "src/shared/xr_scalar_type.h",
+        "src/shared/xr_semantic_owner_ids_gen.h",
         "src/vm/xvm.c",
         "src/vm/xvm_dispatch_collection.inc.c",
         "src/vm/xvm_dispatch_struct.inc.c",
@@ -657,7 +660,8 @@
       "representation": "descriptor",
       "signatures": [
         "xr_native_type_align",
-        "xr_native_type_size"
+        "xr_native_type_size",
+        "xr_target_layout_query_core"
       ],
       "status": "production",
       "test_callers": [

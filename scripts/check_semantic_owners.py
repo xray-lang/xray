@@ -167,6 +167,7 @@ CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
 NULL_TEST_OPERATIONS = {"xi.isnull"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
+TARGET_LAYOUT_QUERY_OPERATIONS = {"xi.target.sizeof", "xi.target.alignof"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -2245,6 +2246,58 @@ def verify_byte_array_copy_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_target_layout_query_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.target-layout-query"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != TARGET_LAYOUT_QUERY_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.target-layout-query family")
+
+    core_text = (root / "src/shared/xr_native_type_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    core_body = extract_c_function(core_text, "xr_target_layout_query_core") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_TARGET_LAYOUT_QUERY_OWNER_APPLY",
+                  "XR_TARGET_LAYOUT_QUERY_INVALID_LAYOUT",
+                  "XR_TARGET_LAYOUT_QUERY_INVALID_NATIVE_TYPE", "xr_target_data_layout_validate",
+                  "xr_native_type_size",
+                  "xr_native_type_align"):
+        if token not in core_text:
+            errors.append("src/shared/xr_native_type_core.h: target-layout contract is incomplete")
+            break
+    if any(token in core_body for token in ("sizeof(", "_Alignof(", "malloc(", "free(")):
+        errors.append("src/shared/xr_native_type_core.h: target-layout core revived host semantics")
+
+    vm_text = (root / "src/ir/xi_emit.c").read_text(encoding="utf-8", errors="strict")
+    vm_body = extract_c_function(vm_text, "xi_emit_target_layout_query") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_TARGET_LAYOUT_QUERY_OWNER_APPLY", "xr_target_layout_query_core"):
+        if token not in vm_body:
+            errors.append("src/ir/xi_emit.c: VM target-layout query bypasses stable owner")
+            break
+    if "xr_native_type_size(" in vm_body or "xr_native_type_align(" in vm_body:
+        errors.append("src/ir/xi_emit.c: VM target-layout adapter owns query semantics")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_target_layout_query_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: target-layout query does not resolve stable adapter")
+    dispatch = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    emitter = extract_c_function(dispatch, "xicgen_target_layout_expr") or ""
+    for token in ("cg_target_layout_query_adapter_name", f"{marker}_HI", f"{marker}_LO",
+                  "XR_SEM_CONSUMER_CGEN", "XR_TARGET_LAYOUT_QUERY_OWNER_APPLY",
+                  "xr_target_layout_query_core", "bundle->target_data_layout", "INT64_C"):
+        if token not in emitter:
+            errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: CGen target-layout query bypasses owner")
+            break
+    if "sizeof(" in emitter or "_Alignof(" in emitter or "xicgen_native_layout_c_type" in dispatch:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: host layout semantics revived")
+    return errors
+
+
 def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     families = (
@@ -2495,6 +2548,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_null_test_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_byte_array_copy_ratchet(root, registry))
+        errors.extend(verify_target_layout_query_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))
         errors.extend(verify_pod_slice_view_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)

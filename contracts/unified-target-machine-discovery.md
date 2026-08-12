@@ -34,7 +34,7 @@ when any retained log is absent.  A timeout, malformed result, stale or dirty
 identity, high variance, source-root residue, or failed lane remains `failed`;
 the protocol has no skip, allowlist, dirty, or fallback state.
 
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json ed154719e9c45d7461f7cf400ca4444fa3540bc28edc88045f35a7890ffca993
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 8c6b7d726d3f76841c825b9583e85561d396ceaa6abed59ff07fa50d15c8a757
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json f97884b9074f8bf8134a958f34d46aac137fedbd9a9660c60255726ac36ff090
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json eda4ba928edcc1547002ee59cb84852ad1183b37ffb34aada75d799837e478e4
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 2caffbcb4e67d700eb39c221fe1c2d7801720d49bfbbf3b89e6313253a7c9440
@@ -43,7 +43,7 @@ anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc6
 anchor-sha256: contracts/target-machine/baseline-manifest.json 9264ec82b4e58d421c7b285e3bc2ff598ef09587622110de6cf72d79cbf7ddef
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 54ee3affe064aabfb89fe1cc75ef5642837fd14b6e7e575a0badb4fc670efd74
 anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
-anchor-sha256: scripts/target_machine_phase0.py 35f864600a92c5fa58eca81b2874c6e2a9b5a8fd9432c9238d206eb85c25e6c0
+anchor-sha256: scripts/target_machine_phase0.py 6834e7d3b066437795b367bd0fa4ae7a01f12f8da8576c1ec7395ff226c528ab
 anchor-sha256: scripts/check_legacy_product_residue.py a47409257b92ad57e90ac23bb28a6c3cb29866c102741ceeaff37f079d0d13cf
 anchor-sha256: scripts/check_runtime_header_dependencies.py 917a82b6ecff974005edfad476b18ed5653be50ccc75952451de5ec2ae9afdd2
 anchor-sha256: tests/target-machine/phase0/run_baseline.py 24128c9f2b7a8733488ce03b190eef02965a88050cc915d63296be602a7577b1

@@ -107,6 +107,37 @@ TEST(emit_return_void) {
     xi_func_free(f);
 }
 
+TEST(emit_target_layout_queries_use_canonical_target_layout) {
+    XiFunc *f = make_func("target-layout", &stub_int);
+    XiBlock *entry = f->entry;
+    XiValue *size = xi_value_new(f, entry, XI_TARGET_SIZEOF, &stub_int, 0);
+    XiValue *align = xi_value_new(f, entry, XI_TARGET_ALIGNOF, &stub_int, 0);
+    assert(size != NULL && align != NULL);
+    size->aux_int = XR_NATIVE_USIZE;
+    align->aux_int = XR_NATIVE_ISIZE;
+    XiValue *sum = xi_value_new(f, entry, XI_ADD, &stub_int, 2);
+    assert(sum != NULL);
+    sum->args[0] = size;
+    sum->args[1] = align;
+    xi_block_set_return(entry, sum);
+
+    XrProto *proto = NULL;
+    XiEmitStatus status = xi_emit(f, NULL, &proto);
+    assert(status == XI_EMIT_OK && proto != NULL);
+    int loads = 0;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        XrInstruction inst = PROTO_CODE(proto, i);
+        if (GET_OPCODE(inst) == OP_LOADI) {
+            assert(GETARG_sBx(inst) == (int) sizeof(void *));
+            loads++;
+        }
+    }
+    assert(loads == 2);
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 TEST(emit_unreachable_is_terminator) {
     XiFunc *f = make_func("unreachable", &stub_void);
     f->entry->kind = XI_BLOCK_UNREACHABLE;
@@ -1297,6 +1328,7 @@ int main(void) {
     /* Basic emission */
     run_emit_return_const_int();
     run_emit_return_void();
+    run_emit_target_layout_queries_use_canonical_target_layout();
     run_emit_unreachable_is_terminator();
     run_emit_const_bool();
     run_emit_const_null();

@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "f0e8a0ee4144c07be7b42206bf68d1d54f86774061803eee63b846de2aad1bd4",
+  "canonical_fingerprint": "4c8dd74ecbc39576027149fd7c9fcfedb95e2fa63907ca45ddc0b2bf54993e8d",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -1173,6 +1173,41 @@
           "consumer": "runtime",
           "path": "src/runtime/object/xbigint.c",
           "symbol": "XR_SHIFT_BIGINT_OWNER_APPLY"
+        }
+      ]
+    },
+    {
+      "owner": "shared.target-layout-query",
+      "owner_id": "e55c44efae2e1171f33b2a95db9de3aa",
+      "owner_id_hi": "0xe55c44efae2e1171",
+      "owner_id_lo": "0xf33b2a95db9de3aa",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.target.sizeof",
+        "xi.target.alignof"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "cgen"
+      ],
+      "consumer_bits": "0x00000013",
+      "cgen_adapter": "xr_target_layout_query_core",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/ir/xi_emit.c",
+          "symbol": "XR_TARGET_LAYOUT_QUERY_OWNER_APPLY"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_target_layout_query_adapter_name"
         }
       ]
     },
@@ -3957,28 +3992,6 @@
       ]
     },
     {
-      "owner": "xi.target.alignof",
-      "owner_id": "06aad88aa0bded560ebed3eff6cf941b",
-      "owner_id_hi": "0x06aad88aa0bded56",
-      "owner_id_lo": "0x0ebed3eff6cf941b",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.target.alignof"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
       "owner": "xi.target.simd.accelerated",
       "owner_id": "29380f3903eea9e169f923cc907d2042",
       "owner_id_hi": "0x29380f3903eea9e1",
@@ -4030,28 +4043,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.target.simd.runtime-selected"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.target.sizeof",
-      "owner_id": "a142ea8b8eee0373f083747e154c9ffb",
-      "owner_id_hi": "0xa142ea8b8eee0373",
-      "owner_id_lo": "0xf083747e154c9ffb",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.target.sizeof"
       ],
       "consumers": [
         "semantic-plan"
@@ -4889,21 +4880,33 @@
       "operation_id": "a142ea8b8eee0373f083747e154c9ffb",
       "operation_id_hi": "0xa142ea8b8eee0373",
       "operation_id_lo": "0xf083747e154c9ffb",
-      "owner": "xi.target.sizeof",
-      "owner_id": "a142ea8b8eee0373f083747e154c9ffb",
-      "owner_id_hi": "0xa142ea8b8eee0373",
-      "owner_id_lo": "0xf083747e154c9ffb",
-      "category": "declarative-primitive",
+      "owner": "shared.target-layout-query",
+      "owner_id": "e55c44efae2e1171f33b2a95db9de3aa",
+      "owner_id_hi": "0xe55c44efae2e1171",
+      "owner_id_lo": "0xf33b2a95db9de3aa",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x00000013",
+      "cgen_adapter": "xr_target_layout_query_core",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/ir/xi_emit.c",
+          "symbol": "XR_TARGET_LAYOUT_QUERY_OWNER_APPLY"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_target_layout_query_adapter_name"
         }
       ]
     },
@@ -4912,21 +4915,33 @@
       "operation_id": "06aad88aa0bded560ebed3eff6cf941b",
       "operation_id_hi": "0x06aad88aa0bded56",
       "operation_id_lo": "0x0ebed3eff6cf941b",
-      "owner": "xi.target.alignof",
-      "owner_id": "06aad88aa0bded560ebed3eff6cf941b",
-      "owner_id_hi": "0x06aad88aa0bded56",
-      "owner_id_lo": "0x0ebed3eff6cf941b",
-      "category": "declarative-primitive",
+      "owner": "shared.target-layout-query",
+      "owner_id": "e55c44efae2e1171f33b2a95db9de3aa",
+      "owner_id_hi": "0xe55c44efae2e1171",
+      "owner_id_lo": "0xf33b2a95db9de3aa",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x00000013",
+      "cgen_adapter": "xr_target_layout_query_core",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/ir/xi_emit.c",
+          "symbol": "XR_TARGET_LAYOUT_QUERY_OWNER_APPLY"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_target_layout_query_adapter_name"
         }
       ]
     },

@@ -261,6 +261,21 @@ runtime_benchmark = "contracts/semantic-runtime-benchmark.json"
 performance_budget = "contracts/semantic-performance-budget.toml"
 
 [[operation]]
+id = "target-layout-query"
+observable_contract = "src/shared/xr_native_type_core.h"
+semantic_kernel = "src/shared/xr_native_type_core.h"
+vm_adapter = "src/ir/xi_emit.c"
+aot_adapter = "src/aot/xi_cgen_dispatch_helpers.inc.c"
+typed_plan = "shared.target-layout-query"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/base/test_native_type_core.c",
+  "tests/unit/ir/test_xi_emit.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/aot/filetests/link/freestanding_uintsize_target.xr",
+]
+
+[[operation]]
 id = "typeOf"
 observable_contract = "src/shared/xr_type_identity_core.h"
 semantic_kernel = "src/shared/xr_type_identity_core.h"

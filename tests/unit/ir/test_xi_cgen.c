@@ -1544,6 +1544,41 @@ TEST(cgen_simple_arith) {
     xi_func_free(ir);
 }
 
+TEST(cgen_target_layout_queries_emit_source_backed_constants) {
+    XrType int_type = {
+        .kind = XR_KIND_INT, .id = 995, .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XiFunc *ir = xi_func_new("target_layout_constants", &int_type);
+    TEST_REQUIRE(ir != NULL, "target-layout CGen function allocated");
+    XiBlock *entry = xi_block_new(ir);
+    TEST_REQUIRE(entry != NULL, "target-layout CGen entry allocated");
+    entry->sealed = true;
+
+    XiValue *size = xi_value_new(ir, entry, XI_TARGET_SIZEOF, &int_type, 0);
+    XiValue *align = xi_value_new(ir, entry, XI_TARGET_ALIGNOF, &int_type, 0);
+    TEST_REQUIRE(size != NULL && align != NULL, "target-layout CGen queries allocated");
+    size->aux_int = XR_NATIVE_USIZE;
+    align->aux_int = XR_NATIVE_ISIZE;
+    XiValue *sum = xi_value_new(ir, entry, XI_ADD, &int_type, 2);
+    TEST_REQUIRE(sum != NULL, "target-layout CGen sum allocated");
+    sum->args[0] = size;
+    sum->args[1] = align;
+    xi_block_set_return(entry, sum);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "target_layout", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "target-layout CGen succeeds");
+    const char *first_constant = strstr(code, "INT64_C(8)");
+    TEST_REQUIRE(first_constant && strstr(first_constant + 1, "INT64_C(8)"),
+                 "CGen consumes the LP64 bundle layout for size and alignment");
+    TEST_REQUIRE(!contains(code, "sizeof(size_t)") && !contains(code, "_Alignof(size_t)") &&
+                     !contains(code, "sizeof(ptrdiff_t)") &&
+                     !contains(code, "_Alignof(ptrdiff_t)"),
+                 "CGen does not ask the host compiler to rediscover target layout");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_rep_identical_source_alias_shares_immutable_c_local) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 919, .scalar_rep = XR_NATIVE_I64, .frozen = true};
     XiFunc *ir = xi_func_new("manual_c_alias", &int_type);
@@ -13305,6 +13340,7 @@ int main(void) {
     run_cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action();
     run_cgen_restricted_c90_header_is_explicit_and_minimal();
     run_cgen_simple_arith();
+    run_cgen_target_layout_queries_emit_source_backed_constants();
     run_cgen_rep_identical_source_alias_shares_immutable_c_local();
     run_cgen_rep_identical_unbox_shares_immutable_c_local();
     run_cgen_fixed_array_alias_address_projection_shares_backing_c_local();

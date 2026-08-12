@@ -73,6 +73,38 @@ TEST(target_data_layout_distinguishes_ilp32_and_lp64) {
     ASSERT_NE(ilp32.stable_hash, lp64.stable_hash);
 }
 
+TEST(target_layout_query_owner_covers_width_and_failure_edges) {
+    XrTargetDataLayout ilp32;
+    XrTargetDataLayout lp64;
+    ASSERT_TRUE(xr_target_data_layout_init_ilp32(&ilp32));
+    ASSERT_TRUE(xr_target_data_layout_init_lp64(&lp64));
+
+    XrTargetLayoutQueryResult result = XR_TARGET_LAYOUT_QUERY_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI,
+        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO, XR_SEM_CONSUMER_VM,
+        xr_target_layout_query_core(XR_TARGET_LAYOUT_QUERY_SIZE, &ilp32, XR_NATIVE_USIZE));
+    ASSERT_EQ_INT(result.status, XR_TARGET_LAYOUT_QUERY_OK);
+    ASSERT_EQ_INT(result.value, 4);
+    result = XR_TARGET_LAYOUT_QUERY_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_HI,
+        XR_SEM_OWNER_ID_SHARED_TARGET_LAYOUT_QUERY_LO, XR_SEM_CONSUMER_CGEN,
+        xr_target_layout_query_core(XR_TARGET_LAYOUT_QUERY_ALIGN, &lp64, XR_NATIVE_ISIZE));
+    ASSERT_EQ_INT(result.status, XR_TARGET_LAYOUT_QUERY_OK);
+    ASSERT_EQ_INT(result.value, 8);
+
+    result = xr_target_layout_query_core((XrTargetLayoutQueryKind) 99, &lp64, XR_NATIVE_I64);
+    ASSERT_EQ_INT(result.status, XR_TARGET_LAYOUT_QUERY_INVALID_KIND);
+    result = xr_target_layout_query_core(XR_TARGET_LAYOUT_QUERY_SIZE, NULL, XR_NATIVE_I64);
+    ASSERT_EQ_INT(result.status, XR_TARGET_LAYOUT_QUERY_INVALID_LAYOUT);
+    XrTargetDataLayout corrupt = lp64;
+    corrupt.stable_hash ^= UINT64_C(1);
+    result = xr_target_layout_query_core(XR_TARGET_LAYOUT_QUERY_SIZE, &corrupt, XR_NATIVE_I64);
+    ASSERT_EQ_INT(result.status, XR_TARGET_LAYOUT_QUERY_INVALID_LAYOUT);
+    result = xr_target_layout_query_core(XR_TARGET_LAYOUT_QUERY_ALIGN, &lp64,
+                                         XR_NATIVE_NESTED_AGGREGATE);
+    ASSERT_EQ_INT(result.status, XR_TARGET_LAYOUT_QUERY_INVALID_NATIVE_TYPE);
+}
+
 TEST(target_aggregate_pointer_and_native_size_layouts) {
     XrTargetDataLayout ilp32;
     XrTargetDataLayout lp64;
@@ -243,6 +275,7 @@ RUN_TEST(native_type_scalar_sizes_are_stable);
 RUN_TEST(native_type_aggregate_sizes_are_stable);
 RUN_TEST(native_type_alignment_rules_are_stable);
 RUN_TEST(target_data_layout_distinguishes_ilp32_and_lp64);
+RUN_TEST(target_layout_query_owner_covers_width_and_failure_edges);
 RUN_TEST(target_aggregate_pointer_and_native_size_layouts);
 RUN_TEST(target_aggregate_nested_packed_union_and_array_layouts);
 RUN_TEST(target_aggregate_flexible_tail_and_endian_invariants);
