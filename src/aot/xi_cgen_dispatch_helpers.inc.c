@@ -15253,63 +15253,17 @@ static void xicgen_place_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         emit_value_as_rep_ctx(ctx, out, v->args[1], pointee_storage_rep);
 }
 
-static void xicgen_emit_raw_endian_prefix(FILE *out, uint8_t width, bool constant_endian,
-                                          int64_t endian) {
-    if (width == 1 || (constant_endian && endian == XR_ENDIAN_NATIVE))
-        return;
-    if (constant_endian && endian == XR_ENDIAN_LE)
-        fprintf(out, "xr_raw_u%u_from_le(", (unsigned) width * 8u);
-    else if (constant_endian && endian == XR_ENDIAN_BE)
-        fprintf(out, "xr_raw_u%u_from_be(", (unsigned) width * 8u);
-    else
-        fprintf(out, "xr_raw_u%u_from_endian(", (unsigned) width * 8u);
-}
-
-static void xicgen_emit_raw_endian_suffix(XiCgenCtx *ctx, FILE *out, uint8_t width,
-                                          bool constant_endian, int64_t endian,
+static void xicgen_emit_raw_scalar_endian(XiCgenCtx *ctx, FILE *out,
                                           const XiValue *endian_value) {
-    if (width == 1 || (constant_endian && endian == XR_ENDIAN_NATIVE))
+    int64_t endian = XR_ENDIAN_NATIVE;
+    if (xicgen_value_is_const_endian(endian_value, &endian)) {
+        fprintf(out, "INT64_C(%" PRId64 ")", endian);
         return;
-    if (!constant_endian) {
-        fprintf(out, ", ");
-        xicgen_emit_raw_endian_arg_i64(ctx, out, endian_value);
     }
-    fprintf(out, ")");
+    xicgen_emit_raw_endian_arg_i64(ctx, out, endian_value);
 }
 
-static void xicgen_emit_raw_load_bits(XiCgenCtx *ctx, FILE *out, const XiValue *ptr, uint8_t width,
-                                      const XiValue *endian_value, bool constant_endian,
-                                      int64_t endian) {
-    xicgen_emit_raw_endian_prefix(out, width, constant_endian, endian);
-    fprintf(out, "xr_raw_load_u%u_unaligned(", (unsigned) width * 8u);
-    emit_value_as_rep_ctx(ctx, out, ptr, XR_REP_RAWPTR);
-    fprintf(out, ")");
-    xicgen_emit_raw_endian_suffix(ctx, out, width, constant_endian, endian, endian_value);
-}
-
-static void xicgen_emit_raw_store_bits(XiCgenCtx *ctx, FILE *out, const XiValue *value,
-                                       uint8_t code, const XiValue *endian_value,
-                                       bool constant_endian, int64_t endian) {
-    uint8_t width = cg_ffi_code_width(ctx, code);
-    xicgen_emit_raw_endian_prefix(out, width, constant_endian, endian);
-    if ((XrFFIType) code == XR_FFI_T_F32) {
-        fprintf(out, "xr_raw_f32_to_bits((float)(");
-        emit_value_as_rep_ctx(ctx, out, value, XR_REP_F64);
-        fprintf(out, "))");
-    } else if ((XrFFIType) code == XR_FFI_T_F64) {
-        fprintf(out, "xr_raw_f64_to_bits(");
-        emit_value_as_rep_ctx(ctx, out, value, XR_REP_F64);
-        fprintf(out, ")");
-    } else {
-        fprintf(out, "(%s)(", cg_ffi_pointee_c_type(ctx, code));
-        emit_value_as_rep_ctx(ctx, out, value, XR_REP_I64);
-        fprintf(out, ")");
-    }
-    xicgen_emit_raw_endian_suffix(ctx, out, width, constant_endian, endian, endian_value);
-}
-
-/* R[dst] = raw_load<T>(addr). All scalar accesses use fixed-size memcpy in
- * xr_raw_scalar_core.h, even when the source pointer is nominally aligned. */
+/* Mechanical native-representation adapter over the raw-scalar-access owner. */
 static void xicgen_ptr_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
     (void) f;
@@ -15320,48 +15274,40 @@ static void xicgen_ptr_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     }
     const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v);
     if (value_plan && value_plan->rep.kind == XAOT_VALUE_AGGREGATE && value_plan->rep.c_type) {
-        fprintf(out, "(*(%s *)(", value_plan->rep.c_type);
+        const char *owner_adapter = cg_raw_scalar_access_adapter_name(ctx);
+        if (!owner_adapter) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "%s(%s, ", owner_adapter, value_plan->rep.c_type);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-        fprintf(out, "))");
+        fprintf(out, ")");
         return;
     }
     uint8_t aux = (uint8_t) (v->aux_int & 0xff);
     uint8_t code = xr_ffi_ptr_aux_type(aux);
-    int64_t endian = XR_ENDIAN_NATIVE;
-    bool constant_endian = xicgen_value_is_const_endian(v->args[1], &endian);
     XrRep from_rep = cg_ffi_code_is_float(code)
                          ? XR_REP_F64
                          : (cg_ffi_code_is_ptr(code) ? XR_REP_RAWPTR : XR_REP_I64);
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, from_rep, cg_value_plan_storage_rep(ctx, v));
-    if (cg_ffi_code_is_ptr(code)) {
-        if (!constant_endian || endian != XR_ENDIAN_NATIVE) {
-            cg_ctx_set_error(ctx);
-            emit_codegen_abort_expr(out);
-            emit_conversion_suffix(out, conv_suffix);
-            return;
-        }
-        fprintf(out, "xr_raw_load_ptr_unaligned(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-        fprintf(out, ")");
-    } else if (cg_ffi_code_is_float(code)) {
-        uint8_t width = cg_ffi_code_width(ctx, code);
-        if ((XrFFIType) code == XR_FFI_T_F32)
-            fprintf(out, "(double)xr_raw_f32_from_bits(");
-        else
-            fprintf(out, "xr_raw_f64_from_bits(");
-        xicgen_emit_raw_load_bits(ctx, out, v->args[0], width, v->args[1], constant_endian, endian);
-        fprintf(out, ")");
-    } else {
-        fprintf(out, "(int64_t)(%s)(", cg_ffi_pointee_c_type(ctx, code));
-        xicgen_emit_raw_load_bits(ctx, out, v->args[0], cg_ffi_code_width(ctx, code), v->args[1],
-                                  constant_endian, endian);
-        fprintf(out, ")");
+    const char *owner_adapter = cg_raw_scalar_access_adapter_name(ctx);
+    if (!owner_adapter) {
+        emit_codegen_abort_expr(out);
+        emit_conversion_suffix(out, conv_suffix);
+        return;
     }
+    fprintf(out, "%s_load_%s(", owner_adapter,
+            cg_ffi_code_is_ptr(code) ? "pointer" : (cg_ffi_code_is_float(code) ? "f64" : "i64"));
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+    fprintf(out, ", UINT8_C(%u), UINT8_C(%u), ", (unsigned) code,
+            (unsigned) cg_ffi_code_width(ctx, XR_FFI_T_PTR));
+    xicgen_emit_raw_scalar_endian(ctx, out, v->args[1]);
+    fprintf(out, ")");
     emit_conversion_suffix(out, conv_suffix);
 }
 
-/* raw_store<T>(addr, value) — unchecked, unaligned and alias-safe. */
+/* Mechanical native-representation adapter over the raw-scalar-access owner. */
 static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     (void) f;
@@ -15374,35 +15320,37 @@ static void xicgen_ptr_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, stored_value);
     if (stored_value && value_plan && value_plan->rep.kind == XAOT_VALUE_AGGREGATE &&
         value_plan->rep.c_type) {
-        fprintf(out, "(*(%s *)(", value_plan->rep.c_type);
+        const char *owner_adapter = cg_raw_scalar_access_adapter_name(ctx);
+        if (!owner_adapter) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "%s_store(%s, ", owner_adapter, value_plan->rep.c_type);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-        fprintf(out, ")) = ");
+        fprintf(out, ", ");
         emit_vref(out, stored_value);
+        fprintf(out, ")");
         return;
     }
     uint8_t aux = (uint8_t) (v->aux_int & 0xff);
     uint8_t code = xr_ffi_ptr_aux_type(aux);
-    int64_t endian = XR_ENDIAN_NATIVE;
-    bool constant_endian = xicgen_value_is_const_endian(v->args[2], &endian);
-    if (cg_ffi_code_is_ptr(code)) {
-        if (!constant_endian || endian != XR_ENDIAN_NATIVE) {
-            cg_ctx_set_error(ctx);
-            emit_codegen_abort_expr(out);
-            return;
-        }
-        fprintf(out, "xr_raw_store_ptr_unaligned(");
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_RAWPTR);
-        fprintf(out, ")");
-    } else {
-        uint8_t width = cg_ffi_code_width(ctx, code);
-        fprintf(out, "xr_raw_store_u%u_unaligned(", (unsigned) width * 8u);
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
-        fprintf(out, ", ");
-        xicgen_emit_raw_store_bits(ctx, out, v->args[1], code, v->args[2], constant_endian, endian);
-        fprintf(out, ")");
+    const char *owner_adapter = cg_raw_scalar_access_adapter_name(ctx);
+    if (!owner_adapter) {
+        emit_codegen_abort_expr(out);
+        return;
     }
+    fprintf(out, "%s_store_%s(", owner_adapter,
+            cg_ffi_code_is_ptr(code) ? "pointer" : (cg_ffi_code_is_float(code) ? "f64" : "i64"));
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
+    fprintf(out, ", UINT8_C(%u), UINT8_C(%u), ", (unsigned) code,
+            (unsigned) cg_ffi_code_width(ctx, XR_FFI_T_PTR));
+    xicgen_emit_raw_scalar_endian(ctx, out, v->args[2]);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1],
+                          cg_ffi_code_is_ptr(code)
+                              ? XR_REP_RAWPTR
+                              : (cg_ffi_code_is_float(code) ? XR_REP_F64 : XR_REP_I64));
+    fprintf(out, ")");
 }
 
 /* Mechanical native-representation adapter for MutPtr<T>.copyFromNonOverlapping. */

@@ -495,6 +495,44 @@ TEST(raw_scalar_core_float_and_pointer_access_preserve_bits) {
     ASSERT(xr_raw_load_ptr_unaligned(p) == &target);
 }
 
+TEST(raw_scalar_access_owner_freezes_typed_load_store_matrix) {
+    uint8_t bytes[40] = {0};
+    uint8_t *p = bytes + 1;
+    XrRawScalarValue value = {0};
+
+    ASSERT(xr_semantic_owner_has_consumer(
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_VM));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,
+                      XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO),
+                  "xrt_raw_scalar_access");
+
+    value.bits = UINT64_C(0xffffffffffffedcc);
+    ASSERT(XR_RAW_SCALAR_ACCESS_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_VM,
+        xr_raw_scalar_store(p, XR_RAW_SCALAR_I16, sizeof(void *), XR_RAW_ENDIAN_LE, value)));
+    ASSERT_EQ_INT(bytes[1], UINT8_C(0xcc));
+    ASSERT_EQ_INT(bytes[2], UINT8_C(0xed));
+    value.bits = 0;
+    ASSERT(xr_raw_scalar_load(p, XR_RAW_SCALAR_I16, sizeof(void *), XR_RAW_ENDIAN_LE, &value));
+    ASSERT_EQ_INT((int64_t) value.bits, -4660);
+
+    value.bits = UINT64_C(0x12345678);
+    ASSERT(xr_raw_scalar_store(p, XR_RAW_SCALAR_U32, sizeof(void *), XR_RAW_ENDIAN_BE, value));
+    ASSERT_EQ_INT(bytes[1], UINT8_C(0x12));
+    ASSERT_EQ_INT(bytes[4], UINT8_C(0x78));
+    value.bits = 0;
+    ASSERT(xr_raw_scalar_load(p, XR_RAW_SCALAR_U32, sizeof(void *), XR_RAW_ENDIAN_BE, &value));
+    ASSERT_EQ_INT(value.bits, UINT64_C(0x12345678));
+
+    ASSERT_FALSE(xr_raw_scalar_load(p, XR_RAW_SCALAR_VOID, sizeof(void *), XR_RAW_ENDIAN_NATIVE,
+                                    &value));
+    ASSERT_FALSE(xr_raw_scalar_store(p, XR_RAW_SCALAR_COUNT, sizeof(void *),
+                                     XR_RAW_ENDIAN_NATIVE, value));
+}
+
 TEST(numeric_core_to_fixed_decimals_clamps) {
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(-10), 0);
     ASSERT_EQ_INT(xr_numeric_core_to_fixed_decimals(3), 3);
@@ -526,6 +564,7 @@ RUN_TEST(bits_core_aot_rotate_macros_match_exact_semantics);
 RUN_TEST(raw_scalar_core_unaligned_integer_access_preserves_bytes);
 RUN_TEST(raw_scalar_core_dynamic_endian_is_only_a_value_transform);
 RUN_TEST(raw_scalar_core_float_and_pointer_access_preserve_bits);
+RUN_TEST(raw_scalar_access_owner_freezes_typed_load_store_matrix);
 RUN_TEST(numeric_core_to_fixed_decimals_clamps);
 
 TEST_MAIN_END()

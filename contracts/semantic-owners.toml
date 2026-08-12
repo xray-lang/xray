@@ -405,6 +405,22 @@ fixtures = [
 ]
 
 [[operation]]
+id = "raw-scalar-access"
+observable_contract = "src/shared/xr_raw_scalar_core.h"
+semantic_kernel = "src/shared/xr_raw_scalar_core.h"
+vm_adapter = "src/vm/xvm_ffi.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "shared.raw-scalar-access"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_numeric_core.c",
+  "tests/unit/aot/test_xrt_raw_scalar_owner_freestanding.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/aot/filetests/cgen/mem_load_store_rawptr_shape.xr",
+  "tests/diff/cases/semantics/stdlib/mem_load_store_scalar_shared_core.xr",
+]
+
+[[operation]]
 id = "pod-slice-copy"
 observable_contract = "src/shared/xr_pod_slice_core.h"
 semantic_kernel = "src/shared/xr_pod_slice_core.h"

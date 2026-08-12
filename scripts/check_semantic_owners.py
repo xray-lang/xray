@@ -160,6 +160,7 @@ POD_SLICE_COPY_OPERATIONS = {"xi.slice.copy"}
 POD_SLICE_COMPARE_OPERATIONS = {"xi.slice.compare"}
 POD_SLICE_VIEW_OPERATIONS = {"xi.slice.as.bytes", "xi.slice.reinterpret"}
 RAW_MEMORY_COPY_OPERATIONS = {"xi.ptr.copy.nonoverlap"}
+RAW_SCALAR_ACCESS_OPERATIONS = {"xi.ptr.load", "xi.ptr.store"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -1733,6 +1734,92 @@ def verify_raw_memory_copy_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_raw_scalar_access_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.raw-scalar-access")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.raw-scalar-access"), None)
+    if owner is None or set(owner.get("operations", [])) != RAW_SCALAR_ACCESS_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.raw-scalar-access family")
+
+    core_text = (root / "src/shared/xr_raw_scalar_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    required_core = (
+        f"{marker}_HI", f"{marker}_LO", "XR_RAW_SCALAR_ACCESS_OWNER_APPLY",
+        "xr_raw_scalar_load", "xr_raw_scalar_store", "xr_raw_scalar_width",
+        "xr_raw_scalar_sign_extend",
+    )
+    if any(token not in core_text for token in required_core):
+        errors.append("src/shared/xr_raw_scalar_core.h: raw scalar access lacks stable owner kernel")
+
+    vm_text = (root / "src/vm/xvm_ffi.c").read_text(encoding="utf-8", errors="strict")
+    for symbol, delegate in (("xr_ffi_ptr_load", "xr_raw_scalar_load"),
+                             ("xr_ffi_ptr_store", "xr_raw_scalar_store")):
+        body = extract_c_function(vm_text, symbol) or ""
+        if (f"{marker}_HI" not in body or f"{marker}_LO" not in body or
+                "XR_RAW_SCALAR_ACCESS_OWNER_APPLY" not in body or delegate not in body):
+            errors.append(f"src/vm/xvm_ffi.c: {symbol} bypasses stable raw scalar owner")
+        if any(token in body for token in
+               ("xr_raw_load_u", "xr_raw_store_u", "xr_raw_u16_from_endian",
+                "xr_raw_u32_from_endian", "xr_raw_u64_from_endian",
+                "xr_raw_f32_from_bits", "xr_raw_f64_from_bits")):
+            errors.append(f"src/vm/xvm_ffi.c: {symbol} revived private raw scalar semantics")
+    for retired in ("ffi_load_integer_bits", "ffi_store_integer_bits", "ffi_sign_extend_integer"):
+        if retired in vm_text:
+            errors.append(f"src/vm/xvm_ffi.c: retired raw scalar source remains: {retired}")
+
+    for relative, consumer in (("src/aot/xrt.h", "XR_SEM_CONSUMER_AOT_HOSTED"),
+                               ("src/aot/xrt_core_freestanding.h",
+                                "XR_SEM_CONSUMER_AOT_FREESTANDING")):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for token in (f"{marker}_HI", f"{marker}_LO", consumer,
+                      "XR_RAW_SCALAR_ACCESS_OWNER_APPLY",
+                      "xrt_raw_scalar_access_load_i64", "xrt_raw_scalar_access_store_i64"):
+            if token not in text:
+                errors.append(f"{relative}: AOT raw scalar adapter bypasses stable owner")
+                break
+
+    # The restricted C90 surface has no Xi raw-pointer lowering; generated C90
+    # therefore cannot consume xi.ptr.load/store and needs no compatibility path.
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_raw_scalar_access_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: raw scalar access does not resolve stable adapter")
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    cgen_required = {
+        "xicgen_ptr_load": (
+            'fprintf(out, "%s(%s, ", owner_adapter, value_plan->rep.c_type)',
+            'fprintf(out, "%s_load_%s(", owner_adapter,',
+        ),
+        "xicgen_ptr_store": (
+            'fprintf(out, "%s_store(%s, ", owner_adapter, value_plan->rep.c_type)',
+            'fprintf(out, "%s_store_%s(", owner_adapter,',
+        ),
+    }
+    cgen_forbidden = {
+        "xicgen_ptr_load": ('fprintf(out, "%s_store',),
+        "xicgen_ptr_store": ('fprintf(out, "%s(%s, ", owner_adapter,',
+                              'fprintf(out, "%s_load_'),
+    }
+    for symbol in ("xicgen_ptr_load", "xicgen_ptr_store"):
+        body = extract_c_function(dispatch_text, symbol) or ""
+        if "cg_raw_scalar_access_adapter_name" not in body:
+            errors.append(f"src/aot/xi_cgen_dispatch_helpers.inc.c: {symbol} bypasses owner adapter")
+        if any(token not in body for token in cgen_required[symbol]) or any(
+                token in body for token in cgen_forbidden[symbol]):
+            errors.append(
+                f"src/aot/xi_cgen_dispatch_helpers.inc.c: {symbol} emits a wrong owner adapter")
+        if any(token in body for token in
+               ("xr_raw_load_u", "xr_raw_store_u", "xr_raw_load_ptr_unaligned",
+                "xr_raw_store_ptr_unaligned", "xr_raw_u16_from_", "xr_raw_u32_from_",
+                "xr_raw_u64_from_", "xr_raw_f32_", "xr_raw_f64_")):
+            errors.append(f"src/aot/xi_cgen_dispatch_helpers.inc.c: {symbol} owns raw semantics")
+    return errors
+
+
 def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     families = (
@@ -1977,6 +2064,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_byte_slice_compare_ratchet(root, registry))
         errors.extend(verify_byte_slice_common_prefix_ratchet(root, registry))
         errors.extend(verify_raw_memory_copy_ratchet(root, registry))
+        errors.extend(verify_raw_scalar_access_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))
         errors.extend(verify_pod_slice_view_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)

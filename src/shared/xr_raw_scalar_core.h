@@ -17,8 +17,35 @@
 #ifndef XR_RAW_SCALAR_CORE_H
 #define XR_RAW_SCALAR_CORE_H
 
+#include "xr_semantic_owner_ids_gen.h"
 #include <stddef.h>
 #include <stdint.h>
+
+/* Serialization-stable scalar kinds shared by Xi raw-pointer access and FFI. */
+typedef enum XrRawScalarKind {
+    XR_RAW_SCALAR_VOID = 0,
+    XR_RAW_SCALAR_BOOL = 1,
+    XR_RAW_SCALAR_I8 = 2,
+    XR_RAW_SCALAR_U8 = 3,
+    XR_RAW_SCALAR_I16 = 4,
+    XR_RAW_SCALAR_U16 = 5,
+    XR_RAW_SCALAR_I32 = 6,
+    XR_RAW_SCALAR_U32 = 7,
+    XR_RAW_SCALAR_I64 = 8,
+    XR_RAW_SCALAR_U64 = 9,
+    XR_RAW_SCALAR_F32 = 10,
+    XR_RAW_SCALAR_F64 = 11,
+    XR_RAW_SCALAR_PTR = 12,
+    XR_RAW_SCALAR_SIZE = 13,
+    XR_RAW_SCALAR_SSIZE = 14,
+    XR_RAW_SCALAR_COUNT = 15
+} XrRawScalarKind;
+
+typedef struct XrRawScalarValue {
+    uint64_t bits;
+    double floating;
+    void *pointer;
+} XrRawScalarValue;
 
 #if defined(__GNUC__) || defined(__clang__)
 #define XR_RAW_COPY(dst, src, size) __builtin_memcpy((dst), (src), (size))
@@ -214,6 +241,243 @@ static inline void xr_raw_store_ptr_unaligned(void *ptr, const void *value) {
     XR_RAW_ASSUME_NON_NULL(ptr);
     XR_RAW_COPY(ptr, &value, sizeof(value));
 }
+
+static inline int xr_raw_scalar_kind_is_memory(uint8_t kind) {
+    return kind > XR_RAW_SCALAR_VOID && kind < XR_RAW_SCALAR_COUNT;
+}
+
+static inline int xr_raw_scalar_kind_is_float(uint8_t kind) {
+    return kind == XR_RAW_SCALAR_F32 || kind == XR_RAW_SCALAR_F64;
+}
+
+static inline int xr_raw_scalar_kind_is_pointer(uint8_t kind) {
+    return kind == XR_RAW_SCALAR_PTR;
+}
+
+static inline int xr_raw_scalar_kind_is_signed(uint8_t kind) {
+    return kind == XR_RAW_SCALAR_I8 || kind == XR_RAW_SCALAR_I16 ||
+           kind == XR_RAW_SCALAR_I32 || kind == XR_RAW_SCALAR_I64 ||
+           kind == XR_RAW_SCALAR_SSIZE;
+}
+
+static inline uint8_t xr_raw_scalar_width(uint8_t kind, uint8_t pointer_width) {
+    switch (kind) {
+        case XR_RAW_SCALAR_BOOL:
+        case XR_RAW_SCALAR_I8:
+        case XR_RAW_SCALAR_U8:
+            return 1;
+        case XR_RAW_SCALAR_I16:
+        case XR_RAW_SCALAR_U16:
+            return 2;
+        case XR_RAW_SCALAR_I32:
+        case XR_RAW_SCALAR_U32:
+        case XR_RAW_SCALAR_F32:
+            return 4;
+        case XR_RAW_SCALAR_I64:
+        case XR_RAW_SCALAR_U64:
+        case XR_RAW_SCALAR_F64:
+            return 8;
+        case XR_RAW_SCALAR_PTR:
+        case XR_RAW_SCALAR_SIZE:
+        case XR_RAW_SCALAR_SSIZE:
+            return pointer_width == 4 || pointer_width == 8 ? pointer_width : 0;
+        default:
+            return 0;
+    }
+}
+
+static inline uint64_t xr_raw_scalar_load_bits(const void *ptr, uint8_t width, int64_t endian,
+                                               int *ok) {
+    uint64_t bits = 0;
+    switch (width) {
+        case 1:
+            bits = xr_raw_load_u8_unaligned(ptr);
+            break;
+        case 2:
+            bits = xr_raw_u16_from_endian(xr_raw_load_u16_unaligned(ptr), endian);
+            break;
+        case 4:
+            bits = xr_raw_u32_from_endian(xr_raw_load_u32_unaligned(ptr), endian);
+            break;
+        case 8:
+            bits = xr_raw_u64_from_endian(xr_raw_load_u64_unaligned(ptr), endian);
+            break;
+        default:
+            if (ok)
+                *ok = 0;
+            return 0;
+    }
+    if (ok)
+        *ok = 1;
+    return bits;
+}
+
+static inline int64_t xr_raw_scalar_sign_extend(uint64_t bits, uint8_t width) {
+    switch (width) {
+        case 1:
+            return (int64_t) (int8_t) bits;
+        case 2:
+            return (int64_t) (int16_t) bits;
+        case 4:
+            return (int64_t) (int32_t) bits;
+        case 8:
+            return (int64_t) bits;
+        default:
+            return 0;
+    }
+}
+
+static inline int xr_raw_scalar_load(const void *ptr, uint8_t kind, uint8_t pointer_width,
+                                     int64_t endian, XrRawScalarValue *out) {
+    uint8_t width;
+    uint64_t bits;
+    int ok = 0;
+    if (!out || !xr_raw_scalar_kind_is_memory(kind))
+        return 0;
+    out->bits = 0;
+    out->floating = 0.0;
+    out->pointer = NULL;
+    if (kind == XR_RAW_SCALAR_PTR) {
+        if (endian != XR_RAW_ENDIAN_NATIVE)
+            return 0;
+        out->pointer = xr_raw_load_ptr_unaligned(ptr);
+        return 1;
+    }
+    width = xr_raw_scalar_width(kind, pointer_width);
+    bits = xr_raw_scalar_load_bits(ptr, width, endian, &ok);
+    if (!ok)
+        return 0;
+    if (kind == XR_RAW_SCALAR_F32) {
+        out->floating = (double) xr_raw_f32_from_bits((uint32_t) bits);
+    } else if (kind == XR_RAW_SCALAR_F64) {
+        out->floating = xr_raw_f64_from_bits(bits);
+    } else if (kind == XR_RAW_SCALAR_BOOL) {
+        out->bits = bits != 0;
+    } else if (xr_raw_scalar_kind_is_signed(kind)) {
+        out->bits = (uint64_t) xr_raw_scalar_sign_extend(bits, width);
+    } else {
+        out->bits = bits;
+    }
+    return 1;
+}
+
+static inline int xr_raw_scalar_store_bits(void *ptr, uint8_t width, uint64_t bits,
+                                           int64_t endian) {
+    switch (width) {
+        case 1:
+            xr_raw_store_u8_unaligned(ptr, (uint8_t) bits);
+            return 1;
+        case 2:
+            xr_raw_store_u16_unaligned(ptr, xr_raw_u16_from_endian((uint16_t) bits, endian));
+            return 1;
+        case 4:
+            xr_raw_store_u32_unaligned(ptr, xr_raw_u32_from_endian((uint32_t) bits, endian));
+            return 1;
+        case 8:
+            xr_raw_store_u64_unaligned(ptr, xr_raw_u64_from_endian(bits, endian));
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static inline int xr_raw_scalar_store(void *ptr, uint8_t kind, uint8_t pointer_width,
+                                      int64_t endian, XrRawScalarValue value) {
+    uint8_t width;
+    uint64_t bits;
+    if (!xr_raw_scalar_kind_is_memory(kind))
+        return 0;
+    if (kind == XR_RAW_SCALAR_PTR) {
+        if (endian != XR_RAW_ENDIAN_NATIVE)
+            return 0;
+        xr_raw_store_ptr_unaligned(ptr, value.pointer);
+        return 1;
+    }
+    width = xr_raw_scalar_width(kind, pointer_width);
+    if (kind == XR_RAW_SCALAR_F32)
+        bits = xr_raw_f32_to_bits((float) value.floating);
+    else if (kind == XR_RAW_SCALAR_F64)
+        bits = xr_raw_f64_to_bits(value.floating);
+    else if (kind == XR_RAW_SCALAR_BOOL)
+        bits = value.bits != 0;
+    else
+        bits = value.bits;
+    return xr_raw_scalar_store_bits(ptr, width, bits, endian);
+}
+
+static inline int64_t xr_raw_scalar_load_i64(const void *ptr, uint8_t kind,
+                                             uint8_t pointer_width, int64_t endian) {
+    XrRawScalarValue value;
+    return xr_raw_scalar_load(ptr, kind, pointer_width, endian, &value)
+               ? (int64_t) value.bits
+               : 0;
+}
+
+static inline double xr_raw_scalar_load_f64(const void *ptr, uint8_t kind,
+                                            uint8_t pointer_width, int64_t endian) {
+    XrRawScalarValue value;
+    return xr_raw_scalar_load(ptr, kind, pointer_width, endian, &value) ? value.floating : 0.0;
+}
+
+static inline void *xr_raw_scalar_load_pointer(const void *ptr, uint8_t kind,
+                                               uint8_t pointer_width, int64_t endian) {
+    XrRawScalarValue value;
+    return xr_raw_scalar_load(ptr, kind, pointer_width, endian, &value) ? value.pointer : NULL;
+}
+
+static inline void xr_raw_scalar_store_i64(void *ptr, uint8_t kind, uint8_t pointer_width,
+                                           int64_t endian, int64_t input) {
+    XrRawScalarValue value;
+    value.bits = (uint64_t) input;
+    value.floating = 0.0;
+    value.pointer = NULL;
+    (void) xr_raw_scalar_store(ptr, kind, pointer_width, endian, value);
+}
+
+static inline void xr_raw_scalar_store_f64(void *ptr, uint8_t kind, uint8_t pointer_width,
+                                           int64_t endian, double input) {
+    XrRawScalarValue value;
+    value.bits = 0;
+    value.floating = input;
+    value.pointer = NULL;
+    (void) xr_raw_scalar_store(ptr, kind, pointer_width, endian, value);
+}
+
+static inline void xr_raw_scalar_store_pointer(void *ptr, uint8_t kind, uint8_t pointer_width,
+                                               int64_t endian, const void *input) {
+    XrRawScalarValue value;
+    value.bits = 0;
+    value.floating = 0.0;
+    value.pointer = (void *) input;
+    (void) xr_raw_scalar_store(ptr, kind, pointer_width, endian, value);
+}
+
+#define xr_raw_scalar_load_aggregate(type, ptr) (*(const type *) (ptr))
+#define xr_raw_scalar_store_aggregate(type, ptr, value) ((*(type *) (ptr)) = (value))
+
+#define XR_RAW_SCALAR_ACCESS_OWNER_GUARD(owner_hi, owner_lo)                                     \
+    ((void) sizeof(struct {                                                                      \
+        unsigned int owner_id_must_be_shared_raw_scalar_access                                   \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI &&          \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO)             \
+                   ? 1                                                                          \
+                   : -1);                                                                       \
+    }))
+
+#define XR_RAW_SCALAR_ACCESS_CONSUMER_GUARD(consumer_bit)                                       \
+    ((void) sizeof(struct {                                                                      \
+        unsigned int consumer_must_be_declared_for_shared_raw_scalar_access                      \
+            : (((uint32_t) (consumer_bit) != 0 &&                                               \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&          \
+                (XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_CONSUMERS &                            \
+                 (uint32_t) (consumer_bit)) != 0)                                               \
+                   ? 1                                                                          \
+                   : -1);                                                                       \
+    }))
+
+#define XR_RAW_SCALAR_ACCESS_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)           \
+    (XR_RAW_SCALAR_ACCESS_OWNER_GUARD((owner_hi), (owner_lo)),                                   \
+     XR_RAW_SCALAR_ACCESS_CONSUMER_GUARD((consumer_bit)), (expression))
 
 #undef XR_RAW_COPY
 #undef XR_RAW_ASSUME_NON_NULL

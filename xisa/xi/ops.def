@@ -2684,8 +2684,6 @@
     xi.local.addr
     xi.place.load
     xi.place.store
-    xi.ptr.load
-    xi.ptr.store
     xi.agg.new
     xi.agg.get
     xi.agg.set
@@ -2783,6 +2781,8 @@
 
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
+    xi.ptr.load
+    xi.ptr.store
     xi.range
     xi.neg
     xi.not
@@ -3268,6 +3268,28 @@
     (aot-hosted "src/aot/xrt.h" "xrt_raw_memory_copy_nonoverlap")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_raw_memory_copy_nonoverlap")
     (cgen "src/aot/xi_cgen.c" "cg_raw_memory_copy_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.raw-scalar-access
+  :category shared-semantic-kernel
+  :operations (
+    xi.ptr.load
+    xi.ptr.store
+  )
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_raw_scalar_access
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_ffi.c" "XR_RAW_SCALAR_ACCESS_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_raw_scalar_access_load_i64")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_raw_scalar_access_load_i64")
+    (cgen "src/aot/xi_cgen.c" "cg_raw_scalar_access_adapter_name")
   ))
 
 (define-xi-observable-owner primitive.type-identity

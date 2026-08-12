@@ -4050,7 +4050,8 @@ TEST(cgen_struct_raw_deref_method_receiver_skips_release_copy) {
     const char *load = find_static_function_definition(code, "loadState");
     TEST_REQUIRE(load != NULL, "raw-deref value-load function should be emitted");
     const char *load_end = next_static_after(load);
-    TEST_REQUIRE(count_lines_outside_debug_locals(load, load_end, " = (*(xrt_struct_abi_") > 0,
+    TEST_REQUIRE(count_lines_outside_debug_locals(load, load_end,
+                                                  " = xrt_raw_scalar_access(xrt_struct_abi_") > 0,
                  "a raw dereference returned by value must still materialize the struct load");
 
     printf("  Generated release-zero-copy raw-deref struct receivers %zu bytes of C code\n",
@@ -5423,9 +5424,9 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     assert(fn_end != NULL && "run function body should be bounded");
     assert(count_between(fn, fn_end, "void *") > 0 &&
            "Ptr/MutPtr locals must use native pointer C storage");
-    assert(count_between(fn, fn_end, "xr_raw_store_u8_unaligned(") > 0 &&
-           count_between(fn, fn_end, "xr_raw_load_u8_unaligned(") > 0 &&
-           "MutPtr<u8>/Ptr<u8> accesses must use alias-safe raw scalar operations");
+    assert(count_between(fn, fn_end, "xrt_raw_scalar_access_store_i64(") > 0 &&
+           count_between(fn, fn_end, "xrt_raw_scalar_access_load_i64(") > 0 &&
+           "MutPtr<u8>/Ptr<u8> accesses must route through the stable raw scalar owner");
     assert(count_between(fn, fn_end, "xrt_raw_memory_copy_nonoverlap(") > 0 &&
            "MutPtr.copyFromNonOverlapping must lower through the stable owner adapter");
     assert(count_between(fn, fn_end, "INT64_C(2)") > 0 &&
@@ -5812,14 +5813,13 @@ TEST(cgen_mem_load_uses_pointer_helper) {
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "read function body should be bounded");
 
-    assert(count_between(fn, fn_end, "xr_raw_load_u16_unaligned(") == 1 &&
-           count_between(fn, fn_end, "xr_raw_load_u32_unaligned(") == 1 &&
-           count_between(fn, fn_end, "xr_raw_load_u64_unaligned(") == 1 &&
-           "mem.load integer widths must lower to fixed-size raw scalar operations");
-    assert(count_between(fn, fn_end, "xr_raw_u16_from_le(") == 1 &&
-           count_between(fn, fn_end, "xr_raw_u32_from_le(") == 1 &&
-           count_between(fn, fn_end, "xr_raw_u64_from_le(") == 1 &&
-           "constant little-endian loads must be specialized before C compilation");
+    assert(count_between(fn, fn_end, "xrt_raw_scalar_access_load_i64(") == 3 &&
+           "mem.load widths must lower through one raw scalar owner adapter");
+    assert(count_between(fn, fn_end, "xr_raw_load_u") == 0 &&
+           count_between(fn, fn_end, "xr_raw_u16_from_") == 0 &&
+           count_between(fn, fn_end, "xr_raw_u32_from_") == 0 &&
+           count_between(fn, fn_end, "xr_raw_u64_from_") == 0 &&
+           "CGen must not recreate raw scalar width or endian semantics");
     assert(count_between(fn, fn_end, "void *") > 0 &&
            "mem.load should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
@@ -5872,14 +5872,13 @@ TEST(cgen_mem_store_uses_pointer_helper) {
     const char *fn_end = next_static_after(fn);
     assert(fn_end != NULL && "write function body should be bounded");
 
-    assert(count_between(fn, fn_end, "xr_raw_store_u16_unaligned(v") == 1 &&
-           count_between(fn, fn_end, "xr_raw_store_u32_unaligned(v") == 1 &&
-           count_between(fn, fn_end, "xr_raw_store_u64_unaligned(v") == 1 &&
-           "mem.store integer widths must pass native pointers to raw scalar operations");
-    assert(count_between(fn, fn_end, "xr_raw_u16_from_le(") == 1 &&
-           count_between(fn, fn_end, "xr_raw_u32_from_le(") == 1 &&
-           count_between(fn, fn_end, "xr_raw_u64_from_le(") == 1 &&
-           "constant little-endian stores must be specialized before C compilation");
+    assert(count_between(fn, fn_end, "xrt_raw_scalar_access_store_i64(") == 3 &&
+           "mem.store widths must lower through one raw scalar owner adapter");
+    assert(count_between(fn, fn_end, "xr_raw_store_u") == 0 &&
+           count_between(fn, fn_end, "xr_raw_u16_from_") == 0 &&
+           count_between(fn, fn_end, "xr_raw_u32_from_") == 0 &&
+           count_between(fn, fn_end, "xr_raw_u64_from_") == 0 &&
+           "CGen must not recreate raw scalar width or endian semantics");
     assert(count_between(fn, fn_end, "void *") > 0 &&
            "mem.store should keep the data pointer in native C storage");
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&

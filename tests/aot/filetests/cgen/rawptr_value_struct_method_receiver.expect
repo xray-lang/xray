@@ -2,8 +2,8 @@ contains=name=bridgeValueState
 contains=name=readValueState
 regex=value v[0-9]+ op=PTR_LOAD kind=aggregate rep=tagged c_type=xrt_struct_abi_[A-Za-z0-9_]+
 regex=value v[0-9]+ op=PTR_STORE kind=void rep=void c_type=void
-c_regex=xrt_struct_abi_[A-Za-z0-9_]+ v[0-9]+ = \(\*\(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\)\);
-c_regex=\(void\)\(\(\*\(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\)\) = v[0-9]+\);
+c_regex=xrt_struct_abi_[A-Za-z0-9_]+ v[0-9]+ = xrt_raw_scalar_access\(xrt_struct_abi_[A-Za-z0-9_]+, v[0-9]+\);
+c_regex=\(void\)\(xrt_raw_scalar_access_store\(xrt_struct_abi_[A-Za-z0-9_]+, v[0-9]+, v[0-9]+\)\);
 # Direct value-struct method receivers use the exact generated aggregate type.
 # Match that shape without coupling the contract to the layout hash.
 c_regex=_State_reset_m\(NULL, \(xrt_struct_abi_[A-Za-z0-9_]+ \*\)\(v[0-9]+\), v[0-9]+\)

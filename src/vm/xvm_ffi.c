@@ -23,120 +23,51 @@
 
 #define XR_FFI_MAX_ARGS 32
 
-static uint64_t ffi_load_integer_bits(const void *ptr, uint8_t width, int64_t endian, bool *ok) {
-    switch (width) {
-        case 1:
-            if (ok)
-                *ok = true;
-            return xr_raw_load_u8_unaligned(ptr);
-        case 2:
-            if (ok)
-                *ok = true;
-            return xr_raw_u16_from_endian(xr_raw_load_u16_unaligned(ptr), endian);
-        case 4:
-            if (ok)
-                *ok = true;
-            return xr_raw_u32_from_endian(xr_raw_load_u32_unaligned(ptr), endian);
-        case 8:
-            if (ok)
-                *ok = true;
-            return xr_raw_u64_from_endian(xr_raw_load_u64_unaligned(ptr), endian);
-        default:
-            if (ok)
-                *ok = false;
-            return 0;
-    }
-}
+_Static_assert(XR_RAW_SCALAR_VOID == XR_FFI_T_VOID &&
+                   XR_RAW_SCALAR_BOOL == XR_FFI_T_BOOL &&
+                   XR_RAW_SCALAR_I8 == XR_FFI_T_I8 && XR_RAW_SCALAR_U8 == XR_FFI_T_U8 &&
+                   XR_RAW_SCALAR_I16 == XR_FFI_T_I16 && XR_RAW_SCALAR_U16 == XR_FFI_T_U16 &&
+                   XR_RAW_SCALAR_I32 == XR_FFI_T_I32 && XR_RAW_SCALAR_U32 == XR_FFI_T_U32 &&
+                   XR_RAW_SCALAR_I64 == XR_FFI_T_I64 && XR_RAW_SCALAR_U64 == XR_FFI_T_U64 &&
+                   XR_RAW_SCALAR_F32 == XR_FFI_T_F32 && XR_RAW_SCALAR_F64 == XR_FFI_T_F64 &&
+                   XR_RAW_SCALAR_PTR == XR_FFI_T_PTR && XR_RAW_SCALAR_SIZE == XR_FFI_T_SIZE &&
+                   XR_RAW_SCALAR_SSIZE == XR_FFI_T_SSIZE &&
+                   XR_RAW_SCALAR_COUNT == XR_FFI_T_COUNT,
+               "raw scalar kinds must match the serialized FFI codes");
 
-static xr_Integer ffi_sign_extend_integer(uint64_t bits, uint8_t width) {
-    switch (width) {
-        case 1:
-            return (xr_Integer) (int8_t) bits;
-        case 2:
-            return (xr_Integer) (int16_t) bits;
-        case 4:
-            return (xr_Integer) (int32_t) bits;
-        case 8:
-            return (xr_Integer) (int64_t) bits;
-        default:
-            return 0;
-    }
-}
-
-static bool ffi_store_integer_bits(void *ptr, uint8_t width, uint64_t bits, int64_t endian) {
-    switch (width) {
-        case 1:
-            xr_raw_store_u8_unaligned(ptr, (uint8_t) bits);
-            return true;
-        case 2:
-            xr_raw_store_u16_unaligned(ptr, xr_raw_u16_from_endian((uint16_t) bits, endian));
-            return true;
-        case 4:
-            xr_raw_store_u32_unaligned(ptr, xr_raw_u32_from_endian((uint32_t) bits, endian));
-            return true;
-        case 8:
-            xr_raw_store_u64_unaligned(ptr, xr_raw_u64_from_endian(bits, endian));
-            return true;
-        default:
-            return false;
-    }
-}
-
-/* FFI raw-pointer scalar load/store. The pointee width/flags byte is recorded
- * on XI_PTR_LOAD/STORE while Endian remains a normal evaluated operand. These
- * back the VM's OP_PTR_LOAD / OP_PTR_STORE and are independent of libffi. No
- * bounds or null check: validity of `addr` is the `unsafe` block's contract. */
+/* Mechanical XrValue adapters over the raw-scalar-access semantic owner. */
 XrValue xr_ffi_ptr_load(uintptr_t addr, uint8_t ffi_type, int64_t endian) {
     uint8_t code = xr_ffi_ptr_aux_type(ffi_type);
-    const XrAbiScalarDesc *desc = xr_abi_scalar_desc(code);
-    const void *ptr = (const void *) addr;
-    bool ok = false;
-    if (!desc || !desc->is_memory_scalar)
+    XrRawScalarValue value;
+    if (!XR_RAW_SCALAR_ACCESS_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,
+            XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_VM,
+            xr_raw_scalar_load((const void *) addr, code, (uint8_t) sizeof(void *), endian,
+                               &value)))
         return xr_null();
-    if (desc->is_pointer) {
-        return xr_int((xr_Integer) (uintptr_t) xr_raw_load_ptr_unaligned(ptr));
-    }
-    uint8_t width = xr_abi_scalar_width(desc, (uint8_t) sizeof(void *));
-    if (desc->is_float) {
-        uint64_t bits = ffi_load_integer_bits(ptr, width, endian, &ok);
-        if (!ok)
-            return xr_null();
-        if (width == 4)
-            return xr_float((double) xr_raw_f32_from_bits((uint32_t) bits));
-        if (width == 8)
-            return xr_float(xr_raw_f64_from_bits(bits));
-        return xr_null();
-    }
-    uint64_t bits = ffi_load_integer_bits(ptr, width, endian, &ok);
-    if (!ok)
-        return xr_null();
+    if (xr_raw_scalar_kind_is_pointer(code))
+        return xr_int((xr_Integer) (uintptr_t) value.pointer);
+    if (xr_raw_scalar_kind_is_float(code))
+        return xr_float(value.floating);
     if (code == XR_FFI_T_BOOL)
-        return xr_bool(bits != 0);
-    return xr_int(desc->is_signed ? ffi_sign_extend_integer(bits, width) : (xr_Integer) bits);
+        return xr_bool(value.bits != 0);
+    return xr_int((xr_Integer) value.bits);
 }
 
 void xr_ffi_ptr_store(uintptr_t addr, uint8_t ffi_type, XrValue val, int64_t endian) {
     uint8_t code = xr_ffi_ptr_aux_type(ffi_type);
-    const XrAbiScalarDesc *desc = xr_abi_scalar_desc(code);
-    double f = XR_IS_FLOAT(val) ? XR_TO_FLOAT(val) : (double) XR_TO_INT(val);
-    xr_Integer iv = XR_IS_FLOAT(val) ? (xr_Integer) XR_TO_FLOAT(val) : XR_TO_INT(val);
-    void *ptr = (void *) addr;
-    if (!desc || !desc->is_memory_scalar)
-        return;
-    if (desc->is_pointer) {
-        xr_raw_store_ptr_unaligned(ptr, (void *) (uintptr_t) iv);
-        return;
-    }
-    uint8_t width = xr_abi_scalar_width(desc, (uint8_t) sizeof(void *));
-    if (desc->is_float) {
-        if (width == 4)
-            (void) ffi_store_integer_bits(ptr, 4, xr_raw_f32_to_bits((float) f), endian);
-        else if (width == 8)
-            (void) ffi_store_integer_bits(ptr, 8, xr_raw_f64_to_bits(f), endian);
-        return;
-    }
-    uint64_t bits = code == XR_FFI_T_BOOL ? (uint64_t) (iv != 0) : (uint64_t) iv;
-    (void) ffi_store_integer_bits(ptr, width, bits, endian);
+    XrRawScalarValue value = {0};
+    if (xr_raw_scalar_kind_is_pointer(code))
+        value.pointer = (void *) (uintptr_t) XR_TO_INT(val);
+    else if (xr_raw_scalar_kind_is_float(code))
+        value.floating = XR_IS_FLOAT(val) ? XR_TO_FLOAT(val) : (double) XR_TO_INT(val);
+    else
+        value.bits =
+            (uint64_t) (XR_IS_FLOAT(val) ? (xr_Integer) XR_TO_FLOAT(val) : XR_TO_INT(val));
+    (void) XR_RAW_SCALAR_ACCESS_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_VM,
+        xr_raw_scalar_store((void *) addr, code, (uint8_t) sizeof(void *), endian, value));
 }
 
 #ifdef XRAY_HAVE_LIBFFI

@@ -4581,18 +4581,18 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_raw_scalar_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "memory-read"
       ],
       "error_panic_suspend_cancel_publication": [],
       "family": "memory-and-place",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.raw-scalar-access",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_raw_scalar_core.h",
       "observable_edges": [],
       "operation_id": "xi.ptr.load",
       "ownership": "borrow",
@@ -4605,19 +4605,19 @@
     {
       "benchmark_anchor": "target-machine/memory-and-place",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_raw_scalar_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "memory-write"
       ],
       "error_panic_suspend_cancel_publication": [],
       "family": "memory-and-place",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.raw-scalar-access",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_raw_scalar_core.h",
       "observable_edges": [],
       "operation_id": "xi.ptr.store",
       "ownership": "borrow",
@@ -6554,5 +6554,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "a8249687a758b7da131ce8098c111430c1d9307dc8949e8f052f244a67002b5b"
+  "source_tree_fingerprint": "9481282a07abb7134d1eb02815cbddfa3ac12acdbadbb016c894e6bdb7d389a2"
 }

@@ -73,6 +73,46 @@
     XR_RAW_MEMORY_COPY_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_HI,                     \
                                    XR_SEM_OWNER_ID_SHARED_RAW_MEMORY_COPY_LO,                     \
                                    XR_SEM_CONSUMER_AOT_HOSTED, dst, src, count)
+#define xrt_raw_scalar_access_load_i64(ptr, kind, pointer_width, endian)                           \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_raw_scalar_load_i64((ptr), (kind), (pointer_width), (endian)))
+#define xrt_raw_scalar_access_load_f64(ptr, kind, pointer_width, endian)                           \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_raw_scalar_load_f64((ptr), (kind), (pointer_width), (endian)))
+#define xrt_raw_scalar_access_load_pointer(ptr, kind, pointer_width, endian)                       \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_raw_scalar_load_pointer((ptr), (kind), (pointer_width), (endian)))
+#define xrt_raw_scalar_access_store_i64(ptr, kind, pointer_width, endian, value)                   \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_raw_scalar_store_i64((ptr), (kind), (pointer_width), (endian), (value)))
+#define xrt_raw_scalar_access_store_f64(ptr, kind, pointer_width, endian, value)                   \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_raw_scalar_store_f64((ptr), (kind), (pointer_width), (endian), (value)))
+#define xrt_raw_scalar_access_store_pointer(ptr, kind, pointer_width, endian, value)               \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_raw_scalar_store_pointer((ptr), (kind), (pointer_width), (endian), (value)))
+#define xrt_raw_scalar_access(type, ptr)                                                          \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_raw_scalar_load_aggregate(type, ptr))
+#define xrt_raw_scalar_access_store(type, ptr, value)                                             \
+    XR_RAW_SCALAR_ACCESS_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_HI,                                              \
+        XR_SEM_OWNER_ID_SHARED_RAW_SCALAR_ACCESS_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_raw_scalar_store_aggregate(type, ptr, value))
 #ifndef xrt_byte_slice_scalar_eval
 #define xrt_byte_slice_scalar_eval(expression)                                                     \
     XR_BYTE_SLICE_SCALAR_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                 \

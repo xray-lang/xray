@@ -8,14 +8,16 @@ regex=value v[0-9]+ op=PTR_LOAD kind=ptr rep=rawptr c_type=const void \*
 c_regex=void \* v[0-9]+ = xr_raw_mut_ptr_offset\(v[0-9]+, \(intptr_t\)\(v[0-9]+\), 0\);
 c_regex=const void \* v[0-9]+ = xr_raw_const_ptr_offset\(v[0-9]+, \(intptr_t\)\(v[0-9]+\), 0\);
 c_not_contains=({
-c_contains=xr_raw_store_u32_unaligned(
-c_contains=xr_raw_load_u32_unaligned(
-c_contains=xr_raw_f32_to_bits(
-c_contains=xr_raw_f32_from_bits(
-c_contains=xr_raw_store_ptr_unaligned(
-c_contains=xr_raw_load_ptr_unaligned(
-c_contains=xr_raw_u32_from_le(
-c_contains=xr_raw_u64_from_endian(
+c_contains=xrt_raw_scalar_access_store_i64(
+c_contains=xrt_raw_scalar_access_load_i64(
+c_contains=xrt_raw_scalar_access_store_f64(
+c_contains=xrt_raw_scalar_access_load_f64(
+c_contains=xrt_raw_scalar_access_store_pointer(
+c_contains=xrt_raw_scalar_access_load_pointer(
+c_not_contains=xr_raw_store_u32_unaligned(
+c_not_contains=xr_raw_load_u32_unaligned(
+c_not_contains=xr_raw_u32_from_le(
+c_not_contains=xr_raw_u64_from_endian(
 c_not_contains=xrt_ptr_
 c_not_contains=xrt_endian_arg(
 c_not_contains=xrt_map_new(
@@ -25,3 +27,4 @@ c_not_contains=xrt_add(
 c_not_contains=(uintptr_t)
 c_not_contains=xrt_mem_load
 c_not_contains=xrt_mem_store
+c_syntax=pass
