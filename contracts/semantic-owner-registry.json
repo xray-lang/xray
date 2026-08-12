@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "4c8dd74ecbc39576027149fd7c9fcfedb95e2fa63907ca45ddc0b2bf54993e8d",
+  "canonical_fingerprint": "225d221c55af764d06c59c00ea0f8c394409e9d0ec08abe4d85002206e796364",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -1120,6 +1120,52 @@
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
           "symbol": "cg_raw_scalar_access_adapter_name"
+        }
+      ]
+    },
+    {
+      "owner": "shared.regex",
+      "owner_id": "c4f504256c97c0ec2c6130a94974719c",
+      "owner_id_hi": "0xc4f504256c97c0ec",
+      "owner_id_lo": "0x2c6130a94974719c",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.regex.compile"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "cgen",
+        "runtime"
+      ],
+      "consumer_bits": "0x00000037",
+      "cgen_adapter": "xrt_regex_compile_with_flags",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_assert.inc.c",
+          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_regex_core.c",
+          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_regex_compile_adapter_name"
+        },
+        {
+          "consumer": "runtime",
+          "path": "stdlib/regex/xregex_binding.c",
+          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
         }
       ]
     },
@@ -3493,28 +3539,6 @@
       "category": "capability-provider",
       "operations": [
         "xi.print"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.regex.compile",
-      "owner_id": "11a866995d9a96f8e462e3c1569e3fb0",
-      "owner_id_hi": "0x11a866995d9a96f8",
-      "owner_id_lo": "0xe462e3c1569e3fb0",
-      "category": "shared-semantic-kernel",
-      "operations": [
-        "xi.regex.compile"
       ],
       "consumers": [
         "semantic-plan"
@@ -10948,21 +10972,45 @@
       "operation_id": "11a866995d9a96f8e462e3c1569e3fb0",
       "operation_id_hi": "0x11a866995d9a96f8",
       "operation_id_lo": "0xe462e3c1569e3fb0",
-      "owner": "xi.regex.compile",
-      "owner_id": "11a866995d9a96f8e462e3c1569e3fb0",
-      "owner_id_hi": "0x11a866995d9a96f8",
-      "owner_id_lo": "0xe462e3c1569e3fb0",
+      "owner": "shared.regex",
+      "owner_id": "c4f504256c97c0ec2c6130a94974719c",
+      "owner_id_hi": "0xc4f504256c97c0ec",
+      "owner_id_lo": "0x2c6130a94974719c",
       "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "cgen",
+        "runtime"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x00000037",
+      "cgen_adapter": "xrt_regex_compile_with_flags",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_assert.inc.c",
+          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt_regex_core.c",
+          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_regex_compile_adapter_name"
+        },
+        {
+          "consumer": "runtime",
+          "path": "stdlib/regex/xregex_binding.c",
+          "symbol": "XR_REGEX_COMPILE_OWNER_APPLY"
         }
       ]
     },

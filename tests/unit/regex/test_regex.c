@@ -74,6 +74,16 @@ TEST(core_parse_flags_matches_regex_engine_flags) {
                   XR_RE_IGNORECASE | XR_RE_MULTILINE | XR_RE_DOTALL);
     ASSERT_EQ_INT(xr_regex_core_parse_flags("ziz", 3), XR_RE_IGNORECASE);
     ASSERT_EQ_INT(xr_regex_core_parse_flags(NULL, 0), XR_RE_NONE);
+    ASSERT_EQ_INT(XR_REGEX_COMPILE_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_REGEX_HI, XR_SEM_OWNER_ID_SHARED_REGEX_LO,
+                      XR_SEM_CONSUMER_VM, xr_regex_core_parse_flags("mis", 3)),
+                  XR_RE_IGNORECASE | XR_RE_MULTILINE | XR_RE_DOTALL);
+    ASSERT_TRUE(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_REGEX_HI,
+                                               XR_SEM_OWNER_ID_SHARED_REGEX_LO,
+                                               XR_SEM_CONSUMER_CGEN));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(XR_SEM_OWNER_ID_SHARED_REGEX_HI,
+                                                 XR_SEM_OWNER_ID_SHARED_REGEX_LO),
+                  "xrt_regex_compile_with_flags");
 }
 
 TEST(core_match_field_schema_matches_regex_match_class) {

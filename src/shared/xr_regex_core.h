@@ -11,6 +11,7 @@
 #ifndef XR_REGEX_CORE_H
 #define XR_REGEX_CORE_H
 
+#include "xr_semantic_owner_ids_gen.h"
 #include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -64,6 +65,32 @@ static inline int xr_regex_core_parse_flags(const char *flags, size_t len) {
     }
     return parsed;
 }
+
+#define XR_REGEX_COMPILE_OWNER_GUARD(owner_hi, owner_lo)                                         \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_regex                                                \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_REGEX_HI &&                      \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_REGEX_LO)                         \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_REGEX_COMPILE_CONSUMER_GUARD(consumer_bit)                                            \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_regex                                  \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&           \
+                (XR_SEM_OWNER_ID_SHARED_REGEX_CONSUMERS & (uint32_t) (consumer_bit)) != 0)       \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+/* The regex engine and representation-specific allocation remain behind the
+ * supplied expression. The owner fixes literal flag interpretation and makes
+ * every VM/AOT entry prove that it consumes the same source-backed contract. */
+#define XR_REGEX_COMPILE_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)               \
+    (XR_REGEX_COMPILE_OWNER_GUARD((owner_hi), (owner_lo)),                                        \
+     XR_REGEX_COMPILE_CONSUMER_GUARD((consumer_bit)), (expression))
 
 static inline bool xr_regex_core_int_arg(int64_t value, int *out) {
     if (!out || value < (int64_t) INT_MIN || value > (int64_t) INT_MAX)

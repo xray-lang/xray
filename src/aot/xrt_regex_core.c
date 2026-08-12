@@ -77,7 +77,9 @@ XrValue xrt_regex_compile_with_flags(const char *pattern_data, int64_t pattern_l
         return XR_NULL_VAL;
 
     XrRegexError error;
-    XrRegexFlags flags = xrt_regex_parse_flags(flags_data, flags_len);
+    XrRegexFlags flags = (XrRegexFlags) XR_REGEX_COMPILE_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_REGEX_HI, XR_SEM_OWNER_ID_SHARED_REGEX_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, xrt_regex_parse_flags(flags_data, flags_len));
     XrRegex *re = xr_regex_compile(pattern, flags, &error);
     xr_re_free(pattern);
     if (!re)

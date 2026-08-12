@@ -165,6 +165,7 @@ RAW_SCALAR_ACCESS_OPERATIONS = {"xi.ptr.load", "xi.ptr.store"}
 ENUM_METADATA_ACCESS_OPERATIONS = {"xi.enum.variant.at", "xi.enum.payload.at"}
 CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
 NULL_TEST_OPERATIONS = {"xi.isnull"}
+REGEX_COMPILE_OPERATIONS = {"xi.regex.compile"}
 DATA_POINTER_OPERATIONS = {"xi.array.data.ptr", "xi.static.bytes.ptr"}
 BYTE_ARRAY_COPY_OPERATIONS = {"xi.byte.array.copy.within", "xi.byte.array.copy.from"}
 TARGET_LAYOUT_QUERY_OPERATIONS = {"xi.target.sizeof", "xi.target.alignof"}
@@ -2045,6 +2046,81 @@ def verify_null_test_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_regex_compile_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.regex"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != REGEX_COMPILE_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.regex family")
+    elif owner.get("cgen_adapter") != "xrt_regex_compile_with_flags":
+        errors.append("semantic owner registry has no exact hosted AOT regex adapter")
+
+    core_text = (root / "src/shared/xr_regex_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_REGEX_COMPILE_OWNER_APPLY",
+                  "xr_regex_core_parse_flags"):
+        if token not in core_text:
+            errors.append("src/shared/xr_regex_core.h: regex compile lacks stable owner")
+            break
+
+    vm_text = (root / "src/vm/xvm_dispatch_assert.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    start = vm_text.find("vmcase(OP_REGEX_COMPILE)")
+    end = vm_text.find("vmbreak;", start)
+    vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_REGEX_COMPILE_OWNER_APPLY", "xr_regex_compile_literal"):
+        if token not in vm_body:
+            errors.append("src/vm/xvm_dispatch_assert.inc.c: regex compile bypasses owner")
+            break
+
+    runtime_text = (root / "stdlib/regex/xregex_binding.c").read_text(
+        encoding="utf-8", errors="strict")
+    body = extract_c_function(runtime_text, "xr_regex_compile_literal") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_RUNTIME",
+                  "XR_REGEX_COMPILE_OWNER_APPLY", "xr_regex_core_parse_flags"):
+        if token not in body:
+            errors.append("stdlib/regex/xregex_binding.c: regex literal bypasses owner")
+            break
+    if re.search(r"\bparse_flags\s*\(", body):
+        errors.append("stdlib/regex/xregex_binding.c: retired literal flag parser revived")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_regex_compile_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: regex compile does not resolve stable adapter")
+    dispatch = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    branch_start = dispatch.find('strcmp(bn, "regex_compile") == 0')
+    branch_end = dispatch.find("} else {", branch_start)
+    branch = dispatch[branch_start:branch_end] if branch_start >= 0 and branch_end >= 0 else ""
+    if ("cg_regex_compile_adapter_name" not in branch or
+            "xr_str_data(" not in branch or "xr_str_len(" not in branch or
+            'fprintf(out, "xr_regex_compile_literal' in branch):
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: regex compile bypasses owner")
+
+    aot_text = (root / "src/aot/xrt_regex_core.c").read_text(
+        encoding="utf-8", errors="strict")
+    flags_body = extract_c_function(aot_text, "xrt_regex_parse_flags") or ""
+    if "xr_regex_core_parse_flags" not in flags_body:
+        errors.append("src/aot/xrt_regex_core.c: regex compile bypasses shared flag semantics")
+    aot_body = extract_c_function(aot_text, "xrt_regex_compile_with_flags") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_AOT_HOSTED",
+                  "XR_REGEX_COMPILE_OWNER_APPLY", "xrt_regex_parse_flags"):
+        if token not in aot_body:
+            errors.append("src/aot/xrt_regex_core.c: hosted AOT regex compile bypasses owner")
+            break
+    freestanding_expect = (root / "tests/aot/filetests/link/"
+                                  "freestanding_heap_constructs_reject.expect").read_text(
+                                      encoding="utf-8", errors="strict")
+    if "contains=freestanding profile rejects regex literal" not in freestanding_expect:
+        errors.append("freestanding regex literal rejection boundary is not pinned")
+    return errors
+
+
 def verify_data_pointer_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     owner_name = "shared.data-pointer"
@@ -2546,6 +2622,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_enum_metadata_access_ratchet(root, registry))
         errors.extend(verify_cell_access_ratchet(root, registry))
         errors.extend(verify_null_test_ratchet(root, registry))
+        errors.extend(verify_regex_compile_ratchet(root, registry))
         errors.extend(verify_data_pointer_ratchet(root, registry))
         errors.extend(verify_byte_array_copy_ratchet(root, registry))
         errors.extend(verify_target_layout_query_ratchet(root, registry))

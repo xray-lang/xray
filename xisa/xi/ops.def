@@ -3417,6 +3417,25 @@
     (cgen "src/aot/xi_cgen.c" "cg_null_test_adapter_name")
   ))
 
+(define-xi-observable-owner shared.regex
+  :category shared-semantic-kernel
+  :operations (xi.regex.compile)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    cgen
+    runtime
+  )
+  :cgen-adapter xrt_regex_compile_with_flags
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_assert.inc.c" "XR_REGEX_COMPILE_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt_regex_core.c" "XR_REGEX_COMPILE_OWNER_APPLY")
+    (cgen "src/aot/xi_cgen.c" "cg_regex_compile_adapter_name")
+    (runtime "stdlib/regex/xregex_binding.c" "XR_REGEX_COMPILE_OWNER_APPLY")
+  ))
+
 (define-xi-observable-owner primitive.type-identity
   :category declarative-primitive
   :operations (xi.typeid)

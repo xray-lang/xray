@@ -189,8 +189,10 @@ XrValue xr_regex_compile_literal(XrVMRuntime *isolate, XrValue pattern_val, XrVa
         return xr_null();
     }
 
-    XrRegexFlags regex_flags = XR_RE_NONE;
-    regex_flags = parse_flags(flags_str->data, (int) flags_str->length);
+    XrRegexFlags regex_flags = (XrRegexFlags) XR_REGEX_COMPILE_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_REGEX_HI, XR_SEM_OWNER_ID_SHARED_REGEX_LO,
+        XR_SEM_CONSUMER_RUNTIME,
+        xr_regex_core_parse_flags(flags_str->data, (size_t) flags_str->length));
 
     XrRegexError error;
     XrRegex *re = xr_regex_compile(pattern_str->data, regex_flags, &error);

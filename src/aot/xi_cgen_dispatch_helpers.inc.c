@@ -7390,11 +7390,20 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         /* Expression emitted by the math helper. */
     } else if (strcmp(bn, "regex_compile") == 0) {
         XR_DCHECK(v->nargs >= 2, "builtin regex_compile: need 2 args");
-        fprintf(out, "xr_regex_compile_literal(iso, ");
+        const char *adapter = cg_regex_compile_adapter_name(ctx);
+        if (!adapter) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "%s(xr_str_data(", adapter);
         emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
+        fprintf(out, "), xr_str_len(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, "), xr_str_data(");
         emit_vref(out, v->args[1]);
-        fprintf(out, ")");
+        fprintf(out, "), xr_str_len(");
+        emit_vref(out, v->args[1]);
+        fprintf(out, "))");
     } else {
         fprintf(stderr, "[xi_cgen] ERROR: unknown builtin '%s'\n", bn);
         emit_codegen_abort_expr(out);

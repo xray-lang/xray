@@ -4792,9 +4792,9 @@
     {
       "benchmark_anchor": "target-machine/allocation-and-ownership",
       "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_regex_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
         "memory-write",
@@ -4802,10 +4802,10 @@
       ],
       "error_panic_suspend_cancel_publication": [],
       "family": "allocation-and-ownership",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.regex",
       "independent_oracle": "ownership-certificate-plus-runtime-event-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_regex_core.h",
       "observable_edges": [],
       "operation_id": "xi.regex.compile",
       "ownership": "consume",
@@ -6694,5 +6694,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "1a0b24f32415f7a2784718d8d6ee626e39063a918bbd1290d47d55cdac124c73"
+  "source_tree_fingerprint": "3bacd23936ee3d016ade078a67696cba0c50cdfc5cbc5d2cd39673dc9b439321"
 }

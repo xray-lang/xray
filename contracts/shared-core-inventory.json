@@ -1033,6 +1033,7 @@
       "production_callers": [
         "src/aot/xrt_regex.h",
         "src/aot/xrt_regex_core.c",
+        "src/vm/xvm.c",
         "stdlib/regex/xregex.c",
         "stdlib/regex/xregex_binding.c"
       ],
