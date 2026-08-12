@@ -158,8 +158,6 @@
     "src/module/xbundle.c",
     "src/module/xbundle.h",
     "src/module/xbytecode_compile.c",
-    "src/module/xbytecode_io.c",
-    "src/module/xbytecode_io.h",
     "src/module/xmodule.c",
     "src/module/xmodule.h",
     "src/module/xmodule_graph.c",
@@ -170,6 +168,8 @@
     "src/module/xpkg_client.h",
     "src/module/xproject.c",
     "src/module/xproject.h",
+    "src/module/xproto_codec.c",
+    "src/module/xproto_codec.h",
     "src/plan/format/xr_artifact_kind.c",
     "src/plan/format/xr_artifact_kind.h",
     "src/runtime/class/xclass.c",
@@ -1653,7 +1653,7 @@
       "evidence_sha256": "52930eb0a8378ddc7cba0021fc33b6d24062edb928e36302b5649a4979f7f1e2",
       "family": "legacy-bytecode-abi",
       "hit_count": 2,
-      "path": "src/module/xbytecode_io.c",
+      "path": "src/module/xproto_codec.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -1726,7 +1726,7 @@
       "evidence_sha256": "394032326b7f4e5438c556e835600b9949d034d2a9104b44f303b2a43f288d84",
       "family": "legacy-cli-format-alias",
       "hit_count": 4,
-      "path": "src/module/xbytecode_io.c",
+      "path": "src/module/xproto_codec.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -2513,7 +2513,7 @@
       "evidence_sha256": "b8f8026400cf0c2b8555105b5cc84e1c0b61a09f4123538a50fcbb1e85bc0171",
       "family": "legacy-embed-macro",
       "hit_count": 1,
-      "path": "src/module/xbytecode_io.h",
+      "path": "src/module/xproto_codec.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -2681,7 +2681,7 @@
       "evidence_sha256": "c8d68a5dbdd8d737e45988963fbd82d2b0650ae054841d7a090a52191719cbc7",
       "family": "legacy-installed-header",
       "hit_count": 1,
-      "path": "src/module/xbytecode_io.c",
+      "path": "src/module/xmodule.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -2693,7 +2693,7 @@
       "evidence_sha256": "c8d68a5dbdd8d737e45988963fbd82d2b0650ae054841d7a090a52191719cbc7",
       "family": "legacy-installed-header",
       "hit_count": 1,
-      "path": "src/module/xmodule.c",
+      "path": "src/module/xproto_codec.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -3221,7 +3221,7 @@
       "evidence_sha256": "9ff7eacddf8c68747b830abb7221020cc0e444b720e1fc2be0639b4bebab53fa",
       "family": "legacy-loader-proto-helper",
       "hit_count": 3,
-      "path": "src/module/xbytecode_io.c",
+      "path": "src/module/xproto_codec.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -3322,10 +3322,23 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
+      "evidence_sha256": "3a746ea044687d8b45d1244f62aa43ee9f5a3ce897145b9745fcf685d0ede410",
+      "family": "legacy-loader-writer-or-converter",
+      "hit_count": 3,
+      "path": "src/module/xmodule.c",
+      "status": "transitional-owner",
+      "surface": "source",
+      "tokens": [
+        "xr_bytecode_error_string",
+        "xr_bytecode_read"
+      ]
+    },
+    {
+      "disposition": "remove-with-atomic-target-plan-product-cutover",
       "evidence_sha256": "c8ccc47cae2569000b9c7ad92e5d86eb396bc82f2c5691bbaf52d366935478e7",
       "family": "legacy-loader-writer-or-converter",
       "hit_count": 17,
-      "path": "src/module/xbytecode_io.c",
+      "path": "src/module/xproto_codec.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -3346,7 +3359,7 @@
       "evidence_sha256": "79d67aa1318431ceebf8f49cda1c83655c764c2004d74e0749c9cbaf6b65a54d",
       "family": "legacy-loader-writer-or-converter",
       "hit_count": 13,
-      "path": "src/module/xbytecode_io.h",
+      "path": "src/module/xproto_codec.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -3362,19 +3375,6 @@
         "xr_eval_bytecode",
         "xr_output_c_source",
         "xr_run_bytecode_file"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "3a746ea044687d8b45d1244f62aa43ee9f5a3ce897145b9745fcf685d0ede410",
-      "family": "legacy-loader-writer-or-converter",
-      "hit_count": 3,
-      "path": "src/module/xmodule.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xr_bytecode_error_string",
-        "xr_bytecode_read"
       ]
     },
     {
@@ -3397,7 +3397,7 @@
       "evidence_sha256": "3d54f7cd7379181be729d7c4cab01fd74de6c67b0d9648fa98c436ef814f096c",
       "family": "legacy-output-format",
       "hit_count": 5,
-      "path": "src/module/xbytecode_io.c",
+      "path": "src/module/xproto_codec.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -3410,7 +3410,7 @@
       "evidence_sha256": "1fcadd6406ba40010196f480557cdde25799b76b0a0004f3c9108f80c744a84c",
       "family": "legacy-output-format",
       "hit_count": 2,
-      "path": "src/module/xbytecode_io.h",
+      "path": "src/module/xproto_codec.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -3715,7 +3715,7 @@
       "evidence_sha256": "1e6ca77cd64b80c995359b057472f5f26a8cc01b5e340dfb2a1cb9d4cdbcc180",
       "family": "legacy-vm-api",
       "hit_count": 1,
-      "path": "src/module/xbytecode_io.c",
+      "path": "src/module/xproto_codec.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -5850,32 +5850,6 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "32d4e6759cd415171f1a13ae7f9672732b64b485287ab13ca29c721a450eee7c",
-      "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 16,
-      "path": "src/module/xbytecode_io.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "XrBytecodeBundle",
-        "XrBytecodeModule",
-        "XrVMRuntime"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "b2f454c853866c161d53c93c84bf557b1e53a16fb348988d0830b86f116c1cd7",
-      "family": "legacy-vm-handle-or-bytecode-type",
-      "hit_count": 7,
-      "path": "src/module/xbytecode_io.h",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "XrVMRuntime"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
       "evidence_sha256": "d22d93a0feebcf176ecbf39fd4b4ca14662342bd8ec5bce6c582a18ac2588ee5",
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 26,
@@ -5990,6 +5964,32 @@
       "family": "legacy-vm-handle-or-bytecode-type",
       "hit_count": 1,
       "path": "src/module/xproject.h",
+      "status": "transitional-owner",
+      "surface": "source",
+      "tokens": [
+        "XrVMRuntime"
+      ]
+    },
+    {
+      "disposition": "remove-with-atomic-target-plan-product-cutover",
+      "evidence_sha256": "32d4e6759cd415171f1a13ae7f9672732b64b485287ab13ca29c721a450eee7c",
+      "family": "legacy-vm-handle-or-bytecode-type",
+      "hit_count": 16,
+      "path": "src/module/xproto_codec.c",
+      "status": "transitional-owner",
+      "surface": "source",
+      "tokens": [
+        "XrBytecodeBundle",
+        "XrBytecodeModule",
+        "XrVMRuntime"
+      ]
+    },
+    {
+      "disposition": "remove-with-atomic-target-plan-product-cutover",
+      "evidence_sha256": "b2f454c853866c161d53c93c84bf557b1e53a16fb348988d0830b86f116c1cd7",
+      "family": "legacy-vm-handle-or-bytecode-type",
+      "hit_count": 7,
+      "path": "src/module/xproto_codec.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -8911,23 +8911,6 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "2d5a1ac8c37e4241cc39d9d386178d1a6226195008a5f1184628db9f5d125beb",
-      "family": "legacy-vm-internal-api-or-alias",
-      "hit_count": 10,
-      "path": "src/module/xbytecode_io.c",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        "xr_vm_entry_plan_derive",
-        "xr_vm_entry_plan_validate",
-        "xr_vm_proto_add_proto",
-        "xr_vm_proto_free",
-        "xr_vm_proto_new",
-        "xr_vm_struct_layout_intern_owned"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
       "evidence_sha256": "a65d3e793ad46e30648cf8f87b4980cae0efab3f0d07041f956014929678f8ec",
       "family": "legacy-vm-internal-api-or-alias",
       "hit_count": 4,
@@ -8949,6 +8932,23 @@
       "surface": "source",
       "tokens": [
         "xr_vm_run_closure_blocking"
+      ]
+    },
+    {
+      "disposition": "remove-with-atomic-target-plan-product-cutover",
+      "evidence_sha256": "2d5a1ac8c37e4241cc39d9d386178d1a6226195008a5f1184628db9f5d125beb",
+      "family": "legacy-vm-internal-api-or-alias",
+      "hit_count": 10,
+      "path": "src/module/xproto_codec.c",
+      "status": "transitional-owner",
+      "surface": "source",
+      "tokens": [
+        "xr_vm_entry_plan_derive",
+        "xr_vm_entry_plan_validate",
+        "xr_vm_proto_add_proto",
+        "xr_vm_proto_free",
+        "xr_vm_proto_new",
+        "xr_vm_struct_layout_intern_owned"
       ]
     },
     {
@@ -10414,10 +10414,22 @@
     },
     {
       "disposition": "remove-with-atomic-target-plan-product-cutover",
+      "evidence_sha256": "936663ab1475a7d7f0892d104bc51677abd0d3972eccc6ea1fd3f7b6d56af999",
+      "family": "xrc-artifact",
+      "hit_count": 1,
+      "path": "src/module/xmodule.c",
+      "status": "transitional-owner",
+      "surface": "source",
+      "tokens": [
+        ".xrc"
+      ]
+    },
+    {
+      "disposition": "remove-with-atomic-target-plan-product-cutover",
       "evidence_sha256": "4244925a248bf5b70d0d9e79ae4ea1cfae70d261cf8d4babd7ce721b18d72764",
       "family": "xrc-artifact",
       "hit_count": 3,
-      "path": "src/module/xbytecode_io.c",
+      "path": "src/module/xproto_codec.c",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -10429,19 +10441,7 @@
       "evidence_sha256": "bcc62554b146b46017baa22cc4bc1bcff94e1634c07bb1d25bb9d7f20c936a70",
       "family": "xrc-artifact",
       "hit_count": 1,
-      "path": "src/module/xbytecode_io.h",
-      "status": "transitional-owner",
-      "surface": "source",
-      "tokens": [
-        ".xrc"
-      ]
-    },
-    {
-      "disposition": "remove-with-atomic-target-plan-product-cutover",
-      "evidence_sha256": "936663ab1475a7d7f0892d104bc51677abd0d3972eccc6ea1fd3f7b6d56af999",
-      "family": "xrc-artifact",
-      "hit_count": 1,
-      "path": "src/module/xmodule.c",
+      "path": "src/module/xproto_codec.h",
       "status": "transitional-owner",
       "surface": "source",
       "tokens": [
@@ -10541,6 +10541,6 @@
     "unclassified_residue": "error"
   },
   "schema": 2,
-  "source_tree_fingerprint": "602b1ee11fdf966ac4b5ded2223af0b146bc76b3efafa625216acea34b1d9f44",
+  "source_tree_fingerprint": "b07df25e44cdda11ddd95ab63f585dc36dd410cb5c11c8ff1c44f8d3a6cab119",
   "total": 4392
 }

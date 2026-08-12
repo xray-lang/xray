@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xbytecode_io.h - Bytecode serialization/deserialization
+ * xproto_codec.h - Compiler-internal proto container codec
  *
  * KEY CONCEPT:
  *   Serializes XrProto to portable bytecode format and loads it back.
@@ -32,8 +32,8 @@
  *   +----------------------------------------+
  */
 
-#ifndef XBYTECODE_IO_H
-#define XBYTECODE_IO_H
+#ifndef XPROTO_CODEC_H
+#define XPROTO_CODEC_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -116,4 +116,4 @@ XR_FUNC XrOutputFormat xr_detect_output_format(const char *filename, XrOutputFor
 XR_FUNC bool xr_output_c_source(struct XrVMRuntime *X, struct XrProto *proto,
                                 const char *output_file, const char *var_name, int flags);
 
-#endif  // XBYTECODE_IO_H
+#endif  // XPROTO_CODEC_H

@@ -68,7 +68,7 @@ def runtime_roots(root: Path) -> list[Path]:
     roots = sorted((root / "include").glob("*.h"))
     for directory in ("src/runtime", "src/vm", "src/coro"):
         roots.extend(sorted((root / directory).rglob("*.h")))
-    roots.append(root / "src/module/xbytecode_io.h")
+    roots.append(root / "src/module/xproto_codec.h")
     return sorted({path.resolve() for path in roots if path.is_file()})
 
 

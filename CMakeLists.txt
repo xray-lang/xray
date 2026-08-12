@@ -4378,6 +4378,10 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/
         PATTERN "*.h"
         PATTERN "*.inc.c"
         PATTERN "*.def"
+        # The legacy proto container codec remains a source-tree compiler
+        # implementation detail.  Generated AOT C never includes it, so the
+        # installed SDK must not expose this retired runtime-product route.
+        PATTERN "xproto_codec.h" EXCLUDE
 )
 
 # Install stdlib source files

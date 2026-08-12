@@ -11,7 +11,7 @@
 #include "../test_framework.h"
 
 #include "base/xmalloc.h"
-#include "module/xbytecode_io.h"
+#include "module/xproto_codec.h"
 #include "plan/format/xr_artifact_kind.h"
 #include "runtime/xisolate_api.h"
 #include "runtime/xexec_state.h"

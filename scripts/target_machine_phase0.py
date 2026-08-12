@@ -315,7 +315,7 @@ def aot_plan_inventory(root: Path) -> dict[str, Any]:
 def legacy_vm_inventory(root: Path) -> dict[str, Any]:
     inputs = [
         "src/runtime/value/xopcode_def.h", "src/runtime/value/xvalue.h",
-        "src/runtime/value/xchunk.h", "src/module/xbytecode_io.h",
+        "src/runtime/value/xchunk.h", "src/module/xproto_codec.h",
         "include/xray_vm.h", "src/vm/xvm.c", "src/vm/xvm_coro_backend.c",
     ]
     op_text = read(root / inputs[0])
@@ -354,7 +354,7 @@ def legacy_vm_inventory(root: Path) -> dict[str, Any]:
 
     api_text = read(root / "include/xray_vm.h")
     api_symbols = sorted(set(re.findall(r"\b(xray_vm_[A-Za-z0-9_]+)\s*\(", api_text)))
-    bc_text = read(root / "src/module/xbytecode_io.h")
+    bc_text = read(root / "src/module/xproto_codec.h")
     artifact_symbols = sorted(set(re.findall(r"\b(xr_[A-Za-z0-9_]*(?:bytecode|output)[A-Za-z0-9_]*)\s*\(", bc_text)))
     result = meta(root, inputs)
     result.update({
@@ -366,8 +366,8 @@ def legacy_vm_inventory(root: Path) -> dict[str, Any]:
         "legacy_artifact_symbols": artifact_symbols,
         "artifact": {
             "extension": ".xrc",
-            "writer": "src/module/xbytecode_io.c",
-            "reader": "src/module/xbytecode_io.c",
+            "writer": "src/module/xproto_codec.c",
+            "reader": "src/module/xproto_codec.c",
             "constant_unknown_behavior": "must-audit-and-delete-default-to-null",
             "replacement": ".xtp exact-version verified target plan",
             "deletion_task": 277,

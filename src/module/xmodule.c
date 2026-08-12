@@ -38,7 +38,7 @@
 
 /* ========== Forward Declarations ========== */
 
-#include "xbytecode_io.h"
+#include "xproto_codec.h"
 
 #include "xstdlib_embedded.h"
 

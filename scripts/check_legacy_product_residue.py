@@ -122,7 +122,7 @@ def family_for(group: str, token: str) -> str:
 def is_cli_alias_owner(relative: str) -> bool:
     return relative in {
         "src/app/cli/xcmd_compile.c",
-        "src/module/xbytecode_io.c",
+        "src/module/xproto_codec.c",
         "src/app/tools/xstdlib_bcgen.c",
     }
 

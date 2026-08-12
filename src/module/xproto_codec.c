@@ -5,14 +5,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xbytecode_io.c - Bytecode serialization/deserialization implementation
+ * xproto_codec.c - Compiler-internal proto container codec implementation
  *
  * KEY CONCEPT:
  *   Serializes XrProto to portable bytecode format (.xrc) and loads it back.
  *   Handles symbol table remapping for cross-compilation compatibility.
  */
 
-#include "xbytecode_io.h"
+#include "xproto_codec.h"
 #include "../plan/format/xr_artifact_kind.h"
 #include "xmodule.h"
 #include "../../stdlib/stdlib_cache.h"

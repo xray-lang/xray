@@ -8,7 +8,7 @@
  * xbytecode_compile.c - Source file to bytecode file compiler helper
  */
 
-#include "xbytecode_io.h"
+#include "xproto_codec.h"
 #include "../base/xfileio.h"
 #include "../base/xlog.h"
 #include "../base/xmalloc.h"

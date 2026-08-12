@@ -20,7 +20,7 @@
 #include "xray_vm.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../frontend/analyzer/xanalyzer.h"
-#include "../../module/xbytecode_io.h"
+#include "../../module/xproto_codec.h"
 #include "../../module/xmodule.h"
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_resolver.h"

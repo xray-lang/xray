@@ -157,7 +157,7 @@ roots, or general module activation.
    unavailable, rejects compiler and `xi_` symbols, and treats any new `xvm_`
    symbol as uninventoried legacy residue.
 
-anchor-sha256: CMakeLists.txt 4e85a1c8251485b56c877766d39d80fb9e8483ccd288e74bd1b06ba362be4e51
+anchor-sha256: CMakeLists.txt ec61f662e1e51f279eb624cfd719274faf52ebbb088841266fdbd5e7531cdd4f
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h 38fd73865e25d62392d8dd0abfd5e6193edf2356803a817349db14c43ccf9874
 anchor-sha256: src/plan/format/xr_artifact_kind.c 289fb506284ed97372e211225dcb5c1d205d7149416ddc96abb2a7f3b8704b39
@@ -183,8 +183,8 @@ anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd5
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
 anchor-sha256: src/runtime/xr_target_plan_load.c f48ff435aedf73dc30588af42bb6bf288282feb10a81762ad4ede9375b06d7c8
 anchor-sha256: src/app/cli/xcmd_run.c 0a8e2be195caff4b859d68f8876ab3a76ec701de62da71a127d50c0ff3dca771
-anchor-sha256: contracts/target-machine/legacy-product-residue.json 61562d23d15266f6282dd3e3185447c3bbd9ccbd69e22240bbc1e581581f7a39
-anchor-sha256: scripts/check_legacy_product_residue.py 0388d636da6384ea62bfaf8401764955541be24b207511727c33af2d85f3a11f
+anchor-sha256: contracts/target-machine/legacy-product-residue.json 6f292fd3f122ce7458993a82f8b672d04644671cc4884d157c064d5bcade0ac5
+anchor-sha256: scripts/check_legacy_product_residue.py a47409257b92ad57e90ac23bb28a6c3cb29866c102741ceeaff37f079d0d13cf
 anchor-sha256: tests/unit/plan/test_target_plan.c 81df2a456c09ab9d676493559d77c6a5c2710ec3e143c28cb6f2bb963002f38f
 anchor-sha256: tests/unit/plan/test_xtp_format.c 5f69974f555b1d9601471299fdc3dbc109af50a919ab89ab65c9e8a787db0cf9
 anchor-sha256: tests/unit/CMakeLists.txt 14080340a0fc797b44f0ea87b82d2085e5611baa3469e597148b0183c714a759

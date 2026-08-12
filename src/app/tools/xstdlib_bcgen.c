@@ -17,7 +17,7 @@
 #include "../../api/xisolate_profile.h"
 #include "../../aot/xaot_driver.h"
 #include "../../base/xmalloc.h"
-#include "../../module/xbytecode_io.h"
+#include "../../module/xproto_codec.h"
 #include "../../module/xproject.h"
 #include "../../runtime/xr_process_shutdown.h"
 #include "../../toolchain/xcompiler_session.h"

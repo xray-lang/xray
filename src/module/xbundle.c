@@ -18,7 +18,7 @@
 #include "xmodule_resolver.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
-#include "xbytecode_io.h"
+#include "xproto_codec.h"
 #include "../runtime/xisolate_api.h"
 #include "../base/xmalloc.h"
 #include "../frontend/analyzer/xanalyzer.h"

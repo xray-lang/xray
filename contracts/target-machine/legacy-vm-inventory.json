@@ -3,13 +3,13 @@
     "constant_unknown_behavior": "must-audit-and-delete-default-to-null",
     "deletion_task": 277,
     "extension": ".xrc",
-    "reader": "src/module/xbytecode_io.c",
+    "reader": "src/module/xproto_codec.c",
     "replacement": ".xtp exact-version verified target plan",
-    "writer": "src/module/xbytecode_io.c"
+    "writer": "src/module/xproto_codec.c"
   },
   "generated_from": [
     "include/xray_vm.h",
-    "src/module/xbytecode_io.h",
+    "src/module/xproto_codec.h",
     "src/runtime/value/xchunk.h",
     "src/runtime/value/xopcode_def.h",
     "src/runtime/value/xvalue.h",
@@ -3587,7 +3587,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "4d5f2c38f60357d846bac6de6b89b1aa0a7203e02e82869a19668811f5f029b3",
+  "source_tree_fingerprint": "561fc9c047432b7f901b8f77e64d605db2215160c0f6d234e047f53eb56cbc0e",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xvm.c",
