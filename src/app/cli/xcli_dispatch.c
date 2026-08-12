@@ -64,7 +64,6 @@ static int string_distance(const char *s1, const char *s2) {
 /* ========== Handler Forward Declarations ========== */
 
 XR_FUNC int cmd_run(const XrCliInvocation *inv);
-XR_FUNC int cmd_eval(const XrCliInvocation *inv);
 XR_FUNC int cmd_repl(const XrCliInvocation *inv);
 XR_FUNC int cmd_test(const XrCliInvocation *inv);
 XR_FUNC int cmd_check(const XrCliInvocation *inv);
@@ -97,7 +96,6 @@ XR_FUNC int cmd_mcp_server(const XrCliInvocation *inv);
  * Must be called once before xr_cli_main(). */
 void xr_cli_register_all_handlers(void) {
     xr_cli_register_handler("run", cmd_run);
-    xr_cli_register_handler("eval", cmd_eval);
     xr_cli_register_handler("repl", cmd_repl);
     xr_cli_register_handler("test", cmd_test);
     xr_cli_register_handler("check", cmd_check);
@@ -286,15 +284,7 @@ int xr_cli_main(int argc, char **argv) {
         return dispatch_new_handler(spec, spec->handler, cmd_argc, cmd_argv, &ctx);
     }
 
-    /* Route 3: xray -e 'code' -> shortcut for eval */
-    if (cmd_name[0] == '-' && cmd_name[1] == 'e' && cmd_name[2] == '\0') {
-        spec = xr_cli_find_command("eval");
-        XR_DCHECK(spec != NULL, "eval command not found");
-        XR_DCHECK(spec->handler != NULL, "eval handler not found");
-        return dispatch_new_handler(spec, spec->handler, cmd_argc - 1, cmd_argv + 1, &ctx);
-    }
-
-    /* Route 4: Unknown command -> error + suggestion */
+    /* Route 3: Unknown command -> error + suggestion */
     xr_cli_unknown_command(cmd_name);
     xr_cli_suggest_command(cmd_name);
     return XR_CLI_EXIT_USAGE;

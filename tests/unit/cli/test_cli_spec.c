@@ -38,12 +38,8 @@ TEST(spec_find_command_run) {
     ASSERT_TRUE(spec->allow_passthrough);
 }
 
-TEST(spec_find_command_eval) {
-    const XrCliCommandSpec *spec = xr_cli_find_command("eval");
-    ASSERT_NOT_NULL(spec);
-    ASSERT_STR_EQ(spec->name, "eval");
-    ASSERT_EQ_INT(spec->positional_min, 1);
-    ASSERT_EQ_INT(spec->positional_max, 1);
+TEST(spec_retired_eval_command_removed) {
+    ASSERT_NULL(xr_cli_find_command("eval"));
 }
 
 TEST(spec_find_command_repl) {
@@ -790,7 +786,7 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Command Registry");
 RUN_TEST(spec_get_commands_not_null);
 RUN_TEST(spec_find_command_run);
-RUN_TEST(spec_find_command_eval);
+RUN_TEST(spec_retired_eval_command_removed);
 RUN_TEST(spec_find_command_repl);
 RUN_TEST(spec_find_command_pkg);
 RUN_TEST(spec_find_command_toolchain);

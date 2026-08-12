@@ -32,8 +32,6 @@ static const XrCliOptionSpec run_options[] = {
     {"dump-ic", 'I', XR_CLI_VALUE_NONE, false, false, NULL, "Dump inline cache feedback"},
     XR_CLI_OPT_END};
 
-static const XrCliOptionSpec eval_options[] = {XR_CLI_OPT_END};
-
 static const XrCliOptionSpec repl_options[] = {
     {"no-color", 'n', XR_CLI_VALUE_NONE, false, false, NULL, "Disable color output"},
     XR_CLI_OPT_END};
@@ -284,7 +282,6 @@ static XrCliCommandSpec cli_commands[] = {
     /* Execution commands */
     {"run", "Run source, bytecode, or project", NULL, run_options, 0, -1, true, false, NULL, NULL,
      0},
-    {"eval", "Execute code string", NULL, eval_options, 1, 1, false, false, NULL, NULL, 0},
     {"repl", "Interactive environment", NULL, repl_options, 0, 0, false, false, NULL, NULL, 0},
     {"test", "Run tests", NULL, test_options, 0, -1, false, false, NULL, NULL, 0},
     {"check", "Syntax check", NULL, check_options, 0, -1, false, false, NULL, NULL, 0},

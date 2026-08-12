@@ -39,16 +39,14 @@ class Case:
     label: str
     expected: str
     code: str
-    # "arg" passes the code with -e; "run" feeds it on stdin.
-    mode: str
 
 
 CASES: tuple[Case, ...] = (
     Case("vm_path_empty_stdlib", "demo.xr",
-         'import path; print(path.basename(path.from("/tmp/demo.xr")))', "arg"),
+         'import path; print(path.basename(path.from("/tmp/demo.xr")))'),
     Case("vm_http_empty_stdlib", "<fn>",
-         "import http\nprint(http.router)", "arg"),
-    Case("vm_cluster_empty_stdlib", "true", CLUSTER_CODE, "run"),
+         "import http\nprint(http.router)"),
+    Case("vm_cluster_empty_stdlib", "true", CLUSTER_CODE),
 )
 
 DIFF_CASES: tuple[str, ...] = (
@@ -70,11 +68,8 @@ def normalize(data: bytes) -> str:
 def run_case(xray: Path, case: Case, env: dict,
              timeout: float | None) -> str | None:
     """None on success, else a failure description."""
-    if case.mode == "arg":
-        result = proc.run([xray, "-e", case.code], env=env, cwd=ROOT, timeout=timeout)
-    else:
-        result = proc.run([xray, "run", "-"], env=env, cwd=ROOT,
-                          stdin=(case.code + "\n").encode(), timeout=timeout)
+    result = proc.run([xray, "run", "-"], env=env, cwd=ROOT,
+                      stdin=(case.code + "\n").encode(), timeout=timeout)
     if not result.ok:
         return f"command failed\n{result.combined_text()}"
     actual = normalize(result.stdout)

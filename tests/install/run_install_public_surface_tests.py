@@ -139,8 +139,18 @@ def main() -> int:
             ]
         )
         gate.record(verify.returncode == 0, "Core payload manifest and binary identity", verify.stdout)
-        evaluation = run([str(core_xray), "-e", 'print("ok")'])
-        gate.record(evaluation.returncode == 0 and evaluation.stdout.strip() == "ok", "Core eval smoke", evaluation.stdout)
+        evaluation = run([str(core_xray), "eval", 'print("runtime-eval-residue")'])
+        gate.record(
+            evaluation.returncode != 0 and "unknown command" in evaluation.stdout.lower(),
+            "Core source eval command is absent",
+            evaluation.stdout,
+        )
+        eval_alias = run([str(core_xray), "-e", 'print("runtime-eval-residue")'])
+        gate.record(
+            eval_alias.returncode != 0 and "unknown command" in eval_alias.stdout.lower(),
+            "Core source eval alias is absent",
+            eval_alias.stdout,
+        )
 
         smoke = work / "core_smoke.xr"
         shutil.copyfile(root / "tests/test_harness/single_pass.xr", smoke)
