@@ -369,6 +369,7 @@ baseline:
 #endif
 
 #include "xray_value_abi.h"
+#include "../shared/xr_cell_access_core.h"
 
 #define XR_TAG_NULL 0
 #define XR_TAG_BOOL 1
@@ -877,6 +878,30 @@ static inline void xrt_release(XrValue v) {
         return;
     xrt_buffer_destroy_builtin(v.ptr);
     xr_hook_free(hdr);
+}
+
+typedef struct xrt_cell {
+    XR_CELL_ABI_FIELDS;
+} xrt_cell_t;
+
+static inline XrValue xrt_cell_access_get(XrValue cell_value) {
+    if (cell_value.tag != XR_TAG_CELL || !cell_value.ptr)
+        return cell_value;
+    xrt_cell_t *cell = (xrt_cell_t *) cell_value.ptr;
+    return XR_CELL_ACCESS_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO,
+        XR_SEM_CONSUMER_AOT_FREESTANDING, xr_cell_access_load_core(&cell->value));
+}
+
+static inline void xrt_cell_access_set(XrValue cell_value, XrValue value) {
+    if (cell_value.tag != XR_TAG_CELL || !cell_value.ptr)
+        return;
+    xrt_cell_t *cell = (xrt_cell_t *) cell_value.ptr;
+    XrValue old = XR_CELL_ACCESS_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO,
+        XR_SEM_CONSUMER_AOT_FREESTANDING,
+        xr_cell_access_replace_core(&cell->value, value));
+    xrt_release(old);
 }
 
 static inline void xrt_enum_aggregate_retain(XrAotEnumAggregate value) {

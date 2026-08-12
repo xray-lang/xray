@@ -8042,6 +8042,36 @@ TEST(cgen_enum_metadata_access_uses_stable_owner_adapter) {
     xi_func_free(ir);
 }
 
+TEST(cgen_cell_access_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI,
+                                          XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO,
+                                          XR_SEM_CONSUMER_CGEN));
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO);
+    TEST_REQUIRE(adapter != NULL && strcmp(adapter, "xrt_cell_access") == 0,
+                 "cell access publishes its stable CGen adapter");
+
+    const char *src = "fn mutateCell() -> int {\n"
+                      "    var n = 1\n"
+                      "    fn bump() { n = n + 2 }\n"
+                      "    bump()\n"
+                      "    return n\n"
+                      "}\n"
+                      "print(mutateCell())\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "cell-access owner fixture compiled");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "cell-access owner fixture generated C");
+    TEST_REQUIRE(contains(code, "xrt_cell_access_get(") &&
+                     contains(code, "xrt_cell_access_set("),
+                 "cell get and set call the stable owner adapter");
+    TEST_REQUIRE(!contains(code, "xrt_cell_get(") && !contains(code, "xrt_cell_set("),
+                 "retired cell access adapters are absent");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
     const char *src = "fn forceUtf8(data: Array<byte>) -> string {\n"
                       "    return string.fromUtf8(data[:])!\n"
@@ -13317,6 +13347,7 @@ int main(void) {
     run_cgen_pod_slice_view_uses_stable_owner_adapter();
     run_cgen_raw_memory_copy_owner_registry_is_stable();
     run_cgen_enum_metadata_access_uses_stable_owner_adapter();
+    run_cgen_cell_access_uses_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();

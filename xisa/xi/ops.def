@@ -2710,8 +2710,6 @@
     xi.extract
     xi.closure.new
     xi.cell.new
-    xi.cell.get
-    xi.cell.set
     xi.load.upval
     xi.store.upval
     xi.get.shared
@@ -2779,6 +2777,8 @@
 
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
+    xi.cell.get
+    xi.cell.set
     xi.enum.variant.at
     xi.enum.payload.at
     xi.ptr.load
@@ -3312,6 +3312,28 @@
     (aot-hosted "src/aot/xrt_coll.h" "xrt_enum_metadata_access_variant_at")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_enum_metadata_access_variant_at")
     (cgen "src/aot/xi_cgen.c" "cg_enum_metadata_access_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.cell-access
+  :category shared-semantic-kernel
+  :operations (
+    xi.cell.get
+    xi.cell.set
+  )
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_cell_access
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_closure.inc.c" "XR_CELL_ACCESS_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt_coll.h" "xrt_cell_access_get")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_cell_access_get")
+    (cgen "src/aot/xi_cgen.c" "cg_cell_access_adapter_name")
   ))
 
 (define-xi-observable-owner primitive.type-identity

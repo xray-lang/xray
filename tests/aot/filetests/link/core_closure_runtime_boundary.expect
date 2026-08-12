@@ -17,8 +17,11 @@ contains=boundary
 contains=reason=closure-object
 c_contains=xrt_closure_stack_new(
 c_contains=xrt_cell_new(
-c_contains=xrt_cell_get(
-c_contains=xrt_cell_set(
+c_contains=xrt_cell_access_get(
+c_contains=xrt_cell_access_set(
+c_not_contains=xrt_cell_get(
+c_not_contains=xrt_cell_set(
+c_syntax=pass
 c_contains=core_closure_runtime_boundary_add_
 c_contains=core_closure_runtime_boundary_inc_
 c_not_contains=xrt_value_clone_for_coro(

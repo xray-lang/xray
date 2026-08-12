@@ -672,7 +672,7 @@ static void test_stack_closure_borrows_cell_upval(void) {
     /* CELL_SET consumes one stored-value owner.  Preserve the independent
      * local owner that this fixture uses after the stack closure is dropped. */
     xrt_retain(arr);
-    xrt_cell_set(cell, arr);
+    xrt_cell_access_set(cell, arr);
 
     int nupvals = 1;
     size_t closure_size = xrt_closure_object_size(nupvals);

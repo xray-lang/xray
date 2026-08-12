@@ -4023,10 +4023,17 @@ static void xicgen_cell_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 static void xicgen_cell_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
     (void) prefix;
+    const char *owner_adapter = cg_cell_access_adapter_name(ctx);
+    if (!owner_adapter || (ctx && (ctx->freestanding_profile ||
+                                  ctx->c_dialect == XI_CGEN_C_DIALECT_C90))) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
     XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
     if (rep == XR_REP_RAWPTR)
         fprintf(out, "(void *)(uintptr_t)XR_TO_INT(");
-    fprintf(out, "xrt_cell_get(");
+    fprintf(out, "%s_get(", owner_adapter);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ")");
     if (rep == XR_REP_PTR)
@@ -4043,7 +4050,14 @@ static void xicgen_cell_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
                             const char *prefix) {
     (void) f;
     (void) prefix;
-    fprintf(out, "(xrt_cell_set(");
+    const char *owner_adapter = cg_cell_access_adapter_name(ctx);
+    if (!owner_adapter || (ctx && (ctx->freestanding_profile ||
+                                  ctx->c_dialect == XI_CGEN_C_DIALECT_C90))) {
+        cg_ctx_set_error(ctx);
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "(%s_set(", owner_adapter);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);

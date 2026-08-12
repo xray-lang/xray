@@ -180,9 +180,9 @@ int main(void) {
     XrValue left = xrt_cell_new(XR_NULL_VAL);
     XrValue right = xrt_cell_new(XR_NULL_VAL);
     xrt_retain(right);
-    xrt_cell_set(left, right);
+    xrt_cell_access_set(left, right);
     xrt_retain(left);
-    xrt_cell_set(right, left);
+    xrt_cell_access_set(right, left);
     xrt_release(left);
     xrt_release(right);
     CHECK(xrt_execution_arena_live_objects(arena) == 2,

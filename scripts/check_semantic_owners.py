@@ -162,6 +162,7 @@ POD_SLICE_VIEW_OPERATIONS = {"xi.slice.as.bytes", "xi.slice.reinterpret"}
 RAW_MEMORY_COPY_OPERATIONS = {"xi.ptr.copy.nonoverlap"}
 RAW_SCALAR_ACCESS_OPERATIONS = {"xi.ptr.load", "xi.ptr.store"}
 ENUM_METADATA_ACCESS_OPERATIONS = {"xi.enum.variant.at", "xi.enum.payload.at"}
+CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -1885,6 +1886,86 @@ def verify_enum_metadata_access_ratchet(root: Path, registry: dict) -> list[str]
     return errors
 
 
+def verify_cell_access_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.cell-access"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != CELL_ACCESS_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.cell-access family")
+
+    core_text = (root / "src/shared/xr_cell_access_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_CELL_ACCESS_OWNER_APPLY",
+                  "xr_cell_access_load_core", "xr_cell_access_replace_core"):
+        if token not in core_text:
+            errors.append("src/shared/xr_cell_access_core.h: cell access lacks stable owner")
+            break
+
+    vm_text = (root / "src/vm/xvm_dispatch_closure.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for opcode, kernel in (("OP_CELL_GET", "xr_cell_access_load_core"),
+                           ("OP_CELL_SET", "xr_cell_access_replace_core")):
+        start = vm_text.find(f"vmcase({opcode})")
+        end = vm_text.find("vmbreak;", start)
+        body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+        if (f"{marker}_HI" not in body or f"{marker}_LO" not in body or
+                "XR_SEM_CONSUMER_VM" not in body or
+                "XR_CELL_ACCESS_OWNER_APPLY" not in body or kernel not in body):
+            errors.append(f"src/vm/xvm_dispatch_closure.inc.c: {opcode} bypasses cell owner")
+        if opcode == "OP_CELL_SET" and "xr_rc_release_value" not in body:
+            errors.append("src/vm/xvm_dispatch_closure.inc.c: OP_CELL_SET lost old-value release")
+        if re.search(r"cell->value\s*=", body):
+            errors.append(f"src/vm/xvm_dispatch_closure.inc.c: {opcode} owns slot semantics")
+
+    hosted_text = (root / "src/aot/xrt_coll.h").read_text(encoding="utf-8", errors="strict")
+    for function, kernel in (("xrt_cell_access_get", "xr_cell_access_load_core"),
+                             ("xrt_cell_access_set", "xr_cell_access_replace_core")):
+        body = extract_c_function(hosted_text, function) or ""
+        if (f"{marker}_HI" not in body or f"{marker}_LO" not in body or
+                "XR_SEM_CONSUMER_AOT_HOSTED" not in body or
+                "XR_CELL_ACCESS_OWNER_APPLY" not in body or kernel not in body):
+            errors.append(f"src/aot/xrt_coll.h: {function} bypasses cell owner")
+        if function.endswith("_set") and "xrt_release(old)" not in body:
+            errors.append("src/aot/xrt_coll.h: cell set lost old-value release")
+        if re.search(r"cell->value\s*=", body):
+            errors.append(f"src/aot/xrt_coll.h: {function} owns slot semantics")
+    if re.search(r"\bxrt_cell_(?:get|set)\s*\(", hosted_text):
+        errors.append("src/aot/xrt_coll.h: retired cell access alias revived")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_cell_access_adapter_name") or ""
+    if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
+            "xr_semantic_owner_cgen_adapter" not in resolver):
+        errors.append("src/aot/xi_cgen.c: cell access does not resolve stable adapter")
+    dispatch = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for emitter, suffix in (("xicgen_cell_get", "_get("), ("xicgen_cell_set", "_set(")):
+        body = extract_c_function(dispatch, emitter) or ""
+        if ("cg_cell_access_adapter_name" not in body or suffix not in body or
+                "freestanding_profile" not in body or "XI_CGEN_C_DIALECT_C90" not in body):
+            errors.append(f"src/aot/xi_cgen_dispatch_helpers.inc.c: {emitter} bypasses owner")
+        if "->value" in body or re.search(r"\bxrt_cell_(?:get|set)\s*\(", body):
+            errors.append(f"src/aot/xi_cgen_dispatch_helpers.inc.c: {emitter} owns cell semantics")
+
+    freestanding_text = (root / "src/aot/xrt_core_freestanding.h").read_text(
+        encoding="utf-8", errors="strict")
+    for function, kernel in (("xrt_cell_access_get", "xr_cell_access_load_core"),
+                             ("xrt_cell_access_set", "xr_cell_access_replace_core")):
+        body = extract_c_function(freestanding_text, function) or ""
+        if (f"{marker}_HI" not in body or f"{marker}_LO" not in body or
+                "XR_SEM_CONSUMER_AOT_FREESTANDING" not in body or
+                "XR_CELL_ACCESS_OWNER_APPLY" not in body or kernel not in body):
+            errors.append(f"src/aot/xrt_core_freestanding.h: {function} bypasses cell owner")
+        if function.endswith("_set") and "xrt_release(old)" not in body:
+            errors.append("src/aot/xrt_core_freestanding.h: cell set lost old-value release")
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    if "xrt_cell_access_" in c90_text:
+        errors.append("src/aot/xrt_c90.h: unsupported cell adapter surface revived")
+    return errors
+
+
 def verify_pod_slice_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     families = (
@@ -2091,8 +2172,8 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.append("semantic-owners.toml contains duplicate core headers")
     if sorted(declared) != actual:
         errors.append(f"core manifest mismatch: declared={sorted(declared)!r} actual={actual!r}")
-    if len(actual) != 30:
-        errors.append(f"shared-core inventory must contain exactly 30 headers, found {len(actual)}")
+    if len(actual) != 31:
+        errors.append(f"shared-core inventory must contain exactly 31 headers, found {len(actual)}")
 
     for entry in manifest.get("core", []):
         if entry.get("owner") != "shared-kernel":
@@ -2131,6 +2212,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_raw_memory_copy_ratchet(root, registry))
         errors.extend(verify_raw_scalar_access_ratchet(root, registry))
         errors.extend(verify_enum_metadata_access_ratchet(root, registry))
+        errors.extend(verify_cell_access_ratchet(root, registry))
         errors.extend(verify_pod_slice_ratchet(root, registry))
         errors.extend(verify_pod_slice_view_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)

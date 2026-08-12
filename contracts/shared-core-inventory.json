@@ -243,6 +243,33 @@
       ]
     },
     {
+      "contains_tagged_value": true,
+      "header": "src/shared/xr_cell_access_core.h",
+      "id": "cell-access",
+      "owner": "shared-kernel",
+      "production_callers": [
+        "src/aot/xrt_coll.h",
+        "src/aot/xrt_core_freestanding.h",
+        "src/runtime/closure/xcell.h",
+        "src/vm/xvm_dispatch_closure.inc.c"
+      ],
+      "profiles": [
+        "vm",
+        "aot",
+        "hosted",
+        "freestanding"
+      ],
+      "representation": "tagged",
+      "signatures": [
+        "xr_cell_access_load_core",
+        "xr_cell_access_replace_core"
+      ],
+      "status": "production",
+      "test_callers": [
+        "tests/unit/stdlib/test_cell_access_core.c"
+      ]
+    },
+    {
       "contains_tagged_value": false,
       "header": "src/shared/xr_compress_core.h",
       "id": "compression",

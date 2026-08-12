@@ -609,6 +609,22 @@ add_xray_unit_test(test_array_core stdlib/test_array_core.c)
 add_xray_unit_test(test_math_core stdlib/test_math_core.c)
 add_xray_unit_test(test_numeric_core stdlib/test_numeric_core.c)
 add_xray_unit_test(test_range_core stdlib/test_range_core.c)
+add_executable(test_cell_access_core stdlib/test_cell_access_core.c)
+target_include_directories(test_cell_access_core PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+add_test(NAME test_cell_access_core COMMAND $<TARGET_FILE:test_cell_access_core>)
+add_executable(test_xrt_cell_access_owner_freestanding
+    aot/test_xrt_cell_access_owner_freestanding.c)
+target_include_directories(test_xrt_cell_access_owner_freestanding PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+add_test(NAME test_xrt_cell_access_owner_freestanding
+    COMMAND $<TARGET_FILE:test_xrt_cell_access_owner_freestanding>)
 add_xray_unit_test(test_xrt_range_owner_freestanding aot/test_xrt_range_owner_freestanding.c)
 add_executable(test_enum_metadata_core stdlib/test_enum_metadata_core.c)
 target_include_directories(test_enum_metadata_core PRIVATE

@@ -26,7 +26,7 @@
 #include "../shared/xr_array_abi.h"
 #include "../shared/xr_array_core.h"
 #include "../shared/xr_builtin_schema.h"
-#include "../shared/xr_cell_abi.h"
+#include "../shared/xr_cell_access_core.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_error_core.h"
 #include "../shared/xr_enum_metadata_core.h"
@@ -7131,18 +7131,22 @@ static inline XrValue xrt_cell_new(XrValue value) {
     return xr_mkptr(cell, XR_TAG_CELL);
 }
 
-static inline XrValue xrt_cell_get(XrValue cell_value) {
+static inline XrValue xrt_cell_access_get(XrValue cell_value) {
     if (cell_value.tag != XR_TAG_CELL || !cell_value.ptr)
         return cell_value;
-    return ((xrt_cell_t *) cell_value.ptr)->value;
+    xrt_cell_t *cell = (xrt_cell_t *) cell_value.ptr;
+    return XR_CELL_ACCESS_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, xr_cell_access_load_core(&cell->value));
 }
 
-static inline void xrt_cell_set(XrValue cell_value, XrValue value) {
+static inline void xrt_cell_access_set(XrValue cell_value, XrValue value) {
     if (cell_value.tag != XR_TAG_CELL || !cell_value.ptr)
         return;
     xrt_cell_t *cell = (xrt_cell_t *) cell_value.ptr;
-    XrValue old = cell->value;
-    cell->value = value;
+    XrValue old = XR_CELL_ACCESS_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI, XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, xr_cell_access_replace_core(&cell->value, value));
     xrt_release(old);
 }
 

@@ -1,7 +1,7 @@
 schema = 1
 
 [policy]
-observable_owner_count = 5
+observable_owner_count = 6
 unknown_plan = "fail_closed"
 native_kernel_forbids_tagged_value = true
 tagged_and_descriptor_kernels_are_explicit = true
@@ -31,6 +31,13 @@ profiles = ["vm", "aot", "hosted", "freestanding"]
 id = "byte-slice-scalar"
 header = "src/shared/xr_byte_slice_scalar_core.h"
 representation = "native"
+owner = "shared-kernel"
+profiles = ["vm", "aot", "hosted", "freestanding"]
+
+[[core]]
+id = "cell-access"
+header = "src/shared/xr_cell_access_core.h"
+representation = "tagged"
 owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
@@ -442,6 +449,23 @@ fixtures = [
 ]
 
 [[operation]]
+id = "cell-access"
+observable_contract = "src/shared/xr_cell_access_core.h"
+semantic_kernel = "src/shared/xr_cell_access_core.h"
+vm_adapter = "src/vm/xvm_dispatch_closure.inc.c"
+aot_adapter = "src/aot/xrt_coll.h"
+typed_plan = "shared.cell-access"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_cell_access_core.c",
+  "tests/unit/aot/test_xrt_cell_access_owner_freestanding.c",
+  "tests/unit/aot/test_xrt_array.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/aot/filetests/link/core_closure_runtime_boundary.xr",
+  "tests/diff/cases/semantics/closure/shared_mutable_capture_cell.xr",
+]
+
+[[operation]]
 id = "pod-slice-copy"
 observable_contract = "src/shared/xr_pod_slice_core.h"
 semantic_kernel = "src/shared/xr_pod_slice_core.h"
@@ -511,7 +535,7 @@ disposition = "single-owner"
 
 [[operation_family]]
 id = "container-primitives"
-canonical_cores = ["array", "array-sort", "byte-slice-scalar", "pod-slice", "range", "raw-memory"]
+canonical_cores = ["array", "array-sort", "byte-slice-scalar", "cell-access", "pod-slice", "range", "raw-memory"]
 duplicate_sources = [
   "src/runtime/object/xarray_vm.c:retired-private-sort",
   "src/aot/xrt_sort.inc.c:retired-private-sort",

@@ -177,7 +177,11 @@ vmcase(OP_CELL_GET) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
     XrCell *cell = (XrCell *) R(b).ptr;
-    R(a) = cell ? cell->value : xr_null();
+    R(a) = cell ? XR_CELL_ACCESS_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI,
+                      XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO, XR_SEM_CONSUMER_VM,
+                      xr_cell_access_load_core(&cell->value))
+                : xr_null();
     vmbreak;
 }
 
@@ -188,8 +192,10 @@ vmcase(OP_CELL_SET) {
     int b = GETARG_B(i);
     XrCell *cell = (XrCell *) R(a).ptr;
     if (cell) {
-        XrValue old = cell->value;
-        cell->value = R(b);
+        XrValue old = XR_CELL_ACCESS_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_HI,
+            XR_SEM_OWNER_ID_SHARED_CELL_ACCESS_LO, XR_SEM_CONSUMER_VM,
+            xr_cell_access_replace_core(&cell->value, R(b)));
         XrCoroutine *_co = (XrCoroutine *) VM_CURRENT_CORO;
         xr_rc_release_value(_co ? _co->heap : NULL, old);
     }
