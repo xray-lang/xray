@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "75ce29577ec583547efc60e1d5585b26861df5ae1c35a756e458445c3442c6d0",
+  "canonical_fingerprint": "5a4bc9202dc6230107179bcae31140539240e0481470f152f44d1349eb8a274b",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -326,6 +326,52 @@
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
           "symbol": "cg_numeric_width_adapter_name"
+        }
+      ]
+    },
+    {
+      "owner": "shared.range",
+      "owner_id": "72235a3a274831e86027f98fa7d4ec32",
+      "owner_id_hi": "0x72235a3a274831e8",
+      "owner_id_lo": "0x6027f98fa7d4ec32",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.range"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
+      ],
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_range_semantics",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_RANGE_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_range_semantics"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_range_semantics"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_range_adapter_name"
         }
       ]
     },
@@ -3038,28 +3084,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.ptr.store"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.range",
-      "owner_id": "5994200214fbf1a1478f4c84f1ed00df",
-      "owner_id_hi": "0x5994200214fbf1a1",
-      "owner_id_lo": "0x478f4c84f1ed00df",
-      "category": "shared-semantic-kernel",
-      "operations": [
-        "xi.range"
       ],
       "consumers": [
         "semantic-plan"
@@ -9574,21 +9598,45 @@
       "operation_id": "5994200214fbf1a1478f4c84f1ed00df",
       "operation_id_hi": "0x5994200214fbf1a1",
       "operation_id_lo": "0x478f4c84f1ed00df",
-      "owner": "xi.range",
-      "owner_id": "5994200214fbf1a1478f4c84f1ed00df",
-      "owner_id_hi": "0x5994200214fbf1a1",
-      "owner_id_lo": "0x478f4c84f1ed00df",
+      "owner": "shared.range",
+      "owner_id": "72235a3a274831e86027f98fa7d4ec32",
+      "owner_id_hi": "0x72235a3a274831e8",
+      "owner_id_lo": "0x6027f98fa7d4ec32",
       "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_range_semantics",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_RANGE_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_range_semantics"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_range_semantics"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_range_adapter_name"
         }
       ]
     },

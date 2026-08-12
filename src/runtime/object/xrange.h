@@ -28,6 +28,7 @@
 #ifndef XRANGE_H
 #define XRANGE_H
 
+#include "../../shared/xr_range_core.h"
 #include "../value/xvalue.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -47,12 +48,8 @@ typedef struct XrRange {
 
 /* ========== Creation ========== */
 
-// Create Range with step=1.
-XR_FUNC XrValue xr_range_new(struct XrVMRuntime *X, int64_t start, int64_t end, bool inclusive_end);
-
-// Create Range with explicit step.
-XR_FUNC XrValue xr_range_new_with_step(struct XrVMRuntime *X, int64_t start, int64_t end,
-                                       int64_t step, bool inclusive_end);
+// Allocate the VM representation of an already-decided shared Range value.
+XR_FUNC XrValue xr_range_from_core(struct XrVMRuntime *X, XrRangeCore core);
 
 /* ========== Type Check ========== */
 
@@ -67,48 +64,18 @@ XR_FUNC XrRange *xr_value_get_range_body(struct XrVMRuntime *X, XrValue v);
 // Number of elements in the range (lazy, O(1)).
 // Half-open forward ranges use `[start, end)`, inclusive forward ranges use
 // `[start, end]`; reverse ranges mirror the boundary around `end`.
-static inline int64_t xr_range_len_from_distance(uint64_t distance, uint64_t step,
-                                                 bool inclusive_end) {
-    if (step == 0)
-        return 0;
-    uint64_t base = distance / step;
-    uint64_t extra = inclusive_end ? 1 : (distance % step != 0);
-    if (base > UINT64_MAX - extra)
-        return INT64_MAX;
-    uint64_t len = base + extra;
-    return len > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) len;
+static inline XrRangeCore xr_range_core_view(const XrRange *r) {
+    return r ? xr_range_core_make_with_bound(r->start, r->end, r->step, r->inclusive_end)
+             : xr_range_core_make(0, 0, 0);
 }
 
-static inline int64_t xr_range_length(XrRange *r) {
-    if (!r || r->step == 0)
-        return 0;
-    if (r->step > 0) {
-        if (r->inclusive_end ? (r->end < r->start) : (r->end <= r->start))
-            return 0;
-        return xr_range_len_from_distance((uint64_t) r->end - (uint64_t) r->start,
-                                          (uint64_t) r->step, r->inclusive_end);
-    } else {
-        if (r->inclusive_end ? (r->end > r->start) : (r->end >= r->start))
-            return 0;
-        int64_t neg_step = -r->step;
-        return xr_range_len_from_distance((uint64_t) r->start - (uint64_t) r->end,
-                                          (uint64_t) neg_step, r->inclusive_end);
-    }
+static inline int64_t xr_range_length(const XrRange *r) {
+    return xr_range_core_length(xr_range_core_view(r));
 }
 
 // Check if value is in the range under the stored end-boundary semantics.
-static inline bool xr_range_contains(XrRange *r, int64_t value) {
-    if (!r || r->step == 0)
-        return false;
-    if (r->step > 0) {
-        if (value < r->start || (r->inclusive_end ? value > r->end : value >= r->end))
-            return false;
-        return ((uint64_t) value - (uint64_t) r->start) % (uint64_t) r->step == 0;
-    } else {
-        if (value > r->start || (r->inclusive_end ? value < r->end : value <= r->end))
-            return false;
-        return ((uint64_t) r->start - (uint64_t) value) % (uint64_t) (-r->step) == 0;
-    }
+static inline bool xr_range_contains(const XrRange *r, int64_t value) {
+    return xr_range_core_contains(xr_range_core_view(r), value);
 }
 
 /* ========== Conversion ========== */

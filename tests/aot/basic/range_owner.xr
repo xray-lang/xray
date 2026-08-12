@@ -1,0 +1,19 @@
+// VM/AOT/generated-C KAT for the shared.range owner and representation adapters.
+
+var forward = 2..6
+print(forward.start)       // 2
+print(forward.end)         // 6
+print(forward.count())     // 4
+print(forward.contains(5)) // true
+print(forward.contains(6)) // false
+print(forward[0])          // 2
+print(forward[3])          // 5
+print(forward[-1])         // current null display: 0
+print(forward[4])          // current null display: 0
+print(forward)             // 2..6
+
+var inclusive = 9223372036854775806..=9223372036854775807
+print(inclusive.count())                           // 2
+print(inclusive.contains(9223372036854775807))     // true
+print(inclusive[1])                                // 9223372036854775807
+print(inclusive)                                   // 9223372036854775806..=9223372036854775807

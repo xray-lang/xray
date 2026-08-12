@@ -11,6 +11,7 @@
 #ifndef XR_RANGE_CORE_H
 #define XR_RANGE_CORE_H
 
+#include "xr_semantic_owner_ids_gen.h"
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -99,8 +100,6 @@ static inline int64_t xr_range_core_value_at(XrRangeCore r, int64_t index) {
 
 static inline int64_t xr_range_core_index(XrRangeCore r, int64_t index, bool *ok) {
     int64_t len = xr_range_core_length(r);
-    if (index < 0)
-        index += len;
     bool in_bounds = index >= 0 && index < len;
     if (ok)
         *ok = in_bounds;
@@ -124,5 +123,30 @@ static inline int xr_range_core_format_buf(XrRangeCore r, char *buf, size_t cap)
         return snprintf(buf, cap, "%" PRId64 "%s%" PRId64, r.start, op, r.end);
     return snprintf(buf, cap, "%" PRId64 "%s%" PRId64 ":%" PRId64, r.start, op, r.end, r.step);
 }
+
+#define XR_RANGE_OWNER_GUARD(owner_hi, owner_lo)                                                   \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_range                                                \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_RANGE_HI &&                       \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_RANGE_LO)                         \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_RANGE_CONSUMER_GUARD(consumer_bit)                                                     \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_range                                   \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (((uint32_t) (consumer_bit) & ((uint32_t) (consumer_bit) - 1)) == 0) &&           \
+                (XR_SEM_OWNER_ID_SHARED_RANGE_CONSUMERS & (uint32_t) (consumer_bit)) != 0)        \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_RANGE_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, start, end, inclusive_end)          \
+    (XR_RANGE_OWNER_GUARD((owner_hi), (owner_lo)),                                                 \
+     XR_RANGE_CONSUMER_GUARD((consumer_bit)),                                                      \
+     xr_range_core_make_with_bound((int64_t) (start), (int64_t) (end), 1,                         \
+                                   (bool) (inclusive_end)))
 
 #endif  // XR_RANGE_CORE_H

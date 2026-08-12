@@ -15,11 +15,14 @@
 #define XR_SEM_CONSUMER_CGEN UINT32_C(0x00000010)
 #define XR_SEM_CONSUMER_RUNTIME UINT32_C(0x00000020)
 
-#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "75ce29577ec583547efc60e1d5585b26861df5ae1c35a756e458445c3442c6d0"
+#define XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT "5a4bc9202dc6230107179bcae31140539240e0481470f152f44d1349eb8a274b"
 
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI UINT64_C(0x7ec352d0136c63f9)
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO UINT64_C(0x9f71c69f3e6c2b2d)
 #define XR_SEM_OWNER_ID_SHARED_TRUTHINESS_CONSUMERS UINT32_C(0x0000003f)
+#define XR_SEM_OWNER_ID_SHARED_RANGE_HI UINT64_C(0x72235a3a274831e8)
+#define XR_SEM_OWNER_ID_SHARED_RANGE_LO UINT64_C(0x6027f98fa7d4ec32)
+#define XR_SEM_OWNER_ID_SHARED_RANGE_CONSUMERS UINT32_C(0x0000001f)
 #define XR_SEM_OWNER_ID_SHARED_BITS_HI UINT64_C(0x658354f83ccf3838)
 #define XR_SEM_OWNER_ID_SHARED_BITS_LO UINT64_C(0xfa2ed89ccc2a3fa4)
 #define XR_SEM_OWNER_ID_SHARED_BITS_CONSUMERS UINT32_C(0x0000001f)
@@ -47,6 +50,9 @@ static inline uint32_t xr_semantic_owner_consumer_bits(uint64_t owner_id_hi,
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO)
         return XR_SEM_OWNER_ID_SHARED_TRUTHINESS_CONSUMERS;
+    if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_RANGE_HI &&
+        owner_id_lo == XR_SEM_OWNER_ID_SHARED_RANGE_LO)
+        return XR_SEM_OWNER_ID_SHARED_RANGE_CONSUMERS;
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_BITS_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_BITS_LO)
         return XR_SEM_OWNER_ID_SHARED_BITS_CONSUMERS;
@@ -83,6 +89,9 @@ static inline const char *xr_semantic_owner_cgen_adapter(uint64_t owner_id_hi,
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_TRUTHINESS_LO)
         return "xr_truthy";
+    if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_RANGE_HI &&
+        owner_id_lo == XR_SEM_OWNER_ID_SHARED_RANGE_LO)
+        return "xrt_range_semantics";
     if (owner_id_hi == XR_SEM_OWNER_ID_SHARED_BITS_HI &&
         owner_id_lo == XR_SEM_OWNER_ID_SHARED_BITS_LO)
         return "xrt_bits_exact_eval";

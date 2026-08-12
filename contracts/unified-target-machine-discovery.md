@@ -34,7 +34,7 @@ when any retained log is absent.  A timeout, malformed result, stale or dirty
 identity, high variance, source-root residue, or failed lane remains `failed`;
 the protocol has no skip, allowlist, dirty, or fallback state.
 
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 7d1062b120d0c3ec437bf12635b3d8b56a82f99abd7003ff468af7bb37e07ac3
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json d85a5d72d985c4a4ba247c0491c01c6521a3c68fc5109abd1569e88a04287a04
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 0bcd147580a994f088b1439e6f7daf4f0211f8d33a07788df586a4cf571a8cae
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json cf6ae29bfc1fe26affeba8f3c8a03bc25dbe7943e6609226547f9df15ef5db0c
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 052cac030a7f91c22c7c4a40e2571f3d9f0a274661aa1396a13f5c5bf4600827

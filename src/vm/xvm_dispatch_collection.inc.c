@@ -392,7 +392,10 @@ vmcase(OP_NEWRANGE) {
     int c = GETARG_C(i);
     int64_t start_val = XR_TO_INT(R(b));
     int64_t end_val = XR_TO_INT(R(c));
-    R(a) = xr_range_new(isolate, start_val, end_val, false);
+    XrRangeCore core = XR_RANGE_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_VM,
+        start_val, end_val, false);
+    R(a) = xr_range_from_core(isolate, core);
     checkGC(base + a + 1);
     vmbreak;
 }
@@ -406,7 +409,10 @@ vmcase(OP_NEWRANGE_INCLUSIVE) {
     int c = GETARG_C(i);
     int64_t start_val = XR_TO_INT(R(b));
     int64_t end_val = XR_TO_INT(R(c));
-    R(a) = xr_range_new(isolate, start_val, end_val, true);
+    XrRangeCore core = XR_RANGE_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_VM,
+        start_val, end_val, true);
+    R(a) = xr_range_from_core(isolate, core);
     checkGC(base + a + 1);
     vmbreak;
 }
@@ -656,12 +662,9 @@ vmcase(OP_ARRAY_GETC) {
     {
         XrRange *rng = xr_value_get_range_body(isolate, obj_val);
         if (rng) {
-            int64_t len = xr_range_length(rng);
-            if (c >= 0 && c < len) {
-                R(a) = xr_int(rng->start + (int64_t) c * rng->step);
-            } else {
-                R(a) = xr_null();
-            }
+            bool ok = false;
+            int64_t value = xr_range_core_index(xr_range_core_view(rng), c, &ok);
+            R(a) = ok ? xr_int(value) : xr_null();
             vmbreak;
         }
     }
@@ -2178,12 +2181,9 @@ vmcase(OP_INDEX_GET) {
         XrRange *rng = xr_value_get_range_body(isolate, obj_val);
         if (rng) {
             int64_t idx = XR_TO_INT(key_val);
-            int64_t len = xr_range_length(rng);
-            if (idx >= 0 && idx < len) {
-                R(a) = xr_int(rng->start + idx * rng->step);
-            } else {
-                R(a) = xr_null();
-            }
+            bool ok = false;
+            int64_t value = xr_range_core_index(xr_range_core_view(rng), idx, &ok);
+            R(a) = ok ? xr_int(value) : xr_null();
             vmbreak;
         }
     }

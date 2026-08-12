@@ -2794,6 +2794,7 @@
 
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
+    xi.range
     xi.not
     xi.bnot
     xi.band
@@ -2857,7 +2858,6 @@
     xi.chan.new
     xi.str.concat
     xi.slice
-    xi.range
     xi.scope.enter
     xi.scope.exit
     xi.regex.compile
@@ -2895,6 +2895,25 @@
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xr_truthy")
     (cgen "src/aot/xi_cgen.c" "xr_semantic_owner_cgen_adapter")
     (runtime "src/runtime/value/xvalue_truthy.c" "xr_value_is_truthy")
+  ))
+
+(define-xi-observable-owner shared.range
+  :category shared-semantic-kernel
+  :operations (xi.range)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_range_semantics
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_collection.inc.c" "XR_RANGE_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_range_semantics")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_range_semantics")
+    (cgen "src/aot/xi_cgen.c" "cg_range_adapter_name")
   ))
 
 (define-xi-observable-owner shared.bits

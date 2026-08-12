@@ -146,6 +146,11 @@ BYTE_SLICE_SCALAR_OPERATIONS = {
     for direction in ("load", "store")
     for scalar in ("u16", "u32", "u64", "f32", "f64")
 }
+RANGE_OPERATIONS = {"xi.range"}
+RANGE_AOT_BINDINGS = (
+    "src/aot/xrt.h",
+    "src/aot/xrt_core_freestanding.h",
+)
 BYTE_SLICE_SCALAR_KERNELS = {
     f"xr_array_core_bytes_{direction}_{scalar}"
     for direction in ("load", "store")
@@ -752,6 +757,88 @@ def verify_bits_not_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_range_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.range")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.range"), None)
+    if owner is None or set(owner.get("operations", [])) != RANGE_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.range operation family")
+
+    core_text = (root / "src/shared/xr_range_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_RANGE_OWNER_APPLY",
+                  "xr_range_core_make_with_bound", "xr_range_core_length",
+                  "xr_range_core_contains", "xr_range_core_index",
+                  "xr_range_core_format_buf"):
+        if token not in core_text:
+            errors.append(f"src/shared/xr_range_core.h: shared Range owner lacks {token}")
+
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_RANGE_OWNER_APPLY",
+                  "xr_range_from_core"):
+        if token not in vm_text:
+            errors.append(f"src/vm/xvm_dispatch_collection.inc.c: VM Range lacks {token}")
+
+    runtime_header = (root / "src/runtime/object/xrange.h").read_text(
+        encoding="utf-8", errors="strict")
+    runtime_source = (root / "src/runtime/object/xrange.c").read_text(
+        encoding="utf-8", errors="strict")
+    value_format = (root / "src/runtime/value/xvalue_format.c").read_text(
+        encoding="utf-8", errors="strict")
+    hosted_range = (root / "src/aot/xrt_range.h").read_text(
+        encoding="utf-8", errors="strict")
+    retired = (
+        "xr_range_new(", "xr_range_new_with_step(", "xr_range_len_from_distance(",
+        "xrt_range_new_raw(", "xrt_range_from_i64(", "xrt_range_len_from_distance(",
+    )
+    for relative, text in (
+            ("src/runtime/object/xrange.h", runtime_header),
+            ("src/runtime/object/xrange.c", runtime_source),
+            ("src/aot/xrt_range.h", hosted_range)):
+        for token in retired:
+            if token in text:
+                errors.append(f"{relative}: retired private Range path revived: {token}")
+
+    runtime_format = extract_c_function(runtime_source, "m_range_to_string")
+    if runtime_format is None or "xr_range_core_format_buf" not in runtime_format:
+        errors.append("src/runtime/object/xrange.c: VM Range formatting bypasses shared core")
+    if "xr_range_core_format_buf(xr_range_core_view(rng)" not in value_format:
+        errors.append("src/runtime/value/xvalue_format.c: generic Range formatting bypasses core")
+    if re.search(r"rng->start\s*\+.*rng->step", vm_text):
+        errors.append("src/vm/xvm_dispatch_collection.inc.c: raw Range indexing revived")
+    for helper in ("xrt_range_length_ptr", "xrt_range_contains_ptr",
+                   "xrt_range_index_ptr", "xrt_range_format_buf"):
+        body = extract_c_function(hosted_range, helper)
+        if body is None or "xr_range_core_" not in body:
+            errors.append(f"src/aot/xrt_range.h: {helper} bypasses shared Range core")
+
+    for relative in RANGE_AOT_BINDINGS:
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "XR_RANGE_OWNER_APPLY" not in text or "xrt_range_semantics" not in text):
+            errors.append(f"{relative}: AOT Range adapter bypasses stable owner")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(
+        encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_range_adapter_name")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append("src/aot/xi_cgen.c: CGen Range does not resolve by stable owner ID")
+
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    emitter_body = extract_c_function(dispatch_text, "xicgen_range")
+    if (emitter_body is None or "cg_range_adapter_name" not in emitter_body or
+            "xrt_range_from_core" not in emitter_body):
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: Range bypasses owner adapter")
+    elif any(token in emitter_body for token in ("xrt_range_from_i64", "xrt_range_new_raw")):
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: retired Range semantics revived")
+    return errors
+
+
 def verify_shift_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     marker = owner_macro_prefix("shared.shift")
@@ -1245,6 +1332,7 @@ def verify(root: Path, write: bool) -> list[str]:
         registry = json.loads(registry_path.read_text(encoding="utf-8", errors="strict"))
         errors.extend(verify_exact_bits_ratchet(root, registry))
         errors.extend(verify_bits_not_ratchet(root, registry))
+        errors.extend(verify_range_ratchet(root, registry))
         errors.extend(verify_bitwise_binary_ratchet(root, registry))
         errors.extend(verify_shift_ratchet(root, registry))
         errors.extend(verify_numeric_width_ratchet(root, registry))

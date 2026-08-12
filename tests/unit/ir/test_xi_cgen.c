@@ -7826,13 +7826,14 @@ TEST(cgen_range_uses_direct_aot_driver) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "range direct driver should generate");
 
-    assert(contains(code, "xrt_range_from_i64(") &&
+    assert(contains(code, "xrt_range_from_core(xrt_range_semantics(") &&
            "range expression must use the direct AOT range helper");
     assert(contains(code, ", false)") && "half-open range must pass inclusive=false");
     assert(contains(code, ", true)") && "inclusive range must pass inclusive=true");
     assert(contains(code, "xrt_typename(") &&
            "typeName(range) must use the direct type-name helper");
-    assert(!contains(code, "xrt_range(XR_FROM_INT") &&
+    assert(!contains(code, "xrt_range_from_i64(") &&
+           !contains(code, "xrt_range(XR_FROM_INT") &&
            "range creation must not box start/end before the AOT helper");
 
     printf("  Generated range direct driver %zu bytes of C code\n", strlen(code));

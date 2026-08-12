@@ -51,33 +51,18 @@ XrRange *xr_value_get_range_body(XrVMRuntime *X, XrValue v) {
 
 /* ========== Creation ========== */
 
-XrValue xr_range_new(XrVMRuntime *X, int64_t start, int64_t end, bool inclusive_end) {
-    XR_DCHECK(X != NULL, "xr_range_new: NULL isolate");
+XrValue xr_range_from_core(XrVMRuntime *X, XrRangeCore core) {
+    XR_DCHECK(X != NULL, "xr_range_from_core: NULL isolate");
+    XR_DCHECK(core.step != 0, "xr_range_from_core: step must not be zero");
     XrInstance *inst = xr_instance_new(X, range_class(X));
     if (!inst)
         return xr_null();
     XrRange *body = (XrRange *) xr_instance_native_body(inst);
-    XR_DCHECK(body != NULL, "xr_range_new: native body NULL");
-    body->start = start;
-    body->end = end;
-    body->step = 1;
-    body->inclusive_end = inclusive_end;
-    return XR_FROM_PTR(inst);
-}
-
-XrValue xr_range_new_with_step(XrVMRuntime *X, int64_t start, int64_t end, int64_t step,
-                               bool inclusive_end) {
-    XR_DCHECK(X != NULL, "xr_range_new_with_step: NULL isolate");
-    XR_CHECK(step != 0, "xr_range_new_with_step: step must not be zero");
-    XrInstance *inst = xr_instance_new(X, range_class(X));
-    if (!inst)
-        return xr_null();
-    XrRange *body = (XrRange *) xr_instance_native_body(inst);
-    XR_DCHECK(body != NULL, "xr_range_new_with_step: native body NULL");
-    body->start = start;
-    body->end = end;
-    body->step = step;
-    body->inclusive_end = inclusive_end;
+    XR_DCHECK(body != NULL, "xr_range_from_core: native body NULL");
+    body->start = core.start;
+    body->end = core.end;
+    body->step = core.step;
+    body->inclusive_end = core.inclusive_end;
     return XR_FROM_PTR(inst);
 }
 
@@ -90,7 +75,7 @@ XrValue xr_range_to_array(struct XrVMRuntime *iso, XrRange *r) {
 
     /* Plan the materialization through the runtime-neutral core so the VM and the
      * AOT (src/aot/xrt_range_methods.inc.c) agree on the cap and length exactly. */
-    XrRangeCore core = xr_range_core_make_with_bound(r->start, r->end, r->step, r->inclusive_end);
+    XrRangeCore core = xr_range_core_view(r);
     XrRangeCoreMaterializePlan plan = xr_range_core_materialize_plan(core);
 
     XrCoroutine *coro = NULL;
@@ -133,11 +118,7 @@ static XrValue m_range_to_string(XrVMRuntime *iso, XrValue self, XrValue *args, 
     if (!rng)
         return xr_null();
     char buf[80];
-    const char *op = rng->inclusive_end ? "..=" : "..";
-    int n = (rng->step == 1)
-                ? snprintf(buf, sizeof(buf), "%" PRId64 "%s%" PRId64, rng->start, op, rng->end)
-                : snprintf(buf, sizeof(buf), "%" PRId64 "%s%" PRId64 ":%" PRId64, rng->start, op,
-                           rng->end, rng->step);
+    int n = xr_range_core_format_buf(xr_range_core_view(rng), buf, sizeof(buf));
     XrString *s = xr_string_intern(iso, buf, (size_t) n, 0);
     return xr_string_value(s);
 }

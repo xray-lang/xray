@@ -37,6 +37,7 @@
 
 #include "../shared/xr_raw_scalar_core.h"  // L0: unsafe raw scalar load/store
 #include "../shared/xr_bits_core.h"        // L0: exact-width compiler bit intrinsics
+#include "../shared/xr_range_core.h"       // L0: canonical Range semantics
 #include "../shared/xr_numeric_conversion_core.h"  // L0: deterministic scalar narrowing
 #define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
@@ -58,6 +59,10 @@
     XR_NUMERIC_WIDTH_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,                    \
                                  XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,                    \
                                  XR_SEM_CONSUMER_AOT_HOSTED, kernel, value)
+#define xrt_range_semantics(start, end, inclusive_end)                                            \
+    XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI,                                        \
+                         XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_AOT_HOSTED, start, end, \
+                         inclusive_end)
 #ifndef xrt_byte_slice_scalar_eval
 #define xrt_byte_slice_scalar_eval(expression)                                                     \
     XR_BYTE_SLICE_SCALAR_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                 \

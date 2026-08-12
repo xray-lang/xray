@@ -6884,15 +6884,19 @@ static void xicgen_buffer_materialize(XiCgenCtx *ctx, FILE *out, const XiFunc *f
 
 static void xicgen_range(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 2, "xicgen_range: need start and end");
-    fprintf(out, "xrt_range_from_i64(");
+    const char *adapter = cg_range_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    fprintf(out, "xrt_range_from_core(%s(", adapter);
     emit_value_as_rep(out, v->args[0], XR_REP_I64);
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[1], XR_REP_I64);
-    fprintf(out, ", %s)", v->aux_int ? "true" : "false");
+    fprintf(out, ", %s))", v->aux_int ? "true" : "false");
 }
 
 static bool xicgen_math_result_rep(const char *name, XrRep *out_rep) {

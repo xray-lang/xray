@@ -54,6 +54,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_int_arith.h" /* xr_i64_*_wrap for int wrapping methods (task 153) */
 #include "../shared/xr_numeric_conversion_core.h"
 #include "../shared/xr_bits_core.h" /* exact-width compiler bit intrinsics */
+#include "../shared/xr_range_core.h"
 #define xrt_bits_exact_eval(kernel, lhs, rhs, native_type)                                        \
     XR_BITS_EXACT_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BITS_HI,                                     \
                               XR_SEM_OWNER_ID_SHARED_BITS_LO,                                     \
@@ -74,6 +75,10 @@ int memcmp(const void *a, const void *b, size_t n);
     XR_NUMERIC_WIDTH_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_HI,                    \
                                  XR_SEM_OWNER_ID_SHARED_NUMERIC_CONVERSION_LO,                    \
                                  XR_SEM_CONSUMER_AOT_FREESTANDING, kernel, value)
+#define xrt_range_semantics(start, end, inclusive_end)                                            \
+    XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI,                                        \
+                         XR_SEM_OWNER_ID_SHARED_RANGE_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,       \
+                         start, end, inclusive_end)
 #define xrt_byte_slice_scalar_eval(expression)                                                     \
     XR_BYTE_SLICE_SCALAR_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                 \
                                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO,                 \

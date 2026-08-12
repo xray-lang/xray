@@ -55,25 +55,44 @@ TEST(range_core_contains_respects_step_and_exclusive_end) {
     ASSERT_FALSE(xr_range_core_contains(reverse, 5));
 }
 
-TEST(range_core_index_supports_negative_indices) {
+TEST(range_core_index_rejects_negative_indices) {
     bool ok = false;
     XrRangeCore forward = xr_range_core_make(2, 9, 2);
     ASSERT_EQ_INT(xr_range_core_index(forward, 0, &ok), 2);
     ASSERT_TRUE(ok);
     ASSERT_EQ_INT(xr_range_core_index(forward, 3, &ok), 8);
     ASSERT_TRUE(ok);
-    ASSERT_EQ_INT(xr_range_core_index(forward, -1, &ok), 8);
-    ASSERT_TRUE(ok);
-    ASSERT_EQ_INT(xr_range_core_index(forward, -4, &ok), 2);
-    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(xr_range_core_index(forward, -1, &ok), 0);
+    ASSERT_FALSE(ok);
+    ASSERT_EQ_INT(xr_range_core_index(forward, -4, &ok), 0);
+    ASSERT_FALSE(ok);
     ASSERT_EQ_INT(xr_range_core_index(forward, -5, &ok), 0);
     ASSERT_FALSE(ok);
 
     XrRangeCore reverse = xr_range_core_make(10, 1, -3);
     ASSERT_EQ_INT(xr_range_core_index(reverse, 0, &ok), 10);
     ASSERT_TRUE(ok);
-    ASSERT_EQ_INT(xr_range_core_index(reverse, -1, &ok), 4);
-    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(xr_range_core_index(reverse, -1, &ok), 0);
+    ASSERT_FALSE(ok);
+}
+
+TEST(range_owner_apply_covers_boundaries) {
+    XrRangeCore half_open = XR_RANGE_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO,
+        XR_SEM_CONSUMER_VM, INT64_MIN, INT64_MAX, false);
+    ASSERT_EQ_INT(half_open.start, INT64_MIN);
+    ASSERT_EQ_INT(half_open.end, INT64_MAX);
+    ASSERT_EQ_INT(half_open.step, 1);
+    ASSERT_FALSE(half_open.inclusive_end);
+    ASSERT_EQ_INT(xr_range_core_length(half_open), INT64_MAX);
+    ASSERT_TRUE(xr_range_core_contains(half_open, INT64_MAX - 1));
+    ASSERT_FALSE(xr_range_core_contains(half_open, INT64_MAX));
+
+    XrRangeCore inclusive = XR_RANGE_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO,
+        XR_SEM_CONSUMER_AOT_HOSTED, INT64_MAX - 1, INT64_MAX, true);
+    ASSERT_EQ_INT(xr_range_core_length(inclusive), 2);
+    ASSERT_TRUE(xr_range_core_contains(inclusive, INT64_MAX));
 }
 
 TEST(range_core_materialize_plan_caps_large_ranges) {
@@ -123,7 +142,8 @@ RUN_TEST(range_core_length_uses_half_open_forward_bounds);
 RUN_TEST(range_core_length_uses_half_open_reverse_bounds);
 RUN_TEST(range_core_length_and_contains_use_inclusive_bounds);
 RUN_TEST(range_core_contains_respects_step_and_exclusive_end);
-RUN_TEST(range_core_index_supports_negative_indices);
+RUN_TEST(range_core_index_rejects_negative_indices);
+RUN_TEST(range_owner_apply_covers_boundaries);
 RUN_TEST(range_core_materialize_plan_caps_large_ranges);
 RUN_TEST(range_core_format_matches_range_to_string);
 

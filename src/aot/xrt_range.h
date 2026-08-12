@@ -11,6 +11,7 @@
 #ifndef XRT_RANGE_H
 #define XRT_RANGE_H
 
+#include "../shared/xr_range_core.h"
 #include "xrt_arc.h"
 #include <inttypes.h>
 #include <stdbool.h>
@@ -25,91 +26,41 @@ typedef struct xrt_range_s {
     bool inclusive_end;
 } xrt_range_t;
 
-static inline int64_t xrt_range_len_from_distance(uint64_t distance, uint64_t step,
-                                                  bool inclusive_end) {
-    if (step == 0)
-        return 0;
-    uint64_t base = distance / step;
-    uint64_t extra = inclusive_end ? 1 : (distance % step != 0);
-    if (base > UINT64_MAX - extra)
-        return INT64_MAX;
-    uint64_t len = base + extra;
-    return len > (uint64_t) INT64_MAX ? INT64_MAX : (int64_t) len;
+static inline XrRangeCore xrt_range_core_view(const xrt_range_t *r) {
+    return r ? xr_range_core_make_with_bound(r->start, r->end, r->step, r->inclusive_end)
+             : xr_range_core_make(0, 0, 0);
 }
 
 static inline int64_t xrt_range_length_ptr(const xrt_range_t *r) {
-    if (!r || r->step == 0)
-        return 0;
-    if (r->step > 0) {
-        if (r->inclusive_end ? (r->end < r->start) : (r->end <= r->start))
-            return 0;
-        return xrt_range_len_from_distance((uint64_t) r->end - (uint64_t) r->start,
-                                           (uint64_t) r->step, r->inclusive_end);
-    }
-    if (r->inclusive_end ? (r->end > r->start) : (r->end >= r->start))
-        return 0;
-    int64_t neg_step = -r->step;
-    return xrt_range_len_from_distance((uint64_t) r->start - (uint64_t) r->end, (uint64_t) neg_step,
-                                       r->inclusive_end);
+    return xr_range_core_length(xrt_range_core_view(r));
 }
 
 static inline bool xrt_range_contains_ptr(const xrt_range_t *r, int64_t value) {
-    if (!r || r->step == 0)
-        return false;
-    if (r->step > 0) {
-        if (value < r->start || (r->inclusive_end ? value > r->end : value >= r->end))
-            return false;
-        return ((uint64_t) value - (uint64_t) r->start) % (uint64_t) r->step == 0;
-    }
-    if (value > r->start || (r->inclusive_end ? value < r->end : value <= r->end))
-        return false;
-    return ((uint64_t) r->start - (uint64_t) value) % (uint64_t) (-r->step) == 0;
+    return xr_range_core_contains(xrt_range_core_view(r), value);
 }
 
 static inline int64_t xrt_range_index_ptr(const xrt_range_t *r, int64_t index, bool *ok) {
-    int64_t len = xrt_range_length_ptr(r);
-    // Subscript indexing does not support from-end negatives (matches array/string
-    // `[i]` and the VM): an out-of-bounds index yields no value.
-    if (ok)
-        *ok = index >= 0 && index < len;
-    if (index < 0 || index >= len)
-        return 0;
-    return r->start + index * r->step;
+    return xr_range_core_index(xrt_range_core_view(r), index, ok);
 }
 
 static inline int xrt_range_format_buf(const xrt_range_t *r, char *buf, size_t cap) {
     if (!r)
         return snprintf(buf, cap, "<Range>");
-    const char *op = r->inclusive_end ? "..=" : "..";
-    if (r->step == 1)
-        return snprintf(buf, cap, "%" PRId64 "%s%" PRId64, r->start, op, r->end);
-    return snprintf(buf, cap, "%" PRId64 "%s%" PRId64 ":%" PRId64, r->start, op, r->end, r->step);
+    return xr_range_core_format_buf(xrt_range_core_view(r), buf, cap);
 }
 
-static inline XrValue xrt_range_new_raw(int64_t start, int64_t end, int64_t step,
-                                        bool inclusive_end) {
-    if (step == 0) {
-        fprintf(stderr, "xrt_range: step must not be zero\n");
-        abort();
-    }
+static inline XrValue xrt_range_from_core(XrRangeCore core) {
+    XR_ASSUME(core.step != 0);
     xrt_range_t *r = (xrt_range_t *) xrt_arc_alloc(sizeof(xrt_range_t));
     if (XR_UNLIKELY(!r)) {
         fprintf(stderr, "xrt_range: out of memory\n");
         abort();
     }
-    r->start = start;
-    r->end = end;
-    r->step = step;
-    r->inclusive_end = inclusive_end;
+    r->start = core.start;
+    r->end = core.end;
+    r->step = core.step;
+    r->inclusive_end = core.inclusive_end;
     return xr_mkptr(r, XR_TAG_RANGE);
-}
-
-static inline XrValue xrt_range_from_i64(int64_t start, int64_t end, bool inclusive_end) {
-    return xrt_range_new_raw(start, end, 1, inclusive_end);
-}
-
-static inline XrValue xrt_range(XrValue start, XrValue end) {
-    return xrt_range_from_i64(XR_TO_INT(start), XR_TO_INT(end), false);
 }
 
 static inline XrValue xrt_range_to_string(XrValue value) {

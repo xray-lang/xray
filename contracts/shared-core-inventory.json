@@ -715,11 +715,17 @@
       "id": "range",
       "owner": "shared-kernel",
       "production_callers": [
+        "src/aot/xrt.h",
         "src/aot/xrt_coll.h",
+        "src/aot/xrt_core_freestanding.h",
         "src/aot/xrt_method.h",
+        "src/aot/xrt_range.h",
         "src/aot/xrt_range_methods.inc.c",
         "src/runtime/object/xiterator.c",
-        "src/runtime/object/xrange.c"
+        "src/runtime/object/xrange.c",
+        "src/runtime/object/xrange.h",
+        "src/runtime/value/xvalue_format.c",
+        "src/vm/xvm_dispatch_collection.inc.c"
       ],
       "profiles": [
         "vm",
@@ -742,6 +748,7 @@
       ],
       "status": "production",
       "test_callers": [
+        "tests/unit/aot/test_xrt_range_owner_freestanding.c",
         "tests/unit/stdlib/test_range_core.c"
       ]
     },
