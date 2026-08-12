@@ -9,6 +9,7 @@ import json
 import os
 import platform as host_platform
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -88,17 +89,28 @@ def canonical_command(root: Path, build: Path, output: Path,
 
 
 def run(command: list[str], root: Path, timeout: int) -> tuple[int, str]:
+    process: subprocess.Popen[str] | None = None
     try:
-        process = subprocess.run(
-            command, cwd=root, check=False, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=timeout,
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
+        process = subprocess.Popen(
+            command, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="replace",
+            creationflags=creationflags, start_new_session=os.name != "nt",
         )
-        return process.returncode, process.stdout + process.stderr
-    except subprocess.TimeoutExpired as error:
-        stdout = error.stdout.decode("utf-8", errors="replace") \
-            if isinstance(error.stdout, bytes) else (error.stdout or "")
-        stderr = error.stderr.decode("utf-8", errors="replace") \
-            if isinstance(error.stderr, bytes) else (error.stderr or "")
+        stdout, stderr = process.communicate(timeout=timeout)
+        return process.returncode, stdout + stderr
+    except subprocess.TimeoutExpired:
+        if process is not None:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    check=False, capture_output=True,
+                )
+            else:
+                os.killpg(process.pid, signal.SIGKILL)
+            stdout, stderr = process.communicate()
+        else:
+            stdout, stderr = "", ""
         return 124, stdout + stderr + "\nvalidation lane timed out\n"
     except OSError as error:
         return 127, f"validation lane could not start: {error}\n"
