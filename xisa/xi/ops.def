@@ -2673,7 +2673,6 @@
     xi.enum.meta.get
     xi.byte.slice.fill
     xi.byte.slice.copy
-    xi.byte.slice.compare
     xi.byte.slice.common.prefix
     xi.byte.slice.repeat
     xi.slice.window
@@ -2833,6 +2832,7 @@
     xi.byte.slice.store.u64
     xi.byte.slice.store.f32
     xi.byte.slice.store.f64
+    xi.byte.slice.compare
     xi.json.decode
     xi.go
     xi.await
@@ -3073,6 +3073,25 @@
     (aot-hosted "src/aot/xrt.h" "xrt_byte_slice_scalar_eval")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_byte_slice_scalar_eval")
     (cgen "src/aot/xi_cgen.c" "cg_byte_slice_scalar_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.byte-slice-compare
+  :category shared-semantic-kernel
+  :operations (xi.byte.slice.compare)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_byte_slice_compare_checked_raw
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_collection.inc.c" "XR_BYTE_SLICE_COMPARE_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_byte_slice_compare_semantics")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_byte_slice_compare_semantics")
+    (cgen "src/aot/xi_cgen.c" "cg_byte_slice_compare_adapter_name")
   ))
 
 (define-xi-observable-owner primitive.type-identity

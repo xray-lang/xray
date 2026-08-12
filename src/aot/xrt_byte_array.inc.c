@@ -9,6 +9,15 @@
                                      XR_SEM_CONSUMER_AOT_HOSTED, expression)
 #endif
 
+#ifndef xrt_byte_slice_compare_semantics
+#define xrt_byte_slice_compare_semantics(left_data, left_length, right_data, right_length, ok)     \
+    XR_BYTE_SLICE_COMPARE_OWNER_APPLY(                                                            \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_byte_slice_compare_core((left_data), (left_length), XR_ELEM_U8, (right_data),          \
+                                   (right_length), XR_ELEM_U8, (ok)))
+#endif
+
 static inline XrValue xrt_array_new_typed_exact(int64_t cap, uint8_t etype) {
     if (cap < 0)
         cap = 0;
@@ -339,22 +348,12 @@ static inline xr_span_t xrt_byte_slice_copy_checked_raw(xr_span_t dst, xr_span_t
 }
 
 static inline int64_t xrt_byte_slice_compare_checked_raw(xr_span_t left, xr_span_t right) {
-    int64_t n = left.length < right.length ? left.length : right.length;
-    int cmp = 0;
-    if (n > 0) {
-        if (!left.data || !right.data)
-            xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMPARE_NO_DATA_MSG);
-        cmp = memcmp(left.data, right.data, (size_t) n);
-    }
-    if (cmp < 0)
-        return -1;
-    if (cmp > 0)
-        return 1;
-    if (left.length < right.length)
-        return -1;
-    if (left.length > right.length)
-        return 1;
-    return 0;
+    bool ok = false;
+    int64_t ordering = xrt_byte_slice_compare_semantics(
+        left.data, left.length, right.data, right.length, &ok);
+    if (!ok)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMPARE_NO_DATA_MSG);
+    return ordering;
 }
 
 static inline int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, xr_span_t right) {

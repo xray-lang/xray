@@ -1721,9 +1721,9 @@
         "byte-slice",
         "bounds"
       ],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xopcode_def.h -> src/vm",
+      "current_aot_owner": "representation adapter",
+      "current_shared_owner": "src/shared/xr_byte_slice_scalar_core.h",
+      "current_vm_owner": "representation adapter",
       "effects": [
         "may-throw",
         "memory-read"
@@ -1732,10 +1732,10 @@
         "may-throw"
       ],
       "family": "memory-and-place",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "future_semantic_owner": "shared.byte-slice-compare",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
+      "migration_task": 278,
+      "observable_contract": "src/shared/xr_byte_slice_scalar_core.h",
       "observable_edges": [
         "slice-compare"
       ],
@@ -6498,5 +6498,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "1414c1fbbddeac286e45d7a4966aa56136b3a500c50d0915287afd8ed3d96294"
+  "source_tree_fingerprint": "45c739235db236e5f78f755422d5a0d8d6fb94cc9fe338598e5af798b3316154"
 }

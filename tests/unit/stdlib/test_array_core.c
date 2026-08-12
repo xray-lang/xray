@@ -755,6 +755,50 @@ TEST(array_core_bytes_common_prefix_uses_min_length_and_word_chunks) {
     ASSERT_FALSE(ok);
 }
 
+TEST(array_core_byte_slice_compare_owns_lexicographic_edges) {
+    const uint8_t equal[] = {0, 127, 128, 255};
+    const uint8_t lower[] = {0, 127, 128, 254};
+    const uint8_t higher[] = {0, 127, 129, 0};
+    bool ok = false;
+
+    ASSERT_TRUE(xr_semantic_owner_has_consumer(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_VM));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO),
+                  "xrt_byte_slice_compare_checked_raw");
+
+    ASSERT_EQ_INT(XR_BYTE_SLICE_COMPARE_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_VM,
+                      xr_byte_slice_compare_core(equal, 4, XR_ELEM_U8, equal, 4, XR_ELEM_U8, &ok)),
+                  0);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(xr_byte_slice_compare_core(lower, 4, XR_ELEM_U8, equal, 4, XR_ELEM_U8, &ok),
+                  -1);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(xr_byte_slice_compare_core(higher, 4, XR_ELEM_U8, equal, 4, XR_ELEM_U8, &ok),
+                  1);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(xr_byte_slice_compare_core(equal, 3, XR_ELEM_U8, equal, 4, XR_ELEM_U8, &ok),
+                  -1);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(xr_byte_slice_compare_core(equal, 4, XR_ELEM_U8, equal, 3, XR_ELEM_U8, &ok),
+                  1);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(xr_byte_slice_compare_core(NULL, 0, XR_ELEM_U8, NULL, 0, XR_ELEM_U8, &ok), 0);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(xr_byte_slice_compare_core(NULL, 1, XR_ELEM_U8, equal, 4, XR_ELEM_U8, &ok), 0);
+    ASSERT_FALSE(ok);
+    ASSERT_EQ_INT(xr_byte_slice_compare_core(equal, -1, XR_ELEM_U8, equal, 4, XR_ELEM_U8, &ok),
+                  0);
+    ASSERT_FALSE(ok);
+    ASSERT_EQ_INT(xr_byte_slice_compare_core(equal, 4, XR_ELEM_I64, equal, 4, XR_ELEM_U8, &ok),
+                  0);
+    ASSERT_FALSE(ok);
+}
+
 TEST(array_core_sort_typed_buffers_in_place) {
     int64_t ints[] = {3, -1, 7, 3, 0};
     ASSERT_TRUE(xr_sort_core_typed(ints, 5, XR_ELEM_I64));
@@ -839,6 +883,7 @@ RUN_TEST(array_core_bytes_copy_uses_shared_range_and_overlap_rules);
 RUN_TEST(array_core_copy_nonoverlap_bytes_handles_all_small_counts);
 RUN_TEST(array_core_bytes_repeat_from_matches_lz_style_overlap);
 RUN_TEST(array_core_bytes_common_prefix_uses_min_length_and_word_chunks);
+RUN_TEST(array_core_byte_slice_compare_owns_lexicographic_edges);
 RUN_TEST(array_core_sort_typed_buffers_in_place);
 RUN_TEST(array_core_sort_compare_result_uses_sign);
 RUN_TEST(array_core_sort_default_compare_numbers_and_string_slices);

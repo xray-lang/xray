@@ -1708,25 +1708,16 @@ vmcase(OP_BYTE_SLICE_COMPARE) {
                        XR_ERROR_CORE_BYTE_SLICE_COMPARE_OPERAND_MSG);
     (void) left_readonly;
     (void) right_readonly;
-    (void) left_elem_type;
-    (void) right_elem_type;
-    int64_t n = left_length < right_length ? left_length : right_length;
-    int cmp = 0;
-    if (n > 0) {
-        if (!left_data || !right_data) {
-            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMPARE_NO_DATA_MSG);
-        }
-        cmp = memcmp(left_data, right_data, (size_t) n);
+    bool ok = false;
+    int64_t ordering = XR_BYTE_SLICE_COMPARE_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_VM,
+        xr_byte_slice_compare_core(left_data, left_length, left_elem_type, right_data,
+                                   right_length, right_elem_type, &ok));
+    if (!ok) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMPARE_NO_DATA_MSG);
     }
-    if (cmp == 0) {
-        if (left_length < right_length)
-            cmp = -1;
-        else if (left_length > right_length)
-            cmp = 1;
-    } else {
-        cmp = cmp < 0 ? -1 : 1;
-    }
-    R(a) = xr_int(cmp);
+    R(a) = xr_int(ordering);
     vmbreak;
 }
 

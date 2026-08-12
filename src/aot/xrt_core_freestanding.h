@@ -83,6 +83,12 @@ int memcmp(const void *a, const void *b, size_t n);
     XR_BYTE_SLICE_SCALAR_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_HI,                 \
                                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO,                 \
                                      XR_SEM_CONSUMER_AOT_FREESTANDING, expression)
+#define xrt_byte_slice_compare_semantics(left_data, left_length, right_data, right_length, ok)     \
+    XR_BYTE_SLICE_COMPARE_OWNER_APPLY(                                                            \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,           \
+        xr_byte_slice_compare_core((left_data), (left_length), XR_ELEM_U8, (right_data),          \
+                                   (right_length), XR_ELEM_U8, (ok)))
 #include "../shared/xr_sync_core.h"
 #include "../shared/xr_truthy_core.h"
 #include "../shared/xr_type_identity_core.h"
@@ -1019,6 +1025,15 @@ static inline xr_span_t xrt_span_from_span_slice(xr_span_t src, int64_t start, i
                    : src.data;
     out.length = count;
     return out;
+}
+
+static inline int64_t xrt_byte_slice_compare_checked_raw(xr_span_t left, xr_span_t right) {
+    bool ok = false;
+    int64_t ordering = xrt_byte_slice_compare_semantics(
+        left.data, left.length, right.data, right.length, &ok);
+    if (!ok)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMPARE_NO_DATA_MSG);
+    return ordering;
 }
 
 typedef struct XrArrayCoreRange {

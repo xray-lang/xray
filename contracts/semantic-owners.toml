@@ -269,6 +269,22 @@ fixtures = [
   "tests/aot/basic/int_wrap_shift.xr",
 ]
 
+[[operation]]
+id = "byte-slice-compare"
+observable_contract = "src/shared/xr_byte_slice_scalar_core.h"
+semantic_kernel = "src/shared/xr_byte_slice_scalar_core.h"
+vm_adapter = "src/vm/xvm_dispatch_collection.inc.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "shared.byte-slice-compare"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_array_core.c",
+  "tests/unit/aot/test_xrt_array.c",
+  "tests/unit/aot/test_xrt_byte_slice_compare_owner_freestanding.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/diff/cases/semantics/collections/byte_slice_bulk_ops_shared_core.xr",
+]
+
 [[operation_family]]
 id = "arithmetic-conversion"
 canonical_cores = ["arithmetic", "bits", "numeric-conversion", "numeric", "raw-scalar"]

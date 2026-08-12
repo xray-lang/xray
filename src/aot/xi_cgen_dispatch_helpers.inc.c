@@ -14422,46 +14422,14 @@ static void xicgen_byte_slice_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
         emit_codegen_abort_expr(out);
         return;
     }
+    const char *owner_adapter = cg_byte_slice_compare_adapter_name(ctx);
+    if (!owner_adapter) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     const char *conv_suffix =
         emit_conversion_prefix(out, v->type, XR_REP_I64, cg_value_plan_storage_rep(ctx, v));
-    if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        fprintf(out, "xrt_byte_slice_compare_checked_raw(");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, ", ");
-        xicgen_emit_byte_slice_operand(ctx, out, v->args[1],
-                                       "XR_ERROR_CORE_BYTE_SLICE_COMPARE_OPERAND_MSG");
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-        return;
-    }
-    bool inline_compare =
-        bulk ? bulk->action == XAOT_BULK_INLINE_MEMCMP
-             : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_COMPARE, XAOT_SLICE_DROP_HELPER);
-    if (bulk && !inline_compare) {
-        cg_ctx_set_error(ctx);
-        emit_codegen_abort_expr(out);
-        emit_conversion_suffix(out, conv_suffix);
-        return;
-    }
-    if (inline_compare) {
-        fprintf(out, "({ xr_span_t _left = ");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, "; xr_span_t _right = ");
-        emit_span_ref_expr(out, v->args[1]);
-        fprintf(out,
-                "; if (XR_UNLIKELY(_left.length < 0 || _right.length < 0 || "
-                "(_left.length > 0 && !_left.data) || (_right.length > 0 && !_right.data))) "
-                "xrt_throw_error(XR_ERR_TYPE_MISMATCH, "
-                "XR_ERROR_CORE_BYTE_SLICE_COMPARE_NO_DATA_MSG); int64_t _n = "
-                "_left.length < _right.length ? _left.length : "
-                "_right.length; int _cmp = _n > 0 ? memcmp(_left.data, _right.data, "
-                "(size_t)_n) : 0; _cmp < 0 ? INT64_C(-1) : (_cmp > 0 ? INT64_C(1) : "
-                "(_left.length < _right.length ? INT64_C(-1) : (_left.length > _right.length ? "
-                "INT64_C(1) : INT64_C(0)))); })");
-        emit_conversion_suffix(out, conv_suffix);
-        return;
-    }
-    fprintf(out, "xrt_byte_slice_compare_checked_raw(");
+    fprintf(out, "%s(", owner_adapter);
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     xicgen_emit_byte_slice_operand(ctx, out, v->args[1],

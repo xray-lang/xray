@@ -79,6 +79,57 @@ typedef enum XrEndianCore {
     (XR_BYTE_SLICE_SCALAR_OWNER_GUARD((owner_hi), (owner_lo)),                                    \
      XR_BYTE_SLICE_SCALAR_CONSUMER_GUARD((consumer_bit)), (expression))
 
+#if !defined(XR_BYTE_SLICE_SCALAR_C90)
+#define XR_BYTE_SLICE_COMPARE_OWNER_GUARD(owner_hi, owner_lo)                                     \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_byte_slice_compare                                  \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI &&         \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO)            \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BYTE_SLICE_COMPARE_CONSUMER_GUARD(consumer_bit)                                        \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_byte_slice_compare                     \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_CONSUMERS &                            \
+                 (uint32_t) (consumer_bit)) != 0)                                                 \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BYTE_SLICE_COMPARE_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)           \
+    (XR_BYTE_SLICE_COMPARE_OWNER_GUARD((owner_hi), (owner_lo)),                                   \
+     XR_BYTE_SLICE_COMPARE_CONSUMER_GUARD((consumer_bit)), (expression))
+#endif
+
+XR_BYTE_SLICE_SCALAR_INLINE int64_t xr_byte_slice_compare_core(
+    const void *left_data, int64_t left_length, uint8_t left_elem_type, const void *right_data,
+    int64_t right_length, uint8_t right_elem_type, bool *ok) {
+    bool valid = left_length >= 0 && right_length >= 0 && left_elem_type == XR_ELEM_U8 &&
+                 right_elem_type == XR_ELEM_U8 && (left_length == 0 || left_data) &&
+                 (right_length == 0 || right_data);
+    int64_t shared_length = 0;
+    int ordering = 0;
+    if (ok)
+        *ok = valid;
+    if (!valid)
+        return 0;
+
+    shared_length = left_length < right_length ? left_length : right_length;
+    ordering = shared_length > 0 ? memcmp(left_data, right_data, (size_t) shared_length) : 0;
+    if (ordering < 0)
+        return -1;
+    if (ordering > 0)
+        return 1;
+    if (left_length < right_length)
+        return -1;
+    if (left_length > right_length)
+        return 1;
+    return 0;
+}
+
 XR_BYTE_SLICE_SCALAR_INLINE bool xr_array_core_bytes_range_ok(int64_t length, uint8_t elem_type,
                                                               int64_t offset, int64_t width) {
     return elem_type == XR_ELEM_U8 && length >= 0 && offset >= 0 && width >= 0 &&

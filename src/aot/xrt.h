@@ -69,6 +69,12 @@
                                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_SCALAR_LO,                 \
                                      XR_SEM_CONSUMER_AOT_HOSTED, expression)
 #endif
+#define xrt_byte_slice_compare_semantics(left_data, left_length, right_data, right_length, ok)     \
+    XR_BYTE_SLICE_COMPARE_OWNER_APPLY(                                                            \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_byte_slice_compare_core((left_data), (left_length), XR_ELEM_U8, (right_data),          \
+                                   (right_length), XR_ELEM_U8, (ok)))
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
 #include "xrt_arc.h"        // L1: execution arena, xrt_str_alloc, xrt_str_concat
 #include "xrt_net.h"        // L1: hosted TCP handle helpers

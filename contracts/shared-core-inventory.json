@@ -186,6 +186,7 @@
       "owner": "shared-kernel",
       "production_callers": [
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xrt.h",
         "src/aot/xrt_byte_array.inc.c",
         "src/aot/xrt_c90.h",
         "src/aot/xrt_core_freestanding.h",
@@ -225,6 +226,7 @@
         "xr_array_core_f64_from_bits",
         "xr_array_core_f64_to_bits",
         "xr_array_core_host_is_little_endian",
+        "xr_byte_slice_compare_core",
         "xr_byte_slice_scalar_copy",
         "xr_byte_slice_scalar_load_u16_unchecked",
         "xr_byte_slice_scalar_load_u32_unchecked",

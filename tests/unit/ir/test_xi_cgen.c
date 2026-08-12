@@ -7680,6 +7680,41 @@ TEST(cgen_byte_slice_scalar_uses_stable_owner_adapter) {
            "CGen must resolve the stable byte-slice scalar owner adapter");
 }
 
+TEST(cgen_byte_slice_compare_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_CGEN) &&
+           "byte-slice compare owner must publish CGen as a mechanical consumer");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO);
+    assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_compare_checked_raw") == 0 &&
+           "CGen must resolve the stable byte-slice compare owner adapter");
+
+    const char *src = "fn compareBytes() -> int {\n"
+                      "    var left = Array<byte>(2)\n"
+                      "    var right = Array<byte>(3)\n"
+                      "    var leftView: Slice<byte> = left[:]\n"
+                      "    return leftView.compare(right[:])\n"
+                      "}\n"
+                      "print(compareBytes())\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "byte-slice compare IR compilation failed");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "stable-owner byte-slice compare C generation failed");
+    const char *fn = find_static_function_definition(code, "test_compareBytes_");
+    assert(fn != NULL && "byte-slice compare definition must be emitted");
+    const char *fn_end = next_static_after(fn);
+    assert(contains_between(fn, fn_end, "xrt_byte_slice_compare_checked_raw(") &&
+           "generated C must call the stable byte-slice compare owner adapter");
+    assert(!contains_between(fn, fn_end, "memcmp(") &&
+           "generated C must not recreate byte-slice compare semantics");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
     const char *src = "fn forceUtf8(data: Array<byte>) -> string {\n"
                       "    return string.fromUtf8(data[:])!\n"
@@ -12944,6 +12979,7 @@ int main(void) {
     run_cgen_bitwise_binary_uses_stable_owner_adapter();
     run_cgen_numeric_width_uses_stable_owner_adapter();
     run_cgen_byte_slice_scalar_uses_stable_owner_adapter();
+    run_cgen_byte_slice_compare_uses_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();

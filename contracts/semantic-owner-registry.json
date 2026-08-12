@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "5a4bc9202dc6230107179bcae31140539240e0481470f152f44d1349eb8a274b",
+  "canonical_fingerprint": "5ccfadf3954b4b5ec237ec814e55ab378acc8626b957eb3b218dc2f6fa81e491",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -212,6 +212,52 @@
           "consumer": "runtime",
           "path": "src/runtime/object/xbigint.c",
           "symbol": "XR_BITWISE_BINARY_BIGINT_OWNER_APPLY"
+        }
+      ]
+    },
+    {
+      "owner": "shared.byte-slice-compare",
+      "owner_id": "73865844a3ce50daac6d98753c69f6b9",
+      "owner_id_hi": "0x73865844a3ce50da",
+      "owner_id_lo": "0xac6d98753c69f6b9",
+      "category": "shared-semantic-kernel",
+      "operations": [
+        "xi.byte.slice.compare"
+      ],
+      "consumers": [
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
+      ],
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_byte_slice_compare_checked_raw",
+      "production_bindings": [
+        {
+          "consumer": "semantic-plan",
+          "path": "src/plan/semantic/xr_semantic_ops.c",
+          "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_BYTE_SLICE_COMPARE_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_byte_slice_compare_semantics"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_byte_slice_compare_semantics"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_byte_slice_compare_adapter_name"
         }
       ]
     },
@@ -1038,28 +1084,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.byte.slice.common.prefix"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.byte.slice.compare",
-      "owner_id": "c74dcd15589f7939ff1931cd63d37dfb",
-      "owner_id_hi": "0xc74dcd15589f7939",
-      "owner_id_lo": "0xff1931cd63d37dfb",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.byte.slice.compare"
       ],
       "consumers": [
         "semantic-plan"
@@ -7252,21 +7276,45 @@
       "operation_id": "c74dcd15589f7939ff1931cd63d37dfb",
       "operation_id_hi": "0xc74dcd15589f7939",
       "operation_id_lo": "0xff1931cd63d37dfb",
-      "owner": "xi.byte.slice.compare",
-      "owner_id": "c74dcd15589f7939ff1931cd63d37dfb",
-      "owner_id_hi": "0xc74dcd15589f7939",
-      "owner_id_lo": "0xff1931cd63d37dfb",
-      "category": "declarative-primitive",
+      "owner": "shared.byte-slice-compare",
+      "owner_id": "73865844a3ce50daac6d98753c69f6b9",
+      "owner_id_hi": "0x73865844a3ce50da",
+      "owner_id_lo": "0xac6d98753c69f6b9",
+      "category": "shared-semantic-kernel",
       "consumers": [
-        "semantic-plan"
+        "semantic-plan",
+        "vm",
+        "aot-hosted",
+        "aot-freestanding",
+        "cgen"
       ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
+      "consumer_bits": "0x0000001f",
+      "cgen_adapter": "xrt_byte_slice_compare_checked_raw",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
           "path": "src/plan/semantic/xr_semantic_ops.c",
           "symbol": "xr_semantic_op_contract"
+        },
+        {
+          "consumer": "vm",
+          "path": "src/vm/xvm_dispatch_collection.inc.c",
+          "symbol": "XR_BYTE_SLICE_COMPARE_OWNER_APPLY"
+        },
+        {
+          "consumer": "aot-hosted",
+          "path": "src/aot/xrt.h",
+          "symbol": "xrt_byte_slice_compare_semantics"
+        },
+        {
+          "consumer": "aot-freestanding",
+          "path": "src/aot/xrt_core_freestanding.h",
+          "symbol": "xrt_byte_slice_compare_semantics"
+        },
+        {
+          "consumer": "cgen",
+          "path": "src/aot/xi_cgen.c",
+          "symbol": "cg_byte_slice_compare_adapter_name"
         }
       ]
     },
