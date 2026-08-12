@@ -164,7 +164,18 @@ def payload(kind: str, log: str, raw: Path) -> dict[str, Any]:
         return {"binaries": []}
     if kind == "installed":
         install_root = raw / "installed"
-        install_root.mkdir(exist_ok=True)
+        header = install_root / "include/xray/runtime.h"
+        header.parent.mkdir(parents=True, exist_ok=True)
+        header.write_text("/* fixture runtime API */\n", encoding="utf-8")
+        write_json(install_root / "share/xray/install/aot-sdk-closure.json", {
+            "schema": 1,
+            "generator": "xray-aot-sdk-header-closure/1",
+            "entries": [{
+                "source_path": "include/runtime.h",
+                "install_path": "include/xray/runtime.h",
+                "sha256": assembler.sha256_file(header),
+            }],
+        })
         return {
             "empty_stage_replay": "passed", "no_work_replay": "passed",
             "deliverables": [], "public_headers": [],

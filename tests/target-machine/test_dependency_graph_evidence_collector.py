@@ -115,18 +115,8 @@ def initialize(root: Path) -> dict[str, Any]:
     return policy
 
 
-def build_fixture(build: Path, legacy: bool = False) -> None:
-    (build / ".cmake/api/v1/reply").mkdir(parents=True)
-    (build / "CMakeCache.txt").write_text(
-        "CMAKE_GENERATOR:INTERNAL=Ninja\n", encoding="utf-8"
-    )
-    ninja = "build fixture: phony"
-    if legacy:
-        ninja += " LEGACY_EDGE"
-    (build / "build.ninja").write_text(ninja + "\n", encoding="utf-8")
-    write_json(build / "compile_commands.json", [{
-        "directory": str(build), "command": "cc clean.c", "file": "clean.c",
-    }])
+def write_codemodel_reply(build: Path) -> None:
+    (build / ".cmake/api/v1/reply").mkdir(parents=True, exist_ok=True)
     target_names = list(collector.TARGET_AUTHORITIES.values())
     write_json(build / ".cmake/api/v1/reply/codemodel.json", {
         "kind": "codemodel", "configurations": [{
@@ -143,6 +133,22 @@ def build_fixture(build: Path, legacy: bool = False) -> None:
     write_json(build / ".cmake/api/v1/reply/index-1.json", {
         "objects": [{"kind": "codemodel", "jsonFile": "codemodel.json"}],
     })
+
+
+def build_fixture(build: Path, legacy: bool = False, reply: bool = True) -> None:
+    build.mkdir(parents=True)
+    (build / "CMakeCache.txt").write_text(
+        "CMAKE_GENERATOR:INTERNAL=Ninja\n", encoding="utf-8"
+    )
+    ninja = "build fixture: phony"
+    if legacy:
+        ninja += " LEGACY_EDGE"
+    (build / "build.ninja").write_text(ninja + "\n", encoding="utf-8")
+    write_json(build / "compile_commands.json", [{
+        "directory": str(build), "command": "cc clean.c", "file": "clean.c",
+    }])
+    if reply:
+        write_codemodel_reply(build)
     (build / "cmake_install.cmake").write_text(
         "# generated install graph\nfile(INSTALL DESTINATION lib TYPE FILE FILES fixture)\n",
         encoding="utf-8",
@@ -156,6 +162,9 @@ def fake_tooling(root: Path) -> dict[str, Any]:
         command = Path(arguments[0]).name.lower()
         if command.startswith("cmake") and "--version" in arguments:
             return 0, "cmake version fixture\n"
+        if command.startswith("cmake") and "-S" in arguments and "-B" in arguments:
+            write_codemodel_reply(Path(arguments[arguments.index("-B") + 1]))
+            return 0, "-- Configuring fixture\n-- Generating fixture\n"
         if command.startswith("ctest"):
             return 0, json.dumps({"tests": [{"name": "fixture"}]})
         if command.startswith("ninja"):
@@ -206,7 +215,7 @@ def self_test() -> int:
         tooling = fake_tooling(root)
         try:
             clean_build = parent / "clean-build"
-            build_fixture(clean_build)
+            build_fixture(clean_build, reply=False)
             clean_output = parent / "clean"
             code = collector.collect(root, clean_build, clean_output, "fixture-owner")
             if code != 0:
@@ -215,6 +224,9 @@ def self_test() -> int:
             clean = validate_raw(clean_manifest, root, policy, "passed")
             if any(row["legacy_edge_count"] != 0 for row in clean["payload"]["graphs"].values()):
                 raise AssertionError("clean graph fixture reported legacy edges")
+            query = clean_build / ".cmake/api/v1/query/codemodel-v2"
+            if not query.is_file():
+                raise AssertionError("collector did not request the CMake codemodel")
 
             legacy_build = parent / "legacy-build"
             build_fixture(legacy_build, legacy=True)
@@ -231,6 +243,29 @@ def self_test() -> int:
                 raise AssertionError("legacy graph edge was not counted")
             if all(log["result"] == "passed" for log in failed["logs"]):
                 raise AssertionError("failed raw evidence marked every log passed")
+
+            refresh_build = parent / "refresh-build"
+            build_fixture(refresh_build)
+            configured = collector.run_text
+
+            def fail_refresh(arguments: list[str], cwd: Path) -> tuple[int, str]:
+                command = Path(arguments[0]).name.lower()
+                if command.startswith("cmake") and "-S" in arguments and "-B" in arguments:
+                    return 1, "fixture configure failed\n"
+                return configured(arguments, cwd)
+
+            collector.run_text = fail_refresh
+            refresh_output = parent / "refresh-failed"
+            code = collector.collect(root, refresh_build, refresh_output, "fixture-owner")
+            if code != 1:
+                raise AssertionError("failed CMake file-api refresh did not fail closed")
+            refresh = validate_raw(
+                refresh_output / "dependency-graph.raw.json", root, policy, "failed"
+            )
+            graph = refresh["payload"]["graphs"]["cmake-codemodel"]
+            if graph["status"] != "failed" or graph["legacy_edge_count"] != 0:
+                raise AssertionError("failed CMake refresh was misclassified as residue")
+            collector.run_text = configured
 
             stale = copy.deepcopy(failed)
             stale["repository_sha256"] = "0" * 64

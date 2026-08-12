@@ -88,6 +88,37 @@ def require_ninja_build(build: Path) -> None:
             raise CollectionError(f"dependency evidence requires {name}")
 
 
+def request_cmake_codemodel(root: Path, build: Path) -> tuple[bool, str]:
+    query = build / ".cmake/api/v1/query/codemodel-v2"
+    resolved_build = build.resolve()
+    resolved_query = query.resolve()
+    try:
+        resolved_query.relative_to(resolved_build)
+    except ValueError:
+        return False, f"CMake file-api query escapes the build root: {query}\n"
+    if query.is_symlink() or (query.exists() and not query.is_file()):
+        return False, f"CMake file-api query is not a regular file: {query}\n"
+    try:
+        query.parent.mkdir(parents=True, exist_ok=True)
+        query.touch(exist_ok=True)
+    except OSError as error:
+        return False, f"cannot create CMake file-api query: {error}\n"
+    arguments = ["cmake", "-S", str(root), "-B", str(build)]
+    code, output = run_text(arguments, build)
+    details = (
+        f"file_api_query={query}\n"
+        f"refresh_argv={json.dumps(arguments)}\n"
+        f"refresh_exit_code={code}\n{output}"
+    )
+    if code != 0:
+        return False, details
+    try:
+        require_ninja_build(build)
+    except CollectionError as error:
+        return False, details + f"\npost-refresh build rejection: {error}\n"
+    return True, details
+
+
 def canonical_command(root: Path, build: Path, output: Path,
                       owner: str) -> list[str]:
     return [
@@ -284,6 +315,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
     if manifest_findings:
         raise CollectionError("completion governance manifest is invalid")
     require_ninja_build(build)
+    file_api_ok, file_api_details = request_cmake_codemodel(root, build)
     identity = repository_identity(root)
     governance_hash = governance["input_identity"]["sha256"]
     actual_governance = completion.framed_tree_hash(
@@ -309,7 +341,13 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         raw_logs: list[dict[str, Any]] = []
         passed = actual_governance == governance_hash and build.is_dir()
         for name in GRAPH_KINDS:
-            ok, count, text = COLLECTORS[name](build, governance)
+            if name == "cmake-codemodel" and not file_api_ok:
+                ok, count, text = False, 0, file_api_details
+            else:
+                ok, count, text = COLLECTORS[name](build, governance)
+                if name == "cmake-codemodel":
+                    ok = ok and file_api_ok
+                    text = file_api_details + "\n" + text
             relative = f"logs/{name}.log"
             log = staging / relative
             log.write_text(text, encoding="utf-8")
