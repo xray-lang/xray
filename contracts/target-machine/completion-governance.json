@@ -76,6 +76,17 @@
       ]
     },
     {
+      "id": "matrix-evidence-producer",
+      "path": "scripts/collect_target_machine_matrix_evidence.py",
+      "required_regex": [
+        "PRODUCER\\s*=\\s*\"target-machine-matrix-evidence/1\"",
+        "validate_policy",
+        "row_result_identity",
+        "status\\s*=\\s*\"passed\"\\s+if\\s+all_ok\\s+else\\s+\"failed\"",
+        "os\\.rename\\(staging, output\\)"
+      ]
+    },
+    {
       "id": "semantic-schema-v18",
       "path": "src/plan/semantic/xr_semantic_ids.h",
       "required_regex": [
@@ -168,6 +179,7 @@
       "scripts/collect_target_machine_full_validation_evidence.py",
       "scripts/collect_target_machine_installed_evidence.py",
       "scripts/collect_target_machine_runtime_reachability_evidence.py",
+      "scripts/collect_target_machine_matrix_evidence.py",
       "scripts/collect_target_machine_symbol_evidence.py",
       "src/plan/format/xr_xtp_schema.h",
       "src/plan/semantic/xr_semantic_ids.h",
@@ -188,7 +200,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "00497f8f6fa457d8d0fb4ff7179bd93db16adf4f3186d38adc452b9031661574"
+    "sha256": "57e97f2d0577d01698bd4dc731d1ebecaa45ffa5b9f0c603cfdea40e25924fc3"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
