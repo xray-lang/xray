@@ -1,5 +1,0 @@
-import parallel
-
-var values = parallel.map(0..4, (i) -> i + 1, parallel.Options(2))
-var enumNamespaceGate = parallel.ParallelError.ConcurrentDispatch
-print(values[3])

@@ -139,6 +139,9 @@ roots, or general module activation.
    the runtime archive. Plans with exports, calls, roots, storage, allocation,
    adapters, or coroutine execution authority still fail PREPARE; this route
    is not general module activation.
+   The retired `.xrc` bytecode-embed runner and its CTest fixtures are not a
+   parallel product route: the exact XSM/XTP runtime-archive gates above are
+   the sole positive embedded-artifact coverage.
 8. Decoder and materializer diagnostics retain their governed stage code at
    the public API and CLI boundaries. They are not folded into a generic
    schema or unverified-artifact error.
@@ -148,7 +151,7 @@ roots, or general module activation.
    unavailable, rejects compiler and `xi_` symbols, and treats any new `xvm_`
    symbol as uninventoried legacy residue.
 
-anchor-sha256: CMakeLists.txt 2a8c9252f2bd7f140368c07851f9d912eeea98b26e1d420c6e7c9b6920270b37
+anchor-sha256: CMakeLists.txt 5bc3704804c4d746313b6db85e4071e14f8e1cf9818c11d44027200b2617f8a1
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h 38fd73865e25d62392d8dd0abfd5e6193edf2356803a817349db14c43ccf9874
 anchor-sha256: src/plan/format/xr_artifact_kind.c 289fb506284ed97372e211225dcb5c1d205d7149416ddc96abb2a7f3b8704b39
