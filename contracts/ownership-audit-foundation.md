@@ -56,7 +56,7 @@ integration gates; none is implied by this leaf module.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 48ba91438d6658567d04b02f45847053ea6a9c119e7a8b6bdf38ea2bbfcf7aee
+anchor-sha256: CMakeLists.txt b3377be596c1a3dd83c28af931d9fadeb86343b3f243f76b2b61498e1161a0a3
 anchor-sha256: src/shared/xr_ownership_event.h 4ee731782643616d5df34ead901ae39cd995fc91113774eabbe8dd95f982d90d
 anchor-sha256: src/plan/ownership/xr_ownership_certificate.h 33de50d0b6bb3a654628ffee0890fa80476e9d85234d8e751bd952e06ed08d07
 anchor-sha256: src/runtime/ownership/xr_ownership_audit.h 524251f129b91b7f6de71081b9514528748ebab1264e25803b547d12a1c39309

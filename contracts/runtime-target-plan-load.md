@@ -157,7 +157,7 @@ roots, or general module activation.
    unavailable, rejects compiler and `xi_` symbols, and treats any new `xvm_`
    symbol as uninventoried legacy residue.
 
-anchor-sha256: CMakeLists.txt 48ba91438d6658567d04b02f45847053ea6a9c119e7a8b6bdf38ea2bbfcf7aee
+anchor-sha256: CMakeLists.txt b3377be596c1a3dd83c28af931d9fadeb86343b3f243f76b2b61498e1161a0a3
 anchor-sha256: include/xray_target_plan_load.h b4908c5917da540471ca4093eacd3dc231f465362d0f126da24700d0404def42
 anchor-sha256: src/plan/format/xr_artifact_kind.h 38fd73865e25d62392d8dd0abfd5e6193edf2356803a817349db14c43ccf9874
 anchor-sha256: src/plan/format/xr_artifact_kind.c 289fb506284ed97372e211225dcb5c1d205d7149416ddc96abb2a7f3b8704b39
