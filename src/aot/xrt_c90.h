@@ -106,6 +106,21 @@ static xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t value) 
     return span;
 }
 
+static xr_span_t xrt_byte_slice_copy_checked_raw(xr_span_t dst, xr_span_t src) {
+    if (!xr_byte_slice_copy_core(dst.data, dst.length, XR_ELEM_U8, src.data, src.length,
+                                 XR_ELEM_U8))
+        abort();
+    return dst;
+}
+
+static xr_span_t xrt_byte_slice_repeat_from_checked_raw(xr_span_t span, int64_t dst_offset,
+                                                        int64_t distance, int64_t count) {
+    if (!xr_byte_slice_repeat_core(span.data, span.length, XR_ELEM_U8, dst_offset, distance,
+                                   count))
+        abort();
+    return span;
+}
+
 static int64_t xrt_byte_slice_compare_checked_raw(xr_span_t left, xr_span_t right) {
     bool ok = false;
     int64_t ordering;

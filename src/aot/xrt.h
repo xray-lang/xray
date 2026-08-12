@@ -90,6 +90,18 @@
         XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO,    \
         XR_SEM_CONSUMER_AOT_HOSTED,                                                               \
         xr_byte_slice_fill_core((data), (length), (elem_type), (value)))
+#define xrt_byte_slice_copy_semantics(dst_data, dst_length, src_data, src_length)                  \
+    XR_BYTE_SLICE_COPY_OWNER_APPLY(                                                               \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO,    \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                               \
+        xr_byte_slice_copy_core((dst_data), (dst_length), XR_ELEM_U8, (src_data), (src_length),  \
+                                XR_ELEM_U8))
+#define xrt_byte_slice_repeat_semantics(data, length, dst_offset, distance, count)                 \
+    XR_BYTE_SLICE_REPEAT_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_byte_slice_repeat_core((data), (length), XR_ELEM_U8, (dst_offset), (distance),        \
+                                  (count)))
 #include "xrt_value.h"      // L0: tags, boxing, unboxing, source-level aliases, XrtContext
 #include "xrt_arc.h"        // L1: execution arena, xrt_str_alloc, xrt_str_concat
 #include "xrt_net.h"        // L1: hosted TCP handle helpers

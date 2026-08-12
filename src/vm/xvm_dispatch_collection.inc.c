@@ -1687,8 +1687,11 @@ vmcase(OP_BYTE_SLICE_COPY) {
     if (dst_readonly) {
         VM_RUNTIME_ERROR(XR_ERR_CMP_CONST_ASSIGN, XR_ERROR_CORE_BYTE_SLICE_READONLY_MSG);
     }
-    if (!xr_array_core_bytes_copy_from(dst_data, dst_length, dst_elem_type, src_data, src_length,
-                                       src_elem_type, 0, 0, src_length, false)) {
+    if (!XR_BYTE_SLICE_COPY_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO, XR_SEM_CONSUMER_VM,
+            xr_byte_slice_copy_core(dst_data, dst_length, dst_elem_type, src_data, src_length,
+                                    src_elem_type))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG);
     }
     vmbreak;
@@ -1766,8 +1769,11 @@ vmcase(OP_BYTE_SLICE_REPEAT) {
     if (!XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) || !XR_IS_INT(R(a + 3))) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_REPEAT_INTS_EXPECTS_MSG);
     }
-    if (!xr_array_core_bytes_repeat_from(data, length, elem_type, XR_TO_INT(R(a + 1)),
-                                         XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 3)))) {
+    if (!XR_BYTE_SLICE_REPEAT_OWNER_APPLY(
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
+            XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO, XR_SEM_CONSUMER_VM,
+            xr_byte_slice_repeat_core(data, length, elem_type, XR_TO_INT(R(a + 1)),
+                                      XR_TO_INT(R(a + 2)), XR_TO_INT(R(a + 3))))) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_REPEAT_OOB_MSG);
     }
     vmbreak;

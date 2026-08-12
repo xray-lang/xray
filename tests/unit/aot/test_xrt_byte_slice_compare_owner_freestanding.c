@@ -66,6 +66,29 @@ TEST(freestanding_byte_slice_fill_owner_preserves_boundaries) {
     ASSERT_FALSE(xr_byte_slice_fill_core(bytes, 4, XR_ELEM_I64, 7));
 }
 
+TEST(freestanding_byte_slice_mutation_owners_preserve_overlap_and_boundaries) {
+    uint8_t bytes[] = {1, 2, 3, 4, 5, 6, 0, 0, 0, 0};
+    xr_span_t overlap_dst = {bytes + 1, 5};
+    xr_span_t overlap_src = {bytes, 5};
+    xr_span_t empty = {NULL, 0};
+
+    xrt_byte_slice_copy_checked_raw(overlap_dst, overlap_src);
+    ASSERT_EQ_INT(bytes[1], 1);
+    ASSERT_EQ_INT(bytes[5], 5);
+    ASSERT_EQ_PTR(xrt_byte_slice_copy_checked_raw(empty, empty).data, NULL);
+    ASSERT_FALSE(xr_byte_slice_copy_core(NULL, 1, XR_ELEM_U8, bytes, 1, XR_ELEM_U8));
+    ASSERT_FALSE(xr_byte_slice_copy_core(bytes, 1, XR_ELEM_U8, bytes, 2, XR_ELEM_U8));
+
+    xrt_byte_slice_repeat_from_checked_raw((xr_span_t) {bytes, 10}, 6, 2, 4);
+    ASSERT_EQ_INT(bytes[6], bytes[4]);
+    ASSERT_EQ_INT(bytes[7], bytes[5]);
+    ASSERT_EQ_INT(bytes[8], bytes[4]);
+    ASSERT_EQ_INT(bytes[9], bytes[5]);
+    ASSERT_FALSE(xr_byte_slice_repeat_core(NULL, 0, XR_ELEM_U8, 0, 1, 0));
+    ASSERT_FALSE(xr_byte_slice_repeat_core(bytes, 10, XR_ELEM_U8, 0, 1, 1));
+    ASSERT_FALSE(xr_byte_slice_repeat_core(bytes, 10, XR_ELEM_U8, 2, 0, 1));
+}
+
 TEST(freestanding_raw_memory_copy_owner_preserves_boundaries) {
     uint8_t source[40];
     uint8_t target[40];
@@ -88,5 +111,6 @@ RUN_TEST_SUITE("Freestanding Byte Slice Compare Owner");
 RUN_TEST(freestanding_byte_slice_compare_owner_preserves_unsigned_and_prefix_ordering);
 RUN_TEST(freestanding_byte_slice_common_prefix_owner_preserves_word_boundaries);
 RUN_TEST(freestanding_byte_slice_fill_owner_preserves_boundaries);
+RUN_TEST(freestanding_byte_slice_mutation_owners_preserve_overlap_and_boundaries);
 RUN_TEST(freestanding_raw_memory_copy_owner_preserves_boundaries);
 TEST_MAIN_END()

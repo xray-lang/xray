@@ -1,0 +1,13 @@
+contains=function 1 name=mutate module=0 depth=1 abi=native boundary=none params=0 ret=int64_t/scalar/i64
+regex=span-access [0-9]+ func=mutate value=v[0-9]+ kind=byte_copy evidence=.* drop=.*helper
+regex=span-access [0-9]+ func=mutate value=v[0-9]+ kind=byte_repeat evidence=.* drop=.*helper
+c_contains=xrt_byte_slice_copy_checked_raw(
+c_contains=xrt_byte_slice_repeat_from_checked_raw(
+c_not_contains=memcpy(_dst.data, _src.data
+c_not_contains=memmove(_dst.data, _src.data
+c_not_contains=((uint8_t*)_dst.data)
+c_not_contains=xr_array_core_copy_or_move_bytes(_dst.data
+c_not_contains=xr_array_core_bytes_repeat_copy(_span.data
+c_not_contains=({ xr_span_t _dst
+c_not_contains=({ xr_span_t _span
+c_syntax=pass

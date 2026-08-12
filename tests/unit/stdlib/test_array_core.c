@@ -400,6 +400,25 @@ TEST(array_core_bytes_constructor_helpers_coerce_and_copy_typed_sources) {
     ASSERT_FALSE(xr_byte_slice_fill_core(dst, -1, XR_ELEM_U8, 7));
     ASSERT_FALSE(xr_byte_slice_fill_core(dst, 4, XR_ELEM_I64, 7));
 
+    uint8_t copy_overlap[] = {1, 2, 3, 4, 5, 6};
+    ASSERT_TRUE(xr_semantic_owner_has_consumer(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO, XR_SEM_CONSUMER_VM));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO),
+                  "xrt_byte_slice_copy_checked_raw");
+    ASSERT_TRUE(xr_byte_slice_copy_core(copy_overlap + 1, 5, XR_ELEM_U8, copy_overlap, 5,
+                                        XR_ELEM_U8));
+    ASSERT_EQ_INT(copy_overlap[1], 1);
+    ASSERT_EQ_INT(copy_overlap[5], 5);
+    ASSERT_TRUE(xr_byte_slice_copy_core(NULL, 0, XR_ELEM_U8, NULL, 0, XR_ELEM_U8));
+    ASSERT_FALSE(xr_byte_slice_copy_core(NULL, 1, XR_ELEM_U8, copy_overlap, 1, XR_ELEM_U8));
+    ASSERT_FALSE(xr_byte_slice_copy_core(copy_overlap, 1, XR_ELEM_U8, copy_overlap, 2,
+                                         XR_ELEM_U8));
+    ASSERT_FALSE(xr_byte_slice_copy_core(copy_overlap, 1, XR_ELEM_I64, copy_overlap, 1,
+                                         XR_ELEM_U8));
+
     int64_t ints[] = {257, -1, 0, 128};
     ASSERT_TRUE(xr_array_core_bytes_copy_from_typed(dst, 4, ints, 4, XR_ELEM_I64));
     ASSERT_EQ_INT(dst[0], 1);
@@ -694,6 +713,13 @@ TEST(raw_memory_copy_nonoverlap_owner_handles_boundaries) {
 
 TEST(array_core_bytes_repeat_from_matches_lz_style_overlap) {
     uint8_t rep[9] = {65, 66, 67, 0, 0, 0, 0, 0, 0};
+    ASSERT_TRUE(xr_semantic_owner_has_consumer(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO, XR_SEM_CONSUMER_VM));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO),
+                  "xrt_byte_slice_repeat_from_checked_raw");
     ASSERT_TRUE(xr_array_core_bytes_repeat_from(rep, 9, XR_ELEM_U8, 3, 3, 6));
     ASSERT_EQ_INT(rep[3], 65);
     ASSERT_EQ_INT(rep[4], 66);

@@ -5082,7 +5082,7 @@ TEST(cgen_typed_array_zero_fill_range_uses_memset) {
     xi_func_free(ir);
 }
 
-TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
+TEST(cgen_byte_slice_safe_methods_use_stable_owners) {
     const char *src =
         "fn run() -> int {\n"
         "    var src = Array<byte>(16)\n"
@@ -5140,14 +5140,14 @@ TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
     assert(count_between(fn_body, fn_end, "xr_raw_memory_copy_nonoverlap(") > 0 &&
            "Array<byte>.appendFrom must lower to the inline Array<byte>+Slice<byte> non-overlap "
            "fast path");
-    assert(count_between(fn_body, fn_end, "xr_array_core_copy_or_move_bytes(") > 0 &&
-           "Slice<byte>.copyFrom must lower to the direct overlap-safe copy helper");
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_copy_checked_raw(") > 0 &&
+           "Slice<byte>.copyFrom must lower through the stable owner adapter");
     assert(count_between(fn_body, fn_end, "xrt_byte_array_append_from_span_raw(") == 0 &&
            "Array<byte>.appendFrom hot path must not call the large raw helper");
     assert(count_between(fn_body, fn_end, "xrt_byte_array_repeat_from_tail_raw(") > 0 &&
            "Array<byte>.repeatFrom must lower to the raw tail repeat helper");
-    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_copy(") > 0 &&
-           "Slice<byte>.repeatFrom must lower to direct repeat-copy");
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_repeat_from_checked_raw(") > 0 &&
+           "Slice<byte>.repeatFrom must lower through the stable owner adapter");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_from(") == 0 &&
            "static Slice<byte>.repeatFrom hot path must not keep the generic repeat wrapper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_copy_from(") == 0 &&
@@ -5173,10 +5173,10 @@ TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
            "static Slice<byte>.store hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_common_prefix_raw(") == 0 &&
            "generated C must not revive the retired common-prefix kernel");
-    assert(count_between(fn_body, fn_end, "xrt_byte_slice_repeat_from_checked_raw(") == 0 &&
-           "static Slice<byte>.repeatFrom hot path must not keep dynamic span checks");
-    assert(count_between(fn_body, fn_end, "xrt_byte_slice_copy_checked_raw(") == 0 &&
-           "static Slice<byte>.copyFrom hot path must not keep dynamic span checks");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_copy(_span.data") == 0 &&
+           "Slice<byte>.repeatFrom must not recreate owner semantics");
+    assert(count_between(fn_body, fn_end, "memmove(_dst.data, _src.data") == 0 &&
+           "Slice<byte>.copyFrom must not recreate owner semantics");
     assert(count_between(fn_body, fn_end, "xrt_method_") == 0 &&
            count_between(fn_body, fn_end, "xrt_index_get(") == 0 &&
            "Array<byte> hot path must not fall back to dynamic dispatch");
@@ -7807,6 +7807,52 @@ TEST(cgen_byte_slice_fill_uses_stable_owner_adapter) {
            !contains_between(fn, fn_end, "({ xr_span_t _s =") &&
            "generated C must not recreate byte-slice fill semantics");
 
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_byte_slice_mutation_uses_stable_owner_adapters) {
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO, XR_SEM_CONSUMER_CGEN));
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO, XR_SEM_CONSUMER_CGEN));
+    assert(strcmp(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO),
+                  "xrt_byte_slice_copy_checked_raw") == 0);
+    assert(strcmp(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO),
+                  "xrt_byte_slice_repeat_from_checked_raw") == 0);
+
+    const char *src = "fn mutate() -> int {\n"
+                      "    var bytes = Array<byte>(8)\n"
+                      "    var view: Slice<byte> = bytes[:]\n"
+                      "    var dst: Slice<byte> = view[2:6]\n"
+                      "    var source: Slice<byte> = view[0:4]\n"
+                      "    dst.copyFrom(source)\n"
+                      "    view.repeatFrom(4, 2, 4)\n"
+                      "    return int(view[7])\n"
+                      "}\n"
+                      "print(mutate())\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "byte-slice mutation IR compilation failed");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error && "stable-owner byte-slice mutation generation failed");
+    const char *fn = find_static_function_definition(code, "test_mutate_");
+    assert(fn != NULL);
+    const char *fn_end = next_static_after(fn);
+    assert(contains_between(fn, fn_end, "xrt_byte_slice_copy_checked_raw(") &&
+           contains_between(fn, fn_end, "xrt_byte_slice_repeat_from_checked_raw("));
+    assert(!contains_between(fn, fn_end, "memcpy(_dst.data") &&
+           !contains_between(fn, fn_end, "memmove(_dst.data") &&
+           !contains_between(fn, fn_end, "((uint8_t*)_dst.data)") &&
+           !contains_between(fn, fn_end, "xr_array_core_copy_or_move_bytes(_dst.data") &&
+           !contains_between(fn, fn_end, "xr_array_core_bytes_repeat_copy(_span.data") &&
+           !contains_between(fn, fn_end, "({ xr_span_t"));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -13068,7 +13114,7 @@ int main(void) {
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
     run_cgen_string_copy_bytes_preserves_byte_storage_fast_path();
     run_cgen_typed_array_zero_fill_range_uses_memset();
-    run_cgen_byte_slice_safe_methods_use_raw_memory_helpers();
+    run_cgen_byte_slice_safe_methods_use_stable_owners();
     run_cgen_byte_slice_native_load_elides_endian_box();
     run_cgen_span_window_and_mem_slice_elide_boxed_operands();
     run_cgen_borrowed_bytes_param_reserve_skips_arc();
@@ -13128,6 +13174,7 @@ int main(void) {
     run_cgen_byte_slice_scalar_uses_stable_owner_adapter();
     run_cgen_byte_slice_compare_uses_stable_owner_adapter();
     run_cgen_byte_slice_fill_uses_stable_owner_adapter();
+    run_cgen_byte_slice_mutation_uses_stable_owner_adapters();
     run_cgen_byte_slice_common_prefix_uses_stable_owner_adapter();
     run_cgen_raw_memory_copy_owner_registry_is_stable();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();

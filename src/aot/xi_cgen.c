@@ -4574,6 +4574,44 @@ static const char *cg_byte_slice_fill_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
+static const char *cg_byte_slice_copy_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
+                                        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: byte-slice copy owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: byte-slice copy owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
+static const char *cg_byte_slice_repeat_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
+                                        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: byte-slice repeat owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO);
+    if (!adapter || !adapter[0]) {
+        fprintf(stderr, "[xi_cgen] ERROR: byte-slice repeat owner has no CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
 static const char *cg_byte_slice_common_prefix_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(
             XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,

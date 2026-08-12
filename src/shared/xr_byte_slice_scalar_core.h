@@ -17,6 +17,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #define XR_BYTE_SLICE_SCALAR_INLINE static inline
 #else
 /* The restricted C90 runtime provides the fixed-width types, bool, size_t,
@@ -150,6 +151,52 @@ typedef enum XrEndianCore {
 #define XR_BYTE_SLICE_FILL_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)             \
     (XR_BYTE_SLICE_FILL_OWNER_GUARD((owner_hi), (owner_lo)),                                     \
      XR_BYTE_SLICE_FILL_CONSUMER_GUARD((consumer_bit)), (expression))
+
+#define XR_BYTE_SLICE_COPY_OWNER_GUARD(owner_hi, owner_lo)                                       \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_byte_slice_copy                                    \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI &&           \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO)              \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BYTE_SLICE_COPY_CONSUMER_GUARD(consumer_bit)                                          \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_byte_slice_copy                       \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_CONSUMERS &                              \
+                 (uint32_t) (consumer_bit)) != 0)                                                 \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BYTE_SLICE_COPY_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)             \
+    (XR_BYTE_SLICE_COPY_OWNER_GUARD((owner_hi), (owner_lo)),                                     \
+     XR_BYTE_SLICE_COPY_CONSUMER_GUARD((consumer_bit)), (expression))
+
+#define XR_BYTE_SLICE_REPEAT_OWNER_GUARD(owner_hi, owner_lo)                                     \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_byte_slice_repeat                                  \
+            : (((uint64_t) (owner_hi) == XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI &&         \
+                (uint64_t) (owner_lo) == XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO)            \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BYTE_SLICE_REPEAT_CONSUMER_GUARD(consumer_bit)                                        \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_byte_slice_repeat                     \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_CONSUMERS &                            \
+                 (uint32_t) (consumer_bit)) != 0)                                                 \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BYTE_SLICE_REPEAT_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)           \
+    (XR_BYTE_SLICE_REPEAT_OWNER_GUARD((owner_hi), (owner_lo)),                                   \
+     XR_BYTE_SLICE_REPEAT_CONSUMER_GUARD((consumer_bit)), (expression))
 #endif
 
 XR_BYTE_SLICE_SCALAR_INLINE bool xr_byte_slice_fill_core(void *data, int64_t length,
@@ -251,6 +298,60 @@ XR_BYTE_SLICE_SCALAR_INLINE bool xr_array_core_bytes_range_ok(int64_t length, ui
                                                               int64_t offset, int64_t width) {
     return elem_type == XR_ELEM_U8 && length >= 0 && offset >= 0 && width >= 0 &&
            offset <= length && width <= length - offset;
+}
+
+XR_BYTE_SLICE_SCALAR_INLINE bool xr_byte_slice_copy_core(
+    void *dst_data, int64_t dst_length, uint8_t dst_elem_type, const void *src_data,
+    int64_t src_length, uint8_t src_elem_type) {
+    if (dst_elem_type != XR_ELEM_U8 || src_elem_type != XR_ELEM_U8 || dst_length < 0 ||
+        src_length < 0 || src_length > dst_length ||
+        (src_length > 0 && (!dst_data || !src_data)))
+        return false;
+    if (src_length > 0)
+        memmove(dst_data, src_data, (size_t) src_length);
+    return true;
+}
+
+XR_BYTE_SLICE_SCALAR_INLINE void xr_byte_slice_repeat_unchecked(void *data, int64_t dst_offset,
+                                                                int64_t distance,
+                                                                int64_t count) {
+    uint8_t *dst;
+    const uint8_t *src;
+    int64_t copied;
+    if (count <= 0)
+        return;
+    dst = (uint8_t *) data + dst_offset;
+    src = dst - distance;
+    if (distance == 1) {
+        memset(dst, src[0], (size_t) count);
+        return;
+    }
+    if (count <= distance) {
+        memcpy(dst, src, (size_t) count);
+        return;
+    }
+    memcpy(dst, src, (size_t) distance);
+    copied = distance;
+    while (copied < count) {
+        int64_t chunk = copied;
+        int64_t remaining = count - copied;
+        if (chunk > remaining)
+            chunk = remaining;
+        memcpy(dst + copied, dst, (size_t) chunk);
+        copied += chunk;
+    }
+}
+
+XR_BYTE_SLICE_SCALAR_INLINE bool xr_byte_slice_repeat_core(void *data, int64_t length,
+                                                           uint8_t elem_type, int64_t dst_offset,
+                                                           int64_t distance, int64_t count) {
+    if (elem_type != XR_ELEM_U8 || dst_offset < 0 || distance <= 0 || count < 0 ||
+        distance > dst_offset ||
+        !xr_array_core_bytes_range_ok(length, elem_type, dst_offset, count) ||
+        (count > 0 && !data))
+        return false;
+    xr_byte_slice_repeat_unchecked(data, dst_offset, distance, count);
+    return true;
 }
 
 XR_BYTE_SLICE_SCALAR_INLINE bool xr_array_core_host_is_little_endian(void) {

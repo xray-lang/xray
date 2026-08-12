@@ -661,6 +661,7 @@ static inline bool xr_array_core_bytes_copy_from(void *dst_data, int64_t dst_len
                                                  int64_t src_length, uint8_t src_elem_type,
                                                  int64_t src_offset, int64_t dst_offset,
                                                  int64_t count, bool same_array) {
+    (void) same_array;
     if (!xr_array_core_bytes_range_ok(src_length, src_elem_type, src_offset, count) ||
         !xr_array_core_bytes_range_ok(dst_length, dst_elem_type, dst_offset, count))
         return false;
@@ -668,11 +669,8 @@ static inline bool xr_array_core_bytes_copy_from(void *dst_data, int64_t dst_len
         return true;
     if (!dst_data || !src_data)
         return false;
-    uint8_t *dp = (uint8_t *) dst_data + dst_offset;
-    const uint8_t *sp = (const uint8_t *) src_data + src_offset;
-    (void) same_array;
-    xr_array_core_copy_or_move_bytes(dp, sp, count);
-    return true;
+    return xr_byte_slice_copy_core((uint8_t *) dst_data + dst_offset, count, dst_elem_type,
+                                   (const uint8_t *) src_data + src_offset, count, src_elem_type);
 }
 
 static inline bool xr_array_core_memory_ranges_overlap(const void *a, int64_t a_len, const void *b,
@@ -697,106 +695,15 @@ static XR_AINLINE void xr_array_core_copy_or_move_bytes(void *dst, const void *s
         xr_raw_memory_copy_nonoverlap(dst, src, count);
 }
 
-static XR_AINLINE uint64_t xr_array_core_repeat_pattern64(const uint8_t *sp, int64_t distance) {
-    uint8_t pattern[8];
-    switch (distance) {
-        case 2:
-            pattern[0] = sp[0];
-            pattern[1] = sp[1];
-            pattern[2] = sp[0];
-            pattern[3] = sp[1];
-            pattern[4] = sp[0];
-            pattern[5] = sp[1];
-            pattern[6] = sp[0];
-            pattern[7] = sp[1];
-            break;
-        case 4:
-            pattern[0] = sp[0];
-            pattern[1] = sp[1];
-            pattern[2] = sp[2];
-            pattern[3] = sp[3];
-            pattern[4] = sp[0];
-            pattern[5] = sp[1];
-            pattern[6] = sp[2];
-            pattern[7] = sp[3];
-            break;
-        default:
-            memcpy(pattern, sp, sizeof(pattern));
-            break;
-    }
-    uint64_t value;
-    memcpy(&value, pattern, sizeof(value));
-    return value;
-}
-
 static XR_AINLINE void xr_array_core_bytes_repeat_copy(void *data, int64_t dst_offset,
                                                        int64_t distance, int64_t count) {
-    if (count <= 0)
-        return;
-    uint8_t *dp = (uint8_t *) data + dst_offset;
-    const uint8_t *sp = dp - distance;
-    if (distance == 1) {
-        memset(dp, sp[0], (size_t) count);
-        return;
-    }
-    if (count <= distance) {
-        xr_raw_memory_copy_nonoverlap(dp, sp, count);
-        return;
-    }
-    if (distance == 2 || distance == 4 || distance == 8) {
-        uint64_t pattern = xr_array_core_repeat_pattern64(sp, distance);
-        int64_t copied = 0;
-        for (; copied + 8 <= count; copied += 8)
-            memcpy(dp + copied, &pattern, sizeof(pattern));
-        if (copied < count)
-            memcpy(dp + copied, &pattern, (size_t) (count - copied));
-        return;
-    }
-    if (distance < 8) {
-        xr_raw_memory_copy_nonoverlap(dp, sp, distance);
-        int64_t copied = distance;
-        while (copied < count) {
-            int64_t chunk = copied;
-            int64_t remaining = count - copied;
-            if (chunk > remaining)
-                chunk = remaining;
-            xr_raw_memory_copy_nonoverlap(dp + copied, dp, chunk);
-            copied += chunk;
-        }
-        return;
-    }
-    if (count <= 16) {
-        xr_raw_memory_copy_nonoverlap(dp, sp, count);
-        return;
-    }
-
-    xr_raw_memory_copy_nonoverlap(dp, sp, distance);
-    int64_t copied = distance;
-    while (copied < count) {
-        int64_t chunk = copied;
-        int64_t remaining = count - copied;
-        if (chunk > remaining)
-            chunk = remaining;
-        xr_raw_memory_copy_nonoverlap(dp + copied, dp, chunk);
-        copied += chunk;
-    }
+    xr_byte_slice_repeat_unchecked(data, dst_offset, distance, count);
 }
 
 static inline bool xr_array_core_bytes_repeat_from(void *data, int64_t length, uint8_t elem_type,
                                                    int64_t dst_offset, int64_t distance,
                                                    int64_t count) {
-    if (elem_type != XR_ELEM_U8 || dst_offset < 0 || distance <= 0 || count < 0)
-        return false;
-    if (distance > dst_offset)
-        return false;
-    if (!xr_array_core_bytes_range_ok(length, elem_type, dst_offset, count))
-        return false;
-    if (count == 0)
-        return true;
-    if (!data)
-        return false;
-    xr_array_core_bytes_repeat_copy(data, dst_offset, distance, count);
-    return true;
+    return xr_byte_slice_repeat_core(data, length, elem_type, dst_offset, distance, count);
 }
 
 #endif  // XR_ARRAY_CORE_H

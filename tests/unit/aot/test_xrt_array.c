@@ -540,6 +540,16 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
                   "Slice<byte>.copyFrom writes first source byte");
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[11], 68,
                   "Slice<byte>.copyFrom writes the final source byte");
+    uint8_t copy_overlap_bytes[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    xr_span_t overlap_dst = {copy_overlap_bytes + 1, 8};
+    xr_span_t overlap_src = {copy_overlap_bytes, 8};
+    xrt_byte_slice_copy_checked_raw(overlap_dst, overlap_src);
+    ASSERT_EQ_INT(copy_overlap_bytes[1], 1,
+                  "hosted Slice<byte>.copyFrom preserves right-overlap source");
+    xrt_byte_slice_copy_checked_raw(empty_span, empty_span);
+    EXPECT_XRT_ERROR_THROW(xrt_byte_slice_copy_checked_raw(invalid_span, invalid_span),
+                           XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG,
+                           "Slice<byte>.copyFrom rejects invalid positive-length storage");
     ASSERT_EQ_INT(
         xrt_byte_slice_common_prefix_checked_raw(xrt_span_from_array_slice(span_ops_value, 0, 4),
                                                  xrt_span_from_array_slice(span_ops_value, 8, 12)),

@@ -104,6 +104,18 @@ int memcmp(const void *a, const void *b, size_t n);
         XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_FILL_LO,    \
         XR_SEM_CONSUMER_AOT_FREESTANDING,                                                         \
         xr_byte_slice_fill_core((data), (length), (elem_type), (value)))
+#define xrt_byte_slice_copy_semantics(dst_data, dst_length, src_data, src_length)                  \
+    XR_BYTE_SLICE_COPY_OWNER_APPLY(                                                               \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO,    \
+        XR_SEM_CONSUMER_AOT_FREESTANDING,                                                         \
+        xr_byte_slice_copy_core((dst_data), (dst_length), XR_ELEM_U8, (src_data), (src_length),  \
+                                XR_ELEM_U8))
+#define xrt_byte_slice_repeat_semantics(data, length, dst_offset, distance, count)                 \
+    XR_BYTE_SLICE_REPEAT_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,           \
+        xr_byte_slice_repeat_core((data), (length), XR_ELEM_U8, (dst_offset), (distance),        \
+                                  (count)))
 #define xrt_byte_slice_common_prefix_semantics(left_data, left_length, right_data, right_length,   \
                                                ok)                                                \
     XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(                                                      \
@@ -1065,6 +1077,19 @@ static inline xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t 
     return span;
 }
 
+static inline xr_span_t xrt_byte_slice_copy_checked_raw(xr_span_t dst, xr_span_t src) {
+    if (!xrt_byte_slice_copy_semantics(dst.data, dst.length, src.data, src.length))
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG);
+    return dst;
+}
+
+static inline xr_span_t xrt_byte_slice_repeat_from_checked_raw(xr_span_t span, int64_t dst_offset,
+                                                               int64_t distance, int64_t count) {
+    if (!xrt_byte_slice_repeat_semantics(span.data, span.length, dst_offset, distance, count))
+        xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_REPEAT_OOB_MSG);
+    return span;
+}
+
 static inline int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, xr_span_t right) {
     bool ok = false;
     int64_t prefix = xrt_byte_slice_common_prefix_semantics(
@@ -1123,88 +1148,9 @@ static inline void xr_array_core_copy_or_move_bytes(void *dst, const void *src, 
         xr_raw_memory_copy_nonoverlap(dst, src, count);
 }
 
-static inline uint64_t xr_array_core_repeat_pattern64(const uint8_t *sp, int64_t distance) {
-    uint8_t pattern[8];
-    switch (distance) {
-        case 2:
-            pattern[0] = sp[0];
-            pattern[1] = sp[1];
-            pattern[2] = sp[0];
-            pattern[3] = sp[1];
-            pattern[4] = sp[0];
-            pattern[5] = sp[1];
-            pattern[6] = sp[0];
-            pattern[7] = sp[1];
-            break;
-        case 4:
-            pattern[0] = sp[0];
-            pattern[1] = sp[1];
-            pattern[2] = sp[2];
-            pattern[3] = sp[3];
-            pattern[4] = sp[0];
-            pattern[5] = sp[1];
-            pattern[6] = sp[2];
-            pattern[7] = sp[3];
-            break;
-        default:
-            memcpy(pattern, sp, sizeof(pattern));
-            break;
-    }
-    uint64_t value = 0;
-    memcpy(&value, pattern, sizeof(value));
-    return value;
-}
-
 static inline void xr_array_core_bytes_repeat_copy(void *data, int64_t dst_offset, int64_t distance,
                                                    int64_t count) {
-    if (count <= 0)
-        return;
-    uint8_t *dp = (uint8_t *) data + dst_offset;
-    const uint8_t *sp = dp - distance;
-    if (distance == 1) {
-        memset(dp, sp[0], (size_t) count);
-        return;
-    }
-    if (count <= distance) {
-        xr_raw_memory_copy_nonoverlap(dp, sp, count);
-        return;
-    }
-    if (distance == 2 || distance == 4 || distance == 8) {
-        uint64_t pattern = xr_array_core_repeat_pattern64(sp, distance);
-        int64_t copied = 0;
-        for (; copied + 8 <= count; copied += 8)
-            memcpy(dp + copied, &pattern, sizeof(pattern));
-        if (copied < count)
-            memcpy(dp + copied, &pattern, (size_t) (count - copied));
-        return;
-    }
-    if (distance < 8) {
-        xr_raw_memory_copy_nonoverlap(dp, sp, distance);
-        int64_t copied = distance;
-        while (copied < count) {
-            int64_t chunk = copied;
-            int64_t remaining = count - copied;
-            if (chunk > remaining)
-                chunk = remaining;
-            xr_raw_memory_copy_nonoverlap(dp + copied, dp, chunk);
-            copied += chunk;
-        }
-        return;
-    }
-    if (count <= 16) {
-        xr_raw_memory_copy_nonoverlap(dp, sp, count);
-        return;
-    }
-    xr_raw_memory_copy_nonoverlap(dp, sp, distance);
-    int64_t copied = distance;
-    while (copied < count) {
-        int64_t chunk = copied;
-        int64_t remaining = count - copied;
-        if (chunk > remaining)
-            chunk = remaining;
-        xr_raw_memory_copy_nonoverlap(dp + copied, dp, chunk);
-        copied += chunk;
-    }
+    xr_byte_slice_repeat_unchecked(data, dst_offset, distance, count);
 }
 
 static inline int64_t xrt_byte_slice_load_u16_unchecked_raw(xr_span_t span, int64_t off,

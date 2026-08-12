@@ -50,7 +50,6 @@
         "src/runtime/object/xarray_methods.c",
         "src/shared/xr_raw_scalar_core.h",
         "src/vm/xvm.c",
-        "src/vm/xvm_dispatch_collection.inc.c",
         "src/vm/xvm_dispatch_misc.inc.c"
       ],
       "profiles": [
@@ -224,7 +223,10 @@
         "xr_byte_slice_common_prefix_core",
         "xr_byte_slice_common_prefix_diff_byte64",
         "xr_byte_slice_compare_core",
+        "xr_byte_slice_copy_core",
         "xr_byte_slice_fill_core",
+        "xr_byte_slice_repeat_core",
+        "xr_byte_slice_repeat_unchecked",
         "xr_byte_slice_scalar_copy",
         "xr_byte_slice_scalar_load_u16_unchecked",
         "xr_byte_slice_scalar_load_u32_unchecked",

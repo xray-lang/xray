@@ -2670,8 +2670,6 @@
     xi.enum.variant.at
     xi.enum.payload.at
     xi.enum.meta.get
-    xi.byte.slice.copy
-    xi.byte.slice.repeat
     xi.slice.window
     xi.slice.from.ptr
     xi.buffer.materialize
@@ -2830,8 +2828,10 @@
     xi.byte.slice.store.f32
     xi.byte.slice.store.f64
     xi.byte.slice.fill
+    xi.byte.slice.copy
     xi.byte.slice.compare
     xi.byte.slice.common.prefix
+    xi.byte.slice.repeat
     xi.ptr.copy.nonoverlap
     xi.json.decode
     xi.go
@@ -3113,6 +3113,44 @@
     (aot-hosted "src/aot/xrt.h" "xrt_byte_slice_fill_semantics")
     (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_byte_slice_fill_semantics")
     (cgen "src/aot/xi_cgen.c" "cg_byte_slice_fill_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.byte-slice-copy
+  :category shared-semantic-kernel
+  :operations (xi.byte.slice.copy)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_byte_slice_copy_checked_raw
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_collection.inc.c" "XR_BYTE_SLICE_COPY_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_byte_slice_copy_semantics")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_byte_slice_copy_semantics")
+    (cgen "src/aot/xi_cgen.c" "cg_byte_slice_copy_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.byte-slice-repeat
+  :category shared-semantic-kernel
+  :operations (xi.byte.slice.repeat)
+  :consumers (
+    semantic-plan
+    vm
+    aot-hosted
+    aot-freestanding
+    cgen
+  )
+  :cgen-adapter xrt_byte_slice_repeat_from_checked_raw
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/vm/xvm_dispatch_collection.inc.c" "XR_BYTE_SLICE_REPEAT_OWNER_APPLY")
+    (aot-hosted "src/aot/xrt.h" "xrt_byte_slice_repeat_semantics")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_byte_slice_repeat_semantics")
+    (cgen "src/aot/xi_cgen.c" "cg_byte_slice_repeat_adapter_name")
   ))
 
 (define-xi-observable-owner shared.byte-slice-compare

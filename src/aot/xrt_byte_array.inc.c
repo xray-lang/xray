@@ -9,6 +9,24 @@
                                      XR_SEM_CONSUMER_AOT_HOSTED, expression)
 #endif
 
+#ifndef xrt_byte_slice_copy_semantics
+#define xrt_byte_slice_copy_semantics(dst_data, dst_length, src_data, src_length)                  \
+    XR_BYTE_SLICE_COPY_OWNER_APPLY(                                                               \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_HI, XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COPY_LO,    \
+        XR_SEM_CONSUMER_AOT_HOSTED,                                                               \
+        xr_byte_slice_copy_core((dst_data), (dst_length), XR_ELEM_U8, (src_data), (src_length),  \
+                                XR_ELEM_U8))
+#endif
+
+#ifndef xrt_byte_slice_repeat_semantics
+#define xrt_byte_slice_repeat_semantics(data, length, dst_offset, distance, count)                 \
+    XR_BYTE_SLICE_REPEAT_OWNER_APPLY(                                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_HI,                                             \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO, XR_SEM_CONSUMER_AOT_HOSTED,                 \
+        xr_byte_slice_repeat_core((data), (length), XR_ELEM_U8, (dst_offset), (distance),        \
+                                  (count)))
+#endif
+
 #ifndef xrt_byte_slice_fill_semantics
 #define xrt_byte_slice_fill_semantics(data, length, elem_type, value)                              \
     XR_BYTE_SLICE_FILL_OWNER_APPLY(                                                               \
@@ -347,8 +365,7 @@ static inline xr_span_t xrt_byte_slice_fill_checked_raw(xr_span_t span, int64_t 
 }
 
 static inline xr_span_t xrt_byte_slice_copy_checked_raw(xr_span_t dst, xr_span_t src) {
-    if (!xr_array_core_bytes_copy_from(dst.data, dst.length, XR_ELEM_U8, src.data, src.length,
-                                       XR_ELEM_U8, 0, 0, src.length, false))
+    if (!xrt_byte_slice_copy_semantics(dst.data, dst.length, src.data, src.length))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG);
     return dst;
 }
@@ -373,8 +390,7 @@ static inline int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, x
 
 static inline xr_span_t xrt_byte_slice_repeat_from_checked_raw(xr_span_t span, int64_t dst_offset,
                                                                int64_t distance, int64_t count) {
-    if (!xr_array_core_bytes_repeat_from(span.data, span.length, XR_ELEM_U8, dst_offset, distance,
-                                         count))
+    if (!xrt_byte_slice_repeat_semantics(span.data, span.length, dst_offset, distance, count))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_REPEAT_OOB_MSG);
     return span;
 }
@@ -614,7 +630,7 @@ static inline xrt_array_t *xrt_byte_array_repeat_from_raw(xrt_array_t *a, int64_
     if (!a || a->elem_type != XR_ELEM_U8 || dst < 0 || distance <= 0 || count < 0 ||
         dst - distance < 0 || count > a->length || dst > a->length - count)
         return a;
-    xr_array_core_bytes_repeat_copy(a->data, dst, distance, count);
+    xr_byte_slice_repeat_unchecked(a->data, dst, distance, count);
     return a;
 }
 
@@ -688,7 +704,7 @@ static inline xrt_array_t *xrt_byte_array_repeat_from_tail_raw(xrt_array_t *a, i
         xrt_array_reserve_trusted_raw(a, new_length);
     if (new_length > a->capacity || (new_length > 0 && !a->data))
         xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_REPEAT_FROM_OOB_MSG);
-    xr_array_core_bytes_repeat_copy(a->data, dst, distance, count);
+    xr_byte_slice_repeat_unchecked(a->data, dst, distance, count);
     a->length = new_length;
     return a;
 }

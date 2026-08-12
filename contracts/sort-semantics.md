@@ -33,4 +33,4 @@ anchor-sha256: src/shared/xr_sort_core.h 12d05da0942da491ae99d49729a27f0dfc71e97
 anchor-sha256: src/runtime/object/xarray_vm.c 82685c3f19e9ea25f34fec818c2a2eceaca4aac05357f2115c74fb826505a8fc
 anchor-sha256: src/aot/xrt_sort.inc.c cf6f34970c83984758e2950a3edf425f7a52a5aaa401fd757539a9c9f6983f42
 anchor-sha256: tests/diff/cases/semantics/collections/array_sort_shared_core.xr ca473706bff252420029ec1dbeda96f74f7f8b6cdb2d1845558843cd50911863
-anchor-sha256: tests/unit/stdlib/test_array_core.c 37335dc77567e784992a6cc6147eec75b6f5635f77335c57d9cf9cb96d30f349
+anchor-sha256: tests/unit/stdlib/test_array_core.c 6e57a3072e033af51c8548a5f4012bb4357259f6edb680be9eb721637050b1c9

@@ -154,6 +154,8 @@ BYTE_SLICE_SCALAR_OPERATIONS = {
 BYTE_SLICE_COMPARE_OPERATIONS = {"xi.byte.slice.compare"}
 BYTE_SLICE_COMMON_PREFIX_OPERATIONS = {"xi.byte.slice.common.prefix"}
 BYTE_SLICE_FILL_OPERATIONS = {"xi.byte.slice.fill"}
+BYTE_SLICE_COPY_OPERATIONS = {"xi.byte.slice.copy"}
+BYTE_SLICE_REPEAT_OPERATIONS = {"xi.byte.slice.repeat"}
 RAW_MEMORY_COPY_OPERATIONS = {"xi.ptr.copy.nonoverlap"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
@@ -1496,6 +1498,74 @@ def verify_byte_slice_fill_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_byte_slice_mutation_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    families = (
+        ("shared.byte-slice-copy", BYTE_SLICE_COPY_OPERATIONS, "COPY",
+         "xr_byte_slice_copy_core", "xrt_byte_slice_copy_semantics",
+         "xrt_byte_slice_copy_checked_raw", "cg_byte_slice_copy_adapter_name"),
+        ("shared.byte-slice-repeat", BYTE_SLICE_REPEAT_OPERATIONS, "REPEAT",
+         "xr_byte_slice_repeat_core", "xrt_byte_slice_repeat_semantics",
+         "xrt_byte_slice_repeat_from_checked_raw", "cg_byte_slice_repeat_adapter_name"),
+    )
+    core_text = (root / "src/shared/xr_byte_slice_scalar_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    hosted_header = (root / "src/aot/xrt.h").read_text(encoding="utf-8", errors="strict")
+    hosted_runtime = (root / "src/aot/xrt_byte_array.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    freestanding_text = (root / "src/aot/xrt_core_freestanding.h").read_text(
+        encoding="utf-8", errors="strict")
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    forbidden_cgen = ("memcpy(_dst.data", "memmove(_dst.data", "((uint8_t*)_dst.data)",
+                      "xr_array_core_copy_or_move_bytes(_dst.data",
+                      "xr_array_core_bytes_repeat_copy(_span.data", "({ xr_span_t")
+
+    for owner_name, operations, tag, kernel, semantics, adapter, resolver in families:
+        marker = owner_macro_prefix(owner_name)
+        owner = next((row for row in registry.get("owners", [])
+                      if row.get("owner") == owner_name), None)
+        if owner is None or set(owner.get("operations", [])) != operations:
+            errors.append(f"semantic owner registry has no exact {owner_name} family")
+        if (f"{marker}_HI" not in core_text or f"{marker}_LO" not in core_text or
+                f"XR_BYTE_SLICE_{tag}_OWNER_APPLY" not in core_text or kernel not in core_text):
+            errors.append(f"src/shared/xr_byte_slice_scalar_core.h: {owner_name} lacks kernel")
+
+        start = vm_text.find(f"vmcase(OP_BYTE_SLICE_{tag})")
+        end = vm_text.find("vmbreak;", start)
+        vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+        if (f"{marker}_HI" not in vm_body or f"{marker}_LO" not in vm_body or
+                f"XR_BYTE_SLICE_{tag}_OWNER_APPLY" not in vm_body or kernel not in vm_body):
+            errors.append(f"src/vm/xvm_dispatch_collection.inc.c: {owner_name} bypasses owner")
+
+        for relative, text in (("src/aot/xrt.h", hosted_header),
+                               ("src/aot/xrt_core_freestanding.h", freestanding_text)):
+            if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                    f"XR_BYTE_SLICE_{tag}_OWNER_APPLY" not in text or semantics not in text):
+                errors.append(f"{relative}: {owner_name} adapter bypasses owner")
+        for relative, text, required in (
+                ("src/aot/xrt_byte_array.inc.c", hosted_runtime, semantics),
+                ("src/aot/xrt_core_freestanding.h", freestanding_text, semantics),
+                ("src/aot/xrt_c90.h", c90_text, kernel)):
+            body = extract_c_function(text, adapter) or ""
+            if required not in body or re.search(r"\.length\s*[<>]", body):
+                errors.append(f"{relative}: {owner_name} adapter owns semantics")
+
+        resolver_body = extract_c_function(cgen_text, resolver)
+        if (resolver_body is None or f"{marker}_HI" not in resolver_body or
+                f"{marker}_LO" not in resolver_body or
+                "xr_semantic_owner_cgen_adapter" not in resolver_body):
+            errors.append(f"src/aot/xi_cgen.c: {owner_name} does not resolve stable adapter")
+        emitter = extract_c_function(dispatch_text, f"xicgen_byte_slice_{tag.lower()}") or ""
+        if resolver not in emitter or any(token in emitter for token in forbidden_cgen):
+            errors.append(f"src/aot/xi_cgen_dispatch_helpers.inc.c: {owner_name} revived semantics")
+    return errors
+
+
 def verify_byte_slice_common_prefix_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     marker = owner_macro_prefix("shared.byte-slice-common-prefix")
@@ -1762,6 +1832,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_numeric_width_ratchet(root, registry))
         errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
         errors.extend(verify_byte_slice_fill_ratchet(root, registry))
+        errors.extend(verify_byte_slice_mutation_ratchet(root, registry))
         errors.extend(verify_byte_slice_compare_ratchet(root, registry))
         errors.extend(verify_byte_slice_common_prefix_ratchet(root, registry))
         errors.extend(verify_raw_memory_copy_ratchet(root, registry))

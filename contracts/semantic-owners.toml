@@ -312,6 +312,44 @@ fixtures = [
 ]
 
 [[operation]]
+id = "byte-slice-copy"
+observable_contract = "src/shared/xr_byte_slice_scalar_core.h"
+semantic_kernel = "src/shared/xr_byte_slice_scalar_core.h"
+vm_adapter = "src/vm/xvm_dispatch_collection.inc.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "shared.byte-slice-copy"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_array_core.c",
+  "tests/unit/aot/test_xrt_array.c",
+  "tests/unit/aot/test_xrt_byte_slice_compare_owner_freestanding.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/diff/cases/semantics/collections/byte_slice_bulk_ops_shared_core.xr",
+  "tests/aot/basic/byte_slice_mutation_owner.xr",
+  "tests/aot/filetests/container/byte_slice_mutation_owner_edges.xr",
+  "tests/aot/filetests/container/byte_slice_bulk_ops_storage.xr",
+]
+
+[[operation]]
+id = "byte-slice-repeat"
+observable_contract = "src/shared/xr_byte_slice_scalar_core.h"
+semantic_kernel = "src/shared/xr_byte_slice_scalar_core.h"
+vm_adapter = "src/vm/xvm_dispatch_collection.inc.c"
+aot_adapter = "src/aot/xrt.h"
+typed_plan = "shared.byte-slice-repeat"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_array_core.c",
+  "tests/unit/aot/test_xrt_array.c",
+  "tests/unit/aot/test_xrt_byte_slice_compare_owner_freestanding.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/diff/cases/semantics/collections/byte_slice_bulk_ops_shared_core.xr",
+  "tests/aot/basic/byte_slice_mutation_owner.xr",
+  "tests/aot/filetests/container/byte_slice_mutation_owner_edges.xr",
+  "tests/aot/filetests/container/byte_slice_bulk_ops_storage.xr",
+]
+
+[[operation]]
 id = "byte-slice-compare"
 observable_contract = "src/shared/xr_byte_slice_scalar_core.h"
 semantic_kernel = "src/shared/xr_byte_slice_scalar_core.h"

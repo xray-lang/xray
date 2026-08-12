@@ -14312,71 +14312,25 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_COPY))
         return;
-    bool unchecked_access = (v->aux_int & XI_ACCESS_UNCHECKED) != 0;
     const XaotBulkPlan *bulk =
         cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice<byte>.copyFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
     }
-    if (!unchecked_access && bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        fprintf(out, "xrt_byte_slice_copy_checked_raw(");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, ", ");
-        xicgen_emit_byte_slice_operand(ctx, out, v->args[1],
-                                       "XR_ERROR_CORE_BYTE_SLICE_COPY_SOURCE_MSG");
-        fprintf(out, ")");
-        return;
-    }
-    bool inline_copy =
-        unchecked_access ||
-        (bulk ? bulk->action == XAOT_BULK_INLINE_MEMCPY ||
-                    bulk->action == XAOT_BULK_INLINE_MEMMOVE || bulk->action == XAOT_BULK_TYPED_LOOP
-              : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_COPY, XAOT_SLICE_DROP_HELPER));
-    if (bulk && !inline_copy) {
+    if (bulk && bulk->action != XAOT_BULK_RUNTIME_HELPER &&
+        bulk->action != XAOT_BULK_INLINE_MEMCPY && bulk->action != XAOT_BULK_INLINE_MEMMOVE &&
+        bulk->action != XAOT_BULK_TYPED_LOOP) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
     }
-    if (inline_copy) {
-        fprintf(out, "({ xr_span_t _dst = ");
-        if (!xicgen_emit_byte_slice_expr(ctx, out, v->args[0])) {
-            ctx->error = true;
-            emit_codegen_abort_expr(out);
-        }
-        fprintf(out, "; xr_span_t _src = ");
-        if (!xicgen_emit_byte_slice_expr(ctx, out, v->args[1])) {
-            ctx->error = true;
-            emit_codegen_abort_expr(out);
-        }
-        fprintf(out, "; ");
-        if (unchecked_access)
-            fprintf(out, "/* unchecked Slice.copyFrom access */ "
-                         "XR_ASSUME(_src.length >= 0 && _dst.length >= _src.length && "
-                         "(_src.length == 0 || (_dst.data && _src.data))); ");
-        else
-            fprintf(out, "if (XR_UNLIKELY(_src.length < 0 || _dst.length < 0 || _src.length > "
-                         "_dst.length || (_src.length > 0 && (!_dst.data || !_src.data)))) "
-                         "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                         "XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG); ");
-        if (bulk && bulk->action == XAOT_BULK_INLINE_MEMCPY)
-            fprintf(out, "if (_src.length > 0) memcpy(_dst.data, _src.data, "
-                         "(size_t)_src.length);");
-        else if (unchecked_access || (bulk && bulk->action == XAOT_BULK_INLINE_MEMMOVE))
-            fprintf(out, "if (_src.length > 0) memmove(_dst.data, _src.data, "
-                         "(size_t)_src.length);");
-        else if (bulk && bulk->action == XAOT_BULK_TYPED_LOOP)
-            fprintf(out, "if (_src.length > 0 && (uintptr_t)_dst.data <= (uintptr_t)_src.data) { "
-                         "for (int64_t _i = 0; _i < _src.length; _i++) "
-                         "((uint8_t*)_dst.data)[_i] = ((const uint8_t*)_src.data)[_i]; } else { "
-                         "for (int64_t _i = _src.length; _i > 0; _i--) "
-                         "((uint8_t*)_dst.data)[_i - 1] = ((const uint8_t*)_src.data)[_i - 1]; }");
-        else
-            fprintf(out, "xr_array_core_copy_or_move_bytes(_dst.data, _src.data, _src.length);");
-        fprintf(out, " _dst; })");
+    const char *adapter = cg_byte_slice_copy_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "xrt_byte_slice_copy_checked_raw(");
+    fprintf(out, "%s(", adapter);
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     xicgen_emit_byte_slice_operand(ctx, out, v->args[1],
@@ -14440,46 +14394,18 @@ static void xicgen_byte_slice_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
         emit_codegen_abort_expr(out);
         return;
     }
-    if (bulk && bulk->action == XAOT_BULK_RUNTIME_HELPER) {
-        fprintf(out, "xrt_byte_slice_repeat_from_checked_raw(");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_I64);
-        fprintf(out, ")");
-        return;
-    }
-    bool inline_repeat =
-        bulk ? bulk->action == XAOT_BULK_TYPED_LOOP
-             : cg_span_plan_drops(ctx, v, XAOT_SLICE_ACCESS_BYTE_REPEAT, XAOT_SLICE_DROP_HELPER);
-    if (bulk && !inline_repeat) {
+    if (bulk && bulk->action != XAOT_BULK_RUNTIME_HELPER &&
+        bulk->action != XAOT_BULK_TYPED_LOOP) {
         cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
     }
-    if (inline_repeat) {
-        fprintf(out, "({ xr_span_t _span = ");
-        emit_span_ref_expr(out, v->args[0]);
-        fprintf(out, "; int64_t _dst_offset = ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, "; int64_t _distance = ");
-        emit_value_as_rep_ctx(ctx, out, v->args[2], XR_REP_I64);
-        fprintf(out, "; int64_t _count = ");
-        emit_value_as_rep_ctx(ctx, out, v->args[3], XR_REP_I64);
-        fprintf(out, "; ");
-        fprintf(out, "if (XR_UNLIKELY(_span.length < 0 || _dst_offset < 0 || _distance <= 0 || "
-                     "_count < 0 || _distance > _dst_offset || _dst_offset > _span.length || "
-                     "_count > _span.length - _dst_offset || (_count > 0 && !_span.data))) "
-                     "xrt_throw_error(XR_ERR_INDEX_OUT_OF_BOUNDS, "
-                     "XR_ERROR_CORE_BYTE_SLICE_REPEAT_OOB_MSG); "
-                     "xr_array_core_bytes_repeat_copy(_span.data, _dst_offset, _distance, "
-                     "_count); _span; })");
+    const char *adapter = cg_byte_slice_repeat_adapter_name(ctx);
+    if (!adapter) {
+        emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "xrt_byte_slice_repeat_from_checked_raw(");
+    fprintf(out, "%s(", adapter);
     emit_span_ref_expr(out, v->args[0]);
     fprintf(out, ", ");
     emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
