@@ -38,6 +38,14 @@
 #include <errno.h>
 #include <string.h>
 
+#define xrt_byte_slice_common_prefix_semantics(left_data, left_length, right_data, right_length,   \
+                                               ok)                                                \
+    XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(                                                      \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,                                       \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO, XR_SEM_CONSUMER_AOT_HOSTED,           \
+        xr_byte_slice_common_prefix_core((left_data), (left_length), XR_ELEM_U8, (right_data),    \
+                                         (right_length), XR_ELEM_U8, (ok)))
+
 static inline XrValue xrt_value_clone_for_coro(XrValue val);
 static inline XrValue xrt_value_set_storage_graph(XrValue value, uint8_t storage_mode);
 XRT_COLD _Noreturn void xrt_type_no_index(const char *message);

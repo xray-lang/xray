@@ -101,6 +101,16 @@ static int64_t xrt_byte_slice_compare_checked_raw(xr_span_t left, xr_span_t righ
     return ordering;
 }
 
+static int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, xr_span_t right) {
+    bool ok = false;
+    int64_t prefix;
+    prefix = xr_byte_slice_common_prefix_core(left.data, left.length, XR_ELEM_U8, right.data,
+                                              right.length, XR_ELEM_U8, &ok);
+    if (!ok)
+        abort();
+    return prefix;
+}
+
 /* Restricted generated kernels do not use dynamic values at their public ABI.
  * The compact compatibility record remains available for fixed-array address
  * projections that the current Xi lowering represents through `.ptr`. */

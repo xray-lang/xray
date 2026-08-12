@@ -34,11 +34,11 @@ when any retained log is absent.  A timeout, malformed result, stale or dirty
 identity, high variance, source-root residue, or failed lane remains `failed`;
 the protocol has no skip, allowlist, dirty, or fallback state.
 
-anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 767f7065882a9f369c29e16839a6e779910a99b040638d4a6f8c16c04a7a80cd
+anchor-sha256: contracts/target-machine/semantic-owner-inventory.json c3f2d18a29524808590df3ec40709cc15ed9af71017a92a7578e089ace8ebd9b
 anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 0bcd147580a994f088b1439e6f7daf4f0211f8d33a07788df586a4cf571a8cae
 anchor-sha256: contracts/target-machine/legacy-vm-inventory.json cf6ae29bfc1fe26affeba8f3c8a03bc25dbe7943e6609226547f9df15ef5db0c
 anchor-sha256: contracts/target-machine/legacy-product-residue.json 052cac030a7f91c22c7c4a40e2571f3d9f0a274661aa1396a13f5c5bf4600827
-anchor-sha256: contracts/target-machine/object-extent-inventory.json a8f10c94589676710b8184eed7fa247b0a8d886f4c2358d6b01ef1cf6ff8ad69
+anchor-sha256: contracts/target-machine/object-extent-inventory.json 64deb801039339938971f828e9c181cf1438bef71f4950abc9bf48a026326466
 anchor-sha256: contracts/target-machine/validation-matrix.json 983dd83a1acc22fc66576441dcdfa3b8b52ee606fb6256abefefa2e848310aed
 anchor-sha256: contracts/target-machine/baseline-manifest.json 9264ec82b4e58d421c7b285e3bc2ff598ef09587622110de6cf72d79cbf7ddef
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml 54ee3affe064aabfb89fe1cc75ef5642837fd14b6e7e575a0badb4fc670efd74

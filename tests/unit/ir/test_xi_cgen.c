@@ -5139,10 +5139,8 @@ TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
            "static Slice<byte>.repeatFrom hot path must not keep the generic repeat wrapper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_copy_from(") == 0 &&
            "static Slice<byte>.copyFrom hot path must not keep the generic copy wrapper");
-    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_common_prefix_raw(") > 0 &&
-           "Slice<byte>.commonPrefix must lower to the trusted static core prefix helper");
-    assert(count_between(fn_body, fn_end, "xr_array_core_slice_range(") > 0 &&
-           "Slice<byte>.commonPrefix over slices should inline slice range planning");
+    assert(count_between(fn_body, fn_end, "xrt_byte_slice_common_prefix_checked_raw(") > 0 &&
+           "Slice<byte>.commonPrefix must lower through the stable owner adapter");
     assert(count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
            "Array<byte>.reserve must lower to the raw AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_byte_array_load_u16_le_value(") == 0 &&
@@ -5160,8 +5158,8 @@ TEST(cgen_byte_slice_safe_methods_use_raw_memory_helpers) {
            "static Slice<byte>.load hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_store_u16_checked_raw(") == 0 &&
            "static Slice<byte>.store hot path must not keep dynamic span checks");
-    assert(count_between(fn_body, fn_end, "xrt_byte_slice_common_prefix_checked_raw(") == 0 &&
-           "static Slice<byte>.commonPrefix hot path must not keep dynamic span checks");
+    assert(count_between(fn_body, fn_end, "xr_array_core_bytes_common_prefix_raw(") == 0 &&
+           "generated C must not revive the retired common-prefix kernel");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_repeat_from_checked_raw(") == 0 &&
            "static Slice<byte>.repeatFrom hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_copy_checked_raw(") == 0 &&
@@ -7725,6 +7723,43 @@ TEST(cgen_byte_slice_compare_uses_stable_owner_adapter) {
            "generated C must call the stable byte-slice compare owner adapter");
     assert(!contains_between(fn, fn_end, "memcmp(") &&
            "generated C must not recreate byte-slice compare semantics");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_byte_slice_common_prefix_uses_stable_owner_adapter) {
+    assert(xr_semantic_owner_has_consumer(
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
+               XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO, XR_SEM_CONSUMER_CGEN) &&
+           "byte-slice common-prefix owner must publish CGen as a mechanical consumer");
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO);
+    assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_common_prefix_checked_raw") == 0 &&
+           "CGen must resolve the stable byte-slice common-prefix owner adapter");
+
+    const char *src = "fn commonPrefix() -> int {\n"
+                      "    var left = Array<byte>(9)\n"
+                      "    var right = Array<byte>(9)\n"
+                      "    var leftView: Slice<byte> = left[:]\n"
+                      "    return leftView.commonPrefix(right[:])\n"
+                      "}\n"
+                      "print(commonPrefix())\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "byte-slice common-prefix IR compilation failed");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && !had_error &&
+           "stable-owner byte-slice common-prefix C generation failed");
+    const char *fn = find_static_function_definition(code, "test_commonPrefix_");
+    assert(fn != NULL && "byte-slice common-prefix definition must be emitted");
+    const char *fn_end = next_static_after(fn);
+    assert(contains_between(fn, fn_end, "xrt_byte_slice_common_prefix_checked_raw(") &&
+           "generated C must call the stable byte-slice common-prefix owner adapter");
+    assert(!contains_between(fn, fn_end, "xr_byte_slice_common_prefix_core(") &&
+           !contains_between(fn, fn_end, "xr_array_core_bytes_common_prefix_raw(") &&
+           "generated C must not recreate byte-slice common-prefix semantics");
 
     xr_free(code);
     xi_func_free(ir);
@@ -12995,6 +13030,7 @@ int main(void) {
     run_cgen_numeric_width_uses_stable_owner_adapter();
     run_cgen_byte_slice_scalar_uses_stable_owner_adapter();
     run_cgen_byte_slice_compare_uses_stable_owner_adapter();
+    run_cgen_byte_slice_common_prefix_uses_stable_owner_adapter();
     run_cgen_force_unwrap_checktype_uses_portable_borrowed_helper();
     run_cgen_same_type_as_lowers_away_without_arc();
     run_cgen_closure_values_and_indirect_calls_use_portable_c();

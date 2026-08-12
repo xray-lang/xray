@@ -34,7 +34,23 @@ TEST(freestanding_byte_slice_compare_owner_preserves_unsigned_and_prefix_orderin
     ASSERT_EQ_INT(xrt_byte_slice_compare_checked_raw(empty, empty), 0);
 }
 
+TEST(freestanding_byte_slice_common_prefix_owner_preserves_word_boundaries) {
+    uint8_t left_bytes[] = {1, 2, 3, 4, 5, 6, 7, 8, 128, 10, 11, 12, 13, 14, 15, 255, 17};
+    uint8_t right_bytes[] = {1, 2, 3, 4, 5, 6, 7, 8, 128, 10, 11, 12, 13, 14, 15, 255, 17};
+    xr_span_t left = {left_bytes, 17};
+    xr_span_t right = {right_bytes, 17};
+    xr_span_t short_right = {right_bytes, 9};
+    xr_span_t empty = {NULL, 0};
+
+    ASSERT_EQ_INT(xrt_byte_slice_common_prefix_checked_raw(left, right), 17);
+    ASSERT_EQ_INT(xrt_byte_slice_common_prefix_checked_raw(left, short_right), 9);
+    right_bytes[8] = 129;
+    ASSERT_EQ_INT(xrt_byte_slice_common_prefix_checked_raw(left, right), 8);
+    ASSERT_EQ_INT(xrt_byte_slice_common_prefix_checked_raw(empty, right), 0);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Freestanding Byte Slice Compare Owner");
 RUN_TEST(freestanding_byte_slice_compare_owner_preserves_unsigned_and_prefix_ordering);
+RUN_TEST(freestanding_byte_slice_common_prefix_owner_preserves_word_boundaries);
 TEST_MAIN_END()

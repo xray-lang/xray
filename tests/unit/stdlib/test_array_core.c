@@ -731,27 +731,62 @@ TEST(array_core_bytes_repeat_from_matches_lz_style_overlap) {
 
 TEST(array_core_bytes_common_prefix_uses_min_length_and_word_chunks) {
     uint8_t left[] = {
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 128, 255, 0, 17,
     };
     uint8_t right[] = {
-        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 99, 12, 13,
+        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 128, 255, 0, 17,
     };
+    uint8_t mismatch[17];
 
     bool ok = false;
-    ASSERT_EQ_INT(
-        xr_array_core_bytes_common_prefix(left, 13, XR_ELEM_U8, right, 13, XR_ELEM_U8, &ok), 10);
+    ASSERT_TRUE(xr_semantic_owner_has_consumer(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO, XR_SEM_CONSUMER_VM));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO),
+                  "xrt_byte_slice_common_prefix_checked_raw");
+
+    memcpy(mismatch, right, sizeof(mismatch));
+    mismatch[0] = 99;
+    ASSERT_EQ_INT(XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
+                      XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO, XR_SEM_CONSUMER_VM,
+                      xr_byte_slice_common_prefix_core(left, 17, XR_ELEM_U8, mismatch, 17,
+                                                       XR_ELEM_U8, &ok)),
+                  0);
     ASSERT_TRUE(ok);
-    ASSERT_EQ_INT(
-        xr_array_core_bytes_common_prefix(left, 9, XR_ELEM_U8, right, 13, XR_ELEM_U8, &ok), 9);
+    for (int64_t boundary = 7; boundary <= 9; boundary++) {
+        memcpy(mismatch, right, sizeof(mismatch));
+        mismatch[boundary] ^= UINT8_C(0xff);
+        ASSERT_EQ_INT(xr_byte_slice_common_prefix_core(left, 17, XR_ELEM_U8, mismatch, 17,
+                                                       XR_ELEM_U8, &ok),
+                      boundary);
+        ASSERT_TRUE(ok);
+    }
+    ASSERT_EQ_INT(xr_byte_slice_common_prefix_core(left, 17, XR_ELEM_U8, right, 13, XR_ELEM_U8,
+                                                   &ok),
+                  13);
     ASSERT_TRUE(ok);
-    ASSERT_EQ_INT(
-        xr_array_core_bytes_common_prefix(NULL, 0, XR_ELEM_U8, right, 13, XR_ELEM_U8, &ok), 0);
+    ASSERT_EQ_INT(xr_byte_slice_common_prefix_core(NULL, 0, XR_ELEM_U8, right, 17, XR_ELEM_U8,
+                                                   &ok),
+                  0);
     ASSERT_TRUE(ok);
-    ASSERT_EQ_INT(
-        xr_array_core_bytes_common_prefix(NULL, 1, XR_ELEM_U8, right, 13, XR_ELEM_U8, &ok), 0);
+    ASSERT_EQ_INT(xr_byte_slice_common_prefix_core(left, 0, XR_ELEM_U8, NULL, 17, XR_ELEM_U8,
+                                                   &ok),
+                  0);
+    ASSERT_TRUE(ok);
+    ASSERT_EQ_INT(xr_byte_slice_common_prefix_core(NULL, 1, XR_ELEM_U8, right, 17, XR_ELEM_U8,
+                                                   &ok),
+                  0);
     ASSERT_FALSE(ok);
-    ASSERT_EQ_INT(
-        xr_array_core_bytes_common_prefix(left, 13, XR_ELEM_I64, right, 13, XR_ELEM_U8, &ok), 0);
+    ASSERT_EQ_INT(xr_byte_slice_common_prefix_core(left, -1, XR_ELEM_U8, right, 17, XR_ELEM_U8,
+                                                   &ok),
+                  0);
+    ASSERT_FALSE(ok);
+    ASSERT_EQ_INT(xr_byte_slice_common_prefix_core(left, 17, XR_ELEM_I64, right, 17, XR_ELEM_U8,
+                                                   &ok),
+                  0);
     ASSERT_FALSE(ok);
 }
 

@@ -102,6 +102,31 @@ typedef enum XrEndianCore {
 #define XR_BYTE_SLICE_COMPARE_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)           \
     (XR_BYTE_SLICE_COMPARE_OWNER_GUARD((owner_hi), (owner_lo)),                                   \
      XR_BYTE_SLICE_COMPARE_CONSUMER_GUARD((consumer_bit)), (expression))
+
+#define XR_BYTE_SLICE_COMMON_PREFIX_OWNER_GUARD(owner_hi, owner_lo)                               \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int owner_id_must_be_shared_byte_slice_common_prefix                            \
+            : (((uint64_t) (owner_hi) ==                                                         \
+                XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI &&                            \
+                (uint64_t) (owner_lo) ==                                                         \
+                    XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO)                           \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BYTE_SLICE_COMMON_PREFIX_CONSUMER_GUARD(consumer_bit)                                  \
+    ((void) sizeof(struct {                                                                        \
+        unsigned int consumer_must_be_declared_for_shared_byte_slice_common_prefix               \
+            : (((uint32_t) (consumer_bit) != 0 &&                                                 \
+                (XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_CONSUMERS &                      \
+                 (uint32_t) (consumer_bit)) != 0)                                                 \
+                   ? 1                                                                            \
+                   : -1);                                                                         \
+    }))
+
+#define XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(owner_hi, owner_lo, consumer_bit, expression)     \
+    (XR_BYTE_SLICE_COMMON_PREFIX_OWNER_GUARD((owner_hi), (owner_lo)),                             \
+     XR_BYTE_SLICE_COMMON_PREFIX_CONSUMER_GUARD((consumer_bit)), (expression))
 #endif
 
 XR_BYTE_SLICE_SCALAR_INLINE int64_t xr_byte_slice_compare_core(
@@ -127,6 +152,66 @@ XR_BYTE_SLICE_SCALAR_INLINE int64_t xr_byte_slice_compare_core(
         return -1;
     if (left_length > right_length)
         return 1;
+    return 0;
+}
+
+XR_BYTE_SLICE_SCALAR_INLINE int xr_byte_slice_common_prefix_diff_byte64(uint64_t diff) {
+#if defined(__GNUC__) || defined(__clang__)
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    return __builtin_clzll(diff) >> 3;
+#else
+    return __builtin_ctzll(diff) >> 3;
+#endif
+#else
+    int n = 0;
+#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
+    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    while (((diff >> ((7 - n) * 8)) & UINT64_C(0xff)) == 0)
+        n++;
+#else
+    while (((diff >> (n * 8)) & UINT64_C(0xff)) == 0)
+        n++;
+#endif
+    return n;
+#endif
+}
+
+XR_BYTE_SLICE_SCALAR_INLINE int64_t xr_byte_slice_common_prefix_core(
+    const void *left_data, int64_t left_length, uint8_t left_elem_type, const void *right_data,
+    int64_t right_length, uint8_t right_elem_type, bool *ok) {
+    bool valid = left_length >= 0 && right_length >= 0 && left_elem_type == XR_ELEM_U8 &&
+                 right_elem_type == XR_ELEM_U8;
+    int64_t shared_length = 0;
+    int64_t i = 0;
+    const uint8_t *left = (const uint8_t *) left_data;
+    const uint8_t *right = (const uint8_t *) right_data;
+    if (!valid)
+        goto invalid;
+
+    shared_length = left_length < right_length ? left_length : right_length;
+    if (shared_length > 0 && (!left_data || !right_data))
+        goto invalid;
+    if (ok)
+        *ok = true;
+    while (i + 8 <= shared_length) {
+        uint64_t left_word = 0;
+        uint64_t right_word = 0;
+        uint64_t diff = 0;
+        memcpy(&left_word, left + i, sizeof(left_word));
+        memcpy(&right_word, right + i, sizeof(right_word));
+        diff = left_word ^ right_word;
+        if (diff)
+            return i + xr_byte_slice_common_prefix_diff_byte64(diff);
+        i += 8;
+    }
+    while (i < shared_length && left[i] == right[i])
+        i++;
+    return i;
+
+invalid:
+    if (ok)
+        *ok = false;
     return 0;
 }
 

@@ -531,6 +531,10 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
                                                  xrt_span_from_array_slice(span_ops_value, 8, 12)),
         4, "Slice<byte>.commonPrefix compares safe span slices");
     ASSERT_EQ_INT(
+        xrt_byte_slice_common_prefix_checked_raw(xrt_span_from_array_slice(span_ops_value, 0, 3),
+                                                 xrt_span_from_array_slice(span_ops_value, 8, 12)),
+        3, "hosted commonPrefix adapter preserves shorter-prefix length");
+    ASSERT_EQ_INT(
         xrt_byte_slice_compare_checked_raw(xrt_span_from_array_slice(span_ops_value, 0, 4),
                                            xrt_span_from_array_slice(span_ops_value, 8, 12)),
         0, "hosted Slice<byte>.compare adapter consumes the shared owner");

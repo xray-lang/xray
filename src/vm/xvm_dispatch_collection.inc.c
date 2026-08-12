@@ -1738,8 +1738,11 @@ vmcase(OP_BYTE_SLICE_COMMON_PREFIX) {
     (void) left_readonly;
     (void) right_readonly;
     bool ok = false;
-    int64_t prefix = xr_array_core_bytes_common_prefix(
-        left_data, left_length, left_elem_type, right_data, right_length, right_elem_type, &ok);
+    int64_t prefix = XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO, XR_SEM_CONSUMER_VM,
+        xr_byte_slice_common_prefix_core(left_data, left_length, left_elem_type, right_data,
+                                         right_length, right_elem_type, &ok));
     if (!ok) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_NO_DATA_MSG);
     }

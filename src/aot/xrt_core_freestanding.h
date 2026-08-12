@@ -89,6 +89,14 @@ int memcmp(const void *a, const void *b, size_t n);
         XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMPARE_LO, XR_SEM_CONSUMER_AOT_FREESTANDING,           \
         xr_byte_slice_compare_core((left_data), (left_length), XR_ELEM_U8, (right_data),          \
                                    (right_length), XR_ELEM_U8, (ok)))
+#define xrt_byte_slice_common_prefix_semantics(left_data, left_length, right_data, right_length,   \
+                                               ok)                                                \
+    XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY(                                                      \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_HI,                                       \
+        XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_COMMON_PREFIX_LO,                                       \
+        XR_SEM_CONSUMER_AOT_FREESTANDING,                                                         \
+        xr_byte_slice_common_prefix_core((left_data), (left_length), XR_ELEM_U8, (right_data),    \
+                                         (right_length), XR_ELEM_U8, (ok)))
 #include "../shared/xr_sync_core.h"
 #include "../shared/xr_truthy_core.h"
 #include "../shared/xr_type_identity_core.h"
@@ -1036,6 +1044,15 @@ static inline int64_t xrt_byte_slice_compare_checked_raw(xr_span_t left, xr_span
     return ordering;
 }
 
+static inline int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, xr_span_t right) {
+    bool ok = false;
+    int64_t prefix = xrt_byte_slice_common_prefix_semantics(
+        left.data, left.length, right.data, right.length, &ok);
+    if (!ok)
+        xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_NO_DATA_MSG);
+    return prefix;
+}
+
 typedef struct XrArrayCoreRange {
     int64_t start;
     int64_t end;
@@ -1061,53 +1078,6 @@ static inline XrArrayCoreRange xr_array_core_slice_range(int64_t length, int64_t
     if (start > end)
         start = end;
     return (XrArrayCoreRange) {start, end, end - start};
-}
-
-static inline int xr_array_core_common_prefix_diff_byte64(uint64_t diff) {
-#if defined(__GNUC__) || defined(__clang__)
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    return __builtin_clzll(diff) >> 3;
-#else
-    return __builtin_ctzll(diff) >> 3;
-#endif
-#else
-    int n = 0;
-#if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) &&                                    \
-    __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-    while (((diff >> ((7 - n) * 8)) & UINT64_C(0xff)) == 0)
-        n++;
-#else
-    while (((diff >> (n * 8)) & UINT64_C(0xff)) == 0)
-        n++;
-#endif
-    return n;
-#endif
-}
-
-static inline int64_t xr_array_core_bytes_common_prefix_raw(const void *left_data,
-                                                            int64_t left_length,
-                                                            const void *right_data,
-                                                            int64_t right_length) {
-    int64_t n = left_length < right_length ? left_length : right_length;
-    if (n <= 0)
-        return 0;
-    const uint8_t *left = (const uint8_t *) left_data;
-    const uint8_t *right = (const uint8_t *) right_data;
-    int64_t i = 0;
-    while (i + 8 <= n) {
-        uint64_t lv = 0;
-        uint64_t rv = 0;
-        memcpy(&lv, left + i, sizeof(lv));
-        memcpy(&rv, right + i, sizeof(rv));
-        uint64_t diff = lv ^ rv;
-        if (diff)
-            return i + xr_array_core_common_prefix_diff_byte64(diff);
-        i += 8;
-    }
-    while (i < n && left[i] == right[i])
-        i++;
-    return i;
 }
 
 static inline bool xr_array_core_memory_ranges_overlap(const void *a, int64_t a_len, const void *b,

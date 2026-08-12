@@ -147,6 +147,7 @@ BYTE_SLICE_SCALAR_OPERATIONS = {
     for scalar in ("u16", "u32", "u64", "f32", "f64")
 }
 BYTE_SLICE_COMPARE_OPERATIONS = {"xi.byte.slice.compare"}
+BYTE_SLICE_COMMON_PREFIX_OPERATIONS = {"xi.byte.slice.common.prefix"}
 RANGE_OPERATIONS = {"xi.range"}
 RANGE_AOT_BINDINGS = (
     "src/aot/xrt.h",
@@ -1321,6 +1322,101 @@ def verify_byte_slice_compare_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_byte_slice_common_prefix_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    marker = owner_macro_prefix("shared.byte-slice-common-prefix")
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == "shared.byte-slice-common-prefix"), None)
+    if owner is None or set(owner.get("operations", [])) != BYTE_SLICE_COMMON_PREFIX_OPERATIONS:
+        errors.append(
+            "semantic owner registry has no exact shared.byte-slice-common-prefix family")
+
+    core_text = (root / "src/shared/xr_byte_slice_scalar_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    if (f"{marker}_HI" not in core_text or f"{marker}_LO" not in core_text or
+            "XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY" not in core_text or
+            "xr_byte_slice_common_prefix_core" not in core_text):
+        errors.append(
+            "src/shared/xr_byte_slice_scalar_core.h: common-prefix lacks stable owner kernel")
+
+    retired = (
+        "xr_array_core_bytes_common_prefix_raw",
+        "xr_array_core_bytes_common_prefix",
+        "xr_array_core_common_prefix_diff_byte64",
+    )
+    for relative in ("src/shared/xr_array_core.h", "src/aot/xrt_core_freestanding.h"):
+        text = (root / relative).read_text(encoding="utf-8", errors="strict")
+        for symbol in retired:
+            if symbol in text:
+                errors.append(f"{relative}: retired common-prefix semantic source remains: {symbol}")
+
+    vm_text = (root / "src/vm/xvm_dispatch_collection.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    start = vm_text.find("vmcase(OP_BYTE_SLICE_COMMON_PREFIX)")
+    end = vm_text.find("vmbreak;", start)
+    vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
+    if (f"{marker}_HI" not in vm_body or f"{marker}_LO" not in vm_body or
+            "XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY" not in vm_body or
+            "xr_byte_slice_common_prefix_core" not in vm_body):
+        errors.append(
+            "src/vm/xvm_dispatch_collection.inc.c: VM common-prefix bypasses stable owner")
+    if any(symbol in vm_body for symbol in retired) or "while (" in vm_body:
+        errors.append(
+            "src/vm/xvm_dispatch_collection.inc.c: VM revived private common-prefix semantics")
+
+    hosted_header = (root / "src/aot/xrt_coll.h").read_text(encoding="utf-8", errors="strict")
+    freestanding_text = (root / "src/aot/xrt_core_freestanding.h").read_text(
+        encoding="utf-8", errors="strict")
+    hosted_runtime = (root / "src/aot/xrt_byte_array.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
+    for relative, text in (("src/aot/xrt_coll.h", hosted_header),
+                           ("src/aot/xrt_core_freestanding.h", freestanding_text)):
+        if (f"{marker}_HI" not in text or f"{marker}_LO" not in text or
+                "XR_BYTE_SLICE_COMMON_PREFIX_OWNER_APPLY" not in text or
+                "xrt_byte_slice_common_prefix_semantics" not in text):
+            errors.append(f"{relative}: AOT common-prefix adapter bypasses stable owner")
+
+    hosted_body = extract_c_function(
+        hosted_runtime, "xrt_byte_slice_common_prefix_checked_raw") or ""
+    if "#ifndef xrt_byte_slice_common_prefix_semantics" in hosted_runtime or \
+            "#define xrt_byte_slice_common_prefix_semantics" in hosted_runtime:
+        errors.append(
+            "src/aot/xrt_byte_array.inc.c: common-prefix owner fallback or alias revived")
+    if "xrt_byte_slice_common_prefix_semantics" not in hosted_body or any(
+            symbol in hosted_body for symbol in retired):
+        errors.append("src/aot/xrt_byte_array.inc.c: hosted common-prefix owns semantics")
+    freestanding_body = extract_c_function(
+        freestanding_text, "xrt_byte_slice_common_prefix_checked_raw") or ""
+    if "xrt_byte_slice_common_prefix_semantics" not in freestanding_body or any(
+            symbol in freestanding_body for symbol in retired):
+        errors.append(
+            "src/aot/xrt_core_freestanding.h: freestanding common-prefix owns semantics")
+    c90_body = extract_c_function(c90_text, "xrt_byte_slice_common_prefix_checked_raw") or ""
+    if "xr_byte_slice_common_prefix_core" not in c90_body or any(
+            symbol in c90_body for symbol in retired):
+        errors.append("src/aot/xrt_c90.h: C90 common-prefix owns semantics")
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    adapter_body = extract_c_function(cgen_text, "cg_byte_slice_common_prefix_adapter_name")
+    if (adapter_body is None or f"{marker}_HI" not in adapter_body or
+            f"{marker}_LO" not in adapter_body or
+            "xr_semantic_owner_cgen_adapter" not in adapter_body):
+        errors.append(
+            "src/aot/xi_cgen.c: CGen common-prefix does not resolve by stable owner ID")
+    dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    emitter_body = extract_c_function(dispatch_text, "xicgen_byte_slice_common_prefix") or ""
+    if ("cg_byte_slice_common_prefix_adapter_name" not in emitter_body or
+            "xrt_byte_slice_common_prefix_checked_raw" in emitter_body or
+            "xr_byte_slice_common_prefix_core" in emitter_body or
+            any(symbol in emitter_body for symbol in retired) or
+            "_left_len" in emitter_body or "_right_len" in emitter_body):
+        errors.append(
+            "src/aot/xi_cgen_dispatch_helpers.inc.c: CGen common-prefix bypasses owner adapter")
+    return errors
+
+
 def verify_operation_registry(root: Path) -> tuple[list[str], int]:
     errors: list[str] = []
     source_path = root / "xisa/xi/ops.def"
@@ -1422,6 +1518,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_numeric_width_ratchet(root, registry))
         errors.extend(verify_byte_slice_scalar_ratchet(root, registry))
         errors.extend(verify_byte_slice_compare_ratchet(root, registry))
+        errors.extend(verify_byte_slice_common_prefix_ratchet(root, registry))
     registry_errors, _ = verify_operation_registry(root)
     errors.extend(registry_errors)
     return errors

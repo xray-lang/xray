@@ -358,8 +358,8 @@ static inline int64_t xrt_byte_slice_compare_checked_raw(xr_span_t left, xr_span
 
 static inline int64_t xrt_byte_slice_common_prefix_checked_raw(xr_span_t left, xr_span_t right) {
     bool ok = false;
-    int64_t prefix = xr_array_core_bytes_common_prefix(left.data, left.length, XR_ELEM_U8,
-                                                       right.data, right.length, XR_ELEM_U8, &ok);
+    int64_t prefix = xrt_byte_slice_common_prefix_semantics(
+        left.data, left.length, right.data, right.length, &ok);
     if (!ok)
         xrt_throw_error(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_SLICE_COMMON_PREFIX_NO_DATA_MSG);
     return prefix;
