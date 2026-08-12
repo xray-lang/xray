@@ -289,13 +289,23 @@ int xray_vm_dostring(XrVMRuntime *isolate, const char *source) {
         fprintf(stderr, "Compiler unavailable: source execution requires a compiler session\n");
         return -1;
     }
-    DostringGraphState graph_state = {0};
-    if (!prepare_graph_for_dostring(isolate, session, source, &graph_state))
+    XrCompilerSessionOperationScope operation_scope;
+    if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
+        fprintf(stderr, "Compiler unavailable: compiler session is busy\n");
         return -1;
+    }
+    DostringGraphState graph_state = {0};
+    if (!prepare_graph_for_dostring(isolate, session, source, &graph_state)) {
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        return -1;
+    }
 
     XrProto *code = xr_compile_source_with_path(session, source, "<eval>");
     if (code == NULL) {
         dostring_graph_cleanup(session, &graph_state);
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         fprintf(stderr, "Compilation error\n");
         return -1;
     }
@@ -304,6 +314,9 @@ int xray_vm_dostring(XrVMRuntime *isolate, const char *source) {
 
     xr_free_code(isolate, code);
     dostring_graph_cleanup(session, &graph_state);
+
+    if (!xr_compiler_session_operation_succeed(&operation_scope))
+        return -1;
 
     return result;
 }

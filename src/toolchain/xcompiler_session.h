@@ -62,6 +62,13 @@ typedef enum XrCompilerSessionOperationOutcome {
     XR_COMPILER_SESSION_OPERATION_FATAL,
 } XrCompilerSessionOperationOutcome;
 
+typedef struct XrCompilerSessionOperationScope {
+    XrCompilerSession *session;
+    uint64_t session_generation;
+    bool owns_operation;
+    bool active;
+} XrCompilerSessionOperationScope;
+
 typedef struct XrCompilerSessionIncrementalStats {
     size_t module_count;
     size_t dependency_count;
@@ -120,13 +127,16 @@ xr_compiler_session_generation_snapshot(const XrCompilerSession *session);
 XR_FUNC bool xr_compiler_session_apply_generation_change(XrCompilerSession *session,
                                                          uint32_t change_mask);
 XR_FUNC bool xr_compiler_session_reset_incremental(XrCompilerSession *session);
-/* Incremental operations own only transient parser/lowering views. Publishing
- * a verified dependency graph or applying an invalidation is a separate
- * atomic transaction performed while no operation is active. */
-XR_FUNC bool xr_compiler_session_begin_incremental_operation(XrCompilerSession *session);
-XR_FUNC bool xr_compiler_session_finish_incremental_operation(XrCompilerSession *session);
-XR_FUNC bool xr_compiler_session_abort_incremental_operation(
-    XrCompilerSession *session, XrCompilerSessionOperationOutcome outcome);
+/* The outermost scope owns the transaction. Nested compiler entry points
+ * borrow it, so a module bundle is one operation rather than one operation per
+ * dependency. Any nested failure aborts the owner and invalidates every scope
+ * from the abandoned generation. */
+XR_FUNC bool xr_compiler_session_operation_begin(
+    XrCompilerSession *session, XrCompilerSessionOperationScope *scope);
+XR_FUNC bool xr_compiler_session_operation_succeed(
+    XrCompilerSessionOperationScope *scope);
+XR_FUNC bool xr_compiler_session_operation_fail(
+    XrCompilerSessionOperationScope *scope, XrCompilerSessionOperationOutcome outcome);
 XR_FUNC bool xr_compiler_session_publish_dependency_graph(
     XrCompilerSession *session, const struct XrDependencyGraph *graph);
 XR_FUNC bool xr_compiler_session_apply_invalidation(

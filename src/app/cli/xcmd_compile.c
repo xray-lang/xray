@@ -197,6 +197,8 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     XrProto *proto = NULL;
     XrModuleGraph *graph = NULL;
     XaAnalyzer *graph_analyzer = NULL;
+    XrCompilerSession *session = NULL;
+    XrCompilerSessionOperationScope operation_scope = {0};
 
     /* Generate variable name */
     if (!var_name && (format == XR_OUTPUT_C_SOURCE || format == XR_OUTPUT_C_HEADER)) {
@@ -212,7 +214,11 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
         goto cleanup;
     }
     xr_module_system_init_with_script(X, input_file);
-    XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    session = xr_compiler_session_current_for_isolate(X);
+    if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
+        xr_cli_error("compile", "compiler session is busy");
+        goto cleanup;
+    }
     if (!prepare_compile_graph(X, session, input_file, &graph, &graph_analyzer))
         goto cleanup;
 
@@ -288,7 +294,6 @@ cleanup:
         xr_vm_proto_free(proto);
     xr_free(source);
     if (X) {
-        XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
         xr_compiler_session_set_module_graph(session, NULL);
     }
     if (graph_analyzer) {
@@ -297,6 +302,15 @@ cleanup:
     }
     if (graph)
         xr_module_graph_free(graph);
+    if (operation_scope.active) {
+        if (result == XR_CLI_EXIT_OK) {
+            if (!xr_compiler_session_operation_succeed(&operation_scope))
+                result = XR_CLI_EXIT_INTERNAL;
+        } else {
+            (void) xr_compiler_session_operation_fail(
+                &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        }
+    }
     if (X)
         xray_vm_delete(X);
     xr_free(gen_var_name);

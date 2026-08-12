@@ -16,6 +16,9 @@
 #include "os/os_fs.h"
 #include "os/os_temp.h"
 #include "toolchain/xcompiler_session.h"
+#include "runtime/xisolate_api.h"
+#include "runtime/value/xchunk.h"
+#include "xray_vm.h"
 
 #include <string.h>
 
@@ -299,8 +302,11 @@ TEST(session_owns_dependency_graph_and_isolates_workspaces) {
 TEST(operation_abort_is_transactional_and_invalidates_old_scopes) {
     XrCompilerSession *session = xr_compiler_session_new(NULL);
     ASSERT_NOT_NULL(session);
-    ASSERT_TRUE(xr_compiler_session_begin_incremental_operation(session));
-    ASSERT_FALSE(xr_compiler_session_begin_incremental_operation(session));
+    XrCompilerSessionOperationScope owner;
+    XrCompilerSessionOperationScope nested;
+    ASSERT_TRUE(xr_compiler_session_operation_begin(session, &owner));
+    ASSERT_TRUE(xr_compiler_session_operation_begin(session, &nested));
+    ASSERT_FALSE(nested.owns_operation);
 
     XrArena arena;
     XrCompilerSessionScope scope;
@@ -312,17 +318,18 @@ TEST(operation_abort_is_transactional_and_invalidates_old_scopes) {
         .canonical_module = "pkg/cancel",
     };
     xr_compiler_session_set_compile_unit_identity(session, &identity);
-    ASSERT_FALSE(xr_compiler_session_finish_incremental_operation(session));
     XrCompilerSessionGenerationSnapshot before =
         xr_compiler_session_generation_snapshot(session);
-    ASSERT_TRUE(xr_compiler_session_abort_incremental_operation(
-        session, XR_COMPILER_SESSION_OPERATION_CANCELLED));
+    ASSERT_TRUE(xr_compiler_session_operation_fail(
+        &nested, XR_COMPILER_SESSION_OPERATION_CANCELLED));
+    ASSERT_TRUE(xr_compiler_session_incremental_stats(session).operation_active);
+    xr_compiler_session_pop_arena(&scope);
+    ASSERT_FALSE(xr_compiler_session_operation_succeed(&owner));
     ASSERT_EQ_UINT(xr_compiler_session_generation_snapshot(session).session_generation,
                    before.session_generation + 1u);
     ASSERT_NULL(xr_compiler_session_current_arena(session));
     ASSERT_NULL(xr_compiler_session_string_pool(session));
     ASSERT_NULL(xr_compiler_session_module_graph(session));
-    xr_compiler_session_pop_arena(&scope);
     ASSERT_NULL(xr_compiler_session_current_arena(session));
 
     XrCompilerSessionIncrementalStats cancelled =
@@ -332,11 +339,11 @@ TEST(operation_abort_is_transactional_and_invalidates_old_scopes) {
     ASSERT_EQ_UINT(cancelled.last_outcome, XR_COMPILER_SESSION_OPERATION_CANCELLED);
     ASSERT_FALSE(cancelled.operation_active);
 
-    ASSERT_TRUE(xr_compiler_session_begin_incremental_operation(session));
-    ASSERT_TRUE(xr_compiler_session_abort_incremental_operation(
-        session, XR_COMPILER_SESSION_OPERATION_FATAL));
-    ASSERT_TRUE(xr_compiler_session_begin_incremental_operation(session));
-    ASSERT_TRUE(xr_compiler_session_finish_incremental_operation(session));
+    ASSERT_TRUE(xr_compiler_session_operation_begin(session, &owner));
+    ASSERT_TRUE(xr_compiler_session_operation_fail(
+        &owner, XR_COMPILER_SESSION_OPERATION_FATAL));
+    ASSERT_TRUE(xr_compiler_session_operation_begin(session, &owner));
+    ASSERT_TRUE(xr_compiler_session_operation_succeed(&owner));
     XrCompilerSessionIncrementalStats final =
         xr_compiler_session_incremental_stats(session);
     ASSERT_EQ_UINT(final.completed_operations, 1);
@@ -375,9 +382,10 @@ TEST(invalidation_history_is_bounded_and_idle_cleanup_is_observable) {
     ASSERT_NULL(xr_compiler_session_invalidation_at(
         session, XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT));
 
-    ASSERT_TRUE(xr_compiler_session_begin_incremental_operation(session));
+    XrCompilerSessionOperationScope operation_scope;
+    ASSERT_TRUE(xr_compiler_session_operation_begin(session, &operation_scope));
     ASSERT_FALSE(xr_compiler_session_incremental_idle_cleanup(session, 2));
-    ASSERT_TRUE(xr_compiler_session_finish_incremental_operation(session));
+    ASSERT_TRUE(xr_compiler_session_operation_succeed(&operation_scope));
     ASSERT_TRUE(xr_compiler_session_incremental_idle_cleanup(session, 2));
     XrCompilerSessionIncrementalStats trimmed =
         xr_compiler_session_incremental_stats(session);
@@ -397,6 +405,80 @@ TEST(invalidation_history_is_bounded_and_idle_cleanup_is_observable) {
     ASSERT_EQ_UINT(reset.cancelled_operations, 0);
     ASSERT_EQ_UINT(reset.fatal_operations, 0);
     xr_compiler_session_delete(session);
+}
+
+TEST(operation_scope_rejects_forged_and_stale_commits) {
+    XrCompilerSession *session = xr_compiler_session_new(NULL);
+    ASSERT_NOT_NULL(session);
+    XrCompilerSessionOperationScope owner;
+    XrCompilerSessionOperationScope nested;
+    ASSERT_TRUE(xr_compiler_session_operation_begin(session, &owner));
+    ASSERT_TRUE(xr_compiler_session_operation_begin(session, &nested));
+
+    XrCompilerSessionOperationScope forged = nested;
+    forged.session_generation++;
+    ASSERT_FALSE(xr_compiler_session_operation_fail(
+        &nested, XR_COMPILER_SESSION_OPERATION_NONE));
+    ASSERT_FALSE(xr_compiler_session_operation_fail(
+        &nested, XR_COMPILER_SESSION_OPERATION_SUCCEEDED));
+    ASSERT_TRUE(nested.active);
+    ASSERT_FALSE(xr_compiler_session_operation_succeed(&forged));
+    ASSERT_TRUE(xr_compiler_session_incremental_stats(session).operation_active);
+
+    ASSERT_TRUE(xr_compiler_session_operation_fail(
+        &nested, XR_COMPILER_SESSION_OPERATION_FATAL));
+    ASSERT_FALSE(xr_compiler_session_operation_succeed(&owner));
+    ASSERT_FALSE(xr_compiler_session_incremental_stats(session).operation_active);
+
+    ASSERT_FALSE(xr_compiler_session_operation_succeed(&nested));
+    ASSERT_FALSE(xr_compiler_session_operation_fail(
+        &forged, XR_COMPILER_SESSION_OPERATION_CANCELLED));
+    ASSERT_FALSE(xr_compiler_session_operation_begin(NULL, &owner));
+    ASSERT_FALSE(xr_compiler_session_operation_begin(session, NULL));
+    ASSERT_FALSE(xr_compiler_session_operation_fail(
+        NULL, XR_COMPILER_SESSION_OPERATION_FATAL));
+
+    xr_compiler_session_delete(session);
+}
+
+TEST(production_compile_entry_commits_or_aborts_one_operation) {
+    XrVMConfig config;
+    xray_vm_config_init(&config);
+    XrVMRuntime *isolate = xray_vm_new_full(&config);
+    ASSERT_NOT_NULL(isolate);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    ASSERT_NOT_NULL(session);
+
+    XrCompilerSessionIncrementalStats initial =
+        xr_compiler_session_incremental_stats(session);
+    XrProto *proto = xr_compile_source_with_path(session, "print(42)\n", "session-ok.xr");
+    ASSERT_NOT_NULL(proto);
+    xr_vm_proto_free(proto);
+    XrCompilerSessionIncrementalStats succeeded =
+        xr_compiler_session_incremental_stats(session);
+    ASSERT_EQ_UINT(succeeded.completed_operations, initial.completed_operations + 1u);
+    ASSERT_EQ_UINT(succeeded.fatal_operations, initial.fatal_operations);
+    ASSERT_EQ_UINT(succeeded.last_outcome, XR_COMPILER_SESSION_OPERATION_SUCCEEDED);
+    ASSERT_FALSE(succeeded.operation_active);
+
+    XrCompilerSessionGenerationSnapshot before_failure =
+        xr_compiler_session_generation_snapshot(session);
+    proto = xr_compile_source_with_path(session, "fn broken( {\n", "session-fail.xr");
+    ASSERT_NULL(proto);
+    XrCompilerSessionGenerationSnapshot after_failure =
+        xr_compiler_session_generation_snapshot(session);
+    XrCompilerSessionIncrementalStats failed =
+        xr_compiler_session_incremental_stats(session);
+    ASSERT_EQ_UINT(after_failure.session_generation,
+                   before_failure.session_generation + 1u);
+    ASSERT_EQ_UINT(failed.fatal_operations, initial.fatal_operations + 1u);
+    ASSERT_EQ_UINT(failed.last_outcome, XR_COMPILER_SESSION_OPERATION_FATAL);
+    ASSERT_FALSE(failed.operation_active);
+    ASSERT_NULL(xr_compiler_session_current_arena(session));
+    ASSERT_NULL(xr_compiler_session_string_pool(session));
+    ASSERT_NULL(xr_compiler_session_module_graph(session));
+
+    xray_vm_delete(isolate);
 }
 
 TEST(rejected_invalidation_preserves_published_state) {
@@ -472,7 +554,9 @@ RUN_TEST(session_owns_configuration_paths);
 RUN_TEST(target_and_provider_updates_advance_only_their_generation);
 RUN_TEST(session_owns_dependency_graph_and_isolates_workspaces);
 RUN_TEST(operation_abort_is_transactional_and_invalidates_old_scopes);
+RUN_TEST(operation_scope_rejects_forged_and_stale_commits);
 RUN_TEST(invalidation_history_is_bounded_and_idle_cleanup_is_observable);
 RUN_TEST(rejected_invalidation_preserves_published_state);
 RUN_TEST(session_owns_cache_store_handle);
+RUN_TEST(production_compile_entry_commits_or_aborts_one_operation);
 TEST_MAIN_END()

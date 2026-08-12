@@ -14,6 +14,13 @@ invalidation transactions leave the prior graph, history, and generations
 unchanged.
 
 Parser and lowering state is scoped to an explicit incremental operation.
+Every non-REPL source/AST compiler entry opens or borrows a generation-bound
+operation scope. The outermost caller alone commits success; a nested failure
+poisons the operation, and the owner aborts only after graph and analyzer
+cleanup has released borrowed views. Bundle compilation is therefore one
+operation regardless of module count. REPL submissions retain declarations
+across inputs and require a separate declaration-generation transaction; they
+must not borrow this transient operation contract as a substitute for rollback.
 Cancellation and fatal failure clear every transient view, advance the session
 generation so stale arena scopes cannot restore abandoned state, and preserve
 the last fully published graph and cache objects. Full reset clears the graph,
@@ -39,6 +46,6 @@ claim without the separate cold/warm/edit benchmark evidence.
 
 ## Digest anchors
 
-anchor-sha256: src/toolchain/xcompiler_session.h bccc06c994cc8b9da45ce633612625c6d2892e168a083b8bf9d1e0bce368e836
-anchor-sha256: src/toolchain/xcompiler_session.c 42ee1cca17f9282c6694d6712b05c1a81bfdb8ed314bec2be3bed7fee1d87b8d
-anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c dcf20d560fbc97f7ca658a7082f6ab7173659972d168e94710f7e7e5baf6ac31
+anchor-sha256: src/toolchain/xcompiler_session.h 9c3fc0fcd1b47fe967d1dc3b55c55eb1fa97e1145dc2d9679d4b1d96f2ec2801
+anchor-sha256: src/toolchain/xcompiler_session.c 7b36ae71943d07f48227a33a734069a774e3e7d861907f884a61cba754450989
+anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c a5b9cebe2e332403e2086f0250ff31cdba42f9679ef3ec9768c921e871a31b6e

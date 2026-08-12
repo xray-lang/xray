@@ -227,10 +227,18 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFl
         xr_log_warning("bundle", "compiler session is required");
         return NULL;
     }
+    XrCompilerSessionOperationScope operation_scope;
+    if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
+        xr_log_warning("bundle", "compiler session is busy");
+        return NULL;
+    }
 
     XrBundle *bundle = xr_calloc(1, sizeof(XrBundle));
-    if (!bundle)
+    if (!bundle) {
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return NULL;
+    }
     bundle->entry_index = -1;
 
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
@@ -251,6 +259,8 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFl
         xr_module_graph_free(graph);
         xr_module_resolver_free(resolver);
         xr_bundle_free(bundle);
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return NULL;
     }
     xr_compiler_session_set_module_graph(session, graph);
@@ -268,6 +278,13 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFl
     xr_module_resolver_free(resolver);
     if (!complete) {
         xr_log_warning("bundle", "bundle compilation failed: %s", entry_file);
+        xr_bundle_free(bundle);
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        return NULL;
+    }
+
+    if (!xr_compiler_session_operation_succeed(&operation_scope)) {
         xr_bundle_free(bundle);
         return NULL;
     }

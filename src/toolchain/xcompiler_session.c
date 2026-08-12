@@ -47,6 +47,7 @@ struct XrCompilerSession {
     uint64_t fatal_operations;
     XrCompilerSessionOperationOutcome last_operation_outcome;
     bool incremental_operation_active;
+    XrCompilerSessionOperationOutcome incremental_operation_failure;
 
     struct XrArena *current_arena;
     struct XrCompileStringPool *compile_string_pool;
@@ -329,6 +330,7 @@ bool xr_compiler_session_reset_incremental(XrCompilerSession *session) {
 
     clear_transient_operation_state(session);
     session->incremental_operation_active = false;
+    session->incremental_operation_failure = XR_COMPILER_SESSION_OPERATION_NONE;
     session->last_operation_outcome = XR_COMPILER_SESSION_OPERATION_NONE;
     session->completed_operations = 0;
     session->cancelled_operations = 0;
@@ -340,29 +342,32 @@ bool xr_compiler_session_reset_incremental(XrCompilerSession *session) {
     return true;
 }
 
-bool xr_compiler_session_begin_incremental_operation(XrCompilerSession *session) {
+static bool begin_incremental_operation(XrCompilerSession *session) {
     if (!session || session->incremental_operation_active || session->current_arena ||
         session->compile_string_pool || session->module_graph ||
         session->compile_unit_identity.canonical_module)
         return false;
     session->incremental_operation_active = true;
+    session->incremental_operation_failure = XR_COMPILER_SESSION_OPERATION_NONE;
     session->last_operation_outcome = XR_COMPILER_SESSION_OPERATION_NONE;
     return true;
 }
 
-bool xr_compiler_session_finish_incremental_operation(XrCompilerSession *session) {
+static bool finish_incremental_operation(XrCompilerSession *session) {
     if (!session || !session->incremental_operation_active || session->current_arena ||
-        session->compile_string_pool)
+        session->compile_string_pool ||
+        session->incremental_operation_failure != XR_COMPILER_SESSION_OPERATION_NONE)
         return false;
     clear_transient_operation_state(session);
     session->incremental_operation_active = false;
+    session->incremental_operation_failure = XR_COMPILER_SESSION_OPERATION_NONE;
     session->last_operation_outcome = XR_COMPILER_SESSION_OPERATION_SUCCEEDED;
     session->completed_operations++;
     return true;
 }
 
-bool xr_compiler_session_abort_incremental_operation(
-    XrCompilerSession *session, XrCompilerSessionOperationOutcome outcome) {
+static bool abort_incremental_operation(XrCompilerSession *session,
+                                        XrCompilerSessionOperationOutcome outcome) {
     if (!session || !session->incremental_operation_active ||
         (outcome != XR_COMPILER_SESSION_OPERATION_CANCELLED &&
          outcome != XR_COMPILER_SESSION_OPERATION_FATAL) ||
@@ -372,12 +377,76 @@ bool xr_compiler_session_abort_incremental_operation(
     clear_transient_operation_state(session);
     session->generations.session_generation++;
     session->incremental_operation_active = false;
+    session->incremental_operation_failure = XR_COMPILER_SESSION_OPERATION_NONE;
     session->last_operation_outcome = outcome;
     if (outcome == XR_COMPILER_SESSION_OPERATION_CANCELLED)
         session->cancelled_operations++;
     else
         session->fatal_operations++;
     return true;
+}
+
+bool xr_compiler_session_operation_begin(XrCompilerSession *session,
+                                         XrCompilerSessionOperationScope *scope) {
+    if (!scope)
+        return false;
+    memset(scope, 0, sizeof(*scope));
+    if (!session)
+        return false;
+
+    bool owns_operation = !session->incremental_operation_active;
+    if (owns_operation && !begin_incremental_operation(session))
+        return false;
+    scope->session = session;
+    scope->session_generation = session->generations.session_generation;
+    scope->owns_operation = owns_operation;
+    scope->active = true;
+    return true;
+}
+
+bool xr_compiler_session_operation_succeed(XrCompilerSessionOperationScope *scope) {
+    if (!scope || !scope->active || !scope->session)
+        return false;
+    XrCompilerSession *session = scope->session;
+    bool current = scope->session_generation == session->generations.session_generation &&
+                   session->incremental_operation_active;
+    bool ok = false;
+    if (current &&
+        session->incremental_operation_failure == XR_COMPILER_SESSION_OPERATION_NONE) {
+        if (!scope->owns_operation) {
+            ok = true;
+        } else {
+            ok = finish_incremental_operation(session);
+            if (!ok)
+                (void) abort_incremental_operation(
+                    session, XR_COMPILER_SESSION_OPERATION_FATAL);
+        }
+    } else if (current && scope->owns_operation) {
+        (void) abort_incremental_operation(session, session->incremental_operation_failure);
+    }
+    memset(scope, 0, sizeof(*scope));
+    return ok;
+}
+
+bool xr_compiler_session_operation_fail(XrCompilerSessionOperationScope *scope,
+                                        XrCompilerSessionOperationOutcome outcome) {
+    if (!scope || !scope->active || !scope->session ||
+        (outcome != XR_COMPILER_SESSION_OPERATION_CANCELLED &&
+         outcome != XR_COMPILER_SESSION_OPERATION_FATAL))
+        return false;
+    XrCompilerSession *session = scope->session;
+    bool current = scope->session_generation == session->generations.session_generation &&
+                   session->incremental_operation_active;
+    bool ok = false;
+    if (current && scope->owns_operation) {
+        ok = abort_incremental_operation(session, outcome);
+    } else if (current) {
+        if (session->incremental_operation_failure == XR_COMPILER_SESSION_OPERATION_NONE)
+            session->incremental_operation_failure = outcome;
+        ok = true;
+    }
+    memset(scope, 0, sizeof(*scope));
+    return ok;
 }
 
 bool xr_compiler_session_publish_dependency_graph(XrCompilerSession *session,

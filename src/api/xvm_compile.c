@@ -76,6 +76,11 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
         *out_module = NULL;
     if (!compile_session_available(session, "compile_ast_internal"))
         return NULL;
+    XrCompilerSessionOperationScope operation_scope;
+    if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
+        xr_log_warning("vm", "compile_ast_internal: compiler session is busy");
+        return NULL;
+    }
     XR_DCHECK(ast != NULL, "compile_ast_internal: NULL ast");
     ensure_compiler_proto_hooks();
 
@@ -91,6 +96,8 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
         xr_log_warning("vm", "failed to create compiler context");
         if (has_ast_scope)
             xr_compiler_session_pop_arena(&ast_scope);
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return NULL;
     }
     xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
@@ -123,6 +130,14 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
     if (has_ast_scope)
         xr_compiler_session_pop_arena(&ast_scope);
 
+    bool operation_ok = proto ? xr_compiler_session_operation_succeed(&operation_scope)
+                              : xr_compiler_session_operation_fail(
+                                    &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+    if (!operation_ok && proto) {
+        xr_vm_proto_free(proto);
+        proto = NULL;
+    }
+
     return proto;
 }
 
@@ -145,12 +160,19 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
                                      const char *source_file) {
     if (!compile_session_available(session, "compile_source_with_path"))
         return NULL;
+    XrCompilerSessionOperationScope operation_scope;
+    if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
+        xr_log_warning("vm", "compile_source_with_path: compiler session is busy");
+        return NULL;
+    }
     XR_DCHECK(source != NULL, "compile_source_with_path: NULL source");
     ensure_compiler_proto_hooks();
     // Create compiler context FIRST to ensure type pool is valid during parsing
     XrCompilerContext *ctx = xr_compiler_context_new(session);
     if (!ctx) {
         xr_log_warning("vm", "failed to create compiler context");
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return NULL;
     }
     xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
@@ -161,6 +183,8 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
     AstNode *ast = xr_parse_with_source(session, source, source_file);
     if (!ast) {
         xr_compiler_context_free(ctx);
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return NULL;
     }
 
@@ -180,6 +204,14 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
 
     // Free AST (not needed after compilation)
     xr_program_destroy(ast);
+
+    bool operation_ok = proto ? xr_compiler_session_operation_succeed(&operation_scope)
+                              : xr_compiler_session_operation_fail(
+                                    &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+    if (!operation_ok && proto) {
+        xr_vm_proto_free(proto);
+        proto = NULL;
+    }
 
     return proto;
 }

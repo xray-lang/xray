@@ -33,11 +33,18 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *canonic
         xr_log_warning("compile", "compiler session has no VM host");
         return false;
     }
+    XrCompilerSessionOperationScope operation_scope;
+    if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
+        xr_log_warning("compile", "compiler session is busy");
+        return false;
+    }
 
     // Read source file
     char *source = xr_file_read_all(source_file, "r", NULL);
     if (!source) {
         xr_log_warning("compile", "cannot open: %s", source_file);
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return false;
     }
 
@@ -46,6 +53,8 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *canonic
 
     if (!proto) {
         xr_log_warning("compile", "compilation failed: %s", source_file);
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return false;
     }
 
@@ -60,6 +69,8 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *canonic
         xr_vm_proto_free(proto);
         xr_log_warning("compile", "bytecode serialization failed: %s",
                        xr_bytecode_error_string(bc_error));
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return false;
     }
 
@@ -70,14 +81,21 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *canonic
     if (!f) {
         xr_free(bc);
         xr_log_warning("compile", "cannot create: %s", output_file);
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return false;
     }
 
-    fwrite(bc, 1, bc_size, f);
-    fclose(f);
+    bool wrote_all = fwrite(bc, 1, bc_size, f) == bc_size;
+    bool closed = fclose(f) == 0;
     xr_free(bc);
-
-    return true;
+    if (!wrote_all || !closed) {
+        xr_log_warning("compile", "cannot complete: %s", output_file);
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        return false;
+    }
+    return xr_compiler_session_operation_succeed(&operation_scope);
 }
 
 bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
@@ -88,6 +106,9 @@ bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
 bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical_module,
                                const char *source_file, const char *output_file, int flags) {
     if (!session || !canonical_module || !canonical_module[0])
+        return false;
+    XrCompilerSessionOperationScope operation_scope;
+    if (!xr_compiler_session_operation_begin(session, &operation_scope))
         return false;
     XrCompileUnitIdentity identity = {
         .kind = XR_COMPILE_UNIT_STDLIB,
@@ -159,5 +180,7 @@ bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical
     if (graph)
         xr_module_graph_free(graph);
     xr_compiler_session_set_compile_unit_identity(session, NULL);
-    return ok;
+    return ok ? xr_compiler_session_operation_succeed(&operation_scope)
+              : xr_compiler_session_operation_fail(
+                    &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL) && false;
 }
