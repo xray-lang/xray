@@ -345,6 +345,13 @@ def self_test() -> int:
         )
         dofile_debug_api_drifted, _ = check(root, collect(root))
         retired_dofile_debug_api.unlink()
+        retired_dofile_api = root / "include/xray_vm.h"
+        retired_dofile_api.write_text(
+            "int xray_vm_dofile(void *, const char *);\n",
+            encoding="utf-8",
+        )
+        dofile_api_drifted, _ = check(root, collect(root))
+        retired_dofile_api.unlink()
         (root / "src/new_loader.c").write_text(
             "void xr_bytecode_load(void);\n", encoding="utf-8"
         )
@@ -363,6 +370,7 @@ def self_test() -> int:
             or execution_policy_api_drifted
             or coro_monitor_api_drifted
             or dofile_debug_api_drifted
+            or dofile_api_drifted
             or drifted or codec_abi_drifted or not terminal
             or zero["total"] != 0 or validate(zero)):
         print("legacy product residue self-test: FAIL")

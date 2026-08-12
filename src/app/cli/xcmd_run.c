@@ -554,7 +554,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     }
 
     /* Execute file */
-    int result = xray_vm_dofile(iso, file);
+    int result = xr_isolate_dofile(iso, file);
 
     xr_compiler_session_set_module_graph(session, NULL);
     if (active_graph_analyzer) {

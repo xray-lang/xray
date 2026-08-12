@@ -16,6 +16,7 @@
 
 #include "../test_framework.h"
 #include "xray_vm.h"
+#include "runtime/xisolate_api.h"
 #include <stddef.h>
 
 /* ========== Isolate Lifecycle NULL Safety ========== */
@@ -76,7 +77,7 @@ TEST(api_isolate_dofile_null_isolate) {
         ASSERT_TRUE(1);
         return;
     }
-    int result = xray_vm_dofile(NULL, "test.xr");
+    int result = xr_isolate_dofile(NULL, "test.xr");
     ASSERT_EQ_INT(result, -1);
 }
 
@@ -93,7 +94,7 @@ TEST(api_isolate_dofile_null_filename) {
         return;
     }
 
-    int result = xray_vm_dofile(iso, NULL);
+    int result = xr_isolate_dofile(iso, NULL);
     ASSERT_EQ_INT(result, -1);
 
     xray_vm_delete(iso);

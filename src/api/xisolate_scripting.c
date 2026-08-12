@@ -321,9 +321,9 @@ int xray_vm_dostring(XrVMRuntime *isolate, const char *source) {
     return result;
 }
 
-int xray_vm_dofile(XrVMRuntime *isolate, const char *filename) {
-    xray_api_checkr(isolate != NULL, "xray_vm_dofile: NULL isolate", -1);
-    xray_api_checkr(filename != NULL, "xray_vm_dofile: NULL filename", -1);
+int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename) {
+    xray_api_checkr(isolate != NULL, "xr_isolate_dofile: NULL isolate", -1);
+    xray_api_checkr(filename != NULL, "xr_isolate_dofile: NULL filename", -1);
 
     char *source = read_file_source(filename);
     if (source == NULL) {
