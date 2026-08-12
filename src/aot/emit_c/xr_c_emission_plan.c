@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(5)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(6)
 
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
@@ -219,7 +219,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v5\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v6\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -552,7 +552,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                               "C emission plan requires a verified TargetPlan");
     const uint64_t required_value_families =
         XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_CLOSURE_STORAGE |
-        XR_TARGET_FAMILY_STRING_LITERAL_STORAGE;
+        XR_TARGET_FAMILY_STRING_LITERAL_STORAGE |
+        XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",

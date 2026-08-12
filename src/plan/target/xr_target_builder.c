@@ -111,6 +111,15 @@ typedef struct XrTargetValueStorageAnalysis {
     uint32_t type_count;
 } XrTargetValueStorageAnalysis;
 
+typedef struct XrDirectLocalCalleeStorageAnalysis {
+    uint32_t *target_by_operation;
+    uint32_t *target_by_value;
+    uint32_t *use_count_by_value;
+    uint8_t *invalid_value;
+    uint32_t operation_count;
+    uint32_t value_count;
+} XrDirectLocalCalleeStorageAnalysis;
+
 typedef struct XrTargetMaterializedPlan {
     XrTargetMachineRepRecord *machine_reps;
     uint32_t machine_rep_count;
@@ -408,6 +417,17 @@ static bool make_dynamic_value_rep(const XrTargetMachineFacts *profile,
     return true;
 }
 
+static bool make_static_callable_value_rep(const XrTargetMachineFacts *profile,
+                                           XrTargetMachineRepRecord *out) {
+    if (!make_dynamic_value_rep(profile, out))
+        return false;
+    /* A frozen direct-local shared function is a borrowed static callable
+     * token. This row owns only its outer XrValue storage; it does not claim
+     * a closure body, allocation, root map, or cleanup. */
+    out->ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    return true;
+}
+
 static int compare_rep_record(const XrTargetMachineRepRecord *left,
                               const XrTargetMachineRepRecord *right) {
 #define XR_COMPARE_REP_FIELD(field)                                                               \
@@ -484,8 +504,16 @@ static bool append_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic
         XrTargetLayoutIntent *existing = &builder->layout_intents[i];
         if (existing->semantic_type != semantic_type)
             continue;
+        bool same_dynamic_geometry =
+            kind == XR_TARGET_LAYOUT_DYNAMIC &&
+            existing->kind == XR_TARGET_LAYOUT_DYNAMIC &&
+            existing->memory_rep.kind == XR_MACHINE_REP_DYN_VALUE &&
+            memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            existing->memory_rep.memory_size == memory_rep->memory_size &&
+            existing->memory_rep.memory_align == memory_rep->memory_align;
         if (existing->kind == kind && existing->element_count == element_count &&
-            compare_rep_record(&existing->memory_rep, memory_rep) == 0)
+            (compare_rep_record(&existing->memory_rep, memory_rep) == 0 ||
+             same_dynamic_geometry))
             return true;
         return fail(error, error_size, "XR_TARGET_1002",
                     "semantic type has conflicting layout intents");
@@ -744,6 +772,188 @@ static bool semantic_string_literal_is_exact(
                 XR_SEM_TYPE_OWNERSHIP_ROOT);
 }
 
+static void direct_local_callee_storage_analysis_dispose(
+    XrDirectLocalCalleeStorageAnalysis *analysis) {
+    if (!analysis)
+        return;
+    xr_free(analysis->target_by_operation);
+    xr_free(analysis->target_by_value);
+    xr_free(analysis->use_count_by_value);
+    xr_free(analysis->invalid_value);
+    memset(analysis, 0, sizeof(*analysis));
+}
+
+static bool semantic_direct_local_callee_type_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint32_t target_function) {
+    if (!plan || !operation || operation->opcode != XI_GET_SHARED ||
+        operation->semantic_immediate < 0 ||
+        operation->semantic_immediate > UINT16_MAX ||
+        operation->operand_count != 0 || operation->allocation_key ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(XI_GET_SHARED) ||
+        operation->effects != xi_generated_op_effects(XI_GET_SHARED) ||
+        operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        operation->return_complete != 1 || operation->return_parameter != -1 ||
+        target_function >= xr_semantic_plan_function_count(plan))
+        return false;
+    for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++)
+        if (operation->allocation_id.bytes[i] != 0)
+            return false;
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(plan, operation->result_type);
+    const XrSemanticFunctionRecord *target =
+        xr_semantic_plan_function(plan, target_function);
+    if (!type || !target || target->parent != operation->function ||
+        (type->kind != XR_KIND_FUNCTION &&
+         type->kind != XR_KIND_UNKNOWN) ||
+        type->scalar_rep != XR_SCALAR_REP_NONE ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->child_count != 0 ||
+        target->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
+        target->parameter_count > xr_semantic_plan_parameter_count(plan) -
+                                      target->parameter_begin ||
+        (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                        XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) != 0 ||
+        (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                        XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    return true;
+}
+
+static bool direct_local_callee_storage_analysis_init(
+    const XrSemanticPlan *plan, const XrTargetValueStorageAnalysis *values,
+    XrDirectLocalCalleeStorageAnalysis *analysis, char *error,
+    size_t error_size) {
+    if (!plan || !values || !analysis ||
+        xr_semantic_plan_operation_count(plan) > UINT32_MAX ||
+        xr_semantic_plan_call_target_count(plan) > UINT32_MAX)
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "direct-local callee-storage budget is invalid");
+    analysis->operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(plan);
+    analysis->value_count = values->total_values;
+    analysis->target_by_operation = (uint32_t *) allocate_records(
+        analysis->operation_count, sizeof(*analysis->target_by_operation));
+    analysis->target_by_value = (uint32_t *) allocate_records(
+        analysis->value_count, sizeof(*analysis->target_by_value));
+    analysis->use_count_by_value = (uint32_t *) allocate_records(
+        analysis->value_count, sizeof(*analysis->use_count_by_value));
+    analysis->invalid_value = (uint8_t *) allocate_records(
+        analysis->value_count, sizeof(*analysis->invalid_value));
+    if ((analysis->operation_count && !analysis->target_by_operation) ||
+        (analysis->value_count && (!analysis->target_by_value ||
+                                   !analysis->use_count_by_value ||
+                                   !analysis->invalid_value))) {
+        direct_local_callee_storage_analysis_dispose(analysis);
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "direct-local callee-storage allocation failed");
+    }
+    for (uint32_t i = 0; i < analysis->operation_count; i++)
+        analysis->target_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < analysis->value_count; i++)
+        analysis->target_by_value[i] = XR_SEMANTIC_INDEX_NONE;
+    uint32_t target_count =
+        (uint32_t) xr_semantic_plan_call_target_count(plan);
+    for (uint32_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(plan, i);
+        if (!target || target->operation >= analysis->operation_count ||
+            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+            analysis->target_by_operation[target->operation] !=
+                XR_SEMANTIC_INDEX_NONE) {
+            direct_local_callee_storage_analysis_dispose(analysis);
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "direct-local callee target authority is ambiguous");
+        }
+        analysis->target_by_operation[target->operation] = i;
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan, &operand_count);
+    for (uint32_t i = 0; i < analysis->operation_count; i++) {
+        const XrSemanticOperationRecord *use =
+            xr_semantic_plan_operation(plan, i);
+        if (!use || use->operand_begin > operand_count ||
+            use->operand_count > operand_count - use->operand_begin) {
+            direct_local_callee_storage_analysis_dispose(analysis);
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "direct-local callee operand range is invalid");
+        }
+        for (uint16_t a = 0; a < use->operand_count; a++) {
+            const XrSemanticOperandRecord *operand =
+                &operands[use->operand_begin + a];
+            if (operand->value >= analysis->value_count)
+                continue;
+            uint32_t source_index = values->value_operations[operand->value];
+            const XrSemanticOperationRecord *source =
+                source_index == XR_SEMANTIC_INDEX_NONE
+                    ? NULL
+                    : xr_semantic_plan_operation(plan, source_index);
+            if (!source || source->opcode != XI_GET_SHARED)
+                continue;
+            uint32_t target_index = analysis->target_by_operation[i];
+            const XrSemanticCallTargetRecord *target =
+                target_index == XR_SEMANTIC_INDEX_NONE
+                    ? NULL
+                    : xr_semantic_plan_call_target(plan, target_index);
+            bool exact = a == 0 &&
+                         (use->opcode == XI_CALL || use->opcode == XI_TAIL_CALL) &&
+                         use->function == source->function && target &&
+                         target->operation == i &&
+                         target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+                         operand->role == XR_SEM_OPERAND_CALLEE &&
+                         operand->parameter == -1 &&
+                         (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 &&
+                         operand->type == source->result_type;
+            uint32_t value = source->result_value;
+            if (!exact || value != operand->value ||
+                (analysis->target_by_value[value] != XR_SEMANTIC_INDEX_NONE &&
+                 analysis->target_by_value[value] != target->function) ||
+                analysis->use_count_by_value[value] == UINT32_MAX) {
+                analysis->invalid_value[value] = 1;
+                continue;
+            }
+            analysis->target_by_value[value] = target->function;
+            analysis->use_count_by_value[value]++;
+        }
+    }
+    uint32_t block_count = (uint32_t) xr_semantic_plan_block_count(plan);
+    for (uint32_t i = 0; i < block_count; i++) {
+        const XrSemanticBlockRecord *block = xr_semantic_plan_block(plan, i);
+        if (!block || block->control_value == XR_SEMANTIC_INDEX_NONE ||
+            block->control_value >= analysis->value_count)
+            continue;
+        uint32_t source_index = values->value_operations[block->control_value];
+        const XrSemanticOperationRecord *source =
+            source_index == XR_SEMANTIC_INDEX_NONE
+                ? NULL
+                : xr_semantic_plan_operation(plan, source_index);
+        if (source && source->opcode == XI_GET_SHARED)
+            analysis->invalid_value[block->control_value] = 1;
+    }
+    return true;
+}
+
+static bool direct_local_callee_storage_value_is_exact(
+    const XrSemanticPlan *plan, const XrDirectLocalCalleeStorageAnalysis *analysis,
+    const XrSemanticOperationRecord *operation) {
+    if (!plan || !analysis || !operation ||
+        operation->result_value >= analysis->value_count ||
+        analysis->invalid_value[operation->result_value] != 0 ||
+        analysis->use_count_by_value[operation->result_value] == 0 ||
+        analysis->target_by_value[operation->result_value] ==
+            XR_SEMANTIC_INDEX_NONE)
+        return false;
+    return semantic_direct_local_callee_type_is_exact(
+        plan, operation,
+        analysis->target_by_value[operation->result_value]);
+}
+
 static bool note_scalar_value(XrTargetPlanBuilder *builder,
                               XrTargetValueStorageAnalysis *analysis,
                               uint32_t semantic_value, uint32_t semantic_type,
@@ -996,6 +1206,72 @@ static bool note_string_literal_storage_value(
     return true;
 }
 
+static bool note_direct_local_callee_storage_value(
+    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis,
+    const XrDirectLocalCalleeStorageAnalysis *callee_analysis,
+    uint32_t semantic_operation, char *error, size_t error_size) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan,
+                                   semantic_operation);
+    if (!direct_local_callee_storage_value_is_exact(
+            builder->semantic_plan, callee_analysis, operation))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "direct-local callee-storage family requires exact shared callable authority");
+    if (operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >=
+            xr_semantic_plan_function_count(builder->semantic_plan))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "direct-local callee-storage identity is out of range");
+    XrTargetMachineRepRecord rep;
+    if (!make_static_callable_value_rep(
+            xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize static callable storage");
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function,
+                            XR_TARGET_SLOT_TEMPORARY, operation->id,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "direct-local callee slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_BORROWED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        !append_layout_intent(builder, operation->result_type,
+                              XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                              error_size) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    analysis->type_rep_kinds[operation->result_type] =
+        XR_MACHINE_REP_DYN_VALUE;
+    analysis->used_types[operation->result_type] = 1;
+    return true;
+}
+
 static bool collect_scalar_intents(XrTargetPlanBuilder *builder,
                                    XrTargetValueStorageAnalysis *analysis, char *error,
                                    size_t error_size) {
@@ -1152,6 +1428,92 @@ static bool builder_add_string_literal_storage(
     }
     builder->completed_family_mask |=
         XR_TARGET_FAMILY_STRING_LITERAL_STORAGE;
+    return true;
+}
+
+static bool builder_add_direct_local_callee_storage(
+    XrTargetPlanBuilder *builder, char *error, size_t error_size) {
+    if (!builder_begin_family(
+            builder, XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE,
+            error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis values = {0};
+    XrDirectLocalCalleeStorageAnalysis callees = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &values,
+                                              error, error_size) &&
+                 index_value_operations(builder->semantic_plan, &values,
+                                        error, error_size) &&
+                 direct_local_callee_storage_analysis_init(
+                     builder->semantic_plan, &values, &callees, error,
+                     error_size);
+    uint32_t operation_count =
+        (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "semantic operation is missing");
+            break;
+        }
+        bool candidate = operation->opcode == XI_GET_SHARED &&
+                         operation->result_value < callees.value_count &&
+                         callees.target_by_value[operation->result_value] !=
+                             XR_SEMANTIC_INDEX_NONE;
+        if (!candidate)
+            continue;
+        if (!direct_local_callee_storage_value_is_exact(
+                builder->semantic_plan, &callees, operation)) {
+            const XrSemanticTypeRecord *failed_type =
+                xr_semantic_plan_type(builder->semantic_plan,
+                                      operation->result_type);
+            const XrSemanticFunctionRecord *failed_target =
+                xr_semantic_plan_function(
+                    builder->semantic_plan,
+                    callees.target_by_value[operation->result_value]);
+            if (error && error_size)
+                snprintf(error, error_size,
+                         "XR_TARGET_1001: direct-local shared callee authority is incomplete "
+                         "(value=%u invalid=%u uses=%u target=%u own=%u provenance=%u:%d:%u "
+                         "type=%u:%u:%u:%u:%u flags=%u target-parent=%u params=%u:%u/%zu "
+                         "shape=%lld:%u:%u:%u effects=%u/%u allocation=%u)",
+                         operation->result_value,
+                         callees.invalid_value[operation->result_value],
+                         callees.use_count_by_value[operation->result_value],
+                         callees.target_by_value[operation->result_value],
+                         operation->result_ownership,
+                         operation->return_provenance,
+                         operation->return_parameter,
+                         operation->return_complete,
+                         failed_type ? failed_type->kind : UINT16_MAX,
+                         failed_type ? failed_type->child_count : UINT32_MAX,
+                         failed_type ? failed_type->scalar_rep : UINT16_MAX,
+                         failed_type ? failed_type->aggregate_extent : UINT32_MAX,
+                         failed_type ? failed_type->aggregate_align : UINT32_MAX,
+                         failed_type ? failed_type->flags : UINT16_MAX,
+                         failed_target ? failed_target->parent : UINT32_MAX,
+                         failed_target ? failed_target->parameter_count : UINT16_MAX,
+                         failed_target ? failed_target->parameter_begin : UINT32_MAX,
+                         xr_semantic_plan_parameter_count(builder->semantic_plan),
+                         (long long) operation->semantic_immediate,
+                         operation->operand_count, operation->constant,
+                         operation->callable_function, operation->effects,
+                         xi_generated_op_effects(XI_GET_SHARED),
+                         operation->allocation_key ? 1u : 0u);
+            valid = false;
+            break;
+        }
+        valid = note_direct_local_callee_storage_value(
+            builder, &values, &callees, i, error, error_size);
+    }
+    direct_local_callee_storage_analysis_dispose(&callees);
+    value_storage_analysis_dispose(&values);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |=
+        XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE;
     return true;
 }
 
@@ -3072,6 +3434,7 @@ bool xr_target_plan_build(const XrSemanticPlan *semantic_plan, XrTargetProfile *
     if (!builder_add_scalars(builder, error, error_size) ||
         !builder_add_closure_storage(builder, error, error_size) ||
         !builder_add_string_literal_storage(builder, error, error_size) ||
+        !builder_add_direct_local_callee_storage(builder, error, error_size) ||
         !builder_add_aggregates(builder, error, error_size) ||
         !builder_add_calls_and_adapters(builder, error, error_size) ||
         !builder_add_coroutine_state_calls(builder, error, error_size)) {

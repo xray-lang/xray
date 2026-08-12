@@ -442,7 +442,8 @@ static bool rep_kind_contract_is_exact(const XrTargetPlan *plan,
         case XR_MACHINE_REP_DYN_VALUE:
             return rep->detail == 0 && rep->lane_count == 0 &&
                    rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
-                   rep->ownership == XR_TARGET_OWNERSHIP_OWNED &&
+                   (rep->ownership == XR_TARGET_OWNERSHIP_OWNED ||
+                    rep->ownership == XR_TARGET_OWNERSHIP_BORROWED) &&
                    rep->null_encoding == XR_TARGET_NULL_TAGGED &&
                    rep->signedness == XR_TARGET_SIGN_NONE;
         case XR_MACHINE_REP_AGGREGATE:
@@ -872,7 +873,244 @@ static bool semantic_string_literal_is_exact(
            (type->flags & required) == required;
 }
 
+static bool verifier_direct_local_callee_type_is_exact(
+    const XrSemanticPlan *semantic,
+    const XrSemanticOperationRecord *operation,
+    uint32_t target_function) {
+    if (!semantic || !operation || operation->opcode != XI_GET_SHARED ||
+        operation->semantic_immediate < 0 ||
+        operation->semantic_immediate > UINT16_MAX ||
+        operation->operand_count != 0 || operation->allocation_key ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(XI_GET_SHARED) ||
+        operation->effects != xi_generated_op_effects(XI_GET_SHARED) ||
+        operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
+        operation->return_complete != 1 || operation->return_parameter != -1 ||
+        target_function >= xr_semantic_plan_function_count(semantic))
+        return false;
+    for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++)
+        if (operation->allocation_id.bytes[i] != 0)
+            return false;
+    const XrSemanticTypeRecord *type =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    const XrSemanticFunctionRecord *target =
+        xr_semantic_plan_function(semantic, target_function);
+    if (!type || !target || target->parent != operation->function ||
+        (type->kind != XR_KIND_FUNCTION &&
+         type->kind != XR_KIND_UNKNOWN) ||
+        type->scalar_rep != XR_SCALAR_REP_NONE ||
+        type->aggregate_extent != 0 || type->aggregate_align != 0 ||
+        type->child_count != 0 ||
+        target->parameter_begin > xr_semantic_plan_parameter_count(semantic) ||
+        target->parameter_count > xr_semantic_plan_parameter_count(semantic) -
+                                      target->parameter_begin ||
+        (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE |
+                        XR_SEM_TYPE_BORROW_VIEW |
+                        XR_SEM_TYPE_AGGREGATE_EXACT)) != 0 ||
+        (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE |
+                        XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
+            (XR_SEM_TYPE_REFERENCE_CAPABLE |
+             XR_SEM_TYPE_OWNERSHIP_ROOT))
+        return false;
+    return true;
+}
+
+static bool collect_exact_direct_local_callee_values(
+    const XrTargetPlan *plan, uint8_t **out_exact, uint32_t **out_targets,
+    char *error, size_t error_size) {
+    if (out_exact)
+        *out_exact = NULL;
+    if (out_targets)
+        *out_targets = NULL;
+    size_t operation_size =
+        xr_semantic_plan_operation_count(plan->semantic_plan);
+    size_t target_size =
+        xr_semantic_plan_call_target_count(plan->semantic_plan);
+    size_t function_size =
+        xr_semantic_plan_function_count(plan->semantic_plan);
+    if (!out_exact || !out_targets || operation_size > UINT32_MAX ||
+        target_size > UINT32_MAX || function_size > UINT32_MAX)
+        return report(error, error_size, "XR_EXEC_5003",
+                      "direct-local callee verifier budget is exhausted");
+    uint32_t value_count = 0;
+    if (function_size) {
+        const XrSemanticFunctionRecord *last = xr_semantic_plan_function(
+            plan->semantic_plan, (uint32_t) function_size - 1u);
+        if (!last || last->value_begin > UINT32_MAX - last->value_count)
+            return report(error, error_size, "XR_EXEC_5003",
+                          "direct-local callee value budget overflow");
+        value_count = last->value_begin + last->value_count;
+    }
+    uint32_t operation_count = (uint32_t) operation_size;
+    uint32_t *definition = operation_count || value_count
+                               ? (uint32_t *) xr_calloc(
+                                     value_count ? value_count : 1u,
+                                     sizeof(*definition))
+                               : NULL;
+    uint32_t *target_by_operation = operation_count
+                                        ? (uint32_t *) xr_calloc(
+                                              operation_count,
+                                              sizeof(*target_by_operation))
+                                        : NULL;
+    uint32_t *target_by_value = value_count
+                                    ? (uint32_t *) xr_calloc(
+                                          value_count,
+                                          sizeof(*target_by_value))
+                                    : NULL;
+    uint32_t *use_count = value_count
+                              ? (uint32_t *) xr_calloc(value_count,
+                                                       sizeof(*use_count))
+                              : NULL;
+    uint8_t *invalid = value_count
+                           ? (uint8_t *) xr_calloc(value_count,
+                                                   sizeof(*invalid))
+                           : NULL;
+    uint8_t *exact = value_count
+                         ? (uint8_t *) xr_calloc(value_count, sizeof(*exact))
+                         : NULL;
+    if ((value_count && (!definition || !target_by_value || !use_count ||
+                         !invalid || !exact)) ||
+        (operation_count && !target_by_operation)) {
+        xr_free(definition);
+        xr_free(target_by_operation);
+        xr_free(target_by_value);
+        xr_free(use_count);
+        xr_free(invalid);
+        xr_free(exact);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "direct-local callee verifier allocation failed");
+    }
+    for (uint32_t i = 0; i < value_count; i++) {
+        definition[i] = XR_SEMANTIC_INDEX_NONE;
+        target_by_value[i] = XR_SEMANTIC_INDEX_NONE;
+    }
+    for (uint32_t i = 0; i < operation_count; i++) {
+        target_by_operation[i] = XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan->semantic_plan, i);
+        if (!operation || operation->result_value >= value_count ||
+            definition[operation->result_value] != XR_SEMANTIC_INDEX_NONE) {
+            goto invalid_authority;
+        }
+        definition[operation->result_value] = i;
+    }
+    for (uint32_t i = 0; i < (uint32_t) target_size; i++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(plan->semantic_plan, i);
+        if (!target || target->operation >= operation_count ||
+            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+            target_by_operation[target->operation] !=
+                XR_SEMANTIC_INDEX_NONE)
+            goto invalid_authority;
+        target_by_operation[target->operation] = i;
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan->semantic_plan, &operand_count);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *use =
+            xr_semantic_plan_operation(plan->semantic_plan, i);
+        if (!use || use->operand_begin > operand_count ||
+            use->operand_count > operand_count - use->operand_begin)
+            goto invalid_authority;
+        for (uint16_t a = 0; a < use->operand_count; a++) {
+            const XrSemanticOperandRecord *operand =
+                &operands[use->operand_begin + a];
+            if (operand->value >= value_count)
+                goto invalid_authority;
+            uint32_t source_index = definition[operand->value];
+            const XrSemanticOperationRecord *source =
+                source_index == XR_SEMANTIC_INDEX_NONE
+                    ? NULL
+                    : xr_semantic_plan_operation(plan->semantic_plan,
+                                                 source_index);
+            if (!source || source->opcode != XI_GET_SHARED)
+                continue;
+            uint32_t target_index = target_by_operation[i];
+            const XrSemanticCallTargetRecord *target =
+                target_index == XR_SEMANTIC_INDEX_NONE
+                    ? NULL
+                    : xr_semantic_plan_call_target(plan->semantic_plan,
+                                                   target_index);
+            uint32_t value = source->result_value;
+            bool use_is_exact =
+                a == 0 &&
+                (use->opcode == XI_CALL || use->opcode == XI_TAIL_CALL) &&
+                use->function == source->function && target &&
+                target->operation == i &&
+                target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+                operand->role == XR_SEM_OPERAND_CALLEE &&
+                operand->parameter == -1 &&
+                (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 &&
+                operand->type == source->result_type &&
+                value == operand->value;
+            if (!use_is_exact ||
+                (target_by_value[value] != XR_SEMANTIC_INDEX_NONE &&
+                 target_by_value[value] != target->function) ||
+                use_count[value] == UINT32_MAX) {
+                invalid[value] = 1;
+                continue;
+            }
+            target_by_value[value] = target->function;
+            use_count[value]++;
+        }
+    }
+    for (uint32_t i = 0;
+         i < (uint32_t) xr_semantic_plan_block_count(plan->semantic_plan);
+         i++) {
+        const XrSemanticBlockRecord *block =
+            xr_semantic_plan_block(plan->semantic_plan, i);
+        if (!block || block->control_value == XR_SEMANTIC_INDEX_NONE ||
+            block->control_value >= value_count)
+            continue;
+        uint32_t source_index = definition[block->control_value];
+        const XrSemanticOperationRecord *source =
+            source_index == XR_SEMANTIC_INDEX_NONE
+                ? NULL
+                : xr_semantic_plan_operation(plan->semantic_plan,
+                                             source_index);
+        if (source && source->opcode == XI_GET_SHARED)
+            invalid[block->control_value] = 1;
+    }
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan->semantic_plan, i);
+        if (!operation || operation->opcode != XI_GET_SHARED ||
+            operation->result_value >= value_count ||
+            target_by_value[operation->result_value] ==
+                XR_SEMANTIC_INDEX_NONE)
+            continue;
+        uint32_t value = operation->result_value;
+        if (invalid[value] || use_count[value] == 0 ||
+            !verifier_direct_local_callee_type_is_exact(
+                plan->semantic_plan, operation, target_by_value[value]))
+            goto invalid_authority;
+        exact[value] = 1;
+    }
+    xr_free(definition);
+    xr_free(target_by_operation);
+    xr_free(use_count);
+    xr_free(invalid);
+    *out_exact = exact;
+    *out_targets = target_by_value;
+    return true;
+
+invalid_authority:
+    xr_free(definition);
+    xr_free(target_by_operation);
+    xr_free(target_by_value);
+    xr_free(use_count);
+    xr_free(invalid);
+    xr_free(exact);
+    return report(error, error_size, "XR_TARGET_1001",
+                  "direct-local callee storage authority is not exact");
+}
+
 static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
+                                        const uint8_t *exact_direct_callees,
                                         uint8_t **out, char *error,
                                         size_t error_size) {
     if (out)
@@ -898,7 +1136,9 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
                           "dynamic-type verification input is invalid");
         }
         if (semantic_heap_closure_is_exact(plan->semantic_plan, operation) ||
-            semantic_string_literal_is_exact(plan->semantic_plan, operation))
+            semantic_string_literal_is_exact(plan->semantic_plan, operation) ||
+            (exact_direct_callees &&
+             exact_direct_callees[operation->result_value] != 0))
             exact_types[operation->result_type] = 1;
     }
     *out = exact_types;
@@ -908,6 +1148,7 @@ static bool collect_exact_dynamic_types(const XrTargetPlan *plan,
 static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value,
                                  uint32_t semantic_type, uint32_t semantic_function,
                                  const XrSemanticOperationRecord *operation,
+                                 const uint8_t *exact_direct_callees,
                                  uint8_t *bound_slots,
                                  const uint8_t *deferred_functions,
                                  uint32_t *failure_reason) {
@@ -936,8 +1177,10 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
         semantic_heap_closure_is_exact(plan->semantic_plan, operation);
     bool exact_string_literal =
         semantic_string_literal_is_exact(plan->semantic_plan, operation);
+    bool exact_direct_callee =
+        exact_direct_callees && exact_direct_callees[semantic_value] != 0;
     int eligibility = operation_result_void || exact_heap_closure ||
-                              exact_string_literal
+                              exact_string_literal || exact_direct_callee
                           ? 1
                           : (type ? semantic_type_expected_rep(type,
                                                                &expected_kind)
@@ -955,7 +1198,7 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
                                                          aggregate_stack, 0)
                         : 0;
     int expected_layout = -1;
-    if (exact_heap_closure || exact_string_literal) {
+    if (exact_heap_closure || exact_string_literal || exact_direct_callee) {
         expected_kind = XR_MACHINE_REP_DYN_VALUE;
         expected_layout = target_plan_layout_for_type(plan, semantic_type);
         eligibility = expected_layout >= 0 &&
@@ -990,6 +1233,20 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
          (plan->machine_reps[record->register_rep].detail != (uint32_t) expected_layout ||
           plan->machine_reps[record->memory_rep].detail != (uint32_t) expected_layout)))
         XR_VALUE_BINDING_FAIL(3);
+    if (expected_kind == XR_MACHINE_REP_DYN_VALUE) {
+        uint8_t expected_ownership =
+            exact_direct_callee ? XR_TARGET_OWNERSHIP_BORROWED
+                                : XR_TARGET_OWNERSHIP_OWNED;
+        if (plan->machine_reps[record->register_rep].ownership !=
+                expected_ownership ||
+            plan->machine_reps[record->memory_rep].ownership !=
+                expected_ownership ||
+            plan->machine_reps[record->register_rep].root_kind !=
+                XR_TARGET_ROOT_DYNAMIC ||
+            plan->machine_reps[record->memory_rep].root_kind !=
+                XR_TARGET_ROOT_DYNAMIC)
+            XR_VALUE_BINDING_FAIL(9);
+    }
     if (expected_kind == XR_MACHINE_REP_VOID) {
         if (record->slot != XR_SEMANTIC_INDEX_NONE)
             XR_VALUE_BINDING_FAIL(8);
@@ -1023,7 +1280,9 @@ static bool verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_val
     return true;
 }
 
-static bool verify_value_reps(const XrTargetPlan *plan, char *error, size_t error_size) {
+static bool verify_value_reps(const XrTargetPlan *plan,
+                              const uint8_t *exact_direct_callees,
+                              char *error, size_t error_size) {
     uint32_t expected_values = 0;
     size_t semantic_functions = xr_semantic_plan_function_count(plan->semantic_plan);
     if (semantic_functions > UINT32_MAX)
@@ -1090,7 +1349,8 @@ static bool verify_value_reps(const XrTargetPlan *plan, char *error, size_t erro
         else if (!defined[parameter->value]) {
             defined[parameter->value] = 1;
             valid = verify_value_binding(plan, parameter->value, parameter->type,
-                                         parameter->function, NULL, bound_slots,
+                                         parameter->function, NULL,
+                                         exact_direct_callees, bound_slots,
                                          deferred_functions,
                                          &failure_reason);
             if (!valid) {
@@ -1112,7 +1372,8 @@ static bool verify_value_reps(const XrTargetPlan *plan, char *error, size_t erro
                 defined[operation->result_value] = 1;
                 valid = verify_value_binding(plan, operation->result_value, operation->result_type,
                                              operation->function, operation,
-                                             bound_slots, deferred_functions,
+                                             exact_direct_callees, bound_slots,
+                                             deferred_functions,
                                              &failure_reason);
                 if (!valid) {
                     failed_value = operation->result_value;
@@ -1279,7 +1540,7 @@ static bool verify_layouts(const XrTargetPlan *plan,
                     rep->memory_align == layout->align;
             }
             if (scalar != 0 || !exact_dynamic_type || layout->field_count != 0 ||
-                layout->root_field_count != 0 || representation_count != 1)
+                layout->root_field_count != 0 || representation_count == 0)
                 return report(error, error_size, "XR_TARGET_1002",
                               "dynamic value layout semantic contract is incomplete");
         } else {
@@ -2272,14 +2533,27 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
                       "TargetPlan semantic fingerprint does not match its exact input");
     if (!xr_target_profile_verify(plan->profile, error, error_size) ||
         !verify_resource_budgets(plan, error, error_size) ||
-        !verify_machine_reps(plan, error, error_size) ||
-        !verify_value_reps(plan, error, error_size) ||
-        !verify_extents(plan, error, error_size))
+        !verify_machine_reps(plan, error, error_size))
         return false;
+    uint8_t *exact_direct_callees = NULL;
+    uint32_t *direct_callee_targets = NULL;
+    if (!collect_exact_direct_local_callee_values(
+            plan, &exact_direct_callees, &direct_callee_targets, error,
+            error_size))
+        return false;
+    if (!verify_value_reps(plan, exact_direct_callees, error, error_size) ||
+        !verify_extents(plan, error, error_size)) {
+        xr_free(exact_direct_callees);
+        xr_free(direct_callee_targets);
+        return false;
+    }
     uint8_t *exact_dynamic_types = NULL;
-    if (!collect_exact_dynamic_types(plan, &exact_dynamic_types, error,
-                                     error_size))
+    if (!collect_exact_dynamic_types(plan, exact_direct_callees,
+                                     &exact_dynamic_types, error, error_size)) {
+        xr_free(exact_direct_callees);
+        xr_free(direct_callee_targets);
         return false;
+    }
     bool verified =
         verify_layouts(plan, exact_dynamic_types, error, error_size) &&
         verify_extent_references(plan, error, error_size) &&
@@ -2291,6 +2565,8 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
         verify_adapters_and_capabilities(plan, error, error_size) &&
         verify_coroutines(plan, error, error_size);
     xr_free(exact_dynamic_types);
+    xr_free(exact_direct_callees);
+    xr_free(direct_callee_targets);
     if (!verified)
         return false;
     XrFingerprint actual;

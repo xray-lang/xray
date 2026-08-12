@@ -86,12 +86,16 @@ materialization. AOT prepare runs only after every required BOX or UNBOX is
 present at its recorded source and use, and rejects a missing, extra, reordered,
 or stale adapter before ABI planning. This adds no public value representation,
 layout, or calling-convention change.
-The C emission projection schema 5 additionally owns an exact materialization
+The C emission projection schema 6 additionally owns an exact materialization
 recipe and immutable byte payload for every verified String literal row. CGen
 mechanically consumes that row and cannot recover literal bytes, a dynamic
 tag, field spelling, or ownership from mutable Xi values. Missing, extra,
 reordered, stale, or incorrectly spelled rows fail before emission; this does
 not authorize general owned Strings, tuples, or object bodies.
+Schema 6 also projects an exact borrowed `TAGGED`/`XrValue` row for a frozen
+direct-local shared callee token. CGen consumes that immutable row mechanically;
+it cannot infer callable representation from Xi type or representation state,
+and the row grants no closure body, allocation, root, or cleanup authority.
 
 Target semantics are selected before analysis, Xi lowering, generated-C
 emission, and native linking:

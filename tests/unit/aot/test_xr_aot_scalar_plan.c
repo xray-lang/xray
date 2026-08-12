@@ -794,7 +794,7 @@ static void test_dynamic_closure_c_emission_is_exact_and_mutation_safe(void) {
     emission->fingerprint.bytes[0] ^= 1u;
 
     uint32_t saved_schema = emission->schema_version;
-    emission->schema_version = 3;
+    emission->schema_version = 5;
     REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
                                        error, sizeof(error)));
     emission->schema_version = saved_schema;

@@ -10,6 +10,7 @@
 
 #include "../../../src/aot/refine/xr_aot_refinement.h"
 #include "../../../src/aot/refine/xr_aot_representation_refinement.h"
+#include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #ifdef XAOT_BUNDLE_H
 #error "refinement public API must not expose the legacy XaotBundle"
 #endif
@@ -25,11 +26,23 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Complete the public opaque projection only for fail-closed mutation tests. */
+struct XrCEmissionPlan {
+    XrCValueEmissionView *values;
+    uint32_t value_count;
+    uint32_t schema_version;
+    XrFingerprint target_fingerprint;
+    XrFingerprint profile_fingerprint;
+    XrFingerprint fingerprint;
+    bool verified;
+};
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -90,6 +103,17 @@ typedef struct ClosureStorageFixture {
     XrTargetProfile *target_profile;
     XrTargetPlan *target_plan;
 } ClosureStorageFixture;
+
+typedef struct DirectLocalCalleeStorageFixture {
+    XiFunc *function;
+    XiFunc *child;
+    XiFunc *decoy;
+    XiBlock *entry;
+    XiValue *load;
+    XiValue *call;
+    XrTargetProfile *target_profile;
+    XrTargetPlan *target_plan;
+} DirectLocalCalleeStorageFixture;
 
 typedef struct FailingBackend {
     bool begun;
@@ -160,6 +184,16 @@ static XrType scalar_closure = {
         .return_type = &scalar_int,
         .throw_effect = XR_FN_EFFECT_NO_THROW,
     },
+};
+
+/* The production select fixture lowers its top-level callable token as an
+ * opaque reference.  The direct-local SemanticPlan call target, not this
+ * erased Xi type, is the callable authority. */
+static XrType opaque_callable = {
+    .kind = XR_KIND_UNKNOWN,
+    .id = 6,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
 };
 
 static XrSemanticPlan *build_semantic_plan(void) {
@@ -428,6 +462,91 @@ static void closure_storage_fixture_free(ClosureStorageFixture *fixture) {
     memset(fixture, 0, sizeof(*fixture));
 }
 
+static DirectLocalCalleeStorageFixture
+direct_local_callee_storage_fixture_create(bool extra_use) {
+    DirectLocalCalleeStorageFixture fixture = {0};
+    fixture.function =
+        xi_func_new("direct_local_shared_callee", &scalar_int);
+    fixture.child = xi_func_new("direct_local_shared_target", &scalar_int);
+    fixture.decoy = xi_func_new("direct_local_shared_decoy", &scalar_int);
+    REQUIRE(fixture.function && fixture.child && fixture.decoy);
+    fixture.entry = xi_block_new(fixture.function);
+    XiBlock *child_entry = xi_block_new(fixture.child);
+    XiBlock *decoy_entry = xi_block_new(fixture.decoy);
+    REQUIRE(fixture.entry && child_entry && decoy_entry);
+    XiValue *child_result =
+        xi_const_int(fixture.child, child_entry, 42, &scalar_int);
+    XiValue *decoy_result =
+        xi_const_int(fixture.decoy, decoy_entry, 7, &scalar_int);
+    REQUIRE(child_result && decoy_result);
+    xi_block_set_return(child_entry, child_result);
+    xi_block_set_return(decoy_entry, decoy_result);
+
+    fixture.function->children =
+        (XiFunc **) xr_calloc(2, sizeof(*fixture.function->children));
+    REQUIRE(fixture.function->children != NULL);
+    fixture.function->children[0] = fixture.child;
+    fixture.function->children[1] = fixture.decoy;
+    fixture.function->nchildren = fixture.function->children_cap = 2;
+    fixture.child->parent_func = fixture.function;
+    fixture.decoy->parent_func = fixture.function;
+
+    XiValue *closure = xi_value_new(fixture.function, fixture.entry,
+                                    XI_CLOSURE_NEW, &scalar_closure, 0);
+    XiValue *store = xi_value_new(fixture.function, fixture.entry,
+                                  XI_SET_SHARED, &scalar_unit, 1);
+    fixture.load = xi_value_new(fixture.function, fixture.entry,
+                                XI_GET_SHARED, &opaque_callable, 0);
+    fixture.call = xi_value_new(fixture.function, fixture.entry,
+                                XI_CALL, &scalar_int, 1);
+    REQUIRE(closure && store && fixture.load && fixture.call);
+    closure->aux = fixture.child;
+    store->aux_int = 0;
+    store->args[0] = closure;
+    fixture.load->aux_int = 0;
+    fixture.call->args[0] = fixture.load;
+    if (extra_use) {
+        XiValue *unexpected = xi_value_new(fixture.function, fixture.entry,
+                                           XI_PRINT, &scalar_unit, 1);
+        REQUIRE(unexpected != NULL);
+        unexpected->args[0] = fixture.load;
+    }
+    xi_block_set_return(fixture.entry, fixture.call);
+    fixture.function->nshared = 1;
+    fixture.function->shared_slot_funcs = (XiFunc **) xi_func_arena_alloc(
+        fixture.function, sizeof(*fixture.function->shared_slot_funcs));
+    REQUIRE(fixture.function->shared_slot_funcs != NULL);
+    fixture.function->shared_slot_funcs[0] = fixture.child;
+    fixture.function->shared_slot_func_count = 1;
+    fixture.function->stage = fixture.child->stage =
+        fixture.decoy->stage = XI_STAGE_OPTIMIZED;
+
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(fixture.function, error,
+                                              sizeof(error)));
+    fixture.target_profile = build_target_profile();
+    bool built = xr_target_plan_build(
+        fixture.function->semantic_plan, fixture.target_profile,
+        &fixture.target_plan, error, sizeof(error));
+    if (extra_use) {
+        REQUIRE(!built && fixture.target_plan == NULL);
+    } else {
+        if (!built)
+            fprintf(stderr, "direct-local TargetPlan build failed: %s\n",
+                    error);
+        REQUIRE(built && fixture.target_plan != NULL);
+    }
+    return fixture;
+}
+
+static void direct_local_callee_storage_fixture_free(
+    DirectLocalCalleeStorageFixture *fixture) {
+    xr_target_plan_free(fixture->target_plan);
+    xr_target_profile_free(fixture->target_profile);
+    xi_func_free(fixture->function);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
 static XrAotRefinementPlan *build_refused_plan(
     const RefinementFixture *fixture, XrAotRefinementDiagnostic *diag) {
     XrAotRefinementBuilder *builder =
@@ -580,7 +699,7 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(xr_aot_backend_run(&view, fixture.target_plan,
                                xr_aot_test_backend_interface(), &test_backend,
                                &stats, &diag));
-    REQUIRE(strstr(emission, "families=000000000000003f") != NULL);
+    REQUIRE(strstr(emission, "families=000000000000007f") != NULL);
     REQUIRE(strstr(emission, "transform=direct-call decision=refused") != NULL);
     REQUIRE(strstr(emission,
                    "issue=XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE") != NULL);
@@ -945,6 +1064,244 @@ static void test_exact_heap_closure_storage_is_tagged_and_fail_closed(void) {
             diag.issue ==
                 XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE);
     closure_storage_fixture_free(&fixture);
+}
+
+static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(void) {
+    DirectLocalCalleeStorageFixture fixture =
+        direct_local_callee_storage_fixture_create(false);
+    REQUIRE((fixture.target_plan->completed_family_mask &
+             XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE) != 0);
+    uint32_t load_operation = XR_SEMANTIC_INDEX_NONE;
+    uint32_t load_value = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_operation_count(fixture.function->semantic_plan);
+         i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(fixture.function->semantic_plan, i);
+        if (operation && operation->opcode == XI_GET_SHARED) {
+            REQUIRE(load_operation == XR_SEMANTIC_INDEX_NONE);
+            load_operation = i;
+            load_value = operation->result_value;
+        }
+    }
+    REQUIRE(load_operation != XR_SEMANTIC_INDEX_NONE &&
+            load_value != XR_SEMANTIC_INDEX_NONE);
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(fixture.target_plan, load_value);
+    REQUIRE(binding != NULL);
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(fixture.target_plan,
+                                   binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(fixture.target_plan,
+                                   binding->memory_rep);
+    REQUIRE(register_rep && memory_rep &&
+            register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            register_rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            memory_rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            register_rep->root_kind == XR_TARGET_ROOT_DYNAMIC);
+    REQUIRE(binding->slot < fixture.target_plan->slots_count);
+    const XrTargetSlotRecord *slot =
+        &fixture.target_plan->slots[binding->slot];
+    REQUIRE(slot->semantic_value == load_value &&
+            slot->semantic_operation == load_operation &&
+            slot->role == XR_TARGET_SLOT_TEMPORARY &&
+            slot->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            slot->root_kind == XR_TARGET_ROOT_DYNAMIC);
+
+    REQUIRE(fixture.target_plan->calls_count == 1);
+    XrTargetCallRecord saved_call = fixture.target_plan->calls[0];
+    XrFingerprint saved_call_plan_fingerprint =
+        fixture.target_plan->fingerprint;
+    fixture.target_plan->calls[0].callee_function =
+        fixture.decoy->semantic_plan_function_index;
+    xr_target_call_compute_fingerprint(fixture.target_plan, 0,
+                                       &fixture.target_plan->calls[0].fingerprint);
+    xr_target_plan_compute_fingerprint(fixture.target_plan,
+                                       &fixture.target_plan->fingerprint);
+    char error[512] = {0};
+    REQUIRE(!xr_target_plan_verify(fixture.target_plan, error,
+                                   sizeof(error)));
+    fixture.target_plan->calls[0] = saved_call;
+    fixture.target_plan->fingerprint = saved_call_plan_fingerprint;
+
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(
+        fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile),
+        &emission, error, sizeof(error)));
+    XrCValueEmissionView emission_value = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, load_value,
+                                          &emission_value, error,
+                                          sizeof(error)));
+    REQUIRE(emission_value.rep == XR_C_VALUE_REP_TAGGED &&
+            emission_value.materialization ==
+                XR_C_VALUE_MATERIALIZATION_NONE &&
+            strcmp(emission_value.c_type, "XrValue") == 0 &&
+            emission_value.literal_bytes == NULL &&
+            emission_value.literal_byte_length == 0);
+
+    uint32_t direct_row_index = UINT32_MAX;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == load_value) {
+            REQUIRE(direct_row_index == UINT32_MAX);
+            direct_row_index = i;
+        }
+    REQUIRE(direct_row_index != UINT32_MAX);
+    uint32_t saved_emission_count = emission->value_count;
+    XrCValueEmissionView *row_snapshot =
+        (XrCValueEmissionView *) xr_calloc(saved_emission_count,
+                                           sizeof(*row_snapshot));
+    REQUIRE(row_snapshot != NULL);
+    memcpy(row_snapshot, emission->values,
+           saved_emission_count * sizeof(*row_snapshot));
+    memmove(&emission->values[direct_row_index],
+            &emission->values[direct_row_index + 1u],
+            (saved_emission_count - direct_row_index - 1u) *
+                sizeof(*emission->values));
+    emission->value_count--;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    emission->value_count = saved_emission_count;
+    memcpy(emission->values, row_snapshot,
+           saved_emission_count * sizeof(*row_snapshot));
+    xr_free(row_snapshot);
+
+    XrCValueEmissionView *saved_rows = emission->values;
+    XrCValueEmissionView *extra_rows =
+        (XrCValueEmissionView *) xr_calloc(saved_emission_count + 1u,
+                                           sizeof(*extra_rows));
+    REQUIRE(extra_rows != NULL);
+    memcpy(extra_rows, saved_rows,
+           saved_emission_count * sizeof(*extra_rows));
+    extra_rows[saved_emission_count] =
+        saved_rows[direct_row_index];
+    extra_rows[saved_emission_count].semantic_value = UINT32_MAX;
+    emission->values = extra_rows;
+    emission->value_count++;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    emission->value_count = saved_emission_count;
+    emission->values = saved_rows;
+    xr_free(extra_rows);
+
+    XrCValueEmissionView *direct_row =
+        &emission->values[direct_row_index];
+    direct_row->target_register_kind = XR_MACHINE_REP_I64;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    direct_row->target_register_kind = XR_MACHINE_REP_DYN_VALUE;
+    direct_row->rep = XR_C_VALUE_REP_I64;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    direct_row->rep = XR_C_VALUE_REP_TAGGED;
+    direct_row->c_type = "int64_t";
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    direct_row->c_type = "XrValue";
+    direct_row->materialization =
+        XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    direct_row->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
+    emission->profile_fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    emission->profile_fingerprint.bytes[0] ^= 1u;
+    emission->target_fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    emission->target_fingerprint.bytes[0] ^= 1u;
+    emission->fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    emission->fingerprint.bytes[0] ^= 1u;
+    REQUIRE(xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    xr_c_emission_plan_free(emission);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        fixture.target_plan, &policy, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count == 0);
+    xi_opt_refresh_representations_with_policy(fixture.function, &policy);
+    REQUIRE(fixture.load->rep == XR_REP_TAGGED &&
+            fixture.load->backend_origin == XI_BACKEND_VALUE_NONE &&
+            fixture.call->args[0] == fixture.load);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    fixture.function->shared_slot_funcs[0] = fixture.decoy;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY ||
+            diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    fixture.function->shared_slot_funcs[0] = fixture.child;
+
+    XiValue *saved_callee = fixture.call->args[0];
+    fixture.call->args[0] = fixture.call;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
+    fixture.call->args[0] = saved_callee;
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+
+    uint64_t saved_mask = fixture.target_plan->completed_family_mask;
+    XrFingerprint saved_fingerprint = fixture.target_plan->fingerprint;
+    fixture.target_plan->completed_family_mask &=
+        ~XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE;
+    xr_target_plan_compute_fingerprint(fixture.target_plan,
+                                       &fixture.target_plan->fingerprint);
+    memset(error, 0, sizeof(error));
+    REQUIRE(!xr_target_plan_verify(fixture.target_plan, error,
+                                   sizeof(error)));
+    fixture.target_plan->completed_family_mask = saved_mask;
+    fixture.target_plan->fingerprint = saved_fingerprint;
+
+    uint32_t machine_rep_index = binding->register_rep;
+    uint16_t saved_ownership =
+        fixture.target_plan->machine_reps[machine_rep_index].ownership;
+    fixture.target_plan->machine_reps[machine_rep_index].ownership =
+        XR_TARGET_OWNERSHIP_OWNED;
+    xr_target_plan_compute_fingerprint(fixture.target_plan,
+                                       &fixture.target_plan->fingerprint);
+    REQUIRE(!xr_target_plan_verify(fixture.target_plan, error,
+                                   sizeof(error)));
+    fixture.target_plan->machine_reps[machine_rep_index].ownership =
+        saved_ownership;
+    fixture.target_plan->fingerprint = saved_fingerprint;
+
+    xr_aot_refinement_plan_free(plan);
+    direct_local_callee_storage_fixture_free(&fixture);
+
+    DirectLocalCalleeStorageFixture extra_use =
+        direct_local_callee_storage_fixture_create(true);
+    direct_local_callee_storage_fixture_free(&extra_use);
 }
 
 static void test_exact_string_literal_storage_is_tagged_and_fail_closed(void) {
@@ -1922,6 +2279,7 @@ int main(void) {
     test_immutable_authority_matches_backend_materialization();
     test_scalar_shared_boundary_is_exact_and_fail_closed();
     test_exact_heap_closure_storage_is_tagged_and_fail_closed();
+    test_direct_local_shared_callee_storage_is_exact_and_fail_closed();
     test_exact_string_literal_storage_is_tagged_and_fail_closed();
     test_bundle_owns_empty_policy_bound_authority();
     test_representation_record_mutations_fail_closed();
