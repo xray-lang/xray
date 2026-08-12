@@ -922,7 +922,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "35b0174dffa5c278efdec2144bcef853dd1de9a621030cece63f02b58bd58d3d") == 0);
+                   "7d5ba75e95ef4e3c227e2b357f4613395a61c8933d5d47c0f6f41cc08e9e7a16") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2061,7 +2061,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "74c389cdb6926c406ec0810bd233abc79948f400fd8d0e858f72a46233674354") == 0);
+                   "29b68feef03015b0056f9ef80af499f68f1bd79cf3b8f87da42ec31a338f4044") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT;
          mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -2637,7 +2637,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "99ec88cd9876123553e68e9ad562c1a92e96d181bb40f7299fe0a1d951f35671") == 0);
+                   "4d0faa6ecee1561ee5e79b577b31dd0e8080663f58157f3ebd9a5dbb5f7dbb12") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -2859,7 +2859,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "3e3affbc48525c64af4db8efe4027f28bf9396935ee4bd8713bee1463529bc3c") == 0);
+                   "02899285b107065d888a0c1b61be9766620b4a41906eaf599accad7017a71e1e") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");
