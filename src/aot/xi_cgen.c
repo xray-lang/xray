@@ -2702,6 +2702,49 @@ static bool cg_value_emission_storage_rep(XiCgenCtx *ctx,
     (void) cg_value_emission_fail(ctx, "immutable C value representation is invalid");
     return false;
 }
+
+static bool cg_channel_receive_emission_view(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    XrCValueEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !value || !out ||
+        value->op != XI_CHAN_TRY_RECV || value->nargs != 1 ||
+        !value->args[0]) {
+        (void) cg_value_emission_fail(
+            ctx, "channel receive C emission input is incomplete");
+        return false;
+    }
+    XrCValueEmissionView receiver = {0};
+    if (cg_value_emission_view(ctx, function, value, out) !=
+            CG_VALUE_EMISSION_FOUND ||
+        cg_value_emission_view(ctx, function, value->args[0], &receiver) !=
+            CG_VALUE_EMISSION_FOUND ||
+        out->materialization !=
+            XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD ||
+        out->recipe_operand_value != receiver.semantic_value ||
+        !out->recipe_symbol || !out->recipe_symbol[0] ||
+        out->rep == XR_C_VALUE_REP_VOID ||
+        out->rep == XR_C_VALUE_REP_TAGGED) {
+        (void) cg_value_emission_fail(
+            ctx, "channel receive has no exact immutable payload recipe");
+        return false;
+    }
+    return true;
+}
+
+static void cg_emit_channel_receive_payload_expression(
+    FILE *out, const XrCValueEmissionView *view, uint32_t value_id,
+    bool coroutine) {
+    fprintf(out, "%s(", view->recipe_symbol);
+    if (coroutine)
+        fprintf(out, "_chan_try_payload_%u", value_id);
+    else
+        fprintf(out,
+                "xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(_chan_try_%u))",
+                value_id);
+    fprintf(out, ")");
+}
 #include "xi_cgen_abi_helpers.inc.c"
 
 static bool cg_closure_new_value_can_emit_null_for_unreachable_body(
@@ -8292,11 +8335,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
 
     if (v->op == XI_CHAN_TRY_RECV) {
-        if (v->nargs < 1) {
-            fprintf(stderr, "[xi_cgen] ERROR: CHAN_TRY_RECV missing channel\n");
-            ctx->error = true;
+        XrCValueEmissionView emission = {0};
+        if (!cg_channel_receive_emission_view(ctx, f, v, &emission))
             return;
-        }
         fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_recv_sync(", v->id);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ");\n");
@@ -8309,10 +8350,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             emit_vref(out, v);
             fprintf(out, " = ");
         }
-        XrRep rep = cg_value_decl_storage_rep(ctx, f, v);
-        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, rep);
-        fprintf(out, "xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(_chan_try_%u))", v->id);
-        emit_conversion_suffix(out, suffix);
+        cg_emit_channel_receive_payload_expression(out, &emission, v->id,
+                                                   false);
         fprintf(out, ";\n");
         emit_value_generated_line_reset(ctx, out, v);
         return;

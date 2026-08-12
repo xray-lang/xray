@@ -2207,6 +2207,70 @@ static bool oracle_direct_local_callee_use(
            match->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
 }
 
+/* Rebuild the channel receive boundary from frozen SemanticPlan and
+ * TargetPlan facts.  The runtime payload is tagged; the target row owns the
+ * exact scalar machine destination.  This is intentionally independent of
+ * both the TargetPlan collector and the C-emission recipe verifier. */
+static bool oracle_channel_receive_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value,
+    XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage ||
+        !out_machine_kind || !ctx->exact_channel_value)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index == XR_SEMANTIC_INDEX_NONE
+            ? NULL
+            : xr_semantic_plan_operation(ctx->semantic, operation_index);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(ctx->semantic, &operand_count);
+    if (!operation || operation->opcode != XI_CHAN_TRY_RECV ||
+        operation->result_value != semantic_value ||
+        operation->operand_count != 1 ||
+        operation->operand_begin >= operand_count || operation->allocation_key ||
+        !aot_stable_id_is_zero(operation->allocation_id) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != 0 || operation->semantic_immediate != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CHAN_TRY_RECV) ||
+        operation->flags != xi_generated_op_default_flags(XI_CHAN_TRY_RECV) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CHAN_TRY_RECV) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(XI_CHAN_TRY_RECV) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1)
+        return false;
+    const XrSemanticOperandRecord *receiver =
+        &operands[operation->operand_begin];
+    uint32_t element_type = XR_SEMANTIC_INDEX_NONE;
+    if (receiver->value >= ctx->value_count ||
+        !ctx->exact_channel_value[receiver->value] ||
+        receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
+        receiver->transfer_mode != XR_TRANSFER_SHARE ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        receiver->parameter_mode != XR_PARAM_READ ||
+        receiver->access != XR_CALL_ARG_PLAIN ||
+        receiver->origin != XI_PLACE_ORIGIN_NONE ||
+        receiver->lifetime != XI_PLACE_LIFETIME_NONE ||
+        receiver->escape != XI_PLACE_ESCAPE_NONE || receiver->flags != 0 ||
+        !aot_channel_type_is_exact(ctx->semantic, receiver->type,
+                                   &element_type) ||
+        element_type != operation->result_type)
+        return false;
+    XrRep native_storage = XR_REP_TAGGED;
+    uint16_t machine_kind = XR_MACHINE_REP_COUNT;
+    if (!oracle_machine_storage(ctx, semantic_value, &native_storage,
+                                &machine_kind) ||
+        native_storage == XR_REP_TAGGED ||
+        !storage_matches_machine(native_storage, machine_kind))
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = machine_kind;
+    return true;
+}
+
 static uint16_t oracle_representation_recipe(uint16_t adapter,
                                              uint16_t machine_kind) {
     bool box = adapter == XR_AOT_REP_ADAPTER_BOX;
@@ -2273,9 +2337,30 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx,
             return oracle_dynamic_closure_storage(ctx, semantic_value,
                                                   out_storage,
                                                   out_machine_kind);
+        case XI_CHAN_TRY_RECV:
+            if (oracle_channel_receive_storage(
+                    ctx, semantic_value, out_storage, out_machine_kind))
+                return true;
+            /* Non-scalar Recv<T> envelopes remain tagged. A scalar result is
+             * owned exclusively by CHANNEL_RECEIVE_STORAGE and may not fall
+             * back when its exact authority is missing. */
+            {
+                const XrTargetValueRepRecord *binding =
+                    xr_target_plan_value_rep(ctx->target_plan,
+                                             semantic_value);
+                const XrTargetMachineRepRecord *machine = binding
+                    ? xr_target_plan_machine_rep(ctx->target_plan,
+                                                 binding->register_rep)
+                    : NULL;
+                if (machine && machine->kind >= XR_MACHINE_REP_I1 &&
+                    machine->kind <= XR_MACHINE_REP_RUNE)
+                    return false;
+            }
+            *out_storage = XR_REP_TAGGED;
+            *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+            return true;
         case XI_CALL_BUILTIN:
         case XI_CHAN_RECV:
-        case XI_CHAN_TRY_RECV:
         case XI_ENUM_DESCRIPTOR_BOX:
             *out_storage = XR_REP_TAGGED;
             *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;

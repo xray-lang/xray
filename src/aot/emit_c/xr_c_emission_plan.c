@@ -18,8 +18,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(7)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(8)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
+#define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
+#define XR_C_CHANNEL_RECV_FLOAT_SYMBOL "XR_TO_FLOAT"
+#define XR_C_CHANNEL_RECV_BOOL_SYMBOL "XR_TO_BOOL"
+#define XR_C_CHANNEL_RECV_RUNE_SYMBOL "XR_TO_RUNE"
 
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
@@ -287,6 +291,188 @@ static bool exact_channel_new_recipe(const XrTargetPlan *target_plan,
     return true;
 }
 
+static const char *channel_receive_symbol(uint16_t machine_kind) {
+    switch ((XrMachineRepKind) machine_kind) {
+        case XR_MACHINE_REP_F32:
+        case XR_MACHINE_REP_F64:
+            return XR_C_CHANNEL_RECV_FLOAT_SYMBOL;
+        case XR_MACHINE_REP_I1:
+            return XR_C_CHANNEL_RECV_BOOL_SYMBOL;
+        case XR_MACHINE_REP_RUNE:
+            return XR_C_CHANNEL_RECV_RUNE_SYMBOL;
+        case XR_MACHINE_REP_I8:
+        case XR_MACHINE_REP_U8:
+        case XR_MACHINE_REP_I16:
+        case XR_MACHINE_REP_U16:
+        case XR_MACHINE_REP_I32:
+        case XR_MACHINE_REP_U32:
+        case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_U64:
+        case XR_MACHINE_REP_ISIZE:
+        case XR_MACHINE_REP_USIZE:
+            return XR_C_CHANNEL_RECV_INT_SYMBOL;
+        default:
+            return NULL;
+    }
+}
+
+static const char *exact_channel_receive_recipe(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding, uint32_t *receiver_value) {
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    if (!semantic || !operation || operation->opcode != XI_CHAN_TRY_RECV ||
+        operation->result_value != binding->semantic_value ||
+        operation->operand_count != 1 ||
+        operation->operand_begin >= operand_count || operation->allocation_key ||
+        !emission_stable_id_is_zero(operation->allocation_id) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != 0 || operation->semantic_immediate != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CHAN_TRY_RECV) ||
+        operation->flags != xi_generated_op_default_flags(XI_CHAN_TRY_RECV) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CHAN_TRY_RECV) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(XI_CHAN_TRY_RECV) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1)
+        return NULL;
+    const XrSemanticOperandRecord *receiver =
+        &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *channel =
+        xr_semantic_plan_type(semantic, receiver->type);
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_count);
+    const XrTargetValueRepRecord *receiver_binding =
+        xr_target_plan_value_rep(target_plan, receiver->value);
+    const XrTargetMachineRepRecord *receiver_rep = receiver_binding
+        ? xr_target_plan_machine_rep(target_plan,
+                                     receiver_binding->register_rep)
+        : NULL;
+    const XrTargetMachineRepRecord *result_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE |
+                       XR_SEM_TYPE_OWNERSHIP_ROOT;
+    if (!channel || channel->kind != XR_KIND_CHANNEL ||
+        channel->scalar_rep != XR_SCALAR_REP_NONE || channel->child_count != 1 ||
+        channel->aggregate_extent != 0 || channel->aggregate_align != 0 ||
+        (channel->flags & required) != required ||
+        (channel->flags & ~(required | XR_SEM_TYPE_CONST)) != 0 ||
+        channel->child_begin >= child_count ||
+        children[channel->child_begin] != operation->result_type ||
+        receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
+        receiver->transfer_mode != XR_TRANSFER_SHARE ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        receiver->parameter_mode != XR_PARAM_READ ||
+        receiver->access != XR_CALL_ARG_PLAIN ||
+        receiver->origin != XI_PLACE_ORIGIN_NONE ||
+        receiver->lifetime != XI_PLACE_LIFETIME_NONE ||
+        receiver->escape != XI_PLACE_ESCAPE_NONE || receiver->flags != 0 ||
+        !receiver_binding || !receiver_rep ||
+        receiver_rep->kind != XR_MACHINE_REP_DYN_VALUE || !result_rep)
+        return NULL;
+    const char *symbol = channel_receive_symbol(result_rep->kind);
+    if (symbol && receiver_value)
+        *receiver_value = receiver->value;
+    return symbol;
+}
+
+static const char *verify_channel_receive_recipe(
+    const XrTargetPlan *target_plan,
+    const XrTargetValueRepRecord *binding, uint32_t *receiver_value) {
+    const XrSemanticPlan *semantic =
+        xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation =
+        binding_operation(target_plan, binding);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    if (!semantic || !operation || operation->opcode != XI_CHAN_TRY_RECV ||
+        operation->result_value != binding->semantic_value ||
+        operation->operand_count != 1 ||
+        operation->operand_begin >= operand_count || operation->allocation_key ||
+        !emission_stable_id_is_zero(operation->allocation_id) ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->auxiliary_kind != 0 || operation->semantic_immediate != 0 ||
+        operation->effects != xi_generated_op_effects(XI_CHAN_TRY_RECV) ||
+        operation->flags != xi_generated_op_default_flags(XI_CHAN_TRY_RECV) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CHAN_TRY_RECV) ||
+        operation->result_ownership !=
+            xi_generated_op_result_ownership(XI_CHAN_TRY_RECV) ||
+        operation->result_alias_operand != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_OWNED ||
+        operation->return_parameter != -1 || operation->return_complete != 1)
+        return NULL;
+    const XrSemanticOperandRecord *receiver =
+        &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *channel =
+        xr_semantic_plan_type(semantic, receiver->type);
+    uint32_t child_count = 0;
+    const uint32_t *children =
+        xr_semantic_plan_type_children(semantic, &child_count);
+    const XrTargetValueRepRecord *receiver_binding =
+        xr_target_plan_value_rep(target_plan, receiver->value);
+    const XrTargetMachineRepRecord *receiver_rep = receiver_binding
+        ? xr_target_plan_machine_rep(target_plan,
+                                     receiver_binding->register_rep)
+        : NULL;
+    const XrTargetMachineRepRecord *result_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE |
+                       XR_SEM_TYPE_OWNERSHIP_ROOT;
+    if (!channel || channel->kind != XR_KIND_CHANNEL ||
+        channel->scalar_rep != XR_SCALAR_REP_NONE || channel->child_count != 1 ||
+        channel->aggregate_extent != 0 || channel->aggregate_align != 0 ||
+        (channel->flags & required) != required ||
+        (channel->flags & ~(required | XR_SEM_TYPE_CONST)) != 0 ||
+        channel->child_begin >= child_count ||
+        children[channel->child_begin] != operation->result_type ||
+        receiver->role != XR_SEM_OPERAND_VALUE || receiver->parameter != -1 ||
+        receiver->transfer_mode != XR_TRANSFER_SHARE ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
+        receiver->parameter_mode != XR_PARAM_READ ||
+        receiver->access != XR_CALL_ARG_PLAIN ||
+        receiver->origin != XI_PLACE_ORIGIN_NONE ||
+        receiver->lifetime != XI_PLACE_LIFETIME_NONE ||
+        receiver->escape != XI_PLACE_ESCAPE_NONE || receiver->flags != 0 ||
+        !receiver_binding || !receiver_rep ||
+        receiver_rep->kind != XR_MACHINE_REP_DYN_VALUE || !result_rep)
+        return NULL;
+    const char *symbol = NULL;
+    switch ((XrMachineRepKind) result_rep->kind) {
+        case XR_MACHINE_REP_I1: symbol = XR_C_CHANNEL_RECV_BOOL_SYMBOL; break;
+        case XR_MACHINE_REP_F32:
+        case XR_MACHINE_REP_F64:
+            symbol = XR_C_CHANNEL_RECV_FLOAT_SYMBOL;
+            break;
+        case XR_MACHINE_REP_RUNE: symbol = XR_C_CHANNEL_RECV_RUNE_SYMBOL; break;
+        case XR_MACHINE_REP_I8:
+        case XR_MACHINE_REP_U8:
+        case XR_MACHINE_REP_I16:
+        case XR_MACHINE_REP_U16:
+        case XR_MACHINE_REP_I32:
+        case XR_MACHINE_REP_U32:
+        case XR_MACHINE_REP_I64:
+        case XR_MACHINE_REP_U64:
+        case XR_MACHINE_REP_ISIZE:
+        case XR_MACHINE_REP_USIZE:
+            symbol = XR_C_CHANNEL_RECV_INT_SYMBOL;
+            break;
+        default: return NULL;
+    }
+    if (receiver_value)
+        *receiver_value = receiver->value;
+    return symbol;
+}
+
 static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
     uint8_t encoded[8];
     for (uint32_t i = 0; i < sizeof(encoded); i++)
@@ -295,7 +481,7 @@ static void hash_u64(XrSHA256Context *ctx, uint64_t value) {
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v7\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v8\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -431,6 +617,18 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_symbol &&
                        strcmp(value->recipe_symbol,
                               XR_C_CHANNEL_NEW_SYMBOL) == 0;
+    if (value->materialization ==
+        XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD)
+        recipe_valid = value->rep != XR_C_VALUE_REP_VOID &&
+                       value->rep != XR_C_VALUE_REP_TAGGED &&
+                       value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL &&
+                       value->recipe_operand_value != UINT32_MAX &&
+                       channel_receive_symbol(value->target_register_kind) &&
+                       value->recipe_symbol &&
+                       strcmp(value->recipe_symbol,
+                              channel_receive_symbol(
+                                  value->target_register_kind)) == 0;
     return expected_rep == (XrCValueRep) value->rep && value->c_type &&
            value->reserved == 0 && recipe_valid &&
            strcmp(value->c_type, expected_c_type) == 0 &&
@@ -615,19 +813,33 @@ bool xr_c_emission_plan_verify(
         uint32_t expected_capacity = UINT32_MAX;
         bool expected_channel = exact_channel_new_recipe(
             target_plan, binding, &expected_capacity);
+        uint32_t expected_receiver = UINT32_MAX;
+        const char *expected_receive_symbol =
+            verify_channel_receive_recipe(target_plan, binding,
+                                           &expected_receiver);
         uint8_t expected_recipe = expected_literal
                                       ? XR_C_VALUE_MATERIALIZATION_STRING_LITERAL_VIEW
                                       : expected_channel
                                             ? XR_C_VALUE_MATERIALIZATION_CHANNEL_NEW
-                                            : XR_C_VALUE_MATERIALIZATION_NONE;
+                                            : expected_receive_symbol
+                                                  ? XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD
+                                                  : XR_C_VALUE_MATERIALIZATION_NONE;
+        uint32_t expected_operand = expected_channel
+                                        ? expected_capacity
+                                        : expected_receive_symbol
+                                              ? expected_receiver
+                                              : UINT32_MAX;
+        const char *expected_symbol = expected_channel
+                                          ? XR_C_CHANNEL_NEW_SYMBOL
+                                          : expected_receive_symbol;
         size_t expected_length = expected_literal ? strlen(expected_literal) : 0;
         if (row->materialization != expected_recipe || row->reserved != 0 ||
             row->literal_byte_length != expected_length ||
-            row->recipe_operand_value != expected_capacity ||
-            (expected_channel
+            row->recipe_operand_value != expected_operand ||
+            (expected_symbol
                  ? (!row->recipe_symbol ||
                     strcmp(row->recipe_symbol,
-                           XR_C_CHANNEL_NEW_SYMBOL) != 0)
+                           expected_symbol) != 0)
                  : row->recipe_symbol != NULL) ||
             (expected_literal
                  ? (!row->literal_bytes ||
@@ -661,7 +873,8 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_CLOSURE_STORAGE |
         XR_TARGET_FAMILY_STRING_LITERAL_STORAGE |
         XR_TARGET_FAMILY_DIRECT_LOCAL_CALLEE_STORAGE |
-        XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE;
+        XR_TARGET_FAMILY_CHANNEL_ALLOCATION_STORAGE |
+        XR_TARGET_FAMILY_CHANNEL_RECEIVE_STORAGE;
     if ((xr_target_plan_completed_family_mask(target_plan) &
          required_value_families) != required_value_families)
         return emission_error(error, error_size, "XR_TARGET_1001",
@@ -783,6 +996,25 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                     XR_C_VALUE_MATERIALIZATION_CHANNEL_NEW;
                 value->recipe_operand_value = capacity;
                 value->recipe_symbol = owned;
+            } else {
+                uint32_t receiver = UINT32_MAX;
+                const char *symbol = exact_channel_receive_recipe(
+                    target_plan, binding, &receiver);
+                if (symbol) {
+                    size_t symbol_length = strlen(symbol) + 1u;
+                    char *owned = (char *) xr_malloc(symbol_length);
+                    if (!owned) {
+                        xr_c_emission_plan_free(plan);
+                        return emission_error(
+                            error, error_size, "XR_EXEC_5003",
+                            "channel receive recipe allocation failed");
+                    }
+                    memcpy(owned, symbol, symbol_length);
+                    value->materialization =
+                        XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD;
+                    value->recipe_operand_value = receiver;
+                    value->recipe_symbol = owned;
+                }
             }
         }
     }

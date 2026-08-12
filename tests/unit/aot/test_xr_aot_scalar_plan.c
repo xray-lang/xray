@@ -889,6 +889,96 @@ static void test_channel_new_c_emission_recipe_is_exact(void) {
     xi_func_free(root);
 }
 
+static void test_channel_receive_c_emission_recipe_is_exact(void) {
+    XiFunc *root = xi_func_new("channel_receive_recipe", &scalar_unit);
+    REQUIRE(root != NULL);
+    XiBlock *entry = xi_block_new(root);
+    REQUIRE(entry != NULL);
+    XiValue *capacity = xi_const_int(root, entry, 1, &scalar_int);
+    XiValue *channel = xi_value_new(root, entry, XI_CHAN_NEW,
+                                    &channel_type, 1);
+    XiValue *receive = xi_value_new(root, entry, XI_CHAN_TRY_RECV,
+                                    &scalar_int, 1);
+    REQUIRE(capacity && channel && receive);
+    channel->args[0] = capacity;
+    receive->args[0] = channel;
+    xi_block_set_return(entry, NULL);
+    root->stage = XI_STAGE_OPTIMIZED;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    XrTargetProfile *profile = build_exact_profile();
+    XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                     error, sizeof(error)));
+    uint32_t ignored_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t channel_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t receive_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, root, channel, &ignored_function, &channel_value, error,
+        sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(
+        target, root, receive, &ignored_function, &receive_value, error,
+        sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, receive_value, &view,
+                                           error, sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_I64 &&
+            view.materialization ==
+                XR_C_VALUE_MATERIALIZATION_CHANNEL_RECV_PAYLOAD &&
+            view.recipe_operand_value == channel_value && view.recipe_symbol &&
+            strcmp(view.recipe_symbol, "XR_TO_INT") == 0 &&
+            view.literal_bytes == NULL && view.literal_byte_length == 0);
+    XrCValueEmissionView *row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == receive_value)
+            row = &emission->values[i];
+    REQUIRE(row != NULL);
+    uint8_t saved_recipe = row->materialization;
+    row->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    row->materialization = saved_recipe;
+    uint32_t saved_operand = row->recipe_operand_value;
+    row->recipe_operand_value = receive_value;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    row->recipe_operand_value = saved_operand;
+    const char *saved_symbol = row->recipe_symbol;
+    row->recipe_symbol = "XR_TO_FLOAT";
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    row->recipe_symbol = saved_symbol;
+    uint16_t saved_kind = row->target_register_kind;
+    row->target_register_kind = XR_MACHINE_REP_F64;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    row->target_register_kind = saved_kind;
+    emission->fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    emission->fingerprint.bytes[0] ^= 1u;
+    uint32_t saved_schema = emission->schema_version;
+    emission->schema_version = 7;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target,
+                                        profile_fingerprint, error,
+                                        sizeof(error)));
+    emission->schema_version = saved_schema;
+    REQUIRE(xr_c_emission_plan_verify(emission, target,
+                                       profile_fingerprint, error,
+                                       sizeof(error)));
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(root);
+}
+
 int main(void) {
     test_scalar_plan_and_emission_view();
     test_missing_semantic_authority_fails_closed();
@@ -901,6 +991,7 @@ int main(void) {
     test_profile_mismatch_fails_before_projection();
     test_dynamic_closure_c_emission_is_exact_and_mutation_safe();
     test_channel_new_c_emission_recipe_is_exact();
+    test_channel_receive_c_emission_recipe_is_exact();
     printf("AOT scalar TargetPlan tests passed\n");
     return 0;
 }

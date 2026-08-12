@@ -699,7 +699,7 @@ static void test_null_and_test_backends_cover_refusal(void) {
     REQUIRE(xr_aot_backend_run(&view, fixture.target_plan,
                                xr_aot_test_backend_interface(), &test_backend,
                                &stats, &diag));
-    REQUIRE(strstr(emission, "families=00000000000000ff") != NULL);
+    REQUIRE(strstr(emission, "families=00000000000001ff") != NULL);
     REQUIRE(strstr(emission, "transform=direct-call decision=refused") != NULL);
     REQUIRE(strstr(emission,
                    "issue=XR_AOT_REFINEMENT_INVALIDATED_EVIDENCE") != NULL);
@@ -2270,6 +2270,59 @@ static void test_live_source_use_and_type_mutations_are_rederived(void) {
     representation_fixture_free(&type_flags);
 }
 
+static void test_channel_receive_refinement_authority_is_exact(void) {
+    XrType channel_type = {
+        .kind = XR_KIND_CHANNEL,
+        .id = 700,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .container = {.element_type = &scalar_int},
+    };
+    XiFunc *function =
+        xi_func_new("channel_receive_refinement", &scalar_int);
+    XiBlock *entry = xi_block_new(function);
+    XiValue *capacity = xi_const_int(function, entry, 1, &scalar_int);
+    XiValue *channel =
+        xi_value_new(function, entry, XI_CHAN_NEW, &channel_type, 1);
+    XiValue *receive =
+        xi_value_new(function, entry, XI_CHAN_TRY_RECV, &scalar_int, 1);
+    XiValue *one = xi_const_int(function, entry, 1, &scalar_int);
+    XiValue *sum = xi_value_new(function, entry, XI_ADD, &scalar_int, 2);
+    REQUIRE(function && entry && capacity && channel && receive && one && sum);
+    channel->args[0] = capacity;
+    receive->args[0] = channel;
+    sum->args[0] = receive;
+    sum->args[1] = one;
+    xi_block_set_return(entry, sum);
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build(
+        function, target, &policy, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.frozen && view.verified && view.record_count != 0);
+    REQUIRE(xr_aot_representation_refinement_verify(
+        &view, function, target, &policy, &diag));
+    XiValue *saved_receiver = receive->args[0];
+    receive->args[0] = capacity;
+    REQUIRE(!xr_aot_representation_refinement_verify(
+        &view, function, target, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+    receive->args[0] = saved_receiver;
+    REQUIRE(xr_aot_representation_refinement_verify(
+        &view, function, target, &policy, &diag));
+    xi_opt_refresh_representations_with_policy(function, &policy);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+
+    xr_aot_refinement_plan_free(plan);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 int main(void) {
     test_scalar_direct_call_refuses_without_baseline_change();
     test_stale_state_and_baseline_mutations_fail_closed();
@@ -2288,6 +2341,7 @@ int main(void) {
     test_parameter_phi_and_return_use_domains_are_exact();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     test_live_source_use_and_type_mutations_are_rederived();
+    test_channel_receive_refinement_authority_is_exact();
     printf("TargetPlan-native AOT refinement tests passed\n");
     return 0;
 }

@@ -1,11 +1,11 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 11 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 12 with the complete
 scalar, aggregate, direct-local call, closure-storage, minimal coroutine
 state-call, String-literal-storage, direct-local-callee-storage, and
-Channel-allocation-storage family mask. Schema 11 is a breaking hard cutover:
-schema 10 and a plan missing any required family fact are rejected
+Channel-allocation-storage and Channel-receive-storage family mask. Schema 12
+is a breaking hard cutover: schema 11 and a plan missing any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
 compatibility logic.
@@ -34,6 +34,11 @@ returned by an exact frozen `XI_CHAN_NEW` as owned, and its exact identity-copy
 aliases as borrowed. It does not describe the Channel object body, allocation
 execution, root map, root slot, cleanup, transfer plan, or general object
 storage and remains outside the trivial frame allocator.
+The Channel-receive-storage family describes only the trivial scalar result
+slot for an exact `XI_CHAN_TRY_RECV` whose Channel allocation identity and
+element type have been independently frozen. It adds no Channel object layout,
+receive scheduling, ownership transfer, aggregate payload, tuple payload,
+root, or cleanup authority.
 
 The separate scalar dispatcher may use this frame only when an independently
 verified, non-empty function instruction group grants its exact execution
@@ -71,9 +76,9 @@ Evidence:
 - The runtime artifact archive gate separately proves activation only through
   the exact XSM/XTP sole-function generation route.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 279ba8e8589c020a58934ab9bbb54a8152a589aa4b0cc31ab1763a1f2208e913
-anchor-sha256: src/vm/xr_typed_frame.h f29400359632d7cc71652d2c61e11cedff6b74a0f4acda08e5e54d35d52f7f1e
+anchor-sha256: src/plan/target/xr_target_plan.h aa9754bc73b8df7986044c40ece64afc81eebd903df33db88dda24f86d56b12e
+anchor-sha256: src/vm/xr_typed_frame.h 889e2dfae789861656387c35458383af1250c66ddaa1686c044899c184b7e2e4
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c a5e4c5b0a99c955f7eb36ceeff493f1586132d731383174a611a6ae7117c92e1
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c e0d9660d107f6590f580ef2fb6eda74764e2a1f12f0e4daa3d82ecb095410c56
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 993a338ba5dd2f0ed7a88f4aa830e697700361d88acd2b6ef36f35bcafc270a7

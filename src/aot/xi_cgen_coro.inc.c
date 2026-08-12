@@ -3881,9 +3881,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (v->op == XI_CHAN_TRY_RECV) {
         emit_value_generated_line_reset(ctx, out, v);
-        if (v->nargs < 1) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: CHAN_TRY_RECV missing channel\n");
+        XrCValueEmissionView emission = {0};
+        if (!cg_channel_receive_emission_view(ctx, f, v, &emission)) {
             emit_codegen_abort_aot_result(out);
             return;
         }
@@ -3897,9 +3896,12 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 "xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(_chan_try_%u));\n",
                 v->id, v->id);
         if (cg_coro_value_has_storage(f, v)) {
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "_chan_try_payload_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = ");
+            cg_emit_channel_receive_payload_expression(out, &emission,
+                                                       v->id, true);
+            fprintf(out, ";\n");
         }
         emit_coro_debug_result_source_var_sync(ctx, out, f, v);
         return;

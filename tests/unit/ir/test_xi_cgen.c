@@ -2805,13 +2805,16 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
     XiValue *capacity = xi_const_int(ir, entry, 3, &u32_type);
     XiValue *channel = xi_value_new(ir, entry, XI_CHAN_NEW, &channel_type, 1);
-    TEST_REQUIRE(parameter && one && sum && literal && print && capacity && channel,
+    XiValue *receive =
+        xi_value_new(ir, entry, XI_CHAN_TRY_RECV, &u32_type, 1);
+    TEST_REQUIRE(parameter && one && sum && literal && print && capacity && channel && receive,
                  "value emission consumer values allocated");
     ir->params[0] = parameter;
     sum->args[0] = parameter;
     sum->args[1] = one;
     print->args[0] = literal;
     channel->args[0] = capacity;
+    receive->args[0] = channel;
     xi_block_set_return(entry, sum);
     TEST_REQUIRE(test_prepare_backend_ir(ir), "scalar emission consumer backend prepared");
 
@@ -2882,7 +2885,8 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     TEST_REQUIRE(xaot_bundle_find_value_plan(&legacy_plan.bundle, parameter) == NULL &&
                      xaot_bundle_find_value_plan(&legacy_plan.bundle, one) == NULL &&
                      xaot_bundle_find_value_plan(&legacy_plan.bundle, sum) == NULL &&
-                     xaot_bundle_find_value_plan(&legacy_plan.bundle, channel) == NULL,
+                     xaot_bundle_find_value_plan(&legacy_plan.bundle, channel) == NULL &&
+                     xaot_bundle_find_value_plan(&legacy_plan.bundle, receive) == NULL,
                  "migrated value families have no legacy Xaot rows");
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
@@ -2908,8 +2912,10 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     legacy_value->rep.flags = 0;
     uint8_t saved_xi_rep = sum->rep;
     uint8_t saved_channel_rep = channel->rep;
+    uint8_t saved_receive_rep = receive->rep;
     sum->rep = XR_REP_TAGGED;
     channel->rep = XR_REP_PTR;
+    receive->rep = XR_REP_TAGGED;
     const char *saved_literal = (const char *) literal->aux;
     literal->aux = "forged-live-xi";
 
@@ -2923,6 +2929,7 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
                  "scalar emission consumer stream closed");
     sum->rep = saved_xi_rep;
     channel->rep = saved_channel_rep;
+    receive->rep = saved_receive_rep;
     literal->aux = (void *) saved_literal;
 
     TEST_REQUIRE(!xi_cgen_has_error(ctx), "scalar emission consumer generated without error");
@@ -2945,6 +2952,12 @@ TEST(cgen_scalar_emission_plan_owns_local_rep_and_c_spelling) {
     TEST_REQUIRE(contains(buf, "xr_aot_channel_new(") &&
                      !contains(buf, "xr_aot_channel_new(NULL"),
                  "Channel CGen mechanically consumes the immutable recipe despite poisoned Xi rep");
+    char receive_assign[96];
+    snprintf(receive_assign, sizeof(receive_assign),
+             "v%u = XR_TO_INT(xr_aot_bridge_value_to_xrt(xr_aot_recv_payload(",
+             (unsigned) receive->id);
+    TEST_REQUIRE(contains(buf, receive_assign),
+                 "Channel receive CGen mechanically consumes the immutable unbox recipe");
     const char *second_fn = find_static_function_definition(
         buf, "scalar_emission_consumer_second");
     TEST_REQUIRE(second_fn != NULL,
