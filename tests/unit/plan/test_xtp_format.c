@@ -50,6 +50,13 @@ static XrType stub_function = {
     .frozen = true,
     .function = {.return_type = &stub_int, .throw_effect = XR_FN_EFFECT_NO_THROW},
 };
+static XrType stub_channel = {
+    .kind = XR_KIND_CHANNEL,
+    .id = 4,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_int},
+};
 
 static XrSemanticPlan *build_semantic_plan(void) {
     XiFunc *function = xi_func_new("xtp_probe", &stub_int);
@@ -107,6 +114,37 @@ static XrSemanticPlan *build_direct_call_semantic_plan(void) {
     REQUIRE(xr_semantic_plan_build(root, &semantic, error, sizeof(error)));
     REQUIRE(semantic != NULL && xr_semantic_plan_call_target_count(semantic) == 1);
     xi_func_free(root);
+    return semantic;
+}
+
+static XrSemanticPlan *build_channel_close_semantic_plan(void) {
+    XiFunc *function = xi_func_new("xtp_channel_close", &stub_unit);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *capacity = xi_const_int(function, entry, 1, &stub_int);
+    XiValue *channel =
+        xi_value_new(function, entry, XI_CHAN_NEW, &stub_channel, 1);
+    XiValue *alias =
+        xi_value_new(function, entry, XI_COPY, &stub_channel, 1);
+    XiValue *close =
+        xi_value_new(function, entry, XI_CALL_METHOD, &stub_unit, 1);
+    REQUIRE(capacity != NULL && channel != NULL && alias != NULL &&
+            close != NULL);
+    channel->args[0] = capacity;
+    alias->args[0] = channel;
+    alias->aux_int = XI_COPY_KIND_IDENTITY;
+    close->args[0] = alias;
+    close->aux = (void *) "close";
+    close->aux_int = 314;
+    xi_block_set_return(entry, NULL);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, error,
+                                   sizeof(error)));
+    REQUIRE(semantic != NULL);
+    xi_func_free(function);
     return semantic;
 }
 
@@ -368,6 +406,10 @@ static XtpFixture make_coroutine_call_fixture(void) {
     return make_fixture_from_semantic(build_coroutine_call_semantic_plan());
 }
 
+static XtpFixture make_channel_close_fixture(void) {
+    return make_fixture_from_semantic(build_channel_close_semantic_plan());
+}
+
 static void dispose_fixture(XtpFixture *fixture) {
     xr_xtp_encoded_free(fixture->bytes);
     xr_target_plan_free(fixture->plan);
@@ -532,6 +574,77 @@ static void test_direct_call_rows_roundtrip_and_mutate(void) {
     resign_artifact(copy, fixture.size);
     expect_materialize_failure(&fixture, copy);
     xr_free(copy);
+    dispose_fixture(&fixture);
+}
+
+static void test_channel_close_row_roundtrip_and_mutate(void) {
+    XtpFixture fixture = make_channel_close_fixture();
+    uint32_t count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(fixture.plan, &count);
+    REQUIRE(calls != NULL && count == 1 &&
+            calls[0].semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+            calls[0].callee_function == XR_SEMANTIC_INDEX_NONE &&
+            calls[0].caller_storage_slot == XR_SEMANTIC_INDEX_NONE &&
+            calls[0].argument_count == 0 &&
+            calls[0].calling_convention ==
+                XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
+            calls[0].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
+    REQUIRE(xr_target_plan_call_arguments(fixture.plan, &count) == NULL &&
+            count == 0);
+
+    uint8_t *call_entry =
+        directory_entry(fixture.bytes, XR_XTP_SECTION_CALLS);
+    size_t call_offset = (size_t) xr_xtp_take_u64(call_entry + 8);
+    REQUIRE(xr_xtp_take_u32(fixture.bytes + call_offset + 20) ==
+                XR_SEMANTIC_INDEX_NONE &&
+            xr_xtp_take_u32(fixture.bytes + call_offset + 32) ==
+                XR_SEMANTIC_INDEX_NONE &&
+            xr_xtp_take_u32(fixture.bytes + call_offset + 44) ==
+                XR_SEMANTIC_INDEX_NONE &&
+            xr_xtp_take_u16(fixture.bytes + call_offset + 68) == 0 &&
+            fixture.bytes[call_offset + 76] ==
+                XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
+            fixture.bytes[call_offset + 77] ==
+                XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
+
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *decoded = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_xtp_decode_candidate(fixture.bytes, fixture.size, &candidate,
+                                    error, sizeof(error)));
+    REQUIRE(xr_xtp_materialize_target_plan(candidate, fixture.semantic,
+                                           fixture.profile, &decoded, error,
+                                           sizeof(error)));
+    const XrTargetCallRecord *decoded_calls =
+        xr_target_plan_calls(decoded, &count);
+    REQUIRE(decoded != NULL && decoded_calls != NULL && count == 1 &&
+            decoded_calls[0].target_kind ==
+                XR_TARGET_CALL_TARGET_CHANNEL_CLOSE &&
+            xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
+                                 xr_target_plan_fingerprint(fixture.plan)));
+    xr_target_plan_free(decoded);
+    xr_xtp_candidate_release(candidate);
+
+    static const size_t mutations[] = {
+        20, /* semantic_call_target */
+        32, /* callee_function */
+        44, /* caller_storage_slot */
+        68, /* argument_count */
+        74, /* flags */
+        76, /* calling_convention */
+        77, /* target_kind */
+    };
+    for (uint32_t i = 0; i < sizeof(mutations) / sizeof(mutations[0]); i++) {
+        uint8_t *copy = copy_artifact(&fixture);
+        uint8_t *entry = directory_entry(copy, XR_XTP_SECTION_CALLS);
+        size_t offset = (size_t) xr_xtp_take_u64(entry + 8);
+        copy[offset + mutations[i]] ^= 1;
+        resign_section(copy, XR_XTP_SECTION_CALLS);
+        resign_artifact(copy, fixture.size);
+        expect_materialize_failure(&fixture, copy);
+        xr_free(copy);
+    }
     dispose_fixture(&fixture);
 }
 
@@ -895,7 +1008,7 @@ static void test_header_and_directory_mutations(void) {
     expect_decode_failure(copy, fixture.size);
 
     memcpy(copy, fixture.bytes, fixture.size);
-    xr_xtp_put_u32(copy + 4, UINT32_C(6)); /* v6 is a hard-cutover negative. */
+    xr_xtp_put_u32(copy + 4, UINT32_C(8)); /* v8 is a hard-cutover negative. */
     resign_artifact(copy, fixture.size);
     expect_decode_failure(copy, fixture.size);
 
@@ -1072,6 +1185,7 @@ int main(int argc, char **argv) {
     test_every_typed_row_codec();
     test_exact_roundtrip_and_owned_candidate();
     test_direct_call_rows_roundtrip_and_mutate();
+    test_channel_close_row_roundtrip_and_mutate();
     test_coroutine_rows_roundtrip_and_mutate();
     test_header_and_directory_mutations();
     test_identity_and_typed_mutations();

@@ -1,10 +1,10 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 8 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 9 with the complete
 scalar, aggregate, direct-local call, closure-storage, minimal coroutine
-state-call, and String-literal-storage family mask. Schema 8 is a breaking hard
-cutover: schema 7 and a plan missing any required family fact are rejected
+state-call, and String-literal-storage family mask. Schema 9 is a breaking hard
+cutover: schema 8 and a plan missing any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
 compatibility logic.
@@ -32,6 +32,13 @@ relations; it contains no child-frame, spill, root, cleanup, drop, cancel, or
 action authority. Aggregate, rooted, owned, caller-storage, coroutine, and
 adapter execution is not implemented here and remains fail closed.
 
+Schema 8 also admits one sealed non-static call descriptor: an exact,
+non-super, non-suspending `Channel.close()` operation reconstructed from
+frozen SemanticPlan receiver, selector, arity, and Unit-result facts. The
+receiver is only the dispatch target. The row has no callee function,
+argument row, receiver slot, caller storage, or general method-call authority,
+and this frame contract grants it no execution path.
+
 The frame retains the plan, binds its exact fingerprint, keeps initialization
 and poison state outside the untagged byte arena, enforces hard arena/slot/total
 allocation budgets, and makes cleanup terminal. Frame creation recomputes the
@@ -47,8 +54,8 @@ Evidence:
   from the runtime-only archive without compiler or AOT ownership, and proves
   that the internal scalar dispatcher is present without activating it.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 10adcaa8f644a39abf670d5367b611758524afe0b313a0d484a824fa7360505d
-anchor-sha256: src/vm/xr_typed_frame.h 968aa3ddce733983cc13ecdb94cf58dd35b35627a2a5d3db85545035baefc759
+anchor-sha256: src/plan/target/xr_target_plan.h 541839b09d06c7ff051b4e9b8b648ed2ab27ec66bd85af272d7f0f97e6066989
+anchor-sha256: src/vm/xr_typed_frame.h 2cd4328e776257047b496a8a49eaf8464d2d3ea527bb8fdfb0a5784c92c9f4ed
 anchor-sha256: src/vm/xr_typed_frame.c f0a3c7ea24cc7b712ac8de2923e92ac8bbb5ddc85006878b147ab9d506fd6ac6
 anchor-sha256: tests/unit/vm/test_typed_frame.c 8e060669f55b27cf072edd0a83c8a1304b7c9700a286fa09ad720aff21dbd816
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 1df1c5d8130a740d9737e735477467501bb0e095289f061bc886ae9dc6dd9dc9
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 5a19e39404c8e9decbc72187d1eee8e307bc44484e18422fb705c271ec192b49

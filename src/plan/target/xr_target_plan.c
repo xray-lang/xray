@@ -378,7 +378,7 @@ void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t lay
 
 void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_index,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-call-v3\0";
+    static const uint8_t domain[] = "xray-target-call-v4\0";
     const XrTargetCallRecord *call = &plan->calls[call_index];
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
@@ -411,7 +411,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v8\0";
+    static const uint8_t domain[] = "xray-target-plan-v9\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -549,10 +549,18 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         xr_target_layout_compute_fingerprint(plan, i, &plan->layouts[i].fingerprint);
     }
     for (uint32_t i = 0; i < plan->calls_count; i++) {
-        if (plan->calls[i].semantic_operation >=
+        bool direct_local =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
+        bool channel_close =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE;
+        if ((!direct_local && !channel_close) ||
+            plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
-            plan->calls[i].semantic_call_target >=
-                xr_semantic_plan_call_target_count(plan->semantic_plan) ||
+            (direct_local &&
+             plan->calls[i].semantic_call_target >=
+                 xr_semantic_plan_call_target_count(plan->semantic_plan)) ||
+            (channel_close &&
+             plan->calls[i].semantic_call_target != XR_SEMANTIC_INDEX_NONE) ||
             plan->calls[i].result_register_rep >= plan->machine_reps_count ||
             plan->calls[i].result_memory_rep >= plan->machine_reps_count ||
             plan->calls[i].error_register_rep >= plan->machine_reps_count ||

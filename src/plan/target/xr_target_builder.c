@@ -81,6 +81,8 @@ typedef struct XrTargetCallIntent {
     uint16_t argument_count;
     uint8_t result_mode;
     uint8_t result_ownership;
+    uint8_t calling_convention;
+    uint8_t target_kind;
     bool suspends;
     bool tail;
 } XrTargetCallIntent;
@@ -1528,6 +1530,92 @@ static bool call_type_is_exact_scalar(const XrSemanticPlan *plan, uint32_t type_
                XR_TARGET_SCALAR_VALUE;
 }
 
+/* Schema 13 already owns every fact needed to name Channel.close without a
+ * backend registry lookup: receiver type, source selector, non-super symbol
+ * encoding, arity, result type, and instance suspension flags. The receiver
+ * is the dispatch target, not a source argument; its machine slot remains a
+ * future channel-storage family concern. */
+static bool semantic_operation_is_exact_channel_close(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint32_t *receiver_type) {
+    if (receiver_type)
+        *receiver_type = XR_SEMANTIC_INDEX_NONE;
+    if (!plan || !operation)
+        return false;
+    uint32_t operand_count = 0;
+    uint32_t metadata_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    if (operation->opcode != XI_CALL_METHOD ||
+        operation->semantic_immediate <= 0 ||
+        (operation->semantic_immediate & INT64_C(1)) != 0 ||
+        (uint64_t) operation->semantic_immediate > UINT32_MAX ||
+        operation->operand_count != 1 ||
+        operation->operand_begin >= operand_count ||
+        operation->metadata_count != 1 ||
+        operation->metadata_begin >= metadata_count || !operands || !metadata ||
+        !metadata[operation->metadata_begin] ||
+        strcmp(metadata[operation->metadata_begin], "close") != 0 ||
+        (operation->flags & XI_FLAG_MAY_SUSPEND) != 0)
+        return false;
+    const XrSemanticOperandRecord *receiver =
+        &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *receiver_record =
+        xr_semantic_plan_type(plan, receiver->type);
+    const XrSemanticTypeRecord *result =
+        xr_semantic_plan_type(plan, operation->result_type);
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(plan, operation->function);
+    if (!receiver_record || !result || !function ||
+        receiver_record->kind != XR_KIND_CHANNEL ||
+        result->kind != XR_KIND_UNIT ||
+        result->scalar_rep != XR_SCALAR_REP_NONE ||
+        receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        (receiver->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
+        receiver->value < function->value_begin ||
+        receiver->value >= function->value_begin + function->value_count ||
+        operation->result_value < function->value_begin ||
+        operation->result_value >= function->value_begin + function->value_count)
+        return false;
+    if (receiver_type)
+        *receiver_type = receiver->type;
+    return true;
+}
+
+static bool collect_channel_close_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
+    uint32_t receiver_type = XR_SEMANTIC_INDEX_NONE;
+    if (!semantic_operation_is_exact_channel_close(builder->semantic_plan, operation,
+                                                    &receiver_type) ||
+        !call_type_is_exact_scalar(builder->semantic_plan, operation->result_type))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "channel-close dispatch authority is incomplete");
+    const XrSemanticTypeRecord *receiver =
+        xr_semantic_plan_type(builder->semantic_plan, receiver_type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE,
+        .target_kind = XR_TARGET_CALL_TARGET_CHANNEL_CLOSE,
+    };
+    if (!receiver ||
+        !stable_identity_from_pair(
+            "xray-target-call-v4", operation->id, receiver->id,
+            (uint32_t) operation->semantic_immediate, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "channel-close call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
                                              uint32_t target_index,
                                              const XrSemanticCallTargetRecord *target,
@@ -1583,10 +1671,12 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder,
         .argument_count = callee->parameter_count,
         .result_mode = XR_TARGET_CALL_VALUE,
         .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
+        .target_kind = XR_TARGET_CALL_TARGET_DIRECT_LOCAL,
         .suspends = suspends,
         .tail = operation->opcode == XI_TAIL_CALL,
     };
-    if (!stable_identity_from_pair("xray-target-call-v3", target->id, operation->id,
+    if (!stable_identity_from_pair("xray-target-call-v4", target->id, operation->id,
                                    0, &call.identity))
         return fail(error, error_size, "XR_TARGET_1003",
                     "direct-local call identity is incomplete");
@@ -1639,8 +1729,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         builder->poisoned = true;
         return fail(error, error_size, "XR_EXEC_5003", "call target budget exhausted");
     }
-    uint8_t *covered = (uint8_t *) allocate_records((uint32_t) operation_count,
-                                                    sizeof(*covered));
+    uint32_t *target_by_operation = (uint32_t *) allocate_records(
+        (uint32_t) operation_count, sizeof(*target_by_operation));
     uint8_t *state_by_operation = (uint8_t *) allocate_records(
         (uint32_t) operation_count, sizeof(*state_by_operation));
     uint32_t function_count =
@@ -1653,10 +1743,10 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         (uint32_t) call_target_count, sizeof(*reverse_next));
     uint32_t *queue = (uint32_t *) allocate_records(function_count,
                                                      sizeof(*queue));
-    if ((operation_count && (!covered || !state_by_operation)) ||
+    if ((operation_count && (!target_by_operation || !state_by_operation)) ||
         (function_count && (!suspendable || !reverse_head || !queue)) ||
         (call_target_count && !reverse_next)) {
-        xr_free(covered);
+        xr_free(target_by_operation);
         xr_free(state_by_operation);
         xr_free(suspendable);
         xr_free(reverse_head);
@@ -1666,6 +1756,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         return fail(error, error_size, "XR_EXEC_5003", "call coverage allocation failed");
     }
     bool valid = true;
+    for (uint32_t operation = 0; operation < (uint32_t) operation_count;
+         operation++)
+        target_by_operation[operation] = XR_SEMANTIC_INDEX_NONE;
     size_t entity_count = xr_semantic_plan_entity_count(plan);
     for (uint32_t i = 0; i < (uint32_t) entity_count && valid; i++) {
         const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
@@ -1711,11 +1804,14 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 ? xr_semantic_plan_operation(plan, target->operation)
                 : NULL;
         if (!target || !operation || target->function >= function_count ||
+            target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
             (operation->opcode != XI_CALL &&
-             operation->opcode != XI_TAIL_CALL)) {
+             operation->opcode != XI_TAIL_CALL) ||
+            target_by_operation[target->operation] != XR_SEMANTIC_INDEX_NONE) {
             valid = false;
             break;
         }
+        target_by_operation[target->operation] = i;
         reverse_next[i] = reverse_head[target->function];
         reverse_head[target->function] = i;
     }
@@ -1738,26 +1834,27 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             }
         }
     }
-    for (uint32_t i = 0; i < (uint32_t) call_target_count && valid; i++) {
-        const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, i);
-        if (!target || target->operation >= operation_count || covered[target->operation]) {
-            valid = fail(error, error_size, "XR_TARGET_1003",
-                         "call-target coverage is missing or duplicated");
-            break;
-        }
-        covered[target->operation] = 1;
-        valid = collect_direct_local_call_intent(
-            builder, i, target, state_by_operation[target->operation] != 0,
-            target->function < function_count && suspendable[target->function] != 0,
-            error, error_size);
-    }
     for (uint32_t i = 0; i < (uint32_t) operation_count && valid; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, i);
-        if (semantic_operation_is_call_shaped(plan, operation) && !covered[i])
+        uint32_t target_index = target_by_operation[i];
+        if (target_index != XR_SEMANTIC_INDEX_NONE) {
+            const XrSemanticCallTargetRecord *target =
+                xr_semantic_plan_call_target(plan, target_index);
+            valid = target && collect_direct_local_call_intent(
+                                  builder, target_index, target,
+                                  state_by_operation[i] != 0,
+                                  target->function < function_count &&
+                                      suspendable[target->function] != 0,
+                                  error, error_size);
+        } else if (semantic_operation_is_exact_channel_close(plan, operation, NULL)) {
+            valid = collect_channel_close_call_intent(builder, i, operation,
+                                                       error, error_size);
+        } else if (semantic_operation_is_call_shaped(plan, operation)) {
             valid = fail(error, error_size, "XR_TARGET_1003",
-                         "call-shaped operation has no exact DIRECT_LOCAL authority");
+                         "call-shaped operation has no exact target authority");
+        }
     }
-    xr_free(covered);
+    xr_free(target_by_operation);
     xr_free(state_by_operation);
     xr_free(suspendable);
     xr_free(reverse_head);
@@ -2519,8 +2616,8 @@ static bool materialize_calls_and_adapters(
             .native_abi = machine->native_abi,
             .flags = (intent->suspends ? XR_TARGET_CALL_SUSPEND : 0) |
                      (intent->tail ? XR_TARGET_CALL_TAIL : 0),
-            .calling_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
-            .target_kind = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
+            .calling_convention = intent->calling_convention,
+            .target_kind = intent->target_kind,
             .result_mode = intent->result_mode,
             .result_ownership = intent->result_ownership,
             .error_mode = XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL,

@@ -91,6 +91,13 @@ static XrType stub_exact_function = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .function = {.return_type = &stub_int, .throw_effect = XR_FN_EFFECT_NO_THROW},
 };
+static XrType stub_channel = {
+    .kind = XR_KIND_CHANNEL,
+    .id = 110,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_int},
+};
 
 static void fill_foundation_capabilities(XrTargetCapabilityRecord capabilities[2]) {
     capabilities[0] = (XrTargetCapabilityRecord) {
@@ -845,7 +852,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                    "7a6268274b58a4f5bcf2cb3cfab62ea2f76817898d9a94d39bce578e9b3981c7") == 0);
+                    "909ca4ae74f17d5d21839df5e31556c877fa1d604fac384e73d632500b89a4cc") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -1560,6 +1567,181 @@ static XrSemanticPlan *build_direct_local_scalar_calls(uint16_t call_opcode) {
     return plan;
 }
 
+static XrSemanticPlan *build_channel_method_semantic(
+    const char *selector, int64_t selector_immediate, XrType *receiver_type,
+    XrType *result_type, bool extra_argument) {
+    XiFunc *function = xi_func_new("target_channel_close", &stub_unit);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *capacity = xi_const_int(function, entry, 1, &stub_int);
+    XiValue *channel = receiver_type == &stub_channel
+                           ? xi_value_new(function, entry, XI_CHAN_NEW,
+                                          &stub_channel, 1)
+                           : xi_const_int(function, entry, 2, &stub_int);
+    XiValue *alias =
+        xi_value_new(function, entry, XI_COPY, receiver_type, 1);
+    XiValue *close =
+        xi_value_new(function, entry, XI_CALL_METHOD, result_type,
+                     extra_argument ? 2 : 1);
+    REQUIRE(capacity && channel && alias && close);
+    if (receiver_type == &stub_channel)
+        channel->args[0] = capacity;
+    alias->args[0] = channel;
+    alias->aux_int = XI_COPY_KIND_IDENTITY;
+    close->args[0] = alias;
+    close->aux = (void *) selector;
+    close->aux_int = selector_immediate;
+    if (extra_argument)
+        close->args[1] = capacity;
+    xi_block_set_return(entry, NULL);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "channel-close semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    return plan;
+}
+
+static XrSemanticPlan *build_channel_close_semantic(void) {
+    return build_channel_method_semantic("close", 314, &stub_channel,
+                                         &stub_unit, false);
+}
+
+typedef enum ChannelCloseCallMutation {
+    CHANNEL_CLOSE_MUTATE_IDENTITY,
+    CHANNEL_CLOSE_MUTATE_SEMANTIC_TARGET,
+    CHANNEL_CLOSE_MUTATE_SEMANTIC_OPERATION,
+    CHANNEL_CLOSE_MUTATE_CALLEE,
+    CHANNEL_CLOSE_MUTATE_RESULT_SLOT,
+    CHANNEL_CLOSE_MUTATE_CALLER_STORAGE,
+    CHANNEL_CLOSE_MUTATE_ARGUMENT_COUNT,
+    CHANNEL_CLOSE_MUTATE_FLAGS,
+    CHANNEL_CLOSE_MUTATE_CONVENTION,
+    CHANNEL_CLOSE_MUTATE_TARGET_KIND,
+    CHANNEL_CLOSE_MUTATION_COUNT,
+} ChannelCloseCallMutation;
+
+static void mutate_channel_close_call(XrTargetCallRecord *call,
+                                      ChannelCloseCallMutation mutation) {
+    switch (mutation) {
+        case CHANNEL_CLOSE_MUTATE_IDENTITY:
+            call->identity.bytes[0] ^= 1;
+            break;
+        case CHANNEL_CLOSE_MUTATE_SEMANTIC_TARGET:
+            call->semantic_call_target = 0;
+            break;
+        case CHANNEL_CLOSE_MUTATE_SEMANTIC_OPERATION:
+            call->semantic_operation--;
+            break;
+        case CHANNEL_CLOSE_MUTATE_CALLEE:
+            call->callee_function = 0;
+            break;
+        case CHANNEL_CLOSE_MUTATE_RESULT_SLOT:
+            call->result_slot = 0;
+            break;
+        case CHANNEL_CLOSE_MUTATE_CALLER_STORAGE:
+            call->caller_storage_slot = 0;
+            break;
+        case CHANNEL_CLOSE_MUTATE_ARGUMENT_COUNT:
+            call->argument_count = 1;
+            break;
+        case CHANNEL_CLOSE_MUTATE_FLAGS:
+            call->flags = XR_TARGET_CALL_SUSPEND;
+            break;
+        case CHANNEL_CLOSE_MUTATE_CONVENTION:
+            call->calling_convention = XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL;
+            break;
+        case CHANNEL_CLOSE_MUTATE_TARGET_KIND:
+            call->target_kind = XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
+            break;
+        case CHANNEL_CLOSE_MUTATION_COUNT:
+            abort();
+    }
+}
+
+static void test_channel_close_call_authority(void) {
+    XrSemanticPlan *semantic = build_channel_close_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error,
+                                      sizeof(error));
+    if (!built)
+        fprintf(stderr, "channel-close target fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    REQUIRE(plan->calls_count == 1 && plan->call_arguments_count == 0);
+    REQUIRE(plan->calls[0].semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+            plan->calls[0].callee_function == XR_SEMANTIC_INDEX_NONE &&
+            plan->calls[0].calling_convention ==
+                XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
+            plan->calls[0].target_kind == XR_TARGET_CALL_TARGET_CHANNEL_CLOSE &&
+            plan->calls[0].argument_count == 0 && plan->calls[0].flags == 0 &&
+            plan->calls[0].result_slot == XR_SEMANTIC_INDEX_NONE);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
+    xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
+    REQUIRE(strcmp(call_hex,
+                   "56671e1c565230096fc445facb7c881b908fc510c5fb7afa03feca37dce62f7d") == 0);
+    for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT;
+         mutation++) {
+        XrTargetCallRecord saved = plan->calls[0];
+        XrTargetCallArgumentRecord fabricated_argument = {0};
+        XrTargetCallArgumentRecord *saved_arguments = plan->call_arguments;
+        uint32_t saved_argument_count = plan->call_arguments_count;
+        mutate_channel_close_call(&plan->calls[0],
+                                  (ChannelCloseCallMutation) mutation);
+        if (mutation == CHANNEL_CLOSE_MUTATE_ARGUMENT_COUNT) {
+            plan->call_arguments = &fabricated_argument;
+            plan->call_arguments_count = 1;
+        }
+        xr_target_call_compute_fingerprint(plan, 0,
+                                           &plan->calls[0].fingerprint);
+        expect_verify_failure(plan, "XR_TARGET_1003");
+        plan->call_arguments = saved_arguments;
+        plan->call_arguments_count = saved_argument_count;
+        plan->calls[0] = saved;
+    }
+    plan->calls_count = 0;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    plan->calls_count = 1;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+
+    static const struct {
+        const char *selector;
+        int64_t selector_immediate;
+        XrType *receiver_type;
+        XrType *result_type;
+        bool extra_argument;
+    } rejected[] = {
+        {"send", 314, &stub_channel, &stub_unit, false},
+        {"close", 315, &stub_channel, &stub_unit, false},
+        {"close", 314, &stub_channel, &stub_unit, true},
+        {"close", 314, &stub_int, &stub_unit, false},
+        {"close", 314, &stub_channel, &stub_int, false},
+    };
+    profile = build_profile(0);
+    for (uint32_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); i++) {
+        semantic = build_channel_method_semantic(
+            rejected[i].selector, rejected[i].selector_immediate,
+            rejected[i].receiver_type, rejected[i].result_type,
+            rejected[i].extra_argument);
+        plan = NULL;
+        error[0] = '\0';
+        REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error,
+                                      sizeof(error)));
+        REQUIRE(plan == NULL && strncmp(error, "XR_TARGET_1003", 14) == 0);
+        xr_semantic_plan_free(semantic);
+    }
+    xr_target_profile_free(profile);
+}
+
 static XrSemanticPlan *build_lowered_coroutine_direct_call(bool unit_result) {
     XrType unit_function = {
         .kind = XR_KIND_FUNCTION,
@@ -1838,7 +2020,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                    "4d0522688d3292dd5a1ad3fea544b98023c2307e706034186d6c87b97cf933cf") == 0);
+                    "5b9f4d71b2bf9951f63e9b9a867250a4dbddfcccfe756998b6c244e74e71712b") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -2060,7 +2242,7 @@ static void test_coroutine_state_call_family(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "b58c7d01206c21000cbb408b5b9cbb845755d8829bd7164802dba8f28da91584") == 0);
+                    "f016bf0863a486a03a1caa17b99e52fdaa6204068614c8761c929ee3e631c392") == 0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
     expect_verify_failure(tail_plan, "XR_TARGET_1003");
@@ -2436,6 +2618,7 @@ static void test_bool_and_nullable_scalar_boundary(void) {
 }
 
 int main(void) {
+    test_channel_close_call_authority();
     test_profile_freeze_and_determinism();
     test_plan_snapshot_and_determinism();
     test_builder_materializes_canonical_scalar_intents();

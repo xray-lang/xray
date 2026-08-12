@@ -166,7 +166,17 @@ typedef enum XrTargetCallOwnership {
 typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_INVALID = 0,
     XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
+    XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE,
 } XrTargetCallConvention;
+
+/* Target-local dispatch authority. DIRECT_LOCAL deliberately retains the
+ * SemanticPlan numeric value, while CHANNEL_CLOSE names a sealed runtime
+ * receiver operation and never claims a static callee function. */
+typedef enum XrTargetCallTargetKind {
+    XR_TARGET_CALL_TARGET_INVALID = 0,
+    XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
+    XR_TARGET_CALL_TARGET_CHANNEL_CLOSE,
+} XrTargetCallTargetKind;
 
 typedef enum XrTargetCallErrorMode {
     XR_TARGET_CALL_ERROR_MODE_INVALID = 0,
