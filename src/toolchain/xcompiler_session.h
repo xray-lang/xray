@@ -33,6 +33,7 @@ struct XrTargetProfile;
 typedef struct XrCompilerSession XrCompilerSession;
 
 #define XR_COMPILER_SESSION_INITIAL_GENERATION UINT64_C(1)
+#define XR_COMPILER_SESSION_INITIAL_REPL_DECLARATION_GENERATION UINT64_C(1)
 #define XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT 16u
 
 typedef enum XrCompilerSessionGenerationChange {
@@ -68,6 +69,41 @@ typedef struct XrCompilerSessionOperationScope {
     bool owns_operation;
     bool active;
 } XrCompilerSessionOperationScope;
+
+typedef enum XrCompilerSessionReplDeclarationState {
+    XR_COMPILER_SESSION_REPL_DECLARATION_RESERVED = 0,
+    XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED,
+    XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE,
+    XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_RUNTIME,
+} XrCompilerSessionReplDeclarationState;
+
+/* Each submitted REPL unit owns a fresh identity. A failed unit remains in
+ * the ledger as abandoned, so later declarations can never reuse its
+ * identity or impersonate the last published generation. */
+typedef struct XrCompilerSessionReplDeclarationRecord {
+    uint64_t generation;
+    uint64_t parent_generation;
+    uint64_t session_generation;
+    uint32_t statement_count;
+    XrCompilerSessionReplDeclarationState state;
+} XrCompilerSessionReplDeclarationRecord;
+
+typedef struct XrCompilerSessionReplGenerationSnapshot {
+    uint64_t next_generation;
+    uint64_t published_generation;
+    uint64_t attempted_count;
+    uint64_t published_count;
+    uint64_t abandoned_count;
+    bool active;
+} XrCompilerSessionReplGenerationSnapshot;
+
+typedef struct XrCompilerSessionReplDeclarationScope {
+    XrCompilerSession *session;
+    uint64_t generation;
+    uint64_t session_generation;
+    size_t record_index;
+    bool active;
+} XrCompilerSessionReplDeclarationScope;
 
 typedef struct XrCompilerSessionIncrementalStats {
     size_t module_count;
@@ -127,6 +163,18 @@ xr_compiler_session_generation_snapshot(const XrCompilerSession *session);
 XR_FUNC bool xr_compiler_session_apply_generation_change(XrCompilerSession *session,
                                                          uint32_t change_mask);
 XR_FUNC bool xr_compiler_session_reset_incremental(XrCompilerSession *session);
+XR_FUNC bool xr_compiler_session_repl_declaration_begin(
+    XrCompilerSession *session, XrCompilerSessionReplDeclarationScope *scope);
+XR_FUNC bool xr_compiler_session_repl_declaration_publish(
+    XrCompilerSessionReplDeclarationScope *scope, uint32_t statement_count);
+XR_FUNC bool xr_compiler_session_repl_declaration_abandon(
+    XrCompilerSessionReplDeclarationScope *scope,
+    XrCompilerSessionReplDeclarationState state);
+XR_FUNC XrCompilerSessionReplGenerationSnapshot
+xr_compiler_session_repl_generation_snapshot(const XrCompilerSession *session);
+XR_FUNC bool xr_compiler_session_repl_declaration_at(
+    const XrCompilerSession *session, size_t index,
+    XrCompilerSessionReplDeclarationRecord *out_record);
 /* The outermost scope owns the transaction. Nested compiler entry points
  * borrow it, so a module bundle is one operation rather than one operation per
  * dependency. Any nested failure aborts the owner and invalidates every scope

@@ -567,6 +567,13 @@ static AstNode *repl_find_reserved_it_decl(AstNode *program) {
     return NULL;
 }
 
+static void repl_abandon_declaration(
+    XrCompilerSessionReplDeclarationScope *scope,
+    XrCompilerSessionReplDeclarationState state) {
+    XR_CHECK(xr_compiler_session_repl_declaration_abandon(scope, state),
+             "REPL declaration generation abandonment failed");
+}
+
 XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
                               const char *source) {
     XrReplEvalResult result = {.proto = NULL, .status = XR_REPL_EVAL_COMPILE_ERROR};
@@ -580,15 +587,34 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     if (xr_compiler_session_vm_host(session) != vm_host)
         return result;
 
-    XrReplSymbolTable *repl_symbols = xr_compiler_session_ensure_repl_symbols(session);
-    if (!repl_symbols)
+    XrCompilerSessionReplDeclarationScope declaration_scope = {0};
+    if (!xr_compiler_session_repl_declaration_begin(session, &declaration_scope))
         return result;
+
+    XrReplSymbolTable *repl_symbols = xr_compiler_session_ensure_repl_symbols(session);
+    if (!repl_symbols) {
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        return result;
+    }
 
     // Parse. REPL units observe the value of a trailing bare expression (see
     // repl_plan_* below), so they must not be rejected as effectless (E0208).
     AstNode *ast = xr_parse_repl_unit(session, source);
-    if (!ast)
+    if (!ast) {
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
+    }
+    if (ast->as.program.count > UINT32_MAX) {
+        xr_program_destroy(ast);
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        return result;
+    }
 
     AstNode *reserved_decl = repl_find_reserved_it_decl(ast);
     if (reserved_decl) {
@@ -597,6 +623,9 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
                       reserved_decl->line, reserved_decl->column, 0, NULL, NULL);
         xr_diag_print_summary("<repl>", 1, 0, 0);
         xr_program_destroy(ast);
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
 
@@ -610,10 +639,16 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     XaAnalyzer *repl_analyzer = xr_compiler_session_ensure_repl_analyzer(session);
     if (!repl_analyzer) {
         xr_program_destroy(ast);
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
     if (!xr_compiler_session_retain_repl_program(session, ast)) {
         xr_program_destroy(ast);
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
     }
 
@@ -625,8 +660,12 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
 
     /* Create compiler context that borrows the persistent analyzer. */
     XrCompilerContext *ctx = xr_compiler_context_new_with_analyzer(session, repl_analyzer);
-    if (!ctx)
+    if (!ctx) {
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
+    }
     ctx->source_file = "<repl>";
     ctx->repl_mode = true;
     ctx->post_analyze_hook = repl_elaborate_last_expr;
@@ -651,12 +690,19 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
      * session-owned analyzer_pool here, but REPL never uses that pool. */
     xr_type_set_current_pool(repl_analyzer->type_pool, &repl_analyzer->type_pool->next_type_id);
 
-    if (!proto)
+    if (!proto) {
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
         return result;
+    }
 
     result.proto = proto;
     if (xr_execute(vm_host, proto) != 0) {
         result.status = XR_REPL_EVAL_RUNTIME_ERROR;
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_RUNTIME);
         return result;
     }
 
@@ -678,6 +724,9 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
         xa_scope_set_alias(repl_analyzer->current_scope, REPL_IT_NAME, result_symbol);
     }
 
+    XR_CHECK(xr_compiler_session_repl_declaration_publish(
+                 &declaration_scope, (uint32_t) ast->as.program.count),
+             "REPL declaration generation publication failed");
     result.status = XR_REPL_EVAL_OK;
     return result;
 }

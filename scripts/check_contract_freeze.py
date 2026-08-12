@@ -369,6 +369,7 @@ CONTRACT_SPECS = (
         (
             "src/toolchain/xcompiler_session.h",
             "src/toolchain/xcompiler_session.c",
+            "src/api/xrepl.c",
             "tests/unit/toolchain/test_compiler_session_generation.c",
         ),
     ),

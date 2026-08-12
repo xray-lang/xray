@@ -18,9 +18,28 @@ Every non-REPL source/AST compiler entry opens or borrows a generation-bound
 operation scope. The outermost caller alone commits success; a nested failure
 poisons the operation, and the owner aborts only after graph and analyzer
 cleanup has released borrowed views. Bundle compilation is therefore one
-operation regardless of module count. REPL submissions retain declarations
-across inputs and require a separate declaration-generation transaction; they
-must not borrow this transient operation contract as a substitute for rollback.
+operation regardless of module count.
+
+Every REPL submission reserves a distinct monotonic declaration generation
+before parsing. Successful execution publishes that generation with its exact
+parent and statement count. Parse, compile, and runtime failures retain an
+immutable abandoned record while leaving the last published generation
+unchanged; their identities are never reused. Only one declaration generation
+may be active, and graph publication, invalidation, cache installation, reset,
+or a non-REPL compiler operation cannot overlap it. The reservation allocates
+its ledger slot before execution, so successful runtime mutation cannot be
+followed by an allocation-dependent publication failure. Snapshot and record
+accessors return detached values instead of mutable ledger pointers.
+Incremental graph reset does not clear this ledger or rewind its next identity;
+only destruction of the owning compiler session ends the declaration history.
+
+The declaration ledger is the authority prerequisite for immutable typed REPL
+generations. The transitional VM still stores REPL bindings in its name-keyed
+global dictionary; this contract does not claim typed layout ownership,
+closure/task pinning, or replacement of that runtime representation. REPL
+program arenas remain retained because the persistent analyzer owns references
+into prior declarations. REPL submissions must not borrow the transient source
+operation contract as a substitute for this declaration-generation boundary.
 Cancellation and fatal failure clear every transient view, advance the session
 generation so stale arena scopes cannot restore abandoned state, and preserve
 the last fully published graph and cache objects. Full reset clears the graph,
@@ -44,7 +63,13 @@ artifact authority and operation-local verifier output.
 - The compiler-session focused test proves deep-copy ownership, session
   isolation, exact invalidation publication, cancellation/fatal recovery,
   stale-scope rejection, bounded history, watermark/reset behavior, and
-  cache-handle lifetime.
+  cache-handle lifetime. It also proves declaration generation ordering,
+  non-reuse, exact parents, overlap rejection, forged-scope rejection, and
+  published-versus-abandoned accounting.
+- The REPL focused test proves that a real successful submission publishes,
+  a rejected submission abandons without replacing its parent, and the next
+  successful submission receives a fresh generation while preserving prior
+  value visibility.
 - Dependency graph and cache-store focused tests remain mandatory; the session
   does not weaken their independent validation contracts.
 - Runtime-only installed symbol gates must continue excluding compiler-session
@@ -52,6 +77,7 @@ artifact authority and operation-local verifier output.
 
 ## Digest anchors
 
-anchor-sha256: src/toolchain/xcompiler_session.h 02a439cbb799c1a0fe9e1047b4365b5bea0070e6bc98f6a5c5bbb4a0e93d97ea
-anchor-sha256: src/toolchain/xcompiler_session.c db145aa17dd0bf44570ef678e6b102ccaf86630f4121e356730b6208b7d75285
-anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c ae42cde0771a6705bb01759f9ac9e6884e82b83adb888ffcf67d235ffb21ec52
+anchor-sha256: src/toolchain/xcompiler_session.h 8dee7c7df5115c2af9f48015dcce11ef6341830de07c06c3b0b5febcce4d8fde
+anchor-sha256: src/toolchain/xcompiler_session.c 5c15ee43fadd472cc0f2e7c577e214f5133360b4930e686b5df29228311ab017
+anchor-sha256: src/api/xrepl.c 5873b544d5291b9a7ef2b4be5ca40afcdf044731c2c2b3b452aa14d114d37187
+anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c 809ca55950acd0593cc1c94fb4da3baa52d202a6f195ead6d06dfe7285e07788

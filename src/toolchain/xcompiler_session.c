@@ -61,6 +61,15 @@ struct XrCompilerSession {
     AstNode **repl_programs;
     size_t repl_program_count;
     size_t repl_program_capacity;
+    XrCompilerSessionReplDeclarationRecord *repl_declarations;
+    size_t repl_declaration_count;
+    size_t repl_declaration_capacity;
+    size_t active_repl_declaration;
+    uint64_t next_repl_declaration_generation;
+    uint64_t published_repl_declaration_generation;
+    uint64_t published_repl_declaration_count;
+    uint64_t abandoned_repl_declaration_count;
+    bool repl_declaration_active;
 
     struct XrModuleGraph *module_graph;
     XrCompileUnitIdentity compile_unit_identity;
@@ -189,6 +198,9 @@ XrCompilerSession *xr_compiler_session_new(const XrCompilerSessionConfig *cfg) {
     if (!session)
         return NULL;
     session->generations = XR_INITIAL_GENERATIONS;
+    session->next_repl_declaration_generation =
+        XR_COMPILER_SESSION_INITIAL_REPL_DECLARATION_GENERATION;
+    session->active_repl_declaration = SIZE_MAX;
     xr_dependency_graph_init(&session->dependency_graph);
     if (!xr_target_data_layout_init_native(&session->target_data_layout)) {
         xr_free(session);
@@ -258,6 +270,7 @@ void xr_compiler_session_delete(XrCompilerSession *session) {
     for (size_t i = 0; i < session->repl_program_count; i++)
         xr_program_destroy(session->repl_programs[i]);
     xr_free(session->repl_programs);
+    xr_free(session->repl_declarations);
     if (session->repl_symbols)
         xr_repl_symbols_free(session->repl_symbols);
     if (xr_type_get_current_pool() == session->analyzer_pool)
@@ -294,6 +307,8 @@ bool xr_compiler_session_apply_generation_change(XrCompilerSession *session,
         return false;
     if (change_mask == XR_COMPILER_SESSION_CHANGE_NONE)
         return true;
+    if (session->repl_declaration_active)
+        return false;
 
     XrCompilerSessionGenerationSnapshot next = session->generations;
     if (generation_would_overflow(next.session_generation, change_mask,
@@ -323,7 +338,7 @@ bool xr_compiler_session_apply_generation_change(XrCompilerSession *session,
 }
 
 bool xr_compiler_session_reset_incremental(XrCompilerSession *session) {
-    if (!session ||
+    if (!session || session->repl_declaration_active ||
         !xr_compiler_session_apply_generation_change(
             session, XR_COMPILER_SESSION_CHANGE_SESSION | XR_COMPILER_SESSION_CHANGE_WORKSPACE))
         return false;
@@ -342,8 +357,139 @@ bool xr_compiler_session_reset_incremental(XrCompilerSession *session) {
     return true;
 }
 
+static bool ensure_repl_declaration_capacity(XrCompilerSession *session) {
+    if (session->repl_declaration_count < session->repl_declaration_capacity)
+        return true;
+    size_t next_capacity = session->repl_declaration_capacity
+                               ? session->repl_declaration_capacity * 2u
+                               : 8u;
+    if (next_capacity < session->repl_declaration_capacity ||
+        next_capacity > SIZE_MAX / sizeof(*session->repl_declarations)) {
+        return false;
+    }
+    XrCompilerSessionReplDeclarationRecord *next =
+        (XrCompilerSessionReplDeclarationRecord *) xr_realloc(
+            session->repl_declarations,
+            next_capacity * sizeof(*session->repl_declarations));
+    if (!next)
+        return false;
+    session->repl_declarations = next;
+    session->repl_declaration_capacity = next_capacity;
+    return true;
+}
+
+bool xr_compiler_session_repl_declaration_begin(
+    XrCompilerSession *session, XrCompilerSessionReplDeclarationScope *scope) {
+    if (!scope)
+        return false;
+    memset(scope, 0, sizeof(*scope));
+    if (!session || session->repl_declaration_active ||
+        session->incremental_operation_active ||
+        session->next_repl_declaration_generation == UINT64_MAX ||
+        session->published_repl_declaration_count == UINT64_MAX ||
+        session->abandoned_repl_declaration_count == UINT64_MAX ||
+        !ensure_repl_declaration_capacity(session)) {
+        return false;
+    }
+
+    size_t record_index = session->repl_declaration_count++;
+    XrCompilerSessionReplDeclarationRecord *record =
+        &session->repl_declarations[record_index];
+    *record = (XrCompilerSessionReplDeclarationRecord) {
+        .generation = session->next_repl_declaration_generation++,
+        .parent_generation = session->published_repl_declaration_generation,
+        .session_generation = session->generations.session_generation,
+        .state = XR_COMPILER_SESSION_REPL_DECLARATION_RESERVED,
+    };
+    session->active_repl_declaration = record_index;
+    session->repl_declaration_active = true;
+    *scope = (XrCompilerSessionReplDeclarationScope) {
+        .session = session,
+        .generation = record->generation,
+        .session_generation = record->session_generation,
+        .record_index = record_index,
+        .active = true,
+    };
+    return true;
+}
+
+static bool finish_repl_declaration(
+    XrCompilerSessionReplDeclarationScope *scope,
+    XrCompilerSessionReplDeclarationState state, uint32_t statement_count) {
+    if (!scope || !scope->active || !scope->session)
+        return false;
+    XrCompilerSession *session = scope->session;
+    bool valid_state = state == XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED ||
+                       state == XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE ||
+                       state == XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_RUNTIME;
+    bool current = valid_state && session->repl_declaration_active &&
+                   session->active_repl_declaration == scope->record_index &&
+                   scope->record_index < session->repl_declaration_count &&
+                   scope->session_generation == session->generations.session_generation;
+    XrCompilerSessionReplDeclarationRecord *record =
+        current ? &session->repl_declarations[scope->record_index] : NULL;
+    current = current && record->state == XR_COMPILER_SESSION_REPL_DECLARATION_RESERVED &&
+              record->generation == scope->generation &&
+              record->session_generation == scope->session_generation;
+    if (!current)
+        return false;
+
+    record->statement_count = statement_count;
+    record->state = state;
+    if (state == XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED) {
+        session->published_repl_declaration_generation = record->generation;
+        session->published_repl_declaration_count++;
+    } else {
+        session->abandoned_repl_declaration_count++;
+    }
+    session->active_repl_declaration = SIZE_MAX;
+    session->repl_declaration_active = false;
+    memset(scope, 0, sizeof(*scope));
+    return true;
+}
+
+bool xr_compiler_session_repl_declaration_publish(
+    XrCompilerSessionReplDeclarationScope *scope, uint32_t statement_count) {
+    return finish_repl_declaration(
+        scope, XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED, statement_count);
+}
+
+bool xr_compiler_session_repl_declaration_abandon(
+    XrCompilerSessionReplDeclarationScope *scope,
+    XrCompilerSessionReplDeclarationState state) {
+    if (state != XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE &&
+        state != XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_RUNTIME) {
+        return false;
+    }
+    return finish_repl_declaration(scope, state, 0);
+}
+
+XrCompilerSessionReplGenerationSnapshot
+xr_compiler_session_repl_generation_snapshot(const XrCompilerSession *session) {
+    if (!session)
+        return (XrCompilerSessionReplGenerationSnapshot) {0};
+    return (XrCompilerSessionReplGenerationSnapshot) {
+        .next_generation = session->next_repl_declaration_generation,
+        .published_generation = session->published_repl_declaration_generation,
+        .attempted_count = session->repl_declaration_count,
+        .published_count = session->published_repl_declaration_count,
+        .abandoned_count = session->abandoned_repl_declaration_count,
+        .active = session->repl_declaration_active,
+    };
+}
+
+bool xr_compiler_session_repl_declaration_at(
+    const XrCompilerSession *session, size_t index,
+    XrCompilerSessionReplDeclarationRecord *out_record) {
+    if (!session || !out_record || index >= session->repl_declaration_count)
+        return false;
+    *out_record = session->repl_declarations[index];
+    return true;
+}
+
 static bool begin_incremental_operation(XrCompilerSession *session) {
-    if (!session || session->incremental_operation_active || session->current_arena ||
+    if (!session || session->incremental_operation_active ||
+        session->repl_declaration_active || session->current_arena ||
         session->compile_string_pool || session->module_graph ||
         session->compile_unit_identity.canonical_module)
         return false;
@@ -452,6 +598,7 @@ bool xr_compiler_session_operation_fail(XrCompilerSessionOperationScope *scope,
 bool xr_compiler_session_publish_dependency_graph(XrCompilerSession *session,
                                                   const XrDependencyGraph *graph) {
     if (!session || session->incremental_operation_active ||
+        session->repl_declaration_active ||
         session->generations.workspace_generation == UINT64_MAX)
         return false;
     XrDependencyGraph copy;
@@ -468,7 +615,8 @@ bool xr_compiler_session_publish_dependency_graph(XrCompilerSession *session,
 
 bool xr_compiler_session_apply_invalidation(XrCompilerSession *session,
                                             const XrInvalidationEvent *event) {
-    if (!session || session->incremental_operation_active || !event ||
+    if (!session || session->incremental_operation_active ||
+        session->repl_declaration_active || !event ||
         session->generations.workspace_generation == UINT64_MAX)
         return false;
     XrInvalidationResult result;
@@ -507,7 +655,7 @@ XrCacheStore *xr_compiler_session_cache_store(const XrCompilerSession *session) 
 bool xr_compiler_session_open_incremental_cache(
     XrCompilerSession *session, const XrCacheStoreConfig *config) {
     if (!session || !config || session->cache_store ||
-        session->incremental_operation_active)
+        session->incremental_operation_active || session->repl_declaration_active)
         return false;
     XrCacheStore *store = xr_cache_store_open(config);
     if (!store)
@@ -545,6 +693,7 @@ XrCompilerSessionIncrementalStats xr_compiler_session_incremental_stats(
 bool xr_compiler_session_incremental_idle_cleanup(XrCompilerSession *session,
                                                   size_t retained_history) {
     if (!session || session->incremental_operation_active ||
+        session->repl_declaration_active ||
         retained_history > XR_COMPILER_SESSION_INVALIDATION_HISTORY_LIMIT)
         return false;
     while (session->invalidation_history_count > retained_history) {

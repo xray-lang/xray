@@ -16,6 +16,7 @@
 #include "os/os_fs.h"
 #include "os/os_temp.h"
 #include "toolchain/xcompiler_session.h"
+#include "api/xrepl.h"
 #include "runtime/xisolate_api.h"
 #include "runtime/value/xchunk.h"
 #include "xray_vm.h"
@@ -110,6 +111,148 @@ static bool snapshots_equal(XrCompilerSessionGenerationSnapshot left,
            left.configuration_generation == right.configuration_generation &&
            left.target_generation == right.target_generation &&
            left.provider_generation == right.provider_generation;
+}
+
+TEST(repl_declaration_generations_publish_and_abandon_without_reuse) {
+    XrCompilerSessionConfig config = {.repl_mode = true};
+    XrCompilerSession *session = xr_compiler_session_new(&config);
+    ASSERT_NOT_NULL(session);
+    XrCompilerSessionReplGenerationSnapshot initial =
+        xr_compiler_session_repl_generation_snapshot(session);
+    ASSERT_EQ_UINT(initial.next_generation,
+                   XR_COMPILER_SESSION_INITIAL_REPL_DECLARATION_GENERATION);
+    ASSERT_EQ_UINT(initial.published_generation, 0);
+    ASSERT_EQ_UINT(initial.attempted_count, 0);
+    ASSERT_FALSE(initial.active);
+
+    XrCompilerSessionReplDeclarationScope first = {0};
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_begin(session, &first));
+    ASSERT_EQ_UINT(first.generation, 1);
+    XrCompilerSessionReplGenerationSnapshot active =
+        xr_compiler_session_repl_generation_snapshot(session);
+    ASSERT_EQ_UINT(active.next_generation, 2);
+    ASSERT_EQ_UINT(active.attempted_count, 1);
+    ASSERT_TRUE(active.active);
+    ASSERT_FALSE(xr_compiler_session_apply_generation_change(
+        session, XR_COMPILER_SESSION_CHANGE_SESSION));
+    ASSERT_FALSE(xr_compiler_session_reset_incremental(session));
+    XrCompilerSessionOperationScope operation = {0};
+    ASSERT_FALSE(xr_compiler_session_operation_begin(session, &operation));
+    XrCompilerSessionReplDeclarationScope overlapping = {0};
+    ASSERT_FALSE(xr_compiler_session_repl_declaration_begin(session, &overlapping));
+
+    XrCompilerSessionReplDeclarationScope forged = first;
+    forged.generation++;
+    ASSERT_FALSE(xr_compiler_session_repl_declaration_publish(&forged, 2));
+    ASSERT_TRUE(xr_compiler_session_repl_generation_snapshot(session).active);
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_publish(&first, 2));
+
+    XrCompilerSessionReplDeclarationScope second = {0};
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_begin(session, &second));
+    ASSERT_EQ_UINT(second.generation, 2);
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_abandon(
+        &second, XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE));
+
+    XrCompilerSessionReplDeclarationScope third = {0};
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_begin(session, &third));
+    ASSERT_EQ_UINT(third.generation, 3);
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_publish(&third, 1));
+
+    XrCompilerSessionReplGenerationSnapshot final =
+        xr_compiler_session_repl_generation_snapshot(session);
+    ASSERT_EQ_UINT(final.next_generation, 4);
+    ASSERT_EQ_UINT(final.published_generation, 3);
+    ASSERT_EQ_UINT(final.attempted_count, 3);
+    ASSERT_EQ_UINT(final.published_count, 2);
+    ASSERT_EQ_UINT(final.abandoned_count, 1);
+    ASSERT_FALSE(final.active);
+
+    XrCompilerSessionReplDeclarationRecord record = {0};
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_at(session, 0, &record));
+    ASSERT_EQ_UINT(record.generation, 1);
+    ASSERT_EQ_UINT(record.parent_generation, 0);
+    ASSERT_EQ_UINT(record.statement_count, 2);
+    ASSERT_EQ_UINT(record.state, XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED);
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_at(session, 1, &record));
+    ASSERT_EQ_UINT(record.generation, 2);
+    ASSERT_EQ_UINT(record.parent_generation, 1);
+    ASSERT_EQ_UINT(record.statement_count, 0);
+    ASSERT_EQ_UINT(record.state,
+                   XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_at(session, 2, &record));
+    ASSERT_EQ_UINT(record.generation, 3);
+    ASSERT_EQ_UINT(record.parent_generation, 1);
+    ASSERT_EQ_UINT(record.statement_count, 1);
+    ASSERT_EQ_UINT(record.state, XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED);
+    ASSERT_FALSE(xr_compiler_session_repl_declaration_at(session, 3, &record));
+    ASSERT_FALSE(xr_compiler_session_repl_declaration_at(session, 0, NULL));
+    xr_compiler_session_delete(session);
+}
+
+TEST(production_repl_eval_publishes_and_abandons_declaration_generations) {
+    XrVMConfig config;
+    xray_vm_config_init(&config);
+    XrVMRuntime *isolate = xray_vm_new_full(&config);
+    ASSERT_NOT_NULL(isolate);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    ASSERT_NOT_NULL(session);
+
+    XrReplEvalResult first =
+        xr_repl_eval(session, isolate, "var generation_value = 41\n");
+    ASSERT_EQ_UINT(first.status, XR_REPL_EVAL_OK);
+    ASSERT_NOT_NULL(first.proto);
+    XrReplEvalResult rejected = xr_repl_eval(session, isolate, "var it = 1\n");
+    ASSERT_EQ_UINT(rejected.status, XR_REPL_EVAL_COMPILE_ERROR);
+    ASSERT_NULL(rejected.proto);
+    XrReplEvalResult third = xr_repl_eval(
+        session, isolate, "var generation_next = generation_value + 1\n");
+    ASSERT_EQ_UINT(third.status, XR_REPL_EVAL_OK);
+    ASSERT_NOT_NULL(third.proto);
+    XrReplEvalResult runtime_rejected = xr_repl_eval(
+        session, isolate, "enum ReplGenerationError { Bad }\n"
+                          "throw ReplGenerationError.Bad\n");
+    ASSERT_EQ_UINT(runtime_rejected.status, XR_REPL_EVAL_RUNTIME_ERROR);
+    ASSERT_NOT_NULL(runtime_rejected.proto);
+
+    XrCompilerSessionReplGenerationSnapshot snapshot =
+        xr_compiler_session_repl_generation_snapshot(session);
+    ASSERT_EQ_UINT(snapshot.next_generation, 5);
+    ASSERT_EQ_UINT(snapshot.published_generation, 3);
+    ASSERT_EQ_UINT(snapshot.attempted_count, 4);
+    ASSERT_EQ_UINT(snapshot.published_count, 2);
+    ASSERT_EQ_UINT(snapshot.abandoned_count, 2);
+    ASSERT_FALSE(snapshot.active);
+
+    XrCompilerSessionReplDeclarationRecord record = {0};
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_at(session, 0, &record));
+    ASSERT_EQ_UINT(record.generation, 1);
+    ASSERT_EQ_UINT(record.parent_generation, 0);
+    ASSERT_EQ_UINT(record.statement_count, 1);
+    ASSERT_EQ_UINT(record.state, XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED);
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_at(session, 3, &record));
+    ASSERT_EQ_UINT(record.generation, 4);
+    ASSERT_EQ_UINT(record.parent_generation, 3);
+    ASSERT_EQ_UINT(record.statement_count, 0);
+    ASSERT_EQ_UINT(record.state,
+                   XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_RUNTIME);
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_at(session, 1, &record));
+    ASSERT_EQ_UINT(record.generation, 2);
+    ASSERT_EQ_UINT(record.parent_generation, 1);
+    ASSERT_EQ_UINT(record.state,
+                   XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+    ASSERT_TRUE(xr_compiler_session_repl_declaration_at(session, 2, &record));
+    ASSERT_EQ_UINT(record.generation, 3);
+    ASSERT_EQ_UINT(record.parent_generation, 1);
+    ASSERT_EQ_UINT(record.statement_count, 1);
+    ASSERT_EQ_UINT(record.state, XR_COMPILER_SESSION_REPL_DECLARATION_PUBLISHED);
+
+    int64_t value = 0;
+    ASSERT_TRUE(xr_repl_peek_int(isolate, "generation_next", &value));
+    ASSERT_EQ_INT(value, 42);
+    xr_free_code(isolate, runtime_rejected.proto);
+    xr_free_code(isolate, third.proto);
+    xr_free_code(isolate, first.proto);
+    xray_vm_delete(isolate);
 }
 
 TEST(generation_replay_is_deterministic) {
@@ -566,6 +709,8 @@ TEST(session_installs_one_cache_before_operations) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Compiler session generations");
 RUN_TEST(generation_replay_is_deterministic);
+RUN_TEST(repl_declaration_generations_publish_and_abandon_without_reuse);
+RUN_TEST(production_repl_eval_publishes_and_abandons_declaration_generations);
 RUN_TEST(generation_changes_are_domain_specific_and_transactional);
 RUN_TEST(incremental_reset_advances_identity_and_clears_transient_state);
 RUN_TEST(session_owns_configuration_paths);
