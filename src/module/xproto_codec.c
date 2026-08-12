@@ -2463,45 +2463,21 @@ void xr_proto_set_param_types(XrProto *p, const uint8_t *ptypes, int nparams, ui
     }
 }
 
-int xr_run_bytecode_file(XrVMRuntime *X, const char *bytecode_file) {
-    XR_DCHECK(X != NULL, "run_bytecode_file: NULL isolate");
-    XR_DCHECK(bytecode_file != NULL, "run_bytecode_file: NULL bytecode_file");
-
-    /* xr_file_read_all checks ftell, allocates with xr_malloc, and reports
-     * the number of bytes that fread actually delivered, closing the door
-     * on the previous unchecked-ftell + unchecked-fread pattern. */
-    size_t size = 0;
-    char *data = xr_file_read_all(bytecode_file, "rb", &size);
-    if (!data) {
-        xr_log_warning("bytecode", "cannot open or read: %s", bytecode_file);
-        return -1;
-    }
-
-    int result = xr_eval_bytecode(X, (uint8_t *) data, size);
-    xr_free(data);
-    return result;
-}
-
 /* ========== Output Format ========== */
 
 XrOutputFormat xr_detect_output_format(const char *filename, XrOutputFormat explicit_fmt) {
     if (explicit_fmt != XR_OUTPUT_AUTO)
         return explicit_fmt;
     if (!filename)
-        return XR_OUTPUT_BYTECODE;
+        return XR_OUTPUT_AUTO;
 
     const char *ext = strrchr(filename, '.');
     if (!ext)
-        return XR_OUTPUT_BYTECODE;
+        return XR_OUTPUT_AUTO;
 
     if (strcmp(ext, ".c") == 0)
         return XR_OUTPUT_C_SOURCE;
-    if (strcmp(ext, ".h") == 0)
-        return XR_OUTPUT_C_HEADER;
-    if (strcmp(ext, ".xrc") == 0)
-        return XR_OUTPUT_BYTECODE;
-
-    return XR_OUTPUT_BYTECODE;
+    return XR_OUTPUT_AUTO;
 }
 
 bool xr_output_c_source(XrVMRuntime *X, XrProto *proto, const char *output_file,

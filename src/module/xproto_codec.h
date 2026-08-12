@@ -86,33 +86,21 @@ XR_FUNC struct XrProto *xr_bytecode_read(struct XrVMRuntime *X, const uint8_t *d
 // Execute bytecode directly, returns 0 on success
 XR_FUNC int xr_eval_bytecode(struct XrVMRuntime *X, const uint8_t *data, size_t size);
 
-/* ========== File API ========== */
+/* ========== Internal bootstrap file API ========== */
 
-// Compile source file with an explicit compiler session and save as bytecode.
+// Compile source file with an explicit compiler session and save an internal
+// bootstrap container. These functions are not installed product routes.
 XR_FUNC bool xr_compile_to_file(struct XrCompilerSession *session, const char *source_file,
                                 const char *output_file, int flags);
 XR_FUNC bool xr_compile_stdlib_to_file(struct XrCompilerSession *session,
                                        const char *canonical_module, const char *source_file,
                                        const char *output_file, int flags);
 
-// Load and execute bytecode file
-XR_FUNC int xr_run_bytecode_file(struct XrVMRuntime *X, const char *bytecode_file);
-
-/* ========== C Embedding Macros ========== */
-
-#define XR_DECL_BYTECODE(name)                                                                     \
-    extern const uint8_t xr_bc_##name[];                                                           \
-    extern const uint32_t xr_bc_##name##_size
-
-#define XR_EVAL_BYTECODE(X, name) xr_eval_bytecode(X, xr_bc_##name, xr_bc_##name##_size)
-
 /* ========== Output Format (for compile command) ========== */
 
 typedef enum {
     XR_OUTPUT_AUTO,
-    XR_OUTPUT_BYTECODE,
     XR_OUTPUT_C_SOURCE,
-    XR_OUTPUT_C_HEADER,
 } XrOutputFormat;
 
 XR_FUNC XrOutputFormat xr_detect_output_format(const char *filename, XrOutputFormat explicit_fmt);

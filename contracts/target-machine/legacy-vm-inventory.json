@@ -24,8 +24,7 @@
     "xr_bytecode_write_stdlib",
     "xr_detect_output_format",
     "xr_eval_bytecode",
-    "xr_output_c_source",
-    "xr_run_bytecode_file"
+    "xr_output_c_source"
   ],
   "opcode_count": 296,
   "opcodes": [
@@ -3587,7 +3586,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "cb440514ab99c465f59cce571382a3bcbae2f798d1f723ae7ce51e467713dc84",
+  "source_tree_fingerprint": "f54e5ecfe01479cdccceaddeab18a4fb883c46ebed0613d40e81d4d351ea45c6",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xvm.c",

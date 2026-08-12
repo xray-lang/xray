@@ -77,7 +77,7 @@ static const XrCliOptionSpec fmt_options[] = {
 
 static const XrCliOptionSpec compile_options[] = {
     {"output", 'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
-    {"format", 'f', XR_CLI_VALUE_STRING, false, false, "FMT", "Output format: c or header"},
+    {"format", 'f', XR_CLI_VALUE_STRING, false, false, "FMT", "Output format: c"},
     {"strip-debug", 's', XR_CLI_VALUE_NONE, false, false, NULL, "Remove debug info"},
     {"strip-source", 'S', XR_CLI_VALUE_NONE, false, false, NULL, "Remove source file path"},
     {"name", 'n', XR_CLI_VALUE_STRING, false, false, "NAME", "C variable name prefix"},

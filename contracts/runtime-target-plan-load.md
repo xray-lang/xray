@@ -143,8 +143,9 @@ roots, or general module activation.
    is not general module activation.
    Standalone XRC generation and execution are retired product routes. The
    compiler rejects default `.xrc`, `bytecode`, and `bc` outputs before isolate
-   creation, while retaining explicit offline C/header containers for compiler
-   development. The runtime recognizes valid XRC magic only to reject it before
+   creation, while retaining one explicit offline C container for compiler
+   development. Header-format aliases are retired rather than preserved as a
+   second spelling. The runtime recognizes valid XRC magic only to reject it before
    isolate creation; renamed artifacts cannot bypass the cutover.
    The retired `.xrc` bytecode-embed runner and its CTest fixtures are not a
    parallel product route: the exact XSM/XTP runtime-archive gates above are
@@ -194,11 +195,11 @@ anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd5
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
 anchor-sha256: src/runtime/xr_target_plan_load.c f48ff435aedf73dc30588af42bb6bf288282feb10a81762ad4ede9375b06d7c8
 anchor-sha256: src/app/cli/xcmd_run.c 9609aa982a60917924cf73e109c03116ba33e589f2024a6edcce2e87d3e1cf07
-anchor-sha256: contracts/target-machine/legacy-product-residue.json 6f292fd3f122ce7458993a82f8b672d04644671cc4884d157c064d5bcade0ac5
+anchor-sha256: contracts/target-machine/legacy-product-residue.json 2caffbcb4e67d700eb39c221fe1c2d7801720d49bfbbf3b89e6313253a7c9440
 anchor-sha256: scripts/check_legacy_product_residue.py a47409257b92ad57e90ac23bb28a6c3cb29866c102741ceeaff37f079d0d13cf
 anchor-sha256: tests/unit/plan/test_target_plan.c 087c905330402b3bff20b267a3252ac2a9ccc81626145662cd445ec6da97e627
 anchor-sha256: tests/unit/plan/test_xtp_format.c ab7a3766a721d1aa2e6fc2ca67031e77ad1f7b44f974d5e8b532067f58705801
 anchor-sha256: tests/unit/CMakeLists.txt 4bb45a04f3870b87299478fc7dfbcc5148fca06f4a403692b02bd39ca507305b
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
-anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py b17583c038c751f8c6cad33a82ff13730442e74bfeb7e6165804fb7e57f7241a
+anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 3c1a4006c3429fbc45145109fda687b10d68f6ff44fc4e57660e29ffe1e502fa
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py c38e7e7b4d9062bf88f1789633aa7ccccbf53aa681308a006d3b498f4fc0406b

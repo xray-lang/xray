@@ -64,8 +64,6 @@ static char *generate_var_name(const char *filename) {
 static XrOutputFormat parse_format(const char *fmt) {
     if (strcmp(fmt, "c") == 0 || strcmp(fmt, "source") == 0) {
         return XR_OUTPUT_C_SOURCE;
-    } else if (strcmp(fmt, "h") == 0 || strcmp(fmt, "header") == 0) {
-        return XR_OUTPUT_C_HEADER;
     }
     return XR_OUTPUT_AUTO;
 }
@@ -175,9 +173,10 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     /* Parse explicit format */
     XrOutputFormat explicit_format = XR_OUTPUT_AUTO;
     if (fmt_str) {
-        if (strcmp(fmt_str, "bytecode") == 0 || strcmp(fmt_str, "bc") == 0) {
+        if (strcmp(fmt_str, "bytecode") == 0 || strcmp(fmt_str, "bc") == 0 ||
+            strcmp(fmt_str, "h") == 0 || strcmp(fmt_str, "header") == 0) {
             xr_cli_error("compile",
-                         "XR_ARTIFACT_2000: legacy XRC output format is removed");
+                         "XR_ARTIFACT_2000: retired output format is removed; use --format c");
             return XR_CLI_EXIT_USAGE;
         }
         explicit_format = parse_format(fmt_str);
@@ -187,23 +186,23 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
         }
     }
 
-    /* A C or header extension is mandatory. There is no legacy XRC default. */
+    /* A C extension is mandatory. There is no executable/container default. */
     if (!output_file) {
         xr_cli_error("compile",
-                     "XR_ARTIFACT_2000: legacy XRC output is removed; use --output FILE.c or FILE.h");
+                     "XR_ARTIFACT_2000: legacy XRC output is removed; use --output FILE.c");
         return XR_CLI_EXIT_USAGE;
     }
     if (has_legacy_xrc_extension(output_file)) {
         xr_cli_error("compile",
-                     "XR_ARTIFACT_2000: legacy .xrc output is removed; use FILE.c or FILE.h");
+                     "XR_ARTIFACT_2000: legacy .xrc output is removed; use FILE.c");
         return XR_CLI_EXIT_USAGE;
     }
 
     /* Determine output format */
     XrOutputFormat format = xr_detect_output_format(output_file, explicit_format);
-    if (format == XR_OUTPUT_BYTECODE || format == XR_OUTPUT_AUTO) {
+    if (format == XR_OUTPUT_AUTO) {
         xr_cli_error("compile",
-                     "XR_ARTIFACT_2000: legacy XRC output is removed; use --format c or header");
+                     "XR_ARTIFACT_2000: legacy XRC output is removed; use --format c");
         return XR_CLI_EXIT_USAGE;
     }
 
@@ -219,7 +218,7 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
     XrCompilerSessionOperationScope operation_scope = {0};
 
     /* Generate variable name */
-    if (!var_name && (format == XR_OUTPUT_C_SOURCE || format == XR_OUTPUT_C_HEADER)) {
+    if (!var_name && format == XR_OUTPUT_C_SOURCE) {
         gen_var_name = generate_var_name(input_file);
         var_name = gen_var_name;
     }
@@ -258,7 +257,6 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
 
     switch (format) {
         case XR_OUTPUT_C_SOURCE:
-        case XR_OUTPUT_C_HEADER:
             success = xr_output_c_source(X, proto, output_file, var_name, flags);
             if (success) {
                 printf("Compiled: %s\n", output_file);

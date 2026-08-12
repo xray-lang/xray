@@ -172,6 +172,14 @@ def main() -> int:
                 "--output", str(root / "legacy.c"),
             ], cwd=root), "XR_ARTIFACT_2000",
                 f"legacy {legacy_format} format is removed")
+        for retired_alias in ("h", "header"):
+            require_rejection(run([
+                str(binary), "compile", str(source), "--format", retired_alias,
+                "--output", str(root / "retired-header.h"),
+            ], cwd=root), "XR_ARTIFACT_2000",
+                f"retired {retired_alias} output alias is removed")
+        require(not (root / "retired-header.h").exists(),
+                "retired header alias leaves no artifact")
         require_rejection(run([
             str(binary), "compile", str(source), "--format", "c",
             "--output", str(root / "disguised.XRC"),
@@ -183,7 +191,7 @@ def main() -> int:
             "--output", str(c_container),
         ], cwd=root)
         require(c_compiled.returncode == 0 and c_container.is_file(),
-                "offline C container remains available to compiler development",
+                "the sole offline C container remains available to compiler development",
                 c_compiled.stdout)
         xrc.write_bytes(b"XRAY\x1e\x00")
         renamed_xrc = root / "legacy.bin"
